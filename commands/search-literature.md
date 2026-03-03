@@ -1,0 +1,130 @@
+---
+description: Search scientific literature using OpenAlex and PubMed, rank results by project relevance, and produce a prioritized reading queue.
+---
+
+# Search Literature
+
+Search literature for `$ARGUMENTS`.
+If no argument is provided, derive candidate search foci from `specs/research-question.md` and `doc/08-open-questions.md`, then ask the user to confirm the focus.
+
+## Before Search
+
+1. Read `prompts/roles/research-assistant.md` if present; otherwise read `${CLAUDE_PLUGIN_ROOT}/references/role-prompts/research-assistant.md`.
+2. Read the `research-methodology` skill.
+3. Read the `data-management` skill.
+4. If present, read source-specific skills:
+   - `skills/data/sources/openalex.md`
+   - `skills/data/sources/pubmed.md`
+5. Read `references/notes-organization.md` and `templates/notes/article-note.md` if present.
+6. Read project context:
+   - `specs/research-question.md`
+   - `specs/scope-boundaries.md`
+   - `doc/08-open-questions.md`
+   - `doc/07-hypotheses.md`
+   - `papers/summaries/`
+   - `notes/topics/`, `notes/questions/`, `notes/articles/` (if present)
+7. Check `papers/searches/` for recent related searches and ask whether to refresh or create a new run.
+8. First-use compatibility: if notes directories are missing, create `notes/{topics,articles,questions}/` and `notes/index.md` before writing note outputs.
+
+## Query Planning
+
+Create 3-5 query variants before running searches:
+
+1. A broad conceptual query.
+2. A mechanism/pathway query.
+3. A methods/measurement query.
+4. A contrasting/alternative explanation query (when relevant).
+5. An optional domain narrowing query (population, assay, disease subtype, etc.).
+
+Default constraints unless user specifies otherwise:
+
+- Time window: last 10 years, plus seminal older papers if they dominate citations.
+- Result depth: retrieve up to 50 candidates before ranking.
+- Output depth: keep top 20 ranked records.
+
+## Search Execution
+
+Use this execution order:
+
+1. Prefer shared runtime if available:
+   - `uv run science-tool literature search ...`
+2. If shared runtime is not available, run direct source queries:
+   - OpenAlex API
+   - PubMed E-utilities
+3. If source APIs are temporarily unavailable, use web search as fallback and mark source as `fallback-web`.
+
+For each candidate, capture identifiers where available:
+
+- DOI
+- PMID/PMCID
+- OpenAlex ID
+- Year
+- Venue
+- First/last author
+
+Do not fabricate missing metadata. Mark unknown fields as `[UNVERIFIED]`.
+
+## Deduplication and Ranking
+
+Deduplicate across sources by DOI first, then PMID, then normalized title.
+
+Rank with explicit rationale using:
+
+1. Relevance to project question and active hypotheses.
+2. Evidence strength (study design and methodological clarity).
+3. Recency and citation momentum.
+4. Novelty or contradiction value (papers that challenge current assumptions are high value).
+5. Reproducibility signal (clear data/method reporting).
+
+Label each ranked item as one of:
+
+- `Core now` (read immediately)
+- `Relevant next` (read if time allows)
+- `Peripheral monitor` (track but defer)
+
+## Writing Output
+
+If `papers/searches/` does not exist yet, create it first.
+
+Create `papers/searches/YYYY-MM-DD-<slug>.md` with sections:
+
+1. `## Search Focus`
+2. `## Query Set`
+3. `## Sources and Run Metadata`
+4. `## Ranked Results`
+5. `## Priority Reading Queue`
+6. `## Coverage Notes and Gaps`
+7. `## Recommended Next Actions`
+
+In `## Ranked Results`, include a table with columns:
+
+- Rank
+- Citation (short)
+- Year
+- Source IDs (DOI / PMID / OpenAlex)
+- Tier
+- Why it matters for this project
+
+Also write machine-readable output to:
+
+- `papers/searches/YYYY-MM-DD-<slug>.json`
+
+Include the normalized candidate list, dedupe keys, source provenance, and rank/tier fields.
+
+## After Search
+
+1. Add the top `Core now` papers to `RESEARCH_PLAN.md` as explicit follow-up tasks.
+2. For selected high-priority papers, run `/science:research-paper` (or queue it in `RESEARCH_PLAN.md`).
+3. Create or update compact article notes in `notes/articles/<citekey>.md` for `Core now` items using `templates/notes/article-note.md`.
+4. Populate note metadata fields:
+   - `tags` for project-specific labels.
+   - `ontology_terms` for normalized ontology CURIEs (for example MeSH, GO, Biolink terms).
+   - `datasets` for relevant dataset accessions when identified.
+5. Update related topic/question notes (`notes/topics/`, `notes/questions/`) with new links and key takeaways.
+6. Add BibTeX entries for selected high-priority papers to `papers/references.bib`. If the file does not exist yet, create it with:
+   ```bibtex
+   % references.bib — BibTeX database for this Science project
+   % Use keys in the format: FirstAuthorLastNameYear (e.g., Smith2024)
+   ```
+7. If substantial gaps remain, run `/science:research-gaps` focused on the searched scope.
+8. Commit: `git add -A && git commit -m "papers: search literature <slug>"`
