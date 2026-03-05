@@ -1,7 +1,5 @@
 ---
-name: update-graph
 description: Detect stale areas in the knowledge graph and selectively update from changed documents. Uses graph diff to find changes, then re-processes affected documents.
-user_invocable: true
 ---
 
 # Update Knowledge Graph

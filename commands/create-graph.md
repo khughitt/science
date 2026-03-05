@@ -1,7 +1,5 @@
 ---
-name: create-graph
 description: Construct a knowledge graph from project prose documents. Reads research docs, extracts entities/relations/claims, populates the graph with provenance, and adds ontology annotations to source documents.
-user_invocable: true
 ---
 
 # Create Knowledge Graph from Prose
