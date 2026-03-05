@@ -1039,7 +1039,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
-    { name = "pyyaml" },
     { name = "rdflib" },
     { name = "rich" },
 ]
@@ -1062,7 +1061,6 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'distill'" },
     { name = "networkx", marker = "extra == 'distill'", specifier = ">=3.2" },
     { name = "pykeen", marker = "extra == 'distill'" },
-    { name = "pyyaml", specifier = ">=6.0" },
     { name = "rdflib", specifier = ">=7.0" },
     { name = "rich", specifier = ">=13.0" },
 ]
