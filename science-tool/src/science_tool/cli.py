@@ -343,6 +343,9 @@ def graph_scan_prose(directory: Path, output_format: str) -> None:
     )
 
 
+PROJECT_STATUSES = ("selected-primary", "deferred", "active", "candidate", "speculative")
+
+
 @graph.group("add")
 def graph_add() -> None:
     """Add graph entities and edges."""
@@ -355,9 +358,7 @@ def graph_add() -> None:
 @click.option("--note", default=None, help="skos:note annotation")
 @click.option("--definition", default=None, help="skos:definition annotation")
 @click.option("--property", "properties", type=(str, str), multiple=True, help="KEY VALUE property pair (repeatable)")
-@click.option(
-    "--status", default=None, help="Project status (selected-primary, deferred, active, candidate, speculative)"
-)
+@click.option("--status", default=None, type=click.Choice(PROJECT_STATUSES), help="Project status")
 @click.option("--source", default=None, help="Provenance source reference (paper:doi_... or file path)")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
@@ -432,7 +433,7 @@ def graph_add_claim(
 @click.argument("hypothesis_id")
 @click.option("--text", required=True)
 @click.option("--source", required=True)
-@click.option("--status", default=None, help="Project status (active, deferred, speculative)")
+@click.option("--status", default=None, type=click.Choice(PROJECT_STATUSES), help="Project status")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
@@ -456,6 +457,7 @@ def graph_add_hypothesis(hypothesis_id: str, text: str, source: str, status: str
 @click.option(
     "--maturity", default="open", show_default=True, type=click.Choice(("open", "partially-resolved", "resolved"))
 )
+@click.option("--status", default=None, type=click.Choice(PROJECT_STATUSES), help="Project status")
 @click.option("--related-hypothesis", "related_hypotheses", multiple=True, help="Hypothesis reference (repeatable)")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
@@ -465,6 +467,7 @@ def graph_add_question(
     text: str,
     source: str,
     maturity: str,
+    status: str | None,
     related_hypotheses: tuple[str, ...],
     graph_path: Path,
 ) -> None:
@@ -476,6 +479,7 @@ def graph_add_question(
         text=text,
         source=source,
         maturity=maturity,
+        status=status,
         related_hypotheses=list(related_hypotheses) if related_hypotheses else None,
     )
     click.echo(f"Added question: {question_uri}")

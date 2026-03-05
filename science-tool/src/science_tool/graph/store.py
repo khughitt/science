@@ -199,6 +199,7 @@ def add_question(
     text: str,
     source: str,
     maturity: str = "open",
+    status: str | None = None,
     related_hypotheses: list[str] | None = None,
 ) -> URIRef:
     dataset = _load_dataset(graph_path)
@@ -210,6 +211,9 @@ def add_question(
     knowledge.add((question_uri, SCHEMA_NS.identifier, Literal(question_id)))
     knowledge.add((question_uri, SCHEMA_NS.text, Literal(text)))
     knowledge.add((question_uri, SCI_NS.maturity, Literal(maturity)))
+
+    if status:
+        knowledge.add((question_uri, SCI_NS.projectStatus, Literal(status)))
 
     provenance.add((question_uri, PROV.wasDerivedFrom, _resolve_term(source)))
 
