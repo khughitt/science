@@ -828,3 +828,36 @@ def test_graph_uncertainty_includes_disputed_epistemic_status() -> None:
         assert result.exit_code == 0
         payload = json.loads(result.output)
         assert any("Disputed" in row["text"] for row in payload["rows"])
+
+
+def test_graph_scan_prose_returns_annotations_json() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        doc_dir = Path("doc")
+        doc_dir.mkdir()
+        (doc_dir / "01-overview.md").write_text(
+            '---\nontology_terms:\n  - "biolink:Gene"\n---\n\nBRCA1 [`NCBIGene:672`] is important.\n',
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["graph", "scan-prose", "doc", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert len(payload["rows"]) == 1
+        assert payload["rows"][0]["frontmatter_terms"] == "biolink:Gene"
+        assert "NCBIGene:672" in payload["rows"][0]["inline_annotations"]
+
+
+def test_graph_scan_prose_returns_empty_for_unannotated_dir() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        doc_dir = Path("doc")
+        doc_dir.mkdir()
+        (doc_dir / "plain.md").write_text("No annotations here.\n", encoding="utf-8")
+
+        result = runner.invoke(main, ["graph", "scan-prose", "doc", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert len(payload["rows"]) == 0

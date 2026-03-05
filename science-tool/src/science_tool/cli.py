@@ -29,6 +29,7 @@ from science_tool.graph.store import (
     validate_graph,
 )
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows
+from science_tool.prose import scan_prose
 
 
 @click.group()
@@ -283,6 +284,37 @@ def graph_import(snapshot_path: Path, graph_path: Path) -> None:
 
     count = import_snapshot(graph_path=graph_path, snapshot_path=snapshot_path)
     click.echo(f"Imported {count} triples from {snapshot_path.name}")
+
+
+@graph.command("scan-prose")
+@click.argument("directory", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def graph_scan_prose(directory: Path, output_format: str) -> None:
+    """Scan markdown files for ontology annotations (frontmatter + inline CURIEs)."""
+
+    file_results = scan_prose(directory)
+    rows: list[dict[str, str]] = []
+    for entry in file_results:
+        rows.append(
+            {
+                "path": entry["path"],
+                "frontmatter_terms": "; ".join(entry["frontmatter_terms"]),
+                "inline_annotations": "; ".join(
+                    f"{a['term']} [{a['curie']}]" for a in entry["inline_annotations"]
+                ),
+            }
+        )
+
+    emit_query_rows(
+        output_format=output_format,
+        title="Prose Annotations",
+        columns=[
+            ("path", "Path"),
+            ("frontmatter_terms", "Frontmatter Terms"),
+            ("inline_annotations", "Inline Annotations"),
+        ],
+        rows=rows,
+    )
 
 
 @graph.group("add")
