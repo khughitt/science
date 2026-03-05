@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import numpy as np
 from click.testing import CliRunner
-from rdflib import Graph, Namespace
-from rdflib.namespace import RDF, SKOS
+from rdflib import Dataset as RdfDataset
+from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib.namespace import PROV, RDF, SKOS
 
 from science_tool.cli import main
 from science_tool.distill.openalex import distill_openalex
+from science_tool.distill.pykeen_source import distill_pykeen
 
 SCI = Namespace("http://example.org/science/vocab/")
 SCHEMA = Namespace("https://schema.org/")
@@ -44,7 +47,10 @@ def _mock_openalex_response(level: str) -> list[dict]:
             {
                 "id": "https://openalex.org/subfields/1101",
                 "display_name": "Agricultural and Biological Sciences (miscellaneous)",
-                "field": {"id": "https://openalex.org/fields/11", "display_name": "Agricultural and Biological Sciences"},
+                "field": {
+                    "id": "https://openalex.org/fields/11",
+                    "display_name": "Agricultural and Biological Sciences",
+                },
                 "works_count": 5000,
             },
             {
@@ -104,36 +110,36 @@ def test_distill_openalex_writes_manifest(tmp_path: Path) -> None:
     assert len(list(g.triples((None, SCHEMA.sha256, None)))) == 1
 
 
-import numpy as np
-
-from science_tool.distill.pykeen_source import distill_pykeen
-
-
 def _make_mock_triples_factory():
     """Create a mock TriplesFactory with small synthetic data."""
-    from unittest.mock import MagicMock
 
-    triples = np.array([
-        ["GeneA", "interacts_with", "GeneB"],
-        ["GeneA", "associated_with", "DiseaseX"],
-        ["GeneB", "interacts_with", "GeneC"],
-        ["DrugAlpha", "treats", "DiseaseX"],
-        ["DiseaseX", "phenotype_present", "PhenotypeP"],
-        ["GeneC", "associated_with", "DiseaseY"],
-        ["DrugBeta", "treats", "DiseaseY"],
-        ["GeneA", "interacts_with", "GeneC"],
-    ], dtype=object)
+    triples = np.array(
+        [
+            ["GeneA", "interacts_with", "GeneB"],
+            ["GeneA", "associated_with", "DiseaseX"],
+            ["GeneB", "interacts_with", "GeneC"],
+            ["DrugAlpha", "treats", "DiseaseX"],
+            ["DiseaseX", "phenotype_present", "PhenotypeP"],
+            ["GeneC", "associated_with", "DiseaseY"],
+            ["DrugBeta", "treats", "DiseaseY"],
+            ["GeneA", "interacts_with", "GeneC"],
+        ],
+        dtype=object,
+    )
 
     factory = MagicMock()
     factory.triples = triples
     factory.num_entities = 8
     factory.num_relations = 4
-    factory.entity_to_id = {name: i for i, name in enumerate(
-        ["GeneA", "GeneB", "GeneC", "DiseaseX", "DiseaseY", "DrugAlpha", "DrugBeta", "PhenotypeP"]
-    )}
-    factory.relation_to_id = {name: i for i, name in enumerate(
-        ["interacts_with", "associated_with", "treats", "phenotype_present"]
-    )}
+    factory.entity_to_id = {
+        name: i
+        for i, name in enumerate(
+            ["GeneA", "GeneB", "GeneC", "DiseaseX", "DiseaseY", "DrugAlpha", "DrugBeta", "PhenotypeP"]
+        )
+    }
+    factory.relation_to_id = {
+        name: i for i, name in enumerate(["interacts_with", "associated_with", "treats", "phenotype_present"])
+    }
     return factory
 
 
@@ -184,10 +190,6 @@ def test_distill_pykeen_writes_manifest(tmp_path: Path) -> None:
     assert manifest.exists()
 
 
-from rdflib import Literal, URIRef
-from rdflib.namespace import PROV
-
-
 def _write_test_snapshot(path: Path) -> None:
     """Write a minimal Turtle snapshot for import testing."""
     g = Graph()
@@ -211,8 +213,6 @@ def test_graph_import_merges_into_knowledge_layer() -> None:
         result = runner.invoke(main, ["graph", "import", str(snapshot)])
         assert result.exit_code == 0
 
-        from rdflib import Dataset as RdfDataset
-
         dataset = RdfDataset()
         dataset.parse(source="knowledge/graph.trig", format="trig")
         knowledge = dataset.graph(URIRef("http://example.org/project/graph/knowledge"))
@@ -233,8 +233,6 @@ def test_graph_import_records_provenance() -> None:
 
         result = runner.invoke(main, ["graph", "import", str(snapshot)])
         assert result.exit_code == 0
-
-        from rdflib import Dataset as RdfDataset
 
         dataset = RdfDataset()
         dataset.parse(source="knowledge/graph.trig", format="trig")
