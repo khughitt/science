@@ -1,6 +1,7 @@
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
     GRAPH_LAYERS,
+    PREDICATE_REGISTRY,
     add_claim,
     add_concept,
     add_edge,
@@ -16,6 +17,7 @@ from science_tool.graph.store import (
     query_evidence,
     query_gaps,
     query_neighborhood,
+    query_predicates,
     query_uncertainty,
     read_graph_stats,
     stamp_revision,
@@ -25,6 +27,7 @@ from science_tool.graph.store import (
 __all__ = [
     "DEFAULT_GRAPH_PATH",
     "GRAPH_LAYERS",
+    "PREDICATE_REGISTRY",
     "add_claim",
     "add_concept",
     "add_edge",
@@ -40,6 +43,7 @@ __all__ = [
     "query_evidence",
     "query_gaps",
     "query_neighborhood",
+    "query_predicates",
     "query_uncertainty",
     "read_graph_stats",
     "stamp_revision",

@@ -281,6 +281,35 @@ def stamp_revision(graph_path: Path) -> str:
     return str(time_obj) if time_obj else "unknown"
 
 
+PREDICATE_REGISTRY: list[dict[str, str]] = [
+    {"predicate": "skos:related", "description": "General association between concepts", "layer": "graph/knowledge"},
+    {"predicate": "skos:broader", "description": "Broader concept hierarchy", "layer": "graph/knowledge"},
+    {"predicate": "skos:narrower", "description": "Narrower concept hierarchy", "layer": "graph/knowledge"},
+    {"predicate": "cito:supports", "description": "Evidence supports a claim/hypothesis", "layer": "graph/knowledge"},
+    {"predicate": "cito:disputes", "description": "Evidence disputes a claim/hypothesis", "layer": "graph/knowledge"},
+    {"predicate": "cito:discusses", "description": "Paper discusses a topic", "layer": "graph/knowledge"},
+    {"predicate": "cito:extends", "description": "Work extends prior research", "layer": "graph/knowledge"},
+    {"predicate": "cito:usesMethodIn", "description": "Uses method from another work", "layer": "graph/knowledge"},
+    {"predicate": "cito:citesAsDataSource", "description": "Cites as data source", "layer": "graph/knowledge"},
+    {"predicate": "sci:evaluates", "description": "Benchmark evaluates model/method", "layer": "graph/knowledge"},
+    {"predicate": "sci:hasModality", "description": "Model/method operates on modality", "layer": "graph/knowledge"},
+    {"predicate": "sci:detectedBy", "description": "Feature detected by method/tool", "layer": "graph/knowledge"},
+    {"predicate": "sci:storedIn", "description": "Data stored in database/repository", "layer": "graph/knowledge"},
+    {"predicate": "sci:measuredBy", "description": "Variable measured by dataset", "layer": "graph/datasets"},
+    {"predicate": "sci:projectStatus", "description": "Project status of entity", "layer": "graph/knowledge"},
+    {"predicate": "sci:confidence", "description": "Confidence score (0.0-1.0)", "layer": "graph/provenance"},
+    {"predicate": "sci:epistemicStatus", "description": "Epistemic status of claim", "layer": "graph/provenance"},
+    {"predicate": "sci:maturity", "description": "Maturity of open question", "layer": "graph/knowledge"},
+    {"predicate": "scic:causes", "description": "Causal relationship", "layer": "graph/causal"},
+    {"predicate": "scic:confounds", "description": "Confounding relationship", "layer": "graph/causal"},
+    {"predicate": "prov:wasDerivedFrom", "description": "Provenance source", "layer": "graph/provenance"},
+]
+
+
+def query_predicates() -> list[dict[str, str]]:
+    return list(PREDICATE_REGISTRY)
+
+
 def validate_graph(graph_path: Path) -> tuple[list[dict[str, str]], bool]:
     rows: list[dict[str, str]] = []
 

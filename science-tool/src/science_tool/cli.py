@@ -26,6 +26,7 @@ from science_tool.graph.store import (
     query_evidence,
     query_gaps,
     query_neighborhood,
+    query_predicates,
     query_uncertainty,
     read_graph_stats,
     validate_graph,
@@ -127,6 +128,20 @@ def graph_stamp_revision(graph_path: Path) -> None:
 
     revision_time = stamp_revision(graph_path)
     click.echo(f"Stamped graph revision: {revision_time}")
+
+
+@graph.command("predicates")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def graph_predicates_cmd(output_format: str) -> None:
+    """List all supported predicates with descriptions and typical graph layers."""
+
+    rows = query_predicates()
+    emit_query_rows(
+        output_format=output_format,
+        title="Supported Predicates",
+        columns=[("predicate", "Predicate"), ("description", "Description"), ("layer", "Layer")],
+        rows=rows,
+    )
 
 
 @graph.command("neighborhood")

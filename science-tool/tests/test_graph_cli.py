@@ -1082,6 +1082,28 @@ def test_graph_add_question_with_maturity_and_related_hypothesis() -> None:
         assert any("hypothesis/h1" in r for r in related)
 
 
+def test_graph_predicates_outputs_table() -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "predicates"])
+    assert result.exit_code == 0
+    assert "cito:supports" in result.output
+    assert "skos:related" in result.output
+    assert "sci:projectStatus" in result.output
+
+
+def test_graph_predicates_outputs_json() -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "predicates", "--format", "json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert isinstance(payload["rows"], list)
+    assert len(payload["rows"]) > 10
+    predicates = {row["predicate"] for row in payload["rows"]}
+    assert "cito:supports" in predicates
+    assert "skos:related" in predicates
+    assert "scic:causes" in predicates
+
+
 def test_graph_stamp_revision_updates_revision_metadata() -> None:
     runner = CliRunner()
 
