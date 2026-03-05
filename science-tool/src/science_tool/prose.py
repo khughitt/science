@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
 
 import yaml
 
@@ -10,7 +10,19 @@ import yaml
 _INLINE_CURIE_RE = re.compile(r"([\w][\w\s\-]*?)\s+\[`([A-Za-z][\w\-]*:[^\]`]+)`\]")
 
 
-def scan_prose(root: Path) -> list[dict[str, Any]]:
+class InlineAnnotation(TypedDict):
+    term: str
+    curie: str
+    line: int
+
+
+class ProseFileResult(TypedDict):
+    path: str
+    frontmatter_terms: list[str]
+    inline_annotations: list[InlineAnnotation]
+
+
+def scan_prose(root: Path) -> list[ProseFileResult]:
     """Scan markdown files under *root* for ontology annotations.
 
     Returns a list of file records, each containing:
@@ -18,7 +30,7 @@ def scan_prose(root: Path) -> list[dict[str, Any]]:
     - frontmatter_terms: list of CURIE strings from YAML frontmatter ``ontology_terms``
     - inline_annotations: list of {term, curie, line} dicts
     """
-    results: list[dict[str, Any]] = []
+    results: list[ProseFileResult] = []
 
     for md_path in sorted(root.rglob("*.md")):
         text = md_path.read_text(encoding="utf-8")
@@ -29,11 +41,11 @@ def scan_prose(root: Path) -> list[dict[str, Any]]:
             continue
 
         results.append(
-            {
-                "path": md_path.relative_to(root).as_posix(),
-                "frontmatter_terms": frontmatter_terms,
-                "inline_annotations": inline_annotations,
-            }
+            ProseFileResult(
+                path=md_path.relative_to(root).as_posix(),
+                frontmatter_terms=frontmatter_terms,
+                inline_annotations=inline_annotations,
+            )
         )
 
     return results
@@ -64,14 +76,14 @@ def _extract_frontmatter_terms(text: str) -> list[str]:
     return [str(t) for t in terms if t]
 
 
-def _extract_inline_annotations(text: str) -> list[dict[str, str | int]]:
+def _extract_inline_annotations(text: str) -> list[InlineAnnotation]:
     """Extract inline ``term [`CURIE`]`` annotations with line numbers."""
-    annotations: list[dict[str, str | int]] = []
+    annotations: list[InlineAnnotation] = []
 
     for line_num, line in enumerate(text.splitlines(), start=1):
         for match in _INLINE_CURIE_RE.finditer(line):
             term = match.group(1).strip()
             curie = match.group(2)
-            annotations.append({"term": term, "curie": curie, "line": line_num})
+            annotations.append(InlineAnnotation(term=term, curie=curie, line=line_num))
 
     return annotations
