@@ -17,6 +17,8 @@ SCI_NS = Namespace("http://example.org/science/vocab/")
 SCIC_NS = Namespace("http://example.org/science/vocab/causal/")
 SCHEMA_NS = Namespace("https://schema.org/")
 BIOLINK_NS = Namespace("https://w3id.org/biolink/vocab/")
+CITO_NS = Namespace("http://purl.org/spar/cito/")
+DCTERMS_NS = Namespace("http://purl.org/dc/terms/")
 REVISION_URI = URIRef(PROJECT_NS["graph_revision"])
 
 GRAPH_LAYERS: tuple[str, ...] = (
@@ -34,6 +36,8 @@ CURIE_PREFIXES: dict[str, Namespace] = {
     "skos": Namespace(str(SKOS)),
     "rdf": Namespace(str(RDF)),
     "biolink": BIOLINK_NS,
+    "cito": CITO_NS,
+    "dcterms": DCTERMS_NS,
 }
 PROJECT_ENTITY_PREFIXES: set[str] = {
     "paper",
@@ -42,6 +46,7 @@ PROJECT_ENTITY_PREFIXES: set[str] = {
     "hypothesis",
     "dataset",
     "question",
+    "evidence",
 }
 
 INITIAL_GRAPH_TEMPLATE = """@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .

@@ -863,6 +863,47 @@ def test_graph_scan_prose_returns_empty_for_unannotated_dir() -> None:
         assert len(payload["rows"]) == 0
 
 
+def test_cito_prefix_resolves_in_add_edge() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        edge = runner.invoke(
+            main,
+            ["graph", "add", "edge", "claim/c1", "cito:supports", "hypothesis/h1", "--graph", "graph/knowledge"],
+        )
+        assert edge.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        cito_supports = Namespace("http://purl.org/spar/cito/")["supports"]
+        assert (PROJECT_NS["claim/c1"], cito_supports, PROJECT_NS["hypothesis/h1"]) in knowledge
+
+
+def test_dcterms_prefix_resolves_in_add_edge() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        edge = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "edge",
+                "concept/brca1",
+                "dcterms:identifier",
+                "concept/ncbigene_672",
+                "--graph",
+                "graph/knowledge",
+            ],
+        )
+        assert edge.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        dcterms_id = Namespace("http://purl.org/dc/terms/")["identifier"]
+        assert (PROJECT_NS["concept/brca1"], dcterms_id, PROJECT_NS["concept/ncbigene_672"]) in knowledge
+
+
 def test_graph_stamp_revision_updates_revision_metadata() -> None:
     runner = CliRunner()
 
