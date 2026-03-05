@@ -5,22 +5,5 @@
   "author": {
     "name": "Keith Hughitt"
   },
-  "license": "MIT",
-  "skills": [
-    {
-      "name": "knowledge-graph",
-      "path": "skills/knowledge-graph.md",
-      "description": "Reference guide for the science knowledge graph ontology and conventions"
-    },
-    {
-      "name": "create-graph",
-      "path": "skills/create-graph.md",
-      "description": "Construct a knowledge graph from project prose documents"
-    },
-    {
-      "name": "update-graph",
-      "path": "skills/update-graph.md",
-      "description": "Detect and update stale areas in the knowledge graph"
-    }
-  ]
+  "license": "MIT"
 }
