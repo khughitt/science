@@ -8,23 +8,32 @@ description: Construct a knowledge graph from project prose documents. Reads res
 
 ## Overview
 
-This skill walks through project prose documents (research notes, literature summaries, hypothesis documents) and constructs a knowledge graph with proper provenance and ontology alignment.
+This command walks through project prose documents (research notes, literature summaries, hypothesis documents) and constructs a knowledge graph with proper provenance and ontology alignment.
+
+## Tool invocation
+
+All `science-tool` commands below use this pattern:
+
+```bash
+uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool <command>
+```
+
+For brevity, the examples below write just `science-tool <command>` — **always expand to the full `uv run --with ...` form when executing.**
 
 ## Prerequisites
 
 Before running this command:
-1. `science-tool` must be installed in the project: `uv add science-tool --directory /mnt/ssd/Dropbox/ai/science/science-tool` (or add it as a path dependency).
-2. The project must have `knowledge/graph.trig` initialized. If not: `uv run science-tool graph init`
-3. Research documents should exist in `doc/`, `specs/`, `notes/`, or `papers/summaries/`.
+1. The project must have `knowledge/graph.trig` initialized. If not: `science-tool graph init`
+2. Research documents should exist in `doc/`, `specs/`, `notes/`, or `papers/summaries/`.
 
 ## Workflow
 
 ### Step 1: Scan for existing annotations
 
 ```bash
-uv run science-tool graph scan-prose doc/
-uv run science-tool graph scan-prose specs/
-uv run science-tool graph scan-prose notes/
+science-tool graph scan-prose doc/
+science-tool graph scan-prose specs/
+science-tool graph scan-prose notes/
 ```
 
 Review the output. Files with existing annotations already have entity groundwork.
@@ -32,7 +41,7 @@ Review the output. Files with existing annotations already have entity groundwor
 ### Step 2: Check current graph state
 
 ```bash
-uv run science-tool graph stats --format json
+science-tool graph stats --format json
 ```
 
 If the graph already has entities, note what exists to avoid duplicates.
@@ -73,9 +82,9 @@ For each factual assertion:
 After processing all documents:
 
 ```bash
-uv run science-tool graph stamp-revision
-uv run science-tool graph validate --format json
-uv run science-tool graph stats --format json
+science-tool graph stamp-revision
+science-tool graph validate --format json
+science-tool graph stats --format json
 ```
 
 All validation checks must pass. Report the final graph stats to the user.

@@ -5,18 +5,27 @@ description: Detect stale areas in the knowledge graph and selectively update fr
 # Update Knowledge Graph
 
 > **Prerequisite:** Load the `knowledge-graph` skill for ontology reference before starting.
-> **Prerequisite:** `science-tool` must be installed in the project. See `/science:create-graph` for setup.
+
+## Tool invocation
+
+All `science-tool` commands below use this pattern:
+
+```bash
+uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool <command>
+```
+
+For brevity, the examples below write just `science-tool <command>` — **always expand to the full `uv run --with ...` form when executing.**
 
 ## Overview
 
-This skill detects which project documents have changed since the last graph update, re-processes them, and updates the graph accordingly.
+This command detects which project documents have changed since the last graph update, re-processes them, and updates the graph accordingly.
 
 ## Workflow
 
 ### Step 1: Run diff to find stale inputs
 
 ```bash
-uv run science-tool graph diff --mode hybrid --format json
+science-tool graph diff --mode hybrid --format json
 ```
 
 Review the output. Each row shows a file path, status (`stale`), and reason (`new_file`, `hash_changed`, `mtime_changed`, `removed_file`).
@@ -36,11 +45,11 @@ Group stale files by type:
 For each stale file:
 
 1. **Read the document** and understand what changed.
-2. **Scan for annotations**: `uv run science-tool graph scan-prose <directory>`
+2. **Scan for annotations**: `science-tool graph scan-prose <directory>`
 3. **Check existing graph entities** related to this document:
    ```bash
-   uv run science-tool graph claims --about "<relevant term>" --format json
-   uv run science-tool graph neighborhood "<relevant entity>" --format json
+   science-tool graph claims --about "<relevant term>" --format json
+   science-tool graph neighborhood "<relevant entity>" --format json
    ```
 4. **Add new entities/claims** that don't already exist.
 5. **Update prose annotations** if new entities were added.
@@ -55,9 +64,9 @@ For files with reason `removed_file`:
 ### Step 5: Finalize
 
 ```bash
-uv run science-tool graph stamp-revision
-uv run science-tool graph validate --format json
-uv run science-tool graph stats --format json
+science-tool graph stamp-revision
+science-tool graph validate --format json
+science-tool graph stats --format json
 ```
 
 Report:
