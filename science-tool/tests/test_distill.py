@@ -182,3 +182,78 @@ def test_distill_pykeen_writes_manifest(tmp_path: Path) -> None:
 
     manifest = tmp_path / "manifest.ttl"
     assert manifest.exists()
+
+
+from rdflib import Literal, URIRef
+from rdflib.namespace import PROV
+
+
+def _write_test_snapshot(path: Path) -> None:
+    """Write a minimal Turtle snapshot for import testing."""
+    g = Graph()
+    g.bind("sci", SCI)
+    g.bind("skos", SKOS)
+    concept = URIRef("http://example.org/test/concept1")
+    g.add((concept, RDF.type, SCI.Concept))
+    g.add((concept, SKOS.prefLabel, Literal("TestConcept")))
+    g.serialize(destination=str(path), format="turtle")
+
+
+def test_graph_import_merges_into_knowledge_layer() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        snapshot = Path("snapshot.ttl")
+        _write_test_snapshot(snapshot)
+
+        result = runner.invoke(main, ["graph", "import", str(snapshot)])
+        assert result.exit_code == 0
+
+        from rdflib import Dataset as RdfDataset
+
+        dataset = RdfDataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(URIRef("http://example.org/project/graph/knowledge"))
+
+        concept = URIRef("http://example.org/test/concept1")
+        assert (concept, RDF.type, SCI.Concept) in knowledge
+        assert (concept, SKOS.prefLabel, Literal("TestConcept")) in knowledge
+
+
+def test_graph_import_records_provenance() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        snapshot = Path("snapshot.ttl")
+        _write_test_snapshot(snapshot)
+
+        result = runner.invoke(main, ["graph", "import", str(snapshot)])
+        assert result.exit_code == 0
+
+        from rdflib import Dataset as RdfDataset
+
+        dataset = RdfDataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        provenance = dataset.graph(URIRef("http://example.org/project/graph/provenance"))
+
+        # Should have an import provenance record
+        import_records = list(provenance.triples((None, PROV.generatedAtTime, None)))
+        assert len(import_records) >= 1
+
+
+def test_graph_import_reports_triple_count() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        snapshot = Path("snapshot.ttl")
+        _write_test_snapshot(snapshot)
+
+        result = runner.invoke(main, ["graph", "import", str(snapshot)])
+        assert result.exit_code == 0
+        assert "2" in result.output  # 2 triples imported
