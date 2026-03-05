@@ -257,3 +257,28 @@ def test_graph_import_reports_triple_count() -> None:
         result = runner.invoke(main, ["graph", "import", str(snapshot)])
         assert result.exit_code == 0
         assert "2" in result.output  # 2 triples imported
+
+
+def test_distill_openalex_cli() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        with patch("science_tool.distill.openalex._fetch_all_pages", side_effect=_mock_fetch_all):
+            result = runner.invoke(main, ["distill", "openalex", "--level", "subfields"])
+
+        assert result.exit_code == 0, f"Failed: {result.output}"
+        assert "openalex" in result.output.lower()
+        assert Path("data/snapshots/openalex-science-map.ttl").exists()
+        assert Path("data/snapshots/manifest.ttl").exists()
+
+
+def test_distill_pykeen_cli() -> None:
+    runner = CliRunner()
+    factory = _make_mock_triples_factory()
+
+    with runner.isolated_filesystem():
+        with patch("science_tool.distill.pykeen_source._load_pykeen_dataset", return_value=factory):
+            result = runner.invoke(main, ["distill", "pykeen", "TestDataset"])
+
+        assert result.exit_code == 0, f"Failed: {result.output}"
+        assert Path("data/snapshots/testdataset-core.ttl").exists()

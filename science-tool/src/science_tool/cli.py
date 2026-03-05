@@ -4,6 +4,8 @@ from pathlib import Path
 
 import click
 
+from science_tool.distill.openalex import distill_openalex
+from science_tool.distill.pykeen_source import distill_pykeen
 from science_tool.doi import lookup_doi_metadata
 from science_tool.graph.store import (
     GRAPH_LAYERS,
@@ -353,6 +355,32 @@ def doi_lookup(doi: str, output_format: str) -> None:
         columns=[("field", "Field"), ("value", "Value")],
         rows=rows,
     )
+
+
+@main.group()
+def distill() -> None:
+    """Distill public knowledge graphs into Turtle snapshots."""
+
+
+@distill.command("openalex")
+@click.option("--level", type=click.Choice(("subfields", "topics")), default="subfields", show_default=True)
+@click.option("--output", "output_path", default=None, type=click.Path(path_type=Path))
+def distill_openalex_cmd(level: str, output_path: Path | None) -> None:
+    """Fetch OpenAlex science hierarchy and write Turtle snapshot."""
+
+    result = distill_openalex(level=level, output_path=output_path)
+    click.echo(f"Wrote OpenAlex snapshot ({level}) to {result}")
+
+
+@distill.command("pykeen")
+@click.argument("dataset_name")
+@click.option("--budget", type=int, default=None)
+@click.option("--output", "output_path", default=None, type=click.Path(path_type=Path))
+def distill_pykeen_cmd(dataset_name: str, budget: int | None, output_path: Path | None) -> None:
+    """Distill a PyKEEN dataset into a Turtle snapshot."""
+
+    result = distill_pykeen(dataset_name=dataset_name, budget=budget, output_path=output_path)
+    click.echo(f"Wrote {dataset_name} snapshot to {result}")
 
 
 if __name__ == "__main__":
