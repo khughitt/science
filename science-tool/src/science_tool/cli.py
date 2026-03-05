@@ -311,9 +311,7 @@ def graph_scan_prose(directory: Path, output_format: str) -> None:
             {
                 "path": entry["path"],
                 "frontmatter_terms": "; ".join(entry["frontmatter_terms"]),
-                "inline_annotations": "; ".join(
-                    f"{a['term']} [{a['curie']}]" for a in entry["inline_annotations"]
-                ),
+                "inline_annotations": "; ".join(f"{a['term']} [{a['curie']}]" for a in entry["inline_annotations"]),
             }
         )
 
@@ -338,13 +336,40 @@ def graph_add() -> None:
 @click.argument("label")
 @click.option("--type", "concept_type", default=None)
 @click.option("--ontology-id", default=None)
+@click.option("--note", default=None, help="skos:note annotation")
+@click.option("--definition", default=None, help="skos:definition annotation")
+@click.option("--property", "properties", type=(str, str), multiple=True, help="KEY VALUE property pair (repeatable)")
+@click.option(
+    "--status", default=None, help="Project status (selected-primary, deferred, active, candidate, speculative)"
+)
+@click.option("--source", default=None, help="Provenance source reference (paper:doi_... or file path)")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_add_concept(label: str, concept_type: str | None, ontology_id: str | None, graph_path: Path) -> None:
+def graph_add_concept(
+    label: str,
+    concept_type: str | None,
+    ontology_id: str | None,
+    note: str | None,
+    definition: str | None,
+    properties: tuple[tuple[str, str], ...],
+    status: str | None,
+    source: str | None,
+    graph_path: Path,
+) -> None:
     """Add a concept node to the knowledge graph."""
 
-    concept_uri = add_concept(graph_path=graph_path, label=label, concept_type=concept_type, ontology_id=ontology_id)
+    concept_uri = add_concept(
+        graph_path=graph_path,
+        label=label,
+        concept_type=concept_type,
+        ontology_id=ontology_id,
+        note=note,
+        definition=definition,
+        properties=list(properties) if properties else None,
+        status=status,
+        source=source,
+    )
     click.echo(f"Added concept: {concept_uri}")
 
 

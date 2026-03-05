@@ -904,6 +904,121 @@ def test_dcterms_prefix_resolves_in_add_edge() -> None:
         assert (PROJECT_NS["concept/brca1"], dcterms_id, PROJECT_NS["concept/ncbigene_672"]) in knowledge
 
 
+def test_graph_add_concept_with_note_writes_skos_note() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(main, ["graph", "add", "concept", "DNABERT-2", "--note", "12 layers; max context 2048 nt"])
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        concept_uri = PROJECT_NS["concept/dnabert_2"]
+        notes = list(knowledge.objects(concept_uri, SKOS.note))
+        assert len(notes) == 1
+        assert str(notes[0]) == "12 layers; max context 2048 nt"
+
+
+def test_graph_add_concept_with_definition_writes_skos_definition() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "concept",
+                "Epistasis",
+                "--definition",
+                "Nonadditive interactions between genetic variants",
+            ],
+        )
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        concept_uri = PROJECT_NS["concept/epistasis"]
+        defs = list(knowledge.objects(concept_uri, SKOS.definition))
+        assert len(defs) == 1
+        assert "Nonadditive" in str(defs[0])
+
+
+def test_graph_add_concept_with_property_bare_key_uses_sci_namespace() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "concept",
+                "DNABERT-2",
+                "--property",
+                "hasArchitecture",
+                "BERT encoder",
+                "--property",
+                "hasParameters",
+                "117M",
+            ],
+        )
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        concept_uri = PROJECT_NS["concept/dnabert_2"]
+        assert (concept_uri, SCI["hasArchitecture"], None) in knowledge
+        assert (concept_uri, SCI["hasParameters"], None) in knowledge
+        arch_vals = [str(o) for o in knowledge.objects(concept_uri, SCI["hasArchitecture"])]
+        assert "BERT encoder" in arch_vals
+
+
+def test_graph_add_concept_with_property_curie_key_resolves_namespace() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(
+            main,
+            ["graph", "add", "concept", "DNABERT-2", "--property", "schema:description", "A DNA foundation model"],
+        )
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        concept_uri = PROJECT_NS["concept/dnabert_2"]
+        assert (concept_uri, SCHEMA["description"], None) in knowledge
+
+
+def test_graph_add_concept_with_status_writes_project_status() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(main, ["graph", "add", "concept", "DNABERT-2", "--status", "selected-primary"])
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        concept_uri = PROJECT_NS["concept/dnabert_2"]
+        statuses = [str(o) for o in knowledge.objects(concept_uri, SCI["projectStatus"])]
+        assert "selected-primary" in statuses
+
+
+def test_graph_add_concept_with_source_writes_provenance() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(main, ["graph", "add", "concept", "DNABERT-2", "--source", "paper:doi_10_1234_test"])
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+        concept_uri = PROJECT_NS["concept/dnabert_2"]
+        sources = list(provenance.objects(concept_uri, PROV.wasDerivedFrom))
+        assert len(sources) == 1
+        assert str(sources[0]).endswith("doi_10_1234_test")
+
+
 def test_graph_stamp_revision_updates_revision_metadata() -> None:
     runner = CliRunner()
 

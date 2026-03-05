@@ -91,7 +91,17 @@ def read_graph_stats(graph_path: Path) -> dict[str, int]:
     return stats
 
 
-def add_concept(graph_path: Path, label: str, concept_type: str | None, ontology_id: str | None) -> URIRef:
+def add_concept(
+    graph_path: Path,
+    label: str,
+    concept_type: str | None,
+    ontology_id: str | None,
+    note: str | None = None,
+    definition: str | None = None,
+    properties: list[tuple[str, str]] | None = None,
+    status: str | None = None,
+    source: str | None = None,
+) -> URIRef:
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
 
@@ -103,6 +113,19 @@ def add_concept(graph_path: Path, label: str, concept_type: str | None, ontology
         knowledge.add((concept_uri, RDF.type, _resolve_term(concept_type)))
     if ontology_id:
         knowledge.add((concept_uri, SCHEMA_NS.identifier, Literal(ontology_id)))
+    if note:
+        knowledge.add((concept_uri, SKOS.note, Literal(note)))
+    if definition:
+        knowledge.add((concept_uri, SKOS.definition, Literal(definition)))
+    if properties:
+        for key, value in properties:
+            pred = _resolve_term(key) if ":" in key else SCI_NS[key]
+            knowledge.add((concept_uri, pred, Literal(value)))
+    if status:
+        knowledge.add((concept_uri, SCI_NS.projectStatus, Literal(status)))
+    if source:
+        provenance = dataset.graph(_graph_uri("graph/provenance"))
+        provenance.add((concept_uri, PROV.wasDerivedFrom, _resolve_term(source)))
 
     _save_dataset(dataset, graph_path)
     return concept_uri
