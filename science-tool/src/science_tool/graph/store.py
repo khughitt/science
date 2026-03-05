@@ -174,7 +174,7 @@ def add_claim(
     return claim_uri
 
 
-def add_hypothesis(graph_path: Path, hypothesis_id: str, text: str, source: str) -> URIRef:
+def add_hypothesis(graph_path: Path, hypothesis_id: str, text: str, source: str, status: str | None = None) -> URIRef:
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
@@ -184,10 +184,41 @@ def add_hypothesis(graph_path: Path, hypothesis_id: str, text: str, source: str)
     knowledge.add((hypothesis_uri, SCHEMA_NS.identifier, Literal(hypothesis_id)))
     knowledge.add((hypothesis_uri, SCHEMA_NS.text, Literal(text)))
 
+    if status:
+        knowledge.add((hypothesis_uri, SCI_NS.projectStatus, Literal(status)))
+
     provenance.add((hypothesis_uri, PROV.wasDerivedFrom, _resolve_term(source)))
 
     _save_dataset(dataset, graph_path)
     return hypothesis_uri
+
+
+def add_question(
+    graph_path: Path,
+    question_id: str,
+    text: str,
+    source: str,
+    maturity: str = "open",
+    related_hypotheses: list[str] | None = None,
+) -> URIRef:
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    provenance = dataset.graph(_graph_uri("graph/provenance"))
+
+    question_uri = URIRef(PROJECT_NS[f"question/{question_id.lower()}"])
+    knowledge.add((question_uri, RDF.type, SCI_NS.Question))
+    knowledge.add((question_uri, SCHEMA_NS.identifier, Literal(question_id)))
+    knowledge.add((question_uri, SCHEMA_NS.text, Literal(text)))
+    knowledge.add((question_uri, SCI_NS.maturity, Literal(maturity)))
+
+    provenance.add((question_uri, PROV.wasDerivedFrom, _resolve_term(source)))
+
+    if related_hypotheses:
+        for hyp_ref in related_hypotheses:
+            knowledge.add((question_uri, SKOS.related, _resolve_term(hyp_ref)))
+
+    _save_dataset(dataset, graph_path)
+    return question_uri
 
 
 def add_edge(graph_path: Path, subject: str, predicate: str, obj: str, graph_layer: str) -> None:

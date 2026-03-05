@@ -15,6 +15,7 @@ from science_tool.graph.store import (
     add_edge,
     add_hypothesis,
     add_paper,
+    add_question,
     build_graph_dot,
     diff_graph_inputs,
     import_snapshot,
@@ -416,14 +417,49 @@ def graph_add_claim(
 @click.argument("hypothesis_id")
 @click.option("--text", required=True)
 @click.option("--source", required=True)
+@click.option("--status", default=None, help="Project status (active, deferred, speculative)")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_add_hypothesis(hypothesis_id: str, text: str, source: str, graph_path: Path) -> None:
+def graph_add_hypothesis(hypothesis_id: str, text: str, source: str, status: str | None, graph_path: Path) -> None:
     """Add a hypothesis with provenance."""
 
-    hypothesis_uri = add_hypothesis(graph_path=graph_path, hypothesis_id=hypothesis_id, text=text, source=source)
+    hypothesis_uri = add_hypothesis(
+        graph_path=graph_path, hypothesis_id=hypothesis_id, text=text, source=source, status=status,
+    )
     click.echo(f"Added hypothesis: {hypothesis_uri}")
+
+
+@graph_add.command("question")
+@click.argument("question_id")
+@click.option("--text", required=True)
+@click.option("--source", required=True)
+@click.option("--maturity", default="open", show_default=True,
+              type=click.Choice(("open", "partially-resolved", "resolved")))
+@click.option("--related-hypothesis", "related_hypotheses", multiple=True,
+              help="Hypothesis reference (repeatable)")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_add_question(
+    question_id: str,
+    text: str,
+    source: str,
+    maturity: str,
+    related_hypotheses: tuple[str, ...],
+    graph_path: Path,
+) -> None:
+    """Add an open question with provenance."""
+
+    question_uri = add_question(
+        graph_path=graph_path,
+        question_id=question_id,
+        text=text,
+        source=source,
+        maturity=maturity,
+        related_hypotheses=list(related_hypotheses) if related_hypotheses else None,
+    )
+    click.echo(f"Added question: {question_uri}")
 
 
 @graph_add.command("edge")

@@ -1019,6 +1019,69 @@ def test_graph_add_concept_with_source_writes_provenance() -> None:
         assert str(sources[0]).endswith("doi_10_1234_test")
 
 
+def test_graph_add_hypothesis_with_status_writes_project_status() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(
+            main,
+            ["graph", "add", "hypothesis", "H1", "--text", "Test hypothesis", "--source", "paper:doi_10_1111_a", "--status", "active"],
+        )
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        hyp_uri = PROJECT_NS["hypothesis/h1"]
+        statuses = [str(o) for o in knowledge.objects(hyp_uri, SCI["projectStatus"])]
+        assert "active" in statuses
+
+
+def test_graph_add_question_creates_entity_with_provenance() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(
+            main,
+            ["graph", "add", "question", "Q01", "--text", "Which tokenization strategy best preserves biological signals?", "--source", "paper:doi_10_1111_a"],
+        )
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+        q_uri = PROJECT_NS["question/q01"]
+        assert (q_uri, RDF.type, SCI["Question"]) in knowledge
+        assert (q_uri, SCHEMA["text"], None) in knowledge
+        assert (q_uri, SCHEMA["identifier"], None) in knowledge
+        assert any(provenance.triples((q_uri, PROV.wasDerivedFrom, None)))
+        # Default maturity is "open"
+        maturity_vals = [str(o) for o in knowledge.objects(q_uri, SCI["maturity"])]
+        assert "open" in maturity_vals
+
+
+def test_graph_add_question_with_maturity_and_related_hypothesis() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert runner.invoke(
+            main,
+            ["graph", "add", "hypothesis", "H1", "--text", "Test hyp", "--source", "paper:doi_10_1111_a"],
+        ).exit_code == 0
+        add = runner.invoke(
+            main,
+            ["graph", "add", "question", "Q05", "--text", "How should models be selected?", "--source", "paper:doi_10_2222_b", "--maturity", "partially-resolved", "--related-hypothesis", "hypothesis/h1"],
+        )
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        q_uri = PROJECT_NS["question/q05"]
+        maturity_vals = [str(o) for o in knowledge.objects(q_uri, SCI["maturity"])]
+        assert "partially-resolved" in maturity_vals
+        related = [str(o) for o in knowledge.objects(q_uri, SKOS.related)]
+        assert any("hypothesis/h1" in r for r in related)
+
+
 def test_graph_stamp_revision_updates_revision_metadata() -> None:
     runner = CliRunner()
 
