@@ -861,3 +861,24 @@ def test_graph_scan_prose_returns_empty_for_unannotated_dir() -> None:
         assert result.exit_code == 0
         payload = json.loads(result.output)
         assert len(payload["rows"]) == 0
+
+
+def test_graph_stamp_revision_updates_revision_metadata() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        doc_dir = Path("doc")
+        doc_dir.mkdir()
+        (doc_dir / "notes.md").write_text("some notes", encoding="utf-8")
+
+        result = runner.invoke(main, ["graph", "stamp-revision"])
+        assert result.exit_code == 0
+        assert "revision" in result.output.lower()
+
+        # Verify the revision metadata was written by checking diff sees no stale files
+        diff = runner.invoke(main, ["graph", "diff", "--mode", "hybrid", "--format", "json"])
+        assert diff.exit_code == 0
+        payload = json.loads(diff.output)
+        assert len(payload["rows"]) == 0

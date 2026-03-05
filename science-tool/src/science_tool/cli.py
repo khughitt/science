@@ -19,6 +19,7 @@ from science_tool.graph.store import (
     diff_graph_inputs,
     import_snapshot,
     init_graph_file,
+    stamp_revision,
     query_claims,
     query_coverage,
     query_evidence,
@@ -114,6 +115,17 @@ def graph_diff(mode: str, output_format: str, graph_path: Path) -> None:
         columns=[("path", "Path"), ("status", "Status"), ("reason", "Reason")],
         rows=rows,
     )
+
+
+@graph.command("stamp-revision")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_stamp_revision(graph_path: Path) -> None:
+    """Update graph revision metadata to reflect current project state."""
+
+    revision_time = stamp_revision(graph_path)
+    click.echo(f"Stamped graph revision: {revision_time}")
 
 
 @graph.command("neighborhood")

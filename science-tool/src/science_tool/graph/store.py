@@ -210,6 +210,18 @@ def import_snapshot(graph_path: Path, snapshot_path: Path) -> int:
     return imported_count
 
 
+def stamp_revision(graph_path: Path) -> str:
+    """Update graph revision metadata without adding entities. Returns the revision timestamp."""
+    dataset = _load_dataset(graph_path)
+    _save_dataset(dataset, graph_path)
+
+    # Read back the stamped time
+    dataset = _load_dataset(graph_path)
+    provenance = dataset.graph(_graph_uri("graph/provenance"))
+    time_obj = next(provenance.objects(REVISION_URI, SCHEMA_NS.dateModified), None)
+    return str(time_obj) if time_obj else "unknown"
+
+
 def validate_graph(graph_path: Path) -> tuple[list[dict[str, str]], bool]:
     rows: list[dict[str, str]] = []
 
