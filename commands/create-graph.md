@@ -51,11 +51,20 @@ If the graph already has entities, note what exists to avoid duplicates.
 For each research document, in order:
 
 1. **Read the document** to understand its content.
-2. **Identify entities**: concepts, genes, diseases, drugs, pathways, papers, datasets.
-3. **Identify relations**: associations, hierarchies, causal claims, evidence links.
+2. **Identify entities**: concepts, genes, diseases, drugs, pathways, papers, datasets, models, methods, tools.
+3. **Identify relations**: associations, hierarchies, causal claims, evidence links. Use `cito:supports`/`cito:disputes` for evidence, `skos:related` for general associations (not `sci:relatedTo`).
 4. **Identify claims**: factual assertions with their sources and confidence levels.
-5. **Add entities to the graph** using `science-tool graph add` commands.
-6. **Add prose annotations** to the document:
+5. **Identify open questions**: unresolved research questions with their maturity status.
+6. **Add entities to the graph** using `science-tool graph add` commands. Capture rich metadata:
+   - Use `--note` for contextual information (parameters, architecture, status notes)
+   - Use `--property KEY VALUE` for structured metadata (hasArchitecture, hasParameters, hasTokenization, hasEmbeddingDim)
+   - Use `--status` for project relevance (`selected-primary`, `deferred`, `active`, `candidate`, `speculative`)
+   - Use `--source` for provenance on concepts, not just claims and hypotheses
+7. **Add open questions** using `science-tool graph add question <ID> --text "<text>" --source <ref>`:
+   - Use `--maturity open|partially-resolved|resolved` to indicate resolution status
+   - Use `--related-hypothesis <hyp_ref>` to link questions to relevant hypotheses
+   - Number questions sequentially (Q01, Q02, ...)
+8. **Add prose annotations** to the document:
    - Add `ontology_terms:` frontmatter with relevant CURIEs.
    - Add inline `[`CURIE`]` annotations on first mention of each entity.
 
@@ -67,6 +76,10 @@ For each entity found in prose, determine:
 - [ ] **Type**: `sci:Concept` + domain type (e.g., `biolink:Gene`)
 - [ ] **Ontology ID**: standard identifier (e.g., `NCBIGene:672`, `MONDO:0016419`)
 - [ ] **Relations**: how it connects to other entities already in the graph
+- [ ] **Properties**: structured metadata (architecture, parameters, dimensions) via `--property`
+- [ ] **Note**: freeform contextual annotations via `--note`
+- [ ] **Status**: project relevance (`selected-primary`, `deferred`, `active`) via `--status`
+- [ ] **Source**: provenance document reference via `--source`
 
 ### Step 5: Claim extraction checklist
 
@@ -102,3 +115,5 @@ At completion, the user should have:
 - **Always include provenance.** Every claim and hypothesis must have a `--source`.
 - **Prefer existing ontology IDs** over invented ones. Use standard identifiers (NCBI Gene, MONDO, ChEBI, etc.).
 - **Ask the user** if uncertain about entity types, confidence levels, or whether something is a claim vs. background knowledge.
+- **Track deferred entities.** If an entity is identified but peripheral to current work, add it to `knowledge/deferred-entities.md` with a brief description rather than cluttering the graph. Add to the graph later when it becomes relevant.
+- **Use standard predicates.** Prefer `cito:supports`/`cito:disputes` over `sci:supports`/`sci:refutes`, and `skos:related` over `sci:relatedTo`. Run `science-tool graph predicates` for the full list.
