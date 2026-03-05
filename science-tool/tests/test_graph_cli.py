@@ -1025,7 +1025,18 @@ def test_graph_add_hypothesis_with_status_writes_project_status() -> None:
         assert runner.invoke(main, ["graph", "init"]).exit_code == 0
         add = runner.invoke(
             main,
-            ["graph", "add", "hypothesis", "H1", "--text", "Test hypothesis", "--source", "paper:doi_10_1111_a", "--status", "active"],
+            [
+                "graph",
+                "add",
+                "hypothesis",
+                "H1",
+                "--text",
+                "Test hypothesis",
+                "--source",
+                "paper:doi_10_1111_a",
+                "--status",
+                "active",
+            ],
         )
         assert add.exit_code == 0
         dataset = Dataset()
@@ -1042,7 +1053,16 @@ def test_graph_add_question_creates_entity_with_provenance() -> None:
         assert runner.invoke(main, ["graph", "init"]).exit_code == 0
         add = runner.invoke(
             main,
-            ["graph", "add", "question", "Q01", "--text", "Which tokenization strategy best preserves biological signals?", "--source", "paper:doi_10_1111_a"],
+            [
+                "graph",
+                "add",
+                "question",
+                "Q01",
+                "--text",
+                "Which tokenization strategy best preserves biological signals?",
+                "--source",
+                "paper:doi_10_1111_a",
+            ],
         )
         assert add.exit_code == 0
         dataset = Dataset()
@@ -1063,13 +1083,29 @@ def test_graph_add_question_with_maturity_and_related_hypothesis() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
         assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert runner.invoke(
-            main,
-            ["graph", "add", "hypothesis", "H1", "--text", "Test hyp", "--source", "paper:doi_10_1111_a"],
-        ).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                ["graph", "add", "hypothesis", "H1", "--text", "Test hyp", "--source", "paper:doi_10_1111_a"],
+            ).exit_code
+            == 0
+        )
         add = runner.invoke(
             main,
-            ["graph", "add", "question", "Q05", "--text", "How should models be selected?", "--source", "paper:doi_10_2222_b", "--maturity", "partially-resolved", "--related-hypothesis", "hypothesis/h1"],
+            [
+                "graph",
+                "add",
+                "question",
+                "Q05",
+                "--text",
+                "How should models be selected?",
+                "--source",
+                "paper:doi_10_2222_b",
+                "--maturity",
+                "partially-resolved",
+                "--related-hypothesis",
+                "hypothesis/h1",
+            ],
         )
         assert add.exit_code == 0
         dataset = Dataset()

@@ -18,8 +18,7 @@ def test_scan_prose_extracts_frontmatter_ontology_terms(tmp_path: Path) -> None:
 def test_scan_prose_extracts_inline_curie_annotations(tmp_path: Path) -> None:
     doc = tmp_path / "doc.md"
     doc.write_text(
-        "BRCA1 [`NCBIGene:672`] is a tumor suppressor gene associated with\n"
-        "breast cancer [`MONDO:0016419`].\n",
+        "BRCA1 [`NCBIGene:672`] is a tumor suppressor gene associated with\nbreast cancer [`MONDO:0016419`].\n",
         encoding="utf-8",
     )
     result = scan_prose(tmp_path)
