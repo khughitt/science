@@ -12,9 +12,10 @@ This skill walks through project prose documents (research notes, literature sum
 
 ## Prerequisites
 
-Before running this skill:
-1. The project must have `knowledge/graph.trig` initialized. If not: `uv run science-tool graph init`
-2. Research documents should exist in `doc/`, `specs/`, `notes/`, or `papers/summaries/`.
+Before running this command:
+1. `science-tool` must be installed in the project: `uv add science-tool --directory /mnt/ssd/Dropbox/ai/science/science-tool` (or add it as a path dependency).
+2. The project must have `knowledge/graph.trig` initialized. If not: `uv run science-tool graph init`
+3. Research documents should exist in `doc/`, `specs/`, `notes/`, or `papers/summaries/`.
 
 ## Workflow
 

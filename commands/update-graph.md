@@ -5,6 +5,7 @@ description: Detect stale areas in the knowledge graph and selectively update fr
 # Update Knowledge Graph
 
 > **Prerequisite:** Load the `knowledge-graph` skill for ontology reference before starting.
+> **Prerequisite:** `science-tool` must be installed in the project. See `/science:create-graph` for setup.
 
 ## Overview
 
