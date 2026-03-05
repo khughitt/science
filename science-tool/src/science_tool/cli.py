@@ -15,20 +15,24 @@ from science_tool.graph.store import (
     add_edge,
     add_hypothesis,
     add_paper,
+    add_question,
     build_graph_dot,
     diff_graph_inputs,
     import_snapshot,
     init_graph_file,
+    stamp_revision,
     query_claims,
     query_coverage,
     query_evidence,
     query_gaps,
     query_neighborhood,
+    query_predicates,
     query_uncertainty,
     read_graph_stats,
     validate_graph,
 )
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows
+from science_tool.prose import scan_prose
 
 
 @click.group()
@@ -111,6 +115,31 @@ def graph_diff(mode: str, output_format: str, graph_path: Path) -> None:
         output_format=output_format,
         title="Graph Diff",
         columns=[("path", "Path"), ("status", "Status"), ("reason", "Reason")],
+        rows=rows,
+    )
+
+
+@graph.command("stamp-revision")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_stamp_revision(graph_path: Path) -> None:
+    """Update graph revision metadata to reflect current project state."""
+
+    revision_time = stamp_revision(graph_path)
+    click.echo(f"Stamped graph revision: {revision_time}")
+
+
+@graph.command("predicates")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def graph_predicates_cmd(output_format: str) -> None:
+    """List all supported predicates with descriptions and typical graph layers."""
+
+    rows = query_predicates()
+    emit_query_rows(
+        output_format=output_format,
+        title="Supported Predicates",
+        columns=[("predicate", "Predicate"), ("description", "Description"), ("layer", "Layer")],
         rows=rows,
     )
 
@@ -285,6 +314,38 @@ def graph_import(snapshot_path: Path, graph_path: Path) -> None:
     click.echo(f"Imported {count} triples from {snapshot_path.name}")
 
 
+@graph.command("scan-prose")
+@click.argument("directory", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def graph_scan_prose(directory: Path, output_format: str) -> None:
+    """Scan markdown files for ontology annotations (frontmatter + inline CURIEs)."""
+
+    file_results = scan_prose(directory)
+    rows: list[dict[str, str]] = []
+    for entry in file_results:
+        rows.append(
+            {
+                "path": entry["path"],
+                "frontmatter_terms": "; ".join(entry["frontmatter_terms"]),
+                "inline_annotations": "; ".join(f"{a['term']} [{a['curie']}]" for a in entry["inline_annotations"]),
+            }
+        )
+
+    emit_query_rows(
+        output_format=output_format,
+        title="Prose Annotations",
+        columns=[
+            ("path", "Path"),
+            ("frontmatter_terms", "Frontmatter Terms"),
+            ("inline_annotations", "Inline Annotations"),
+        ],
+        rows=rows,
+    )
+
+
+PROJECT_STATUSES = ("selected-primary", "deferred", "active", "candidate", "speculative")
+
+
 @graph.group("add")
 def graph_add() -> None:
     """Add graph entities and edges."""
@@ -294,13 +355,38 @@ def graph_add() -> None:
 @click.argument("label")
 @click.option("--type", "concept_type", default=None)
 @click.option("--ontology-id", default=None)
+@click.option("--note", default=None, help="skos:note annotation")
+@click.option("--definition", default=None, help="skos:definition annotation")
+@click.option("--property", "properties", type=(str, str), multiple=True, help="KEY VALUE property pair (repeatable)")
+@click.option("--status", default=None, type=click.Choice(PROJECT_STATUSES), help="Project status")
+@click.option("--source", default=None, help="Provenance source reference (paper:doi_... or file path)")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_add_concept(label: str, concept_type: str | None, ontology_id: str | None, graph_path: Path) -> None:
+def graph_add_concept(
+    label: str,
+    concept_type: str | None,
+    ontology_id: str | None,
+    note: str | None,
+    definition: str | None,
+    properties: tuple[tuple[str, str], ...],
+    status: str | None,
+    source: str | None,
+    graph_path: Path,
+) -> None:
     """Add a concept node to the knowledge graph."""
 
-    concept_uri = add_concept(graph_path=graph_path, label=label, concept_type=concept_type, ontology_id=ontology_id)
+    concept_uri = add_concept(
+        graph_path=graph_path,
+        label=label,
+        concept_type=concept_type,
+        ontology_id=ontology_id,
+        note=note,
+        definition=definition,
+        properties=list(properties) if properties else None,
+        status=status,
+        source=source,
+    )
     click.echo(f"Added concept: {concept_uri}")
 
 
@@ -347,14 +433,56 @@ def graph_add_claim(
 @click.argument("hypothesis_id")
 @click.option("--text", required=True)
 @click.option("--source", required=True)
+@click.option("--status", default=None, type=click.Choice(PROJECT_STATUSES), help="Project status")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_add_hypothesis(hypothesis_id: str, text: str, source: str, graph_path: Path) -> None:
+def graph_add_hypothesis(hypothesis_id: str, text: str, source: str, status: str | None, graph_path: Path) -> None:
     """Add a hypothesis with provenance."""
 
-    hypothesis_uri = add_hypothesis(graph_path=graph_path, hypothesis_id=hypothesis_id, text=text, source=source)
+    hypothesis_uri = add_hypothesis(
+        graph_path=graph_path,
+        hypothesis_id=hypothesis_id,
+        text=text,
+        source=source,
+        status=status,
+    )
     click.echo(f"Added hypothesis: {hypothesis_uri}")
+
+
+@graph_add.command("question")
+@click.argument("question_id")
+@click.option("--text", required=True)
+@click.option("--source", required=True)
+@click.option(
+    "--maturity", default="open", show_default=True, type=click.Choice(("open", "partially-resolved", "resolved"))
+)
+@click.option("--status", default=None, type=click.Choice(PROJECT_STATUSES), help="Project status")
+@click.option("--related-hypothesis", "related_hypotheses", multiple=True, help="Hypothesis reference (repeatable)")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_add_question(
+    question_id: str,
+    text: str,
+    source: str,
+    maturity: str,
+    status: str | None,
+    related_hypotheses: tuple[str, ...],
+    graph_path: Path,
+) -> None:
+    """Add an open question with provenance."""
+
+    question_uri = add_question(
+        graph_path=graph_path,
+        question_id=question_id,
+        text=text,
+        source=source,
+        maturity=maturity,
+        status=status,
+        related_hypotheses=list(related_hypotheses) if related_hypotheses else None,
+    )
+    click.echo(f"Added question: {question_uri}")
 
 
 @graph_add.command("edge")

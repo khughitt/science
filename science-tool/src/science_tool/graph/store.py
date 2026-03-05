@@ -17,6 +17,8 @@ SCI_NS = Namespace("http://example.org/science/vocab/")
 SCIC_NS = Namespace("http://example.org/science/vocab/causal/")
 SCHEMA_NS = Namespace("https://schema.org/")
 BIOLINK_NS = Namespace("https://w3id.org/biolink/vocab/")
+CITO_NS = Namespace("http://purl.org/spar/cito/")
+DCTERMS_NS = Namespace("http://purl.org/dc/terms/")
 REVISION_URI = URIRef(PROJECT_NS["graph_revision"])
 
 GRAPH_LAYERS: tuple[str, ...] = (
@@ -34,6 +36,8 @@ CURIE_PREFIXES: dict[str, Namespace] = {
     "skos": Namespace(str(SKOS)),
     "rdf": Namespace(str(RDF)),
     "biolink": BIOLINK_NS,
+    "cito": CITO_NS,
+    "dcterms": DCTERMS_NS,
 }
 PROJECT_ENTITY_PREFIXES: set[str] = {
     "paper",
@@ -42,6 +46,7 @@ PROJECT_ENTITY_PREFIXES: set[str] = {
     "hypothesis",
     "dataset",
     "question",
+    "evidence",
 }
 
 INITIAL_GRAPH_TEMPLATE = """@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -86,7 +91,17 @@ def read_graph_stats(graph_path: Path) -> dict[str, int]:
     return stats
 
 
-def add_concept(graph_path: Path, label: str, concept_type: str | None, ontology_id: str | None) -> URIRef:
+def add_concept(
+    graph_path: Path,
+    label: str,
+    concept_type: str | None,
+    ontology_id: str | None,
+    note: str | None = None,
+    definition: str | None = None,
+    properties: list[tuple[str, str]] | None = None,
+    status: str | None = None,
+    source: str | None = None,
+) -> URIRef:
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
 
@@ -98,6 +113,19 @@ def add_concept(graph_path: Path, label: str, concept_type: str | None, ontology
         knowledge.add((concept_uri, RDF.type, _resolve_term(concept_type)))
     if ontology_id:
         knowledge.add((concept_uri, SCHEMA_NS.identifier, Literal(ontology_id)))
+    if note:
+        knowledge.add((concept_uri, SKOS.note, Literal(note)))
+    if definition:
+        knowledge.add((concept_uri, SKOS.definition, Literal(definition)))
+    if properties:
+        for key, value in properties:
+            pred = _resolve_term(key) if ":" in key else SCI_NS[key]
+            knowledge.add((concept_uri, pred, Literal(value)))
+    if status:
+        knowledge.add((concept_uri, SCI_NS.projectStatus, Literal(status)))
+    if source:
+        provenance = dataset.graph(_graph_uri("graph/provenance"))
+        provenance.add((concept_uri, PROV.wasDerivedFrom, _resolve_term(source)))
 
     _save_dataset(dataset, graph_path)
     return concept_uri
@@ -146,7 +174,7 @@ def add_claim(
     return claim_uri
 
 
-def add_hypothesis(graph_path: Path, hypothesis_id: str, text: str, source: str) -> URIRef:
+def add_hypothesis(graph_path: Path, hypothesis_id: str, text: str, source: str, status: str | None = None) -> URIRef:
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
@@ -156,10 +184,45 @@ def add_hypothesis(graph_path: Path, hypothesis_id: str, text: str, source: str)
     knowledge.add((hypothesis_uri, SCHEMA_NS.identifier, Literal(hypothesis_id)))
     knowledge.add((hypothesis_uri, SCHEMA_NS.text, Literal(text)))
 
+    if status:
+        knowledge.add((hypothesis_uri, SCI_NS.projectStatus, Literal(status)))
+
     provenance.add((hypothesis_uri, PROV.wasDerivedFrom, _resolve_term(source)))
 
     _save_dataset(dataset, graph_path)
     return hypothesis_uri
+
+
+def add_question(
+    graph_path: Path,
+    question_id: str,
+    text: str,
+    source: str,
+    maturity: str = "open",
+    status: str | None = None,
+    related_hypotheses: list[str] | None = None,
+) -> URIRef:
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    provenance = dataset.graph(_graph_uri("graph/provenance"))
+
+    question_uri = URIRef(PROJECT_NS[f"question/{question_id.lower()}"])
+    knowledge.add((question_uri, RDF.type, SCI_NS.Question))
+    knowledge.add((question_uri, SCHEMA_NS.identifier, Literal(question_id)))
+    knowledge.add((question_uri, SCHEMA_NS.text, Literal(text)))
+    knowledge.add((question_uri, SCI_NS.maturity, Literal(maturity)))
+
+    if status:
+        knowledge.add((question_uri, SCI_NS.projectStatus, Literal(status)))
+
+    provenance.add((question_uri, PROV.wasDerivedFrom, _resolve_term(source)))
+
+    if related_hypotheses:
+        for hyp_ref in related_hypotheses:
+            knowledge.add((question_uri, SKOS.related, _resolve_term(hyp_ref)))
+
+    _save_dataset(dataset, graph_path)
+    return question_uri
 
 
 def add_edge(graph_path: Path, subject: str, predicate: str, obj: str, graph_layer: str) -> None:
@@ -208,6 +271,47 @@ def import_snapshot(graph_path: Path, snapshot_path: Path) -> int:
 
     _save_dataset(dataset, graph_path)
     return imported_count
+
+
+def stamp_revision(graph_path: Path) -> str:
+    """Update graph revision metadata without adding entities. Returns the revision timestamp."""
+    dataset = _load_dataset(graph_path)
+    _save_dataset(dataset, graph_path)
+
+    # Read back the stamped time
+    dataset = _load_dataset(graph_path)
+    provenance = dataset.graph(_graph_uri("graph/provenance"))
+    time_obj = next(provenance.objects(REVISION_URI, SCHEMA_NS.dateModified), None)
+    return str(time_obj) if time_obj else "unknown"
+
+
+PREDICATE_REGISTRY: list[dict[str, str]] = [
+    {"predicate": "skos:related", "description": "General association between concepts", "layer": "graph/knowledge"},
+    {"predicate": "skos:broader", "description": "Broader concept hierarchy", "layer": "graph/knowledge"},
+    {"predicate": "skos:narrower", "description": "Narrower concept hierarchy", "layer": "graph/knowledge"},
+    {"predicate": "cito:supports", "description": "Evidence supports a claim/hypothesis", "layer": "graph/knowledge"},
+    {"predicate": "cito:disputes", "description": "Evidence disputes a claim/hypothesis", "layer": "graph/knowledge"},
+    {"predicate": "cito:discusses", "description": "Paper discusses a topic", "layer": "graph/knowledge"},
+    {"predicate": "cito:extends", "description": "Work extends prior research", "layer": "graph/knowledge"},
+    {"predicate": "cito:usesMethodIn", "description": "Uses method from another work", "layer": "graph/knowledge"},
+    {"predicate": "cito:citesAsDataSource", "description": "Cites as data source", "layer": "graph/knowledge"},
+    {"predicate": "sci:evaluates", "description": "Benchmark evaluates model/method", "layer": "graph/knowledge"},
+    {"predicate": "sci:hasModality", "description": "Model/method operates on modality", "layer": "graph/knowledge"},
+    {"predicate": "sci:detectedBy", "description": "Feature detected by method/tool", "layer": "graph/knowledge"},
+    {"predicate": "sci:storedIn", "description": "Data stored in database/repository", "layer": "graph/knowledge"},
+    {"predicate": "sci:measuredBy", "description": "Variable measured by dataset", "layer": "graph/datasets"},
+    {"predicate": "sci:projectStatus", "description": "Project status of entity", "layer": "graph/knowledge"},
+    {"predicate": "sci:confidence", "description": "Confidence score (0.0-1.0)", "layer": "graph/provenance"},
+    {"predicate": "sci:epistemicStatus", "description": "Epistemic status of claim", "layer": "graph/provenance"},
+    {"predicate": "sci:maturity", "description": "Maturity of open question", "layer": "graph/knowledge"},
+    {"predicate": "scic:causes", "description": "Causal relationship", "layer": "graph/causal"},
+    {"predicate": "scic:confounds", "description": "Confounding relationship", "layer": "graph/causal"},
+    {"predicate": "prov:wasDerivedFrom", "description": "Provenance source", "layer": "graph/provenance"},
+]
+
+
+def query_predicates() -> list[dict[str, str]]:
+    return list(PREDICATE_REGISTRY)
 
 
 def validate_graph(graph_path: Path) -> tuple[list[dict[str, str]], bool]:

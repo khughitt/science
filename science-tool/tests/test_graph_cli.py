@@ -828,3 +828,334 @@ def test_graph_uncertainty_includes_disputed_epistemic_status() -> None:
         assert result.exit_code == 0
         payload = json.loads(result.output)
         assert any("Disputed" in row["text"] for row in payload["rows"])
+
+
+def test_graph_scan_prose_returns_annotations_json() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        doc_dir = Path("doc")
+        doc_dir.mkdir()
+        (doc_dir / "01-overview.md").write_text(
+            '---\nontology_terms:\n  - "biolink:Gene"\n---\n\nBRCA1 [`NCBIGene:672`] is important.\n',
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["graph", "scan-prose", "doc", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert len(payload["rows"]) == 1
+        assert payload["rows"][0]["frontmatter_terms"] == "biolink:Gene"
+        assert "NCBIGene:672" in payload["rows"][0]["inline_annotations"]
+
+
+def test_graph_scan_prose_returns_empty_for_unannotated_dir() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        doc_dir = Path("doc")
+        doc_dir.mkdir()
+        (doc_dir / "plain.md").write_text("No annotations here.\n", encoding="utf-8")
+
+        result = runner.invoke(main, ["graph", "scan-prose", "doc", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert len(payload["rows"]) == 0
+
+
+def test_cito_prefix_resolves_in_add_edge() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        edge = runner.invoke(
+            main,
+            ["graph", "add", "edge", "claim/c1", "cito:supports", "hypothesis/h1", "--graph", "graph/knowledge"],
+        )
+        assert edge.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        cito_supports = Namespace("http://purl.org/spar/cito/")["supports"]
+        assert (PROJECT_NS["claim/c1"], cito_supports, PROJECT_NS["hypothesis/h1"]) in knowledge
+
+
+def test_dcterms_prefix_resolves_in_add_edge() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        edge = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "edge",
+                "concept/brca1",
+                "dcterms:identifier",
+                "concept/ncbigene_672",
+                "--graph",
+                "graph/knowledge",
+            ],
+        )
+        assert edge.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        dcterms_id = Namespace("http://purl.org/dc/terms/")["identifier"]
+        assert (PROJECT_NS["concept/brca1"], dcterms_id, PROJECT_NS["concept/ncbigene_672"]) in knowledge
+
+
+def test_graph_add_concept_with_note_writes_skos_note() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(main, ["graph", "add", "concept", "DNABERT-2", "--note", "12 layers; max context 2048 nt"])
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        concept_uri = PROJECT_NS["concept/dnabert_2"]
+        notes = list(knowledge.objects(concept_uri, SKOS.note))
+        assert len(notes) == 1
+        assert str(notes[0]) == "12 layers; max context 2048 nt"
+
+
+def test_graph_add_concept_with_definition_writes_skos_definition() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "concept",
+                "Epistasis",
+                "--definition",
+                "Nonadditive interactions between genetic variants",
+            ],
+        )
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        concept_uri = PROJECT_NS["concept/epistasis"]
+        defs = list(knowledge.objects(concept_uri, SKOS.definition))
+        assert len(defs) == 1
+        assert "Nonadditive" in str(defs[0])
+
+
+def test_graph_add_concept_with_property_bare_key_uses_sci_namespace() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "concept",
+                "DNABERT-2",
+                "--property",
+                "hasArchitecture",
+                "BERT encoder",
+                "--property",
+                "hasParameters",
+                "117M",
+            ],
+        )
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        concept_uri = PROJECT_NS["concept/dnabert_2"]
+        assert (concept_uri, SCI["hasArchitecture"], None) in knowledge
+        assert (concept_uri, SCI["hasParameters"], None) in knowledge
+        arch_vals = [str(o) for o in knowledge.objects(concept_uri, SCI["hasArchitecture"])]
+        assert "BERT encoder" in arch_vals
+
+
+def test_graph_add_concept_with_property_curie_key_resolves_namespace() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(
+            main,
+            ["graph", "add", "concept", "DNABERT-2", "--property", "schema:description", "A DNA foundation model"],
+        )
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        concept_uri = PROJECT_NS["concept/dnabert_2"]
+        assert (concept_uri, SCHEMA["description"], None) in knowledge
+
+
+def test_graph_add_concept_with_status_writes_project_status() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(main, ["graph", "add", "concept", "DNABERT-2", "--status", "selected-primary"])
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        concept_uri = PROJECT_NS["concept/dnabert_2"]
+        statuses = [str(o) for o in knowledge.objects(concept_uri, SCI["projectStatus"])]
+        assert "selected-primary" in statuses
+
+
+def test_graph_add_concept_with_source_writes_provenance() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(main, ["graph", "add", "concept", "DNABERT-2", "--source", "paper:doi_10_1234_test"])
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+        concept_uri = PROJECT_NS["concept/dnabert_2"]
+        sources = list(provenance.objects(concept_uri, PROV.wasDerivedFrom))
+        assert len(sources) == 1
+        assert str(sources[0]).endswith("doi_10_1234_test")
+
+
+def test_graph_add_hypothesis_with_status_writes_project_status() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "hypothesis",
+                "H1",
+                "--text",
+                "Test hypothesis",
+                "--source",
+                "paper:doi_10_1111_a",
+                "--status",
+                "active",
+            ],
+        )
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        hyp_uri = PROJECT_NS["hypothesis/h1"]
+        statuses = [str(o) for o in knowledge.objects(hyp_uri, SCI["projectStatus"])]
+        assert "active" in statuses
+
+
+def test_graph_add_question_creates_entity_with_provenance() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        add = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "question",
+                "Q01",
+                "--text",
+                "Which tokenization strategy best preserves biological signals?",
+                "--source",
+                "paper:doi_10_1111_a",
+            ],
+        )
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+        q_uri = PROJECT_NS["question/q01"]
+        assert (q_uri, RDF.type, SCI["Question"]) in knowledge
+        assert (q_uri, SCHEMA["text"], None) in knowledge
+        assert (q_uri, SCHEMA["identifier"], None) in knowledge
+        assert any(provenance.triples((q_uri, PROV.wasDerivedFrom, None)))
+        # Default maturity is "open"
+        maturity_vals = [str(o) for o in knowledge.objects(q_uri, SCI["maturity"])]
+        assert "open" in maturity_vals
+
+
+def test_graph_add_question_with_maturity_and_related_hypothesis() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                ["graph", "add", "hypothesis", "H1", "--text", "Test hyp", "--source", "paper:doi_10_1111_a"],
+            ).exit_code
+            == 0
+        )
+        add = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "question",
+                "Q05",
+                "--text",
+                "How should models be selected?",
+                "--source",
+                "paper:doi_10_2222_b",
+                "--maturity",
+                "partially-resolved",
+                "--related-hypothesis",
+                "hypothesis/h1",
+            ],
+        )
+        assert add.exit_code == 0
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        q_uri = PROJECT_NS["question/q05"]
+        maturity_vals = [str(o) for o in knowledge.objects(q_uri, SCI["maturity"])]
+        assert "partially-resolved" in maturity_vals
+        related = [str(o) for o in knowledge.objects(q_uri, SKOS.related)]
+        assert any("hypothesis/h1" in r for r in related)
+
+
+def test_graph_stamp_revision_updates_revision_metadata() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        doc_dir = Path("doc")
+        doc_dir.mkdir()
+        (doc_dir / "notes.md").write_text("some notes", encoding="utf-8")
+
+        result = runner.invoke(main, ["graph", "stamp-revision"])
+        assert result.exit_code == 0
+        assert "revision" in result.output.lower()
+
+        # Verify the revision metadata was written by checking diff sees no stale files
+        diff = runner.invoke(main, ["graph", "diff", "--mode", "hybrid", "--format", "json"])
+        assert diff.exit_code == 0
+        payload = json.loads(diff.output)
+        assert len(payload["rows"]) == 0
+
+
+def test_graph_predicates_outputs_table() -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "predicates"])
+    assert result.exit_code == 0
+    assert "cito:supports" in result.output
+    assert "skos:related" in result.output
+    assert "sci:projectStatus" in result.output
+
+
+def test_graph_predicates_outputs_json() -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "predicates", "--format", "json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert isinstance(payload["rows"], list)
+    assert len(payload["rows"]) > 10
+    predicates = {row["predicate"] for row in payload["rows"]}
+    assert "cito:supports" in predicates
+    assert "skos:related" in predicates
+    assert "scic:causes" in predicates
