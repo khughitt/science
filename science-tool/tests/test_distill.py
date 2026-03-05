@@ -102,3 +102,83 @@ def test_distill_openalex_writes_manifest(tmp_path: Path) -> None:
     g.parse(str(manifest), format="turtle")
     assert len(list(g.triples((None, SCHEMA.name, None)))) == 1
     assert len(list(g.triples((None, SCHEMA.sha256, None)))) == 1
+
+
+import numpy as np
+
+from science_tool.distill.pykeen_source import distill_pykeen
+
+
+def _make_mock_triples_factory():
+    """Create a mock TriplesFactory with small synthetic data."""
+    from unittest.mock import MagicMock
+
+    triples = np.array([
+        ["GeneA", "interacts_with", "GeneB"],
+        ["GeneA", "associated_with", "DiseaseX"],
+        ["GeneB", "interacts_with", "GeneC"],
+        ["DrugAlpha", "treats", "DiseaseX"],
+        ["DiseaseX", "phenotype_present", "PhenotypeP"],
+        ["GeneC", "associated_with", "DiseaseY"],
+        ["DrugBeta", "treats", "DiseaseY"],
+        ["GeneA", "interacts_with", "GeneC"],
+    ], dtype=object)
+
+    factory = MagicMock()
+    factory.triples = triples
+    factory.num_entities = 8
+    factory.num_relations = 4
+    factory.entity_to_id = {name: i for i, name in enumerate(
+        ["GeneA", "GeneB", "GeneC", "DiseaseX", "DiseaseY", "DrugAlpha", "DrugBeta", "PhenotypeP"]
+    )}
+    factory.relation_to_id = {name: i for i, name in enumerate(
+        ["interacts_with", "associated_with", "treats", "phenotype_present"]
+    )}
+    return factory
+
+
+def test_distill_pykeen_no_budget_takes_all_triples(tmp_path: Path) -> None:
+    output = tmp_path / "test-dataset.ttl"
+    factory = _make_mock_triples_factory()
+
+    with patch("science_tool.distill.pykeen_source._load_pykeen_dataset", return_value=factory):
+        result = distill_pykeen(dataset_name="TestDataset", output_path=output)
+
+    assert result.exists()
+    g = Graph()
+    g.parse(str(result), format="turtle")
+
+    concepts = set(g.subjects(RDF.type, SCI.Concept))
+    assert len(concepts) == 8  # all entities
+
+    # All entities should have prefLabel
+    for concept in concepts:
+        assert any(g.triples((concept, SKOS.prefLabel, None)))
+
+
+def test_distill_pykeen_with_budget_reduces_entities(tmp_path: Path) -> None:
+    output = tmp_path / "test-budget.ttl"
+    factory = _make_mock_triples_factory()
+
+    with patch("science_tool.distill.pykeen_source._load_pykeen_dataset", return_value=factory):
+        result = distill_pykeen(dataset_name="TestDataset", budget=4, output_path=output)
+
+    assert result.exists()
+    g = Graph()
+    g.parse(str(result), format="turtle")
+
+    concepts = set(g.subjects(RDF.type, SCI.Concept))
+    # Budget=4 means at most 4 entities selected
+    assert len(concepts) <= 4
+    assert len(concepts) >= 1  # at least some survived
+
+
+def test_distill_pykeen_writes_manifest(tmp_path: Path) -> None:
+    output = tmp_path / "test-dataset.ttl"
+    factory = _make_mock_triples_factory()
+
+    with patch("science_tool.distill.pykeen_source._load_pykeen_dataset", return_value=factory):
+        distill_pykeen(dataset_name="TestDataset", output_path=output)
+
+    manifest = tmp_path / "manifest.ttl"
+    assert manifest.exists()
