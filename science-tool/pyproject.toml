@@ -1,0 +1,43 @@
+[project]
+name = "science-tool"
+version = "0.1.0"
+description = "Science knowledge graph tooling"
+requires-python = ">=3.11"
+dependencies = [
+  "click>=8.1",
+  "rich>=13.0",
+  "rdflib>=7.0",
+]
+
+[project.scripts]
+science-tool = "science_tool.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/science_tool"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
+[project.optional-dependencies]
+distill = [
+    "pykeen",
+    "networkx>=3.2",
+    "httpx",
+]
