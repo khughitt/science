@@ -2,6 +2,8 @@
   "name": "science",
   "version": "0.1.0",
   "description": "Science — an AI research assistant for hypothesis development, literature review, and reproducible computational pipelines. Named after the lab rat from Adventure Time.",
-  "author": "Keith",
+  "author": {
+    "name": "Keith Hughitt"
+  },
   "license": "MIT"
 }

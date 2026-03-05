@@ -644,9 +644,7 @@ def build_graph_dot(
         pred = row["predicate"]
         nodes.add(subj)
         nodes.add(obj)
-        lines.append(
-            f'  "{_short_name(subj)}" -> "{_short_name(obj)}" [label="{_short_name(pred)}"];'
-        )
+        lines.append(f'  "{_short_name(subj)}" -> "{_short_name(obj)}" [label="{_short_name(pred)}"];')
     for node in sorted(nodes):
         lines.append(f'  "{_short_name(node)}";')
     lines.append("}")

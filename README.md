@@ -56,7 +56,7 @@ claude --plugin-dir /path/to/science
 |---|---|
 | `research-methodology` | Conducting literature review, evaluating sources, synthesizing findings |
 | `scientific-writing` | Writing research documents, background sections, summaries |
-| `data-management` | Working with datasets, data packages, provenance *(stub — Phase 2)* |
+| `data-management` | Working with datasets, data packages, provenance |
 
 ## Project Structure
 

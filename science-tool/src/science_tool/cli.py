@@ -42,7 +42,9 @@ def graph() -> None:
 
 
 @graph.command("init")
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_init(graph_path: Path) -> None:
     """Initialize a project graph.trig with named graph layers."""
 
@@ -52,7 +54,9 @@ def graph_init(graph_path: Path) -> None:
 
 @graph.command("stats")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_stats(output_format: str, graph_path: Path) -> None:
     """Show triple counts for configured named graph layers."""
 
@@ -76,7 +80,9 @@ def graph_stats(output_format: str, graph_path: Path) -> None:
 
 @graph.command("validate")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_validate(output_format: str, graph_path: Path) -> None:
     """Run structural validation checks on graph.trig."""
 
@@ -94,7 +100,9 @@ def graph_validate(output_format: str, graph_path: Path) -> None:
 @graph.command("diff")
 @click.option("--mode", type=click.Choice(("hybrid", "mtime", "hash")), default="hybrid", show_default=True)
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_diff(mode: str, output_format: str, graph_path: Path) -> None:
     """Show files that are stale relative to graph revision metadata."""
 
@@ -113,8 +121,12 @@ def graph_diff(mode: str, output_format: str, graph_path: Path) -> None:
 @click.option("--layer", "graph_layer", type=click.Choice(GRAPH_LAYERS), default="graph/knowledge", show_default=True)
 @click.option("--limit", type=int, default=200, show_default=True)
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
-def graph_neighborhood(center: str, hops: int, graph_layer: str, limit: int, output_format: str, graph_path: Path) -> None:
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_neighborhood(
+    center: str, hops: int, graph_layer: str, limit: int, output_format: str, graph_path: Path
+) -> None:
     """Return neighborhood edges around a center entity."""
 
     rows = query_neighborhood(
@@ -136,7 +148,9 @@ def graph_neighborhood(center: str, hops: int, graph_layer: str, limit: int, out
 @click.option("--about", required=True)
 @click.option("--limit", type=int, default=200, show_default=True)
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_claims(about: str, limit: int, output_format: str, graph_path: Path) -> None:
     """Return claims mentioning a term/entity."""
 
@@ -153,7 +167,9 @@ def graph_claims(about: str, limit: int, output_format: str, graph_path: Path) -
 @click.argument("hypothesis_id")
 @click.option("--limit", type=int, default=200, show_default=True)
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_evidence(hypothesis_id: str, limit: int, output_format: str, graph_path: Path) -> None:
     """Return evidence for/against a hypothesis, grouped by supports/refutes."""
 
@@ -169,7 +185,9 @@ def graph_evidence(hypothesis_id: str, limit: int, output_format: str, graph_pat
 @graph.command("coverage")
 @click.option("--limit", type=int, default=200, show_default=True)
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_coverage(limit: int, output_format: str, graph_path: Path) -> None:
     """Show variables with/without dataset links and observedness status."""
 
@@ -187,7 +205,9 @@ def graph_coverage(limit: int, output_format: str, graph_path: Path) -> None:
 @click.option("--hops", type=int, default=2, show_default=True)
 @click.option("--limit", type=int, default=200, show_default=True)
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_gaps(center: str, hops: int, limit: int, output_format: str, graph_path: Path) -> None:
     """Show low-coverage areas in a neighborhood (missing provenance, low confidence, low connectivity)."""
 
@@ -203,7 +223,9 @@ def graph_gaps(center: str, hops: int, limit: int, output_format: str, graph_pat
 @graph.command("uncertainty")
 @click.option("--top", type=int, default=10, show_default=True)
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_uncertainty(top: int, output_format: str, graph_path: Path) -> None:
     """Show highest-uncertainty claims/entities ranked by epistemic status and confidence."""
 
@@ -222,7 +244,9 @@ def graph_uncertainty(top: int, output_format: str, graph_path: Path) -> None:
 @click.option("--hops", type=int, default=2, show_default=True)
 @click.option("--limit", type=int, default=200, show_default=True)
 @click.option("--output", "output_path", default=None, type=click.Path(path_type=Path))
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_viz(
     graph_layer: str,
     center: str | None,
@@ -251,7 +275,9 @@ def graph_viz(
 
 @graph.command("import")
 @click.argument("snapshot_path", type=click.Path(exists=True, path_type=Path))
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_import(snapshot_path: Path, graph_path: Path) -> None:
     """Import a Turtle snapshot into the knowledge graph."""
 
@@ -268,7 +294,9 @@ def graph_add() -> None:
 @click.argument("label")
 @click.option("--type", "concept_type", default=None)
 @click.option("--ontology-id", default=None)
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_add_concept(label: str, concept_type: str | None, ontology_id: str | None, graph_path: Path) -> None:
     """Add a concept node to the knowledge graph."""
 
@@ -278,7 +306,9 @@ def graph_add_concept(label: str, concept_type: str | None, ontology_id: str | N
 
 @graph_add.command("paper")
 @click.option("--doi", required=True)
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_add_paper(doi: str, graph_path: Path) -> None:
     """Add a paper node to the knowledge graph."""
 
@@ -291,7 +321,9 @@ def graph_add_paper(doi: str, graph_path: Path) -> None:
 @click.option("--source", required=True)
 @click.option("--confidence", type=float, default=None)
 @click.option("--id", "claim_id", default=None)
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_add_claim(
     text: str,
     source: str,
@@ -315,7 +347,9 @@ def graph_add_claim(
 @click.argument("hypothesis_id")
 @click.option("--text", required=True)
 @click.option("--source", required=True)
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_add_hypothesis(hypothesis_id: str, text: str, source: str, graph_path: Path) -> None:
     """Add a hypothesis with provenance."""
 
@@ -328,7 +362,9 @@ def graph_add_hypothesis(hypothesis_id: str, text: str, source: str, graph_path:
 @click.argument("predicate")
 @click.argument("object")
 @click.option("--graph", "graph_layer", type=click.Choice(GRAPH_LAYERS), default="graph/knowledge", show_default=True)
-@click.option("--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
 def graph_add_edge(subject: str, predicate: str, object: str, graph_layer: str, graph_path: Path) -> None:
     """Add an arbitrary edge to a selected named graph layer."""
 
