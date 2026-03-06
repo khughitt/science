@@ -252,6 +252,19 @@ def network_graph(alt, df, layer_filter, math, max_edges_slider, mo, n_triples, 
         if layer_filter.value != "all":
             _net_df = df.filter(pl.col("layer") == layer_filter.value)
 
+        # Exclude provenance-only targets (e.g. doc/*.md sources) from network
+        _prov_targets = set(
+            df.filter(pl.col("predicate") == "prov:wasDerivedFrom")["object"].to_list()
+        )
+        _typed_entities = set(
+            df.filter(pl.col("predicate") == "rdf:type")["subject"].to_list()
+        )
+        _prov_only = _prov_targets - _typed_entities
+        if _prov_only:
+            _net_df = _net_df.filter(
+                ~pl.col("subject").is_in(_prov_only) & ~pl.col("object").is_in(_prov_only)
+            )
+
         # Limit edges
         _max_e = max_edges_slider.value
         if len(_net_df) > _max_e:
@@ -387,8 +400,20 @@ def network_graph(alt, df, layer_filter, math, max_edges_slider, mo, n_triples, 
 
 # ── Neighborhood explorer ────────────────────────────────────────────
 @app.cell
-def neighborhood_controls(mo):
-    entity_input = mo.ui.text(value="", label="Entity (CURIE or name)", full_width=True)
+def neighborhood_controls(df, mo, n_triples, pl):
+    # Pick the most-connected typed entity as default
+    _default_entity = ""
+    if n_triples > 0:
+        _typed = set(df.filter(pl.col("predicate") == "rdf:type")["subject"].to_list())
+        _all_refs = df["subject"].to_list() + df["object"].to_list()
+        _deg: dict[str, int] = {}
+        for _n in _all_refs:
+            if _n in _typed:
+                _deg[_n] = _deg.get(_n, 0) + 1
+        if _deg:
+            _default_entity = max(_deg, key=_deg.get)  # type: ignore[arg-type]
+
+    entity_input = mo.ui.text(value=_default_entity, label="Entity (CURIE or name)", full_width=True)
     hops_slider = mo.ui.slider(start=1, stop=3, step=1, value=1, label="Hops")
     mo.md(f"## Neighborhood Explorer\n\n{mo.hstack([entity_input, hops_slider])}")
     return entity_input, hops_slider
@@ -544,11 +569,14 @@ def quality_dashboard(df, mo, n_triples, pl):
         _out = mo.vstack([mo.md("## Quality Dashboard"), mo.md("_No data._")])
     else:
         # 1. Entities missing definition or provenance
+        # skos:definition is used for concepts; schema:text for claims/hypotheses/questions
         _typed_entities = set(
             df.filter(pl.col("predicate") == "rdf:type")["subject"].to_list()
         )
         _has_definition = set(
-            df.filter(pl.col("predicate") == "skos:definition")["subject"].to_list()
+            df.filter(
+                pl.col("predicate").is_in(["skos:definition", "schema:text"])
+            )["subject"].to_list()
         )
         _has_provenance = set(
             df.filter(pl.col("predicate") == "prov:wasDerivedFrom")["subject"].to_list()
