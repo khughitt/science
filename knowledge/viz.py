@@ -2,6 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "marimo",
+#     "numpy",
 #     "altair>=5",
 #     "polars",
 #     "rdflib>=7",
@@ -35,6 +36,7 @@ def load_graph(graph_path_input, mo):
     from pathlib import Path
 
     import altair as alt
+    import numpy as np
     import polars as pl
 
     graph_file = Path(graph_path_input.value)

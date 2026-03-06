@@ -47,6 +47,8 @@ claude --plugin-dir /path/to/science
 | `/science:summarize-topic` | Write a background document on a topic |
 | `/science:summarize-paper` | Summarize a paper (LLM knowledge → web search → PDF) |
 | `/science:add-hypothesis` | Develop and refine a hypothesis interactively |
+| `/science:create-graph` | Build a knowledge graph from project documents |
+| `/science:update-graph` | Incrementally update the graph after document changes |
 
 `/science:summarize-topic` and `/science:summarize-paper` remain supported for backward compatibility.
 
@@ -57,6 +59,7 @@ claude --plugin-dir /path/to/science
 | `research-methodology` | Conducting literature review, evaluating sources, synthesizing findings |
 | `scientific-writing` | Writing research documents, background sections, summaries |
 | `data-management` | Working with datasets, data packages, provenance |
+| `knowledge-graph` | Building and updating the project knowledge graph |
 
 ## Project Structure
 
@@ -104,6 +107,97 @@ my-project/
 ├── tools/                    # Project tooling
 └── templates/                # Document templates
 ```
+
+## Typical Workflow
+
+A research project typically moves through these phases. Commands can be repeated and interleaved as understanding deepens.
+
+### 1. Bootstrap the project
+
+```
+/science:create-project
+```
+
+Interactive conversation refines your research question, then scaffolds the full directory structure, populates core files, and makes the initial git commit. You'll end up with `science.yaml`, `specs/research-question.md`, a starter `doc/01-overview.md`, and empty slots for everything else.
+
+### 2. State your hypotheses
+
+```
+/science:add-hypothesis
+```
+
+For each conjecture — even vague ones — this command walks you through clarifying the claim, defining falsifiability criteria, listing predictions, and identifying required evidence. Output lands in `specs/hypotheses/` and gets cross-linked to open questions.
+
+### 3. Build background knowledge
+
+```
+/science:research-topic "circadian regulation of immune response"
+```
+
+Synthesizes a structured background document from LLM knowledge + web search, adds BibTeX entries, and creates a compact linked note in `notes/topics/`. Repeat for each major topic area your project touches.
+
+### 4. Search the literature
+
+```
+/science:search-literature
+```
+
+Queries OpenAlex and PubMed with multiple query variants, deduplicates, and ranks results by project relevance. Produces a prioritized reading queue with tiers: *Core now*, *Relevant next*, *Peripheral monitor*. High-priority papers get queued in `RESEARCH_PLAN.md`.
+
+### 5. Summarize key papers
+
+```
+/science:research-paper "Doe et al. 2023 circadian immune oscillations"
+```
+
+For each high-priority paper from the search, this command synthesizes a structured summary (from LLM knowledge, web search, or a provided PDF), adds it to `papers/summaries/`, updates the bibliography, and creates a linked note in `notes/articles/`.
+
+### 6. Identify gaps and reprioritize
+
+```
+/science:research-gaps
+/science:review-tasks
+```
+
+`research-gaps` audits coverage across five dimensions (concepts, evidence quality, contradictions, testability, data feasibility) and writes `doc/10-research-gaps.md` with prioritized gap-closing tasks.
+
+`review-tasks` then reshuffles `RESEARCH_PLAN.md` using an expand/compress method — scoring tasks by impact, uncertainty reduction, feasibility, and dependency order.
+
+### 7. Stress-test ideas
+
+```
+/science:discuss "H1: circadian gating of inflammatory cytokine release"
+```
+
+Runs a structured critical discussion that surfaces assumptions, alternative explanations, confounders, and missing evidence. Supports an optional **double-blind mode** where you and the agent write independent analyses before comparing. Discussion output feeds back into open questions and the research plan.
+
+### 8. Build the knowledge graph
+
+```
+/science:create-graph
+```
+
+Reads all project documents and extracts entities (concepts, papers, claims, hypotheses, questions) and their relationships into a formal knowledge graph (`knowledge/graph.trig`). Uses ontology-aligned types and controlled predicates (`cito:supports`, `skos:related`, `scic:causes`, etc.). Source documents get annotated with ontology terms.
+
+After subsequent research rounds, run:
+
+```
+/science:update-graph
+```
+
+This detects stale documents via content hashing and incrementally adds new entities and relations without disturbing existing ones.
+
+### Iterate
+
+Research isn't linear. A typical session might look like:
+
+```
+research-topic → add-hypothesis → search-literature → research-paper ×3
+→ research-gaps → review-tasks → discuss → update-graph
+→ research-topic (deeper) → research-paper ×2 → review-tasks
+```
+
+Each command reads existing project state and builds on it. All artifacts are version-controlled, cross-linked, and validated by `bash validate.sh`.
 
 ## Design Principles
 
