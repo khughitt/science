@@ -16,6 +16,8 @@ uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool <command>
 
 For brevity, the examples below write just `science-tool <command>` — **always expand to the full `uv run --with ...` form when executing.**
 
+> **Cache note:** If `uv run --with` reports missing commands or flags that should exist, the build cache may be stale. Run `uv cache clean science-tool` to clear it, then retry.
+
 ## Overview
 
 This command detects which project documents have changed since the last graph update, re-processes them, and updates the graph accordingly.
@@ -80,3 +82,4 @@ Report:
 - **Incremental updates only.** Do not re-process unchanged files.
 - **Preserve existing entities.** Do not remove or modify entities unless the source document changed.
 - **Ask before removing.** Never silently delete graph entities, even if their source was removed.
+- **Use standard predicates.** Same rules as create-graph: prefer `cito:supports`/`cito:disputes` over `sci:supports`/`sci:refutes`, and `skos:related` over `sci:relatedTo`. Run `science-tool graph predicates` for the full list.

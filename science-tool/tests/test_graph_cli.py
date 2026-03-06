@@ -40,6 +40,21 @@ def test_graph_init_creates_trig_with_named_graphs() -> None:
         parsed.parse(source=str(graph_path), format="trig")
 
 
+def test_graph_init_copies_viz_notebook() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["graph", "init"])
+        assert result.exit_code == 0
+
+        viz_path = Path("code/notebooks/viz.py")
+        assert viz_path.exists()
+        content = viz_path.read_text(encoding="utf-8")
+        assert "marimo" in content
+        assert "viz" in result.output.lower()
+        assert "uv run --with marimo marimo edit" in result.output
+
+
 def test_graph_init_fails_if_graph_exists() -> None:
     runner = CliRunner()
 
@@ -584,7 +599,7 @@ def test_graph_claims_query_filters_about_term() -> None:
 
 
 def _setup_evidence_graph(runner: CliRunner) -> None:
-    """Helper: init graph, add hypothesis H3, add supporting and refuting evidence."""
+    """Helper: init graph, add hypothesis H3, add supporting and disputing claims."""
     assert runner.invoke(main, ["graph", "init"]).exit_code == 0
     assert (
         runner.invoke(
@@ -602,11 +617,27 @@ def _setup_evidence_graph(runner: CliRunner) -> None:
         ).exit_code
         == 0
     )
-    # Add evidence entities and link them
+    # Add claim entities and link them with cito predicates
     assert (
         runner.invoke(
             main,
-            ["graph", "add", "edge", "evidence/ev1", "rdf:type", "sci:Evidence", "--graph", "graph/knowledge"],
+            [
+                "graph",
+                "add",
+                "claim",
+                "Literature supports BRCA1 role",
+                "--source",
+                "paper:doi_10_1111_a",
+                "--id",
+                "ev1",
+            ],
+        ).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(
+            main,
+            ["graph", "add", "edge", "claim/ev1", "cito:supports", "hypothesis/h3", "--graph", "graph/knowledge"],
         ).exit_code
         == 0
     )
@@ -616,12 +647,12 @@ def _setup_evidence_graph(runner: CliRunner) -> None:
             [
                 "graph",
                 "add",
-                "edge",
-                "evidence/ev1",
-                "schema:text",
-                "http://example.org/project/lit_supports_BRCA1",
-                "--graph",
-                "graph/knowledge",
+                "claim",
+                "Counter-evidence against BRCA1",
+                "--source",
+                "paper:doi_10_2222_b",
+                "--id",
+                "ev2",
             ],
         ).exit_code
         == 0
@@ -629,21 +660,7 @@ def _setup_evidence_graph(runner: CliRunner) -> None:
     assert (
         runner.invoke(
             main,
-            ["graph", "add", "edge", "evidence/ev1", "sci:supports", "hypothesis/h3", "--graph", "graph/knowledge"],
-        ).exit_code
-        == 0
-    )
-    assert (
-        runner.invoke(
-            main,
-            ["graph", "add", "edge", "evidence/ev2", "rdf:type", "sci:Evidence", "--graph", "graph/knowledge"],
-        ).exit_code
-        == 0
-    )
-    assert (
-        runner.invoke(
-            main,
-            ["graph", "add", "edge", "evidence/ev2", "sci:refutes", "hypothesis/h3", "--graph", "graph/knowledge"],
+            ["graph", "add", "edge", "claim/ev2", "cito:disputes", "hypothesis/h3", "--graph", "graph/knowledge"],
         ).exit_code
         == 0
     )
@@ -661,7 +678,7 @@ def test_graph_evidence_groups_by_supports_refutes() -> None:
         rows = payload["rows"]
         assert len(rows) == 2
         relations = {row["relation"] for row in rows}
-        assert relations == {"supports", "refutes"}
+        assert relations == {"supports", "disputes"}
 
 
 def test_graph_evidence_returns_empty_for_unknown_hypothesis() -> None:
@@ -1159,3 +1176,83 @@ def test_graph_predicates_outputs_json() -> None:
     assert "cito:supports" in predicates
     assert "skos:related" in predicates
     assert "scic:causes" in predicates
+
+
+def test_graph_add_edge_slugifies_bare_terms() -> None:
+    """Bare terms (no prefix, no URL) should be auto-slugified in edge subjects/objects."""
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        # Add concept first so it exists
+        assert runner.invoke(main, ["graph", "add", "concept", "Nucleotide Transformer v2"]).exit_code == 0
+
+        edge = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "edge",
+                "concept/nucleotide_transformer_v2",
+                "skos:related",
+                "Some New Thing",
+                "--graph",
+                "graph/knowledge",
+            ],
+        )
+        assert edge.exit_code == 0
+
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        # The bare term "Some New Thing" should resolve to slugified URI
+        assert (
+            PROJECT_NS["concept/nucleotide_transformer_v2"],
+            Namespace("http://www.w3.org/2004/02/skos/core#")["related"],
+            PROJECT_NS["some_new_thing"],
+        ) in knowledge
+
+
+def test_graph_add_edge_warns_on_nonexistent_entity() -> None:
+    """Adding an edge referencing a non-existent entity should emit a warning to stderr."""
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        # First add a concept so one side exists
+        assert runner.invoke(main, ["graph", "add", "concept", "BRCA1"]).exit_code == 0
+
+        edge = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "edge",
+                "concept/brca1",
+                "skos:related",
+                "concept/nonexistent",
+                "--graph",
+                "graph/knowledge",
+            ],
+        )
+        assert edge.exit_code == 0
+        # The warning is written to stderr via click.echo(err=True),
+        # but CliRunner mixes stderr into output by default
+        assert "Warning" in edge.output
+        assert "not yet in the graph" in edge.output
+
+
+def test_graph_add_edge_echoes_resolved_uris() -> None:
+    """The CLI should echo resolved URIs, not raw input strings."""
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert runner.invoke(main, ["graph", "add", "concept", "BRCA1"]).exit_code == 0
+
+        edge = runner.invoke(
+            main,
+            ["graph", "add", "edge", "concept/brca1", "skos:related", "concept/tp53", "--graph", "graph/knowledge"],
+        )
+        assert edge.exit_code == 0
+        # Output should show resolved short forms, not raw input
+        assert "concept/brca1" in edge.output
+        assert "skos:related" in edge.output

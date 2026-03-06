@@ -20,6 +20,7 @@ from science_tool.graph.store import (
     diff_graph_inputs,
     import_snapshot,
     init_graph_file,
+    shorten_uri,
     stamp_revision,
     query_claims,
     query_coverage,
@@ -54,6 +55,10 @@ def graph_init(graph_path: Path) -> None:
 
     init_graph_file(graph_path)
     click.echo(f"Initialized graph at {graph_path}")
+    viz_path = graph_path.parent.parent / "code" / "notebooks" / "viz.py"
+    if viz_path.exists():
+        click.echo(f"Copied visualization notebook to {viz_path}")
+        click.echo(f"  Run: uv run --with marimo marimo edit {viz_path}")
 
 
 @graph.command("stats")
@@ -496,8 +501,10 @@ def graph_add_question(
 def graph_add_edge(subject: str, predicate: str, object: str, graph_layer: str, graph_path: Path) -> None:
     """Add an arbitrary edge to a selected named graph layer."""
 
-    add_edge(graph_path=graph_path, subject=subject, predicate=predicate, obj=object, graph_layer=graph_layer)
-    click.echo(f"Added edge in {graph_layer}: {subject} {predicate} {object}")
+    s_uri, p_uri, o_uri = add_edge(
+        graph_path=graph_path, subject=subject, predicate=predicate, obj=object, graph_layer=graph_layer
+    )
+    click.echo(f"Added edge in {graph_layer}: {shorten_uri(str(s_uri))} {shorten_uri(str(p_uri))} {shorten_uri(str(o_uri))}")
 
 
 @main.group()

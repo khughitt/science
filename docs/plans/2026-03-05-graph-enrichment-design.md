@@ -1,6 +1,7 @@
 # Graph Enrichment Design
 
 **Date:** 2026-03-05
+**Status:** IMPLEMENTED (code complete), REFINED (prompt/skill docs iterated post-deployment)
 **Context:** Comparison of hand-curated vs CLI-assisted knowledge graphs revealed significant gaps in per-entity richness, ontology expressiveness, and entity type coverage. This design addresses those gaps.
 
 ## Problem
@@ -106,7 +107,7 @@ Lists all supported predicates with namespace, description, and typical graph la
 
 ### `commands/update-graph.md`
 
-No structural changes -- the workflow benefits from richer CLI commands without prompt changes.
+Added standard predicates note to Important Notes, cross-referencing create-graph rules.
 
 ## Testing
 
@@ -121,3 +122,30 @@ Each feature gets tests following existing patterns in `test_graph_cli.py`:
 - `add question` without optional flags uses defaults
 - `graph predicates` outputs table and JSON formats
 - CiTO and dcterms prefixes resolve correctly in `_resolve_term`
+
+## Post-Implementation Issues (2026-03-05)
+
+Three issues surfaced when testing `/science:create-graph` with the enriched CLI:
+
+### 1. Missing `pyyaml` dependency
+
+Commit `308e910` ("remove unused pyyaml dependency") was incorrect — `prose.py` imports `yaml` for frontmatter parsing. This caused the entire CLI to crash at import time, making it appear that `predicates`, `--note`, `--property`, etc. didn't exist. **Fix:** restored `pyyaml>=6.0` in `pyproject.toml`.
+
+### 2. Stale `uv` build cache
+
+`uv run --with /path/to/science-tool` caches wheel builds aggressively. After adding new commands/flags, the cached build served the old version. Neither `--reinstall-package` nor `--refresh-package` cleared it — only `uv cache prune` or `uv cache clean science-tool` worked. **Fix:** added a "Cache note" to both command files explaining the workaround.
+
+### 3. Prompt compliance gaps
+
+After three test runs of `/science:create-graph`, agents consistently:
+- Used deprecated predicates (`sci:supports` instead of `cito:supports`)
+- Skipped `graph predicates` step
+- Didn't use enrichment flags (`--note`, `--property`, `--status`, `--source`)
+- Tried to check/preserve existing graph state instead of creating fresh
+
+**Fixes applied to prompt docs:**
+- Added **Rules** section at top of `create-graph.md` with MUST/MUST NOT imperatives
+- Replaced ambiguous prerequisites with explicit `graph init` as Step 1
+- Removed useless `scan-prose` step (returns empty on fresh graph)
+- Merged duplicate predicate sections in SKILL.md into single table with "Deprecated" column
+- Added concrete `add concept` example with all flags in workflow Step 2

@@ -60,6 +60,51 @@ Prefix format: `prefix:localname`. Supported prefixes:
 
 Project entity references: `paper:<slug>`, `concept:<slug>`, `claim:<slug>`, `hypothesis:<id>`, `question:<id>`, `dataset:<slug>`.
 
+## Predicate Reference
+
+Run `graph predicates` to see all supported predicates. Only use predicates from this list.
+
+| Relationship | Predicate | Graph Layer | Deprecated alternative |
+|-------------|-----------|-------------|----------------------|
+| General association | `skos:related` | `graph/knowledge` | ~~`sci:relatedTo`~~ |
+| Hierarchy | `skos:broader` / `skos:narrower` | `graph/knowledge` | |
+| Evidence supports claim | `cito:supports` | `graph/knowledge` | ~~`sci:supports`~~ |
+| Evidence disputes claim | `cito:disputes` | `graph/knowledge` | ~~`sci:refutes`~~ |
+| Paper discusses topic | `cito:discusses` | `graph/knowledge` | ~~`sci:addresses`~~ |
+| Extends prior work | `cito:extends` | `graph/knowledge` | |
+| Uses method from work | `cito:usesMethodIn` | `graph/knowledge` | |
+| Cites as data source | `cito:citesAsDataSource` | `graph/knowledge` | |
+| Benchmark evaluates model | `sci:evaluates` | `graph/knowledge` | |
+| Model operates on modality | `sci:hasModality` | `graph/knowledge` | |
+| Feature detected by method | `sci:detectedBy` | `graph/knowledge` | |
+| Data stored in repository | `sci:storedIn` | `graph/knowledge` | |
+| Variable measured by dataset | `sci:measuredBy` | `graph/datasets` | |
+| Causal effect | `scic:causes` | `graph/causal` | |
+| Confounding | `scic:confounds` | `graph/causal` | |
+
+Keep `sci:` for domain-specific predicates: `sci:evaluates`, `sci:hasModality`, `sci:detectedBy`, `sci:storedIn`, `sci:measuredBy`, `sci:projectStatus`, `sci:confidence`, `sci:epistemicStatus`, `sci:maturity`.
+
+If a relationship doesn't fit any predicate above, use `skos:related` and add a `--note`. Do **not** invent new predicates.
+
+## URI Slugification Rules
+
+All entity URIs are auto-slugified: **lowercase, non-alphanumeric characters → underscore, leading/trailing underscores stripped**.
+
+This applies to:
+- Entity creation: `graph add concept "Nucleotide Transformer v2"` → URI `concept/nucleotide_transformer_v2`
+- Bare terms in edges: `graph add edge "My Concept" "skos:related" "Other Thing"` → `my_concept` and `other_thing`
+- DOI slugs: `10.1234/arXiv.2301.01234` → `10_1234_arxiv_2301_01234` (note: `arXiv` → `arxiv`)
+
+**Important for agents:** After `graph add concept`, check the echoed URI to know the exact slug for later `graph add edge` calls. CURIE-prefixed terms (`concept:my_slug`, `paper:doi_...`) and full URLs are NOT slugified — only bare terms without a `:` or `http` prefix.
+
+Examples:
+| Input | Resolved URI suffix |
+|-------|-------------------|
+| `"Nucleotide Transformer v2"` | `nucleotide_transformer_v2` |
+| `"arXiv:2301.01234"` | Error — `arXiv` is not a known CURIE prefix. Use `concept/arxiv_2301_01234` or a DOI. |
+| `concept/nucleotide_transformer_v2` | `concept/nucleotide_transformer_v2` (passed through) |
+| `"DNABERT-2"` | `dnabert_2` |
+
 ## Ontology Alignment Guidelines
 
 1. **Always provide ontology IDs** for well-known entities (genes, diseases, drugs, pathways).
@@ -75,42 +120,6 @@ Project entity references: `paper:<slug>`, `concept:<slug>`, `claim:<slug>`, `hy
 - Use `--confidence` (0.0-1.0) for claims where strength of evidence varies.
 - Epistemic status values: `established`, `hypothesized`, `disputed`, `retracted`.
 - Concepts **should** have `--source` when the source document is known.
-
-## Preferred Predicates
-
-Use standard predicates over custom ones where they exist:
-
-| Use case | Preferred | Avoid |
-|----------|-----------|-------|
-| General association | `skos:related` | `sci:relatedTo` |
-| Evidence supports claim | `cito:supports` | `sci:supports` |
-| Evidence disputes claim | `cito:disputes` | `sci:refutes` |
-| Paper discusses topic | `cito:discusses` | `sci:addresses` |
-| Extends prior work | `cito:extends` | -- |
-| Uses method from work | `cito:usesMethodIn` | -- |
-| Cites as data source | `cito:citesAsDataSource` | -- |
-
-Keep `sci:` for domain-specific predicates: `sci:evaluates`, `sci:hasModality`, `sci:detectedBy`, `sci:storedIn`, `sci:measuredBy`, `sci:projectStatus`, `sci:confidence`, `sci:epistemicStatus`, `sci:maturity`.
-
-Run `graph predicates` to see all supported predicates with descriptions.
-
-## Relation Selection Guide
-
-| Relationship | Predicate | Graph Layer |
-|-------------|-----------|-------------|
-| General association | `skos:related` | `graph/knowledge` |
-| Hierarchy | `skos:broader` / `skos:narrower` | `graph/knowledge` |
-| Evidence supports claim | `cito:supports` | `graph/knowledge` |
-| Evidence disputes claim | `cito:disputes` | `graph/knowledge` |
-| Paper discusses topic | `cito:discusses` | `graph/knowledge` |
-| Extends prior work | `cito:extends` | `graph/knowledge` |
-| Benchmark evaluates model | `sci:evaluates` | `graph/knowledge` |
-| Model operates on modality | `sci:hasModality` | `graph/knowledge` |
-| Feature detected by method | `sci:detectedBy` | `graph/knowledge` |
-| Data stored in repository | `sci:storedIn` | `graph/knowledge` |
-| Variable measured by dataset | `sci:measuredBy` | `graph/datasets` |
-| Causal effect | `scic:causes` | `graph/causal` |
-| Confounding | `scic:confounds` | `graph/causal` |
 
 ## Prose Annotation Format
 

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.resources
 import json
 import re
+import shutil
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
@@ -79,6 +81,9 @@ def init_graph_file(graph_path: Path) -> None:
 
     graph_path.parent.mkdir(parents=True, exist_ok=True)
     graph_path.write_text(INITIAL_GRAPH_TEMPLATE, encoding="utf-8")
+
+    project_root = _project_root_from_graph_path(graph_path)
+    _copy_viz_notebook(project_root / "code" / "notebooks")
 
 
 def read_graph_stats(graph_path: Path) -> dict[str, int]:
@@ -225,15 +230,28 @@ def add_question(
     return question_uri
 
 
-def add_edge(graph_path: Path, subject: str, predicate: str, obj: str, graph_layer: str) -> None:
+def add_edge(
+    graph_path: Path, subject: str, predicate: str, obj: str, graph_layer: str
+) -> tuple[URIRef, URIRef, URIRef]:
     if graph_layer not in GRAPH_LAYERS:
         raise click.ClickException(f"Unsupported graph layer: {graph_layer}")
 
     dataset = _load_dataset(graph_path)
+
+    s_uri = _resolve_term(subject)
+    p_uri = _resolve_term(predicate)
+    o_uri = _resolve_term(obj)
+
+    # Warn if subject/object URIs don't exist in any graph yet
+    for uri, label in [(s_uri, subject), (o_uri, obj)]:
+        if not any((uri, None, None) in g for g in dataset.graphs()):
+            click.echo(f"Warning: '{label}' resolves to {uri} which is not yet in the graph", err=True)
+
     layer = dataset.graph(_graph_uri(graph_layer))
-    layer.add((_resolve_term(subject), _resolve_term(predicate), _resolve_term(obj)))
+    layer.add((s_uri, p_uri, o_uri))
 
     _save_dataset(dataset, graph_path)
+    return s_uri, p_uri, o_uri
 
 
 def import_snapshot(graph_path: Path, snapshot_path: Path) -> int:
@@ -511,15 +529,20 @@ def query_evidence(
     hyp_uri = _resolve_center_entity(hypothesis_id)
 
     rows: list[dict[str, str]] = []
-    for ev_uri, _, _ in knowledge.triples((None, RDF.type, SCI_NS.Evidence)):
-        relation: str | None = None
-        if (ev_uri, SCI_NS.supports, hyp_uri) in knowledge:
-            relation = "supports"
-        elif (ev_uri, SCI_NS.refutes, hyp_uri) in knowledge:
-            relation = "refutes"
-        else:
-            continue
 
+    # Collect all entities that have a cito relation to the hypothesis
+    relation_map: dict[URIRef, str] = {}
+    for subj, _, _ in knowledge.triples((None, CITO_NS.supports, hyp_uri)):
+        if isinstance(subj, URIRef):
+            relation_map[subj] = "supports"
+    for subj, _, _ in knowledge.triples((None, CITO_NS.disputes, hyp_uri)):
+        if isinstance(subj, URIRef):
+            relation_map[subj] = "disputes"
+    for subj, _, _ in knowledge.triples((None, CITO_NS.discusses, hyp_uri)):
+        if isinstance(subj, URIRef):
+            relation_map.setdefault(subj, "discusses")
+
+    for ev_uri, relation in relation_map.items():
         text_obj = next(knowledge.objects(ev_uri, SCHEMA_NS.text), None)
         text = str(text_obj) if text_obj else ""
 
@@ -808,7 +831,11 @@ def _resolve_term(value: str) -> URIRef:
             f"Unknown CURIE prefix '{prefix}'. Supported prefixes: {', '.join(supported_prefixes)}"
         )
 
-    return URIRef(PROJECT_NS[value])
+    # Bare terms with "/" are already structured paths (e.g. concept/brca1) — preserve as-is
+    if "/" in value:
+        return URIRef(PROJECT_NS[value])
+    # Bare terms without structure get slugified (e.g. "Nucleotide Transformer v2" → nucleotide_transformer_v2)
+    return URIRef(PROJECT_NS[_slug(value)])
 
 
 def _load_dataset(graph_path: Path) -> Dataset:
@@ -939,6 +966,29 @@ def _about_tokens(about: str) -> set[str]:
         if suffix:
             tokens.add(suffix)
     return {token for token in tokens if token}
+
+
+def shorten_uri(uri: str) -> str:
+    """Shorten a full URI to a readable CURIE-like form for display."""
+    project_base = str(PROJECT_NS)
+    if uri.startswith(project_base):
+        return uri[len(project_base):]
+    for prefix, ns in CURIE_PREFIXES.items():
+        ns_str = str(ns)
+        if uri.startswith(ns_str):
+            return f"{prefix}:{uri[len(ns_str):]}"
+    return uri
+
+
+def _copy_viz_notebook(notebooks_dir: Path) -> None:
+    """Copy the bundled viz.py marimo notebook into the notebooks directory."""
+    dest = notebooks_dir / "viz.py"
+    if dest.exists():
+        return
+    notebooks_dir.mkdir(parents=True, exist_ok=True)
+    template = importlib.resources.files("science_tool.graph").joinpath("viz_template.py")
+    with importlib.resources.as_file(template) as src:
+        shutil.copy2(src, dest)
 
 
 def _short_name(uri: str) -> str:

@@ -8,6 +8,31 @@
 
 **Tech Stack:** Python 3.12, rdflib, click, pytest, CliRunner
 
+## Status
+
+| Task | Description | Status | Commit |
+|------|-------------|--------|--------|
+| 1 | CiTO/dcterms namespace prefixes | DONE | `cd90010` |
+| 2 | `--note` and `--definition` flags | DONE | `06daad6` |
+| 3 | `--property` flag | DONE | `06daad6` |
+| 4 | `--status` and `--source` flags | DONE | `06daad6` |
+| 5 | `--status` on `add hypothesis` | DONE | `4839af2` |
+| 6 | `add question` command | DONE | `4839af2` |
+| 7 | `graph predicates` command | DONE | `8f7fcc3` |
+| 8 | Update SKILL.md | DONE | `d1ec245`, refined in prompt iteration |
+| 9 | Update create-graph.md | DONE | `d1ec245`, refined in prompt iteration |
+| 10 | Lint, type-check, final tests | DONE | `f9627c4` |
+
+**Post-implementation fixes** (not in original plan):
+- Restored `pyyaml>=6.0` to `pyproject.toml` — incorrectly removed in `308e910`, broke CLI at import
+- Added uv cache note to command files — `uv run --with` served stale builds missing new commands/flags
+- Front-loaded Rules section in `create-graph.md` — agents ignored constraints buried at bottom
+- Simplified `create-graph.md` workflow — removed useless scan-prose/stats steps for fresh graphs
+- Added predicate rule to `update-graph.md` Important Notes
+- Merged duplicate predicate sections in SKILL.md into single table with Deprecated column
+
+See `2026-03-05-graph-enrichment-design.md` § "Post-Implementation Issues" for details.
+
 ---
 
 ### Task 1: Add CiTO and dcterms namespace prefixes

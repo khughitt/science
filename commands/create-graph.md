@@ -20,33 +20,37 @@ uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool <command>
 
 For brevity, the examples below write just `science-tool <command>` — **always expand to the full `uv run --with ...` form when executing.**
 
+> **Cache note:** If `uv run --with` reports missing commands or flags that should exist, the build cache may be stale. Run `uv cache clean science-tool` to clear it, then retry.
+
+## Rules
+
+- **MUST** use `cito:supports`/`cito:disputes` for evidence relations, NOT `sci:supports`/`sci:refutes`
+- **MUST** use `skos:related` for general associations, NOT `sci:relatedTo`
+- **MUST** run `science-tool graph predicates` before adding edges — only use listed predicates
+- **MUST** use `--note`, `--property`, `--status`, `--source` flags on concepts — do NOT edit graph.trig directly
+- **MUST** run `science-tool graph add question` for open questions — do NOT skip this step
+- **MUST NOT** invent predicates — if a relationship doesn't fit an existing predicate, use `skos:related` and add a `--note`
+- **SHOULD** keep build scripts in `knowledge/` for reproducibility — do NOT delete them after running
+- **URI slugification:** Entity labels are auto-slugified (lowercase, non-alphanumeric → `_`). Bare terms in `graph add edge` follow the same rule. After `graph add concept`, check the echoed URI (e.g. `Added concept: http://example.org/project/concept/nucleotide_transformer_v2`) and use that slug in subsequent `graph add edge` calls. The CLI echoes resolved URIs for edges too, so you can verify the mapping.
+
 ## Prerequisites
 
-Before running this command:
-1. The project must have `knowledge/graph.trig` initialized. If not: `science-tool graph init`
-2. Research documents should exist in `doc/`, `specs/`, `notes/`, or `papers/summaries/`.
+This command **creates a graph from scratch**. If a graph already exists, use `update-graph` instead for incremental updates.
+
+Research documents should exist in `doc/`, `specs/`, `notes/`, or `papers/summaries/`.
 
 ## Workflow
 
-### Step 1: Scan for existing annotations
+### Step 1: Initialize graph and review predicates
 
 ```bash
-science-tool graph scan-prose doc/
-science-tool graph scan-prose specs/
-science-tool graph scan-prose notes/
+science-tool graph init
+science-tool graph predicates --format table
 ```
 
-Review the output. Files with existing annotations already have entity groundwork.
+Initialize a fresh `knowledge/graph.trig`. Then review the full predicate list — only use predicates from this list when adding edges. If a relationship doesn't fit any predicate, default to `skos:related`.
 
-### Step 2: Check current graph state
-
-```bash
-science-tool graph stats --format json
-```
-
-If the graph already has entities, note what exists to avoid duplicates.
-
-### Step 3: Process each document
+### Step 2: Process each document
 
 For each research document, in order:
 
@@ -55,7 +59,18 @@ For each research document, in order:
 3. **Identify relations**: associations, hierarchies, causal claims, evidence links. Use `cito:supports`/`cito:disputes` for evidence, `skos:related` for general associations (not `sci:relatedTo`).
 4. **Identify claims**: factual assertions with their sources and confidence levels.
 5. **Identify open questions**: unresolved research questions with their maturity status.
-6. **Add entities to the graph** using `science-tool graph add` commands. Capture rich metadata:
+6. **Add entities to the graph** using `science-tool graph add` commands with rich metadata. Example:
+   ```bash
+   science-tool graph add concept "DNABERT-2" \
+     --type biolink:GeneticModel \
+     --ontology-id "DNABERT2" \
+     --note "12 layers; max context 2048 nt; BPE tokenizer" \
+     --definition "DNA foundation model pretrained on multi-species genomes" \
+     --status selected-primary \
+     --source paper:doi_10_1234_test \
+     --property hasArchitecture "BERT encoder" \
+     --property hasParameters "117M"
+   ```
    - Use `--note` for contextual information (parameters, architecture, status notes)
    - Use `--property KEY VALUE` for structured metadata (hasArchitecture, hasParameters, hasTokenization, hasEmbeddingDim)
    - Use `--status` for project relevance (`selected-primary`, `deferred`, `active`, `candidate`, `speculative`)
@@ -68,7 +83,7 @@ For each research document, in order:
    - Add `ontology_terms:` frontmatter with relevant CURIEs.
    - Add inline `[`CURIE`]` annotations on first mention of each entity.
 
-### Step 4: Entity extraction checklist
+### Step 3: Entity extraction checklist
 
 For each entity found in prose, determine:
 
@@ -81,7 +96,7 @@ For each entity found in prose, determine:
 - [ ] **Status**: project relevance (`selected-primary`, `deferred`, `active`) via `--status`
 - [ ] **Source**: provenance document reference via `--source`
 
-### Step 5: Claim extraction checklist
+### Step 4: Claim extraction checklist
 
 For each factual assertion:
 
@@ -90,7 +105,7 @@ For each factual assertion:
 - [ ] **Confidence**: estimated strength (0.0-1.0)
 - [ ] **ID**: optional explicit claim ID for cross-referencing
 
-### Step 6: Finalize
+### Step 5: Finalize
 
 After processing all documents:
 
@@ -116,4 +131,3 @@ At completion, the user should have:
 - **Prefer existing ontology IDs** over invented ones. Use standard identifiers (NCBI Gene, MONDO, ChEBI, etc.).
 - **Ask the user** if uncertain about entity types, confidence levels, or whether something is a claim vs. background knowledge.
 - **Track deferred entities.** If an entity is identified but peripheral to current work, add it to `knowledge/deferred-entities.md` with a brief description rather than cluttering the graph. Add to the graph later when it becomes relevant.
-- **Use standard predicates.** Prefer `cito:supports`/`cito:disputes` over `sci:supports`/`sci:refutes`, and `skos:related` over `sci:relatedTo`. Run `science-tool graph predicates` for the full list.
