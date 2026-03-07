@@ -4,6 +4,8 @@ from pathlib import Path
 
 import click
 
+from science_tool.causal.export_chirho import export_chirho_script
+from science_tool.causal.export_pgmpy import export_pgmpy_script
 from science_tool.distill.openalex import distill_openalex
 from science_tool.distill.pykeen_source import distill_pykeen
 from science_tool.doi import lookup_doi_metadata
@@ -723,6 +725,46 @@ def inquiry_validate(slug: str, output_format: str, graph_path: Path) -> None:
 
     if any(r["status"] == "fail" for r in results):
         raise click.exceptions.Exit(1)
+
+
+@inquiry.command("export-pgmpy")
+@click.argument("slug")
+@click.option("--output", "output_path", default=None, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def inquiry_export_pgmpy(slug: str, output_path: Path | None, graph_path: Path) -> None:
+    """Export a causal inquiry as a pgmpy scaffold script."""
+    try:
+        script = export_pgmpy_script(graph_path, slug)
+    except ValueError as e:
+        raise click.ClickException(str(e))
+
+    if output_path:
+        output_path.write_text(script, encoding="utf-8")
+        click.echo(f"Wrote pgmpy script to {output_path}")
+    else:
+        click.echo(script)
+
+
+@inquiry.command("export-chirho")
+@click.argument("slug")
+@click.option("--output", "output_path", default=None, type=click.Path(path_type=Path))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def inquiry_export_chirho(slug: str, output_path: Path | None, graph_path: Path) -> None:
+    """Export a causal inquiry as a ChiRho/Pyro scaffold script."""
+    try:
+        script = export_chirho_script(graph_path, slug)
+    except ValueError as e:
+        raise click.ClickException(str(e))
+
+    if output_path:
+        output_path.write_text(script, encoding="utf-8")
+        click.echo(f"Wrote ChiRho script to {output_path}")
+    else:
+        click.echo(script)
 
 
 @main.group()
