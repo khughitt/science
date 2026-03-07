@@ -605,7 +605,21 @@ are in the companion [docs/plans/2026-03-01-knowledge-graph-design.md].
 
 Support projects that need explicit models, datasets, or computational workflows.
 
-**Deliverables:**
+**Deliverables (4a — Inquiry Workflow):**
+- [ ] Ontology extensions: `sci:Inquiry`, `sci:Variable`, `sci:Transformation`, `sci:Assumption`, `sci:Unknown`, `sci:ValidationCheck` types + 12 new predicates
+- [ ] Graph store inquiry methods: `add_inquiry`, `set_boundary_role`, `add_inquiry_edge`, `add_assumption`, `add_transformation`, `set_param_metadata`, `get_inquiry`, `list_inquiries`, `validate_inquiry`, `render_inquiry_doc`
+- [ ] CLI: `science-tool inquiry` command group (init, add-node, add-edge, list, show, validate)
+- [ ] `validate.sh` section 14: inquiry validation checks
+- [ ] Knowledge-graph skill updated with inquiry entity types and predicates
+- [ ] `/science:sketch-model` command
+- [ ] `/science:specify-model` command
+- [ ] `/science:plan-pipeline` command
+- [ ] `/science:review-pipeline` command
+- [ ] `templates/inquiry.md` template
+- [ ] Inquiry document rendering from graph
+- [ ] Design doc: `docs/plans/2026-03-06-inquiry-workflow-design.md`
+
+**Deliverables (4b — Causal Models + Pipelines):**
 - [ ] `science_tool/causal/dag.py` and `science_tool/causal/export_{pymc,pyro,pgmpy}.py`
 - [ ] `skills/models/causal-dag.md`
 - [ ] `/science:build-dag` and `/science:critique-approach` commands
