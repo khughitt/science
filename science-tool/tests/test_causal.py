@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from science_tool.causal.export_pgmpy import export_pgmpy_script
 from science_tool.graph.store import (
     INITIAL_GRAPH_TEMPLATE,
     PREDICATE_REGISTRY,
@@ -138,3 +139,44 @@ class TestCausalValidation:
         results = validate_inquiry(graph_path, "gen")
         check_names = [r["check"] for r in results]
         assert "causal_acyclicity" not in check_names
+
+
+class TestExportPgmpy:
+    def _build_simple_dag(self, graph_path: Path) -> str:
+        """Build a simple X->Y<-Z causal inquiry."""
+        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Z", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "xy-dag", "XY DAG", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "xy-dag", "concept/x", "BoundaryIn")
+        set_boundary_role(graph_path, "xy-dag", "concept/y", "BoundaryOut")
+        set_boundary_role(graph_path, "xy-dag", "concept/z", "BoundaryIn")
+        set_treatment_outcome(graph_path, "xy-dag", treatment="concept/x", outcome="concept/y")
+        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
+        add_edge(graph_path, "concept/z", "scic:causes", "concept/y", graph_layer="graph/causal")
+        return "xy-dag"
+
+    def test_export_pgmpy_generates_valid_script(self, graph_path: Path) -> None:
+        slug = self._build_simple_dag(graph_path)
+        script = export_pgmpy_script(graph_path, slug)
+        assert "from pgmpy.models import BayesianNetwork" in script
+        assert "BayesianNetwork(" in script
+        assert "CausalInference" in script
+
+    def test_export_pgmpy_includes_provenance_comments(self, graph_path: Path) -> None:
+        slug = self._build_simple_dag(graph_path)
+        script = export_pgmpy_script(graph_path, slug)
+        assert "# Generated from inquiry:" in script
+
+    def test_export_pgmpy_rejects_non_causal(self, graph_path: Path) -> None:
+        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "gen", "General", "hypothesis:h1")
+        with pytest.raises(ValueError, match="only supported for causal"):
+            export_pgmpy_script(graph_path, "gen")
+
+    def test_export_pgmpy_contains_edge_tuples(self, graph_path: Path) -> None:
+        slug = self._build_simple_dag(graph_path)
+        script = export_pgmpy_script(graph_path, slug)
+        # Should contain tuple pairs for edges
+        assert '("x", "y")' in script or '("x","y")' in script

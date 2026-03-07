@@ -47,3 +47,9 @@ distill = [
     "networkx>=3.2",
     "httpx",
 ]
+causal = [
+    "pgmpy>=0.1.25",
+    "chirho>=0.2.0",
+    "pyro-ppl>=1.9.0",
+    "torch>=2.0",
+]
