@@ -49,6 +49,7 @@ PROJECT_ENTITY_PREFIXES: set[str] = {
     "dataset",
     "question",
     "evidence",
+    "inquiry",
 }
 
 INITIAL_GRAPH_TEMPLATE = """@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -325,6 +326,19 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     {"predicate": "scic:causes", "description": "Causal relationship", "layer": "graph/causal"},
     {"predicate": "scic:confounds", "description": "Confounding relationship", "layer": "graph/causal"},
     {"predicate": "prov:wasDerivedFrom", "description": "Provenance source", "layer": "graph/provenance"},
+    # Inquiry predicates
+    {"predicate": "sci:target", "description": "Inquiry targets hypothesis/question", "layer": "inquiry"},
+    {"predicate": "sci:boundaryRole", "description": "Boundary classification within inquiry", "layer": "inquiry"},
+    {"predicate": "sci:inquiryStatus", "description": "Inquiry lifecycle status", "layer": "inquiry"},
+    {"predicate": "sci:feedsInto", "description": "Data/information flow", "layer": "inquiry"},
+    {"predicate": "sci:assumes", "description": "Dependency on assumption", "layer": "inquiry"},
+    {"predicate": "sci:produces", "description": "Transformation yields output", "layer": "inquiry"},
+    {"predicate": "sci:paramValue", "description": "Parameter value", "layer": "inquiry"},
+    {"predicate": "sci:paramSource", "description": "Parameter source type", "layer": "inquiry"},
+    {"predicate": "sci:paramRef", "description": "Parameter reference", "layer": "inquiry"},
+    {"predicate": "sci:paramNote", "description": "Parameter rationale", "layer": "inquiry"},
+    {"predicate": "sci:observability", "description": "Variable observability status", "layer": "graph/knowledge"},
+    {"predicate": "sci:validatedBy", "description": "Step validated by criterion", "layer": "inquiry"},
 ]
 
 
