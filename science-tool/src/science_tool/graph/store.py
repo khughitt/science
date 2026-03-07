@@ -879,8 +879,8 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
         elif o == SCI_NS.BoundaryOut:
             boundary_out.add(s)
 
-    # Build adjacency from flow edges (feedsInto, produces)
-    flow_predicates = {SCI_NS.feedsInto, SCI_NS.produces}
+    # Build adjacency from flow edges (feedsInto, produces, and scic:causes for causal inquiries)
+    flow_predicates = {SCI_NS.feedsInto, SCI_NS.produces, SCIC_NS.causes}
     adjacency: dict[URIRef, list[URIRef]] = {}
     all_flow_nodes: set[URIRef] = set()
     for s, p, o in inquiry_graph:

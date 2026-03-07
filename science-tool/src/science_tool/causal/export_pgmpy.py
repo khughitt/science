@@ -53,8 +53,8 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[dict]:
     for s, _p, o in inquiry_graph.triples((None, SCI_NS.boundaryRole, None)):
         members.add(s)  # type: ignore[arg-type]
 
-    # Collect flow nodes
-    flow_predicates = {SCI_NS.feedsInto, SCI_NS.produces}
+    # Collect flow nodes (including scic:causes edges within the inquiry graph)
+    flow_predicates = {SCI_NS.feedsInto, SCI_NS.produces, SCIC_NS.causes}
     for s, p, o in inquiry_graph:
         if p in flow_predicates:
             members.add(s)  # type: ignore[arg-type]
