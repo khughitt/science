@@ -145,3 +145,71 @@ Rules:
 - Annotate each entity on **first mention only**.
 - Use the format: `term [`CURIE`]`.
 - CURIEs should match ontology IDs used in `graph add concept --ontology-id`.
+
+## Inquiry Entities
+
+Inquiries are named subgraphs that represent self-contained investigations. They connect data/observations to hypotheses through variables, assumptions, and transformations.
+
+### Inquiry-Specific Entity Types
+
+| Entity | CLI Command | When to use |
+|--------|-------------|-------------|
+| Inquiry | `inquiry init "<slug>" --label --target` | Named subgraph container for an investigation |
+| Variable | `graph add concept "<label>" --type sci:Variable` | A quantity in the model (observed, latent, or computed) |
+| Transformation | (via `/science:plan-pipeline`) | A computational/analytical step in the pipeline |
+| Assumption | (via `add_assumption` or specify-model) | An explicit modeling assumption with provenance |
+| Unknown | `graph add concept "<label>" --type sci:Unknown` | Placeholder for unidentified factors (sketch only) |
+| ValidationCheck | `graph add concept "<label>" --type sci:ValidationCheck` | A criterion for verifying a step or result |
+
+### Inquiry CLI Commands
+
+```
+inquiry init <SLUG> --label <LABEL> --target <HYPOTHESIS_OR_QUESTION>
+inquiry add-node <SLUG> <ENTITY> --role <BoundaryIn|BoundaryOut>
+inquiry add-edge <SLUG> <SUBJECT> <PREDICATE> <OBJECT>
+inquiry list [--format table|json]
+inquiry show <SLUG> [--format table|json]
+inquiry validate <SLUG> [--format table|json]
+```
+
+### Inquiry-Specific Predicates
+
+| Predicate | Description | Layer |
+|-----------|-------------|-------|
+| `sci:target` | Links inquiry to its hypothesis/question | inquiry |
+| `sci:boundaryRole` | Assigns BoundaryIn/BoundaryOut within an inquiry | inquiry |
+| `sci:inquiryStatus` | Inquiry lifecycle status (sketch/specified/planned/in-progress/complete) | inquiry |
+| `sci:feedsInto` | Data/information flow (A provides input to B) | inquiry |
+| `sci:assumes` | Dependency on an assumption | inquiry |
+| `sci:produces` | Transformation yields output | inquiry |
+| `sci:validatedBy` | Step validated by criterion | inquiry |
+
+### Boundary Roles
+
+- `sci:BoundaryIn` — Given/observable input (datasets, measurements, known facts)
+- `sci:BoundaryOut` — Produced output (test results, predictions, artifacts)
+- Interior nodes have no boundary role — they are latent variables, transformations, assumptions
+
+A node can appear in multiple inquiries with different boundary roles. The boundary classification is per-inquiry, not intrinsic to the node.
+
+### Parameter Provenance Predicates
+
+For annotating parameters with their evidence source (AnnotatedParam pattern):
+
+| Predicate | Description |
+|-----------|-------------|
+| `sci:paramValue` | The parameter value |
+| `sci:paramSource` | Source type: `literature`, `empirical`, `design_decision`, `convention`, `data_derived` |
+| `sci:paramRef` | BibTeX key or doc path reference |
+| `sci:paramNote` | Rationale note |
+
+### Inquiry Validation Checks
+
+`inquiry validate <SLUG>` runs these checks:
+
+| Check | Description |
+|-------|-------------|
+| `boundary_reachability` | Every BoundaryOut reachable from some BoundaryIn via directed edges |
+| `no_cycles` | No cycles in `sci:feedsInto`/`sci:produces` edges |
+| `unknown_resolution` | `sci:Unknown` nodes allowed in sketch, must be resolved in specified+ |
+| `target_exists` | Target hypothesis/question exists in the knowledge graph |
