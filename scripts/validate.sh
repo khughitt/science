@@ -462,6 +462,53 @@ else
     info "No knowledge/graph.trig — skipping graph checks"
 fi
 
+# ─── 14. Inquiry validation ──────────────────────────────────────
+if [ -f "knowledge/graph.trig" ] && [ -n "${SCIENCE_TOOL:-}" ]; then
+    inquiry_list=$($SCIENCE_TOOL inquiry list --path knowledge/graph.trig --format json 2>/dev/null || echo "[]")
+    inquiry_count=$(printf "%s" "$inquiry_list" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
+
+    if [ "$inquiry_count" -gt 0 ]; then
+        echo ""
+        echo "Checking inquiries (${inquiry_count})..."
+
+        inquiry_slugs=$(printf "%s" "$inquiry_list" | python3 -c "
+import sys, json
+for inq in json.load(sys.stdin):
+    print(inq['slug'])
+" 2>/dev/null)
+
+        while IFS= read -r slug; do
+            [ -z "$slug" ] && continue
+            validate_out=$($SCIENCE_TOOL inquiry validate "$slug" --path knowledge/graph.trig --format json 2>&1) || true
+
+            if printf "%s" "$validate_out" | python3 -c "import sys,json; json.load(sys.stdin)" &>/dev/null; then
+                while IFS= read -r row; do
+                    check=$(printf "%s" "$row" | python3 -c "import sys,json; print(json.load(sys.stdin)['check'])")
+                    row_status=$(printf "%s" "$row" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+                    msg=$(printf "%s" "$row" | python3 -c "import sys,json; print(json.load(sys.stdin)['message'])")
+
+                    if [ "$row_status" = "fail" ]; then
+                        error "inquiry '${slug}': ${check} — ${msg}"
+                    elif [ "$row_status" = "warn" ]; then
+                        warn "inquiry '${slug}': ${check} — ${msg}"
+                    else
+                        if [ "$VERBOSE" = "--verbose" ]; then
+                            info "inquiry '${slug}': ${check} — ${msg}"
+                        fi
+                    fi
+                done < <(printf "%s" "$validate_out" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for row in data:
+    print(json.dumps(row))
+")
+            else
+                error "inquiry '${slug}' validation produced unparseable output"
+            fi
+        done <<< "$inquiry_slugs"
+    fi
+fi
+
 # ─── Summary ─────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
