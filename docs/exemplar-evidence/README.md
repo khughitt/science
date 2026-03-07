@@ -1,4 +1,4 @@
-# Phase 3 Exemplar Evidence Bundle
+# Exemplar Evidence Bundle (Phases 3 & 4)
 
 **Date:** 2026-03-07
 **Exemplar project:** `~/d/3d-attention-bias/` (3D Structure-Aware Attention Bias for Nucleic Acid Foundation Models)
@@ -23,6 +23,22 @@
 - `query-claims.json` — Claims mentioning "attention"
 - `query-coverage.json` — Variable coverage status
 - `validate-sh.log` — Full validate.sh output
+
+## Phase 4 Gate (Causal Modeling)
+
+**Date:** 2026-03-07
+
+| Criterion | Evidence File | Result |
+|-----------|--------------|--------|
+| Causal inquiry created with type=causal | `causal-validate.json` | Inquiry `3d-attention-effect` validates (acyclicity, boundary reachability) |
+| pgmpy scaffold export | `causal-export-pgmpy.py` | BayesianNetwork + CausalInference script with 5 variables, 5 edges |
+| ChiRho/Pyro scaffold export | `causal-export-chirho.py` | Pyro model function + `do()` intervention handler |
+
+### Files (Phase 4)
+
+- `causal-validate.json` — Causal inquiry validation output (acyclicity + boundary reachability)
+- `causal-export-pgmpy.py` — Generated pgmpy scaffold script
+- `causal-export-chirho.py` — Generated ChiRho/Pyro scaffold script
 
 ## Warnings (Expected)
 

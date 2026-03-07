@@ -611,7 +611,7 @@ are in the companion [docs/plans/2026-03-01-knowledge-graph-design.md].
 - **3c (Knowledge Base Bootstrapping): Complete.** Distillation modules, `graph import`, OpenAlex snapshot at `data/snapshots/openalex-science-map.ttl`, biomedical starter profile at `docs/biomedical-starter-profile.md`. 116 tests passing (including 10 distill tests).
 - **3d (Validation + Exemplar): Complete.** Exemplar project `~/d/3d-attention-bias/` run end-to-end through Phases 1-3. Graph: 2,761 triples, 4/4 validation checks pass, `validate.sh` passes. Evidence bundle archived at `docs/exemplar-evidence/`.
 
-### Phase 4: Modeling + Operationalization (Stage B/C Optional Paths) (4a ✅, 4b in progress)
+### Phase 4: Modeling + Operationalization (Stage B/C Optional Paths) (4a ✅, 4b ✅)
 
 Support projects that need explicit models, datasets, or computational workflows.
 
@@ -644,8 +644,8 @@ Support projects that need explicit models, datasets, or computational workflows
 - [x] `/science:build-dag` command
 - [x] `/science:critique-approach` command
 - [x] Design doc: `docs/plans/2026-03-07-phase4b-causal-dag-design.md`
-- [ ] Run on exemplar project and archive evidence
-- [ ] Deferred inquiry-projection refactor documented: `docs/plans/2026-03-07-inquiry-projection-refactor.md`
+- [x] Run on exemplar project and archive evidence (`docs/exemplar-evidence/causal-*.{json,py}`)
+- [x] Deferred inquiry-projection refactor documented: `docs/plans/2026-03-07-inquiry-projection-refactor.md`
 
 **Deliverables (4c — Operationalization):**
 - [ ] `find_datasets` capability + command surface
@@ -682,11 +682,7 @@ Iterate based on real usage. Observe failure modes and add guardrails.
 
 **Phase 3: COMPLETE** (gate closed 2026-03-07). See `docs/exemplar-evidence/README.md` for evidence bundle.
 
-**Phase 4b (Causal Modeling) — in progress:**
-10. ~~Implement inquiry type system~~ ✅
-11. ~~Implement causal exports (pgmpy, ChiRho)~~ ✅
-12. ~~Create causal DAG skill + build-dag + critique-approach commands~~ ✅
-13. Run causal DAG on exemplar project and archive evidence to close Phase 4 gate.
+**Phase 4b: COMPLETE** (gate closed 2026-03-07). Causal DAG as typed inquiry with pgmpy + ChiRho exports. Evidence: `docs/exemplar-evidence/causal-*.{json,py}`.
 
 **Phase 4c (Operationalization):**
 14. Implement `find_datasets` capability + command surface.
@@ -699,7 +695,7 @@ Iterate based on real usage. Observe failure modes and add guardrails.
 |---|---|
 | 2 | Stage A capabilities run end-to-end on a real project and produce prioritized, evidence-backed next steps |
 | 3 | ✅ At least one project can agent-construct a knowledge graph from prose, import a distilled snapshot, run use-case queries with table/json output, detect changes via hybrid `graph diff`, pass `graph validate` + `validate.sh`, and provide an archived exemplar evidence bundle. **Closed 2026-03-07.** Evidence: `docs/exemplar-evidence/` |
-| 4 | At least one optional path (causal modeling or software/data operationalization) runs end-to-end with reproducible outputs |
+| 4 | ✅ Causal modeling path runs end-to-end: typed causal inquiry → pgmpy/ChiRho scaffold exports → exemplar project validated. **Closed 2026-03-07.** Evidence: `docs/exemplar-evidence/causal-validate.json`, `causal-export-pgmpy.py`, `causal-export-chirho.py` |
 | 5 | Loop runs for at least 3 iterations without manual intervention and produces auditable, validated commits |
 | 6 | Known high-frequency failure modes have explicit guardrails and regression tests |
 
