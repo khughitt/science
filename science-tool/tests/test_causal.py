@@ -4,6 +4,13 @@ from pathlib import Path
 
 import pytest
 
+try:
+    import pgmpy  # noqa: F401
+
+    HAS_PGMPY = True
+except ImportError:
+    HAS_PGMPY = False
+
 from science_tool.causal.export_chirho import export_chirho_script
 from science_tool.causal.export_pgmpy import export_pgmpy_script
 from science_tool.graph.store import (
@@ -465,3 +472,85 @@ class TestConfoundersDeclared:
         results = validate_inquiry(graph_path, "gen")
         check_names = [r["check"] for r in results]
         assert "confounders_declared" not in check_names
+
+
+class TestIdentifiabilityCheck:
+    def _build_identifiable_dag(self, graph_path: Path) -> str:
+        """Build a DAG where X->Y is identifiable by adjusting for Z.
+        Z -> X -> Y, Z -> Y (Z is a confounder, adjusting for Z identifies X->Y).
+        """
+        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Z", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        add_inquiry(graph_path, "ident-dag", "Identifiable", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "ident-dag", "concept/x", "BoundaryIn")
+        set_boundary_role(graph_path, "ident-dag", "concept/y", "BoundaryOut")
+        set_boundary_role(graph_path, "ident-dag", "concept/z", "BoundaryIn")
+        set_treatment_outcome(graph_path, "ident-dag", treatment="concept/x", outcome="concept/y")
+        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
+        add_edge(graph_path, "concept/z", "scic:causes", "concept/x", graph_layer="graph/causal")
+        add_edge(graph_path, "concept/z", "scic:causes", "concept/y", graph_layer="graph/causal")
+        return "ident-dag"
+
+    def test_identifiability_check_present(self, graph_path: Path) -> None:
+        """Causal inquiry validation includes identifiability check."""
+        slug = self._build_identifiable_dag(graph_path)
+        results = validate_inquiry(graph_path, slug)
+        check_names = [r["check"] for r in results]
+        assert "identifiability" in check_names
+
+    def test_adjustment_sets_check_present(self, graph_path: Path) -> None:
+        """Causal inquiry validation includes adjustment_sets check."""
+        slug = self._build_identifiable_dag(graph_path)
+        results = validate_inquiry(graph_path, slug)
+        check_names = [r["check"] for r in results]
+        assert "adjustment_sets" in check_names
+
+    @pytest.mark.skipif(not HAS_PGMPY, reason="pgmpy not installed")
+    def test_identifiable_dag_passes(self, graph_path: Path) -> None:
+        """With pgmpy installed, identifiable DAG passes identifiability check."""
+        slug = self._build_identifiable_dag(graph_path)
+        results = validate_inquiry(graph_path, slug)
+        ident_check = next(r for r in results if r["check"] == "identifiability")
+        assert ident_check["status"] == "pass"
+
+    @pytest.mark.skipif(not HAS_PGMPY, reason="pgmpy not installed")
+    def test_adjustment_sets_reported(self, graph_path: Path) -> None:
+        """With pgmpy, adjustment sets are reported as info."""
+        slug = self._build_identifiable_dag(graph_path)
+        results = validate_inquiry(graph_path, slug)
+        adj_check = next(r for r in results if r["check"] == "adjustment_sets")
+        assert adj_check["status"] == "info"
+        assert "z" in adj_check["message"].lower()
+
+    @pytest.mark.skipif(HAS_PGMPY, reason="pgmpy IS installed")
+    def test_skip_when_pgmpy_not_installed(self, graph_path: Path) -> None:
+        """Without pgmpy, checks have skip status."""
+        slug = self._build_identifiable_dag(graph_path)
+        results = validate_inquiry(graph_path, slug)
+        ident_check = next(r for r in results if r["check"] == "identifiability")
+        assert ident_check["status"] == "skip"
+
+    def test_identifiability_without_treatment_outcome_skips(self, graph_path: Path) -> None:
+        """Without treatment/outcome set, identifiability check is skipped."""
+        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        add_inquiry(graph_path, "no-est", "No Estimand", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "no-est", "concept/x", "BoundaryIn")
+        set_boundary_role(graph_path, "no-est", "concept/y", "BoundaryOut")
+        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
+        results = validate_inquiry(graph_path, "no-est")
+        ident_check = next((r for r in results if r["check"] == "identifiability"), None)
+        assert ident_check is not None
+        assert ident_check["status"] == "skip"
+
+    def test_general_inquiry_skips_identifiability(self, graph_path: Path) -> None:
+        """General inquiries don't get identifiability or adjustment_sets checks."""
+        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        add_inquiry(graph_path, "gen", "General", "hypothesis:h1")
+        results = validate_inquiry(graph_path, "gen")
+        check_names = [r["check"] for r in results]
+        assert "identifiability" not in check_names
+        assert "adjustment_sets" not in check_names

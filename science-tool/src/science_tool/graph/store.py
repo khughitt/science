@@ -1115,6 +1115,129 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
                 }
             )
 
+        # identifiability + adjustment_sets — requires pgmpy (optional)
+        treatment_uri = next(inquiry_graph.objects(inquiry_uri, SCI_NS.treatment), None)
+        outcome_uri = next(inquiry_graph.objects(inquiry_uri, SCI_NS.outcome), None)
+
+        if not treatment_uri or not outcome_uri:
+            results.append(
+                {
+                    "check": "identifiability",
+                    "status": "skip",
+                    "message": "Treatment or outcome not set — cannot check identifiability",
+                }
+            )
+            results.append(
+                {
+                    "check": "adjustment_sets",
+                    "status": "skip",
+                    "message": "Treatment or outcome not set — cannot compute adjustment sets",
+                }
+            )
+        else:
+            treatment_name = shorten_uri(str(treatment_uri)).rsplit("/", 1)[-1]
+            outcome_name = shorten_uri(str(outcome_uri)).rsplit("/", 1)[-1]
+
+            _pgmpy_available = True
+            try:
+                try:
+                    from pgmpy.models import DiscreteBayesianNetwork as _BN
+                except ImportError:
+                    from pgmpy.models import BayesianNetwork as _BN
+                from pgmpy.inference import CausalInference
+            except ImportError:
+                _pgmpy_available = False
+
+            if not _pgmpy_available:
+                results.append(
+                    {
+                        "check": "identifiability",
+                        "status": "skip",
+                        "message": "pgmpy not installed — install with: uv add pgmpy",
+                    }
+                )
+                results.append(
+                    {
+                        "check": "adjustment_sets",
+                        "status": "skip",
+                        "message": "pgmpy not installed — install with: uv add pgmpy",
+                    }
+                )
+            else:
+                edge_list = [
+                    (shorten_uri(s).rsplit("/", 1)[-1], shorten_uri(o).rsplit("/", 1)[-1])
+                    for s, o in causal_edges
+                ]
+                if edge_list:
+                    try:
+                        model = _BN(edge_list)
+                        ci = CausalInference(model)
+                        adj_sets = ci.get_all_backdoor_adjustment_sets(treatment_name, outcome_name)
+                        adj_list = [set(s) for s in adj_sets]
+                        if adj_list:
+                            results.append(
+                                {
+                                    "check": "identifiability",
+                                    "status": "pass",
+                                    "message": f"Causal effect {treatment_name} -> {outcome_name}"
+                                    " is identifiable via back-door",
+                                }
+                            )
+                            sets_str = "; ".join(str(s) for s in adj_list)
+                            results.append(
+                                {
+                                    "check": "adjustment_sets",
+                                    "status": "info",
+                                    "message": f"Valid adjustment sets: {sets_str}",
+                                }
+                            )
+                        else:
+                            results.append(
+                                {
+                                    "check": "identifiability",
+                                    "status": "warn",
+                                    "message": f"No valid back-door adjustment set found for"
+                                    f" {treatment_name} -> {outcome_name}",
+                                }
+                            )
+                            results.append(
+                                {
+                                    "check": "adjustment_sets",
+                                    "status": "info",
+                                    "message": "No valid adjustment sets found",
+                                }
+                            )
+                    except Exception as exc:
+                        results.append(
+                            {
+                                "check": "identifiability",
+                                "status": "warn",
+                                "message": f"Could not compute identifiability: {exc}",
+                            }
+                        )
+                        results.append(
+                            {
+                                "check": "adjustment_sets",
+                                "status": "skip",
+                                "message": f"Could not compute adjustment sets: {exc}",
+                            }
+                        )
+                else:
+                    results.append(
+                        {
+                            "check": "identifiability",
+                            "status": "skip",
+                            "message": "No causal edges found — cannot assess identifiability",
+                        }
+                    )
+                    results.append(
+                        {
+                            "check": "adjustment_sets",
+                            "status": "skip",
+                            "message": "No causal edges found",
+                        }
+                    )
+
     # 6. provenance_completeness — specified+ inquiries: all assumptions must have prov:wasDerivedFrom
     if status != "sketch":
         provenance_graph = dataset.graph(_graph_uri("graph/provenance"))
