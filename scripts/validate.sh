@@ -393,6 +393,75 @@ if [ -d "notes" ]; then
     done
 fi
 
+# ─── 13. Knowledge graph checks ──────────────────────────────────
+echo ""
+echo "Checking knowledge graph..."
+
+if [ -f "knowledge/graph.trig" ]; then
+    # Resolve science-tool command
+    # Priority: SCIENCE_TOOL_PATH env var → science-tool on PATH → uv run --with
+    SCIENCE_TOOL=""
+    if [ -n "${SCIENCE_TOOL_PATH:-}" ] && command -v uv &>/dev/null; then
+        SCIENCE_TOOL="uv run --with ${SCIENCE_TOOL_PATH} science-tool"
+    elif command -v science-tool &>/dev/null; then
+        SCIENCE_TOOL="science-tool"
+    fi
+
+    if [ -z "$SCIENCE_TOOL" ]; then
+        error "knowledge/graph.trig exists but science-tool is not available (set SCIENCE_TOOL_PATH or install science-tool)"
+    else
+        info "Using: ${SCIENCE_TOOL}"
+
+        # 13a-d: Run graph validate (parseable, provenance, acyclicity, orphaned)
+        validate_output=$($SCIENCE_TOOL graph validate --format json --path knowledge/graph.trig 2>&1) || true
+        if printf "%s" "$validate_output" | python3 -c "import sys,json; json.load(sys.stdin)" &>/dev/null; then
+            while IFS= read -r row; do
+                check=$(printf "%s" "$row" | python3 -c "import sys,json; print(json.load(sys.stdin)['check'])")
+                status=$(printf "%s" "$row" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+                details=$(printf "%s" "$row" | python3 -c "import sys,json; print(json.load(sys.stdin)['details'])")
+
+                if [ "$status" = "fail" ]; then
+                    error "graph validate: ${check} — ${details}"
+                elif [ "$status" = "warn" ]; then
+                    warn "graph validate: ${check} — ${details}"
+                else
+                    info "graph validate: ${check} — ${details}"
+                fi
+            done < <(printf "%s" "$validate_output" | python3 -c "
+import sys, json
+for row in json.load(sys.stdin)['rows']:
+    print(json.dumps(row))
+")
+        else
+            error "graph validate produced unparseable output"
+        fi
+
+        # 13e: Graph-prose sync staleness
+        diff_output=$($SCIENCE_TOOL graph diff --format json --path knowledge/graph.trig 2>&1) || true
+        if printf "%s" "$diff_output" | python3 -c "import sys,json; json.load(sys.stdin)" &>/dev/null; then
+            stale_count=$(printf "%s" "$diff_output" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['rows']))")
+            if [ "$stale_count" -gt 0 ]; then
+                stale_files=$(printf "%s" "$diff_output" | python3 -c "
+import sys, json
+for row in json.load(sys.stdin)['rows']:
+    print(f\"  {row['path']} ({row['reason']})\")
+")
+                warn "graph has ${stale_count} stale input file(s) — run /science:update-graph"
+                if [ "$VERBOSE" = "--verbose" ]; then
+                    printf "%s\n" "$stale_files"
+                fi
+            else
+                info "graph-prose sync: all inputs up to date"
+            fi
+        else
+            # diff may fail if no revision metadata exists yet (fresh graph)
+            info "graph diff: no revision metadata (expected for new graphs)"
+        fi
+    fi
+else
+    info "No knowledge/graph.trig — skipping graph checks"
+fi
+
 # ─── Summary ─────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
