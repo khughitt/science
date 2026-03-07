@@ -400,6 +400,50 @@ def validate_graph(graph_path: Path) -> tuple[list[dict[str, str]], bool]:
             }
         )
 
+    # Orphaned nodes: entities with rdf:type but no other triples as subject or object
+    typed_entities = set()
+    for entity_type in (SCI_NS.Concept, SCI_NS.Claim, SCI_NS.Hypothesis, SCI_NS.Question):
+        for entity, _, _ in knowledge.triples((None, RDF.type, entity_type)):
+            typed_entities.add(entity)
+    for entity, _, _ in knowledge.triples((None, RDF.type, SCIC_NS.Variable)):
+        typed_entities.add(entity)
+
+    # Predicates that describe the node itself (metadata), not edges to other entities
+    metadata_preds = {
+        RDF.type,
+        SKOS.prefLabel,
+        SKOS.note,
+        SKOS.definition,
+        SCHEMA_NS.identifier,
+        SCI_NS.projectStatus,
+    }
+
+    orphaned = 0
+    for entity in typed_entities:
+        # Count triples where entity appears as subject (excluding metadata predicates)
+        as_subject = sum(1 for _, p, _ in knowledge.triples((entity, None, None)) if p not in metadata_preds)
+        # Count triples where entity appears as object
+        as_object = sum(1 for _ in knowledge.triples((None, None, entity)))
+        if as_subject == 0 and as_object == 0:
+            orphaned += 1
+
+    if orphaned:
+        rows.append(
+            {
+                "check": "orphaned_nodes",
+                "status": "warn",
+                "details": f"{orphaned} entities have no edges to other entities",
+            }
+        )
+    else:
+        rows.append(
+            {
+                "check": "orphaned_nodes",
+                "status": "pass",
+                "details": "all entities have at least one edge",
+            }
+        )
+
     has_failures = any(row["status"] == "fail" for row in rows)
     return rows, has_failures
 
@@ -972,11 +1016,11 @@ def shorten_uri(uri: str) -> str:
     """Shorten a full URI to a readable CURIE-like form for display."""
     project_base = str(PROJECT_NS)
     if uri.startswith(project_base):
-        return uri[len(project_base):]
+        return uri[len(project_base) :]
     for prefix, ns in CURIE_PREFIXES.items():
         ns_str = str(ns)
         if uri.startswith(ns_str):
-            return f"{prefix}:{uri[len(ns_str):]}"
+            return f"{prefix}:{uri[len(ns_str) :]}"
     return uri
 
 
