@@ -255,6 +255,116 @@ def add_edge(
     return s_uri, p_uri, o_uri
 
 
+def add_inquiry(
+    graph_path: Path,
+    slug: str,
+    label: str,
+    target: str,
+    description: str = "",
+    status: str = "sketch",
+) -> URIRef:
+    """Create a new inquiry named graph with metadata triples."""
+    safe_slug = _slug(slug)
+    inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
+
+    dataset = _load_dataset(graph_path)
+    inquiry_graph = dataset.graph(inquiry_uri)
+
+    # Duplicate check
+    if (inquiry_uri, RDF.type, SCI_NS.Inquiry) in inquiry_graph:
+        raise ValueError(f"Inquiry 'inquiry/{safe_slug}' already exists")
+
+    inquiry_graph.add((inquiry_uri, RDF.type, SCI_NS.Inquiry))
+    inquiry_graph.add((inquiry_uri, SKOS.prefLabel, Literal(label)))
+    inquiry_graph.add((inquiry_uri, SCI_NS.inquiryStatus, Literal(status)))
+    inquiry_graph.add((inquiry_uri, SCI_NS.target, _resolve_term(target)))
+
+    created = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    inquiry_graph.add((inquiry_uri, DCTERMS_NS.created, Literal(created)))
+
+    if description:
+        inquiry_graph.add((inquiry_uri, SKOS.note, Literal(description)))
+
+    _save_dataset(dataset, graph_path)
+    return inquiry_uri
+
+
+def set_boundary_role(
+    graph_path: Path,
+    inquiry_slug: str,
+    entity: str,
+    role: str,
+) -> None:
+    """Assign a boundary role (BoundaryIn or BoundaryOut) to an entity within an inquiry."""
+    valid_roles = {"BoundaryIn": SCI_NS.BoundaryIn, "BoundaryOut": SCI_NS.BoundaryOut}
+    if role not in valid_roles:
+        raise ValueError(f"Invalid boundary role '{role}'. Must be one of: {', '.join(sorted(valid_roles))}")
+
+    safe_slug = _slug(inquiry_slug)
+    inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
+
+    dataset = _load_dataset(graph_path)
+    inquiry_graph = dataset.graph(inquiry_uri)
+
+    if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
+        raise ValueError(f"Inquiry 'inquiry/{safe_slug}' does not exist")
+
+    entity_uri = _resolve_term(entity)
+    inquiry_graph.add((entity_uri, SCI_NS.boundaryRole, valid_roles[role]))
+
+    _save_dataset(dataset, graph_path)
+
+
+def add_inquiry_edge(
+    graph_path: Path,
+    inquiry_slug: str,
+    subject: str,
+    predicate: str,
+    obj: str,
+) -> tuple[URIRef, URIRef, URIRef]:
+    """Add a triple to an inquiry's named graph."""
+    safe_slug = _slug(inquiry_slug)
+    inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
+
+    dataset = _load_dataset(graph_path)
+    inquiry_graph = dataset.graph(inquiry_uri)
+
+    if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
+        raise ValueError(f"Inquiry 'inquiry/{safe_slug}' does not exist")
+
+    s_uri = _resolve_term(subject)
+    p_uri = _resolve_term(predicate)
+    o_uri = _resolve_term(obj)
+    inquiry_graph.add((s_uri, p_uri, o_uri))
+
+    _save_dataset(dataset, graph_path)
+    return s_uri, p_uri, o_uri
+
+
+def add_assumption(
+    graph_path: Path,
+    label: str,
+    source: str,
+    inquiry_slug: str | None = None,
+) -> URIRef:
+    """Create an assumption concept in the knowledge layer and optionally link it to an inquiry."""
+    uri = add_concept(graph_path, label, concept_type="sci:Assumption", ontology_id=None, source=source)
+
+    # Ensure sci:Assumption type is explicitly present in knowledge layer
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    knowledge.add((uri, RDF.type, SCI_NS.Assumption))
+
+    if inquiry_slug is not None:
+        safe_slug = _slug(inquiry_slug)
+        inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
+        inquiry_graph = dataset.graph(inquiry_uri)
+        inquiry_graph.add((uri, RDF.type, SCI_NS.Assumption))
+
+    _save_dataset(dataset, graph_path)
+    return uri
+
+
 def import_snapshot(graph_path: Path, snapshot_path: Path) -> int:
     """Import a Turtle snapshot into :graph/knowledge and record provenance. Returns triple count."""
     if not snapshot_path.exists():
