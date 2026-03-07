@@ -611,12 +611,12 @@ are in the companion [docs/plans/2026-03-01-knowledge-graph-design.md].
 - **3c (Knowledge Base Bootstrapping): Complete.** Distillation modules, `graph import`, OpenAlex snapshot at `data/snapshots/openalex-science-map.ttl`, biomedical starter profile at `docs/biomedical-starter-profile.md`. 116 tests passing (including 10 distill tests).
 - **3d (Validation + Exemplar): Complete.** Exemplar project `~/d/3d-attention-bias/` run end-to-end through Phases 1-3. Graph: 2,761 triples, 4/4 validation checks pass, `validate.sh` passes. Evidence bundle archived at `docs/exemplar-evidence/`.
 
-**Phase 4a Progress Snapshot (2026-03-07):**
-- **4a (Inquiry Workflow): Complete.** All 12 deliverables implemented. Inquiry command group (8 subcommands), 4 slash commands (`sketch-model`, `specify-model`, `plan-pipeline`, `review-pipeline`), inquiry template, `render_inquiry_doc()`, `validate.sh` section 14, knowledge-graph skill updated. Design doc at `docs/plans/2026-03-06-inquiry-workflow-design.md`. 106 tests passing across `test_graph_cli.py`, `test_inquiry.py`, `test_inquiry_e2e.py`, `test_prose.py`.
-
-### Phase 4: Modeling + Operationalization (Stage B/C Optional Paths) (4a ✅, 4b not started)
+### Phase 4: Modeling + Operationalization (Stage B/C Optional Paths) (4a ✅, 4b in progress)
 
 Support projects that need explicit models, datasets, or computational workflows.
+
+**Phase 4a Progress Snapshot (2026-03-07):**
+- **4a (Inquiry Workflow): Complete.** All 12 deliverables implemented. Inquiry command group (8 subcommands), 4 slash commands (`sketch-model`, `specify-model`, `plan-pipeline`, `review-pipeline`), inquiry template, `render_inquiry_doc()`, `validate.sh` section 14, knowledge-graph skill updated. Design doc at `docs/plans/2026-03-06-inquiry-workflow-design.md`. 106 tests passing across `test_graph_cli.py`, `test_inquiry.py`, `test_inquiry_e2e.py`, `test_prose.py`.
 
 **Deliverables (4a — Inquiry Workflow):** ✅
 - [x] Ontology extensions: `sci:Inquiry`, `sci:Variable`, `sci:Transformation`, `sci:Assumption`, `sci:Unknown`, `sci:ValidationCheck` types + 12 new predicates
@@ -632,16 +632,28 @@ Support projects that need explicit models, datasets, or computational workflows
 - [x] Inquiry document rendering from graph (`render_inquiry_doc()`)
 - [x] Design doc: `docs/plans/2026-03-06-inquiry-workflow-design.md`
 
-**Deliverables (4b — Causal Models + Pipelines):**
-- [ ] `science_tool/causal/dag.py` and `science_tool/causal/export_{pymc,pyro,pgmpy}.py`
-- [ ] `skills/models/causal-dag.md`
-- [ ] `/science:build-dag` and `/science:critique-approach` commands
-- [ ] Graph-to-model provenance links (every exported model records source graph hash/timestamp)
+**Deliverables (4b — Causal Modeling):**
+- [x] `--type causal` on `inquiry init` + `sci:inquiryType` predicate
+- [x] `sci:treatment` and `sci:outcome` predicates + `inquiry set-estimand` command
+- [x] Causal-specific validation checks (acyclicity for inquiry members)
+- [x] `science_tool/causal/export_pgmpy.py` — pgmpy scaffold script generation
+- [x] `science_tool/causal/export_chirho.py` — ChiRho/Pyro scaffold script generation
+- [x] `inquiry export-pgmpy` and `inquiry export-chirho` CLI commands
+- [x] `pgmpy` and `chirho` as optional `[causal]` extras in pyproject.toml
+- [x] `.claude-plugin/skills/models/causal-dag.md` skill
+- [x] `/science:build-dag` command
+- [x] `/science:critique-approach` command
+- [x] Design doc: `docs/plans/2026-03-07-phase4b-causal-dag-design.md`
+- [ ] Run on exemplar project and archive evidence
+- [ ] Deferred inquiry-projection refactor documented: `docs/plans/2026-03-07-inquiry-projection-refactor.md`
+
+**Deliverables (4c — Operationalization):**
 - [ ] `find_datasets` capability + command surface
 - [ ] Data validation tooling (Frictionless checks and dataset ↔ variable mapping checks)
 - [ ] `skills/data/frictionless.md`
 - [ ] `skills/pipelines/snakemake.md`, `skills/pipelines/marimo.md`
 - [ ] Snakefile template and templates `pipeline-step.md`, `experiment.md`
+- [ ] PyMC export (if needed)
 - [ ] Stage C capability set implemented (`find_datasets`, workflow recommendations, reproducibility handoff)
 
 ### Phase 5: Autonomous Loops
@@ -670,12 +682,16 @@ Iterate based on real usage. Observe failure modes and add guardrails.
 
 **Phase 3: COMPLETE** (gate closed 2026-03-07). See `docs/exemplar-evidence/README.md` for evidence bundle.
 
-**Phase 4b (Causal Models + Pipelines):**
-10. Implement dedicated `dag` CLI subcommand group (`dag add-variable`, `dag add-edge`, `dag show`, `dag validate`).
-11. Implement causal model export modules (`export_pymc.py`, `export_pyro.py`, `export_pgmpy.py`).
-12. Create `skills/models/causal-dag.md` skill.
-13. Implement `/science:build-dag` and `/science:critique-approach` commands.
-14. Create dataset-variable exemplar mapping with column-level validation.
+**Phase 4b (Causal Modeling) — in progress:**
+10. ~~Implement inquiry type system~~ ✅
+11. ~~Implement causal exports (pgmpy, ChiRho)~~ ✅
+12. ~~Create causal DAG skill + build-dag + critique-approach commands~~ ✅
+13. Run causal DAG on exemplar project and archive evidence to close Phase 4 gate.
+
+**Phase 4c (Operationalization):**
+14. Implement `find_datasets` capability + command surface.
+15. Create data validation tooling (Frictionless) + skill.
+16. Create pipeline skills (Snakemake, Marimo) + templates.
 
 ## Phase Gates (Exit Criteria)
 
