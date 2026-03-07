@@ -20,6 +20,7 @@ from science_tool.graph.store import (
     add_transformation,
     get_inquiry,
     list_inquiries,
+    render_inquiry_doc,
     set_boundary_role,
     set_param_metadata,
     validate_inquiry,
@@ -360,3 +361,22 @@ class TestInquiryValidation:
         results = validate_inquiry(graph_path, "sketch-unk")
         statuses = {r["check"]: r["status"] for r in results}
         assert statuses["unknown_resolution"] == "pass"
+
+
+class TestInquiryRender:
+    def test_render_inquiry_doc(self, graph_path: Path) -> None:
+        add_inquiry(
+            graph_path, slug="test", label="Test Inquiry", target="hypothesis:h01", description="A test inquiry"
+        )
+        add_concept(graph_path, "data_in", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "result_out", concept_type="sci:Variable", ontology_id=None)
+        set_boundary_role(graph_path, "test", "concept:data_in", "BoundaryIn")
+        set_boundary_role(graph_path, "test", "concept:result_out", "BoundaryOut")
+        add_inquiry_edge(graph_path, "test", "concept:data_in", "sci:feedsInto", "concept:result_out")
+        doc = render_inquiry_doc(graph_path, "test")
+        assert "# Inquiry: Test Inquiry" in doc
+        assert "data_in" in doc
+        assert "result_out" in doc
+        assert "## Data Flow" in doc
+        assert "feedsInto" in doc
+        assert "A test inquiry" in doc

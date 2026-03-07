@@ -534,6 +534,212 @@ def get_inquiry(graph_path: Path, slug: str) -> dict:
     }
 
 
+def render_inquiry_doc(graph_path: Path, slug: str) -> str:
+    """Render an inquiry as a markdown document string.
+
+    Calls get_inquiry() to gather data, then builds a markdown document
+    with metadata, boundary node tables, interior nodes, edge list,
+    assumptions, and parameters.
+    """
+    info = get_inquiry(graph_path, slug)
+    safe_slug = _slug(slug)
+    inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
+
+    dataset = _load_dataset(graph_path)
+    inquiry_graph = dataset.graph(inquiry_uri)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+
+    # Helper: get label for a URI from knowledge or inquiry graph
+    def _label_for(uri_str: str) -> str:
+        uri_ref = URIRef(uri_str)
+        label = next(knowledge.objects(uri_ref, SKOS.prefLabel), None)
+        if label is None:
+            label = next(inquiry_graph.objects(uri_ref, SKOS.prefLabel), None)
+        return str(label) if label else shorten_uri(uri_str)
+
+    # Helper: get rdf:type for a URI (excluding sci:Concept base type)
+    def _type_for(uri_str: str) -> str:
+        uri_ref = URIRef(uri_str)
+        types: list[str] = []
+        for t in knowledge.objects(uri_ref, RDF.type):
+            t_str = str(t)
+            if t_str != str(SCI_NS.Concept):
+                types.append(shorten_uri(t_str))
+        for t in inquiry_graph.objects(uri_ref, RDF.type):
+            t_str = str(t)
+            short = shorten_uri(t_str)
+            if t_str != str(SCI_NS.Concept) and short not in types:
+                types.append(short)
+        return ", ".join(types) if types else ""
+
+    # Helper: get note for a URI
+    def _note_for(uri_str: str) -> str:
+        uri_ref = URIRef(uri_str)
+        note = next(knowledge.objects(uri_ref, SKOS.note), None)
+        if note is None:
+            note = next(inquiry_graph.objects(uri_ref, SKOS.note), None)
+        return str(note) if note else ""
+
+    # Helper: get validatedBy for a URI
+    def _validated_by(uri_str: str) -> str:
+        uri_ref = URIRef(uri_str)
+        vals: list[str] = []
+        for v in inquiry_graph.objects(uri_ref, SCI_NS.validatedBy):
+            vals.append(shorten_uri(str(v)))
+        return ", ".join(vals) if vals else ""
+
+    # Helper: get provenance for a URI
+    def _provenance_for(uri_str: str) -> str:
+        uri_ref = URIRef(uri_str)
+        provenance = dataset.graph(_graph_uri("graph/provenance"))
+        sources: list[str] = []
+        for src in provenance.objects(uri_ref, PROV.wasDerivedFrom):
+            sources.append(shorten_uri(str(src)))
+        return ", ".join(sources) if sources else ""
+
+    # Target label
+    target_str = info["target"]
+    target_label = _label_for(target_str)
+    target_id = shorten_uri(target_str)
+
+    # Build boundary sets for interior detection
+    boundary_set = set(info["boundary_in"]) | set(info["boundary_out"])
+
+    # Find interior nodes: nodes in edges that are not boundary and not the inquiry itself
+    interior_nodes: list[str] = []
+    seen: set[str] = set()
+    for edge in info["edges"]:
+        for uri_str in (edge["subject"], edge["object"]):
+            if uri_str not in boundary_set and uri_str not in seen and uri_str != str(inquiry_uri):
+                interior_nodes.append(uri_str)
+                seen.add(uri_str)
+
+    # Build boundary_in rows
+    boundary_in_rows = ""
+    for uri_str in info["boundary_in"]:
+        name = _label_for(uri_str)
+        typ = _type_for(uri_str)
+        prov = _provenance_for(uri_str)
+        boundary_in_rows += f"| {name} | {typ} | {prov} |\n"
+
+    # Build boundary_out rows
+    boundary_out_rows = ""
+    for uri_str in info["boundary_out"]:
+        name = _label_for(uri_str)
+        typ = _type_for(uri_str)
+        validation = _validated_by(uri_str)
+        boundary_out_rows += f"| {name} | {typ} | {validation} |\n"
+
+    # Build interior rows
+    interior_rows = ""
+    for uri_str in interior_nodes:
+        name = _label_for(uri_str)
+        typ = _type_for(uri_str)
+        note = _note_for(uri_str)
+        interior_rows += f"| {name} | {typ} | {note} |\n"
+
+    # Build edge list
+    edge_lines: list[str] = []
+    for edge in info["edges"]:
+        s = shorten_uri(edge["subject"])
+        p = shorten_uri(edge["predicate"])
+        o = shorten_uri(edge["object"])
+        edge_lines.append(f"- {s} --[{p}]--> {o}")
+    edge_list = "\n".join(edge_lines) if edge_lines else "(no edges)"
+
+    # Build assumption rows
+    assumption_rows = ""
+    for s, _p, _o in inquiry_graph.triples((None, RDF.type, SCI_NS.Assumption)):
+        name = _label_for(str(s))
+        evidence = _provenance_for(str(s))
+        # Also check sci:assumes edges for evidence
+        for _s2, _p2, ev in inquiry_graph.triples((s, SCI_NS.assumes, None)):
+            ev_label = shorten_uri(str(ev))
+            evidence = ev_label if not evidence else f"{evidence}, {ev_label}"
+        assumption_rows += f"| {name} | {evidence} |\n"
+
+    # Build param rows
+    param_rows = ""
+    for s in set(inquiry_graph.subjects(SCI_NS.paramValue, None)):
+        name = _label_for(str(s))
+        value = str(next(inquiry_graph.objects(s, SCI_NS.paramValue), ""))
+        source = str(next(inquiry_graph.objects(s, SCI_NS.paramSource), ""))
+        refs_list: list[str] = []
+        for r in inquiry_graph.objects(s, SCI_NS.paramRef):
+            refs_list.append(str(r))
+        refs = ", ".join(refs_list)
+        note = str(next(inquiry_graph.objects(s, SCI_NS.paramNote), ""))
+        param_rows += f"| {name} | {value} | {source} | {refs} | {note} |\n"
+
+    # Also check knowledge graph for params
+    for s_uri_str in list(set([*info["boundary_in"], *info["boundary_out"], *[str(n) for n in interior_nodes]])):
+        s_ref = URIRef(s_uri_str)
+        val = next(knowledge.objects(s_ref, SCI_NS.paramValue), None)
+        if val is not None and s_ref not in set(inquiry_graph.subjects(SCI_NS.paramValue, None)):
+            name = _label_for(s_uri_str)
+            value = str(val)
+            source = str(next(knowledge.objects(s_ref, SCI_NS.paramSource), ""))
+            refs_list = []
+            for r in knowledge.objects(s_ref, SCI_NS.paramRef):
+                refs_list.append(str(r))
+            refs = ", ".join(refs_list)
+            note = str(next(knowledge.objects(s_ref, SCI_NS.paramNote), ""))
+            param_rows += f"| {name} | {value} | {source} | {refs} | {note} |\n"
+
+    # Assemble document
+    lines = [
+        f"# Inquiry: {info['label']}",
+        "",
+        f"- **Slug:** {info['slug']}",
+        f"- **Target:** {target_label} ({target_id})",
+        f"- **Status:** {info['status']}",
+        f"- **Created:** {info['created']}",
+        "",
+        "## Summary",
+        "",
+        info["description"] or "(no description)",
+        "",
+        "## Variables",
+        "",
+        "### Boundary In (Givens)",
+        "",
+        "| Variable | Type | Provenance |",
+        "|---|---|---|",
+        boundary_in_rows.rstrip("\n") if boundary_in_rows else "",
+        "",
+        "### Boundary Out (Produces)",
+        "",
+        "| Variable | Type | Validation |",
+        "|---|---|---|",
+        boundary_out_rows.rstrip("\n") if boundary_out_rows else "",
+        "",
+        "### Interior",
+        "",
+        "| Variable | Type | Notes |",
+        "|---|---|---|",
+        interior_rows.rstrip("\n") if interior_rows else "",
+        "",
+        "## Data Flow",
+        "",
+        edge_list,
+        "",
+        "## Assumptions",
+        "",
+        "| Assumption | Evidence |",
+        "|---|---|",
+        assumption_rows.rstrip("\n") if assumption_rows else "",
+        "",
+        "## Parameters",
+        "",
+        "| Parameter | Value | Source | References | Note |",
+        "|---|---|---|---|---|",
+        param_rows.rstrip("\n") if param_rows else "",
+        "",
+    ]
+
+    return "\n".join(lines)
+
+
 def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
     """Validate an inquiry graph, returning a list of check-result dicts.
 
