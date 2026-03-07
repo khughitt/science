@@ -534,6 +534,150 @@ def get_inquiry(graph_path: Path, slug: str) -> dict:
     }
 
 
+def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
+    """Validate an inquiry graph, returning a list of check-result dicts.
+
+    Each result has keys: check (str), status ("pass"/"fail"/"warn"), message (str),
+    and optionally details (list).
+    """
+    safe_slug = _slug(slug)
+    inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
+
+    dataset = _load_dataset(graph_path)
+    inquiry_graph = dataset.graph(inquiry_uri)
+
+    if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
+        raise ValueError(f"Inquiry 'inquiry/{safe_slug}' does not exist")
+
+    status = str(next(inquiry_graph.objects(inquiry_uri, SCI_NS.inquiryStatus), "sketch"))
+    target = next(inquiry_graph.objects(inquiry_uri, SCI_NS.target), None)
+
+    # Collect boundary nodes
+    boundary_in: set[URIRef] = set()
+    boundary_out: set[URIRef] = set()
+    for s, _p, o in inquiry_graph.triples((None, SCI_NS.boundaryRole, None)):
+        if o == SCI_NS.BoundaryIn:
+            boundary_in.add(s)
+        elif o == SCI_NS.BoundaryOut:
+            boundary_out.add(s)
+
+    # Build adjacency from flow edges (feedsInto, produces)
+    flow_predicates = {SCI_NS.feedsInto, SCI_NS.produces}
+    adjacency: dict[URIRef, list[URIRef]] = {}
+    all_flow_nodes: set[URIRef] = set()
+    for s, p, o in inquiry_graph:
+        if p in flow_predicates:
+            adjacency.setdefault(s, []).append(o)
+            all_flow_nodes.add(s)
+            all_flow_nodes.add(o)
+
+    results: list[dict] = []
+
+    # 1. boundary_reachability — BFS from BoundaryIn, check all BoundaryOut reachable
+    reachable: set[URIRef] = set()
+    queue: deque[URIRef] = deque(boundary_in)
+    while queue:
+        node = queue.popleft()
+        if node in reachable:
+            continue
+        reachable.add(node)
+        for neighbor in adjacency.get(node, []):
+            if neighbor not in reachable:
+                queue.append(neighbor)
+
+    unreachable_out = [str(n) for n in boundary_out if n not in reachable]
+    if unreachable_out:
+        results.append({
+            "check": "boundary_reachability",
+            "status": "fail",
+            "message": f"{len(unreachable_out)} BoundaryOut node(s) not reachable from any BoundaryIn",
+            "details": unreachable_out,
+        })
+    else:
+        results.append({
+            "check": "boundary_reachability",
+            "status": "pass",
+            "message": "All BoundaryOut nodes reachable from BoundaryIn",
+        })
+
+    # 2. no_cycles — Kahn's algorithm (topological sort)
+    in_degree: dict[URIRef, int] = {n: 0 for n in all_flow_nodes}
+    for src, dsts in adjacency.items():
+        for dst in dsts:
+            in_degree[dst] = in_degree.get(dst, 0) + 1
+
+    topo_queue: deque[URIRef] = deque(n for n, d in in_degree.items() if d == 0)
+    sorted_count = 0
+    while topo_queue:
+        node = topo_queue.popleft()
+        sorted_count += 1
+        for neighbor in adjacency.get(node, []):
+            in_degree[neighbor] -= 1
+            if in_degree[neighbor] == 0:
+                topo_queue.append(neighbor)
+
+    if sorted_count < len(all_flow_nodes):
+        results.append({
+            "check": "no_cycles",
+            "status": "fail",
+            "message": "Cycle detected in flow edges",
+        })
+    else:
+        results.append({
+            "check": "no_cycles",
+            "status": "pass",
+            "message": "No cycles in flow edges",
+        })
+
+    # 3. unknown_resolution — find sci:Unknown nodes used in this inquiry
+    unknown_nodes: list[str] = []
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    for node in all_flow_nodes:
+        if (node, RDF.type, SCI_NS.Unknown) in knowledge or (node, RDF.type, SCI_NS.Unknown) in inquiry_graph:
+            unknown_nodes.append(str(node))
+
+    if unknown_nodes and status != "sketch":
+        results.append({
+            "check": "unknown_resolution",
+            "status": "fail",
+            "message": f"{len(unknown_nodes)} sci:Unknown node(s) in non-sketch inquiry",
+            "details": unknown_nodes,
+        })
+    else:
+        results.append({
+            "check": "unknown_resolution",
+            "status": "pass",
+            "message": "No unresolved Unknown nodes" if not unknown_nodes else "Unknown nodes allowed in sketch",
+        })
+
+    # 4. target_exists — check the target has an rdf:type somewhere
+    if target is not None:
+        has_type = any(True for _ in knowledge.triples((target, RDF.type, None)))
+        if not has_type:
+            # Also check other graphs
+            has_type = any(True for _ in dataset.triples((target, RDF.type, None)))
+        if has_type:
+            results.append({
+                "check": "target_exists",
+                "status": "pass",
+                "message": "Target node exists",
+            })
+        else:
+            results.append({
+                "check": "target_exists",
+                "status": "fail",
+                "message": f"Target {target} has no rdf:type in the knowledge graph",
+            })
+    else:
+        results.append({
+            "check": "target_exists",
+            "status": "warn",
+            "message": "No target specified for inquiry",
+        })
+
+    return results
+
+
 def import_snapshot(graph_path: Path, snapshot_path: Path) -> int:
     """Import a Turtle snapshot into :graph/knowledge and record provenance. Returns triple count."""
     if not snapshot_path.exists():

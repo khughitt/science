@@ -22,6 +22,7 @@ from science_tool.graph.store import (
     list_inquiries,
     set_boundary_role,
     set_param_metadata,
+    validate_inquiry,
 )
 from rdflib.namespace import SKOS
 
@@ -283,3 +284,79 @@ class TestInquiryQueries:
     def test_get_inquiry_nonexistent_raises(self, graph_path: Path) -> None:
         with pytest.raises(ValueError, match="does not exist"):
             get_inquiry(graph_path, "nonexistent")
+
+
+class TestInquiryValidation:
+    def test_valid_inquiry_passes(self, graph_path: Path) -> None:
+        """A well-formed inquiry passes all checks."""
+        add_inquiry(graph_path, slug="valid", label="Valid", target="hypothesis:h01")
+        add_concept(graph_path, "data_in", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "result_out", concept_type=None, ontology_id=None)
+        set_boundary_role(graph_path, "valid", "concept:data_in", "BoundaryIn")
+        set_boundary_role(graph_path, "valid", "concept:result_out", "BoundaryOut")
+        add_inquiry_edge(graph_path, "valid", "concept:data_in", "sci:feedsInto", "concept:result_out")
+
+        results = validate_inquiry(graph_path, "valid")
+        statuses = {r["check"]: r["status"] for r in results}
+        assert statuses["boundary_reachability"] == "pass"
+        assert statuses["no_cycles"] == "pass"
+
+    def test_unreachable_boundary_out_fails(self, graph_path: Path) -> None:
+        """BoundaryOut not reachable from any BoundaryIn."""
+        add_inquiry(graph_path, slug="unreach", label="Unreachable", target="hypothesis:h01")
+        add_concept(graph_path, "data_in", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "result_out", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "disconnected_out", concept_type=None, ontology_id=None)
+        set_boundary_role(graph_path, "unreach", "concept:data_in", "BoundaryIn")
+        set_boundary_role(graph_path, "unreach", "concept:result_out", "BoundaryOut")
+        set_boundary_role(graph_path, "unreach", "concept:disconnected_out", "BoundaryOut")
+        add_inquiry_edge(graph_path, "unreach", "concept:data_in", "sci:feedsInto", "concept:result_out")
+        # disconnected_out has no incoming path
+
+        results = validate_inquiry(graph_path, "unreach")
+        statuses = {r["check"]: r["status"] for r in results}
+        assert statuses["boundary_reachability"] == "fail"
+
+    def test_cycle_in_feeds_into_fails(self, graph_path: Path) -> None:
+        """Cycles in feedsInto edges fail."""
+        add_inquiry(graph_path, slug="cycle", label="Cycle", target="hypothesis:h01")
+        add_concept(graph_path, "a", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "b", concept_type=None, ontology_id=None)
+        set_boundary_role(graph_path, "cycle", "concept:a", "BoundaryIn")
+        set_boundary_role(graph_path, "cycle", "concept:b", "BoundaryOut")
+        add_inquiry_edge(graph_path, "cycle", "concept:a", "sci:feedsInto", "concept:b")
+        add_inquiry_edge(graph_path, "cycle", "concept:b", "sci:feedsInto", "concept:a")
+
+        results = validate_inquiry(graph_path, "cycle")
+        statuses = {r["check"]: r["status"] for r in results}
+        assert statuses["no_cycles"] == "fail"
+
+    def test_unknown_in_specified_fails(self, graph_path: Path) -> None:
+        """sci:Unknown nodes in a specified inquiry fail."""
+        add_inquiry(graph_path, slug="unk", label="Unknown", target="hypothesis:h01", status="specified")
+        add_concept(graph_path, "mystery", concept_type="sci:Unknown", ontology_id=None)
+        add_concept(graph_path, "data_in", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "result_out", concept_type=None, ontology_id=None)
+        set_boundary_role(graph_path, "unk", "concept:data_in", "BoundaryIn")
+        set_boundary_role(graph_path, "unk", "concept:result_out", "BoundaryOut")
+        add_inquiry_edge(graph_path, "unk", "concept:data_in", "sci:feedsInto", "concept:mystery")
+        add_inquiry_edge(graph_path, "unk", "concept:mystery", "sci:feedsInto", "concept:result_out")
+
+        results = validate_inquiry(graph_path, "unk")
+        statuses = {r["check"]: r["status"] for r in results}
+        assert statuses["unknown_resolution"] == "fail"
+
+    def test_unknown_in_sketch_passes(self, graph_path: Path) -> None:
+        """sci:Unknown nodes in a sketch are allowed."""
+        add_inquiry(graph_path, slug="sketch-unk", label="Sketch", target="hypothesis:h01", status="sketch")
+        add_concept(graph_path, "mystery", concept_type="sci:Unknown", ontology_id=None)
+        add_concept(graph_path, "data_in", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "result_out", concept_type=None, ontology_id=None)
+        set_boundary_role(graph_path, "sketch-unk", "concept:data_in", "BoundaryIn")
+        set_boundary_role(graph_path, "sketch-unk", "concept:result_out", "BoundaryOut")
+        add_inquiry_edge(graph_path, "sketch-unk", "concept:data_in", "sci:feedsInto", "concept:mystery")
+        add_inquiry_edge(graph_path, "sketch-unk", "concept:mystery", "sci:feedsInto", "concept:result_out")
+
+        results = validate_inquiry(graph_path, "sketch-unk")
+        statuses = {r["check"]: r["status"] for r in results}
+        assert statuses["unknown_resolution"] == "pass"
