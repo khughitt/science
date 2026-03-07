@@ -656,6 +656,7 @@ def inquiry_list(output_format: str, graph_path: Path) -> None:
         columns=[
             ("slug", "Slug"),
             ("label", "Label"),
+            ("inquiry_type", "Type"),
             ("status", "Status"),
             ("target", "Target"),
             ("created", "Created"),
@@ -683,6 +684,7 @@ def inquiry_show(slug: str, output_format: str, graph_path: Path) -> None:
     else:
         click.echo(f"Inquiry: {info['label']}")
         click.echo(f"  Slug: {info['slug']}")
+        click.echo(f"  Type: {info['inquiry_type']}")
         click.echo(f"  Status: {info['status']}")
         click.echo(f"  Target: {info['target']}")
         click.echo(f"  Created: {info['created']}")

@@ -52,6 +52,28 @@ class TestInquiryInitType:
         assert "Created inquiry" in result.output
 
 
+class TestInquiryTypeInOutput:
+    def test_show_displays_type(self, runner: CliRunner, graph_path: Path) -> None:
+        """inquiry show text output includes the inquiry type."""
+        p = str(graph_path)
+        runner.invoke(main, ["graph", "add", "hypothesis", "h1", "--source", "paper:doi_test", "--path", p])
+        runner.invoke(main, ["inquiry", "init", "dag1", "--label", "DAG",
+                             "--target", "hypothesis:h1", "--type", "causal", "--path", p])
+        result = runner.invoke(main, ["inquiry", "show", "dag1", "--path", p])
+        assert result.exit_code == 0
+        assert "Type: causal" in result.output
+
+    def test_list_displays_type_column(self, runner: CliRunner, graph_path: Path) -> None:
+        """inquiry list includes a Type column."""
+        p = str(graph_path)
+        runner.invoke(main, ["graph", "add", "hypothesis", "h1", "--source", "paper:doi_test", "--path", p])
+        runner.invoke(main, ["inquiry", "init", "dag1", "--label", "DAG",
+                             "--target", "hypothesis:h1", "--type", "causal", "--path", p])
+        result = runner.invoke(main, ["inquiry", "list", "--path", p])
+        assert result.exit_code == 0
+        assert "causal" in result.output
+
+
 class TestExportCLI:
     def test_export_pgmpy_cli(self, runner: CliRunner, graph_path: Path, tmp_path: Path) -> None:
         _setup_causal_inquiry(runner, graph_path)

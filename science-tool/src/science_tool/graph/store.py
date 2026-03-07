@@ -501,10 +501,17 @@ def list_inquiries(graph_path: Path) -> list[dict[str, str]]:
         for obj in ctx.objects(inquiry_uri, DCTERMS_NS.created):
             created = str(obj)
 
+        inquiry_type = ""
+        for obj in ctx.objects(inquiry_uri, SCI_NS.inquiryType):
+            inquiry_type = str(obj)
+        if not inquiry_type:
+            inquiry_type = "general"
+
         results.append(
             {
                 "slug": slug,
                 "label": label,
+                "inquiry_type": inquiry_type,
                 "status": status,
                 "target": target,
                 "created": created,

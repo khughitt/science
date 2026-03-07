@@ -82,6 +82,21 @@ class TestInquiryType:
         assert "causal" in VALID_INQUIRY_TYPES
 
 
+class TestInquiryTypeDisplay:
+    def test_list_inquiries_includes_type(self, graph_path: Path) -> None:
+        """list_inquiries() returns inquiry_type in each dict."""
+        from science_tool.graph.store import list_inquiries
+
+        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        add_inquiry(graph_path, "causal-1", "Causal", "hypothesis:h1", inquiry_type="causal")
+        add_inquiry(graph_path, "general-1", "General", "hypothesis:h1")
+        rows = list_inquiries(graph_path)
+        causal_row = next(r for r in rows if r["slug"] == "causal_1")
+        general_row = next(r for r in rows if r["slug"] == "general_1")
+        assert causal_row["inquiry_type"] == "causal"
+        assert general_row["inquiry_type"] == "general"
+
+
 class TestTreatmentOutcome:
     def test_set_treatment_outcome(self, graph_path: Path) -> None:
         """Setting treatment and outcome stores predicates in inquiry graph."""
