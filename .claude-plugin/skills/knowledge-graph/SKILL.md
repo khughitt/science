@@ -165,12 +165,16 @@ Inquiries are named subgraphs that represent self-contained investigations. They
 
 ```
 inquiry init <SLUG> --label <LABEL> --target <HYPOTHESIS_OR_QUESTION>
-inquiry add-node <SLUG> <ENTITY> --role <BoundaryIn|BoundaryOut>
+inquiry add-node <SLUG> <ENTITY> [--role <BoundaryIn|BoundaryOut>]
 inquiry add-edge <SLUG> <SUBJECT> <PREDICATE> <OBJECT>
+inquiry add-assumption <SLUG> <LABEL> --source <REF>
+inquiry add-transformation <SLUG> <LABEL> [--tool <TOOL>]
 inquiry list [--format table|json]
 inquiry show <SLUG> [--format table|json]
 inquiry validate <SLUG> [--format table|json]
 ```
+
+Note: `add-node` without `--role` adds an interior node (no boundary classification).
 
 ### Inquiry-Specific Predicates
 
@@ -213,3 +217,5 @@ For annotating parameters with their evidence source (AnnotatedParam pattern):
 | `no_cycles` | No cycles in `sci:feedsInto`/`sci:produces` edges |
 | `unknown_resolution` | `sci:Unknown` nodes allowed in sketch, must be resolved in specified+ |
 | `target_exists` | Target hypothesis/question exists in the knowledge graph |
+| `orphaned_interior` | Interior nodes should have both incoming and outgoing flow edges (warn) |
+| `provenance_completeness` | Specified+ inquiries: all assumptions must have `prov:wasDerivedFrom` |

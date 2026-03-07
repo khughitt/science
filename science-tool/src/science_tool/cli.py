@@ -14,8 +14,11 @@ from science_tool.graph.store import (
     add_concept,
     add_edge,
     add_hypothesis,
+    add_assumption,
     add_inquiry,
     add_inquiry_edge,
+    add_inquiry_node,
+    add_transformation,
     add_paper,
     add_question,
     build_graph_dot,
@@ -543,15 +546,19 @@ def inquiry_init(slug: str, label: str, target: str, description: str, status: s
 @inquiry.command("add-node")
 @click.argument("slug")
 @click.argument("entity")
-@click.option("--role", required=True, type=click.Choice(["BoundaryIn", "BoundaryOut"]))
+@click.option("--role", required=False, type=click.Choice(["BoundaryIn", "BoundaryOut"]), default=None)
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def inquiry_add_node(slug: str, entity: str, role: str, graph_path: Path) -> None:
-    """Add a node with a boundary role to an inquiry."""
+def inquiry_add_node(slug: str, entity: str, role: str | None, graph_path: Path) -> None:
+    """Add a node to an inquiry, optionally with a boundary role."""
     try:
-        set_boundary_role(graph_path, slug, entity, role)
-        click.echo(f"Set {entity} as {role} in inquiry/{slug}")
+        if role:
+            set_boundary_role(graph_path, slug, entity, role)
+            click.echo(f"Set {entity} as {role} in inquiry/{slug}")
+        else:
+            add_inquiry_node(graph_path, slug, entity)
+            click.echo(f"Added {entity} as interior node in inquiry/{slug}")
     except ValueError as e:
         raise click.ClickException(str(e))
 
@@ -569,6 +576,38 @@ def inquiry_add_edge(slug: str, subject: str, predicate: str, object: str, graph
     try:
         s, p, o = add_inquiry_edge(graph_path, slug, subject, predicate, object)
         click.echo(f"Added edge: {shorten_uri(str(s))} --[{shorten_uri(str(p))}]--> {shorten_uri(str(o))}")
+    except ValueError as e:
+        raise click.ClickException(str(e))
+
+
+@inquiry.command("add-assumption")
+@click.argument("slug")
+@click.argument("label")
+@click.option("--source", required=True, help="Evidence source (e.g. paper:doi_...)")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def inquiry_add_assumption(slug: str, label: str, source: str, graph_path: Path) -> None:
+    """Add an assumption to an inquiry with provenance."""
+    try:
+        uri = add_assumption(graph_path, label=label, source=source, inquiry_slug=slug)
+        click.echo(f"Added assumption: {shorten_uri(str(uri))} in inquiry/{slug}")
+    except ValueError as e:
+        raise click.ClickException(str(e))
+
+
+@inquiry.command("add-transformation")
+@click.argument("slug")
+@click.argument("label")
+@click.option("--tool", default="", help="Tool or library name")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def inquiry_add_transformation(slug: str, label: str, tool: str, graph_path: Path) -> None:
+    """Add a transformation step to an inquiry."""
+    try:
+        uri = add_transformation(graph_path, label=label, inquiry_slug=slug, tool=tool)
+        click.echo(f"Added transformation: {shorten_uri(str(uri))} in inquiry/{slug}")
     except ValueError as e:
         raise click.ClickException(str(e))
 

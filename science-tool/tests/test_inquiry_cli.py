@@ -79,6 +79,41 @@ class TestInquiryAddEdge:
         assert result.exit_code == 0
 
 
+class TestInquiryAddNodeInterior:
+    def test_add_interior_node(self, runner: CliRunner, graph_path: Path) -> None:
+        p = str(graph_path)
+        runner.invoke(main, ["inquiry", "init", "test", "--label", "T", "--target", "hypothesis:h01", "--path", p])
+        runner.invoke(main, ["graph", "add", "concept", "middle_step", "--path", p])
+        result = runner.invoke(
+            main, ["inquiry", "add-node", "test", "concept:middle_step", "--path", p]
+        )
+        assert result.exit_code == 0
+        assert "interior" in result.output
+
+
+class TestInquiryAddAssumption:
+    def test_add_assumption(self, runner: CliRunner, graph_path: Path) -> None:
+        p = str(graph_path)
+        runner.invoke(main, ["inquiry", "init", "test", "--label", "T", "--target", "hypothesis:h01", "--path", p])
+        result = runner.invoke(
+            main, ["inquiry", "add-assumption", "test", "Mean pooling sufficient",
+                   "--source", "paper:doi_test", "--path", p]
+        )
+        assert result.exit_code == 0
+        assert "assumption" in result.output.lower()
+
+
+class TestInquiryAddTransformation:
+    def test_add_transformation(self, runner: CliRunner, graph_path: Path) -> None:
+        p = str(graph_path)
+        runner.invoke(main, ["inquiry", "init", "test", "--label", "T", "--target", "hypothesis:h01", "--path", p])
+        result = runner.invoke(
+            main, ["inquiry", "add-transformation", "test", "Extract sequences", "--tool", "BioPython", "--path", p]
+        )
+        assert result.exit_code == 0
+        assert "transformation" in result.output.lower()
+
+
 class TestInquiryList:
     def test_list_empty(self, runner: CliRunner, graph_path: Path) -> None:
         result = runner.invoke(main, ["inquiry", "list", "--path", str(graph_path), "--format", "json"])

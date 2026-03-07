@@ -17,6 +17,7 @@ from science_tool.graph.store import (
     add_concept,
     add_inquiry,
     add_inquiry_edge,
+    add_inquiry_node,
     add_transformation,
     get_inquiry,
     list_inquiries,
@@ -363,6 +364,25 @@ class TestInquiryValidation:
         assert statuses["unknown_resolution"] == "pass"
 
 
+class TestInteriorNodes:
+    def test_add_inquiry_node_interior(self, graph_path: Path) -> None:
+        """Add an interior node (no boundary role) to an inquiry."""
+        add_inquiry(graph_path, slug="test", label="Test", target="hypothesis:h01")
+        add_concept(graph_path, "middle_step", concept_type="sci:Variable", ontology_id=None)
+        add_inquiry_node(graph_path, "test", "concept:middle_step")
+        dataset = _load_dataset(graph_path)
+        inquiry_graph = dataset.graph(URIRef(str(PROJECT_NS) + "inquiry/test"))
+        concept_uri = PROJECT_NS["concept/middle_step"]
+        # Should have a type triple in the inquiry graph but no boundary role
+        assert any(inquiry_graph.triples((concept_uri, RDF.type, None)))
+        assert not any(inquiry_graph.triples((concept_uri, SCI_NS.boundaryRole, None)))
+
+    def test_add_inquiry_node_nonexistent_inquiry_raises(self, graph_path: Path) -> None:
+        add_concept(graph_path, "node", concept_type=None, ontology_id=None)
+        with pytest.raises(ValueError, match="does not exist"):
+            add_inquiry_node(graph_path, "nonexistent", "concept:node")
+
+
 class TestInquiryRender:
     def test_render_inquiry_doc(self, graph_path: Path) -> None:
         add_inquiry(
@@ -380,3 +400,101 @@ class TestInquiryRender:
         assert "## Data Flow" in doc
         assert "feedsInto" in doc
         assert "A test inquiry" in doc
+        assert "## Unknowns" in doc
+
+    def test_render_with_unknowns(self, graph_path: Path) -> None:
+        """Unknowns section renders when sci:Unknown nodes are present."""
+        add_inquiry(graph_path, slug="unk-render", label="Unknown Render", target="hypothesis:h01")
+        add_concept(graph_path, "data_in", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "mystery_factor", concept_type="sci:Unknown", ontology_id=None)
+        add_concept(graph_path, "result_out", concept_type="sci:Variable", ontology_id=None)
+        set_boundary_role(graph_path, "unk-render", "concept:data_in", "BoundaryIn")
+        set_boundary_role(graph_path, "unk-render", "concept:result_out", "BoundaryOut")
+        add_inquiry_edge(graph_path, "unk-render", "concept:data_in", "sci:feedsInto", "concept:mystery_factor")
+        add_inquiry_edge(graph_path, "unk-render", "concept:mystery_factor", "sci:feedsInto", "concept:result_out")
+        doc = render_inquiry_doc(graph_path, "unk-render")
+        assert "## Unknowns" in doc
+        assert "mystery_factor" in doc
+
+
+class TestOrphanedInteriorValidation:
+    def test_orphaned_interior_warns(self, graph_path: Path) -> None:
+        """Interior node with no outgoing flow edge triggers warning."""
+        add_inquiry(graph_path, slug="orphan", label="Orphan", target="hypothesis:h01")
+        add_concept(graph_path, "data_in", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "middle", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "result_out", concept_type=None, ontology_id=None)
+        set_boundary_role(graph_path, "orphan", "concept:data_in", "BoundaryIn")
+        set_boundary_role(graph_path, "orphan", "concept:result_out", "BoundaryOut")
+        # data_in -> middle, data_in -> result_out, but middle has no outgoing edge
+        add_inquiry_edge(graph_path, "orphan", "concept:data_in", "sci:feedsInto", "concept:middle")
+        add_inquiry_edge(graph_path, "orphan", "concept:data_in", "sci:feedsInto", "concept:result_out")
+
+        results = validate_inquiry(graph_path, "orphan")
+        statuses = {r["check"]: r["status"] for r in results}
+        assert statuses["orphaned_interior"] == "warn"
+
+    def test_no_orphans_passes(self, graph_path: Path) -> None:
+        """Well-connected interior node passes orphan check."""
+        add_inquiry(graph_path, slug="connected", label="Connected", target="hypothesis:h01")
+        add_concept(graph_path, "data_in", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "middle", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "result_out", concept_type=None, ontology_id=None)
+        set_boundary_role(graph_path, "connected", "concept:data_in", "BoundaryIn")
+        set_boundary_role(graph_path, "connected", "concept:result_out", "BoundaryOut")
+        add_inquiry_edge(graph_path, "connected", "concept:data_in", "sci:feedsInto", "concept:middle")
+        add_inquiry_edge(graph_path, "connected", "concept:middle", "sci:feedsInto", "concept:result_out")
+
+        results = validate_inquiry(graph_path, "connected")
+        statuses = {r["check"]: r["status"] for r in results}
+        assert statuses["orphaned_interior"] == "pass"
+
+
+class TestProvenanceCompletenessValidation:
+    def test_missing_provenance_fails_specified(self, graph_path: Path) -> None:
+        """Assumption without prov:wasDerivedFrom fails in specified inquiry."""
+        add_inquiry(graph_path, slug="no-prov", label="No Prov", target="hypothesis:h01", status="specified")
+        add_concept(graph_path, "data_in", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "result_out", concept_type=None, ontology_id=None)
+        set_boundary_role(graph_path, "no-prov", "concept:data_in", "BoundaryIn")
+        set_boundary_role(graph_path, "no-prov", "concept:result_out", "BoundaryOut")
+        add_inquiry_edge(graph_path, "no-prov", "concept:data_in", "sci:feedsInto", "concept:result_out")
+        # Add assumption directly to inquiry graph without provenance
+        dataset = _load_dataset(graph_path)
+        inquiry_graph = dataset.graph(URIRef(str(PROJECT_NS) + "inquiry/no_prov"))
+        assumption_uri = URIRef(str(PROJECT_NS) + "concept/unproven_assumption")
+        inquiry_graph.add((assumption_uri, RDF.type, SCI_NS.Assumption))
+        from science_tool.graph.store import _save_dataset
+        _save_dataset(dataset, graph_path)
+
+        results = validate_inquiry(graph_path, "no-prov")
+        statuses = {r["check"]: r["status"] for r in results}
+        assert statuses["provenance_completeness"] == "fail"
+
+    def test_provenance_present_passes(self, graph_path: Path) -> None:
+        """Assumption with provenance passes in specified inquiry."""
+        add_inquiry(graph_path, slug="with-prov", label="With Prov", target="hypothesis:h01", status="specified")
+        add_concept(graph_path, "data_in", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "result_out", concept_type=None, ontology_id=None)
+        set_boundary_role(graph_path, "with-prov", "concept:data_in", "BoundaryIn")
+        set_boundary_role(graph_path, "with-prov", "concept:result_out", "BoundaryOut")
+        add_inquiry_edge(graph_path, "with-prov", "concept:data_in", "sci:feedsInto", "concept:result_out")
+        # add_assumption uses add_concept which adds provenance via --source
+        add_assumption(graph_path, label="Justified claim", source="paper:doi_test", inquiry_slug="with-prov")
+
+        results = validate_inquiry(graph_path, "with-prov")
+        statuses = {r["check"]: r["status"] for r in results}
+        assert statuses["provenance_completeness"] == "pass"
+
+    def test_provenance_not_checked_in_sketch(self, graph_path: Path) -> None:
+        """Provenance completeness is not checked for sketch inquiries."""
+        add_inquiry(graph_path, slug="sketch-prov", label="Sketch", target="hypothesis:h01", status="sketch")
+        add_concept(graph_path, "data_in", concept_type=None, ontology_id=None)
+        add_concept(graph_path, "result_out", concept_type=None, ontology_id=None)
+        set_boundary_role(graph_path, "sketch-prov", "concept:data_in", "BoundaryIn")
+        set_boundary_role(graph_path, "sketch-prov", "concept:result_out", "BoundaryOut")
+        add_inquiry_edge(graph_path, "sketch-prov", "concept:data_in", "sci:feedsInto", "concept:result_out")
+
+        results = validate_inquiry(graph_path, "sketch-prov")
+        check_names = [r["check"] for r in results]
+        assert "provenance_completeness" not in check_names

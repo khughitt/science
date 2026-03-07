@@ -315,6 +315,34 @@ def set_boundary_role(
     _save_dataset(dataset, graph_path)
 
 
+def add_inquiry_node(
+    graph_path: Path,
+    inquiry_slug: str,
+    entity: str,
+) -> None:
+    """Add an entity as an interior node to an inquiry (no boundary role)."""
+    safe_slug = _slug(inquiry_slug)
+    inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
+
+    dataset = _load_dataset(graph_path)
+    inquiry_graph = dataset.graph(inquiry_uri)
+
+    if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
+        raise ValueError(f"Inquiry 'inquiry/{safe_slug}' does not exist")
+
+    entity_uri = _resolve_term(entity)
+    # Mark presence in inquiry by adding its type from knowledge graph
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    for t in knowledge.objects(entity_uri, RDF.type):
+        inquiry_graph.add((entity_uri, RDF.type, t))
+        break  # one type is sufficient to mark membership
+    else:
+        # If no type found in knowledge, add a generic membership triple
+        inquiry_graph.add((entity_uri, RDF.type, SCI_NS.Concept))
+
+    _save_dataset(dataset, graph_path)
+
+
 def add_inquiry_edge(
     graph_path: Path,
     inquiry_slug: str,
@@ -399,8 +427,9 @@ def add_transformation(
                 inquiry_graph.add((uri, SCI_NS.paramSource, Literal(meta["source"])))
             if "note" in meta:
                 inquiry_graph.add((uri, SCI_NS.paramNote, Literal(meta["note"])))
-            if "ref" in meta:
-                inquiry_graph.add((uri, SCI_NS.paramRef, Literal(meta["ref"])))
+            if "refs" in meta:
+                for ref in meta["refs"] if isinstance(meta["refs"], list) else [meta["refs"]]:
+                    inquiry_graph.add((uri, SCI_NS.paramRef, Literal(ref)))
 
     _save_dataset(dataset, graph_path)
     return uri
@@ -688,6 +717,28 @@ def render_inquiry_doc(graph_path: Path, slug: str) -> str:
             note = str(next(knowledge.objects(s_ref, SCI_NS.paramNote), ""))
             param_rows += f"| {name} | {value} | {source} | {refs} | {note} |\n"
 
+    # Build unknown rows — check both inquiry graph and knowledge graph
+    unknown_rows = ""
+    unknown_seen: set[str] = set()
+    for s, _p3, _o3 in inquiry_graph.triples((None, RDF.type, SCI_NS.Unknown)):
+        uri_str = str(s)
+        if uri_str not in unknown_seen:
+            unknown_seen.add(uri_str)
+            name = _label_for(uri_str)
+            note = _note_for(uri_str)
+            unknown_rows += f"| {name} | {note} |\n"
+    # Also check knowledge graph for Unknown-typed nodes referenced in edges
+    all_edge_nodes = set()
+    for edge in info["edges"]:
+        all_edge_nodes.add(edge["subject"])
+        all_edge_nodes.add(edge["object"])
+    for node_str in all_edge_nodes:
+        if node_str not in unknown_seen and (URIRef(node_str), RDF.type, SCI_NS.Unknown) in knowledge:
+            unknown_seen.add(node_str)
+            name = _label_for(node_str)
+            note = _note_for(node_str)
+            unknown_rows += f"| {name} | {note} |\n"
+
     # Assemble document
     lines = [
         f"# Inquiry: {info['label']}",
@@ -730,6 +781,12 @@ def render_inquiry_doc(graph_path: Path, slug: str) -> str:
         "| Assumption | Evidence |",
         "|---|---|",
         assumption_rows.rstrip("\n") if assumption_rows else "",
+        "",
+        "## Unknowns",
+        "",
+        "| Unknown | Notes |",
+        "|---|---|",
+        unknown_rows.rstrip("\n") if unknown_rows else "",
         "",
         "## Parameters",
         "",
@@ -882,6 +939,57 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
             "status": "warn",
             "message": "No target specified for inquiry",
         })
+
+    # 5. orphaned_interior — interior nodes with no incoming or outgoing flow edges
+    boundary_all = boundary_in | boundary_out
+    orphaned: list[str] = []
+    for node in all_flow_nodes:
+        if node in boundary_all or node == inquiry_uri:
+            continue
+        has_incoming = any(node in adjacency.get(src, []) for src in all_flow_nodes)
+        has_outgoing = node in adjacency and len(adjacency[node]) > 0
+        if not has_incoming or not has_outgoing:
+            orphaned.append(str(node))
+
+    if orphaned:
+        results.append({
+            "check": "orphaned_interior",
+            "status": "warn",
+            "message": f"{len(orphaned)} interior node(s) missing incoming or outgoing flow edges",
+            "details": orphaned,
+        })
+    else:
+        results.append({
+            "check": "orphaned_interior",
+            "status": "pass",
+            "message": "All interior nodes have incoming and outgoing flow edges",
+        })
+
+    # 6. provenance_completeness — specified+ inquiries: all assumptions must have prov:wasDerivedFrom
+    if status != "sketch":
+        provenance_graph = dataset.graph(_graph_uri("graph/provenance"))
+        missing_prov: list[str] = []
+        for s, _p, _o in inquiry_graph.triples((None, RDF.type, SCI_NS.Assumption)):
+            has_source = any(True for _ in provenance_graph.triples((s, PROV.wasDerivedFrom, None)))
+            if not has_source:
+                # Also check knowledge graph for inline source
+                has_source = any(True for _ in knowledge.triples((s, PROV.wasDerivedFrom, None)))
+            if not has_source:
+                missing_prov.append(str(s))
+
+        if missing_prov:
+            results.append({
+                "check": "provenance_completeness",
+                "status": "fail",
+                "message": f"{len(missing_prov)} assumption(s) missing provenance (prov:wasDerivedFrom)",
+                "details": missing_prov,
+            })
+        else:
+            results.append({
+                "check": "provenance_completeness",
+                "status": "pass",
+                "message": "All assumptions have provenance",
+            })
 
     return results
 
