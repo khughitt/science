@@ -129,8 +129,8 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
     """
     info = get_inquiry(graph_path, slug)
 
-    if info["inquiry_type"] != "causal":
-        raise ValueError(f"pgmpy export only supported for causal inquiries (got '{info['inquiry_type']}')")
+    if info.get("inquiry_type", "general") != "causal":
+        raise ValueError(f"pgmpy export only supported for causal inquiries (got '{info.get('inquiry_type')}')")
 
     edges = _get_causal_edges_for_inquiry(graph_path, slug)
 
