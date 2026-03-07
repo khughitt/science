@@ -382,13 +382,22 @@ Each command is a markdown file in `commands/` with YAML frontmatter (descriptio
 | `/science:create-graph` | Agent-guided initial knowledge graph construction from project artifacts |
 | `/science:update-graph` | Agent-guided incremental graph updates with change detection via `graph diff` |
 
+### Implemented Commands (Phase 4a)
+
+| Command | Purpose |
+|---|---|
+| `/science:sketch-model` | Agent-guided inquiry subgraph sketching from research context |
+| `/science:specify-model` | Formal variable/edge/parameter specification for an inquiry |
+| `/science:plan-pipeline` | Computational pipeline planning from inquiry structure |
+| `/science:review-pipeline` | Critical review of inquiry/pipeline against 7-dimensional rubric |
+
 ### Commands Planned for Later Phases
 
 | Command | Phase | Purpose |
 |---|---|---|
-| `/science:find-datasets` | 4 | Discover and document candidate datasets for research or tool demos |
-| `/science:build-dag` | 4 | Interactive causal DAG construction (optional, project-dependent) |
-| `/science:critique-approach` | 4 | Identify weaknesses using graph/model + literature |
+| `/science:find-datasets` | 4b | Discover and document candidate datasets for research or tool demos |
+| `/science:build-dag` | 4b | Interactive causal DAG construction (optional, project-dependent) |
+| `/science:critique-approach` | 4b | Identify weaknesses using graph/model + literature |
 | `/science:explore-open-questions` | 5 | Autonomous exploration of open questions |
 
 ---
@@ -438,7 +447,7 @@ Tooling is split into a reusable shared package and optional per-project wrapper
 | `science-tool/` package (inside plugin repo) | Implemented | Graph store, query presets, DOI lookup, distillation (OpenAlex, PyKEEN), visualization, validation |
 | `tools/*` in generated projects (optional wrappers) | Planned | Thin project-local helper scripts that call `uv run science-tool ...` with project defaults |
 
-Current `science-tool` CLI surface: `graph` (17 subcommands), `distill` (2 subcommands), `doi` (1 subcommand). 55 tests across 3 test files.
+Current `science-tool` CLI surface: `graph` (17 subcommands), `inquiry` (8 subcommands), `distill` (2 subcommands), `doi` (1 subcommand). 106 tests across 4 test files (+ 10 in `test_distill.py` blocked by missing `numpy` dev dep).
 
 This avoids duplicated logic across commands, loops, and ad-hoc scripts.
 
@@ -539,7 +548,7 @@ Deliver the highest-value role profiles and capability interfaces for non-linear
 - [x] `/science:search-literature` command with OpenAlex/PubMed source skills
 - [x] `skills/data/sources/openalex.md` and `skills/data/sources/pubmed.md` source guides
 
-### Phase 3: Shared Knowledge Runtime + Stage B Entry
+### Phase 3: Shared Knowledge Runtime + Stage B Entry (3a/3b ✅, 3c/3d partial)
 
 Establish the `science-tool` Python package, graph infrastructure, and agent-guided
 formalization workflows. Validate end-to-end on one exemplar project.
@@ -581,13 +590,14 @@ are in the companion [docs/plans/2026-03-01-knowledge-graph-design.md].
 - [x] `/science:update-graph` command (agent-guided incremental updates with change detection via `graph diff`)
 - [x] Prose annotation conventions (frontmatter `ontology_terms:` + inline CURIEs) documented in skill and enforced by `graph scan-prose`
 
-**Deliverables (3c — Knowledge Base Bootstrapping):**
+**Deliverables (3c — Knowledge Base Bootstrapping):** (partial)
 - [x] `science_tool/distill/{openalex,pykeen_source}.py` distillation modules
 - [x] `science-tool distill openalex` and `science-tool distill pykeen` CLI commands
 - [x] Import flow: `science-tool graph import <snapshot>` → `:graph/knowledge`
 - [ ] Pre-generated snapshots: `data/snapshots/{openalex-science-map,primekg-core}.ttl` + provenance-rich `manifest.ttl` (source/date/version/counts/checksum)
 - [ ] Biomedical starter profile (Biolink prefix config, curated entity examples, example graph fragment)
 - [ ] Ontology caching groundwork: `science-tool ontology cache <name>` (download and cache vocabularies for future entity matching)
+- [ ] Fix `test_distill.py` — add `numpy` to dev deps (currently blocks collection of 10 distill tests)
 
 **Deliverables (3d — Validation + Exemplar):**
 - [x] `validate.sh` graph checks: parseable TriG, provenance completeness, orphaned nodes, causal acyclicity, graph-prose sync staleness
@@ -599,25 +609,28 @@ are in the companion [docs/plans/2026-03-01-knowledge-graph-design.md].
 - **3a (Graph Foundation): Complete.** All CLI commands implemented: `graph init`, `graph stats`, `graph add {concept,paper,claim,hypothesis,question,edge}`, `graph validate`, `graph diff`, `graph viz`, `graph predicates`, `graph scan-prose`, `graph stamp-revision`. All six query presets implemented: `neighborhood`, `claims`, `evidence`, `coverage`, `gaps`, `uncertainty`. Shared `--format table|json` output contract on all query commands. 48 CLI tests + 7 prose scanner tests passing.
 - **3b (Graph Authoring): Complete.** Knowledge-graph skill at `.claude-plugin/skills/knowledge-graph/SKILL.md`. `create-graph` and `update-graph` commands implemented and iterated through three rounds of prompt refinement (see `docs/plans/2026-03-05-graph-enrichment-design.md` for post-deployment fixes).
 - **3c (Knowledge Base Bootstrapping): Partially complete.** Distillation modules (`openalex.py`, `pykeen_source.py`) and `graph import` command implemented. Pre-generated snapshots, biomedical starter profile, and ontology caching not yet done. `test_distill.py` exists but requires `numpy` (not in frozen deps).
-- **3d (Validation + Exemplar): In progress.** `validate.sh` section 13 added — shells out to `graph validate` (parseable TriG, provenance, acyclicity, orphaned nodes) and `graph diff` (prose sync staleness). Resolves `science-tool` via `SCIENCE_TOOL_PATH` env var or PATH. 49 CLI tests + 7 prose tests passing. Biomedical exemplar not yet run.
+- **3d (Validation + Exemplar): In progress.** `validate.sh` section 13 added — shells out to `graph validate` (parseable TriG, provenance, acyclicity, orphaned nodes) and `graph diff` (prose sync staleness). Resolves `science-tool` via `SCIENCE_TOOL_PATH` env var or PATH. Biomedical exemplar not yet run.
 
-### Phase 4: Modeling + Operationalization (Stage B/C Optional Paths)
+**Phase 4a Progress Snapshot (2026-03-07):**
+- **4a (Inquiry Workflow): Complete.** All 12 deliverables implemented. Inquiry command group (8 subcommands), 4 slash commands (`sketch-model`, `specify-model`, `plan-pipeline`, `review-pipeline`), inquiry template, `render_inquiry_doc()`, `validate.sh` section 14, knowledge-graph skill updated. Design doc at `docs/plans/2026-03-06-inquiry-workflow-design.md`. 106 tests passing across `test_graph_cli.py`, `test_inquiry.py`, `test_inquiry_e2e.py`, `test_prose.py`.
+
+### Phase 4: Modeling + Operationalization (Stage B/C Optional Paths) (4a ✅, 4b not started)
 
 Support projects that need explicit models, datasets, or computational workflows.
 
-**Deliverables (4a — Inquiry Workflow):**
-- [ ] Ontology extensions: `sci:Inquiry`, `sci:Variable`, `sci:Transformation`, `sci:Assumption`, `sci:Unknown`, `sci:ValidationCheck` types + 12 new predicates
-- [ ] Graph store inquiry methods: `add_inquiry`, `set_boundary_role`, `add_inquiry_edge`, `add_assumption`, `add_transformation`, `set_param_metadata`, `get_inquiry`, `list_inquiries`, `validate_inquiry`, `render_inquiry_doc`
-- [ ] CLI: `science-tool inquiry` command group (init, add-node, add-edge, list, show, validate)
-- [ ] `validate.sh` section 14: inquiry validation checks
-- [ ] Knowledge-graph skill updated with inquiry entity types and predicates
-- [ ] `/science:sketch-model` command
-- [ ] `/science:specify-model` command
-- [ ] `/science:plan-pipeline` command
-- [ ] `/science:review-pipeline` command
-- [ ] `templates/inquiry.md` template
-- [ ] Inquiry document rendering from graph
-- [ ] Design doc: `docs/plans/2026-03-06-inquiry-workflow-design.md`
+**Deliverables (4a — Inquiry Workflow):** ✅
+- [x] Ontology extensions: `sci:Inquiry`, `sci:Variable`, `sci:Transformation`, `sci:Assumption`, `sci:Unknown`, `sci:ValidationCheck` types + 12 new predicates
+- [x] Graph store inquiry methods: `add_inquiry`, `set_boundary_role`, `add_inquiry_edge`, `add_assumption`, `add_transformation`, `set_param_metadata`, `get_inquiry`, `list_inquiries`, `validate_inquiry`, `render_inquiry_doc`
+- [x] CLI: `science-tool inquiry` command group (init, add-node, add-edge, add-assumption, add-transformation, list, show, validate)
+- [x] `validate.sh` section 14: inquiry validation checks (boundary_reachability, unknown_resolution, provenance_completeness, target_exists, no_cycles, orphaned_interior)
+- [x] Knowledge-graph skill updated with inquiry entity types, predicates, boundary roles, and parameter provenance
+- [x] `/science:sketch-model` command
+- [x] `/science:specify-model` command
+- [x] `/science:plan-pipeline` command
+- [x] `/science:review-pipeline` command
+- [x] `templates/inquiry.md` template
+- [x] Inquiry document rendering from graph (`render_inquiry_doc()`)
+- [x] Design doc: `docs/plans/2026-03-06-inquiry-workflow-design.md`
 
 **Deliverables (4b — Causal Models + Pipelines):**
 - [ ] `science_tool/causal/dag.py` and `science_tool/causal/export_{pymc,pyro,pgmpy}.py`
@@ -653,8 +666,9 @@ Iterate based on real usage. Observe failure modes and add guardrails.
 - [ ] Additional validation checks as failure modes emerge
 - [ ] Documentation and README for open-source release
 
-## Immediate Next Steps (Phase 3 Completion)
+## Immediate Next Steps
 
+**Phase 3 completion (3c/3d remainders):**
 1. ~~Implement remaining query presets~~ ✅ All six implemented and tested.
 2. ~~Write knowledge-graph skill, `create-graph`, `update-graph`~~ ✅ Implemented and iterated.
 3. ~~Implement distillation modules and `graph import`~~ ✅ Code complete.
@@ -663,6 +677,14 @@ Iterate based on real usage. Observe failure modes and add guardrails.
 6. Add ontology caching groundwork (`ontology cache <name>`).
 7. ~~Add graph validation checks to `validate.sh`~~ ✅ Section 13 added with 5 checks.
 8. Run one biomedical exemplar project through Phases 1-3 end-to-end and archive evidence bundle.
+9. Create biomedical starter profile (Biolink prefix config, curated entity examples).
+
+**Phase 4b (Causal Models + Pipelines):**
+10. Implement dedicated `dag` CLI subcommand group (`dag add-variable`, `dag add-edge`, `dag show`, `dag validate`).
+11. Implement causal model export modules (`export_pymc.py`, `export_pyro.py`, `export_pgmpy.py`).
+12. Create `skills/models/causal-dag.md` skill.
+13. Implement `/science:build-dag` and `/science:critique-approach` commands.
+14. Create dataset-variable exemplar mapping with column-level validation.
 
 ## Phase Gates (Exit Criteria)
 

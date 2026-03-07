@@ -35,7 +35,10 @@ packages = ["src/science_tool"]
 
 [dependency-groups]
 dev = [
+    "networkx>=3.2",
+    "numpy>=2.4.2",
     "pytest>=9.0.2",
+    "scipy>=1.17.1",
 ]
 
 [project.optional-dependencies]
