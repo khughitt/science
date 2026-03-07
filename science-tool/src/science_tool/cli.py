@@ -28,6 +28,7 @@ from science_tool.graph.store import (
     init_graph_file,
     list_inquiries,
     set_boundary_role,
+    set_treatment_outcome,
     shorten_uri,
     stamp_revision,
     query_claims,
@@ -513,7 +514,9 @@ def graph_add_edge(subject: str, predicate: str, object: str, graph_layer: str, 
     s_uri, p_uri, o_uri = add_edge(
         graph_path=graph_path, subject=subject, predicate=predicate, obj=object, graph_layer=graph_layer
     )
-    click.echo(f"Added edge in {graph_layer}: {shorten_uri(str(s_uri))} {shorten_uri(str(p_uri))} {shorten_uri(str(o_uri))}")
+    click.echo(
+        f"Added edge in {graph_layer}: {shorten_uri(str(s_uri))} {shorten_uri(str(p_uri))} {shorten_uri(str(o_uri))}"
+    )
 
 
 @main.group()
@@ -531,9 +534,7 @@ def inquiry() -> None:
     default="sketch",
     type=click.Choice(["sketch", "specified", "planned", "in-progress", "complete"]),
 )
-@click.option(
-    "--type", "inquiry_type", default="general", type=click.Choice(["general", "causal"]), show_default=True
-)
+@click.option("--type", "inquiry_type", default="general", type=click.Choice(["general", "causal"]), show_default=True)
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
@@ -617,6 +618,22 @@ def inquiry_add_transformation(slug: str, label: str, tool: str, graph_path: Pat
         raise click.ClickException(str(e))
 
 
+@inquiry.command("set-estimand")
+@click.argument("slug")
+@click.option("--treatment", required=True, help="Treatment variable (e.g. concept/drug)")
+@click.option("--outcome", required=True, help="Outcome variable (e.g. concept/recovery)")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def inquiry_set_estimand(slug: str, treatment: str, outcome: str, graph_path: Path) -> None:
+    """Set treatment and outcome variables for a causal inquiry."""
+    try:
+        set_treatment_outcome(graph_path, slug, treatment=treatment, outcome=outcome)
+        click.echo(f"Set estimand for inquiry/{slug}: treatment={treatment}, outcome={outcome}")
+    except ValueError as e:
+        raise click.ClickException(str(e))
+
+
 @inquiry.command("list")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 @click.option(
@@ -634,7 +651,13 @@ def inquiry_list(output_format: str, graph_path: Path) -> None:
     emit_query_rows(
         output_format=output_format,
         title="Inquiries",
-        columns=[("slug", "Slug"), ("label", "Label"), ("status", "Status"), ("target", "Target"), ("created", "Created")],
+        columns=[
+            ("slug", "Slug"),
+            ("label", "Label"),
+            ("status", "Status"),
+            ("target", "Target"),
+            ("created", "Created"),
+        ],
         rows=rows,
     )
 

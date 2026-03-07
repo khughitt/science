@@ -7,10 +7,13 @@ import pytest
 from science_tool.graph.store import (
     INITIAL_GRAPH_TEMPLATE,
     PREDICATE_REGISTRY,
+    PROJECT_NS,
     VALID_INQUIRY_TYPES,
+    add_concept,
     add_hypothesis,
     add_inquiry,
     get_inquiry,
+    set_treatment_outcome,
 )
 
 
@@ -71,3 +74,23 @@ class TestInquiryType:
         """Verify the VALID_INQUIRY_TYPES constant."""
         assert "general" in VALID_INQUIRY_TYPES
         assert "causal" in VALID_INQUIRY_TYPES
+
+
+class TestTreatmentOutcome:
+    def test_set_treatment_outcome(self, graph_path: Path) -> None:
+        """Setting treatment and outcome stores predicates in inquiry graph."""
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h01", text="Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "drug-effect", "Drug Effect", "hypothesis:h01", inquiry_type="causal")
+        set_treatment_outcome(graph_path, "drug-effect", treatment="concept/drug", outcome="concept/recovery")
+        info = get_inquiry(graph_path, "drug-effect")
+        assert info["treatment"] == str(PROJECT_NS["concept/drug"])
+        assert info["outcome"] == str(PROJECT_NS["concept/recovery"])
+
+    def test_set_treatment_outcome_rejects_non_causal(self, graph_path: Path) -> None:
+        """Setting treatment/outcome on a general inquiry raises error."""
+        add_hypothesis(graph_path, "h01", text="Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "gen", "General", "hypothesis:h01")
+        with pytest.raises(ValueError, match="only supported for causal"):
+            set_treatment_outcome(graph_path, "gen", treatment="concept/x", outcome="concept/y")

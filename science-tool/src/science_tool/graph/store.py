@@ -268,9 +268,7 @@ def add_inquiry(
 ) -> URIRef:
     """Create a new inquiry named graph with metadata triples."""
     if inquiry_type not in VALID_INQUIRY_TYPES:
-        raise ValueError(
-            f"Invalid inquiry type '{inquiry_type}'. Must be one of: {', '.join(VALID_INQUIRY_TYPES)}"
-        )
+        raise ValueError(f"Invalid inquiry type '{inquiry_type}'. Must be one of: {', '.join(VALID_INQUIRY_TYPES)}")
 
     safe_slug = _slug(slug)
     inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
@@ -482,7 +480,7 @@ def list_inquiries(graph_path: Path) -> list[dict[str, str]]:
         if not graph_id.startswith(inquiry_prefix):
             continue
 
-        slug = graph_id[len(inquiry_prefix):]
+        slug = graph_id[len(inquiry_prefix) :]
         inquiry_uri = URIRef(graph_id)
 
         # Only include actual inquiry graphs (must have Inquiry type)
@@ -503,13 +501,15 @@ def list_inquiries(graph_path: Path) -> list[dict[str, str]]:
         for obj in ctx.objects(inquiry_uri, DCTERMS_NS.created):
             created = str(obj)
 
-        results.append({
-            "slug": slug,
-            "label": label,
-            "status": status,
-            "target": target,
-            "created": created,
-        })
+        results.append(
+            {
+                "slug": slug,
+                "label": label,
+                "status": status,
+                "target": target,
+                "created": created,
+            }
+        )
 
     return results
 
@@ -533,6 +533,10 @@ def get_inquiry(graph_path: Path, slug: str) -> dict:
     created = str(next(inquiry_graph.objects(inquiry_uri, DCTERMS_NS.created), ""))
     description = str(next(inquiry_graph.objects(inquiry_uri, SKOS.note), ""))
 
+    # Read treatment/outcome (causal inquiries)
+    treatment = next(inquiry_graph.objects(inquiry_uri, SCI_NS.treatment), None)
+    outcome = next(inquiry_graph.objects(inquiry_uri, SCI_NS.outcome), None)
+
     # Collect boundary nodes
     boundary_in: list[str] = []
     boundary_out: list[str] = []
@@ -551,6 +555,8 @@ def get_inquiry(graph_path: Path, slug: str) -> dict:
         SCI_NS.inquiryType,
         SCI_NS.target,
         SCI_NS.boundaryRole,
+        SCI_NS.treatment,
+        SCI_NS.outcome,
         SCI_NS.tool,
         SCI_NS.paramValue,
         SCI_NS.paramSource,
@@ -571,10 +577,45 @@ def get_inquiry(graph_path: Path, slug: str) -> dict:
         "target": target,
         "created": created,
         "description": description,
+        "treatment": str(treatment) if treatment else None,
+        "outcome": str(outcome) if outcome else None,
         "boundary_in": boundary_in,
         "boundary_out": boundary_out,
         "edges": edges,
     }
+
+
+def set_treatment_outcome(
+    graph_path: Path,
+    inquiry_slug: str,
+    treatment: str,
+    outcome: str,
+) -> None:
+    """Set treatment and outcome variables for a causal inquiry."""
+    safe_slug = _slug(inquiry_slug)
+    inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
+
+    dataset = _load_dataset(graph_path)
+    inquiry_graph = dataset.graph(inquiry_uri)
+
+    if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
+        raise ValueError(f"Inquiry 'inquiry/{safe_slug}' does not exist")
+
+    inquiry_type = str(next(inquiry_graph.objects(inquiry_uri, SCI_NS.inquiryType), "general"))
+    if inquiry_type != "causal":
+        raise ValueError(f"Treatment/outcome only supported for causal inquiries (got '{inquiry_type}')")
+
+    treatment_uri = _resolve_term(treatment)
+    outcome_uri = _resolve_term(outcome)
+
+    # Remove any existing treatment/outcome
+    inquiry_graph.remove((inquiry_uri, SCI_NS.treatment, None))
+    inquiry_graph.remove((inquiry_uri, SCI_NS.outcome, None))
+
+    inquiry_graph.add((inquiry_uri, SCI_NS.treatment, treatment_uri))
+    inquiry_graph.add((inquiry_uri, SCI_NS.outcome, outcome_uri))
+
+    _save_dataset(dataset, graph_path)
 
 
 def render_inquiry_doc(graph_path: Path, slug: str) -> str:
@@ -864,18 +905,22 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
 
     unreachable_out = [str(n) for n in boundary_out if n not in reachable]
     if unreachable_out:
-        results.append({
-            "check": "boundary_reachability",
-            "status": "fail",
-            "message": f"{len(unreachable_out)} BoundaryOut node(s) not reachable from any BoundaryIn",
-            "details": unreachable_out,
-        })
+        results.append(
+            {
+                "check": "boundary_reachability",
+                "status": "fail",
+                "message": f"{len(unreachable_out)} BoundaryOut node(s) not reachable from any BoundaryIn",
+                "details": unreachable_out,
+            }
+        )
     else:
-        results.append({
-            "check": "boundary_reachability",
-            "status": "pass",
-            "message": "All BoundaryOut nodes reachable from BoundaryIn",
-        })
+        results.append(
+            {
+                "check": "boundary_reachability",
+                "status": "pass",
+                "message": "All BoundaryOut nodes reachable from BoundaryIn",
+            }
+        )
 
     # 2. no_cycles — Kahn's algorithm (topological sort)
     in_degree: dict[URIRef, int] = {n: 0 for n in all_flow_nodes}
@@ -894,17 +939,21 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
                 topo_queue.append(neighbor)
 
     if sorted_count < len(all_flow_nodes):
-        results.append({
-            "check": "no_cycles",
-            "status": "fail",
-            "message": "Cycle detected in flow edges",
-        })
+        results.append(
+            {
+                "check": "no_cycles",
+                "status": "fail",
+                "message": "Cycle detected in flow edges",
+            }
+        )
     else:
-        results.append({
-            "check": "no_cycles",
-            "status": "pass",
-            "message": "No cycles in flow edges",
-        })
+        results.append(
+            {
+                "check": "no_cycles",
+                "status": "pass",
+                "message": "No cycles in flow edges",
+            }
+        )
 
     # 3. unknown_resolution — find sci:Unknown nodes used in this inquiry
     unknown_nodes: list[str] = []
@@ -914,18 +963,22 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
             unknown_nodes.append(str(node))
 
     if unknown_nodes and status != "sketch":
-        results.append({
-            "check": "unknown_resolution",
-            "status": "fail",
-            "message": f"{len(unknown_nodes)} sci:Unknown node(s) in non-sketch inquiry",
-            "details": unknown_nodes,
-        })
+        results.append(
+            {
+                "check": "unknown_resolution",
+                "status": "fail",
+                "message": f"{len(unknown_nodes)} sci:Unknown node(s) in non-sketch inquiry",
+                "details": unknown_nodes,
+            }
+        )
     else:
-        results.append({
-            "check": "unknown_resolution",
-            "status": "pass",
-            "message": "No unresolved Unknown nodes" if not unknown_nodes else "Unknown nodes allowed in sketch",
-        })
+        results.append(
+            {
+                "check": "unknown_resolution",
+                "status": "pass",
+                "message": "No unresolved Unknown nodes" if not unknown_nodes else "Unknown nodes allowed in sketch",
+            }
+        )
 
     # 4. target_exists — check the target has an rdf:type somewhere
     if target is not None:
@@ -934,23 +987,29 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
             # Also check other graphs
             has_type = any(True for _ in dataset.triples((target, RDF.type, None)))
         if has_type:
-            results.append({
-                "check": "target_exists",
-                "status": "pass",
-                "message": "Target node exists",
-            })
+            results.append(
+                {
+                    "check": "target_exists",
+                    "status": "pass",
+                    "message": "Target node exists",
+                }
+            )
         else:
-            results.append({
-                "check": "target_exists",
-                "status": "fail",
-                "message": f"Target {target} has no rdf:type in the knowledge graph",
-            })
+            results.append(
+                {
+                    "check": "target_exists",
+                    "status": "fail",
+                    "message": f"Target {target} has no rdf:type in the knowledge graph",
+                }
+            )
     else:
-        results.append({
-            "check": "target_exists",
-            "status": "warn",
-            "message": "No target specified for inquiry",
-        })
+        results.append(
+            {
+                "check": "target_exists",
+                "status": "warn",
+                "message": "No target specified for inquiry",
+            }
+        )
 
     # 5. orphaned_interior — interior nodes with no incoming or outgoing flow edges
     boundary_all = boundary_in | boundary_out
@@ -964,18 +1023,22 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
             orphaned.append(str(node))
 
     if orphaned:
-        results.append({
-            "check": "orphaned_interior",
-            "status": "warn",
-            "message": f"{len(orphaned)} interior node(s) missing incoming or outgoing flow edges",
-            "details": orphaned,
-        })
+        results.append(
+            {
+                "check": "orphaned_interior",
+                "status": "warn",
+                "message": f"{len(orphaned)} interior node(s) missing incoming or outgoing flow edges",
+                "details": orphaned,
+            }
+        )
     else:
-        results.append({
-            "check": "orphaned_interior",
-            "status": "pass",
-            "message": "All interior nodes have incoming and outgoing flow edges",
-        })
+        results.append(
+            {
+                "check": "orphaned_interior",
+                "status": "pass",
+                "message": "All interior nodes have incoming and outgoing flow edges",
+            }
+        )
 
     # 6. provenance_completeness — specified+ inquiries: all assumptions must have prov:wasDerivedFrom
     if status != "sketch":
@@ -990,18 +1053,22 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
                 missing_prov.append(str(s))
 
         if missing_prov:
-            results.append({
-                "check": "provenance_completeness",
-                "status": "fail",
-                "message": f"{len(missing_prov)} assumption(s) missing provenance (prov:wasDerivedFrom)",
-                "details": missing_prov,
-            })
+            results.append(
+                {
+                    "check": "provenance_completeness",
+                    "status": "fail",
+                    "message": f"{len(missing_prov)} assumption(s) missing provenance (prov:wasDerivedFrom)",
+                    "details": missing_prov,
+                }
+            )
         else:
-            results.append({
-                "check": "provenance_completeness",
-                "status": "pass",
-                "message": "All assumptions have provenance",
-            })
+            results.append(
+                {
+                    "check": "provenance_completeness",
+                    "status": "pass",
+                    "message": "All assumptions have provenance",
+                }
+            )
 
     return results
 
@@ -1091,7 +1158,11 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     {"predicate": "sci:observability", "description": "Variable observability status", "layer": "graph/knowledge"},
     {"predicate": "sci:validatedBy", "description": "Step validated by criterion", "layer": "inquiry"},
     {"predicate": "sci:inquiryType", "description": "Inquiry type (general, causal)", "layer": "inquiry"},
-    {"predicate": "sci:treatment", "description": "Treatment/intervention variable in causal inquiry", "layer": "inquiry"},
+    {
+        "predicate": "sci:treatment",
+        "description": "Treatment/intervention variable in causal inquiry",
+        "layer": "inquiry",
+    },
     {"predicate": "sci:outcome", "description": "Outcome variable in causal inquiry", "layer": "inquiry"},
 ]
 
