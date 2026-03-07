@@ -1110,8 +1110,8 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
                     "check": "confounders_declared",
                     "status": "pass",
                     "message": "All common causes have confounders declared"
-                        if common_causes
-                        else "No common causes found",
+                    if common_causes
+                    else "No common causes found",
                 }
             )
 
@@ -1165,8 +1165,7 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
                 )
             else:
                 edge_list = [
-                    (shorten_uri(s).rsplit("/", 1)[-1], shorten_uri(o).rsplit("/", 1)[-1])
-                    for s, o in causal_edges
+                    (shorten_uri(s).rsplit("/", 1)[-1], shorten_uri(o).rsplit("/", 1)[-1]) for s, o in causal_edges
                 ]
                 if edge_list:
                     try:

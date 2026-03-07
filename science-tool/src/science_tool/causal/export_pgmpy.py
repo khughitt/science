@@ -79,11 +79,13 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[dict]:
             continue
         confidence_obj = next(provenance_graph.objects(claim_uri, SCI_NS.confidence), None)
         source_obj = next(provenance_graph.objects(claim_uri, PROV.wasDerivedFrom), None)
-        claims.append({
-            "text": str(text_obj),
-            "confidence": float(str(confidence_obj)) if confidence_obj is not None else None,
-            "source": str(source_obj) if source_obj is not None else None,
-        })
+        claims.append(
+            {
+                "text": str(text_obj),
+                "confidence": float(str(confidence_obj)) if confidence_obj is not None else None,
+                "source": str(source_obj) if source_obj is not None else None,
+            }
+        )
 
     causal_graph = dataset.graph(_graph_uri("graph/causal"))
 
@@ -100,8 +102,7 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[dict]:
                 o_name = _variable_name(str(o))
                 # Best-effort match: claims whose text mentions both endpoint names
                 matched_claims = [
-                    c for c in claims
-                    if s_name.lower() in c["text"].lower() and o_name.lower() in c["text"].lower()
+                    c for c in claims if s_name.lower() in c["text"].lower() and o_name.lower() in c["text"].lower()
                 ]
                 edges.append(
                     {
@@ -212,8 +213,7 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
     latent_vars = sorted(set(latent_vars))
 
     edges_without_claims = [
-        f'{_variable_name(e["subject"])} -> {_variable_name(e["object"])}'
-        for e in cause_edges if not e.get("claims")
+        f"{_variable_name(e['subject'])} -> {_variable_name(e['object'])}" for e in cause_edges if not e.get("claims")
     ]
 
     if latent_vars or edges_without_claims:

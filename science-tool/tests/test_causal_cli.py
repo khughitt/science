@@ -29,25 +29,44 @@ def _setup_causal_inquiry(runner: CliRunner, graph_path: Path) -> None:
     runner.invoke(main, ["graph", "add", "concept", "Y", "--type", "sci:Variable", "--status", "active", "--path", p])
     runner.invoke(main, ["graph", "add", "concept", "Z", "--type", "sci:Variable", "--status", "active", "--path", p])
     runner.invoke(main, ["graph", "add", "hypothesis", "test hyp", "--source", "paper:doi_test", "--path", p])
-    runner.invoke(main, ["inquiry", "init", "test-dag", "--label", "Test DAG",
-                         "--target", "hypothesis:test_hyp", "--type", "causal", "--path", p])
+    runner.invoke(
+        main,
+        [
+            "inquiry",
+            "init",
+            "test-dag",
+            "--label",
+            "Test DAG",
+            "--target",
+            "hypothesis:test_hyp",
+            "--type",
+            "causal",
+            "--path",
+            p,
+        ],
+    )
     runner.invoke(main, ["inquiry", "add-node", "test-dag", "concept/x", "--role", "BoundaryIn", "--path", p])
     runner.invoke(main, ["inquiry", "add-node", "test-dag", "concept/y", "--role", "BoundaryOut", "--path", p])
     runner.invoke(main, ["inquiry", "add-node", "test-dag", "concept/z", "--role", "BoundaryIn", "--path", p])
-    runner.invoke(main, ["inquiry", "set-estimand", "test-dag",
-                         "--treatment", "concept/x", "--outcome", "concept/y", "--path", p])
-    runner.invoke(main, ["graph", "add", "edge", "concept/x", "scic:causes", "concept/y",
-                         "--graph", "graph/causal", "--path", p])
-    runner.invoke(main, ["graph", "add", "edge", "concept/z", "scic:causes", "concept/y",
-                         "--graph", "graph/causal", "--path", p])
+    runner.invoke(
+        main, ["inquiry", "set-estimand", "test-dag", "--treatment", "concept/x", "--outcome", "concept/y", "--path", p]
+    )
+    runner.invoke(
+        main, ["graph", "add", "edge", "concept/x", "scic:causes", "concept/y", "--graph", "graph/causal", "--path", p]
+    )
+    runner.invoke(
+        main, ["graph", "add", "edge", "concept/z", "scic:causes", "concept/y", "--graph", "graph/causal", "--path", p]
+    )
 
 
 class TestInquiryInitType:
     def test_init_with_type_causal(self, runner: CliRunner, graph_path: Path) -> None:
         p = str(graph_path)
         runner.invoke(main, ["graph", "add", "hypothesis", "h1", "--source", "paper:doi_test", "--path", p])
-        result = runner.invoke(main, ["inquiry", "init", "dag1", "--label", "DAG",
-                                      "--target", "hypothesis:h1", "--type", "causal", "--path", p])
+        result = runner.invoke(
+            main,
+            ["inquiry", "init", "dag1", "--label", "DAG", "--target", "hypothesis:h1", "--type", "causal", "--path", p],
+        )
         assert result.exit_code == 0
         assert "Created inquiry" in result.output
 
@@ -57,8 +76,10 @@ class TestInquiryTypeInOutput:
         """inquiry show text output includes the inquiry type."""
         p = str(graph_path)
         runner.invoke(main, ["graph", "add", "hypothesis", "h1", "--source", "paper:doi_test", "--path", p])
-        runner.invoke(main, ["inquiry", "init", "dag1", "--label", "DAG",
-                             "--target", "hypothesis:h1", "--type", "causal", "--path", p])
+        runner.invoke(
+            main,
+            ["inquiry", "init", "dag1", "--label", "DAG", "--target", "hypothesis:h1", "--type", "causal", "--path", p],
+        )
         result = runner.invoke(main, ["inquiry", "show", "dag1", "--path", p])
         assert result.exit_code == 0
         assert "Type: causal" in result.output
@@ -67,8 +88,10 @@ class TestInquiryTypeInOutput:
         """inquiry list includes a Type column."""
         p = str(graph_path)
         runner.invoke(main, ["graph", "add", "hypothesis", "h1", "--source", "paper:doi_test", "--path", p])
-        runner.invoke(main, ["inquiry", "init", "dag1", "--label", "DAG",
-                             "--target", "hypothesis:h1", "--type", "causal", "--path", p])
+        runner.invoke(
+            main,
+            ["inquiry", "init", "dag1", "--label", "DAG", "--target", "hypothesis:h1", "--type", "causal", "--path", p],
+        )
         result = runner.invoke(main, ["inquiry", "list", "--path", p])
         assert result.exit_code == 0
         assert "causal" in result.output
@@ -78,8 +101,9 @@ class TestExportCLI:
     def test_export_pgmpy_cli(self, runner: CliRunner, graph_path: Path, tmp_path: Path) -> None:
         _setup_causal_inquiry(runner, graph_path)
         out_file = tmp_path / "dag.py"
-        result = runner.invoke(main, ["inquiry", "export-pgmpy", "test-dag",
-                                      "--output", str(out_file), "--path", str(graph_path)])
+        result = runner.invoke(
+            main, ["inquiry", "export-pgmpy", "test-dag", "--output", str(out_file), "--path", str(graph_path)]
+        )
         assert result.exit_code == 0
         assert out_file.exists()
         content = out_file.read_text()
@@ -88,8 +112,9 @@ class TestExportCLI:
     def test_export_chirho_cli(self, runner: CliRunner, graph_path: Path, tmp_path: Path) -> None:
         _setup_causal_inquiry(runner, graph_path)
         out_file = tmp_path / "model.py"
-        result = runner.invoke(main, ["inquiry", "export-chirho", "test-dag",
-                                      "--output", str(out_file), "--path", str(graph_path)])
+        result = runner.invoke(
+            main, ["inquiry", "export-chirho", "test-dag", "--output", str(out_file), "--path", str(graph_path)]
+        )
         assert result.exit_code == 0
         assert out_file.exists()
         content = out_file.read_text()
@@ -104,7 +129,6 @@ class TestExportCLI:
     def test_export_non_causal_errors(self, runner: CliRunner, graph_path: Path) -> None:
         p = str(graph_path)
         runner.invoke(main, ["graph", "add", "hypothesis", "h1", "--source", "paper:doi_test", "--path", p])
-        runner.invoke(main, ["inquiry", "init", "gen", "--label", "General",
-                             "--target", "hypothesis:h1", "--path", p])
+        runner.invoke(main, ["inquiry", "init", "gen", "--label", "General", "--target", "hypothesis:h1", "--path", p])
         result = runner.invoke(main, ["inquiry", "export-pgmpy", "gen", "--path", p])
         assert result.exit_code != 0

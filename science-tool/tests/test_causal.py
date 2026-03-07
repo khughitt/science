@@ -215,8 +215,9 @@ class TestExportPgmpy:
         set_boundary_role(graph_path, "prov-pgmpy", "concept/recovery", "BoundaryOut")
         set_treatment_outcome(graph_path, "prov-pgmpy", treatment="concept/drug", outcome="concept/recovery")
         add_edge(graph_path, "concept/drug", "scic:causes", "concept/recovery", graph_layer="graph/causal")
-        add_claim(graph_path, "Drug treatment improves recovery time",
-                  source="paper:doi_10.1234/study", confidence=0.85)
+        add_claim(
+            graph_path, "Drug treatment improves recovery time", source="paper:doi_10.1234/study", confidence=0.85
+        )
         script = export_pgmpy_script(graph_path, "prov-pgmpy")
         assert "confidence: 0.85" in script
         assert "doi_10.1234/study" in script
@@ -229,10 +230,20 @@ class TestExportPgmpy:
 
     def test_export_pgmpy_todo_section(self, graph_path: Path) -> None:
         """Export includes TODO section noting latent variables."""
-        add_concept(graph_path, "Hidden", concept_type="sci:Variable", ontology_id=None,
-                    properties=[("sci:observability", "latent")])
-        add_concept(graph_path, "Outcome", concept_type="sci:Variable", ontology_id=None,
-                    properties=[("sci:observability", "observed")])
+        add_concept(
+            graph_path,
+            "Hidden",
+            concept_type="sci:Variable",
+            ontology_id=None,
+            properties=[("sci:observability", "latent")],
+        )
+        add_concept(
+            graph_path,
+            "Outcome",
+            concept_type="sci:Variable",
+            ontology_id=None,
+            properties=[("sci:observability", "observed")],
+        )
         add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
         add_inquiry(graph_path, "latent-dag", "Latent DAG", "hypothesis:h1", inquiry_type="causal")
         set_boundary_role(graph_path, "latent-dag", "concept/hidden", "BoundaryIn")
@@ -308,8 +319,9 @@ class TestExportChirho:
         set_boundary_role(graph_path, "prov-chirho", "concept/recovery", "BoundaryOut")
         set_treatment_outcome(graph_path, "prov-chirho", treatment="concept/drug", outcome="concept/recovery")
         add_edge(graph_path, "concept/drug", "scic:causes", "concept/recovery", graph_layer="graph/causal")
-        add_claim(graph_path, "Drug treatment improves recovery time",
-                  source="paper:doi_10.1234/study", confidence=0.85)
+        add_claim(
+            graph_path, "Drug treatment improves recovery time", source="paper:doi_10.1234/study", confidence=0.85
+        )
         script = export_chirho_script(graph_path, "prov-chirho")
         assert "confidence: 0.85" in script
         assert "doi_10.1234/study" in script
@@ -322,10 +334,20 @@ class TestExportChirho:
 
     def test_export_chirho_todo_latent_variables(self, graph_path: Path) -> None:
         """Export TODO section flags latent variables."""
-        add_concept(graph_path, "Hidden", concept_type="sci:Variable", ontology_id=None,
-                    properties=[("sci:observability", "latent")])
-        add_concept(graph_path, "Visible", concept_type="sci:Variable", ontology_id=None,
-                    properties=[("sci:observability", "observed")])
+        add_concept(
+            graph_path,
+            "Hidden",
+            concept_type="sci:Variable",
+            ontology_id=None,
+            properties=[("sci:observability", "latent")],
+        )
+        add_concept(
+            graph_path,
+            "Visible",
+            concept_type="sci:Variable",
+            ontology_id=None,
+            properties=[("sci:observability", "observed")],
+        )
         add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
         add_inquiry(graph_path, "latent-chirho", "Latent ChiRho", "hypothesis:h1", inquiry_type="causal")
         set_boundary_role(graph_path, "latent-chirho", "concept/hidden", "BoundaryIn")
@@ -343,12 +365,27 @@ class TestEdgeProvenance:
 
     def _build_dag_with_claims(self, graph_path: Path) -> str:
         """Build a DAG with claims supporting the causal edges."""
-        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None,
-                    properties=[("sci:observability", "observed")])
-        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None,
-                    properties=[("sci:observability", "observed")])
-        add_concept(graph_path, "Severity", concept_type="sci:Variable", ontology_id=None,
-                    properties=[("sci:observability", "latent")])
+        add_concept(
+            graph_path,
+            "Drug",
+            concept_type="sci:Variable",
+            ontology_id=None,
+            properties=[("sci:observability", "observed")],
+        )
+        add_concept(
+            graph_path,
+            "Recovery",
+            concept_type="sci:Variable",
+            ontology_id=None,
+            properties=[("sci:observability", "observed")],
+        )
+        add_concept(
+            graph_path,
+            "Severity",
+            concept_type="sci:Variable",
+            ontology_id=None,
+            properties=[("sci:observability", "latent")],
+        )
         add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
         add_inquiry(graph_path, "prov-dag", "Provenance DAG", "hypothesis:h1", inquiry_type="causal")
         set_boundary_role(graph_path, "prov-dag", "concept/drug", "BoundaryIn")
@@ -359,15 +396,24 @@ class TestEdgeProvenance:
         add_edge(graph_path, "concept/severity", "scic:causes", "concept/recovery", graph_layer="graph/causal")
         add_edge(graph_path, "concept/severity", "scic:causes", "concept/drug", graph_layer="graph/causal")
         # Add claims that mention both endpoints
-        add_claim(graph_path, "Drug treatment improves recovery time",
-                  source="paper:doi_10.1234/drug_recovery", confidence=0.85)
-        add_claim(graph_path, "Disease severity affects recovery outcomes",
-                  source="paper:doi_10.5678/severity", confidence=0.90)
+        add_claim(
+            graph_path,
+            "Drug treatment improves recovery time",
+            source="paper:doi_10.1234/drug_recovery",
+            confidence=0.85,
+        )
+        add_claim(
+            graph_path,
+            "Disease severity affects recovery outcomes",
+            source="paper:doi_10.5678/severity",
+            confidence=0.90,
+        )
         return "prov-dag"
 
     def test_enriched_edges_contain_claims(self, graph_path: Path) -> None:
         """Edges returned by _get_causal_edges_for_inquiry include matched claims."""
         from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
+
         slug = self._build_dag_with_claims(graph_path)
         edges = _get_causal_edges_for_inquiry(graph_path, slug)
         # Find the drug->recovery edge
@@ -384,6 +430,7 @@ class TestEdgeProvenance:
     def test_enriched_edges_contain_observability(self, graph_path: Path) -> None:
         """Edges include observability metadata for both endpoints."""
         from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
+
         slug = self._build_dag_with_claims(graph_path)
         edges = _get_causal_edges_for_inquiry(graph_path, slug)
         drug_recovery = [e for e in edges if "drug" in e["subject"] and "recovery" in e["object"]]
@@ -394,6 +441,7 @@ class TestEdgeProvenance:
     def test_edges_without_claims_have_empty_list(self, graph_path: Path) -> None:
         """Edges with no matching claims still have a 'claims' key with empty list."""
         from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
+
         add_concept(graph_path, "A", concept_type="sci:Variable", ontology_id=None)
         add_concept(graph_path, "B", concept_type="sci:Variable", ontology_id=None)
         add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
