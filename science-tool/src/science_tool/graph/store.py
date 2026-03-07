@@ -1080,6 +1080,41 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
                 }
             )
 
+        # confounders_declared — check for common causes without scic:confounds
+        # A "common cause" is a variable that causes 2+ other inquiry variables
+        children: dict[str, set[str]] = {}
+        for s_str, o_str in causal_edges:
+            children.setdefault(s_str, set()).add(o_str)
+
+        common_causes = [parent for parent, targets in children.items() if len(targets) >= 2]
+
+        # Check if common causes have scic:confounds edges declared
+        confound_sources: set[str] = set()
+        for s, _p, o in causal_graph.triples((None, SCIC_NS.confounds, None)):
+            if s in members:
+                confound_sources.add(str(s))
+
+        undeclared = [c for c in common_causes if c not in confound_sources]
+        if undeclared:
+            short_names = [shorten_uri(u) for u in undeclared]
+            results.append(
+                {
+                    "check": "confounders_declared",
+                    "status": "warn",
+                    "message": f"Common cause(s) without scic:confounds declaration: {', '.join(short_names)}",
+                }
+            )
+        else:
+            results.append(
+                {
+                    "check": "confounders_declared",
+                    "status": "pass",
+                    "message": "All common causes have confounders declared"
+                        if common_causes
+                        else "No common causes found",
+                }
+            )
+
     # 6. provenance_completeness — specified+ inquiries: all assumptions must have prov:wasDerivedFrom
     if status != "sketch":
         provenance_graph = dataset.graph(_graph_uri("graph/provenance"))

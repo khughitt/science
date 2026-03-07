@@ -398,3 +398,70 @@ class TestEdgeProvenance:
         edges = _get_causal_edges_for_inquiry(graph_path, "no-claims")
         assert len(edges) == 1
         assert edges[0]["claims"] == []
+
+
+class TestConfoundersDeclared:
+    def test_confounder_declared_passes(self, graph_path: Path) -> None:
+        """When a common cause has scic:confounds declared, check passes."""
+        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Z", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        add_inquiry(graph_path, "conf-ok", "Conf OK", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "conf-ok", "concept/x", "BoundaryIn")
+        set_boundary_role(graph_path, "conf-ok", "concept/y", "BoundaryOut")
+        set_boundary_role(graph_path, "conf-ok", "concept/z", "BoundaryIn")
+        set_treatment_outcome(graph_path, "conf-ok", treatment="concept/x", outcome="concept/y")
+        # Z causes both X and Y (common cause = confounder)
+        add_edge(graph_path, "concept/z", "scic:causes", "concept/x", graph_layer="graph/causal")
+        add_edge(graph_path, "concept/z", "scic:causes", "concept/y", graph_layer="graph/causal")
+        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
+        # Declare the confounding
+        add_edge(graph_path, "concept/z", "scic:confounds", "concept/x", graph_layer="graph/causal")
+        results = validate_inquiry(graph_path, "conf-ok")
+        conf_check = next((r for r in results if r["check"] == "confounders_declared"), None)
+        assert conf_check is not None
+        assert conf_check["status"] == "pass"
+
+    def test_undeclared_confounder_warns(self, graph_path: Path) -> None:
+        """When a common cause exists but no scic:confounds edge, check warns."""
+        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Z", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        add_inquiry(graph_path, "conf-warn", "Conf Warn", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "conf-warn", "concept/x", "BoundaryIn")
+        set_boundary_role(graph_path, "conf-warn", "concept/y", "BoundaryOut")
+        set_boundary_role(graph_path, "conf-warn", "concept/z", "BoundaryIn")
+        set_treatment_outcome(graph_path, "conf-warn", treatment="concept/x", outcome="concept/y")
+        # Z causes both X and Y but no confounds edge declared
+        add_edge(graph_path, "concept/z", "scic:causes", "concept/x", graph_layer="graph/causal")
+        add_edge(graph_path, "concept/z", "scic:causes", "concept/y", graph_layer="graph/causal")
+        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
+        results = validate_inquiry(graph_path, "conf-warn")
+        conf_check = next((r for r in results if r["check"] == "confounders_declared"), None)
+        assert conf_check is not None
+        assert conf_check["status"] == "warn"
+
+    def test_no_common_causes_passes(self, graph_path: Path) -> None:
+        """When there are no common causes, check passes."""
+        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        add_inquiry(graph_path, "no-conf", "No Conf", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "no-conf", "concept/x", "BoundaryIn")
+        set_boundary_role(graph_path, "no-conf", "concept/y", "BoundaryOut")
+        set_treatment_outcome(graph_path, "no-conf", treatment="concept/x", outcome="concept/y")
+        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
+        results = validate_inquiry(graph_path, "no-conf")
+        conf_check = next((r for r in results if r["check"] == "confounders_declared"), None)
+        assert conf_check is not None
+        assert conf_check["status"] == "pass"
+
+    def test_general_inquiry_skips_confounder_check(self, graph_path: Path) -> None:
+        """General inquiries don't get confounders_declared check."""
+        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        add_inquiry(graph_path, "gen", "General", "hypothesis:h1")
+        results = validate_inquiry(graph_path, "gen")
+        check_names = [r["check"] for r in results]
+        assert "confounders_declared" not in check_names
