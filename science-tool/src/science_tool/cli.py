@@ -532,12 +532,17 @@ def inquiry() -> None:
     type=click.Choice(["sketch", "specified", "planned", "in-progress", "complete"]),
 )
 @click.option(
+    "--type", "inquiry_type", default="general", type=click.Choice(["general", "causal"]), show_default=True
+)
+@click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def inquiry_init(slug: str, label: str, target: str, description: str, status: str, graph_path: Path) -> None:
+def inquiry_init(
+    slug: str, label: str, target: str, description: str, status: str, inquiry_type: str, graph_path: Path
+) -> None:
     """Create a new inquiry subgraph."""
     try:
-        uri = add_inquiry(graph_path, slug, label, target, description, status)
+        uri = add_inquiry(graph_path, slug, label, target, description, status, inquiry_type=inquiry_type)
         click.echo(f"Created inquiry: {shorten_uri(str(uri))}")
     except ValueError as e:
         raise click.ClickException(str(e))

@@ -23,6 +23,8 @@ CITO_NS = Namespace("http://purl.org/spar/cito/")
 DCTERMS_NS = Namespace("http://purl.org/dc/terms/")
 REVISION_URI = URIRef(PROJECT_NS["graph_revision"])
 
+VALID_INQUIRY_TYPES: tuple[str, ...] = ("general", "causal")
+
 GRAPH_LAYERS: tuple[str, ...] = (
     "graph/knowledge",
     "graph/causal",
@@ -262,8 +264,14 @@ def add_inquiry(
     target: str,
     description: str = "",
     status: str = "sketch",
+    inquiry_type: str = "general",
 ) -> URIRef:
     """Create a new inquiry named graph with metadata triples."""
+    if inquiry_type not in VALID_INQUIRY_TYPES:
+        raise ValueError(
+            f"Invalid inquiry type '{inquiry_type}'. Must be one of: {', '.join(VALID_INQUIRY_TYPES)}"
+        )
+
     safe_slug = _slug(slug)
     inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
 
@@ -277,6 +285,7 @@ def add_inquiry(
     inquiry_graph.add((inquiry_uri, RDF.type, SCI_NS.Inquiry))
     inquiry_graph.add((inquiry_uri, SKOS.prefLabel, Literal(label)))
     inquiry_graph.add((inquiry_uri, SCI_NS.inquiryStatus, Literal(status)))
+    inquiry_graph.add((inquiry_uri, SCI_NS.inquiryType, Literal(inquiry_type)))
     inquiry_graph.add((inquiry_uri, SCI_NS.target, _resolve_term(target)))
 
     created = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -519,6 +528,7 @@ def get_inquiry(graph_path: Path, slug: str) -> dict:
     # Read metadata
     label = str(next(inquiry_graph.objects(inquiry_uri, SKOS.prefLabel), ""))
     status = str(next(inquiry_graph.objects(inquiry_uri, SCI_NS.inquiryStatus), ""))
+    inquiry_type = str(next(inquiry_graph.objects(inquiry_uri, SCI_NS.inquiryType), "general"))
     target = str(next(inquiry_graph.objects(inquiry_uri, SCI_NS.target), ""))
     created = str(next(inquiry_graph.objects(inquiry_uri, DCTERMS_NS.created), ""))
     description = str(next(inquiry_graph.objects(inquiry_uri, SKOS.note), ""))
@@ -538,6 +548,7 @@ def get_inquiry(graph_path: Path, slug: str) -> dict:
         SKOS.prefLabel,
         SKOS.note,
         SCI_NS.inquiryStatus,
+        SCI_NS.inquiryType,
         SCI_NS.target,
         SCI_NS.boundaryRole,
         SCI_NS.tool,
@@ -556,6 +567,7 @@ def get_inquiry(graph_path: Path, slug: str) -> dict:
         "slug": safe_slug,
         "label": label,
         "status": status,
+        "inquiry_type": inquiry_type,
         "target": target,
         "created": created,
         "description": description,
@@ -1078,6 +1090,9 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     {"predicate": "sci:paramNote", "description": "Parameter rationale", "layer": "inquiry"},
     {"predicate": "sci:observability", "description": "Variable observability status", "layer": "graph/knowledge"},
     {"predicate": "sci:validatedBy", "description": "Step validated by criterion", "layer": "inquiry"},
+    {"predicate": "sci:inquiryType", "description": "Inquiry type (general, causal)", "layer": "inquiry"},
+    {"predicate": "sci:treatment", "description": "Treatment/intervention variable in causal inquiry", "layer": "inquiry"},
+    {"predicate": "sci:outcome", "description": "Outcome variable in causal inquiry", "layer": "inquiry"},
 ]
 
 
