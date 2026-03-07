@@ -276,6 +276,45 @@ class TestExportChirho:
         assert "# Treatment: x" in script
         assert "# Outcome: y" in script
 
+    def test_export_chirho_edge_level_provenance(self, graph_path: Path) -> None:
+        """Export includes claim provenance as comments on pyro.sample lines."""
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        add_inquiry(graph_path, "prov-chirho", "Prov chirho", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "prov-chirho", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "prov-chirho", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "prov-chirho", treatment="concept/drug", outcome="concept/recovery")
+        add_edge(graph_path, "concept/drug", "scic:causes", "concept/recovery", graph_layer="graph/causal")
+        add_claim(graph_path, "Drug treatment improves recovery time",
+                  source="paper:doi_10.1234/study", confidence=0.85)
+        script = export_chirho_script(graph_path, "prov-chirho")
+        assert "confidence: 0.85" in script
+        assert "doi_10.1234/study" in script
+
+    def test_export_chirho_revision_hash(self, graph_path: Path) -> None:
+        """Export header includes graph revision hash."""
+        slug = self._build_simple_dag(graph_path)
+        script = export_chirho_script(graph_path, slug)
+        assert "# Revision:" in script
+
+    def test_export_chirho_todo_latent_variables(self, graph_path: Path) -> None:
+        """Export TODO section flags latent variables."""
+        add_concept(graph_path, "Hidden", concept_type="sci:Variable", ontology_id=None,
+                    properties=[("sci:observability", "latent")])
+        add_concept(graph_path, "Visible", concept_type="sci:Variable", ontology_id=None,
+                    properties=[("sci:observability", "observed")])
+        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        add_inquiry(graph_path, "latent-chirho", "Latent ChiRho", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "latent-chirho", "concept/hidden", "BoundaryIn")
+        set_boundary_role(graph_path, "latent-chirho", "concept/visible", "BoundaryOut")
+        set_treatment_outcome(graph_path, "latent-chirho", treatment="concept/hidden", outcome="concept/visible")
+        add_edge(graph_path, "concept/hidden", "scic:causes", "concept/visible", graph_layer="graph/causal")
+        script = export_chirho_script(graph_path, "latent-chirho")
+        assert "TODO" in script
+        assert "latent" in script.lower()
+        assert "hidden" in script.lower()
+
 
 class TestEdgeProvenance:
     """Tests for enriched edge metadata in causal exports."""

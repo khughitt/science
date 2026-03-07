@@ -5,8 +5,16 @@ from __future__ import annotations
 from collections import deque
 from pathlib import Path
 
+from rdflib import URIRef
+
 from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry, _variable_name
-from science_tool.graph.store import get_inquiry
+from science_tool.graph.store import (
+    SCHEMA_NS,
+    _graph_uri,
+    _load_dataset,
+    get_inquiry,
+    shorten_uri,
+)
 
 
 def _topological_sort(edges: list[dict[str, str]]) -> list[str]:
@@ -62,6 +70,13 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
         raise ValueError(f"ChiRho export only supported for causal inquiries (got '{info.get('inquiry_type')}')")
 
     edges = _get_causal_edges_for_inquiry(graph_path, slug)
+
+    # Query revision hash from provenance graph
+    dataset = _load_dataset(graph_path)
+    provenance_graph = dataset.graph(_graph_uri("graph/provenance"))
+    revision_uri = URIRef("http://example.org/project/graph_revision")
+    revision_hash = str(next(provenance_graph.objects(revision_uri, SCHEMA_NS.sha256), "unknown"))
+
     treatment = info.get("treatment")
     outcome = info.get("outcome")
 
@@ -70,15 +85,35 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
 
     sorted_vars = _topological_sort(edges)
 
+    # Build per-variable claim lookup
+    var_claims: dict[str, list[dict]] = {}
+    for e in edges:
+        if e["pred_type"] == "causes" and e.get("claims"):
+            o_name = _variable_name(e["object"])
+            var_claims.setdefault(o_name, []).extend(e["claims"])
+
+    # Collect latent variables
+    latent_vars: set[str] = set()
+    for e in edges:
+        if e.get("subject_observability") == "latent":
+            latent_vars.add(_variable_name(e["subject"]))
+        if e.get("object_observability") == "latent":
+            latent_vars.add(_variable_name(e["object"]))
+
     lines: list[str] = []
     lines.append(f"# Generated from inquiry: {slug}")
     lines.append(f"# Label: {info['label']}")
     lines.append(f"# Target: {info['target']}")
+    lines.append(f"# Revision: {revision_hash}")
     lines.append(f"# Treatment: {treatment_name}")
     lines.append(f"# Outcome: {outcome_name}")
     lines.append("#")
     lines.append("# TODO: Replace placeholder distributions with appropriate priors")
     lines.append("# TODO: Add observed data conditioning")
+    if latent_vars:
+        lines.append("# TODO: Latent (unobserved) variables — cannot condition on data directly:")
+        for lv in sorted(latent_vars):
+            lines.append(f"#   - {lv}")
     lines.append("")
     lines.append("import torch")
     lines.append("import pyro")
@@ -94,12 +129,24 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
         parents = _get_parents(var, edges)
         if not parents:
             lines.append(f'    {var} = pyro.sample("{var}", dist.Normal(0.0, 1.0))  # root')
-        elif len(parents) == 1:
-            lines.append(f'    {var} = pyro.sample("{var}", dist.Normal({parents[0]}, 1.0))  # caused by {parents[0]}')
         else:
+            if len(parents) == 1:
+                comment = f"caused by {parents[0]}"
+            else:
+                comment = f"caused by {', '.join(parents)}"
+            # Append provenance info if claims exist for this variable
+            claims_for_var = var_claims.get(var, [])
+            if claims_for_var:
+                claim = claims_for_var[0]
+                prov_parts: list[str] = []
+                if claim["confidence"] is not None:
+                    prov_parts.append(f"confidence: {claim['confidence']}")
+                if claim["source"]:
+                    prov_parts.append(f"source: {shorten_uri(claim['source'])}")
+                if prov_parts:
+                    comment += " | " + ", ".join(prov_parts)
             parent_sum = " + ".join(parents)
-            parent_list = ", ".join(parents)
-            lines.append(f'    {var} = pyro.sample("{var}", dist.Normal({parent_sum}, 1.0))  # caused by {parent_list}')
+            lines.append(f'    {var} = pyro.sample("{var}", dist.Normal({parent_sum}, 1.0))  # {comment}')
 
     lines.append(f"    return {outcome_name}")
     lines.append("")
