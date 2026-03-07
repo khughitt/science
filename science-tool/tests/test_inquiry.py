@@ -11,11 +11,17 @@ from science_tool.graph.store import (
     PREDICATE_REGISTRY,
     PROJECT_NS,
     SCI_NS,
+    _graph_uri,
+    _load_dataset,
     add_assumption,
     add_concept,
     add_inquiry,
     add_inquiry_edge,
+    add_transformation,
+    get_inquiry,
+    list_inquiries,
     set_boundary_role,
+    set_param_metadata,
 )
 from rdflib.namespace import SKOS
 
@@ -169,3 +175,111 @@ class TestInquiryEdges:
         assert (uri, RDF.type, SCI_NS.Assumption) in knowledge
         inquiry_graph = dataset.graph(URIRef(str(PROJECT_NS) + "inquiry/test"))
         assert len(list(inquiry_graph.triples((uri, None, None)))) > 0
+
+
+class TestTransformations:
+    def test_add_transformation(self, graph_path: Path) -> None:
+        """Add a transformation step to an inquiry."""
+        add_inquiry(graph_path, slug="test", label="Test", target="hypothesis:h01")
+        uri = add_transformation(graph_path, label="Extract sequences", inquiry_slug="test", tool="BioPython")
+        assert "concept/extract_sequences" in str(uri)
+        dataset = _load_dataset(graph_path)
+        inquiry_graph = dataset.graph(URIRef(str(PROJECT_NS) + "inquiry/test"))
+        assert (uri, RDF.type, SCI_NS.Transformation) in inquiry_graph
+        assert (uri, SCI_NS.tool, Literal("BioPython")) in inquiry_graph
+
+    def test_add_transformation_with_params(self, graph_path: Path) -> None:
+        """Add a transformation with parameter metadata."""
+        add_inquiry(graph_path, slug="test", label="Test", target="hypothesis:h01")
+        params = {
+            "batch_size": {"value": "32", "source": "design_decision", "note": "GPU memory constraint"},
+        }
+        uri = add_transformation(
+            graph_path, label="Train model", inquiry_slug="test", tool="PyTorch", params=params
+        )
+        assert "concept/train_model" in str(uri)
+        dataset = _load_dataset(graph_path)
+        inquiry_graph = dataset.graph(URIRef(str(PROJECT_NS) + "inquiry/test"))
+        assert (uri, SCI_NS.tool, Literal("PyTorch")) in inquiry_graph
+
+    def test_add_transformation_no_tool(self, graph_path: Path) -> None:
+        """Add a transformation without specifying a tool."""
+        add_inquiry(graph_path, slug="test", label="Test", target="hypothesis:h01")
+        uri = add_transformation(graph_path, label="Normalize data", inquiry_slug="test")
+        dataset = _load_dataset(graph_path)
+        inquiry_graph = dataset.graph(URIRef(str(PROJECT_NS) + "inquiry/test"))
+        assert (uri, RDF.type, SCI_NS.Transformation) in inquiry_graph
+        assert len(list(inquiry_graph.triples((uri, SCI_NS.tool, None)))) == 0
+
+
+class TestParamMetadata:
+    def test_set_param_metadata(self, graph_path: Path) -> None:
+        """Attach AnnotatedParam-style metadata to an entity."""
+        add_concept(graph_path, "pooling_method", concept_type=None, ontology_id=None)
+        set_param_metadata(
+            graph_path,
+            entity="concept:pooling_method",
+            value="mean",
+            source="design_decision",
+            refs=["doc/04-approach.md"],
+            note="Captures SP-relevant information",
+        )
+        dataset = _load_dataset(graph_path)
+        knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+        entity_uri = PROJECT_NS["concept/pooling_method"]
+        assert (entity_uri, SCI_NS.paramValue, Literal("mean")) in knowledge
+        assert (entity_uri, SCI_NS.paramSource, Literal("design_decision")) in knowledge
+        assert (entity_uri, SCI_NS.paramNote, Literal("Captures SP-relevant information")) in knowledge
+        assert (entity_uri, SCI_NS.paramRef, Literal("doc/04-approach.md")) in knowledge
+
+    def test_set_param_metadata_no_optional(self, graph_path: Path) -> None:
+        """Set param metadata without optional fields."""
+        add_concept(graph_path, "learning_rate", concept_type=None, ontology_id=None)
+        set_param_metadata(graph_path, entity="concept:learning_rate", value="0.001", source="hyperparameter_search")
+        dataset = _load_dataset(graph_path)
+        knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+        entity_uri = PROJECT_NS["concept/learning_rate"]
+        assert (entity_uri, SCI_NS.paramValue, Literal("0.001")) in knowledge
+        assert (entity_uri, SCI_NS.paramSource, Literal("hyperparameter_search")) in knowledge
+        assert len(list(knowledge.triples((entity_uri, SCI_NS.paramNote, None)))) == 0
+
+
+class TestInquiryQueries:
+    def test_list_inquiries_empty(self, graph_path: Path) -> None:
+        result = list_inquiries(graph_path)
+        assert result == []
+
+    def test_list_inquiries(self, graph_path: Path) -> None:
+        add_inquiry(graph_path, slug="inq-1", label="First", target="hypothesis:h01")
+        add_inquiry(graph_path, slug="inq-2", label="Second", target="hypothesis:h02")
+        result = list_inquiries(graph_path)
+        assert len(result) == 2
+        labels = {r["label"] for r in result}
+        assert labels == {"First", "Second"}
+
+    def test_list_inquiries_has_fields(self, graph_path: Path) -> None:
+        add_inquiry(graph_path, slug="test", label="Test Inquiry", target="hypothesis:h01", status="specified")
+        result = list_inquiries(graph_path)
+        assert len(result) == 1
+        entry = result[0]
+        assert entry["label"] == "Test Inquiry"
+        assert entry["status"] == "specified"
+        assert entry["slug"] == "test"
+
+    def test_get_inquiry(self, graph_path: Path) -> None:
+        add_inquiry(graph_path, slug="test", label="Test", target="hypothesis:h01", description="Test inquiry")
+        add_concept(graph_path, "data_in", concept_type=None, ontology_id=None)
+        set_boundary_role(graph_path, "test", "concept:data_in", "BoundaryIn")
+        add_concept(graph_path, "result_out", concept_type=None, ontology_id=None)
+        set_boundary_role(graph_path, "test", "concept:result_out", "BoundaryOut")
+        add_inquiry_edge(graph_path, "test", "concept:data_in", "sci:feedsInto", "concept:result_out")
+        result = get_inquiry(graph_path, "test")
+        assert result["label"] == "Test"
+        assert result["status"] == "sketch"
+        assert len(result["boundary_in"]) == 1
+        assert len(result["boundary_out"]) == 1
+        assert len(result["edges"]) >= 1
+
+    def test_get_inquiry_nonexistent_raises(self, graph_path: Path) -> None:
+        with pytest.raises(ValueError, match="does not exist"):
+            get_inquiry(graph_path, "nonexistent")

@@ -365,6 +365,175 @@ def add_assumption(
     return uri
 
 
+def add_transformation(
+    graph_path: Path,
+    label: str,
+    inquiry_slug: str,
+    tool: str = "",
+    params: dict[str, dict[str, str]] | None = None,
+) -> URIRef:
+    """Create a transformation concept and register it in an inquiry graph."""
+    uri = add_concept(graph_path, label, concept_type="sci:Transformation", ontology_id=None)
+
+    safe_slug = _slug(inquiry_slug)
+    inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
+
+    dataset = _load_dataset(graph_path)
+    inquiry_graph = dataset.graph(inquiry_uri)
+
+    if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
+        raise ValueError(f"Inquiry 'inquiry/{safe_slug}' does not exist")
+
+    inquiry_graph.add((uri, RDF.type, SCI_NS.Transformation))
+
+    if tool:
+        inquiry_graph.add((uri, SCI_NS.tool, Literal(tool)))
+
+    if params:
+        for _param_name, meta in params.items():
+            if "value" in meta:
+                inquiry_graph.add((uri, SCI_NS.paramValue, Literal(meta["value"])))
+            if "source" in meta:
+                inquiry_graph.add((uri, SCI_NS.paramSource, Literal(meta["source"])))
+            if "note" in meta:
+                inquiry_graph.add((uri, SCI_NS.paramNote, Literal(meta["note"])))
+            if "ref" in meta:
+                inquiry_graph.add((uri, SCI_NS.paramRef, Literal(meta["ref"])))
+
+    _save_dataset(dataset, graph_path)
+    return uri
+
+
+def set_param_metadata(
+    graph_path: Path,
+    entity: str,
+    value: str,
+    source: str,
+    refs: list[str] | None = None,
+    note: str = "",
+) -> None:
+    """Attach AnnotatedParam-style metadata (value, source, refs, note) to an entity in the knowledge graph."""
+    entity_uri = _resolve_term(entity)
+
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+
+    knowledge.add((entity_uri, SCI_NS.paramValue, Literal(value)))
+    knowledge.add((entity_uri, SCI_NS.paramSource, Literal(source)))
+
+    if note:
+        knowledge.add((entity_uri, SCI_NS.paramNote, Literal(note)))
+
+    if refs:
+        for ref in refs:
+            knowledge.add((entity_uri, SCI_NS.paramRef, Literal(ref)))
+
+    _save_dataset(dataset, graph_path)
+
+
+def list_inquiries(graph_path: Path) -> list[dict[str, str]]:
+    """List all inquiries in the dataset, returning a list of summary dicts."""
+    dataset = _load_dataset(graph_path)
+    inquiry_prefix = str(PROJECT_NS) + "inquiry/"
+    results: list[dict[str, str]] = []
+
+    for ctx in dataset.contexts():
+        graph_id = str(ctx.identifier)
+        if not graph_id.startswith(inquiry_prefix):
+            continue
+
+        slug = graph_id[len(inquiry_prefix):]
+        inquiry_uri = URIRef(graph_id)
+
+        # Only include actual inquiry graphs (must have Inquiry type)
+        if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in ctx:
+            continue
+
+        label = ""
+        status = ""
+        target = ""
+        created = ""
+
+        for obj in ctx.objects(inquiry_uri, SKOS.prefLabel):
+            label = str(obj)
+        for obj in ctx.objects(inquiry_uri, SCI_NS.inquiryStatus):
+            status = str(obj)
+        for obj in ctx.objects(inquiry_uri, SCI_NS.target):
+            target = str(obj)
+        for obj in ctx.objects(inquiry_uri, DCTERMS_NS.created):
+            created = str(obj)
+
+        results.append({
+            "slug": slug,
+            "label": label,
+            "status": status,
+            "target": target,
+            "created": created,
+        })
+
+    return results
+
+
+def get_inquiry(graph_path: Path, slug: str) -> dict:
+    """Get detailed information about a specific inquiry, including boundaries and edges."""
+    safe_slug = _slug(slug)
+    inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
+
+    dataset = _load_dataset(graph_path)
+    inquiry_graph = dataset.graph(inquiry_uri)
+
+    if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
+        raise ValueError(f"Inquiry 'inquiry/{safe_slug}' does not exist")
+
+    # Read metadata
+    label = str(next(inquiry_graph.objects(inquiry_uri, SKOS.prefLabel), ""))
+    status = str(next(inquiry_graph.objects(inquiry_uri, SCI_NS.inquiryStatus), ""))
+    target = str(next(inquiry_graph.objects(inquiry_uri, SCI_NS.target), ""))
+    created = str(next(inquiry_graph.objects(inquiry_uri, DCTERMS_NS.created), ""))
+    description = str(next(inquiry_graph.objects(inquiry_uri, SKOS.note), ""))
+
+    # Collect boundary nodes
+    boundary_in: list[str] = []
+    boundary_out: list[str] = []
+    for s, _p, o in inquiry_graph.triples((None, SCI_NS.boundaryRole, None)):
+        if o == SCI_NS.BoundaryIn:
+            boundary_in.append(str(s))
+        elif o == SCI_NS.BoundaryOut:
+            boundary_out.append(str(s))
+
+    # Collect edges (excluding metadata predicates)
+    metadata_predicates = {
+        RDF.type,
+        SKOS.prefLabel,
+        SKOS.note,
+        SCI_NS.inquiryStatus,
+        SCI_NS.target,
+        SCI_NS.boundaryRole,
+        SCI_NS.tool,
+        SCI_NS.paramValue,
+        SCI_NS.paramSource,
+        SCI_NS.paramNote,
+        SCI_NS.paramRef,
+        DCTERMS_NS.created,
+    }
+    edges: list[dict[str, str]] = []
+    for s, p, o in inquiry_graph:
+        if p not in metadata_predicates:
+            edges.append({"subject": str(s), "predicate": str(p), "object": str(o)})
+
+    return {
+        "slug": safe_slug,
+        "label": label,
+        "status": status,
+        "target": target,
+        "created": created,
+        "description": description,
+        "boundary_in": boundary_in,
+        "boundary_out": boundary_out,
+        "edges": edges,
+    }
+
+
 def import_snapshot(graph_path: Path, snapshot_path: Path) -> int:
     """Import a Turtle snapshot into :graph/knowledge and record provenance. Returns triple count."""
     if not snapshot_path.exists():
