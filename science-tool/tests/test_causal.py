@@ -183,6 +183,45 @@ class TestExportPgmpy:
         # Should contain tuple pairs for edges
         assert '("x", "y")' in script or '("x","y")' in script
 
+    def test_export_pgmpy_edge_level_provenance(self, graph_path: Path) -> None:
+        """Export includes claim text, confidence, and source as comments on edges."""
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        add_inquiry(graph_path, "prov-pgmpy", "Prov pgmpy", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "prov-pgmpy", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "prov-pgmpy", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "prov-pgmpy", treatment="concept/drug", outcome="concept/recovery")
+        add_edge(graph_path, "concept/drug", "scic:causes", "concept/recovery", graph_layer="graph/causal")
+        add_claim(graph_path, "Drug treatment improves recovery time",
+                  source="paper:doi_10.1234/study", confidence=0.85)
+        script = export_pgmpy_script(graph_path, "prov-pgmpy")
+        assert "confidence: 0.85" in script
+        assert "doi_10.1234/study" in script
+
+    def test_export_pgmpy_revision_hash(self, graph_path: Path) -> None:
+        """Export header includes graph revision hash when available."""
+        slug = self._build_simple_dag(graph_path)
+        script = export_pgmpy_script(graph_path, slug)
+        assert "# Revision:" in script
+
+    def test_export_pgmpy_todo_section(self, graph_path: Path) -> None:
+        """Export includes TODO section noting latent variables."""
+        add_concept(graph_path, "Hidden", concept_type="sci:Variable", ontology_id=None,
+                    properties=[("sci:observability", "latent")])
+        add_concept(graph_path, "Outcome", concept_type="sci:Variable", ontology_id=None,
+                    properties=[("sci:observability", "observed")])
+        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        add_inquiry(graph_path, "latent-dag", "Latent DAG", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "latent-dag", "concept/hidden", "BoundaryIn")
+        set_boundary_role(graph_path, "latent-dag", "concept/outcome", "BoundaryOut")
+        set_treatment_outcome(graph_path, "latent-dag", treatment="concept/hidden", outcome="concept/outcome")
+        add_edge(graph_path, "concept/hidden", "scic:causes", "concept/outcome", graph_layer="graph/causal")
+        script = export_pgmpy_script(graph_path, "latent-dag")
+        assert "TODO" in script
+        assert "latent" in script.lower()
+        assert "hidden" in script.lower()
+
 
 class TestExportChirho:
     def _build_simple_dag(self, graph_path: Path) -> str:

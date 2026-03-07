@@ -134,6 +134,12 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
 
     edges = _get_causal_edges_for_inquiry(graph_path, slug)
 
+    # Query revision hash from provenance graph
+    dataset = _load_dataset(graph_path)
+    provenance_graph = dataset.graph(_graph_uri("graph/provenance"))
+    revision_uri = URIRef("http://example.org/project/graph_revision")
+    revision_hash = str(next(provenance_graph.objects(revision_uri, SCHEMA_NS.sha256), "unknown"))
+
     treatment_name = _variable_name(info["treatment"]) if info.get("treatment") else None
     outcome_name = _variable_name(info["outcome"]) if info.get("outcome") else None
 
@@ -146,7 +152,16 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
     for e in cause_edges:
         s_name = _variable_name(e["subject"])
         o_name = _variable_name(e["object"])
-        edge_tuples.append(f'("{s_name}", "{o_name}")')
+        comment_parts: list[str] = []
+        if e.get("claims"):
+            claim = e["claims"][0]
+            comment_parts.append(f'claim: "{claim["text"]}"')
+            if claim["confidence"] is not None:
+                comment_parts.append(f"confidence: {claim['confidence']}")
+            if claim["source"]:
+                comment_parts.append(f"source: {shorten_uri(claim['source'])}")
+        comment = f"  # {', '.join(comment_parts)}" if comment_parts else ""
+        edge_tuples.append(f'("{s_name}", "{o_name}"),{comment}')
 
     lines: list[str] = []
 
@@ -154,6 +169,7 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
     lines.append(f"# Generated from inquiry: {info['slug']}")
     lines.append(f"# Label: {info['label']}")
     lines.append(f"# Target: {shorten_uri(info['target']) if info.get('target') else 'N/A'}")
+    lines.append(f"# Revision: {revision_hash}")
     if treatment_name:
         lines.append(f"# Treatment: {treatment_name}")
     if outcome_name:
@@ -166,8 +182,8 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
     lines.append("")
 
     # Build model
-    edges_str = ", ".join(edge_tuples)
-    lines.append(f"model = BayesianNetwork([{edges_str}])")
+    edges_str = "\n    ".join(edge_tuples)
+    lines.append(f"model = BayesianNetwork([\n    {edges_str}\n])")
     lines.append("")
 
     # Confounders as comments
@@ -185,5 +201,27 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
         lines.append(f'adj_sets = ci.get_all_backdoor_adjustment_sets("{treatment_name}", "{outcome_name}")')
         lines.append('print("Backdoor adjustment sets:", adj_sets)')
     lines.append("")
+
+    # TODO section for latent variables and unsupported edges
+    latent_vars: list[str] = []
+    for e in edges:
+        if e.get("subject_observability") == "latent":
+            latent_vars.append(_variable_name(e["subject"]))
+        if e.get("object_observability") == "latent":
+            latent_vars.append(_variable_name(e["object"]))
+    latent_vars = sorted(set(latent_vars))
+
+    edges_without_claims = [
+        f'{_variable_name(e["subject"])} -> {_variable_name(e["object"])}'
+        for e in cause_edges if not e.get("claims")
+    ]
+
+    if latent_vars or edges_without_claims:
+        lines.append("# TODO:")
+        for lv in latent_vars:
+            lines.append(f"#   - Variable '{lv}' is latent (unobserved) — cannot be directly measured")
+        for ec in edges_without_claims:
+            lines.append(f"#   - Edge {ec} has no supporting claim — add provenance")
+        lines.append("")
 
     return "\n".join(lines)
