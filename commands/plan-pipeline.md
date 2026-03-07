@@ -1,0 +1,136 @@
+---
+description: Generate a computational implementation plan from a specified inquiry. Translates the evidence-driven model into concrete pipeline steps with tools, configs, tests, and validation criteria. Use when the user wants to implement a model, build a pipeline, operationalize an inquiry, or make something computational. Also use when the user says "plan pipeline", "implement this", "build the pipeline", or "make this executable".
+---
+
+# Plan Pipeline from Inquiry
+
+> **Prerequisites:**
+> - Load the `knowledge-graph` skill for ontology reference
+> - Load the `research-methodology` skill for evidence standards
+
+## Overview
+
+This command takes a specified inquiry and generates a concrete computational implementation plan. It adds `sci:Transformation` nodes to the inquiry subgraph, attaches tools and parameters, creates validation criteria, and writes an implementation plan document.
+
+The plan bridges the evidence-driven model and code. Every transformation traces back through the inquiry to the data and assumptions that justify it.
+
+## Tool invocation
+
+All `science-tool` commands below use this pattern:
+
+```bash
+uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool <command>
+```
+
+For brevity, the examples below write just `science-tool <command>` — **always expand to the full `uv run --with ...` form when executing.**
+
+## Rules
+
+- **MUST** start from a specified inquiry (status=`specified`); warn if sketch
+- **MUST** add `sci:Transformation` nodes for each computational step
+- **MUST** connect transformations with `sci:feedsInto` edges
+- **MUST** attach `sci:validatedBy` checks to each transformation
+- **MUST** include AnnotatedParam metadata for all pipeline parameters
+- **MUST** write the plan to `doc/plans/YYYY-MM-DD-<slug>-pipeline-plan.md`
+- **SHOULD** reference tool-specific skills where applicable
+- **SHOULD** suggest a pilot/phased approach for complex pipelines
+- **MUST NOT** embed tool-specific logic (Snakemake rules, etc.) — reference skills instead
+
+## Workflow
+
+### Step 1: Load and verify the inquiry
+
+```bash
+science-tool inquiry show "<slug>" --format table
+science-tool inquiry validate "<slug>" --format json
+```
+
+Verify status is `specified`. If it's `sketch`, warn the user and suggest `/science:specify-model` first.
+
+### Step 2: Identify computational requirements
+
+Walk the inquiry subgraph and identify:
+
+**Data acquisition steps** — for each `BoundaryIn` node:
+- How is this data obtained? (Download, query, extract from reference)
+- What format is it in? What format does it need to be in?
+- Are there preprocessing steps?
+
+**Transformation steps** — for each interior edge:
+- What computation does this edge imply?
+- What tool/library performs it?
+- What are the input/output formats?
+- What parameters does it need?
+
+**Output steps** — for each `BoundaryOut` node:
+- What format should the output be in?
+- How is it validated?
+- What does "success" look like?
+
+### Step 3: Add computational nodes to the inquiry
+
+For each identified step:
+
+```bash
+# Add transformation to knowledge graph and inquiry
+science-tool graph add concept "<step name>" --type sci:Transformation \
+  --note "<what this step does>"
+
+science-tool inquiry add-node "<slug>" "concept:<step>" --role BoundaryIn
+# or no --role for interior nodes (just add edges)
+
+# Connect in the data flow
+science-tool inquiry add-edge "<slug>" "concept:<input>" "sci:feedsInto" "concept:<step>"
+science-tool inquiry add-edge "<slug>" "concept:<step>" "sci:produces" "concept:<output>"
+
+# Add validation criterion
+science-tool graph add concept "<check name>" --type sci:ValidationCheck \
+  --note "<what to check>"
+science-tool inquiry add-edge "<slug>" "concept:<step>" "sci:validatedBy" "concept:<check>"
+```
+
+### Step 4: Write the implementation plan
+
+Save to `doc/plans/YYYY-MM-DD-<slug>-pipeline-plan.md` using the standard plan format:
+
+```markdown
+# <Inquiry Label> Pipeline Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** <derived from inquiry target and description>
+
+**Architecture:** <derived from transformation graph>
+
+**Tech Stack:** <tools identified in step 3>
+
+**Inquiry:** `<slug>` — see `doc/inquiries/<slug>.md` and knowledge graph
+
+---
+
+## Task N: <Transformation step>
+...
+```
+
+Each task should reference the inquiry node it implements and include TDD steps.
+
+### Step 5: Update inquiry status and finalize
+
+Update the inquiry status to `planned`. Regenerate `doc/inquiries/<slug>.md`.
+
+```bash
+science-tool graph stamp-revision
+```
+
+### Step 6: Suggest next steps
+
+1. `/science:review-pipeline <slug>` — get critical review before implementation
+2. Execute the plan using `superpowers:executing-plans`
+3. `/science:discuss` — discuss specific aspects of the plan
+
+## Important Notes
+
+- **Plans are tool-agnostic by default.** Reference tool-specific skills rather than embedding their conventions.
+- **Pilot first.** For complex pipelines, suggest a pilot phase with reduced scope.
+- **Validation criteria are mandatory.** Every transformation must have a way to verify it worked.
+- **The inquiry is the source of truth.** The plan document is a rendering of the inquiry's computational layer.
