@@ -359,6 +359,8 @@ def add_assumption(
         safe_slug = _slug(inquiry_slug)
         inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
         inquiry_graph = dataset.graph(inquiry_uri)
+        if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
+            raise ValueError(f"Inquiry '{safe_slug}' does not exist")
         inquiry_graph.add((uri, RDF.type, SCI_NS.Assumption))
 
     _save_dataset(dataset, graph_path)
@@ -437,7 +439,7 @@ def list_inquiries(graph_path: Path) -> list[dict[str, str]]:
     inquiry_prefix = str(PROJECT_NS) + "inquiry/"
     results: list[dict[str, str]] = []
 
-    for ctx in dataset.contexts():
+    for ctx in dataset.graphs():
         graph_id = str(ctx.identifier)
         if not graph_id.startswith(inquiry_prefix):
             continue
