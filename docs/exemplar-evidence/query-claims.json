@@ -1,0 +1,35 @@
+{
+  "format": "json",
+  "rows": [
+    {
+      "claim": "http://example.org/project/claim/20e394aa805d",
+      "text": "ESM-2 learns substantial structural information from sequence alone at scale; contact maps emerge from attention at 15B parameters",
+      "sources": "http://example.org/project/paper/doi_10_1126_science_ade2574"
+    },
+    {
+      "claim": "http://example.org/project/claim/9b143db86722",
+      "text": "Nucleotide Transformer attention maps reveal model learns to focus on biologically meaningful regions (enhancers, promoters) without explicit supervision",
+      "sources": "http://example.org/project/paper/doi_10_1038_s41592_024_02523_z"
+    },
+    {
+      "claim": "http://example.org/project/claim/a3e18a09b19d",
+      "text": "Structure-conditioned attention works: AlphaFold 2 demonstrated that conditioning attention on 3D coordinates (IPA) or pairwise structural features (Evoformer pair bias) dramatically improves protein structure prediction",
+      "sources": "http://example.org/project/paper/doi_10_1038_s41586_021_03819_2"
+    },
+    {
+      "claim": "http://example.org/project/claim/ad3800db01b8",
+      "text": "Structure-conditioned attention works: IPA and Evoformer pair bias dramatically improve protein structure prediction",
+      "sources": "http://example.org/project/paper/doi_10_1038_s41586_021_03819_2"
+    },
+    {
+      "claim": "http://example.org/project/claim/d3de864f5508",
+      "text": "No protein PLM has adopted additive attention bias to inject continuous 3D distance; attention bias is the unexplored strategy between tokenization and GNN approaches",
+      "sources": "http://example.org/project/doc/background/04-structure-aware-protein-language-models.md"
+    },
+    {
+      "claim": "http://example.org/project/claim/f501e7fbea84",
+      "text": "No protein PLM has adopted additive attention bias for injecting continuous 3D distance; this is a gap our project targets",
+      "sources": "http://example.org/project/doc/background/04-structure-aware-protein-language-models.md"
+    }
+  ]
+}

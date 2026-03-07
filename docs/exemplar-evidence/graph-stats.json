@@ -1,0 +1,25 @@
+{
+  "format": "json",
+  "rows": [
+    {
+      "graph": "graph/knowledge",
+      "triples": 2552
+    },
+    {
+      "graph": "graph/causal",
+      "triples": 0
+    },
+    {
+      "graph": "graph/provenance",
+      "triples": 208
+    },
+    {
+      "graph": "graph/datasets",
+      "triples": 1
+    },
+    {
+      "graph": "total",
+      "triples": 2761
+    }
+  ]
+}

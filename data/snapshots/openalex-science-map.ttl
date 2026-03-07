@@ -1,0 +1,1971 @@
+@prefix schema: <https://schema.org/> .
+@prefix sci: <http://example.org/science/vocab/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://openalex.org/subfields/1100> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/11> ;
+    skos:prefLabel "General Agricultural and Biological Sciences" ;
+    schema:size 1088818 .
+
+<https://openalex.org/subfields/1102> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/11> ;
+    skos:prefLabel "Agronomy and Crop Science" ;
+    schema:size 801217 .
+
+<https://openalex.org/subfields/1103> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/11> ;
+    skos:prefLabel "Animal Science and Zoology" ;
+    schema:size 658925 .
+
+<https://openalex.org/subfields/1104> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/11> ;
+    skos:prefLabel "Aquatic Science" ;
+    schema:size 544530 .
+
+<https://openalex.org/subfields/1105> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/11> ;
+    skos:prefLabel "Ecology, Evolution, Behavior and Systematics" ;
+    schema:size 3827796 .
+
+<https://openalex.org/subfields/1106> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/11> ;
+    skos:prefLabel "Food Science" ;
+    schema:size 2002376 .
+
+<https://openalex.org/subfields/1107> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/11> ;
+    skos:prefLabel "Forestry" ;
+    schema:size 439300 .
+
+<https://openalex.org/subfields/1108> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/11> ;
+    skos:prefLabel "Horticulture" ;
+    schema:size 44196 .
+
+<https://openalex.org/subfields/1109> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/11> ;
+    skos:prefLabel "Insect Science" ;
+    schema:size 1276397 .
+
+<https://openalex.org/subfields/1110> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/11> ;
+    skos:prefLabel "Plant Science" ;
+    schema:size 10558106 .
+
+<https://openalex.org/subfields/1111> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/11> ;
+    skos:prefLabel "Soil Science" ;
+    schema:size 744242 .
+
+<https://openalex.org/subfields/1200> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/12> ;
+    skos:prefLabel "General Arts and Humanities" ;
+    schema:size 232915 .
+
+<https://openalex.org/subfields/1202> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/12> ;
+    skos:prefLabel "History" ;
+    schema:size 4956624 .
+
+<https://openalex.org/subfields/1203> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/12> ;
+    skos:prefLabel "Language and Linguistics" ;
+    schema:size 2589160 .
+
+<https://openalex.org/subfields/1204> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/12> ;
+    skos:prefLabel "Archeology" ;
+    schema:size 3041386 .
+
+<https://openalex.org/subfields/1205> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/12> ;
+    skos:prefLabel "Classics" ;
+    schema:size 961358 .
+
+<https://openalex.org/subfields/1206> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/12> ;
+    skos:prefLabel "Conservation" ;
+    schema:size 575148 .
+
+<https://openalex.org/subfields/1207> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/12> ;
+    skos:prefLabel "History and Philosophy of Science" ;
+    schema:size 1564388 .
+
+<https://openalex.org/subfields/1208> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/12> ;
+    skos:prefLabel "Literature and Literary Theory" ;
+    schema:size 4421597 .
+
+<https://openalex.org/subfields/1209> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/12> ;
+    skos:prefLabel "Museology" ;
+    schema:size 1218098 .
+
+<https://openalex.org/subfields/1210> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/12> ;
+    skos:prefLabel "Music" ;
+    schema:size 1060861 .
+
+<https://openalex.org/subfields/1211> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/12> ;
+    skos:prefLabel "Philosophy" ;
+    schema:size 3776745 .
+
+<https://openalex.org/subfields/1212> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/12> ;
+    skos:prefLabel "Religious studies" ;
+    schema:size 1469872 .
+
+<https://openalex.org/subfields/1213> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/12> ;
+    skos:prefLabel "Visual Arts and Performing Arts" ;
+    schema:size 1362285 .
+
+<https://openalex.org/subfields/1302> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/13> ;
+    skos:prefLabel "Aging" ;
+    schema:size 99119 .
+
+<https://openalex.org/subfields/1303> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/13> ;
+    skos:prefLabel "Biochemistry" ;
+    schema:size 425818 .
+
+<https://openalex.org/subfields/1304> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/13> ;
+    skos:prefLabel "Biophysics" ;
+    schema:size 1465915 .
+
+<https://openalex.org/subfields/1305> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/13> ;
+    skos:prefLabel "Biotechnology" ;
+    schema:size 521548 .
+
+<https://openalex.org/subfields/1306> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/13> ;
+    skos:prefLabel "Cancer Research" ;
+    schema:size 1042020 .
+
+<https://openalex.org/subfields/1307> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/13> ;
+    skos:prefLabel "Cell Biology" ;
+    schema:size 1133196 .
+
+<https://openalex.org/subfields/1308> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/13> ;
+    skos:prefLabel "Clinical Biochemistry" ;
+    schema:size 320281 .
+
+<https://openalex.org/subfields/1309> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/13> ;
+    skos:prefLabel "Developmental Biology" ;
+    schema:size 97530 .
+
+<https://openalex.org/subfields/1310> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/13> ;
+    skos:prefLabel "Endocrinology" ;
+    schema:size 393648 .
+
+<https://openalex.org/subfields/1311> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/13> ;
+    skos:prefLabel "Genetics" ;
+    schema:size 3761531 .
+
+<https://openalex.org/subfields/1312> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/13> ;
+    skos:prefLabel "Molecular Biology" ;
+    schema:size 10714346 .
+
+<https://openalex.org/subfields/1313> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/13> ;
+    skos:prefLabel "Molecular Medicine" ;
+    schema:size 226915 .
+
+<https://openalex.org/subfields/1314> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/13> ;
+    skos:prefLabel "Physiology" ;
+    schema:size 239885 .
+
+<https://openalex.org/subfields/1315> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/13> ;
+    skos:prefLabel "Structural Biology" ;
+    schema:size 204560 .
+
+<https://openalex.org/subfields/1402> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/14> ;
+    skos:prefLabel "Accounting" ;
+    schema:size 1816514 .
+
+<https://openalex.org/subfields/1403> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/14> ;
+    skos:prefLabel "Business and International Management" ;
+    schema:size 133240 .
+
+<https://openalex.org/subfields/1404> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/14> ;
+    skos:prefLabel "Management Information Systems" ;
+    schema:size 1028909 .
+
+<https://openalex.org/subfields/1405> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/14> ;
+    skos:prefLabel "Management of Technology and Innovation" ;
+    schema:size 821617 .
+
+<https://openalex.org/subfields/1406> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/14> ;
+    skos:prefLabel "Marketing" ;
+    schema:size 1051779 .
+
+<https://openalex.org/subfields/1407> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/14> ;
+    skos:prefLabel "Organizational Behavior and Human Resource Management" ;
+    schema:size 1393037 .
+
+<https://openalex.org/subfields/1408> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/14> ;
+    skos:prefLabel "Strategy and Management" ;
+    schema:size 2690311 .
+
+<https://openalex.org/subfields/1409> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/14> ;
+    skos:prefLabel "Tourism, Leisure and Hospitality Management" ;
+    schema:size 99158 .
+
+<https://openalex.org/subfields/1410> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/14> ;
+    skos:prefLabel "Industrial relations" ;
+    schema:size 126427 .
+
+<https://openalex.org/subfields/1502> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/15> ;
+    skos:prefLabel "Bioengineering" ;
+    schema:size 175406 .
+
+<https://openalex.org/subfields/1503> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/15> ;
+    skos:prefLabel "Catalysis" ;
+    schema:size 255844 .
+
+<https://openalex.org/subfields/1504> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/15> ;
+    skos:prefLabel "Chemical Health and Safety" ;
+    schema:size 54465 .
+
+<https://openalex.org/subfields/1506> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/15> ;
+    skos:prefLabel "Filtration and Separation" ;
+    schema:size 58373 .
+
+<https://openalex.org/subfields/1507> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/15> ;
+    skos:prefLabel "Fluid Flow and Transfer Processes" ;
+    schema:size 278807 .
+
+<https://openalex.org/subfields/1508> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/15> ;
+    skos:prefLabel "Process Chemistry and Technology" ;
+    schema:size 80043 .
+
+<https://openalex.org/subfields/1602> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/16> ;
+    skos:prefLabel "Analytical Chemistry" ;
+    schema:size 510267 .
+
+<https://openalex.org/subfields/1603> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/16> ;
+    skos:prefLabel "Electrochemistry" ;
+    schema:size 159387 .
+
+<https://openalex.org/subfields/1604> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/16> ;
+    skos:prefLabel "Inorganic Chemistry" ;
+    schema:size 864694 .
+
+<https://openalex.org/subfields/1605> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/16> ;
+    skos:prefLabel "Organic Chemistry" ;
+    schema:size 3504592 .
+
+<https://openalex.org/subfields/1606> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/16> ;
+    skos:prefLabel "Physical and Theoretical Chemistry" ;
+    schema:size 878216 .
+
+<https://openalex.org/subfields/1607> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/16> ;
+    skos:prefLabel "Spectroscopy" ;
+    schema:size 1101681 .
+
+<https://openalex.org/subfields/1702> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/17> ;
+    skos:prefLabel "Artificial Intelligence" ;
+    schema:size 9334575 .
+
+<https://openalex.org/subfields/1703> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/17> ;
+    skos:prefLabel "Computational Theory and Mathematics" ;
+    schema:size 1479955 .
+
+<https://openalex.org/subfields/1704> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/17> ;
+    skos:prefLabel "Computer Graphics and Computer-Aided Design" ;
+    schema:size 262247 .
+
+<https://openalex.org/subfields/1705> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/17> ;
+    skos:prefLabel "Computer Networks and Communications" ;
+    schema:size 2701420 .
+
+<https://openalex.org/subfields/1706> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/17> ;
+    skos:prefLabel "Computer Science Applications" ;
+    schema:size 810471 .
+
+<https://openalex.org/subfields/1707> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/17> ;
+    skos:prefLabel "Computer Vision and Pattern Recognition" ;
+    schema:size 2371205 .
+
+<https://openalex.org/subfields/1708> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/17> ;
+    skos:prefLabel "Hardware and Architecture" ;
+    schema:size 447251 .
+
+<https://openalex.org/subfields/1709> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/17> ;
+    skos:prefLabel "Human-Computer Interaction" ;
+    schema:size 375025 .
+
+<https://openalex.org/subfields/1710> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/17> ;
+    skos:prefLabel "Information Systems" ;
+    schema:size 4342774 .
+
+<https://openalex.org/subfields/1711> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/17> ;
+    skos:prefLabel "Signal Processing" ;
+    schema:size 612133 .
+
+<https://openalex.org/subfields/1712> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/17> ;
+    skos:prefLabel "Software" ;
+    schema:size 241862 .
+
+<https://openalex.org/subfields/1800> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/18> ;
+    skos:prefLabel "General Decision Sciences" ;
+    schema:size 70332 .
+
+<https://openalex.org/subfields/1802> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/18> ;
+    skos:prefLabel "Information Systems and Management" ;
+    schema:size 1354963 .
+
+<https://openalex.org/subfields/1803> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/18> ;
+    skos:prefLabel "Management Science and Operations Research" ;
+    schema:size 1425247 .
+
+<https://openalex.org/subfields/1804> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/18> ;
+    skos:prefLabel "Statistics, Probability and Uncertainty" ;
+    schema:size 668804 .
+
+<https://openalex.org/subfields/1902> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/19> ;
+    skos:prefLabel "Atmospheric Science" ;
+    schema:size 1704787 .
+
+<https://openalex.org/subfields/1904> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/19> ;
+    skos:prefLabel "Earth-Surface Processes" ;
+    schema:size 457617 .
+
+<https://openalex.org/subfields/1906> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/19> ;
+    skos:prefLabel "Geochemistry and Petrology" ;
+    schema:size 474912 .
+
+<https://openalex.org/subfields/1907> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/19> ;
+    skos:prefLabel "Geology" ;
+    schema:size 496335 .
+
+<https://openalex.org/subfields/1908> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/19> ;
+    skos:prefLabel "Geophysics" ;
+    schema:size 1706083 .
+
+<https://openalex.org/subfields/1910> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/19> ;
+    skos:prefLabel "Oceanography" ;
+    schema:size 1391986 .
+
+<https://openalex.org/subfields/1911> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/19> ;
+    skos:prefLabel "Paleontology" ;
+    schema:size 1429854 .
+
+<https://openalex.org/subfields/1912> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/19> ;
+    skos:prefLabel "Space and Planetary Science" ;
+    schema:size 106431 .
+
+<https://openalex.org/subfields/2000> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/20> ;
+    skos:prefLabel "General Economics, Econometrics and Finance" ;
+    schema:size 995796 .
+
+<https://openalex.org/subfields/2002> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/20> ;
+    skos:prefLabel "Economics and Econometrics" ;
+    schema:size 10560101 .
+
+<https://openalex.org/subfields/2003> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/20> ;
+    skos:prefLabel "Finance" ;
+    schema:size 1348931 .
+
+<https://openalex.org/subfields/2100> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/21> ;
+    skos:prefLabel "General Energy" ;
+    schema:size 120423 .
+
+<https://openalex.org/subfields/2102> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/21> ;
+    skos:prefLabel "Energy Engineering and Power Technology" ;
+    schema:size 165988 .
+
+<https://openalex.org/subfields/2103> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/21> ;
+    skos:prefLabel "Fuel Technology" ;
+    schema:size 49361 .
+
+<https://openalex.org/subfields/2104> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/21> ;
+    skos:prefLabel "Nuclear Energy and Engineering" ;
+    schema:size 11515 .
+
+<https://openalex.org/subfields/2105> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/21> ;
+    skos:prefLabel "Renewable Energy, Sustainability and the Environment" ;
+    schema:size 1515736 .
+
+<https://openalex.org/subfields/2200> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "General Engineering" ;
+    schema:size 72309 .
+
+<https://openalex.org/subfields/2202> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "Aerospace Engineering" ;
+    schema:size 25812424 .
+
+<https://openalex.org/subfields/2203> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "Automotive Engineering" ;
+    schema:size 769978 .
+
+<https://openalex.org/subfields/2204> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "Biomedical Engineering" ;
+    schema:size 4350005 .
+
+<https://openalex.org/subfields/2205> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "Civil and Structural Engineering" ;
+    schema:size 2807399 .
+
+<https://openalex.org/subfields/2206> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "Computational Mechanics" ;
+    schema:size 2042541 .
+
+<https://openalex.org/subfields/2207> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "Control and Systems Engineering" ;
+    schema:size 2696293 .
+
+<https://openalex.org/subfields/2208> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "Electrical and Electronic Engineering" ;
+    schema:size 10504124 .
+
+<https://openalex.org/subfields/2209> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "Industrial and Manufacturing Engineering" ;
+    schema:size 1191135 .
+
+<https://openalex.org/subfields/2210> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "Mechanical Engineering" ;
+    schema:size 4250996 .
+
+<https://openalex.org/subfields/2211> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "Mechanics of Materials" ;
+    schema:size 2017669 .
+
+<https://openalex.org/subfields/2212> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "Ocean Engineering" ;
+    schema:size 1619641 .
+
+<https://openalex.org/subfields/2213> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "Safety, Risk, Reliability and Quality" ;
+    schema:size 695216 .
+
+<https://openalex.org/subfields/2214> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "Media Technology" ;
+    schema:size 666957 .
+
+<https://openalex.org/subfields/2215> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "Building and Construction" ;
+    schema:size 1322810 .
+
+<https://openalex.org/subfields/2216> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/22> ;
+    skos:prefLabel "Architecture" ;
+    schema:size 319565 .
+
+<https://openalex.org/subfields/2302> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/23> ;
+    skos:prefLabel "Ecological Modeling" ;
+    schema:size 1450769 .
+
+<https://openalex.org/subfields/2303> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/23> ;
+    skos:prefLabel "Ecology" ;
+    schema:size 3502594 .
+
+<https://openalex.org/subfields/2304> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/23> ;
+    skos:prefLabel "Environmental Chemistry" ;
+    schema:size 1048031 .
+
+<https://openalex.org/subfields/2305> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/23> ;
+    skos:prefLabel "Environmental Engineering" ;
+    schema:size 1371252 .
+
+<https://openalex.org/subfields/2306> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/23> ;
+    skos:prefLabel "Global and Planetary Change" ;
+    schema:size 2352906 .
+
+<https://openalex.org/subfields/2307> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/23> ;
+    skos:prefLabel "Health, Toxicology and Mutagenesis" ;
+    schema:size 1197861 .
+
+<https://openalex.org/subfields/2308> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/23> ;
+    skos:prefLabel "Management, Monitoring, Policy and Law" ;
+    schema:size 2455632 .
+
+<https://openalex.org/subfields/2309> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/23> ;
+    skos:prefLabel "Nature and Landscape Conservation" ;
+    schema:size 1271381 .
+
+<https://openalex.org/subfields/2310> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/23> ;
+    skos:prefLabel "Pollution" ;
+    schema:size 768432 .
+
+<https://openalex.org/subfields/2311> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/23> ;
+    skos:prefLabel "Industrial and Manufacturing Engineering" ;
+    schema:size 637076 .
+
+<https://openalex.org/subfields/2312> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/23> ;
+    skos:prefLabel "Water Science and Technology" ;
+    schema:size 1531124 .
+
+<https://openalex.org/subfields/2402> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/24> ;
+    skos:prefLabel "Applied Microbiology and Biotechnology" ;
+    schema:size 87339 .
+
+<https://openalex.org/subfields/2403> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/24> ;
+    skos:prefLabel "Immunology" ;
+    schema:size 1596056 .
+
+<https://openalex.org/subfields/2404> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/24> ;
+    skos:prefLabel "Microbiology" ;
+    schema:size 432868 .
+
+<https://openalex.org/subfields/2405> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/24> ;
+    skos:prefLabel "Parasitology" ;
+    schema:size 471596 .
+
+<https://openalex.org/subfields/2406> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/24> ;
+    skos:prefLabel "Virology" ;
+    schema:size 236049 .
+
+<https://openalex.org/subfields/2500> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/25> ;
+    skos:prefLabel "General Materials Science" ;
+    schema:size 338272 .
+
+<https://openalex.org/subfields/2502> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/25> ;
+    skos:prefLabel "Biomaterials" ;
+    schema:size 1258320 .
+
+<https://openalex.org/subfields/2503> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/25> ;
+    skos:prefLabel "Ceramics and Composites" ;
+    schema:size 258800 .
+
+<https://openalex.org/subfields/2504> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/25> ;
+    skos:prefLabel "Electronic, Optical and Magnetic Materials" ;
+    schema:size 1000805 .
+
+<https://openalex.org/subfields/2505> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/25> ;
+    skos:prefLabel "Materials Chemistry" ;
+    schema:size 5417950 .
+
+<https://openalex.org/subfields/2506> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/25> ;
+    skos:prefLabel "Metals and Alloys" ;
+    schema:size 64836 .
+
+<https://openalex.org/subfields/2507> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/25> ;
+    skos:prefLabel "Polymers and Plastics" ;
+    schema:size 835986 .
+
+<https://openalex.org/subfields/2508> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/25> ;
+    skos:prefLabel "Surfaces, Coatings and Films" ;
+    schema:size 417661 .
+
+<https://openalex.org/subfields/2602> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/26> ;
+    skos:prefLabel "Algebra and Number Theory" ;
+    schema:size 261553 .
+
+<https://openalex.org/subfields/2604> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/26> ;
+    skos:prefLabel "Applied Mathematics" ;
+    schema:size 857119 .
+
+<https://openalex.org/subfields/2605> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/26> ;
+    skos:prefLabel "Computational Mathematics" ;
+    schema:size 22610 .
+
+<https://openalex.org/subfields/2607> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/26> ;
+    skos:prefLabel "Discrete Mathematics and Combinatorics" ;
+    schema:size 164972 .
+
+<https://openalex.org/subfields/2608> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/26> ;
+    skos:prefLabel "Geometry and Topology" ;
+    schema:size 810583 .
+
+<https://openalex.org/subfields/2610> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/26> ;
+    skos:prefLabel "Mathematical Physics" ;
+    schema:size 656016 .
+
+<https://openalex.org/subfields/2611> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/26> ;
+    skos:prefLabel "Modeling and Simulation" ;
+    schema:size 289398 .
+
+<https://openalex.org/subfields/2612> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/26> ;
+    skos:prefLabel "Numerical Analysis" ;
+    schema:size 239006 .
+
+<https://openalex.org/subfields/2613> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/26> ;
+    skos:prefLabel "Statistics and Probability" ;
+    schema:size 963633 .
+
+<https://openalex.org/subfields/2614> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/26> ;
+    skos:prefLabel "Theoretical Computer Science" ;
+    schema:size 280473 .
+
+<https://openalex.org/subfields/2702> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Anatomy" ;
+    schema:size 224185 .
+
+<https://openalex.org/subfields/2703> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Anesthesiology and Pain Medicine" ;
+    schema:size 298459 .
+
+<https://openalex.org/subfields/2704> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Biochemistry" ;
+    schema:size 209860 .
+
+<https://openalex.org/subfields/2705> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Cardiology and Cardiovascular Medicine" ;
+    schema:size 2365750 .
+
+<https://openalex.org/subfields/2706> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Critical Care and Intensive Care Medicine" ;
+    schema:size 245899 .
+
+<https://openalex.org/subfields/2707> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Complementary and alternative medicine" ;
+    schema:size 918795 .
+
+<https://openalex.org/subfields/2708> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Dermatology" ;
+    schema:size 731260 .
+
+<https://openalex.org/subfields/2711> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Emergency Medicine" ;
+    schema:size 652476 .
+
+<https://openalex.org/subfields/2712> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Endocrinology, Diabetes and Metabolism" ;
+    schema:size 1417769 .
+
+<https://openalex.org/subfields/2713> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Epidemiology" ;
+    schema:size 3694150 .
+
+<https://openalex.org/subfields/2714> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Family Practice" ;
+    schema:size 76831 .
+
+<https://openalex.org/subfields/2715> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Gastroenterology" ;
+    schema:size 318231 .
+
+<https://openalex.org/subfields/2716> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Genetics" ;
+    schema:size 648185 .
+
+<https://openalex.org/subfields/2717> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Geriatrics and Gerontology" ;
+    schema:size 223444 .
+
+<https://openalex.org/subfields/2718> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Health Informatics" ;
+    schema:size 116549 .
+
+<https://openalex.org/subfields/2720> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Hematology" ;
+    schema:size 809135 .
+
+<https://openalex.org/subfields/2721> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Hepatology" ;
+    schema:size 504434 .
+
+<https://openalex.org/subfields/2723> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Immunology and Allergy" ;
+    schema:size 281288 .
+
+<https://openalex.org/subfields/2724> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Internal Medicine" ;
+    schema:size 166165 .
+
+<https://openalex.org/subfields/2725> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Infectious Diseases" ;
+    schema:size 1604503 .
+
+<https://openalex.org/subfields/2726> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Microbiology" ;
+    schema:size 58490 .
+
+<https://openalex.org/subfields/2727> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Nephrology" ;
+    schema:size 517255 .
+
+<https://openalex.org/subfields/2728> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Neurology" ;
+    schema:size 1326868 .
+
+<https://openalex.org/subfields/2729> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Obstetrics and Gynecology" ;
+    schema:size 796663 .
+
+<https://openalex.org/subfields/2730> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Oncology" ;
+    schema:size 2402689 .
+
+<https://openalex.org/subfields/2731> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Ophthalmology" ;
+    schema:size 732897 .
+
+<https://openalex.org/subfields/2732> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Orthopedics and Sports Medicine" ;
+    schema:size 549427 .
+
+<https://openalex.org/subfields/2733> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Otorhinolaryngology" ;
+    schema:size 260340 .
+
+<https://openalex.org/subfields/2734> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Pathology and Forensic Medicine" ;
+    schema:size 1393655 .
+
+<https://openalex.org/subfields/2735> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Pediatrics, Perinatology and Child Health" ;
+    schema:size 3733929 .
+
+<https://openalex.org/subfields/2736> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Pharmacology" ;
+    schema:size 1903576 .
+
+<https://openalex.org/subfields/2737> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Physiology" ;
+    schema:size 2393220 .
+
+<https://openalex.org/subfields/2738> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Psychiatry and Mental health" ;
+    schema:size 1270100 .
+
+<https://openalex.org/subfields/2739> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Public Health, Environmental and Occupational Health" ;
+    schema:size 4186392 .
+
+<https://openalex.org/subfields/2740> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Pulmonary and Respiratory Medicine" ;
+    schema:size 3660173 .
+
+<https://openalex.org/subfields/2741> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Radiology, Nuclear Medicine and Imaging" ;
+    schema:size 2213531 .
+
+<https://openalex.org/subfields/2742> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Rehabilitation" ;
+    schema:size 432653 .
+
+<https://openalex.org/subfields/2743> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Reproductive Medicine" ;
+    schema:size 1323352 .
+
+<https://openalex.org/subfields/2745> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Rheumatology" ;
+    schema:size 1149404 .
+
+<https://openalex.org/subfields/2746> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Surgery" ;
+    schema:size 5842841 .
+
+<https://openalex.org/subfields/2747> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Transplantation" ;
+    schema:size 108248 .
+
+<https://openalex.org/subfields/2748> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/27> ;
+    skos:prefLabel "Urology" ;
+    schema:size 347016 .
+
+<https://openalex.org/subfields/2802> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/28> ;
+    skos:prefLabel "Behavioral Neuroscience" ;
+    schema:size 107569 .
+
+<https://openalex.org/subfields/2803> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/28> ;
+    skos:prefLabel "Biological Psychiatry" ;
+    schema:size 63361 .
+
+<https://openalex.org/subfields/2804> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/28> ;
+    skos:prefLabel "Cellular and Molecular Neuroscience" ;
+    schema:size 1029261 .
+
+<https://openalex.org/subfields/2805> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/28> ;
+    skos:prefLabel "Cognitive Neuroscience" ;
+    schema:size 1859695 .
+
+<https://openalex.org/subfields/2806> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/28> ;
+    skos:prefLabel "Developmental Neuroscience" ;
+    schema:size 154311 .
+
+<https://openalex.org/subfields/2807> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/28> ;
+    skos:prefLabel "Endocrine and Autonomic Systems" ;
+    schema:size 250439 .
+
+<https://openalex.org/subfields/2808> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/28> ;
+    skos:prefLabel "Neurology" ;
+    schema:size 675239 .
+
+<https://openalex.org/subfields/2809> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/28> ;
+    skos:prefLabel "Sensory Systems" ;
+    schema:size 215872 .
+
+<https://openalex.org/subfields/2910> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/29> ;
+    skos:prefLabel "Issues, ethics and legal aspects" ;
+    schema:size 163713 .
+
+<https://openalex.org/subfields/2911> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/29> ;
+    skos:prefLabel "Leadership and Management" ;
+    schema:size 58286 .
+
+<https://openalex.org/subfields/2916> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/29> ;
+    skos:prefLabel "Nutrition and Dietetics" ;
+    schema:size 1078961 .
+
+<https://openalex.org/subfields/2922> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/29> ;
+    skos:prefLabel "Research and Theory" ;
+    schema:size 43148 .
+
+<https://openalex.org/subfields/3002> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/30> ;
+    skos:prefLabel "Drug Discovery" ;
+    schema:size 12684 .
+
+<https://openalex.org/subfields/3003> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/30> ;
+    skos:prefLabel "Pharmaceutical Science" ;
+    schema:size 362270 .
+
+<https://openalex.org/subfields/3004> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/30> ;
+    skos:prefLabel "Pharmacology" ;
+    schema:size 651152 .
+
+<https://openalex.org/subfields/3005> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/30> ;
+    skos:prefLabel "Toxicology" ;
+    schema:size 129815 .
+
+<https://openalex.org/subfields/3102> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/31> ;
+    skos:prefLabel "Acoustics and Ultrasonics" ;
+    schema:size 25601 .
+
+<https://openalex.org/subfields/3103> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/31> ;
+    skos:prefLabel "Astronomy and Astrophysics" ;
+    schema:size 4584596 .
+
+<https://openalex.org/subfields/3104> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/31> ;
+    skos:prefLabel "Condensed Matter Physics" ;
+    schema:size 1371339 .
+
+<https://openalex.org/subfields/3105> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/31> ;
+    skos:prefLabel "Instrumentation" ;
+    schema:size 395990 .
+
+<https://openalex.org/subfields/3106> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/31> ;
+    skos:prefLabel "Nuclear and High Energy Physics" ;
+    schema:size 12272368 .
+
+<https://openalex.org/subfields/3107> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/31> ;
+    skos:prefLabel "Atomic and Molecular Physics, and Optics" ;
+    schema:size 4276195 .
+
+<https://openalex.org/subfields/3108> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/31> ;
+    skos:prefLabel "Radiation" ;
+    schema:size 739031 .
+
+<https://openalex.org/subfields/3109> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/31> ;
+    skos:prefLabel "Statistical and Nonlinear Physics" ;
+    schema:size 1057695 .
+
+<https://openalex.org/subfields/3200> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/32> ;
+    skos:prefLabel "General Psychology" ;
+    schema:size 189726 .
+
+<https://openalex.org/subfields/3202> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/32> ;
+    skos:prefLabel "Applied Psychology" ;
+    schema:size 295054 .
+
+<https://openalex.org/subfields/3203> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/32> ;
+    skos:prefLabel "Clinical Psychology" ;
+    schema:size 3010415 .
+
+<https://openalex.org/subfields/3204> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/32> ;
+    skos:prefLabel "Developmental and Educational Psychology" ;
+    schema:size 1251079 .
+
+<https://openalex.org/subfields/3205> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/32> ;
+    skos:prefLabel "Experimental and Cognitive Psychology" ;
+    schema:size 1359081 .
+
+<https://openalex.org/subfields/3206> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/32> ;
+    skos:prefLabel "Neuropsychology and Physiological Psychology" ;
+    schema:size 124370 .
+
+<https://openalex.org/subfields/3207> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/32> ;
+    skos:prefLabel "Social Psychology" ;
+    schema:size 2595960 .
+
+<https://openalex.org/subfields/3300> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "General Social Sciences" ;
+    schema:size 656984 .
+
+<https://openalex.org/subfields/3302> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Archeology" ;
+    schema:size 171460 .
+
+<https://openalex.org/subfields/3303> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Development" ;
+    schema:size 438968 .
+
+<https://openalex.org/subfields/3304> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Education" ;
+    schema:size 8932502 .
+
+<https://openalex.org/subfields/3305> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Geography, Planning and Development" ;
+    schema:size 967751 .
+
+<https://openalex.org/subfields/3306> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Health" ;
+    schema:size 712375 .
+
+<https://openalex.org/subfields/3307> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Human Factors and Ergonomics" ;
+    schema:size 175033 .
+
+<https://openalex.org/subfields/3308> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Law" ;
+    schema:size 2675480 .
+
+<https://openalex.org/subfields/3309> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Library and Information Sciences" ;
+    schema:size 313802 .
+
+<https://openalex.org/subfields/3310> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Linguistics and Language" ;
+    schema:size 511047 .
+
+<https://openalex.org/subfields/3311> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Safety Research" ;
+    schema:size 895494 .
+
+<https://openalex.org/subfields/3312> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Sociology and Political Science" ;
+    schema:size 14719713 .
+
+<https://openalex.org/subfields/3313> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Transportation" ;
+    schema:size 858741 .
+
+<https://openalex.org/subfields/3314> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Anthropology" ;
+    schema:size 2591513 .
+
+<https://openalex.org/subfields/3315> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Communication" ;
+    schema:size 902329 .
+
+<https://openalex.org/subfields/3316> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Cultural Studies" ;
+    schema:size 2355640 .
+
+<https://openalex.org/subfields/3317> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Demography" ;
+    schema:size 1575835 .
+
+<https://openalex.org/subfields/3318> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Gender Studies" ;
+    schema:size 1128843 .
+
+<https://openalex.org/subfields/3319> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Life-span and Life-course Studies" ;
+    schema:size 82906 .
+
+<https://openalex.org/subfields/3320> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Political Science and International Relations" ;
+    schema:size 9786317 .
+
+<https://openalex.org/subfields/3321> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Public Administration" ;
+    schema:size 371992 .
+
+<https://openalex.org/subfields/3322> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/33> ;
+    skos:prefLabel "Urban Studies" ;
+    schema:size 1274508 .
+
+<https://openalex.org/subfields/3402> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/34> ;
+    skos:prefLabel "Equine" ;
+    schema:size 62811 .
+
+<https://openalex.org/subfields/3404> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/34> ;
+    skos:prefLabel "Small Animals" ;
+    schema:size 446900 .
+
+<https://openalex.org/subfields/3500> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/35> ;
+    skos:prefLabel "General Dentistry" ;
+    schema:size 57195 .
+
+<https://openalex.org/subfields/3504> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/35> ;
+    skos:prefLabel "Oral Surgery" ;
+    schema:size 400242 .
+
+<https://openalex.org/subfields/3505> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/35> ;
+    skos:prefLabel "Orthodontics" ;
+    schema:size 236255 .
+
+<https://openalex.org/subfields/3506> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/35> ;
+    skos:prefLabel "Periodontics" ;
+    schema:size 302022 .
+
+<https://openalex.org/subfields/3600> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/36> ;
+    skos:prefLabel "General Health Professions" ;
+    schema:size 4371709 .
+
+<https://openalex.org/subfields/3603> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/36> ;
+    skos:prefLabel "Complementary and Manual Therapy" ;
+    schema:size 125874 .
+
+<https://openalex.org/subfields/3604> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/36> ;
+    skos:prefLabel "Emergency Medical Services" ;
+    schema:size 541167 .
+
+<https://openalex.org/subfields/3605> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/36> ;
+    skos:prefLabel "Health Information Management" ;
+    schema:size 518654 .
+
+<https://openalex.org/subfields/3607> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/36> ;
+    skos:prefLabel "Medical Laboratory Technology" ;
+    schema:size 107894 .
+
+<https://openalex.org/subfields/3608> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/36> ;
+    skos:prefLabel "Medical Terminology" ;
+    schema:size 63105 .
+
+<https://openalex.org/subfields/3609> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/36> ;
+    skos:prefLabel "Occupational Therapy" ;
+    schema:size 406999 .
+
+<https://openalex.org/subfields/3611> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/36> ;
+    skos:prefLabel "Pharmacy" ;
+    schema:size 327787 .
+
+<https://openalex.org/subfields/3612> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/36> ;
+    skos:prefLabel "Physical Therapy, Sports Therapy and Rehabilitation" ;
+    schema:size 501096 .
+
+<https://openalex.org/subfields/3614> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/36> ;
+    skos:prefLabel "Radiological and Ultrasound Technology" ;
+    schema:size 269936 .
+
+<https://openalex.org/subfields/3616> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/fields/36> ;
+    skos:prefLabel "Speech and Hearing" ;
+    schema:size 583404 .
+
+<https://openalex.org/fields/34> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/4> ;
+    skos:narrower <https://openalex.org/subfields/3402>,
+        <https://openalex.org/subfields/3404> ;
+    skos:prefLabel "Veterinary" ;
+    schema:size 509711 .
+
+<https://openalex.org/fields/20> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/2> ;
+    skos:narrower <https://openalex.org/subfields/2000>,
+        <https://openalex.org/subfields/2002>,
+        <https://openalex.org/subfields/2003> ;
+    skos:prefLabel "Economics, Econometrics and Finance" ;
+    schema:size 12904828 .
+
+<https://openalex.org/domains/1> a sci:Concept,
+        skos:Concept ;
+    skos:narrower <https://openalex.org/fields/11>,
+        <https://openalex.org/fields/13>,
+        <https://openalex.org/fields/24>,
+        <https://openalex.org/fields/28>,
+        <https://openalex.org/fields/30> ;
+    skos:prefLabel "Life Sciences" ;
+    schema:size 50967791 .
+
+<https://openalex.org/domains/4> a sci:Concept,
+        skos:Concept ;
+    skos:narrower <https://openalex.org/fields/27>,
+        <https://openalex.org/fields/29>,
+        <https://openalex.org/fields/34>,
+        <https://openalex.org/fields/35>,
+        <https://openalex.org/fields/36> ;
+    skos:prefLabel "Health Sciences" ;
+    schema:size 62777245 .
+
+<https://openalex.org/fields/18> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/2> ;
+    skos:narrower <https://openalex.org/subfields/1800>,
+        <https://openalex.org/subfields/1802>,
+        <https://openalex.org/subfields/1803>,
+        <https://openalex.org/subfields/1804> ;
+    skos:prefLabel "Decision Sciences" ;
+    schema:size 3519346 .
+
+<https://openalex.org/fields/29> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/4> ;
+    skos:narrower <https://openalex.org/subfields/2910>,
+        <https://openalex.org/subfields/2911>,
+        <https://openalex.org/subfields/2916>,
+        <https://openalex.org/subfields/2922> ;
+    skos:prefLabel "Nursing" ;
+    schema:size 1344108 .
+
+<https://openalex.org/fields/30> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/1> ;
+    skos:narrower <https://openalex.org/subfields/3002>,
+        <https://openalex.org/subfields/3003>,
+        <https://openalex.org/subfields/3004>,
+        <https://openalex.org/subfields/3005> ;
+    skos:prefLabel "Pharmacology, Toxicology and Pharmaceutics" ;
+    schema:size 1155921 .
+
+<https://openalex.org/fields/35> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/4> ;
+    skos:narrower <https://openalex.org/subfields/3500>,
+        <https://openalex.org/subfields/3504>,
+        <https://openalex.org/subfields/3505>,
+        <https://openalex.org/subfields/3506> ;
+    skos:prefLabel "Dentistry" ;
+    schema:size 995714 .
+
+<https://openalex.org/domains/2> a sci:Concept,
+        skos:Concept ;
+    skos:narrower <https://openalex.org/fields/12>,
+        <https://openalex.org/fields/14>,
+        <https://openalex.org/fields/18>,
+        <https://openalex.org/fields/20>,
+        <https://openalex.org/fields/32>,
+        <https://openalex.org/fields/33> ;
+    skos:prefLabel "Social Sciences" ;
+    schema:size 113740521 .
+
+<https://openalex.org/fields/21> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/3> ;
+    skos:narrower <https://openalex.org/subfields/2100>,
+        <https://openalex.org/subfields/2102>,
+        <https://openalex.org/subfields/2103>,
+        <https://openalex.org/subfields/2104>,
+        <https://openalex.org/subfields/2105> ;
+    skos:prefLabel "Energy" ;
+    schema:size 1863023 .
+
+<https://openalex.org/fields/24> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/1> ;
+    skos:narrower <https://openalex.org/subfields/2402>,
+        <https://openalex.org/subfields/2403>,
+        <https://openalex.org/subfields/2404>,
+        <https://openalex.org/subfields/2405>,
+        <https://openalex.org/subfields/2406> ;
+    skos:prefLabel "Immunology and Microbiology" ;
+    schema:size 2823908 .
+
+<https://openalex.org/fields/15> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/3> ;
+    skos:narrower <https://openalex.org/subfields/1502>,
+        <https://openalex.org/subfields/1503>,
+        <https://openalex.org/subfields/1504>,
+        <https://openalex.org/subfields/1506>,
+        <https://openalex.org/subfields/1507>,
+        <https://openalex.org/subfields/1508> ;
+    skos:prefLabel "Chemical Engineering" ;
+    schema:size 902938 .
+
+<https://openalex.org/fields/16> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/3> ;
+    skos:narrower <https://openalex.org/subfields/1602>,
+        <https://openalex.org/subfields/1603>,
+        <https://openalex.org/subfields/1604>,
+        <https://openalex.org/subfields/1605>,
+        <https://openalex.org/subfields/1606>,
+        <https://openalex.org/subfields/1607> ;
+    skos:prefLabel "Chemistry" ;
+    schema:size 7018837 .
+
+<https://openalex.org/fields/32> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/2> ;
+    skos:narrower <https://openalex.org/subfields/3200>,
+        <https://openalex.org/subfields/3202>,
+        <https://openalex.org/subfields/3203>,
+        <https://openalex.org/subfields/3204>,
+        <https://openalex.org/subfields/3205>,
+        <https://openalex.org/subfields/3206>,
+        <https://openalex.org/subfields/3207> ;
+    skos:prefLabel "Psychology" ;
+    schema:size 8825685 .
+
+<https://openalex.org/fields/19> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/3> ;
+    skos:narrower <https://openalex.org/subfields/1902>,
+        <https://openalex.org/subfields/1904>,
+        <https://openalex.org/subfields/1906>,
+        <https://openalex.org/subfields/1907>,
+        <https://openalex.org/subfields/1908>,
+        <https://openalex.org/subfields/1910>,
+        <https://openalex.org/subfields/1911>,
+        <https://openalex.org/subfields/1912> ;
+    skos:prefLabel "Earth and Planetary Sciences" ;
+    schema:size 7768005 .
+
+<https://openalex.org/fields/25> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/3> ;
+    skos:narrower <https://openalex.org/subfields/2500>,
+        <https://openalex.org/subfields/2502>,
+        <https://openalex.org/subfields/2503>,
+        <https://openalex.org/subfields/2504>,
+        <https://openalex.org/subfields/2505>,
+        <https://openalex.org/subfields/2506>,
+        <https://openalex.org/subfields/2507>,
+        <https://openalex.org/subfields/2508> ;
+    skos:prefLabel "Materials Science" ;
+    schema:size 9592630 .
+
+<https://openalex.org/fields/28> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/1> ;
+    skos:narrower <https://openalex.org/subfields/2802>,
+        <https://openalex.org/subfields/2803>,
+        <https://openalex.org/subfields/2804>,
+        <https://openalex.org/subfields/2805>,
+        <https://openalex.org/subfields/2806>,
+        <https://openalex.org/subfields/2807>,
+        <https://openalex.org/subfields/2808>,
+        <https://openalex.org/subfields/2809> ;
+    skos:prefLabel "Neuroscience" ;
+    schema:size 4355747 .
+
+<https://openalex.org/fields/31> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/3> ;
+    skos:narrower <https://openalex.org/subfields/3102>,
+        <https://openalex.org/subfields/3103>,
+        <https://openalex.org/subfields/3104>,
+        <https://openalex.org/subfields/3105>,
+        <https://openalex.org/subfields/3106>,
+        <https://openalex.org/subfields/3107>,
+        <https://openalex.org/subfields/3108>,
+        <https://openalex.org/subfields/3109> ;
+    skos:prefLabel "Physics and Astronomy" ;
+    schema:size 24722815 .
+
+<https://openalex.org/domains/3> a sci:Concept,
+        skos:Concept ;
+    skos:narrower <https://openalex.org/fields/15>,
+        <https://openalex.org/fields/16>,
+        <https://openalex.org/fields/17>,
+        <https://openalex.org/fields/19>,
+        <https://openalex.org/fields/21>,
+        <https://openalex.org/fields/22>,
+        <https://openalex.org/fields/23>,
+        <https://openalex.org/fields/25>,
+        <https://openalex.org/fields/26>,
+        <https://openalex.org/fields/31> ;
+    skos:prefLabel "Physical Sciences" ;
+    schema:size 158118649 .
+
+<https://openalex.org/fields/14> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/2> ;
+    skos:narrower <https://openalex.org/subfields/1402>,
+        <https://openalex.org/subfields/1403>,
+        <https://openalex.org/subfields/1404>,
+        <https://openalex.org/subfields/1405>,
+        <https://openalex.org/subfields/1406>,
+        <https://openalex.org/subfields/1407>,
+        <https://openalex.org/subfields/1408>,
+        <https://openalex.org/subfields/1409>,
+        <https://openalex.org/subfields/1410> ;
+    skos:prefLabel "Business, Management and Accounting" ;
+    schema:size 9160992 .
+
+<https://openalex.org/fields/26> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/3> ;
+    skos:narrower <https://openalex.org/subfields/2602>,
+        <https://openalex.org/subfields/2604>,
+        <https://openalex.org/subfields/2605>,
+        <https://openalex.org/subfields/2607>,
+        <https://openalex.org/subfields/2608>,
+        <https://openalex.org/subfields/2610>,
+        <https://openalex.org/subfields/2611>,
+        <https://openalex.org/subfields/2612>,
+        <https://openalex.org/subfields/2613>,
+        <https://openalex.org/subfields/2614> ;
+    skos:prefLabel "Mathematics" ;
+    schema:size 4545363 .
+
+<https://openalex.org/fields/11> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/1> ;
+    skos:narrower <https://openalex.org/subfields/1100>,
+        <https://openalex.org/subfields/1102>,
+        <https://openalex.org/subfields/1103>,
+        <https://openalex.org/subfields/1104>,
+        <https://openalex.org/subfields/1105>,
+        <https://openalex.org/subfields/1106>,
+        <https://openalex.org/subfields/1107>,
+        <https://openalex.org/subfields/1108>,
+        <https://openalex.org/subfields/1109>,
+        <https://openalex.org/subfields/1110>,
+        <https://openalex.org/subfields/1111> ;
+    skos:prefLabel "Agricultural and Biological Sciences" ;
+    schema:size 21985903 .
+
+<https://openalex.org/fields/17> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/3> ;
+    skos:narrower <https://openalex.org/subfields/1702>,
+        <https://openalex.org/subfields/1703>,
+        <https://openalex.org/subfields/1704>,
+        <https://openalex.org/subfields/1705>,
+        <https://openalex.org/subfields/1706>,
+        <https://openalex.org/subfields/1707>,
+        <https://openalex.org/subfields/1708>,
+        <https://openalex.org/subfields/1709>,
+        <https://openalex.org/subfields/1710>,
+        <https://openalex.org/subfields/1711>,
+        <https://openalex.org/subfields/1712> ;
+    skos:prefLabel "Computer Science" ;
+    schema:size 22978918 .
+
+<https://openalex.org/fields/23> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/3> ;
+    skos:narrower <https://openalex.org/subfields/2302>,
+        <https://openalex.org/subfields/2303>,
+        <https://openalex.org/subfields/2304>,
+        <https://openalex.org/subfields/2305>,
+        <https://openalex.org/subfields/2306>,
+        <https://openalex.org/subfields/2307>,
+        <https://openalex.org/subfields/2308>,
+        <https://openalex.org/subfields/2309>,
+        <https://openalex.org/subfields/2310>,
+        <https://openalex.org/subfields/2311>,
+        <https://openalex.org/subfields/2312> ;
+    skos:prefLabel "Environmental Science" ;
+    schema:size 17587058 .
+
+<https://openalex.org/fields/36> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/4> ;
+    skos:narrower <https://openalex.org/subfields/3600>,
+        <https://openalex.org/subfields/3603>,
+        <https://openalex.org/subfields/3604>,
+        <https://openalex.org/subfields/3605>,
+        <https://openalex.org/subfields/3607>,
+        <https://openalex.org/subfields/3608>,
+        <https://openalex.org/subfields/3609>,
+        <https://openalex.org/subfields/3611>,
+        <https://openalex.org/subfields/3612>,
+        <https://openalex.org/subfields/3614>,
+        <https://openalex.org/subfields/3616> ;
+    skos:prefLabel "Health Professions" ;
+    schema:size 7817625 .
+
+<https://openalex.org/fields/12> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/2> ;
+    skos:narrower <https://openalex.org/subfields/1200>,
+        <https://openalex.org/subfields/1202>,
+        <https://openalex.org/subfields/1203>,
+        <https://openalex.org/subfields/1204>,
+        <https://openalex.org/subfields/1205>,
+        <https://openalex.org/subfields/1206>,
+        <https://openalex.org/subfields/1207>,
+        <https://openalex.org/subfields/1208>,
+        <https://openalex.org/subfields/1209>,
+        <https://openalex.org/subfields/1210>,
+        <https://openalex.org/subfields/1211>,
+        <https://openalex.org/subfields/1212>,
+        <https://openalex.org/subfields/1213> ;
+    skos:prefLabel "Arts and Humanities" ;
+    schema:size 27230437 .
+
+<https://openalex.org/fields/13> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/1> ;
+    skos:narrower <https://openalex.org/subfields/1302>,
+        <https://openalex.org/subfields/1303>,
+        <https://openalex.org/subfields/1304>,
+        <https://openalex.org/subfields/1305>,
+        <https://openalex.org/subfields/1306>,
+        <https://openalex.org/subfields/1307>,
+        <https://openalex.org/subfields/1308>,
+        <https://openalex.org/subfields/1309>,
+        <https://openalex.org/subfields/1310>,
+        <https://openalex.org/subfields/1311>,
+        <https://openalex.org/subfields/1312>,
+        <https://openalex.org/subfields/1313>,
+        <https://openalex.org/subfields/1314>,
+        <https://openalex.org/subfields/1315> ;
+    skos:prefLabel "Biochemistry, Genetics and Molecular Biology" ;
+    schema:size 20646312 .
+
+<https://openalex.org/fields/22> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/3> ;
+    skos:narrower <https://openalex.org/subfields/2200>,
+        <https://openalex.org/subfields/2202>,
+        <https://openalex.org/subfields/2203>,
+        <https://openalex.org/subfields/2204>,
+        <https://openalex.org/subfields/2205>,
+        <https://openalex.org/subfields/2206>,
+        <https://openalex.org/subfields/2207>,
+        <https://openalex.org/subfields/2208>,
+        <https://openalex.org/subfields/2209>,
+        <https://openalex.org/subfields/2210>,
+        <https://openalex.org/subfields/2211>,
+        <https://openalex.org/subfields/2212>,
+        <https://openalex.org/subfields/2213>,
+        <https://openalex.org/subfields/2214>,
+        <https://openalex.org/subfields/2215>,
+        <https://openalex.org/subfields/2216> ;
+    skos:prefLabel "Engineering" ;
+    schema:size 61139062 .
+
+<https://openalex.org/fields/33> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/2> ;
+    skos:narrower <https://openalex.org/subfields/3300>,
+        <https://openalex.org/subfields/3302>,
+        <https://openalex.org/subfields/3303>,
+        <https://openalex.org/subfields/3304>,
+        <https://openalex.org/subfields/3305>,
+        <https://openalex.org/subfields/3306>,
+        <https://openalex.org/subfields/3307>,
+        <https://openalex.org/subfields/3308>,
+        <https://openalex.org/subfields/3309>,
+        <https://openalex.org/subfields/3310>,
+        <https://openalex.org/subfields/3311>,
+        <https://openalex.org/subfields/3312>,
+        <https://openalex.org/subfields/3313>,
+        <https://openalex.org/subfields/3314>,
+        <https://openalex.org/subfields/3315>,
+        <https://openalex.org/subfields/3316>,
+        <https://openalex.org/subfields/3317>,
+        <https://openalex.org/subfields/3318>,
+        <https://openalex.org/subfields/3319>,
+        <https://openalex.org/subfields/3320>,
+        <https://openalex.org/subfields/3321>,
+        <https://openalex.org/subfields/3322> ;
+    skos:prefLabel "Social Sciences" ;
+    schema:size 52099233 .
+
+<https://openalex.org/fields/27> a sci:Concept,
+        skos:Concept ;
+    skos:broader <https://openalex.org/domains/4> ;
+    skos:narrower <https://openalex.org/subfields/2702>,
+        <https://openalex.org/subfields/2703>,
+        <https://openalex.org/subfields/2704>,
+        <https://openalex.org/subfields/2705>,
+        <https://openalex.org/subfields/2706>,
+        <https://openalex.org/subfields/2707>,
+        <https://openalex.org/subfields/2708>,
+        <https://openalex.org/subfields/2711>,
+        <https://openalex.org/subfields/2712>,
+        <https://openalex.org/subfields/2713>,
+        <https://openalex.org/subfields/2714>,
+        <https://openalex.org/subfields/2715>,
+        <https://openalex.org/subfields/2716>,
+        <https://openalex.org/subfields/2717>,
+        <https://openalex.org/subfields/2718>,
+        <https://openalex.org/subfields/2720>,
+        <https://openalex.org/subfields/2721>,
+        <https://openalex.org/subfields/2723>,
+        <https://openalex.org/subfields/2724>,
+        <https://openalex.org/subfields/2725>,
+        <https://openalex.org/subfields/2726>,
+        <https://openalex.org/subfields/2727>,
+        <https://openalex.org/subfields/2728>,
+        <https://openalex.org/subfields/2729>,
+        <https://openalex.org/subfields/2730>,
+        <https://openalex.org/subfields/2731>,
+        <https://openalex.org/subfields/2732>,
+        <https://openalex.org/subfields/2733>,
+        <https://openalex.org/subfields/2734>,
+        <https://openalex.org/subfields/2735>,
+        <https://openalex.org/subfields/2736>,
+        <https://openalex.org/subfields/2737>,
+        <https://openalex.org/subfields/2738>,
+        <https://openalex.org/subfields/2739>,
+        <https://openalex.org/subfields/2740>,
+        <https://openalex.org/subfields/2741>,
+        <https://openalex.org/subfields/2742>,
+        <https://openalex.org/subfields/2743>,
+        <https://openalex.org/subfields/2745>,
+        <https://openalex.org/subfields/2746>,
+        <https://openalex.org/subfields/2747>,
+        <https://openalex.org/subfields/2748> ;
+    skos:prefLabel "Medicine" ;
+    schema:size 52110087 .
+

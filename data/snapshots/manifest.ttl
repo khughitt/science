@@ -1,0 +1,14 @@
+@prefix : <http://example.org/science/snapshots/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix schema: <https://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:openalex-science-map a prov:Entity,
+        schema:Dataset ;
+    prov:generatedAtTime "2026-03-07T15:51:31+00:00"^^xsd:dateTime ;
+    prov:wasDerivedFrom <https://api.openalex.org/subfields> ;
+    schema:name "OpenAlex Science Map (subfields level)" ;
+    schema:sha256 "ee46e42b1a53d27f4c289e7d02d5b53e620f472e87a09b9c0cee06a77dae6fd0" ;
+    schema:size "282 nodes, 1684 triples" ;
+    schema:version "openalex:subfields" .
+

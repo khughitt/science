@@ -1,0 +1,25 @@
+{
+  "format": "json",
+  "rows": [
+    {
+      "check": "parseable_trig",
+      "status": "pass",
+      "details": "graph.trig parsed successfully"
+    },
+    {
+      "check": "provenance_completeness",
+      "status": "pass",
+      "details": "all claims and hypotheses have provenance links"
+    },
+    {
+      "check": "causal_acyclicity",
+      "status": "pass",
+      "details": "causal graph is acyclic"
+    },
+    {
+      "check": "orphaned_nodes",
+      "status": "pass",
+      "details": "all entities have at least one edge"
+    }
+  ]
+}
