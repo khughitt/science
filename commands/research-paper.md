@@ -76,3 +76,32 @@ Follow `templates/paper-summary.md` and fill every section.
    - `ontology_terms` with ontology CURIEs tied to the paper's core entities.
    - `datasets` with cited dataset accessions relevant to this project.
 7. Commit: `git add -A && git commit -m "papers: research <AuthorYear> - <short title>"`
+
+## Process Reflection
+
+Reflect on the **paper-summary template** sections and the **cross-checking** guidance.
+
+After completing the task above, append a brief entry to `doc/meta/skill-feedback.md` (create the file and directory if they don't exist).
+
+Use this format:
+
+```markdown
+## YYYY-MM-DD — research-paper
+
+**Template/structure friction:**
+- Any section you left empty, filled with boilerplate, or that felt forced
+
+**Missing capture:**
+- Information you wanted to record but had no natural place for
+
+**Guidance issues:**
+- Command instructions that were confusing, contradictory, or didn't help
+
+**What worked well:**
+- A section or instruction that genuinely improved the output
+```
+
+Guidelines:
+- Be concrete and specific, not generic ("the Limitations section felt redundant for a methods paper" > "some sections could be improved")
+- 2-5 bullets total. Skip categories that have nothing to report.
+- If everything worked smoothly, a single "No friction encountered" is fine — don't manufacture feedback

@@ -54,3 +54,32 @@ For each recommended task, include:
 1. Update `RESEARCH_PLAN.md` with prioritized tasks and rationale.
 2. Cross-link relevant items in `doc/08-open-questions.md`.
 3. Commit: `git add -A && git commit -m "plan: research gap analysis and priorities"`
+
+## Process Reflection
+
+Reflect on the **gap analysis framework** (coverage dimensions, prioritization criteria).
+
+After completing the task above, append a brief entry to `doc/meta/skill-feedback.md` (create the file and directory if they don't exist).
+
+Use this format:
+
+```markdown
+## YYYY-MM-DD — research-gaps
+
+**Template/structure friction:**
+- Any section you left empty, filled with boilerplate, or that felt forced
+
+**Missing capture:**
+- Information you wanted to record but had no natural place for
+
+**Guidance issues:**
+- Command instructions that were confusing, contradictory, or didn't help
+
+**What worked well:**
+- A section or instruction that genuinely improved the output
+```
+
+Guidelines:
+- Be concrete and specific, not generic ("the Data Feasibility dimension was hard to assess without a data inventory" > "some sections could be improved")
+- 2-5 bullets total. Skip categories that have nothing to report.
+- If everything worked smoothly, a single "No friction encountered" is fine — don't manufacture feedback

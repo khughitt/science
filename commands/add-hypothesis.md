@@ -66,3 +66,32 @@ New hypotheses start as `proposed` unless the user presents existing evidence, i
 4. If the hypothesis implies causal relationships, note that `models/causal-dag.*` may need updating and mention this to the user.
 5. Suggest 2-3 papers that may be relevant to testing this hypothesis (from LLM knowledge; cross-check titles and authors via web search before presenting).
 6. Commit: `git add -A && git commit -m "hypothesis: add H<NN> - <short title>"`
+
+## Process Reflection
+
+Reflect on the **hypothesis template** sections and the **falsifiability/predictions** prompts.
+
+After completing the task above, append a brief entry to `doc/meta/skill-feedback.md` (create the file and directory if they don't exist).
+
+Use this format:
+
+```markdown
+## YYYY-MM-DD — add-hypothesis
+
+**Template/structure friction:**
+- Any section you left empty, filled with boilerplate, or that felt forced
+
+**Missing capture:**
+- Information you wanted to record but had no natural place for
+
+**Guidance issues:**
+- Command instructions that were confusing, contradictory, or didn't help
+
+**What worked well:**
+- A section or instruction that genuinely improved the output
+```
+
+Guidelines:
+- Be concrete and specific, not generic ("the Causal Model section was empty because no DAG exists yet" > "some sections could be improved")
+- 2-5 bullets total. Skip categories that have nothing to report.
+- If everything worked smoothly, a single "No friction encountered" is fine — don't manufacture feedback

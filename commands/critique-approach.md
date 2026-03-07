@@ -144,3 +144,32 @@ Summarize the key findings to the user:
 - Important concerns (should investigate)
 - Minor notes (awareness items)
 - Recommended next steps
+
+## Process Reflection
+
+Reflect on the **critique rubric** (structural checks, confounder identification, edge review).
+
+After completing the task above, append a brief entry to `doc/meta/skill-feedback.md` (create the file and directory if they don't exist).
+
+Use this format:
+
+```markdown
+## YYYY-MM-DD — critique-approach
+
+**Template/structure friction:**
+- Any section you left empty, filled with boilerplate, or that felt forced
+
+**Missing capture:**
+- Information you wanted to record but had no natural place for
+
+**Guidance issues:**
+- Command instructions that were confusing, contradictory, or didn't help
+
+**What worked well:**
+- A section or instruction that genuinely improved the output
+```
+
+Guidelines:
+- Be concrete and specific, not generic ("the M-bias check was hard to apply without a visual DAG rendering" > "some sections could be improved")
+- 2-5 bullets total. Skip categories that have nothing to report.
+- If everything worked smoothly, a single "No friction encountered" is fine — don't manufacture feedback
