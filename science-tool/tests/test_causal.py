@@ -11,6 +11,7 @@ from science_tool.graph.store import (
     PREDICATE_REGISTRY,
     PROJECT_NS,
     VALID_INQUIRY_TYPES,
+    add_claim,
     add_concept,
     add_edge,
     add_hypothesis,
@@ -235,3 +236,72 @@ class TestExportChirho:
         assert "# Generated from inquiry:" in script
         assert "# Treatment: x" in script
         assert "# Outcome: y" in script
+
+
+class TestEdgeProvenance:
+    """Tests for enriched edge metadata in causal exports."""
+
+    def _build_dag_with_claims(self, graph_path: Path) -> str:
+        """Build a DAG with claims supporting the causal edges."""
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None,
+                    properties=[("sci:observability", "observed")])
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None,
+                    properties=[("sci:observability", "observed")])
+        add_concept(graph_path, "Severity", concept_type="sci:Variable", ontology_id=None,
+                    properties=[("sci:observability", "latent")])
+        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "prov-dag", "Provenance DAG", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "prov-dag", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "prov-dag", "concept/recovery", "BoundaryOut")
+        set_boundary_role(graph_path, "prov-dag", "concept/severity", "BoundaryIn")
+        set_treatment_outcome(graph_path, "prov-dag", treatment="concept/drug", outcome="concept/recovery")
+        add_edge(graph_path, "concept/drug", "scic:causes", "concept/recovery", graph_layer="graph/causal")
+        add_edge(graph_path, "concept/severity", "scic:causes", "concept/recovery", graph_layer="graph/causal")
+        add_edge(graph_path, "concept/severity", "scic:causes", "concept/drug", graph_layer="graph/causal")
+        # Add claims that mention both endpoints
+        add_claim(graph_path, "Drug treatment improves recovery time",
+                  source="paper:doi_10.1234/drug_recovery", confidence=0.85)
+        add_claim(graph_path, "Disease severity affects recovery outcomes",
+                  source="paper:doi_10.5678/severity", confidence=0.90)
+        return "prov-dag"
+
+    def test_enriched_edges_contain_claims(self, graph_path: Path) -> None:
+        """Edges returned by _get_causal_edges_for_inquiry include matched claims."""
+        from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
+        slug = self._build_dag_with_claims(graph_path)
+        edges = _get_causal_edges_for_inquiry(graph_path, slug)
+        # Find the drug->recovery edge
+        drug_recovery = [e for e in edges if "drug" in e["subject"] and "recovery" in e["object"]]
+        assert len(drug_recovery) == 1
+        edge = drug_recovery[0]
+        assert "claims" in edge
+        assert len(edge["claims"]) >= 1
+        claim = edge["claims"][0]
+        assert "text" in claim
+        assert "confidence" in claim
+        assert "source" in claim
+
+    def test_enriched_edges_contain_observability(self, graph_path: Path) -> None:
+        """Edges include observability metadata for both endpoints."""
+        from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
+        slug = self._build_dag_with_claims(graph_path)
+        edges = _get_causal_edges_for_inquiry(graph_path, slug)
+        drug_recovery = [e for e in edges if "drug" in e["subject"] and "recovery" in e["object"]]
+        edge = drug_recovery[0]
+        assert "subject_observability" in edge
+        assert "object_observability" in edge
+
+    def test_edges_without_claims_have_empty_list(self, graph_path: Path) -> None:
+        """Edges with no matching claims still have a 'claims' key with empty list."""
+        from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
+        add_concept(graph_path, "A", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "B", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "no-claims", "No Claims", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "no-claims", "concept/a", "BoundaryIn")
+        set_boundary_role(graph_path, "no-claims", "concept/b", "BoundaryOut")
+        set_treatment_outcome(graph_path, "no-claims", treatment="concept/a", outcome="concept/b")
+        add_edge(graph_path, "concept/a", "scic:causes", "concept/b", graph_layer="graph/causal")
+        edges = _get_causal_edges_for_inquiry(graph_path, "no-claims")
+        assert len(edges) == 1
+        assert edges[0]["claims"] == []

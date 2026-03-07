@@ -6,8 +6,10 @@ import re
 from pathlib import Path
 
 from rdflib import URIRef
+from rdflib.namespace import PROV, RDF
 
 from science_tool.graph.store import (
+    SCHEMA_NS,
     SCIC_NS,
     SCI_NS,
     _graph_uri,
@@ -40,7 +42,8 @@ def _variable_name(uri: str) -> str:
 def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[dict]:
     """Collect causal edges (scic:causes, scic:confounds) filtered to inquiry members.
 
-    Returns a list of dicts with keys: subject, predicate, object, pred_type.
+    Returns a list of dicts with keys: subject, predicate, object, pred_type,
+    claims, subject_observability, object_observability.
     """
     safe_slug = _slug(slug)
     inquiry_uri = URIRef(f"http://example.org/project/inquiry/{safe_slug}")
@@ -60,6 +63,28 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[dict]:
             members.add(s)  # type: ignore[arg-type]
             members.add(o)  # type: ignore[arg-type]
 
+    # Collect observability for each member variable from graph/knowledge
+    knowledge_graph = dataset.graph(_graph_uri("graph/knowledge"))
+    observability: dict[str, str | None] = {}
+    for member_uri in members:
+        obs_obj = next(knowledge_graph.objects(member_uri, SCI_NS.observability), None)
+        observability[str(member_uri)] = str(obs_obj) if obs_obj is not None else None
+
+    # Collect all claims from graph/knowledge and their provenance from graph/provenance
+    provenance_graph = dataset.graph(_graph_uri("graph/provenance"))
+    claims: list[dict] = []
+    for claim_uri in knowledge_graph.subjects(RDF.type, SCI_NS.Claim):
+        text_obj = next(knowledge_graph.objects(claim_uri, SCHEMA_NS.text), None)
+        if text_obj is None:
+            continue
+        confidence_obj = next(provenance_graph.objects(claim_uri, SCI_NS.confidence), None)
+        source_obj = next(provenance_graph.objects(claim_uri, PROV.wasDerivedFrom), None)
+        claims.append({
+            "text": str(text_obj),
+            "confidence": float(str(confidence_obj)) if confidence_obj is not None else None,
+            "source": str(source_obj) if source_obj is not None else None,
+        })
+
     causal_graph = dataset.graph(_graph_uri("graph/causal"))
 
     edges: list[dict] = []
@@ -70,12 +95,23 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[dict]:
     for pred_uri, pred_type in causal_predicates.items():
         for s, _p, o in causal_graph.triples((None, pred_uri, None)):
             if s in members and o in members:
+                # Extract variable names from URIs for claim matching
+                s_name = _variable_name(str(s))
+                o_name = _variable_name(str(o))
+                # Best-effort match: claims whose text mentions both endpoint names
+                matched_claims = [
+                    c for c in claims
+                    if s_name.lower() in c["text"].lower() and o_name.lower() in c["text"].lower()
+                ]
                 edges.append(
                     {
                         "subject": str(s),
                         "predicate": str(pred_uri),
                         "object": str(o),
                         "pred_type": pred_type,
+                        "claims": matched_claims,
+                        "subject_observability": observability.get(str(s)),
+                        "object_observability": observability.get(str(o)),
                     }
                 )
 
