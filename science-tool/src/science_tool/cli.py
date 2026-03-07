@@ -14,12 +14,17 @@ from science_tool.graph.store import (
     add_concept,
     add_edge,
     add_hypothesis,
+    add_inquiry,
+    add_inquiry_edge,
     add_paper,
     add_question,
     build_graph_dot,
     diff_graph_inputs,
+    get_inquiry,
     import_snapshot,
     init_graph_file,
+    list_inquiries,
+    set_boundary_role,
     shorten_uri,
     stamp_revision,
     query_claims,
@@ -31,6 +36,7 @@ from science_tool.graph.store import (
     query_uncertainty,
     read_graph_stats,
     validate_graph,
+    validate_inquiry,
 )
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows
 from science_tool.prose import scan_prose
@@ -505,6 +511,151 @@ def graph_add_edge(subject: str, predicate: str, object: str, graph_layer: str, 
         graph_path=graph_path, subject=subject, predicate=predicate, obj=object, graph_layer=graph_layer
     )
     click.echo(f"Added edge in {graph_layer}: {shorten_uri(str(s_uri))} {shorten_uri(str(p_uri))} {shorten_uri(str(o_uri))}")
+
+
+@main.group()
+def inquiry() -> None:
+    """Inquiry subgraph commands."""
+
+
+@inquiry.command("init")
+@click.argument("slug")
+@click.option("--label", required=True)
+@click.option("--target", required=True, help="Target hypothesis or question (e.g. hypothesis:h01)")
+@click.option("--description", default="")
+@click.option(
+    "--status",
+    default="sketch",
+    type=click.Choice(["sketch", "specified", "planned", "in-progress", "complete"]),
+)
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def inquiry_init(slug: str, label: str, target: str, description: str, status: str, graph_path: Path) -> None:
+    """Create a new inquiry subgraph."""
+    try:
+        uri = add_inquiry(graph_path, slug, label, target, description, status)
+        click.echo(f"Created inquiry: {shorten_uri(str(uri))}")
+    except ValueError as e:
+        raise click.ClickException(str(e))
+
+
+@inquiry.command("add-node")
+@click.argument("slug")
+@click.argument("entity")
+@click.option("--role", required=True, type=click.Choice(["BoundaryIn", "BoundaryOut"]))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def inquiry_add_node(slug: str, entity: str, role: str, graph_path: Path) -> None:
+    """Add a node with a boundary role to an inquiry."""
+    try:
+        set_boundary_role(graph_path, slug, entity, role)
+        click.echo(f"Set {entity} as {role} in inquiry/{slug}")
+    except ValueError as e:
+        raise click.ClickException(str(e))
+
+
+@inquiry.command("add-edge")
+@click.argument("slug")
+@click.argument("subject")
+@click.argument("predicate")
+@click.argument("object", metavar="OBJECT")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def inquiry_add_edge(slug: str, subject: str, predicate: str, object: str, graph_path: Path) -> None:
+    """Add an edge within an inquiry subgraph."""
+    try:
+        s, p, o = add_inquiry_edge(graph_path, slug, subject, predicate, object)
+        click.echo(f"Added edge: {shorten_uri(str(s))} --[{shorten_uri(str(p))}]--> {shorten_uri(str(o))}")
+    except ValueError as e:
+        raise click.ClickException(str(e))
+
+
+@inquiry.command("list")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def inquiry_list(output_format: str, graph_path: Path) -> None:
+    """List all inquiries."""
+    rows = list_inquiries(graph_path)
+    if not rows:
+        if output_format == "json":
+            click.echo("[]")
+        else:
+            click.echo("No inquiries found.")
+        return
+    emit_query_rows(
+        output_format=output_format,
+        title="Inquiries",
+        columns=[("slug", "Slug"), ("label", "Label"), ("status", "Status"), ("target", "Target"), ("created", "Created")],
+        rows=rows,
+    )
+
+
+@inquiry.command("show")
+@click.argument("slug")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def inquiry_show(slug: str, output_format: str, graph_path: Path) -> None:
+    """Show details of an inquiry."""
+    try:
+        info = get_inquiry(graph_path, slug)
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    if output_format == "json":
+        import json
+
+        click.echo(json.dumps(info, indent=2, default=str))
+    else:
+        click.echo(f"Inquiry: {info['label']}")
+        click.echo(f"  Slug: {info['slug']}")
+        click.echo(f"  Status: {info['status']}")
+        click.echo(f"  Target: {info['target']}")
+        click.echo(f"  Created: {info['created']}")
+        if info.get("description"):
+            click.echo(f"  Description: {info['description']}")
+        click.echo(f"  Boundary In: {len(info['boundary_in'])} node(s)")
+        for n in info["boundary_in"]:
+            click.echo(f"    - {shorten_uri(n)}")
+        click.echo(f"  Boundary Out: {len(info['boundary_out'])} node(s)")
+        for n in info["boundary_out"]:
+            click.echo(f"    - {shorten_uri(n)}")
+        click.echo(f"  Edges: {len(info['edges'])}")
+        for edge in info["edges"]:
+            click.echo(
+                f"    {shorten_uri(edge['subject'])} --[{shorten_uri(edge['predicate'])}]--> {shorten_uri(edge['object'])}"
+            )
+
+
+@inquiry.command("validate")
+@click.argument("slug")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def inquiry_validate(slug: str, output_format: str, graph_path: Path) -> None:
+    """Validate an inquiry subgraph."""
+    try:
+        results = validate_inquiry(graph_path, slug)
+    except ValueError as e:
+        raise click.ClickException(str(e))
+
+    if output_format == "json":
+        import json
+
+        click.echo(json.dumps(results, indent=2))
+    else:
+        for r in results:
+            icon = "PASS" if r["status"] == "pass" else "FAIL" if r["status"] == "fail" else "WARN"
+            click.echo(f"  [{icon}] {r['check']}: {r['message']}")
+
+    if any(r["status"] == "fail" for r in results):
+        raise click.exceptions.Exit(1)
 
 
 @main.group()
