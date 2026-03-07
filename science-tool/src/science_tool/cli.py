@@ -70,7 +70,8 @@ def graph_init(graph_path: Path) -> None:
     viz_path = graph_path.parent.parent / "code" / "notebooks" / "viz.py"
     if viz_path.exists():
         click.echo(f"Copied visualization notebook to {viz_path}")
-        click.echo(f"  Run: uv run --with marimo marimo edit {viz_path}")
+        notebooks_dir = viz_path.parent
+        click.echo(f"  Run: cd {notebooks_dir} && uv run marimo edit {viz_path.name}")
 
 
 @graph.command("stats")

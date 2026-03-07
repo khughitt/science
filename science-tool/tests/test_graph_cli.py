@@ -52,7 +52,13 @@ def test_graph_init_copies_viz_notebook() -> None:
         content = viz_path.read_text(encoding="utf-8")
         assert "marimo" in content
         assert "viz" in result.output.lower()
-        assert "uv run --with marimo marimo edit" in result.output
+        assert "uv run marimo edit" in result.output
+
+        pyproject_path = Path("code/notebooks/pyproject.toml")
+        assert pyproject_path.exists()
+        pyproject_content = pyproject_path.read_text(encoding="utf-8")
+        assert "marimo" in pyproject_content
+        assert "rdflib" in pyproject_content
 
 
 def test_graph_init_fails_if_graph_exists() -> None:
