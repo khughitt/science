@@ -10,10 +10,13 @@ from science_tool.graph.store import (
     PROJECT_NS,
     VALID_INQUIRY_TYPES,
     add_concept,
+    add_edge,
     add_hypothesis,
     add_inquiry,
     get_inquiry,
+    set_boundary_role,
     set_treatment_outcome,
+    validate_inquiry,
 )
 
 
@@ -94,3 +97,44 @@ class TestTreatmentOutcome:
         add_inquiry(graph_path, "gen", "General", "hypothesis:h01")
         with pytest.raises(ValueError, match="only supported for causal"):
             set_treatment_outcome(graph_path, "gen", treatment="concept/x", outcome="concept/y")
+
+
+class TestCausalValidation:
+    def _setup_causal_inquiry(self, graph_path: Path) -> str:
+        """Helper: create a causal inquiry with variables and edges."""
+        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Z", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "test_hyp", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "causal-test", "Causal Test", "hypothesis:test_hyp", inquiry_type="causal")
+        set_boundary_role(graph_path, "causal-test", "concept/x", "BoundaryIn")
+        set_boundary_role(graph_path, "causal-test", "concept/y", "BoundaryOut")
+        set_boundary_role(graph_path, "causal-test", "concept/z", "BoundaryIn")
+        set_treatment_outcome(graph_path, "causal-test", treatment="concept/x", outcome="concept/y")
+        return "causal-test"
+
+    def test_acyclic_causal_edges_pass(self, graph_path: Path) -> None:
+        """Acyclic causal edges pass validation."""
+        slug = self._setup_causal_inquiry(graph_path)
+        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
+        add_edge(graph_path, "concept/z", "scic:causes", "concept/y", graph_layer="graph/causal")
+        results = validate_inquiry(graph_path, slug)
+        acyclicity = next(r for r in results if r["check"] == "causal_acyclicity")
+        assert acyclicity["status"] == "pass"
+
+    def test_cyclic_causal_edges_fail(self, graph_path: Path) -> None:
+        """Cyclic causal edges fail validation."""
+        slug = self._setup_causal_inquiry(graph_path)
+        add_edge(graph_path, "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
+        add_edge(graph_path, "concept/y", "scic:causes", "concept/x", graph_layer="graph/causal")
+        results = validate_inquiry(graph_path, slug)
+        acyclicity = next(r for r in results if r["check"] == "causal_acyclicity")
+        assert acyclicity["status"] == "fail"
+
+    def test_general_inquiry_skips_causal_checks(self, graph_path: Path) -> None:
+        """General inquiries don't get causal validation checks."""
+        add_hypothesis(graph_path, "test_hyp", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "gen", "General", "hypothesis:test_hyp")
+        results = validate_inquiry(graph_path, "gen")
+        check_names = [r["check"] for r in results]
+        assert "causal_acyclicity" not in check_names

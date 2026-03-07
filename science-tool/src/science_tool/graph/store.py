@@ -1040,6 +1040,39 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
             }
         )
 
+    # === Causal-specific checks (only for type=causal) ===
+    inquiry_type = str(next(inquiry_graph.objects(inquiry_uri, SCI_NS.inquiryType), "general"))
+    if inquiry_type == "causal":
+        causal_graph = dataset.graph(_graph_uri("graph/causal"))
+
+        # Collect inquiry member entities (boundary + flow nodes)
+        members = boundary_in | boundary_out | all_flow_nodes
+
+        # Filter causal edges to inquiry members
+        causal_edges = [
+            (str(s), str(o))
+            for s, _, o in causal_graph.triples((None, SCIC_NS.causes, None))
+            if s in members and o in members
+        ]
+
+        # causal_acyclicity
+        if _has_cycle(causal_edges):
+            results.append(
+                {
+                    "check": "causal_acyclicity",
+                    "status": "fail",
+                    "message": "Cycle detected in scic:causes edges among inquiry variables",
+                }
+            )
+        else:
+            results.append(
+                {
+                    "check": "causal_acyclicity",
+                    "status": "pass",
+                    "message": "Causal edges are acyclic",
+                }
+            )
+
     # 6. provenance_completeness — specified+ inquiries: all assumptions must have prov:wasDerivedFrom
     if status != "sketch":
         provenance_graph = dataset.graph(_graph_uri("graph/provenance"))
