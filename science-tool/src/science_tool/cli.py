@@ -1068,5 +1068,189 @@ def distill_pykeen_cmd(dataset_name: str, budget: int | None, output_path: Path 
     click.echo(f"Wrote {dataset_name} snapshot to {result}")
 
 
+DEFAULT_TASKS_DIR = Path("tasks")
+
+
+@main.group()
+def tasks() -> None:
+    """Task management commands."""
+
+
+@tasks.command("add")
+@click.argument("title")
+@click.option("--type", "task_type", required=True, type=click.Choice(["research", "dev"]))
+@click.option("--priority", required=True, type=click.Choice(["P0", "P1", "P2", "P3"]))
+@click.option("--related", multiple=True)
+@click.option("--blocked-by", multiple=True)
+@click.option("--description", default="")
+def tasks_add(
+    title: str,
+    task_type: str,
+    priority: str,
+    related: tuple[str, ...],
+    blocked_by: tuple[str, ...],
+    description: str,
+) -> None:
+    """Add a new task."""
+    from science_tool.tasks import add_task
+
+    task = add_task(
+        tasks_dir=DEFAULT_TASKS_DIR,
+        title=title,
+        task_type=task_type,
+        priority=priority,
+        related=list(related) or None,
+        blocked_by=list(blocked_by) or None,
+        description=description,
+    )
+    click.echo(f"Created [{task.id}] {task.title}")
+
+
+@tasks.command("done")
+@click.argument("task_id")
+@click.option("--note", default=None)
+def tasks_done(task_id: str, note: str | None) -> None:
+    """Mark a task as done."""
+    from science_tool.tasks import complete_task
+
+    try:
+        task = complete_task(DEFAULT_TASKS_DIR, task_id, note=note)
+    except KeyError as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(f"[{task.id}] marked done")
+
+
+@tasks.command("defer")
+@click.argument("task_id")
+@click.option("--reason", default=None)
+def tasks_defer(task_id: str, reason: str | None) -> None:
+    """Defer a task."""
+    from science_tool.tasks import defer_task
+
+    try:
+        task = defer_task(DEFAULT_TASKS_DIR, task_id, reason=reason)
+    except KeyError as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(f"[{task.id}] deferred")
+
+
+@tasks.command("block")
+@click.argument("task_id")
+@click.option("--by", "blocked_by", required=True)
+def tasks_block(task_id: str, blocked_by: str) -> None:
+    """Block a task."""
+    from science_tool.tasks import block_task
+
+    try:
+        task = block_task(DEFAULT_TASKS_DIR, task_id, blocked_by=blocked_by)
+    except KeyError as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(f"[{task.id}] blocked by {blocked_by}")
+
+
+@tasks.command("unblock")
+@click.argument("task_id")
+def tasks_unblock(task_id: str) -> None:
+    """Unblock a task."""
+    from science_tool.tasks import unblock_task
+
+    try:
+        task = unblock_task(DEFAULT_TASKS_DIR, task_id)
+    except KeyError as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(f"[{task.id}] unblocked → active")
+
+
+@tasks.command("edit")
+@click.argument("task_id")
+@click.option("--priority", default=None, type=click.Choice(["P0", "P1", "P2", "P3"]))
+@click.option("--status", default=None, type=click.Choice(["proposed", "active", "blocked", "deferred"]))
+@click.option("--type", "task_type", default=None, type=click.Choice(["research", "dev"]))
+def tasks_edit(task_id: str, priority: str | None, status: str | None, task_type: str | None) -> None:
+    """Edit a task's fields."""
+    from science_tool.tasks import edit_task
+
+    try:
+        task = edit_task(DEFAULT_TASKS_DIR, task_id, priority=priority, status=status, task_type=task_type)
+    except KeyError as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(f"[{task.id}] updated")
+
+
+@tasks.command("list")
+@click.option("--type", "task_type", default=None, type=click.Choice(["research", "dev"]))
+@click.option("--priority", default=None, type=click.Choice(["P0", "P1", "P2", "P3"]))
+@click.option("--status", default=None, type=click.Choice(["proposed", "active", "blocked", "deferred"]))
+@click.option("--related", default=None)
+@click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
+def tasks_list(
+    task_type: str | None,
+    priority: str | None,
+    status: str | None,
+    related: str | None,
+    output_format: str,
+) -> None:
+    """List active tasks."""
+    from science_tool.tasks import list_tasks
+
+    matched = list_tasks(DEFAULT_TASKS_DIR, task_type=task_type, priority=priority, status=status, related=related)
+    columns: list[tuple[str, str]] = [
+        ("id", "ID"),
+        ("title", "Title"),
+        ("type", "Type"),
+        ("priority", "Priority"),
+        ("status", "Status"),
+        ("created", "Created"),
+    ]
+    rows = [
+        {
+            "id": t.id,
+            "title": t.title,
+            "type": t.type,
+            "priority": t.priority,
+            "status": t.status,
+            "created": t.created.isoformat(),
+        }
+        for t in matched
+    ]
+    emit_query_rows(output_format=output_format, title="Tasks", columns=columns, rows=rows)
+
+
+@tasks.command("show")
+@click.argument("task_id")
+def tasks_show(task_id: str) -> None:
+    """Show full details of a task."""
+    from science_tool.tasks import render_task, _read_active, _find_task
+
+    try:
+        active = _read_active(DEFAULT_TASKS_DIR)
+        task = _find_task(active, task_id)
+    except KeyError as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(render_task(task))
+
+
+@tasks.command("summary")
+def tasks_summary() -> None:
+    """Print summary counts by status, type, and priority."""
+    from collections import Counter
+
+    from science_tool.tasks import _read_active
+
+    active = _read_active(DEFAULT_TASKS_DIR)
+    if not active:
+        click.echo("No active tasks.")
+        return
+
+    by_status = Counter(t.status for t in active)
+    by_type = Counter(t.type for t in active)
+    by_priority = Counter(t.priority for t in active)
+
+    click.echo(f"Total: {len(active)}")
+    click.echo("By status:  " + ", ".join(f"{k}: {v}" for k, v in sorted(by_status.items())))
+    click.echo("By type:    " + ", ".join(f"{k}: {v}" for k, v in sorted(by_type.items())))
+    click.echo("By priority: " + ", ".join(f"{k}: {v}" for k, v in sorted(by_priority.items())))
+
+
 if __name__ == "__main__":
     main()
