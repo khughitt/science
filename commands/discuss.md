@@ -5,18 +5,18 @@ description: Structured critical discussion for a hypothesis, question, topic, o
 # Discuss
 
 Run a structured discussion on `$ARGUMENTS`.
-If no argument is provided, sample a discussion focus from `doc/08-open-questions.md`, `specs/hypotheses/`, or recent priorities in `RESEARCH_PLAN.md`.
+If no argument is provided, sample a discussion focus from `doc/questions/`, `specs/hypotheses/`, or recent priorities in `RESEARCH_PLAN.md`.
 
-## Before Discussion
+## Setup
 
-1. Read `prompts/roles/discussant.md` if present; otherwise read `${CLAUDE_PLUGIN_ROOT}/references/role-prompts/discussant.md`.
-2. Read the `research-methodology` skill.
-3. Read `specs/research-question.md`.
-4. Read `templates/discussion.md` for required output structure.
-5. Read relevant context tied to the chosen focus:
-   - `doc/background/`
+Follow `references/command-preamble.md` (role: `discussant`).
+
+Additionally:
+1. Read `templates/discussion.md`.
+2. Read relevant context tied to the chosen focus:
+   - `doc/topics/`
    - `specs/hypotheses/`
-   - `doc/08-open-questions.md`
+   - `doc/questions/`
    - `RESEARCH_PLAN.md`
 
 ## Discussion Modes
@@ -51,7 +51,7 @@ Save to `doc/discussions/YYYY-MM-DD-<slug>.md` with sections:
 
 ## After Discussion
 
-1. Add/adjust entries in `doc/08-open-questions.md`.
+1. Add/adjust entries in `doc/questions/` using `templates/question.md`.
 2. Update `RESEARCH_PLAN.md` with prioritized follow-up tasks and rationale.
 3. If discussion changes hypothesis wording, update relevant file in `specs/hypotheses/`.
 4. Commit: `git add -A && git commit -m "doc: discuss <slug> and update priorities"`

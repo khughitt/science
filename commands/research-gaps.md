@@ -7,17 +7,17 @@ description: Review current project research coverage, identify missing areas, a
 Analyze project coverage and identify high-value research gaps.
 Use `$ARGUMENTS` as optional scope, for example: `background only`, `hypotheses only`, `causal assumptions`, or a specific topic/domain.
 
-## Before Analysis
+## Setup
 
-1. Read `prompts/roles/research-assistant.md` if present; otherwise read `${CLAUDE_PLUGIN_ROOT}/references/role-prompts/research-assistant.md`.
-2. Read the `research-methodology` skill.
-3. Read the `scientific-writing` skill.
-4. Read `specs/research-question.md` and `specs/scope-boundaries.md`.
-5. Read current materials:
-   - `doc/background/`
-   - `doc/07-hypotheses.md`
-   - `doc/08-open-questions.md`
-   - `papers/summaries/`
+Follow `references/command-preamble.md` (role: `research-assistant`).
+
+Additionally:
+1. Read `specs/scope-boundaries.md`.
+2. Read current materials:
+   - `doc/topics/`
+   - `specs/hypotheses/`
+   - `doc/questions/`
+   - `doc/papers/`
    - `RESEARCH_PLAN.md`
 
 ## Gap Analysis Method
@@ -47,12 +47,12 @@ For each recommended task, include:
 - Priority: `P1`, `P2`, or `P3`
 - Why now: expected impact and uncertainty reduction
 - Dependencies
-- Suggested command/capability (`research_topic`, `research_paper`, `discuss`, etc.)
+- Suggested command (`research-topic`, `research-paper`, `discuss`, etc.)
 
 ## After Writing
 
 1. Update `RESEARCH_PLAN.md` with prioritized tasks and rationale.
-2. Cross-link relevant items in `doc/08-open-questions.md`.
+2. Cross-link relevant items in `doc/questions/`.
 3. Commit: `git add -A && git commit -m "plan: research gap analysis and priorities"`
 
 ## Process Reflection

@@ -5,26 +5,25 @@ description: Search scientific literature using OpenAlex and PubMed, rank result
 # Search Literature
 
 Search literature for `$ARGUMENTS`.
-If no argument is provided, derive candidate search foci from `specs/research-question.md` and `doc/08-open-questions.md`, then ask the user to confirm the focus.
+If no argument is provided, derive candidate search foci from `specs/research-question.md` and `doc/questions/`, then ask the user to confirm the focus.
 
-## Before Search
+## Setup
 
-1. Read `prompts/roles/research-assistant.md` if present; otherwise read `${CLAUDE_PLUGIN_ROOT}/references/role-prompts/research-assistant.md`.
-2. Read the `research-methodology` skill.
-3. Read the `data-management` skill.
-4. If present, read source-specific skills:
+Follow `references/command-preamble.md` (role: `research-assistant`).
+
+Additionally:
+1. If present, read source-specific skills:
    - `skills/data/sources/openalex.md`
    - `skills/data/sources/pubmed.md`
-5. Read `references/notes-organization.md` and `templates/notes/article-note.md` if present.
-6. Read project context:
+2. Read `templates/notes/article-note.md` if present.
+3. Read project context:
    - `specs/research-question.md`
    - `specs/scope-boundaries.md`
-   - `doc/08-open-questions.md`
-   - `doc/07-hypotheses.md`
-   - `papers/summaries/`
-   - `notes/topics/`, `notes/questions/`, `notes/articles/` (if present)
-7. Check `papers/searches/` for recent related searches and ask whether to refresh or create a new run.
-8. First-use compatibility: if notes directories are missing, create `notes/{topics,articles,questions}/` and `notes/index.md` before writing note outputs.
+   - `doc/questions/`
+   - `specs/hypotheses/`
+   - `doc/papers/`
+   - `doc/topics/`, `doc/questions/`
+4. Check `doc/searches/` for recent related searches and ask whether to refresh or create a new run.
 
 ## Query Planning
 
@@ -84,9 +83,9 @@ Label each ranked item as one of:
 
 ## Writing Output
 
-If `papers/searches/` does not exist yet, create it first.
+If `doc/searches/` does not exist yet, create it first.
 
-Create `papers/searches/YYYY-MM-DD-<slug>.md` with sections:
+Create `doc/searches/YYYY-MM-DD-<slug>.md` with sections:
 
 1. `## Search Focus`
 2. `## Query Set`
@@ -107,7 +106,7 @@ In `## Ranked Results`, include a table with columns:
 
 Also write machine-readable output to:
 
-- `papers/searches/YYYY-MM-DD-<slug>.json`
+- `doc/searches/YYYY-MM-DD-<slug>.json`
 
 Include the normalized candidate list, dedupe keys, source provenance, and rank/tier fields.
 
@@ -115,12 +114,12 @@ Include the normalized candidate list, dedupe keys, source provenance, and rank/
 
 1. Add the top `Core now` papers to `RESEARCH_PLAN.md` as explicit follow-up tasks.
 2. For selected high-priority papers, run `/science:research-paper` (or queue it in `RESEARCH_PLAN.md`).
-3. Create or update compact article notes in `notes/articles/<citekey>.md` for `Core now` items using `templates/notes/article-note.md`.
+3. Create or update compact article notes in `doc/papers/<citekey>.md` for `Core now` items using `templates/notes/article-note.md`.
 4. Populate note metadata fields:
    - `tags` for project-specific labels.
    - `ontology_terms` for normalized ontology CURIEs (for example MeSH, GO, Biolink terms).
    - `datasets` for relevant dataset accessions when identified.
-5. Update related topic/question notes (`notes/topics/`, `notes/questions/`) with new links and key takeaways.
+5. Update related topic/question notes (`doc/topics/`, `doc/questions/`) with new links and key takeaways.
 6. Add BibTeX entries for selected high-priority papers to `papers/references.bib`. If the file does not exist yet, create it with:
    ```bibtex
    % references.bib — BibTeX database for this Science project

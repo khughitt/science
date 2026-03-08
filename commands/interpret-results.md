@@ -10,15 +10,14 @@ If no argument is provided, ask the user to describe their findings or point to 
 
 ## Setup
 
-1. Read `prompts/roles/research-assistant.md` if present; otherwise read `${CLAUDE_PLUGIN_ROOT}/references/role-prompts/research-assistant.md`.
-2. Read the `research-methodology` skill.
-3. Read the `scientific-writing` skill.
-4. Read `templates/interpretation.md`.
-5. Read `specs/research-question.md`.
-6. Read active hypotheses in `specs/hypotheses/`.
-7. Read `doc/08-open-questions.md`.
-8. Read `RESEARCH_PLAN.md`.
-9. If the user specifies an inquiry slug, load the inquiry context:
+Follow `references/command-preamble.md` (role: `research-assistant`).
+
+Additionally:
+1. Read `templates/interpretation.md`.
+2. Read active hypotheses in `specs/hypotheses/`.
+3. Read `doc/questions/` for open questions.
+4. Read `RESEARCH_PLAN.md`.
+5. If the user specifies an inquiry slug, load the inquiry context:
    ```bash
    uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool inquiry show "<slug>" --format json
    ```
@@ -89,7 +88,7 @@ Save to `doc/interpretations/YYYY-MM-DD-<slug>.md`.
 ## After Writing
 
 1. Update hypothesis files in `specs/hypotheses/` with confirmed status changes and new evidence in the "Current Evidence" section.
-2. Add new questions to `doc/08-open-questions.md`.
+2. Add new questions to `doc/questions/` using `templates/question.md`.
 3. Update `RESEARCH_PLAN.md` with revised priorities.
 4. If graph updates were proposed, remind the user of the commands to run.
 5. Suggest next steps:

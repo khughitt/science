@@ -1,25 +1,26 @@
 ---
-description: Develop and refine a research hypothesis interactively. Use when the user wants to add a new hypothesis, formalize a conjecture, or develop a testable claim for their research project. Also use when the user says "I think", "what if", "could it be that", or proposes a potential mechanism or relationship.
+description: Develop and refine a research hypothesis interactively. Use when the user wants to add a new hypothesis, formalize a conjecture, or develop a testable claim. Also use when the user says "I think", "what if", "could it be that", or proposes a potential mechanism or relationship.
 ---
 
 # Add a Hypothesis
 
 Develop a structured, falsifiable hypothesis from the user's input in `$ARGUMENTS`.
 
-## Before Starting
+## Setup
 
-1. Read the `research-methodology` skill for hypothesis development guidelines.
-2. Read `templates/hypothesis.md` for the required document structure.
-3. Read `specs/research-question.md` to understand the project scope.
-4. Read existing hypotheses in `specs/hypotheses/` to understand what's already proposed and avoid duplication.
-5. Check `doc/08-open-questions.md` — the new hypothesis may address an existing open question.
+Follow `references/command-preamble.md` (role: `research-assistant`).
+
+Additionally:
+1. Read `templates/hypothesis.md`.
+2. Read existing hypotheses in `specs/hypotheses/` to avoid duplication.
+3. Check `doc/questions/` — the new hypothesis may address an existing open question.
 
 ## Interactive Refinement
 
-Have a natural conversation with the user to develop the hypothesis. The questions below are guidelines — use your judgment about which are needed based on how much context the user has already provided. If the user's initial input is already specific and falsifiable, you can skip ahead to writing. If it's vague, work through the relevant questions.
+Have a natural conversation with the user to develop the hypothesis. The questions below are guidelines — use your judgment about which are needed based on how much context the user has already provided. If the user's initial input is already specific and falsifiable, skip ahead to writing.
 
 ### 1. Clarify the Claim
-- What specifically are you claiming? 
+- What specifically are you claiming?
 - Can you state it as a single, clear sentence?
 - Is this about a **causal relationship**, a **correlation**, a **mechanism**, or a **prediction**?
 
@@ -60,12 +61,11 @@ New hypotheses start as `proposed` unless the user presents existing evidence, i
 
 ## After Writing
 
-1. Save to `specs/hypotheses/hNN-short-title.md`
-2. Update `doc/07-hypotheses.md` with a one-line summary of the new hypothesis.
-3. If the hypothesis addresses an open question, update `doc/08-open-questions.md`.
-4. If the hypothesis implies causal relationships, note that `models/causal-dag.*` may need updating and mention this to the user.
-5. Suggest 2-3 papers that may be relevant to testing this hypothesis (from LLM knowledge; cross-check titles and authors via web search before presenting).
-6. Commit: `git add -A && git commit -m "hypothesis: add H<NN> - <short title>"`
+1. Save to `specs/hypotheses/hNN-short-title.md`.
+2. If the hypothesis addresses an open question, update the relevant file in `doc/questions/`.
+3. If the hypothesis implies causal relationships, note that `models/causal-dag.*` may need updating and mention this to the user.
+4. Suggest 2-3 papers that may be relevant to testing this hypothesis (from LLM knowledge; cross-check titles and authors via web search before presenting).
+5. Commit: `git add -A && git commit -m "hypothesis: add H<NN> - <short title>"`
 
 ## Process Reflection
 
