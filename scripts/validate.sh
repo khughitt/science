@@ -255,7 +255,7 @@ if [ -f "RESEARCH_PLAN.md" ]; then
     done
 
     if [ "$missing_sections" -gt 0 ] && grep -q "^## Status" "RESEARCH_PLAN.md" 2>/dev/null; then
-        warn "RESEARCH_PLAN.md appears to use legacy '## Status' format — run /science:review-tasks to migrate"
+        warn "RESEARCH_PLAN.md appears to use legacy '## Status' format — run /science:next-steps to migrate"
     fi
 
     current_priorities=$(sed -n '/^## Current Priorities/,/^## /p' RESEARCH_PLAN.md 2>/dev/null \

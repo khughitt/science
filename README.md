@@ -200,8 +200,8 @@ Research isn't linear. A typical session might look like:
 
 ```
 research-topic → add-hypothesis → search-literature → research-paper ×3
-→ research-gaps → review-tasks → discuss → update-graph
-→ research-topic (deeper) → research-paper ×2 → review-tasks
+→ research-gaps → next-steps → discuss → update-graph
+→ research-topic (deeper) → research-paper ×2 → next-steps
 ```
 
 Each command reads existing project state and builds on it. All artifacts are version-controlled, cross-linked, and validated by `bash validate.sh`.

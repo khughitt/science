@@ -1220,14 +1220,13 @@ def tasks_list(
 @click.argument("task_id")
 def tasks_show(task_id: str) -> None:
     """Show full details of a task."""
-    from science_tool.tasks import render_task, _read_active, _find_task
+    from science_tool.tasks import parse_tasks, render_task
 
-    try:
-        active = _read_active(DEFAULT_TASKS_DIR)
-        task = _find_task(active, task_id)
-    except KeyError as e:
-        raise click.ClickException(str(e)) from e
-    click.echo(render_task(task))
+    active = parse_tasks(DEFAULT_TASKS_DIR / "active.md")
+    matching = [t for t in active if t.id == task_id]
+    if not matching:
+        raise click.ClickException(f"Task {task_id} not found in active.md")
+    click.echo(render_task(matching[0]))
 
 
 @tasks.command("summary")
@@ -1235,9 +1234,9 @@ def tasks_summary() -> None:
     """Print summary counts by status, type, and priority."""
     from collections import Counter
 
-    from science_tool.tasks import _read_active
+    from science_tool.tasks import parse_tasks
 
-    active = _read_active(DEFAULT_TASKS_DIR)
+    active = parse_tasks(DEFAULT_TASKS_DIR / "active.md")
     if not active:
         click.echo("No active tasks.")
         return
