@@ -102,3 +102,129 @@ class TestRegistry:
 
         with pytest.raises(KeyError):
             get_adapter("nonexistent_adapter_xyz")
+
+
+# ---------------------------------------------------------------------------
+# Zenodo adapter tests
+# ---------------------------------------------------------------------------
+from unittest.mock import MagicMock, patch
+
+from science_tool.datasets.zenodo import ZenodoAdapter
+
+
+class TestZenodoAdapter:
+    def test_name(self) -> None:
+        adapter = ZenodoAdapter()
+        assert adapter.name == "zenodo"
+
+    def test_search_parses_response(self) -> None:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "hits": {
+                "hits": [
+                    {
+                        "id": 12345,
+                        "metadata": {
+                            "title": "Test Dataset",
+                            "description": "A test",
+                            "doi": "10.5281/zenodo.12345",
+                            "publication_date": "2024-01-15",
+                            "license": {"id": "cc-by-4.0"},
+                            "keywords": ["test", "data"],
+                        },
+                        "links": {"self_html": "https://zenodo.org/records/12345"},
+                        "files": [
+                            {"key": "data.csv", "size": 1024},
+                        ],
+                    }
+                ]
+            }
+        }
+
+        adapter = ZenodoAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            results = adapter.search("test query", max_results=10)
+
+        assert len(results) == 1
+        r = results[0]
+        assert r.source == "zenodo"
+        assert r.id == "12345"
+        assert r.title == "Test Dataset"
+        assert r.doi == "10.5281/zenodo.12345"
+        assert r.year == 2024
+        assert r.file_count == 1
+        assert r.total_size_bytes == 1024
+
+    def test_metadata_parses_record(self) -> None:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "id": 99999,
+            "metadata": {
+                "title": "Specific Record",
+                "description": "Details",
+                "doi": "10.5281/zenodo.99999",
+                "publication_date": "2023-06-01",
+                "license": {"id": "cc0-1.0"},
+                "keywords": [],
+            },
+            "links": {"self_html": "https://zenodo.org/records/99999"},
+            "files": [],
+        }
+
+        adapter = ZenodoAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            result = adapter.metadata("99999")
+
+        assert result.id == "99999"
+        assert result.title == "Specific Record"
+        assert result.license == "cc0-1.0"
+
+    def test_files_parses_list(self) -> None:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "id": 12345,
+            "metadata": {"title": "T", "description": "", "publication_date": "2024-01-01"},
+            "links": {},
+            "files": [
+                {
+                    "key": "data.csv",
+                    "size": 2048,
+                    "checksum": "md5:abc123def456",
+                    "links": {"self": "https://zenodo.org/api/records/12345/files/data.csv/content"},
+                },
+                {
+                    "key": "readme.txt",
+                    "size": 256,
+                    "checksum": "md5:789xyz",
+                    "links": {"self": "https://zenodo.org/api/records/12345/files/readme.txt/content"},
+                },
+            ],
+        }
+
+        adapter = ZenodoAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            files = adapter.files("12345")
+
+        assert len(files) == 2
+        assert files[0].filename == "data.csv"
+        assert files[0].size_bytes == 2048
+        assert files[0].checksum == "md5:abc123def456"
+        assert files[1].filename == "readme.txt"
+
+    def test_search_empty_results(self) -> None:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"hits": {"hits": []}}
+
+        adapter = ZenodoAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            results = adapter.search("nonexistent gibberish query")
+
+        assert results == []
