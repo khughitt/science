@@ -261,9 +261,8 @@ The following templates are implemented in `templates/`:
 | `notes/method-note.md` | Compact method note format | Manual, future workflow commands |
 | `notes/dataset-note.md` | Compact dataset/accession note format | `/science:find-datasets`, `/science:search-literature` |
 
-Templates deferred to later phases:
-- `pipeline-step.md` — Phase 4 (Snakemake workflows)
-- `experiment.md` — Phase 4 (computational experiments)
+| `pipeline-step.md` | Pipeline step documentation (input/output, params, validation) | `/science:plan-pipeline` |
+| `experiment.md` | Computational experiment documentation | Manual, pipeline commands |
 
 ---
 
@@ -316,13 +315,19 @@ This is intentional redundancy — both mechanisms complement each other.
 |---|---|
 | `.claude-plugin/skills/knowledge-graph/SKILL.md` | Entity extraction, ontology alignment (Biolink, CiTO, SKOS), relation types, provenance discipline, graph layering, prose annotation guidance |
 
-### Skills Planned for Later Phases
+### Implemented Skills (Phase 4b)
 
-| Skill | Phase | Purpose |
-|---|---|---|
-| `skills/models/causal-dag.md` | 4 | DAG construction, d-separation, adjustment sets |
-| `skills/pipelines/snakemake.md` | 4 | Workflow construction |
-| `skills/pipelines/marimo.md` | 4 | Reactive notebooks |
+| Skill | Purpose |
+|---|---|
+| `.claude-plugin/skills/models/causal-dag.md` | Causal DAG reference (when/how to use causal vs general inquiries) |
+
+### Implemented Skills (Phase 4c)
+
+| Skill | Purpose |
+|---|---|
+| `skills/data/frictionless.md` | Frictionless Data Package creation, validation, and provenance |
+| `skills/pipelines/snakemake.md` | Snakemake workflow construction and best practices |
+| `skills/pipelines/marimo.md` | Marimo reactive notebook construction and best practices |
 
 ---
 
@@ -391,13 +396,23 @@ Each command is a markdown file in `commands/` with YAML frontmatter (descriptio
 | `/science:plan-pipeline` | Computational pipeline planning from inquiry structure |
 | `/science:review-pipeline` | Critical review of inquiry/pipeline against 7-dimensional rubric |
 
+### Implemented Commands (Phase 4b)
+
+| Command | Purpose |
+|---|---|
+| `/science:build-dag` | Interactive causal DAG construction (optional, project-dependent) |
+| `/science:critique-approach` | Identify weaknesses using graph/model + literature |
+
+### Implemented Commands (Phase 4c)
+
+| Command | Purpose |
+|---|---|
+| `/science:find-datasets` | Discover and document candidate datasets via LLM + adapter search |
+
 ### Commands Planned for Later Phases
 
 | Command | Phase | Purpose |
 |---|---|---|
-| `/science:find-datasets` | 4b | Discover and document candidate datasets for research or tool demos |
-| `/science:build-dag` | 4b | Interactive causal DAG construction (optional, project-dependent) |
-| `/science:critique-approach` | 4b | Identify weaknesses using graph/model + literature |
 | `/science:explore-open-questions` | 5 | Autonomous exploration of open questions |
 
 ---
@@ -648,13 +663,15 @@ Support projects that need explicit models, datasets, or computational workflows
 - [x] Deferred inquiry-projection refactor documented: `docs/plans/2026-03-07-inquiry-projection-refactor.md`
 
 **Deliverables (4c — Operationalization):**
-- [ ] `find_datasets` capability + command surface
-- [ ] Data validation tooling (Frictionless checks and dataset ↔ variable mapping checks)
-- [ ] `skills/data/frictionless.md`
-- [ ] `skills/pipelines/snakemake.md`, `skills/pipelines/marimo.md`
-- [ ] Snakefile template and templates `pipeline-step.md`, `experiment.md`
-- [ ] PyMC export (if needed)
-- [ ] Stage C capability set implemented (`find_datasets`, workflow recommendations, reproducibility handoff)
+- [x] `find_datasets` capability + command surface (`/science:find-datasets`, `science-tool datasets *`)
+- [x] Dataset adapter system: Zenodo, Dryad, GEO, Semantic Scholar (`science_tool/datasets/`)
+- [x] Data validation tooling (`science-tool datasets validate`, schema + type checks)
+- [x] `skills/data/frictionless.md`
+- [x] `skills/pipelines/snakemake.md`, `skills/pipelines/marimo.md`
+- [x] Templates `pipeline-step.md`, `experiment.md`
+- [x] Design doc: `docs/plans/2026-03-07-phase4c-operationalization-design.md`
+- [ ] PyMC export (deferred — not needed by current projects)
+- [ ] Dataset-variable coverage check (`science-tool datasets check-coverage`) (deferred to Tier 2)
 
 ### Phase 5: Autonomous Loops
 
@@ -684,10 +701,12 @@ Iterate based on real usage. Observe failure modes and add guardrails.
 
 **Phase 4b: COMPLETE** (gate closed 2026-03-07). Causal DAG as typed inquiry with pgmpy + ChiRho exports. Evidence: `docs/exemplar-evidence/causal-*.{json,py}`.
 
-**Phase 4c (Operationalization):**
-14. Implement `find_datasets` capability + command surface.
-15. Create data validation tooling (Frictionless) + skill.
-16. Create pipeline skills (Snakemake, Marimo) + templates.
+**Phase 4c: COMPLETE** (gate closed 2026-03-07). Dataset adapter system (Zenodo, Dryad, GEO, Semantic Scholar), `/science:find-datasets` command, data validation, Frictionless/Snakemake/Marimo skills, pipeline templates. Design: `docs/plans/2026-03-07-phase4c-operationalization-design.md`.
+
+**Phase 5 (Autonomous Loops):**
+17. Design loop execution mechanism.
+18. Implement planning, research, and exploration loop prompts.
+19. `/science:explore-open-questions` command.
 
 ## Phase Gates (Exit Criteria)
 
