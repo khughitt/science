@@ -417,3 +417,81 @@ class TestGEOAdapter:
             results = adapter.search("zzzzz nothing")
 
         assert results == []
+
+
+# ---------------------------------------------------------------------------
+# Semantic Scholar adapter tests
+# ---------------------------------------------------------------------------
+from science_tool.datasets.semantic_scholar import SemanticScholarAdapter
+
+
+class TestSemanticScholarAdapter:
+    def test_name(self) -> None:
+        assert SemanticScholarAdapter().name == "semantic_scholar"
+
+    def test_search_parses_response(self) -> None:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "total": 1,
+            "data": [
+                {
+                    "paperId": "abc123",
+                    "title": "A study on datasets",
+                    "abstract": "We present a new dataset...",
+                    "year": 2024,
+                    "externalIds": {"DOI": "10.1234/test.5678", "PMID": "38000001"},
+                    "url": "https://www.semanticscholar.org/paper/abc123",
+                    "openAccessPdf": {"url": "https://example.com/paper.pdf"},
+                    "fieldsOfStudy": ["Biology", "Computer Science"],
+                    "citationCount": 42,
+                }
+            ],
+        }
+
+        adapter = SemanticScholarAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            results = adapter.search("datasets biology")
+
+        assert len(results) == 1
+        r = results[0]
+        assert r.source == "semantic_scholar"
+        assert r.id == "abc123"
+        assert r.doi == "10.1234/test.5678"
+        assert r.year == 2024
+        assert "Biology" in r.keywords
+
+    def test_metadata_by_doi(self) -> None:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "paperId": "xyz789",
+            "title": "Specific Paper",
+            "abstract": "Details",
+            "year": 2023,
+            "externalIds": {"DOI": "10.1234/specific"},
+            "url": "https://www.semanticscholar.org/paper/xyz789",
+            "fieldsOfStudy": [],
+            "citationCount": 10,
+        }
+
+        adapter = SemanticScholarAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            result = adapter.metadata("DOI:10.1234/specific")
+
+        assert result.id == "xyz789"
+        assert result.title == "Specific Paper"
+
+    def test_search_empty(self) -> None:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"total": 0, "data": []}
+
+        adapter = SemanticScholarAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            results = adapter.search("nonexistent")
+
+        assert results == []
