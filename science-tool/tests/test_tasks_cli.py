@@ -30,7 +30,17 @@ class TestTasksAdd:
         with runner.isolated_filesystem():
             result = runner.invoke(
                 main,
-                ["tasks", "add", "Task with desc", "--type", "dev", "--priority", "P2", "--description", "Some details"],
+                [
+                    "tasks",
+                    "add",
+                    "Task with desc",
+                    "--type",
+                    "dev",
+                    "--priority",
+                    "P2",
+                    "--description",
+                    "Some details",
+                ],
             )
             assert result.exit_code == 0
             assert "t001" in result.output
@@ -40,10 +50,19 @@ class TestTasksAdd:
             result = runner.invoke(
                 main,
                 [
-                    "tasks", "add", "Blocked task",
-                    "--type", "dev", "--priority", "P0",
-                    "--related", "t001", "--related", "t002",
-                    "--blocked-by", "t001",
+                    "tasks",
+                    "add",
+                    "Blocked task",
+                    "--type",
+                    "dev",
+                    "--priority",
+                    "P0",
+                    "--related",
+                    "t001",
+                    "--related",
+                    "t002",
+                    "--blocked-by",
+                    "t001",
                 ],
             )
             assert result.exit_code == 0
