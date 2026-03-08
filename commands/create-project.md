@@ -201,6 +201,15 @@ Run structural checks before committing:
 - **Citations:** Use BibTeX keys `[@AuthorYear]` inline, entries in `papers/references.bib`
 - **Markers:** `[UNVERIFIED]` for unverified facts, `[NEEDS CITATION]` for unsourced claims
 
+## Task Execution
+
+Tasks are tracked in `tasks/active.md`. Key constraints for this project:
+
+- <note environment requirements, e.g. "GPU tasks require CUDA 12+", "model X needs torch <2.6">
+- <note sequential constraints, e.g. "model loading and package installs must not run in parallel">
+
+Update this section when you discover new constraints during task execution.
+
 ## Data Access
 
 <note any known data sources, or "No data sources configured yet.">

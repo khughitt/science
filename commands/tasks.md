@@ -50,6 +50,26 @@ Defer a task. Ask for a reason.
 uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool tasks defer <task_id> [--reason="<reason>"]
 ```
 
+### "block <task_id> --by <blocker_id>"
+
+Mark a task as blocked by another task.
+
+### "unblock <task_id>"
+
+Remove all blockers and set status to active.
+
+### "edit <task_id> [--priority P0] [--status active] [--type dev] [--related hypothesis:h01]"
+
+Update task fields.
+
+### "show <task_id>"
+
+Show full details of a single task.
+
+### "summary"
+
+Show task counts by status, type, and priority.
+
 ### Other actions
 
 Pass through to `science-tool tasks`:
@@ -57,6 +77,16 @@ Pass through to `science-tool tasks`:
 ```bash
 uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool tasks <action> [args...]
 ```
+
+## Execution Guidance
+
+When working through tasks, follow these principles:
+
+- **Respect `blocked-by` dependencies.** Don't start a blocked task until its blockers are complete. Run `/science:tasks list --status=active` to see what's actionable.
+- **Don't parallelize tasks that share environment state.** Tasks that install/change packages, modify shared config, or compete for GPU memory must run sequentially. Only parallelize truly independent work (e.g., two literature reviews).
+- **Log failures into the task.** If a task fails, update its description with what went wrong: `science-tool tasks edit <id> --status=blocked`. This prevents repeating the same failed approach.
+- **Check `AGENTS.md` before executing.** The project's operational guide may document known issues, environment constraints, or workarounds discovered in previous sessions.
+- **Mark progress as you go.** Set tasks to `active` when starting, `done` when complete. Don't leave tasks in ambiguous states.
 
 ## After Changes
 
