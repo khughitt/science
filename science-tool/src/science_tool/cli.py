@@ -45,6 +45,7 @@ from science_tool.graph.store import (
     validate_inquiry,
 )
 from science_tool.datasets import available_adapters, get_adapter, search_all
+from science_tool.datasets.validate import validate_data_packages
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows
 from science_tool.prose import scan_prose
 from science_tool.refs import check_refs
@@ -977,6 +978,22 @@ def datasets_download(source_id: str, file_pattern: str | None, dest_dir: Path) 
         click.echo(f"Downloading {fi.filename}...")
         path = adapter.download(fi, dest_dir)
         click.echo(f"  Saved to {path}")
+
+
+@datasets.command("validate")
+@click.option("--path", "data_path", default="data", show_default=True, type=click.Path(path_type=Path))
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def datasets_validate(data_path: Path, output_format: str) -> None:
+    """Validate Frictionless Data Packages in raw/ and processed/ directories."""
+    results = validate_data_packages(data_path)
+    emit_query_rows(
+        output_format=output_format,
+        title="Data Validation",
+        columns=[("check", "Check"), ("status", "Status"), ("details", "Details")],
+        rows=results,
+    )
+    if any(r["status"] == "fail" for r in results):
+        raise click.exceptions.Exit(1)
 
 
 def _human_size(size_bytes: int) -> str:
