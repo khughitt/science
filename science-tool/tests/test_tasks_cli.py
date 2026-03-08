@@ -168,6 +168,14 @@ class TestTasksEdit:
             result = runner.invoke(main, ["tasks", "edit", "t001", "--type", "research"])
             assert result.exit_code == 0
 
+    def test_edit_related(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            runner.invoke(main, ["tasks", "add", "To edit", "--type", "dev", "--priority", "P1"])
+            result = runner.invoke(
+                main, ["tasks", "edit", "t001", "--related", "hypothesis:h01", "--related", "topic:rna"]
+            )
+            assert result.exit_code == 0
+
     def test_edit_rejects_invalid_status(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
             runner.invoke(main, ["tasks", "add", "To edit", "--type", "dev", "--priority", "P1"])

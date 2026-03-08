@@ -306,6 +306,6 @@ def list_tasks(
     if status is not None:
         tasks = [t for t in tasks if t.status == status]
     if related is not None:
-        tasks = [t for t in tasks if related in t.related]
+        tasks = [t for t in tasks if any(related in r for r in t.related)]
 
     return tasks

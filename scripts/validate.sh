@@ -238,50 +238,20 @@ echo ""
 echo "Checking research plan conventions..."
 
 if [ -f "RESEARCH_PLAN.md" ]; then
-    required_sections=(
+    info "RESEARCH_PLAN.md exists"
+
+    # Check for legacy task-queue sections (should now live in tasks/active.md)
+    legacy_sections=(
         "## Current Priorities"
-        "## Priority Rationale"
-        "## Deferred / Parked Tasks"
-        "## Blockers and Dependencies"
         "## Next Review Trigger"
     )
-
-    missing_sections=0
-    for section in "${required_sections[@]}"; do
-        if ! grep -q "$section" "RESEARCH_PLAN.md" 2>/dev/null; then
-            missing_sections=$((missing_sections + 1))
-            warn "RESEARCH_PLAN.md missing section: ${section}"
+    for section in "${legacy_sections[@]}"; do
+        if grep -q "$section" "RESEARCH_PLAN.md" 2>/dev/null; then
+            warn "RESEARCH_PLAN.md contains legacy task-queue section '${section}' — migrate tasks to tasks/active.md via /science:tasks"
         fi
     done
-
-    if [ "$missing_sections" -gt 0 ] && grep -q "^## Status" "RESEARCH_PLAN.md" 2>/dev/null; then
-        warn "RESEARCH_PLAN.md appears to use legacy '## Status' format — run /science:next-steps to migrate"
-    fi
-
-    current_priorities=$(sed -n '/^## Current Priorities/,/^## /p' RESEARCH_PLAN.md 2>/dev/null \
-        | sed '1d;$d' || true)
-    active_priorities=$(printf "%s\n" "$current_priorities" | grep -E '^- ' \
-        | grep -Ev '^- No active priorities yet\.?$' || true)
-    priority_count=$(printf "%s\n" "$active_priorities" | grep -E '^- ' | wc -l | tr -d ' ' || true)
-    priority_count=${priority_count:-0}
-
-    if [ "$priority_count" -gt 12 ]; then
-        warn "RESEARCH_PLAN.md has ${priority_count} active priority bullets; keep active queue compact"
-    fi
-
-    if [ "$priority_count" -gt 0 ] && ! printf "%s\n" "$active_priorities" | grep -Eq '\[P[123]\]' 2>/dev/null; then
-        warn "RESEARCH_PLAN.md current priorities should use explicit [P1]/[P2]/[P3] markers"
-    fi
-
-    priority_rationale=$(sed -n '/^## Priority Rationale/,/^## /p' RESEARCH_PLAN.md 2>/dev/null \
-        | sed '1d;$d' || true)
-    if [ "$priority_count" -gt 0 ] && [ -z "$(printf "%s\n" "$priority_rationale" | grep -v '^\s*$' | head -1 || true)" ]; then
-        warn "RESEARCH_PLAN.md has priorities but empty Priority Rationale section"
-    fi
-
-    if [ "$priority_count" -gt 0 ] && ! printf "%s\n" "$priority_rationale" | grep -Eq '\[@|doc/|papers/|specs/|knowledge/' 2>/dev/null; then
-        warn "RESEARCH_PLAN.md Priority Rationale should reference evidence or project artifacts"
-    fi
+else
+    warn "RESEARCH_PLAN.md not found (expected as high-level research strategy document)"
 fi
 
 # ─── 11. Discussion document conformance ──────────────────────────

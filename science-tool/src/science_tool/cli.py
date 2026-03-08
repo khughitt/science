@@ -1166,12 +1166,26 @@ def tasks_unblock(task_id: str) -> None:
 @click.option("--priority", default=None, type=click.Choice(["P0", "P1", "P2", "P3"]))
 @click.option("--status", default=None, type=click.Choice(["proposed", "active", "blocked", "deferred"]))
 @click.option("--type", "task_type", default=None, type=click.Choice(["research", "dev"]))
-def tasks_edit(task_id: str, priority: str | None, status: str | None, task_type: str | None) -> None:
+@click.option("--related", multiple=True)
+def tasks_edit(
+    task_id: str,
+    priority: str | None,
+    status: str | None,
+    task_type: str | None,
+    related: tuple[str, ...],
+) -> None:
     """Edit a task's fields."""
     from science_tool.tasks import edit_task
 
     try:
-        task = edit_task(DEFAULT_TASKS_DIR, task_id, priority=priority, status=status, task_type=task_type)
+        task = edit_task(
+            DEFAULT_TASKS_DIR,
+            task_id,
+            priority=priority,
+            status=status,
+            task_type=task_type,
+            related=list(related) if related else None,
+        )
     except KeyError as e:
         raise click.ClickException(str(e)) from e
     click.echo(f"[{task.id}] updated")

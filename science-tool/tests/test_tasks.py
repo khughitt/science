@@ -442,9 +442,15 @@ Another dev desc.
         assert len(result) == 1
         assert result[0].id == "t002"
 
-    def test_list_by_related(self, tmp_path: Path) -> None:
+    def test_list_by_related_exact(self, tmp_path: Path) -> None:
         tasks_dir = self._setup_multi(tmp_path)
         result = list_tasks(tasks_dir, related="hypothesis:h01")
+        assert len(result) == 1
+        assert result[0].id == "t003"
+
+    def test_list_by_related_substring(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_multi(tmp_path)
+        result = list_tasks(tasks_dir, related="h01")
         assert len(result) == 1
         assert result[0].id == "t003"
 
