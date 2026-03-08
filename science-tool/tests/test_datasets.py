@@ -228,3 +228,94 @@ class TestZenodoAdapter:
             results = adapter.search("nonexistent gibberish query")
 
         assert results == []
+
+
+# ---------------------------------------------------------------------------
+# Dryad adapter tests
+# ---------------------------------------------------------------------------
+from science_tool.datasets.dryad import DryadAdapter
+
+
+class TestDryadAdapter:
+    def test_name(self) -> None:
+        assert DryadAdapter().name == "dryad"
+
+    def test_search_parses_response(self) -> None:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "_embedded": {
+                "stash:datasets": [
+                    {
+                        "identifier": "doi:10.5061/dryad.abc123",
+                        "title": "Dryad Test Dataset",
+                        "abstract": "A curated dataset",
+                        "publicationDate": "2024-03-15",
+                        "license": "https://creativecommons.org/publicdomain/zero/1.0/",
+                        "keywords": ["ecology", "birds"],
+                        "_links": {"stash:version": {"href": "/api/v2/versions/111"}},
+                    }
+                ]
+            },
+            "total": 1,
+        }
+
+        adapter = DryadAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            results = adapter.search("ecology birds")
+
+        assert len(results) == 1
+        r = results[0]
+        assert r.source == "dryad"
+        assert r.doi == "10.5061/dryad.abc123"
+        assert r.year == 2024
+        assert "ecology" in r.keywords
+
+    def test_files_parses_list(self) -> None:
+        meta_response = MagicMock()
+        meta_response.status_code = 200
+        meta_response.json.return_value = {
+            "identifier": "doi:10.5061/dryad.abc123",
+            "title": "T",
+            "abstract": "",
+            "publicationDate": "2024-01-01",
+            "_links": {"stash:version": {"href": "/api/v2/versions/111"}},
+        }
+
+        files_response = MagicMock()
+        files_response.status_code = 200
+        files_response.json.return_value = {
+            "_embedded": {
+                "stash:files": [
+                    {
+                        "path": "observations.csv",
+                        "size": 4096,
+                        "digestType": "md5",
+                        "digest": "aabbcc",
+                        "_links": {"stash:download": {"href": "/api/v2/files/222/download"}},
+                    }
+                ]
+            }
+        }
+
+        adapter = DryadAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.side_effect = [meta_response, files_response]
+            files = adapter.files("doi:10.5061/dryad.abc123")
+
+        assert len(files) == 1
+        assert files[0].filename == "observations.csv"
+        assert files[0].size_bytes == 4096
+
+    def test_search_empty(self) -> None:
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"_embedded": {"stash:datasets": []}, "total": 0}
+
+        adapter = DryadAdapter()
+        with patch.object(adapter, "_client") as mock_client:
+            mock_client.get.return_value = mock_response
+            results = adapter.search("zzzzz nonexistent")
+
+        assert results == []
