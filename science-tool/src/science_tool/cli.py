@@ -44,6 +44,7 @@ from science_tool.graph.store import (
     validate_graph,
     validate_inquiry,
 )
+from science_tool.datasets import available_adapters, get_adapter, search_all
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows
 from science_tool.prose import scan_prose
 from science_tool.refs import check_refs
@@ -825,6 +826,166 @@ def refs_check(root_path: Path, output_format: str, strict: bool) -> None:
         raise click.exceptions.Exit(1)
     if strict and markers:
         raise click.exceptions.Exit(1)
+
+
+@main.group()
+def datasets() -> None:
+    """Dataset discovery and download commands."""
+
+
+@datasets.command("sources")
+def datasets_sources() -> None:
+    """List available dataset adapters."""
+    adapters = available_adapters()
+    if not adapters:
+        click.echo("No dataset adapters available. Install with: uv add science-tool[datasets]")
+        return
+    click.echo("Available dataset sources:")
+    for name in adapters:
+        click.echo(f"  - {name}")
+
+
+@datasets.command("search")
+@click.argument("query")
+@click.option("--source", default=None, help="Comma-separated list of sources (e.g. zenodo,geo)")
+@click.option("--max", "max_results", default=20, show_default=True, help="Max results per source")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def datasets_search(query: str, source: str | None, max_results: int, output_format: str) -> None:
+    """Search for datasets across repositories."""
+    sources = source.split(",") if source else None
+    results = search_all(query, sources=sources, max_per_source=max_results)
+    if not results:
+        click.echo("No datasets found.")
+        return
+
+    rows = [
+        {
+            "source": r.source,
+            "id": r.id,
+            "title": r.title[:80],
+            "year": r.year or "",
+            "doi": r.doi or "",
+        }
+        for r in results
+    ]
+
+    emit_query_rows(
+        output_format=output_format,
+        title=f"Dataset Search: {query}",
+        columns=[
+            ("source", "Source"),
+            ("id", "ID"),
+            ("title", "Title"),
+            ("year", "Year"),
+            ("doi", "DOI"),
+        ],
+        rows=rows,
+    )
+
+
+@datasets.command("metadata")
+@click.argument("source_id", metavar="SOURCE:ID")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def datasets_metadata(source_id: str, output_format: str) -> None:
+    """Show full metadata for a dataset. Use SOURCE:ID format (e.g. zenodo:12345)."""
+    source, _, dataset_id = source_id.partition(":")
+    if not dataset_id:
+        raise click.ClickException("Use SOURCE:ID format, e.g. zenodo:12345 or geo:GSE12345")
+    adapter = get_adapter(source)
+    result = adapter.metadata(dataset_id)
+
+    rows = [
+        {"field": "Source", "value": result.source},
+        {"field": "ID", "value": result.id},
+        {"field": "Title", "value": result.title},
+        {"field": "Description", "value": result.description[:200] if result.description else ""},
+        {"field": "DOI", "value": result.doi or ""},
+        {"field": "URL", "value": result.url or ""},
+        {"field": "Year", "value": str(result.year) if result.year else ""},
+        {"field": "License", "value": result.license or ""},
+        {"field": "Keywords", "value": ", ".join(result.keywords) if result.keywords else ""},
+        {"field": "Organism", "value": result.organism or ""},
+        {"field": "Modality", "value": result.modality or ""},
+        {"field": "Samples", "value": str(result.sample_count) if result.sample_count else ""},
+        {"field": "Files", "value": str(result.file_count) if result.file_count else ""},
+    ]
+
+    emit_query_rows(
+        output_format=output_format,
+        title=f"Dataset: {result.title}",
+        columns=[("field", "Field"), ("value", "Value")],
+        rows=rows,
+    )
+
+
+@datasets.command("files")
+@click.argument("source_id", metavar="SOURCE:ID")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def datasets_files(source_id: str, output_format: str) -> None:
+    """List downloadable files in a dataset. Use SOURCE:ID format."""
+    source, _, dataset_id = source_id.partition(":")
+    if not dataset_id:
+        raise click.ClickException("Use SOURCE:ID format, e.g. zenodo:12345")
+    adapter = get_adapter(source)
+    file_list = adapter.files(dataset_id)
+    if not file_list:
+        click.echo("No files found.")
+        return
+
+    rows = [
+        {
+            "filename": f.filename,
+            "format": f.format or "",
+            "size": _human_size(f.size_bytes) if f.size_bytes else "",
+            "checksum": (f.checksum[:30] + "...") if f.checksum and len(f.checksum) > 30 else (f.checksum or ""),
+        }
+        for f in file_list
+    ]
+
+    emit_query_rows(
+        output_format=output_format,
+        title="Files",
+        columns=[("filename", "Filename"), ("format", "Format"), ("size", "Size"), ("checksum", "Checksum")],
+        rows=rows,
+    )
+
+
+@datasets.command("download")
+@click.argument("source_id", metavar="SOURCE:ID")
+@click.option("--file", "file_pattern", default=None, help="Download only files matching this pattern")
+@click.option("--dest", "dest_dir", default="data/raw", show_default=True, type=click.Path(path_type=Path))
+def datasets_download(source_id: str, file_pattern: str | None, dest_dir: Path) -> None:
+    """Download dataset files. Use SOURCE:ID format."""
+    import fnmatch
+
+    source, _, dataset_id = source_id.partition(":")
+    if not dataset_id:
+        raise click.ClickException("Use SOURCE:ID format, e.g. zenodo:12345")
+    adapter = get_adapter(source)
+    file_list = adapter.files(dataset_id)
+    if not file_list:
+        click.echo("No files found.")
+        return
+
+    if file_pattern:
+        file_list = [f for f in file_list if fnmatch.fnmatch(f.filename, file_pattern)]
+        if not file_list:
+            click.echo(f"No files matching pattern: {file_pattern}")
+            return
+
+    for fi in file_list:
+        click.echo(f"Downloading {fi.filename}...")
+        path = adapter.download(fi, dest_dir)
+        click.echo(f"  Saved to {path}")
+
+
+def _human_size(size_bytes: int) -> str:
+    """Format bytes as human-readable size."""
+    for unit in ("B", "KB", "MB", "GB"):
+        if size_bytes < 1024:
+            return f"{size_bytes:.1f} {unit}"
+        size_bytes //= 1024
+    return f"{size_bytes:.1f} TB"
 
 
 @main.group()

@@ -49,3 +49,34 @@ def search_all(
         adapter = get_adapter(name)
         results.extend(adapter.search(query, max_results=max_per_source))
     return results
+
+
+def _auto_register() -> None:
+    """Register all built-in adapters. Called on import."""
+    try:
+        from science_tool.datasets.zenodo import ZenodoAdapter
+
+        register("zenodo", ZenodoAdapter)
+    except ImportError:
+        pass
+    try:
+        from science_tool.datasets.dryad import DryadAdapter
+
+        register("dryad", DryadAdapter)
+    except ImportError:
+        pass
+    try:
+        from science_tool.datasets.geo import GEOAdapter
+
+        register("geo", GEOAdapter)
+    except ImportError:
+        pass
+    try:
+        from science_tool.datasets.semantic_scholar import SemanticScholarAdapter
+
+        register("semantic_scholar", SemanticScholarAdapter)
+    except ImportError:
+        pass
+
+
+_auto_register()
