@@ -1013,11 +1013,12 @@ def datasets_validate(data_path: Path, output_format: str) -> None:
 
 def _human_size(size_bytes: int) -> str:
     """Format bytes as human-readable size."""
+    value = float(size_bytes)
     for unit in ("B", "KB", "MB", "GB"):
-        if size_bytes < 1024:
-            return f"{size_bytes:.1f} {unit}"
-        size_bytes //= 1024
-    return f"{size_bytes:.1f} TB"
+        if value < 1024:
+            return f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} TB"
 
 
 @main.group()

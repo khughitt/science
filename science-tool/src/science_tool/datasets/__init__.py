@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from science_tool.datasets._base import DatasetAdapter, DatasetResult, FileInfo
 
 __all__ = [
@@ -16,15 +14,15 @@ __all__ = [
     "search_all",
 ]
 
-_ADAPTERS: dict[str, type[Any]] = {}
+_ADAPTERS: dict[str, type[DatasetAdapter]] = {}
 
 
-def register(name: str, cls: type[Any]) -> None:
+def register(name: str, cls: type[DatasetAdapter]) -> None:
     """Register a dataset adapter class by name."""
     _ADAPTERS[name] = cls
 
 
-def get_adapter(name: str) -> Any:
+def get_adapter(name: str) -> DatasetAdapter:
     """Instantiate a registered adapter by name. Raises KeyError if unknown."""
     if name not in _ADAPTERS:
         raise KeyError(f"Unknown dataset adapter: {name!r}. Available: {sorted(_ADAPTERS)}")

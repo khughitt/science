@@ -75,10 +75,10 @@ Use these Frictionless types:
 ## Validation
 
 ```bash
-# Validate a data package
+# Validate a data package (built-in lightweight checks)
 science-tool datasets validate --path data/raw/
 
-# Or use frictionless directly
+# For deeper validation, install frictionless CLI separately: uv add frictionless
 frictionless validate data/raw/datapackage.json
 ```
 
@@ -92,7 +92,7 @@ Common validation errors:
 When a `datapackage.json` exists and an inquiry is active:
 
 1. Map resource fields to inquiry variables in `doc/datasets/data-<slug>.md`
-2. Run coverage check: `science-tool datasets check-coverage <inquiry-slug>`
+2. Manually check which inquiry variables are covered by available dataset fields
 3. Document any transformations needed (unit conversions, normalization, filtering)
 
 ## Directory Conventions
