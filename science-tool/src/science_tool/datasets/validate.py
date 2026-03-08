@@ -23,45 +23,55 @@ def validate_data_packages(data_dir: Path) -> list[dict[str, str]]:
 
         # Check 1: datapackage.json presence
         if not pkg_path.exists():
-            results.append({
-                "check": f"{subdir_name}/datapackage.json presence",
-                "status": "warn",
-                "details": f"No datapackage.json in {subdir_name}/",
-            })
+            results.append(
+                {
+                    "check": f"{subdir_name}/datapackage.json presence",
+                    "status": "warn",
+                    "details": f"No datapackage.json in {subdir_name}/",
+                }
+            )
             continue
 
-        results.append({
-            "check": f"{subdir_name}/datapackage.json presence",
-            "status": "pass",
-            "details": f"Found {pkg_path}",
-        })
+        results.append(
+            {
+                "check": f"{subdir_name}/datapackage.json presence",
+                "status": "pass",
+                "details": f"Found {pkg_path}",
+            }
+        )
 
         # Check 2: valid JSON
         try:
             with pkg_path.open() as f:
                 pkg = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
-            results.append({
-                "check": f"{subdir_name}/datapackage.json valid JSON",
-                "status": "fail",
-                "details": str(e),
-            })
+            results.append(
+                {
+                    "check": f"{subdir_name}/datapackage.json valid JSON",
+                    "status": "fail",
+                    "details": str(e),
+                }
+            )
             continue
 
-        results.append({
-            "check": f"{subdir_name}/datapackage.json valid JSON",
-            "status": "pass",
-            "details": "Valid JSON",
-        })
+        results.append(
+            {
+                "check": f"{subdir_name}/datapackage.json valid JSON",
+                "status": "pass",
+                "details": "Valid JSON",
+            }
+        )
 
         # Check 3: has resources
         resources = pkg.get("resources", [])
         if not resources:
-            results.append({
-                "check": f"{subdir_name} resources defined",
-                "status": "warn",
-                "details": "No resources defined in datapackage.json",
-            })
+            results.append(
+                {
+                    "check": f"{subdir_name} resources defined",
+                    "status": "warn",
+                    "details": "No resources defined in datapackage.json",
+                }
+            )
             continue
 
         # Check 4: each resource file exists and schema validates
@@ -70,18 +80,22 @@ def validate_data_packages(data_dir: Path) -> list[dict[str, str]]:
             res_path = subdir / res.get("path", "")
 
             if not res_path.exists():
-                results.append({
-                    "check": f"{subdir_name}/{res_name} file exists",
-                    "status": "fail",
-                    "details": f"File not found: {res_path}",
-                })
+                results.append(
+                    {
+                        "check": f"{subdir_name}/{res_name} file exists",
+                        "status": "fail",
+                        "details": f"File not found: {res_path}",
+                    }
+                )
                 continue
 
-            results.append({
-                "check": f"{subdir_name}/{res_name} file exists",
-                "status": "pass",
-                "details": str(res_path),
-            })
+            results.append(
+                {
+                    "check": f"{subdir_name}/{res_name} file exists",
+                    "status": "pass",
+                    "details": str(res_path),
+                }
+            )
 
             # Check 5: schema validation
             schema = res.get("schema")
@@ -90,18 +104,18 @@ def validate_data_packages(data_dir: Path) -> list[dict[str, str]]:
                 results.extend(schema_results)
 
     if not results:
-        results.append({
-            "check": "data directory structure",
-            "status": "warn",
-            "details": "No raw/ or processed/ subdirectories found",
-        })
+        results.append(
+            {
+                "check": "data directory structure",
+                "status": "warn",
+                "details": "No raw/ or processed/ subdirectories found",
+            }
+        )
 
     return results
 
 
-def _validate_resource_schema(
-    file_path: Path, schema: dict, prefix: str
-) -> list[dict[str, str]]:
+def _validate_resource_schema(file_path: Path, schema: dict, prefix: str) -> list[dict[str, str]]:
     """Validate a CSV file against a Frictionless-style schema."""
     results: list[dict[str, str]] = []
 
@@ -111,11 +125,13 @@ def _validate_resource_schema(
         with file_path.open(newline="") as f:
             reader = csv.DictReader(f)
             if reader.fieldnames is None:
-                results.append({
-                    "check": f"{prefix} schema validation",
-                    "status": "fail",
-                    "details": "Could not read CSV headers",
-                })
+                results.append(
+                    {
+                        "check": f"{prefix} schema validation",
+                        "status": "fail",
+                        "details": "Could not read CSV headers",
+                    }
+                )
                 return results
 
             # Check field names match
@@ -125,23 +141,29 @@ def _validate_resource_schema(
             extra = set(actual_fields) - set(expected_fields)
 
             if missing:
-                results.append({
-                    "check": f"{prefix} field presence",
-                    "status": "fail",
-                    "details": f"Missing fields: {sorted(missing)}",
-                })
+                results.append(
+                    {
+                        "check": f"{prefix} field presence",
+                        "status": "fail",
+                        "details": f"Missing fields: {sorted(missing)}",
+                    }
+                )
             elif extra:
-                results.append({
-                    "check": f"{prefix} field presence",
-                    "status": "warn",
-                    "details": f"Extra fields not in schema: {sorted(extra)}",
-                })
+                results.append(
+                    {
+                        "check": f"{prefix} field presence",
+                        "status": "warn",
+                        "details": f"Extra fields not in schema: {sorted(extra)}",
+                    }
+                )
             else:
-                results.append({
-                    "check": f"{prefix} field presence",
-                    "status": "pass",
-                    "details": f"All {len(expected_fields)} fields present",
-                })
+                results.append(
+                    {
+                        "check": f"{prefix} field presence",
+                        "status": "pass",
+                        "details": f"All {len(expected_fields)} fields present",
+                    }
+                )
 
             # Check type conformance for a sample of rows
             field_types = {f["name"]: f.get("type", "string") for f in schema.get("fields", [])}
@@ -157,25 +179,31 @@ def _validate_resource_schema(
                         type_errors.append(f"Row {row_num}, {fname}: {value!r} is not {ftype}")
 
             if type_errors:
-                results.append({
-                    "check": f"{prefix} type conformance",
-                    "status": "fail",
-                    "details": f"{len(type_errors)} type error(s): {type_errors[0]}"
-                    + (f" (and {len(type_errors) - 1} more)" if len(type_errors) > 1 else ""),
-                })
+                results.append(
+                    {
+                        "check": f"{prefix} type conformance",
+                        "status": "fail",
+                        "details": f"{len(type_errors)} type error(s): {type_errors[0]}"
+                        + (f" (and {len(type_errors) - 1} more)" if len(type_errors) > 1 else ""),
+                    }
+                )
             else:
-                results.append({
-                    "check": f"{prefix} type conformance",
-                    "status": "pass",
-                    "details": "All sampled values match declared types",
-                })
+                results.append(
+                    {
+                        "check": f"{prefix} type conformance",
+                        "status": "pass",
+                        "details": "All sampled values match declared types",
+                    }
+                )
 
     except Exception as e:
-        results.append({
-            "check": f"{prefix} schema validation",
-            "status": "fail",
-            "details": f"Validation error: {e}",
-        })
+        results.append(
+            {
+                "check": f"{prefix} schema validation",
+                "status": "fail",
+                "details": f"Validation error: {e}",
+            }
+        )
 
     return results
 

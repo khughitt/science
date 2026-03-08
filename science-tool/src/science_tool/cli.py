@@ -793,10 +793,25 @@ def refs_check(root_path: Path, output_format: str, strict: bool) -> None:
     if output_format == "json":
         import json
 
-        click.echo(json.dumps({
-            "broken": [{"file": i.file, "line": i.line, "type": i.ref_type, "value": i.ref_value, "message": i.message, "suggestion": i.suggestion} for i in broken],
-            "markers": [{"file": i.file, "line": i.line, "value": i.ref_value} for i in markers],
-        }, indent=2))
+        click.echo(
+            json.dumps(
+                {
+                    "broken": [
+                        {
+                            "file": i.file,
+                            "line": i.line,
+                            "type": i.ref_type,
+                            "value": i.ref_value,
+                            "message": i.message,
+                            "suggestion": i.suggestion,
+                        }
+                        for i in broken
+                    ],
+                    "markers": [{"file": i.file, "line": i.line, "value": i.ref_value} for i in markers],
+                },
+                indent=2,
+            )
+        )
     else:
         if broken:
             click.echo(f"refs check: {len(broken)} broken, {len(markers)} unresolved markers\n")

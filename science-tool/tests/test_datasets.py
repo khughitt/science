@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from science_tool.datasets._base import DatasetResult, FileInfo
+from science_tool.datasets.dryad import DryadAdapter
+from science_tool.datasets.geo import GEOAdapter
+from science_tool.datasets.semantic_scholar import SemanticScholarAdapter
+from science_tool.datasets.zenodo import ZenodoAdapter
 
 
 class TestDatasetResult:
@@ -102,14 +107,6 @@ class TestRegistry:
 
         with pytest.raises(KeyError):
             get_adapter("nonexistent_adapter_xyz")
-
-
-# ---------------------------------------------------------------------------
-# Zenodo adapter tests
-# ---------------------------------------------------------------------------
-from unittest.mock import MagicMock, patch
-
-from science_tool.datasets.zenodo import ZenodoAdapter
 
 
 class TestZenodoAdapter:
@@ -230,12 +227,6 @@ class TestZenodoAdapter:
         assert results == []
 
 
-# ---------------------------------------------------------------------------
-# Dryad adapter tests
-# ---------------------------------------------------------------------------
-from science_tool.datasets.dryad import DryadAdapter
-
-
 class TestDryadAdapter:
     def test_name(self) -> None:
         assert DryadAdapter().name == "dryad"
@@ -319,12 +310,6 @@ class TestDryadAdapter:
             results = adapter.search("zzzzz nonexistent")
 
         assert results == []
-
-
-# ---------------------------------------------------------------------------
-# GEO adapter tests
-# ---------------------------------------------------------------------------
-from science_tool.datasets.geo import GEOAdapter
 
 
 class TestGEOAdapter:
@@ -417,12 +402,6 @@ class TestGEOAdapter:
             results = adapter.search("zzzzz nothing")
 
         assert results == []
-
-
-# ---------------------------------------------------------------------------
-# Semantic Scholar adapter tests
-# ---------------------------------------------------------------------------
-from science_tool.datasets.semantic_scholar import SemanticScholarAdapter
 
 
 class TestSemanticScholarAdapter:
