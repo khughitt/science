@@ -13,7 +13,7 @@ Science provides **skills** (structured research methodology) and **commands** (
 - **Identify research gaps** and turn them into prioritized next tasks
 - **Run structured discussions** (including optional double-blind mode)
 - **Review and reprioritize task plans** using explicit rationale
-- **Capture compact linked notes** across topics, papers, questions, methods, and datasets
+- **Interpret results** and feed findings back into hypotheses, causal models, and priorities
 - **Develop hypotheses** with structured falsifiability criteria and evidence tracking
 - **Create research projects** with consistent, version-controlled structure
 - **Validate project structure** with automated checks (template conformance, citation integrity)
@@ -37,6 +37,7 @@ claude --plugin-dir /path/to/science
 
 | Command | Description |
 |---|---|
+| `/science:status` | Curated project orientation — hypotheses, questions, activity, next steps |
 | `/science:create-project` | Scaffold a new research project with full directory structure |
 | `/science:research-paper` | Capability-first paper research/synthesis command |
 | `/science:research-topic` | Capability-first topic research/synthesis command |
@@ -47,10 +48,11 @@ claude --plugin-dir /path/to/science
 | `/science:summarize-topic` | Write a background document on a topic |
 | `/science:summarize-paper` | Summarize a paper (LLM knowledge → web search → PDF) |
 | `/science:add-hypothesis` | Develop and refine a hypothesis interactively |
+| `/science:interpret-results` | Interpret analysis results and update the research framework |
 | `/science:create-graph` | Build a knowledge graph from project documents |
 | `/science:update-graph` | Incrementally update the graph after document changes |
 
-`/science:summarize-topic` and `/science:summarize-paper` remain supported for backward compatibility.
+`/science:summarize-topic` and `/science:summarize-paper` are deprecated aliases — use `research-topic` and `research-paper` instead.
 
 ## Skills
 
@@ -75,23 +77,24 @@ my-project/
 ├── validate.sh               # Structural validation
 ├── specs/                    # Research scope
 │   ├── research-question.md
+│   ├── scope-boundaries.md
 │   └── hypotheses/
-├── doc/                      # Research documents
-│   ├── background/
-│   ├── discussions/
-│   ├── 01-overview.md
-│   ├── ...
+├── doc/                      # All research documents
+│   ├── topics/               # Background topic summaries
+│   ├── papers/               # Paper summaries
+│   ├── questions/            # Open questions
+│   ├── methods/              # Method/tool notes
+│   ├── datasets/             # Dataset notes
+│   ├── searches/             # Literature search runs
+│   ├── discussions/          # Discussion artifacts
+│   ├── interpretations/      # Result interpretations
+│   ├── meta/                 # Process reflection
+│   ├── index.md
+│   ├── 01-overview.md ... 09-causal-model.md
 │   └── 99-next-steps.md
 ├── papers/                   # References
 │   ├── references.bib
-│   ├── pdfs/
-│   └── summaries/
-├── notes/                    # Compact linked notes
-│   ├── topics/
-│   ├── articles/
-│   ├── questions/
-│   ├── methods/
-│   └── datasets/
+│   └── pdfs/
 ├── models/                   # Formal models (causal DAGs, etc.)
 ├── knowledge/                # Knowledge graph artifacts
 ├── data/                     # Frictionless Data Packages
