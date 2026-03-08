@@ -1,3 +1,18 @@
+---
+id: "paper:{{bibtex_key}}"
+type: "paper"
+title: "{{Title}}"
+status: "active"
+tags: []
+ontology_terms: []
+datasets: []
+source_refs:
+  - "cite:{{bibtex_key}}"
+related: []
+created: "{{YYYY-MM-DD}}"
+updated: "{{YYYY-MM-DD}}"
+---
+
 # {{Title}}
 
 - **Authors:** {{authors}}
@@ -5,7 +20,7 @@
 - **Journal:** {{journal}}
 - **DOI/URL:** {{url}}
 - **BibTeX key:** {{bibtex_key}}
-- **Source:** LLM knowledge | web search | PDF  <!-- indicate how this summary was produced -->
+- **Source:** LLM knowledge | web search | PDF
 
 ## Key Contribution
 

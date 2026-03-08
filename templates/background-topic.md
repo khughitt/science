@@ -1,3 +1,17 @@
+---
+id: "topic:{{slug}}"
+type: "topic"
+title: "{{Title}}"
+status: "active"
+tags: []
+ontology_terms: []
+datasets: []
+source_refs: []
+related: []
+created: "{{YYYY-MM-DD}}"
+updated: "{{YYYY-MM-DD}}"
+---
+
 # {{Title}}
 
 ## Summary
