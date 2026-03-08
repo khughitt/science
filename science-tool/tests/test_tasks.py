@@ -5,7 +5,22 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from science_tool.tasks import Task, next_task_id, parse_tasks, render_task, render_tasks
+import pytest
+
+from science_tool.tasks import (
+    Task,
+    add_task,
+    block_task,
+    complete_task,
+    defer_task,
+    edit_task,
+    list_tasks,
+    next_task_id,
+    parse_tasks,
+    render_task,
+    render_tasks,
+    unblock_task,
+)
 
 
 def _write(path: Path, content: str) -> Path:
@@ -208,3 +223,233 @@ Done desc.
 """,
     )
     assert next_task_id(tasks_dir) == "t006"
+
+
+# ---------------------------------------------------------------------------
+# Tests for task operations
+# ---------------------------------------------------------------------------
+
+
+def _make_tasks_dir(tmp_path: Path) -> Path:
+    """Create a tasks_dir with an active.md containing one task."""
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    _write(
+        tasks_dir / "active.md",
+        """\
+## [t001] Existing task
+- type: dev
+- priority: P1
+- status: active
+- created: 2026-03-01
+
+Existing description.
+""",
+    )
+    return tasks_dir
+
+
+class TestAddTask:
+    def test_add_creates_task_in_active(self, tmp_path: Path) -> None:
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir()
+        t = add_task(tasks_dir, title="New task", task_type="research", priority="P2")
+        assert t.id == "t001"
+        assert t.title == "New task"
+        assert t.type == "research"
+        assert t.priority == "P2"
+        assert t.status == "proposed"
+        assert t.created == date.today()
+        # Verify it was written to active.md
+        tasks = parse_tasks(tasks_dir / "active.md")
+        assert len(tasks) == 1
+        assert tasks[0].id == "t001"
+
+    def test_add_appends_to_existing(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        t = add_task(tasks_dir, title="Second task", task_type="dev", priority="P1")
+        assert t.id == "t002"
+        tasks = parse_tasks(tasks_dir / "active.md")
+        assert len(tasks) == 2
+        assert tasks[1].id == "t002"
+
+    def test_add_with_optional_fields(self, tmp_path: Path) -> None:
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir()
+        t = add_task(
+            tasks_dir,
+            title="Blocked task",
+            task_type="dev",
+            priority="P1",
+            related=["hypothesis:h01"],
+            blocked_by=["t001"],
+            description="Some notes.",
+        )
+        assert t.related == ["hypothesis:h01"]
+        assert t.blocked_by == ["t001"]
+        assert t.description == "Some notes."
+
+
+class TestCompleteTask:
+    def test_complete_moves_to_done(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        t = complete_task(tasks_dir, "t001")
+        assert t.status == "done"
+        assert t.completed == date.today()
+        # active.md should be empty
+        active_tasks = parse_tasks(tasks_dir / "active.md")
+        assert len(active_tasks) == 0
+        # done file should have the task
+        done_path = tasks_dir / "done" / f"{date.today().strftime('%Y-%m')}.md"
+        done_tasks = parse_tasks(done_path)
+        assert len(done_tasks) == 1
+        assert done_tasks[0].id == "t001"
+
+    def test_complete_with_note(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        t = complete_task(tasks_dir, "t001", note="Finished early.")
+        assert "Finished early." in t.description
+
+    def test_complete_not_found_raises(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        with pytest.raises(KeyError):
+            complete_task(tasks_dir, "t999")
+
+
+class TestDeferTask:
+    def test_defer_sets_status(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        t = defer_task(tasks_dir, "t001")
+        assert t.status == "deferred"
+        tasks = parse_tasks(tasks_dir / "active.md")
+        assert tasks[0].status == "deferred"
+
+    def test_defer_with_reason(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        t = defer_task(tasks_dir, "t001", reason="Waiting on data.")
+        assert "Waiting on data." in t.description
+
+
+class TestBlockTask:
+    def test_block_adds_blocker(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        t = block_task(tasks_dir, "t001", blocked_by="t002")
+        assert t.status == "blocked"
+        assert "t002" in t.blocked_by
+        tasks = parse_tasks(tasks_dir / "active.md")
+        assert tasks[0].status == "blocked"
+        assert "t002" in tasks[0].blocked_by
+
+    def test_block_appends_to_existing_blockers(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        block_task(tasks_dir, "t001", blocked_by="t002")
+        t = block_task(tasks_dir, "t001", blocked_by="t003")
+        assert "t002" in t.blocked_by
+        assert "t003" in t.blocked_by
+
+
+class TestUnblockTask:
+    def test_unblock_clears_blockers(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        block_task(tasks_dir, "t001", blocked_by="t002")
+        t = unblock_task(tasks_dir, "t001")
+        assert t.status == "active"
+        assert t.blocked_by == []
+
+
+class TestEditTask:
+    def test_edit_priority(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        t = edit_task(tasks_dir, "t001", priority="P3")
+        assert t.priority == "P3"
+        tasks = parse_tasks(tasks_dir / "active.md")
+        assert tasks[0].priority == "P3"
+
+    def test_edit_multiple_fields(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        t = edit_task(tasks_dir, "t001", priority="P2", status="todo", task_type="research")
+        assert t.priority == "P2"
+        assert t.status == "todo"
+        assert t.type == "research"
+
+    def test_edit_related(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        t = edit_task(tasks_dir, "t001", related=["hypothesis:h01"])
+        assert t.related == ["hypothesis:h01"]
+
+    def test_edit_not_found_raises(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        with pytest.raises(KeyError):
+            edit_task(tasks_dir, "t999", priority="P3")
+
+
+class TestListTasks:
+    def _setup_multi(self, tmp_path: Path) -> Path:
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir()
+        _write(
+            tasks_dir / "active.md",
+            """\
+## [t001] Dev task
+- type: dev
+- priority: P1
+- status: active
+- created: 2026-03-01
+
+Dev desc.
+
+## [t002] Research task
+- type: research
+- priority: P2
+- status: blocked
+- blocked-by: [t001]
+- created: 2026-03-02
+
+Research desc.
+
+## [t003] Another dev task
+- type: dev
+- priority: P2
+- status: active
+- related: [hypothesis:h01]
+- created: 2026-03-03
+
+Another dev desc.
+""",
+        )
+        return tasks_dir
+
+    def test_list_all(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_multi(tmp_path)
+        result = list_tasks(tasks_dir)
+        assert len(result) == 3
+
+    def test_list_by_type(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_multi(tmp_path)
+        result = list_tasks(tasks_dir, task_type="dev")
+        assert len(result) == 2
+        assert all(t.type == "dev" for t in result)
+
+    def test_list_by_priority(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_multi(tmp_path)
+        result = list_tasks(tasks_dir, priority="P1")
+        assert len(result) == 1
+        assert result[0].id == "t001"
+
+    def test_list_by_status(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_multi(tmp_path)
+        result = list_tasks(tasks_dir, status="blocked")
+        assert len(result) == 1
+        assert result[0].id == "t002"
+
+    def test_list_by_related(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_multi(tmp_path)
+        result = list_tasks(tasks_dir, related="hypothesis:h01")
+        assert len(result) == 1
+        assert result[0].id == "t003"
+
+    def test_list_combined_filters(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_multi(tmp_path)
+        result = list_tasks(tasks_dir, task_type="dev", priority="P2")
+        assert len(result) == 1
+        assert result[0].id == "t003"

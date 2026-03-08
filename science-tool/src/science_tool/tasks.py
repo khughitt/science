@@ -154,3 +154,158 @@ def next_task_id(tasks_dir: Path) -> str:
                 max_num = max(max_num, int(m.group(1)))
 
     return f"t{max_num + 1:03d}"
+
+
+def _read_active(tasks_dir: Path) -> list[Task]:
+    return parse_tasks(tasks_dir / "active.md")
+
+
+def _write_active(tasks_dir: Path, tasks: list[Task]) -> None:
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    (tasks_dir / "active.md").write_text(render_tasks(tasks) if tasks else "")
+
+
+def _find_task(tasks: list[Task], task_id: str) -> Task:
+    for t in tasks:
+        if t.id == task_id:
+            return t
+    msg = f"Task {task_id} not found in active.md"
+    raise KeyError(msg)
+
+
+def add_task(
+    tasks_dir: Path,
+    title: str,
+    task_type: str,
+    priority: str,
+    related: list[str] | None = None,
+    blocked_by: list[str] | None = None,
+    description: str = "",
+) -> Task:
+    """Create a task with status 'proposed', auto-assign ID, write to active.md."""
+    task_id = next_task_id(tasks_dir)
+    task = Task(
+        id=task_id,
+        title=title,
+        type=task_type,
+        priority=priority,
+        status="proposed",
+        created=date.today(),
+        related=related or [],
+        blocked_by=blocked_by or [],
+        description=description,
+    )
+    tasks = _read_active(tasks_dir)
+    tasks.append(task)
+    _write_active(tasks_dir, tasks)
+    return task
+
+
+def complete_task(tasks_dir: Path, task_id: str, note: str | None = None) -> Task:
+    """Mark task done, add completion date, move from active.md to done/YYYY-MM.md."""
+    tasks = _read_active(tasks_dir)
+    task = _find_task(tasks, task_id)
+
+    task.status = "done"
+    task.completed = date.today()
+    if note:
+        task.description = f"{task.description}\n\n{note}".strip()
+
+    # Remove from active
+    tasks = [t for t in tasks if t.id != task_id]
+    _write_active(tasks_dir, tasks)
+
+    # Append to done file
+    done_dir = tasks_dir / "done"
+    done_dir.mkdir(parents=True, exist_ok=True)
+    done_path = done_dir / f"{date.today().strftime('%Y-%m')}.md"
+    existing_done = parse_tasks(done_path)
+    existing_done.append(task)
+    done_path.write_text(render_tasks(existing_done))
+
+    return task
+
+
+def defer_task(tasks_dir: Path, task_id: str, reason: str | None = None) -> Task:
+    """Set status to 'deferred', append reason to description."""
+    tasks = _read_active(tasks_dir)
+    task = _find_task(tasks, task_id)
+
+    task.status = "deferred"
+    if reason:
+        task.description = f"{task.description}\n\n{reason}".strip()
+
+    _write_active(tasks_dir, tasks)
+    return task
+
+
+def block_task(tasks_dir: Path, task_id: str, blocked_by: str) -> Task:
+    """Add blocker to blocked_by list, set status to 'blocked'."""
+    tasks = _read_active(tasks_dir)
+    task = _find_task(tasks, task_id)
+
+    task.status = "blocked"
+    if blocked_by not in task.blocked_by:
+        task.blocked_by.append(blocked_by)
+
+    _write_active(tasks_dir, tasks)
+    return task
+
+
+def unblock_task(tasks_dir: Path, task_id: str) -> Task:
+    """Clear blocked_by list, set status to 'active'."""
+    tasks = _read_active(tasks_dir)
+    task = _find_task(tasks, task_id)
+
+    task.status = "active"
+    task.blocked_by = []
+
+    _write_active(tasks_dir, tasks)
+    return task
+
+
+def edit_task(
+    tasks_dir: Path,
+    task_id: str,
+    priority: str | None = None,
+    status: str | None = None,
+    task_type: str | None = None,
+    related: list[str] | None = None,
+) -> Task:
+    """Update specified fields on a task."""
+    tasks = _read_active(tasks_dir)
+    task = _find_task(tasks, task_id)
+
+    if priority is not None:
+        task.priority = priority
+    if status is not None:
+        task.status = status
+    if task_type is not None:
+        task.type = task_type
+    if related is not None:
+        task.related = related
+
+    _write_active(tasks_dir, tasks)
+    return task
+
+
+def list_tasks(
+    tasks_dir: Path,
+    task_type: str | None = None,
+    priority: str | None = None,
+    status: str | None = None,
+    related: str | None = None,
+) -> list[Task]:
+    """Filter active tasks by optional criteria."""
+    tasks = _read_active(tasks_dir)
+
+    if task_type is not None:
+        tasks = [t for t in tasks if t.type == task_type]
+    if priority is not None:
+        tasks = [t for t in tasks if t.priority == priority]
+    if status is not None:
+        tasks = [t for t in tasks if t.status == status]
+    if related is not None:
+        tasks = [t for t in tasks if related in t.related]
+
+    return tasks
