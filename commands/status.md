@@ -52,7 +52,7 @@ Run: `git log --oneline -10 --format="%h %s (%cr)"`
 
 Check file modification times:
 
-- Flag `RESEARCH_PLAN.md` if not modified in >14 days
+- Flag `tasks/active.md` if not modified in >14 days
 - Flag `specs/hypotheses/` files if none modified in >30 days
 - If `knowledge/graph.trig` exists, check whether docs have been modified since the last `graph stamp-revision`
 - If nothing is stale, skip this section
@@ -93,11 +93,11 @@ When no graph exists, print: "No knowledge graph yet. Run `/science:create-graph
 
 ### 8. Next Steps
 
-From `RESEARCH_PLAN.md`:
+From `tasks/active.md`:
 
-- Show current priorities (top 3-5 items)
-- Note any blockers
-- Show the next review trigger
+- Show P0 and P1 tasks (top 5 items)
+- Note any blocked tasks
+- If no tasks file exists, note this and suggest `/science:tasks add`
 
 ## Output Format
 

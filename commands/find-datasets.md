@@ -121,7 +121,7 @@ Include this mapping in a `## Variable Coverage` section of the search output.
    ```bash
    science-tool datasets download <source>:<id> --dest data/raw/
    ```
-4. Add follow-up tasks to `RESEARCH_PLAN.md`:
+4. Offer to create follow-up tasks via `science-tool tasks add`:
    - Download and inspect `Use now` datasets
    - Create `datapackage.json` for downloaded data
    - Map variables for pipeline planning

@@ -18,7 +18,7 @@ Additionally:
    - `specs/hypotheses/`
    - `doc/questions/`
    - `doc/papers/`
-   - `RESEARCH_PLAN.md`
+   - `tasks/active.md`
 
 ## Gap Analysis Method
 
@@ -51,7 +51,8 @@ For each recommended task, include:
 
 ## After Writing
 
-1. Update `RESEARCH_PLAN.md` with prioritized tasks and rationale.
+1. Offer to create tasks from recommended items: "Create tasks from these gaps?"
+   - If accepted, run `science-tool tasks add` for each recommended task with appropriate priority, type, and related entities
 2. Cross-link relevant items in `doc/questions/`.
 3. Commit: `git add -A && git commit -m "plan: research gap analysis and priorities"`
 

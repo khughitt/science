@@ -29,7 +29,7 @@ Before performing any of the following tasks, read the corresponding skill:
 Use role prompt packs for capability-first workflows:
 
 - `prompts/roles/research-assistant.md` for research/synthesis/prioritization tasks
-  (`/science:research-paper`, `/science:research-topic`, `/science:research-gaps`, `/science:review-tasks`)
+  (`/science:research-paper`, `/science:research-topic`, `/science:research-gaps`, `/science:next-steps`)
 - `prompts/roles/discussant.md` for critical discussion tasks
   (`/science:discuss`, including optional double-blind mode)
 
@@ -64,6 +64,7 @@ When writing about any topic:
 
 ## Project State Files
 
-- `RESEARCH_PLAN.md` — current investigation queue. Update with discoveries.
+- `tasks/active.md` — operational task queue. Manage via `/science:tasks`.
+- `RESEARCH_PLAN.md` — high-level research strategy and direction.
 - `AGENTS.md` — operational guide. Update with new tools or conventions.
 - `science.yaml` — project manifest. Update `last_modified` on significant changes.

@@ -16,7 +16,7 @@ Additionally:
 1. Read `templates/interpretation.md`.
 2. Read active hypotheses in `specs/hypotheses/`.
 3. Read `doc/questions/` for open questions.
-4. Read `RESEARCH_PLAN.md`.
+4. Read `tasks/active.md` if it exists.
 5. If the user specifies an inquiry slug, load the inquiry context:
    ```bash
    uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool inquiry show "<slug>" --format json
@@ -75,8 +75,9 @@ For each, note:
 
 ### 5. Update priorities
 
-Given the findings, propose changes to `RESEARCH_PLAN.md`:
-- Tasks to add, reprioritize, or drop
+Given the findings, propose changes to the task queue:
+- Tasks to add via `science-tool tasks add`
+- Existing tasks to reprioritize or complete
 - Hypotheses to pursue further or set aside
 - Next commands to run
 
@@ -89,7 +90,7 @@ Save to `doc/interpretations/YYYY-MM-DD-<slug>.md`.
 
 1. Update hypothesis files in `specs/hypotheses/` with confirmed status changes and new evidence in the "Current Evidence" section.
 2. Add new questions to `doc/questions/` using `templates/question.md`.
-3. Update `RESEARCH_PLAN.md` with revised priorities.
+3. Update task queue: add new tasks, complete or reprioritize existing ones via `science-tool tasks`.
 4. If graph updates were proposed, remind the user of the commands to run.
 5. Suggest next steps:
    - `/science:discuss` — to debate interpretation of ambiguous findings

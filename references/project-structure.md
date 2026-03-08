@@ -11,10 +11,17 @@ This document describes the standard directory layout for a Science research pro
 | `.gitignore` | Git ignore rules | Agent on project creation |
 | `CLAUDE.md` | Instructions for Claude Code (skill triggers, conventions) | Agent on project creation |
 | `AGENTS.md` | Operational guide (tools, validation, conventions) | Agent during loops |
-| `RESEARCH_PLAN.md` | Prioritized investigation queue | Agent during planning loops |
+| `RESEARCH_PLAN.md` | High-level research strategy (direction, phases, long-term goals) | Agent during planning |
 | `validate.sh` | Structural validation script | Copied from plugin |
 
 ## Directories
+
+### `tasks/` — Task Queue
+
+Lightweight task management.
+
+- `active.md` — current task queue (structured entries with ID, type, priority, status, links)
+- `done/YYYY-MM.md` — completed tasks archived monthly
 
 ### `specs/` — Research Scope
 

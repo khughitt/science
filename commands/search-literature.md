@@ -112,8 +112,8 @@ Include the normalized candidate list, dedupe keys, source provenance, and rank/
 
 ## After Search
 
-1. Add the top `Core now` papers to `RESEARCH_PLAN.md` as explicit follow-up tasks.
-2. For selected high-priority papers, run `/science:research-paper` (or queue it in `RESEARCH_PLAN.md`).
+1. Offer to create tasks for the top `Core now` papers via `science-tool tasks add`.
+2. For selected high-priority papers, run `/science:research-paper` (or create a task for later).
 3. Create or update compact article notes in `doc/papers/<citekey>.md` for `Core now` items using `templates/paper-summary.md`.
 4. Populate note metadata fields:
    - `tags` for project-specific labels.

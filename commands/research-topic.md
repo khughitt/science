@@ -37,7 +37,7 @@ The output should include:
 
 1. Add new references to `papers/references.bib` (create with header if missing).
 2. Add newly surfaced questions to `doc/questions/` using `templates/question.md`.
-3. Update `RESEARCH_PLAN.md` with follow-up tasks derived from the synthesis.
+3. Offer to create follow-up tasks via `science-tool tasks add` derived from the synthesis.
 4. Commit: `git add -A && git commit -m "doc: research topic <topic>"`
 
 ## Process Reflection

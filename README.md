@@ -43,7 +43,8 @@ claude --plugin-dir /path/to/science
 | `/science:research-topic` | Capability-first topic research/synthesis command |
 | `/science:research-gaps` | Analyze current project coverage and identify high-impact gaps |
 | `/science:discuss` | Structured critical discussion for ideas, hypotheses, or approaches |
-| `/science:review-tasks` | Reprioritize `RESEARCH_PLAN.md` with explicit rationale |
+| `/science:tasks` | Manage research and development tasks — add, complete, defer, list, filter |
+| `/science:next-steps` | Synthesize recent progress, current state, and suggest next actions |
 | `/science:search-literature` | Search OpenAlex/PubMed, rank results, and create a prioritized reading queue |
 | `/science:summarize-topic` | Write a background document on a topic |
 | `/science:summarize-paper` | Summarize a paper (LLM knowledge → web search → PDF) |
@@ -73,7 +74,10 @@ my-project/
 ├── .env                      # API keys (gitignored)
 ├── CLAUDE.md                 # Instructions for Claude Code
 ├── AGENTS.md                 # Operational guide
-├── RESEARCH_PLAN.md          # Investigation queue (auto-generated)
+├── RESEARCH_PLAN.md          # High-level research strategy
+├── tasks/                    # Task queue
+│   ├── active.md             # Current tasks
+│   └── done/                 # Completed tasks (monthly archives)
 ├── validate.sh               # Structural validation
 ├── specs/                    # Research scope
 │   ├── research-question.md
@@ -145,7 +149,7 @@ Synthesizes a structured background document from LLM knowledge + web search, ad
 /science:search-literature
 ```
 
-Queries OpenAlex and PubMed with multiple query variants, deduplicates, and ranks results by project relevance. Produces a prioritized reading queue with tiers: *Core now*, *Relevant next*, *Peripheral monitor*. High-priority papers get queued in `RESEARCH_PLAN.md`.
+Queries OpenAlex and PubMed with multiple query variants, deduplicates, and ranks results by project relevance. Produces a prioritized reading queue with tiers: *Core now*, *Relevant next*, *Peripheral monitor*. High-priority papers can be queued as tasks via `/science:tasks`.
 
 ### 5. Summarize key papers
 
@@ -159,12 +163,12 @@ For each high-priority paper from the search, this command synthesizes a structu
 
 ```
 /science:research-gaps
-/science:review-tasks
+/science:next-steps
 ```
 
 `research-gaps` audits coverage across five dimensions (concepts, evidence quality, contradictions, testability, data feasibility) and writes `doc/10-research-gaps.md` with prioritized gap-closing tasks.
 
-`review-tasks` then reshuffles `RESEARCH_PLAN.md` using an expand/compress method — scoring tasks by impact, uncertainty reduction, feasibility, and dependency order.
+`next-steps` synthesizes recent progress, current task state, hypothesis status, and open questions to recommend 3-5 high-value next actions.
 
 ### 7. Stress-test ideas
 
