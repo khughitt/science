@@ -51,37 +51,36 @@ Create the following directories and files. Use `$ARGUMENTS` as the project name
 │   └── hypotheses/
 │       └── .gitkeep
 ├── doc/
-│   ├── background/
+│   ├── topics/
+│   │   └── .gitkeep
+│   ├── papers/
+│   │   └── .gitkeep
+│   ├── questions/
+│   │   └── .gitkeep
+│   ├── methods/
+│   │   └── .gitkeep
+│   ├── datasets/
+│   │   └── .gitkeep
+│   ├── searches/
 │   │   └── .gitkeep
 │   ├── discussions/
 │   │   └── .gitkeep
+│   ├── interpretations/
+│   │   └── .gitkeep
+│   ├── meta/
+│   │   └── .gitkeep
+│   ├── index.md
 │   ├── 01-overview.md
 │   ├── 02-background.md
 │   ├── 03-model.md
 │   ├── 04-approach.md
 │   ├── 05-data.md
 │   ├── 06-evaluation.md
-│   ├── 07-hypotheses.md
-│   ├── 08-open-questions.md
 │   ├── 09-causal-model.md
 │   └── 99-next-steps.md
 ├── papers/
 │   ├── references.bib
-│   ├── pdfs/
-│   │   └── .gitkeep
-│   └── summaries/
-│       └── .gitkeep
-├── notes/
-│   ├── index.md
-│   ├── topics/
-│   │   └── .gitkeep
-│   ├── articles/
-│   │   └── .gitkeep
-│   ├── questions/
-│   │   └── .gitkeep
-│   ├── methods/
-│   │   └── .gitkeep
-│   └── datasets/
+│   └── pdfs/
 │       └── .gitkeep
 ├── knowledge/
 │   └── .gitkeep
@@ -262,7 +261,7 @@ Create with a header comment:
 
 ```bibtex
 % references.bib — BibTeX database for this Science project
-% Add entries here for every paper cited in doc/ or papers/summaries/.
+% Add entries here for every paper cited in doc/.
 % Use keys in the format: FirstAuthorLastNameYear (e.g., Smith2024)
 ```
 
@@ -290,22 +289,32 @@ Use these titles:
 - `04-approach.md` → "Approach"
 - `05-data.md` → "Data"
 - `06-evaluation.md` → "Evaluation"
-- `07-hypotheses.md` → "Hypotheses"
-- `08-open-questions.md` → "Open Questions"
 - `09-causal-model.md` → "Causal Model"
 - `99-next-steps.md` → "Next Steps"
 
-For `07-hypotheses.md` and `08-open-questions.md`, add a note that these are updated automatically as hypotheses and questions are added via `/science:add-hypothesis`.
+### `doc/index.md`
 
-### `notes/index.md`
+```markdown
+# Document Index
 
-Create from template:
+## Topics
+<!-- doc/topics/*.md -->
 
-```bash
-cp ${CLAUDE_PLUGIN_ROOT}/templates/notes/index.md ./notes/index.md
+## Papers
+<!-- doc/papers/*.md -->
+
+## Hypotheses
+<!-- specs/hypotheses/*.md -->
+
+## Questions
+<!-- doc/questions/*.md -->
+
+## Methods
+<!-- doc/methods/*.md -->
+
+## Datasets
+<!-- doc/datasets/*.md -->
 ```
-
-Reference `${CLAUDE_PLUGIN_ROOT}/references/notes-organization.md` for note metadata and section conventions.
 
 ### `data/README.md`
 
@@ -344,7 +353,7 @@ chmod +x validate.sh
 
 ### `templates/`
 
-Copy all templates from `${CLAUDE_PLUGIN_ROOT}/templates/` into the project's `templates/` directory (including `templates/notes/`):
+Copy all templates from `${CLAUDE_PLUGIN_ROOT}/templates/` into the project's `templates/` directory:
 
 ```bash
 mkdir -p ./templates
@@ -383,7 +392,7 @@ It should pass with zero errors. Warnings are acceptable at this stage (e.g., em
 
 Tell the user what was created and suggest next steps:
 1. Add initial hypotheses with `/science:add-hypothesis`
-2. Explore background topics with `/science:research-topic` (or `/science:summarize-topic`)
-3. Research relevant papers with `/science:research-paper` (or `/science:summarize-paper`)
+2. Explore background topics with `/science:research-topic`
+3. Research relevant papers with `/science:research-paper`
 4. Run `/science:research-gaps` and `/science:review-tasks` to prioritize next work
 5. Edit `specs/scope-boundaries.md` to refine what's in/out of scope
