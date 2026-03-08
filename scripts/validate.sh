@@ -509,6 +509,42 @@ for row in data:
     fi
 fi
 
+# ─── 15. Task queue ──────────────────────────────────────────────
+echo ""
+echo "Checking task queue..."
+
+if [ ! -f "tasks/active.md" ]; then
+    warn "tasks/active.md not found (use /science:tasks to create)"
+else
+    info "tasks/active.md exists"
+    # Check for duplicate task IDs
+    task_ids=$(grep -oP '^\#\# \[\Kt\d+' "tasks/active.md" 2>/dev/null || true)
+    if [ -n "$task_ids" ]; then
+        dupes=$(echo "$task_ids" | sort | uniq -d)
+        if [ -n "$dupes" ]; then
+            error "duplicate task IDs in active.md: ${dupes}"
+        else
+            info "  no duplicate task IDs"
+        fi
+        # Check each task has required fields
+        while IFS= read -r tid; do
+            # Extract the block for this task (from ## [tNNN] to next ## or EOF)
+            block=$(sed -n "/^## \[${tid}\]/,/^## \[t/p" "tasks/active.md" | head -n -1)
+            if [ -z "$block" ]; then
+                block=$(sed -n "/^## \[${tid}\]/,\$p" "tasks/active.md")
+            fi
+            for field in type priority status created; do
+                if ! echo "$block" | grep -qP "^- ${field}:" 2>/dev/null; then
+                    error "task ${tid} missing required field: ${field}"
+                fi
+            done
+        done <<< "$task_ids"
+        info "  $(echo "$task_ids" | wc -l) task(s) validated"
+    else
+        info "  no tasks in active.md"
+    fi
+fi
+
 # ─── Summary ─────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

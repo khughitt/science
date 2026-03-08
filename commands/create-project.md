@@ -44,6 +44,8 @@ Create the following directories and files. Use `$ARGUMENTS` as the project name
 ├── CLAUDE.md
 ├── AGENTS.md
 ├── RESEARCH_PLAN.md
+├── tasks/
+│   └── active.md
 ├── validate.sh
 ├── specs/
 │   ├── research-question.md
@@ -215,29 +217,24 @@ Create with an initial header:
 ```markdown
 # Research Plan
 
-> This file tracks the prioritized investigation queue for the project.
-> It is updated during planning loops and after each research task.
-> Tasks are ordered by priority — work from the top.
+> High-level research strategy and direction for this project.
+> For the operational task queue, see `tasks/active.md`.
 
-## Current Priorities
+## Research Direction
 
-- No active priorities yet.
+<brief description of the research approach and phases>
 
-## Priority Rationale
+## Long-Term Goals
 
-- Pending initial synthesis.
+- <to be defined as the project develops>
+```
 
-## Deferred / Parked Tasks
+### `tasks/active.md`
 
-- None.
+Create an empty task file:
 
-## Blockers and Dependencies
-
-- None.
-
-## Next Review Trigger
-
-- After running `/science:research-gaps` or `/science:review-tasks`.
+```markdown
+<!-- Task queue. Use /science:tasks to manage. -->
 ```
 
 ### `specs/research-question.md`
@@ -394,5 +391,5 @@ Tell the user what was created and suggest next steps:
 1. Add initial hypotheses with `/science:add-hypothesis`
 2. Explore background topics with `/science:research-topic`
 3. Research relevant papers with `/science:research-paper`
-4. Run `/science:research-gaps` and `/science:review-tasks` to prioritize next work
+4. Run `/science:research-gaps` and `/science:next-steps` to prioritize next work
 5. Edit `specs/scope-boundaries.md` to refine what's in/out of scope
