@@ -37,7 +37,7 @@ For brevity, the examples below write just `science-tool <command>` — **always
 
 This command **creates a graph from scratch**. If a graph already exists, use `update-graph` instead for incremental updates.
 
-Research documents should exist in `doc/`, `specs/`, `notes/`, or `papers/summaries/`.
+Research documents should exist in `doc/`, `specs/`, or `doc/papers/`.
 
 ## Workflow
 

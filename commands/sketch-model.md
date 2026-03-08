@@ -40,7 +40,7 @@ For brevity, the examples below write just `science-tool <command>` — **always
 Read the following project files (skip any that don't exist):
 - `specs/research-question.md` — project scope
 - `specs/hypotheses/` — existing hypotheses
-- `doc/08-open-questions.md` — open questions
+- `doc/questions/` — open questions
 - `knowledge/graph.trig` — existing graph (if any)
 - `doc/inquiries/` — existing inquiries (if any)
 

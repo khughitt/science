@@ -17,7 +17,7 @@
 
 Before performing any of the following tasks, read the corresponding skill:
 
-- **Writing any document in `doc/` or `papers/summaries/`:** Read the `scientific-writing` skill
+- **Writing any document in `doc/` or `specs/`:** Read the `scientific-writing` skill
 - **Literature review, source evaluation, paper summarization:** Read the `research-methodology` skill
 - **Working with data sources or data acquisition:** Read the `data-management` skill (when available)
 - **Pipeline work (Snakemake, analysis scripts):** Read the `pipelines` skill (when available)
@@ -58,9 +58,9 @@ Always cross-check: author lists, publication year, specific numerical results, 
 
 When writing about any topic:
 1. Check `specs/hypotheses/` — does this connect to a hypothesis?
-2. Check `doc/08-open-questions.md` — does this address or raise a question?
-3. Check `doc/background/` — has this been covered? Don't duplicate.
-4. Check `papers/summaries/` — have we reviewed relevant papers?
+2. Check `doc/questions/` — does this address or raise a question?
+3. Check `doc/topics/` — has this been covered? Don't duplicate.
+4. Check `doc/papers/` — have we reviewed relevant papers?
 
 ## Project State Files
 

@@ -1,8 +1,7 @@
 # Question: {{Short Title}}
 
-<!-- 
-  Usage: Each open question is added as a section in doc/08-open-questions.md,
-  following this format. One question per section, separated by ---.
+<!--
+  Usage: Save as doc/questions/<slug>.md — one question per file.
 -->
 
 - **Priority:** high | medium | low

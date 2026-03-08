@@ -5,7 +5,7 @@ description: Scientific writing conventions for research documents. This skill s
 
 # Scientific Writing
 
-This skill defines writing conventions for documents within a Science project. Read this before writing or editing any document in `doc/`, `papers/summaries/`, or `specs/`.
+This skill defines writing conventions for documents within a Science project. Read this before writing or editing any document in `doc/` or `specs/`.
 
 ## Voice and Tone
 
@@ -48,7 +48,7 @@ Every BibTeX key used in a document must have a corresponding entry in `papers/r
 When writing any document, actively connect the content to the project's research framework:
 
 - Reference relevant **hypotheses** by ID: `(see Hypothesis H01)`
-- Note implications for **open questions** in `doc/08-open-questions.md`
+- Note implications for **open questions** in `doc/questions/`
 - Suggest updates to **next steps** when findings change priorities
 - Flag any findings that affect the **causal model** in `models/`
 
@@ -62,8 +62,8 @@ When writing any document, actively connect the content to the project's researc
 
 ## Length Guidelines
 
-- **Background topics** (`doc/background/`): 500-1500 words. Comprehensive but focused.
-- **Paper summaries** (`papers/summaries/`): 300-800 words. Capture what matters for this project.
+- **Background topics** (`doc/topics/`): 500-1500 words. Comprehensive but focused.
+- **Paper summaries** (`doc/papers/`): 300-800 words. Capture what matters for this project.
 - **Hypothesis descriptions** (`specs/hypotheses/`): 300-1000 words. Thorough enough to be actionable.
-- **Open questions** (`doc/08-open-questions.md`): 50-200 words per question. Concise and specific.
+- **Open questions** (`doc/questions/`): 50-200 words per question. Concise and specific.
 - **Overview** (`doc/01-overview.md`): 500-1000 words. The "elevator pitch" for the whole project.

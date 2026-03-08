@@ -134,7 +134,7 @@ For each conjecture — even vague ones — this command walks you through clari
 /science:research-topic "circadian regulation of immune response"
 ```
 
-Synthesizes a structured background document from LLM knowledge + web search, adds BibTeX entries, and creates a compact linked note in `notes/topics/`. Repeat for each major topic area your project touches.
+Synthesizes a structured background document from LLM knowledge + web search, adds BibTeX entries, and saves to `doc/topics/`. Repeat for each major topic area your project touches.
 
 ### 4. Search the literature
 
@@ -150,7 +150,7 @@ Queries OpenAlex and PubMed with multiple query variants, deduplicates, and rank
 /science:research-paper "Doe et al. 2023 circadian immune oscillations"
 ```
 
-For each high-priority paper from the search, this command synthesizes a structured summary (from LLM knowledge, web search, or a provided PDF), adds it to `papers/summaries/`, updates the bibliography, and creates a linked note in `notes/articles/`.
+For each high-priority paper from the search, this command synthesizes a structured summary (from LLM knowledge, web search, or a provided PDF), saves it to `doc/papers/`, and updates the bibliography.
 
 ### 6. Identify gaps and reprioritize
 

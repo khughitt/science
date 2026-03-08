@@ -81,9 +81,9 @@ Before writing any document, check:
 
 1. `specs/research-question.md` — What is this project about?
 2. `specs/hypotheses/` — What hypotheses are we tracking?
-3. `doc/08-open-questions.md` — What questions are we trying to answer?
-4. `papers/summaries/` — What have we already reviewed?
-5. `doc/background/` — What topics have we already covered?
+3. `doc/questions/` — What questions are we trying to answer?
+4. `doc/papers/` — What have we already reviewed?
+5. `doc/topics/` — What topics have we already covered?
 
 This prevents duplication and ensures new work connects to the existing knowledge base.
 

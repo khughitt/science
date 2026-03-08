@@ -15,7 +15,7 @@ Additionally:
 1. If present, read source-specific skills:
    - `skills/data/sources/openalex.md`
    - `skills/data/sources/pubmed.md`
-2. Read `templates/notes/article-note.md` if present.
+2. Read `templates/paper-summary.md`.
 3. Read project context:
    - `specs/research-question.md`
    - `specs/scope-boundaries.md`
@@ -114,7 +114,7 @@ Include the normalized candidate list, dedupe keys, source provenance, and rank/
 
 1. Add the top `Core now` papers to `RESEARCH_PLAN.md` as explicit follow-up tasks.
 2. For selected high-priority papers, run `/science:research-paper` (or queue it in `RESEARCH_PLAN.md`).
-3. Create or update compact article notes in `doc/papers/<citekey>.md` for `Core now` items using `templates/notes/article-note.md`.
+3. Create or update compact article notes in `doc/papers/<citekey>.md` for `Core now` items using `templates/paper-summary.md`.
 4. Populate note metadata fields:
    - `tags` for project-specific labels.
    - `ontology_terms` for normalized ontology CURIEs (for example MeSH, GO, Biolink terms).

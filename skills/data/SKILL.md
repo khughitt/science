@@ -34,7 +34,7 @@ data/
 
 ## When Adding a New Data Source
 
-1. Document it using `templates/data-source.md` — save to `doc/background/data-<source-name>.md`
+1. Document it using `templates/dataset.md` — save to `doc/datasets/data-<source-name>.md`
 2. Update `science.yaml` with the new data source entry
 3. Add acquisition scripts to `code/scripts/`
 4. Create or update `datapackage.json` in the appropriate directory

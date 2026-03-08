@@ -7,17 +7,18 @@ description: Review and reprioritize research tasks using explicit rationale tie
 Review and reprioritize `RESEARCH_PLAN.md`.
 Use `$ARGUMENTS` as optional scope filters, for example: `next 2 weeks`, `only P1`, `modeling-related`, `dataset-related`.
 
-## Before Review
+## Setup
 
-1. Read `prompts/roles/research-assistant.md` if present; otherwise read `${CLAUDE_PLUGIN_ROOT}/references/role-prompts/research-assistant.md`.
-2. Read `RESEARCH_PLAN.md`.
-3. Read `specs/research-question.md`.
-4. Read recent changes in:
-   - `doc/background/`
-   - `doc/07-hypotheses.md`
-   - `doc/08-open-questions.md`
-   - `papers/summaries/`
-5. Read `doc/10-research-gaps.md` if present.
+Follow `references/command-preamble.md` (role: `research-assistant`).
+
+Additionally:
+1. Read `RESEARCH_PLAN.md`.
+2. Read recent changes in:
+   - `doc/topics/`
+   - `specs/hypotheses/`
+   - `doc/questions/`
+   - `doc/papers/`
+3. Read `doc/10-research-gaps.md` if present.
 
 ## Prioritization Method
 
@@ -50,4 +51,4 @@ Prefer fewer, well-justified active tasks over long unmanaged queues.
 
 1. Ensure each active priority has explicit rationale and a next action.
 2. Cross-link relevant open questions/hypotheses where needed.
-3. Commit: `git add RESEARCH_PLAN.md doc/08-open-questions.md && git commit -m "plan: reprioritize research tasks"`
+3. Commit: `git add RESEARCH_PLAN.md && git commit -m "plan: reprioritize research tasks"`

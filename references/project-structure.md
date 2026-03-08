@@ -26,10 +26,18 @@ The "requirements" for the research project.
 
 ### `doc/` — Research Documents
 
-The primary written output of the project. Numbered for reading order.
+The primary written output of the project.
 
-- `background/NN-topic.md` — background topic summaries
-- `discussions/YYYY-MM-DD-topic.md` — structured discussion artifacts
+- `topics/<topic-slug>.md` — background topic summaries
+- `papers/<citekey>.md` — structured paper summaries
+- `questions/<slug>.md` — structured open questions
+- `methods/<slug>.md` — method and tool notes
+- `datasets/<slug>.md` — dataset and accession notes
+- `searches/YYYY-MM-DD-<slug>.md` — literature search runs
+- `discussions/YYYY-MM-DD-<slug>.md` — structured discussion artifacts
+- `interpretations/YYYY-MM-DD-<slug>.md` — result interpretation documents
+- `meta/skill-feedback.md` — process reflection log
+- `index.md` — document coverage map
 - `01-overview.md` through `09-causal-model.md` — structured project narrative
 - `10-research-gaps.md` — optional gap analysis and prioritization output
 - `99-next-steps.md` — immediate action items
@@ -38,23 +46,11 @@ The primary written output of the project. Numbered for reading order.
 
 - `references.bib` — BibTeX database (the single source of truth for citations)
 - `pdfs/` — downloaded PDFs (gitignored)
-- `summaries/AuthorYear-title.md` — structured paper summaries
-
-### `notes/` — Compact Linked Notes
-
-- `index.md` — coverage map across note domains
-- `topics/*.md` — compact topic notes
-- `articles/*.md` — compact paper notes keyed to BibTeX entries
-- `questions/*.md` — structured question notes
-- `methods/*.md` — method/tool notes
-- `datasets/*.md` — dataset/accession notes
-
-See `references/notes-organization.md` for metadata and template conventions.
 
 ### `knowledge/` — Knowledge Graph Artifacts
 
-- `topics.json`, `authors.json`, `concepts.json` — graph data from OpenAlex
-- `graph.dot` — exportable visualization
+- `graph.trig` — RDF knowledge graph
+- Build scripts and export files
 
 ### `models/` — Formal Models
 
@@ -87,4 +83,4 @@ Python scripts for external services: `openalex.py`, `pubmed.py`, `dag.py`, etc.
 ### `templates/` — Document Templates
 
 Copied from the Science plugin on project creation.
-Includes templates for background topics, paper summaries, hypotheses, open questions, data sources, and `templates/notes/*` compact note types.
+Includes templates for topics, paper summaries, hypotheses, questions, methods, datasets, and interpretations.

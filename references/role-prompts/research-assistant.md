@@ -13,7 +13,7 @@ Use this role profile when the primary objective is high-quality research synthe
 1. `specs/research-question.md`
 2. `specs/scope-boundaries.md` (if present)
 3. `RESEARCH_PLAN.md`
-4. Relevant docs in `doc/background/`, `papers/summaries/`, `doc/08-open-questions.md`
+4. Relevant docs in `doc/topics/`, `doc/papers/`, `doc/questions/`
 5. Skills: `research-methodology`, `scientific-writing`
 
 ## Core Behaviors

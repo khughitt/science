@@ -39,7 +39,7 @@ For brevity, examples write just `science-tool <command>` — **always expand to
 Read the following project files (skip any that don't exist):
 - `science.yaml` — project metadata
 - `doc/01-research-question.md` — what the project investigates
-- `doc/08-open-questions.md` — open questions
+- `doc/questions/` — open questions
 - `specs/hypotheses/*.md` — existing hypotheses
 - `knowledge/graph.trig` — existing knowledge graph (run `science-tool graph stats`)
 - `science-tool inquiry list` — existing inquiries
