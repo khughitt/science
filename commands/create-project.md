@@ -8,6 +8,9 @@ You are scaffolding a new research project. Follow these steps:
 
 ## Step 0: Check for Existing Project
 
+> **Note:** If the user has an existing project they want to adopt Science for,
+> use `/science:import-project` instead. `create-project` is for brand-new projects only.
+
 Before starting, check if a `science.yaml` already exists in the current directory or any parent. If it does, warn the user that they appear to be inside an existing Science project and ask if they want to:
 - Create a new project in a subdirectory
 - Overwrite the existing project (dangerous — confirm twice)
