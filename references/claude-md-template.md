@@ -68,3 +68,16 @@ When writing about any topic:
 - `RESEARCH_PLAN.md` — high-level research strategy and direction.
 - `AGENTS.md` — operational guide. Update with new tools or conventions.
 - `science.yaml` — project manifest. Update `last_modified` on significant changes.
+
+## Path Mappings (Imported Projects)
+
+If this project was imported with `/science:import-project`, check `science.yaml` for
+a `paths:` section. Use mapped directories instead of Science defaults:
+- `doc_dir` for research documents (default: `doc/`)
+- `code_dir` for code (default: `code/`)
+- `specs_dir` for specs (default: `specs/`)
+- `papers_dir` for papers/references (default: `papers/`)
+- `knowledge_dir` for knowledge graph (default: `knowledge/`)
+- `tasks_dir` for task queue (default: `tasks/`)
+
+If no `paths:` section exists, use standard Science directory names.
