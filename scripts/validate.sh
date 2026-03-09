@@ -31,6 +31,37 @@ info() {
     fi
 }
 
+# ─── Path resolution from science.yaml ─────────────────────────────
+# Read paths: section if present, otherwise use defaults
+DOC_DIR="doc"
+CODE_DIR="code"
+DATA_DIR="data"
+SPECS_DIR="specs"
+PAPERS_DIR="papers"
+KNOWLEDGE_DIR="knowledge"
+TASKS_DIR="tasks"
+MODELS_DIR="models"
+
+if [ -f "science.yaml" ] && command -v python3 &>/dev/null; then
+    _resolve_path() {
+        python3 -c "
+import yaml
+with open('science.yaml') as f:
+    d = yaml.safe_load(f) or {}
+p = (d.get('paths') or {}).get('${1}', '${2}')
+print(p.rstrip('/'))
+" 2>/dev/null || echo "$2"
+    }
+    DOC_DIR=$(_resolve_path doc_dir doc)
+    CODE_DIR=$(_resolve_path code_dir code)
+    DATA_DIR=$(_resolve_path data_dir data)
+    SPECS_DIR=$(_resolve_path specs_dir specs)
+    PAPERS_DIR=$(_resolve_path papers_dir papers)
+    KNOWLEDGE_DIR=$(_resolve_path knowledge_dir knowledge)
+    TASKS_DIR=$(_resolve_path tasks_dir tasks)
+    MODELS_DIR=$(_resolve_path models_dir models)
+fi
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Science Project Validation"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -56,7 +87,7 @@ fi
 echo ""
 echo "Checking directory structure..."
 
-for dir in specs doc papers data code; do
+for dir in "$SPECS_DIR" "$DOC_DIR" "$PAPERS_DIR" "$DATA_DIR" "$CODE_DIR"; do
     if [ ! -d "$dir" ]; then
         error "Required directory missing: ${dir}/"
     else
@@ -76,16 +107,16 @@ done
 echo ""
 echo "Checking research scope..."
 
-if [ ! -f "specs/research-question.md" ]; then
-    error "specs/research-question.md not found — every project needs a research question"
+if [ ! -f "$SPECS_DIR/research-question.md" ]; then
+    error "$SPECS_DIR/research-question.md not found — every project needs a research question"
 fi
 
 # ─── 4. Template conformance for background docs ──────────────────
 echo ""
 echo "Checking document structure..."
 
-if [ -d "doc/background" ]; then
-    for doc_file in doc/background/*.md; do
+if [ -d "$DOC_DIR/background" ]; then
+    for doc_file in "$DOC_DIR/background/"*.md; do
         [ -f "$doc_file" ] || continue
         info "Checking ${doc_file}..."
 
@@ -101,8 +132,8 @@ fi
 echo ""
 echo "Checking hypotheses..."
 
-if [ -d "specs/hypotheses" ]; then
-    for hyp_file in specs/hypotheses/h*.md; do
+if [ -d "$SPECS_DIR/hypotheses" ]; then
+    for hyp_file in "$SPECS_DIR/hypotheses/"h*.md; do
         [ -f "$hyp_file" ] || continue
         info "Checking ${hyp_file}..."
 
@@ -127,15 +158,15 @@ fi
 echo ""
 echo "Checking citations..."
 
-if [ -f "papers/references.bib" ]; then
+if [ -f "$PAPERS_DIR/references.bib" ]; then
     # Collect all [@Key] citations across docs and summaries
     cited_keys=""
-    if [ -d "doc" ]; then
-        cited_keys=$(grep -roh '\[@[A-Za-z0-9_-]*\]' doc/ 2>/dev/null \
+    if [ -d "$DOC_DIR" ]; then
+        cited_keys=$(grep -roh '\[@[A-Za-z0-9_-]*\]' "$DOC_DIR/" 2>/dev/null \
             | sed 's/\[@//;s/\]//' | sort -u || true)
     fi
-    if [ -d "papers/summaries" ]; then
-        summary_keys=$(grep -roh '\[@[A-Za-z0-9_-]*\]' papers/summaries/ 2>/dev/null \
+    if [ -d "$PAPERS_DIR/summaries" ]; then
+        summary_keys=$(grep -roh '\[@[A-Za-z0-9_-]*\]' "$PAPERS_DIR/summaries/" 2>/dev/null \
             | sed 's/\[@//;s/\]//' | sort -u || true)
         if [ -n "$summary_keys" ]; then
             cited_keys=$(printf "%s\n%s" "$cited_keys" "$summary_keys" | sort -u)
@@ -144,16 +175,16 @@ if [ -f "papers/references.bib" ]; then
 
     for key in $cited_keys; do
         [ -z "$key" ] && continue
-        if ! grep -q "@.*{${key}," papers/references.bib 2>/dev/null; then
-            warn "Citation [@${key}] used in docs but not found in papers/references.bib"
+        if ! grep -q "@.*{${key}," "$PAPERS_DIR/references.bib" 2>/dev/null; then
+            warn "Citation [@${key}] used in docs but not found in $PAPERS_DIR/references.bib"
         fi
     done
     info "Citation check complete"
 else
     # Check if any citations exist without a bib file
-    has_citations=$(grep -rl '\[@' doc/ 2>/dev/null | head -1 || true)
+    has_citations=$(grep -rl '\[@' "$DOC_DIR/" 2>/dev/null | head -1 || true)
     if [ -n "$has_citations" ]; then
-        warn "Citations found in docs but papers/references.bib does not exist"
+        warn "Citations found in docs but $PAPERS_DIR/references.bib does not exist"
     fi
 fi
 
@@ -161,8 +192,8 @@ fi
 echo ""
 echo "Checking paper summaries..."
 
-if [ -d "papers/summaries" ]; then
-    for summary_file in papers/summaries/*.md; do
+if [ -d "$PAPERS_DIR/summaries" ]; then
+    for summary_file in "$PAPERS_DIR/summaries/"*.md; do
         [ -f "$summary_file" ] || continue
         info "Checking ${summary_file}..."
 
@@ -181,20 +212,20 @@ echo "Checking for unresolved markers..."
 unverified_count=0
 needs_citation_count=0
 
-if [ -d "doc" ]; then
-    unverified_count=$(grep -rc '\[UNVERIFIED\]' doc/ 2>/dev/null \
+if [ -d "$DOC_DIR" ]; then
+    unverified_count=$(grep -rc '\[UNVERIFIED\]' "$DOC_DIR/" 2>/dev/null \
         | awk -F: '{s+=$2} END {print s+0}' || true)
-    needs_citation_count=$(grep -rc '\[NEEDS CITATION\]' doc/ 2>/dev/null \
+    needs_citation_count=$(grep -rc '\[NEEDS CITATION\]' "$DOC_DIR/" 2>/dev/null \
         | awk -F: '{s+=$2} END {print s+0}' || true)
     # Ensure we have valid integers (awk always outputs via END, || true just suppresses pipefail)
     unverified_count=${unverified_count:-0}
     needs_citation_count=${needs_citation_count:-0}
 fi
 
-if [ -d "papers/summaries" ]; then
-    uv_extra=$(grep -rc '\[UNVERIFIED\]' papers/summaries/ 2>/dev/null \
+if [ -d "$PAPERS_DIR/summaries" ]; then
+    uv_extra=$(grep -rc '\[UNVERIFIED\]' "$PAPERS_DIR/summaries/" 2>/dev/null \
         | awk -F: '{s+=$2} END {print s+0}' || true)
-    nc_extra=$(grep -rc '\[NEEDS CITATION\]' papers/summaries/ 2>/dev/null \
+    nc_extra=$(grep -rc '\[NEEDS CITATION\]' "$PAPERS_DIR/summaries/" 2>/dev/null \
         | awk -F: '{s+=$2} END {print s+0}' || true)
     uv_extra=${uv_extra:-0}
     nc_extra=${nc_extra:-0}
@@ -214,8 +245,8 @@ fi
 echo ""
 echo "Checking research gap analysis..."
 
-if [ -f "doc/10-research-gaps.md" ]; then
-    info "Checking doc/10-research-gaps.md..."
+if [ -f "$DOC_DIR/10-research-gaps.md" ]; then
+    info "Checking $DOC_DIR/10-research-gaps.md..."
 
     for section in \
         "## Scope Reviewed" \
@@ -223,13 +254,13 @@ if [ -f "doc/10-research-gaps.md" ]; then
         "## High-Impact Gaps" \
         "## Recommended Next Tasks (Prioritized)" \
         "## Rationale and Evidence Links"; do
-        if ! grep -q "$section" "doc/10-research-gaps.md" 2>/dev/null; then
-            warn "doc/10-research-gaps.md missing section: ${section}"
+        if ! grep -q "$section" "$DOC_DIR/10-research-gaps.md" 2>/dev/null; then
+            warn "$DOC_DIR/10-research-gaps.md missing section: ${section}"
         fi
     done
 
-    if ! grep -Eq '\bP[123]\b' "doc/10-research-gaps.md" 2>/dev/null; then
-        warn "doc/10-research-gaps.md has no explicit P1/P2/P3 priorities"
+    if ! grep -Eq '\bP[123]\b' "$DOC_DIR/10-research-gaps.md" 2>/dev/null; then
+        warn "$DOC_DIR/10-research-gaps.md has no explicit P1/P2/P3 priorities"
     fi
 fi
 
@@ -247,7 +278,7 @@ if [ -f "RESEARCH_PLAN.md" ]; then
     )
     for section in "${legacy_sections[@]}"; do
         if grep -q "$section" "RESEARCH_PLAN.md" 2>/dev/null; then
-            warn "RESEARCH_PLAN.md contains legacy task-queue section '${section}' — migrate tasks to tasks/active.md via /science:tasks"
+            warn "RESEARCH_PLAN.md contains legacy task-queue section '${section}' — migrate tasks to $TASKS_DIR/active.md via /science:tasks"
         fi
     done
 else
@@ -258,8 +289,8 @@ fi
 echo ""
 echo "Checking discussion documents..."
 
-if [ -d "doc/discussions" ]; then
-    for discussion_file in doc/discussions/*.md; do
+if [ -d "$DOC_DIR/discussions" ]; then
+    for discussion_file in "$DOC_DIR/discussions/"*.md; do
         [ -f "$discussion_file" ] || continue
         info "Checking ${discussion_file}..."
 
@@ -367,7 +398,7 @@ fi
 echo ""
 echo "Checking knowledge graph..."
 
-if [ -f "knowledge/graph.trig" ]; then
+if [ -f "$KNOWLEDGE_DIR/graph.trig" ]; then
     # Resolve science-tool command
     # Priority: SCIENCE_TOOL_PATH env var → science-tool on PATH → uv run --with
     SCIENCE_TOOL=""
@@ -378,12 +409,12 @@ if [ -f "knowledge/graph.trig" ]; then
     fi
 
     if [ -z "$SCIENCE_TOOL" ]; then
-        error "knowledge/graph.trig exists but science-tool is not available (set SCIENCE_TOOL_PATH or install science-tool)"
+        error "$KNOWLEDGE_DIR/graph.trig exists but science-tool is not available (set SCIENCE_TOOL_PATH or install science-tool)"
     else
         info "Using: ${SCIENCE_TOOL}"
 
         # 13a-d: Run graph validate (parseable, provenance, acyclicity, orphaned)
-        validate_output=$($SCIENCE_TOOL graph validate --format json --path knowledge/graph.trig 2>&1) || true
+        validate_output=$($SCIENCE_TOOL graph validate --format json --path "$KNOWLEDGE_DIR/graph.trig" 2>&1) || true
         if printf "%s" "$validate_output" | python3 -c "import sys,json; json.load(sys.stdin)" &>/dev/null; then
             while IFS= read -r row; do
                 check=$(printf "%s" "$row" | python3 -c "import sys,json; print(json.load(sys.stdin)['check'])")
@@ -407,7 +438,7 @@ for row in json.load(sys.stdin)['rows']:
         fi
 
         # 13e: Graph-prose sync staleness
-        diff_output=$($SCIENCE_TOOL graph diff --format json --path knowledge/graph.trig 2>&1) || true
+        diff_output=$($SCIENCE_TOOL graph diff --format json --path "$KNOWLEDGE_DIR/graph.trig" 2>&1) || true
         if printf "%s" "$diff_output" | python3 -c "import sys,json; json.load(sys.stdin)" &>/dev/null; then
             stale_count=$(printf "%s" "$diff_output" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['rows']))")
             if [ "$stale_count" -gt 0 ]; then
@@ -429,12 +460,12 @@ for row in json.load(sys.stdin)['rows']:
         fi
     fi
 else
-    info "No knowledge/graph.trig — skipping graph checks"
+    info "No $KNOWLEDGE_DIR/graph.trig — skipping graph checks"
 fi
 
 # ─── 14. Inquiry validation ──────────────────────────────────────
-if [ -f "knowledge/graph.trig" ] && [ -n "${SCIENCE_TOOL:-}" ]; then
-    inquiry_list=$($SCIENCE_TOOL inquiry list --path knowledge/graph.trig --format json 2>/dev/null || echo "[]")
+if [ -f "$KNOWLEDGE_DIR/graph.trig" ] && [ -n "${SCIENCE_TOOL:-}" ]; then
+    inquiry_list=$($SCIENCE_TOOL inquiry list --path "$KNOWLEDGE_DIR/graph.trig" --format json 2>/dev/null || echo "[]")
     inquiry_count=$(printf "%s" "$inquiry_list" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
 
     if [ "$inquiry_count" -gt 0 ]; then
@@ -449,7 +480,7 @@ for inq in json.load(sys.stdin):
 
         while IFS= read -r slug; do
             [ -z "$slug" ] && continue
-            validate_out=$($SCIENCE_TOOL inquiry validate "$slug" --path knowledge/graph.trig --format json 2>&1) || true
+            validate_out=$($SCIENCE_TOOL inquiry validate "$slug" --path "$KNOWLEDGE_DIR/graph.trig" --format json 2>&1) || true
 
             if printf "%s" "$validate_out" | python3 -c "import sys,json; json.load(sys.stdin)" &>/dev/null; then
                 while IFS= read -r row; do
@@ -483,12 +514,12 @@ fi
 echo ""
 echo "Checking task queue..."
 
-if [ ! -f "tasks/active.md" ]; then
-    warn "tasks/active.md not found (use /science:tasks to create)"
+if [ ! -f "$TASKS_DIR/active.md" ]; then
+    warn "$TASKS_DIR/active.md not found (use /science:tasks to create)"
 else
-    info "tasks/active.md exists"
+    info "$TASKS_DIR/active.md exists"
     # Check for duplicate task IDs
-    task_ids=$(grep -oP '^\#\# \[\Kt\d+' "tasks/active.md" 2>/dev/null || true)
+    task_ids=$(grep -oP '^\#\# \[\Kt\d+' "$TASKS_DIR/active.md" 2>/dev/null || true)
     if [ -n "$task_ids" ]; then
         dupes=$(echo "$task_ids" | sort | uniq -d)
         if [ -n "$dupes" ]; then
@@ -499,9 +530,9 @@ else
         # Check each task has required fields
         while IFS= read -r tid; do
             # Extract the block for this task (from ## [tNNN] to next ## or EOF)
-            block=$(sed -n "/^## \[${tid}\]/,/^## \[t/p" "tasks/active.md" | head -n -1)
+            block=$(sed -n "/^## \[${tid}\]/,/^## \[t/p" "$TASKS_DIR/active.md" | head -n -1)
             if [ -z "$block" ]; then
-                block=$(sed -n "/^## \[${tid}\]/,\$p" "tasks/active.md")
+                block=$(sed -n "/^## \[${tid}\]/,\$p" "$TASKS_DIR/active.md")
             fi
             for field in type priority status created; do
                 if ! echo "$block" | grep -qP "^- ${field}:" 2>/dev/null; then
