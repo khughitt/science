@@ -1982,7 +1982,24 @@ def _read_revision_manifest(dataset: Dataset) -> dict[str, dict[str, int | str]]
 
 def _build_input_manifest(graph_path: Path) -> dict[str, dict[str, int | str]]:
     project_root = _project_root_from_graph_path(graph_path)
-    include_dirs = ("doc", "specs", "notes", "papers/summaries", "data", "code")
+
+    try:
+        from science_tool.paths import resolve_paths
+
+        pp = resolve_paths(project_root)
+        include_dirs: list[Path] = [
+            pp.doc_dir,
+            pp.specs_dir,
+            pp.papers_dir / "summaries",
+            pp.data_dir,
+            pp.code_dir,
+        ]
+        notes_dir = project_root / "notes"
+        if notes_dir.is_dir():
+            include_dirs.append(notes_dir)
+    except Exception:
+        include_dirs = [project_root / d for d in ("doc", "specs", "notes", "papers/summaries", "data", "code")]
+
     include_files = ("RESEARCH_PLAN.md", "science.yaml", "CLAUDE.md", "AGENTS.md")
 
     files: set[Path] = set()
@@ -1991,8 +2008,7 @@ def _build_input_manifest(graph_path: Path) -> dict[str, dict[str, int | str]]:
         if candidate.is_file():
             files.add(candidate)
 
-    for dir_name in include_dirs:
-        base = project_root / dir_name
+    for base in include_dirs:
         if not base.is_dir():
             continue
         for candidate in base.rglob("*"):

@@ -40,9 +40,16 @@ _SKIP_DIRS = {"templates", ".venv", "data", ".git", "__pycache__"}
 
 def _collect_markdown_files(root: Path) -> list[Path]:
     """Collect all markdown files to scan."""
+    try:
+        from science_tool.paths import resolve_paths
+
+        pp = resolve_paths(root)
+        scan_dirs = [pp.doc_dir, pp.specs_dir]
+    except Exception:
+        scan_dirs = [root / d for d in _SCAN_DIRS]
+
     files: list[Path] = []
-    for scan_dir in _SCAN_DIRS:
-        d = root / scan_dir
+    for d in scan_dirs:
         if d.is_dir():
             for p in d.rglob("*.md"):
                 if not any(part in _SKIP_DIRS for part in p.parts):
