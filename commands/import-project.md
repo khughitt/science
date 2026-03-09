@@ -198,6 +198,10 @@ mkdir -p ./prompts/roles
 cp ${CLAUDE_PLUGIN_ROOT}/references/role-prompts/*.md ./prompts/roles/
 ```
 
+If the project has non-default path mappings, update the copied role prompts to use the
+mapped directory names. For example, if `doc_dir: docs/`, replace `doc/topics/` with
+`docs/topics/`, `doc/papers/` with `docs/papers/`, etc. in the role prompt files.
+
 ### Extend `CLAUDE.md`
 
 If `CLAUDE.md` exists, **append** a Science section (do not replace existing content).
