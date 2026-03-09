@@ -91,3 +91,16 @@ Python scripts for external services: `openalex.py`, `pubmed.py`, `dag.py`, etc.
 
 Copied from the Science plugin on project creation.
 Includes templates for topics, paper summaries, hypotheses, questions, methods, datasets, and interpretations.
+
+## Imported Projects
+
+Projects initialized with `/science:import-project` may have non-standard directory layouts.
+Check `science.yaml` for a `paths:` section that maps Science conventions to existing directories.
+
+For example, a project with `paths: { doc_dir: docs/, code_dir: src/ }` stores research
+documents in `docs/` instead of `doc/` and code in `src/` instead of `code/`.
+
+All Science commands, `validate.sh`, and `science-tool` respect these mappings.
+When a `paths:` key is absent, the standard Science default applies.
+
+See `references/science-yaml-schema.md` for the full list of mappable paths.
