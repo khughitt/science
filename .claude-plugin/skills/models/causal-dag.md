@@ -1,6 +1,6 @@
 ---
 name: causal-dag
-description: Reference guide for causal DAG modeling within the science inquiry framework. Covers causal structure, common pitfalls, provenance discipline, and export to pgmpy/ChiRho. Loaded by build-dag and critique-approach as background context.
+description: Reference guide for causal DAG modeling within the science inquiry framework. Covers causal structure, common pitfalls, provenance discipline, and export to pgmpy/ChiRho. Loaded by sketch-model (causal mode) and critique-approach as background context.
 ---
 
 # Causal DAG Modeling Reference
@@ -77,11 +77,11 @@ Confidence scores reflect evidence strength:
 ## Workflow
 
 ```
-/science:build-dag  →  /science:critique-approach  →  inquiry export-pgmpy / export-chirho
+/science:sketch-model (causal mode)  →  /science:critique-approach  →  inquiry export-pgmpy / export-chirho
    (construct)              (review)                        (export)
 ```
 
-1. **Build**: `/science:build-dag` guides interactive construction of a causal DAG
+1. **Build**: `/science:sketch-model` (causal mode) guides interactive construction of a causal DAG
 2. **Critique**: `/science:critique-approach` reviews for confounders, identifiability, bias
 3. **Export**: CLI commands generate scaffold code for analysis
 

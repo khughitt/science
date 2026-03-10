@@ -182,7 +182,7 @@ Note: `add-node` without `--role` adds an interior node (no boundary classificat
 |-----------|-------------|-------|
 | `sci:target` | Links inquiry to its hypothesis/question | inquiry |
 | `sci:boundaryRole` | Assigns BoundaryIn/BoundaryOut within an inquiry | inquiry |
-| `sci:inquiryStatus` | Inquiry lifecycle status (sketch/specified/planned/in-progress/complete) | inquiry |
+| `sci:inquiryStatus` | Inquiry lifecycle status (sketch/specified/critiqued/planned/reviewed) | inquiry |
 | `sci:feedsInto` | Data/information flow (A provides input to B) | inquiry |
 | `sci:assumes` | Dependency on an assumption | inquiry |
 | `sci:produces` | Transformation yields output | inquiry |

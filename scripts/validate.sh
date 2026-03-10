@@ -310,6 +310,10 @@ echo "Checking discussion documents..."
 if [ -d "$DOC_DIR/discussions" ]; then
     for discussion_file in "$DOC_DIR/discussions/"*.md; do
         [ -f "$discussion_file" ] || continue
+        # Skip comparison documents — validated separately below
+        case "$discussion_file" in
+            *comparison-*) continue ;;
+        esac
         info "Checking ${discussion_file}..."
 
         for section in \
