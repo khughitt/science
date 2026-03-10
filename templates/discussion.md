@@ -21,11 +21,11 @@ status: "in-progress"
 
 ## Critical Analysis
 
-<Strengths, weaknesses, assumptions, and likely failure modes.>
-
-## Alternative Explanations / Confounders
-
-<Competing explanations and potential confounding factors.>
+<Strengths, weaknesses, assumptions, and likely failure modes.
+Include alternative explanations and confounding factors.
+If the alternatives are central to the analysis (e.g., revising an existing claim
+or evaluating a methodological decision), integrate them directly rather than
+splitting into a separate section.>
 
 ## Evidence Needed
 
