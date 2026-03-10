@@ -41,29 +41,27 @@ Extract the key results. For each finding, classify signal strength:
 - **Suggestive** — directional but uncertain
 - **Null** — no effect detected (record this — it's informative)
 - **Ambiguous** — multiple interpretations possible
+- **Methodological** — finding about the evaluation framework itself, not the phenomenon (e.g., a metric is invalid, a baseline is inadequate)
+
+Loaded aspects may contribute additional signal categories (e.g., **Descriptive** from `computational-analysis`, **Confounded** from `causal-modeling`). Check loaded aspect files for definitions.
 
 Include effect sizes and confidence intervals where available.
 Ask the user to clarify anything ambiguous before proceeding.
 
-### 2. Evaluate hypotheses
+### 2. Evaluate against open questions
 
-For each active hypothesis in `specs/hypotheses/`:
+For each open question in `doc/questions/`:
 - Is it relevant to these results?
-- If relevant: does the evidence support, refute, or leave it unchanged?
-- Propose a status update if warranted: `proposed` → `supported` / `refuted` / `revised` / `under-investigation`
-- If revising, draft the revised statement
+- If relevant: does the evidence address, partially address, or leave it unchanged?
+- Note new constraints, refined scope, or resolved sub-questions
 
-Present the evaluation table to the user. **Do not update hypothesis files until the user confirms each proposed change.**
+If the project has the `hypothesis-testing` aspect, also perform the formal Hypothesis Evaluation contributed by that aspect.
 
-### 3. Assess causal model
+### 3. Aspect-contributed analysis
 
-If a causal inquiry exists:
-- Do results suggest missing variables or edges?
-- Should any edges be removed or reversed?
-- Do effect sizes inform parameter estimates?
-- Propose specific graph updates but do not execute them — list the `science-tool` commands that would make the changes
+Include any additional analysis sections contributed by loaded aspects (e.g., Causal Model Implications from `causal-modeling`, Hypothesis Evaluation table from `hypothesis-testing`, Sub-group Analysis from `computational-analysis`).
 
-If no causal model exists, note whether results suggest building one.
+Follow the guidance in each aspect file for section content and placement.
 
 ### 4. Surface new questions
 
@@ -88,7 +86,7 @@ Save to `doc/interpretations/YYYY-MM-DD-<slug>.md`.
 
 ## After Writing
 
-1. Update hypothesis files in `specs/hypotheses/` with confirmed status changes and new evidence in the "Current Evidence" section.
+1. If the project has the `hypothesis-testing` aspect: update hypothesis files in `specs/hypotheses/` with confirmed status changes and new evidence.
 2. Add new questions to `doc/questions/` using `templates/question.md`.
 3. Update task queue: add new tasks, complete or reprioritize existing ones via `science-tool tasks`.
 4. If graph updates were proposed, remind the user of the commands to run.
