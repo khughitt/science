@@ -1362,6 +1362,16 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "layer": "inquiry",
     },
     {"predicate": "sci:outcome", "description": "Outcome variable in causal inquiry", "layer": "inquiry"},
+    # Model-parameter structure predicates (natural-systems-guide)
+    {"predicate": "sci:hasParameter", "description": "Model uses canonical parameter", "layer": "graph/knowledge"},
+    {"predicate": "sci:approximates", "description": "Model approximates another model", "layer": "graph/knowledge"},
+    {"predicate": "sci:limitOf", "description": "Model is a limit case of another", "layer": "graph/knowledge"},
+    {"predicate": "sci:dualOf", "description": "Models are dual formulations", "layer": "graph/knowledge"},
+    {"predicate": "sci:coarseGrainOf", "description": "Model is coarse-grained version", "layer": "graph/knowledge"},
+    {"predicate": "sci:coupledWith", "description": "Models coupled in multi-physics", "layer": "graph/knowledge"},
+    {"predicate": "sci:analogousTo", "description": "Structure-preserving cross-domain analogy", "layer": "graph/knowledge"},
+    {"predicate": "sci:competesWithParam", "description": "Parameters have competing effects", "layer": "graph/knowledge"},
+    {"predicate": "sci:controlsOnset", "description": "Parameter controls bifurcation/onset", "layer": "graph/knowledge"},
 ]
 
 
