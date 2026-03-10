@@ -168,6 +168,8 @@ science-tool inquiry validate "<slug>" --format json
 
 Save the inquiry document to `doc/inquiries/<slug>.md`.
 
+The inquiry status is `sketch` at this stage.
+
 Show the user the boundary nodes, data flow, and any unknowns.
 
 ### Step 5: Finalize

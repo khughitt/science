@@ -148,6 +148,8 @@ Save to `doc/inquiries/<slug>-review.md`:
 {{What's done well}}
 ```
 
+Update the inquiry status to `reviewed`.
+
 ### Step 4: Present to user
 
 Show the summary table and top recommendations. Ask if they want to:

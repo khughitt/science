@@ -116,7 +116,7 @@ All checks must pass for a specified inquiry:
 - unknown_resolution: pass
 - target_exists: pass
 
-Update the inquiry document in `doc/inquiries/<slug>.md`.
+Update the inquiry status to `specified` and the inquiry document in `doc/inquiries/<slug>.md`.
 
 ```bash
 science-tool graph stamp-revision

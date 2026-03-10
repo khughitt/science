@@ -172,6 +172,10 @@ Save to `doc/inquiries/<slug>-critique.md`:
 <specific actionable items>
 ```
 
+Update the inquiry status to `critiqued`.
+
+Note: this status indicates the inquiry has been through critical review, NOT that it passed. The review report documents what was found.
+
 ### Step 8: Present findings
 
 Summarize the key findings to the user:

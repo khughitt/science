@@ -47,6 +47,8 @@ science-tool inquiry validate "<slug>" --format json
 
 Verify status is `specified`. If it's `sketch`, warn the user and suggest `/science:specify-model` first.
 
+If status is `specified` but not `critiqued`, warn: "This inquiry hasn't been through critique yet. Consider running `/science:critique-approach <slug>` first. Proceeding anyway."
+
 ### Step 2: Identify computational requirements
 
 Walk the inquiry subgraph and identify:
