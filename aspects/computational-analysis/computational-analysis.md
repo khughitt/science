@@ -49,3 +49,7 @@ When researching computational methods or tools:
 ## Signal categories
 
 - **Descriptive** — structure observed but not statistically testable (e.g., UMAP clusters, NMF factors, visualization patterns)
+
+## Available commands
+
+(none)

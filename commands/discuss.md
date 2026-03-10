@@ -85,7 +85,7 @@ Use this format:
 ```
 
 Guidelines:
-- Be concrete and specific, not generic ("the Alternative Explanations section overlapped heavily with Critical Analysis" > "some sections could be improved")
+- Be concrete and specific, not generic ("the Critical Analysis section felt too broad when covering both methodological and empirical weaknesses" > "some sections could be improved")
 - 2-5 bullets total. Skip categories that have nothing to report.
 - If the same issue has occurred before, note the recurrence (e.g., "3rd time this section was not applicable") — recurring patterns are the strongest signal for needed changes
 - If everything worked smoothly, a single "No friction encountered" is fine — don't manufacture feedback

@@ -13,7 +13,7 @@ This feedback accumulates per-project and is periodically reviewed by the plugin
 
 ## Scope
 
-### Commands receiving feedback prompts (6 total)
+### Commands receiving feedback prompts (7 total)
 
 **Tier 1 — template/structure directly shapes research capture:**
 
@@ -66,18 +66,19 @@ These don't involve template/structure decisions that meaningfully affect resear
 - A section or instruction that genuinely improved the output
 ```
 
-### Four fixed categories
+### Five fixed categories
 
 Each category targets a specific failure mode:
 
 1. **Template/structure friction** — detects sections that don't fit real research tasks
 2. **Missing capture** — detects information gaps in templates
 3. **Guidance issues** — detects confusing or counterproductive instructions
-4. **What worked well** — prevents removing things that work (kept last and brief)
+4. **Suggested improvement** — captures concrete fix proposals (added 2026-03-10)
+5. **What worked well** — prevents removing things that work (kept last and brief)
 
 ### Prompt design
 
-Each of the 6 commands gets a "Process Reflection" section appended at the end, consisting of:
+Each of the 7 commands gets a "Process Reflection" section appended at the end, consisting of:
 
 1. A **one-line custom preamble** specific to what that command should reflect on
 2. A **shared epilogue block** with the entry format and guidelines
@@ -108,13 +109,14 @@ The feedback entry format was also updated:
 
 ## Implementation
 
-Six command files need a "Process Reflection" section appended:
+Seven command files need a "Process Reflection" section appended:
 
-1. `commands/research-topic.md`
-2. `commands/research-paper.md`
-3. `commands/add-hypothesis.md`
-4. `commands/discuss.md`
-5. `commands/research-gaps.md`
-6. `commands/critique-approach.md`
+1. `commands/interpret-results.md`
+2. `commands/research-topic.md`
+3. `commands/research-paper.md`
+4. `commands/add-hypothesis.md`
+5. `commands/discuss.md`
+6. `commands/research-gaps.md`
+7. `commands/critique-approach.md`
 
 Each edit is small — approximately 20-25 lines added to the end of each file.

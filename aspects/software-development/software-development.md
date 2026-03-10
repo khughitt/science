@@ -40,3 +40,7 @@ When discussing software design decisions:
 ## Signal categories
 
 (none — uses core categories)
+
+## Available commands
+
+(none)
