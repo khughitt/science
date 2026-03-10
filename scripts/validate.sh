@@ -264,6 +264,24 @@ if [ -f "$DOC_DIR/10-research-gaps.md" ]; then
     fi
 fi
 
+# Legacy path — also check new path
+if [ ! -f "$DOC_DIR/10-research-gaps.md" ]; then
+    # Check for new-style next-steps files
+    if ! ls "$DOC_DIR/meta/next-steps-"*.md 1>/dev/null 2>&1; then
+        info "No gap analysis found ($DOC_DIR/10-research-gaps.md or $DOC_DIR/meta/next-steps-*.md)"
+    fi
+fi
+
+# --- Next-steps documents (new format) ---
+for f in "$DOC_DIR/meta/next-steps-"*.md; do
+    [ -f "$f" ] || continue
+    for section in "Recent Progress" "Current State" "Coverage Gaps" "Recommended Next Actions"; do
+        if ! grep -q "## $section" "$f"; then
+            warn "Next-steps $f missing section: $section"
+        fi
+    done
+done
+
 # ─── 10. RESEARCH_PLAN conventions ───────────────────────────────
 echo ""
 echo "Checking research plan conventions..."
@@ -321,6 +339,36 @@ if [ -d "$DOC_DIR/discussions" ]; then
         fi
     done
 fi
+
+# --- Pre-registration documents ---
+for f in "$DOC_DIR/meta/pre-registration-"*.md; do
+    [ -f "$f" ] || continue
+    for section in "Hypotheses Under Test" "Expected Outcomes" "Decision Criteria" "Null Result Plan"; do
+        if ! grep -q "## $section" "$f"; then
+            warn "Pre-registration $f missing section: $section"
+        fi
+    done
+done
+
+# --- Hypothesis comparison documents ---
+for f in "$DOC_DIR/discussions/comparison-"*.md; do
+    [ -f "$f" ] || continue
+    for section in "Hypotheses Compared" "Evidence Inventory" "Discriminating Predictions" "Current Verdict"; do
+        if ! grep -q "## $section" "$f"; then
+            warn "Comparison $f missing section: $section"
+        fi
+    done
+done
+
+# --- Bias audit documents ---
+for f in "$DOC_DIR/meta/bias-audit-"*.md; do
+    [ -f "$f" ] || continue
+    for section in "Cognitive Biases" "Methodological Biases" "Summary"; do
+        if ! grep -q "## $section" "$f"; then
+            warn "Bias audit $f missing section: $section"
+        fi
+    done
+done
 
 # ─── 12. Notes conformance ─────────────────────────────────────────
 echo ""
