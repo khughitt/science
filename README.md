@@ -15,6 +15,9 @@ Science provides **skills** (structured research methodology), **commands** (int
 - **Review and reprioritize task plans** using explicit rationale
 - **Interpret results** and feed findings back into hypotheses, causal models, and priorities
 - **Develop hypotheses** with structured falsifiability criteria and evidence tracking
+- **Pre-register expectations** — formalize predictions and decision criteria before analysis
+- **Compare competing hypotheses** — head-to-head evidence evaluation with discriminating predictions
+- **Audit for biases** — systematic cognitive and methodological bias checklist
 - **Sketch and formalize models** — capture variables, relationships, and unknowns, then add evidence provenance
 - **Build and critique causal DAGs** — identify treatment, outcome, confounders, and check identifiability
 - **Plan and review pipelines** — translate inquiries into computational steps with validation criteria
@@ -47,20 +50,21 @@ claude --plugin-dir /path/to/science
 | `/science:import-project` | Add Science framework to an existing project without restructuring |
 | `/science:research-paper` | Research and synthesize a paper (LLM knowledge → web search → PDF) |
 | `/science:research-topic` | Research and synthesize a topic with project context |
-| `/science:research-gaps` | Analyze current project coverage and identify high-impact gaps |
+| `/science:next-steps` | Gap analysis + progress synthesis + prioritized recommendations |
 | `/science:discuss` | Structured critical discussion for ideas, hypotheses, or approaches |
 | `/science:tasks` | Manage research and development tasks — add, complete, defer, list, filter |
-| `/science:next-steps` | Synthesize recent progress, current state, and suggest next actions |
 | `/science:search-literature` | Search OpenAlex/PubMed, rank results, and create a prioritized reading queue |
 | `/science:find-datasets` | Discover and document candidate datasets from public repositories |
 | `/science:add-hypothesis` | Develop and refine a hypothesis interactively |
-| `/science:interpret-results` | Interpret analysis results and update the research framework |
-| `/science:sketch-model` | Sketch a research model — variables, relationships, and unknowns |
+| `/science:pre-register` | Formalize expectations and decision criteria before analysis |
+| `/science:compare-hypotheses` | Head-to-head evaluation of competing explanations |
+| `/science:bias-audit` | Systematic bias and threat-to-validity check |
+| `/science:interpret-results` | Interpret results with pre-registration cross-check |
+| `/science:sketch-model` | Sketch a research model (auto-detects causal mode) |
 | `/science:specify-model` | Formalize a model with full evidence provenance |
-| `/science:build-dag` | Build a causal DAG interactively (treatment, outcome, confounders) |
-| `/science:critique-approach` | Review a causal DAG for structural problems and missing confounders |
-| `/science:plan-pipeline` | Generate a computational implementation plan from an inquiry |
-| `/science:review-pipeline` | Audit a pipeline plan against an evidence rubric |
+| `/science:critique-approach` | Review model for problems, sensitivity analysis |
+| `/science:plan-pipeline` | Generate implementation plan with QA checkpoints |
+| `/science:review-pipeline` | Audit plan against evidence rubric with QA coverage |
 | `/science:create-graph` | Build a knowledge graph from project documents |
 | `/science:update-graph` | Incrementally update the graph after document changes |
 
@@ -163,6 +167,14 @@ Interactive conversation refines your research question, then scaffolds the full
 
 For each conjecture — even vague ones — this command walks you through clarifying the claim, defining falsifiability criteria, listing predictions, and identifying required evidence. Output lands in `specs/hypotheses/` and gets cross-linked to open questions.
 
+After adding hypotheses, formalize your expectations:
+
+```
+/science:pre-register
+```
+
+This walks you through declaring expected outcomes, decision criteria, and a null-result plan — all before running any analysis. The pre-registration is version-controlled and cross-checked later by `/science:interpret-results`.
+
 ### 3. Build background knowledge
 
 ```
@@ -179,6 +191,14 @@ Synthesizes a structured background document from LLM knowledge + web search, ad
 
 Queries OpenAlex and PubMed with multiple query variants, deduplicates, and ranks results by project relevance. Produces a prioritized reading queue with tiers: *Core now*, *Relevant next*, *Peripheral monitor*. High-priority papers can be queued as tasks via `/science:tasks`.
 
+### 4b. Compare competing explanations
+
+```
+/science:compare-hypotheses
+```
+
+When 2+ hypotheses exist for the same phenomenon, this command performs a structured head-to-head comparison — identifying discriminating predictions and crucial experiments.
+
 ### 5. Summarize key papers
 
 ```
@@ -190,13 +210,10 @@ For each high-priority paper from the search, this command synthesizes a structu
 ### 6. Identify gaps and reprioritize
 
 ```
-/science:research-gaps
 /science:next-steps
 ```
 
-`research-gaps` audits coverage across five dimensions (concepts, evidence quality, contradictions, testability, data feasibility) and writes `doc/10-research-gaps.md` with prioritized gap-closing tasks.
-
-`next-steps` synthesizes recent progress, current task state, hypothesis status, and open questions to recommend 3-5 high-value next actions.
+Audits coverage across five dimensions (concepts, evidence quality, contradictions, testability, data feasibility), synthesizes recent progress and hypothesis status, and recommends 3-5 high-value next actions.
 
 ### 7. Stress-test ideas
 
@@ -206,18 +223,25 @@ For each high-priority paper from the search, this command synthesizes a structu
 
 Runs a structured critical discussion that surfaces assumptions, alternative explanations, confounders, and missing evidence. Supports an optional **double-blind mode** where you and the agent write independent analyses before comparing. Discussion output feeds back into open questions and the research plan.
 
+### 7b. Audit for biases
+
+```
+/science:bias-audit
+```
+
+Systematic check of cognitive and methodological biases against current project state. Especially valuable before interpreting results or when a project feels "too settled".
+
 ### 8. Model cause and effect
 
 ```
 /science:sketch-model
 /science:specify-model
-/science:build-dag
 /science:critique-approach
 ```
 
-`sketch-model` captures variables, relationships, data sources, and unknowns as an inquiry subgraph. `specify-model` formalizes the sketch with evidence provenance — every variable gets a type, every edge gets evidence.
+`sketch-model` captures variables, relationships, data sources, and unknowns as an inquiry subgraph — auto-detecting causal mode when appropriate. `specify-model` formalizes the sketch with evidence provenance — every variable gets a type, every edge gets evidence.
 
-`build-dag` constructs a causal DAG identifying treatment, outcome, and confounders. `critique-approach` reviews the DAG for missing confounders, identifiability issues, and structural problems.
+`critique-approach` reviews the model for missing confounders, identifiability issues, structural problems, and sensitivity analysis.
 
 ### 9. Find datasets
 
@@ -257,11 +281,11 @@ This detects stale documents via content hashing and incrementally adds new enti
 Research isn't linear. A typical session might look like:
 
 ```
-research-topic → add-hypothesis → search-literature → research-paper ×3
-→ research-gaps → next-steps → discuss → update-graph
-→ sketch-model → specify-model → build-dag → critique-approach
+research-topic → add-hypothesis → pre-register → search-literature → research-paper ×3
+→ compare-hypotheses → next-steps → discuss → bias-audit → update-graph
+→ sketch-model → specify-model → critique-approach
 → find-datasets → plan-pipeline → review-pipeline
-→ research-topic (deeper) → research-paper ×2 → next-steps
+→ [run analysis] → interpret-results → next-steps
 ```
 
 Each command reads existing project state and builds on it. All artifacts are version-controlled, cross-linked, and validated by `bash validate.sh`.
