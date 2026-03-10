@@ -7,43 +7,49 @@
 ## Findings Summary
 
 <!--
-  Summarize key results. For each finding, classify signal strength:
+  Summarize key results. For each finding, classify signal strength.
+
+  Core categories (always available):
   - Strong: clear, replicated, large effect
   - Suggestive: directional but uncertain
   - Null: no effect detected (important — record, don't discard)
   - Ambiguous: multiple interpretations possible
+  - Methodological: finding about the evaluation framework itself, not the phenomenon
+
+  Aspect-contributed categories (include if the project has the relevant aspect):
+  - Descriptive (computational-analysis): structure observed but not statistically testable
+  - Confounded (causal-modeling): effect present but likely due to unmeasured variable
 
   Include effect sizes and confidence intervals where available.
 -->
 
-## Hypothesis Evaluation
+## Evidence vs. Open Questions
 
 <!--
-  For each relevant hypothesis, assess the evidence.
-  Include null results — "no change" is informative.
-  Propose status changes; do not apply without user confirmation.
+  For each open question in doc/questions/:
+  - Is it relevant to these results?
+  - If relevant: does the evidence address, partially address, or leave it unchanged?
+  - Note new constraints, refined scope, or resolved sub-questions
+
+  This section works with or without formal hypotheses.
+  If the project has the hypothesis-testing aspect, a formal Hypothesis Evaluation
+  section will follow (contributed by that aspect).
 -->
 
-| Hypothesis | Prior Status | Evidence Summary | Proposed Status | Confidence |
-|---|---|---|---|---|
-| {{H01 — short title}} | {{proposed}} | {{brief evidence}} | {{supported / refuted / revised / unchanged}} | {{high / moderate / low}} |
-
-## Causal Model Implications
-
+<!-- ASPECT SECTIONS INSERTED HERE -->
 <!--
-  Do results suggest changes to the causal DAG?
-  - Edges to add, remove, or reverse
-  - Missing variables suggested by unexpected patterns
-  - Effect sizes that inform parameter estimates
-
-  If no causal model exists yet, note whether results suggest building one.
+  Loaded aspects may contribute additional sections at this point.
+  Follow the placement guidance in each aspect file.
 -->
 
 ## New Questions Raised
 
 <!--
   Questions that did not exist before these results.
-  For each, note priority and suggested approach.
+  For each, note:
+  - Priority (high / medium / low)
+  - Type (empirical / methodological / theoretical)
+  - Suggested approach to investigate
 -->
 
 ## Limitations & Caveats
@@ -56,11 +62,23 @@
   - Data quality concerns
 -->
 
+## Additional Observations
+
+<!--
+  Catch-all for findings that don't fit neatly into other sections:
+  - Sub-group or decomposition results
+  - Control quality concerns
+  - Metric or measurement validity issues
+  - Unexpected patterns worth noting
+
+  Skip this section if there's nothing to add.
+-->
+
 ## Updated Priorities
 
 <!--
   Given these findings, what changes in the research plan?
   - Tasks to add, reprioritize, or drop
-  - Hypotheses to pursue further or abandon
+  - Open questions to pursue further or set aside
   - Next commands to run (discuss, research-gaps, add-hypothesis, etc.)
 -->
