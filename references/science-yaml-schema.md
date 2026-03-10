@@ -35,6 +35,12 @@ paths:
   tasks_dir: "string"        # Default: tasks/
   templates_dir: "string"    # Default: templates/
   prompts_dir: "string"      # Default: prompts/
+
+# Optional — project aspects (composable mixins)
+# Each aspect contributes additional sections, signal categories, and guidance to commands.
+# See aspects/ directory for available aspects and what they provide.
+aspects:                        # Default: [] (no aspects)
+  - "string"                    # One of: causal-modeling, hypothesis-testing, computational-analysis, software-development
 ```
 
 ## Status Values
@@ -71,6 +77,9 @@ data_sources:
     type: "text"
     url: "https://api.openalex.org/"
     access: "public"
+aspects:
+  - causal-modeling
+  - hypothesis-testing
 ```
 
 ## Imported Project Example
@@ -93,4 +102,7 @@ paths:
   doc_dir: docs/
   code_dir: src/
   models_dir: src/natural/registry/
+aspects:
+  - computational-analysis
+  - software-development
 ```
