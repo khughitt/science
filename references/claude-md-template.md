@@ -29,7 +29,7 @@ Before performing any of the following tasks, read the corresponding skill:
 Use role prompt packs for capability-first workflows:
 
 - `prompts/roles/research-assistant.md` for research/synthesis/prioritization tasks
-  (`/science:research-paper`, `/science:research-topic`, `/science:research-gaps`, `/science:next-steps`)
+  (`/science:research-paper`, `/science:research-topic`, `/science:next-steps`)
 - `prompts/roles/discussant.md` for critical discussion tasks
   (`/science:discuss`, including optional double-blind mode)
 

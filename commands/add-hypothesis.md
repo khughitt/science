@@ -65,7 +65,8 @@ New hypotheses start as `proposed` unless the user presents existing evidence, i
 2. If the hypothesis addresses an open question, update the relevant file in `doc/questions/`.
 3. If the hypothesis implies causal relationships, note that `models/causal-dag.*` may need updating and mention this to the user.
 4. Suggest 2-3 papers that may be relevant to testing this hypothesis (from LLM knowledge; cross-check titles and authors via web search before presenting).
-5. Commit: `git add -A && git commit -m "hypothesis: add H<NN> - <short title>"`
+5. If the hypothesis is testable with planned analysis, suggest: `/science:pre-register` — to formalize expectations before running the analysis.
+6. Commit: `git add -A && git commit -m "hypothesis: add H<NN> - <short title>"`
 
 ## Process Reflection
 

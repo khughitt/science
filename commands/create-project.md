@@ -348,7 +348,7 @@ This directory contains formal models for the project.
 - `causal-dag.dot` — Causal DAG in Graphviz DOT format (when created)
 - `causal-dag.json` — Machine-readable causal DAG (when created)
 
-Use `/science:build-dag` to construct and update the causal model.
+Use `/science:sketch-model` to construct and update the causal model.
 ```
 
 ### `validate.sh`
@@ -403,5 +403,5 @@ Tell the user what was created and suggest next steps:
 1. Add initial hypotheses with `/science:add-hypothesis`
 2. Explore background topics with `/science:research-topic`
 3. Research relevant papers with `/science:research-paper`
-4. Run `/science:research-gaps` and `/science:next-steps` to prioritize next work
+4. Run `/science:next-steps` to prioritize next work
 5. Edit `specs/scope-boundaries.md` to refine what's in/out of scope

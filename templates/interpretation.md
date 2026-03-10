@@ -92,5 +92,5 @@
   Given these findings, what changes in the research plan?
   - Tasks to add, reprioritize, or drop
   - Open questions to pursue further or set aside
-  - Next commands to run (discuss, research-gaps, add-hypothesis, etc.)
+  - Next commands to run (discuss, next-steps, add-hypothesis, etc.)
 -->

@@ -51,7 +51,6 @@ When researching topics relevant to causal modeling, note:
 ## Available commands
 
 These commands become relevant with this aspect:
-- `build-dag` — construct a causal DAG from variables and relationships
-- `sketch-model` — sketch an informal causal model
+- `sketch-model` — construct and sketch a causal model interactively
 - `specify-model` — formalize a causal model with parameters
 - `critique-approach` — critically review a causal DAG inquiry

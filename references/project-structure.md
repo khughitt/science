@@ -46,8 +46,8 @@ The primary written output of the project.
 - `meta/skill-feedback.md` — process reflection log
 - `index.md` — document coverage map
 - `01-overview.md` through `09-causal-model.md` — structured project narrative
-- `10-research-gaps.md` — optional gap analysis and prioritization output
 - `99-next-steps.md` — immediate action items
+- `meta/next-steps-*.md` — gap analysis and prioritization output (written by `/science:next-steps`)
 
 ### `papers/` — Reference Management
 

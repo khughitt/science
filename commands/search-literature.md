@@ -125,5 +125,5 @@ Include the normalized candidate list, dedupe keys, source provenance, and rank/
    % references.bib — BibTeX database for this Science project
    % Use keys in the format: FirstAuthorLastNameYear (e.g., Smith2024)
    ```
-7. If substantial gaps remain, run `/science:research-gaps` focused on the searched scope.
+7. If substantial gaps remain, run `/science:next-steps` focused on the searched scope.
 8. Commit: `git add -A && git commit -m "papers: search literature <slug>"`
