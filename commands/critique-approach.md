@@ -102,6 +102,38 @@ Rate each dimension:
 | Evidence quality | Are causal edges well-supported by literature/data? |
 | Structural validity | No collider bias, M-bias, or overadjustment? |
 | Temporal coherence | Does the causal ordering make temporal sense? |
+| Sensitivity | How robust are conclusions to assumption violations? |
+
+### Step 6b: Sensitivity analysis
+
+For each key assumption or causal edge identified in steps 3-5, assess sensitivity:
+
+1. **What if this assumption is violated?**
+   - State the assumption explicitly
+   - Describe how conclusions change if it's wrong
+   - Rate impact: high (conclusions reverse) / moderate (conclusions weaken) / low (conclusions robust)
+
+2. **What if this relationship doesn't hold or is reversed?**
+   - For causal edges: what if A doesn't cause B, or B causes A?
+   - For conceptual models: what if this link is spurious or mediated?
+
+3. **Unmeasured variables**
+   - For causal DAGs: for each critical path, what unmeasured confounder could explain the relationship?
+   - For conceptual models: what hidden mediator or moderator could alter the relationship?
+
+4. **Robustness**
+   - What's the minimum effect size that would survive the identified threats?
+   - How sensitive are conclusions to parameter choices?
+
+5. **Boundary conditions**
+   - Under what conditions does the model break down entirely?
+   - Are there population, temporal, or contextual limits to applicability?
+
+Include a sensitivity summary table in the review report:
+
+| Assumption | If Violated | Impact | Robustness |
+|---|---|---|---|
+| <assumption> | <consequence> | high/moderate/low | <assessment> |
 
 ### Step 7: Write review report
 
@@ -129,6 +161,9 @@ Save to `doc/inquiries/<slug>-critique.md`:
 
 ## Structural Issues
 <collider bias, M-bias, overadjustment>
+
+## Sensitivity Analysis
+<sensitivity summary table and key findings>
 
 ## Overall Assessment
 <summary table with pass/warn/fail per dimension>
