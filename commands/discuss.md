@@ -28,6 +28,8 @@ Additionally:
 3. Identify confounders, failure modes, and missing evidence.
 4. Propose concrete follow-up tasks.
 
+If loaded aspects contribute additional discussion guidance (e.g., causal reasoning checks from `causal-modeling`), incorporate that guidance into the critical analysis.
+
 ### Double-blind mode (optional)
 
 Use when the user asks for independent reasoning before synthesis.
@@ -43,11 +45,10 @@ Save to `doc/discussions/YYYY-MM-DD-<slug>.md` with sections:
 
 1. `## Focus`
 2. `## Current Position`
-3. `## Critical Analysis`
-4. `## Alternative Explanations / Confounders`
-5. `## Evidence Needed`
-6. `## Prioritized Follow-Ups`
-7. `## Synthesis` (include side-by-side summary in double-blind mode)
+3. `## Critical Analysis` (includes alternative explanations and confounders — see template)
+4. `## Evidence Needed`
+5. `## Prioritized Follow-Ups`
+6. `## Synthesis` (include side-by-side summary in double-blind mode)
 
 ## After Discussion
 
