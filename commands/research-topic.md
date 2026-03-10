@@ -33,6 +33,8 @@ The output should include:
 - Links to existing hypotheses and open questions.
 - Suggested follow-up research tasks.
 
+If loaded aspects contribute additional sections (e.g., Tooling & Implementation from `software-development`), include them after the core sections.
+
 ## After Writing
 
 1. Add new references to `papers/references.bib` (create with header if missing).
