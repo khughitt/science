@@ -92,6 +92,26 @@ Python scripts for external services: `openalex.py`, `pubmed.py`, `dag.py`, etc.
 Copied from the Science plugin on project creation.
 Includes templates for topics, paper summaries, hypotheses, questions, methods, datasets, and interpretations.
 
+### `aspects/` — Project Aspects (Plugin-Level)
+
+Composable mixins that adapt commands and templates to project characteristics.
+Defined in the Science plugin, not in individual projects.
+
+- `causal-modeling/causal-modeling.md` — causal inference, DAGs, structural models
+- `hypothesis-testing/hypothesis-testing.md` — formal hypothesis tracking and evaluation
+- `computational-analysis/computational-analysis.md` — exploratory analysis, benchmarks, pipelines
+- `software-development/software-development.md` — applications, tools, libraries
+
+Projects declare which aspects apply in `science.yaml`:
+
+```yaml
+aspects:
+  - causal-modeling
+  - computational-analysis
+```
+
+See `references/science-yaml-schema.md` for the schema and each aspect file for what it contributes.
+
 ## Imported Projects
 
 Projects initialized with `/science:import-project` may have non-standard directory layouts.
