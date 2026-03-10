@@ -69,6 +69,19 @@ When writing about any topic:
 - `AGENTS.md` — operational guide. Update with new tools or conventions.
 - `science.yaml` — project manifest. Update `last_modified` on significant changes.
 
+## Aspects
+
+This project uses the following Science aspects (declared in `science.yaml`):
+
+<!-- List the project's aspects here, e.g.: -->
+<!-- - `causal-modeling` — adds Causal Model Implications to interpretations, causal discussion guidance -->
+<!-- - `hypothesis-testing` — adds formal Hypothesis Evaluation tables to interpretations -->
+<!-- - `computational-analysis` — adds Sub-group Analysis, Descriptive signal category -->
+<!-- - `software-development` — adds Tooling & Implementation to topic research -->
+
+Commands automatically load aspect definitions and incorporate their additional sections and guidance.
+See `aspects/<name>/<name>.md` for what each aspect contributes.
+
 ## Path Mappings (Imported Projects)
 
 If this project was imported with `/science:import-project`, check `science.yaml` for
