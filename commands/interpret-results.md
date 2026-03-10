@@ -21,6 +21,7 @@ Additionally:
    ```bash
    uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool inquiry show "<slug>" --format json
    ```
+6. Check for pre-registration documents: scan `doc/meta/pre-registration-*.md`. If any exist, read them and identify which are relevant to the current interpretation (matching hypothesis IDs in the `related` frontmatter field).
 
 ## Input
 
@@ -63,6 +64,28 @@ Include any additional analysis sections contributed by loaded aspects (e.g., Ca
 
 Follow the guidance in each aspect file for section content and placement.
 
+### 3b. Pre-registration cross-check
+
+If a pre-registration document exists for any hypothesis or inquiry being interpreted (matched via `related` frontmatter field):
+
+1. **Match check:** Does the result match pre-registered expectations?
+   - Compare actual findings against the "Expected Outcomes" section of the pre-registration
+   - Characterize any divergence: in direction, magnitude, or kind?
+
+2. **QA verification:** Before updating beliefs, confirm that pipeline QA checks passed (if applicable).
+   - Link to QA output if available
+   - If QA checks haven't been run, flag this
+
+3. **Confirmatory vs. exploratory:** Explicitly label each conclusion:
+   - **Confirmatory:** pre-registered analysis with pre-specified decision criteria
+   - **Exploratory:** post-hoc discovery (valid but needs different evidential weight)
+
+4. **Goalpost check:** Has the interpretation drifted from pre-registered decision criteria?
+   - Compare actual decision criteria used against the "Decision Criteria" section
+   - Flag if the pre-registration was modified after analysis began (compare `created` date in pre-registration against today)
+
+If no pre-registration exists, skip this step but note in the output: "No pre-registration on file. Consider `/science:pre-register` for future analyses."
+
 ### 4. Surface new questions
 
 Identify questions raised by these results that didn't exist before.
@@ -92,7 +115,9 @@ Save to `doc/interpretations/YYYY-MM-DD-<slug>.md`.
 4. If graph updates were proposed, remind the user of the commands to run.
 5. Suggest next steps:
    - `/science:discuss` — to debate interpretation of ambiguous findings
-   - `/science:research-gaps` — to reassess coverage given new knowledge
+   - `/science:next-steps` — to reassess coverage and priorities given new knowledge
+   - `/science:compare-hypotheses` — if results are ambiguous between competing explanations
+   - `/science:bias-audit` — to check for post-hoc rationalization
    - `/science:add-hypothesis` — if new conjectures emerged
    - `/science:research-topic` or `/science:research-paper` — to fill gaps revealed by results
 6. Commit: `git add -A && git commit -m "doc: interpret results <slug>"`

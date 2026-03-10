@@ -42,6 +42,18 @@
   Follow the placement guidance in each aspect file.
 -->
 
+## Pre-registration Cross-check (if applicable)
+
+<!--
+  If a pre-registration document exists for the hypotheses or inquiry being interpreted:
+  - Does the result match expectations? If not, characterize the divergence.
+  - Have QA checks passed?
+  - Label each conclusion as confirmatory (pre-registered) or exploratory (post-hoc).
+  - Has the interpretation drifted from pre-registered decision criteria?
+
+  If no pre-registration exists, note: "No pre-registration on file."
+-->
+
 ## New Questions Raised
 
 <!--
