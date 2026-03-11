@@ -107,6 +107,13 @@ Given the findings, propose changes to the task queue:
 Follow `templates/interpretation.md` and fill all sections.
 Save to `doc/interpretations/YYYY-MM-DD-<slug>.md`.
 
+Populate frontmatter fields:
+- `id`: `"interpretation:YYYY-MM-DD-<slug>"`
+- `related`: include the inquiry slug (e.g., `"inquiry:<slug>"`) and any hypothesis IDs being evaluated
+- `source_refs`: IDs of papers or prior interpretations cited
+- `input`: path to the results file, notebook, or prose description of what was analyzed
+- `created` and `updated`: today's date
+
 ## After Writing
 
 1. If the project has the `hypothesis-testing` aspect: update hypothesis files in `specs/hypotheses/` with confirmed status changes and new evidence.

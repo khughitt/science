@@ -1,8 +1,17 @@
-# Interpretation: {{Short Title}}
+---
+id: "interpretation:{{slug}}"
+type: "interpretation"
+title: "{{Short Title}}"
+status: "active"
+tags: []
+source_refs: []
+related: []
+created: "{{YYYY-MM-DD}}"
+updated: "{{YYYY-MM-DD}}"
+input: "{{path to results, notebook, or prose description}}"
+---
 
-- **Date:** {{YYYY-MM-DD}}
-- **Inquiry:** {{slug or "N/A"}}
-- **Input:** {{path to results, notebook, or "prose description"}}
+# Interpretation: {{Short Title}}
 
 ## Findings Summary
 
