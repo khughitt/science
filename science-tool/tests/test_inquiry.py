@@ -394,6 +394,12 @@ class TestInquiryRender:
         set_boundary_role(graph_path, "test", "concept:result_out", "BoundaryOut")
         add_inquiry_edge(graph_path, "test", "concept:data_in", "sci:feedsInto", "concept:result_out")
         doc = render_inquiry_doc(graph_path, "test")
+        assert doc.startswith("---\n")
+        assert 'id: "inquiry:test"' in doc
+        assert 'type: "inquiry"' in doc
+        assert 'title: "Test Inquiry"' in doc
+        assert 'status: "' in doc
+        assert 'target: "' in doc
         assert "# Inquiry: Test Inquiry" in doc
         assert "data_in" in doc
         assert "result_out" in doc

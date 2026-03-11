@@ -1,9 +1,17 @@
-# Inquiry: {{label}}
+---
+id: "inquiry:{{slug}}"
+type: "inquiry"
+title: "{{label}}"
+status: "{{status}}"
+tags: []
+source_refs: []
+related: []
+created: "{{created}}"
+updated: "{{created}}"
+target: "{{target_id}}"
+---
 
-- **Slug:** {{slug}}
-- **Target:** {{target_label}} ({{target_id}})
-- **Status:** {{status}}
-- **Created:** {{created}}
+# Inquiry: {{label}}
 
 ## Summary
 
@@ -38,6 +46,12 @@
 | Assumption | Evidence |
 |---|---|
 {{assumption_rows}}
+
+## Unknowns
+
+| Unknown | Notes |
+|---|---|
+{{unknown_rows}}
 
 ## Parameters
 
