@@ -126,9 +126,10 @@ science-tool graph stamp-revision
 
 ### Step 6: Suggest next steps
 
-1. `/science:review-pipeline <slug>` — get critical review before implementation
-2. Execute the plan using `superpowers:executing-plans`
-3. `/science:discuss` — discuss specific aspects of the plan
+1. If no pre-registration exists for the target hypothesis, suggest: `/science:pre-register` — to formalize expectations before running the analysis
+2. `/science:review-pipeline <slug>` — get critical review before implementation
+3. Execute the plan using `superpowers:executing-plans`
+4. `/science:discuss` — discuss specific aspects of the plan
 
 ## Important Notes
 
@@ -136,3 +137,42 @@ science-tool graph stamp-revision
 - **Pilot first.** For complex pipelines, suggest a pilot phase with reduced scope.
 - **Validation criteria are mandatory.** Every transformation must have a way to verify it worked.
 - **The inquiry is the source of truth.** The plan document is a rendering of the inquiry's computational layer.
+
+## Process Reflection
+
+Reflect on the **pipeline planning workflow** and the **task decomposition** process.
+
+After completing the task above, append a brief entry to `doc/meta/skill-feedback.md` (create the file and directory if they don't exist).
+
+Use this format:
+
+```markdown
+## YYYY-MM-DD — plan-pipeline
+
+**Template/structure friction:**
+- Any section you left empty, filled with boilerplate, or that felt forced
+
+**Missing capture:**
+- Information you wanted to record but had no natural place for
+
+**Guidance issues:**
+- Command instructions that were confusing, contradictory, or didn't help
+
+**Suggested improvement:**
+- Concrete proposal for fixing any friction above (optional but encouraged)
+
+**What worked well:**
+- A section or instruction that genuinely improved the output
+```
+
+Guidelines:
+- Be concrete and specific, not generic ("QA checkpoints were hard to define without knowing the data schema" > "some sections could be improved")
+- 2-5 bullets total. Skip categories that have nothing to report.
+- If the same issue has occurred before, note the recurrence (e.g., "3rd time this section was not applicable") — recurring patterns are the strongest signal for needed changes
+- If everything worked smoothly, a single "No friction encountered" is fine — don't manufacture feedback
+
+Aspect fit check:
+- Are the current project aspects the right fit for this work?
+- If sections were missing that an unloaded aspect would have provided, suggest adding it
+- If aspect-contributed sections were consistently skipped or filled with boilerplate, suggest removing the aspect
+- Note any aspect suggestions in the feedback entry under "Suggested improvement"
