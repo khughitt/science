@@ -599,6 +599,88 @@ else
     fi
 fi
 
+# ─── 16. Frontmatter cross-reference validation ──────────────────
+echo ""
+echo "Checking frontmatter cross-references..."
+
+xref_result=$(XREF_SPECS="$SPECS_DIR/hypotheses" XREF_DOC="$DOC_DIR" python3 << 'PYEOF'
+import os, re
+
+QUOTE = "[\"']?"
+NOT_QUOTE = "[^\"'\n]+"
+
+def extract_frontmatter(path):
+    try:
+        with open(path) as f:
+            content = f.read()
+    except Exception:
+        return None, []
+    m = re.match(r'^---\n(.*?)\n---', content, re.DOTALL)
+    if not m:
+        return None, []
+    fm = m.group(1)
+    id_match = re.search(r'^id:\s*' + QUOTE + '(' + NOT_QUOTE + ')' + QUOTE, fm, re.MULTILINE)
+    doc_id = id_match.group(1).strip() if id_match else None
+    related = []
+    rel_match = re.search(r'^related:\s*\[(.*?)\]', fm, re.MULTILINE)
+    if rel_match:
+        items = rel_match.group(1)
+        related = [s.strip().strip('"').strip("'") for s in items.split(',') if s.strip()]
+    else:
+        in_related = False
+        for line in fm.split('\n'):
+            if line.startswith('related:'):
+                in_related = True
+                continue
+            if in_related:
+                if line.startswith('  - '):
+                    val = line[4:].strip().strip('"').strip("'")
+                    if '{{' not in val and val:
+                        related.append(val)
+                elif not line.startswith(' '):
+                    in_related = False
+    return doc_id, related
+
+search_dirs = [os.environ['XREF_SPECS'], os.environ['XREF_DOC']]
+all_ids = set()
+refs_by_file = {}
+for search_dir in search_dirs:
+    if not os.path.isdir(search_dir):
+        continue
+    for root, dirs, files in os.walk(search_dir):
+        for fname in files:
+            if not fname.endswith('.md'):
+                continue
+            path = os.path.join(root, fname)
+            doc_id, related = extract_frontmatter(path)
+            if doc_id:
+                all_ids.add(doc_id)
+            if related:
+                refs_by_file[path] = related
+
+broken = 0
+for path, refs in refs_by_file.items():
+    for ref in refs:
+        if ref not in all_ids:
+            print(f'BROKEN:{os.path.basename(path)}:{ref}')
+            broken += 1
+if broken == 0:
+    print('OK')
+PYEOF
+2>/dev/null || echo "SKIP")
+
+if [ "$xref_result" = "SKIP" ]; then
+    info "Frontmatter cross-reference check skipped (python3 error)"
+elif [ "$xref_result" = "OK" ]; then
+    info "All frontmatter cross-references valid"
+else
+    echo "$xref_result" | while IFS=: read -r status filename ref; do
+        if [ "$status" = "BROKEN" ]; then
+            warn "Broken reference in $filename: related ID '$ref' not found"
+        fi
+    done
+fi
+
 # ─── Summary ─────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
