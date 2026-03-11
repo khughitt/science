@@ -98,11 +98,13 @@ Have a natural, adaptive conversation. These questions are guidelines — skip a
 6. **Confounders:** "What variables affect both the treatment and outcome? (These are potential confounders.)"
 7. **Evidence for causation:** For each proposed causal relationship: "Why do you believe A causes B? What evidence supports this?"
 
-4. **Data:** "What data do you have or could get?"
+**For all modes, continue with:**
+
+8. **Data:** "What data do you have or could get?"
    - Existing datasets, databases, measurements
    - What's available vs. what would need to be generated?
 
-5. **Unknowns:** "What are you unsure about?"
+9. **Unknowns:** "What are you unsure about?"
    - Create `sci:Unknown` nodes for gaps
    - "Is there something that might affect the outcome but you're not sure what?"
 
@@ -190,3 +192,42 @@ Suggest next steps:
 - **Unknown nodes are valuable.** They make gaps explicit rather than leaving them implicit in prose.
 - **Multiple sketches are fine.** A project can have several inquiry sketches exploring different approaches.
 - **Reuse existing entities.** Check the graph for existing concepts before creating duplicates.
+
+## Process Reflection
+
+Reflect on the **sketch workflow** and the **interactive conversation** process.
+
+After completing the task above, append a brief entry to `doc/meta/skill-feedback.md` (create the file and directory if they don't exist).
+
+Use this format:
+
+```markdown
+## YYYY-MM-DD — sketch-model
+
+**Template/structure friction:**
+- Any section you left empty, filled with boilerplate, or that felt forced
+
+**Missing capture:**
+- Information you wanted to record but had no natural place for
+
+**Guidance issues:**
+- Command instructions that were confusing, contradictory, or didn't help
+
+**Suggested improvement:**
+- Concrete proposal for fixing any friction above (optional but encouraged)
+
+**What worked well:**
+- A section or instruction that genuinely improved the output
+```
+
+Guidelines:
+- Be concrete and specific, not generic ("causal mode detection was ambiguous when the user said X" > "some sections could be improved")
+- 2-5 bullets total. Skip categories that have nothing to report.
+- If the same issue has occurred before, note the recurrence (e.g., "3rd time this section was not applicable") — recurring patterns are the strongest signal for needed changes
+- If everything worked smoothly, a single "No friction encountered" is fine — don't manufacture feedback
+
+Aspect fit check:
+- Are the current project aspects the right fit for this work?
+- If sections were missing that an unloaded aspect would have provided, suggest adding it
+- If aspect-contributed sections were consistently skipped or filled with boilerplate, suggest removing the aspect
+- Note any aspect suggestions in the feedback entry under "Suggested improvement"
