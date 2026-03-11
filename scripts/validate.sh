@@ -322,7 +322,6 @@ if [ -d "$DOC_DIR/discussions" ]; then
             "## Focus" \
             "## Current Position" \
             "## Critical Analysis" \
-            "## Alternative Explanations / Confounders" \
             "## Evidence Needed" \
             "## Prioritized Follow-Ups" \
             "## Synthesis"; do

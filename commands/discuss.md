@@ -41,7 +41,16 @@ Use when the user asks for independent reasoning before synthesis.
 
 ## Writing Output
 
-Save to `doc/discussions/YYYY-MM-DD-<slug>.md` with sections:
+Save to `doc/discussions/YYYY-MM-DD-<slug>.md`.
+
+Populate frontmatter fields:
+- `id`: `"discussion:YYYY-MM-DD-<slug>"`
+- `related`: IDs of the focus entity and any hypotheses, questions, or topics discussed
+- `source_refs`: IDs of papers cited during the discussion
+- `focus_type` and `focus_ref`: from the user's input or inferred from context
+- `mode`: `"standard"` or `"double-blind"` based on the user's choice
+
+Sections:
 
 1. `## Focus`
 2. `## Current Position`

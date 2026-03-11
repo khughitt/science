@@ -1,35 +1,38 @@
-# Discussion Template
-
-> Use this template for structured discussion artifacts in `doc/discussions/`.
-
 ---
-title: "<discussion title>"
-date: "<YYYY-MM-DD>"
-focus_type: "<question|hypothesis|topic|approach>"
-focus_ref: "<optional file path or ID>"
-mode: "<standard|double-blind>"
+id: "discussion:{{YYYY-MM-DD-slug}}"
+type: "discussion"
+title: "{{discussion title}}"
 status: "in-progress"
+tags: []
+source_refs: []
+related: []
+created: "{{YYYY-MM-DD}}"
+updated: "{{YYYY-MM-DD}}"
+focus_type: "question | hypothesis | topic | approach"
+focus_ref: "{{optional ID or file path}}"
+mode: "standard | double-blind"
 ---
+
+# Discussion: {{discussion title}}
 
 ## Focus
 
-<What is being discussed, and why now?>
+<!-- What is being discussed and why? Reference the focus entity. -->
 
 ## Current Position
 
-<Current project stance, assumptions, and context.>
+<!-- Current project stance, assumptions, and context. -->
 
 ## Critical Analysis
 
-<Strengths, weaknesses, assumptions, and likely failure modes.
+<!-- Strengths, weaknesses, assumptions, and likely failure modes.
 Include alternative explanations and confounding factors.
-If the alternatives are central to the analysis (e.g., revising an existing claim
-or evaluating a methodological decision), integrate them directly rather than
-splitting into a separate section.>
+If the alternatives are central to the analysis, integrate them directly
+rather than splitting into a separate section. -->
 
 ## Evidence Needed
 
-<What evidence would help decide between alternatives?>
+<!-- What evidence would help decide between alternatives? -->
 
 ## Prioritized Follow-Ups
 
@@ -39,17 +42,17 @@ splitting into a separate section.>
 
 ## Synthesis
 
-<Integrated conclusion and decision-oriented next steps.>
+<!-- Integrated conclusion and decision-oriented next steps. -->
 
 ## Double-Blind Addendum (If mode = double-blind)
 
 ### Agent Independent Draft
 
-<Agent draft written before reading user draft.>
+<!-- Agent draft written before reading user draft. -->
 
 ### User Independent Draft
 
-<User draft.>
+<!-- User draft. -->
 
 ### Comparison
 
@@ -59,5 +62,4 @@ splitting into a separate section.>
 
 ### Combined Synthesis
 
-<Final synthesis considering both drafts.>
-
+<!-- Final synthesis considering both drafts. -->
