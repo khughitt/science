@@ -26,7 +26,7 @@ uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool <command>
 ## Rules
 
 - **MUST** run structural validation first (`inquiry validate`)
-- **MUST** evaluate all 7 rubric dimensions
+- **MUST** evaluate all 8 rubric dimensions
 - **MUST** be critical — surface weaknesses, don't just confirm the plan is good
 - **MUST** provide specific, actionable recommendations for each issue
 - **MUST** save review report to `doc/inquiries/<slug>-review.md`
@@ -46,6 +46,8 @@ Also read:
 - `doc/inquiries/<slug>.md` — inquiry document
 - `doc/plans/*<slug>*` — implementation plan (if exists)
 - `specs/scope-boundaries.md` — project scope
+
+**Sub-plan handling:** If the plan being reviewed is a sub-plan of a larger inquiry (e.g., Tasks 2-3 of a broader inquiry), the inquiry-level validation may pass trivially. In this case, apply the rubric dimensions to the plan's internal consistency, not just the parent inquiry's structure.
 
 ### Step 2: Evaluate each rubric dimension
 
@@ -105,6 +107,15 @@ For each `BoundaryIn` node:
 
 **Scoring:** PASS (in scope), WARN (borderline), FAIL (out of scope)
 
+#### Dimension 8: Integration Boundary Check
+
+- Does the plan's output format match the consuming module's input format?
+- Check tensor dimensions, data schemas, and API contracts across module boundaries
+- Verify that intermediate representations are compatible between pipeline stages
+- Read the actual code at integration points (model input shapes, data loader expectations, etc.)
+
+**Scoring:** PASS (all boundaries verified), WARN (some unchecked), FAIL (mismatches found)
+
 ### Step 3: Write review report
 
 Save to `doc/inquiries/<slug>-review.md`:
@@ -131,6 +142,7 @@ Save to `doc/inquiries/<slug>-review.md`:
 | Reproducibility | {{score}} | {{brief}} |
 | Validation criteria | {{score}} | {{brief}} |
 | Scope check | {{score}} | {{brief}} |
+| Integration boundaries | {{score}} | {{brief}} |
 
 ## Detailed Findings
 

@@ -13,6 +13,8 @@ Projects studying cause-effect relationships through directed acyclic graphs and
 
 (insert after: Evidence vs. Open Questions)
 
+**Skip condition:** If the results have no causal implications and no causal inquiry exists for this project, omit this section entirely. Do not fill with boilerplate — a skipped section is better than a forced one. If this section has been skipped 3+ times consecutively, consider removing the `causal-modeling` aspect from `science.yaml`.
+
 If a causal inquiry exists:
 - Do results suggest missing variables or edges?
 - Should any edges be removed or reversed?

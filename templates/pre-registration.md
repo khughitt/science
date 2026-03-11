@@ -45,3 +45,17 @@ Be concrete — name the metric, the threshold, the pattern. -->
 
 <!-- Which analyses are pre-registered (confirmatory) and which are explicitly exploratory?
 Mark each planned analysis as one or the other. Exploratory analyses are fine — but they need different evidential weight. -->
+
+## Total Comparison Count
+
+<!-- How many statistical tests or comparisons will this analysis involve?
+Include both confirmatory and exploratory.
+If the count is high (>10), specify the correction method
+(e.g., Bonferroni, FDR, permutation null).
+
+| Category | Count | Correction |
+|---|---|---|
+| Confirmatory tests | N | method |
+| Exploratory tests | N | method or "none (exploratory)" |
+| **Total** | **N** | |
+-->

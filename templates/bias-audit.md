@@ -39,6 +39,15 @@ A specific hypothesis, inquiry, pipeline, or the most recently active area. -->
 - **Rating:** not detected / possible / likely
 - **Evidence:** <!-- Are you pursuing a hypothesis or approach because of effort invested rather than evidence? -->
 
+### Process Bias
+
+- **Rating:** not detected / possible / likely
+- **Evidence:** <!-- Assess the research process itself:
+  - Pace of iteration: rapid single-analyst iteration creates momentum bias
+  - Perspective diversity: has anyone else reviewed the findings?
+  - Cooling-off period: how much time elapsed between analysis and interpretation?
+  - Pattern: many commits in a short period without external review? -->
+
 ## Methodological Biases
 
 ### Selection Bias
@@ -68,8 +77,12 @@ A specific hypothesis, inquiry, pipeline, or the most recently active area. -->
 
 ### Publication Bias
 
-- **Rating:** not detected / possible / likely
-- **Evidence:** <!-- Is the literature search biased toward positive results? -->
+- **Rating:** not detected / possible / likely / not applicable
+- **Evidence:** <!-- Is the literature search biased toward positive results?
+  For in-progress experimental projects (not systematic literature review),
+  assess whether literature searches for context/methods are biased toward
+  positive results. Mark "not applicable" if the project doesn't involve
+  literature review. -->
 
 ## Summary
 

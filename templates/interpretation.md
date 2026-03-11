@@ -95,6 +95,30 @@ input: "{{path to results, notebook, or prose description}}"
   Skip this section if there's nothing to add.
 -->
 
+## Cumulative Evidence (if applicable)
+
+<!--
+  If this interpretation builds on or depends on prior interpretations
+  (e.g., Phase 3B results that only make sense in context of Phase 3A),
+  summarize the cumulative picture across related interpretations.
+  Cross-reference prior interpretation documents by ID.
+
+  Omit this section if the interpretation is standalone.
+-->
+
+## Decision Gate (if applicable)
+
+<!--
+  If these results trigger a pre-defined gate from a pipeline plan
+  or project roadmap:
+  - What was the gate condition?
+  - What is the verdict (pass / fail / conditional)?
+  - What path does this open or close?
+  - What decision follows from this verdict?
+
+  Omit this section if no gate applies.
+-->
+
 ## Updated Priorities
 
 <!--

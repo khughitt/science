@@ -42,3 +42,8 @@ Before executing any research command:
 
    Only check once per command invocation — do not re-prompt for the same aspect
    if the user has previously declined it in this session.
+7. **Resolve templates:** When a command says "Read `templates/<name>.md`",
+   check the project's `templates/` directory first. If not found, read from
+   `${CLAUDE_PLUGIN_ROOT}/templates/<name>.md`. If neither exists, warn the
+   user and proceed without a template — the command's Writing section provides
+   sufficient structure.

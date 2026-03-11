@@ -57,6 +57,12 @@ For each cognitive bias, assess based on the evidence you've read:
 - Are there hypotheses or approaches that have received significant effort but little supporting evidence?
 - Has the project direction changed in response to evidence, or stayed fixed despite it?
 
+**Process bias:**
+- Pace of iteration: how many commits/analyses in the recent period? Rapid single-analyst iteration creates momentum bias.
+- Perspective diversity: has anyone else reviewed the findings or methodology?
+- Cooling-off period: how much time elapsed between running analyses and interpreting results?
+- Use `git log --oneline -20 --format="%h %an %s (%cr)"` to assess iteration pace and contributor diversity.
+
 ### 3. Methodological Bias Assessment
 
 **Selection bias:**
@@ -84,6 +90,7 @@ For each cognitive bias, assess based on the evidence you've read:
 **Publication bias:**
 - Are literature searches biased toward positive results?
 - Are null-result papers included in the review?
+- For in-progress experimental projects (not systematic literature review), focus on whether background literature searches for context/methods may be biased. Mark "not applicable" if no systematic literature review was conducted.
 
 ### 4. Synthesize
 

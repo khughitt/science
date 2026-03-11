@@ -16,8 +16,8 @@ Additionally, read (skip any that don't exist):
 2. Recent completed tasks: scan `tasks/done/` for the most recent file
 3. `specs/hypotheses/` — status of each hypothesis
 4. `specs/scope-boundaries.md` — project scope
-5. `doc/questions/` — open, high-priority questions
-6. `doc/topics/` — current topic coverage
+5. Open questions: check `doc/questions/` first; if it doesn't exist, scan for `*questions*.md` or `*open-questions*.md` in the doc directory
+6. `doc/topics/` or equivalent topic coverage files in the doc directory
 7. `doc/papers/` — paper coverage
 8. `doc/meta/next-steps-*.md` — prior next-steps analyses (most recent)
 
@@ -56,6 +56,18 @@ Focus on decision impact, not document volume.
 
 Present as a coverage map: **Strong / Partial / Missing** for each major area.
 
+### 3b. Newly Unblocked
+
+If a prior next-steps analysis exists (`doc/meta/next-steps-*.md`), compare against it:
+- Which tasks were previously blocked but are now unblocked?
+- What changed to unblock them?
+
+This longitudinal view makes progress visible and highlights newly actionable work.
+
+### 3c. Task Tracking Gaps
+
+Scan pipeline plans in `doc/plans/` for implementation tasks that are not tracked in `tasks/active.md`. Surface any development work buried in plan documents that should be trackable tasks.
+
 ### 4. Suggested Next Steps
 
 Recommend 3-5 actions based on:
@@ -91,6 +103,12 @@ Save output to `doc/meta/next-steps-<YYYY-MM-DD>.md` with these sections:
 
 ### High-Impact Gaps
 <prioritized gap descriptions with evidence links>
+
+## Newly Unblocked (if prior analysis exists)
+<tasks that became actionable since last analysis>
+
+## Task Tracking Gaps (if any)
+<implementation work in plans not tracked as tasks>
 
 ## Recommended Next Actions
 | Priority | Action | Rationale | Command |

@@ -13,9 +13,9 @@ If no argument is provided, ask the user to describe their findings or point to 
 Follow `references/command-preamble.md` (role: `research-assistant`).
 
 Additionally:
-1. Read `templates/interpretation.md`.
+1. Read `templates/interpretation.md` (resolve via command-preamble step 7).
 2. Read active hypotheses in `specs/hypotheses/`.
-3. Read `doc/questions/` for open questions.
+3. Read open questions: check `doc/questions/` first; if it doesn't exist, scan for `*questions*.md` or `*open-questions*.md` in the doc directory.
 4. Read `tasks/active.md` if it exists.
 5. If the user specifies an inquiry slug, load the inquiry context:
    ```bash
@@ -31,6 +31,13 @@ Additionally:
 - An inquiry slug (to find associated outputs)
 
 If given a file path, read it. If given a directory, scan for result files (`.csv`, `.json`, `.md`, `.ipynb`, `.html`) and summarize what's available.
+
+## Mode Detection
+
+Check whether interpretation documents already exist for these results (scan `doc/interpretations/` for files matching the inquiry slug or results description).
+
+- **Write mode** (default): No existing interpretation — write a full interpretation document following the workflow below.
+- **Update mode**: Interpretation documents already exist for these results. Operate as a framework-update task: read existing interpretations, then run only the framework update steps (hypothesis evaluation, question cross-referencing, priority updates, decision gate assessment) without rewriting the interpretation narrative. Note "Update mode — existing interpretation: `<id>`" at the top of the output.
 
 ## Workflow
 
@@ -93,6 +100,8 @@ For each, note:
 - Priority (high / medium / low)
 - Type (empirical / methodological / theoretical)
 - Suggested approach to investigate
+
+**Numbering:** Before assigning new question IDs, check existing questions and use the next available number. Do not invent IDs that could conflict with the master list.
 
 ### 5. Update priorities
 

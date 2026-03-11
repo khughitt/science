@@ -49,6 +49,8 @@ Verify status is `specified`. If it's `sketch`, warn the user and suggest `/scie
 
 If status is `specified` but not `critiqued`, warn: "This inquiry hasn't been through critique yet. Consider running `/science:critique-approach <slug>` first. Proceeding anyway."
 
+**Fallback:** If `science-tool inquiry show` fails or times out, read the inquiry document directly from `doc/inquiries/<slug>.md`.
+
 ### Step 2: Identify computational requirements
 
 Walk the inquiry subgraph and identify:
@@ -126,10 +128,11 @@ science-tool graph stamp-revision
 
 ### Step 6: Suggest next steps
 
-1. If no pre-registration exists for the target hypothesis, suggest: `/science:pre-register` — to formalize expectations before running the analysis
-2. `/science:review-pipeline <slug>` — get critical review before implementation
-3. Execute the plan using `superpowers:executing-plans`
-4. `/science:discuss` — discuss specific aspects of the plan
+1. **Track plan tasks:** For each task in the plan that doesn't have a corresponding entry in `tasks/active.md`, offer to create one via `science-tool tasks add`. Implementation tasks buried in plan docs should be surfaced as trackable tasks.
+2. If no pre-registration exists for the target hypothesis, suggest: `/science:pre-register` — to formalize expectations before running the analysis
+3. `/science:review-pipeline <slug>` — get critical review before implementation
+4. Execute the plan using `superpowers:executing-plans`
+5. `/science:discuss` — discuss specific aspects of the plan
 
 ## Important Notes
 
@@ -137,6 +140,7 @@ science-tool graph stamp-revision
 - **Pilot first.** For complex pipelines, suggest a pilot phase with reduced scope.
 - **Validation criteria are mandatory.** Every transformation must have a way to verify it worked.
 - **The inquiry is the source of truth.** The plan document is a rendering of the inquiry's computational layer.
+- **When science-tool is unavailable:** If `science-tool` commands fail or time out (>15s), proceed with the plan document directly. Read inquiry and graph data from markdown files in `doc/inquiries/` instead. Graph annotations are secondary — the plan document is the primary deliverable. Note which graph commands were skipped so they can be run later.
 
 ## Process Reflection
 

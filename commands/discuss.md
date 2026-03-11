@@ -24,9 +24,8 @@ Additionally:
 ### Standard mode
 
 1. Clarify the focal claim/question.
-2. Surface strengths, weaknesses, assumptions, and alternatives.
-3. Identify confounders, failure modes, and missing evidence.
-4. Propose concrete follow-up tasks.
+2. Surface strengths, weaknesses, assumptions, alternatives, confounders, and failure modes in a unified critical analysis. Do NOT create a separate "Alternative Explanations" section — alternatives belong within the critical analysis.
+3. Propose concrete follow-up tasks.
 
 If loaded aspects contribute additional discussion guidance (e.g., causal reasoning checks from `causal-modeling`), incorporate that guidance into the critical analysis.
 
@@ -64,7 +63,8 @@ Sections:
 1. Add/adjust entries in `doc/questions/` using `templates/question.md`.
 2. Offer to create follow-up tasks via `science-tool tasks add` with appropriate priority and related entities.
 3. If discussion changes hypothesis wording, update relevant file in `specs/hypotheses/`.
-4. Commit: `git add -A && git commit -m "doc: discuss <slug> and update priorities"`
+4. **Task reframing check:** Review whether the discussion reframes the meaning of any existing tasks. If a task's purpose or scope has changed, update its description in `tasks/active.md` to reflect the new framing.
+5. Commit: `git add -A && git commit -m "doc: discuss <slug> and update priorities"`
 
 ## Process Reflection
 

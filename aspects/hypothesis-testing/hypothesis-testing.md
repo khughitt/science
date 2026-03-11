@@ -19,6 +19,8 @@ For each active hypothesis in `specs/hypotheses/`:
 - Propose a status update if warranted: `proposed` → `supported` / `refuted` / `revised` / `under-investigation`
 - If revising, draft the revised statement
 
+**Fallback when no formal hypotheses exist:** If `specs/hypotheses/` is empty or doesn't exist, evaluate findings against open questions using the same table format with question IDs instead of hypothesis IDs. Use the same status categories (supported → "addressed", refuted → "invalidated", revised → "refined", unchanged → "unchanged").
+
 Present the evaluation table to the user. **Do not update hypothesis files until the user confirms each proposed change.**
 
 | Hypothesis | Prior Status | Evidence Summary | Proposed Status | Confidence |
