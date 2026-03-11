@@ -10,7 +10,7 @@
 
 **Spec:** Design spec section 3.3 (Standardize Document Frontmatter) from `docs/superpowers/specs/2026-03-10-reasoning-and-coherence-design.md`
 
-**Status: COMPLETE** — All 5 tasks executed and committed. See commit log below.
+**Status: COMPLETE** — All 5 tasks executed and committed, plus deferred inquiry.md migration and one-time migration of 3 existing projects. See commit log below.
 
 ---
 
@@ -48,6 +48,10 @@
 | Task 3 | `0aee818` | Standardize discussion template frontmatter |
 | Task 4 | `64c652f` | Migrate interpretation template to YAML frontmatter |
 | Task 5 | `5bc13d0` | Add frontmatter cross-reference validation to validate.sh |
+| Post-plan | `e805993` | Migrate inquiry template + render_inquiry_doc to YAML frontmatter |
+| Post-plan | `b383262` | Migrate seq-feats documents (18 files) |
+| Post-plan | `24d0760` | Migrate 3d-attention-bias documents (4 files) |
+| Post-plan | `17f59ae` | Migrate natural-systems-guide documents (17 files) |
 
 ---
 
@@ -118,8 +122,25 @@
 
 ---
 
-## Deferred
+## Post-Plan: inquiry.md Migration (Done)
 
-### inquiry.md migration
+Originally deferred because `render_inquiry_doc()` in `store.py` hardcodes the document format. Completed as a coordinated change:
 
-The `inquiry.md` template is used programmatically by `science-tool` Python code (`science-tool/src/science_tool/store.py:render_inquiry_doc()`). The Python function hardcodes the inline metadata format and section structure (including `## Unknowns` which isn't in the template). Migrating just the template creates an inconsistency. This should be done as a code change that updates both `render_inquiry_doc()` and the template together.
+- **Template:** Added YAML frontmatter (id, type, title, status, tags, source_refs, related, created, updated, target) + `## Unknowns` section (was in code but missing from template)
+- **Python:** Updated `render_inquiry_doc()` to emit YAML frontmatter instead of inline bullets
+- **Tests:** Updated 2 tests in `TestInquiryRender` to assert frontmatter presence
+- **Commit:** `e805993`
+
+---
+
+## Post-Plan: Existing Project Migration (Done)
+
+One-time migration of 39 documents across 3 projects using a disposable Python script:
+
+| Project | Hypotheses | Interpretations | Discussions | Inquiries | Total | Commit |
+|---|---|---|---|---|---|---|
+| `seq-feats` | 4 | 8 | 5 (3 standardized, 2 converted) | 1 | 18 | `b383262` |
+| `3d-attention-bias` | 2 | 0 | 0 | 2 | 4 | `24d0760` |
+| `natural-systems-guide` | 0 | 11 | 6 (all standardized) | 0 | 17 | `17f59ae` |
+
+Domain-specific inline bullets (Models, Features, Controls, etc.) were preserved below the heading. Standard fields (Date, Status, ID) moved to YAML frontmatter.
