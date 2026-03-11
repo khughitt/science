@@ -1,39 +1,45 @@
-# Hypothesis: {{Short Title}}
+---
+id: "hypothesis:h{{nn}}-{{slug}}"
+type: "hypothesis"
+title: "{{Short Title}}"
+status: "proposed"
+tags: []
+source_refs: []
+related: []
+created: "{{YYYY-MM-DD}}"
+updated: "{{YYYY-MM-DD}}"
+---
 
-- **ID:** H{{number}}
-- **Status:** proposed | under-investigation | supported | refuted | revised
-- **Related hypotheses:** {{list}}
-- **Date proposed:** {{date}}
-- **Last updated:** {{date}}
+# Hypothesis: {{Short Title}}
 
 ## Statement
 
-<!-- Clear, falsifiable statement of the hypothesis. One or two sentences. -->
+<!-- Clear, falsifiable claim. One sentence if possible. -->
 
 ## Rationale
 
-<!-- Why do we think this might be true? What observations or theory motivate it? -->
+<!-- Why do you believe this? What existing evidence or reasoning supports it? -->
 
 ## Predictions
 
-<!-- What observable consequences follow IF this hypothesis is correct? Be specific. -->
+<!-- What observable consequences follow if this hypothesis is correct? -->
 
 ## Falsifiability
 
-<!-- What evidence would DISPROVE this hypothesis? Be concrete — name the data, the threshold, the result that would falsify. -->
+<!-- What evidence would refute this hypothesis? Be specific. -->
 
 ## Required Evidence
 
-<!-- What data, analysis, or experiments do we need to test this? -->
+<!-- What data, experiments, or analyses would test this hypothesis? -->
 
 ## Causal Model
 
-<!-- Reference to relevant nodes/edges in models/causal-dag if applicable. -->
+<!-- If applicable: what causal mechanism does this hypothesis propose? -->
 
 ## Current Evidence
 
-<!-- What do we know so far? Summarize evidence for and against. -->
+<!-- Evidence collected so far. Cite papers and topics by reference. -->
 
 ## Related Work
 
-<!-- Papers that bear on this hypothesis. Use BibTeX keys. -->
+<!-- Papers, topics, and other hypotheses that bear on this claim. -->

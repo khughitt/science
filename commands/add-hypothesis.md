@@ -53,11 +53,15 @@ After the conversation, write the hypothesis document following `templates/hypot
 Check existing files in `specs/hypotheses/` and assign the next sequential number.
 
 - **Filename:** lowercase `h` prefix: `h01-short-title.md`, `h02-short-title.md`, etc.
-- **In-document ID:** uppercase `H` prefix: `H01`, `H02`, etc. (used for cross-referencing in prose)
+- **Frontmatter `id`:** uses the filename stem: `"hypothesis:h01-short-title"`, `"hypothesis:h02-short-title"`, etc.
+- **Prose references:** uppercase `H` prefix: `H01`, `H02`, etc. (used for cross-referencing in discussion text)
 
-### Setting Initial Status
+### Populating Frontmatter
 
-New hypotheses start as `proposed` unless the user presents existing evidence, in which case `under-investigation` may be appropriate.
+- `status`: `"proposed"` unless the user presents existing evidence → `"under-investigation"`
+- `related`: list IDs of related hypotheses, questions, or topics (e.g., `["question:q01-mechanism", "topic:circadian-regulation"]`)
+- `source_refs`: list paper IDs cited in the rationale (e.g., `["paper:smith-2024"]`)
+- `created` and `updated`: today's date
 
 ## After Writing
 

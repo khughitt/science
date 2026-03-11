@@ -148,7 +148,9 @@ if [ -d "$SPECS_DIR/hypotheses" ]; then
             fi
         fi
 
-        if ! grep -q "^\- \*\*Status:\*\*" "$hyp_file" 2>/dev/null; then
+        # Check for status in YAML frontmatter or inline format
+        if ! grep -q "^\- \*\*Status:\*\*" "$hyp_file" 2>/dev/null && \
+           ! grep -q "^status:" "$hyp_file" 2>/dev/null; then
             warn "${hyp_file} missing Status field"
         fi
     done
