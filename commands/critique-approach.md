@@ -15,10 +15,10 @@ This command provides a critical, adversarial review of a causal inquiry. The ag
 All `science-tool` commands below use this pattern:
 
 ```bash
-uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool <command>
+uv run science-tool <command>
 ```
 
-For brevity, examples write just `science-tool <command>` — **always expand to the full `uv run --with ...` form when executing.**
+For brevity, examples write just `science-tool <command>` — **always expand to `uv run science-tool <command>` when executing. See command-preamble step 8 for fallback.**
 
 ## Rules
 

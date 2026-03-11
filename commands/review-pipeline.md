@@ -20,7 +20,7 @@ The review is NOT a rubber stamp. It should surface problems the user hasn't con
 All `science-tool` commands below use this pattern:
 
 ```bash
-uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool <command>
+uv run science-tool <command>
 ```
 
 ## Rules

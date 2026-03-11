@@ -29,7 +29,7 @@ Before executing any research command:
    | Files in `<specs_dir>/hypotheses/` | `hypothesis-testing` |
    | Files in `<models_dir>/` (`.dot`, `.json` DAG files) | `causal-modeling` |
    | Pipeline files, notebooks, or benchmark scripts in `<code_dir>/` | `computational-analysis` |
-   | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root | `software-development` |
+   | Package manifests (`pyproject.toml`, `package.json`, `Cargo.toml`) at project root with project source code (not just tool dependencies) | `software-development` |
 
    If a signal is detected and the corresponding aspect is not in the `aspects` list,
    briefly note it to the user before proceeding:
@@ -47,3 +47,8 @@ Before executing any research command:
    `${CLAUDE_PLUGIN_ROOT}/templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
+8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
+   use `uv run science-tool <command>` (requires science-tool as a project
+   dependency). If that fails (no pyproject.toml or science-tool not in
+   dependencies), fall back to:
+   `uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool <command>`

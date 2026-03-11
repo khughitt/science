@@ -15,12 +15,12 @@ This command walks through project prose documents (research notes, literature s
 All `science-tool` commands below use this pattern:
 
 ```bash
-uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool <command>
+uv run science-tool <command>
 ```
 
-For brevity, the examples below write just `science-tool <command>` — **always expand to the full `uv run --with ...` form when executing.**
+For brevity, the examples below write just `science-tool <command>` — **always expand to `uv run science-tool <command>` when executing. See command-preamble step 8 for fallback.**
 
-> **Cache note:** If `uv run --with` reports missing commands or flags that should exist, the build cache may be stale. Run `uv cache clean science-tool` to clear it, then retry.
+> **Cache note:** If `uv run science-tool` reports missing commands or flags that should exist, the build cache may be stale. Run `uv cache clean science-tool` to clear it, then retry.
 
 ## Rules
 

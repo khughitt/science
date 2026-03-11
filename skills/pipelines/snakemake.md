@@ -48,7 +48,7 @@ rule download:
         "data/raw/{accession}_data.csv"
     shell:
         """
-        uv run --with science-tool science-tool datasets download \
+        uv run science-tool datasets download \
             {config[source]}:{wildcards.accession} --dest data/raw/
         """
 

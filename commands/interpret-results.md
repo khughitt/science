@@ -19,7 +19,7 @@ Additionally:
 4. Read `tasks/active.md` if it exists.
 5. If the user specifies an inquiry slug, load the inquiry context:
    ```bash
-   uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool inquiry show "<slug>" --format json
+   uv run science-tool inquiry show "<slug>" --format json
    ```
 6. Check for pre-registration documents: scan `doc/meta/pre-registration-*.md`. If any exist, read them and identify which are relevant to the current interpretation (matching hypothesis IDs in the `related` frontmatter field).
 

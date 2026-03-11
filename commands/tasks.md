@@ -18,7 +18,7 @@ Read `tasks/active.md` if it exists. If `tasks/` directory doesn't exist, create
 Show active tasks sorted by priority (P0 first). Use:
 
 ```bash
-uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool tasks list
+uv run science-tool tasks list
 ```
 
 ### "add <description>"
@@ -31,7 +31,7 @@ Interactively create a task. Ask the user for:
 Then run:
 
 ```bash
-uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool tasks add "<title>" --type=<type> --priority=<priority> [--related=<ref>...]
+uv run science-tool tasks add "<title>" --type=<type> --priority=<priority> [--related=<ref>...]
 ```
 
 ### "done <task_id>"
@@ -39,7 +39,7 @@ uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool tasks add "<title>
 Mark a task complete. Optionally ask for a completion note.
 
 ```bash
-uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool tasks done <task_id> [--note="<note>"]
+uv run science-tool tasks done <task_id> [--note="<note>"]
 ```
 
 ### "defer <task_id>"
@@ -47,7 +47,7 @@ uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool tasks done <task_i
 Defer a task. Ask for a reason.
 
 ```bash
-uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool tasks defer <task_id> [--reason="<reason>"]
+uv run science-tool tasks defer <task_id> [--reason="<reason>"]
 ```
 
 ### "block <task_id> --by <blocker_id>"
@@ -75,7 +75,7 @@ Show task counts by status, type, and priority.
 Pass through to `science-tool tasks`:
 
 ```bash
-uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool tasks <action> [args...]
+uv run science-tool tasks <action> [args...]
 ```
 
 ## Execution Guidance
