@@ -163,3 +163,42 @@ Show the summary table and top recommendations. Ask if they want to:
 - **Cross-check claims.** Use LLM knowledge and web search to verify factual claims.
 - **Look for circular reasoning.** If A justifies B and B justifies A, flag it.
 - **Consider failure modes.** For each transformation: what happens if it fails?
+
+## Process Reflection
+
+Reflect on the **review rubric** and the **audit workflow**.
+
+After completing the task above, append a brief entry to `doc/meta/skill-feedback.md` (create the file and directory if they don't exist).
+
+Use this format:
+
+```markdown
+## YYYY-MM-DD — review-pipeline
+
+**Template/structure friction:**
+- Any section you left empty, filled with boilerplate, or that felt forced
+
+**Missing capture:**
+- Information you wanted to record but had no natural place for
+
+**Guidance issues:**
+- Command instructions that were confusing, contradictory, or didn't help
+
+**Suggested improvement:**
+- Concrete proposal for fixing any friction above (optional but encouraged)
+
+**What worked well:**
+- A section or instruction that genuinely improved the output
+```
+
+Guidelines:
+- Be concrete and specific, not generic ("QA coverage rubric was hard to score without seeing actual assertion code" > "some sections could be improved")
+- 2-5 bullets total. Skip categories that have nothing to report.
+- If the same issue has occurred before, note the recurrence (e.g., "3rd time this section was not applicable") — recurring patterns are the strongest signal for needed changes
+- If everything worked smoothly, a single "No friction encountered" is fine — don't manufacture feedback
+
+Aspect fit check:
+- Are the current project aspects the right fit for this work?
+- If sections were missing that an unloaded aspect would have provided, suggest adding it
+- If aspect-contributed sections were consistently skipped or filled with boilerplate, suggest removing the aspect
+- Note any aspect suggestions in the feedback entry under "Suggested improvement"
