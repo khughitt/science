@@ -234,11 +234,11 @@ echo "status: active" >> science.yaml
 echo "summary: test project" >> science.yaml
 
 # Init a graph and add an orphaned concept
-uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool graph init
-uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool graph add concept "Orphan" --type biolink:Gene
+uv run --with /mnt/ssd/Dropbox/science/science-tool science-tool graph init
+uv run --with /mnt/ssd/Dropbox/science/science-tool science-tool graph add concept "Orphan" --type biolink:Gene
 
 # Run validate.sh
-bash /mnt/ssd/Dropbox/ai/science/scripts/validate.sh --verbose
+bash /mnt/ssd/Dropbox/science/scripts/validate.sh --verbose
 ```
 
 Expected: should show graph validate checks (parseable=pass, provenance=pass, acyclicity=pass, orphaned=warn), plus a staleness warning or "no revision metadata" info.

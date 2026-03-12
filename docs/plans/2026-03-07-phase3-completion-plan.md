@@ -211,8 +211,8 @@ The agent will:
 **Step 2: Verify graph quality**
 
 ```bash
-uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool graph stats --format json
-uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool graph validate --format json
+uv run --with /mnt/ssd/Dropbox/science/science-tool science-tool graph stats --format json
+uv run --with /mnt/ssd/Dropbox/science/science-tool science-tool graph validate --format json
 ```
 
 Expected:
@@ -230,14 +230,14 @@ git commit -m "feat: build knowledge graph from background research"
 
 ### Task 8: Generate OpenAlex snapshot (infrastructure)
 
-**Working directory:** `/mnt/ssd/Dropbox/ai/science/science-tool/`
+**Working directory:** `/mnt/ssd/Dropbox/science/science-tool/`
 
 This task runs in the **science plugin repo**, not the exemplar project.
 
 **Step 1: Generate the snapshot**
 
 ```bash
-cd /mnt/ssd/Dropbox/ai/science/science-tool
+cd /mnt/ssd/Dropbox/science/science-tool
 uv run --frozen science-tool distill openalex --level subfields
 ```
 
@@ -255,7 +255,7 @@ head -20 data/snapshots/manifest.ttl
 **Step 3: Commit to science repo**
 
 ```bash
-cd /mnt/ssd/Dropbox/ai/science
+cd /mnt/ssd/Dropbox/science
 git add science-tool/data/snapshots/openalex-science-map.ttl science-tool/data/snapshots/manifest.ttl
 git commit -m "feat: add pre-generated OpenAlex science map snapshot (subfield level)"
 ```
@@ -269,13 +269,13 @@ git commit -m "feat: add pre-generated OpenAlex science map snapshot (subfield l
 **Step 1: Import the OpenAlex snapshot**
 
 ```bash
-uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool graph import /mnt/ssd/Dropbox/ai/science/science-tool/data/snapshots/openalex-science-map.ttl
+uv run --with /mnt/ssd/Dropbox/science/science-tool science-tool graph import /mnt/ssd/Dropbox/science/science-tool/data/snapshots/openalex-science-map.ttl
 ```
 
 **Step 2: Verify import**
 
 ```bash
-uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool graph stats --format json
+uv run --with /mnt/ssd/Dropbox/science/science-tool science-tool graph stats --format json
 ```
 
 Expected: triple counts should increase significantly after import.
@@ -291,7 +291,7 @@ git commit -m "feat: import OpenAlex science map snapshot into knowledge graph"
 
 ### Task 10: Validate and capture evidence bundle
 
-**Working directory:** `~/d/3d-attention-bias/` for running commands, `/mnt/ssd/Dropbox/ai/science/` for archiving.
+**Working directory:** `~/d/3d-attention-bias/` for running commands, `/mnt/ssd/Dropbox/science/` for archiving.
 
 **Step 1: Run full validation suite in exemplar project**
 
@@ -299,33 +299,33 @@ git commit -m "feat: import OpenAlex science map snapshot into knowledge graph"
 cd ~/d/3d-attention-bias
 
 # Graph commands
-uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool graph stats --format json > /tmp/exemplar-graph-stats.json
-uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool graph validate --format json > /tmp/exemplar-graph-validate.json
-uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool graph diff --mode hybrid --format json > /tmp/exemplar-graph-diff.json
+uv run --with /mnt/ssd/Dropbox/science/science-tool science-tool graph stats --format json > /tmp/exemplar-graph-stats.json
+uv run --with /mnt/ssd/Dropbox/science/science-tool science-tool graph validate --format json > /tmp/exemplar-graph-validate.json
+uv run --with /mnt/ssd/Dropbox/science/science-tool science-tool graph diff --mode hybrid --format json > /tmp/exemplar-graph-diff.json
 
 # Query presets
-uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool graph claims --format json > /tmp/exemplar-query-claims.json
-uv run --with /mnt/ssd/Dropbox/ai/science/science-tool science-tool graph coverage --format json > /tmp/exemplar-query-coverage.json
+uv run --with /mnt/ssd/Dropbox/science/science-tool science-tool graph claims --format json > /tmp/exemplar-query-claims.json
+uv run --with /mnt/ssd/Dropbox/science/science-tool science-tool graph coverage --format json > /tmp/exemplar-query-coverage.json
 
 # validate.sh
-SCIENCE_TOOL_PATH="/mnt/ssd/Dropbox/ai/science/science-tool" bash validate.sh > /tmp/exemplar-validate-sh.log 2>&1 || true
+SCIENCE_TOOL_PATH="/mnt/ssd/Dropbox/science/science-tool" bash validate.sh > /tmp/exemplar-validate-sh.log 2>&1 || true
 ```
 
 **Step 2: Archive evidence in science repo**
 
 ```bash
-mkdir -p /mnt/ssd/Dropbox/ai/science/docs/exemplar-evidence
-cp /tmp/exemplar-graph-stats.json /mnt/ssd/Dropbox/ai/science/docs/exemplar-evidence/
-cp /tmp/exemplar-graph-validate.json /mnt/ssd/Dropbox/ai/science/docs/exemplar-evidence/
-cp /tmp/exemplar-graph-diff.json /mnt/ssd/Dropbox/ai/science/docs/exemplar-evidence/
-cp /tmp/exemplar-query-claims.json /mnt/ssd/Dropbox/ai/science/docs/exemplar-evidence/
-cp /tmp/exemplar-query-coverage.json /mnt/ssd/Dropbox/ai/science/docs/exemplar-evidence/
-cp /tmp/exemplar-validate-sh.log /mnt/ssd/Dropbox/ai/science/docs/exemplar-evidence/
+mkdir -p /mnt/ssd/Dropbox/science/docs/exemplar-evidence
+cp /tmp/exemplar-graph-stats.json /mnt/ssd/Dropbox/science/docs/exemplar-evidence/
+cp /tmp/exemplar-graph-validate.json /mnt/ssd/Dropbox/science/docs/exemplar-evidence/
+cp /tmp/exemplar-graph-diff.json /mnt/ssd/Dropbox/science/docs/exemplar-evidence/
+cp /tmp/exemplar-query-claims.json /mnt/ssd/Dropbox/science/docs/exemplar-evidence/
+cp /tmp/exemplar-query-coverage.json /mnt/ssd/Dropbox/science/docs/exemplar-evidence/
+cp /tmp/exemplar-validate-sh.log /mnt/ssd/Dropbox/science/docs/exemplar-evidence/
 ```
 
 **Step 3: Write evidence README**
 
-Create `/mnt/ssd/Dropbox/ai/science/docs/exemplar-evidence/README.md`:
+Create `/mnt/ssd/Dropbox/science/docs/exemplar-evidence/README.md`:
 
 ```markdown
 # Phase 3 Exemplar Evidence Bundle
@@ -359,7 +359,7 @@ Create `/mnt/ssd/Dropbox/ai/science/docs/exemplar-evidence/README.md`:
 **Step 4: Commit evidence to science repo**
 
 ```bash
-cd /mnt/ssd/Dropbox/ai/science
+cd /mnt/ssd/Dropbox/science
 git add -f docs/exemplar-evidence/
 git commit -m "docs: archive Phase 3 exemplar evidence bundle (3d-attention-bias project)"
 ```
@@ -368,7 +368,7 @@ git commit -m "docs: archive Phase 3 exemplar evidence bundle (3d-attention-bias
 
 ### Task 11: Extract biomedical starter profile (infrastructure)
 
-**Working directory:** `/mnt/ssd/Dropbox/ai/science/`
+**Working directory:** `/mnt/ssd/Dropbox/science/`
 
 **Step 1: Analyze exemplar graph for patterns**
 
@@ -376,7 +376,7 @@ Review the exemplar's `knowledge/graph.trig` to identify which Biolink types, CU
 
 **Step 2: Create starter profile reference**
 
-Create `/mnt/ssd/Dropbox/ai/science/references/biomedical-starter-profile.md`:
+Create `/mnt/ssd/Dropbox/science/references/biomedical-starter-profile.md`:
 
 Content should include:
 - Recommended Biolink types for genomics/bioinformatics projects (Gene, Protein, Disease, BiologicalProcess, Pathway, ChemicalEntity, Phenotype)
@@ -388,7 +388,7 @@ Content should include:
 **Step 3: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/ai/science
+cd /mnt/ssd/Dropbox/science
 git add references/biomedical-starter-profile.md
 git commit -m "docs: add biomedical starter profile reference derived from exemplar"
 ```
@@ -397,7 +397,7 @@ git commit -m "docs: add biomedical starter profile reference derived from exemp
 
 ### Task 12: Close Phase 3 gate
 
-**Working directory:** `/mnt/ssd/Dropbox/ai/science/`
+**Working directory:** `/mnt/ssd/Dropbox/science/`
 
 **Step 1: Update plan.md deliverables**
 
@@ -424,7 +424,7 @@ Fill in all Status and Commit columns.
 **Step 4: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/ai/science
+cd /mnt/ssd/Dropbox/science
 git add -f docs/plan.md docs/plans/2026-03-01-knowledge-graph-design.md docs/plans/2026-03-07-phase3-completion-plan.md
 git commit -m "docs: close Phase 3 gate — all deliverables complete"
 ```
