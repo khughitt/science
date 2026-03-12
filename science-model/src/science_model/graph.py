@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 
 class GraphNode(BaseModel):
     """A node in the knowledge graph for visualization."""
 
     id: str
+    canonical_id: str = ""
     label: str
     type: str
+    profile: str = "core"
     domain: str | None = None
     importance: float = 0.0
     status: str | None = None
@@ -22,6 +24,13 @@ class GraphNode(BaseModel):
     graph_layer: str
     inquiry: str | None = None
     boundary_role: str | None = None
+    aliases: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _fill_derived_defaults(self) -> "GraphNode":
+        if not self.canonical_id:
+            self.canonical_id = self.id
+        return self
 
 
 class GraphEdge(BaseModel):
