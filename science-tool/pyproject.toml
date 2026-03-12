@@ -8,6 +8,7 @@ dependencies = [
   "rich>=13.0",
   "rdflib>=7.0",
   "pyyaml>=6.0",
+  "science-model",
 ]
 
 [project.scripts]
@@ -32,6 +33,9 @@ venv = ".venv"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/science_tool"]
+
+[tool.uv.sources]
+science-model = { path = "../science-model", editable = true }
 
 [dependency-groups]
 dev = [
