@@ -31,9 +31,17 @@ class EntityType(StrEnum):
     COMPARISON = "comparison"
     EXPERIMENT = "experiment"
     BIAS_AUDIT = "bias-audit"
+    EVIDENCE = "evidence"
     ARTICLE = "article"
     PIPELINE_STEP = "pipeline-step"
     UNKNOWN = "unknown"
+
+
+class EntityUpdate(BaseModel):
+    """Partial update for entity metadata (written back to frontmatter)."""
+
+    status: str | None = None
+    tags: list[str] | None = None
 
 
 class Entity(BaseModel):

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TaskStatus(StrEnum):
@@ -22,7 +22,7 @@ class Task(BaseModel):
     """A research task."""
 
     id: str
-    project: str
+    project: str = ""
     title: str
     description: str = ""
     type: str = ""
@@ -30,7 +30,7 @@ class Task(BaseModel):
     status: str = TaskStatus.PROPOSED
     blocked_by: list[str] = []
     related: list[str] = []
-    created: date = date.today()
+    created: date = Field(default_factory=date.today)
     completed: date | None = None
 
 

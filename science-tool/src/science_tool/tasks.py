@@ -1,27 +1,17 @@
-"""Task model and markdown parser/renderer for science-tool."""
+"""Task markdown parser/renderer and CRUD operations for science-tool.
+
+The Task model is defined in science-model and re-exported here for convenience.
+"""
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
+from science_model.tasks import Task, TaskCreate, TaskStatus, TaskUpdate
 
-@dataclass
-class Task:
-    """A single actionable task in the research project."""
-
-    id: str
-    title: str
-    type: str
-    priority: str
-    status: str
-    created: date
-    related: list[str] = field(default_factory=list)
-    blocked_by: list[str] = field(default_factory=list)
-    completed: date | None = None
-    description: str = ""
+__all__ = ["Task", "TaskCreate", "TaskStatus", "TaskUpdate"]
 
 
 _HEADER_RE = re.compile(r"^##\s+\[(\w+)\]\s+(.+)$")
