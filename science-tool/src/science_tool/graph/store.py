@@ -28,6 +28,7 @@ VALID_INQUIRY_TYPES: tuple[str, ...] = ("general", "causal")
 
 GRAPH_LAYERS: tuple[str, ...] = (
     "graph/knowledge",
+    "graph/bridge",
     "graph/causal",
     "graph/provenance",
     "graph/datasets",
@@ -53,6 +54,7 @@ PROJECT_ENTITY_PREFIXES: set[str] = {
     "question",
     "evidence",
     "inquiry",
+    "task",
 }
 
 INITIAL_GRAPH_TEMPLATE = """@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -66,6 +68,9 @@ INITIAL_GRAPH_TEMPLATE = """@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-sy
 @prefix :       <http://example.org/project/> .
 
 <http://example.org/project/graph/knowledge> {
+}
+
+<http://example.org/project/graph/bridge> {
 }
 
 <http://example.org/project/graph/causal> {
@@ -691,7 +696,6 @@ def render_inquiry_doc(graph_path: Path, slug: str) -> str:
 
     # Target label
     target_str = info["target"]
-    target_label = _label_for(target_str)
     target_id = shorten_uri(target_str)
 
     # Build boundary sets for interior detection
@@ -1457,7 +1461,7 @@ def validate_graph(graph_path: Path) -> tuple[list[dict[str, str]], bool]:
 
     # Orphaned nodes: entities with rdf:type but no other triples as subject or object
     typed_entities = set()
-    for entity_type in (SCI_NS.Concept, SCI_NS.Claim, SCI_NS.Hypothesis, SCI_NS.Question):
+    for entity_type in (SCI_NS.Concept, SCI_NS.Claim, SCI_NS.Hypothesis, SCI_NS.Question, SCI_NS.Task):
         for entity, _, _ in knowledge.triples((None, RDF.type, entity_type)):
             typed_entities.add(entity)
     for entity, _, _ in knowledge.triples((None, RDF.type, SCIC_NS.Variable)):
@@ -1951,6 +1955,11 @@ def _save_dataset(dataset: Dataset, graph_path: Path) -> None:
     dataset.serialize(destination=str(graph_path), format="trig")
 
 
+def save_graph_dataset(dataset: Dataset, graph_path: Path) -> None:
+    """Persist a graph dataset with revision metadata refreshed."""
+    _save_dataset(dataset, graph_path)
+
+
 def _upsert_revision_metadata(dataset: Dataset, graph_path: Path) -> None:
     provenance = dataset.graph(_graph_uri("graph/provenance"))
     for triple in list(provenance.triples((REVISION_URI, None, None))):
@@ -2011,6 +2020,8 @@ def _build_input_manifest(graph_path: Path) -> dict[str, dict[str, int | str]]:
             pp.papers_dir / "summaries",
             pp.data_dir,
             pp.code_dir,
+            pp.tasks_dir,
+            pp.knowledge_dir / "sources",
         ]
         notes_dir = project_root / "notes"
         if notes_dir.is_dir():

@@ -9,6 +9,7 @@ from science_tool.causal.export_pgmpy import export_pgmpy_script
 from science_tool.distill.openalex import distill_openalex
 from science_tool.distill.pykeen_source import distill_pykeen
 from science_tool.doi import lookup_doi_metadata
+from science_tool.graph.materialize import materialization_audit, materialize_graph
 from science_tool.graph.store import (
     GRAPH_LAYERS,
     DEFAULT_GRAPH_PATH,
@@ -75,6 +76,52 @@ def graph_init(graph_path: Path) -> None:
         click.echo(f"Copied visualization notebook to {viz_path}")
         notebooks_dir = viz_path.parent
         click.echo(f"  Run: cd {notebooks_dir} && uv run marimo edit {viz_path.name}")
+
+
+@graph.command("build")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+def graph_build(project_root: Path) -> None:
+    """Materialize graph.trig from structured upstream project sources."""
+
+    try:
+        trig_path = materialize_graph(project_root)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Materialized graph at {trig_path}")
+
+
+@graph.command("audit")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+def graph_audit(output_format: str, project_root: Path) -> None:
+    """Audit canonical source references before graph materialization."""
+
+    rows, has_failures = materialization_audit(project_root)
+    emit_query_rows(
+        output_format=output_format,
+        title="Graph Source Audit",
+        columns=[
+            ("check", "Check"),
+            ("status", "Status"),
+            ("source", "Source"),
+            ("field", "Field"),
+            ("target", "Target"),
+            ("details", "Details"),
+        ],
+        rows=rows,
+    )
+    if has_failures:
+        raise click.exceptions.Exit(1)
 
 
 @graph.command("stats")

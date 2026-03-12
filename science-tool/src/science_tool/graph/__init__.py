@@ -1,3 +1,4 @@
+from science_tool.graph.materialize import materialization_audit, materialize_graph
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
     GRAPH_LAYERS,
@@ -28,6 +29,8 @@ __all__ = [
     "DEFAULT_GRAPH_PATH",
     "GRAPH_LAYERS",
     "PREDICATE_REGISTRY",
+    "materialization_audit",
+    "materialize_graph",
     "add_claim",
     "add_concept",
     "add_edge",

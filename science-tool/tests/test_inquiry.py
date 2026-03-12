@@ -6,7 +6,6 @@ import pytest
 from rdflib import RDF, Literal, URIRef
 
 from science_tool.graph.store import (
-    DCTERMS_NS,
     INITIAL_GRAPH_TEMPLATE,
     PREDICATE_REGISTRY,
     PROJECT_NS,
@@ -89,7 +88,7 @@ class TestInquiryCreation:
             description="Test SP embedding geometry",
         )
         assert "inquiry/sp_geometry" in str(uri)
-        from science_tool.graph.store import _load_dataset, _graph_uri
+        from science_tool.graph.store import _load_dataset
 
         dataset = _load_dataset(graph_path)
         inquiry_graph = dataset.graph(URIRef(str(PROJECT_NS) + "inquiry/sp_geometry"))
