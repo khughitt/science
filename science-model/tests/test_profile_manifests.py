@@ -3,7 +3,7 @@ from science_model.profiles import BIO_PROFILE, CORE_PROFILE, PROJECT_SPECIFIC_P
 
 def test_core_profile_contains_task_and_hypothesis() -> None:
     names = {kind.name for kind in CORE_PROFILE.entity_kinds}
-    assert {"task", "hypothesis", "question", "claim"} <= names
+    assert {"task", "hypothesis", "question", "claim", "experiment", "evidence"} <= names
 
 
 def test_bio_profile_imports_core() -> None:
@@ -12,3 +12,8 @@ def test_bio_profile_imports_core() -> None:
 
 def test_project_specific_profile_is_typed_extension() -> None:
     assert PROJECT_SPECIFIC_PROFILE.strictness == "typed-extension"
+
+
+def test_bio_profile_encodes_targets_protein() -> None:
+    encodes = next(relation for relation in BIO_PROFILE.relation_kinds if relation.name == "encodes")
+    assert encodes.target_kinds == ["protein"]

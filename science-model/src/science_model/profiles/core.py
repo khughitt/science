@@ -31,6 +31,18 @@ CORE_PROFILE = ProfileManifest(
             layer="layer/core",
             description="Evidence-bearing project claim.",
         ),
+        EntityKind(
+            name="experiment",
+            canonical_prefix="experiment",
+            layer="layer/core",
+            description="Experiment or analysis step that tests project questions.",
+        ),
+        EntityKind(
+            name="evidence",
+            canonical_prefix="evidence",
+            layer="layer/core",
+            description="Evidence item that supports or disputes project claims.",
+        ),
     ],
     relation_kinds=[
         RelationKind(
