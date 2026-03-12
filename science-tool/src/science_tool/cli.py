@@ -1206,28 +1206,34 @@ def tasks_list(
 ) -> None:
     """List active tasks."""
     from science_tool.tasks import list_tasks
+    from science_tool.tasks_display import render_tasks_table, sort_tasks
 
     matched = list_tasks(DEFAULT_TASKS_DIR, task_type=task_type, priority=priority, status=status, related=related)
-    columns: list[tuple[str, str]] = [
-        ("id", "ID"),
-        ("title", "Title"),
-        ("type", "Type"),
-        ("priority", "Priority"),
-        ("status", "Status"),
-        ("created", "Created"),
-    ]
-    rows = [
-        {
-            "id": t.id,
-            "title": t.title,
-            "type": t.type,
-            "priority": t.priority,
-            "status": t.status,
-            "created": t.created.isoformat(),
-        }
-        for t in matched
-    ]
-    emit_query_rows(output_format=output_format, title="Tasks", columns=columns, rows=rows)
+    matched = sort_tasks(matched)
+
+    if output_format == "json":
+        columns: list[tuple[str, str]] = [
+            ("id", "ID"),
+            ("title", "Title"),
+            ("type", "Type"),
+            ("priority", "Priority"),
+            ("status", "Status"),
+            ("created", "Created"),
+        ]
+        rows = [
+            {
+                "id": t.id,
+                "title": t.title,
+                "type": t.type,
+                "priority": t.priority,
+                "status": t.status,
+                "created": t.created.isoformat(),
+            }
+            for t in matched
+        ]
+        emit_query_rows(output_format=output_format, title="Tasks", columns=columns, rows=rows)
+    else:
+        render_tasks_table(matched)
 
 
 @tasks.command("show")
