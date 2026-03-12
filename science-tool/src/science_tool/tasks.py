@@ -25,7 +25,7 @@ class Task:
 
 
 _HEADER_RE = re.compile(r"^##\s+\[(\w+)\]\s+(.+)$")
-_FIELD_RE = re.compile(r"^-\s+([\w-]+):\s+(.+)$")
+_FIELD_RE = re.compile(r"^-\s+([\w-]+):\s*(.*)$")
 _LIST_RE = re.compile(r"^\[(.+)\]$")
 
 
@@ -111,7 +111,8 @@ def parse_tasks(path: Path) -> list[Task]:
 def render_task(task: Task) -> str:
     """Render a single task to markdown."""
     lines = [f"## [{task.id}] {task.title}"]
-    lines.append(f"- type: {task.type}")
+    if task.type:
+        lines.append(f"- type: {task.type}")
     lines.append(f"- priority: {task.priority}")
     lines.append(f"- status: {task.status}")
     if task.related:
