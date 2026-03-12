@@ -24,7 +24,9 @@ This is the body content of the hypothesis.
 
 Some rationale here.
 """)
-    fm, body = parse_frontmatter(md)
+    result = parse_frontmatter(md)
+    assert result is not None
+    fm, body = result
     assert fm["id"] == "hypothesis:h01-test"
     assert fm["type"] == "hypothesis"
     assert fm["tags"] == ["genomics", "ml"]
@@ -50,6 +52,7 @@ created: 2026-03-01
 Body text here.
 """)
     entity = parse_entity_file(md, project_slug="my-project")
+    assert entity is not None
     assert entity.id == "question:q01-test"
     assert entity.type.value == "question"
     assert entity.project == "my-project"

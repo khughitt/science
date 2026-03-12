@@ -26,4 +26,4 @@ def normalize_alias(raw: str, aliases: dict[str, str]) -> str:
     resolved = aliases.get(raw) or aliases.get(raw.lower())
     if resolved is not None:
         return resolved
-    return raw if ":" in raw else raw.lower()
+    return raw
