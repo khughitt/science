@@ -7,15 +7,8 @@ from datetime import date, datetime
 from pydantic import BaseModel
 
 from science_model.entities import Entity
+from science_model.graph import GraphSummary
 from science_model.tasks import Task
-
-
-class GraphSummary(BaseModel):
-    """Summary statistics for a project's knowledge graph."""
-
-    node_count: int
-    edge_count: int
-    top_domains: list[str]
 
 
 class Project(BaseModel):
