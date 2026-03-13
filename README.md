@@ -65,8 +65,8 @@ claude --plugin-dir /path/to/science
 | `/science:critique-approach` | Review model for problems, sensitivity analysis |
 | `/science:plan-pipeline` | Generate implementation plan with QA checkpoints |
 | `/science:review-pipeline` | Audit plan against evidence rubric with QA coverage |
-| `/science:create-graph` | Build a knowledge graph from project documents |
-| `/science:update-graph` | Incrementally update the graph after document changes |
+| `/science:create-graph` | Build canonical KG sources, audit them, and materialize the graph |
+| `/science:update-graph` | Re-audit and re-materialize the graph after source changes |
 
 ## Skills
 
@@ -97,7 +97,7 @@ When you run `/science:create-project`, Science scaffolds:
 
 ```
 my-project/
-├── science.yaml              # Project manifest (aspects, paths, metadata)
+├── science.yaml              # Project manifest (aspects, paths, metadata, knowledge_profiles)
 ├── .env                      # API keys (gitignored)
 ├── CLAUDE.md                 # Instructions for Claude Code
 ├── AGENTS.md                 # Operational guide
@@ -132,7 +132,11 @@ my-project/
 │   ├── references.bib
 │   └── pdfs/
 ├── models/                   # Formal models (causal DAGs, etc.)
-├── knowledge/                # Knowledge graph artifacts
+├── knowledge/                # Generated graph + structured KG source artifacts
+│   ├── graph.trig            # Materialized graph output (do not edit directly)
+│   ├── reports/              # Audit / migration reports
+│   └── sources/
+│       └── project_specific/ # Local KG entities, relations, aliases
 ├── data/                     # Frictionless Data Packages
 │   ├── raw/
 │   └── processed/
@@ -158,6 +162,14 @@ A research project typically moves through these phases. Commands can be repeate
 ```
 
 Interactive conversation refines your research question, then scaffolds the full directory structure, populates core files, and makes the initial git commit. You'll end up with `science.yaml`, `specs/research-question.md`, a starter `doc/01-overview.md`, and empty slots for everything else.
+
+Projects that use the knowledge graph should also declare profile composition in `science.yaml`:
+
+```yaml
+knowledge_profiles:
+  curated: [bio]
+  local: project_specific
+```
 
 ### 2. State your hypotheses
 
@@ -289,6 +301,8 @@ research-topic → add-hypothesis → pre-register → search-literature → res
 ```
 
 Each command reads existing project state and builds on it. All artifacts are version-controlled, cross-linked, and validated by `bash validate.sh`.
+
+For knowledge-graph projects, `knowledge/graph.trig` is generated from canonical upstream sources in `specs/`, `doc/`, `tasks/`, and `knowledge/sources/`. If the graph is wrong, fix the source artifact and re-materialize; do not patch the TriG file directly.
 
 ## Design Principles
 

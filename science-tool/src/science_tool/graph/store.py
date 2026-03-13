@@ -1952,7 +1952,7 @@ def _load_dataset(graph_path: Path) -> Dataset:
 
 def _save_dataset(dataset: Dataset, graph_path: Path) -> None:
     _upsert_revision_metadata(dataset, graph_path)
-    dataset.serialize(destination=str(graph_path), format="trig")
+    graph_path.write_text(_serialize_dataset_deterministically(dataset), encoding="utf-8")
 
 
 def save_graph_dataset(dataset: Dataset, graph_path: Path) -> None:
@@ -1967,17 +1967,144 @@ def _upsert_revision_metadata(dataset: Dataset, graph_path: Path) -> None:
 
     manifest = _build_input_manifest(graph_path=graph_path)
     manifest_json = json.dumps(manifest, sort_keys=True, separators=(",", ":"))
-    revision_time = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    revision_time = _revision_timestamp_from_manifest(manifest)
 
     provenance.add((REVISION_URI, RDF.type, PROV.Entity))
     provenance.add((REVISION_URI, SCHEMA_NS.name, Literal("graph-revision")))
     provenance.add((REVISION_URI, SCHEMA_NS.dateModified, Literal(revision_time, datatype=XSD.dateTime)))
     provenance.add((REVISION_URI, SCHEMA_NS.text, Literal(manifest_json)))
 
-    preview = dataset.serialize(format="trig")
-    preview_text = preview.decode("utf-8") if isinstance(preview, bytes) else str(preview)
+    preview_text = _serialize_dataset_deterministically(dataset)
     graph_hash = hashlib.sha256(preview_text.encode("utf-8")).hexdigest()
     provenance.add((REVISION_URI, SCHEMA_NS.sha256, Literal(graph_hash)))
+
+
+_SERIALIZER_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("rdf", str(RDF)),
+    ("prov", str(PROV)),
+    ("schema", str(SCHEMA_NS)),
+    ("skos", str(SKOS)),
+    ("xsd", str(XSD)),
+    ("sci", str(SCI_NS)),
+    ("scic", str(SCIC_NS)),
+    ("biolink", str(BIOLINK_NS)),
+    ("cito", str(CITO_NS)),
+    ("dcterms", str(DCTERMS_NS)),
+)
+_SAFE_PREFIX_LOCAL_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9._-]*$")
+
+
+def _serialize_dataset_deterministically(dataset: Dataset) -> str:
+    lines = [f"@prefix {prefix}: <{namespace}> ." for prefix, namespace in _SERIALIZER_PREFIXES]
+    lines.append("")
+
+    default_graph = dataset.default_graph
+    if len(default_graph):
+        lines.extend(_render_graph_triples(default_graph))
+        lines.append("")
+
+    named_graphs: dict[str, object] = {}
+    for graph in dataset.graphs():
+        if graph.identifier == default_graph.identifier:
+            continue
+        named_graphs[str(graph.identifier)] = graph
+
+    ordered_graph_ids = [str(PROJECT_NS[layer]) for layer in GRAPH_LAYERS if str(PROJECT_NS[layer]) in named_graphs]
+    ordered_graph_ids.extend(sorted(graph_id for graph_id in named_graphs if graph_id not in ordered_graph_ids))
+
+    for index, graph_id in enumerate(ordered_graph_ids):
+        graph = named_graphs[graph_id]
+        lines.append(f"<{graph_id}> {{")
+        graph_lines = _render_graph_triples(graph, indent="    ")
+        lines.extend(graph_lines)
+        lines.append("}")
+        if index != len(ordered_graph_ids) - 1:
+            lines.append("")
+
+    return "\n".join(lines) + "\n"
+
+
+def _render_graph_triples(graph, *, indent: str = "") -> list[str]:
+    triples = sorted(graph, key=_triple_sort_key)
+    if not triples:
+        return []
+
+    grouped: list[tuple[object, list[tuple[object, list[object]]]]] = []
+    for subject, predicate, obj in triples:
+        if not grouped or grouped[-1][0] != subject:
+            grouped.append((subject, []))
+        predicates = grouped[-1][1]
+        if not predicates or predicates[-1][0] != predicate:
+            predicates.append((predicate, []))
+        predicates[-1][1].append(obj)
+
+    lines: list[str] = []
+    for subject, predicates in grouped:
+        rendered_subject = _format_trig_term(subject)
+        for predicate_index, (predicate, objects) in enumerate(predicates):
+            rendered_predicate = "a" if predicate == RDF.type else _format_trig_term(predicate)
+            rendered_objects = _render_object_list(objects, indent=indent)
+            suffix = " ." if predicate_index == len(predicates) - 1 else " ;"
+            if predicate_index == 0:
+                lines.append(f"{indent}{rendered_subject} {rendered_predicate} {rendered_objects}{suffix}")
+                continue
+            lines.append(f"{indent}    {rendered_predicate} {rendered_objects}{suffix}")
+    return lines
+
+
+def _render_object_list(objects: list[object], *, indent: str) -> str:
+    rendered = [_format_trig_term(obj) for obj in objects]
+    if len(rendered) == 1:
+        return rendered[0]
+    separator = ",\n" + indent + "        "
+    return separator.join(rendered)
+
+
+def _triple_sort_key(triple: tuple[object, object, object]) -> tuple[tuple[int, str], tuple[int, str], tuple[int, str]]:
+    subject, predicate, obj = triple
+    return (_term_sort_key(subject), _term_sort_key(predicate), _term_sort_key(obj))
+
+
+def _term_sort_key(term: object) -> tuple[int, str]:
+    if isinstance(term, URIRef):
+        return (0, str(term))
+    if isinstance(term, Literal):
+        return (1, f"{term.language or ''}|{term.datatype or ''}|{term}")
+    msg = f"Unsupported RDF term for deterministic serialization: {term!r}"
+    raise TypeError(msg)
+
+
+def _format_trig_term(term: object) -> str:
+    if isinstance(term, URIRef):
+        return _format_uri(term)
+    if isinstance(term, Literal):
+        return term.n3()
+    msg = f"Unsupported RDF term for deterministic serialization: {term!r}"
+    raise TypeError(msg)
+
+
+def _format_uri(uri: URIRef) -> str:
+    uri_text = str(uri)
+    for prefix, namespace in _SERIALIZER_PREFIXES:
+        if not uri_text.startswith(namespace):
+            continue
+        local = uri_text.removeprefix(namespace)
+        if _SAFE_PREFIX_LOCAL_RE.match(local):
+            return f"{prefix}:{local}"
+    return f"<{uri_text}>"
+
+
+def _revision_timestamp_from_manifest(manifest: dict[str, dict[str, int | str]]) -> str:
+    latest_mtime_ns = max(
+        (
+            int(metadata["mtime_ns"])
+            for metadata in manifest.values()
+            if isinstance(metadata, dict) and isinstance(metadata.get("mtime_ns"), int)
+        ),
+        default=0,
+    )
+    revision_time = datetime.fromtimestamp(latest_mtime_ns / 1_000_000_000, tz=timezone.utc)
+    return revision_time.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _read_revision_manifest(dataset: Dataset) -> dict[str, dict[str, int | str]]:

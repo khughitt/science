@@ -1,14 +1,14 @@
 ---
-description: Construct a knowledge graph from project prose documents. Reads research docs, extracts entities/relations/claims, populates the graph with provenance, and adds ontology annotations to source documents.
+description: Build a project knowledge graph from canonical upstream sources, then materialize graph.trig.
 ---
 
-# Create Knowledge Graph from Prose
+# Create Knowledge Graph
 
-> **Prerequisite:** Load the `knowledge-graph` skill for ontology reference before starting.
+> **Prerequisite:** Load the `knowledge-graph` skill before starting.
 
 ## Overview
 
-This command walks through project prose documents (research notes, literature summaries, hypothesis documents) and constructs a knowledge graph with proper provenance and ontology alignment.
+This command does **not** author triples directly. It organizes project knowledge into canonical upstream sources, audits reference resolution, and materializes `knowledge/graph.trig` as a generated artifact.
 
 ## Tool invocation
 
@@ -18,116 +18,107 @@ All `science-tool` commands below use this pattern:
 uv run science-tool <command>
 ```
 
-For brevity, the examples below write just `science-tool <command>` — **always expand to `uv run science-tool <command>` when executing. See command-preamble step 8 for fallback.**
-
-> **Cache note:** If `uv run science-tool` reports missing commands or flags that should exist, the build cache may be stale. Run `uv cache clean science-tool` to clear it, then retry.
+For brevity, the examples below write just `science-tool <command>`; always expand them to `uv run science-tool <command>` when executing.
 
 ## Rules
 
-- **MUST** use `cito:supports`/`cito:disputes` for evidence relations, NOT `sci:supports`/`sci:refutes`
-- **MUST** use `skos:related` for general associations, NOT `sci:relatedTo`
-- **MUST** run `science-tool graph predicates` before adding edges — only use listed predicates
-- **MUST** use `--note`, `--property`, `--status`, `--source` flags on concepts — do NOT edit graph.trig directly
-- **MUST** run `science-tool graph add question` for open questions — do NOT skip this step
-- **MUST NOT** invent predicates — if a relationship doesn't fit an existing predicate, use `skos:related` and add a `--note`
-- **SHOULD** keep build scripts in `knowledge/` for reproducibility — do NOT delete them after running
-- **URI slugification:** Entity labels are auto-slugified (lowercase, non-alphanumeric → `_`). Bare terms in `graph add edge` follow the same rule. After `graph add concept`, check the echoed URI (e.g. `Added concept: http://example.org/project/concept/nucleotide_transformer_v2`) and use that slug in subsequent `graph add edge` calls. The CLI echoes resolved URIs for edges too, so you can verify the mapping.
+- **MUST NOT** edit `knowledge/graph.trig` directly.
+- **MUST** define `knowledge_profiles` in `science.yaml` before building the graph.
+- **MUST** treat markdown docs, task files, and `knowledge/sources/` files as the canonical graph inputs.
+- **MUST** add project-local entities and aliases under `knowledge/sources/project_specific/`, not as ad hoc triples.
+- **MUST** run `science-tool graph audit` before `science-tool graph build`.
+- **MUST** keep tasks as graph entities; do not treat them as out-of-band metadata.
 
-## Prerequisites
+## Canonical Inputs
 
-This command **creates a graph from scratch**. If a graph already exists, use `update-graph` instead for incremental updates.
+Build the graph from these upstream sources:
 
-Research documents should exist in `doc/`, `specs/`, or `doc/papers/`.
+- Typed markdown entities in `specs/` and `doc/` with YAML frontmatter (`id`, `type`, `title`, `related`, `source_refs`, etc.)
+- Task files in `tasks/active.md` and `tasks/done/*.md`
+- Structured local extensions in:
+  - `knowledge/sources/project_specific/entities.yaml`
+  - `knowledge/sources/project_specific/relations.yaml`
+  - `knowledge/sources/project_specific/mappings.yaml`
+
+Use `science-model/core` semantics for shared entity and relation types. Enable curated domain profiles such as `bio` through `science.yaml`. Put anything project-local but still useful in `project_specific`.
 
 ## Workflow
 
-### Step 1: Initialize graph and review predicates
+### Step 1: Configure profiles
 
-```bash
-science-tool graph init
-science-tool graph predicates --format table
+Ensure `science.yaml` declares the graph profiles you want to compose:
+
+```yaml
+knowledge_profiles:
+  curated: [bio]
+  local: project_specific
 ```
 
-Initialize a fresh `knowledge/graph.trig`. Then review the full predicate list — only use predicates from this list when adding edges. If a relationship doesn't fit any predicate, default to `skos:related`.
+`core` is always implied. Add more curated profiles only when the project genuinely uses them.
 
-### Step 2: Process each document
+### Step 2: Author canonical sources
 
-For each research document, in order:
+For each project entity:
 
-1. **Read the document** to understand its content.
-2. **Identify entities**: concepts, genes, diseases, drugs, pathways, papers, datasets, models, methods, tools.
-3. **Identify relations**: associations, hierarchies, causal claims, evidence links. Use `cito:supports`/`cito:disputes` for evidence, `skos:related` for general associations (not `sci:relatedTo`).
-4. **Identify claims**: factual assertions with their sources and confidence levels.
-5. **Identify open questions**: unresolved research questions with their maturity status.
-6. **Add entities to the graph** using `science-tool graph add` commands with rich metadata. Example:
-   ```bash
-   science-tool graph add concept "DNABERT-2" \
-     --type biolink:GeneticModel \
-     --ontology-id "DNABERT2" \
-     --note "12 layers; max context 2048 nt; BPE tokenizer" \
-     --definition "DNA foundation model pretrained on multi-species genomes" \
-     --status selected-primary \
-     --source paper:doi_10_1234_test \
-     --property hasArchitecture "BERT encoder" \
-     --property hasParameters "117M"
-   ```
-   - Use `--note` for contextual information (parameters, architecture, status notes)
-   - Use `--property KEY VALUE` for structured metadata (hasArchitecture, hasParameters, hasTokenization, hasEmbeddingDim)
-   - Use `--status` for project relevance (`selected-primary`, `deferred`, `active`, `candidate`, `speculative`)
-   - Use `--source` for provenance on concepts, not just claims and hypotheses
-7. **Add open questions** using `science-tool graph add question <ID> --text "<text>" --source <ref>`:
-   - Use `--maturity open|partially-resolved|resolved` to indicate resolution status
-   - Use `--related-hypothesis <hyp_ref>` to link questions to relevant hypotheses
-   - Number questions sequentially (Q01, Q02, ...)
-8. **Add prose annotations** to the document:
-   - Add `ontology_terms:` frontmatter with relevant CURIEs.
-   - Add inline `[`CURIE`]` annotations on first mention of each entity.
+1. Put first-class research objects in typed markdown docs:
+   - hypotheses in `specs/hypotheses/`
+   - questions in `doc/questions/`
+   - interpretations, discussions, pre-registrations, bias audits, methods, datasets, and similar entities in their typed `doc/` locations
+2. Keep task links in `tasks/*.md` `related:` / `blocked-by:` fields using canonical IDs.
+3. Put unresolved but legitimate project-local semantics in `knowledge/sources/project_specific/`:
+   - `entities.yaml` for local entities such as project topics or legacy questions not yet migrated into standalone docs
+   - `mappings.yaml` for explicit aliases during migration
+   - `relations.yaml` only when you need project-local relation declarations
 
-### Step 3: Entity extraction checklist
+Example `entities.yaml` entry:
 
-For each entity found in prose, determine:
+```yaml
+entities:
+  - canonical_id: topic:evaluation
+    kind: topic
+    title: Evaluation
+    profile: project_specific
+    source_path: knowledge/sources/project_specific/entities.yaml
+```
 
-- [ ] **Label**: human-readable name
-- [ ] **Type**: `sci:Concept` + domain type (e.g., `biolink:Gene`)
-- [ ] **Ontology ID**: standard identifier (e.g., `NCBIGene:672`, `MONDO:0016419`)
-- [ ] **Relations**: how it connects to other entities already in the graph
-- [ ] **Properties**: structured metadata (architecture, parameters, dimensions) via `--property`
-- [ ] **Note**: freeform contextual annotations via `--note`
-- [ ] **Status**: project relevance (`selected-primary`, `deferred`, `active`) via `--status`
-- [ ] **Source**: provenance document reference via `--source`
+### Step 3: Audit canonical reference resolution
 
-### Step 4: Claim extraction checklist
-
-For each factual assertion:
-
-- [ ] **Text**: the claim statement
-- [ ] **Source**: which paper/document supports it (use `paper:doi_<slug>` format)
-- [ ] **Confidence**: estimated strength (0.0-1.0)
-- [ ] **ID**: optional explicit claim ID for cross-referencing
-
-### Step 5: Finalize
-
-After processing all documents:
+Run:
 
 ```bash
-science-tool graph stamp-revision
+science-tool graph audit --project-root . --format json
+```
+
+Fix every unresolved reference in the canonical sources before building:
+
+- add missing frontmatter to existing docs
+- convert legacy short IDs to canonical IDs
+- add explicit aliases in `mappings.yaml` when a temporary migration bridge is still needed
+- add missing `project_specific` entities for legitimate project-local concepts
+
+### Step 4: Materialize the graph
+
+Once audit is clean:
+
+```bash
+science-tool graph build --project-root .
 science-tool graph validate --format json
 science-tool graph stats --format json
 ```
 
-All validation checks must pass. Report the final graph stats to the user.
+`science-tool graph build` generates `knowledge/graph.trig` deterministically from the upstream sources. That file is a view over the canonical inputs, not the place to curate knowledge manually.
 
 ## Output
 
-At completion, the user should have:
-1. A populated `knowledge/graph.trig` with entities, relations, and provenance.
-2. Research documents annotated with frontmatter `ontology_terms:` and inline CURIEs.
-3. A clean `graph validate` output.
+At completion, the project should have:
+
+1. Canonical entity/task/source files with resolved IDs
+2. `knowledge/sources/project_specific/` for local extensions and explicit aliases
+3. A generated `knowledge/graph.trig`
+4. Clean `graph audit` and `graph validate` output
 
 ## Important Notes
 
-- **Do not invent claims.** Only add claims that are explicitly stated in the prose.
-- **Always include provenance.** Every claim and hypothesis must have a `--source`.
-- **Prefer existing ontology IDs** over invented ones. Use standard identifiers (NCBI Gene, MONDO, ChEBI, etc.).
-- **Ask the user** if uncertain about entity types, confidence levels, or whether something is a claim vs. background knowledge.
-- **Track deferred entities.** If an entity is identified but peripheral to current work, add it to `knowledge/deferred-entities.md` with a brief description rather than cluttering the graph. Add to the graph later when it becomes relevant.
+- Prefer fixing the upstream source over adding a temporary alias.
+- If you feel compelled to hand-edit `graph.trig`, stop and add or repair the missing upstream source instead.
+- Curated domain profiles should stay opinionated and small; do not mirror whole external ontologies into a project repo.

@@ -7,6 +7,8 @@
 # Note: intentionally NOT using set -e — we count errors and report at the end.
 set -uo pipefail
 
+export UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/uv-cache}"
+
 VERBOSE="${1:-}"
 ERRORS=0
 WARNINGS=0
@@ -29,6 +31,33 @@ info() {
     if [ "$VERBOSE" = "--verbose" ]; then
         echo "  $1"
     fi
+}
+
+resolve_science_tool() {
+    if [ -n "${SCIENCE_TOOL_PATH:-}" ] && command -v uv &>/dev/null; then
+        printf "uv run --project %s science-tool" "${SCIENCE_TOOL_PATH}"
+        return
+    fi
+
+    if command -v uv &>/dev/null; then
+        for candidate in \
+            "./science-tool" \
+            "../science/science-tool" \
+            "../science-tool"
+        do
+            if [ -f "${candidate}/pyproject.toml" ]; then
+                printf "uv run --project %s science-tool" "${candidate}"
+                return
+            fi
+        done
+    fi
+
+    if command -v science-tool &>/dev/null; then
+        printf "science-tool"
+        return
+    fi
+
+    printf ""
 }
 
 # ─── Path resolution from science.yaml ─────────────────────────────
@@ -81,6 +110,49 @@ else
             info "  ${field}: present"
         fi
     done
+
+    knowledge_profile_status=$(python3 - <<'PYEOF'
+import yaml
+
+with open("science.yaml", encoding="utf-8") as handle:
+    data = yaml.safe_load(handle) or {}
+
+profiles = data.get("knowledge_profiles")
+if not isinstance(profiles, dict):
+    print("missing")
+elif not isinstance(profiles.get("local"), str) or not profiles.get("local"):
+    print("missing-local")
+else:
+    curated = profiles.get("curated")
+    if curated is None:
+        print("missing-curated")
+    elif not isinstance(curated, list):
+        print("invalid-curated")
+    else:
+        print("ok")
+PYEOF
+2>/dev/null || echo "error")
+
+    case "$knowledge_profile_status" in
+        missing)
+            error "science.yaml missing required knowledge_profiles section"
+            ;;
+        missing-local)
+            error "science.yaml knowledge_profiles.local missing or empty"
+            ;;
+        missing-curated)
+            error "science.yaml knowledge_profiles.curated missing"
+            ;;
+        invalid-curated)
+            error "science.yaml knowledge_profiles.curated must be a list"
+            ;;
+        error)
+            error "science.yaml knowledge_profiles could not be parsed"
+            ;;
+        *)
+            info "knowledge_profiles configured"
+            ;;
+    esac
 fi
 
 # ─── 2. Core structure ────────────────────────────────────────────
@@ -451,16 +523,42 @@ fi
 echo ""
 echo "Checking knowledge graph..."
 
-if [ -f "$KNOWLEDGE_DIR/graph.trig" ]; then
-    # Resolve science-tool command
-    # Priority: SCIENCE_TOOL_PATH env var → science-tool on PATH → uv run --with
-    SCIENCE_TOOL=""
-    if [ -n "${SCIENCE_TOOL_PATH:-}" ] && command -v uv &>/dev/null; then
-        SCIENCE_TOOL="uv run --with ${SCIENCE_TOOL_PATH} science-tool"
-    elif command -v science-tool &>/dev/null; then
-        SCIENCE_TOOL="science-tool"
-    fi
+SCIENCE_TOOL="${SCIENCE_TOOL:-$(resolve_science_tool)}"
 
+if [ -z "$SCIENCE_TOOL" ]; then
+    warn "science-tool unavailable; skipping graph source audit and graph validation"
+else
+    audit_output=$($SCIENCE_TOOL graph audit --project-root . --format json 2>&1) || true
+    if printf "%s" "$audit_output" | python3 -c "import sys,json; json.load(sys.stdin)" &>/dev/null; then
+        audit_rows=$(printf "%s" "$audit_output" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['rows']))")
+        if [ "$audit_rows" -eq 0 ]; then
+            info "graph audit: all canonical references resolved"
+        else
+            while IFS= read -r row; do
+                check=$(printf "%s" "$row" | python3 -c "import sys,json; print(json.load(sys.stdin)['check'])")
+                status=$(printf "%s" "$row" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+                source=$(printf "%s" "$row" | python3 -c "import sys,json; print(json.load(sys.stdin)['source'])")
+                field=$(printf "%s" "$row" | python3 -c "import sys,json; print(json.load(sys.stdin)['field'])")
+                target=$(printf "%s" "$row" | python3 -c "import sys,json; print(json.load(sys.stdin)['target'])")
+                details=$(printf "%s" "$row" | python3 -c "import sys,json; print(json.load(sys.stdin)['details'])")
+
+                if [ "$status" = "fail" ]; then
+                    error "graph audit: ${check} — ${source} ${field} -> ${target} (${details})"
+                else
+                    warn "graph audit: ${check} — ${source} ${field} -> ${target} (${details})"
+                fi
+            done < <(printf "%s" "$audit_output" | python3 -c "
+import sys, json
+for row in json.load(sys.stdin)['rows']:
+    print(json.dumps(row))
+")
+        fi
+    else
+        error "graph audit produced unparseable output"
+    fi
+fi
+
+if [ -f "$KNOWLEDGE_DIR/graph.trig" ]; then
     if [ -z "$SCIENCE_TOOL" ]; then
         error "$KNOWLEDGE_DIR/graph.trig exists but science-tool is not available (set SCIENCE_TOOL_PATH or install science-tool)"
     else
@@ -603,8 +701,13 @@ fi
 echo ""
 echo "Checking frontmatter cross-references..."
 
-xref_result=$(XREF_SPECS="$SPECS_DIR/hypotheses" XREF_DOC="$DOC_DIR" python3 << 'PYEOF'
+xref_result=$(XREF_SPECS="$SPECS_DIR/hypotheses" XREF_DOC="$DOC_DIR" XREF_TASKS="$TASKS_DIR" XREF_ENTITIES="$KNOWLEDGE_DIR/sources/project_specific/entities.yaml" python3 << 'PYEOF'
 import os, re
+
+try:
+    import yaml
+except Exception:  # pragma: no cover - shell fallback
+    yaml = None
 
 QUOTE = "[\"']?"
 NOT_QUOTE = "[^\"'\n]+"
@@ -641,6 +744,54 @@ def extract_frontmatter(path):
                     in_related = False
     return doc_id, related
 
+
+def load_task_ids(tasks_dir):
+    task_ids = set()
+    if not os.path.isdir(tasks_dir):
+        return task_ids
+
+    task_paths = [os.path.join(tasks_dir, "active.md")]
+    done_dir = os.path.join(tasks_dir, "done")
+    if os.path.isdir(done_dir):
+        for name in os.listdir(done_dir):
+            if name.endswith(".md"):
+                task_paths.append(os.path.join(done_dir, name))
+
+    header_re = re.compile(r"^##\s+\[(\w+)\]")
+    for path in task_paths:
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as handle:
+                for line in handle:
+                    match = header_re.match(line)
+                    if match:
+                        task_ids.add(f"task:{match.group(1).lower()}")
+        except Exception:
+            continue
+    return task_ids
+
+
+def load_structured_ids(path):
+    ids = set()
+    if yaml is None or not os.path.isfile(path):
+        return ids
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+    except Exception:
+        return ids
+    items = data.get("entities") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        return ids
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        canonical_id = item.get("canonical_id")
+        if isinstance(canonical_id, str) and canonical_id:
+            ids.add(canonical_id)
+    return ids
+
 search_dirs = [os.environ['XREF_SPECS'], os.environ['XREF_DOC']]
 all_ids = set()
 refs_by_file = {}
@@ -657,6 +808,9 @@ for search_dir in search_dirs:
                 all_ids.add(doc_id)
             if related:
                 refs_by_file[path] = related
+
+all_ids.update(load_task_ids(os.environ["XREF_TASKS"]))
+all_ids.update(load_structured_ids(os.environ["XREF_ENTITIES"]))
 
 broken = 0
 for path, refs in refs_by_file.items():

@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
+import textwrap
+import time
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -258,9 +263,61 @@ def test_graph_build_materializes_project_graph(tmp_path: Path) -> None:
     result = runner.invoke(main, ["graph", "build", "--project-root", str(project)])
 
     assert result.exit_code == 0
+
+
+def test_materialize_graph_is_deterministic_for_identical_inputs(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+
+    first_path = materialize_graph(project)
+    first_text = first_path.read_text(encoding="utf-8")
+
+    time.sleep(1.1)
+    second_path = materialize_graph(project)
+    second_text = second_path.read_text(encoding="utf-8")
+
+    assert second_path == first_path
+    assert second_text == first_text
     trig_path = project / "knowledge" / "graph.trig"
     assert trig_path.exists()
     assert diff_graph_inputs(trig_path, "hash") == []
+
+
+def test_graph_build_is_deterministic_across_processes(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+
+    script = textwrap.dedent(
+        """
+        import hashlib
+        from pathlib import Path
+
+        from science_tool.graph.materialize import materialize_graph
+
+        trig_path = materialize_graph(Path(r"{project_root}"))
+        print(hashlib.sha256(trig_path.read_bytes()).hexdigest())
+        """
+    ).format(project_root=project)
+
+    first_env = os.environ | {"PYTHONHASHSEED": "1"}
+    second_env = os.environ | {"PYTHONHASHSEED": "2"}
+
+    first = subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=first_env,
+    )
+    second = subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=second_env,
+    )
+
+    assert second.stdout == first.stdout
 
 
 def test_graph_build_fails_cleanly_on_unresolved_references(tmp_path: Path) -> None:

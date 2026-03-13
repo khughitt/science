@@ -740,3 +740,20 @@ Expected: file contains concrete commands and outcomes.
 git add docs/plans/2026-03-12-knowledge-graph-layering-plan.md docs/exemplar-evidence/kg-layering-verification.md
 git commit -m "docs: record KG layering verification"
 ```
+
+### Completion Note
+
+Executed on 2026-03-13.
+
+Completed:
+- Tasks 1 through 8 were implemented across `science-model`, `science-tool`, `science-web`, and `seq-feats`.
+- `science-tool` now materializes `graph.trig` deterministically across separate processes.
+- `seq-feats` migrated to `core + bio + project_specific` upstream sources with canonical task/question/hypothesis coverage and generated graph rebuilds.
+- Command docs and validation flows were updated to treat `knowledge/graph.trig` as a generated artifact rather than a hand-edited source.
+
+Verification summary:
+- `science-model` package-scoped tests, `pyright`, and `ruff check` passed.
+- `science-tool` graph-focused regression suite passed, including the cross-process determinism test.
+- `science-tool` full-suite collection remains blocked by a pre-existing missing `httpx` dependency in dataset tests.
+- `science-web` tests, typecheck, and frontend build passed in this implementation run.
+- `seq-feats` repeated graph builds now produce identical bytes; graph audit and graph validation pass; `validate.sh --verbose` reports all frontmatter cross-references valid and passes with warnings only.

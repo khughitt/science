@@ -60,6 +60,7 @@ class ProjectSources(BaseModel):
     project_root: str
     profiles: KnowledgeProfiles
     entities: list[SourceEntity]
+    manual_aliases: dict[str, str] = Field(default_factory=dict)
 
 
 def load_project_sources(project_root: Path) -> ProjectSources:
@@ -71,6 +72,7 @@ def load_project_sources(project_root: Path) -> ProjectSources:
     entities: list[SourceEntity] = []
     entities.extend(_load_markdown_entities(project_root, [paths.doc_dir, paths.specs_dir]))
     entities.extend(_load_task_entities(project_root, paths.tasks_dir))
+    entities.extend(_load_structured_entities(project_root))
     entities.sort(key=lambda entity: entity.canonical_id)
 
     return ProjectSources(
@@ -78,10 +80,11 @@ def load_project_sources(project_root: Path) -> ProjectSources:
         project_root=str(project_root),
         profiles=KnowledgeProfiles.model_validate(config["knowledge_profiles"]),
         entities=entities,
+        manual_aliases=_load_manual_aliases(project_root),
     )
 
 
-def build_alias_map(entities: list[SourceEntity]) -> dict[str, str]:
+def build_alias_map(entities: list[SourceEntity], manual_aliases: dict[str, str] | None = None) -> dict[str, str]:
     """Build a best-effort alias map for canonical entity resolution."""
     alias_map: dict[str, str] = {}
     for entity in entities:
@@ -90,6 +93,9 @@ def build_alias_map(entities: list[SourceEntity]) -> dict[str, str]:
         for alias in entity.aliases:
             _register_alias(alias_map, alias, entity.canonical_id)
             _register_alias(alias_map, alias.lower(), entity.canonical_id)
+    for alias, canonical_id in (manual_aliases or {}).items():
+        _register_alias(alias_map, alias, canonical_id)
+        _register_alias(alias_map, alias.lower(), canonical_id)
     return alias_map
 
 
@@ -137,7 +143,10 @@ def _load_markdown_entities(project_root: Path, roots: list[Path]) -> list[Sourc
                     related=entity.related,
                     source_refs=entity.source_refs,
                     ontology_terms=entity.ontology_terms,
-                    aliases=_derive_aliases(entity.canonical_id, raw_aliases),
+                    aliases=_derive_aliases(
+                        entity.canonical_id,
+                        [*raw_aliases, *_aliases_from_source_path(entity.type.value, entity.file_path)],
+                    ),
                 )
             )
     return entities
@@ -163,6 +172,53 @@ def _load_task_entities(project_root: Path, tasks_dir: Path) -> list[SourceEntit
                     aliases=_derive_aliases(canonical_id, [task.id, task.id.upper()]),
                 )
             )
+    return entities
+
+
+def _load_structured_entities(project_root: Path) -> list[SourceEntity]:
+    entities_path = project_root / "knowledge" / "sources" / "project_specific" / "entities.yaml"
+    if not entities_path.is_file():
+        return []
+
+    data = yaml.safe_load(entities_path.read_text(encoding="utf-8")) or {}
+    items = data.get("entities") or []
+    if not isinstance(items, list):
+        return []
+
+    entities: list[SourceEntity] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        canonical_id = item.get("canonical_id")
+        kind = item.get("kind")
+        title = item.get("title")
+        if not isinstance(canonical_id, str) or not canonical_id:
+            continue
+        if not isinstance(kind, str) or not kind:
+            continue
+        if not isinstance(title, str) or not title:
+            continue
+
+        aliases_raw = item.get("aliases") or []
+        aliases = [str(alias) for alias in aliases_raw] if isinstance(aliases_raw, list) else []
+
+        entities.append(
+            SourceEntity(
+                canonical_id=canonical_id,
+                kind=kind,
+                title=title,
+                profile=str(item.get("profile") or "project_specific"),
+                source_path=str(item.get("source_path") or "knowledge/sources/project_specific/entities.yaml"),
+                status=str(item.get("status")) if item.get("status") is not None else None,
+                content_preview=str(item.get("content_preview") or ""),
+                related=_coerce_string_list(item.get("related")),
+                blocked_by=_coerce_string_list(item.get("blocked_by")),
+                source_refs=_coerce_string_list(item.get("source_refs")),
+                ontology_terms=_coerce_string_list(item.get("ontology_terms")),
+                aliases=_derive_aliases(canonical_id, aliases),
+            )
+        )
+
     return entities
 
 
@@ -197,6 +253,29 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     }
 
 
+def _load_manual_aliases(project_root: Path) -> dict[str, str]:
+    mappings_path = project_root / "knowledge" / "sources" / "project_specific" / "mappings.yaml"
+    if not mappings_path.is_file():
+        return {}
+
+    data = yaml.safe_load(mappings_path.read_text(encoding="utf-8")) or {}
+    aliases = data.get("aliases") or {}
+    if not isinstance(aliases, dict):
+        return {}
+
+    result: dict[str, str] = {}
+    for alias, canonical_id in aliases.items():
+        if isinstance(alias, str) and isinstance(canonical_id, str):
+            result[alias] = canonical_id
+    return result
+
+
+def _coerce_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value]
+
+
 def _derive_aliases(canonical_id: str, explicit_aliases: list[str]) -> list[str]:
     aliases: list[str] = []
     seen: set[str] = set()
@@ -212,6 +291,9 @@ def _derive_aliases(canonical_id: str, explicit_aliases: list[str]) -> list[str]
         add(alias)
 
     kind, slug = canonical_id.split(":", 1)
+    if kind not in {"hypothesis", "question", "task"}:
+        return aliases
+
     match = _SHORT_ID_RE.match(slug)
     if match is None:
         head = slug.split("-", 1)[0]
@@ -237,3 +319,24 @@ def _default_profile_for_kind(kind: str) -> str:
     if kind in _CORE_KINDS:
         return "core"
     return "project_specific"
+
+
+def _aliases_from_source_path(kind: str, source_path: str) -> list[str]:
+    if kind not in {"hypothesis", "question", "task"}:
+        return []
+
+    stem = Path(source_path).stem
+    match = _SHORT_ID_RE.match(stem)
+    if match is None:
+        head = stem.split("-", 1)[0]
+        match = _SHORT_ID_RE.match(head)
+    if match is None:
+        return []
+
+    token = match.group("token")
+    return [
+        f"{kind}:{token.lower()}",
+        f"{kind}:{token.upper()}",
+        token.lower(),
+        token.upper(),
+    ]

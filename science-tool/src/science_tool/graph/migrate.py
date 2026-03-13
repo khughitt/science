@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
+import yaml
 from science_model import normalize_alias
 
 from science_tool.graph.sources import (
@@ -10,13 +14,14 @@ from science_tool.graph.sources import (
     SourceEntity,
     build_alias_map,
     is_external_reference,
+    load_project_sources,
 )
 
 
 def audit_project_sources(sources: ProjectSources) -> tuple[list[dict[str, str]], bool]:
     """Validate that structured project sources resolve canonically."""
     try:
-        alias_map = build_alias_map(sources.entities)
+        alias_map = build_alias_map(sources.entities, manual_aliases=sources.manual_aliases)
     except AliasCollisionError as exc:
         return (
             [
@@ -39,6 +44,91 @@ def audit_project_sources(sources: ProjectSources) -> tuple[list[dict[str, str]]
     rows.sort(key=lambda row: (row["source"], row["target"]))
     has_failures = any(row["status"] == "fail" for row in rows)
     return rows, has_failures
+
+
+def audit_project_graph(project_root: Path) -> dict[str, object]:
+    """Load a project, audit canonical references, and summarize the result."""
+    sources = load_project_sources(project_root)
+    rows, has_failures = audit_project_sources(sources)
+    try:
+        alias_map = build_alias_map(sources.entities, manual_aliases=sources.manual_aliases)
+    except AliasCollisionError:
+        alias_map = sources.manual_aliases.copy()
+
+    unresolved_rows = [row for row in rows if row["check"] == "unresolved_reference"]
+    return {
+        "project_root": str(project_root.resolve()),
+        "has_failures": has_failures,
+        "unresolved_reference_count": len(unresolved_rows),
+        "rows": rows,
+        "alias_map": dict(sorted(alias_map.items())),
+        "manual_aliases": dict(sorted(sources.manual_aliases.items())),
+    }
+
+
+_LIST_FIELD_RE = re.compile(
+    r"(?P<prefix>(?:^|\n)(?:-\s+)?(?P<field>related|blocked-by|source_refs):\s*\[)(?P<body>[^\]]*)(?P<suffix>\])"
+)
+
+
+def migrate_project_ids(text: str, alias_map: dict[str, str]) -> str:
+    """Rewrite bracketed reference lists using a canonical alias map."""
+
+    def replace(match: re.Match[str]) -> str:
+        body = match.group("body")
+        items = [item.strip() for item in body.split(",") if item.strip()]
+        rewritten: list[str] = []
+        for item in items:
+            quote = ""
+            value = item
+            if value[0] in {'"', "'"} and value[-1] == value[0]:
+                quote = value[0]
+                value = value[1:-1]
+
+            canonical = alias_map.get(value)
+            if canonical is None:
+                canonical = _resolve_kind_safe_alias(value, alias_map)
+            rewritten_value = canonical or value
+            if quote:
+                rewritten.append(f"{quote}{rewritten_value}{quote}")
+            else:
+                rewritten.append(rewritten_value)
+
+        return f"{match.group('prefix')}{', '.join(rewritten)}{match.group('suffix')}"
+
+    return _LIST_FIELD_RE.sub(replace, text)
+
+
+def write_project_specific_sources(project_root: Path, report: dict[str, object]) -> None:
+    """Write structured migration artifacts for project-specific aliases and unresolved refs."""
+    base = project_root / "knowledge" / "sources" / "project_specific"
+    base.mkdir(parents=True, exist_ok=True)
+    raw_rows = report.get("rows", [])
+    unresolved_rows = [
+        row
+        for row in raw_rows
+        if isinstance(row, dict) and row.get("check") == "unresolved_reference"
+    ] if isinstance(raw_rows, list) else []
+    entities = _merge_entities(
+        _load_entity_records(base / "entities.yaml"),
+        [_placeholder_entity(row["target"]) for row in unresolved_rows if isinstance(row.get("target"), str)],
+    )
+    relations = _load_relation_records(base / "relations.yaml")
+    mappings = _load_alias_records(base / "mappings.yaml")
+    mappings.update(_coerce_alias_map(report.get("manual_aliases")))
+
+    (base / "entities.yaml").write_text(
+        yaml.safe_dump({"entities": entities}, sort_keys=False),
+        encoding="utf-8",
+    )
+    (base / "relations.yaml").write_text(
+        yaml.safe_dump({"relations": relations}, sort_keys=False),
+        encoding="utf-8",
+    )
+    (base / "mappings.yaml").write_text(
+        yaml.safe_dump({"aliases": mappings}, sort_keys=True),
+        encoding="utf-8",
+    )
 
 
 def _audit_entity(entity: SourceEntity, alias_map: dict[str, str]) -> list[dict[str, str]]:
@@ -75,3 +165,99 @@ def _audit_reference(
         ]
 
     return []
+
+
+def _placeholder_entity(target: str) -> dict[str, str] | None:
+    if is_external_reference(target) or ":" not in target:
+        return None
+
+    kind, _ = target.split(":", 1)
+    return {
+        "canonical_id": target,
+        "kind": kind,
+        "title": _humanize_canonical_id(target),
+        "profile": "project_specific",
+        "source_path": "migration:audit",
+    }
+
+
+def _humanize_canonical_id(canonical_id: str) -> str:
+    _, slug = canonical_id.split(":", 1)
+    tokens = [token for token in re.split(r"[-_]+", slug) if token]
+    words: list[str] = []
+    for token in tokens:
+        if re.fullmatch(r"[a-z]\d+", token, re.IGNORECASE):
+            words.append(token.upper())
+        else:
+            words.append(token.capitalize())
+    return " ".join(words)
+
+
+def _coerce_alias_map(value: object) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, str] = {}
+    for alias, canonical_id in value.items():
+        if isinstance(alias, str) and isinstance(canonical_id, str):
+            result[alias] = canonical_id
+    return result
+
+
+def _resolve_kind_safe_alias(value: str, alias_map: dict[str, str]) -> str | None:
+    if ":" not in value:
+        return None
+
+    kind, suffix = value.split(":", 1)
+    canonical = alias_map.get(suffix)
+    if canonical is None or ":" not in canonical:
+        return None
+    canonical_kind, _ = canonical.split(":", 1)
+    if canonical_kind != kind:
+        return None
+    return canonical
+
+
+def _merge_entities(
+    existing: list[dict[str, str]],
+    additions: list[dict[str, str] | None],
+) -> list[dict[str, str]]:
+    entity_map: dict[str, dict[str, str]] = {}
+    for entity in existing:
+        canonical_id = entity.get("canonical_id")
+        if isinstance(canonical_id, str) and canonical_id:
+            entity_map[canonical_id] = entity
+
+    for entity in additions:
+        if entity is None:
+            continue
+        entity_map.setdefault(entity["canonical_id"], entity)
+
+    return [entity_map[key] for key in sorted(entity_map)]
+
+
+def _load_entity_records(path: Path) -> list[dict[str, str]]:
+    data = _load_yaml(path)
+    items = data.get("entities") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        return []
+    return [item for item in items if isinstance(item, dict)]
+
+
+def _load_relation_records(path: Path) -> list[dict[str, object]]:
+    data = _load_yaml(path)
+    items = data.get("relations") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        return []
+    return [item for item in items if isinstance(item, dict)]
+
+
+def _load_alias_records(path: Path) -> dict[str, str]:
+    data = _load_yaml(path)
+    aliases = data.get("aliases") if isinstance(data, dict) else None
+    return _coerce_alias_map(aliases)
+
+
+def _load_yaml(path: Path) -> object:
+    if not path.is_file():
+        return {}
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
