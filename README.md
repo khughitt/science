@@ -136,7 +136,7 @@ my-project/
 │   ├── graph.trig            # Materialized graph output (do not edit directly)
 │   ├── reports/              # Audit / migration reports
 │   └── sources/
-│       └── project_specific/ # Local KG entities, relations, aliases
+│       └── <local-profile>/  # Local KG entities, relations, aliases (default: project_specific)
 ├── data/                     # Frictionless Data Packages
 │   ├── raw/
 │   └── processed/
@@ -170,6 +170,9 @@ knowledge_profiles:
   curated: [bio]
   local: project_specific
 ```
+
+`local` controls the directory name under `knowledge/sources/`. Most projects should keep the default
+`project_specific`, but the tooling now honors a different local profile name when explicitly configured.
 
 ### 2. State your hypotheses
 
@@ -286,7 +289,7 @@ After subsequent research rounds, run:
 /science:update-graph
 ```
 
-This detects stale documents via content hashing and incrementally adds new entities and relations without disturbing existing ones.
+This detects stale canonical sources, runs migration/audit checks for unresolved references, and then re-materializes `knowledge/graph.trig` from upstream inputs.
 
 ### Iterate
 

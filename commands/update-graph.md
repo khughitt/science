@@ -38,7 +38,7 @@ Typical categories:
 
 - typed markdown docs in `specs/` or `doc/`
 - task files in `tasks/`
-- local extension files in `knowledge/sources/project_specific/`
+- local extension files in `knowledge/sources/<local-profile>/`
 - removed source files that may require entity retirement or migration
 
 ### Step 3: Update the canonical sources
@@ -47,7 +47,7 @@ For each stale source:
 
 1. Re-read the source file.
 2. Update frontmatter IDs, `related`, `source_refs`, and task links to canonical IDs.
-3. Add or revise `project_specific` entities and alias mappings when the project introduces new local semantics.
+3. Add or revise local-profile entities and alias mappings when the project introduces new local semantics.
 4. If a file was removed, decide whether the represented entity should also be removed or replaced by another canonical source. Do not silently orphan it.
 
 ### Step 4: Audit before rebuild
@@ -55,10 +55,13 @@ For each stale source:
 Run:
 
 ```bash
+science-tool graph migrate --project-root . --format json
 science-tool graph audit --project-root . --format json
 ```
 
-If any unresolved references remain, fix the upstream sources first. Do not build until the audit is clean.
+Use `graph migrate` when you want the tool to rewrite alias-resolvable refs, scaffold local-profile
+source files, and persist `knowledge/reports/kg-migration-audit.json` before the final audit. If any
+unresolved references remain after migration, fix the upstream sources first. Do not build until the audit is clean.
 
 ### Step 5: Re-materialize and validate
 
@@ -74,12 +77,13 @@ science-tool graph stats --format json
 
 If the update involved legacy ID cleanup or new project-local semantics, keep the migration artifacts current:
 
-- `knowledge/sources/project_specific/entities.yaml`
-- `knowledge/sources/project_specific/mappings.yaml`
+- `knowledge/sources/<local-profile>/entities.yaml`
+- `knowledge/sources/<local-profile>/mappings.yaml`
 - `knowledge/reports/kg-migration-audit.json`
 
 ## Important Notes
 
 - Incremental updates still happen at the source layer; `graph.trig` is always regenerated.
 - Tasks are graph entities and must stay linked canonically.
+- `<local-profile>` comes from `science.yaml` `knowledge_profiles.local` and defaults to `project_specific`.
 - If `graph diff` reports staleness after a rebuild, inspect the source file change rather than patching the graph output.

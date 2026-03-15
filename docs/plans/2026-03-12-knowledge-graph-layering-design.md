@@ -32,6 +32,10 @@ In `seq-feats`, for example, the graph currently splits into a literature/concep
 3. Collapse all layers into one permanent graph.
 4. Preserve legacy short-form IDs as long-term canonical identifiers.
 
+Refactor prep docs for this design live in
+`docs/plans/2026-03-12-knowledge-graph-layering-desired-file-structure.md` and
+`docs/plans/2026-03-12-knowledge-graph-layering-files-to-remove.md`.
+
 ## Model Library Structure
 
 `science-model` becomes a layered model library:
@@ -72,6 +76,7 @@ Each profile must declare:
 5. Canonical ID namespace and ID format rules
 6. Validation rules and strictness level
 7. Bridge and mapping rules to `core` and other enabled profiles
+8. Domain assignment rules for UI-facing summaries and graph coloring
 
 This profile system is the main contract that tooling consumes. `science-tool`, `science-web`, project validation, and skills should stop hardcoding entity semantics and instead resolve them through `science-model`.
 
@@ -166,6 +171,12 @@ Recommended named graph layout:
 
 The union graph is assembled on demand from selected layers. It is a view, not a separate authority.
 
+The model must keep three concepts distinct:
+
+1. `profile` — which schema bundle introduced or governs the semantics
+2. `graph_layer` — which named graph stores the statement
+3. `domain` — the stable UI-facing topical grouping used for graph coloring and project summaries
+
 This allows:
 
 1. Queries on a single layer
@@ -183,6 +194,8 @@ Curated profiles such as `bio` should be practical and selective. They should:
 4. Avoid dumping entire external ontologies into every project
 
 For `bio`, the goal is not to clone Biolink, GO, MeSH, Disease Ontology, or Sequence Ontology wholesale. The goal is to expose the most useful and interoperable subset for biology-heavy projects.
+
+Curated profiles alone are not sufficient as the dashboard's domain signal. A project with `bio` enabled should still be able to expose multiple per-node domains such as `genomics`, `proteomics`, `causal-inference`, or `evaluation` when the upstream model supports them. `science-web` should consume those explicit node/entity domains rather than collapsing everything into the enabled profile name.
 
 ## Project-Local Extension Profile
 
@@ -227,6 +240,101 @@ This avoids silent drift between prose, tasks, and RDF.
 
 If a user feels compelled to edit `graph.trig` directly, that is usually a sign that an upstream canonical source is missing and should be added.
 
+### Canonical Structured Source Contracts
+
+The structured `knowledge/sources/<local-profile>/` tree needs to be a real authoring contract, not just a catch-all folder.
+
+At minimum, the contract should support:
+
+1. `entities.yaml`
+   - Simple project-local entities that do not need a specialized schema
+   - Canonical IDs, titles, aliases, provenance-facing source paths, related refs, source refs, ontology terms, optional `profile`, and optional `domain`
+2. `relations.yaml`
+   - Authored project assertions that need explicit predicates rather than generic `related`
+   - `subject`, `predicate`, `object`, `graph_layer`, `source_path`
+   - Relation endpoints may point at canonical project IDs, external CURIEs, URLs, or bare controlled vocabulary tokens when those are the canonical authored form
+3. `mappings.yaml`
+   - Explicit alias and migration metadata
+   - Legacy short IDs, malformed historic refs, and promoted canonical rewrites
+4. `models.yaml`
+   - Canonical model entities and model-to-model relations
+   - Required fields should include `canonical_id`, `title`, `profile`, `source_path`
+   - Optional fields should include `domain`, `aliases`, `source_refs`, `related`, and a structured `relations` list
+5. `parameters.yaml`
+   - Canonical parameter entities and parameter-to-parameter relations
+   - Required fields should include `canonical_id`, `title`, `symbol`, `source_path`
+   - Optional fields should include `aliases`, `domain`, `source_refs`, `ontology_terms`, physical metadata such as units and quantity grouping, and a structured `relations` list
+6. `bindings.yaml`
+   - Model-parameter binding assertions and binding metadata
+   - Required fields should include `model`, `parameter`, `source_path`
+   - Optional fields should include symbol override, role override, units override, confidence, match tier, default value, typical range, provenance/evidence refs, and notes
+
+Illustrative examples:
+
+```yaml
+# knowledge/sources/project_specific/models.yaml
+models:
+  - canonical_id: model:navier-stokes
+    title: Navier-Stokes equations
+    profile: project_specific
+    domain: fluid-dynamics
+    source_path: knowledge/sources/project_specific/models.yaml
+    aliases: [NavierStokes]
+    source_refs: [paper:legatiuk2021]
+    related: [question:q01-model-granularity]
+    relations:
+      - predicate: sci:approximates
+        target: model:stokes
+```
+
+```yaml
+# knowledge/sources/project_specific/parameters.yaml
+parameters:
+  - canonical_id: parameter:kinematic-viscosity
+    title: Kinematic viscosity
+    symbol: ν
+    profile: project_specific
+    domain: transport
+    units: m^2/s
+    quantity_group: velocity
+    source_path: knowledge/sources/project_specific/parameters.yaml
+    source_refs: [paper:legatiuk2021]
+    relations:
+      - predicate: prov:wasDerivedFrom
+        target: parameter:dynamic-viscosity
+```
+
+```yaml
+# knowledge/sources/project_specific/bindings.yaml
+bindings:
+  - model: model:navier-stokes
+    parameter: parameter:kinematic-viscosity
+    symbol: ν
+    role: viscosity
+    confidence: 1.0
+    match_tier: canonical
+    source_path: knowledge/sources/project_specific/bindings.yaml
+```
+
+These contracts are the long-term inputs that `science-tool graph build` should read directly.
+
+### Canonical Sources Vs Application Internals
+
+Project application internals such as generated JSON, TypeScript registries, notebooks, or UI-specific caches are not part of the long-term KG authoring contract.
+
+They may be used as migration/import inputs, but only through explicit importers that write canonical source files under `knowledge/sources/<local-profile>/`.
+
+This boundary matters for projects like `natural-systems-guide`, where the current model layer lives in app-specific files. The correct end state is:
+
+1. canonical source files become the source of truth for model-layer knowledge
+2. `science-tool` materializes RDF from those canonical source files
+3. project applications either read those canonical files directly or regenerate their own internal artifacts from them
+
+`science-tool` should not permanently depend on project-specific TypeScript or generated JSON layouts to build the KG.
+
+Implementation reminder:
+After the typed canonical source contracts are implemented, return to `natural-systems-guide` and complete the model-layer cutover by replacing the remaining app-internal KG inputs with generated canonical source files.
+
 ## Runtime Responsibilities
 
 ### `science-model`
@@ -238,6 +346,7 @@ Owns:
 3. ID rules
 4. Validation rules
 5. Graph payload structures shared by other systems
+6. The shared distinction between `profile`, `graph_layer`, and `domain`
 
 ### `science-tool`
 
@@ -248,6 +357,9 @@ Owns:
 3. Materializing RDF layers deterministically
 4. Rebuilding and validating the graph
 5. Providing CLI commands for profile-aware graph operations
+6. Assigning explicit `domain` values to canonical entities and materialized graph nodes using upstream rules
+7. Computing project-level domain summaries such as top domain counts when needed by downstream consumers
+8. Treating project-specific importers as migration helpers that write canonical source files rather than as permanent materialization dependencies
 
 ### `science-web`
 
@@ -257,6 +369,55 @@ Owns:
 2. Rendering per-layer and union views
 3. Treating tasks and other core entities consistently
 4. Avoiding hardcoded semantic assumptions that duplicate `science-model`
+5. Consuming upstream `domain` metadata for graph coloring and dashboard summaries rather than inferring domains locally
+
+### `science-web` Consumer Contract
+
+The current `science-web` backend already understands profile manifests and task nodes at a basic level.
+The next implementation slice should finish the richer consumer contract exposed by the layered graph model.
+
+`science-web` should treat the following as first-class graph payload concepts:
+
+1. `Task` nodes from project task files
+2. `Model` nodes from typed canonical model sources
+3. `CanonicalParameter` nodes from typed canonical parameter sources
+4. `ParameterBinding` provenance nodes that explain why a model/parameter association exists
+
+The shared API/UI contract should make these distinctions explicit rather than forcing the frontend to reverse-engineer them from RDF details.
+
+Minimum node payload expectations:
+
+```python
+class GraphNode(BaseModel):
+    id: str
+    canonical_id: str
+    label: str
+    type: str
+    profile: str
+    domain: str | None
+    graph_layer: str
+    aliases: list[str] = Field(default_factory=list)
+    source_refs: list[str] = Field(default_factory=list)
+    status: str | None = None
+    confidence: float | None = None
+    symbol: str | None = None
+    role: str | None = None
+    match_tier: str | None = None
+```
+
+Not every field is populated for every node type.
+The important rule is that `science-web` should receive explicit metadata where it exists upstream, especially for model-layer provenance nodes.
+
+Dashboard and graph-view behavior should follow these rules:
+
+1. Color by explicit `domain` values from the graph payload
+2. Shape or otherwise distinguish major node kinds such as `Task`, `Model`, `CanonicalParameter`, and `ParameterBinding`
+3. Show `profile`, `graph_layer`, and `domain` as separate concepts in inspectors and filters
+4. Expose project-level `top_domains` from actual graph content rather than leaving them empty
+5. Degrade gracefully for smaller projects that only contain `core` entities and task/question graphs
+
+Implementation reminder:
+After the typed model-layer source contracts and project migrations are in place, return to `science-web` and finish the consumer work against both a task-heavy project such as `seq-feats` and a model-heavy project such as `natural-systems-guide`.
 
 ## Migration Strategy
 
@@ -266,8 +427,11 @@ Migration should be staged:
 2. Update `science-tool` to materialize graphs from canonical upstream sources
 3. Update `science-web` to consume model/profile metadata and include tasks as graph entities
 4. Migrate `seq-feats` to `core + bio + project_specific`
-5. Backfill aliases and mapping metadata for legacy IDs
-6. Remove obsolete assumptions and migration shims after validation
+5. Define typed canonical source contracts for richer project-local semantics such as models, parameters, and bindings
+6. Migrate projects with app-internal graph semantics, such as `natural-systems-guide`, by writing canonical source files from importer scripts
+7. Finish `science-web` consumer alignment for richer model-layer nodes, provenance payloads, and domain summaries
+8. Backfill aliases and mapping metadata for legacy IDs
+9. Remove obsolete assumptions and migration shims after validation
 
 ## Validation Requirements
 
@@ -278,13 +442,19 @@ Validation should operate at three levels:
 2. Project validation
    - All canonical IDs resolve
    - All `related:` and `blocked-by` references resolve
+   - All structured relation endpoints resolve
    - All bridge relations point to valid entities
+   - External term assertions accept the authored canonical form, whether that is a URL, CURIE, or bare controlled vocabulary token
    - Required provenance exists
    - First-class entities are not silently orphaned
 3. Runtime validation
    - Union graph assembly is deterministic
    - Layer filters behave correctly
    - API/UI payloads remain stable
+   - `profile`, `graph_layer`, and `domain` remain distinct in shared payloads
+   - Nodes/entities intended for the dashboard expose explicit `domain` values when available
+   - Model-layer projects surface `Model`, `CanonicalParameter`, and `ParameterBinding` nodes without frontend-specific RDF parsing
+   - Project summaries expose non-empty `top_domains` when the graph contains domain-tagged nodes
 
 ## Key Decisions
 
@@ -298,6 +468,8 @@ Approved decisions from this design round:
 6. Tasks are first-class graph entities in `core`
 7. `graph.trig` is a generated/materialized artifact
 8. Manual graph curation must happen through structured upstream sources, not direct TriG editing
+9. Application-internal registries are migration inputs, not permanent KG build inputs
+10. Rich project-local semantics such as models, parameters, and bindings need typed canonical source contracts, not ad hoc parsing
 
 ## Remaining Implementation Questions
 
@@ -308,3 +480,6 @@ These are implementation details to resolve in the plan, not open architecture q
 3. Exact profile manifest file format
 4. Exact location of project assertion and mapping source files
 5. Promotion workflow for moving stable project-local semantics into curated profiles
+6. Exact upstream precedence rules for assigning `domain` (for example explicit source field, curated mapping, otherwise `None`)
+7. Exact contract for project-level domain summaries such as `top_domains`
+8. Whether typed source contracts live in a dedicated `science-model` module or remain schema-validated within `science-tool`

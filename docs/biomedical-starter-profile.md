@@ -44,9 +44,10 @@ Model biomedical knowledge through canonical sources, not direct graph edits:
 
 - typed markdown docs in `doc/` and `specs/`
 - tasks in `tasks/*.md`
-- project-local extensions in `knowledge/sources/project_specific/*.yaml`
+- project-local extensions in `knowledge/sources/<local-profile>/*.yaml`
 
 `knowledge/graph.trig` is always generated from those sources.
+For most projects, `<local-profile>` remains `project_specific`.
 
 ## Useful Prefixes
 
@@ -77,7 +78,8 @@ Start with a small bundle like:
 
 ## Project-Specific Extensions
 
-If a bio project needs local entities that do not belong in the curated profile yet, add them under `knowledge/sources/project_specific/`.
+If a bio project needs local entities that do not belong in the curated profile yet, add them under
+`knowledge/sources/<local-profile>/`.
 
 Example:
 

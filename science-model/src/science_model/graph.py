@@ -25,6 +25,10 @@ class GraphNode(BaseModel):
     inquiry: str | None = None
     boundary_role: str | None = None
     aliases: list[str] = Field(default_factory=list)
+    source_refs: list[str] = Field(default_factory=list)
+    symbol: str | None = None
+    role: str | None = None
+    match_tier: str | None = None
 
     @model_validator(mode="after")
     def _fill_derived_defaults(self) -> "GraphNode":

@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Introduce a canonical, profile-driven knowledge graph model across `science-model`, `science-tool`, `science-web`, and `seq-feats`, with `core` as the required base profile, composable curated domain profiles such as `bio`, a formal `project_specific` extension profile, canonical IDs shared across docs/tasks/RDF/UI, and `graph.trig` treated as a deterministic materialized artifact.
+**Goal:** Introduce a canonical, profile-driven knowledge graph model across `science-model`, `science-tool`, `science-web`, and `seq-feats`, with `core` as the required base profile, composable curated domain profiles such as `bio`, a formal `project_specific` extension profile, canonical IDs shared across docs/tasks/RDF/UI, explicit per-entity and per-node `domain` metadata for downstream consumers, and `graph.trig` treated as a deterministic materialized artifact.
 
-**Architecture:** `science-model` becomes the sole authority for profile schema, canonical IDs, entity kinds, relation kinds, and validation rules. `science-tool` parses structured upstream sources and materializes named graph layers (`core`, domain profiles, `project_specific`, `bridge`, `provenance`, `causal`, `datasets`) into RDF. `science-web` becomes profile-aware and renders tasks as first-class graph entities. `seq-feats` migrates onto `core + bio + project_specific` through explicit migration tooling rather than direct graph editing.
+**Architecture:** `science-model` becomes the sole authority for profile schema, canonical IDs, entity kinds, relation kinds, validation rules, and the shared distinction between `profile`, `graph_layer`, and `domain`. `science-tool` parses structured upstream sources, assigns explicit `domain` values, and materializes named graph layers (`core`, domain profiles, `project_specific`, `bridge`, `provenance`, `causal`, `datasets`) into RDF. `science-web` becomes profile-aware, consumes upstream domain metadata directly, and renders tasks as first-class graph entities. `seq-feats` migrates onto `core + bio + project_specific` through explicit migration tooling rather than direct graph editing.
 
 **Tech Stack:** Python 3.11+, Pydantic, rdflib, click, rich, pathlib, FastAPI, React/TypeScript, existing `science-model`, `science-tool`, and `science-web` packages. No new storage backend.
 
@@ -198,13 +198,14 @@ class ProfileManifest(BaseModel):
     strictness: Literal["core", "curated", "typed-extension"]
 ```
 
-Extend `Entity` and graph payloads to carry canonical/profile metadata:
+Extend `Entity` and graph payloads to carry canonical/profile/domain metadata:
 
 ```python
 class Entity(BaseModel):
     ...
     canonical_id: str
     profile: str = "core"
+    domain: str | None = None
     aliases: list[str] = []
 
 
@@ -212,6 +213,7 @@ class GraphNode(BaseModel):
     ...
     canonical_id: str
     profile: str
+    domain: str | None = None
     aliases: list[str] = []
 ```
 
@@ -383,16 +385,19 @@ class SourceEntity(BaseModel):
     title: str
     profile: str
     source_path: str
+    domain: str | None = None
     related: list[str] = []
+    blocked_by: list[str] = []
+    source_refs: list[str] = []
+    ontology_terms: list[str] = []
     aliases: list[str] = []
 
 
 class SourceRelation(BaseModel):
-    source_id: str
-    relation: str
-    target_id: str
-    profile: str
-    layer: str
+    subject: str
+    predicate: str
+    object: str
+    graph_layer: str
     source_path: str
 ```
 
@@ -402,7 +407,8 @@ Add a materializer in `science-tool/src/science_tool/graph/materialize.py` that:
 2. Scans canonical entity docs and tasks
 3. Loads structured manual assertions from `knowledge/sources/`
 4. Resolves aliases via `science-model`
-5. Writes named graph layers deterministically to `knowledge/graph.trig`
+5. Accepts structured relation endpoints that point at canonical project IDs, external CURIEs, URLs, or bare controlled vocabulary tokens
+6. Writes named graph layers deterministically to `knowledge/graph.trig`
 
 Use a narrow API:
 
@@ -444,17 +450,19 @@ git add science-tool/src/science_tool/graph/sources.py science-tool/src/science_
 git commit -m "feat(science-tool): materialize profile-driven knowledge graphs"
 ```
 
-### Task 5: Make `science-web` profile-aware and render tasks as graph entities
+### Task 5: Make `science-web` profile-aware, domain-aware, and task-inclusive
 
 **Files:**
 - Create: `../science-web/backend/profiles.py`
 - Modify: `../science-web/backend/indexer.py`
 - Modify: `../science-web/backend/graph.py`
 - Modify: `../science-web/backend/store.py`
+- Modify: `../science-web/tests/test_store.py`
 - Modify: `../science-web/frontend/src/types/index.ts`
 - Modify: `../science-web/frontend/src/routes/projects.$slug.graph.tsx`
 - Test: `../science-web/tests/test_graph.py`
 - Test: `../science-web/tests/test_indexer.py`
+- Test: `../science-web/tests/test_store.py`
 
 **Step 1: Write the failing tests**
 
@@ -485,14 +493,22 @@ def test_load_graph_exposes_task_nodes(tmp_path: Path) -> None:
 
 def test_scan_project_preserves_task_related_links() -> None:
     ...
+
+
+def test_load_graph_exposes_explicit_node_domain_metadata(tmp_path: Path) -> None:
+    ...
+
+
+def test_store_get_project_populates_top_domains_from_graph() -> None:
+    ...
 ```
 
 **Step 2: Run tests to verify they fail**
 
-Run: `cd ../science-web && UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_graph.py tests/test_indexer.py -q`
-Expected: FAIL because `Task` typing/profile metadata are not handled yet.
+Run: `cd ../science-web && UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_graph.py tests/test_indexer.py tests/test_store.py -q`
+Expected: FAIL because `Task` typing/profile metadata and explicit domain metadata are not handled yet.
 
-**Step 3: Implement profile-aware graph loading**
+**Step 3: Implement profile-aware and domain-aware graph loading**
 
 In `../science-web/backend/profiles.py`, add helpers that import manifests from `science_model.profiles` and expose:
 
@@ -501,7 +517,15 @@ def load_enabled_profiles(project_root: Path) -> list[str]: ...
 def graph_type_map() -> dict[str, str]: ...
 ```
 
-Update `../science-web/backend/graph.py` to build node types from `science-model` profile manifests instead of a hardcoded `_TYPE_MAP`. Extend `GraphNode` handling so nodes carry `canonical_id`, `profile`, and `graph_layer`. Treat tasks as first-class graph nodes.
+Update `../science-web/backend/graph.py` to build node types from `science-model` profile manifests instead of a hardcoded `_TYPE_MAP`. Extend `GraphNode` handling so nodes carry `canonical_id`, `profile`, `domain`, and `graph_layer`. Treat tasks as first-class graph nodes.
+
+Add explicit tests and implementation for the shared contract that:
+
+1. `profile` identifies the governing schema bundle
+2. `graph_layer` identifies the named graph storing the statement
+3. `domain` is the stable UI-facing topical grouping used for graph coloring and summaries
+
+Do not make `science-web` infer `domain` from profile names or graph layers.
 
 Update the frontend types to expect:
 
@@ -512,11 +536,12 @@ export interface GraphNode {
   label: string
   type: string
   profile: string
+  domain: string | null
   graph_layer: string
 }
 ```
 
-Remove the design assumption that tasks are not graph entities and update the graph route to render them with the same interaction model as other core nodes.
+Remove the design assumption that tasks are not graph entities and update the graph route to render them with the same interaction model as other core nodes. Preserve existing graph metadata that the web app already uses, including `status`, `importance`, and domain color lookup data.
 
 **Step 4: Verify**
 
@@ -524,17 +549,17 @@ Run:
 
 ```bash
 cd ../science-web
-UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_graph.py tests/test_indexer.py -q
+UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_graph.py tests/test_indexer.py tests/test_store.py -q
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pyright
 cd frontend && npm run build
 ```
 
-Expected: backend tests, type-checking, and frontend build all pass.
+Expected: backend tests, type-checking, and frontend build all pass. Graph payloads expose explicit `domain` metadata and project summaries expose non-empty `top_domains` when upstream data provides them.
 
 **Step 5: Commit**
 
 ```bash
-git -C ../science-web add backend/profiles.py backend/indexer.py backend/graph.py backend/store.py frontend/src/types/index.ts frontend/src/routes/projects.$slug.graph.tsx tests/test_graph.py tests/test_indexer.py
+git -C ../science-web add backend/profiles.py backend/indexer.py backend/graph.py backend/store.py frontend/src/types/index.ts frontend/src/routes/projects.$slug.graph.tsx tests/test_graph.py tests/test_indexer.py tests/test_store.py
 git -C ../science-web commit -m "feat: make science-web profile-aware and task-inclusive"
 ```
 
@@ -626,6 +651,282 @@ git -C ../seq-feats add science.yaml tasks/active.md tasks/done/2026-03.md knowl
 git -C ../seq-feats commit -m "kg: migrate seq-feats to canonical layered model"
 ```
 
+### Task 6B: Define canonical model-layer source contracts and migrate `natural-systems-guide` off app-internal KG inputs
+
+Reminder:
+Do not resume the `natural-systems-guide` graph cutover work piecemeal before this task lands. Finish the typed source-contract implementation first, then return to `natural-systems-guide` to run the importer, rebuild the graph, and retire the remaining legacy model-layer builders.
+
+**Files:**
+- Modify: `docs/plans/2026-03-12-knowledge-graph-layering-design.md`
+- Create: `science-model/src/science_model/source_contracts.py`
+- Test: `science-model/tests/test_source_contracts.py`
+- Modify: `science-tool/src/science_tool/graph/sources.py`
+- Modify: `science-tool/src/science_tool/graph/materialize.py`
+- Modify: `science-tool/src/science_tool/graph/migrate.py`
+- Create: `../natural-systems-guide/knowledge/sources/project_specific/models.yaml`
+- Create: `../natural-systems-guide/knowledge/sources/project_specific/parameters.yaml`
+- Create: `../natural-systems-guide/knowledge/sources/project_specific/bindings.yaml`
+- Create or Modify: `../natural-systems-guide/scripts/export_kg_model_sources.py`
+- Modify: `../natural-systems-guide/science.yaml`
+- Modify: `../natural-systems-guide/validate.sh`
+
+**Step 1: Write the failing test-equivalent contract expectations**
+
+Capture these required outcomes:
+
+```text
+- `science-tool graph build` must not permanently parse project-specific TypeScript or generated JSON files
+- model-layer knowledge must flow through typed canonical source files under `knowledge/sources/<local-profile>/`
+- canonical model-layer contracts must cover model entities, parameter entities, authored model/parameter relations, and model-parameter bindings
+- importer scripts may read app internals, but only to write canonical source files
+```
+
+**Step 2: Add typed source-contract models**
+
+Define explicit source-contract schemas, preferably in `science-model`, for:
+
+1. `ModelSource`
+2. `ParameterSource`
+3. `BindingSource`
+4. Shared helper records for authored relations and provenance references
+
+Use concrete fields that match the design contract, for example:
+
+```python
+class ModelSource(BaseModel):
+    canonical_id: str
+    title: str
+    profile: str
+    source_path: str
+    domain: str | None = None
+    aliases: list[str] = Field(default_factory=list)
+    source_refs: list[str] = Field(default_factory=list)
+    related: list[str] = Field(default_factory=list)
+    relations: list[AuthoredTargetedRelation] = Field(default_factory=list)
+
+
+class ParameterSource(BaseModel):
+    canonical_id: str
+    title: str
+    symbol: str
+    profile: str
+    source_path: str
+    units: str | None = None
+    quantity_group: str | None = None
+    domain: str | None = None
+    aliases: list[str] = Field(default_factory=list)
+    source_refs: list[str] = Field(default_factory=list)
+    ontology_terms: list[str] = Field(default_factory=list)
+    relations: list[AuthoredTargetedRelation] = Field(default_factory=list)
+
+
+class BindingSource(BaseModel):
+    model: str
+    parameter: str
+    source_path: str
+    symbol: str | None = None
+    role: str | None = None
+    units_override: str | None = None
+    confidence: float | None = None
+    match_tier: str | None = None
+```
+
+**Step 3: Extend `science-tool` to read those contracts**
+
+Update `science-tool` so that:
+
+1. `sources.py` loads `models.yaml`, `parameters.yaml`, and `bindings.yaml` in addition to `entities.yaml`, `relations.yaml`, and `mappings.yaml`
+2. `migrate.py` audits canonical IDs across those typed source files
+3. `materialize.py` emits:
+   - `sci:Model` nodes
+   - `sci:CanonicalParameter` nodes
+   - authored model-to-model and parameter-to-parameter relations
+   - provenance-layer binding records for model-parameter bindings
+
+Do not add a permanent `science-tool` dependency on `natural-systems-guide` TypeScript files.
+
+**Step 4: Add a project-local importer for `natural-systems-guide`**
+
+Create or update a project-local importer script that reads the current app-internal sources:
+
+1. `src/chapters/generated/guide-data.json`
+2. `src/natural/registry/parameterRegistry.ts`
+3. `src/natural/registry/modelParameterBindings.ts`
+4. supporting reports such as `doc/reports/parameter-matches.json` when needed
+
+The importer must write canonical source files:
+
+1. `knowledge/sources/project_specific/models.yaml`
+2. `knowledge/sources/project_specific/parameters.yaml`
+3. `knowledge/sources/project_specific/bindings.yaml`
+
+This importer is a migration bridge, not a permanent `science-tool graph build` input.
+
+**Step 5: Verify with `natural-systems-guide`**
+
+Run:
+
+```bash
+cd ../natural-systems-guide
+UV_CACHE_DIR=/tmp/uv-cache uv run python scripts/export_kg_model_sources.py
+UV_CACHE_DIR=/tmp/uv-cache uv run --project ../science/science-tool science-tool graph audit --project-root . --format json
+UV_CACHE_DIR=/tmp/uv-cache uv run --project ../science/science-tool science-tool graph build --project-root .
+UV_CACHE_DIR=/tmp/uv-cache uv run --project ../science/science-tool science-tool graph validate --format json --path knowledge/graph.trig
+./validate.sh --verbose
+```
+
+Expected:
+
+1. The importer writes canonical model-layer source files without manual TriG editing
+2. `graph audit` returns no unresolved canonical IDs
+3. `graph build` succeeds without reading app-internal TS/JSON files directly
+4. The rebuilt graph preserves model-layer coverage closely enough to replace the old `knowledge/scripts/build-model-layer.ts` pipeline
+
+**Step 6: Commit**
+
+```bash
+git add docs/plans/2026-03-12-knowledge-graph-layering-design.md science-model/src/science_model/source_contracts.py science-model/tests/test_source_contracts.py science-tool/src/science_tool/graph/sources.py science-tool/src/science_tool/graph/materialize.py science-tool/src/science_tool/graph/migrate.py
+git commit -m "feat: add canonical model-layer source contracts"
+git -C ../natural-systems-guide add knowledge/sources/project_specific/models.yaml knowledge/sources/project_specific/parameters.yaml knowledge/sources/project_specific/bindings.yaml scripts/export_kg_model_sources.py science.yaml validate.sh knowledge/graph.trig
+git -C ../natural-systems-guide commit -m "kg: migrate model layer to canonical sources"
+```
+
+### Task 6C: Finish `science-web` model-layer consumption, summaries, and graph UX
+
+This is a follow-up to the earlier `science-web` profile-awareness task, not a replacement for it.
+The earlier work established basic task-node support and manifest-driven type mapping.
+This task finishes the consumer side now that typed model-layer source contracts and real migrated projects exist.
+
+**Files:**
+- Modify: `science-model/src/science_model/graph.py`
+- Modify: `science-model/src/science_model/projects.py`
+- Modify: `../science-web/backend/graph.py`
+- Modify: `../science-web/backend/indexer.py`
+- Modify: `../science-web/backend/store.py`
+- Modify: `../science-web/backend/routes/projects.py`
+- Modify: `../science-web/tests/test_graph.py`
+- Modify: `../science-web/tests/test_indexer.py`
+- Modify: `../science-web/tests/test_store.py`
+- Modify: `../science-web/tests/test_api_projects.py`
+- Modify: `../science-web/frontend/src/types/index.ts`
+- Modify: `../science-web/frontend/src/components/GraphExplorer/GraphExplorer.tsx`
+- Modify: `../science-web/frontend/src/components/GraphExplorer/GraphExplorer3D.tsx`
+- Modify: `../science-web/frontend/src/components/GraphExplorer/nodeShapes.ts`
+- Modify: `../science-web/frontend/src/routes/ProjectGraph.tsx`
+- Modify: `../science-web/frontend/src/routes/ProjectDashboard.tsx`
+
+**Step 1: Write the failing tests around real graph-consumer gaps**
+
+Capture these expectations:
+
+```text
+- `load_graph()` exposes `Model`, `CanonicalParameter`, and `ParameterBinding` nodes from a canonical TriG fixture
+- node payloads preserve explicit `domain`, `profile`, `graph_layer`, aliases, and source refs when present
+- binding nodes preserve provenance-facing metadata such as `confidence`, `match_tier`, `symbol`, and `role`
+- `get_project()` computes non-empty `top_domains` from graph content when domain-tagged nodes exist
+- the dashboard/API remain valid for small task/question-only projects with no model-layer nodes
+```
+
+Use two fixture styles:
+
+1. a minimal synthetic TriG fixture in `science-web/tests/test_graph.py`
+2. one richer verification fixture derived from the migrated `natural-systems-guide` shape so the tests cover `Model` + `CanonicalParameter` + `ParameterBinding`
+
+**Step 2: Tighten the shared graph payload contract**
+
+Update the shared `science-model` graph payloads so the API contract is explicit about the data `science-web` actually needs.
+
+The target shape should include at least:
+
+```python
+class GraphNode(BaseModel):
+    id: str
+    canonical_id: str
+    label: str
+    type: str
+    profile: str
+    domain: str | None = None
+    graph_layer: str
+    aliases: list[str] = Field(default_factory=list)
+    source_refs: list[str] = Field(default_factory=list)
+    status: str | None = None
+    confidence: float | None = None
+    symbol: str | None = None
+    role: str | None = None
+    match_tier: str | None = None
+```
+
+If the dashboard needs project-level profile information, add it to the shared project/detail models here rather than inventing ad hoc backend-only payloads.
+
+**Step 3: Finish backend graph loading and summaries**
+
+Update `science-web` backend code so that:
+
+1. `backend/graph.py` parses explicit node metadata from the materialized graph instead of only labels and types
+2. model-layer provenance nodes such as `sci:ParameterBinding` are exposed as selectable graph nodes
+3. `backend/store.py` computes `GraphSummary.top_domains` from graph nodes rather than returning an empty list
+4. `backend/indexer.py` and `backend/routes/projects.py` expose any project-level profile/domain summary fields added to the shared models
+
+Important constraints:
+
+1. do not infer `domain` from profile names
+2. do not special-case `natural-systems-guide` file layouts in `science-web`
+3. do not parse YAML source files directly in `science-web`; consume the shared API payloads and materialized graph only
+
+**Step 4: Upgrade the frontend graph explorer and dashboard**
+
+Update the frontend so the graph explorer is useful for both `seq-feats` and `natural-systems-guide`.
+
+Required outcomes:
+
+1. node shapes or markers clearly distinguish `Task`, `Model`, `CanonicalParameter`, and `ParameterBinding`
+2. the node inspector shows `canonical_id`, `profile`, `domain`, and `graph_layer` separately
+3. binding nodes surface provenance metadata such as `confidence`, `match_tier`, `symbol`, `role`, and `source_refs`
+4. the project dashboard displays non-empty `top_domains` when available
+5. the graph UI remains readable for task/question-only projects without forcing model-layer affordances
+
+Do not add frontend logic that reverse-engineers semantic categories from raw RDF predicate strings when the backend can provide explicit fields.
+
+**Step 5: Verify against both small and rich projects**
+
+Run:
+
+```bash
+cd ../science-web
+UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_graph.py tests/test_indexer.py tests/test_store.py tests/test_api_projects.py -q
+UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pyright
+cd frontend && npm run build
+
+cd ../../science
+UV_CACHE_DIR=/tmp/uv-cache uv run --project ../science-web python - <<'PY'
+from pathlib import Path
+from backend.graph import load_graph
+
+seq_feats = Path("../seq-feats/knowledge/graph.trig")
+natural = Path("../mindful/natural-systems-guide/knowledge/graph.trig")
+
+for path in [seq_feats, natural]:
+    data = load_graph(path, lod=1.0)
+    print(path, len(data.nodes), len(data.edges), sorted({node.type for node in data.nodes})[:12])
+PY
+```
+
+Expected:
+
+1. backend tests, typing checks, and frontend build all pass
+2. `seq-feats` still loads as a task/question/paper graph without regressions
+3. `natural-systems-guide` exposes `Model`, `CanonicalParameter`, and `ParameterBinding` nodes with explicit metadata
+4. project summaries include non-empty `top_domains` when upstream nodes carry domains
+
+**Step 6: Commit**
+
+```bash
+git add science-model/src/science_model/graph.py science-model/src/science_model/projects.py
+git commit -m "feat(science-model): extend graph payloads for science-web"
+git -C ../science-web add backend/graph.py backend/indexer.py backend/store.py backend/routes/projects.py tests/test_graph.py tests/test_indexer.py tests/test_store.py tests/test_api_projects.py frontend/src/types/index.ts frontend/src/components/GraphExplorer/GraphExplorer.tsx frontend/src/components/GraphExplorer/GraphExplorer3D.tsx frontend/src/components/GraphExplorer/nodeShapes.ts frontend/src/routes/ProjectGraph.tsx frontend/src/routes/ProjectDashboard.tsx
+git -C ../science-web commit -m "feat: surface model-layer graph metadata in dashboard and explorer"
+```
+
 ### Task 7: Replace direct graph authoring assumptions in command docs and validation flows
 
 **Files:**
@@ -699,6 +1000,7 @@ cd science-model && UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest && UV_CACH
 cd ../science-tool && UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest && UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pyright && UV_CACHE_DIR=/tmp/uv-cache uv run --frozen ruff check .
 cd ../science-web && UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest && UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pyright && cd frontend && npm run build
 cd ../../seq-feats && UV_CACHE_DIR=/tmp/uv-cache uv run --project ../science/science-tool science-tool graph build && UV_CACHE_DIR=/tmp/uv-cache uv run --project ../science/science-tool science-tool graph validate --format json
+cd ../mindful/natural-systems-guide && UV_CACHE_DIR=/tmp/uv-cache uv run --project ../../science/science-tool science-tool graph audit --project-root . --format json && UV_CACHE_DIR=/tmp/uv-cache uv run --project ../../science/science-tool science-tool graph build --project-root . && UV_CACHE_DIR=/tmp/uv-cache uv run --project ../../science/science-tool science-tool graph validate --format json --path knowledge/graph.trig
 ```
 
 **Step 2: Run verification and capture evidence**
@@ -710,6 +1012,7 @@ Expected:
 3. `science-web` backend checks and frontend build pass
 4. `seq-feats` graph rebuild succeeds
 5. `seq-feats` graph validate shows no unresolved canonical ID failures and no missing task node materialization
+6. `natural-systems-guide` graph audit/build/validate succeed against canonical source files without the old model/community layer builders on the critical path
 
 **Step 3: Write the evidence summary**
 
@@ -751,9 +1054,31 @@ Completed:
 - `seq-feats` migrated to `core + bio + project_specific` upstream sources with canonical task/question/hypothesis coverage and generated graph rebuilds.
 - Command docs and validation flows were updated to treat `knowledge/graph.trig` as a generated artifact rather than a hand-edited source.
 
+Follow-up gap discovered after the original implementation scope:
+- `natural-systems-guide` exposed a second migration class where rich model-layer semantics still lived in project app internals rather than canonical KG source files.
+- That gap is now captured explicitly as Task `6B`, which defines typed canonical source contracts for models, parameters, and bindings, and uses a project-local importer rather than teaching `science-tool` to permanently parse project-specific TS/JSON inputs.
+
 Verification summary:
 - `science-model` package-scoped tests, `pyright`, and `ruff check` passed.
 - `science-tool` graph-focused regression suite passed, including the cross-process determinism test.
 - `science-tool` full-suite collection remains blocked by a pre-existing missing `httpx` dependency in dataset tests.
 - `science-web` tests, typecheck, and frontend build passed in this implementation run.
 - `seq-feats` repeated graph builds now produce identical bytes; graph audit and graph validation pass; `validate.sh --verbose` reports all frontmatter cross-references valid and passes with warnings only.
+
+Addendum (2026-03-14):
+- Task `6C` follow-up implementation in `science-web` is now verified end-to-end:
+  - backend tests and API tests pass with model/provenance fixtures
+  - `science-web` `pyright` and frontend build pass
+  - live graph loading confirms `natural-systems-guide` now surfaces `Model`, `CanonicalParameter`, and `ParameterBinding` node payloads with explicit metadata
+- Task `7` docs/validation alignment was completed by removing the remaining stale README wording that still implied incremental graph mutation instead of canonical-source re-materialization.
+- Current environment caveats in this verification run:
+  - `uv run --frozen ruff check .` is currently unavailable in both `science-model` and `science-tool` because `ruff` is not installed in the runtime image.
+  - `science-tool` full-suite `pytest` and `pyright` still report pre-existing dependency/type issues (including unresolved `httpx` imports in dataset modules).
+
+Addendum (2026-03-14, verification refresh):
+- Re-ran the Task 8 cross-repo verification commands after the migration typing fixes.
+- `science-model` remained green for `pytest` and `pyright`; `ruff` remains unavailable in the runtime image.
+- `science-web` remained green for backend tests, `pyright`, and frontend build.
+- `seq-feats` and `natural-systems-guide` both passed `graph audit` (empty rows), `graph build`, and `graph validate`.
+- `seq-feats` `validate.sh --verbose` still passes with warnings only; current graph hash in this run is `733830f7990ecc81c0db8defcca6a2bffe98e797df5d1f45982a7b55cc9982f0`.
+- `science-tool` still has pre-existing full-suite blockers (`httpx`/`pykeen`/`pgmpy`/`marimo` family deps and existing `graph/store.py` typing issues), but the earlier 6B migration-report typing regressions are cleared.

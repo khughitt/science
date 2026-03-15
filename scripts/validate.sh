@@ -70,6 +70,8 @@ PAPERS_DIR="papers"
 KNOWLEDGE_DIR="knowledge"
 TASKS_DIR="tasks"
 MODELS_DIR="models"
+LOCAL_PROFILE="project_specific"
+LOCAL_PROFILE_DIR="$KNOWLEDGE_DIR/sources/$LOCAL_PROFILE"
 
 if [ -f "science.yaml" ] && command -v python3 &>/dev/null; then
     _resolve_path() {
@@ -89,6 +91,14 @@ print(p.rstrip('/'))
     KNOWLEDGE_DIR=$(_resolve_path knowledge_dir knowledge)
     TASKS_DIR=$(_resolve_path tasks_dir tasks)
     MODELS_DIR=$(_resolve_path models_dir models)
+    LOCAL_PROFILE=$(python3 -c "
+import yaml
+with open('science.yaml') as f:
+    d = yaml.safe_load(f) or {}
+profile = ((d.get('knowledge_profiles') or {}).get('local') or 'project_specific')
+print(str(profile).strip() or 'project_specific')
+" 2>/dev/null || echo "project_specific")
+    LOCAL_PROFILE_DIR="$KNOWLEDGE_DIR/sources/$LOCAL_PROFILE"
 fi
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -701,7 +711,7 @@ fi
 echo ""
 echo "Checking frontmatter cross-references..."
 
-xref_result=$(XREF_SPECS="$SPECS_DIR/hypotheses" XREF_DOC="$DOC_DIR" XREF_TASKS="$TASKS_DIR" XREF_ENTITIES="$KNOWLEDGE_DIR/sources/project_specific/entities.yaml" python3 << 'PYEOF'
+xref_result=$(XREF_SPECS="$SPECS_DIR/hypotheses" XREF_DOC="$DOC_DIR" XREF_TASKS="$TASKS_DIR" XREF_ENTITIES="$LOCAL_PROFILE_DIR/entities.yaml" python3 << 'PYEOF'
 import os, re
 
 try:

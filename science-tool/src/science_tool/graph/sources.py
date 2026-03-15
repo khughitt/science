@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import TypeVar
 
 import yaml
 from pydantic import BaseModel, Field
 
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
 from science_model.profiles import CORE_PROFILE
+from science_model.source_contracts import AuthoredTargetedRelation, BindingSource, ModelSource, ParameterSource
 from science_tool.paths import resolve_paths
 from science_tool.tasks import parse_tasks
 
@@ -17,6 +19,7 @@ from science_tool.tasks import parse_tasks
 _SHORT_ID_RE = re.compile(r"^(?P<token>[a-z]\d+)(?:[-_].*)?$", re.IGNORECASE)
 _EXTERNAL_PREFIXES = frozenset({"go", "mesh", "doid", "hp", "so", "ncbitaxon", "ncbigene", "ensembl"})
 _CORE_KINDS = frozenset(kind.name for kind in CORE_PROFILE.entity_kinds)
+_SourceRecordT = TypeVar("_SourceRecordT", bound=BaseModel)
 
 
 class AliasCollisionError(ValueError):
@@ -37,6 +40,7 @@ class SourceEntity(BaseModel):
     title: str
     profile: str
     source_path: str
+    domain: str | None = None
     status: str | None = None
     content_preview: str = ""
     related: list[str] = Field(default_factory=list)
@@ -53,6 +57,16 @@ class KnowledgeProfiles(BaseModel):
     local: str = "project_specific"
 
 
+class SourceRelation(BaseModel):
+    """An authored relation collected from structured source files."""
+
+    subject: str
+    predicate: str
+    object: str
+    graph_layer: str = "graph/knowledge"
+    source_path: str
+
+
 class ProjectSources(BaseModel):
     """Structured source bundle used to materialize a project graph."""
 
@@ -60,7 +74,12 @@ class ProjectSources(BaseModel):
     project_root: str
     profiles: KnowledgeProfiles
     entities: list[SourceEntity]
+    relations: list[SourceRelation] = Field(default_factory=list)
+    bindings: list[BindingSource] = Field(default_factory=list)
     manual_aliases: dict[str, str] = Field(default_factory=dict)
+
+
+SourceBinding = BindingSource
 
 
 def load_project_sources(project_root: Path) -> ProjectSources:
@@ -68,19 +87,39 @@ def load_project_sources(project_root: Path) -> ProjectSources:
     project_root = project_root.resolve()
     config = _read_project_config(project_root)
     paths = resolve_paths(project_root)
+    profiles = KnowledgeProfiles.model_validate(config["knowledge_profiles"])
 
     entities: list[SourceEntity] = []
-    entities.extend(_load_markdown_entities(project_root, [paths.doc_dir, paths.specs_dir]))
-    entities.extend(_load_task_entities(project_root, paths.tasks_dir))
-    entities.extend(_load_structured_entities(project_root))
+    local_profile = profiles.local
+    entities.extend(
+        _load_markdown_entities(
+            project_root,
+            [paths.doc_dir, paths.specs_dir],
+            local_profile=local_profile,
+        )
+    )
+    entities.extend(_load_task_entities(project_root, paths.tasks_dir, local_profile=local_profile))
+    entities.extend(_load_structured_entities(project_root, local_profile=local_profile))
+    model_entities, model_relations = _load_model_sources(project_root, local_profile=local_profile)
+    parameter_entities, parameter_relations = _load_parameter_sources(project_root, local_profile=local_profile)
+    entities.extend(model_entities)
+    entities.extend(parameter_entities)
     entities.sort(key=lambda entity: entity.canonical_id)
+    relations = _load_structured_relations(project_root, local_profile=local_profile)
+    relations.extend(model_relations)
+    relations.extend(parameter_relations)
+    relations.sort(key=lambda relation: (relation.graph_layer, relation.subject, relation.predicate, relation.object))
+    bindings = _load_binding_sources(project_root, local_profile=local_profile)
+    bindings.sort(key=lambda binding: (binding.model, binding.parameter, binding.source_path))
 
     return ProjectSources(
         project_name=str(config["name"]),
         project_root=str(project_root),
-        profiles=KnowledgeProfiles.model_validate(config["knowledge_profiles"]),
+        profiles=profiles,
         entities=entities,
-        manual_aliases=_load_manual_aliases(project_root),
+        relations=relations,
+        bindings=bindings,
+        manual_aliases=_load_manual_aliases(project_root, local_profile=local_profile),
     )
 
 
@@ -109,7 +148,7 @@ def is_external_reference(raw: str) -> bool:
     return prefix.lower() in _EXTERNAL_PREFIXES
 
 
-def _load_markdown_entities(project_root: Path, roots: list[Path]) -> list[SourceEntity]:
+def _load_markdown_entities(project_root: Path, roots: list[Path], *, local_profile: str) -> list[SourceEntity]:
     entities: list[SourceEntity] = []
     for root in roots:
         if not root.is_dir():
@@ -121,7 +160,7 @@ def _load_markdown_entities(project_root: Path, roots: list[Path]) -> list[Sourc
 
             frontmatter = parse_frontmatter(path)
             raw_aliases: list[str] = []
-            raw_profile = _default_profile_for_kind(entity.type.value)
+            raw_profile = _default_profile_for_kind(entity.type.value, local_profile=local_profile)
             if frontmatter is not None:
                 fm, _ = frontmatter
                 aliases = fm.get("aliases") or []
@@ -135,11 +174,12 @@ def _load_markdown_entities(project_root: Path, roots: list[Path]) -> list[Sourc
                 SourceEntity(
                     canonical_id=entity.canonical_id,
                     kind=entity.type.value,
-                    title=entity.title,
-                    profile=raw_profile,
-                    source_path=entity.file_path,
-                    status=entity.status,
-                    content_preview=entity.content_preview,
+                title=entity.title,
+                profile=raw_profile,
+                source_path=entity.file_path,
+                domain=entity.domain,
+                status=entity.status,
+                content_preview=entity.content_preview,
                     related=entity.related,
                     source_refs=entity.source_refs,
                     ontology_terms=entity.ontology_terms,
@@ -152,7 +192,7 @@ def _load_markdown_entities(project_root: Path, roots: list[Path]) -> list[Sourc
     return entities
 
 
-def _load_task_entities(project_root: Path, tasks_dir: Path) -> list[SourceEntity]:
+def _load_task_entities(project_root: Path, tasks_dir: Path, *, local_profile: str) -> list[SourceEntity]:
     entities: list[SourceEntity] = []
     for path in _task_paths(tasks_dir):
         rel_path = path.relative_to(project_root).as_posix()
@@ -163,7 +203,7 @@ def _load_task_entities(project_root: Path, tasks_dir: Path) -> list[SourceEntit
                     canonical_id=canonical_id,
                     kind="task",
                     title=task.title,
-                    profile=_default_profile_for_kind("task"),
+                    profile=_default_profile_for_kind("task", local_profile=local_profile),
                     source_path=rel_path,
                     status=task.status,
                     content_preview=task.description,
@@ -175,8 +215,8 @@ def _load_task_entities(project_root: Path, tasks_dir: Path) -> list[SourceEntit
     return entities
 
 
-def _load_structured_entities(project_root: Path) -> list[SourceEntity]:
-    entities_path = project_root / "knowledge" / "sources" / "project_specific" / "entities.yaml"
+def _load_structured_entities(project_root: Path, *, local_profile: str) -> list[SourceEntity]:
+    entities_path = local_profile_sources_dir(project_root, local_profile=local_profile) / "entities.yaml"
     if not entities_path.is_file():
         return []
 
@@ -207,8 +247,9 @@ def _load_structured_entities(project_root: Path) -> list[SourceEntity]:
                 canonical_id=canonical_id,
                 kind=kind,
                 title=title,
-                profile=str(item.get("profile") or "project_specific"),
-                source_path=str(item.get("source_path") or "knowledge/sources/project_specific/entities.yaml"),
+                profile=str(item.get("profile") or local_profile),
+                source_path=str(item.get("source_path") or _default_local_source_path(local_profile, "entities.yaml")),
+                domain=_coerce_optional_string(item.get("domain")),
                 status=str(item.get("status")) if item.get("status") is not None else None,
                 content_preview=str(item.get("content_preview") or ""),
                 related=_coerce_string_list(item.get("related")),
@@ -222,6 +263,78 @@ def _load_structured_entities(project_root: Path) -> list[SourceEntity]:
     return entities
 
 
+def _load_model_sources(project_root: Path, *, local_profile: str) -> tuple[list[SourceEntity], list[SourceRelation]]:
+    records = _load_typed_records(
+        project_root,
+        local_profile=local_profile,
+        file_name="models.yaml",
+        root_key="models",
+        model=ModelSource,
+    )
+
+    entities: list[SourceEntity] = []
+    relations: list[SourceRelation] = []
+    for record in records:
+        entities.append(
+            SourceEntity(
+                canonical_id=record.canonical_id,
+                kind="model",
+                title=record.title,
+                profile=record.profile,
+                source_path=record.source_path,
+                domain=record.domain,
+                related=record.related,
+                source_refs=record.source_refs,
+                aliases=_derive_aliases(record.canonical_id, record.aliases),
+            )
+        )
+        relations.extend(_nested_relations(record.canonical_id, record.relations, source_path=record.source_path))
+
+    return entities, relations
+
+
+def _load_parameter_sources(project_root: Path, *, local_profile: str) -> tuple[list[SourceEntity], list[SourceRelation]]:
+    records = _load_typed_records(
+        project_root,
+        local_profile=local_profile,
+        file_name="parameters.yaml",
+        root_key="parameters",
+        model=ParameterSource,
+    )
+
+    entities: list[SourceEntity] = []
+    relations: list[SourceRelation] = []
+    for record in records:
+        entities.append(
+            SourceEntity(
+                canonical_id=record.canonical_id,
+                kind="canonical_parameter",
+                title=record.title,
+                profile=record.profile,
+                source_path=record.source_path,
+                domain=record.domain,
+                content_preview=_parameter_preview(record),
+                related=record.related,
+                source_refs=record.source_refs,
+                ontology_terms=record.ontology_terms,
+                aliases=_derive_aliases(record.canonical_id, record.aliases),
+            )
+        )
+        relations.extend(_nested_relations(record.canonical_id, record.relations, source_path=record.source_path))
+
+    return entities, relations
+
+
+def _load_binding_sources(project_root: Path, *, local_profile: str) -> list[BindingSource]:
+    return _load_typed_records(
+        project_root,
+        local_profile=local_profile,
+        file_name="bindings.yaml",
+        root_key="bindings",
+        model=BindingSource,
+    )
+
+
 def _task_paths(tasks_dir: Path) -> list[Path]:
     paths: list[Path] = []
     active_path = tasks_dir / "active.md"
@@ -232,6 +345,68 @@ def _task_paths(tasks_dir: Path) -> list[Path]:
     if done_dir.is_dir():
         paths.extend(sorted(done_dir.glob("*.md")))
     return paths
+
+
+def _load_structured_relations(project_root: Path, *, local_profile: str) -> list[SourceRelation]:
+    relations_path = local_profile_sources_dir(project_root, local_profile=local_profile) / "relations.yaml"
+    if not relations_path.is_file():
+        return []
+
+    data = yaml.safe_load(relations_path.read_text(encoding="utf-8")) or {}
+    items = data.get("relations") or []
+    if not isinstance(items, list):
+        return []
+
+    relations: list[SourceRelation] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        subject = item.get("subject")
+        predicate = item.get("predicate")
+        obj = item.get("object")
+        if not isinstance(subject, str) or not subject:
+            continue
+        if not isinstance(predicate, str) or not predicate:
+            continue
+        if not isinstance(obj, str) or not obj:
+            continue
+
+        relations.append(
+            SourceRelation(
+                subject=subject,
+                predicate=predicate,
+                object=obj,
+                graph_layer=str(item.get("graph_layer") or "graph/knowledge"),
+                source_path=str(item.get("source_path") or _default_local_source_path(local_profile, "relations.yaml")),
+            )
+        )
+
+    return relations
+
+
+def _load_typed_records(
+    project_root: Path,
+    *,
+    local_profile: str,
+    file_name: str,
+    root_key: str,
+    model: type[_SourceRecordT],
+) -> list[_SourceRecordT]:
+    path = local_profile_sources_dir(project_root, local_profile=local_profile) / file_name
+    if not path.is_file():
+        return []
+
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    items = data.get(root_key) or []
+    if not isinstance(items, list):
+        return []
+
+    records: list[_SourceRecordT] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        records.append(model.model_validate(item))
+    return records
 
 
 def _read_project_config(project_root: Path) -> dict[str, object]:
@@ -253,8 +428,8 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     }
 
 
-def _load_manual_aliases(project_root: Path) -> dict[str, str]:
-    mappings_path = project_root / "knowledge" / "sources" / "project_specific" / "mappings.yaml"
+def _load_manual_aliases(project_root: Path, *, local_profile: str) -> dict[str, str]:
+    mappings_path = local_profile_sources_dir(project_root, local_profile=local_profile) / "mappings.yaml"
     if not mappings_path.is_file():
         return {}
 
@@ -274,6 +449,41 @@ def _coerce_string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value]
+
+
+def _coerce_optional_string(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value
+    return None
+
+
+def _nested_relations(
+    subject: str,
+    relations: list[AuthoredTargetedRelation],
+    *,
+    source_path: str,
+) -> list[SourceRelation]:
+    flattened: list[SourceRelation] = []
+    for relation in relations:
+        flattened.append(
+            SourceRelation(
+                subject=subject,
+                predicate=relation.predicate,
+                object=relation.target,
+                graph_layer=relation.graph_layer,
+                source_path=source_path,
+            )
+        )
+    return flattened
+
+
+def _parameter_preview(record: ParameterSource) -> str:
+    tokens = [record.symbol]
+    if record.units:
+        tokens.append(record.units)
+    if record.quantity_group:
+        tokens.append(record.quantity_group)
+    return " | ".join(token for token in tokens if token)
 
 
 def _derive_aliases(canonical_id: str, explicit_aliases: list[str]) -> list[str]:
@@ -315,10 +525,19 @@ def _register_alias(alias_map: dict[str, str], alias: str, canonical_id: str) ->
     alias_map[alias] = canonical_id
 
 
-def _default_profile_for_kind(kind: str) -> str:
+def _default_profile_for_kind(kind: str, *, local_profile: str) -> str:
     if kind in _CORE_KINDS:
         return "core"
-    return "project_specific"
+    return local_profile
+
+
+def local_profile_sources_dir(project_root: Path, *, local_profile: str) -> Path:
+    """Return the structured source directory for the configured local profile."""
+    return project_root / "knowledge" / "sources" / local_profile
+
+
+def _default_local_source_path(local_profile: str, file_name: str) -> str:
+    return f"knowledge/sources/{local_profile}/{file_name}"
 
 
 def _aliases_from_source_path(kind: str, source_path: str) -> list[str]:

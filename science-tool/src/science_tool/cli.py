@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -9,6 +11,12 @@ from science_tool.causal.export_pgmpy import export_pgmpy_script
 from science_tool.distill.openalex import distill_openalex
 from science_tool.distill.pykeen_source import distill_pykeen
 from science_tool.doi import lookup_doi_metadata
+from science_tool.graph.migrate import (
+    audit_project_graph,
+    rewrite_project_ids_in_sources,
+    write_migration_report,
+    write_project_specific_sources,
+)
 from science_tool.graph.materialize import materialization_audit, materialize_graph
 from science_tool.graph.store import (
     GRAPH_LAYERS,
@@ -121,6 +129,52 @@ def graph_audit(output_format: str, project_root: Path) -> None:
         rows=rows,
     )
     if has_failures:
+        raise click.exceptions.Exit(1)
+
+
+@graph.command("migrate")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+def graph_migrate(output_format: str, project_root: Path) -> None:
+    """Rewrite alias-based refs, scaffold local sources, and persist a migration audit report."""
+
+    project_root = project_root.resolve()
+    initial_report = audit_project_graph(project_root)
+    rewritten_files = rewrite_project_ids_in_sources(project_root, initial_report["alias_map"])
+    write_project_specific_sources(project_root, dict(initial_report))
+
+    final_report = audit_project_graph(project_root)
+    final_report_payload: dict[str, Any] = dict(final_report)
+    final_report_payload["rewritten_files"] = rewritten_files
+    final_report_payload["rewritten_file_count"] = len(rewritten_files)
+    report_path = write_migration_report(project_root, final_report_payload)
+    final_report_payload["report_path"] = str(report_path)
+
+    if output_format == "json":
+        click.echo(json.dumps(final_report_payload, indent=2, sort_keys=True))
+    else:
+        emit_query_rows(
+            output_format=output_format,
+            title="Graph Migration Audit",
+            columns=[
+                ("check", "Check"),
+                ("status", "Status"),
+                ("source", "Source"),
+                ("field", "Field"),
+                ("target", "Target"),
+                ("details", "Details"),
+            ],
+            rows=[dict(row) for row in final_report["rows"]],
+        )
+        click.echo(f"Report: {report_path}")
+        click.echo(f"Rewritten files: {len(rewritten_files)}")
+
+    if final_report["has_failures"]:
         raise click.exceptions.Exit(1)
 
 
