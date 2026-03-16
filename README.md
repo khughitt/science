@@ -75,8 +75,8 @@ claude --plugin-dir /path/to/science
 | `research-methodology` | Conducting literature review, evaluating sources, synthesizing findings |
 | `scientific-writing` | Writing research documents, background sections, summaries |
 | `data-management` | Working with datasets, data packages, provenance |
-| `knowledge-graph` | Building and updating the project knowledge graph |
-| `causal-dag` | Building causal DAGs, modeling cause-and-effect, checking identifiability |
+| `knowledge-graph` | Reference skill loaded by `create-graph` and `update-graph` as background context |
+| `causal-dag` | Reference skill loaded by `sketch-model` (causal mode) and `critique-approach` |
 
 ## Aspects
 
@@ -306,6 +306,17 @@ research-topic → add-hypothesis → pre-register → search-literature → res
 Each command reads existing project state and builds on it. All artifacts are version-controlled, cross-linked, and validated by `bash validate.sh`.
 
 For knowledge-graph projects, `knowledge/graph.trig` is generated from canonical upstream sources in `specs/`, `doc/`, `tasks/`, and `knowledge/sources/`. If the graph is wrong, fix the source artifact and re-materialize; do not patch the TriG file directly.
+
+## Packages
+
+Science includes two Python packages that back the plugin commands:
+
+| Package | Description |
+|---|---|
+| `science-model` | Shared Pydantic data models — entities, relations, tasks, profiles, and project config |
+| `science-tool` | CLI (`science-tool`) for knowledge graph operations, causal export, dataset validation, and task management |
+
+Both require Python >= 3.11. `science-tool` depends on `science-model` and provides optional extras for causal modeling (`pgmpy`, `ChiRho`), dataset discovery (`httpx`, `pooch`), and graph distillation (`PyKEEN`, `OpenAlex`).
 
 ## Design Principles
 

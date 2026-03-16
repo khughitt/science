@@ -134,14 +134,16 @@ def check_refs(root: Path) -> list[RefIssue]:
                         # Suggest closest existing ID
                         existing = sorted(hyp_ids.keys())
                         suggestion = f"Existing hypotheses: {', '.join(f'H{h}' for h in existing)}"
-                    issues.append(RefIssue(
-                        file=rel_path,
-                        line=line_num,
-                        ref_type="hypothesis",
-                        ref_value=f"H{hyp_num}",
-                        message=f"H{hyp_num} — no matching file in specs/hypotheses/",
-                        suggestion=suggestion,
-                    ))
+                    issues.append(
+                        RefIssue(
+                            file=rel_path,
+                            line=line_num,
+                            ref_type="hypothesis",
+                            ref_value=f"H{hyp_num}",
+                            message=f"H{hyp_num} — no matching file in specs/hypotheses/",
+                            suggestion=suggestion,
+                        )
+                    )
 
             # --- Citation references ---
             for m in _CITATION_RE.finditer(line):
@@ -152,13 +154,15 @@ def check_refs(root: Path) -> list[RefIssue]:
                     if not key:
                         continue
                     if key not in bib_keys:
-                        issues.append(RefIssue(
-                            file=rel_path,
-                            line=line_num,
-                            ref_type="citation",
-                            ref_value=key,
-                            message=f"@{key} — not in papers/references.bib",
-                        ))
+                        issues.append(
+                            RefIssue(
+                                file=rel_path,
+                                line=line_num,
+                                ref_type="citation",
+                                ref_value=key,
+                                message=f"@{key} — not in papers/references.bib",
+                            )
+                        )
 
             # --- Markdown links ---
             for m in _LINK_RE.finditer(line):
@@ -172,30 +176,36 @@ def check_refs(root: Path) -> list[RefIssue]:
                     # Also try relative to project root
                     resolved_root = (root / target).resolve()
                     if not resolved_root.exists():
-                        issues.append(RefIssue(
-                            file=rel_path,
-                            line=line_num,
-                            ref_type="link",
-                            ref_value=target,
-                            message=f"Link target not found: {target}",
-                        ))
+                        issues.append(
+                            RefIssue(
+                                file=rel_path,
+                                line=line_num,
+                                ref_type="link",
+                                ref_value=target,
+                                message=f"Link target not found: {target}",
+                            )
+                        )
 
             # --- Unresolved markers ---
             for m in _UNVERIFIED_RE.finditer(line):
-                issues.append(RefIssue(
-                    file=rel_path,
-                    line=line_num,
-                    ref_type="marker",
-                    ref_value="[UNVERIFIED]",
-                    message="Unresolved [UNVERIFIED] marker",
-                ))
+                issues.append(
+                    RefIssue(
+                        file=rel_path,
+                        line=line_num,
+                        ref_type="marker",
+                        ref_value="[UNVERIFIED]",
+                        message="Unresolved [UNVERIFIED] marker",
+                    )
+                )
             for m in _NEEDS_CITATION_RE.finditer(line):
-                issues.append(RefIssue(
-                    file=rel_path,
-                    line=line_num,
-                    ref_type="marker",
-                    ref_value="[NEEDS CITATION]",
-                    message="Unresolved [NEEDS CITATION] marker",
-                ))
+                issues.append(
+                    RefIssue(
+                        file=rel_path,
+                        line=line_num,
+                        ref_type="marker",
+                        ref_value="[NEEDS CITATION]",
+                        message="Unresolved [NEEDS CITATION] marker",
+                    )
+                )
 
     return issues

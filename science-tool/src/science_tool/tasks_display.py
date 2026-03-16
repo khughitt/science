@@ -8,7 +8,6 @@ from rich.console import Console
 from rich.style import Style
 from rich.table import Table
 from rich.text import Text
-
 from science_model.tasks import Task
 
 # ── Status: sort order and colors ────────────────────────────────────────

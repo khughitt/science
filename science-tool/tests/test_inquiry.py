@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from rdflib import RDF, Literal, URIRef
+from rdflib.namespace import SKOS
 
 from science_tool.graph.store import (
     INITIAL_GRAPH_TEMPLATE,
@@ -25,7 +26,6 @@ from science_tool.graph.store import (
     set_param_metadata,
     validate_inquiry,
 )
-from rdflib.namespace import SKOS
 
 
 @pytest.fixture
@@ -59,9 +59,7 @@ class TestOntologyExtensions:
 
     def test_inquiry_predicates_have_inquiry_layer(self) -> None:
         """Inquiry-specific predicates use 'inquiry' layer."""
-        inquiry_preds = [
-            p for p in PREDICATE_REGISTRY if p["layer"] == "inquiry"
-        ]
+        inquiry_preds = [p for p in PREDICATE_REGISTRY if p["layer"] == "inquiry"]
         assert len(inquiry_preds) >= 8
 
     def test_boundary_role_constants(self) -> None:
@@ -170,7 +168,7 @@ class TestInquiryEdges:
             inquiry_slug="test",
         )
         assert "concept/mean_pooling_sufficient" in str(uri)
-        from science_tool.graph.store import _load_dataset, _graph_uri
+        from science_tool.graph.store import _graph_uri, _load_dataset
 
         dataset = _load_dataset(graph_path)
         knowledge = dataset.graph(_graph_uri("graph/knowledge"))
@@ -196,9 +194,7 @@ class TestTransformations:
         params = {
             "batch_size": {"value": "32", "source": "design_decision", "note": "GPU memory constraint"},
         }
-        uri = add_transformation(
-            graph_path, label="Train model", inquiry_slug="test", tool="PyTorch", params=params
-        )
+        uri = add_transformation(graph_path, label="Train model", inquiry_slug="test", tool="PyTorch", params=params)
         assert "concept/train_model" in str(uri)
         dataset = _load_dataset(graph_path)
         inquiry_graph = dataset.graph(URIRef(str(PROJECT_NS) + "inquiry/test"))
@@ -470,6 +466,7 @@ class TestProvenanceCompletenessValidation:
         assumption_uri = URIRef(str(PROJECT_NS) + "concept/unproven_assumption")
         inquiry_graph.add((assumption_uri, RDF.type, SCI_NS.Assumption))
         from science_tool.graph.store import _save_dataset
+
         _save_dataset(dataset, graph_path)
 
         results = validate_inquiry(graph_path, "no-prov")

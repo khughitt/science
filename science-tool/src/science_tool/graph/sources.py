@@ -8,13 +8,12 @@ from typing import TypeVar
 
 import yaml
 from pydantic import BaseModel, Field
-
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
 from science_model.profiles import CORE_PROFILE
 from science_model.source_contracts import AuthoredTargetedRelation, BindingSource, ModelSource, ParameterSource
+
 from science_tool.paths import resolve_paths
 from science_tool.tasks import parse_tasks
-
 
 _SHORT_ID_RE = re.compile(r"^(?P<token>[a-z]\d+)(?:[-_].*)?$", re.IGNORECASE)
 _EXTERNAL_PREFIXES = frozenset({"go", "mesh", "doid", "hp", "so", "ncbitaxon", "ncbigene", "ensembl"})
@@ -175,12 +174,12 @@ def _load_markdown_entities(project_root: Path, roots: list[Path], *, local_prof
                 SourceEntity(
                     canonical_id=entity.canonical_id,
                     kind=entity.type.value,
-                title=entity.title,
-                profile=raw_profile,
-                source_path=entity.file_path,
-                domain=entity.domain,
-                status=entity.status,
-                content_preview=entity.content_preview,
+                    title=entity.title,
+                    profile=raw_profile,
+                    source_path=entity.file_path,
+                    domain=entity.domain,
+                    status=entity.status,
+                    content_preview=entity.content_preview,
                     related=entity.related,
                     source_refs=entity.source_refs,
                     ontology_terms=entity.ontology_terms,
@@ -295,7 +294,9 @@ def _load_model_sources(project_root: Path, *, local_profile: str) -> tuple[list
     return entities, relations
 
 
-def _load_parameter_sources(project_root: Path, *, local_profile: str) -> tuple[list[SourceEntity], list[SourceRelation]]:
+def _load_parameter_sources(
+    project_root: Path, *, local_profile: str
+) -> tuple[list[SourceEntity], list[SourceRelation]]:
     records = _load_typed_records(
         project_root,
         local_profile=local_profile,

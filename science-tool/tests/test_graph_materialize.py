@@ -9,14 +9,12 @@ import time
 from pathlib import Path
 
 from click.testing import CliRunner
-from rdflib import Dataset, Namespace
-from rdflib import Literal
+from rdflib import Dataset, Literal, Namespace
 from rdflib.namespace import RDF, SKOS, XSD
 
 from science_tool.cli import main
 from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.store import diff_graph_inputs
-
 
 PROJECT_NS = Namespace("http://example.org/project/")
 SCI = Namespace("http://example.org/science/vocab/")
@@ -380,7 +378,9 @@ def test_materialize_graph_accepts_bare_ontology_terms(tmp_path: Path) -> None:
     _write_demo_project(project)
     hypothesis_path = project / "specs" / "hypotheses" / "h01-demo.md"
     hypothesis_path.write_text(
-        hypothesis_path.read_text(encoding="utf-8").replace("ontology_terms: [GO:0008150]", "ontology_terms: [functor]"),
+        hypothesis_path.read_text(encoding="utf-8").replace(
+            "ontology_terms: [GO:0008150]", "ontology_terms: [functor]"
+        ),
         encoding="utf-8",
     )
 

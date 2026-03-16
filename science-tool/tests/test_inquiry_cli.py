@@ -23,7 +23,18 @@ def graph_path(tmp_path: Path) -> Path:
     assert result.exit_code == 0
     r.invoke(
         main,
-        ["graph", "add", "hypothesis", "H01", "--text", "Test hypothesis", "--source", "paper:doi_test", "--path", str(gp)],
+        [
+            "graph",
+            "add",
+            "hypothesis",
+            "H01",
+            "--text",
+            "Test hypothesis",
+            "--source",
+            "paper:doi_test",
+            "--path",
+            str(gp),
+        ],
     )
     return gp
 
@@ -84,9 +95,7 @@ class TestInquiryAddNodeInterior:
         p = str(graph_path)
         runner.invoke(main, ["inquiry", "init", "test", "--label", "T", "--target", "hypothesis:h01", "--path", p])
         runner.invoke(main, ["graph", "add", "concept", "middle_step", "--path", p])
-        result = runner.invoke(
-            main, ["inquiry", "add-node", "test", "concept:middle_step", "--path", p]
-        )
+        result = runner.invoke(main, ["inquiry", "add-node", "test", "concept:middle_step", "--path", p])
         assert result.exit_code == 0
         assert "interior" in result.output
 
@@ -96,8 +105,8 @@ class TestInquiryAddAssumption:
         p = str(graph_path)
         runner.invoke(main, ["inquiry", "init", "test", "--label", "T", "--target", "hypothesis:h01", "--path", p])
         result = runner.invoke(
-            main, ["inquiry", "add-assumption", "test", "Mean pooling sufficient",
-                   "--source", "paper:doi_test", "--path", p]
+            main,
+            ["inquiry", "add-assumption", "test", "Mean pooling sufficient", "--source", "paper:doi_test", "--path", p],
         )
         assert result.exit_code == 0
         assert "assumption" in result.output.lower()
@@ -146,6 +155,8 @@ class TestInquiryValidate:
         runner.invoke(main, ["graph", "add", "concept", "dout", "--path", p])
         runner.invoke(main, ["inquiry", "add-node", "test", "concept:din", "--role", "BoundaryIn", "--path", p])
         runner.invoke(main, ["inquiry", "add-node", "test", "concept:dout", "--role", "BoundaryOut", "--path", p])
-        runner.invoke(main, ["inquiry", "add-edge", "test", "concept:din", "sci:feedsInto", "concept:dout", "--path", p])
+        runner.invoke(
+            main, ["inquiry", "add-edge", "test", "concept:din", "sci:feedsInto", "concept:dout", "--path", p]
+        )
         result = runner.invoke(main, ["inquiry", "validate", "test", "--path", p, "--format", "json"])
         assert result.exit_code == 0

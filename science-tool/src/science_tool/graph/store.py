@@ -1381,9 +1381,21 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     {"predicate": "sci:dualOf", "description": "Models are dual formulations", "layer": "graph/knowledge"},
     {"predicate": "sci:coarseGrainOf", "description": "Model is coarse-grained version", "layer": "graph/knowledge"},
     {"predicate": "sci:coupledWith", "description": "Models coupled in multi-physics", "layer": "graph/knowledge"},
-    {"predicate": "sci:analogousTo", "description": "Structure-preserving cross-domain analogy", "layer": "graph/knowledge"},
-    {"predicate": "sci:competesWithParam", "description": "Parameters have competing effects", "layer": "graph/knowledge"},
-    {"predicate": "sci:controlsOnset", "description": "Parameter controls bifurcation/onset", "layer": "graph/knowledge"},
+    {
+        "predicate": "sci:analogousTo",
+        "description": "Structure-preserving cross-domain analogy",
+        "layer": "graph/knowledge",
+    },
+    {
+        "predicate": "sci:competesWithParam",
+        "description": "Parameters have competing effects",
+        "layer": "graph/knowledge",
+    },
+    {
+        "predicate": "sci:controlsOnset",
+        "description": "Parameter controls bifurcation/onset",
+        "layer": "graph/knowledge",
+    },
 ]
 
 

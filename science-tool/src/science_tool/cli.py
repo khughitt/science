@@ -8,40 +8,38 @@ import click
 
 from science_tool.causal.export_chirho import export_chirho_script
 from science_tool.causal.export_pgmpy import export_pgmpy_script
+from science_tool.datasets import available_adapters, get_adapter, search_all
+from science_tool.datasets.validate import validate_data_packages
 from science_tool.distill.openalex import distill_openalex
 from science_tool.distill.pykeen_source import distill_pykeen
 from science_tool.doi import lookup_doi_metadata
+from science_tool.graph.materialize import materialization_audit, materialize_graph
 from science_tool.graph.migrate import (
     audit_project_graph,
     rewrite_project_ids_in_sources,
     write_migration_report,
     write_project_specific_sources,
 )
-from science_tool.graph.materialize import materialization_audit, materialize_graph
 from science_tool.graph.store import (
-    GRAPH_LAYERS,
     DEFAULT_GRAPH_PATH,
+    GRAPH_LAYERS,
+    add_assumption,
     add_claim,
     add_concept,
     add_edge,
     add_hypothesis,
-    add_assumption,
     add_inquiry,
     add_inquiry_edge,
     add_inquiry_node,
-    add_transformation,
     add_paper,
     add_question,
+    add_transformation,
     build_graph_dot,
     diff_graph_inputs,
     get_inquiry,
     import_snapshot,
     init_graph_file,
     list_inquiries,
-    set_boundary_role,
-    set_treatment_outcome,
-    shorten_uri,
-    stamp_revision,
     query_claims,
     query_coverage,
     query_evidence,
@@ -50,11 +48,13 @@ from science_tool.graph.store import (
     query_predicates,
     query_uncertainty,
     read_graph_stats,
+    set_boundary_role,
+    set_treatment_outcome,
+    shorten_uri,
+    stamp_revision,
     validate_graph,
     validate_inquiry,
 )
-from science_tool.datasets import available_adapters, get_adapter, search_all
-from science_tool.datasets.validate import validate_data_packages
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows
 from science_tool.prose import scan_prose
 from science_tool.refs import check_refs

@@ -19,9 +19,7 @@ def _scaffold(root: Path) -> None:
     (root / "papers").mkdir(parents=True)
 
     # Create hypothesis file
-    (root / "specs" / "hypotheses" / "h01-test.md").write_text(
-        "# Hypothesis H01\nStatus: proposed\n"
-    )
+    (root / "specs" / "hypotheses" / "h01-test.md").write_text("# Hypothesis H01\nStatus: proposed\n")
     # Create bib file
     (root / "papers" / "references.bib").write_text(
         "% references.bib\n@article{Smith2024,\n  title={Test},\n  author={Smith},\n  year={2024}\n}\n"
@@ -35,9 +33,7 @@ def test_valid_hypothesis_ref() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "doc" / "topics" / "test.md").write_text(
-            "# Test\nThis relates to H01 strongly.\n"
-        )
+        (root / "doc" / "topics" / "test.md").write_text("# Test\nThis relates to H01 strongly.\n")
         issues = check_refs(root)
         hyp_issues = [i for i in issues if i.ref_type == "hypothesis"]
         assert len(hyp_issues) == 0
@@ -48,9 +44,7 @@ def test_broken_hypothesis_ref() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "doc" / "topics" / "test.md").write_text(
-            "# Test\nThis relates to H03 which doesn't exist.\n"
-        )
+        (root / "doc" / "topics" / "test.md").write_text("# Test\nThis relates to H03 which doesn't exist.\n")
         issues = check_refs(root)
         hyp_issues = [i for i in issues if i.ref_type == "hypothesis"]
         assert len(hyp_issues) == 1
@@ -63,9 +57,7 @@ def test_hypothesis_ref_in_own_file_ignored() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "specs" / "hypotheses" / "h01-test.md").write_text(
-            "# Hypothesis H01\nH01 is about testing.\n"
-        )
+        (root / "specs" / "hypotheses" / "h01-test.md").write_text("# Hypothesis H01\nH01 is about testing.\n")
         issues = check_refs(root)
         hyp_issues = [i for i in issues if i.ref_type == "hypothesis"]
         assert len(hyp_issues) == 0
@@ -76,9 +68,7 @@ def test_valid_citation_ref() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "doc" / "topics" / "test.md").write_text(
-            "# Test\nAs shown by [@Smith2024], this works.\n"
-        )
+        (root / "doc" / "topics" / "test.md").write_text("# Test\nAs shown by [@Smith2024], this works.\n")
         issues = check_refs(root)
         cite_issues = [i for i in issues if i.ref_type == "citation"]
         assert len(cite_issues) == 0
@@ -89,9 +79,7 @@ def test_broken_citation_ref() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "doc" / "topics" / "test.md").write_text(
-            "# Test\nAs shown by [@Jones2023], this works.\n"
-        )
+        (root / "doc" / "topics" / "test.md").write_text("# Test\nAs shown by [@Jones2023], this works.\n")
         issues = check_refs(root)
         cite_issues = [i for i in issues if i.ref_type == "citation"]
         assert len(cite_issues) == 1
@@ -118,9 +106,7 @@ def test_valid_markdown_link() -> None:
         root = Path(td)
         _scaffold(root)
         (root / "doc" / "topics" / "other.md").write_text("# Other\n")
-        (root / "doc" / "topics" / "test.md").write_text(
-            "# Test\nSee [other topic](other.md) for details.\n"
-        )
+        (root / "doc" / "topics" / "test.md").write_text("# Test\nSee [other topic](other.md) for details.\n")
         issues = check_refs(root)
         link_issues = [i for i in issues if i.ref_type == "link"]
         assert len(link_issues) == 0
@@ -149,9 +135,7 @@ def test_no_bib_file_skips_citation_check() -> None:
         root = Path(td)
         _scaffold(root)
         (root / "papers" / "references.bib").unlink()
-        (root / "doc" / "topics" / "test.md").write_text(
-            "# Test\nAs shown by [@Smith2024].\n"
-        )
+        (root / "doc" / "topics" / "test.md").write_text("# Test\nAs shown by [@Smith2024].\n")
         issues = check_refs(root)
         cite_issues = [i for i in issues if i.ref_type == "citation"]
         assert len(cite_issues) == 1
@@ -162,9 +146,7 @@ def test_cli_refs_check() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "doc" / "topics" / "test.md").write_text(
-            "# Test\nH99 is broken and [@Nobody2099] too.\n"
-        )
+        (root / "doc" / "topics" / "test.md").write_text("# Test\nH99 is broken and [@Nobody2099] too.\n")
         result = runner.invoke(main, ["refs", "check"])
         assert result.exit_code == 1
         assert "H99" in result.output
@@ -176,9 +158,7 @@ def test_cli_refs_check_clean() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "doc" / "topics" / "test.md").write_text(
-            "# Test\nH01 is valid and [@Smith2024] is cited.\n"
-        )
+        (root / "doc" / "topics" / "test.md").write_text("# Test\nH01 is valid and [@Smith2024] is cited.\n")
         result = runner.invoke(main, ["refs", "check"])
         assert result.exit_code == 0
 
@@ -188,9 +168,7 @@ def test_multiple_citations_in_one_bracket() -> None:
     with runner.isolated_filesystem() as td:
         root = Path(td)
         _scaffold(root)
-        (root / "doc" / "topics" / "test.md").write_text(
-            "# Test\nAs shown [@Smith2024; @Jones2023].\n"
-        )
+        (root / "doc" / "topics" / "test.md").write_text("# Test\nAs shown [@Smith2024; @Jones2023].\n")
         issues = check_refs(root)
         cite_issues = [i for i in issues if i.ref_type == "citation"]
         # Smith2024 is valid, Jones2023 is not

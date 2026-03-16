@@ -18,22 +18,40 @@ def test_full_inquiry_lifecycle(tmp_path: Path) -> None:
     assert result.exit_code == 0, f"graph init failed: {result.output}"
 
     # 2. Add a hypothesis as target
-    result = runner.invoke(main, [
-        "graph", "add", "hypothesis", "H01",
-        "--text", "SP embeddings occupy distinct geometric regions",
-        "--source", "paper:doi_test",
-        "--path", graph_path,
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "graph",
+            "add",
+            "hypothesis",
+            "H01",
+            "--text",
+            "SP embeddings occupy distinct geometric regions",
+            "--source",
+            "paper:doi_test",
+            "--path",
+            graph_path,
+        ],
+    )
     assert result.exit_code == 0, f"add hypothesis failed: {result.output}"
 
     # 3. Create inquiry (sketch)
-    result = runner.invoke(main, [
-        "inquiry", "init", "sp-geometry",
-        "--label", "Signal peptide embedding geometry",
-        "--target", "hypothesis:h01",
-        "--description", "Test whether SP embeddings form distinct clusters",
-        "--path", graph_path,
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "inquiry",
+            "init",
+            "sp-geometry",
+            "--label",
+            "Signal peptide embedding geometry",
+            "--target",
+            "hypothesis:h01",
+            "--description",
+            "Test whether SP embeddings form distinct clusters",
+            "--path",
+            graph_path,
+        ],
+    )
     assert result.exit_code == 0, f"inquiry init failed: {result.output}"
     assert "inquiry/sp_geometry" in result.output
 
@@ -49,9 +67,19 @@ def test_full_inquiry_lifecycle(tmp_path: Path) -> None:
         ("concept:distance_matrix", "BoundaryOut"),
         ("concept:t1_comparison", "BoundaryOut"),
     ]:
-        result = runner.invoke(main, [
-            "inquiry", "add-node", "sp-geometry", entity, "--role", role, "--path", graph_path,
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "inquiry",
+                "add-node",
+                "sp-geometry",
+                entity,
+                "--role",
+                role,
+                "--path",
+                graph_path,
+            ],
+        )
         assert result.exit_code == 0, f"add-node {entity} {role} failed: {result.output}"
 
     # 6. Add data flow edges
@@ -62,9 +90,19 @@ def test_full_inquiry_lifecycle(tmp_path: Path) -> None:
         ("concept:sp_embeddings", "sci:feedsInto", "concept:t1_comparison"),
     ]
     for s, p, o in edges:
-        result = runner.invoke(main, [
-            "inquiry", "add-edge", "sp-geometry", s, p, o, "--path", graph_path,
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "inquiry",
+                "add-edge",
+                "sp-geometry",
+                s,
+                p,
+                o,
+                "--path",
+                graph_path,
+            ],
+        )
         assert result.exit_code == 0, f"add-edge {s}->{o} failed: {result.output}"
 
     # 7. List inquiries
@@ -80,9 +118,18 @@ def test_full_inquiry_lifecycle(tmp_path: Path) -> None:
     assert "boundary_out" in result.output
 
     # 9. Validate — should pass
-    result = runner.invoke(main, [
-        "inquiry", "validate", "sp-geometry", "--path", graph_path, "--format", "json",
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "inquiry",
+            "validate",
+            "sp-geometry",
+            "--path",
+            graph_path,
+            "--format",
+            "json",
+        ],
+    )
     assert result.exit_code == 0, f"validate failed: {result.output}"
 
 
@@ -93,18 +140,41 @@ def test_inquiry_validation_catches_unreachable(tmp_path: Path) -> None:
     (tmp_path / "knowledge").mkdir()
 
     runner.invoke(main, ["graph", "init", "--path", graph_path])
-    runner.invoke(main, ["graph", "add", "hypothesis", "H01", "--text", "Test", "--source", "paper:doi_test", "--path", graph_path])
-    runner.invoke(main, ["inquiry", "init", "broken", "--label", "Broken", "--target", "hypothesis:h01", "--path", graph_path])
+    runner.invoke(
+        main,
+        ["graph", "add", "hypothesis", "H01", "--text", "Test", "--source", "paper:doi_test", "--path", graph_path],
+    )
+    runner.invoke(
+        main, ["inquiry", "init", "broken", "--label", "Broken", "--target", "hypothesis:h01", "--path", graph_path]
+    )
 
     # Add concepts
     for c in ["input_data", "output_a", "output_b"]:
         runner.invoke(main, ["graph", "add", "concept", c, "--path", graph_path])
 
     # Set boundaries — output_b will be unreachable
-    runner.invoke(main, ["inquiry", "add-node", "broken", "concept:input_data", "--role", "BoundaryIn", "--path", graph_path])
-    runner.invoke(main, ["inquiry", "add-node", "broken", "concept:output_a", "--role", "BoundaryOut", "--path", graph_path])
-    runner.invoke(main, ["inquiry", "add-node", "broken", "concept:output_b", "--role", "BoundaryOut", "--path", graph_path])
-    runner.invoke(main, ["inquiry", "add-edge", "broken", "concept:input_data", "sci:feedsInto", "concept:output_a", "--path", graph_path])
+    runner.invoke(
+        main, ["inquiry", "add-node", "broken", "concept:input_data", "--role", "BoundaryIn", "--path", graph_path]
+    )
+    runner.invoke(
+        main, ["inquiry", "add-node", "broken", "concept:output_a", "--role", "BoundaryOut", "--path", graph_path]
+    )
+    runner.invoke(
+        main, ["inquiry", "add-node", "broken", "concept:output_b", "--role", "BoundaryOut", "--path", graph_path]
+    )
+    runner.invoke(
+        main,
+        [
+            "inquiry",
+            "add-edge",
+            "broken",
+            "concept:input_data",
+            "sci:feedsInto",
+            "concept:output_a",
+            "--path",
+            graph_path,
+        ],
+    )
     # No edge to output_b!
 
     result = runner.invoke(main, ["inquiry", "validate", "broken", "--path", graph_path, "--format", "json"])

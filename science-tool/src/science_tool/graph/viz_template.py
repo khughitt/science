@@ -68,7 +68,7 @@ def load_graph(graph_path_input, mo):
         # Sort by longest prefix first so more specific matches win
         for prefix, short in sorted(_PREFIX_MAP.items(), key=lambda kv: -len(kv[0])):
             if s.startswith(prefix):
-                return short + s[len(prefix):]
+                return short + s[len(prefix) :]
         return s
 
     def layer_name(graph_uri: str | None) -> str:
@@ -92,15 +92,21 @@ def load_graph(graph_path_input, mo):
             ctx_id = str(ctx.identifier) if ctx.identifier else None
             ln = layer_name(ctx_id)
             for s, p, o in ctx:
-                rows.append({
-                    "subject": shorten_uri(s),
-                    "predicate": shorten_uri(p),
-                    "object": shorten_uri(o),
-                    "layer": ln,
-                })
+                rows.append(
+                    {
+                        "subject": shorten_uri(s),
+                        "predicate": shorten_uri(p),
+                        "object": shorten_uri(o),
+                        "layer": ln,
+                    }
+                )
 
-    df = pl.DataFrame(rows) if rows else pl.DataFrame(
-        schema={"subject": pl.String, "predicate": pl.String, "object": pl.String, "layer": pl.String}
+    df = (
+        pl.DataFrame(rows)
+        if rows
+        else pl.DataFrame(
+            schema={"subject": pl.String, "predicate": pl.String, "object": pl.String, "layer": pl.String}
+        )
     )
 
     n_triples = len(df)
@@ -157,10 +163,12 @@ def stats_overview(alt, df, mo, n_entities, n_predicates, n_triples, pl):
             kind="info",
         )
 
-        _out = mo.vstack([
-            mo.md("## Stats Overview"),
-            mo.hstack([mo.ui.altair_chart(_chart_layers), _stats_callout], justify="start", gap=2),
-        ])
+        _out = mo.vstack(
+            [
+                mo.md("## Stats Overview"),
+                mo.hstack([mo.ui.altair_chart(_chart_layers), _stats_callout], justify="start", gap=2),
+            ]
+        )
     _out
 
 
@@ -202,12 +210,7 @@ def predicate_freq(alt, df, mo, n_triples, pl):
     if n_triples == 0:
         _out = mo.vstack([mo.md("## Predicate Frequency"), mo.md("_No data._")])
     else:
-        _pred_df = (
-            df.group_by(["predicate", "layer"])
-            .len()
-            .rename({"len": "count"})
-            .sort("count", descending=True)
-        )
+        _pred_df = df.group_by(["predicate", "layer"]).len().rename({"len": "count"}).sort("count", descending=True)
 
         _chart_preds = (
             alt.Chart(_pred_df.to_pandas())
@@ -233,9 +236,7 @@ def predicate_freq(alt, df, mo, n_triples, pl):
 def network_controls(df, mo, n_triples):
     layers = ["all"] + sorted(df["layer"].unique().to_list()) if n_triples > 0 else ["all"]
     layer_filter = mo.ui.dropdown(options=layers, value="all", label="Layer filter")
-    max_edges_slider = mo.ui.slider(
-        start=10, stop=500, step=10, value=200, label="Max edges"
-    )
+    max_edges_slider = mo.ui.slider(start=10, stop=500, step=10, value=200, label="Max edges")
     mo.md(f"## Network Graph\n\n{mo.hstack([layer_filter, max_edges_slider])}")
     return layer_filter, max_edges_slider
 
@@ -329,24 +330,30 @@ def network_graph(alt, df, layer_filter, math, max_edges_slider, mo, n_triples, 
             # Build node dataframe
             _node_records = []
             for _i, _name in enumerate(_all_nodes):
-                _node_records.append({
-                    "entity": _name,
-                    "x": _pos_x[_i],
-                    "y": _pos_y[_i],
-                    "degree": _degree.get(_name, 1),
-                    "type": _type_map.get(_name, "unknown"),
-                })
+                _node_records.append(
+                    {
+                        "entity": _name,
+                        "x": _pos_x[_i],
+                        "y": _pos_y[_i],
+                        "degree": _degree.get(_name, 1),
+                        "type": _type_map.get(_name, "unknown"),
+                    }
+                )
             _nodes_pl = pl.DataFrame(_node_records)
 
             # Build edge dataframe
             _edge_records = []
             _preds = _net_df["predicate"].to_list()
             for _idx, (_u, _v) in enumerate(_edges):
-                _edge_records.append({
-                    "x": _pos_x[_u], "y": _pos_y[_u],
-                    "x2": _pos_x[_v], "y2": _pos_y[_v],
-                    "predicate": _preds[_idx],
-                })
+                _edge_records.append(
+                    {
+                        "x": _pos_x[_u],
+                        "y": _pos_y[_u],
+                        "x2": _pos_x[_v],
+                        "y2": _pos_y[_v],
+                        "predicate": _preds[_idx],
+                    }
+                )
             _edges_pl = pl.DataFrame(_edge_records)
 
             # Render with altair
@@ -509,8 +516,10 @@ def neighborhood_graph(alt, df, entity_input, hops_slider, math, mo, n_triples, 
                 alt.Chart(_ego_edges_pl.to_pandas())
                 .mark_rule(opacity=0.4, color="gray")
                 .encode(
-                    x=alt.X("x:Q", axis=None), y=alt.Y("y:Q", axis=None),
-                    x2="x2:Q", y2="y2:Q",
+                    x=alt.X("x:Q", axis=None),
+                    y=alt.Y("y:Q", axis=None),
+                    x2="x2:Q",
+                    y2="y2:Q",
                     tooltip=["predicate"],
                 )
             )
@@ -518,11 +527,14 @@ def neighborhood_graph(alt, df, entity_input, hops_slider, math, mo, n_triples, 
                 alt.Chart(_ego_nodes_pl.to_pandas())
                 .mark_circle()
                 .encode(
-                    x=alt.X("x:Q", axis=None), y=alt.Y("y:Q", axis=None),
+                    x=alt.X("x:Q", axis=None),
+                    y=alt.Y("y:Q", axis=None),
                     size=alt.Size("degree:Q", scale=alt.Scale(range=[50, 400]), legend=None),
-                    color=alt.Color("is_center:N", scale=alt.Scale(
-                        domain=["center", "other"], range=["#e45756", "#4c78a8"]
-                    ), title="Role"),
+                    color=alt.Color(
+                        "is_center:N",
+                        scale=alt.Scale(domain=["center", "other"], range=["#e45756", "#4c78a8"]),
+                        title="Role",
+                    ),
                     tooltip=["entity", "degree", "is_center"],
                 )
             )
@@ -542,15 +554,9 @@ def quality_dashboard(df, mo, n_triples, pl):
         _out = mo.vstack([mo.md("## Quality Dashboard"), mo.md("_No data._")])
     else:
         # 1. Entities missing definition or provenance
-        _typed_entities = set(
-            df.filter(pl.col("predicate") == "rdf:type")["subject"].to_list()
-        )
-        _has_definition = set(
-            df.filter(pl.col("predicate") == "skos:definition")["subject"].to_list()
-        )
-        _has_provenance = set(
-            df.filter(pl.col("predicate") == "prov:wasDerivedFrom")["subject"].to_list()
-        )
+        _typed_entities = set(df.filter(pl.col("predicate") == "rdf:type")["subject"].to_list())
+        _has_definition = set(df.filter(pl.col("predicate") == "skos:definition")["subject"].to_list())
+        _has_provenance = set(df.filter(pl.col("predicate") == "prov:wasDerivedFrom")["subject"].to_list())
         _missing_def = sorted(_typed_entities - _has_definition)
         _missing_prov = sorted(_typed_entities - _has_provenance)
 
@@ -585,9 +591,7 @@ def quality_dashboard(df, mo, n_triples, pl):
 
         # 3. Open questions by maturity
         _maturity_triples = df.filter(pl.col("predicate") == "sci:maturity")
-        _question_triples = df.filter(
-            (pl.col("predicate") == "rdf:type") & (pl.col("object") == "sci:Question")
-        )
+        _question_triples = df.filter((pl.col("predicate") == "rdf:type") & (pl.col("object") == "sci:Question"))
         _question_entities = set(_question_triples["subject"].to_list())
 
         _maturity_groups: dict[str, list[str]] = {}

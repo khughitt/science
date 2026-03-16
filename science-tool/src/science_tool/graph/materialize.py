@@ -23,8 +23,8 @@ from science_tool.graph.store import (
     CURIE_PREFIXES,
     DEFAULT_GRAPH_PATH,
     GRAPH_LAYERS,
-    PROJECT_NS,
     PROJECT_ENTITY_PREFIXES,
+    PROJECT_NS,
     SCHEMA_NS,
     SCI_NS,
     save_graph_dataset,
@@ -149,7 +149,9 @@ def _add_relations(
             continue
 
         target_uri = _entity_uri(target.canonical_id)
-        predicate = SCI_NS.tests if entity.kind == "task" and target.kind in {"hypothesis", "question"} else SKOS.related
+        predicate = (
+            SCI_NS.tests if entity.kind == "task" and target.kind in {"hypothesis", "question"} else SKOS.related
+        )
         knowledge.add((entity_uri, predicate, target_uri))
 
     for raw_target in sorted(entity.blocked_by):
@@ -304,9 +306,9 @@ def _external_uri(raw_target: str) -> URIRef:
 
 def _binding_uri(binding: SourceBinding) -> URIRef:
     token = hashlib.sha1(
-        "|".join([binding.model, binding.parameter, binding.source_path, binding.symbol or "", binding.role or ""]).encode(
-            "utf-8"
-        )
+        "|".join(
+            [binding.model, binding.parameter, binding.source_path, binding.symbol or "", binding.role or ""]
+        ).encode("utf-8")
     ).hexdigest()[:12]
     return URIRef(PROJECT_NS[f"binding/{token}"])
 
@@ -334,6 +336,9 @@ def _kind_class_name(kind: str) -> str:
 def _external_profile(raw_target: str, curated_profiles: list[str]) -> str:
     if ":" in raw_target:
         prefix, _ = raw_target.split(":", 1)
-        if prefix.lower() in {"go", "mesh", "doid", "hp", "so", "ncbitaxon", "ncbigene", "ensembl"} and "bio" in curated_profiles:
+        if (
+            prefix.lower() in {"go", "mesh", "doid", "hp", "so", "ncbitaxon", "ncbigene", "ensembl"}
+            and "bio" in curated_profiles
+        ):
             return "bio"
     return "external"

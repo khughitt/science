@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from click.testing import CliRunner
 import yaml
+from click.testing import CliRunner
 
 from science_tool.cli import main
 from science_tool.graph.migrate import audit_project_graph, migrate_project_ids, write_project_specific_sources
@@ -24,7 +24,7 @@ def test_audit_project_graph_reports_unresolved_related_refs(tmp_path: Path) -> 
                 'title: "Demo hypothesis"',
                 'status: "proposed"',
                 'related: ["question:Q99"]',
-                'source_refs: []',
+                "source_refs: []",
                 'created: "2026-03-12"',
                 'updated: "2026-03-12"',
                 "---",
@@ -72,7 +72,7 @@ def test_audit_project_graph_suggests_aliases_from_question_file_stems(tmp_path:
                 'title: "Demo question"',
                 'status: "open"',
                 'related: ["question:Q16"]',
-                'source_refs: []',
+                "source_refs: []",
                 'created: "2026-03-12"',
                 'updated: "2026-03-12"',
                 "---",
@@ -253,10 +253,7 @@ def test_audit_project_graph_reports_unresolved_structured_relation_refs(tmp_pat
 
     assert report["unresolved_reference_count"] == 1
     assert report["has_failures"] is True
-    assert any(
-        row["field"] == "object" and row["target"] == "question:q99-missing"
-        for row in report["rows"]
-    )
+    assert any(row["field"] == "object" and row["target"] == "question:q99-missing" for row in report["rows"])
 
 
 def test_audit_project_graph_reports_unresolved_binding_refs(tmp_path: Path) -> None:
@@ -302,8 +299,7 @@ def test_audit_project_graph_reports_unresolved_binding_refs(tmp_path: Path) -> 
     assert report["unresolved_reference_count"] == 1
     assert report["has_failures"] is True
     assert any(
-        row["field"] == "parameter" and row["target"] == "parameter:kinematic-viscosity"
-        for row in report["rows"]
+        row["field"] == "parameter" and row["target"] == "parameter:kinematic-viscosity" for row in report["rows"]
     )
 
 

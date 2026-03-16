@@ -5,7 +5,6 @@ from pathlib import Path
 
 import yaml
 
-
 _DEFAULTS: dict[str, str] = {
     "doc_dir": "doc",
     "code_dir": "code",

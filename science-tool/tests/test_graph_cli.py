@@ -1,6 +1,6 @@
-from pathlib import Path
 import json
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 from click.testing import CliRunner
@@ -8,7 +8,6 @@ from rdflib import Dataset
 from rdflib.namespace import PROV, RDF, SKOS, Namespace
 
 from science_tool.cli import main
-
 
 EXPECTED_GRAPHS = (
     "graph/knowledge",

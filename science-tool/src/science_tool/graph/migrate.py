@@ -10,7 +10,6 @@ from typing import TypedDict
 import yaml
 from science_model import normalize_alias
 
-from science_tool.paths import resolve_paths
 from science_tool.graph.sources import (
     AliasCollisionError,
     ProjectSources,
@@ -19,9 +18,10 @@ from science_tool.graph.sources import (
     SourceRelation,
     build_alias_map,
     is_external_reference,
-    local_profile_sources_dir,
     load_project_sources,
+    local_profile_sources_dir,
 )
+from science_tool.paths import resolve_paths
 
 
 class AuditRow(TypedDict):
@@ -139,11 +139,11 @@ def write_project_specific_sources(project_root: Path, report: dict[str, object]
     base = local_profile_sources_dir(project_root, local_profile=local_profile)
     base.mkdir(parents=True, exist_ok=True)
     raw_rows = report.get("rows", [])
-    unresolved_rows = [
-        row
-        for row in raw_rows
-        if isinstance(row, dict) and row.get("check") == "unresolved_reference"
-    ] if isinstance(raw_rows, list) else []
+    unresolved_rows = (
+        [row for row in raw_rows if isinstance(row, dict) and row.get("check") == "unresolved_reference"]
+        if isinstance(raw_rows, list)
+        else []
+    )
     entities = _merge_entities(
         _load_entity_records(base / "entities.yaml"),
         [

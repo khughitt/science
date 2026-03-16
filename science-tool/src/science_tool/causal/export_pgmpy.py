@@ -10,8 +10,8 @@ from rdflib.namespace import PROV, RDF
 
 from science_tool.graph.store import (
     SCHEMA_NS,
-    SCIC_NS,
     SCI_NS,
+    SCIC_NS,
     _graph_uri,
     _load_dataset,
     _slug,
