@@ -37,9 +37,30 @@ Be concrete — name the metric, the threshold, the pattern. -->
 - Does null mean the hypothesis is wrong, or that the test was inadequate?
 - What would you do next? -->
 
+## Suspicious/Unexpected Result Plan
+
+<!-- What would "too good to be true" look like?
+- What result would be suspiciously high (e.g., AUC > 0.95, perfect accuracy)?
+- What inflators could produce misleading results (data leakage, confounds, overfitting)?
+- What checks would you run before accepting an unexpectedly strong result?
+
+This section prevents post-hoc rationalization of inflated signals.
+Omit if the analysis type doesn't have a meaningful "too good" threshold. -->
+
 ## Known Limitations
 
 <!-- What can this analysis NOT tell you, even if it works perfectly? -->
+
+## Metric Selection Rationale
+
+<!-- What metrics are used and why?
+- Primary metric: what is it, and why was it chosen?
+- If the metric changed from a prior analysis, explain what motivated the switch.
+- What are the metric's known limitations?
+
+This section ensures the rationale for metric choices is documented up front,
+especially when the primary metric has changed mid-project.
+Omit if metric choice is straightforward and unchanged. -->
 
 ## Exploratory vs. Confirmatory
 

@@ -75,6 +75,17 @@ A specific hypothesis, inquiry, pipeline, or the most recently active area. -->
 - **Rating:** not detected / possible / likely
 - **Evidence:** <!-- Cross-reference causal DAG if available; otherwise check for uncontrolled variables. -->
 
+#### Confound Severity Matrix
+
+<!-- For each identified confound, rate severity and fixability.
+HIGH severity + EASY fix → address before running experiments.
+MED severity + INFEASIBLE → acknowledge as limitation.
+
+| Confound | Severity | Fixability | Mitigation |
+|---|---|---|---|
+| _confound_ | HIGH/MED/LOW | EASY/HARD/INFEASIBLE | _action_ |
+-->
+
 ### Publication Bias
 
 - **Rating:** not detected / possible / likely / not applicable

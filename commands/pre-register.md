@@ -46,6 +46,21 @@ For each hypothesis under test:
 - Is the analysis sufficiently powered to detect the expected effect?
 - What would you do next if results are ambiguous?
 
+### 4b. Plan for Suspicious/Unexpected Results
+
+- What would "too good to be true" look like? (e.g., AUC > 0.95, perfect accuracy)
+- What inflators could produce misleading results? (data leakage, confounds, overfitting)
+- What checks would you run before accepting an unexpectedly strong result?
+
+Skip this if the analysis type doesn't have a meaningful "too good" threshold.
+
+### 4c. Metric Selection Rationale (if applicable)
+
+If the primary metric has changed from prior analyses, or if the metric choice is non-obvious:
+- What metric are you using and why?
+- What motivated the change from the prior metric (if applicable)?
+- What are the known limitations of this metric?
+
 ### 5. Separate Confirmatory from Exploratory
 
 - Which analyses are pre-registered (confirmatory)?

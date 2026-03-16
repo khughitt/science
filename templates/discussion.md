@@ -44,15 +44,19 @@ rather than splitting into a separate section. -->
 
 <!-- Integrated conclusion and decision-oriented next steps. -->
 
-## Double-Blind Addendum (If mode = double-blind)
+<!--
+  DOUBLE-BLIND ADDENDUM — include this section ONLY when mode = "double-blind".
+  Delete this entire block for standard-mode discussions.
+
+## Double-Blind Addendum
 
 ### Agent Independent Draft
 
-<!-- Agent draft written before reading user draft. -->
+(Agent draft written before reading user draft.)
 
 ### User Independent Draft
 
-<!-- User draft. -->
+(User draft.)
 
 ### Comparison
 
@@ -62,4 +66,5 @@ rather than splitting into a separate section. -->
 
 ### Combined Synthesis
 
-<!-- Final synthesis considering both drafts. -->
+(Final synthesis considering both drafts.)
+-->

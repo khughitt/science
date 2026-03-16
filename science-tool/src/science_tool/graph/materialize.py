@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from rdflib import Dataset, Literal, URIRef
-from rdflib.namespace import PROV, RDF, SKOS
+from rdflib.namespace import PROV, RDF, SKOS, XSD
 from science_model import normalize_alias
 
 from science_tool.graph.migrate import audit_project_sources
@@ -120,6 +120,8 @@ def _add_entity(*, entity: SourceEntity, knowledge, provenance) -> None:
 
     source_uri = _source_uri(entity.source_path)
     provenance.add((uri, PROV.wasDerivedFrom, source_uri))
+    if entity.confidence is not None:
+        provenance.add((uri, SCI_NS.confidence, Literal(str(entity.confidence), datatype=XSD.decimal)))
     provenance.add((source_uri, RDF.type, PROV.Entity))
     provenance.add((source_uri, SCHEMA_NS.identifier, Literal(entity.source_path)))
 

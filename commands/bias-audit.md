@@ -86,6 +86,13 @@ For each cognitive bias, assess based on the evidence you've read:
 **Confounding:**
 - If a causal DAG exists, review it for uncontrolled confounders.
 - If no causal DAG exists, identify key relationships and ask: "what else could explain this?"
+- For each identified confound, rate severity and fixability in a matrix:
+
+| Confound | Severity | Fixability | Mitigation |
+|---|---|---|---|
+| _confound_ | HIGH/MED/LOW | EASY/HARD/INFEASIBLE | _action_ |
+
+This makes mitigation recommendations actionable — HIGH severity + EASY to fix should be addressed before running experiments; MED severity + INFEASIBLE should be acknowledged as limitations.
 
 **Publication bias:**
 - Are literature searches biased toward positive results?

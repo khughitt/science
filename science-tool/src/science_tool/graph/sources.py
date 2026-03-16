@@ -41,6 +41,7 @@ class SourceEntity(BaseModel):
     profile: str
     source_path: str
     domain: str | None = None
+    confidence: float | None = None
     status: str | None = None
     content_preview: str = ""
     related: list[str] = Field(default_factory=list)
@@ -250,6 +251,7 @@ def _load_structured_entities(project_root: Path, *, local_profile: str) -> list
                 profile=str(item.get("profile") or local_profile),
                 source_path=str(item.get("source_path") or _default_local_source_path(local_profile, "entities.yaml")),
                 domain=_coerce_optional_string(item.get("domain")),
+                confidence=_coerce_optional_float(item.get("confidence")),
                 status=str(item.get("status")) if item.get("status") is not None else None,
                 content_preview=str(item.get("content_preview") or ""),
                 related=_coerce_string_list(item.get("related")),
@@ -455,6 +457,15 @@ def _coerce_optional_string(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value
     return None
+
+
+def _coerce_optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _nested_relations(

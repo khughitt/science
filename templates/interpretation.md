@@ -63,6 +63,32 @@ input: "{{path to results, notebook, or prose description}}"
   If no pre-registration exists, note: "No pre-registration on file."
 -->
 
+## Data Quality Checks
+
+<!--
+  Basic data quality verification — this step has caught bugs at interpretation time.
+  Check and note any issues:
+  - Control uniqueness: are control samples distinct from each other and from test samples?
+  - Dimensionality: do embedding/feature dimensions match expectations?
+  - Sample counts: do they match the experimental design?
+  - Value ranges: are metrics in plausible ranges? Anything suspiciously perfect or impossible?
+
+  Flag issues as "Data Quality Issue" findings — these indicate the data generation
+  may be broken, not just the analysis.
+
+  Skip this section in Dev mode or if no empirical data is involved.
+-->
+
+## User Questions
+
+<!--
+  Questions raised by the user during interpretation.
+  Record each question and provide a direct answer with supporting evidence.
+  User-prompted follow-ups are often the most insightful — they deserve first-class treatment.
+
+  Skip this section if no user questions were raised.
+-->
+
 ## New Questions Raised
 
 <!--

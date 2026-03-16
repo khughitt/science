@@ -11,7 +11,7 @@ from pathlib import Path
 from click.testing import CliRunner
 from rdflib import Dataset, Namespace
 from rdflib import Literal
-from rdflib.namespace import RDF, SKOS
+from rdflib.namespace import RDF, SKOS, XSD
 
 from science_tool.cli import main
 from science_tool.graph.materialize import materialize_graph
@@ -252,6 +252,39 @@ def test_materialize_graph_uses_configured_local_profile_sources(tmp_path: Path)
     assert (topic_uri, RDF.type, SCI.Topic) in knowledge
     assert (topic_uri, SCI.profile, Literal("lab_local")) in knowledge
     assert (topic_uri, SKOS.related, question_uri) in knowledge
+
+
+def test_materialize_graph_materializes_structured_entity_confidence_in_provenance(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    project_specific = project / "knowledge" / "sources" / "project_specific"
+    project_specific.mkdir(parents=True)
+    (project_specific / "entities.yaml").write_text(
+        "\n".join(
+            [
+                "entities:",
+                "  - canonical_id: hypothesis:h02-confidence",
+                "    kind: hypothesis",
+                "    title: Confidence-backed hypothesis",
+                "    confidence: 0.7",
+                "    domain: structural-biology",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    trig_path = materialize_graph(project)
+
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+
+    hypothesis_uri = PROJECT_NS["hypothesis/h02-confidence"]
+
+    assert (hypothesis_uri, SCI.domain, Literal("structural-biology")) in knowledge
+    assert (hypothesis_uri, SCI.confidence, Literal("0.7", datatype=XSD.decimal)) in provenance
 
 
 def test_materialize_graph_applies_structured_relations_with_internal_targets(tmp_path: Path) -> None:

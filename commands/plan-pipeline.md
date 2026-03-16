@@ -26,19 +26,28 @@ For brevity, the examples below write just `science-tool <command>` — **always
 
 ## Rules
 
-- **MUST** start from a specified inquiry (status=`specified`); warn if sketch
-- **MUST** add `sci:Transformation` nodes for each computational step
-- **MUST** connect transformations with `sci:feedsInto` edges
-- **MUST** attach `sci:validatedBy` checks to each transformation
-- **MUST** include AnnotatedParam metadata for all pipeline parameters
+- **MUST** start from a specified inquiry or a task/question description (see Input Modes below)
 - **MUST** write the plan to `doc/plans/YYYY-MM-DD-<slug>-pipeline-plan.md`
+- **SHOULD** add `sci:Transformation` nodes when the project uses formal inquiries
+- **SHOULD** connect transformations with `sci:feedsInto` edges
+- **SHOULD** attach `sci:validatedBy` checks to each transformation
+- **SHOULD** include AnnotatedParam metadata for all pipeline parameters
 - **SHOULD** reference tool-specific skills where applicable
 - **SHOULD** suggest a pilot/phased approach for complex pipelines
 - **MUST NOT** embed tool-specific logic (Snakemake rules, etc.) — reference skills instead
 
+## Input Modes
+
+The plan-pipeline command works with two types of input:
+
+- **Inquiry mode** (default when an inquiry slug is provided): Load the formal inquiry subgraph and translate it into a pipeline plan. Follow Steps 1, 3, and 5 for inquiry loading, graph annotation, and status updates.
+- **Task mode** (when the project uses tasks/questions instead of formal inquiries, or when `$ARGUMENTS` is a task ID or description): Derive the plan directly from the task description, existing code, and project context. Skip inquiry-specific steps (1, 3, 5) — the plan document is the primary deliverable. Graph annotations are secondary.
+
 ## Workflow
 
-### Step 1: Load and verify the inquiry
+### Step 1: Load and verify the inquiry (Inquiry mode only)
+
+Skip this step in Task mode — proceed directly to Step 2.
 
 ```bash
 science-tool inquiry show "<slug>" --format table
@@ -71,7 +80,9 @@ Walk the inquiry subgraph and identify:
 - How is it validated?
 - What does "success" look like?
 
-### Step 3: Add computational nodes to the inquiry
+### Step 3: Add computational nodes to the inquiry (Inquiry mode only)
+
+Skip this step in Task mode — the plan document captures the same information.
 
 For each identified step:
 
@@ -106,7 +117,7 @@ Save to `doc/plans/YYYY-MM-DD-<slug>-pipeline-plan.md` using the standard plan f
 
 **Architecture:** <derived from transformation graph>
 
-**Tech Stack:** <tools identified in step 3>
+**Tech Stack:** <tools identified in steps 2-3>
 
 **Inquiry:** `<slug>` — see `doc/inquiries/<slug>.md` and knowledge graph
 
@@ -118,7 +129,9 @@ Save to `doc/plans/YYYY-MM-DD-<slug>-pipeline-plan.md` using the standard plan f
 
 Each task should reference the inquiry node it implements and include TDD steps.
 
-### Step 5: Update inquiry status and finalize
+### Step 5: Update inquiry status and finalize (Inquiry mode only)
+
+Skip this step in Task mode.
 
 Update the inquiry status to `planned`. Regenerate `doc/inquiries/<slug>.md`.
 

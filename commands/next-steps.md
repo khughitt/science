@@ -23,6 +23,21 @@ Additionally, read (skip any that don't exist):
 
 Also run: `git log --oneline -15 --format="%h %s (%cr)"`
 
+## Mode Detection
+
+Check for a prior same-day analysis: scan `doc/meta/next-steps-<today's date>*.md`.
+
+- **Full mode** (default): No same-day analysis exists, or the last analysis is >3 days old, or the user explicitly requests full analysis.
+- **Delta mode**: A same-day analysis already exists. Focus on what changed:
+  - New completions and commits since last analysis
+  - Status transitions (tasks that changed state)
+  - Newly unblocked items
+  - Revised recommendations
+  - Skip unchanged coverage map rows — show only areas where coverage level or direction changed.
+  - Append as a `## Update — HH:MM` section to the existing file rather than creating a new file.
+
+If a prior analysis exists from 1-3 days ago, default to full mode but reference the prior analysis for the "Direction" column in the coverage map.
+
 ## Workflow
 
 ### 1. Recent Progress
@@ -40,11 +55,11 @@ From `tasks/active.md`, show:
 - **P0 tasks** (critical path) — full detail
 - **P1 tasks** (active work) — title and status
 - **Blocked tasks** — what's blocking them
-- **Hypothesis status** — one-line summary per hypothesis from `specs/hypotheses/`
+- **Hypothesis / question status** — one-line summary per hypothesis from `specs/hypotheses/`, or per open question from `doc/questions/` if no formal hypotheses exist
 
 ### 3. Coverage Gap Analysis
 
-Analyze project coverage across five dimensions:
+Analyze project coverage across key dimensions. Use these five default dimensions, but adapt or replace them if the project's actual gaps are better described by different categories (e.g., "infrastructure built vs. exploited", "theoretical grounding", domain-specific axes):
 
 1. **Concepts/topics:** What core topics are missing or too shallow?
 2. **Evidence quality:** What claims rely on weak, old, or uncorroborated support?
@@ -54,7 +69,13 @@ Analyze project coverage across five dimensions:
 
 Focus on decision impact, not document volume.
 
-Present as a coverage map: **Strong / Partial / Missing** for each major area.
+Present as a coverage map with a **Direction** column when a prior analysis exists:
+
+| Area | Coverage | Direction | Key Gap |
+|---|---|---|---|
+| _area_ | Strong/Partial/Missing | improving/stable/regressing/new | _gap_ |
+
+The Direction column (improving / stable / regressing / new) shows momentum since the last analysis. This makes regressions and stale areas immediately visible.
 
 ### 3b. Newly Unblocked
 
@@ -67,6 +88,16 @@ This longitudinal view makes progress visible and highlights newly actionable wo
 ### 3c. Task Tracking Gaps
 
 Scan pipeline plans in `doc/plans/` for implementation tasks that are not tracked in `tasks/active.md`. Surface any development work buried in plan documents that should be trackable tasks.
+
+### 3d. Strategic Decision Point (if applicable)
+
+If the project is at a fork — a moment where the next direction depends on a choice between competing approaches, depth-first vs breadth-first, or a go/no-go gate — add a "Strategic Decision Point" section that frames:
+- What the decision is
+- What evidence bears on it
+- What the options are and their tradeoffs
+- What the recommended path is and why
+
+This captures strategic framing that individual task recommendations don't. Omit if no strategic decision is pending.
 
 ### 4. Suggested Next Steps
 
@@ -84,7 +115,7 @@ For each suggestion, include:
 
 ## Writing
 
-Save output to `doc/meta/next-steps-<YYYY-MM-DD>.md` with these sections:
+Save output to `doc/meta/next-steps-<YYYY-MM-DD>.md`. If a file for today already exists (delta mode), append an `## Update — HH:MM` section instead of creating a new file.
 
 ```markdown
 # Next Steps — YYYY-MM-DD
@@ -93,13 +124,13 @@ Save output to `doc/meta/next-steps-<YYYY-MM-DD>.md` with these sections:
 <grouped bullet points>
 
 ## Current State
-<task summary, hypothesis status>
+<task summary, hypothesis/question status>
 
 ## Coverage Gaps
 ### Coverage Map
-| Area | Coverage | Key Gap |
-|---|---|---|
-| <area> | Strong/Partial/Missing | <gap> |
+| Area | Coverage | Direction | Key Gap |
+|---|---|---|---|
+| <area> | Strong/Partial/Missing | improving/stable/regressing/new | <gap> |
 
 ### High-Impact Gaps
 <prioritized gap descriptions with evidence links>
@@ -110,10 +141,17 @@ Save output to `doc/meta/next-steps-<YYYY-MM-DD>.md` with these sections:
 ## Task Tracking Gaps (if any)
 <implementation work in plans not tracked as tasks>
 
+## Strategic Decision Point (if applicable)
+<decision framing, options, tradeoffs, recommendation>
+
 ## Recommended Next Actions
 | Priority | Action | Rationale | Command |
 |---|---|---|---|
 | P1 | <action> | <why now> | <command> |
+
+## Session Summary (optional)
+<brief narrative arc of the session — what happened, what changed, what was learned>
+<useful for future orientation when the trajectory matters more than the snapshot>
 ```
 
 ## Format
@@ -128,7 +166,7 @@ Display the output in the terminal using rich formatting:
 
 ## After Writing
 
-1. Save to `doc/meta/next-steps-<YYYY-MM-DD>.md`.
+1. Save to `doc/meta/next-steps-<YYYY-MM-DD>.md`. In delta mode, append to the existing file rather than creating a new one — git tracks history, so overwriting the date-stamped file is acceptable.
 2. Offer to create tasks from recommended items: "Create tasks from these suggestions?"
    - If accepted, run `science-tool tasks add` for each recommended task with appropriate priority, type, and related entities
 3. Cross-link relevant items in `doc/questions/`.

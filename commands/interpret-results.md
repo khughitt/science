@@ -34,10 +34,11 @@ If given a file path, read it. If given a directory, scan for result files (`.cs
 
 ## Mode Detection
 
-Check whether interpretation documents already exist for these results (scan `doc/interpretations/` for files matching the inquiry slug or results description).
+Check whether interpretation documents already exist for these results (scan `doc/interpretations/` for files matching the inquiry slug or results description). Also assess the nature of the results.
 
 - **Write mode** (default): No existing interpretation — write a full interpretation document following the workflow below.
 - **Update mode**: Interpretation documents already exist for these results. Operate as a framework-update task: read existing interpretations, then run only the framework update steps (hypothesis evaluation, question cross-referencing, priority updates, decision gate assessment) without rewriting the interpretation narrative. Note "Update mode — existing interpretation: `<id>`" at the top of the output.
+- **Dev mode**: The results are from an infrastructure or development task (pipeline formalization, tooling, refactoring) rather than an experimental analysis. Use a lighter-weight interpretation that focuses on: (a) what's now unblocked, (b) validation gaps in the new tooling, (c) new tasks or questions. Skip: signal strength classification (step 1), pre-registration cross-check (step 3b), and data quality checks (step 3c). Keep: evidence vs. open questions (step 2), user questions (step 3d), surface new questions (step 4), and update priorities (step 5). Note "Dev mode" at the top of the output.
 
 ## Workflow
 
@@ -92,6 +93,23 @@ If a pre-registration document exists for any hypothesis or inquiry being interp
    - Flag if the pre-registration was modified after analysis began (compare `created` date in pre-registration against today)
 
 If no pre-registration exists, skip this step but note in the output: "No pre-registration on file. Consider `/science:pre-register` for future analyses."
+
+### 3c. Data Quality Checks
+
+Before proceeding to new questions, verify basic data quality. This step has caught bugs twice at interpretation time — it's the natural moment for these checks:
+
+- **Control uniqueness:** Are control sequences/samples distinct from each other and from test samples?
+- **Dimensionality:** Do embedding dimensions match expectations (model output size, expected feature count)?
+- **Sample counts:** Do sample counts match the experimental design? Any unexpected drops?
+- **Value ranges:** Are metric values in plausible ranges? Any suspiciously perfect (1.0) or impossible values?
+
+Flag any issues as a "Data Quality Issue" finding. These are distinct from methodological findings — they indicate the data generation may be broken, not just the analysis.
+
+Skip this section in Dev mode.
+
+### 3d. User Questions
+
+If the user raises questions during interpretation (e.g., "does X also apply to Y?", "what about Z?"), record and answer them here. User-prompted follow-up questions are often the most insightful prompts and should be a first-class part of the interpretation, not an afterthought.
 
 ### 4. Surface new questions
 

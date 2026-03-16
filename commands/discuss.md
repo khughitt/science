@@ -29,6 +29,15 @@ Additionally:
 
 If loaded aspects contribute additional discussion guidance (e.g., causal reasoning checks from `causal-modeling`), incorporate that guidance into the critical analysis.
 
+### Q&A mode (automatic)
+
+If the user provides multiple specific questions (e.g., "I have 5 questions about X"), use a Q&A structure instead of the standard template sections:
+
+1. One section per user question, with a focused answer and supporting evidence.
+2. A synthesis section at the end that ties the answers together.
+
+This produces clearer output than forcing multiple questions through the generic Critical Analysis / Evidence Needed split. The Q&A structure is used *instead of* the standard sections (Focus / Current Position / Critical Analysis / Evidence Needed), not in addition to them. Still include Prioritized Follow-Ups and Synthesis.
+
 ### Double-blind mode (optional)
 
 Use when the user asks for independent reasoning before synthesis.
