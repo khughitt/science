@@ -1366,6 +1366,24 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
             ).exit_code
             == 0
         )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Low-confidence BRCA1 claim",
+                    "--source",
+                    "paper:doi_10_4444_d",
+                    "--confidence",
+                    "0.2",
+                    "--id",
+                    "low_conf",
+                ],
+            ).exit_code
+            == 0
+        )
 
         result = runner.invoke(main, ["graph", "uncertainty", "--format", "json"])
         assert result.exit_code == 0
@@ -1373,6 +1391,9 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
         rows = payload["rows"]
         assert rows[0]["text"] == "Contested BRCA1 claim"
         assert "contested" in rows[0]["signals"]
+        assert any(row["text"] == "Low-confidence BRCA1 claim" for row in rows)
+        low_conf_row = next(row for row in rows if row["text"] == "Low-confidence BRCA1 claim")
+        assert rows.index(low_conf_row) > 0
         assert any(row["text"] == "Single-source BRCA1 claim" for row in rows)
         single_row = next(row for row in rows if row["text"] == "Single-source BRCA1 claim")
         assert "single_source" in single_row["signals"]
