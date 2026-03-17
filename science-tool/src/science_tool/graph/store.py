@@ -1698,7 +1698,7 @@ def query_evidence(
 
     target_uri = _resolve_center_entity(target_ref)
     rows: list[dict[str, str]] = []
-    seen: set[tuple[str, str]] = set()
+    seen: dict[tuple[str, str], dict[str, str]] = {}
 
     if (target_uri, RDF.type, SCI_NS.Hypothesis) in knowledge:
         _append_evidence_rows(
@@ -1730,7 +1730,7 @@ def query_evidence(
 
 def _append_evidence_rows(
     rows: list[dict[str, str]],
-    seen: set[tuple[str, str]],
+    seen: dict[tuple[str, str], dict[str, str]],
     knowledge,
     provenance,
     target_uri: URIRef,
@@ -1782,7 +1782,7 @@ def _append_evidence_rows(
 
 def _append_row(
     rows: list[dict[str, str]],
-    seen: set[tuple[str, str]],
+    seen: dict[tuple[str, str], dict[str, str]],
     knowledge,
     provenance,
     evidence_uri: URIRef,
@@ -1790,9 +1790,6 @@ def _append_row(
     fallback_uri: URIRef | None = None,
 ) -> None:
     key = (str(evidence_uri), relation)
-    if key in seen:
-        return
-
     text_obj = next(knowledge.objects(evidence_uri, SCHEMA_NS.text), None)
     text = str(text_obj) if text_obj else ""
 
@@ -1802,15 +1799,23 @@ def _append_row(
             fallback_text_obj = next(knowledge.objects(fallback_uri, SCHEMA_NS.text), None)
             text = str(fallback_text_obj) if fallback_text_obj else text
 
-    rows.append(
-        {
-            "evidence": str(evidence_uri),
-            "relation": relation,
-            "text": text,
-            "sources": "; ".join(sources),
-        }
-    )
-    seen.add(key)
+    existing_row = seen.get(key)
+    if existing_row is not None:
+        existing_sources = {source for source in existing_row["sources"].split("; ") if source}
+        existing_sources.update(sources)
+        existing_row["sources"] = "; ".join(sorted(existing_sources))
+        if not existing_row["text"] and text:
+            existing_row["text"] = text
+        return
+
+    row = {
+        "evidence": str(evidence_uri),
+        "relation": relation,
+        "text": text,
+        "sources": "; ".join(sources),
+    }
+    rows.append(row)
+    seen[key] = row
 
 
 def _linked_claims_for_hypothesis(knowledge, hypothesis_uri: URIRef) -> list[URIRef]:

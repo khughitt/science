@@ -1022,6 +1022,87 @@ def test_graph_evidence_hypothesis_aggregates_linked_claim_evidence() -> None:
         assert all(row["relation"] != "discusses" for row in rows)
 
 
+def test_graph_evidence_merges_sources_for_reused_evidence_node() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Multi-source main claim",
+                    "--source",
+                    "paper:doi_10_5555_e",
+                    "--id",
+                    "main",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Reusable support evidence",
+                    "--source",
+                    "paper:doi_10_5555_e",
+                    "--id",
+                    "ev1",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/ev1",
+                    "cito:supports",
+                    "claim/main",
+                    "--source",
+                    "paper:doi_10_5555_e",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/ev1",
+                    "cito:supports",
+                    "claim/main",
+                    "--source",
+                    "paper:doi_10_6666_f",
+                    "--id",
+                    "second_source",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "evidence", "claim/main", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        rows = payload["rows"]
+        assert len(rows) == 1
+        assert "paper/doi_10_5555_e" in rows[0]["sources"]
+        assert "paper/doi_10_6666_f" in rows[0]["sources"]
+
+
 def test_graph_coverage_shows_measured_and_observed_status() -> None:
     runner = CliRunner()
 
