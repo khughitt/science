@@ -509,6 +509,44 @@ def test_graph_validate_warns_orphaned_claim_nodes() -> None:
         assert "1" in orphan_rows[0]["details"]
 
 
+def test_graph_validate_warns_orphaned_question_nodes_with_maturity_only() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "question",
+                    "Q1",
+                    "--text",
+                    "Open question",
+                    "--source",
+                    "paper:doi_10_9999_i",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        knowledge.add((PROJECT_NS["question/q1"], SCI.maturity, Literal("early")))
+        dataset.serialize(destination="knowledge/graph.trig", format="trig")
+
+        result = runner.invoke(main, ["graph", "validate", "--format", "json"])
+        assert result.exit_code == 0
+
+        payload = json.loads(result.output)
+        orphan_rows = [r for r in payload["rows"] if r["check"] == "orphaned_nodes"]
+        assert len(orphan_rows) == 1
+        assert orphan_rows[0]["status"] == "warn"
+        assert "1" in orphan_rows[0]["details"]
+
+
 def test_graph_add_claim_same_text_different_sources_creates_distinct_claims() -> None:
     runner = CliRunner()
 
@@ -1198,6 +1236,76 @@ def test_graph_evidence_falls_back_to_relation_claim_text_for_non_claim_subjects
         assert rows[0]["text"] == "BRCA1 supports H1"
 
 
+def test_graph_evidence_ignores_non_claim_discusses_subjects_for_hypothesis_linking() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "hypothesis",
+                    "H1",
+                    "--text",
+                    "Hypothesis H1",
+                    "--source",
+                    "paper:doi_10_7777_g",
+                ],
+            ).exit_code
+            == 0
+        )
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        knowledge.add((PROJECT_NS["concept/brca1"], Namespace("http://purl.org/spar/cito/").discusses, PROJECT_NS["hypothesis/h1"]))
+        dataset.serialize(destination="knowledge/graph.trig", format="trig")
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Evidence attached to BRCA1 concept",
+                    "--source",
+                    "paper:doi_10_7777_g",
+                    "--id",
+                    "ev1",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/ev1",
+                    "cito:supports",
+                    "concept/brca1",
+                    "--source",
+                    "paper:doi_10_7777_g",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        evidence = runner.invoke(main, ["graph", "evidence", "hypothesis/h1", "--format", "json"])
+        assert evidence.exit_code == 0
+        evidence_payload = json.loads(evidence.output)
+        assert evidence_payload["rows"] == []
+
+        uncertainty = runner.invoke(main, ["graph", "uncertainty", "--format", "json"])
+        assert uncertainty.exit_code == 0
+        uncertainty_payload = json.loads(uncertainty.output)
+        assert all(row["entity"] != str(PROJECT_NS["hypothesis/h1"]) for row in uncertainty_payload["rows"])
+
+
 def test_graph_coverage_shows_measured_and_observed_status() -> None:
     runner = CliRunner()
 
@@ -1702,6 +1810,88 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
         single_row = next(row for row in rows if row["text"] == "Single-source BRCA1 claim")
         assert "single_source" in single_row["signals"]
         assert all(row["text"] != "Multi-source BRCA1 claim" for row in rows)
+
+
+def test_graph_uncertainty_dedupes_reused_evidence_nodes_for_support_count() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Low-confidence multi-source claim",
+                    "--source",
+                    "paper:doi_10_5555_e",
+                    "--confidence",
+                    "0.2",
+                    "--id",
+                    "main",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Reusable evidence node",
+                    "--source",
+                    "paper:doi_10_5555_e",
+                    "--id",
+                    "ev1",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/ev1",
+                    "cito:supports",
+                    "claim/main",
+                    "--source",
+                    "paper:doi_10_5555_e",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/ev1",
+                    "cito:supports",
+                    "claim/main",
+                    "--source",
+                    "paper:doi_10_6666_f",
+                    "--id",
+                    "second_source",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "uncertainty", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        rows = payload["rows"]
+        main_row = next(row for row in rows if row["text"] == "Low-confidence multi-source claim")
+        assert main_row["support_count"] == "1"
 
 
 def test_graph_uncertainty_includes_disputed_epistemic_status() -> None:

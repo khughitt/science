@@ -1543,6 +1543,7 @@ def validate_graph(graph_path: Path) -> tuple[list[dict[str, str]], bool]:
         SKOS.definition,
         SCHEMA_NS.identifier,
         SCHEMA_NS.text,
+        SCI_NS.maturity,
         SCI_NS.projectStatus,
     }
 
@@ -1824,7 +1825,7 @@ def _linked_claims_for_hypothesis(knowledge, hypothesis_uri: URIRef) -> list[URI
     seen: set[URIRef] = set()
 
     for subj, _, _ in knowledge.triples((None, CITO_NS.discusses, hypothesis_uri)):
-        if isinstance(subj, URIRef) and subj not in seen:
+        if isinstance(subj, URIRef) and (subj, RDF.type, SCI_NS.Claim) in knowledge and subj not in seen:
             linked_claims.append(subj)
             seen.add(subj)
 
@@ -1859,12 +1860,12 @@ def _evidence_targets_for_uri(knowledge, target_uri: URIRef) -> list[URIRef]:
 def _collect_evidence_signals(knowledge, provenance, target_uri: URIRef) -> dict[str, object]:
     support_sources: set[str] = set()
     dispute_sources: set[str] = set()
-    support_items: set[tuple[str, tuple[str, ...]]] = set()
-    dispute_items: set[tuple[str, tuple[str, ...]]] = set()
+    support_items: set[str] = set()
+    dispute_items: set[str] = set()
 
     def record(relation: str, evidence_uri: URIRef, fallback_uri: URIRef | None = None) -> None:
         source_strings = tuple(_source_strings(provenance, evidence_uri, fallback_uri))
-        item = (str(evidence_uri), source_strings)
+        item = str(evidence_uri)
         if relation == "supports":
             support_items.add(item)
             support_sources.update(source_strings)
