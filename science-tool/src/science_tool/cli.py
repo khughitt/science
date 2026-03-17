@@ -33,6 +33,7 @@ from science_tool.graph.store import (
     add_inquiry_node,
     add_paper,
     add_question,
+    add_relation_claim,
     add_transformation,
     build_graph_dot,
     diff_graph_inputs,
@@ -48,6 +49,7 @@ from science_tool.graph.store import (
     query_predicates,
     query_uncertainty,
     read_graph_stats,
+    reject_relation_claim_predicate,
     set_boundary_role,
     set_treatment_outcome,
     shorten_uri,
@@ -551,6 +553,42 @@ def graph_add_claim(
     click.echo(f"Added claim: {claim_uri}")
 
 
+@graph_add.command("relation-claim")
+@click.argument("subject")
+@click.argument("predicate")
+@click.argument("object", metavar="OBJECT")
+@click.option("--source", required=True)
+@click.option("--confidence", type=float, default=None)
+@click.option("--text", default=None)
+@click.option("--id", "claim_id", default=None)
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_add_relation_claim(
+    subject: str,
+    predicate: str,
+    object: str,
+    source: str,
+    confidence: float | None,
+    text: str | None,
+    claim_id: str | None,
+    graph_path: Path,
+) -> None:
+    """Add a claim whose content is an explicit subject-predicate-object relation."""
+
+    claim_uri = add_relation_claim(
+        graph_path=graph_path,
+        subject=subject,
+        predicate=predicate,
+        obj=object,
+        source=source,
+        confidence=confidence,
+        text=text,
+        claim_id=claim_id,
+    )
+    click.echo(f"Added relation claim: {claim_uri}")
+
+
 @graph_add.command("hypothesis")
 @click.argument("hypothesis_id")
 @click.option("--text", required=True)
@@ -618,6 +656,7 @@ def graph_add_question(
 def graph_add_edge(subject: str, predicate: str, object: str, graph_layer: str, graph_path: Path) -> None:
     """Add an arbitrary edge to a selected named graph layer."""
 
+    reject_relation_claim_predicate(predicate)
     s_uri, p_uri, o_uri = add_edge(
         graph_path=graph_path, subject=subject, predicate=predicate, obj=object, graph_layer=graph_layer
     )

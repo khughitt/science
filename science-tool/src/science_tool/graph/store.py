@@ -56,6 +56,16 @@ PROJECT_ENTITY_PREFIXES: set[str] = {
     "inquiry",
     "task",
 }
+RELATION_CLAIM_PREDICATE_URIS: frozenset[URIRef] = frozenset(
+    {
+        SKOS.related,
+        SCI_NS.relatedTo,
+        SCIC_NS.causes,
+        SCIC_NS.confounds,
+        CITO_NS.supports,
+        CITO_NS.disputes,
+    }
+)
 
 INITIAL_GRAPH_TEMPLATE = """@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
@@ -188,6 +198,49 @@ def add_claim(
     return claim_uri
 
 
+def add_relation_claim(
+    graph_path: Path,
+    subject: str,
+    predicate: str,
+    obj: str,
+    source: str,
+    confidence: float | None,
+    text: str | None = None,
+    claim_id: str | None = None,
+) -> URIRef:
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    provenance = dataset.graph(_graph_uri("graph/provenance"))
+
+    if claim_id is not None:
+        token = _slug(claim_id)
+        if not token:
+            raise click.ClickException("Claim ID must contain at least one alphanumeric character")
+    else:
+        token = hashlib.sha1(f"{subject}|{predicate}|{obj}|{source}".encode("utf-8")).hexdigest()[:12]
+
+    claim_uri = URIRef(PROJECT_NS[f"relation_claim/{token}"])
+    subject_uri = _resolve_term(subject)
+    predicate_uri = _resolve_term(predicate)
+    object_uri = _resolve_term(obj)
+    claim_text = text or _derive_relation_claim_text(subject_uri, predicate_uri, object_uri)
+
+    knowledge.add((claim_uri, RDF.type, SCI_NS.Claim))
+    knowledge.add((claim_uri, RDF.type, SCI_NS.RelationClaim))
+    knowledge.add((claim_uri, SCHEMA_NS.text, Literal(claim_text)))
+    knowledge.add((claim_uri, SCI_NS.claimSubject, subject_uri))
+    knowledge.add((claim_uri, SCI_NS.claimPredicate, predicate_uri))
+    knowledge.add((claim_uri, SCI_NS.claimObject, object_uri))
+    knowledge.add((subject_uri, predicate_uri, object_uri))
+
+    provenance.add((claim_uri, PROV.wasDerivedFrom, _resolve_term(source)))
+    if confidence is not None:
+        provenance.add((claim_uri, SCI_NS.confidence, Literal(confidence, datatype=XSD.decimal)))
+
+    _save_dataset(dataset, graph_path)
+    return claim_uri
+
+
 def add_hypothesis(graph_path: Path, hypothesis_id: str, text: str, source: str, status: str | None = None) -> URIRef:
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
@@ -261,6 +314,14 @@ def add_edge(
 
     _save_dataset(dataset, graph_path)
     return s_uri, p_uri, o_uri
+
+
+def reject_relation_claim_predicate(predicate: str) -> None:
+    predicate_uri = _resolve_term(predicate)
+    if predicate_uri in RELATION_CLAIM_PREDICATE_URIS:
+        raise click.ClickException(
+            f"Predicate '{predicate}' is an uncertain scientific assertion; use 'graph add relation-claim' instead."
+        )
 
 
 def add_inquiry(
@@ -1928,6 +1989,23 @@ def _slug(value: str) -> str:
 
 def _graph_uri(layer: str) -> URIRef:
     return URIRef(PROJECT_NS[layer])
+
+
+def _derive_relation_claim_text(subject_uri: URIRef, predicate_uri: URIRef, object_uri: URIRef) -> str:
+    return (
+        f"{_relation_claim_label(subject_uri)} "
+        f"{_relation_claim_label(predicate_uri)} "
+        f"{_relation_claim_label(object_uri)}"
+    )
+
+
+def _relation_claim_label(uri: URIRef) -> str:
+    short = shorten_uri(str(uri))
+    if ":" in short:
+        short = short.split(":", 1)[1]
+    if "/" in short:
+        short = short.rsplit("/", 1)[1]
+    return short.replace("_", " ")
 
 
 def _resolve_term(value: str) -> URIRef:

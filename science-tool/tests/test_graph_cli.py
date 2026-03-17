@@ -8,6 +8,7 @@ from rdflib import Dataset
 from rdflib.namespace import PROV, RDF, SKOS, Namespace
 
 from science_tool.cli import main
+from science_tool.graph.store import add_edge as add_store_edge
 
 EXPECTED_GRAPHS = (
     "graph/knowledge",
@@ -213,7 +214,7 @@ def test_graph_add_edge_targets_requested_layer() -> None:
                 "add",
                 "edge",
                 "concept/brca1",
-                "sci:relatedTo",
+                "skos:broader",
                 "concept/tp53",
                 "--graph",
                 "graph/knowledge",
@@ -224,7 +225,76 @@ def test_graph_add_edge_targets_requested_layer() -> None:
         dataset = Dataset()
         dataset.parse(source="knowledge/graph.trig", format="trig")
         knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        assert (PROJECT_NS["concept/brca1"], SCI.relatedTo, PROJECT_NS["concept/tp53"]) in knowledge
+        assert (PROJECT_NS["concept/brca1"], SKOS.broader, PROJECT_NS["concept/tp53"]) in knowledge
+
+
+def test_graph_add_relation_claim_writes_claim_types_and_relation_metadata() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        relation_claim = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "concept/brca1",
+                "cito:supports",
+                "hypothesis/h3",
+                "--source",
+                "paper:doi_10_1038_s41586_023_06957_x",
+                "--confidence",
+                "0.8",
+                "--id",
+                "RC1",
+            ],
+        )
+        assert relation_claim.exit_code == 0
+
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+        claim_uri = PROJECT_NS["relation_claim/rc1"]
+
+        assert (claim_uri, RDF.type, SCI.Claim) in knowledge
+        assert (claim_uri, RDF.type, SCI.RelationClaim) in knowledge
+        assert (claim_uri, SCI.claimSubject, PROJECT_NS["concept/brca1"]) in knowledge
+        assert (claim_uri, SCI.claimPredicate, Namespace("http://purl.org/spar/cito/").supports) in knowledge
+        assert (claim_uri, SCI.claimObject, PROJECT_NS["hypothesis/h3"]) in knowledge
+        assert (
+            claim_uri,
+            SCHEMA.text,
+            None,
+        ) in knowledge
+        assert (claim_uri, PROV.wasDerivedFrom, PROJECT_NS["paper/doi_10_1038_s41586_023_06957_x"]) in provenance
+        assert any(pred == SCI.confidence for _, pred, _ in provenance.triples((claim_uri, None, None)))
+
+
+def test_graph_add_edge_rejects_scientific_assertion_predicates() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        edge = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "edge",
+                "concept/brca1",
+                "cito:supports",
+                "hypothesis/h3",
+                "--graph",
+                "graph/knowledge",
+            ],
+        )
+
+        assert edge.exit_code != 0
+        assert "relation-claim" in edge.output
 
 
 def test_graph_add_edge_rejects_unknown_curie_prefix() -> None:
@@ -304,38 +374,8 @@ def test_graph_validate_fails_on_causal_cycle() -> None:
 
     with runner.isolated_filesystem():
         assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "edge",
-                    "concept/x",
-                    "scic:causes",
-                    "concept/y",
-                    "--graph",
-                    "graph/causal",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "edge",
-                    "concept/y",
-                    "scic:causes",
-                    "concept/x",
-                    "--graph",
-                    "graph/causal",
-                ],
-            ).exit_code
-            == 0
-        )
+        add_store_edge(Path("knowledge/graph.trig"), "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
+        add_store_edge(Path("knowledge/graph.trig"), "concept/y", "scic:causes", "concept/x", graph_layer="graph/causal")
 
         result = runner.invoke(main, ["graph", "validate", "--format", "json"])
         assert result.exit_code != 0
@@ -512,7 +552,7 @@ def test_graph_viz_outputs_dot_to_stdout() -> None:
                     "add",
                     "edge",
                     "concept/brca1",
-                    "sci:relatedTo",
+                    "skos:broader",
                     "concept/tp53",
                     "--graph",
                     "graph/knowledge",
@@ -524,7 +564,7 @@ def test_graph_viz_outputs_dot_to_stdout() -> None:
         viz = runner.invoke(main, ["graph", "viz", "--layer", "graph/knowledge"])
         assert viz.exit_code == 0
         assert "digraph" in viz.output
-        assert "relatedTo" in viz.output
+        assert "broader" in viz.output
 
 
 def test_graph_viz_writes_dot_file() -> None:
@@ -572,7 +612,7 @@ def test_graph_neighborhood_query_supports_json_format() -> None:
                     "add",
                     "edge",
                     "concept/brca1",
-                    "sci:relatedTo",
+                    "skos:broader",
                     "concept/tp53",
                     "--graph",
                     "graph/knowledge",
@@ -584,7 +624,7 @@ def test_graph_neighborhood_query_supports_json_format() -> None:
         neighborhood = runner.invoke(main, ["graph", "neighborhood", "BRCA1", "--format", "json"])
         assert neighborhood.exit_code == 0
         payload = json.loads(neighborhood.output)
-        assert any(row["predicate"].endswith("relatedTo") for row in payload["rows"])
+        assert any(row["predicate"].endswith("broader") for row in payload["rows"])
 
 
 def test_graph_claims_query_filters_about_term() -> None:
@@ -647,7 +687,7 @@ def _setup_evidence_graph(runner: CliRunner) -> None:
         ).exit_code
         == 0
     )
-    # Add claim entities and link them with cito predicates
+    # Add claim entities and link them with relation claims
     assert (
         runner.invoke(
             main,
@@ -667,7 +707,16 @@ def _setup_evidence_graph(runner: CliRunner) -> None:
     assert (
         runner.invoke(
             main,
-            ["graph", "add", "edge", "claim/ev1", "cito:supports", "hypothesis/h3", "--graph", "graph/knowledge"],
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "claim/ev1",
+                "cito:supports",
+                "hypothesis/h3",
+                "--source",
+                "paper:doi_10_1111_a",
+            ],
         ).exit_code
         == 0
     )
@@ -690,7 +739,16 @@ def _setup_evidence_graph(runner: CliRunner) -> None:
     assert (
         runner.invoke(
             main,
-            ["graph", "add", "edge", "claim/ev2", "cito:disputes", "hypothesis/h3", "--graph", "graph/knowledge"],
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "claim/ev2",
+                "cito:disputes",
+                "hypothesis/h3",
+                "--source",
+                "paper:doi_10_2222_b",
+            ],
         ).exit_code
         == 0
     )
@@ -774,7 +832,7 @@ def test_graph_gaps_identifies_low_connectivity_and_missing_provenance() -> None
                     "add",
                     "edge",
                     "concept/brca1",
-                    "sci:relatedTo",
+                    "skos:broader",
                     "concept/orphan",
                     "--graph",
                     "graph/knowledge",
@@ -910,15 +968,24 @@ def test_graph_scan_prose_returns_empty_for_unannotated_dir() -> None:
         assert len(payload["rows"]) == 0
 
 
-def test_cito_prefix_resolves_in_add_edge() -> None:
+def test_cito_prefix_resolves_in_relation_claim() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
         assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        edge = runner.invoke(
+        relation_claim = runner.invoke(
             main,
-            ["graph", "add", "edge", "claim/c1", "cito:supports", "hypothesis/h1", "--graph", "graph/knowledge"],
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "claim/c1",
+                "cito:supports",
+                "hypothesis/h1",
+                "--source",
+                "paper:doi_10_1234_example",
+            ],
         )
-        assert edge.exit_code == 0
+        assert relation_claim.exit_code == 0
         dataset = Dataset()
         dataset.parse(source="knowledge/graph.trig", format="trig")
         knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
@@ -1223,7 +1290,7 @@ def test_graph_add_edge_slugifies_bare_terms() -> None:
                 "add",
                 "edge",
                 "concept/nucleotide_transformer_v2",
-                "skos:related",
+                "skos:broader",
                 "Some New Thing",
                 "--graph",
                 "graph/knowledge",
@@ -1237,7 +1304,7 @@ def test_graph_add_edge_slugifies_bare_terms() -> None:
         # The bare term "Some New Thing" should resolve to slugified URI
         assert (
             PROJECT_NS["concept/nucleotide_transformer_v2"],
-            Namespace("http://www.w3.org/2004/02/skos/core#")["related"],
+            Namespace("http://www.w3.org/2004/02/skos/core#")["broader"],
             PROJECT_NS["some_new_thing"],
         ) in knowledge
 
@@ -1258,7 +1325,7 @@ def test_graph_add_edge_warns_on_nonexistent_entity() -> None:
                 "add",
                 "edge",
                 "concept/brca1",
-                "skos:related",
+                "skos:broader",
                 "concept/nonexistent",
                 "--graph",
                 "graph/knowledge",
@@ -1280,9 +1347,9 @@ def test_graph_add_edge_echoes_resolved_uris() -> None:
 
         edge = runner.invoke(
             main,
-            ["graph", "add", "edge", "concept/brca1", "skos:related", "concept/tp53", "--graph", "graph/knowledge"],
+            ["graph", "add", "edge", "concept/brca1", "skos:broader", "concept/tp53", "--graph", "graph/knowledge"],
         )
         assert edge.exit_code == 0
         # Output should show resolved short forms, not raw input
         assert "concept/brca1" in edge.output
-        assert "skos:related" in edge.output
+        assert "skos:broader" in edge.output
