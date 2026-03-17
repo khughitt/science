@@ -9,7 +9,7 @@ import subprocess
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 import click
 from rdflib import Dataset, Literal, Namespace, URIRef
@@ -26,11 +26,11 @@ DCTERMS_NS = Namespace("http://purl.org/dc/terms/")
 REVISION_URI = URIRef(PROJECT_NS["graph_revision"])
 
 
-class InquiryEdge(TypedDict, total=False):
+class InquiryEdge(TypedDict):
     subject: str
     predicate: str
     object: str
-    claims: list[str]
+    claims: NotRequired[list[str]]
 
 
 class InquiryInfo(TypedDict):

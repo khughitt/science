@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections import deque
 from pathlib import Path
+from typing import Sequence
 
 from rdflib import URIRef
 
-from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry, _variable_name
+from science_tool.causal.export_pgmpy import CausalEdge, ClaimBundle, _get_causal_edges_for_inquiry, _variable_name
 from science_tool.graph.store import (
     SCHEMA_NS,
     _graph_uri,
@@ -17,7 +18,7 @@ from science_tool.graph.store import (
 )
 
 
-def _topological_sort(edges: list[dict[str, str]]) -> list[str]:
+def _topological_sort(edges: Sequence[CausalEdge]) -> list[str]:
     """Topological sort of variable names derived from causal edges."""
     graph: dict[str, list[str]] = {}
     in_degree: dict[str, int] = {}
@@ -46,7 +47,7 @@ def _topological_sort(edges: list[dict[str, str]]) -> list[str]:
     return result
 
 
-def _get_parents(var_name: str, edges: list[dict[str, str]]) -> list[str]:
+def _get_parents(var_name: str, edges: Sequence[CausalEdge]) -> list[str]:
     """Get parent variable names (causes) for a variable."""
     return [
         _variable_name(e["subject"])
@@ -90,7 +91,7 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
     sorted_vars = _topological_sort(edges)
 
     # Build per-edge claim lookup to preserve provenance for each parent -> child edge.
-    edge_claims: dict[tuple[str, str], list[dict]] = {}
+    edge_claims: dict[tuple[str, str], list[ClaimBundle]] = {}
     for e in edges:
         if e["pred_type"] == "causes" and e.get("claims"):
             s_name = _variable_name(e["subject"])

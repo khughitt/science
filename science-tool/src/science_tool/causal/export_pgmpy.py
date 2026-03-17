@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from rdflib import URIRef
 
@@ -129,16 +129,15 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[CausalEdg
                     text_obj = next(knowledge_graph.objects(claim_uri, SCHEMA_NS.text), None)
                     confidence_obj = next(provenance_graph.objects(claim_uri, SCI_NS.confidence), None)
                     evidence = _collect_evidence_signals(knowledge_graph, provenance_graph, claim_uri)
-                    edge["claims"].append(
-                        {
-                            "uri": str(claim_uri),
-                            "text": str(text_obj) if text_obj is not None else shorten_uri(str(claim_uri)),
-                            "confidence": float(str(confidence_obj)) if confidence_obj is not None else None,
-                            "sources": _source_strings(provenance_graph, claim_uri),
-                            "support_count": int(evidence["support_count"]),
-                            "dispute_count": int(evidence["dispute_count"]),
-                        }
-                    )
+                    claim_bundle: ClaimBundle = {
+                        "uri": str(claim_uri),
+                        "text": str(text_obj) if text_obj is not None else shorten_uri(str(claim_uri)),
+                        "confidence": float(str(confidence_obj)) if confidence_obj is not None else None,
+                        "sources": _source_strings(provenance_graph, claim_uri),
+                        "support_count": cast(int, evidence["support_count"]),
+                        "dispute_count": cast(int, evidence["dispute_count"]),
+                    }
+                    edge["claims"].append(claim_bundle)
 
     return list(edge_map.values())
 
@@ -165,8 +164,10 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
     revision_uri = URIRef("http://example.org/project/graph_revision")
     revision_hash = str(next(provenance_graph.objects(revision_uri, SCHEMA_NS.sha256), "unknown"))
 
-    treatment_name = _variable_name(info["treatment"]) if info.get("treatment") else None
-    outcome_name = _variable_name(info["outcome"]) if info.get("outcome") else None
+    treatment = info["treatment"]
+    outcome = info["outcome"]
+    treatment_name = _variable_name(treatment) if treatment else None
+    outcome_name = _variable_name(outcome) if outcome else None
 
     # Separate causes vs confounds
     cause_edges = [e for e in edges if e["pred_type"] == "causes"]

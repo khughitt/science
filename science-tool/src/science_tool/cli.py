@@ -868,8 +868,9 @@ def inquiry_show(slug: str, output_format: str, graph_path: Path) -> None:
         click.echo(f"  Edges: {len(info['edges'])}")
         for edge in info["edges"]:
             line = f"    {shorten_uri(edge['subject'])} --[{shorten_uri(edge['predicate'])}]--> {shorten_uri(edge['object'])}"
-            if edge.get("claims"):
-                claims = ", ".join(shorten_uri(claim) for claim in edge["claims"])
+            claims = edge.get("claims")
+            if claims:
+                claims = ", ".join(shorten_uri(claim) for claim in claims)
                 line = f"{line} [{claims}]"
             click.echo(line)
 
