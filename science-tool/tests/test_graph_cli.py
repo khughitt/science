@@ -4,12 +4,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from click.testing import CliRunner
-from rdflib import Dataset
+from rdflib import Dataset, Literal
 from rdflib.namespace import PROV, RDF, SKOS, Namespace
 
 from science_tool.cli import main
-from science_tool.graph.store import add_edge as add_store_edge
-
 EXPECTED_GRAPHS = (
     "graph/knowledge",
     "graph/causal",
@@ -264,11 +262,8 @@ def test_graph_add_relation_claim_writes_claim_types_and_relation_metadata() -> 
         assert (claim_uri, SCI.claimSubject, PROJECT_NS["concept/brca1"]) in knowledge
         assert (claim_uri, SCI.claimPredicate, Namespace("http://purl.org/spar/cito/").supports) in knowledge
         assert (claim_uri, SCI.claimObject, PROJECT_NS["hypothesis/h3"]) in knowledge
-        assert (
-            claim_uri,
-            SCHEMA.text,
-            None,
-        ) in knowledge
+        assert (PROJECT_NS["concept/brca1"], Namespace("http://purl.org/spar/cito/").supports, PROJECT_NS["hypothesis/h3"]) not in knowledge
+        assert (claim_uri, SCHEMA.text, Literal("brca1 supports h3")) in knowledge
         assert (claim_uri, PROV.wasDerivedFrom, PROJECT_NS["paper/doi_10_1038_s41586_023_06957_x"]) in provenance
         assert any(pred == SCI.confidence for _, pred, _ in provenance.triples((claim_uri, None, None)))
 
@@ -374,8 +369,38 @@ def test_graph_validate_fails_on_causal_cycle() -> None:
 
     with runner.isolated_filesystem():
         assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        add_store_edge(Path("knowledge/graph.trig"), "concept/x", "scic:causes", "concept/y", graph_layer="graph/causal")
-        add_store_edge(Path("knowledge/graph.trig"), "concept/y", "scic:causes", "concept/x", graph_layer="graph/causal")
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "edge",
+                    "concept/x",
+                    "scic:causes",
+                    "concept/y",
+                    "--graph",
+                    "graph/causal",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "edge",
+                    "concept/y",
+                    "scic:causes",
+                    "concept/x",
+                    "--graph",
+                    "graph/causal",
+                ],
+            ).exit_code
+            == 0
+        )
 
         result = runner.invoke(main, ["graph", "validate", "--format", "json"])
         assert result.exit_code != 0
@@ -989,8 +1014,9 @@ def test_cito_prefix_resolves_in_relation_claim() -> None:
         dataset = Dataset()
         dataset.parse(source="knowledge/graph.trig", format="trig")
         knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        claim_uri = next(knowledge.subjects(RDF.type, SCI.RelationClaim))
         cito_supports = Namespace("http://purl.org/spar/cito/")["supports"]
-        assert (PROJECT_NS["claim/c1"], cito_supports, PROJECT_NS["hypothesis/h1"]) in knowledge
+        assert (claim_uri, SCI.claimPredicate, cito_supports) in knowledge
 
 
 def test_dcterms_prefix_resolves_in_add_edge() -> None:

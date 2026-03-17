@@ -49,6 +49,7 @@ PROJECT_ENTITY_PREFIXES: set[str] = {
     "paper",
     "concept",
     "claim",
+    "relation_claim",
     "hypothesis",
     "dataset",
     "question",
@@ -231,7 +232,6 @@ def add_relation_claim(
     knowledge.add((claim_uri, SCI_NS.claimSubject, subject_uri))
     knowledge.add((claim_uri, SCI_NS.claimPredicate, predicate_uri))
     knowledge.add((claim_uri, SCI_NS.claimObject, object_uri))
-    knowledge.add((subject_uri, predicate_uri, object_uri))
 
     provenance.add((claim_uri, PROV.wasDerivedFrom, _resolve_term(source)))
     if confidence is not None:
@@ -303,6 +303,11 @@ def add_edge(
     s_uri = _resolve_term(subject)
     p_uri = _resolve_term(predicate)
     o_uri = _resolve_term(obj)
+
+    if graph_layer == "graph/knowledge" and p_uri in RELATION_CLAIM_PREDICATE_URIS:
+        raise click.ClickException(
+            f"Predicate '{predicate}' is an uncertain scientific assertion; use 'graph add relation-claim' instead."
+        )
 
     # Warn if subject/object URIs don't exist in any graph yet
     for uri, label in [(s_uri, subject), (o_uri, obj)]:
@@ -1717,6 +1722,21 @@ def query_evidence(
     for subj, _, _ in knowledge.triples((None, CITO_NS.discusses, hyp_uri)):
         if isinstance(subj, URIRef):
             relation_map.setdefault(subj, "discusses")
+    for claim_uri, _, predicate_uri in knowledge.triples((None, SCI_NS.claimPredicate, None)):
+        if not isinstance(claim_uri, URIRef) or not isinstance(predicate_uri, URIRef):
+            continue
+        if (claim_uri, RDF.type, SCI_NS.RelationClaim) not in knowledge:
+            continue
+
+        claim_object = next(knowledge.objects(claim_uri, SCI_NS.claimObject), None)
+        if claim_object != hyp_uri:
+            continue
+        if predicate_uri == CITO_NS.supports:
+            relation_map[claim_uri] = "supports"
+        elif predicate_uri == CITO_NS.disputes:
+            relation_map[claim_uri] = "disputes"
+        elif predicate_uri == CITO_NS.discusses:
+            relation_map.setdefault(claim_uri, "discusses")
 
     for ev_uri, relation in relation_map.items():
         text_obj = next(knowledge.objects(ev_uri, SCHEMA_NS.text), None)

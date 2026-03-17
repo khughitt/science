@@ -49,7 +49,6 @@ from science_tool.graph.store import (
     query_predicates,
     query_uncertainty,
     read_graph_stats,
-    reject_relation_claim_predicate,
     set_boundary_role,
     set_treatment_outcome,
     shorten_uri,
@@ -656,7 +655,6 @@ def graph_add_question(
 def graph_add_edge(subject: str, predicate: str, object: str, graph_layer: str, graph_path: Path) -> None:
     """Add an arbitrary edge to a selected named graph layer."""
 
-    reject_relation_claim_predicate(predicate)
     s_uri, p_uri, o_uri = add_edge(
         graph_path=graph_path, subject=subject, predicate=predicate, obj=object, graph_layer=graph_layer
     )
