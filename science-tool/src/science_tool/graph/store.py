@@ -1838,10 +1838,10 @@ def _linked_claims_for_hypothesis(knowledge, hypothesis_uri: URIRef) -> list[URI
 
 
 def _source_strings(provenance, primary_uri: URIRef, fallback_uri: URIRef | None = None) -> list[str]:
-    sources = sorted({str(src) for src in provenance.objects(primary_uri, PROV.wasDerivedFrom)})
-    if sources or fallback_uri is None:
-        return sources
-    return sorted({str(src) for src in provenance.objects(fallback_uri, PROV.wasDerivedFrom)})
+    sources = {str(src) for src in provenance.objects(primary_uri, PROV.wasDerivedFrom)}
+    if fallback_uri is not None:
+        sources.update(str(src) for src in provenance.objects(fallback_uri, PROV.wasDerivedFrom))
+    return sorted(sources)
 
 
 def _evidence_targets_for_uri(knowledge, target_uri: URIRef) -> list[URIRef]:

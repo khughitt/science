@@ -1081,71 +1081,6 @@ def test_graph_gaps_identifies_low_connectivity_and_missing_provenance() -> None
             ).exit_code
             == 0
         )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "claim",
-                    "Second supporting evidence from same source",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                    "--id",
-                    "ev2",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "relation-claim",
-                    "claim/ev2",
-                    "cito:supports",
-                    "relation_claim/rc1",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "claim",
-                    "Second supporting evidence from same source",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                    "--id",
-                    "ev2",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "relation-claim",
-                    "claim/ev2",
-                    "cito:supports",
-                    "relation_claim/rc1",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                ],
-            ).exit_code
-            == 0
-        )
-
         result = runner.invoke(main, ["graph", "gaps", "concept/brca1", "--format", "json"])
         assert result.exit_code == 0
         payload = json.loads(result.output)
@@ -1232,6 +1167,38 @@ def test_graph_gaps_distinguishes_structural_and_evidential_fragility() -> None:
                     "add",
                     "relation-claim",
                     "claim/ev1",
+                    "cito:supports",
+                    "relation_claim/rc1",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Second supporting evidence from same source",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                    "--id",
+                    "ev2",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/ev2",
                     "cito:supports",
                     "relation_claim/rc1",
                     "--source",
@@ -1479,6 +1446,72 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
             ).exit_code
             == 0
         )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Multi-source BRCA1 claim",
+                    "--source",
+                    "paper:doi_10_5555_e",
+                    "--id",
+                    "multi",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Reusable evidence node for multi-source claim",
+                    "--source",
+                    "paper:doi_10_5555_e",
+                    "--id",
+                    "ev5",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/ev5",
+                    "cito:supports",
+                    "claim/multi",
+                    "--source",
+                    "paper:doi_10_5555_e",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/ev5",
+                    "cito:supports",
+                    "claim/multi",
+                    "--source",
+                    "paper:doi_10_6666_f",
+                    "--id",
+                    "multi_second_source",
+                ],
+            ).exit_code
+            == 0
+        )
 
         result = runner.invoke(main, ["graph", "uncertainty", "--format", "json"])
         assert result.exit_code == 0
@@ -1492,6 +1525,7 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
         assert any(row["text"] == "Single-source BRCA1 claim" for row in rows)
         single_row = next(row for row in rows if row["text"] == "Single-source BRCA1 claim")
         assert "single_source" in single_row["signals"]
+        assert all(row["text"] != "Multi-source BRCA1 claim" for row in rows)
 
 
 def test_graph_uncertainty_includes_disputed_epistemic_status() -> None:
