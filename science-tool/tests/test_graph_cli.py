@@ -292,6 +292,34 @@ def test_graph_add_edge_rejects_scientific_assertion_predicates() -> None:
         assert "relation-claim" in edge.output
 
 
+def test_graph_add_edge_allows_structural_skos_related_in_knowledge() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        edge = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "edge",
+                "concept/brca1",
+                "skos:related",
+                "concept/tp53",
+                "--graph",
+                "graph/knowledge",
+            ],
+        )
+
+        assert edge.exit_code == 0
+
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        assert (PROJECT_NS["concept/brca1"], SKOS.related, PROJECT_NS["concept/tp53"]) in knowledge
+
+
 def test_graph_add_edge_rejects_unknown_curie_prefix() -> None:
     runner = CliRunner()
 
@@ -779,6 +807,122 @@ def _setup_evidence_graph(runner: CliRunner) -> None:
     )
 
 
+def _setup_claim_backed_hypothesis_evidence_graph(runner: CliRunner) -> None:
+    assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+    assert (
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "hypothesis",
+                "H3",
+                "--text",
+                "BRCA1 drives resistance",
+                "--source",
+                "paper:doi_10_1111_a",
+            ],
+        ).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "claim",
+                "Primary BRCA1 resistance claim",
+                "--source",
+                "paper:doi_10_1111_a",
+                "--id",
+                "main",
+            ],
+        ).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "claim/main",
+                "cito:discusses",
+                "hypothesis/h3",
+                "--source",
+                "paper:doi_10_1111_a",
+            ],
+        ).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "claim",
+                "Literature supports BRCA1 role",
+                "--source",
+                "paper:doi_10_1111_a",
+                "--id",
+                "ev1",
+            ],
+        ).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "claim/ev1",
+                "cito:supports",
+                "claim/main",
+                "--source",
+                "paper:doi_10_1111_a",
+            ],
+        ).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "claim",
+                "Counter-evidence against BRCA1",
+                "--source",
+                "paper:doi_10_2222_b",
+                "--id",
+                "ev2",
+            ],
+        ).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "claim/ev2",
+                "cito:disputes",
+                "claim/main",
+                "--source",
+                "paper:doi_10_2222_b",
+            ],
+        ).exit_code
+        == 0
+    )
+
+
 def test_graph_evidence_groups_by_supports_refutes() -> None:
     runner = CliRunner()
 
@@ -792,6 +936,8 @@ def test_graph_evidence_groups_by_supports_refutes() -> None:
         assert len(rows) == 2
         relations = {row["relation"] for row in rows}
         assert relations == {"supports", "disputes"}
+        texts = {row["text"] for row in rows}
+        assert texts == {"Literature supports BRCA1 role", "Counter-evidence against BRCA1"}
 
 
 def test_graph_evidence_returns_empty_for_unknown_hypothesis() -> None:
@@ -804,6 +950,42 @@ def test_graph_evidence_returns_empty_for_unknown_hypothesis() -> None:
         assert result.exit_code == 0
         payload = json.loads(result.output)
         assert len(payload["rows"]) == 0
+
+
+def test_graph_evidence_returns_support_and_dispute_for_claim() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        _setup_claim_backed_hypothesis_evidence_graph(runner)
+
+        result = runner.invoke(main, ["graph", "evidence", "claim/main", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        rows = payload["rows"]
+        assert len(rows) == 2
+        assert {row["relation"] for row in rows} == {"supports", "disputes"}
+        assert {row["text"] for row in rows} == {
+            "Literature supports BRCA1 role",
+            "Counter-evidence against BRCA1",
+        }
+
+
+def test_graph_evidence_hypothesis_aggregates_linked_claim_evidence() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        _setup_claim_backed_hypothesis_evidence_graph(runner)
+
+        result = runner.invoke(main, ["graph", "evidence", "hypothesis/h3", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        rows = payload["rows"]
+        assert len(rows) == 2
+        assert {row["relation"] for row in rows} == {"supports", "disputes"}
+        assert {row["text"] for row in rows} == {
+            "Literature supports BRCA1 role",
+            "Counter-evidence against BRCA1",
+        }
 
 
 def test_graph_coverage_shows_measured_and_observed_status() -> None:

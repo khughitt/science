@@ -316,16 +316,16 @@ def graph_claims(about: str, limit: int, output_format: str, graph_path: Path) -
 
 
 @graph.command("evidence")
-@click.argument("hypothesis_id")
+@click.argument("target_ref")
 @click.option("--limit", type=int, default=200, show_default=True)
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_evidence(hypothesis_id: str, limit: int, output_format: str, graph_path: Path) -> None:
-    """Return evidence for/against a hypothesis, grouped by supports/refutes."""
+def graph_evidence(target_ref: str, limit: int, output_format: str, graph_path: Path) -> None:
+    """Return support/dispute evidence for a claim, or aggregate claim-backed evidence for a hypothesis."""
 
-    rows = query_evidence(graph_path=graph_path, hypothesis_id=hypothesis_id, limit=limit)
+    rows = query_evidence(graph_path=graph_path, target_ref=target_ref, limit=limit)
     emit_query_rows(
         output_format=output_format,
         title="Graph Evidence",
