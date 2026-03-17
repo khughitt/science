@@ -64,6 +64,7 @@ RELATION_CLAIM_PREDICATE_URIS: frozenset[URIRef] = frozenset(
         SCIC_NS.confounds,
         CITO_NS.supports,
         CITO_NS.disputes,
+        CITO_NS.discusses,
     }
 )
 
@@ -1541,6 +1542,7 @@ def validate_graph(graph_path: Path) -> tuple[list[dict[str, str]], bool]:
         SKOS.note,
         SKOS.definition,
         SCHEMA_NS.identifier,
+        SCHEMA_NS.text,
         SCI_NS.projectStatus,
     }
 

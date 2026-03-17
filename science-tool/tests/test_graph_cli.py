@@ -291,6 +291,23 @@ def test_graph_add_edge_rejects_scientific_assertion_predicates() -> None:
         assert edge.exit_code != 0
         assert "relation-claim" in edge.output
 
+        discusses = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "edge",
+                "claim/c1",
+                "cito:discusses",
+                "hypothesis/h3",
+                "--graph",
+                "graph/knowledge",
+            ],
+        )
+
+        assert discusses.exit_code != 0
+        assert "relation-claim" in discusses.output
+
 
 def test_graph_add_edge_allows_structural_skos_related_in_knowledge() -> None:
     runner = CliRunner()
@@ -453,6 +470,36 @@ def test_graph_validate_warns_orphaned_nodes() -> None:
 
         result = runner.invoke(main, ["graph", "validate", "--format", "json"])
         # Orphan check should be a warning (status=warn), not a failure
+        assert result.exit_code == 0
+
+        payload = json.loads(result.output)
+        orphan_rows = [r for r in payload["rows"] if r["check"] == "orphaned_nodes"]
+        assert len(orphan_rows) == 1
+        assert orphan_rows[0]["status"] == "warn"
+        assert "1" in orphan_rows[0]["details"]
+
+
+def test_graph_validate_warns_orphaned_claim_nodes() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Unlinked claim",
+                    "--source",
+                    "paper:doi_10_8888_h",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "validate", "--format", "json"])
         assert result.exit_code == 0
 
         payload = json.loads(result.output)
