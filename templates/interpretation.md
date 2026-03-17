@@ -16,140 +16,65 @@ input: "{{path to results, notebook, or prose description}}"
 ## Findings Summary
 
 <!--
-  Summarize key results. For each finding, classify signal strength.
+Summarize the main results.
+For each finding, note signal strength and evidence type.
+-->
 
-  Core categories (always available):
-  - Strong: clear, replicated, large effect
-  - Suggestive: directional but uncertain
-  - Null: no effect detected (important — record, don't discard)
-  - Ambiguous: multiple interpretations possible
-  - Methodological: finding about the evaluation framework itself, not the phenomenon
+## Evidence Quality
 
-  Aspect-contributed categories (include if the project has the relevant aspect):
-  - Descriptive (computational-analysis): structure observed but not statistically testable
-  - Confounded (causal-modeling): effect present but likely due to unmeasured variable
+<!--
+Before updating beliefs, record:
+- data quality or QA concerns
+- sample size and power concerns
+- confirmatory vs exploratory status
+- dependence or independence relative to prior evidence
+-->
 
-  Include effect sizes and confidence intervals where available.
+## Claim-Level Updates
+
+<!--
+For each relevant claim or relation-claim:
+- what supports it?
+- what disputes it?
+- what remains unresolved?
+
+This is the core epistemic section.
+-->
+
+## Hypothesis-Level Implications
+
+<!--
+How do the claim-level updates affect the broader hypothesis?
+Avoid direct "proved/refuted" language unless the case is genuinely overwhelming.
 -->
 
 ## Evidence vs. Open Questions
 
 <!--
-  For each open question in doc/questions/:
-  - Is it relevant to these results?
-  - If relevant: does the evidence address, partially address, or leave it unchanged?
-  - Note new constraints, refined scope, or resolved sub-questions
-
-  This section works with or without formal hypotheses.
-  If the project has the hypothesis-testing aspect, a formal Hypothesis Evaluation
-  section will follow (contributed by that aspect).
--->
-
-<!-- ASPECT SECTIONS INSERTED HERE -->
-<!--
-  Loaded aspects may contribute additional sections at this point.
-  Follow the placement guidance in each aspect file.
--->
-
-## Pre-registration Cross-check (if applicable)
-
-<!--
-  If a pre-registration document exists for the hypotheses or inquiry being interpreted:
-  - Does the result match expectations? If not, characterize the divergence.
-  - Have QA checks passed?
-  - Label each conclusion as confirmatory (pre-registered) or exploratory (post-hoc).
-  - Has the interpretation drifted from pre-registered decision criteria?
-
-  If no pre-registration exists, note: "No pre-registration on file."
--->
-
-## Data Quality Checks
-
-<!--
-  Basic data quality verification — this step has caught bugs at interpretation time.
-  Check and note any issues:
-  - Control uniqueness: are control samples distinct from each other and from test samples?
-  - Dimensionality: do embedding/feature dimensions match expectations?
-  - Sample counts: do they match the experimental design?
-  - Value ranges: are metrics in plausible ranges? Anything suspiciously perfect or impossible?
-
-  Flag issues as "Data Quality Issue" findings — these indicate the data generation
-  may be broken, not just the analysis.
-
-  Skip this section in Dev mode or if no empirical data is involved.
--->
-
-## User Questions
-
-<!--
-  Questions raised by the user during interpretation.
-  Record each question and provide a direct answer with supporting evidence.
-  User-prompted follow-ups are often the most insightful — they deserve first-class treatment.
-
-  Skip this section if no user questions were raised.
+Which open questions were addressed, partially addressed, or left unchanged?
 -->
 
 ## New Questions Raised
 
 <!--
-  Questions that did not exist before these results.
-  For each, note:
-  - Priority (high / medium / low)
-  - Type (empirical / methodological / theoretical)
-  - Suggested approach to investigate
+For each new question:
+- priority
+- type
+- suggested next evidence
 -->
 
-## Limitations & Caveats
+## Limitations & Residual Uncertainty
 
 <!--
-  What these results do NOT tell us.
-  - Threats to internal validity (confounds, selection bias, measurement error)
-  - Threats to external validity (generalizability, population differences)
-  - Statistical limitations (power, multiple comparisons, model assumptions)
-  - Data quality concerns
--->
-
-## Additional Observations
-
-<!--
-  Catch-all for findings that don't fit neatly into other sections:
-  - Sub-group or decomposition results
-  - Control quality concerns
-  - Metric or measurement validity issues
-  - Unexpected patterns worth noting
-
-  Skip this section if there's nothing to add.
--->
-
-## Cumulative Evidence (if applicable)
-
-<!--
-  If this interpretation builds on or depends on prior interpretations
-  (e.g., Phase 3B results that only make sense in context of Phase 3A),
-  summarize the cumulative picture across related interpretations.
-  Cross-reference prior interpretation documents by ID.
-
-  Omit this section if the interpretation is standalone.
--->
-
-## Decision Gate (if applicable)
-
-<!--
-  If these results trigger a pre-defined gate from a pipeline plan
-  or project roadmap:
-  - What was the gate condition?
-  - What is the verdict (pass / fail / conditional)?
-  - What path does this open or close?
-  - What decision follows from this verdict?
-
-  Omit this section if no gate applies.
+What prevents these results from being decisive?
+What remains fragile, contested, or underdetermined?
 -->
 
 ## Updated Priorities
 
 <!--
-  Given these findings, what changes in the research plan?
-  - Tasks to add, reprioritize, or drop
-  - Open questions to pursue further or set aside
-  - Next commands to run (discuss, next-steps, add-hypothesis, etc.)
+Given these findings, what should happen next?
+- claims to investigate further
+- tasks to add or reprioritize
+- evidence gaps worth targeting
 -->

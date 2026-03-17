@@ -1,5 +1,5 @@
 ---
-description: Formalize a research model with full evidence provenance. Every variable gets a type, every edge gets evidence, every parameter gets a source. Use when the user wants to make a sketch rigorous, add provenance, resolve unknowns, or formalize assumptions. Also use when the user says "specify", "formalize", "add evidence", "make rigorous", or "resolve unknowns".
+description: Formalize a research model with explicit claims, evidence provenance, and residual uncertainty. Use when the user wants to make a sketch rigorous, attach support/dispute to candidate relations, resolve unknowns, or formalize assumptions.
 ---
 
 # Specify a Research Model
@@ -8,168 +8,170 @@ description: Formalize a research model with full evidence provenance. Every var
 
 ## Overview
 
-This command takes an inquiry from sketch to specified status. Every variable gets a formal type, every edge gets evidence, every parameter gets provenance metadata (AnnotatedParam-style), and all `sci:Unknown` nodes are resolved or justified.
+This command takes an inquiry from sketch to specified status.
 
-Can start from an existing sketch (preferred) or from scratch.
+In the skeptical model:
+- variables get formal types
+- non-trivial scientific relations become explicit `relation_claim`s
+- evidence updates those claims via support/dispute
+- uncertainty remains explicit unless the evidence base is genuinely strong
 
-## Tool invocation
+The goal is not to convert every edge into a fact. The goal is to convert vague structure into explicit, reviewable claims with provenance.
 
-All `science-tool` commands below use this pattern:
+## Tool Invocation
+
+All `science-tool` commands below use:
 
 ```bash
 uv run science-tool <command>
 ```
 
-For brevity, the examples below write just `science-tool <command>` — **always expand to `uv run science-tool <command>` when executing. See command-preamble step 8 for fallback.**
-
 ## Rules
 
 - **MUST** read the existing inquiry before modifying it
-- **MUST** assign formal types to all variables (not just `sci:Concept`)
-- **MUST** replace `skos:related` edges with typed predicates where the relationship is known
-- **MUST** add `--source` provenance to all assumptions and claims
-- **MUST** resolve or justify all `sci:Unknown` nodes
-- **MUST** run `inquiry validate` after specifying — all checks must pass
-- **MUST** add AnnotatedParam metadata for all non-trivial parameter values
-- **SHOULD** identify confounders for each causal/directional edge
-- **SHOULD** justify edge direction (why A->B not B->A?)
+- **MUST** assign formal types to all important variables
+- **MUST** identify which inquiry edges are structural only and which represent uncertain scientific claims
+- **MUST** represent uncertain scientific relations as `relation_claim`s
+- **MUST** attach provenance to authored claims
+- **MUST** keep residual uncertainty visible when support is sparse, contested, or low-quality
+- **MUST** run `inquiry validate` after specifying
+- **SHOULD** identify confounders for directional or causal claims
+- **SHOULD** ask what would materially change belief in each key claim
 
 ## Workflow
 
-### Step 1: Load and assess the inquiry
+### Step 1: Load And Assess The Inquiry
 
 If `$ARGUMENTS` contains a slug:
+
 ```bash
 science-tool inquiry show "<slug>" --format table
 science-tool inquiry validate "<slug>" --format json
 ```
 
-Identify gaps:
-- Variables without formal types
-- Edges using `skos:related` that should be more specific
-- Nodes without provenance
-- `sci:Unknown` nodes needing resolution
-- Missing confounders
-- Parameters without AnnotatedParam metadata
+Identify:
+- variables lacking proper types
+- vague edges that should become explicit claims
+- unresolved unknowns
+- unsupported causal assumptions
+- places where the inquiry is structurally useful but epistemically fragile
 
-If no slug provided, ask which inquiry to specify, or offer to create one from scratch.
+If no slug is provided, ask which inquiry to specify.
 
-### Step 2: Specify variables
+### Step 2: Specify Variables
 
-For each variable in the inquiry, work through interactively:
+For each important variable:
 
-1. **Type:** "What kind of thing is this?" -> assign `biolink:*`, `sci:Variable`, `sci:Transformation`, etc.
+1. **Type**
+   - What kind of thing is this?
+   - Use the most specific reasonable type.
+
+2. **Observability**
+   - Is this observed, latent, or computed?
+
+3. **Provenance**
+   - Where does this variable definition come from?
+
+Use commands like:
+
 ```bash
 science-tool graph add concept "<name>" --type <CURIE> --definition "<definition>"
 ```
 
-2. **Observability:** Is this observed, latent, or computed?
+### Step 3: Convert Scientific Edges Into Explicit Claims
 
-3. **Provenance:** Where does this come from?
+For each non-trivial scientific relation in the inquiry:
+
+1. Clarify the content of the claim
+   - What exactly is being asserted?
+   - Is it causal, mechanistic, predictive, or descriptive?
+
+2. Create a `relation_claim`
+
 ```bash
-science-tool graph add concept "<name>" --source "<ref>"
+science-tool graph add relation-claim \
+  "concept:<subject>" \
+  "<predicate>" \
+  "concept:<object>" \
+  --source "<ref>" \
+  --confidence <0-1> \
+  --text "<clear claim text>"
 ```
 
-### Step 3: Specify edges
+3. Attach the claim to the inquiry edge when the edge should remain in the model
 
-For each edge in the inquiry:
-
-1. **Type:** Replace loose edges with typed predicates
-   - `sci:feedsInto` -> data/information flow (keep if correct)
-   - `scic:causes` -> causal claim (requires evidence)
-   - `sci:assumes` -> dependency on assumption
-   - `sci:produces` -> transformation output
-
-2. **Evidence:** Create a claim justifying each non-obvious edge
 ```bash
-science-tool graph add claim "X feeds into Y because..." --source "paper:doi_..." --confidence 0.8
+science-tool inquiry add-edge "<slug>" "concept:<subject>" "<predicate>" "concept:<object>" \
+  --claim "relation_claim:<id>"
 ```
 
-3. **Direction justification:** For causal/directional edges, note why A->B not B->A
+Use direct structural edges without claims only when the edge is organizational or procedural rather than epistemic.
 
-4. **Confounders:** "What else could explain this relationship?"
+### Step 4: Attach Support And Dispute
+
+For each important claim, ask:
+- What currently supports it?
+- What currently disputes it?
+- What evidence is missing?
+
+When the project has concrete supporting or disputing project claims, represent them explicitly:
+
 ```bash
-science-tool graph add concept "<confounder>" --type sci:Variable
-science-tool graph add edge "concept:<confounder>" "scic:confounds" "concept:<edge-subject>"
+science-tool graph add claim "<supporting or disputing statement>" --source "<ref>" --confidence <0-1>
+science-tool graph add relation-claim \
+  "claim:<supporting-claim>" \
+  "cito:supports" \
+  "relation_claim:<target>" \
+  --source "<ref>"
 ```
 
-### Step 4: Specify parameters
+Use `cito:disputes` analogously for counter-evidence.
 
-For each parameter-bearing node, add AnnotatedParam metadata. Source types: `literature`, `empirical`, `design_decision`, `convention`, `data_derived`.
+Do not force a flat verdict when the evidence is mixed or weak.
 
-### Step 5: Resolve unknowns
+### Step 5: Resolve Unknowns And Assumptions
 
 For each `sci:Unknown` node:
-- **Resolve:** Replace with a real entity (new concept with proper type and provenance)
-- **Justify:** Document why it remains unknown and what would resolve it
-- **Remove:** If the unknown is no longer relevant
+- resolve it to a real entity
+- justify why it remains unknown
+- or remove it if it no longer matters
 
-### Step 6: Validate and finalize
+For each assumption:
+- note why the model currently relies on it
+- note what evidence or analysis would reduce that reliance
+
+### Step 6: Validate And Finalize
 
 ```bash
 science-tool inquiry validate "<slug>" --format json
 ```
 
-All checks must pass for a specified inquiry:
-- boundary_reachability: pass
-- no_cycles: pass
-- unknown_resolution: pass
-- target_exists: pass
+Update the inquiry status to `specified` only when:
+- the model structure is coherent
+- the important claims are explicit
+- the main evidence links are recorded
+- major unknowns are either resolved or intentionally documented
 
-Update the inquiry status to `specified` and the inquiry document in `doc/inquiries/<slug>.md`.
+Then:
 
 ```bash
 science-tool graph stamp-revision
 ```
 
-### Step 7: Suggest next steps
+### Step 7: Suggest Next Steps
 
-1. `/science:plan-pipeline <slug>` — generate computational implementation plan
-2. `/science:review-pipeline <slug>` — get a critical review before implementation
-3. `/science:discuss` with `focus_ref: inquiry:<slug>` — structured discussion
+1. `/science:interpret-results` when new empirical results should update support/dispute
+2. `/science:compare-hypotheses` when competing claim bundles need head-to-head evaluation
+3. `/science:discuss` when a claim remains contested or structurally important but weakly evidenced
 
 ## Important Notes
 
-- **Evidence-driven.** Every edge should be justifiable. If you can't justify an edge, it might not belong in the model.
-- **Parameters are first-class.** Every number in the eventual pipeline should trace back to a source: a paper, a dataset, a design decision, or a convention.
-- **Confounders matter.** The specify step is where you catch missing variables.
-- **Iterate with the user.** Don't specify everything silently — discuss non-obvious decisions.
+- Specifying a model increases clarity, not certainty.
+- A relation-claim with one weak line of evidence is still fragile.
+- The main output of this command is a model whose uncertainty can be inspected, challenged, and improved.
 
 ## Process Reflection
 
-Reflect on the **specification workflow** and the **evidence provenance** discipline.
+Reflect on the **claim formalization** and **support/dispute attachment** workflow.
 
-After completing the task above, append a brief entry to `doc/meta/skill-feedback.md` (create the file and directory if they don't exist).
-
-Use this format:
-
-```markdown
-## YYYY-MM-DD — specify-model
-
-**Template/structure friction:**
-- Any section you left empty, filled with boilerplate, or that felt forced
-
-**Missing capture:**
-- Information you wanted to record but had no natural place for
-
-**Guidance issues:**
-- Command instructions that were confusing, contradictory, or didn't help
-
-**Suggested improvement:**
-- Concrete proposal for fixing any friction above (optional but encouraged)
-
-**What worked well:**
-- A section or instruction that genuinely improved the output
-```
-
-Guidelines:
-- Be concrete and specific, not generic ("provenance was hard to add for edges based on domain knowledge rather than papers" > "some sections could be improved")
-- 2-5 bullets total. Skip categories that have nothing to report.
-- If the same issue has occurred before, note the recurrence (e.g., "3rd time this section was not applicable") — recurring patterns are the strongest signal for needed changes
-- If everything worked smoothly, a single "No friction encountered" is fine — don't manufacture feedback
-
-Aspect fit check:
-- Are the current project aspects the right fit for this work?
-- If sections were missing that an unloaded aspect would have provided, suggest adding it
-- If aspect-contributed sections were consistently skipped or filled with boilerplate, suggest removing the aspect
-- Note any aspect suggestions in the feedback entry under "Suggested improvement"
+After completing the task above, append a brief entry to `doc/meta/skill-feedback.md`.

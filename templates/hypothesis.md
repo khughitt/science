@@ -12,34 +12,80 @@ updated: "{{YYYY-MM-DD}}"
 
 # Hypothesis: {{Short Title}}
 
-## Statement
+## Organizing Conjecture
 
-<!-- Clear, falsifiable claim. One sentence if possible. -->
+<!--
+High-level research idea.
+State the overarching conjecture in plain language.
+This is the umbrella idea, not the final unit of evidence aggregation.
+-->
 
-## Rationale
+## Claim Bundle
 
-<!-- Why do you believe this? What existing evidence or reasoning supports it? -->
+<!--
+List the key claims that make up this hypothesis.
+Prefer explicit subclaims, especially relation-claims of the form:
+- subject
+- predicate
+- object
+-->
+
+### Core Claims
+
+<!-- Claims that must be roughly true for the hypothesis to survive. -->
+
+### Supporting Or Auxiliary Claims
+
+<!-- Claims that strengthen or elaborate the hypothesis but are not essential. -->
+
+## Current Uncertainty
+
+<!--
+What makes this hypothesis currently fragile, contested, or underspecified?
+Note whether support is sparse, single-source, indirect, literature-only, etc.
+-->
 
 ## Predictions
 
-<!-- What observable consequences follow if this hypothesis is correct? -->
+<!--
+What should we observe if the core claims are true?
+Distinguish strong discriminating predictions from weaker corollaries.
+-->
 
 ## Falsifiability
 
-<!-- What evidence would refute this hypothesis? Be specific. -->
+<!--
+What results would materially lower confidence in the core claims?
+Be specific about what would force revision.
+-->
 
-## Required Evidence
+## Supporting Evidence
 
-<!-- What data, experiments, or analyses would test this hypothesis? -->
+<!--
+Existing evidence that supports one or more claims in this bundle.
+Note evidence type where possible:
+- literature
+- empirical-data
+- simulation
+- benchmark
+-->
 
-## Causal Model
+## Disputing Evidence
 
-<!-- If applicable: what causal mechanism does this hypothesis propose? -->
+<!--
+Existing evidence that weakens or contests one or more claims.
+Include null or conflicting findings here.
+-->
 
-## Current Evidence
+## Evidence Needed To Shift Belief
 
-<!-- Evidence collected so far. Cite papers and topics by reference. -->
+<!--
+What evidence would most efficiently increase or decrease confidence?
+What is the most discriminating next test?
+-->
 
 ## Related Work
 
-<!-- Papers, topics, and other hypotheses that bear on this claim. -->
+<!--
+Papers, topics, inquiries, and other hypotheses that bear on this hypothesis.
+-->

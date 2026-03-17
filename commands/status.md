@@ -1,116 +1,114 @@
 ---
-description: Show a curated project orientation — hypotheses, open questions, recent activity, staleness warnings, and next steps. Use at the start of a session, when returning to a project, or when the user says "where are we", "what's the status", "catch me up", or "project overview".
+description: Show a curated project orientation — active hypotheses, open questions, uncertainty hotspots, recent activity, and next steps. Use at the start of a session or when the user says "where are we", "what's the status", or "catch me up".
 ---
 
 # Project Status
 
-Print a curated orientation for the current research project. Output goes to the terminal (not saved to file) unless `$ARGUMENTS` contains `--save`.
+Print a curated orientation for the current research project.
+
+The default stance is skeptical:
+- hypotheses are organizing conjectures
+- claims carry uncertainty
+- evidence updates belief
+- sparse or contested regions deserve attention
+
+Output goes to the terminal unless `$ARGUMENTS` contains `--save`.
 
 ## Setup
 
-1. Read `specs/research-question.md` for project context.
-2. Read `science.yaml` for project metadata.
-
-No skills or role prompts needed — this is a read-only summary command.
+1. Read `specs/research-question.md`.
+2. Read `science.yaml`.
+3. If present, read `docs/claim-and-evidence-model.md`.
 
 ## Sections
 
-Produce each section below. Skip any section whose data source doesn't exist. Keep total output under ~100 lines.
+Keep output under ~100 lines.
 
 ### 1. Project Identity
 
 From `science.yaml` and `specs/research-question.md`:
+- project name and status
+- research question
+- tags
 
-- Project name and status
-- Research question (1-2 sentences)
-- Tags
-
-### 2. Hypotheses
+### 2. Active Hypotheses
 
 From `specs/hypotheses/*.md`:
-
-- List each hypothesis with its ID, short title, and status
-- Group by status: `under-investigation` first, then `proposed`, then `supported`/`refuted`/`revised`
-- If no hypotheses exist, note this and suggest `/science:add-hypothesis`
+- list each hypothesis with ID, short title, and current status
+- describe it briefly as an organizing conjecture, not a proven result
+- highlight which ones are under active investigation
 
 ### 3. Open Questions
 
 From `doc/questions/*.md`:
+- list the top 5 by priority
+- include the question text and type
 
-- List top 5 by priority (high > medium > low)
-- Show priority, type, and the question text (truncated to one line)
-- If no questions exist, note this
-
-### 4. Recent Activity
-
-Run: `git log --oneline -10 --format="%h %s (%cr)"`
-
-- Show the last 10 commits with relative dates
-- Group by scope prefix if possible (doc, papers, hypothesis, plan, etc.)
-
-### 5. Staleness Warnings
-
-Check file modification times:
-
-- Flag `tasks/active.md` if not modified in >14 days
-- Flag `specs/hypotheses/` files if none modified in >30 days
-- If `knowledge/graph.trig` exists, check whether docs have been modified since the last `graph stamp-revision`
-- If nothing is stale, skip this section
-
-### 6. Document Inventory
-
-Count files in each doc subdirectory:
-
-- `doc/topics/` — N topic documents
-- `doc/papers/` — N paper summaries
-- `doc/questions/` — N open questions
-- `doc/methods/` — N method notes
-- `doc/datasets/` — N dataset notes
-- `doc/searches/` — N literature searches
-- `doc/discussions/` — N discussions
-- `doc/interpretations/` — N interpretations
-- `specs/hypotheses/` — N hypotheses
-
-Skip directories with 0 files. Show totals on one line each.
-
-### 7. Knowledge Graph Core
+### 4. Claim And Graph Uncertainty
 
 When `knowledge/graph.trig` exists:
 
-1. Run `science-tool graph stats --format json` for entity/edge counts.
-2. Identify the ~5-10 most central entities connected to the research question, treatment/outcome nodes, and hypothesis-linked entities. Prefer semantic centrality over raw degree.
-3. Render as a Mermaid diagram:
-   ```mermaid
-   graph LR
-     A[Treatment] -->|causes| B[Outcome]
-     C[Confounder] -->|confounds| A
-     C -->|confounds| B
-   ```
-4. For terminal-only contexts, use compact text: `A --causes--> B`
-5. Prioritize causal (`scic:causes`) and evidence (`cito:supports`, `cito:disputes`) edges over metadata edges.
+1. Run:
 
-When no graph exists, print: "No knowledge graph yet. Run `/science:create-graph` to build one."
+```bash
+science-tool graph uncertainty --format json
+science-tool graph gaps --format json
+```
+
+2. Surface:
+- contested claims
+- single-source claims
+- low-confidence claims
+- high-uncertainty neighborhoods
+- structurally fragile areas
+
+3. Prefer this section over simplistic “supported vs refuted” summaries.
+
+### 5. Recent Activity
+
+Run:
+
+```bash
+git log --oneline -10 --format="%h %s (%cr)"
+```
+
+Show recent project movement.
+
+### 6. Staleness Warnings
+
+Flag:
+- stale tasks
+- old untouched hypotheses
+- graph/doc drift if the graph changed but interpretation/docs did not
+
+### 7. Document Inventory
+
+Count key document classes:
+- topics
+- papers
+- questions
+- methods
+- datasets
+- discussions
+- interpretations
+- hypotheses
 
 ### 8. Next Steps
 
-From `tasks/active.md`:
-
-- Show P0 and P1 tasks (top 5 items)
-- Note any blocked tasks
-- If no tasks file exists, note this and suggest `/science:tasks add`
+From tasks, graph uncertainty, and recent activity, show:
+- the top few high-value next actions
+- where uncertainty reduction is most likely to pay off
+- blocked tasks or missing evidence
 
 ## Output Format
 
-Use **rich formatting** for terminal output:
+Use rich terminal output:
+- section headers
+- tables where useful
+- compact graph summaries when relevant
 
-- Section headers as `## Section Name`
-- Tables for hypotheses and questions
-- Bullet lists for activity and inventory
-- Mermaid code block for graph visualization
-
-## Optional: `--save`
+## Optional `--save`
 
 If `$ARGUMENTS` contains `--save`:
-- Save the output to `doc/meta/status-snapshot-YYYY-MM-DD.md`
-- Create `doc/meta/` if it doesn't exist
-- Commit: `git add doc/meta/ && git commit -m "doc: save status snapshot"`
+- save to `doc/meta/status-snapshot-YYYY-MM-DD.md`
+- commit the snapshot

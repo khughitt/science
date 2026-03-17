@@ -14,41 +14,65 @@ updated: "{{YYYY-MM-DD}}"
 
 ## Hypotheses Compared
 
-<!-- Summary of each hypothesis with key claims. -->
+<!--
+Summarize each hypothesis as an organizing conjecture plus its main claim bundle.
+-->
 
 ### {{H01 — Title}}
 
-<!-- Core claim, mechanism, and key predictions. -->
+<!-- Core claim bundle, mechanism, and main predictions. -->
 
 ### {{H02 — Title}}
 
-<!-- Core claim, mechanism, and key predictions. -->
+<!-- Core claim bundle, mechanism, and main predictions. -->
+
+## Claim-Level Comparison
+
+<!--
+What are the key claims that matter most in this comparison?
+Which claims are shared, and which genuinely differ?
+-->
 
 ## Evidence Inventory
 
-<!-- For each hypothesis: what supports it, what weakens it, what is silent.
-Use a table or structured list. -->
+<!--
+For each important claim, record how the current evidence bears on each hypothesis.
+Prefer support/dispute framing over winner/loser framing.
+-->
 
-| Evidence | Supports H01 | Supports H02 | Neutral |
+| Claim / Evidence | H01 | H02 | Residual uncertainty |
 |---|---|---|---|
-| {{finding or paper}} | {{how}} | {{how}} | {{why neutral}} |
+| {{claim or evidence item}} | {{supports / disputes / unclear}} | {{supports / disputes / unclear}} | {{what still needs resolution}} |
 
 ## Discriminating Predictions
 
-<!-- Where do these hypotheses make DIFFERENT predictions?
-These are the high-value observations — the places where data could settle the question. -->
+<!--
+Where do these hypotheses make different predictions?
+These are the highest-value places to gather evidence.
+-->
 
-## Crucial Experiments
+## Discriminating Evidence Needed
 
-<!-- What single observation or analysis would most decisively distinguish between them?
-Be specific about what you'd measure, what you'd expect under each hypothesis, and what data you'd need. -->
+<!--
+What evidence would most efficiently shift belief between them?
+Be explicit about which claim each proposed test bears on.
+-->
 
-## Current Verdict
+## Current Assessment
 
-<!-- Which hypothesis is better supported? How confident are you?
-What specific evidence would change the verdict? -->
+<!--
+Use skeptical language:
+- better supported
+- more fragile
+- contested
+- insufficiently resolved
 
-## Synthesis
+Avoid overstating certainty.
+-->
 
-<!-- Are these truly competing, or could they be complementary?
-Could they operate at different scales, in different conditions, or via different mechanisms? -->
+## Synthesis Or Coexistence
+
+<!--
+Could both hypotheses contain valid claims?
+Could they apply in different settings, scales, or mechanisms?
+-->

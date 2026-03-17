@@ -12,9 +12,27 @@ updated: "<YYYY-MM-DD>"
 
 # <Experiment Name>
 
-## Hypothesis
+## Hypothesis Context
 
-<Which hypothesis is being tested and what the expected outcome is.>
+<!--
+What higher-level hypothesis or inquiry does this experiment bear on?
+-->
+
+## Claim(s) Under Test
+
+<!--
+List the specific claims or relation-claims this experiment is intended to update.
+-->
+
+## Evidence Type
+
+<!--
+Mark the expected evidence class:
+- empirical-data
+- simulation
+- benchmark
+- methodological
+-->
 
 ## Design
 
@@ -22,26 +40,43 @@ updated: "<YYYY-MM-DD>"
 - **Dependent variable(s):** <what is being measured>
 - **Controls:** <baseline comparisons>
 - **Sample size:** <N>
+- **Analysis method:** <test, model, or workflow>
+- **Primary outputs:** <effect size, ranking, estimate, etc.>
 
 ## Pipeline Steps
 
 1. <step-slug> — <brief description>
 2. <step-slug> — <brief description>
 
-## Expected Results
+## Expected Belief Update
 
-<What a positive result looks like. What a negative result looks like.>
+<!--
+What result would support the target claim?
+What result would dispute it?
+What result would remain ambiguous?
+-->
 
 ## Actual Results
 
-<Fill in after running.>
+<!-- Fill in after running. Include effect sizes, uncertainty, and key diagnostics. -->
 
-## Interpretation
+## Claim Update
 
-<What the results mean for the hypothesis. Limitations. Next steps.>
+<!--
+How should these results update the claim(s) under test?
+Use support/dispute/ambiguous language and note residual uncertainty.
+-->
+
+## Limitations
+
+<!--
+What keeps this from being decisive?
+Examples: small sample size, model dependence, single dataset, weak controls.
+-->
 
 ## Related
 
 - Hypothesis: `specs/hypotheses/<hypothesis-id>.md`
+- Inquiry: `doc/inquiries/<inquiry-slug>.md`
 - Pipeline: `doc/plans/<pipeline-plan>.md`
 - Data: `data/processed/<output>`
