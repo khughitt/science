@@ -4,20 +4,42 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import TypedDict
 
 from rdflib import URIRef
-from rdflib.namespace import PROV, RDF
 
 from science_tool.graph.store import (
     SCHEMA_NS,
     SCI_NS,
     SCIC_NS,
+    _collect_evidence_signals,
+    _edge_claims,
     _graph_uri,
     _load_dataset,
     _slug,
+    _source_strings,
     get_inquiry,
     shorten_uri,
 )
+
+
+class ClaimBundle(TypedDict):
+    uri: str
+    text: str
+    confidence: float | None
+    sources: list[str]
+    support_count: int
+    dispute_count: int
+
+
+class CausalEdge(TypedDict):
+    subject: str
+    predicate: str
+    object: str
+    pred_type: str
+    claims: list[ClaimBundle]
+    subject_observability: str | None
+    object_observability: str | None
 
 
 def _variable_name(uri: str) -> str:
@@ -39,7 +61,7 @@ def _variable_name(uri: str) -> str:
     return name
 
 
-def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[dict]:
+def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[CausalEdge]:
     """Collect causal edges (scic:causes, scic:confounds) filtered to inquiry members.
 
     Returns a list of dicts with keys: subject, predicate, object, pred_type,
@@ -70,40 +92,36 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[dict]:
         obs_obj = next(knowledge_graph.objects(member_uri, SCI_NS.observability), None)
         observability[str(member_uri)] = str(obs_obj) if obs_obj is not None else None
 
-    # Collect all claims from graph/knowledge and their provenance from graph/provenance
+    # Collect relation claims attached directly to causal edges.
     provenance_graph = dataset.graph(_graph_uri("graph/provenance"))
-    claims: list[dict] = []
-    for claim_uri in knowledge_graph.subjects(RDF.type, SCI_NS.Claim):
-        text_obj = next(knowledge_graph.objects(claim_uri, SCHEMA_NS.text), None)
-        if text_obj is None:
-            continue
-        confidence_obj = next(provenance_graph.objects(claim_uri, SCI_NS.confidence), None)
-        source_obj = next(provenance_graph.objects(claim_uri, PROV.wasDerivedFrom), None)
-        claims.append(
-            {
-                "text": str(text_obj),
-                "confidence": float(str(confidence_obj)) if confidence_obj is not None else None,
-                "source": str(source_obj) if source_obj is not None else None,
-            }
-        )
 
     causal_graph = dataset.graph(_graph_uri("graph/causal"))
 
-    edges: list[dict] = []
+    edges: list[CausalEdge] = []
     causal_predicates = {
         SCIC_NS.causes: "causes",
         SCIC_NS.confounds: "confounds",
     }
     for pred_uri, pred_type in causal_predicates.items():
         for s, _p, o in causal_graph.triples((None, pred_uri, None)):
+            if not isinstance(s, URIRef) or not isinstance(o, URIRef):
+                continue
             if s in members and o in members:
-                # Extract variable names from URIs for claim matching
-                s_name = _variable_name(str(s))
-                o_name = _variable_name(str(o))
-                # Best-effort match: claims whose text mentions both endpoint names
-                matched_claims = [
-                    c for c in claims if s_name.lower() in c["text"].lower() and o_name.lower() in c["text"].lower()
-                ]
+                matched_claims: list[ClaimBundle] = []
+                for claim_uri in _edge_claims(causal_graph, s, pred_uri, o):
+                    text_obj = next(knowledge_graph.objects(claim_uri, SCHEMA_NS.text), None)
+                    confidence_obj = next(provenance_graph.objects(claim_uri, SCI_NS.confidence), None)
+                    evidence = _collect_evidence_signals(knowledge_graph, provenance_graph, claim_uri)
+                    matched_claims.append(
+                        {
+                            "uri": str(claim_uri),
+                            "text": str(text_obj) if text_obj is not None else shorten_uri(str(claim_uri)),
+                            "confidence": float(str(confidence_obj)) if confidence_obj is not None else None,
+                            "sources": _source_strings(provenance_graph, claim_uri),
+                            "support_count": evidence["support_count"],
+                            "dispute_count": evidence["dispute_count"],
+                        }
+                    )
                 edges.append(
                     {
                         "subject": str(s),
@@ -155,12 +173,19 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
         o_name = _variable_name(e["object"])
         comment_parts: list[str] = []
         if e.get("claims"):
-            claim = e["claims"][0]
-            comment_parts.append(f'claim: "{claim["text"]}"')
-            if claim["confidence"] is not None:
-                comment_parts.append(f"confidence: {claim['confidence']}")
-            if claim["source"]:
-                comment_parts.append(f"source: {shorten_uri(claim['source'])}")
+            claim_summaries: list[str] = []
+            for claim in e["claims"]:
+                claim_parts = [f'claim: "{claim["text"]}"']
+                if claim["confidence"] is not None:
+                    claim_parts.append(f"confidence: {claim['confidence']}")
+                claim_parts.append(f"supports: {claim['support_count']}")
+                claim_parts.append(f"disputes: {claim['dispute_count']}")
+                if claim["sources"]:
+                    claim_parts.append(
+                        "sources: " + ", ".join(shorten_uri(source) for source in claim["sources"])
+                    )
+                claim_summaries.append(", ".join(claim_parts))
+            comment_parts.append(" | ".join(claim_summaries))
         comment = f"  # {', '.join(comment_parts)}" if comment_parts else ""
         edge_tuples.append(f'("{s_name}", "{o_name}"),{comment}')
 
@@ -221,7 +246,7 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
         for lv in latent_vars:
             lines.append(f"#   - Variable '{lv}' is latent (unobserved) — cannot be directly measured")
         for ec in edges_without_claims:
-            lines.append(f"#   - Edge {ec} has no supporting claim — add provenance")
+            lines.append(f"#   - Edge {ec} has no attached relation claim")
         lines.append("")
 
     return "\n".join(lines)

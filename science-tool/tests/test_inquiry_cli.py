@@ -1,5 +1,7 @@
 """CLI tests for inquiry subcommands."""
 
+import json
+
 from pathlib import Path
 
 import pytest
@@ -88,6 +90,58 @@ class TestInquiryAddEdge:
             main, ["inquiry", "add-edge", "test", "concept:a", "sci:feedsInto", "concept:b", "--path", p]
         )
         assert result.exit_code == 0
+
+    def test_add_edge_with_relation_claim_attaches_claim_to_edge(self, runner: CliRunner, graph_path: Path) -> None:
+        p = str(graph_path)
+        runner.invoke(main, ["inquiry", "init", "test", "--label", "T", "--target", "hypothesis:h01", "--path", p])
+        runner.invoke(main, ["graph", "add", "concept", "a", "--path", p])
+        runner.invoke(main, ["graph", "add", "concept", "b", "--path", p])
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "concept:a",
+                "sci:feedsInto",
+                "concept:b",
+                "--id",
+                "a_feeds_into_b",
+                "--source",
+                "paper:doi_test",
+                "--path",
+                p,
+            ],
+        )
+
+        result = runner.invoke(
+            main,
+            [
+                "inquiry",
+                "add-edge",
+                "test",
+                "concept:a",
+                "sci:feedsInto",
+                "concept:b",
+                "--claim",
+                "relation_claim:a_feeds_into_b",
+                "--path",
+                p,
+            ],
+        )
+        assert result.exit_code == 0
+
+        show_result = runner.invoke(main, ["inquiry", "show", "test", "--format", "json", "--path", p])
+        assert show_result.exit_code == 0
+        info = json.loads(show_result.output)
+        assert info["edges"] == [
+            {
+                "subject": "http://example.org/project/concept/a",
+                "predicate": "http://example.org/science/vocab/feedsInto",
+                "object": "http://example.org/project/concept/b",
+                "claims": ["http://example.org/project/relation_claim/a_feeds_into_b"],
+            }
+        ]
 
 
 class TestInquiryAddNodeInterior:

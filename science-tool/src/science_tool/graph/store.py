@@ -9,6 +9,7 @@ import subprocess
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TypedDict
 
 import click
 from rdflib import Dataset, Literal, Namespace, URIRef
@@ -23,6 +24,28 @@ BIOLINK_NS = Namespace("https://w3id.org/biolink/vocab/")
 CITO_NS = Namespace("http://purl.org/spar/cito/")
 DCTERMS_NS = Namespace("http://purl.org/dc/terms/")
 REVISION_URI = URIRef(PROJECT_NS["graph_revision"])
+
+
+class InquiryEdge(TypedDict, total=False):
+    subject: str
+    predicate: str
+    object: str
+    claims: list[str]
+
+
+class InquiryInfo(TypedDict):
+    slug: str
+    label: str
+    status: str
+    inquiry_type: str
+    target: str
+    created: str
+    description: str
+    treatment: str | None
+    outcome: str | None
+    boundary_in: list[str]
+    boundary_out: list[str]
+    edges: list[InquiryEdge]
 
 VALID_INQUIRY_TYPES: tuple[str, ...] = ("general", "causal")
 
@@ -293,7 +316,12 @@ def add_question(
 
 
 def add_edge(
-    graph_path: Path, subject: str, predicate: str, obj: str, graph_layer: str
+    graph_path: Path,
+    subject: str,
+    predicate: str,
+    obj: str,
+    graph_layer: str,
+    claim_refs: list[str] | None = None,
 ) -> tuple[URIRef, URIRef, URIRef]:
     if graph_layer not in GRAPH_LAYERS:
         raise click.ClickException(f"Unsupported graph layer: {graph_layer}")
@@ -315,10 +343,23 @@ def add_edge(
             click.echo(f"Warning: '{label}' resolves to {uri} which is not yet in the graph", err=True)
 
     layer = dataset.graph(_graph_uri(graph_layer))
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     layer.add((s_uri, p_uri, o_uri))
+    if claim_refs:
+        _attach_edge_claims(
+            context_graph=layer,
+            knowledge=knowledge,
+            context_token=graph_layer,
+            subject_uri=s_uri,
+            predicate_uri=p_uri,
+            object_uri=o_uri,
+            claim_refs=claim_refs,
+        )
 
     _save_dataset(dataset, graph_path)
     return s_uri, p_uri, o_uri
+
+
 def add_inquiry(
     graph_path: Path,
     slug: str,
@@ -418,6 +459,7 @@ def add_inquiry_edge(
     subject: str,
     predicate: str,
     obj: str,
+    claim_refs: list[str] | None = None,
 ) -> tuple[URIRef, URIRef, URIRef]:
     """Add a triple to an inquiry's named graph."""
     safe_slug = _slug(inquiry_slug)
@@ -425,6 +467,7 @@ def add_inquiry_edge(
 
     dataset = _load_dataset(graph_path)
     inquiry_graph = dataset.graph(inquiry_uri)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
 
     if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
         raise ValueError(f"Inquiry 'inquiry/{safe_slug}' does not exist")
@@ -433,6 +476,16 @@ def add_inquiry_edge(
     p_uri = _resolve_term(predicate)
     o_uri = _resolve_term(obj)
     inquiry_graph.add((s_uri, p_uri, o_uri))
+    if claim_refs:
+        _attach_edge_claims(
+            context_graph=inquiry_graph,
+            knowledge=knowledge,
+            context_token=str(inquiry_uri),
+            subject_uri=s_uri,
+            predicate_uri=p_uri,
+            object_uri=o_uri,
+            claim_refs=claim_refs,
+        )
 
     _save_dataset(dataset, graph_path)
     return s_uri, p_uri, o_uri
@@ -583,7 +636,7 @@ def list_inquiries(graph_path: Path) -> list[dict[str, str]]:
     return results
 
 
-def get_inquiry(graph_path: Path, slug: str) -> dict:
+def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
     """Get detailed information about a specific inquiry, including boundaries and edges."""
     safe_slug = _slug(slug)
     inquiry_uri = URIRef(PROJECT_NS[f"inquiry/{safe_slug}"])
@@ -618,6 +671,9 @@ def get_inquiry(graph_path: Path, slug: str) -> dict:
     # Collect edges (excluding metadata predicates)
     metadata_predicates = {
         RDF.type,
+        RDF.subject,
+        RDF.predicate,
+        RDF.object,
         SKOS.prefLabel,
         SKOS.note,
         SCI_NS.inquiryStatus,
@@ -631,12 +687,18 @@ def get_inquiry(graph_path: Path, slug: str) -> dict:
         SCI_NS.paramSource,
         SCI_NS.paramNote,
         SCI_NS.paramRef,
+        SCI_NS.validatedBy,
         DCTERMS_NS.created,
     }
-    edges: list[dict[str, str]] = []
+    edges: list[InquiryEdge] = []
     for s, p, o in inquiry_graph:
         if p not in metadata_predicates:
-            edges.append({"subject": str(s), "predicate": str(p), "object": str(o)})
+            edge_info: InquiryEdge = {"subject": str(s), "predicate": str(p), "object": str(o)}
+            if isinstance(s, URIRef) and isinstance(p, URIRef) and isinstance(o, URIRef):
+                claim_uris = _edge_claims(inquiry_graph, s, p, o)
+                if claim_uris:
+                    edge_info["claims"] = [str(uri) for uri in claim_uris]
+            edges.append(edge_info)
 
     return {
         "slug": safe_slug,
@@ -2214,6 +2276,64 @@ def _relation_claim_label(uri: URIRef) -> str:
     if "/" in short:
         short = short.rsplit("/", 1)[1]
     return short.replace("_", " ")
+
+
+def _attach_edge_claims(
+    context_graph,
+    knowledge,
+    context_token: str,
+    subject_uri: URIRef,
+    predicate_uri: URIRef,
+    object_uri: URIRef,
+    claim_refs: list[str],
+) -> None:
+    statement_uri = _edge_statement_uri(context_token, subject_uri, predicate_uri, object_uri)
+    context_graph.add((statement_uri, RDF.type, RDF.Statement))
+    context_graph.add((statement_uri, RDF.subject, subject_uri))
+    context_graph.add((statement_uri, RDF.predicate, predicate_uri))
+    context_graph.add((statement_uri, RDF.object, object_uri))
+
+    seen: set[URIRef] = set()
+    for claim_ref in claim_refs:
+        claim_uri = _resolve_term(claim_ref)
+        if claim_uri in seen:
+            continue
+        seen.add(claim_uri)
+        if (claim_uri, RDF.type, SCI_NS.RelationClaim) not in knowledge:
+            raise click.ClickException(f"Attached claim '{claim_ref}' must resolve to a relation_claim entity")
+
+        claim_subject = next(knowledge.objects(claim_uri, SCI_NS.claimSubject), None)
+        claim_predicate = next(knowledge.objects(claim_uri, SCI_NS.claimPredicate), None)
+        claim_object = next(knowledge.objects(claim_uri, SCI_NS.claimObject), None)
+        if (claim_subject, claim_predicate, claim_object) != (subject_uri, predicate_uri, object_uri):
+            raise click.ClickException(
+                f"Attached claim '{claim_ref}' must assert the same subject, predicate, and object as the edge"
+            )
+
+        context_graph.add((statement_uri, SCI_NS.validatedBy, claim_uri))
+
+
+def _edge_claims(context_graph, subject_uri: URIRef, predicate_uri: URIRef, object_uri: URIRef) -> list[URIRef]:
+    claim_uris: set[URIRef] = set()
+    for statement_uri in context_graph.subjects(RDF.subject, subject_uri):
+        if (statement_uri, RDF.predicate, predicate_uri) not in context_graph:
+            continue
+        if (statement_uri, RDF.object, object_uri) not in context_graph:
+            continue
+        for claim_uri in context_graph.objects(statement_uri, SCI_NS.validatedBy):
+            if isinstance(claim_uri, URIRef):
+                claim_uris.add(claim_uri)
+    return sorted(claim_uris, key=str)
+
+
+def _edge_statement_uri(
+    context_token: str,
+    subject_uri: URIRef,
+    predicate_uri: URIRef,
+    object_uri: URIRef,
+) -> URIRef:
+    token = hashlib.sha256(f"{context_token}|{subject_uri}|{predicate_uri}|{object_uri}".encode("utf-8")).hexdigest()
+    return URIRef(PROJECT_NS[f"edge_statement/{token[:16]}"])
 
 
 def _resolve_term(value: str) -> URIRef:

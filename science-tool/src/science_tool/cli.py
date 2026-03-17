@@ -655,14 +655,27 @@ def graph_add_question(
 @click.argument("predicate")
 @click.argument("object")
 @click.option("--graph", "graph_layer", type=click.Choice(GRAPH_LAYERS), default="graph/knowledge", show_default=True)
+@click.option("--claim", "claim_refs", multiple=True, help="Supporting relation claim reference (repeatable)")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_add_edge(subject: str, predicate: str, object: str, graph_layer: str, graph_path: Path) -> None:
+def graph_add_edge(
+    subject: str,
+    predicate: str,
+    object: str,
+    graph_layer: str,
+    claim_refs: tuple[str, ...],
+    graph_path: Path,
+) -> None:
     """Add an arbitrary edge to a selected named graph layer."""
 
     s_uri, p_uri, o_uri = add_edge(
-        graph_path=graph_path, subject=subject, predicate=predicate, obj=object, graph_layer=graph_layer
+        graph_path=graph_path,
+        subject=subject,
+        predicate=predicate,
+        obj=object,
+        graph_layer=graph_layer,
+        claim_refs=list(claim_refs) if claim_refs else None,
     )
     click.echo(
         f"Added edge in {graph_layer}: {shorten_uri(str(s_uri))} {shorten_uri(str(p_uri))} {shorten_uri(str(o_uri))}"
@@ -724,13 +737,21 @@ def inquiry_add_node(slug: str, entity: str, role: str | None, graph_path: Path)
 @click.argument("subject")
 @click.argument("predicate")
 @click.argument("object", metavar="OBJECT")
+@click.option("--claim", "claim_refs", multiple=True, help="Supporting relation claim reference (repeatable)")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def inquiry_add_edge(slug: str, subject: str, predicate: str, object: str, graph_path: Path) -> None:
+def inquiry_add_edge(
+    slug: str,
+    subject: str,
+    predicate: str,
+    object: str,
+    claim_refs: tuple[str, ...],
+    graph_path: Path,
+) -> None:
     """Add an edge within an inquiry subgraph."""
     try:
-        s, p, o = add_inquiry_edge(graph_path, slug, subject, predicate, object)
+        s, p, o = add_inquiry_edge(graph_path, slug, subject, predicate, object, list(claim_refs) if claim_refs else None)
         click.echo(f"Added edge: {shorten_uri(str(s))} --[{shorten_uri(str(p))}]--> {shorten_uri(str(o))}")
     except ValueError as e:
         raise click.ClickException(str(e))
@@ -846,9 +867,11 @@ def inquiry_show(slug: str, output_format: str, graph_path: Path) -> None:
             click.echo(f"    - {shorten_uri(n)}")
         click.echo(f"  Edges: {len(info['edges'])}")
         for edge in info["edges"]:
-            click.echo(
-                f"    {shorten_uri(edge['subject'])} --[{shorten_uri(edge['predicate'])}]--> {shorten_uri(edge['object'])}"
-            )
+            line = f"    {shorten_uri(edge['subject'])} --[{shorten_uri(edge['predicate'])}]--> {shorten_uri(edge['object'])}"
+            if edge.get("claims"):
+                claims = ", ".join(shorten_uri(claim) for claim in edge["claims"])
+                line = f"{line} [{claims}]"
+            click.echo(line)
 
 
 @inquiry.command("validate")

@@ -98,6 +98,127 @@ class TestInquiryTypeInOutput:
 
 
 class TestExportCLI:
+    def test_export_pgmpy_uses_explicit_claim_attachments(self, runner: CliRunner, graph_path: Path) -> None:
+        p = str(graph_path)
+        _setup_causal_inquiry(runner, graph_path)
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "concept:x",
+                "scic:causes",
+                "concept:y",
+                "--id",
+                "x_causes_y",
+                "--text",
+                "X causes Y",
+                "--source",
+                "paper:doi_claim",
+                "--confidence",
+                "0.85",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "claim",
+                "Independent study supports X causes Y",
+                "--id",
+                "support_xy",
+                "--source",
+                "paper:doi_support",
+                "--confidence",
+                "0.7",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "claim",
+                "Counter-evidence disputes X causes Y",
+                "--id",
+                "dispute_xy",
+                "--source",
+                "paper:doi_dispute",
+                "--confidence",
+                "0.4",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "claim:support_xy",
+                "cito:supports",
+                "relation_claim:x_causes_y",
+                "--id",
+                "support_xy_rel",
+                "--source",
+                "paper:doi_support",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "claim:dispute_xy",
+                "cito:disputes",
+                "relation_claim:x_causes_y",
+                "--id",
+                "dispute_xy_rel",
+                "--source",
+                "paper:doi_dispute",
+                "--path",
+                p,
+            ],
+        )
+
+        attach_result = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "edge",
+                "concept/x",
+                "scic:causes",
+                "concept/y",
+                "--graph",
+                "graph/causal",
+                "--claim",
+                "relation_claim:x_causes_y",
+                "--path",
+                p,
+            ],
+        )
+        assert attach_result.exit_code == 0
+
+        result = runner.invoke(main, ["inquiry", "export-pgmpy", "test-dag", "--path", p])
+        assert result.exit_code == 0
+        assert 'claim: "X causes Y"' in result.output
+        assert "confidence: 0.85" in result.output
+        assert "supports: 1" in result.output
+        assert "disputes: 1" in result.output
+        assert "TODO" in result.output
+        assert "Edge z -> y has no attached relation claim" in result.output
+
     def test_export_pgmpy_cli(self, runner: CliRunner, graph_path: Path, tmp_path: Path) -> None:
         _setup_causal_inquiry(runner, graph_path)
         out_file = tmp_path / "dag.py"

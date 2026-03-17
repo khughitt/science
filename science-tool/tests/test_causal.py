@@ -18,11 +18,11 @@ from science_tool.graph.store import (
     PREDICATE_REGISTRY,
     PROJECT_NS,
     VALID_INQUIRY_TYPES,
-    add_claim,
     add_concept,
     add_edge,
     add_hypothesis,
     add_inquiry,
+    add_relation_claim,
     get_inquiry,
     set_boundary_role,
     set_treatment_outcome,
@@ -214,9 +214,23 @@ class TestExportPgmpy:
         set_boundary_role(graph_path, "prov-pgmpy", "concept/drug", "BoundaryIn")
         set_boundary_role(graph_path, "prov-pgmpy", "concept/recovery", "BoundaryOut")
         set_treatment_outcome(graph_path, "prov-pgmpy", treatment="concept/drug", outcome="concept/recovery")
-        add_edge(graph_path, "concept/drug", "scic:causes", "concept/recovery", graph_layer="graph/causal")
-        add_claim(
-            graph_path, "Drug treatment improves recovery time", source="paper:doi_10.1234/study", confidence=0.85
+        add_relation_claim(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            source="paper:doi_10.1234/study",
+            confidence=0.85,
+            text="Drug treatment improves recovery time",
+            claim_id="drug_causes_recovery",
+        )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["relation_claim:drug_causes_recovery"],
         )
         script = export_pgmpy_script(graph_path, "prov-pgmpy")
         assert "confidence: 0.85" in script
@@ -318,9 +332,23 @@ class TestExportChirho:
         set_boundary_role(graph_path, "prov-chirho", "concept/drug", "BoundaryIn")
         set_boundary_role(graph_path, "prov-chirho", "concept/recovery", "BoundaryOut")
         set_treatment_outcome(graph_path, "prov-chirho", treatment="concept/drug", outcome="concept/recovery")
-        add_edge(graph_path, "concept/drug", "scic:causes", "concept/recovery", graph_layer="graph/causal")
-        add_claim(
-            graph_path, "Drug treatment improves recovery time", source="paper:doi_10.1234/study", confidence=0.85
+        add_relation_claim(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            source="paper:doi_10.1234/study",
+            confidence=0.85,
+            text="Drug treatment improves recovery time",
+            claim_id="drug_causes_recovery",
+        )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["relation_claim:drug_causes_recovery"],
         )
         script = export_chirho_script(graph_path, "prov-chirho")
         assert "confidence: 0.85" in script
@@ -392,22 +420,43 @@ class TestEdgeProvenance:
         set_boundary_role(graph_path, "prov-dag", "concept/recovery", "BoundaryOut")
         set_boundary_role(graph_path, "prov-dag", "concept/severity", "BoundaryIn")
         set_treatment_outcome(graph_path, "prov-dag", treatment="concept/drug", outcome="concept/recovery")
-        add_edge(graph_path, "concept/drug", "scic:causes", "concept/recovery", graph_layer="graph/causal")
-        add_edge(graph_path, "concept/severity", "scic:causes", "concept/recovery", graph_layer="graph/causal")
-        add_edge(graph_path, "concept/severity", "scic:causes", "concept/drug", graph_layer="graph/causal")
-        # Add claims that mention both endpoints
-        add_claim(
+        add_relation_claim(
             graph_path,
-            "Drug treatment improves recovery time",
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
             source="paper:doi_10.1234/drug_recovery",
             confidence=0.85,
+            text="Drug treatment improves recovery time",
+            claim_id="drug_causes_recovery",
         )
-        add_claim(
+        add_relation_claim(
             graph_path,
-            "Disease severity affects recovery outcomes",
+            "concept/severity",
+            "scic:causes",
+            "concept/recovery",
             source="paper:doi_10.5678/severity",
             confidence=0.90,
+            text="Disease severity affects recovery outcomes",
+            claim_id="severity_causes_recovery",
         )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["relation_claim:drug_causes_recovery"],
+        )
+        add_edge(
+            graph_path,
+            "concept/severity",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["relation_claim:severity_causes_recovery"],
+        )
+        add_edge(graph_path, "concept/severity", "scic:causes", "concept/drug", graph_layer="graph/causal")
         return "prov-dag"
 
     def test_enriched_edges_contain_claims(self, graph_path: Path) -> None:
@@ -425,7 +474,7 @@ class TestEdgeProvenance:
         claim = edge["claims"][0]
         assert "text" in claim
         assert "confidence" in claim
-        assert "source" in claim
+        assert "sources" in claim
 
     def test_enriched_edges_contain_observability(self, graph_path: Path) -> None:
         """Edges include observability metadata for both endpoints."""

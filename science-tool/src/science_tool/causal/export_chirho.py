@@ -78,7 +78,11 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
     revision_hash = str(next(provenance_graph.objects(revision_uri, SCHEMA_NS.sha256), "unknown"))
 
     treatment = info.get("treatment")
+    if not isinstance(treatment, str):
+        treatment = None
     outcome = info.get("outcome")
+    if not isinstance(outcome, str):
+        outcome = None
 
     treatment_name = _variable_name(treatment) if treatment else "TREATMENT"
     outcome_name = _variable_name(outcome) if outcome else "OUTCOME"
@@ -110,10 +114,19 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
     lines.append("#")
     lines.append("# TODO: Replace placeholder distributions with appropriate priors")
     lines.append("# TODO: Add observed data conditioning")
+    ungrounded_edges = [
+        f"{_variable_name(edge['subject'])} -> {_variable_name(edge['object'])}"
+        for edge in edges
+        if edge["pred_type"] == "causes" and not edge.get("claims")
+    ]
     if latent_vars:
         lines.append("# TODO: Latent (unobserved) variables — cannot condition on data directly:")
         for lv in sorted(latent_vars):
             lines.append(f"#   - {lv}")
+    if ungrounded_edges:
+        lines.append("# TODO: Ungrounded causal edges:")
+        for edge in ungrounded_edges:
+            lines.append(f"#   - Edge {edge} has no attached relation claim")
     lines.append("")
     lines.append("import torch")
     lines.append("import pyro")
@@ -141,8 +154,12 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
                 prov_parts: list[str] = []
                 if claim["confidence"] is not None:
                     prov_parts.append(f"confidence: {claim['confidence']}")
-                if claim["source"]:
-                    prov_parts.append(f"source: {shorten_uri(claim['source'])}")
+                prov_parts.append(f"supports: {claim['support_count']}")
+                prov_parts.append(f"disputes: {claim['dispute_count']}")
+                if claim["sources"]:
+                    prov_parts.append(
+                        "sources: " + ", ".join(shorten_uri(source) for source in claim["sources"])
+                    )
                 if prov_parts:
                     comment += " | " + ", ".join(prov_parts)
             parent_sum = " + ".join(parents)
