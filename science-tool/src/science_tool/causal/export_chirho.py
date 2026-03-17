@@ -89,12 +89,13 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
 
     sorted_vars = _topological_sort(edges)
 
-    # Build per-variable claim lookup
-    var_claims: dict[str, list[dict]] = {}
+    # Build per-edge claim lookup to preserve provenance for each parent -> child edge.
+    edge_claims: dict[tuple[str, str], list[dict]] = {}
     for e in edges:
         if e["pred_type"] == "causes" and e.get("claims"):
+            s_name = _variable_name(e["subject"])
             o_name = _variable_name(e["object"])
-            var_claims.setdefault(o_name, []).extend(e["claims"])
+            edge_claims[(s_name, o_name)] = list(e["claims"])
 
     # Collect latent variables
     latent_vars: set[str] = set()
@@ -147,21 +148,28 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
                 comment = f"caused by {parents[0]}"
             else:
                 comment = f"caused by {', '.join(parents)}"
-            # Append provenance info if claims exist for this variable
-            claims_for_var = var_claims.get(var, [])
-            if claims_for_var:
-                claim = claims_for_var[0]
-                prov_parts: list[str] = []
-                if claim["confidence"] is not None:
-                    prov_parts.append(f"confidence: {claim['confidence']}")
-                prov_parts.append(f"supports: {claim['support_count']}")
-                prov_parts.append(f"disputes: {claim['dispute_count']}")
-                if claim["sources"]:
-                    prov_parts.append(
-                        "sources: " + ", ".join(shorten_uri(source) for source in claim["sources"])
-                    )
-                if prov_parts:
-                    comment += " | " + ", ".join(prov_parts)
+            edge_comments: list[str] = []
+            for parent in parents:
+                claims_for_edge = edge_claims.get((parent, var), [])
+                if not claims_for_edge:
+                    continue
+                claim_comments: list[str] = []
+                for claim in claims_for_edge:
+                    prov_parts: list[str] = []
+                    if claim["confidence"] is not None:
+                        prov_parts.append(f"confidence: {claim['confidence']}")
+                    prov_parts.append(f"supports: {claim['support_count']}")
+                    prov_parts.append(f"disputes: {claim['dispute_count']}")
+                    if claim["sources"]:
+                        prov_parts.append(
+                            "sources: " + ", ".join(shorten_uri(source) for source in claim["sources"])
+                        )
+                    if prov_parts:
+                        claim_comments.append(", ".join(prov_parts))
+                if claim_comments:
+                    edge_comments.append(f"{parent}: " + " | ".join(claim_comments))
+            if edge_comments:
+                comment += " | " + "; ".join(edge_comments)
             parent_sum = " + ".join(parents)
             lines.append(f'    {var} = pyro.sample("{var}", dist.Normal({parent_sum}, 1.0))  # {comment}')
 

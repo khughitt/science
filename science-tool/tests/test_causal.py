@@ -354,6 +354,58 @@ class TestExportChirho:
         assert "confidence: 0.85" in script
         assert "doi_10.1234/study" in script
 
+    def test_export_chirho_preserves_parent_specific_claims(self, graph_path: Path) -> None:
+        """Each incoming causal edge keeps its own attached claim provenance."""
+        add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Y", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Z", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test", source="paper:doi_test")
+        add_inquiry(graph_path, "multi-parent", "Multi Parent", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "multi-parent", "concept/x", "BoundaryIn")
+        set_boundary_role(graph_path, "multi-parent", "concept/y", "BoundaryOut")
+        set_boundary_role(graph_path, "multi-parent", "concept/z", "BoundaryIn")
+        set_treatment_outcome(graph_path, "multi-parent", treatment="concept/x", outcome="concept/y")
+        add_relation_claim(
+            graph_path,
+            "concept/x",
+            "scic:causes",
+            "concept/y",
+            source="paper:doi_x",
+            confidence=0.8,
+            text="X causes Y",
+            claim_id="x_causes_y",
+        )
+        add_relation_claim(
+            graph_path,
+            "concept/z",
+            "scic:causes",
+            "concept/y",
+            source="paper:doi_z",
+            confidence=0.9,
+            text="Z causes Y",
+            claim_id="z_causes_y",
+        )
+        add_edge(
+            graph_path,
+            "concept/x",
+            "scic:causes",
+            "concept/y",
+            graph_layer="graph/causal",
+            claim_refs=["relation_claim:x_causes_y"],
+        )
+        add_edge(
+            graph_path,
+            "concept/z",
+            "scic:causes",
+            "concept/y",
+            graph_layer="graph/causal",
+            claim_refs=["relation_claim:z_causes_y"],
+        )
+
+        script = export_chirho_script(graph_path, "multi-parent")
+        assert "doi_x" in script
+        assert "doi_z" in script
+
     def test_export_chirho_revision_hash(self, graph_path: Path) -> None:
         """Export header includes graph revision hash."""
         slug = self._build_simple_dag(graph_path)

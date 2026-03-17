@@ -98,6 +98,74 @@ class TestInquiryTypeInOutput:
 
 
 class TestExportCLI:
+    def test_export_pgmpy_includes_inquiry_local_causal_edges(self, runner: CliRunner, graph_path: Path) -> None:
+        p = str(graph_path)
+        runner.invoke(main, ["graph", "add", "concept", "X", "--type", "sci:Variable", "--status", "active", "--path", p])
+        runner.invoke(main, ["graph", "add", "concept", "Y", "--type", "sci:Variable", "--status", "active", "--path", p])
+        runner.invoke(main, ["graph", "add", "hypothesis", "test hyp", "--source", "paper:doi_test", "--path", p])
+        runner.invoke(
+            main,
+            [
+                "inquiry",
+                "init",
+                "local-dag",
+                "--label",
+                "Local DAG",
+                "--target",
+                "hypothesis:test_hyp",
+                "--type",
+                "causal",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(main, ["inquiry", "add-node", "local-dag", "concept/x", "--role", "BoundaryIn", "--path", p])
+        runner.invoke(main, ["inquiry", "add-node", "local-dag", "concept/y", "--role", "BoundaryOut", "--path", p])
+        runner.invoke(
+            main, ["inquiry", "set-estimand", "local-dag", "--treatment", "concept/x", "--outcome", "concept/y", "--path", p]
+        )
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "concept:x",
+                "scic:causes",
+                "concept:y",
+                "--id",
+                "x_causes_y",
+                "--text",
+                "X causes Y",
+                "--source",
+                "paper:doi_claim",
+                "--path",
+                p,
+            ],
+        )
+
+        result = runner.invoke(
+            main,
+            [
+                "inquiry",
+                "add-edge",
+                "local-dag",
+                "concept:x",
+                "scic:causes",
+                "concept:y",
+                "--claim",
+                "relation_claim:x_causes_y",
+                "--path",
+                p,
+            ],
+        )
+        assert result.exit_code == 0
+
+        export_result = runner.invoke(main, ["inquiry", "export-pgmpy", "local-dag", "--path", p])
+        assert export_result.exit_code == 0
+        assert '("x", "y")' in export_result.output
+        assert 'claim: "X causes Y"' in export_result.output
+
     def test_export_pgmpy_uses_explicit_claim_attachments(self, runner: CliRunner, graph_path: Path) -> None:
         p = str(graph_path)
         _setup_causal_inquiry(runner, graph_path)

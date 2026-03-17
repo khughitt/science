@@ -94,47 +94,53 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[CausalEdg
 
     # Collect relation claims attached directly to causal edges.
     provenance_graph = dataset.graph(_graph_uri("graph/provenance"))
-
     causal_graph = dataset.graph(_graph_uri("graph/causal"))
-
-    edges: list[CausalEdge] = []
+    edge_map: dict[tuple[str, str, str], CausalEdge] = {}
     causal_predicates = {
         SCIC_NS.causes: "causes",
         SCIC_NS.confounds: "confounds",
     }
-    for pred_uri, pred_type in causal_predicates.items():
-        for s, _p, o in causal_graph.triples((None, pred_uri, None)):
-            if not isinstance(s, URIRef) or not isinstance(o, URIRef):
-                continue
-            if s in members and o in members:
-                matched_claims: list[ClaimBundle] = []
-                for claim_uri in _edge_claims(causal_graph, s, pred_uri, o):
-                    text_obj = next(knowledge_graph.objects(claim_uri, SCHEMA_NS.text), None)
-                    confidence_obj = next(provenance_graph.objects(claim_uri, SCI_NS.confidence), None)
-                    evidence = _collect_evidence_signals(knowledge_graph, provenance_graph, claim_uri)
-                    matched_claims.append(
-                        {
-                            "uri": str(claim_uri),
-                            "text": str(text_obj) if text_obj is not None else shorten_uri(str(claim_uri)),
-                            "confidence": float(str(confidence_obj)) if confidence_obj is not None else None,
-                            "sources": _source_strings(provenance_graph, claim_uri),
-                            "support_count": evidence["support_count"],
-                            "dispute_count": evidence["dispute_count"],
-                        }
-                    )
-                edges.append(
+    for graph in (inquiry_graph, causal_graph):
+        for pred_uri, pred_type in causal_predicates.items():
+            for s, _p, o in graph.triples((None, pred_uri, None)):
+                if not isinstance(s, URIRef) or not isinstance(o, URIRef):
+                    continue
+                if s not in members or o not in members:
+                    continue
+
+                key = (str(s), str(pred_uri), str(o))
+                edge = edge_map.setdefault(
+                    key,
                     {
                         "subject": str(s),
                         "predicate": str(pred_uri),
                         "object": str(o),
                         "pred_type": pred_type,
-                        "claims": matched_claims,
+                        "claims": [],
                         "subject_observability": observability.get(str(s)),
                         "object_observability": observability.get(str(o)),
-                    }
+                    },
                 )
 
-    return edges
+                existing_claim_uris = {claim["uri"] for claim in edge["claims"]}
+                for claim_uri in _edge_claims(graph, s, pred_uri, o):
+                    if str(claim_uri) in existing_claim_uris:
+                        continue
+                    text_obj = next(knowledge_graph.objects(claim_uri, SCHEMA_NS.text), None)
+                    confidence_obj = next(provenance_graph.objects(claim_uri, SCI_NS.confidence), None)
+                    evidence = _collect_evidence_signals(knowledge_graph, provenance_graph, claim_uri)
+                    edge["claims"].append(
+                        {
+                            "uri": str(claim_uri),
+                            "text": str(text_obj) if text_obj is not None else shorten_uri(str(claim_uri)),
+                            "confidence": float(str(confidence_obj)) if confidence_obj is not None else None,
+                            "sources": _source_strings(provenance_graph, claim_uri),
+                            "support_count": int(evidence["support_count"]),
+                            "dispute_count": int(evidence["dispute_count"]),
+                        }
+                    )
+
+    return list(edge_map.values())
 
 
 def export_pgmpy_script(graph_path: Path, slug: str) -> str:
