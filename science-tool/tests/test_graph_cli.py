@@ -832,6 +832,38 @@ def _setup_claim_backed_hypothesis_evidence_graph(runner: CliRunner) -> None:
                 "graph",
                 "add",
                 "claim",
+                "Context-setting BRCA1 discussion",
+                "--source",
+                "paper:doi_10_3333_c",
+                "--id",
+                "ev3",
+            ],
+        ).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "claim/ev3",
+                "cito:discusses",
+                "claim/main",
+                "--source",
+                "paper:doi_10_3333_c",
+            ],
+        ).exit_code
+        == 0
+    )
+    assert (
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "claim",
                 "Primary BRCA1 resistance claim",
                 "--source",
                 "paper:doi_10_1111_a",
@@ -968,6 +1000,7 @@ def test_graph_evidence_returns_support_and_dispute_for_claim() -> None:
             "Literature supports BRCA1 role",
             "Counter-evidence against BRCA1",
         }
+        assert all(row["relation"] != "discusses" for row in rows)
 
 
 def test_graph_evidence_hypothesis_aggregates_linked_claim_evidence() -> None:
@@ -986,6 +1019,7 @@ def test_graph_evidence_hypothesis_aggregates_linked_claim_evidence() -> None:
             "Literature supports BRCA1 role",
             "Counter-evidence against BRCA1",
         }
+        assert all(row["relation"] != "discusses" for row in rows)
 
 
 def test_graph_coverage_shows_measured_and_observed_status() -> None:
@@ -1478,9 +1512,12 @@ def test_graph_predicates_outputs_json() -> None:
     assert isinstance(payload["rows"], list)
     assert len(payload["rows"]) > 10
     predicates = {row["predicate"] for row in payload["rows"]}
+    predicate_rows = {row["predicate"]: row for row in payload["rows"]}
     assert "cito:supports" in predicates
     assert "skos:related" in predicates
     assert "scic:causes" in predicates
+    assert predicate_rows["cito:supports"]["layer"] == "relation-claim"
+    assert predicate_rows["cito:disputes"]["layer"] == "relation-claim"
 
 
 def test_graph_add_edge_slugifies_bare_terms() -> None:

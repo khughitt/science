@@ -1391,9 +1391,9 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     {"predicate": "skos:related", "description": "General association between concepts", "layer": "graph/knowledge"},
     {"predicate": "skos:broader", "description": "Broader concept hierarchy", "layer": "graph/knowledge"},
     {"predicate": "skos:narrower", "description": "Narrower concept hierarchy", "layer": "graph/knowledge"},
-    {"predicate": "cito:supports", "description": "Evidence supports a claim/hypothesis", "layer": "graph/knowledge"},
-    {"predicate": "cito:disputes", "description": "Evidence disputes a claim/hypothesis", "layer": "graph/knowledge"},
-    {"predicate": "cito:discusses", "description": "Paper discusses a topic", "layer": "graph/knowledge"},
+    {"predicate": "cito:supports", "description": "Relation-claim predicate for support evidence", "layer": "relation-claim"},
+    {"predicate": "cito:disputes", "description": "Relation-claim predicate for disputing evidence", "layer": "relation-claim"},
+    {"predicate": "cito:discusses", "description": "Relation-claim predicate for claim/hypothesis discussion", "layer": "relation-claim"},
     {"predicate": "cito:extends", "description": "Work extends prior research", "layer": "graph/knowledge"},
     {"predicate": "cito:usesMethodIn", "description": "Uses method from another work", "layer": "graph/knowledge"},
     {"predicate": "cito:citesAsDataSource", "description": "Cites as data source", "layer": "graph/knowledge"},
@@ -1707,7 +1707,6 @@ def query_evidence(
             knowledge=knowledge,
             provenance=provenance,
             target_uri=target_uri,
-            include_discusses=False,
         )
         for claim_uri in _linked_claims_for_hypothesis(knowledge, target_uri):
             _append_evidence_rows(
@@ -1716,7 +1715,6 @@ def query_evidence(
                 knowledge=knowledge,
                 provenance=provenance,
                 target_uri=claim_uri,
-                include_discusses=True,
             )
     else:
         _append_evidence_rows(
@@ -1725,7 +1723,6 @@ def query_evidence(
             knowledge=knowledge,
             provenance=provenance,
             target_uri=target_uri,
-            include_discusses=True,
         )
 
     return rows[:limit]
@@ -1737,14 +1734,11 @@ def _append_evidence_rows(
     knowledge,
     provenance,
     target_uri: URIRef,
-    include_discusses: bool,
 ) -> None:
-    predicates: tuple[tuple[URIRef, str], ...] = (
+    allowed_predicates: tuple[tuple[URIRef, str], ...] = (
         (CITO_NS.supports, "supports"),
         (CITO_NS.disputes, "disputes"),
-        (CITO_NS.discusses, "discusses"),
     )
-    allowed_predicates = predicates if include_discusses else predicates[:2]
 
     for predicate_uri, relation in allowed_predicates:
         for subj, _, _ in knowledge.triples((None, predicate_uri, target_uri)):
