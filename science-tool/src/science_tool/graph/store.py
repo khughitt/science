@@ -1794,10 +1794,9 @@ def _append_row(
     text = str(text_obj) if text_obj else ""
 
     sources = _source_strings(provenance, evidence_uri, fallback_uri)
-    if not sources and fallback_uri is not None:
-        if not text:
-            fallback_text_obj = next(knowledge.objects(fallback_uri, SCHEMA_NS.text), None)
-            text = str(fallback_text_obj) if fallback_text_obj else text
+    if fallback_uri is not None and not text:
+        fallback_text_obj = next(knowledge.objects(fallback_uri, SCHEMA_NS.text), None)
+        text = str(fallback_text_obj) if fallback_text_obj else text
 
     existing_row = seen.get(key)
     if existing_row is not None:

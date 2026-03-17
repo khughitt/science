@@ -1103,6 +1103,54 @@ def test_graph_evidence_merges_sources_for_reused_evidence_node() -> None:
         assert "paper/doi_10_6666_f" in rows[0]["sources"]
 
 
+def test_graph_evidence_falls_back_to_relation_claim_text_for_non_claim_subjects() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "hypothesis",
+                    "H1",
+                    "--text",
+                    "Hypothesis H1",
+                    "--source",
+                    "paper:doi_10_7777_g",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "concept/brca1",
+                    "cito:supports",
+                    "hypothesis/h1",
+                    "--source",
+                    "paper:doi_10_7777_g",
+                    "--text",
+                    "BRCA1 supports H1",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "evidence", "hypothesis/h1", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        rows = payload["rows"]
+        assert len(rows) == 1
+        assert rows[0]["text"] == "BRCA1 supports H1"
+
+
 def test_graph_coverage_shows_measured_and_observed_status() -> None:
     runner = CliRunner()
 
