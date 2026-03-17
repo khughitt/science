@@ -7,11 +7,16 @@ description: Scientific writing conventions for research documents. This skill s
 
 This skill defines writing conventions for documents within a Science project. Read this before writing or editing any document in `doc/` or `specs/`.
 
+The default epistemic posture is skeptical:
+- write hypotheses as organizing conjectures
+- write claims as uncertain unless the evidence base is unusually strong
+- describe evidence as supporting, disputing, or leaving a claim unresolved
+
 ## Voice and Tone
 
 - **Precise.** Choose words carefully. "The model predicts" is different from "the model suggests."
 - **Evidence-based.** Every substantive claim should reference evidence or be explicitly marked as conjecture.
-- **Appropriately hedged.** Use "suggests," "indicates," "is consistent with" for uncertain findings. Reserve "demonstrates," "proves," "shows" for strong evidence.
+- **Appropriately hedged.** Use "suggests," "indicates," "is consistent with," or "supports" for uncertain findings. Use stronger language only when the evidence base is genuinely strong and replicated.
 - **Active voice preferred.** "Smith et al. demonstrated" over "It was demonstrated by Smith et al."
 - **Concise.** Cut unnecessary words. Avoid throat-clearing introductions.
 
@@ -19,8 +24,8 @@ This skill defines writing conventions for documents within a Science project. R
 
 | Confidence Level | Language |
 |---|---|
-| Strong evidence, replicated | "X demonstrates / establishes / confirms" |
-| Good evidence, single study | "X shows / indicates / reveals" |
+| Strong evidence, replicated | "X strongly supports / provides strong evidence for" |
+| Good evidence, limited scope | "X supports / indicates" |
 | Suggestive evidence | "X suggests / points toward / is consistent with" |
 | Preliminary / weak | "X may indicate / could suggest / tentatively supports" |
 | Speculation | "One possibility is / It is conceivable that / We hypothesize" |
@@ -48,9 +53,14 @@ Every BibTeX key used in a document must have a corresponding entry in `papers/r
 When writing any document, actively connect the content to the project's research framework:
 
 - Reference relevant **hypotheses** by ID: `(see Hypothesis H01)`
+- Reference important **claims** or `relation_claim`s when they are the real unit being updated
 - Note implications for **open questions** in `doc/questions/`
 - Suggest updates to **next steps** when findings change priorities
 - Flag any findings that affect the **causal model** in `models/`
+
+Avoid writing as if one result has proved a hypothesis or validated an edge unless that standard is genuinely met.
+
+For the project’s reasoning model, see `docs/claim-and-evidence-model.md`.
 
 ## Formatting Conventions
 

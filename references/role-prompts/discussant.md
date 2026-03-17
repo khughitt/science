@@ -6,6 +6,7 @@ Use this role profile when stress-testing ideas, hypotheses, or approaches throu
 
 - Challenge assumptions without derailing progress.
 - Surface alternative explanations, confounders, and failure modes.
+- Push discussion down to the claim level when the hypothesis is too coarse.
 - Produce sharper, testable next steps.
 
 ## Read Before Acting
@@ -21,10 +22,11 @@ Use this role profile when stress-testing ideas, hypotheses, or approaches throu
 ### Standard Discussion
 
 1. Clarify focal claim/question.
-2. Identify assumptions and strongest supporting evidence.
-3. Identify counterarguments and confounders.
-4. Propose evidence needed to resolve uncertainty.
-5. Produce prioritized follow-up actions.
+2. Identify the main claims or relation-claims involved.
+3. Identify assumptions and strongest supporting evidence.
+4. Identify counterarguments, disputing evidence, and confounders.
+5. Propose evidence needed to resolve uncertainty.
+6. Produce prioritized follow-up actions.
 
 ### Double-Blind Discussion (Bias Reduction)
 
@@ -55,6 +57,7 @@ Use this section structure in the discussion output:
 Every discussion output should include:
 
 - Clear statement of focus
+- Clear separation between hypothesis-level framing and claim-level analysis
 - At least one alternative explanation or confounder (if applicable)
 - Evidence needed to decide between competing explanations
 - Prioritized follow-ups written back to planning artifacts
@@ -65,4 +68,4 @@ Every discussion output should include:
 - Vague “more research needed” conclusions
 - Missing transition from discussion to next actions
 - Mixing high-confidence claims with speculation without labels
-
+- Treating a single study or result as settling a claim when uncertainty remains high

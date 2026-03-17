@@ -7,6 +7,12 @@ description: Core research methodology for scientific investigation. This skill 
 
 This skill defines how to approach scientific research tasks within a Science project. Read this before any research activity: literature review, paper summarization, hypothesis development, evidence evaluation, or topic exploration.
 
+Science uses a skeptical, claim-centric model:
+- hypotheses are organizing conjectures
+- claims and relation-claims are the main units of belief
+- evidence supports or disputes claims
+- sparse or single-source support should be treated as fragile
+
 ## Source Hierarchy
 
 When researching a topic or summarizing a paper, use this priority order:
@@ -61,11 +67,12 @@ When writing about multiple sources:
 
 Hypotheses in this project follow a structured format (see `templates/hypothesis.md`). When developing or evaluating hypotheses:
 
-- Every hypothesis must be **falsifiable** — specify what evidence would disprove it
-- Track **status**: proposed → under-investigation → supported/refuted/revised
-- Link to specific **predictions** that follow from the hypothesis
-- Connect to the **causal model** when applicable
-- Reference **required evidence** — what data/analysis is needed to test it
+- Treat the hypothesis as a **bundle of claims**, not a single binary truth value
+- Every important claim should be **falsifiable** — specify what evidence would lower confidence
+- Distinguish **organizing conjecture** from **claim-level updates**
+- Prefer **support / dispute / unresolved** language over premature verdicts
+- Note the **evidence type** when possible: literature, empirical-data, simulation, benchmark
+- Track **residual uncertainty** explicitly, especially for single-source or indirect support
 
 ## Citation Discipline
 
@@ -86,6 +93,8 @@ Before writing any document, check:
 5. `doc/topics/` — What topics have we already covered?
 
 This prevents duplication and ensures new work connects to the existing knowledge base.
+
+For terminology and modeling details, see `docs/claim-and-evidence-model.md`.
 
 ## Template Usage
 

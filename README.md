@@ -2,7 +2,15 @@
 
 > *Named after [Science the lab rat](https://adventuretime.fandom.com/wiki/Science) from Adventure Time — an intelligent research assistant who helps explore the unknown.*
 
-Science is a Claude Code plugin that helps scientists and researchers develop ideas, refine hypotheses, and build reproducible computational pipelines.
+Science is a Claude Code plugin that helps scientists and researchers develop ideas, refine hypotheses, represent uncertain claims, and build reproducible computational pipelines.
+
+Its default stance is skeptical:
+- hypotheses are organizing conjectures
+- claims and relation-claims are the main units of belief
+- evidence supports or disputes claims rather than proving them outright
+- uncertainty is something to inspect and prioritize, not hide
+
+See [docs/claim-and-evidence-model.md](docs/claim-and-evidence-model.md) for the canonical reasoning model.
 
 ## What It Does
 
@@ -13,12 +21,12 @@ Science provides **skills** (structured research methodology), **commands** (int
 - **Identify research gaps** and turn them into prioritized next tasks
 - **Run structured discussions** (including optional double-blind mode)
 - **Review and reprioritize task plans** using explicit rationale
-- **Interpret results** and feed findings back into hypotheses, causal models, and priorities
-- **Develop hypotheses** with structured falsifiability criteria and evidence tracking
+- **Interpret results** as support/dispute updates on claims, hypotheses, and priorities
+- **Develop hypotheses** as bundles of uncertain claims with structured falsifiability criteria
 - **Pre-register expectations** — formalize predictions and decision criteria before analysis
 - **Compare competing hypotheses** — head-to-head evidence evaluation with discriminating predictions
 - **Audit for biases** — systematic cognitive and methodological bias checklist
-- **Sketch and formalize models** — capture variables, relationships, and unknowns, then add evidence provenance
+- **Sketch and formalize models** — capture variables, candidate relationships, and unknowns, then attach claim and evidence provenance
 - **Build and critique causal DAGs** — identify treatment, outcome, confounders, and check identifiability
 - **Plan and review pipelines** — translate inquiries into computational steps with validation criteria
 - **Find datasets** from public repositories, ranked by project relevance
@@ -45,7 +53,7 @@ claude --plugin-dir /path/to/science
 
 | Command | Description |
 |---|---|
-| `/science:status` | Curated project orientation — hypotheses, questions, activity, next steps |
+| `/science:status` | Curated project orientation — hypotheses, questions, uncertainty hotspots, activity, next steps |
 | `/science:create-project` | Scaffold a new research project with full directory structure |
 | `/science:import-project` | Add Science framework to an existing project without restructuring |
 | `/science:research-paper` | Research and synthesize a paper (LLM knowledge → web search → PDF) |
@@ -55,13 +63,13 @@ claude --plugin-dir /path/to/science
 | `/science:tasks` | Manage research and development tasks — add, complete, defer, list, filter |
 | `/science:search-literature` | Search OpenAlex/PubMed, rank results, and create a prioritized reading queue |
 | `/science:find-datasets` | Discover and document candidate datasets from public repositories |
-| `/science:add-hypothesis` | Develop and refine a hypothesis interactively |
+| `/science:add-hypothesis` | Develop and refine a hypothesis as a bundle of uncertain claims |
 | `/science:pre-register` | Formalize expectations and decision criteria before analysis |
-| `/science:compare-hypotheses` | Head-to-head evaluation of competing explanations |
+| `/science:compare-hypotheses` | Head-to-head comparison of competing claim bundles |
 | `/science:bias-audit` | Systematic bias and threat-to-validity check |
-| `/science:interpret-results` | Interpret results with pre-registration cross-check |
-| `/science:sketch-model` | Sketch a research model (auto-detects causal mode) |
-| `/science:specify-model` | Formalize a model with full evidence provenance |
+| `/science:interpret-results` | Interpret results as claim-level support/dispute updates |
+| `/science:sketch-model` | Sketch a research model with tentative claims and unknowns |
+| `/science:specify-model` | Formalize a model with explicit claims, evidence, and uncertainty |
 | `/science:critique-approach` | Review model for problems, sensitivity analysis |
 | `/science:plan-pipeline` | Generate implementation plan with QA checkpoints |
 | `/science:review-pipeline` | Audit plan against evidence rubric with QA coverage |
@@ -89,7 +97,7 @@ Aspects are project-type modifiers declared in `science.yaml` that tailor comman
 | `computational-analysis` | Computational and exploratory data analysis |
 | `software-development` | Software engineering — applications, tools, and libraries |
 
-For example, with `hypothesis-testing` active, `/science:interpret-results` adds a "Hypothesis Evaluation" section that tracks status transitions. With `causal-modeling`, it adds "Causal Model Implications" instead. Aspects compose — a project can activate several at once.
+For example, with `hypothesis-testing` active, `/science:interpret-results` can add more explicit claim and evidence evaluation. With `causal-modeling`, it adds causal-model implications instead. Aspects compose — a project can activate several at once.
 
 ## Project Structure
 
@@ -180,7 +188,7 @@ knowledge_profiles:
 /science:add-hypothesis
 ```
 
-For each conjecture — even vague ones — this command walks you through clarifying the claim, defining falsifiability criteria, listing predictions, and identifying required evidence. Output lands in `specs/hypotheses/` and gets cross-linked to open questions.
+For each conjecture — even vague ones — this command walks you through clarifying the organizing idea, decomposing it into testable claims, defining falsifiability criteria, listing predictions, and identifying required evidence. Output lands in `specs/hypotheses/` and gets cross-linked to open questions.
 
 After adding hypotheses, formalize your expectations:
 
@@ -228,7 +236,7 @@ For each high-priority paper from the search, this command synthesizes a structu
 /science:next-steps
 ```
 
-Audits coverage across five dimensions (concepts, evidence quality, contradictions, testability, data feasibility), synthesizes recent progress and hypothesis status, and recommends 3-5 high-value next actions.
+Audits coverage across five dimensions (concepts, evidence quality, contradictions, testability, data feasibility), synthesizes recent progress and uncertainty hotspots, and recommends 3-5 high-value next actions.
 
 ### 7. Stress-test ideas
 
@@ -254,7 +262,7 @@ Systematic check of cognitive and methodological biases against current project 
 /science:critique-approach
 ```
 
-`sketch-model` captures variables, relationships, data sources, and unknowns as an inquiry subgraph — auto-detecting causal mode when appropriate. `specify-model` formalizes the sketch with evidence provenance — every variable gets a type, every edge gets evidence.
+`sketch-model` captures variables, candidate relationships, data sources, and unknowns as an inquiry subgraph — auto-detecting causal mode when appropriate. `specify-model` formalizes the sketch with explicit claims, support/dispute links, and evidence provenance.
 
 `critique-approach` reviews the model for missing confounders, identifiability issues, structural problems, and sensitivity analysis.
 
