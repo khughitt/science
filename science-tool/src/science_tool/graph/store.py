@@ -59,7 +59,6 @@ PROJECT_ENTITY_PREFIXES: set[str] = {
 }
 RELATION_CLAIM_PREDICATE_URIS: frozenset[URIRef] = frozenset(
     {
-        SKOS.related,
         SCI_NS.relatedTo,
         SCIC_NS.causes,
         SCIC_NS.confounds,
@@ -319,16 +318,6 @@ def add_edge(
 
     _save_dataset(dataset, graph_path)
     return s_uri, p_uri, o_uri
-
-
-def reject_relation_claim_predicate(predicate: str) -> None:
-    predicate_uri = _resolve_term(predicate)
-    if predicate_uri in RELATION_CLAIM_PREDICATE_URIS:
-        raise click.ClickException(
-            f"Predicate '{predicate}' is an uncertain scientific assertion; use 'graph add relation-claim' instead."
-        )
-
-
 def add_inquiry(
     graph_path: Path,
     slug: str,
@@ -1700,58 +1689,160 @@ def query_claims(graph_path: Path, about: str, limit: int) -> list[dict[str, str
 
 def query_evidence(
     graph_path: Path,
-    hypothesis_id: str,
+    target_ref: str,
     limit: int,
 ) -> list[dict[str, str]]:
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
 
-    hyp_uri = _resolve_center_entity(hypothesis_id)
-
+    target_uri = _resolve_center_entity(target_ref)
     rows: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
 
-    # Collect all entities that have a cito relation to the hypothesis
-    relation_map: dict[URIRef, str] = {}
-    for subj, _, _ in knowledge.triples((None, CITO_NS.supports, hyp_uri)):
-        if isinstance(subj, URIRef):
-            relation_map[subj] = "supports"
-    for subj, _, _ in knowledge.triples((None, CITO_NS.disputes, hyp_uri)):
-        if isinstance(subj, URIRef):
-            relation_map[subj] = "disputes"
-    for subj, _, _ in knowledge.triples((None, CITO_NS.discusses, hyp_uri)):
-        if isinstance(subj, URIRef):
-            relation_map.setdefault(subj, "discusses")
-    for claim_uri, _, predicate_uri in knowledge.triples((None, SCI_NS.claimPredicate, None)):
-        if not isinstance(claim_uri, URIRef) or not isinstance(predicate_uri, URIRef):
-            continue
-        if (claim_uri, RDF.type, SCI_NS.RelationClaim) not in knowledge:
-            continue
-
-        claim_object = next(knowledge.objects(claim_uri, SCI_NS.claimObject), None)
-        if claim_object != hyp_uri:
-            continue
-        if predicate_uri == CITO_NS.supports:
-            relation_map[claim_uri] = "supports"
-        elif predicate_uri == CITO_NS.disputes:
-            relation_map[claim_uri] = "disputes"
-        elif predicate_uri == CITO_NS.discusses:
-            relation_map.setdefault(claim_uri, "discusses")
-
-    for ev_uri, relation in relation_map.items():
-        text_obj = next(knowledge.objects(ev_uri, SCHEMA_NS.text), None)
-        text = str(text_obj) if text_obj else ""
-
-        sources = sorted({str(src) for src in provenance.objects(ev_uri, PROV.wasDerivedFrom)})
-        rows.append(
-            {
-                "evidence": str(ev_uri),
-                "relation": relation,
-                "text": text,
-                "sources": "; ".join(sources),
-            }
+    if (target_uri, RDF.type, SCI_NS.Hypothesis) in knowledge:
+        _append_evidence_rows(
+            rows=rows,
+            seen=seen,
+            knowledge=knowledge,
+            provenance=provenance,
+            target_uri=target_uri,
+            include_discusses=False,
         )
+        for claim_uri in _linked_claims_for_hypothesis(knowledge, target_uri):
+            _append_evidence_rows(
+                rows=rows,
+                seen=seen,
+                knowledge=knowledge,
+                provenance=provenance,
+                target_uri=claim_uri,
+                include_discusses=True,
+            )
+    else:
+        _append_evidence_rows(
+            rows=rows,
+            seen=seen,
+            knowledge=knowledge,
+            provenance=provenance,
+            target_uri=target_uri,
+            include_discusses=True,
+        )
+
     return rows[:limit]
+
+
+def _append_evidence_rows(
+    rows: list[dict[str, str]],
+    seen: set[tuple[str, str]],
+    knowledge,
+    provenance,
+    target_uri: URIRef,
+    include_discusses: bool,
+) -> None:
+    predicates: tuple[tuple[URIRef, str], ...] = (
+        (CITO_NS.supports, "supports"),
+        (CITO_NS.disputes, "disputes"),
+        (CITO_NS.discusses, "discusses"),
+    )
+    allowed_predicates = predicates if include_discusses else predicates[:2]
+
+    for predicate_uri, relation in allowed_predicates:
+        for subj, _, _ in knowledge.triples((None, predicate_uri, target_uri)):
+            if isinstance(subj, URIRef):
+                _append_row(
+                    rows=rows,
+                    seen=seen,
+                    knowledge=knowledge,
+                    provenance=provenance,
+                    evidence_uri=subj,
+                    relation=relation,
+                )
+
+    for relation_claim_uri, _, predicate_uri in knowledge.triples((None, SCI_NS.claimPredicate, None)):
+        if not isinstance(relation_claim_uri, URIRef) or not isinstance(predicate_uri, URIRef):
+            continue
+        if (relation_claim_uri, RDF.type, SCI_NS.RelationClaim) not in knowledge:
+            continue
+        if not any(predicate_uri == allowed_predicate for allowed_predicate, _ in allowed_predicates):
+            continue
+
+        claim_object = next(knowledge.objects(relation_claim_uri, SCI_NS.claimObject), None)
+        if claim_object != target_uri:
+            continue
+
+        claim_subject = next(knowledge.objects(relation_claim_uri, SCI_NS.claimSubject), None)
+        evidence_uri = claim_subject if isinstance(claim_subject, URIRef) else relation_claim_uri
+        relation = next(
+            label for allowed_predicate, label in allowed_predicates if predicate_uri == allowed_predicate
+        )
+        _append_row(
+            rows=rows,
+            seen=seen,
+            knowledge=knowledge,
+            provenance=provenance,
+            evidence_uri=evidence_uri,
+            relation=relation,
+            fallback_uri=relation_claim_uri,
+        )
+
+
+def _append_row(
+    rows: list[dict[str, str]],
+    seen: set[tuple[str, str]],
+    knowledge,
+    provenance,
+    evidence_uri: URIRef,
+    relation: str,
+    fallback_uri: URIRef | None = None,
+) -> None:
+    key = (str(evidence_uri), relation)
+    if key in seen:
+        return
+
+    text_obj = next(knowledge.objects(evidence_uri, SCHEMA_NS.text), None)
+    text = str(text_obj) if text_obj else ""
+
+    source_uri = evidence_uri
+    sources = sorted({str(src) for src in provenance.objects(source_uri, PROV.wasDerivedFrom)})
+    if not sources and fallback_uri is not None:
+        sources = sorted({str(src) for src in provenance.objects(fallback_uri, PROV.wasDerivedFrom)})
+        if not text:
+            fallback_text_obj = next(knowledge.objects(fallback_uri, SCHEMA_NS.text), None)
+            text = str(fallback_text_obj) if fallback_text_obj else text
+
+    rows.append(
+        {
+            "evidence": str(evidence_uri),
+            "relation": relation,
+            "text": text,
+            "sources": "; ".join(sources),
+        }
+    )
+    seen.add(key)
+
+
+def _linked_claims_for_hypothesis(knowledge, hypothesis_uri: URIRef) -> list[URIRef]:
+    linked_claims: list[URIRef] = []
+    seen: set[URIRef] = set()
+
+    for subj, _, _ in knowledge.triples((None, CITO_NS.discusses, hypothesis_uri)):
+        if isinstance(subj, URIRef) and subj not in seen:
+            linked_claims.append(subj)
+            seen.add(subj)
+
+    for relation_claim_uri, _, _ in knowledge.triples((None, SCI_NS.claimPredicate, CITO_NS.discusses)):
+        if not isinstance(relation_claim_uri, URIRef):
+            continue
+        if (relation_claim_uri, RDF.type, SCI_NS.RelationClaim) not in knowledge:
+            continue
+
+        claim_object = next(knowledge.objects(relation_claim_uri, SCI_NS.claimObject), None)
+        claim_subject = next(knowledge.objects(relation_claim_uri, SCI_NS.claimSubject), None)
+        if claim_object == hypothesis_uri and isinstance(claim_subject, URIRef) and claim_subject not in seen:
+            linked_claims.append(claim_subject)
+            seen.add(claim_subject)
+
+    return linked_claims
 
 
 def query_coverage(
