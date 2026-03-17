@@ -1890,11 +1890,17 @@ def _collect_evidence_signals(knowledge, provenance, target_uri: URIRef) -> dict
             evidence_uri = claim_subject if isinstance(claim_subject, URIRef) else relation_claim_uri
             record("supports" if predicate_uri == CITO_NS.supports else "disputes", evidence_uri, relation_claim_uri)
 
+    total_evidence = len(support_items) + len(dispute_items)
+    unique_source_count = len(support_sources | dispute_sources)
+    if unique_source_count == 0 and total_evidence > 0:
+        unique_source_count = total_evidence
+
     return {
         "support_count": len(support_items),
         "dispute_count": len(dispute_items),
         "support_sources": support_sources,
         "dispute_sources": dispute_sources,
+        "source_count": unique_source_count,
     }
 
 
@@ -1990,9 +1996,10 @@ def query_gaps(
             support_count = int(evidence_summary["support_count"])
             dispute_count = int(evidence_summary["dispute_count"])
             total_evidence = support_count + dispute_count
+            source_count = int(evidence_summary["source_count"])
             if support_count > 0 and dispute_count > 0:
                 issues.append("evidential_fragility(contested)")
-            elif total_evidence == 1:
+            if total_evidence > 0 and source_count <= 1:
                 issues.append("evidential_fragility(single_source)")
 
         # Low confidence
@@ -2054,6 +2061,7 @@ def query_uncertainty(
             evidence_summary = _collect_evidence_signals(knowledge, provenance, uri)
             support_count = int(evidence_summary["support_count"])
             dispute_count = int(evidence_summary["dispute_count"])
+            source_count = int(evidence_summary["source_count"])
             signals: list[str] = []
             risk_score = 0.0
 
@@ -2062,7 +2070,7 @@ def query_uncertainty(
                 risk_score += 3.0
 
             total_evidence = support_count + dispute_count
-            if total_evidence == 1:
+            if total_evidence > 0 and source_count <= 1:
                 signals.append("single_source")
                 risk_score += 2.0
 

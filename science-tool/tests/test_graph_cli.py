@@ -1081,6 +1081,70 @@ def test_graph_gaps_identifies_low_connectivity_and_missing_provenance() -> None
             ).exit_code
             == 0
         )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Second supporting evidence from same source",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                    "--id",
+                    "ev2",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/ev2",
+                    "cito:supports",
+                    "relation_claim/rc1",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Second supporting evidence from same source",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                    "--id",
+                    "ev2",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/ev2",
+                    "cito:supports",
+                    "relation_claim/rc1",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                ],
+            ).exit_code
+            == 0
+        )
 
         result = runner.invoke(main, ["graph", "gaps", "concept/brca1", "--format", "json"])
         assert result.exit_code == 0
@@ -1224,7 +1288,6 @@ def test_graph_uncertainty_ranks_by_epistemic_status_and_confidence() -> None:
             ).exit_code
             == 0
         )
-
         result = runner.invoke(main, ["graph", "uncertainty", "--format", "json"])
         assert result.exit_code == 0
         payload = json.loads(result.output)
@@ -1380,6 +1443,38 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                     "0.2",
                     "--id",
                     "low_conf",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Second support for single-source BRCA1 claim",
+                    "--source",
+                    "paper:doi_10_3333_c",
+                    "--id",
+                    "ev4",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/ev4",
+                    "cito:supports",
+                    "claim/single",
+                    "--source",
+                    "paper:doi_10_3333_c",
                 ],
             ).exit_code
             == 0
