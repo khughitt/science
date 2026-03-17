@@ -1089,6 +1089,102 @@ def test_graph_gaps_identifies_low_connectivity_and_missing_provenance() -> None
         assert any("low_connectivity" in row["issues"] for row in rows)
 
 
+def test_graph_gaps_distinguishes_structural_and_evidential_fragility() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "edge",
+                    "concept/brca1",
+                    "skos:broader",
+                    "concept/orphan",
+                    "--graph",
+                    "graph/knowledge",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "hypothesis",
+                    "H3",
+                    "--text",
+                    "BRCA1 contributes to resistance",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "concept/brca1",
+                    "sci:relatedTo",
+                    "hypothesis/h3",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                    "--id",
+                    "rc1",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Single supporting evidence",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                    "--id",
+                    "ev1",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/ev1",
+                    "cito:supports",
+                    "relation_claim/rc1",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "gaps", "concept/brca1", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        rows = payload["rows"]
+        assert any("structural_fragility" in row["issues"] for row in rows)
+        assert any("evidential_fragility(single_source)" in row["issues"] for row in rows)
+
+
 def test_graph_uncertainty_ranks_by_epistemic_status_and_confidence() -> None:
     runner = CliRunner()
 
@@ -1135,6 +1231,151 @@ def test_graph_uncertainty_ranks_by_epistemic_status_and_confidence() -> None:
         rows = payload["rows"]
         assert len(rows) == 1
         assert "Weak" in rows[0]["text"]
+
+
+def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Contested BRCA1 claim",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                    "--id",
+                    "main",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Support for contested BRCA1 claim",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                    "--id",
+                    "ev1",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/ev1",
+                    "cito:supports",
+                    "claim/main",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Dispute for contested BRCA1 claim",
+                    "--source",
+                    "paper:doi_10_2222_b",
+                    "--id",
+                    "ev2",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/ev2",
+                    "cito:disputes",
+                    "claim/main",
+                    "--source",
+                    "paper:doi_10_2222_b",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Single-source BRCA1 claim",
+                    "--source",
+                    "paper:doi_10_3333_c",
+                    "--id",
+                    "single",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Only support for single-source BRCA1 claim",
+                    "--source",
+                    "paper:doi_10_3333_c",
+                    "--id",
+                    "ev3",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/ev3",
+                    "cito:supports",
+                    "claim/single",
+                    "--source",
+                    "paper:doi_10_3333_c",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "uncertainty", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        rows = payload["rows"]
+        assert rows[0]["text"] == "Contested BRCA1 claim"
+        assert "contested" in rows[0]["signals"]
+        assert any(row["text"] == "Single-source BRCA1 claim" for row in rows)
+        single_row = next(row for row in rows if row["text"] == "Single-source BRCA1 claim")
+        assert "single_source" in single_row["signals"]
 
 
 def test_graph_uncertainty_includes_disputed_epistemic_status() -> None:

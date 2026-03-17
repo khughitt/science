@@ -1796,10 +1796,8 @@ def _append_row(
     text_obj = next(knowledge.objects(evidence_uri, SCHEMA_NS.text), None)
     text = str(text_obj) if text_obj else ""
 
-    source_uri = evidence_uri
-    sources = sorted({str(src) for src in provenance.objects(source_uri, PROV.wasDerivedFrom)})
+    sources = _source_strings(provenance, evidence_uri, fallback_uri)
     if not sources and fallback_uri is not None:
-        sources = sorted({str(src) for src in provenance.objects(fallback_uri, PROV.wasDerivedFrom)})
         if not text:
             fallback_text_obj = next(knowledge.objects(fallback_uri, SCHEMA_NS.text), None)
             text = str(fallback_text_obj) if fallback_text_obj else text
@@ -1837,6 +1835,67 @@ def _linked_claims_for_hypothesis(knowledge, hypothesis_uri: URIRef) -> list[URI
             seen.add(claim_subject)
 
     return linked_claims
+
+
+def _source_strings(provenance, primary_uri: URIRef, fallback_uri: URIRef | None = None) -> list[str]:
+    sources = sorted({str(src) for src in provenance.objects(primary_uri, PROV.wasDerivedFrom)})
+    if sources or fallback_uri is None:
+        return sources
+    return sorted({str(src) for src in provenance.objects(fallback_uri, PROV.wasDerivedFrom)})
+
+
+def _evidence_targets_for_uri(knowledge, target_uri: URIRef) -> list[URIRef]:
+    if (target_uri, RDF.type, SCI_NS.Hypothesis) not in knowledge:
+        return [target_uri]
+    return [target_uri, *_linked_claims_for_hypothesis(knowledge, target_uri)]
+
+
+def _collect_evidence_signals(knowledge, provenance, target_uri: URIRef) -> dict[str, object]:
+    support_sources: set[str] = set()
+    dispute_sources: set[str] = set()
+    support_items: set[tuple[str, tuple[str, ...]]] = set()
+    dispute_items: set[tuple[str, tuple[str, ...]]] = set()
+
+    def record(relation: str, evidence_uri: URIRef, fallback_uri: URIRef | None = None) -> None:
+        source_strings = tuple(_source_strings(provenance, evidence_uri, fallback_uri))
+        item = (str(evidence_uri), source_strings)
+        if relation == "supports":
+            support_items.add(item)
+            support_sources.update(source_strings)
+            return
+        dispute_items.add(item)
+        dispute_sources.update(source_strings)
+
+    for aggregate_target in _evidence_targets_for_uri(knowledge, target_uri):
+        for subj, _, _ in knowledge.triples((None, CITO_NS.supports, aggregate_target)):
+            if isinstance(subj, URIRef):
+                record("supports", subj)
+        for subj, _, _ in knowledge.triples((None, CITO_NS.disputes, aggregate_target)):
+            if isinstance(subj, URIRef):
+                record("disputes", subj)
+
+        for relation_claim_uri, _, predicate_uri in knowledge.triples((None, SCI_NS.claimPredicate, None)):
+            if not isinstance(relation_claim_uri, URIRef) or not isinstance(predicate_uri, URIRef):
+                continue
+            if (relation_claim_uri, RDF.type, SCI_NS.RelationClaim) not in knowledge:
+                continue
+            if predicate_uri not in (CITO_NS.supports, CITO_NS.disputes):
+                continue
+
+            claim_object = next(knowledge.objects(relation_claim_uri, SCI_NS.claimObject), None)
+            if claim_object != aggregate_target:
+                continue
+
+            claim_subject = next(knowledge.objects(relation_claim_uri, SCI_NS.claimSubject), None)
+            evidence_uri = claim_subject if isinstance(claim_subject, URIRef) else relation_claim_uri
+            record("supports" if predicate_uri == CITO_NS.supports else "disputes", evidence_uri, relation_claim_uri)
+
+    return {
+        "support_count": len(support_items),
+        "dispute_count": len(dispute_items),
+        "support_sources": support_sources,
+        "dispute_sources": dispute_sources,
+    }
 
 
 def query_coverage(
@@ -1920,12 +1979,21 @@ def query_gaps(
         # Low connectivity
         degree = len(adjacency.get(uri, set()))
         if degree <= 1:
-            issues.append(f"low_connectivity(degree={degree})")
+            issues.append(f"structural_fragility(low_connectivity,degree={degree})")
 
-        # Claims missing provenance
-        if (uri, RDF.type, SCI_NS.Claim) in knowledge:
+        # Claim and hypothesis evidence/provenance fragility
+        if (uri, RDF.type, SCI_NS.Claim) in knowledge or (uri, RDF.type, SCI_NS.Hypothesis) in knowledge:
             if not any(provenance.triples((uri, PROV.wasDerivedFrom, None))):
                 issues.append("missing_provenance")
+
+            evidence_summary = _collect_evidence_signals(knowledge, provenance, uri)
+            support_count = int(evidence_summary["support_count"])
+            dispute_count = int(evidence_summary["dispute_count"])
+            total_evidence = support_count + dispute_count
+            if support_count > 0 and dispute_count > 0:
+                issues.append("evidential_fragility(contested)")
+            elif total_evidence == 1:
+                issues.append("evidential_fragility(single_source)")
 
         # Low confidence
         conf_obj = next(provenance.objects(uri, SCI_NS.confidence), None)
@@ -1933,7 +2001,7 @@ def query_gaps(
             try:
                 conf = float(str(conf_obj))
                 if conf < 0.5:
-                    issues.append(f"low_confidence({conf:.2f})")
+                    issues.append(f"authored_low_confidence({conf:.2f})")
             except ValueError:
                 pass
 
@@ -1983,19 +2051,36 @@ def query_uncertainty(
                 except ValueError:
                     pass
 
-            is_uncertain_status = status.lower() in uncertain_statuses
-            is_low_confidence = confidence is not None and confidence < 0.5
+            evidence_summary = _collect_evidence_signals(knowledge, provenance, uri)
+            support_count = int(evidence_summary["support_count"])
+            dispute_count = int(evidence_summary["dispute_count"])
+            signals: list[str] = []
+            risk_score = 0.0
 
-            if not is_uncertain_status and not is_low_confidence:
+            if support_count > 0 and dispute_count > 0:
+                signals.append("contested")
+                risk_score += 3.0
+
+            total_evidence = support_count + dispute_count
+            if total_evidence == 1:
+                signals.append("single_source")
+                risk_score += 2.0
+
+            is_uncertain_status = status.lower() in uncertain_statuses
+            if is_uncertain_status:
+                signals.append(f"status:{status.lower()}")
+                risk_score += 1.5
+
+            is_low_confidence = confidence is not None and confidence < 0.5
+            if is_low_confidence and confidence is not None:
+                signals.append("low_confidence")
+                risk_score += 1.0 + (0.5 - confidence)
+
+            if not signals:
                 continue
 
             text_obj = next(knowledge.objects(uri, SCHEMA_NS.text), None)
             text = str(text_obj) if text_obj else _short_name(str(uri))
-
-            # Sort key: lower confidence = more uncertain; uncertain status adds penalty
-            sort_score = confidence if confidence is not None else 0.5
-            if is_uncertain_status:
-                sort_score -= 1.0
 
             rows.append(
                 {
@@ -2003,11 +2088,14 @@ def query_uncertainty(
                     "text": text,
                     "status": status or "-",
                     "confidence": f"{confidence:.2f}" if confidence is not None else "-",
-                    "_sort": str(sort_score),
+                    "signals": "; ".join(signals),
+                    "support_count": str(support_count),
+                    "dispute_count": str(dispute_count),
+                    "_sort": str(risk_score),
                 }
             )
 
-    rows.sort(key=lambda r: float(r["_sort"]))
+    rows.sort(key=lambda r: float(r["_sort"]), reverse=True)
     for row in rows:
         del row["_sort"]
     return rows[:top]

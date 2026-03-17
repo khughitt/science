@@ -361,7 +361,7 @@ def graph_coverage(limit: int, output_format: str, graph_path: Path) -> None:
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def graph_gaps(center: str, hops: int, limit: int, output_format: str, graph_path: Path) -> None:
-    """Show low-coverage areas in a neighborhood (missing provenance, low confidence, low connectivity)."""
+    """Show structural and evidential fragility in a neighborhood around a graph target."""
 
     rows = query_gaps(graph_path=graph_path, center=center, hops=hops, limit=limit)
     emit_query_rows(
@@ -379,13 +379,19 @@ def graph_gaps(center: str, hops: int, limit: int, output_format: str, graph_pat
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def graph_uncertainty(top: int, output_format: str, graph_path: Path) -> None:
-    """Show highest-uncertainty claims/entities ranked by epistemic status and confidence."""
+    """Show claims and hypotheses ranked by derived uncertainty signals from support/dispute structure."""
 
     rows = query_uncertainty(graph_path=graph_path, top=top)
     emit_query_rows(
         output_format=output_format,
         title="Graph Uncertainty",
-        columns=[("entity", "Entity"), ("text", "Text"), ("status", "Status"), ("confidence", "Confidence")],
+        columns=[
+            ("entity", "Entity"),
+            ("text", "Text"),
+            ("signals", "Signals"),
+            ("status", "Status"),
+            ("confidence", "Confidence"),
+        ],
         rows=rows,
     )
 
