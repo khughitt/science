@@ -49,6 +49,9 @@ def test_graph_init_copies_viz_notebook() -> None:
         assert viz_path.exists()
         content = viz_path.read_text(encoding="utf-8")
         assert "marimo" in content
+        assert "Weakly Supported Claims" in content
+        assert "Contested Claims" in content
+        assert "Single-Source Claims" in content
         assert "viz" in result.output.lower()
         assert "uv run marimo edit" in result.output
 

@@ -687,6 +687,7 @@ def get_inquiry(graph_path: Path, slug: str) -> InquiryInfo:
         SCI_NS.paramSource,
         SCI_NS.paramNote,
         SCI_NS.paramRef,
+        SCI_NS.backedByClaim,
         SCI_NS.validatedBy,
         DCTERMS_NS.created,
     }
@@ -1484,6 +1485,7 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     {"predicate": "sci:paramRef", "description": "Parameter reference", "layer": "inquiry"},
     {"predicate": "sci:paramNote", "description": "Parameter rationale", "layer": "inquiry"},
     {"predicate": "sci:observability", "description": "Variable observability status", "layer": "graph/knowledge"},
+    {"predicate": "sci:backedByClaim", "description": "Inquiry edge backed by relation claim", "layer": "inquiry"},
     {"predicate": "sci:validatedBy", "description": "Step validated by criterion", "layer": "inquiry"},
     {"predicate": "sci:inquiryType", "description": "Inquiry type (general, causal)", "layer": "inquiry"},
     {
@@ -2310,7 +2312,7 @@ def _attach_edge_claims(
                 f"Attached claim '{claim_ref}' must assert the same subject, predicate, and object as the edge"
             )
 
-        context_graph.add((statement_uri, SCI_NS.validatedBy, claim_uri))
+        context_graph.add((statement_uri, SCI_NS.backedByClaim, claim_uri))
 
 
 def _edge_claims(context_graph, subject_uri: URIRef, predicate_uri: URIRef, object_uri: URIRef) -> list[URIRef]:
@@ -2320,7 +2322,7 @@ def _edge_claims(context_graph, subject_uri: URIRef, predicate_uri: URIRef, obje
             continue
         if (statement_uri, RDF.object, object_uri) not in context_graph:
             continue
-        for claim_uri in context_graph.objects(statement_uri, SCI_NS.validatedBy):
+        for claim_uri in context_graph.objects(statement_uri, SCI_NS.backedByClaim):
             if isinstance(claim_uri, URIRef):
                 claim_uris.add(claim_uri)
     return sorted(claim_uris, key=str)

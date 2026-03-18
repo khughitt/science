@@ -553,8 +553,13 @@ def quality_dashboard(df, mo, n_triples, pl):
     if n_triples == 0:
         _out = mo.vstack([mo.md("## Quality Dashboard"), mo.md("_No data._")])
     else:
+        def _display_label(uri: str, label_map: dict[str, str]) -> str:
+            return label_map.get(uri, uri)
+
         # 1. Entities missing definition or provenance
-        _typed_entities = set(df.filter(pl.col("predicate") == "rdf:type")["subject"].to_list())
+        _typed_entities = set(
+            df.filter((pl.col("predicate") == "rdf:type") & (pl.col("object") != "rdf:Statement"))["subject"].to_list()
+        )
         _has_definition = set(df.filter(pl.col("predicate") == "skos:definition")["subject"].to_list())
         _has_provenance = set(df.filter(pl.col("predicate") == "prov:wasDerivedFrom")["subject"].to_list())
         _missing_def = sorted(_typed_entities - _has_definition)
@@ -572,21 +577,98 @@ def quality_dashboard(df, mo, n_triples, pl):
             + ("\n".join(_missing_items) if _missing_items else "_All entities have definitions and provenance._")
         )
 
-        # 2. Low-confidence claims
-        _confidence_triples = df.filter(pl.col("predicate") == "sci:confidence")
-        _low_conf_items = []
-        if len(_confidence_triples) > 0:
-            for _row in _confidence_triples.iter_rows(named=True):
-                try:
-                    _val = float(_row["object"])
-                    if _val < 0.5:
-                        _low_conf_items.append(f"- `{_row['subject']}` — confidence {_val:.2f}")
-                except (ValueError, TypeError):
-                    pass
+        # 2. Claim evidence fragility
+        _label_map: dict[str, str] = {}
+        for _predicate in ("skos:prefLabel", "schema:text"):
+            for _row in df.filter(pl.col("predicate") == _predicate).iter_rows(named=True):
+                _label_map.setdefault(_row["subject"], _row["object"])
 
-        _confidence_panel = mo.md(
-            "### Low-Confidence Claims (< 0.5)\n\n"
-            + ("\n".join(_low_conf_items[:20]) if _low_conf_items else "_No low-confidence claims found._")
+        _claim_entities = set(
+            df.filter(
+                (pl.col("predicate") == "rdf:type")
+                & pl.col("object").is_in(["sci:Claim", "sci:RelationClaim", "sci:Hypothesis"])
+            )["subject"].to_list()
+        )
+
+        _provenance_map: dict[str, set[str]] = {}
+        for _row in df.filter(pl.col("predicate") == "prov:wasDerivedFrom").iter_rows(named=True):
+            _provenance_map.setdefault(_row["subject"], set()).add(_row["object"])
+
+        _claim_subject_map: dict[str, str] = {}
+        _claim_predicate_map: dict[str, str] = {}
+        _claim_object_map: dict[str, str] = {}
+        for _row in df.filter(pl.col("predicate") == "sci:claimSubject").iter_rows(named=True):
+            _claim_subject_map[_row["subject"]] = _row["object"]
+        for _row in df.filter(pl.col("predicate") == "sci:claimPredicate").iter_rows(named=True):
+            _claim_predicate_map[_row["subject"]] = _row["object"]
+        for _row in df.filter(pl.col("predicate") == "sci:claimObject").iter_rows(named=True):
+            _claim_object_map[_row["subject"]] = _row["object"]
+
+        _claim_signals: dict[str, dict[str, set[str]]] = {}
+
+        def _record_evidence(target: str, relation: str, evidence: str, relation_claim: str | None = None) -> None:
+            if target not in _claim_entities:
+                return
+            _entry = _claim_signals.setdefault(target, {"supports": set(), "disputes": set(), "sources": set()})
+            _entry[relation].add(evidence)
+
+            _sources = set(_provenance_map.get(evidence, set()))
+            if relation_claim is not None:
+                _sources.update(_provenance_map.get(relation_claim, set()))
+            if _sources:
+                _entry["sources"].update(_sources)
+            else:
+                _entry["sources"].add(evidence)
+
+        for _predicate, _relation in (("cito:supports", "supports"), ("cito:disputes", "disputes")):
+            for _row in df.filter(pl.col("predicate") == _predicate).iter_rows(named=True):
+                _record_evidence(_row["object"], _relation, _row["subject"])
+
+        _relation_claims = set(df.filter((pl.col("predicate") == "rdf:type") & (pl.col("object") == "sci:RelationClaim"))["subject"])
+        for _relation_claim in _relation_claims:
+            _predicate = _claim_predicate_map.get(_relation_claim)
+            _target = _claim_object_map.get(_relation_claim)
+            if _predicate not in {"cito:supports", "cito:disputes"} or _target is None:
+                continue
+            _evidence = _claim_subject_map.get(_relation_claim, _relation_claim)
+            _record_evidence(
+                _target,
+                "supports" if _predicate == "cito:supports" else "disputes",
+                _evidence,
+                _relation_claim,
+            )
+
+        _weak_support_items = []
+        _contested_items = []
+        _single_source_items = []
+        for _claim in sorted(_claim_signals):
+            _signals = _claim_signals[_claim]
+            _support_count = len(_signals["supports"])
+            _dispute_count = len(_signals["disputes"])
+            _source_count = len(_signals["sources"])
+            _label = _display_label(_claim, _label_map)
+            if _support_count == 1 and _dispute_count == 0:
+                _weak_support_items.append(f"- `{_label}` — supports {_support_count}, disputes {_dispute_count}")
+            if _support_count > 0 and _dispute_count > 0:
+                _contested_items.append(
+                    f"- `{_label}` — supports {_support_count}, disputes {_dispute_count}, sources {_source_count}"
+                )
+            if (_support_count + _dispute_count) > 0 and _source_count <= 1:
+                _single_source_items.append(
+                    f"- `{_label}` — evidence items {_support_count + _dispute_count}, sources {_source_count}"
+                )
+
+        _weak_support_panel = mo.md(
+            "### Weakly Supported Claims\n\n"
+            + ("\n".join(_weak_support_items[:20]) if _weak_support_items else "_No weakly supported claims found._")
+        )
+        _contested_panel = mo.md(
+            "### Contested Claims\n\n"
+            + ("\n".join(_contested_items[:20]) if _contested_items else "_No contested claims found._")
+        )
+        _single_source_panel = mo.md(
+            "### Single-Source Claims\n\n"
+            + ("\n".join(_single_source_items[:20]) if _single_source_items else "_No single-source claims found._")
         )
 
         # 3. Open questions by maturity
@@ -612,7 +694,16 @@ def quality_dashboard(df, mo, n_triples, pl):
             + ("\n".join(_mat_lines) if _mat_lines else "_No open questions found._")
         )
 
-        _out = mo.vstack([mo.md("## Quality Dashboard"), _missing_panel, _confidence_panel, _maturity_panel])
+        _out = mo.vstack(
+            [
+                mo.md("## Quality Dashboard"),
+                _missing_panel,
+                _weak_support_panel,
+                _contested_panel,
+                _single_source_panel,
+                _maturity_panel,
+            ]
+        )
     _out
 
 

@@ -53,6 +53,7 @@ class TestOntologyExtensions:
             "sci:paramRef",
             "sci:paramNote",
             "sci:observability",
+            "sci:backedByClaim",
             "sci:validatedBy",
         ]:
             assert pred in pred_names, f"{pred} not in PREDICATE_REGISTRY"

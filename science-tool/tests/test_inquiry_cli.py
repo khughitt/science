@@ -1,13 +1,15 @@
 """CLI tests for inquiry subcommands."""
 
 import json
-
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from rdflib import URIRef
+from rdflib.namespace import RDF
 
 from science_tool.cli import main
+from science_tool.graph.store import PROJECT_NS, SCI_NS, _load_dataset
 
 
 @pytest.fixture
@@ -142,6 +144,13 @@ class TestInquiryAddEdge:
                 "claims": ["http://example.org/project/relation_claim/a_feeds_into_b"],
             }
         ]
+
+        dataset = _load_dataset(graph_path)
+        inquiry_graph = dataset.graph(URIRef(str(PROJECT_NS) + "inquiry/test"))
+        statement_uri = next(inquiry_graph.subjects(RDF.subject, PROJECT_NS["concept/a"]), None)
+        assert statement_uri is not None
+        assert (statement_uri, SCI_NS.backedByClaim, PROJECT_NS["relation_claim/a_feeds_into_b"]) in inquiry_graph
+        assert (statement_uri, SCI_NS.validatedBy, PROJECT_NS["relation_claim/a_feeds_into_b"]) not in inquiry_graph
 
 
 class TestInquiryAddNodeInterior:

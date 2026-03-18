@@ -2,7 +2,6 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "marimo",
-#     "numpy",
 #     "altair>=5",
 #     "polars",
 #     "rdflib>=7",
@@ -36,7 +35,6 @@ def load_graph(graph_path_input, mo):
     from pathlib import Path
 
     import altair as alt
-    import numpy as np
     import polars as pl
 
     graph_file = Path(graph_path_input.value)
@@ -70,7 +68,7 @@ def load_graph(graph_path_input, mo):
         # Sort by longest prefix first so more specific matches win
         for prefix, short in sorted(_PREFIX_MAP.items(), key=lambda kv: -len(kv[0])):
             if s.startswith(prefix):
-                return short + s[len(prefix):]
+                return short + s[len(prefix) :]
         return s
 
     def layer_name(graph_uri: str | None) -> str:
@@ -94,15 +92,21 @@ def load_graph(graph_path_input, mo):
             ctx_id = str(ctx.identifier) if ctx.identifier else None
             ln = layer_name(ctx_id)
             for s, p, o in ctx:
-                rows.append({
-                    "subject": shorten_uri(s),
-                    "predicate": shorten_uri(p),
-                    "object": shorten_uri(o),
-                    "layer": ln,
-                })
+                rows.append(
+                    {
+                        "subject": shorten_uri(s),
+                        "predicate": shorten_uri(p),
+                        "object": shorten_uri(o),
+                        "layer": ln,
+                    }
+                )
 
-    df = pl.DataFrame(rows) if rows else pl.DataFrame(
-        schema={"subject": pl.String, "predicate": pl.String, "object": pl.String, "layer": pl.String}
+    df = (
+        pl.DataFrame(rows)
+        if rows
+        else pl.DataFrame(
+            schema={"subject": pl.String, "predicate": pl.String, "object": pl.String, "layer": pl.String}
+        )
     )
 
     n_triples = len(df)
@@ -159,10 +163,12 @@ def stats_overview(alt, df, mo, n_entities, n_predicates, n_triples, pl):
             kind="info",
         )
 
-        _out = mo.vstack([
-            mo.md("## Stats Overview"),
-            mo.hstack([mo.ui.altair_chart(_chart_layers), _stats_callout], justify="start", gap=2),
-        ])
+        _out = mo.vstack(
+            [
+                mo.md("## Stats Overview"),
+                mo.hstack([mo.ui.altair_chart(_chart_layers), _stats_callout], justify="start", gap=2),
+            ]
+        )
     _out
 
 
@@ -204,12 +210,7 @@ def predicate_freq(alt, df, mo, n_triples, pl):
     if n_triples == 0:
         _out = mo.vstack([mo.md("## Predicate Frequency"), mo.md("_No data._")])
     else:
-        _pred_df = (
-            df.group_by(["predicate", "layer"])
-            .len()
-            .rename({"len": "count"})
-            .sort("count", descending=True)
-        )
+        _pred_df = df.group_by(["predicate", "layer"]).len().rename({"len": "count"}).sort("count", descending=True)
 
         _chart_preds = (
             alt.Chart(_pred_df.to_pandas())
@@ -235,9 +236,7 @@ def predicate_freq(alt, df, mo, n_triples, pl):
 def network_controls(df, mo, n_triples):
     layers = ["all"] + sorted(df["layer"].unique().to_list()) if n_triples > 0 else ["all"]
     layer_filter = mo.ui.dropdown(options=layers, value="all", label="Layer filter")
-    max_edges_slider = mo.ui.slider(
-        start=10, stop=500, step=10, value=200, label="Max edges"
-    )
+    max_edges_slider = mo.ui.slider(start=10, stop=500, step=10, value=200, label="Max edges")
     mo.md(f"## Network Graph\n\n{mo.hstack([layer_filter, max_edges_slider])}")
     return layer_filter, max_edges_slider
 
@@ -251,19 +250,6 @@ def network_graph(alt, df, layer_filter, math, max_edges_slider, mo, n_triples, 
         _net_df = df
         if layer_filter.value != "all":
             _net_df = df.filter(pl.col("layer") == layer_filter.value)
-
-        # Exclude provenance-only targets (e.g. doc/*.md sources) from network
-        _prov_targets = set(
-            df.filter(pl.col("predicate") == "prov:wasDerivedFrom")["object"].to_list()
-        )
-        _typed_entities = set(
-            df.filter(pl.col("predicate") == "rdf:type")["subject"].to_list()
-        )
-        _prov_only = _prov_targets - _typed_entities
-        if _prov_only:
-            _net_df = _net_df.filter(
-                ~pl.col("subject").is_in(_prov_only) & ~pl.col("object").is_in(_prov_only)
-            )
 
         # Limit edges
         _max_e = max_edges_slider.value
@@ -344,24 +330,30 @@ def network_graph(alt, df, layer_filter, math, max_edges_slider, mo, n_triples, 
             # Build node dataframe
             _node_records = []
             for _i, _name in enumerate(_all_nodes):
-                _node_records.append({
-                    "entity": _name,
-                    "x": _pos_x[_i],
-                    "y": _pos_y[_i],
-                    "degree": _degree.get(_name, 1),
-                    "type": _type_map.get(_name, "unknown"),
-                })
+                _node_records.append(
+                    {
+                        "entity": _name,
+                        "x": _pos_x[_i],
+                        "y": _pos_y[_i],
+                        "degree": _degree.get(_name, 1),
+                        "type": _type_map.get(_name, "unknown"),
+                    }
+                )
             _nodes_pl = pl.DataFrame(_node_records)
 
             # Build edge dataframe
             _edge_records = []
             _preds = _net_df["predicate"].to_list()
             for _idx, (_u, _v) in enumerate(_edges):
-                _edge_records.append({
-                    "x": _pos_x[_u], "y": _pos_y[_u],
-                    "x2": _pos_x[_v], "y2": _pos_y[_v],
-                    "predicate": _preds[_idx],
-                })
+                _edge_records.append(
+                    {
+                        "x": _pos_x[_u],
+                        "y": _pos_y[_u],
+                        "x2": _pos_x[_v],
+                        "y2": _pos_y[_v],
+                        "predicate": _preds[_idx],
+                    }
+                )
             _edges_pl = pl.DataFrame(_edge_records)
 
             # Render with altair
@@ -400,20 +392,8 @@ def network_graph(alt, df, layer_filter, math, max_edges_slider, mo, n_triples, 
 
 # ── Neighborhood explorer ────────────────────────────────────────────
 @app.cell
-def neighborhood_controls(df, mo, n_triples, pl):
-    # Pick the most-connected typed entity as default
-    _default_entity = ""
-    if n_triples > 0:
-        _typed = set(df.filter(pl.col("predicate") == "rdf:type")["subject"].to_list())
-        _all_refs = df["subject"].to_list() + df["object"].to_list()
-        _deg: dict[str, int] = {}
-        for _n in _all_refs:
-            if _n in _typed:
-                _deg[_n] = _deg.get(_n, 0) + 1
-        if _deg:
-            _default_entity = max(_deg, key=_deg.get)  # type: ignore[arg-type]
-
-    entity_input = mo.ui.text(value=_default_entity, label="Entity (CURIE or name)", full_width=True)
+def neighborhood_controls(mo):
+    entity_input = mo.ui.text(value="", label="Entity (CURIE or name)", full_width=True)
     hops_slider = mo.ui.slider(start=1, stop=3, step=1, value=1, label="Hops")
     mo.md(f"## Neighborhood Explorer\n\n{mo.hstack([entity_input, hops_slider])}")
     return entity_input, hops_slider
@@ -536,8 +516,10 @@ def neighborhood_graph(alt, df, entity_input, hops_slider, math, mo, n_triples, 
                 alt.Chart(_ego_edges_pl.to_pandas())
                 .mark_rule(opacity=0.4, color="gray")
                 .encode(
-                    x=alt.X("x:Q", axis=None), y=alt.Y("y:Q", axis=None),
-                    x2="x2:Q", y2="y2:Q",
+                    x=alt.X("x:Q", axis=None),
+                    y=alt.Y("y:Q", axis=None),
+                    x2="x2:Q",
+                    y2="y2:Q",
                     tooltip=["predicate"],
                 )
             )
@@ -545,11 +527,14 @@ def neighborhood_graph(alt, df, entity_input, hops_slider, math, mo, n_triples, 
                 alt.Chart(_ego_nodes_pl.to_pandas())
                 .mark_circle()
                 .encode(
-                    x=alt.X("x:Q", axis=None), y=alt.Y("y:Q", axis=None),
+                    x=alt.X("x:Q", axis=None),
+                    y=alt.Y("y:Q", axis=None),
                     size=alt.Size("degree:Q", scale=alt.Scale(range=[50, 400]), legend=None),
-                    color=alt.Color("is_center:N", scale=alt.Scale(
-                        domain=["center", "other"], range=["#e45756", "#4c78a8"]
-                    ), title="Role"),
+                    color=alt.Color(
+                        "is_center:N",
+                        scale=alt.Scale(domain=["center", "other"], range=["#e45756", "#4c78a8"]),
+                        title="Role",
+                    ),
                     tooltip=["entity", "degree", "is_center"],
                 )
             )
@@ -568,19 +553,15 @@ def quality_dashboard(df, mo, n_triples, pl):
     if n_triples == 0:
         _out = mo.vstack([mo.md("## Quality Dashboard"), mo.md("_No data._")])
     else:
+        def _display_label(uri: str, label_map: dict[str, str]) -> str:
+            return label_map.get(uri, uri)
+
         # 1. Entities missing definition or provenance
-        # skos:definition is used for concepts; schema:text for claims/hypotheses/questions
         _typed_entities = set(
-            df.filter(pl.col("predicate") == "rdf:type")["subject"].to_list()
+            df.filter((pl.col("predicate") == "rdf:type") & (pl.col("object") != "rdf:Statement"))["subject"].to_list()
         )
-        _has_definition = set(
-            df.filter(
-                pl.col("predicate").is_in(["skos:definition", "schema:text"])
-            )["subject"].to_list()
-        )
-        _has_provenance = set(
-            df.filter(pl.col("predicate") == "prov:wasDerivedFrom")["subject"].to_list()
-        )
+        _has_definition = set(df.filter(pl.col("predicate") == "skos:definition")["subject"].to_list())
+        _has_provenance = set(df.filter(pl.col("predicate") == "prov:wasDerivedFrom")["subject"].to_list())
         _missing_def = sorted(_typed_entities - _has_definition)
         _missing_prov = sorted(_typed_entities - _has_provenance)
 
@@ -596,28 +577,103 @@ def quality_dashboard(df, mo, n_triples, pl):
             + ("\n".join(_missing_items) if _missing_items else "_All entities have definitions and provenance._")
         )
 
-        # 2. Low-confidence claims
-        _confidence_triples = df.filter(pl.col("predicate") == "sci:confidence")
-        _low_conf_items = []
-        if len(_confidence_triples) > 0:
-            for _row in _confidence_triples.iter_rows(named=True):
-                try:
-                    _val = float(_row["object"])
-                    if _val < 0.5:
-                        _low_conf_items.append(f"- `{_row['subject']}` — confidence {_val:.2f}")
-                except (ValueError, TypeError):
-                    pass
+        # 2. Claim evidence fragility
+        _label_map: dict[str, str] = {}
+        for _predicate in ("skos:prefLabel", "schema:text"):
+            for _row in df.filter(pl.col("predicate") == _predicate).iter_rows(named=True):
+                _label_map.setdefault(_row["subject"], _row["object"])
 
-        _confidence_panel = mo.md(
-            "### Low-Confidence Claims (< 0.5)\n\n"
-            + ("\n".join(_low_conf_items[:20]) if _low_conf_items else "_No low-confidence claims found._")
+        _claim_entities = set(
+            df.filter(
+                (pl.col("predicate") == "rdf:type")
+                & pl.col("object").is_in(["sci:Claim", "sci:RelationClaim", "sci:Hypothesis"])
+            )["subject"].to_list()
+        )
+
+        _provenance_map: dict[str, set[str]] = {}
+        for _row in df.filter(pl.col("predicate") == "prov:wasDerivedFrom").iter_rows(named=True):
+            _provenance_map.setdefault(_row["subject"], set()).add(_row["object"])
+
+        _claim_subject_map: dict[str, str] = {}
+        _claim_predicate_map: dict[str, str] = {}
+        _claim_object_map: dict[str, str] = {}
+        for _row in df.filter(pl.col("predicate") == "sci:claimSubject").iter_rows(named=True):
+            _claim_subject_map[_row["subject"]] = _row["object"]
+        for _row in df.filter(pl.col("predicate") == "sci:claimPredicate").iter_rows(named=True):
+            _claim_predicate_map[_row["subject"]] = _row["object"]
+        for _row in df.filter(pl.col("predicate") == "sci:claimObject").iter_rows(named=True):
+            _claim_object_map[_row["subject"]] = _row["object"]
+
+        _claim_signals: dict[str, dict[str, set[str]]] = {}
+
+        def _record_evidence(target: str, relation: str, evidence: str, relation_claim: str | None = None) -> None:
+            if target not in _claim_entities:
+                return
+            _entry = _claim_signals.setdefault(target, {"supports": set(), "disputes": set(), "sources": set()})
+            _entry[relation].add(evidence)
+
+            _sources = set(_provenance_map.get(evidence, set()))
+            if relation_claim is not None:
+                _sources.update(_provenance_map.get(relation_claim, set()))
+            if _sources:
+                _entry["sources"].update(_sources)
+            else:
+                _entry["sources"].add(evidence)
+
+        for _predicate, _relation in (("cito:supports", "supports"), ("cito:disputes", "disputes")):
+            for _row in df.filter(pl.col("predicate") == _predicate).iter_rows(named=True):
+                _record_evidence(_row["object"], _relation, _row["subject"])
+
+        _relation_claims = set(df.filter((pl.col("predicate") == "rdf:type") & (pl.col("object") == "sci:RelationClaim"))["subject"])
+        for _relation_claim in _relation_claims:
+            _predicate = _claim_predicate_map.get(_relation_claim)
+            _target = _claim_object_map.get(_relation_claim)
+            if _predicate not in {"cito:supports", "cito:disputes"} or _target is None:
+                continue
+            _evidence = _claim_subject_map.get(_relation_claim, _relation_claim)
+            _record_evidence(
+                _target,
+                "supports" if _predicate == "cito:supports" else "disputes",
+                _evidence,
+                _relation_claim,
+            )
+
+        _weak_support_items = []
+        _contested_items = []
+        _single_source_items = []
+        for _claim in sorted(_claim_signals):
+            _signals = _claim_signals[_claim]
+            _support_count = len(_signals["supports"])
+            _dispute_count = len(_signals["disputes"])
+            _source_count = len(_signals["sources"])
+            _label = _display_label(_claim, _label_map)
+            if _support_count == 1 and _dispute_count == 0:
+                _weak_support_items.append(f"- `{_label}` — supports {_support_count}, disputes {_dispute_count}")
+            if _support_count > 0 and _dispute_count > 0:
+                _contested_items.append(
+                    f"- `{_label}` — supports {_support_count}, disputes {_dispute_count}, sources {_source_count}"
+                )
+            if (_support_count + _dispute_count) > 0 and _source_count <= 1:
+                _single_source_items.append(
+                    f"- `{_label}` — evidence items {_support_count + _dispute_count}, sources {_source_count}"
+                )
+
+        _weak_support_panel = mo.md(
+            "### Weakly Supported Claims\n\n"
+            + ("\n".join(_weak_support_items[:20]) if _weak_support_items else "_No weakly supported claims found._")
+        )
+        _contested_panel = mo.md(
+            "### Contested Claims\n\n"
+            + ("\n".join(_contested_items[:20]) if _contested_items else "_No contested claims found._")
+        )
+        _single_source_panel = mo.md(
+            "### Single-Source Claims\n\n"
+            + ("\n".join(_single_source_items[:20]) if _single_source_items else "_No single-source claims found._")
         )
 
         # 3. Open questions by maturity
         _maturity_triples = df.filter(pl.col("predicate") == "sci:maturity")
-        _question_triples = df.filter(
-            (pl.col("predicate") == "rdf:type") & (pl.col("object") == "sci:Question")
-        )
+        _question_triples = df.filter((pl.col("predicate") == "rdf:type") & (pl.col("object") == "sci:Question"))
         _question_entities = set(_question_triples["subject"].to_list())
 
         _maturity_groups: dict[str, list[str]] = {}
@@ -638,7 +694,16 @@ def quality_dashboard(df, mo, n_triples, pl):
             + ("\n".join(_mat_lines) if _mat_lines else "_No open questions found._")
         )
 
-        _out = mo.vstack([mo.md("## Quality Dashboard"), _missing_panel, _confidence_panel, _maturity_panel])
+        _out = mo.vstack(
+            [
+                mo.md("## Quality Dashboard"),
+                _missing_panel,
+                _weak_support_panel,
+                _contested_panel,
+                _single_source_panel,
+                _maturity_panel,
+            ]
+        )
     _out
 
 
