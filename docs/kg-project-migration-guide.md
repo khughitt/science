@@ -112,6 +112,43 @@ Expected end state:
 | Hidden ontology links | Explicit bridge links through canonical source fields |
 | Task metadata outside the graph | Canonical task refs and task materialization |
 
+## Claim-Centric Uncertainty Migration
+
+Projects that already passed the canonical KG migration usually still need a second migration step: moving from hypothesis-level prose and scalar confidence toward explicit claims plus evidence.
+
+That migration should make these changes:
+
+- treat hypotheses as organizing bundles, not as the primary unit of belief
+- represent important uncertain assertions as `claim` or `relation_claim`
+- classify support as typed evidence:
+  - `literature_evidence`
+  - `empirical_data_evidence`
+  - `simulation_evidence`
+  - `benchmark_evidence`
+  - `expert_judgment`
+  - `negative_result`
+- demote authored confidence on hypotheses/questions to optional annotations rather than the main uncertainty model
+- prefer support/dispute plus evidence composition over flat confidence panels
+
+### Practical Rules
+
+- Do not migrate every sentence into a claim.
+- Do migrate assertions you expect to compare, support, dispute, prioritize, or export.
+- Do not treat “an experiment exists” as equivalent to “the claim is supported”.
+- Do preserve negative and invalidating results as disputing evidence instead of deleting the old story.
+
+### Dashboard Expectations After Migration
+
+After migration, the dashboard should help users find:
+
+- weakly supported claims
+- contested claims
+- single-source claims
+- claims lacking empirical data evidence
+- high-uncertainty neighborhoods worth investigating next
+
+If a project still mainly exposes scalar `confidence` on hypotheses and no claim-backed evidence summaries, it is only partially migrated.
+
 ## Notes For Tooling
 
 Tooling now assumes:
