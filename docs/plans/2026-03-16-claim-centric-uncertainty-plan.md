@@ -1,6 +1,7 @@
 # Claim-Centric Uncertainty Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> Long-term roadmap: [`2026-03-18-claim-centric-reasoning-roadmap.md`](./2026-03-18-claim-centric-reasoning-roadmap.md) describes the later phases that build on this initial implementation plan.
 
 **Goal:** Replace edge-as-fact and hypothesis-status-first assumptions with a skeptical, claim-centric uncertainty model across the Science graph, CLI, templates, and guidance.
 
