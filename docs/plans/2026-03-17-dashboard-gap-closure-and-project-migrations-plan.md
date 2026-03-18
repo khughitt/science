@@ -8,19 +8,19 @@
 
 **Tech Stack:** Click CLI, rdflib dataset queries, marimo/Polars visualization, Markdown docs, pytest, Ruff, Pyright.
 
-## Status Snapshot (2026-03-17)
+## Status Snapshot (2026-03-18)
 
 This plan is now partially implemented on `main`.
 
 Completed:
+- Task 1 landed: `docs/claim-centric-dashboard-contract.md` now defines the canonical claim and neighborhood summary contract, and the claim-centric uncertainty design links to it.
 - Task 2 landed in a minimal but usable form: `graph add claim` and `graph add relation-claim` accept `--evidence-type`, and the graph store aggregates typed evidence signals for dashboarding.
 - Task 3 landed on `main` via `d4acff2`: `query_dashboard_summary(...)` and `science-tool graph dashboard-summary` now exist and expose claim summaries in `table` and `json` formats.
+- Task 4 now has a first implementation: `query_neighborhood_summary(...)` and `science-tool graph neighborhood-summary` provide claim-centered neighborhood risk summaries with separate structural fragility reporting.
 - Task 6 is complete: the shared migration guide and project-specific migration guides were written.
 - Task 7 has been piloted in `3d-attention-bias`: the project was migrated to claim-backed support/dispute records and typed evidence.
 
 Still pending:
-- Task 1: the canonical dashboard contract doc has not been written yet.
-- Task 4: neighborhood uncertainty prioritization has not been implemented yet.
 - Task 5: the marimo notebook/dashboard still needs to be rebuilt around the store-level summary surfaces.
 - Task 8: shared user guidance still needs a final pass to teach the dashboard-guided migration workflow.
 
@@ -30,6 +30,8 @@ Refinement note:
 ---
 
 ### Task 1: Define A Reusable Dashboard Summary Contract
+
+**Status:** Completed.
 
 **Files:**
 - Create: `docs/claim-centric-dashboard-contract.md`
@@ -223,6 +225,19 @@ git commit -m "feat: add reusable claim-centric dashboard summaries"
 ```
 
 ### Task 4: Add Neighborhood Uncertainty Prioritization
+
+**Status:** Completed for the first claim-centered pass.
+
+What landed:
+- `query_neighborhood_summary(...)` in `science-tool/src/science_tool/graph/store.py`
+- `science-tool graph neighborhood-summary` in `science-tool/src/science_tool/cli.py`
+- neighborhood-level risk aggregation over local claim clusters
+- separate structural fragility reporting via `structural_fragility`
+
+Remaining refinement space:
+- richer neighborhood diffusion
+- stronger locality definitions beyond shared hypotheses and explicit claim links
+- tighter integration with notebook/dashboard panels in Task 5
 
 **Files:**
 - Modify: `science-tool/src/science_tool/graph/store.py`

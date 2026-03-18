@@ -47,6 +47,7 @@ from science_tool.graph.store import (
     query_evidence,
     query_gaps,
     query_neighborhood,
+    query_neighborhood_summary,
     query_predicates,
     query_uncertainty,
     read_graph_stats,
@@ -420,6 +421,35 @@ def graph_dashboard_summary(top: int, output_format: str, graph_path: Path) -> N
             ("source_count", "Sources"),
             ("evidence_types", "Evidence Types"),
             ("has_empirical_data", "Empirical"),
+        ],
+        rows=rows,
+    )
+
+
+@graph.command("neighborhood-summary")
+@click.option("--top", type=int, default=25, show_default=True)
+@click.option("--hops", type=int, default=1, show_default=True)
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_neighborhood_summary(top: int, hops: int, output_format: str, graph_path: Path) -> None:
+    """Show claim-centered neighborhood risk summaries for local uncertainty prioritization."""
+
+    rows = query_neighborhood_summary(graph_path=graph_path, top=top, hops=hops)
+    emit_query_rows(
+        output_format=output_format,
+        title="Graph Neighborhood Summary",
+        columns=[
+            ("center_claim", "Center Claim"),
+            ("text", "Text"),
+            ("neighborhood_risk", "Neighborhood Risk"),
+            ("avg_risk_score", "Avg Claim Risk"),
+            ("contested_count", "Contested"),
+            ("single_source_count", "Single Source"),
+            ("no_empirical_count", "No Empirical"),
+            ("neighbor_claim_count", "Neighbors"),
+            ("structural_fragility", "Structure"),
         ],
         rows=rows,
     )

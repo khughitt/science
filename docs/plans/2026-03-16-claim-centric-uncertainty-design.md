@@ -1,6 +1,7 @@
 # Claim-Centric Uncertainty Design
 
 > Canonical reference: [`docs/claim-and-evidence-model.md`](../claim-and-evidence-model.md) defines the reasoning model terminology and belief-update rules used by this design.
+> Dashboard contract: [`docs/claim-centric-dashboard-contract.md`](../claim-centric-dashboard-contract.md) defines the stable claim and neighborhood summary shapes that should drive uncertainty views.
 > Long-term roadmap: [`2026-03-18-claim-centric-reasoning-roadmap.md`](./2026-03-18-claim-centric-reasoning-roadmap.md) extends this design into a phased reasoning architecture for summaries, prioritization, and multi-scale views.
 
 ## Summary

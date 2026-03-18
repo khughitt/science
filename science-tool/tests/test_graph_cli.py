@@ -2161,6 +2161,299 @@ def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -
         assert contested_row["evidence_types"] == "literature_evidence; negative_result"
 
 
+def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "hypothesis",
+                    "Hcluster",
+                    "--text",
+                    "Local cluster of uncertain claims",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Contested local claim A",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                    "--id",
+                    "cluster_a",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/cluster_a",
+                    "cito:discusses",
+                    "hypothesis/hcluster",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Literature support for contested local claim A",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                    "--evidence-type",
+                    "literature_evidence",
+                    "--id",
+                    "cluster_a_support",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/cluster_a_support",
+                    "cito:supports",
+                    "claim/cluster_a",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Negative result for contested local claim A",
+                    "--source",
+                    "paper:doi_10_2222_b",
+                    "--evidence-type",
+                    "negative_result",
+                    "--id",
+                    "cluster_a_dispute",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/cluster_a_dispute",
+                    "cito:disputes",
+                    "claim/cluster_a",
+                    "--source",
+                    "paper:doi_10_2222_b",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Fragile local claim B",
+                    "--source",
+                    "paper:doi_10_3333_c",
+                    "--id",
+                    "cluster_b",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/cluster_b",
+                    "cito:discusses",
+                    "hypothesis/hcluster",
+                    "--source",
+                    "paper:doi_10_3333_c",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Single-source support for fragile local claim B",
+                    "--source",
+                    "paper:doi_10_3333_c",
+                    "--evidence-type",
+                    "literature_evidence",
+                    "--id",
+                    "cluster_b_support",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/cluster_b_support",
+                    "cito:supports",
+                    "claim/cluster_b",
+                    "--source",
+                    "paper:doi_10_3333_c",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Isolated well-supported claim",
+                    "--source",
+                    "paper:doi_10_4444_d",
+                    "--id",
+                    "isolated_good",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Empirical support one for isolated claim",
+                    "--source",
+                    "paper:doi_10_4444_d",
+                    "--evidence-type",
+                    "empirical_data_evidence",
+                    "--id",
+                    "isolated_support_1",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/isolated_support_1",
+                    "cito:supports",
+                    "claim/isolated_good",
+                    "--source",
+                    "paper:doi_10_4444_d",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Empirical support two for isolated claim",
+                    "--source",
+                    "paper:doi_10_5555_e",
+                    "--evidence-type",
+                    "empirical_data_evidence",
+                    "--id",
+                    "isolated_support_2",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/isolated_support_2",
+                    "cito:supports",
+                    "claim/isolated_good",
+                    "--source",
+                    "paper:doi_10_5555_e",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "neighborhood-summary", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+
+        contested_row = next(row for row in payload["rows"] if row["text"] == "Contested local claim A")
+        isolated_row = next(row for row in payload["rows"] if row["text"] == "Isolated well-supported claim")
+
+        assert contested_row["neighbor_claim_count"] == "1"
+        assert contested_row["contested_count"] == "1"
+        assert contested_row["single_source_count"] == "1"
+        assert contested_row["no_empirical_count"] == "2"
+        assert contested_row["structural_fragility"] == "connected"
+
+        assert isolated_row["neighbor_claim_count"] == "0"
+        assert isolated_row["structural_fragility"] == "isolated"
+        assert float(contested_row["neighborhood_risk"]) > float(isolated_row["neighborhood_risk"])
+
+
 def test_graph_scan_prose_returns_annotations_json() -> None:
     runner = CliRunner()
 

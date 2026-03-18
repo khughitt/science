@@ -6,6 +6,7 @@ docs/migrations/*
 docs/plans/*
 !docs/plans/2026-03-17-dashboard-gap-closure-and-project-migrations-plan.md
 !docs/plans/2026-03-18-claim-centric-reasoning-roadmap.md
+!docs/claim-centric-dashboard-contract.md
 notes
 .worktrees
 .tmp
