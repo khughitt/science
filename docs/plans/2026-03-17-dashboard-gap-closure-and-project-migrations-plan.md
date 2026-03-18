@@ -17,11 +17,11 @@ Completed:
 - Task 2 landed in a minimal but usable form: `graph add claim` and `graph add relation-claim` accept `--evidence-type`, and the graph store aggregates typed evidence signals for dashboarding.
 - Task 3 landed on `main` via `d4acff2`: `query_dashboard_summary(...)` and `science-tool graph dashboard-summary` now exist and expose claim summaries in `table` and `json` formats.
 - Task 4 now has a first implementation: `query_neighborhood_summary(...)` and `science-tool graph neighborhood-summary` provide claim-centered neighborhood risk summaries with separate structural fragility reporting.
+- Task 5 now has a first store-backed notebook implementation: the marimo dashboard uses `query_dashboard_summary(...)` and `query_neighborhood_summary(...)` for claim and neighborhood panels instead of reconstructing those summaries by scanning triples.
 - Task 6 is complete: the shared migration guide and project-specific migration guides were written.
 - Task 7 has been piloted in `3d-attention-bias`: the project was migrated to claim-backed support/dispute records and typed evidence.
 
 Still pending:
-- Task 5: the marimo notebook/dashboard still needs to be rebuilt around the store-level summary surfaces.
 - Task 8: shared user guidance still needs a final pass to teach the dashboard-guided migration workflow.
 
 Refinement note:
@@ -297,6 +297,21 @@ git commit -m "feat: add neighborhood uncertainty prioritization"
 ```
 
 ### Task 5: Rebuild The Marimo Dashboard Around Store Summaries
+
+**Status:** Completed for the first store-backed pass.
+
+What landed:
+- `science-tool/src/science_tool/graph/viz_template.py` now imports and uses `query_dashboard_summary(...)` and `query_neighborhood_summary(...)`
+- `knowledge/viz.py` is synced to the same store-backed logic
+- the quality dashboard now exposes:
+  - claims lacking empirical data evidence
+  - evidence type mix
+  - high-uncertainty neighborhoods
+
+Remaining refinement space:
+- richer charting and tabular presentation of summary outputs
+- cleaner explanation of neighborhood semantics inside the notebook
+- later expansion to inquiry and project summaries once those store-level outputs exist
 
 **Files:**
 - Modify: `science-tool/src/science_tool/graph/viz_template.py`

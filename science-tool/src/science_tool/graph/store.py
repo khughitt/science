@@ -2989,6 +2989,7 @@ requires-python = ">=3.11"
 dependencies = [
     "marimo",
     "altair>=5",
+    "click",
     "polars",
     "rdflib>=7",
 ]

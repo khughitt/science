@@ -134,6 +134,32 @@ def load_graph(graph_path_input, mo):
     )
 
 
+@app.cell
+def dashboard_summary_data(graph_path_input):
+    import sys
+    from pathlib import Path
+
+    _graph_path = Path(graph_path_input.value)
+    _cwd = Path.cwd().resolve()
+    _repo_root = _cwd.parent.parent if _cwd.name == "notebooks" and _cwd.parent.name == "code" else _cwd
+    _science_tool_src = _repo_root / "science-tool" / "src"
+    if str(_science_tool_src) not in sys.path:
+        sys.path.insert(0, str(_science_tool_src))
+
+    _dashboard_rows: list[dict[str, str]] = []
+    _neighborhood_rows: list[dict[str, str]] = []
+    _summary_error = ""
+    try:
+        from science_tool.graph.store import query_dashboard_summary, query_neighborhood_summary
+
+        _dashboard_rows = query_dashboard_summary(graph_path=_graph_path, top=25)
+        _neighborhood_rows = query_neighborhood_summary(graph_path=_graph_path, top=15, hops=1)
+    except Exception as exc:
+        _summary_error = str(exc)
+
+    return _dashboard_rows, _neighborhood_rows, _summary_error
+
+
 # ── Stats overview ───────────────────────────────────────────────────
 @app.cell
 def stats_overview(alt, df, mo, n_entities, n_predicates, n_triples, pl):
@@ -549,13 +575,10 @@ def neighborhood_graph(alt, df, entity_input, hops_slider, math, mo, n_triples, 
 
 # ── Quality dashboard ────────────────────────────────────────────────
 @app.cell
-def quality_dashboard(df, mo, n_triples, pl):
+def quality_dashboard(_dashboard_rows, _neighborhood_rows, _summary_error, df, mo, n_triples, pl):
     if n_triples == 0:
         _out = mo.vstack([mo.md("## Quality Dashboard"), mo.md("_No data._")])
     else:
-        def _display_label(uri: str, label_map: dict[str, str]) -> str:
-            return label_map.get(uri, uri)
-
         # 1. Entities missing definition or provenance
         _typed_entities = set(
             df.filter((pl.col("predicate") == "rdf:type") & (pl.col("object") != "rdf:Statement"))["subject"].to_list()
@@ -577,86 +600,33 @@ def quality_dashboard(df, mo, n_triples, pl):
             + ("\n".join(_missing_items) if _missing_items else "_All entities have definitions and provenance._")
         )
 
-        # 2. Claim evidence fragility
-        _label_map: dict[str, str] = {}
-        for _predicate in ("skos:prefLabel", "schema:text"):
-            for _row in df.filter(pl.col("predicate") == _predicate).iter_rows(named=True):
-                _label_map.setdefault(_row["subject"], _row["object"])
-
-        _claim_entities = set(
-            df.filter(
-                (pl.col("predicate") == "rdf:type")
-                & pl.col("object").is_in(["sci:Claim", "sci:RelationClaim", "sci:Hypothesis"])
-            )["subject"].to_list()
-        )
-
-        _provenance_map: dict[str, set[str]] = {}
-        for _row in df.filter(pl.col("predicate") == "prov:wasDerivedFrom").iter_rows(named=True):
-            _provenance_map.setdefault(_row["subject"], set()).add(_row["object"])
-
-        _claim_subject_map: dict[str, str] = {}
-        _claim_predicate_map: dict[str, str] = {}
-        _claim_object_map: dict[str, str] = {}
-        for _row in df.filter(pl.col("predicate") == "sci:claimSubject").iter_rows(named=True):
-            _claim_subject_map[_row["subject"]] = _row["object"]
-        for _row in df.filter(pl.col("predicate") == "sci:claimPredicate").iter_rows(named=True):
-            _claim_predicate_map[_row["subject"]] = _row["object"]
-        for _row in df.filter(pl.col("predicate") == "sci:claimObject").iter_rows(named=True):
-            _claim_object_map[_row["subject"]] = _row["object"]
-
-        _claim_signals: dict[str, dict[str, set[str]]] = {}
-
-        def _record_evidence(target: str, relation: str, evidence: str, relation_claim: str | None = None) -> None:
-            if target not in _claim_entities:
-                return
-            _entry = _claim_signals.setdefault(target, {"supports": set(), "disputes": set(), "sources": set()})
-            _entry[relation].add(evidence)
-
-            _sources = set(_provenance_map.get(evidence, set()))
-            if relation_claim is not None:
-                _sources.update(_provenance_map.get(relation_claim, set()))
-            if _sources:
-                _entry["sources"].update(_sources)
-            else:
-                _entry["sources"].add(evidence)
-
-        for _predicate, _relation in (("cito:supports", "supports"), ("cito:disputes", "disputes")):
-            for _row in df.filter(pl.col("predicate") == _predicate).iter_rows(named=True):
-                _record_evidence(_row["object"], _relation, _row["subject"])
-
-        _relation_claims = set(df.filter((pl.col("predicate") == "rdf:type") & (pl.col("object") == "sci:RelationClaim"))["subject"])
-        for _relation_claim in _relation_claims:
-            _predicate = _claim_predicate_map.get(_relation_claim)
-            _target = _claim_object_map.get(_relation_claim)
-            if _predicate not in {"cito:supports", "cito:disputes"} or _target is None:
-                continue
-            _evidence = _claim_subject_map.get(_relation_claim, _relation_claim)
-            _record_evidence(
-                _target,
-                "supports" if _predicate == "cito:supports" else "disputes",
-                _evidence,
-                _relation_claim,
-            )
-
         _weak_support_items = []
         _contested_items = []
         _single_source_items = []
-        for _claim in sorted(_claim_signals):
-            _signals = _claim_signals[_claim]
-            _support_count = len(_signals["supports"])
-            _dispute_count = len(_signals["disputes"])
-            _source_count = len(_signals["sources"])
-            _label = _display_label(_claim, _label_map)
-            if _support_count == 1 and _dispute_count == 0:
-                _weak_support_items.append(f"- `{_label}` — supports {_support_count}, disputes {_dispute_count}")
-            if _support_count > 0 and _dispute_count > 0:
+        _no_empirical_items = []
+        _evidence_mix_items = []
+        for _row in _dashboard_rows:
+            _text = _row["text"]
+            _support_count = _row["support_count"]
+            _dispute_count = _row["dispute_count"]
+            _source_count = _row["source_count"]
+            _signals = set() if _row["signals"] == "-" else {item.strip() for item in _row["signals"].split(";")}
+            _evidence_types = _row["evidence_types"]
+
+            if _support_count == "1" and _dispute_count == "0":
+                _weak_support_items.append(f"- `{_text}` - supports {_support_count}, disputes {_dispute_count}")
+            if _row["belief_state"] == "contested":
                 _contested_items.append(
-                    f"- `{_label}` — supports {_support_count}, disputes {_dispute_count}, sources {_source_count}"
+                    f"- `{_text}` - supports {_support_count}, disputes {_dispute_count}, sources {_source_count}"
                 )
-            if (_support_count + _dispute_count) > 0 and _source_count <= 1:
+            if "single_source" in _signals:
                 _single_source_items.append(
-                    f"- `{_label}` — evidence items {_support_count + _dispute_count}, sources {_source_count}"
+                    f"- `{_text}` - evidence items {int(_support_count) + int(_dispute_count)}, sources {_source_count}"
                 )
+            if "no_empirical_data" in _signals:
+                _no_empirical_items.append(f"- `{_text}` - evidence types {_evidence_types}")
+            if _evidence_types != "-":
+                _evidence_mix_items.append(f"- `{_text}` - {_evidence_types}")
 
         _weak_support_panel = mo.md(
             "### Weakly Supported Claims\n\n"
@@ -670,8 +640,41 @@ def quality_dashboard(df, mo, n_triples, pl):
             "### Single-Source Claims\n\n"
             + ("\n".join(_single_source_items[:20]) if _single_source_items else "_No single-source claims found._")
         )
+        _no_empirical_panel = mo.md(
+            "### Claims Lacking Empirical Data Evidence\n\n"
+            + (
+                "\n".join(_no_empirical_items[:20])
+                if _no_empirical_items
+                else "_No claims lacking empirical data evidence found._"
+            )
+        )
+        _evidence_mix_panel = mo.md(
+            "### Evidence Type Mix\n\n"
+            + ("\n".join(_evidence_mix_items[:20]) if _evidence_mix_items else "_No evidence-type summaries found._")
+        )
 
-        # 3. Open questions by maturity
+        _neighborhood_items = []
+        for _row in _neighborhood_rows:
+            if float(_row["neighborhood_risk"]) <= 0:
+                continue
+            _neighborhood_items.append(
+                f"- `{_row['text']}` - risk {_row['neighborhood_risk']}, neighbors {_row['neighbor_claim_count']}, "
+                f"contested {_row['contested_count']}, no empirical {_row['no_empirical_count']}, "
+                f"structure {_row['structural_fragility']}"
+            )
+        _neighborhood_panel = mo.md(
+            "### High-Uncertainty Neighborhoods\n\n"
+            + ("\n".join(_neighborhood_items[:20]) if _neighborhood_items else "_No high-uncertainty neighborhoods found._")
+        )
+
+        _summary_error_panel = None
+        if _summary_error:
+            _summary_error_panel = mo.callout(
+                mo.md(f"Store-backed dashboard summaries are unavailable: `{_summary_error}`"),
+                kind="warn",
+            )
+
+        # 2. Open questions by maturity
         _maturity_triples = df.filter(pl.col("predicate") == "sci:maturity")
         _question_triples = df.filter((pl.col("predicate") == "rdf:type") & (pl.col("object") == "sci:Question"))
         _question_entities = set(_question_triples["subject"].to_list())
@@ -697,10 +700,14 @@ def quality_dashboard(df, mo, n_triples, pl):
         _out = mo.vstack(
             [
                 mo.md("## Quality Dashboard"),
+                *([_summary_error_panel] if _summary_error_panel is not None else []),
                 _missing_panel,
                 _weak_support_panel,
                 _contested_panel,
                 _single_source_panel,
+                _no_empirical_panel,
+                _evidence_mix_panel,
+                _neighborhood_panel,
                 _maturity_panel,
             ]
         )

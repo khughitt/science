@@ -62,6 +62,26 @@ def test_graph_init_copies_viz_notebook() -> None:
         assert "rdflib" in pyproject_content
 
 
+def test_graph_init_viz_notebook_uses_store_summaries_for_dashboard_panels() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["graph", "init"])
+        assert result.exit_code == 0
+
+        viz_path = Path("code/notebooks/viz.py")
+        content = viz_path.read_text(encoding="utf-8")
+        assert "query_dashboard_summary" in content
+        assert "query_neighborhood_summary" in content
+        assert "Claims Lacking Empirical Data Evidence" in content
+        assert "High-Uncertainty Neighborhoods" in content
+        assert "Evidence Type Mix" in content
+
+        pyproject_path = Path("code/notebooks/pyproject.toml")
+        pyproject_content = pyproject_path.read_text(encoding="utf-8")
+        assert "click" in pyproject_content
+
+
 def test_graph_init_fails_if_graph_exists() -> None:
     runner = CliRunner()
 
