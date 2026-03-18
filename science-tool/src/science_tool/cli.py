@@ -43,6 +43,7 @@ from science_tool.graph.store import (
     list_inquiries,
     query_claims,
     query_coverage,
+    query_dashboard_summary,
     query_evidence,
     query_gaps,
     query_neighborhood,
@@ -396,6 +397,34 @@ def graph_uncertainty(top: int, output_format: str, graph_path: Path) -> None:
     )
 
 
+@graph.command("dashboard-summary")
+@click.option("--top", type=int, default=25, show_default=True)
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_dashboard_summary(top: int, output_format: str, graph_path: Path) -> None:
+    """Show claim-centric dashboard summaries for evidence mix, empirical support, and risk."""
+
+    rows = query_dashboard_summary(graph_path=graph_path, top=top)
+    emit_query_rows(
+        output_format=output_format,
+        title="Graph Dashboard Summary",
+        columns=[
+            ("claim", "Claim"),
+            ("text", "Text"),
+            ("belief_state", "Belief State"),
+            ("signals", "Signals"),
+            ("support_count", "Supports"),
+            ("dispute_count", "Disputes"),
+            ("source_count", "Sources"),
+            ("evidence_types", "Evidence Types"),
+            ("has_empirical_data", "Empirical"),
+        ],
+        rows=rows,
+    )
+
+
 @graph.command("viz")
 @click.option("--layer", "graph_layer", type=click.Choice(GRAPH_LAYERS), default="graph/knowledge", show_default=True)
 @click.option("--center", default=None)
@@ -473,6 +502,14 @@ def graph_scan_prose(directory: Path, output_format: str) -> None:
 
 
 PROJECT_STATUSES = ("selected-primary", "deferred", "active", "candidate", "speculative")
+EVIDENCE_TYPES = (
+    "literature_evidence",
+    "empirical_data_evidence",
+    "simulation_evidence",
+    "benchmark_evidence",
+    "expert_judgment",
+    "negative_result",
+)
 
 
 @graph.group("add")
@@ -535,6 +572,7 @@ def graph_add_paper(doi: str, graph_path: Path) -> None:
 @click.argument("text")
 @click.option("--source", required=True)
 @click.option("--confidence", type=float, default=None)
+@click.option("--evidence-type", type=click.Choice(EVIDENCE_TYPES), default=None)
 @click.option("--id", "claim_id", default=None)
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
@@ -543,6 +581,7 @@ def graph_add_claim(
     text: str,
     source: str,
     confidence: float | None,
+    evidence_type: str | None,
     claim_id: str | None,
     graph_path: Path,
 ) -> None:
@@ -553,6 +592,7 @@ def graph_add_claim(
         text=text,
         source=source,
         confidence=confidence,
+        evidence_type=evidence_type,
         claim_id=claim_id,
     )
     click.echo(f"Added claim: {claim_uri}")
@@ -564,6 +604,7 @@ def graph_add_claim(
 @click.argument("object", metavar="OBJECT")
 @click.option("--source", required=True)
 @click.option("--confidence", type=float, default=None)
+@click.option("--evidence-type", type=click.Choice(EVIDENCE_TYPES), default=None)
 @click.option("--text", default=None)
 @click.option("--id", "claim_id", default=None)
 @click.option(
@@ -575,6 +616,7 @@ def graph_add_relation_claim(
     object: str,
     source: str,
     confidence: float | None,
+    evidence_type: str | None,
     text: str | None,
     claim_id: str | None,
     graph_path: Path,
@@ -588,6 +630,7 @@ def graph_add_relation_claim(
         obj=object,
         source=source,
         confidence=confidence,
+        evidence_type=evidence_type,
         text=text,
         claim_id=claim_id,
     )

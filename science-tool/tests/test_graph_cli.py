@@ -1936,6 +1936,231 @@ def test_graph_uncertainty_includes_disputed_epistemic_status() -> None:
         assert any("Disputed" in row["text"] for row in payload["rows"])
 
 
+def test_graph_add_claim_accepts_evidence_type_metadata() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        result = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "claim",
+                "Literature support for dashboard summary",
+                "--source",
+                "paper:doi_10_1111_a",
+                "--evidence-type",
+                "literature_evidence",
+                "--id",
+                "lit_support",
+            ],
+        )
+        assert result.exit_code == 0
+
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+        claim_uri = PROJECT_NS["claim/lit_support"]
+
+        assert (claim_uri, SCI.evidenceType, Literal("literature_evidence")) in provenance
+
+
+def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Claim with mixed evidence",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                    "--id",
+                    "main",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Literature evidence for mixed claim",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                    "--evidence-type",
+                    "literature_evidence",
+                    "--id",
+                    "lit_support",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/lit_support",
+                    "cito:supports",
+                    "claim/main",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Empirical evidence for mixed claim",
+                    "--source",
+                    "paper:doi_10_2222_b",
+                    "--evidence-type",
+                    "empirical_data_evidence",
+                    "--id",
+                    "emp_support",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/emp_support",
+                    "cito:supports",
+                    "claim/main",
+                    "--source",
+                    "paper:doi_10_2222_b",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Contested literature-only claim",
+                    "--source",
+                    "paper:doi_10_3333_c",
+                    "--id",
+                    "contested",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Literature support for contested claim",
+                    "--source",
+                    "paper:doi_10_3333_c",
+                    "--evidence-type",
+                    "literature_evidence",
+                    "--id",
+                    "contested_support",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/contested_support",
+                    "cito:supports",
+                    "claim/contested",
+                    "--source",
+                    "paper:doi_10_3333_c",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Negative empirical result for contested claim",
+                    "--source",
+                    "paper:doi_10_4444_d",
+                    "--evidence-type",
+                    "negative_result",
+                    "--id",
+                    "contested_dispute",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/contested_dispute",
+                    "cito:disputes",
+                    "claim/contested",
+                    "--source",
+                    "paper:doi_10_4444_d",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "dashboard-summary", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+
+        mixed_row = next(row for row in payload["rows"] if row["text"] == "Claim with mixed evidence")
+        assert mixed_row["support_count"] == "2"
+        assert mixed_row["dispute_count"] == "0"
+        assert mixed_row["has_empirical_data"] == "yes"
+        assert mixed_row["belief_state"] in {"supported", "well_supported"}
+        assert mixed_row["evidence_types"] == "empirical_data_evidence; literature_evidence"
+
+        contested_row = next(row for row in payload["rows"] if row["text"] == "Contested literature-only claim")
+        assert contested_row["support_count"] == "1"
+        assert contested_row["dispute_count"] == "1"
+        assert contested_row["has_empirical_data"] == "no"
+        assert contested_row["belief_state"] == "contested"
+        assert contested_row["evidence_types"] == "literature_evidence; negative_result"
+
+
 def test_graph_scan_prose_returns_annotations_json() -> None:
     runner = CliRunner()
 

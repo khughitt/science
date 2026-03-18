@@ -197,6 +197,7 @@ def add_claim(
     text: str,
     source: str,
     confidence: float | None,
+    evidence_type: str | None = None,
     claim_id: str | None = None,
 ) -> URIRef:
     dataset = _load_dataset(graph_path)
@@ -217,6 +218,8 @@ def add_claim(
     provenance.add((claim_uri, PROV.wasDerivedFrom, _resolve_term(source)))
     if confidence is not None:
         provenance.add((claim_uri, SCI_NS.confidence, Literal(confidence, datatype=XSD.decimal)))
+    if evidence_type is not None:
+        provenance.add((claim_uri, SCI_NS.evidenceType, Literal(evidence_type)))
 
     _save_dataset(dataset, graph_path)
     return claim_uri
@@ -229,6 +232,7 @@ def add_relation_claim(
     obj: str,
     source: str,
     confidence: float | None,
+    evidence_type: str | None = None,
     text: str | None = None,
     claim_id: str | None = None,
 ) -> URIRef:
@@ -259,6 +263,8 @@ def add_relation_claim(
     provenance.add((claim_uri, PROV.wasDerivedFrom, _resolve_term(source)))
     if confidence is not None:
         provenance.add((claim_uri, SCI_NS.confidence, Literal(confidence, datatype=XSD.decimal)))
+    if evidence_type is not None:
+        provenance.add((claim_uri, SCI_NS.evidenceType, Literal(evidence_type)))
 
     _save_dataset(dataset, graph_path)
     return claim_uri
@@ -1468,6 +1474,7 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     {"predicate": "sci:measuredBy", "description": "Variable measured by dataset", "layer": "graph/datasets"},
     {"predicate": "sci:projectStatus", "description": "Project status of entity", "layer": "graph/knowledge"},
     {"predicate": "sci:confidence", "description": "Confidence score (0.0-1.0)", "layer": "graph/provenance"},
+    {"predicate": "sci:evidenceType", "description": "Evidence classification for claims/evidence items", "layer": "graph/provenance"},
     {"predicate": "sci:epistemicStatus", "description": "Epistemic status of claim", "layer": "graph/provenance"},
     {"predicate": "sci:maturity", "description": "Maturity of open question", "layer": "graph/knowledge"},
     {"predicate": "scic:causes", "description": "Causal relationship", "layer": "graph/causal"},
@@ -1973,6 +1980,146 @@ def _collect_evidence_signals(knowledge, provenance, target_uri: URIRef) -> dict
         "dispute_sources": dispute_sources,
         "source_count": unique_source_count,
     }
+
+
+def _evidence_type_strings(provenance, primary_uri: URIRef, fallback_uri: URIRef | None = None) -> set[str]:
+    evidence_types = {str(value) for value in provenance.objects(primary_uri, SCI_NS.evidenceType)}
+    if fallback_uri is not None:
+        evidence_types.update(str(value) for value in provenance.objects(fallback_uri, SCI_NS.evidenceType))
+    return {value for value in evidence_types if value}
+
+
+def _collect_evidence_types(knowledge, provenance, target_uri: URIRef) -> set[str]:
+    evidence_types: set[str] = set()
+
+    def record(evidence_uri: URIRef, fallback_uri: URIRef | None = None) -> None:
+        evidence_types.update(_evidence_type_strings(provenance, evidence_uri, fallback_uri))
+
+    for aggregate_target in _evidence_targets_for_uri(knowledge, target_uri):
+        for subj, _, _ in knowledge.triples((None, CITO_NS.supports, aggregate_target)):
+            if isinstance(subj, URIRef):
+                record(subj)
+        for subj, _, _ in knowledge.triples((None, CITO_NS.disputes, aggregate_target)):
+            if isinstance(subj, URIRef):
+                record(subj)
+
+        for relation_claim_uri, _, predicate_uri in knowledge.triples((None, SCI_NS.claimPredicate, None)):
+            if not isinstance(relation_claim_uri, URIRef) or not isinstance(predicate_uri, URIRef):
+                continue
+            if (relation_claim_uri, RDF.type, SCI_NS.RelationClaim) not in knowledge:
+                continue
+            if predicate_uri not in (CITO_NS.supports, CITO_NS.disputes):
+                continue
+
+            claim_object = next(knowledge.objects(relation_claim_uri, SCI_NS.claimObject), None)
+            if claim_object != aggregate_target:
+                continue
+
+            claim_subject = next(knowledge.objects(relation_claim_uri, SCI_NS.claimSubject), None)
+            evidence_uri = claim_subject if isinstance(claim_subject, URIRef) else relation_claim_uri
+            record(evidence_uri, relation_claim_uri)
+
+    return evidence_types
+
+
+def _belief_state(
+    support_count: int,
+    dispute_count: int,
+    source_count: int,
+) -> str:
+    if dispute_count > 0:
+        return "contested"
+    if support_count == 0:
+        return "speculative"
+    if source_count <= 1:
+        return "fragile"
+    if support_count >= 2 and source_count >= 2:
+        return "well_supported"
+    return "supported"
+
+
+def query_dashboard_summary(
+    graph_path: Path,
+    top: int,
+) -> list[dict[str, str]]:
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    provenance = dataset.graph(_graph_uri("graph/provenance"))
+
+    rows: list[dict[str, str]] = []
+    seen: set[URIRef] = set()
+    for entity_type in (SCI_NS.Claim, SCI_NS.Hypothesis):
+        for uri, _, _ in knowledge.triples((None, RDF.type, entity_type)):
+            if not isinstance(uri, URIRef) or uri in seen:
+                continue
+            seen.add(uri)
+
+            evidence_summary = _collect_evidence_signals(knowledge, provenance, uri)
+            support_count = int(evidence_summary["support_count"])
+            dispute_count = int(evidence_summary["dispute_count"])
+            source_count = int(evidence_summary["source_count"])
+            evidence_types = sorted(_collect_evidence_types(knowledge, provenance, uri))
+            has_empirical_data = "empirical_data_evidence" in evidence_types
+            belief_state = _belief_state(support_count=support_count, dispute_count=dispute_count, source_count=source_count)
+
+            status_obj = next(provenance.objects(uri, SCI_NS.epistemicStatus), None)
+            status = str(status_obj) if status_obj else ""
+            conf_obj = next(provenance.objects(uri, SCI_NS.confidence), None)
+            confidence: float | None = None
+            if conf_obj is not None:
+                try:
+                    confidence = float(str(conf_obj))
+                except ValueError:
+                    pass
+
+            signals: list[str] = []
+            risk_score = 0.0
+            total_evidence = support_count + dispute_count
+            if dispute_count > 0:
+                signals.append("contested")
+                risk_score += 3.0
+            if support_count > 0 and source_count <= 1:
+                signals.append("single_source")
+                risk_score += 2.0
+            if total_evidence > 0 and not has_empirical_data:
+                signals.append("no_empirical_data")
+                risk_score += 1.5
+            if total_evidence == 0:
+                signals.append("no_evidence")
+                risk_score += 1.0
+            if confidence is not None and confidence < 0.5:
+                signals.append("low_confidence")
+                risk_score += 1.0 + (0.5 - confidence)
+            if status:
+                signals.append(f"status:{status}")
+                risk_score += 0.5
+
+            if total_evidence == 0 and confidence is None and not status:
+                continue
+
+            text_obj = next(knowledge.objects(uri, SCHEMA_NS.text), None)
+            text = str(text_obj) if text_obj else _short_name(str(uri))
+            label_obj = next(knowledge.objects(uri, SKOS.prefLabel), None)
+            label = str(label_obj) if label_obj else text
+
+            rows.append(
+                {
+                    "claim": str(uri),
+                    "label": label,
+                    "text": text,
+                    "belief_state": belief_state,
+                    "support_count": str(support_count),
+                    "dispute_count": str(dispute_count),
+                    "source_count": str(source_count),
+                    "evidence_types": "; ".join(evidence_types) if evidence_types else "-",
+                    "has_empirical_data": "yes" if has_empirical_data else "no",
+                    "signals": "; ".join(signals) if signals else "-",
+                    "risk_score": f"{risk_score:.2f}",
+                }
+            )
+
+    rows.sort(key=lambda row: (-float(row["risk_score"]), row["text"]))
+    return rows[:top]
 
 
 def query_coverage(
