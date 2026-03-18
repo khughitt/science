@@ -76,6 +76,8 @@ def test_graph_init_viz_notebook_uses_store_summaries_for_dashboard_panels() -> 
         assert "Claims Lacking Empirical Data Evidence" in content
         assert "High-Uncertainty Neighborhoods" in content
         assert "Evidence Type Mix" in content
+        assert "SCIENCE_TOOL_IMPORT_ROOT = " in content
+        assert "__SCIENCE_TOOL_IMPORT_ROOT__" not in content
 
         pyproject_path = Path("code/notebooks/pyproject.toml")
         pyproject_content = pyproject_path.read_text(encoding="utf-8")
@@ -2179,6 +2181,72 @@ def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -
         assert contested_row["has_empirical_data"] == "no"
         assert contested_row["belief_state"] == "contested"
         assert contested_row["evidence_types"] == "literature_evidence; negative_result"
+
+
+def test_graph_dashboard_summary_counts_benchmark_evidence_as_empirical_presence() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Benchmark-backed claim",
+                    "--source",
+                    "paper:doi_10_6666_f",
+                    "--id",
+                    "benchmark_target",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Benchmark evidence for claim",
+                    "--source",
+                    "paper:doi_10_6666_f",
+                    "--evidence-type",
+                    "benchmark_evidence",
+                    "--id",
+                    "benchmark_support",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/benchmark_support",
+                    "cito:supports",
+                    "claim/benchmark_target",
+                    "--source",
+                    "paper:doi_10_6666_f",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "dashboard-summary", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+
+        benchmark_row = next(row for row in payload["rows"] if row["text"] == "Benchmark-backed claim")
+        assert benchmark_row["has_empirical_data"] == "yes"
+        assert benchmark_row["evidence_types"] == "benchmark_evidence"
 
 
 def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> None:

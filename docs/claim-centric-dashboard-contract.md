@@ -67,6 +67,7 @@ Current interpretation rules:
 - `belief_state` is claim-local.
 - `risk_score` is claim-local.
 - `signals` should be explainable from support/dispute structure and evidence composition.
+- `has_empirical_data` should currently become `true` when the observed evidence mix includes `empirical_data_evidence` or `benchmark_evidence`.
 
 ## `evidence_mix_summary`
 

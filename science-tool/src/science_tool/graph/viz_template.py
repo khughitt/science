@@ -12,6 +12,7 @@ import marimo
 
 __generated_with = "0.13.0"
 app = marimo.App(width="medium")
+SCIENCE_TOOL_IMPORT_ROOT = "__SCIENCE_TOOL_IMPORT_ROOT__"
 
 
 # ── Config & data loading ────────────────────────────────────────────
@@ -140,11 +141,9 @@ def dashboard_summary_data(graph_path_input):
     from pathlib import Path
 
     _graph_path = Path(graph_path_input.value)
-    _cwd = Path.cwd().resolve()
-    _repo_root = _cwd.parent.parent if _cwd.name == "notebooks" and _cwd.parent.name == "code" else _cwd
-    _science_tool_src = _repo_root / "science-tool" / "src"
-    if str(_science_tool_src) not in sys.path:
-        sys.path.insert(0, str(_science_tool_src))
+    _science_tool_import_root = Path(SCIENCE_TOOL_IMPORT_ROOT)
+    if _science_tool_import_root.exists() and str(_science_tool_import_root) not in sys.path:
+        sys.path.insert(0, str(_science_tool_import_root))
 
     _dashboard_rows: list[dict[str, str]] = []
     _neighborhood_rows: list[dict[str, str]] = []

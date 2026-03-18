@@ -4,7 +4,6 @@ import hashlib
 import importlib.resources
 import json
 import re
-import shutil
 import subprocess
 from collections import deque
 from datetime import datetime, timezone
@@ -2076,7 +2075,9 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
     dispute_count = cast(int, evidence_summary["dispute_count"])
     source_count = cast(int, evidence_summary["source_count"])
     evidence_types = sorted(_collect_evidence_types(knowledge, provenance, uri))
-    has_empirical_data = "empirical_data_evidence" in evidence_types
+    has_empirical_data = any(
+        evidence_type in {"empirical_data_evidence", "benchmark_evidence"} for evidence_type in evidence_types
+    )
     belief_state = _belief_state(support_count=support_count, dispute_count=dispute_count, source_count=source_count)
 
     status_obj = next(provenance.objects(uri, SCI_NS.epistemicStatus), None)
@@ -3004,7 +3005,9 @@ def _copy_viz_notebook(notebooks_dir: Path) -> None:
     notebooks_dir.mkdir(parents=True, exist_ok=True)
     template = importlib.resources.files("science_tool.graph").joinpath("viz_template.py")
     with importlib.resources.as_file(template) as src:
-        shutil.copy2(src, dest)
+        import_root = Path(__file__).resolve().parents[2]
+        content = src.read_text(encoding="utf-8").replace("__SCIENCE_TOOL_IMPORT_ROOT__", import_root.as_posix())
+        dest.write_text(content, encoding="utf-8")
 
     pyproject = notebooks_dir / "pyproject.toml"
     if not pyproject.exists():
