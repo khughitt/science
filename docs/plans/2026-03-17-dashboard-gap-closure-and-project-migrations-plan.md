@@ -20,9 +20,7 @@ Completed:
 - Task 5 now has a first store-backed notebook implementation: the marimo dashboard uses `query_dashboard_summary(...)` and `query_neighborhood_summary(...)` for claim and neighborhood panels instead of reconstructing those summaries by scanning triples.
 - Task 6 is complete: the shared migration guide and project-specific migration guides were written.
 - Task 7 has been piloted in `3d-attention-bias`: the project was migrated to claim-backed support/dispute records and typed evidence.
-
-Still pending:
-- Task 8: shared user guidance still needs a final pass to teach the dashboard-guided migration workflow.
+- Task 8 is complete: shared guidance now teaches how to recognize partially migrated projects, classify evidence with the canonical taxonomy, and use dashboard/neighborhood summaries to prioritize work.
 
 Refinement note:
 - The shipped `dashboard-summary` command already covers the core claim-level summary fields, so the next implementation phase should treat claim summaries as an existing dependency and focus on neighborhood summaries plus notebook integration rather than rebuilding Task 3 from scratch.
@@ -461,6 +459,14 @@ Run the project’s standard graph audit/build/validate commands and capture the
 Commit in the pilot project repo, not in `science`.
 
 ### Task 8: Fold The Migration Lessons Back Into Shared Guidance
+
+**Status:** Completed.
+
+What landed:
+- `README.md` now teaches the reasoning model, migration posture, and evidence taxonomy more explicitly
+- `skills/research/SKILL.md` now teaches evidence classification, unmigrated-project detection, and use of dashboard summary commands
+- `commands/status.md` now treats `dashboard-summary` and `neighborhood-summary` as the primary uncertainty surfaces
+- `commands/interpret-results.md` now pushes canonical evidence typing and dashboard-guided prioritization
 
 **Files:**
 - Modify: `README.md`

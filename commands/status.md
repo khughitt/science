@@ -51,6 +51,8 @@ When `knowledge/graph.trig` exists:
 1. Run:
 
 ```bash
+science-tool graph dashboard-summary --format json
+science-tool graph neighborhood-summary --format json
 science-tool graph uncertainty --format json
 science-tool graph gaps --format json
 ```
@@ -58,11 +60,15 @@ science-tool graph gaps --format json
 2. Surface:
 - contested claims
 - single-source claims
-- low-confidence claims
+- claims lacking empirical data evidence
+- evidence-type mix when relevant
 - high-uncertainty neighborhoods
 - structurally fragile areas
 
-3. Prefer this section over simplistic “supported vs refuted” summaries.
+3. Prefer `dashboard-summary` and `neighborhood-summary` as the primary epistemic view.
+Use `uncertainty` and `gaps` as secondary support views rather than the main dashboard.
+
+4. If the graph does not expose claim-backed evidence summaries yet, say that the project appears only partially migrated and treat the uncertainty section as provisional.
 
 ### 5. Recent Activity
 

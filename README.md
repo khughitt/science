@@ -34,6 +34,17 @@ Science provides **skills** (structured research methodology), **commands** (int
 - **Import existing projects** into the Science framework without restructuring
 - **Validate project structure** with automated checks (template conformance, citation integrity)
 
+## Reasoning Model
+
+Science treats research graphs as uncertain by default.
+
+- hypotheses are organizing conjectures
+- claims and relation-claims are the units of belief
+- evidence supports or disputes claims
+- dashboard summaries should help you find fragile claims, contested regions, and claims lacking empirical support
+
+If a project still mainly expresses confidence as scalar values on hypotheses or questions, and does not yet expose claim-backed evidence, it is only partially migrated to the current model.
+
 ## Installation
 
 ### From a Marketplace
@@ -189,6 +200,16 @@ knowledge_profiles:
 ```
 
 For each conjecture — even vague ones — this command walks you through clarifying the organizing idea, decomposing it into testable claims, defining falsifiability criteria, listing predictions, and identifying required evidence. Output lands in `specs/hypotheses/` and gets cross-linked to open questions.
+
+As the project matures, treat each hypothesis as a claim bundle rather than a single verdict target.
+Important claims should accumulate explicit support or dispute from:
+
+- `literature_evidence`
+- `empirical_data_evidence`
+- `simulation_evidence`
+- `benchmark_evidence`
+- `expert_judgment`
+- `negative_result`
 
 After adding hypotheses, formalize your expectations:
 

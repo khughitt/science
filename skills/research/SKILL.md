@@ -12,6 +12,7 @@ Science uses a skeptical, claim-centric model:
 - claims and relation-claims are the main units of belief
 - evidence supports or disputes claims
 - sparse or single-source support should be treated as fragile
+- contested neighborhoods and claims lacking empirical support should be treated as prioritization signals, not just annotations
 
 ## Source Hierarchy
 
@@ -73,6 +74,54 @@ Hypotheses in this project follow a structured format (see `templates/hypothesis
 - Prefer **support / dispute / unresolved** language over premature verdicts
 - Note the **evidence type** when possible: literature, empirical-data, simulation, benchmark
 - Track **residual uncertainty** explicitly, especially for single-source or indirect support
+
+## Evidence Classification
+
+When updating the project model, prefer the canonical evidence categories:
+
+- `literature_evidence`
+- `empirical_data_evidence`
+- `simulation_evidence`
+- `benchmark_evidence`
+- `expert_judgment`
+- `negative_result`
+
+Use `empirical_data_evidence` for project-run analyses over observed data.
+Use `simulation_evidence` only when the result primarily comes from a model world.
+Use `negative_result` when the finding meaningfully disputes a claim or undermines prior support.
+
+Do not collapse these into a generic "computational evidence" label.
+
+## Recognizing Unmigrated Projects
+
+Treat a project as only partially migrated when:
+
+- hypothesis documents carry most of the real reasoning
+- scalar `confidence` on hypotheses or questions is still doing most of the epistemic work
+- claims are not yet decomposed from broad hypotheses
+- evidence is not yet attached as explicit support/dispute
+
+In those cases:
+
+- prefer creating or refining claims over editing prose alone
+- prefer claim-backed graph updates over summary-only status changes
+- call out that the project still needs migration work when that affects interpretation quality
+
+## Using Dashboard Summaries
+
+When `knowledge/graph.trig` exists, use the store summaries to guide effort:
+
+- `science-tool graph dashboard-summary --format json`
+- `science-tool graph neighborhood-summary --format json`
+
+Use them to identify:
+
+- contested claims
+- single-source claims
+- claims lacking empirical support
+- high-uncertainty neighborhoods
+
+These are high-value places to direct reading, replication, experimental work, or model cleanup.
 
 ## Citation Discipline
 

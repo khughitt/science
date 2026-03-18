@@ -55,11 +55,12 @@ Extract the main findings and classify each as:
 - `methodological`
 
 Also identify the evidence type where possible:
-- literature
-- empirical-data
-- simulation
-- benchmark
-- expert judgment
+- `literature_evidence`
+- `empirical_data_evidence`
+- `simulation_evidence`
+- `benchmark_evidence`
+- `expert_judgment`
+- `negative_result`
 
 Include effect sizes, uncertainty intervals, and sample counts where available.
 
@@ -94,6 +95,7 @@ Before updating beliefs, check:
 - control integrity
 - whether the result is confirmatory or exploratory
 - whether the result is independent of prior supporting evidence or largely redundant
+- whether it adds empirical support to a claim that previously had only literature or simulation support
 
 If the finding is fragile, say so explicitly.
 
@@ -103,6 +105,7 @@ When graph updates are warranted, frame them as claim updates:
 - add a project claim describing the result
 - attach it as `cito:supports` or `cito:disputes` to the affected `relation_claim`
 - note residual uncertainty, especially when evidence is single-source, weak, or contested
+- classify the new evidence explicitly using the canonical evidence types above
 
 Do not use hypothesis status changes as the primary output.
 Hypothesis-level summaries can be updated later as a secondary reflection of underlying claim changes.
@@ -123,6 +126,19 @@ Propose changes to the task queue:
 - claims needing more empirical evidence
 - contested areas needing direct comparison or replication
 - weakly supported regions of the graph worth prioritizing
+- high-uncertainty neighborhoods that look likely to pay off with targeted follow-up
+
+When `knowledge/graph.trig` exists, prefer using:
+
+```bash
+science-tool graph dashboard-summary --format json
+science-tool graph neighborhood-summary --format json
+```
+
+to anchor the prioritization section, especially for:
+- claims lacking empirical support
+- single-source claims
+- contested local clusters
 
 ## Writing
 
@@ -144,7 +160,8 @@ Do not mechanically flip them to `supported` or `refuted`.
 2. Add new questions to `doc/questions/` when needed.
 3. Update tasks via `science-tool tasks`.
 4. If graph updates were proposed, point the user to the exact claim or relation-claim updates to make.
-5. Suggest next steps:
+5. If the project still lacks claim-backed evidence summaries, say that it appears partially migrated and that interpretation quality is constrained by that gap.
+6. Suggest next steps:
    - `/science:compare-hypotheses`
    - `/science:discuss`
    - `/science:add-hypothesis`
