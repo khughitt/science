@@ -16,6 +16,30 @@ The earlier design and implementation plan established the skeptical baseline:
 
 This roadmap defines what comes next: how `science` should evolve from a claim-aware graph into a reusable reasoning system with stable summary contracts, multi-scale uncertainty views, and action-oriented prioritization.
 
+## Status Snapshot (2026-03-18)
+
+This roadmap is no longer purely forward-looking.
+Several of its early phases now have concrete first-pass implementations on the `neighborhood-summaries` branch:
+
+- Phase 1 is largely complete.
+- Phase 2 is complete for the first stable contract pass.
+- Phase 3 is complete for the first claim-neighborhood pass.
+- Phase 5 is partially underway through store-backed claim and neighborhood dashboards.
+
+What has landed so far:
+
+- a canonical dashboard contract for `claim_summary`, `neighborhood_summary`, and `evidence_mix_summary`
+- `graph dashboard-summary`
+- `graph neighborhood-summary`
+- a store-backed marimo dashboard that consumes those summary queries
+- shared guidance that teaches dashboard-guided prioritization and migration posture
+
+Important caveats:
+
+- richer evidence-item-first authoring and structured study/result metadata are still future work
+- higher-level summaries for questions, inquiries, and projects do not exist yet
+- prioritization is still mostly ranking-oriented rather than decision-oriented
+
 ## Target End State
 
 The long-term goal is not just a better dashboard.
@@ -132,6 +156,9 @@ Remaining cleanup:
 
 ### Phase 2: Stable Summary Contract
 
+Status:
+- complete for the first pass
+
 Goal:
 - make the current summary surfaces explicit and durable
 
@@ -149,7 +176,14 @@ Exit criteria:
 - claim summaries are documented and treated as stable
 - neighborhood summaries have a first-pass schema even if their scoring evolves
 
+Current state:
+- satisfied for the current claim and neighborhood dashboard surfaces
+- future revisions should evolve the contract conservatively rather than reopening the summary model ad hoc
+
 ### Phase 3: Neighborhood And Locality-Aware Reasoning
+
+Status:
+- complete for the first claim-centered pass
 
 Goal:
 - move from isolated claim risk to local graph risk
@@ -168,7 +202,14 @@ Recommended interpretation:
 Exit criteria:
 - users can identify not just weak claims, but weak or contested regions of the project graph
 
+Current state:
+- satisfied for first-pass claim neighborhoods
+- further work should refine locality semantics and diffusion rather than reintroducing notebook-local neighborhood logic
+
 ### Phase 4: Richer Evidence Modeling
+
+Status:
+- partially complete
 
 Goal:
 - improve the epistemic quality of belief updates by structuring evidence more precisely
@@ -200,7 +241,15 @@ Longer-term alignment:
 Exit criteria:
 - claim confidence depends more on structured evidence than on residual scalar annotations
 
+Current state:
+- the evidence taxonomy is active and dashboard summaries distinguish key evidence types
+- benchmark evidence now counts toward empirical-presence summaries
+- structured study/result metadata and evidence-item-first authoring remain open
+
 ### Phase 5: Multi-Scale Research Summaries
+
+Status:
+- partially underway
 
 Goal:
 - let users navigate uncertainty across the project at multiple levels
@@ -221,7 +270,15 @@ What this enables:
 Exit criteria:
 - users can move cleanly from a project view down to the exact weak claims and evidence gaps driving that summary
 
+Current state:
+- claim and neighborhood summaries exist
+- the notebook consumes those store summaries directly
+- `question_summary`, `inquiry_summary`, and `project_summary` are still missing and remain the next real expansion of this phase
+
 ### Phase 6: Action-Oriented Prioritization
+
+Status:
+- not implemented, but partially scaffolded by current guidance
 
 Goal:
 - convert uncertainty summaries into next-step guidance
@@ -243,7 +300,14 @@ This phase matters because:
 Exit criteria:
 - users can use the graph not just to inspect beliefs, but to plan research effort
 
+Current state:
+- guidance now tells users to prioritize contested neighborhoods, single-source claims, and claims lacking empirical support
+- the store does not yet produce explicit next-step or decision summaries
+
 ### Phase 7: Optional Formalization
+
+Status:
+- future work
 
 Goal:
 - support more formal reasoning only where it pays for itself
