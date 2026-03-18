@@ -17,7 +17,7 @@ For interactive exploration, prefer marimo notebooks instead.
 ## Project Structure
 
 ```
-code/pipelines/
+code/workflows/
 ├── Snakefile           # Main workflow definition
 ├── config.yaml         # Parameters (linked to inquiry AnnotatedParams)
 ├── envs/               # Conda environment specs per rule
@@ -131,4 +131,4 @@ snakemake --dag | dot -Tpng > dag.png
 2. **Config parameters** map to inquiry `AnnotatedParam` values
 3. **Validation rules** call `science-tool datasets validate`
 4. **Output** goes to `data/processed/` with its own `datapackage.json`
-5. Document each rule using `templates/pipeline-step.md`
+5. Document each rule using the framework `pipeline-step.md` template (or a project override in `.ai/templates/`)

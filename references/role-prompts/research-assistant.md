@@ -13,7 +13,7 @@ Use this role profile when the primary objective is high-quality research synthe
 1. `specs/research-question.md`
 2. `specs/scope-boundaries.md` (if present)
 3. `tasks/active.md`
-4. Relevant docs in `doc/topics/`, `doc/papers/`, `doc/questions/`
+4. Relevant docs in `doc/background/topics/`, `doc/background/papers/`, `doc/questions/`
 5. Skills: `research-methodology`, `scientific-writing`
 
 ## Core Behaviors
@@ -51,4 +51,3 @@ Prefer work that unlocks later high-value decisions.
 - Inflated task queues without prioritization rationale
 - Missing contradictory evidence
 - Weak citation hygiene
-

@@ -65,8 +65,8 @@ claude --plugin-dir /path/to/science
 | Command | Description |
 |---|---|
 | `/science:status` | Curated project orientation — hypotheses, questions, uncertainty hotspots, activity, next steps |
-| `/science:create-project` | Scaffold a new research project with full directory structure |
-| `/science:import-project` | Add Science framework to an existing project without restructuring |
+| `/science:create-project` | Scaffold a new Science-managed project using the `research` or `software` profile |
+| `/science:import-project` | Migrate an existing project into a canonical Science project profile |
 | `/science:research-paper` | Research and synthesize a paper (LLM knowledge → web search → PDF) |
 | `/science:research-topic` | Research and synthesize a topic with project context |
 | `/science:next-steps` | Gap analysis + progress synthesis + prioritized recommendations |
@@ -112,63 +112,65 @@ For example, with `hypothesis-testing` active, `/science:interpret-results` can 
 
 ## Project Structure
 
-When you run `/science:create-project`, Science scaffolds:
+See [docs/project-organization-profiles.md](docs/project-organization-profiles.md) for migration rules and profile-selection guidance.
+
+Science supports two steady-state project profiles:
+
+- `research` for research-first projects
+- `software` for tools, apps, libraries, and CLIs
+
+All Science-managed projects draw from a common root set:
 
 ```
-my-project/
-├── science.yaml              # Project manifest (aspects, paths, metadata, knowledge_profiles)
-├── .env                      # API keys (gitignored)
-├── CLAUDE.md                 # Instructions for Claude Code
-├── AGENTS.md                 # Operational guide
-├── RESEARCH_PLAN.md          # High-level research strategy
-├── tasks/                    # Task queue
-│   └── active.md             # Current tasks
-├── validate.sh               # Structural validation
-├── specs/                    # Research scope
-│   ├── research-question.md
-│   ├── scope-boundaries.md
-│   └── hypotheses/
-├── doc/                      # All research documents
-│   ├── topics/               # Background topic summaries
-│   ├── papers/               # Paper summaries
-│   ├── questions/            # Open questions
-│   ├── methods/              # Method/tool notes
-│   ├── datasets/             # Dataset notes
-│   ├── searches/             # Literature search runs
-│   ├── discussions/          # Discussion artifacts
-│   ├── interpretations/      # Result interpretations
-│   ├── meta/                 # Process reflection
-│   ├── index.md
-│   ├── 01-overview.md        # Project overview
-│   ├── 02-background.md      # Background context
-│   ├── 03-model.md           # Research model
-│   ├── 04-approach.md        # Methodology / approach
-│   ├── 05-data.md            # Data landscape
-│   ├── 06-evaluation.md      # Evaluation strategy
-│   ├── 09-causal-model.md    # Causal model
-│   └── 99-next-steps.md      # Next steps
-├── papers/                   # References
-│   ├── references.bib
-│   └── pdfs/
-├── models/                   # Formal models (causal DAGs, etc.)
-├── knowledge/                # Generated graph + structured KG source artifacts
-│   ├── graph.trig            # Materialized graph output (do not edit directly)
-│   ├── reports/              # Audit / migration reports
-│   └── sources/
-│       └── <local-profile>/  # Local KG entities, relations, aliases (default: project_specific)
-├── data/                     # Frictionless Data Packages
+project/
+├── science.yaml              # Project manifest (profile, aspects, metadata, knowledge_profiles)
+├── AGENTS.md                 # Primary operational guide
+├── CLAUDE.md                 # Contains only: @AGENTS.md
+├── README.md
+├── tasks/
+├── specs/
+├── doc/
+├── knowledge/
+└── .ai/                      # Optional project-specific AI overrides/additions
+```
+
+Research-profile projects add the research execution/data roots:
+
+```
+project/
+├── src/                      # Optional installable package root for Python projects
+├── tests/                    # Optional package-aligned tests
+├── code/
+│   ├── scripts/
+│   ├── notebooks/
+│   └── workflows/
+├── data/
 │   ├── raw/
 │   └── processed/
-├── code/                     # Analysis code
-│   ├── pipelines/
-│   ├── notebooks/
-│   ├── scripts/
-│   └── lib/
-├── prompts/                  # Role prompt packs
-│   └── roles/
-├── tools/                    # Project tooling
-└── templates/                # Document templates
+├── results/
+├── models/
+└── papers/
+    ├── references.bib
+    └── pdfs/
 ```
+
+Software-profile projects keep their native implementation roots:
+
+```
+project/
+├── src/
+├── tests/
+└── <framework-native roots>
+```
+
+Conventions:
+
+- `doc/` is the canonical root for Science-managed project documents
+- use `doc/background/topics/` for topic background and `doc/background/papers/` for paper summaries
+- root `papers/` is bibliography/PDF management only
+- use `code/workflows/` consistently; do not split between `workflows/` and `pipelines/`
+- framework prompts/templates are resolved centrally; `.ai/` is for project-specific overrides only
+- `archive/` is an accepted optional root for superseded material
 
 ## Typical Workflow
 
@@ -185,6 +187,8 @@ Interactive conversation refines your research question, then scaffolds the full
 Projects that use the knowledge graph should also declare profile composition in `science.yaml`:
 
 ```yaml
+profile: research
+layout_version: 2
 knowledge_profiles:
   curated: [bio]
   local: project_specific
@@ -225,7 +229,7 @@ This walks you through declaring expected outcomes, decision criteria, and a nul
 /science:research-topic "circadian regulation of immune response"
 ```
 
-Synthesizes a structured background document from LLM knowledge + web search, adds BibTeX entries, and saves to `doc/topics/`. Repeat for each major topic area your project touches.
+Synthesizes a structured background document from LLM knowledge + web search, adds BibTeX entries, and saves to `doc/background/topics/`. Repeat for each major topic area your project touches.
 
 ### 4. Search the literature
 

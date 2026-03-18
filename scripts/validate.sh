@@ -60,8 +60,7 @@ resolve_science_tool() {
     printf ""
 }
 
-# ─── Path resolution from science.yaml ─────────────────────────────
-# Read paths: section if present, otherwise use defaults
+# ─── Canonical path/profile resolution from science.yaml ───────────
 DOC_DIR="doc"
 CODE_DIR="code"
 DATA_DIR="data"
@@ -70,27 +69,32 @@ PAPERS_DIR="papers"
 KNOWLEDGE_DIR="knowledge"
 TASKS_DIR="tasks"
 MODELS_DIR="models"
+RESULTS_DIR="results"
+PROFILE="research"
 LOCAL_PROFILE="project_specific"
 LOCAL_PROFILE_DIR="$KNOWLEDGE_DIR/sources/$LOCAL_PROFILE"
 
 if [ -f "science.yaml" ] && command -v python3 &>/dev/null; then
-    _resolve_path() {
-        python3 -c "
+    PROFILE=$(python3 -c "
 import yaml
 with open('science.yaml') as f:
     d = yaml.safe_load(f) or {}
-p = (d.get('paths') or {}).get('${1}', '${2}')
-print(p.rstrip('/'))
-" 2>/dev/null || echo "$2"
-    }
-    DOC_DIR=$(_resolve_path doc_dir doc)
-    CODE_DIR=$(_resolve_path code_dir code)
-    DATA_DIR=$(_resolve_path data_dir data)
-    SPECS_DIR=$(_resolve_path specs_dir specs)
-    PAPERS_DIR=$(_resolve_path papers_dir papers)
-    KNOWLEDGE_DIR=$(_resolve_path knowledge_dir knowledge)
-    TASKS_DIR=$(_resolve_path tasks_dir tasks)
-    MODELS_DIR=$(_resolve_path models_dir models)
+profile = str(d.get('profile') or 'research').strip() or 'research'
+print(profile)
+" 2>/dev/null || echo "research")
+
+    case "$PROFILE" in
+        research)
+            CODE_DIR="code"
+            ;;
+        software)
+            CODE_DIR="src"
+            ;;
+        *)
+            CODE_DIR="code"
+            ;;
+    esac
+
     LOCAL_PROFILE=$(python3 -c "
 import yaml
 with open('science.yaml') as f:
@@ -113,7 +117,7 @@ if [ ! -f "science.yaml" ]; then
     error "science.yaml not found at project root"
 else
     info "science.yaml exists"
-    for field in name created last_modified status summary; do
+    for field in name created last_modified status summary profile layout_version; do
         if ! grep -q "^${field}:" science.yaml 2>/dev/null; then
             error "science.yaml missing required field: ${field}"
         else
@@ -169,7 +173,7 @@ fi
 echo ""
 echo "Checking directory structure..."
 
-for dir in "$SPECS_DIR" "$DOC_DIR" "$PAPERS_DIR" "$DATA_DIR" "$CODE_DIR"; do
+for dir in "$SPECS_DIR" "$DOC_DIR" "$KNOWLEDGE_DIR" "$TASKS_DIR" "$CODE_DIR"; do
     if [ ! -d "$dir" ]; then
         error "Required directory missing: ${dir}/"
     else
@@ -177,7 +181,17 @@ for dir in "$SPECS_DIR" "$DOC_DIR" "$PAPERS_DIR" "$DATA_DIR" "$CODE_DIR"; do
     fi
 done
 
-for file in CLAUDE.md AGENTS.md RESEARCH_PLAN.md; do
+if [ "$PROFILE" = "research" ]; then
+    for dir in "$PAPERS_DIR" "$DATA_DIR" "$MODELS_DIR" "$RESULTS_DIR"; do
+        if [ ! -d "$dir" ]; then
+            error "Required directory missing: ${dir}/"
+        else
+            info "${dir}/ exists"
+        fi
+    done
+fi
+
+for file in CLAUDE.md AGENTS.md; do
     if [ ! -f "$file" ]; then
         error "Required file missing: ${file}"
     else
@@ -185,11 +199,48 @@ for file in CLAUDE.md AGENTS.md RESEARCH_PLAN.md; do
     fi
 done
 
+if [ "$PROFILE" = "research" ]; then
+    if [ ! -f "RESEARCH_PLAN.md" ]; then
+        warn "RESEARCH_PLAN.md not found (allowed if high-level planning is in README.md)"
+    else
+        info "RESEARCH_PLAN.md exists"
+    fi
+fi
+
+if [ "$PROFILE" = "software" ] && [ -f "RESEARCH_PLAN.md" ]; then
+    info "RESEARCH_PLAN.md exists"
+fi
+
+if [ -d "docs" ] && [ -d "$DOC_DIR" ]; then
+    warn "Duplicate document roots detected: ${DOC_DIR}/ and docs/"
+fi
+
+if [ "$PROFILE" = "research" ]; then
+    for legacy_dir in scripts notebooks workflow; do
+        if [ -d "$legacy_dir" ]; then
+            warn "Legacy top-level execution root detected: ${legacy_dir}/ — consolidate under ${CODE_DIR}/"
+        fi
+    done
+    if [ -d "$CODE_DIR/pipelines" ]; then
+        warn "Legacy workflow directory detected: ${CODE_DIR}/pipelines/ — use ${CODE_DIR}/workflows/"
+    fi
+fi
+
+if [ "$PROFILE" = "software" ] && [ -d "code" ]; then
+    warn "Software-profile project has top-level code/ — keep implementation in native roots such as src/"
+fi
+
+for legacy_ai_root in prompts templates; do
+    if [ -d "$legacy_ai_root" ]; then
+        warn "Legacy top-level AI artifact root detected: ${legacy_ai_root}/ — use .ai/ overrides only when needed"
+    fi
+done
+
 # ─── 3. Research question ─────────────────────────────────────────
 echo ""
 echo "Checking research scope..."
 
-if [ ! -f "$SPECS_DIR/research-question.md" ]; then
+if [ "$PROFILE" = "research" ] && [ ! -f "$SPECS_DIR/research-question.md" ]; then
     error "$SPECS_DIR/research-question.md not found — every project needs a research question"
 fi
 
@@ -197,14 +248,27 @@ fi
 echo ""
 echo "Checking document structure..."
 
-if [ -d "$DOC_DIR/background" ]; then
-    for doc_file in "$DOC_DIR/background/"*.md; do
+if [ -d "$DOC_DIR/background/topics" ]; then
+    for doc_file in "$DOC_DIR/background/topics/"*.md; do
         [ -f "$doc_file" ] || continue
         info "Checking ${doc_file}..."
 
         for section in "## Summary" "## Key Concepts" "## Current State of Knowledge" "## Relevance to This Project" "## Key References"; do
             if ! grep -q "$section" "$doc_file" 2>/dev/null; then
                 warn "${doc_file} missing section: ${section}"
+            fi
+        done
+    done
+fi
+
+if [ -d "$DOC_DIR/background/papers" ]; then
+    for summary_file in "$DOC_DIR/background/papers/"*.md; do
+        [ -f "$summary_file" ] || continue
+        info "Checking ${summary_file}..."
+
+        for section in "## Key Contribution" "## Methods" "## Key Findings" "## Relevance"; do
+            if ! grep -q "$section" "$summary_file" 2>/dev/null; then
+                warn "${summary_file} missing section: ${section}"
             fi
         done
     done
@@ -243,18 +307,11 @@ echo ""
 echo "Checking citations..."
 
 if [ -f "$PAPERS_DIR/references.bib" ]; then
-    # Collect all [@Key] citations across docs and summaries
+    # Collect all [@Key] citations across docs
     cited_keys=""
     if [ -d "$DOC_DIR" ]; then
         cited_keys=$(grep -roh '\[@[A-Za-z0-9_-]*\]' "$DOC_DIR/" 2>/dev/null \
             | sed 's/\[@//;s/\]//' | sort -u || true)
-    fi
-    if [ -d "$PAPERS_DIR/summaries" ]; then
-        summary_keys=$(grep -roh '\[@[A-Za-z0-9_-]*\]' "$PAPERS_DIR/summaries/" 2>/dev/null \
-            | sed 's/\[@//;s/\]//' | sort -u || true)
-        if [ -n "$summary_keys" ]; then
-            cited_keys=$(printf "%s\n%s" "$cited_keys" "$summary_keys" | sort -u)
-        fi
     fi
 
     for key in $cited_keys; do
@@ -275,19 +332,7 @@ fi
 # ─── 7. Paper summary template conformance ───────────────────────
 echo ""
 echo "Checking paper summaries..."
-
-if [ -d "$PAPERS_DIR/summaries" ]; then
-    for summary_file in "$PAPERS_DIR/summaries/"*.md; do
-        [ -f "$summary_file" ] || continue
-        info "Checking ${summary_file}..."
-
-        for section in "## Key Contribution" "## Methods" "## Key Findings" "## Relevance"; do
-            if ! grep -q "$section" "$summary_file" 2>/dev/null; then
-                warn "${summary_file} missing section: ${section}"
-            fi
-        done
-    done
-fi
+info "Paper summary structure is checked in $DOC_DIR/background/papers/"
 
 # ─── 8. Unverified/uncited markers ──────────────────────────────
 echo ""
@@ -306,17 +351,6 @@ if [ -d "$DOC_DIR" ]; then
     needs_citation_count=${needs_citation_count:-0}
 fi
 
-if [ -d "$PAPERS_DIR/summaries" ]; then
-    uv_extra=$(grep -rc '\[UNVERIFIED\]' "$PAPERS_DIR/summaries/" 2>/dev/null \
-        | awk -F: '{s+=$2} END {print s+0}' || true)
-    nc_extra=$(grep -rc '\[NEEDS CITATION\]' "$PAPERS_DIR/summaries/" 2>/dev/null \
-        | awk -F: '{s+=$2} END {print s+0}' || true)
-    uv_extra=${uv_extra:-0}
-    nc_extra=${nc_extra:-0}
-    unverified_count=$((unverified_count + uv_extra))
-    needs_citation_count=$((needs_citation_count + nc_extra))
-fi
-
 if [ "$unverified_count" -gt 0 ]; then
     warn "${unverified_count} [UNVERIFIED] marker(s) found in documents"
 fi
@@ -329,34 +363,6 @@ fi
 echo ""
 echo "Checking research gap analysis..."
 
-if [ -f "$DOC_DIR/10-research-gaps.md" ]; then
-    info "Checking $DOC_DIR/10-research-gaps.md..."
-
-    for section in \
-        "## Scope Reviewed" \
-        "## Coverage Map (Strong / Partial / Missing)" \
-        "## High-Impact Gaps" \
-        "## Recommended Next Tasks (Prioritized)" \
-        "## Rationale and Evidence Links"; do
-        if ! grep -q "$section" "$DOC_DIR/10-research-gaps.md" 2>/dev/null; then
-            warn "$DOC_DIR/10-research-gaps.md missing section: ${section}"
-        fi
-    done
-
-    if ! grep -Eq '\bP[123]\b' "$DOC_DIR/10-research-gaps.md" 2>/dev/null; then
-        warn "$DOC_DIR/10-research-gaps.md has no explicit P1/P2/P3 priorities"
-    fi
-fi
-
-# Legacy path — also check new path
-if [ ! -f "$DOC_DIR/10-research-gaps.md" ]; then
-    # Check for new-style next-steps files
-    if ! ls "$DOC_DIR/meta/next-steps-"*.md 1>/dev/null 2>&1; then
-        info "No gap analysis found ($DOC_DIR/10-research-gaps.md or $DOC_DIR/meta/next-steps-*.md)"
-    fi
-fi
-
-# --- Next-steps documents (new format) ---
 for f in "$DOC_DIR/meta/next-steps-"*.md; do
     [ -f "$f" ] || continue
     for section in "Recent Progress" "Current State" "Coverage Gaps" "Recommended Next Actions"; do
@@ -366,6 +372,10 @@ for f in "$DOC_DIR/meta/next-steps-"*.md; do
     done
 done
 
+if ! ls "$DOC_DIR/meta/next-steps-"*.md 1>/dev/null 2>&1; then
+    info "No next-steps analysis found ($DOC_DIR/meta/next-steps-*.md)"
+fi
+
 # ─── 10. RESEARCH_PLAN conventions ───────────────────────────────
 echo ""
 echo "Checking research plan conventions..."
@@ -373,7 +383,6 @@ echo "Checking research plan conventions..."
 if [ -f "RESEARCH_PLAN.md" ]; then
     info "RESEARCH_PLAN.md exists"
 
-    # Check for legacy task-queue sections (should now live in tasks/active.md)
     legacy_sections=(
         "## Current Priorities"
         "## Next Review Trigger"
@@ -383,8 +392,8 @@ if [ -f "RESEARCH_PLAN.md" ]; then
             warn "RESEARCH_PLAN.md contains legacy task-queue section '${section}' — migrate tasks to $TASKS_DIR/active.md via /science:tasks"
         fi
     done
-else
-    warn "RESEARCH_PLAN.md not found (expected as high-level research strategy document)"
+elif [ "$PROFILE" = "research" ]; then
+    info "No RESEARCH_PLAN.md — high-level planning may be in README.md or $DOC_DIR/plans/"
 fi
 
 # ─── 11. Discussion document conformance ──────────────────────────

@@ -32,7 +32,7 @@ The default epistemic posture is skeptical:
 
 ## Document Structure
 
-All documents follow templates from the `templates/` directory. General structural principles:
+All documents follow framework templates unless the project defines an override in `.ai/templates/`. General structural principles:
 
 - **Lead with the point.** First paragraph should state the main takeaway.
 - **Sections are self-contained.** A reader should be able to read any section in isolation and get value.
@@ -72,8 +72,8 @@ For the project’s reasoning model, see `docs/claim-and-evidence-model.md`.
 
 ## Length Guidelines
 
-- **Background topics** (`doc/topics/`): 500-1500 words. Comprehensive but focused.
-- **Paper summaries** (`doc/papers/`): 300-800 words. Capture what matters for this project.
+- **Background topics** (`doc/background/topics/`): 500-1500 words. Comprehensive but focused.
+- **Paper summaries** (`doc/background/papers/`): 300-800 words. Capture what matters for this project.
 - **Hypothesis descriptions** (`specs/hypotheses/`): 300-1000 words. Thorough enough to be actionable.
 - **Open questions** (`doc/questions/`): 50-200 words per question. Concise and specific.
 - **Overview** (`doc/01-overview.md`): 500-1000 words. The "elevator pitch" for the whole project.

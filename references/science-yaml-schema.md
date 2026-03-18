@@ -11,6 +11,8 @@ created: "YYYY-MM-DD"       # Date project was created
 last_modified: "YYYY-MM-DD" # Date of last significant update
 summary: "string"           # 2-3 sentence project description
 status: "string"            # One of: active, paused, completed, archived
+profile: "string"           # One of: research, software
+layout_version: 2           # Current layout version
 
 # Required (may be empty initially)
 tags:                        # Keywords for categorization
@@ -21,20 +23,10 @@ data_sources:                # Known data sources
     url: "string"           # Access URL
     access: "string"        # public, restricted, requires-application
 
-# Optional — path mappings for imported projects
-# Omit entirely for standard Science layout (all defaults apply)
-# Only list non-default mappings
-paths:
-  doc_dir: "string"          # Default: doc/
-  code_dir: "string"         # Default: code/
-  data_dir: "string"         # Default: data/
-  models_dir: "string"       # Default: models/
-  specs_dir: "string"        # Default: specs/
-  papers_dir: "string"       # Default: papers/
-  knowledge_dir: "string"    # Default: knowledge/
-  tasks_dir: "string"        # Default: tasks/
-  templates_dir: "string"    # Default: templates/
-  prompts_dir: "string"      # Default: prompts/
+# Required for knowledge-graph-enabled projects
+knowledge_profiles:
+  curated: ["string"]        # Curated graph profiles, e.g. [bio]
+  local: "string"            # Local source directory name, e.g. project_specific
 
 # Optional — project aspects (composable mixins)
 # Each aspect contributes additional sections, signal categories, and guidance to commands.
@@ -63,6 +55,8 @@ summary: >
   processes across natural phenomena using generative models, L-systems,
   and iterated function systems.
 status: "active"
+profile: "research"
+layout_version: 2
 tags:
   - fractal-geometry
   - generative-models
@@ -77,32 +71,33 @@ data_sources:
     type: "text"
     url: "https://api.openalex.org/"
     access: "public"
+knowledge_profiles:
+  curated: [bio]
+  local: project_specific
 aspects:
   - causal-modeling
   - hypothesis-testing
 ```
 
-## Imported Project Example
+## Software Project Example
 
 ```yaml
-name: "natural-systems-guide"
-created: "2025-12-01"
-last_modified: "2026-03-09"
+name: "cats"
+created: "2026-03-18"
+last_modified: "2026-03-18"
 summary: >
-  Interactive guide to natural systems models, cataloging mathematical models
-  across physics, chemistry, and biology with a parameter ontology and
-  interactive web demonstrations.
+  CLI tool for browsing, filtering, and rendering cat-related content with a
+  conventional packaged Python application layout.
 status: "active"
+profile: "software"
+layout_version: 2
 tags:
-  - mathematical-models
-  - parameter-ontology
-  - interactive-visualization
+  - cli
+  - tooling
 data_sources: []
-paths:
-  doc_dir: docs/
-  code_dir: src/
-  models_dir: src/natural/registry/
+knowledge_profiles:
+  curated: []
+  local: project_specific
 aspects:
-  - computational-analysis
   - software-development
 ```

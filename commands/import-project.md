@@ -1,72 +1,131 @@
 ---
-description: Add Science research framework to an existing project. Use when the user has a pre-existing codebase, documentation, or research project and wants to adopt Science conventions without restructuring. Triggered by "import project", "adopt science", "add science to existing project", or similar.
+description: Migrate an existing repository into one of the two supported Science project profiles (`research` or `software`). Use when a pre-existing project wants to adopt Science and converge on the canonical layout.
 ---
 
-# Import an Existing Project into Science
+# Import An Existing Project Into Science
 
-You are adding Science research infrastructure to an existing project. The key principle:
-**additive only** — never overwrite, rename, or restructure existing files.
+You are migrating an existing repository into the canonical Science model.
 
-## Step 0: Pre-flight Checks
+This command is not a long-term path-mapping escape hatch.
+Its job is to move the project toward one of the two supported steady-state profiles:
 
-1. Confirm you are inside an existing project root (look for `.git/`, `package.json`,
-   `pyproject.toml`, `Cargo.toml`, `go.mod`, or similar project markers).
-2. If `science.yaml` already exists, this project has already been imported. Ask the user
-   if they want to re-run import (which will fill in any missing pieces) or cancel.
-3. Read the project's existing `CLAUDE.md` and `AGENTS.md` if they exist — you will
-   extend these, not replace them.
+- `research`
+- `software`
 
-## Step 1: Discover Existing Structure
+## Step 0: Pre-Flight Checks
 
-Scan the project directory and identify existing equivalents for Science conventions:
+1. Confirm you are inside an existing project root.
+2. Read existing `AGENTS.md`, `CLAUDE.md`, `README.md`, and core project manifests if present.
+3. If `science.yaml` already exists, treat this as a migration/refinement of an existing Science-managed project rather than a fresh import.
+4. Do not auto-commit. The user should review migration changes before commit.
 
-| Science convention | Look for |
-|---|---|
-| `doc/` | `docs/`, `documentation/`, `doc/` |
-| `code/` | `src/`, `lib/`, `app/`, `code/` |
-| `data/` | `data/`, `datasets/` |
-| `models/` | `models/`, `src/models/` |
-| `papers/` | `papers/`, `references/`, `bibliography/` |
-| `CLAUDE.md` | `CLAUDE.md` |
-| `AGENTS.md` | `AGENTS.md` |
-| `.bib` files | any `*.bib` file |
+## Step 1: Audit The Existing Structure
 
-Present your findings to the user:
+Scan the repository and identify:
 
+- documentation roots (`doc/`, `docs/`, `notes/`, `guide/`)
+- implementation roots (`src/`, `code/`, `scripts/`, `workflow/`, `notebooks/`)
+- bibliography roots (`papers/`, `.bib` files)
+- AI artifact roots (`prompts/`, `templates/`, `.ai/`)
+- archived material (`archive/`)
+
+Present the findings and recommend a target profile:
+
+- use `research` for research-first repositories
+- use `software` for tools/apps/libraries/CLIs, even if they retain some research context
+
+Ask the user to confirm the target profile if it is not already obvious.
+
+## Step 2: Gather Project Context
+
+Gather or infer:
+
+1. Summary
+2. Tags
+3. Aspects
+4. Data sources
+5. Knowledge-graph usage (`knowledge_profiles`)
+
+If the target profile is `research`, also gather:
+
+1. Research question
+2. Scope boundaries
+3. Whether an installable package should remain in root `src/`
+
+## Step 3: Migrate Toward The Canonical Layout
+
+### Common Migration Rules
+
+- `doc/` becomes the canonical root for Science-managed documents
+- `CLAUDE.md` becomes `@AGENTS.md`
+- `.ai/` is for project-specific prompt/template overrides only
+- framework prompt/template defaults are not copied into the project
+- `archive/` is allowed for superseded material
+
+### If Target Profile Is `research`
+
+Target structure:
+
+```text
+project/
+├── science.yaml
+├── AGENTS.md
+├── CLAUDE.md
+├── doc/
+├── tasks/
+├── specs/
+├── knowledge/
+├── code/
+│   ├── scripts/
+│   ├── notebooks/
+│   └── workflows/
+├── data/
+├── results/
+├── models/
+└── papers/
 ```
-Found existing project structure:
-  docs/          → will map as doc_dir
-  src/           → will map as code_dir
-  CLAUDE.md      → will extend (not replace)
 
-No equivalent found for:
-  papers/        → will create
-  specs/         → will create
-  data/          → will create (or skip if not needed)
+If the project has an installable Python package, preserve:
+
+```text
+project/
+├── src/
+└── tests/
 ```
 
-Ask the user to confirm or adjust the mappings.
+Do not move package code under `code/`.
 
-## Step 2: Gather Research Context
+### If Target Profile Is `software`
 
-Have an interactive conversation to understand:
+Target structure:
 
-1. **Research question** — what is this project investigating or building?
-2. **Brief summary** — 2-3 sentences describing the project
-3. **Tags** — keywords for categorization
-4. **Status** — likely `active` (since it's an existing project being worked on)
+```text
+project/
+├── science.yaml
+├── AGENTS.md
+├── CLAUDE.md
+├── doc/
+├── tasks/
+├── specs/
+├── knowledge/
+├── src/
+└── tests/
+```
 
-If the project has existing documentation (README, planning docs, design docs), read them
-first and propose a research question based on what you find. Let the user refine it.
+Keep framework-native roots natural for the stack:
 
-Don't ask all questions at once — have a natural conversation.
+- `public/`
+- `scripts/`
+- `assets/`
+- application/toolchain files
 
-## Step 3: Create Science Infrastructure
+Do not introduce `code/` just to satisfy symmetry.
+
+## Step 4: Populate Or Update Core Files
 
 ### `science.yaml`
 
-Create with the `paths:` section reflecting discovered mappings. Only include non-default
-mappings — if a key would map to the Science default, omit it.
+Create or update:
 
 ```yaml
 name: "<project-name>"
@@ -74,250 +133,91 @@ created: "<original project creation date if known, else today>"
 last_modified: "<today YYYY-MM-DD>"
 summary: "<from conversation>"
 status: "active"
-tags:
-  - "<tag1>"
-  - "<tag2>"
+profile: "<research-or-software>"
+layout_version: 2
+tags: []
 data_sources: []
-paths:
-  doc_dir: "<mapped dir, e.g. docs/>"
-  code_dir: "<mapped dir, e.g. src/>"
-  # Only list non-default mappings
+knowledge_profiles:
+  curated: []
+  local: project_specific
+aspects: []
 ```
 
-For the schema, see `${CLAUDE_PLUGIN_ROOT}/references/science-yaml-schema.md`.
+Do not add broad `paths:` mappings as the long-term solution.
 
-### Create missing directories
+### `AGENTS.md`
 
-Create these Science-specific directories (they won't have existing equivalents):
+Extend or create `AGENTS.md` so it reflects:
 
-```bash
-mkdir -p specs/hypotheses
-mkdir -p papers/pdfs
-mkdir -p knowledge
-mkdir -p prompts/roles
-mkdir -p templates
-mkdir -p tasks
-```
+- the canonical active roots
+- validation commands
+- conventions
+- operational constraints
 
-Skip any that already exist. Add `.gitkeep` to empty directories.
+### `CLAUDE.md`
 
-### Create subdirectories in the mapped doc dir
+Create or normalize:
 
-The mapped doc directory needs Science-standard subdirectories for research artifacts.
-Create them inside the mapped `doc_dir`:
-
-```bash
-# Using the mapped doc_dir (e.g., docs/)
-mkdir -p <doc_dir>/topics
-mkdir -p <doc_dir>/papers
-mkdir -p <doc_dir>/questions
-mkdir -p <doc_dir>/methods
-mkdir -p <doc_dir>/datasets
-mkdir -p <doc_dir>/searches
-mkdir -p <doc_dir>/discussions
-mkdir -p <doc_dir>/interpretations
-mkdir -p <doc_dir>/meta
-```
-
-Only create subdirectories that don't already exist. Add `.gitkeep` to empty ones.
-
-### `specs/research-question.md`
-
-Write the research question from the conversation. If the project has existing planning
-or design documents, reference them and synthesize the question from those.
-
-### `specs/scope-boundaries.md`
-
-Write scope boundaries based on the conversation and any existing project documentation.
-
-### `papers/references.bib`
-
-If the project already has a `.bib` file, map to it in `science.yaml` paths (or symlink).
-Otherwise create a new one:
-
-```bibtex
-% references.bib — BibTeX database for this Science project
-% Add entries here for every paper cited in docs.
-% Use keys in the format: FirstAuthorLastNameYear (e.g., Smith2024)
-```
-
-### `RESEARCH_PLAN.md`
-
-Create based on the project's current state. If existing planning docs exist, synthesize
-them into the Science format:
-
-```markdown
-# Research Plan
-
-> High-level research strategy and direction for this project.
-> For the operational task queue, see `tasks/active.md`.
-
-## Research Direction
-
-<synthesized from existing docs and conversation>
-
-## Current State
-
-<what has been accomplished so far>
-
-## Long-Term Goals
-
-<from conversation and existing docs>
-```
-
-### `tasks/active.md`
-
-```markdown
-<!-- Task queue. Use /science:tasks to manage. -->
+```md
+@AGENTS.md
 ```
 
 ### `validate.sh`
 
-Copy from plugin:
+Copy `${CLAUDE_PLUGIN_ROOT}/scripts/validate.sh` into the project root and make it executable.
 
-```bash
-cp ${CLAUDE_PLUGIN_ROOT}/scripts/validate.sh ./validate.sh
-chmod +x validate.sh
+### `doc/`
+
+Collapse active Science-managed documentation into:
+
+```text
+doc/
+├── background/
+│   ├── topics/
+│   └── papers/
+├── questions/
+├── methods/
+├── datasets/
+├── searches/
+├── discussions/
+├── interpretations/
+├── reports/
+├── meta/
+└── plans/
 ```
 
-### `templates/`
+### Prompts And Templates
 
-Copy all templates from `${CLAUDE_PLUGIN_ROOT}/templates/`:
+Do not copy framework defaults into the project.
 
-```bash
-mkdir -p ./templates
-cp -R ${CLAUDE_PLUGIN_ROOT}/templates/* ./templates/
-```
+Only create `.ai/prompts/` and `.ai/templates/` if the project needs project-specific overrides or additions.
 
-### `prompts/roles/`
+## Step 5: Update `.gitignore` If Needed
 
-Copy role prompts from `${CLAUDE_PLUGIN_ROOT}/references/role-prompts/`:
+Ensure the project ignores:
 
-```bash
-mkdir -p ./prompts/roles
-cp ${CLAUDE_PLUGIN_ROOT}/references/role-prompts/*.md ./prompts/roles/
-```
+- `.env`
+- `papers/pdfs/`
+- `.worktrees/`
 
-If the project has non-default path mappings, update the copied role prompts to use the
-mapped directory names. For example, if `doc_dir: docs/`, replace `doc/topics/` with
-`docs/topics/`, `doc/papers/` with `docs/papers/`, etc. in the role prompt files.
+Add profile-specific ignores only when they match the project's actual layout.
 
-### Extend `CLAUDE.md`
+## Step 6: Verify
 
-If `CLAUDE.md` exists, **append** a Science section (do not replace existing content).
-If it doesn't exist, create one from `${CLAUDE_PLUGIN_ROOT}/references/claude-md-template.md`.
-
-When appending, add:
-
-```markdown
-
-## Science Project
-
-This project uses the Science research framework.
-See `science.yaml` for project manifest and path mappings.
-
-### Automatic Skill Triggers
-
-Before performing any of the following tasks, read the corresponding skill:
-
-- **Writing any document in `<doc_dir>/` or `specs/`:** Read the `scientific-writing` skill
-- **Literature review, source evaluation, paper summarization:** Read the `research-methodology` skill
-- **Knowledge graph work:** Read the `knowledge-graph` skill (when available)
-
-### Role Prompt Packs
-
-- `prompts/roles/research-assistant.md` for research/synthesis/prioritization tasks
-- `prompts/roles/discussant.md` for critical discussion tasks
-
-### Document Conventions
-
-- Use templates from `templates/` for all new research documents
-- Run `bash validate.sh` before committing research artifacts
-- Every factual claim needs a citation; use BibTeX keys `[@AuthorYear]`
-- Mark unverified facts with `[UNVERIFIED]` and unsourced claims with `[NEEDS CITATION]`
-
-### Path Mappings
-
-<list the active non-default mappings, e.g.:>
-- Research docs: `docs/` (Science default: `doc/`)
-- Code: `src/` (Science default: `code/`)
-```
-
-Replace `<doc_dir>` with the actual mapped directory name, and list only non-default mappings.
-
-### Extend `AGENTS.md`
-
-If `AGENTS.md` exists, **append** a Science section (do not replace existing content).
-If it doesn't exist, create a skeleton (same format as `create-project` Step 3).
-
-When appending, add:
-
-```markdown
-
-## Science Conventions
-
-### Validation
-
-Run structural checks before committing research artifacts:
-
-    bash validate.sh
-    bash validate.sh --verbose
-
-### Commit Messages for Research Artifacts
-
-Use format: `<scope>: <description>` for research commits:
-- `doc: add background on topic-x`
-- `hypothesis: add H01`
-- `papers: summarize Smith2024`
-- `specs: refine research question`
-
-### Citations
-
-Use BibTeX keys `[@AuthorYear]` inline. All entries go in `papers/references.bib`.
-
-### Markers
-
-- `[UNVERIFIED]` for unverified facts
-- `[NEEDS CITATION]` for unsourced claims
-
-### Task Management
-
-Tasks tracked in `tasks/active.md`. Manage via `/science:tasks`.
-```
-
-## Step 4: Update .gitignore (if needed)
-
-Check the existing `.gitignore` and add Science-specific entries if missing:
-
-```gitignore
-# Science project
-papers/pdfs/
-.env
-```
-
-Do NOT add entries that conflict with existing gitignore rules or the project's needs.
-
-## Step 5: Verify
-
-Run validation:
+Run:
 
 ```bash
 bash validate.sh --verbose
 ```
 
-It should pass. Warnings are acceptable (empty hypothesis directory, etc.). If there are
-errors due to path mapping issues, fix the mappings in `science.yaml` and re-run.
+If the project has native test or typecheck commands, run those too.
 
-## Step 6: Summarize
+## Step 7: Summarize
 
-Tell the user what was created, what was mapped, and suggest next steps:
+Tell the user:
 
-1. Review the generated `specs/research-question.md` and refine it
-2. Add initial hypotheses with `/science:add-hypothesis`
-3. Explore background with `/science:research-topic`
-4. Review existing docs for papers to add to `papers/references.bib`
-5. Run `/science:next-steps` to prioritize work
-
-**Important:** Do NOT create a git commit automatically. The user may want to review the
-changes first, especially since this modifies an existing project. Ask if they'd like to
-commit.
+- which profile the project was migrated to
+- which roots were consolidated
+- which material was archived versus kept active
+- whether `RESEARCH_PLAN.md` was retained, moved into `README.md`, or replaced by `doc/plans/`
+- what still needs manual review before commit

@@ -66,7 +66,7 @@ When writing about multiple sources:
 
 ## Working with Hypotheses
 
-Hypotheses in this project follow a structured format (see `templates/hypothesis.md`). When developing or evaluating hypotheses:
+Hypotheses in this project follow a structured format (see the framework `hypothesis.md` template, or a project override in `.ai/templates/`). When developing or evaluating hypotheses:
 
 - Treat the hypothesis as a **bundle of claims**, not a single binary truth value
 - Every important claim should be **falsifiable** — specify what evidence would lower confidence
@@ -138,8 +138,8 @@ Before writing any document, check:
 1. `specs/research-question.md` — What is this project about?
 2. `specs/hypotheses/` — What hypotheses are we tracking?
 3. `doc/questions/` — What questions are we trying to answer?
-4. `doc/papers/` — What have we already reviewed?
-5. `doc/topics/` — What topics have we already covered?
+4. `doc/background/papers/` — What have we already reviewed?
+5. `doc/background/topics/` — What topics have we already covered?
 
 This prevents duplication and ensures new work connects to the existing knowledge base.
 
@@ -147,4 +147,4 @@ For terminology and modeling details, see `docs/claim-and-evidence-model.md`.
 
 ## Template Usage
 
-All research documents must follow their corresponding template from the `templates/` directory. Read the relevant template before writing. The template sections are not optional — fill every section, even if briefly.
+All research documents must follow their corresponding framework template unless the project defines a specific override in `.ai/templates/`. Read the relevant template before writing. The template sections are not optional — fill every section, even if briefly.

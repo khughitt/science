@@ -1,96 +1,12 @@
 # CLAUDE.md Template Reference
 
-> **Instructions for the agent:** When creating a new project's `CLAUDE.md`, adapt the
-> content below the "Template content starts below" marker. Replace all `{{placeholders}}`
-> with project-specific values. Do not include this instruction header in the output.
+New Science-managed projects should keep `CLAUDE.md` minimal and use `AGENTS.md` as the
+single source of project-specific agent guidance.
 
----
-<!-- ═══ Template content starts below ═══ -->
+Template content:
 
-# Project: {{project_name}}
+```md
+@AGENTS.md
+```
 
-## Overview
-
-{{One paragraph describing the research question and project scope.}}
-
-## Automatic Skill Triggers
-
-Before performing any of the following tasks, read the corresponding skill:
-
-- **Writing any document in `doc/` or `specs/`:** Read the `scientific-writing` skill
-- **Literature review, source evaluation, paper summarization:** Read the `research-methodology` skill
-- **Working with data sources or data acquisition:** Read the `data-management` skill (when available)
-- **Pipeline work (Snakemake, analysis scripts):** Read the `pipelines` skill (when available)
-- **Causal modeling or DAG construction:** Read the `causal-dag` skill (when available)
-- **Knowledge graph work:** Read the `knowledge-graph` skill (when available)
-
-## Role Prompt Packs
-
-Use role prompt packs for capability-first workflows:
-
-- `prompts/roles/research-assistant.md` for research/synthesis/prioritization tasks
-  (`/science:research-paper`, `/science:research-topic`, `/science:next-steps`)
-- `prompts/roles/discussant.md` for critical discussion tasks
-  (`/science:discuss`, including optional double-blind mode)
-
-If these files are missing (older project), fall back to plugin references:
-`${CLAUDE_PLUGIN_ROOT}/references/role-prompts/*.md`.
-
-## Paper Summarization Order
-
-When summarizing papers, always follow this priority:
-1. **LLM knowledge first** — start from what you know
-2. **Web search second** — verify key facts, find recent work
-3. **PDF last** — only when user provides a file path
-
-Always cross-check: author lists, publication year, specific numerical results, method details.
-
-## Document Conventions
-
-- Use templates from `templates/` for all new documents
-- Run `bash validate.sh` before committing
-- Commit after each completed unit of work with descriptive messages
-- Use commit format: `<scope>: <description>` (e.g., `doc: add background on X`)
-- Every factual claim needs a citation; use BibTeX keys `[@AuthorYear]`
-- Mark unverified facts with `[UNVERIFIED]` and unsourced claims with `[NEEDS CITATION]`
-
-## Cross-Referencing
-
-When writing about any topic:
-1. Check `specs/hypotheses/` — does this connect to a hypothesis?
-2. Check `doc/questions/` — does this address or raise a question?
-3. Check `doc/topics/` — has this been covered? Don't duplicate.
-4. Check `doc/papers/` — have we reviewed relevant papers?
-
-## Project State Files
-
-- `tasks/active.md` — operational task queue. Manage via `/science:tasks`.
-- `RESEARCH_PLAN.md` — high-level research strategy and direction.
-- `AGENTS.md` — operational guide. Update with new tools or conventions.
-- `science.yaml` — project manifest. Update `last_modified` on significant changes.
-
-## Aspects
-
-This project uses the following Science aspects (declared in `science.yaml`):
-
-<!-- List the project's aspects here, e.g.: -->
-<!-- - `causal-modeling` — adds Causal Model Implications to interpretations, causal discussion guidance -->
-<!-- - `hypothesis-testing` — adds formal Hypothesis Evaluation tables to interpretations -->
-<!-- - `computational-analysis` — adds Sub-group Analysis, Descriptive signal category -->
-<!-- - `software-development` — adds Tooling & Implementation to topic research -->
-
-Commands automatically load aspect definitions and incorporate their additional sections and guidance.
-See `aspects/<name>/<name>.md` for what each aspect contributes.
-
-## Path Mappings (Imported Projects)
-
-If this project was imported with `/science:import-project`, check `science.yaml` for
-a `paths:` section. Use mapped directories instead of Science defaults:
-- `doc_dir` for research documents (default: `doc/`)
-- `code_dir` for code (default: `code/`)
-- `specs_dir` for specs (default: `specs/`)
-- `papers_dir` for papers/references (default: `papers/`)
-- `knowledge_dir` for knowledge graph (default: `knowledge/`)
-- `tasks_dir` for task queue (default: `tasks/`)
-
-If no `paths:` section exists, use standard Science directory names.
+Do not duplicate project instructions across both files.
