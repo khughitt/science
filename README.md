@@ -1,10 +1,10 @@
-# 🐀 Science
+# Science
 
-> *Named after [Science the lab rat](https://adventuretime.fandom.com/wiki/Science) from Adventure Time — an intelligent research assistant who helps explore the unknown.*
+![Science](extra/Science.webp)
 
 Science is a Claude Code plugin that helps scientists and researchers develop ideas, refine hypotheses, represent uncertain claims, and build reproducible computational pipelines.
 
-Its default stance is skeptical:
+Its default stance is _skeptical_:
 - hypotheses are organizing conjectures
 - claims and relation-claims are the main units of belief
 - evidence supports or disputes claims rather than proving them outright
