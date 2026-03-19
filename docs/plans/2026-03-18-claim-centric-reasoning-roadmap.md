@@ -67,7 +67,7 @@ In that end state:
 - users can move cleanly from evidence item -> claim -> neighborhood -> inquiry -> project
 - prioritization outputs help users decide what to investigate next, not just what looks uncertain
 - research-profile projects are the primary home for full claim-centric reasoning
-- software-profile projects can opt into lighter overlays later, but they should not define the first-pass contract for higher-level summaries
+- software-profile projects can opt into lighter reasoning overlays selectively later, without being forced into research-first workflows, but they should not define the first-pass contract for higher-level summaries
 
 ## Guiding Principles
 
@@ -305,6 +305,12 @@ Profile implication:
   - `research` projects now roll up claims, evidence, neighborhoods, questions, and inquiries in the first-pass implementation
   - `software` projects should eventually support lighter reasoning overlays, such as benchmark/evaluation claim clusters, without requiring full inquiry structure
 
+Profile implication:
+- `question_summary` and `inquiry_summary` are primarily `research`-profile outputs
+- `project_summary` should support both profiles, but with different expectations:
+  - `research` projects should roll up claims, evidence, neighborhoods, questions, and inquiries
+  - `software` projects should support lighter reasoning overlays, such as benchmark/evaluation claim clusters, without requiring full inquiry structure
+
 ### Phase 6: Action-Oriented Prioritization
 
 Status:
@@ -382,7 +388,7 @@ The next concrete steps should be:
 3. deepen evidence-item-first authoring and structured study/result metadata for `research` projects
 4. define the minimal reasoning overlay expected for `software` projects
 
-These are the shortest-path steps that also move the system toward the long-term architecture rather than creating another temporary dashboard.
+These are the shortest-path steps that move the system toward the long-term architecture on top of the now-stable profile-based organization model.
 
 ## Open Questions
 
