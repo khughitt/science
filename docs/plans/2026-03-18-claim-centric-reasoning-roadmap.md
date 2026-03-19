@@ -20,7 +20,7 @@ This roadmap defines what comes next: how `science` should evolve from a claim-a
 ## Status Snapshot (2026-03-18)
 
 This roadmap is no longer purely forward-looking.
-Several of its early phases now have concrete first-pass implementations on the `neighborhood-summaries` branch:
+Several of its early phases now have concrete first-pass implementations in the current codebase:
 
 - Phase 1 is largely complete.
 - Phase 2 is complete for the first stable contract pass.

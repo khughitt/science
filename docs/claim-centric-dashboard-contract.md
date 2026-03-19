@@ -227,10 +227,10 @@ The first contract version does not require:
 
 - full probabilistic updates
 - mathematically calibrated Bayesian posteriors
-- inquiry-level or question-level summaries beyond the first-pass contract sections above
 - notebook-specific rendering fields
 
-Those may be added later, but the first contract should stay focused on stable claim and neighborhood summaries.
+The `question_summary`, `inquiry_summary`, and `project_summary` sections above are the first-pass higher-level summary contract.
+Additional higher-level summary types may be added later, but this contract should stay focused on stable claim, neighborhood, and first-pass rollup summaries.
 
 ## What The Dashboard Must Not Do
 

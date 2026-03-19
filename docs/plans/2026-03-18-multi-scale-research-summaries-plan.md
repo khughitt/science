@@ -23,7 +23,7 @@
 **Files:**
 - Modify: `docs/claim-centric-dashboard-contract.md`
 - Modify: `docs/plans/2026-03-18-claim-centric-reasoning-roadmap.md`
-- Create: `docs/plans/2026-03-18-multi-scale-research-summaries-plan.md`
+- Modify: `docs/plans/2026-03-18-multi-scale-research-summaries-plan.md`
 
 **Step 1: Extend the contract document with the new summary units**
 
