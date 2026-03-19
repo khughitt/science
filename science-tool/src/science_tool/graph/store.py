@@ -2365,6 +2365,14 @@ def _question_claims(knowledge, question_uri: URIRef) -> list[URIRef]:
             continue
         if (claim_uri, RDF.type, SCI_NS.Claim) in knowledge:
             claims.add(claim_uri)
+
+    for related_uri in knowledge.objects(question_uri, SKOS.related):
+        if not isinstance(related_uri, URIRef):
+            continue
+        if (related_uri, RDF.type, SCI_NS.Hypothesis) not in knowledge:
+            continue
+        claims.update(_linked_claims_for_hypothesis(knowledge, related_uri))
+
     return sorted(claims, key=str)
 
 
@@ -2377,8 +2385,13 @@ def _inquiry_claims(knowledge, inquiry_graph, inquiry_uri: URIRef) -> tuple[list
 
     targeted_claims: set[URIRef] = set()
     target_uri = next(inquiry_graph.objects(inquiry_uri, SCI_NS.target), None)
-    if isinstance(target_uri, URIRef) and (target_uri, RDF.type, SCI_NS.Claim) in knowledge:
-        targeted_claims.add(target_uri)
+    if isinstance(target_uri, URIRef):
+        if (target_uri, RDF.type, SCI_NS.Claim) in knowledge:
+            targeted_claims.add(target_uri)
+        elif (target_uri, RDF.type, SCI_NS.Hypothesis) in knowledge:
+            targeted_claims.update(_linked_claims_for_hypothesis(knowledge, target_uri))
+        elif (target_uri, RDF.type, SCI_NS.Question) in knowledge:
+            targeted_claims.update(_question_claims(knowledge, target_uri))
 
     claim_uris = sorted(backed_claims | targeted_claims, key=str)
     return claim_uris, sorted(backed_claims, key=str)

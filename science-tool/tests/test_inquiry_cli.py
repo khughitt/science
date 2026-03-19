@@ -414,6 +414,212 @@ class TestInquirySummary:
         assert "Graph Inquiry Summary" in result.output
         assert "Inquiry" in result.output
 
+    def test_inquiry_summary_includes_claims_from_hypothesis_targets(self, runner: CliRunner, graph_path: Path) -> None:
+        p = str(graph_path)
+        runner.invoke(
+            main,
+            [
+                "inquiry",
+                "init",
+                "hypothesis-target",
+                "--label",
+                "Hypothesis Target Inquiry",
+                "--target",
+                "hypothesis:h01",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "claim",
+                "Hypothesis-linked claim without explicit inquiry backing",
+                "--source",
+                "paper:doi_test",
+                "--id",
+                "hypothesis_target_claim",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "claim",
+                "Literature support for hypothesis-linked claim",
+                "--source",
+                "paper:doi_test",
+                "--evidence-type",
+                "literature_evidence",
+                "--id",
+                "hypothesis_target_support",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "claim/hypothesis_target_support",
+                "cito:supports",
+                "claim/hypothesis_target_claim",
+                "--source",
+                "paper:doi_test",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "claim/hypothesis_target_claim",
+                "cito:discusses",
+                "hypothesis:h01",
+                "--source",
+                "paper:doi_test",
+                "--path",
+                p,
+            ],
+        )
+
+        result = runner.invoke(main, ["graph", "inquiry-summary", "--format", "json", "--path", p])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        row = next(item for item in payload["rows"] if item["inquiry"] == "http://example.org/project/inquiry/hypothesis_target")
+        assert row["claim_count"] == "1"
+        assert row["backed_claim_count"] == "0"
+        assert row["no_empirical_claim_count"] == "1"
+
+    def test_inquiry_summary_includes_claims_from_question_targets(self, runner: CliRunner, graph_path: Path) -> None:
+        p = str(graph_path)
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "question",
+                    "QTARGET",
+                    "--text",
+                    "Question targeted by the inquiry",
+                    "--source",
+                    "paper:doi_test",
+                    "--path",
+                    p,
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Question-targeted claim without explicit inquiry backing",
+                    "--source",
+                    "paper:doi_test",
+                    "--id",
+                    "question_target_claim",
+                    "--path",
+                    p,
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Empirical support for question-targeted claim",
+                    "--source",
+                    "paper:doi_test",
+                    "--evidence-type",
+                    "empirical_data_evidence",
+                    "--id",
+                    "question_target_support",
+                    "--path",
+                    p,
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/question_target_support",
+                    "cito:supports",
+                    "claim/question_target_claim",
+                    "--source",
+                    "paper:doi_test",
+                    "--path",
+                    p,
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "edge",
+                    "claim/question_target_claim",
+                    "sci:addresses",
+                    "question/qtarget",
+                    "--path",
+                    p,
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "inquiry",
+                    "init",
+                    "question-target",
+                    "--label",
+                    "Question Target Inquiry",
+                    "--target",
+                    "question:qtarget",
+                    "--path",
+                    p,
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "inquiry-summary", "--format", "json", "--path", p])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        row = next(item for item in payload["rows"] if item["inquiry"] == "http://example.org/project/inquiry/question_target")
+        assert row["claim_count"] == "1"
+        assert row["backed_claim_count"] == "0"
+        assert float(row["avg_risk_score"]) > 0.0
+        assert float(row["priority_score"]) > 0.0
+
 
 class TestInquiryValidate:
     def test_validate_valid(self, runner: CliRunner, graph_path: Path) -> None:

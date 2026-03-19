@@ -2816,6 +2816,120 @@ def test_graph_question_summary_table_headers_are_sensible() -> None:
         assert "Text" in result.output
 
 
+def test_graph_question_summary_includes_claims_from_related_hypotheses() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "hypothesis",
+                    "HREL",
+                    "--text",
+                    "Hypothesis related to the question",
+                    "--source",
+                    "paper:doi_10_6666_f",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "question",
+                    "QREL",
+                    "--text",
+                    "Question linked to a related hypothesis",
+                    "--source",
+                    "paper:doi_10_6666_f",
+                    "--related-hypothesis",
+                    "hypothesis:hrel",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Claim linked to related hypothesis only",
+                    "--source",
+                    "paper:doi_10_6666_f",
+                    "--id",
+                    "related_hypothesis_claim",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Literature support for related hypothesis claim",
+                    "--source",
+                    "paper:doi_10_6666_f",
+                    "--evidence-type",
+                    "literature_evidence",
+                    "--id",
+                    "related_hypothesis_support",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/related_hypothesis_support",
+                    "cito:supports",
+                    "claim/related_hypothesis_claim",
+                    "--source",
+                    "paper:doi_10_6666_f",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/related_hypothesis_claim",
+                    "cito:discusses",
+                    "hypothesis:hrel",
+                    "--source",
+                    "paper:doi_10_6666_f",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "question-summary", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        row = next(item for item in payload["rows"] if item["question"] == "http://example.org/project/question/qrel")
+        assert row["claim_count"] == "1"
+        assert row["no_empirical_claim_count"] == "1"
+
+
 def test_graph_scan_prose_returns_annotations_json() -> None:
     runner = CliRunner()
 
