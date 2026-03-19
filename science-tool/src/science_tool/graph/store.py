@@ -104,6 +104,20 @@ class InquirySummaryData(TypedDict):
     no_empirical_claim_count: int
     priority_score: float
 
+
+class ProjectSummaryData(TypedDict):
+    project: str
+    profile: str
+    question_count: int
+    inquiry_count: int
+    claim_count: int
+    high_risk_neighborhood_count: int
+    avg_risk_score: float
+    contested_claim_count: int
+    single_source_claim_count: int
+    no_empirical_claim_count: int
+    priority_score: float
+
 VALID_INQUIRY_TYPES: tuple[str, ...] = ("general", "causal")
 
 GRAPH_LAYERS: tuple[str, ...] = (
@@ -2606,6 +2620,88 @@ def query_inquiry_summary(
 
     rows.sort(key=lambda row: (-float(row["priority_score"]), row["label"]))
     return rows[:top]
+
+
+def _project_summary_data(
+    project_root: Path,
+    profile: str,
+    claim_by_uri: dict[URIRef, ClaimSummaryData],
+    neighborhood_rows: list[NeighborhoodSummaryData],
+    question_rows: list[QuestionSummaryData],
+    inquiry_rows: list[InquirySummaryData],
+) -> ProjectSummaryData:
+    high_risk_neighborhood_count = sum(float(row["neighborhood_risk"]) >= 3.0 for row in neighborhood_rows)
+    metrics = _rollup_claim_group(
+        sorted(claim_by_uri, key=str),
+        claim_by_uri,
+        {row["center_uri"]: row for row in neighborhood_rows},
+    )
+
+    return {
+        "project": str(project_root),
+        "profile": profile,
+        "question_count": len(question_rows),
+        "inquiry_count": len(inquiry_rows),
+        "claim_count": cast(int, metrics["claim_count"]),
+        "high_risk_neighborhood_count": high_risk_neighborhood_count,
+        "avg_risk_score": cast(float, metrics["avg_risk_score"]),
+        "contested_claim_count": cast(int, metrics["contested_claim_count"]),
+        "single_source_claim_count": cast(int, metrics["single_source_claim_count"]),
+        "no_empirical_claim_count": cast(int, metrics["no_empirical_claim_count"]),
+        "priority_score": cast(float, metrics["priority_score"]) + (0.5 * high_risk_neighborhood_count),
+    }
+
+
+def _format_project_summary_row(summary: ProjectSummaryData) -> dict[str, str]:
+    return {
+        "project": summary["project"],
+        "profile": summary["profile"],
+        "question_count": str(summary["question_count"]),
+        "inquiry_count": str(summary["inquiry_count"]),
+        "claim_count": str(summary["claim_count"]),
+        "high_risk_neighborhood_count": str(summary["high_risk_neighborhood_count"]),
+        "avg_risk_score": f"{summary['avg_risk_score']:.2f}",
+        "contested_claim_count": str(summary["contested_claim_count"]),
+        "single_source_claim_count": str(summary["single_source_claim_count"]),
+        "no_empirical_claim_count": str(summary["no_empirical_claim_count"]),
+        "priority_score": f"{summary['priority_score']:.2f}",
+    }
+
+
+def query_project_summary(graph_path: Path) -> list[dict[str, str]]:
+    from science_tool.paths import resolve_paths
+
+    project_root = _project_root_from_graph_path(graph_path).resolve()
+    profile = resolve_paths(project_root).profile
+    if profile != "research":
+        raise ValueError("project-summary is currently defined only for research projects")
+
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    provenance = dataset.graph(_graph_uri("graph/provenance"))
+
+    claim_rows = _claim_summaries(knowledge, provenance, include_hypotheses=False)
+    claim_by_uri = {summary["uri"]: summary for summary in claim_rows}
+    neighborhood_rows = _neighborhood_summary_data_rows(knowledge, provenance, hops=1)
+    neighborhood_by_center = {summary["center_uri"]: summary for summary in neighborhood_rows}
+    question_rows = [
+        _question_summary_data(knowledge, question_uri, claim_by_uri, neighborhood_by_center)
+        for question_uri, _, _ in knowledge.triples((None, RDF.type, SCI_NS.Question))
+        if isinstance(question_uri, URIRef)
+    ]
+
+    inquiry_prefix = str(PROJECT_NS) + "inquiry/"
+    inquiry_rows: list[InquirySummaryData] = []
+    for inquiry_graph in dataset.graphs():
+        graph_id = str(inquiry_graph.identifier)
+        if not graph_id.startswith(inquiry_prefix):
+            continue
+        inquiry_uri = URIRef(graph_id)
+        if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
+            continue
+        inquiry_rows.append(_inquiry_summary_data(knowledge, inquiry_graph, inquiry_uri, claim_by_uri, neighborhood_by_center))
+
+    return [_format_project_summary_row(_project_summary_data(project_root, profile, claim_by_uri, neighborhood_rows, question_rows, inquiry_rows))]
 
 
 def query_coverage(

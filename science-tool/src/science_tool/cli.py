@@ -50,6 +50,7 @@ from science_tool.graph.store import (
     query_neighborhood,
     query_neighborhood_summary,
     query_predicates,
+    query_project_summary,
     query_question_summary,
     query_uncertainty,
     read_graph_stats,
@@ -510,6 +511,39 @@ def graph_inquiry_summary(top: int, output_format: str, graph_path: Path) -> Non
             ("no_empirical_claim_count", "No Empirical"),
             ("inquiry_type", "Type"),
             ("status", "Status"),
+        ],
+        rows=rows,
+    )
+
+
+@graph.command("project-summary")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_project_summary(output_format: str, graph_path: Path) -> None:
+    """Show a research-project rollup derived from lower-level reasoning summaries."""
+
+    try:
+        rows = query_project_summary(graph_path=graph_path)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    emit_query_rows(
+        output_format=output_format,
+        title="Graph Project Summary",
+        columns=[
+            ("project", "Project"),
+            ("profile", "Profile"),
+            ("priority_score", "Priority"),
+            ("avg_risk_score", "Avg Risk"),
+            ("question_count", "Questions"),
+            ("inquiry_count", "Inquiries"),
+            ("claim_count", "Claims"),
+            ("high_risk_neighborhood_count", "High-Risk Neighborhoods"),
+            ("contested_claim_count", "Contested"),
+            ("single_source_claim_count", "Single-Source"),
+            ("no_empirical_claim_count", "No Empirical"),
         ],
         rows=rows,
     )

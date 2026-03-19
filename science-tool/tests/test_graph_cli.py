@@ -2816,6 +2816,173 @@ def test_graph_question_summary_table_headers_are_sensible() -> None:
         assert "Text" in result.output
 
 
+def test_graph_project_summary_rolls_up_research_profile() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        Path("science.yaml").write_text("name: demo\nprofile: research\n", encoding="utf-8")
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "question",
+                    "QPROJ",
+                    "--text",
+                    "Which research path should we prioritize?",
+                    "--source",
+                    "paper:doi_10_7777_g",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Contested project claim",
+                    "--source",
+                    "paper:doi_10_7777_g",
+                    "--id",
+                    "project_contested",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Literature support for project claim",
+                    "--source",
+                    "paper:doi_10_7777_g",
+                    "--evidence-type",
+                    "literature_evidence",
+                    "--id",
+                    "project_support",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Negative result for project claim",
+                    "--source",
+                    "paper:doi_10_8888_h",
+                    "--evidence-type",
+                    "negative_result",
+                    "--id",
+                    "project_dispute",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Empirically supported project claim",
+                    "--source",
+                    "paper:doi_10_9999_i",
+                    "--id",
+                    "project_empirical",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Empirical support for project claim",
+                    "--source",
+                    "paper:doi_10_9999_i",
+                    "--evidence-type",
+                    "empirical_data_evidence",
+                    "--id",
+                    "project_empirical_support",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        for subject, predicate, obj, source in (
+            ("claim/project_support", "cito:supports", "claim/project_contested", "paper:doi_10_7777_g"),
+            ("claim/project_dispute", "cito:disputes", "claim/project_contested", "paper:doi_10_8888_h"),
+            ("claim/project_empirical_support", "cito:supports", "claim/project_empirical", "paper:doi_10_9999_i"),
+        ):
+            assert (
+                runner.invoke(main, ["graph", "add", "relation-claim", subject, predicate, obj, "--source", source]).exit_code
+                == 0
+            )
+
+        for claim_ref in ("claim/project_contested", "claim/project_empirical"):
+            assert runner.invoke(main, ["graph", "add", "edge", claim_ref, "sci:addresses", "question/qproj"]).exit_code == 0
+
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "inquiry",
+                    "init",
+                    "project-inquiry",
+                    "--label",
+                    "Project Inquiry",
+                    "--target",
+                    "question:qproj",
+                    "--path",
+                    "knowledge/graph.trig",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "project-summary", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        row = payload["rows"][0]
+
+        assert row["profile"] == "research"
+        assert row["question_count"] == "1"
+        assert row["inquiry_count"] == "1"
+        assert row["claim_count"] == "2"
+        assert row["project"] == str(Path.cwd())
+        assert "high_risk_neighborhood_count" in row
+        assert "avg_risk_score" in row
+        assert "priority_score" in row
+
+
+def test_graph_project_summary_rejects_software_profile() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        Path("science.yaml").write_text("name: demo\nprofile: software\n", encoding="utf-8")
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        result = runner.invoke(main, ["graph", "project-summary", "--format", "json"])
+        assert result.exit_code != 0
+        assert "project-summary is currently defined only for research projects" in result.output
+
+
 def test_graph_question_summary_includes_claims_from_related_hypotheses() -> None:
     runner = CliRunner()
 
