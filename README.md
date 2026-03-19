@@ -340,6 +340,14 @@ Each command reads existing project state and builds on it. All artifacts are ve
 
 For knowledge-graph projects, `knowledge/graph.trig` is generated from canonical upstream sources in `specs/`, `doc/`, `tasks/`, and `knowledge/sources/`. If the graph is wrong, fix the source artifact and re-materialize; do not patch the TriG file directly.
 
+Once the graph is materialized, use the summary stack top-down:
+
+- `science-tool graph project-summary` for the research-level rollup
+- `science-tool graph question-summary` and `science-tool graph inquiry-summary` for thread-level prioritization
+- `science-tool graph dashboard-summary` and `science-tool graph neighborhood-summary` for claim-level and local-cluster detail
+
+Use `knowledge/` for live dashboards, `doc/interpretations/` and `doc/reports/` for durable writeups, and `tasks/` for follow-up work derived from the summary outputs.
+
 ## Packages
 
 Science includes two Python packages that back the plugin commands:

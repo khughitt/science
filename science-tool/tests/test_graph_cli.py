@@ -73,6 +73,12 @@ def test_graph_init_viz_notebook_uses_store_summaries_for_dashboard_panels() -> 
         content = viz_path.read_text(encoding="utf-8")
         assert "query_dashboard_summary" in content
         assert "query_neighborhood_summary" in content
+        assert "query_question_summary" in content
+        assert "query_inquiry_summary" in content
+        assert "query_project_summary" in content
+        assert "Research Project Summary" in content
+        assert "High-Priority Questions" in content
+        assert "High-Priority Inquiries" in content
         assert "Claims Lacking Empirical Data Evidence" in content
         assert "High-Uncertainty Neighborhoods" in content
         assert "Evidence Type Mix" in content

@@ -147,16 +147,28 @@ def dashboard_summary_data(graph_path_input):
 
     _dashboard_rows: list[dict[str, str]] = []
     _neighborhood_rows: list[dict[str, str]] = []
+    _question_rows: list[dict[str, str]] = []
+    _inquiry_rows: list[dict[str, str]] = []
+    _project_rows: list[dict[str, str]] = []
     _summary_error = ""
     try:
-        from science_tool.graph.store import query_dashboard_summary, query_neighborhood_summary
+        from science_tool.graph.store import (
+            query_dashboard_summary,
+            query_inquiry_summary,
+            query_neighborhood_summary,
+            query_project_summary,
+            query_question_summary,
+        )
 
         _dashboard_rows = query_dashboard_summary(graph_path=_graph_path, top=25)
         _neighborhood_rows = query_neighborhood_summary(graph_path=_graph_path, top=15, hops=1)
+        _question_rows = query_question_summary(graph_path=_graph_path, top=10)
+        _inquiry_rows = query_inquiry_summary(graph_path=_graph_path, top=10)
+        _project_rows = query_project_summary(graph_path=_graph_path)
     except Exception as exc:
         _summary_error = str(exc)
 
-    return _dashboard_rows, _neighborhood_rows, _summary_error
+    return _dashboard_rows, _inquiry_rows, _neighborhood_rows, _project_rows, _question_rows, _summary_error
 
 
 # ── Stats overview ───────────────────────────────────────────────────
@@ -574,7 +586,7 @@ def neighborhood_graph(alt, df, entity_input, hops_slider, math, mo, n_triples, 
 
 # ── Quality dashboard ────────────────────────────────────────────────
 @app.cell
-def quality_dashboard(_dashboard_rows, _neighborhood_rows, _summary_error, df, mo, n_triples, pl):
+def quality_dashboard(_dashboard_rows, _inquiry_rows, _neighborhood_rows, _project_rows, _question_rows, _summary_error, df, mo, n_triples, pl):
     if n_triples == 0:
         _out = mo.vstack([mo.md("## Quality Dashboard"), mo.md("_No data._")])
     else:
@@ -673,6 +685,44 @@ def quality_dashboard(_dashboard_rows, _neighborhood_rows, _summary_error, df, m
                 kind="warn",
             )
 
+        if _project_rows:
+            _project_row = _project_rows[0]
+            _project_panel = mo.md(
+                "### Research Project Summary\n\n"
+                f"- project: `{_project_row['project']}`\n"
+                f"- profile: `{_project_row['profile']}`\n"
+                f"- priority: `{_project_row['priority_score']}`\n"
+                f"- avg claim risk: `{_project_row['avg_risk_score']}`\n"
+                f"- questions: `{_project_row['question_count']}`\n"
+                f"- inquiries: `{_project_row['inquiry_count']}`\n"
+                f"- claims: `{_project_row['claim_count']}`\n"
+                f"- high-risk neighborhoods: `{_project_row['high_risk_neighborhood_count']}`"
+            )
+        elif _summary_error:
+            _project_panel = mo.md("### Research Project Summary\n\n_Project summary unavailable while store summaries fail._")
+        else:
+            _project_panel = mo.md("### Research Project Summary\n\n_Project summary unavailable for this graph._")
+
+        _question_items = [
+            f"- `{_row['text']}` - priority {_row['priority_score']}, claims {_row['claim_count']}, "
+            f"contested {_row['contested_claim_count']}, no empirical {_row['no_empirical_claim_count']}"
+            for _row in _question_rows
+        ]
+        _question_panel = mo.md(
+            "### High-Priority Questions\n\n"
+            + ("\n".join(_question_items[:10]) if _question_items else "_No question summaries found._")
+        )
+
+        _inquiry_items = [
+            f"- `{_row['label']}` - priority {_row['priority_score']}, claims {_row['claim_count']}, "
+            f"backed {_row['backed_claim_count']}, contested {_row['contested_claim_count']}"
+            for _row in _inquiry_rows
+        ]
+        _inquiry_panel = mo.md(
+            "### High-Priority Inquiries\n\n"
+            + ("\n".join(_inquiry_items[:10]) if _inquiry_items else "_No inquiry summaries found._")
+        )
+
         # 2. Open questions by maturity
         _maturity_triples = df.filter(pl.col("predicate") == "sci:maturity")
         _question_triples = df.filter((pl.col("predicate") == "rdf:type") & (pl.col("object") == "sci:Question"))
@@ -700,6 +750,9 @@ def quality_dashboard(_dashboard_rows, _neighborhood_rows, _summary_error, df, m
             [
                 mo.md("## Quality Dashboard"),
                 *([_summary_error_panel] if _summary_error_panel is not None else []),
+                _project_panel,
+                _question_panel,
+                _inquiry_panel,
                 _missing_panel,
                 _weak_support_panel,
                 _contested_panel,

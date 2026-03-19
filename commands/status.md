@@ -51,6 +51,9 @@ When `knowledge/graph.trig` exists:
 1. Run:
 
 ```bash
+science-tool graph project-summary --format json
+science-tool graph question-summary --format json
+science-tool graph inquiry-summary --format json
 science-tool graph dashboard-summary --format json
 science-tool graph neighborhood-summary --format json
 science-tool graph uncertainty --format json
@@ -58,6 +61,9 @@ science-tool graph gaps --format json
 ```
 
 2. Surface:
+- research project summary
+- high-priority questions
+- high-priority inquiries
 - contested claims
 - single-source claims
 - claims lacking empirical data evidence
@@ -65,8 +71,11 @@ science-tool graph gaps --format json
 - high-uncertainty neighborhoods
 - structurally fragile areas
 
-3. Prefer `dashboard-summary` and `neighborhood-summary` as the primary epistemic view.
-Use `uncertainty` and `gaps` as secondary support views rather than the main dashboard.
+3. Prefer the higher-level drill path:
+- `project-summary` for the top-level rollup
+- `question-summary` and `inquiry-summary` for research-thread prioritization
+- `dashboard-summary` and `neighborhood-summary` for exact weak points
+- `uncertainty` and `gaps` as secondary support views rather than the main dashboard
 
 4. If the graph does not expose claim-backed evidence summaries yet, say that the project appears only partially migrated and treat the uncertainty section as provisional.
 
@@ -105,6 +114,8 @@ From tasks, graph uncertainty, and recent activity, show:
 - the top few high-value next actions
 - where uncertainty reduction is most likely to pay off
 - blocked tasks or missing evidence
+- which findings belong in `doc/reports/` or `doc/interpretations/`
+- which follow-up actions should be added under `tasks/`
 
 ## Output Format
 

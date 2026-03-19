@@ -131,14 +131,25 @@ Propose changes to the task queue:
 When `knowledge/graph.trig` exists, prefer using:
 
 ```bash
+science-tool graph project-summary --format json
+science-tool graph question-summary --format json
+science-tool graph inquiry-summary --format json
 science-tool graph dashboard-summary --format json
 science-tool graph neighborhood-summary --format json
 ```
 
 to anchor the prioritization section, especially for:
+- the overall research-project rollup
+- high-priority questions
+- high-priority inquiries
 - claims lacking empirical support
 - single-source claims
 - contested local clusters
+
+Use them in this order:
+1. `project-summary` to see the current research-level rollup
+2. `question-summary` and `inquiry-summary` to find which threads deserve attention
+3. `dashboard-summary` and `neighborhood-summary` to identify the exact claims and clusters driving that priority
 
 ## Writing
 
@@ -159,6 +170,7 @@ Populate frontmatter:
 Do not mechanically flip them to `supported` or `refuted`.
 2. Add new questions to `doc/questions/` when needed.
 3. Update tasks via `science-tool tasks`.
+Write durable result interpretations under `doc/interpretations/`, and when the findings change the project-level narrative or current state substantially, summarize that in `doc/reports/` as well.
 4. If graph updates were proposed, point the user to the exact claim or relation-claim updates to make.
 5. If the project still lacks claim-backed evidence summaries, say that it appears partially migrated and that interpretation quality is constrained by that gap.
 6. Suggest next steps:
