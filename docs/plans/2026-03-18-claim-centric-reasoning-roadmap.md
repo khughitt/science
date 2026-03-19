@@ -4,6 +4,7 @@
 > - [`2026-03-16-claim-centric-uncertainty-design.md`](./2026-03-16-claim-centric-uncertainty-design.md)
 > - [`2026-03-16-claim-centric-uncertainty-plan.md`](./2026-03-16-claim-centric-uncertainty-plan.md)
 > - [`2026-03-17-dashboard-gap-closure-and-project-migrations-plan.md`](./2026-03-17-dashboard-gap-closure-and-project-migrations-plan.md)
+> - [`2026-03-18-multi-scale-research-summaries-plan.md`](./2026-03-18-multi-scale-research-summaries-plan.md)
 
 ## Purpose
 
@@ -37,8 +38,9 @@ What has landed so far:
 Important caveats:
 
 - richer evidence-item-first authoring and structured study/result metadata are still future work
-- higher-level summaries for questions, inquiries, and projects do not exist yet
+- higher-level summaries for questions, inquiries, and projects do not exist yet in the repository state captured by this roadmap snapshot
 - prioritization is still mostly ranking-oriented rather than decision-oriented
+- the remaining phases should now assume the profile-based organization model from `2026-03-18-project-organization-design.md`
 
 ## Target End State
 
@@ -60,6 +62,8 @@ In that end state:
 - the dashboard becomes a thin presentation layer
 - users can move cleanly from evidence item -> claim -> neighborhood -> inquiry -> project
 - prioritization outputs help users decide what to investigate next, not just what looks uncertain
+- research-profile projects are the primary home for full claim-centric reasoning
+- software-profile projects can opt into lighter overlays later, but they should not define the first-pass contract for higher-level summaries
 
 ## Guiding Principles
 
@@ -124,6 +128,10 @@ Presentation layers should:
 - render the store summaries
 - filter and sort them
 - explain them to the user
+- integrate with the canonical project roots:
+  - `doc/` for durable project writing and reports
+  - `tasks/` for actionable follow-up work
+  - `knowledge/` for notebooks and graph-facing exploration
 
 Presentation layers should not:
 
@@ -151,7 +159,8 @@ Primary outcome:
 - `science` no longer treats uncertain scientific edges as simple facts by default
 
 Remaining cleanup:
-- finish migrating older projects
+- finish claim-centric reasoning migration for older projects that benefit from it
+- keep organization/profile migration distinct from reasoning migration
 - tighten any lingering scalar-confidence-first surfaces
 
 ### Phase 2: Stable Summary Contract
@@ -213,6 +222,7 @@ Status:
 
 Goal:
 - improve the epistemic quality of belief updates by structuring evidence more precisely
+- do so in a way that fits the new project profiles rather than assuming one universal project shape
 
 Primary deliverables:
 
@@ -246,6 +256,10 @@ Current state:
 - benchmark evidence now counts toward empirical-presence summaries
 - structured study/result metadata and evidence-item-first authoring remain open
 
+Profile implication:
+- this phase is core for `research` projects
+- for `software` projects, richer evidence modeling should remain opt-in and usually attach to targeted investigations, benchmarks, or evaluation claims rather than becoming the default project mode
+
 ### Phase 5: Multi-Scale Research Summaries
 
 Status:
@@ -253,6 +267,7 @@ Status:
 
 Goal:
 - let users navigate uncertainty across the project at multiple levels
+- make those higher-level summaries aware of project profile and canonical project organization
 
 Primary deliverables:
 
@@ -266,6 +281,10 @@ What this enables:
 - project status views that are based on reasoning state rather than prose alone
 - better comparison between alternative inquiries or competing hypotheses
 - clearer understanding of where evidence is concentrated or missing
+- clean integration with canonical project surfaces:
+  - `knowledge/` for exploratory dashboards
+  - `doc/reports/` and `doc/interpretations/` for durable summaries
+  - `tasks/` for converting identified uncertainty into follow-up work
 
 Exit criteria:
 - users can move cleanly from a project view down to the exact weak claims and evidence gaps driving that summary
@@ -273,7 +292,13 @@ Exit criteria:
 Current state:
 - claim and neighborhood summaries exist
 - the notebook consumes those store summaries directly
-- `question_summary`, `inquiry_summary`, and `project_summary` are still missing and remain the next real expansion of this phase
+- `question_summary`, `inquiry_summary`, and `project_summary` are still missing in the repository state captured by this roadmap snapshot and remain the next real expansion of this phase
+
+Profile implication:
+- `question_summary` and `inquiry_summary` are primarily `research`-profile outputs
+- `project_summary` should support both profiles, but with different expectations:
+  - `research` projects should roll up claims, evidence, neighborhoods, questions, and inquiries
+  - `software` projects should support lighter reasoning overlays, such as benchmark/evaluation claim clusters, without requiring full inquiry structure
 
 ### Phase 6: Action-Oriented Prioritization
 
@@ -330,13 +355,16 @@ Exit criteria:
 
 The roadmap should be adopted through rolling migration, not a flag day rewrite.
 
+The project-organization migration is already complete.
+What remains is selective reasoning-model migration on top of the new canonical profiles and root structure.
+
 Recommended order:
 
-1. finish the summary contract and neighborhood layers
-2. migrate the highest-value existing projects
-3. rebuild the notebook/dashboard entirely around store summaries
-4. add richer evidence authoring where projects actually benefit
-5. add higher-level summaries once enough projects have meaningful claim graphs
+1. finish migrating high-value `research` projects to the claim-centric reasoning model where they still lag
+2. add richer evidence authoring where research projects actually benefit
+3. add higher-level summaries once enough projects have meaningful claim graphs
+4. define the lightweight reasoning overlay expected for `software` projects
+5. connect higher-level summaries to canonical `doc/`, `tasks/`, and `knowledge/` workflows
 
 This keeps the architecture honest: each new layer should be justified by real project use, not only by theoretical completeness.
 
@@ -344,10 +372,10 @@ This keeps the architecture honest: each new layer should be justified by real p
 
 The next concrete steps should be:
 
-1. define the dashboard summary contract
-2. implement claim-neighborhood summaries
-3. rebuild dashboard views around the store summaries
-4. teach users how to interpret and act on those summaries
+1. implement `question_summary`, `inquiry_summary`, and profile-aware `project_summary`
+2. connect those summaries to canonical `doc/`, `tasks/`, and `knowledge/` surfaces
+3. deepen evidence-item-first authoring and structured study/result metadata for `research` projects
+4. define the minimal reasoning overlay expected for `software` projects
 
 These are the shortest-path steps that also move the system toward the long-term architecture rather than creating another temporary dashboard.
 
@@ -355,6 +383,8 @@ These are the shortest-path steps that also move the system toward the long-term
 
 - When should evidence-type metadata live on evidence items only, versus also being allowed on claims as a transitional summary aid?
 - What is the right balance between neighborhood diffusion and explicit claim dependency links?
+- What is the right minimal reasoning surface for `software` projects?
+- How should `project_summary` differ between `research` and `software` profiles without fragmenting the contract model?
 - When should question and inquiry summaries become first-class outputs rather than notebook-only aggregations?
 - Which prioritization outputs are most useful in practice: uncertainty ranking, expected information gain, discriminating experiment suggestions, or something simpler?
 - How much formal probabilistic machinery is worth introducing before richer empirical evidence structure is common across projects?

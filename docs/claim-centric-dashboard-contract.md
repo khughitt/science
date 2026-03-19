@@ -11,15 +11,19 @@ The purpose of this contract is simple:
 
 ## Summary Units
 
-The dashboard contract currently defines three summary units:
+The dashboard contract currently defines six summary units:
 
 - `claim_summary`
 - `neighborhood_summary`
 - `evidence_mix_summary`
+- `question_summary`
+- `inquiry_summary`
+- `project_summary`
 
 `claim_summary` is the primary unit already exposed in `graph dashboard-summary`.
 `neighborhood_summary` is the next required unit for local uncertainty prioritization.
 `evidence_mix_summary` is a reusable logical sub-summary that may be embedded in larger outputs rather than always emitted on its own.
+`question_summary`, `inquiry_summary`, and `project_summary` are the higher-level rollup units that sit above the claim and neighborhood layers.
 
 ## Required Dashboard Panels
 
@@ -86,6 +90,105 @@ Required fields:
 
 This unit exists so that higher-level summaries can reuse the same semantics without restating them ad hoc.
 
+## `question_summary`
+
+`question_summary` is the canonical rollup for a research question.
+It should summarize the claims that directly address the question and the local neighborhoods that make that question more or less urgent.
+
+Required fields:
+
+| Field | Meaning |
+|---|---|
+| `question` | Canonical URI or identifier for the summarized question. |
+| `label` | Human-readable label for display. |
+| `text` | Primary question text or fallback descriptive text. |
+| `claim_count` | Count of claims directly addressing the question. |
+| `neighborhood_count` | Count of claim neighborhoods contributing to the rollup. |
+| `avg_risk_score` | Average claim-local risk across the addressed claims and neighborhoods. |
+| `contested_claim_count` | Count of addressed claims whose support/dispute mix is contested. |
+| `single_source_claim_count` | Count of addressed claims supported by only one source. |
+| `no_empirical_claim_count` | Count of addressed claims lacking empirical data evidence. |
+| `priority_score` | Derived question-level prioritization score. |
+
+Required interpretation rules:
+
+- `question_summary` rolls up claims that directly address the question.
+- neighborhood metrics derive from already-computed claim neighborhoods rather than a separate question-local graph walk.
+- `priority_score` is a question-level prioritization metric, not a claim-level belief state.
+- question summaries should remain explainable in terms of the underlying claim summaries and neighborhood summaries.
+
+First-pass profile constraints:
+
+- `question_summary` is primarily a `research`-profile output.
+- software-profile projects may eventually expose a lighter question layer, but they should not be forced into research-style question rollups in this first pass.
+
+## `inquiry_summary`
+
+`inquiry_summary` is the canonical rollup for an inquiry.
+It should summarize the claims explicitly attached to inquiry edges plus claims directly targeted by the inquiry.
+
+Required fields:
+
+| Field | Meaning |
+|---|---|
+| `inquiry` | Canonical URI or identifier for the summarized inquiry. |
+| `label` | Human-readable label for display. |
+| `text` | Primary inquiry text or fallback descriptive text. |
+| `inquiry_type` | Inquiry category such as general or causal. |
+| `status` | Inquiry lifecycle status. |
+| `claim_count` | Count of claims contributing to the inquiry rollup. |
+| `backed_claim_count` | Count of claims concretely referenced by inquiry structure. |
+| `avg_risk_score` | Average claim-local risk across the inquiry-linked claims. |
+| `contested_claim_count` | Count of inquiry-linked claims whose support/dispute mix is contested. |
+| `single_source_claim_count` | Count of inquiry-linked claims supported by only one source. |
+| `no_empirical_claim_count` | Count of inquiry-linked claims lacking empirical data evidence. |
+| `priority_score` | Derived inquiry-level prioritization score. |
+
+Required interpretation rules:
+
+- `inquiry_summary` rolls up claims explicitly attached to inquiry edges plus claims directly targeted by the inquiry.
+- `backed_claim_count` counts claims concretely referenced by inquiry structure, not inferred topic overlap.
+- inquiries with no explicit claim backing should remain visible as weakly grounded rather than being silently omitted.
+- `priority_score` is an inquiry-level prioritization metric, not a claim-level belief state.
+
+First-pass profile constraints:
+
+- `inquiry_summary` is primarily a `research`-profile output.
+- software-profile projects may use inquiry-style structures later, but the first-pass contract should not assume they exist.
+
+## `project_summary`
+
+`project_summary` is the canonical rollup for a research project.
+It should summarize the highest-level reasoning state of the project from its questions, inquiries, claims, and neighborhoods.
+
+Required fields:
+
+| Field | Meaning |
+|---|---|
+| `project` | Canonical project URI or identifier. |
+| `profile` | Project profile, currently expected to be `research` for this first-pass contract. |
+| `question_count` | Count of summarized questions. |
+| `inquiry_count` | Count of summarized inquiries. |
+| `claim_count` | Count of summarized claims. |
+| `high_risk_neighborhood_count` | Count of neighborhoods whose risk crosses the high-risk threshold. |
+| `avg_risk_score` | Average risk across the project-level rollup. |
+| `contested_claim_count` | Count of contested claims in the project rollup. |
+| `single_source_claim_count` | Count of single-source claims in the project rollup. |
+| `no_empirical_claim_count` | Count of claims lacking empirical data evidence. |
+| `priority_score` | Derived project-level prioritization score. |
+
+Required interpretation rules:
+
+- `project_summary` is a rollup over question, inquiry, claim, and neighborhood summaries.
+- `priority_score` is a project-level prioritization metric, not a claim-level belief state.
+- project summaries should stay explainable in terms of the lower-level summary units.
+
+First-pass profile constraints:
+
+- this first pass is only defined for `research` projects.
+- if `profile != research`, the command should fail clearly or emit a minimal unsupported message; do not invent a fake research rollup.
+- software-profile projects may get a lighter overlay later, but that is out of scope for this contract revision.
+
 ## `neighborhood_summary`
 
 `neighborhood_summary` is the canonical local-prioritization unit.
@@ -124,7 +227,7 @@ The first contract version does not require:
 
 - full probabilistic updates
 - mathematically calibrated Bayesian posteriors
-- inquiry-level or question-level summaries
+- inquiry-level or question-level summaries beyond the first-pass contract sections above
 - notebook-specific rendering fields
 
 Those may be added later, but the first contract should stay focused on stable claim and neighborhood summaries.
