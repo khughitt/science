@@ -46,9 +46,11 @@ from science_tool.graph.store import (
     query_dashboard_summary,
     query_evidence,
     query_gaps,
+    query_inquiry_summary,
     query_neighborhood,
     query_neighborhood_summary,
     query_predicates,
+    query_question_summary,
     query_uncertainty,
     read_graph_stats,
     set_boundary_role,
@@ -450,6 +452,64 @@ def graph_neighborhood_summary(top: int, hops: int, output_format: str, graph_pa
             ("no_empirical_count", "No Empirical"),
             ("neighbor_claim_count", "Neighbors"),
             ("structural_fragility", "Structure"),
+        ],
+        rows=rows,
+    )
+
+
+@graph.command("question-summary")
+@click.option("--top", type=int, default=25, show_default=True)
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_question_summary(top: int, output_format: str, graph_path: Path) -> None:
+    """Show question-level rollups derived from claim and neighborhood summaries."""
+
+    rows = query_question_summary(graph_path=graph_path, top=top)
+    emit_query_rows(
+        output_format=output_format,
+        title="Graph Question Summary",
+        columns=[
+            ("question", "Question"),
+            ("text", "Text"),
+            ("priority_score", "Priority"),
+            ("avg_risk_score", "Avg Risk"),
+            ("claim_count", "Claims"),
+            ("neighborhood_count", "Neighbors"),
+            ("contested_claim_count", "Contested"),
+            ("single_source_claim_count", "SingleSrc"),
+            ("no_empirical_claim_count", "NoEmpirical"),
+        ],
+        rows=rows,
+    )
+
+
+@graph.command("inquiry-summary")
+@click.option("--top", type=int, default=25, show_default=True)
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_inquiry_summary(top: int, output_format: str, graph_path: Path) -> None:
+    """Show inquiry-level rollups derived from explicit claim backing and claim summaries."""
+
+    rows = query_inquiry_summary(graph_path=graph_path, top=top)
+    emit_query_rows(
+        output_format=output_format,
+        title="Graph Inquiry Summary",
+        columns=[
+            ("inquiry", "Inquiry"),
+            ("label", "Label"),
+            ("priority_score", "Priority"),
+            ("avg_risk_score", "Avg Risk"),
+            ("claim_count", "Claims"),
+            ("backed_claim_count", "Backed"),
+            ("contested_claim_count", "Contested"),
+            ("single_source_claim_count", "SingleSrc"),
+            ("no_empirical_claim_count", "NoEmpirical"),
+            ("inquiry_type", "Type"),
+            ("status", "Status"),
         ],
         rows=rows,
     )

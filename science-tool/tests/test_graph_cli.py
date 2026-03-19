@@ -2542,6 +2542,280 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
         assert float(contested_row["neighborhood_risk"]) > float(isolated_row["neighborhood_risk"])
 
 
+def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "question",
+                    "Q1",
+                    "--text",
+                    "Which claims matter most for the contested question?",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "question",
+                    "Q2",
+                    "--text",
+                    "Lower-priority comparison question",
+                    "--source",
+                    "paper:doi_10_2222_b",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Contested literature-only question claim",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                    "--id",
+                    "question_contested",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Literature support for contested question claim",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                    "--evidence-type",
+                    "literature_evidence",
+                    "--id",
+                    "question_contested_support",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/question_contested_support",
+                    "cito:supports",
+                    "claim/question_contested",
+                    "--source",
+                    "paper:doi_10_1111_a",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Negative result disputing contested question claim",
+                    "--source",
+                    "paper:doi_10_3333_c",
+                    "--evidence-type",
+                    "negative_result",
+                    "--id",
+                    "question_contested_dispute",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/question_contested_dispute",
+                    "cito:disputes",
+                    "claim/question_contested",
+                    "--source",
+                    "paper:doi_10_3333_c",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Empirically supported question claim",
+                    "--source",
+                    "paper:doi_10_4444_d",
+                    "--id",
+                    "question_empirical",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Empirical support for question claim",
+                    "--source",
+                    "paper:doi_10_4444_d",
+                    "--evidence-type",
+                    "empirical_data_evidence",
+                    "--id",
+                    "question_empirical_support",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/question_empirical_support",
+                    "cito:supports",
+                    "claim/question_empirical",
+                    "--source",
+                    "paper:doi_10_4444_d",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Low-priority comparison question claim",
+                    "--source",
+                    "paper:doi_10_5555_e",
+                    "--id",
+                    "question_low_priority",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "claim",
+                    "Empirical support for low-priority claim",
+                    "--source",
+                    "paper:doi_10_5555_e",
+                    "--evidence-type",
+                    "empirical_data_evidence",
+                    "--id",
+                    "question_low_priority_support",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "relation-claim",
+                    "claim/question_low_priority_support",
+                    "cito:supports",
+                    "claim/question_low_priority",
+                    "--source",
+                    "paper:doi_10_5555_e",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        for claim_ref, question_ref in (
+            ("claim/question_contested", "question/q1"),
+            ("claim/question_empirical", "question/q1"),
+            ("claim/question_low_priority", "question/q2"),
+        ):
+            assert (
+                runner.invoke(
+                    main,
+                    [
+                        "graph",
+                        "add",
+                        "edge",
+                        claim_ref,
+                        "sci:addresses",
+                        question_ref,
+                    ],
+                ).exit_code
+                == 0
+            )
+
+        result = runner.invoke(main, ["graph", "question-summary", "--format", "json", "--top", "1"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+
+        assert len(payload["rows"]) == 1
+        row = payload["rows"][0]
+        assert row["question"] == "http://example.org/project/question/q1"
+        assert row["claim_count"] == "2"
+        assert row["neighborhood_count"] == "2"
+        assert row["contested_claim_count"] == "1"
+        assert row["single_source_claim_count"] == "1"
+        assert row["no_empirical_claim_count"] == "1"
+        assert float(row["avg_risk_score"]) > 0.0
+        assert float(row["priority_score"]) > 0.0
+
+
+def test_graph_question_summary_table_headers_are_sensible() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        result = runner.invoke(main, ["graph", "question-summary"])
+        assert result.exit_code == 0
+        assert "Graph Question Summary" in result.output
+        assert "Question" in result.output
+        assert "Text" in result.output
+
+
 def test_graph_scan_prose_returns_annotations_json() -> None:
     runner = CliRunner()
 

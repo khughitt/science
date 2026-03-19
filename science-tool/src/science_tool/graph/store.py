@@ -62,6 +62,48 @@ class ClaimSummaryData(TypedDict):
     signals: list[str]
     risk_score: float
 
+
+class NeighborhoodSummaryData(TypedDict):
+    center_uri: URIRef
+    label: str
+    text: str
+    neighbor_claim_count: int
+    avg_risk_score: float
+    contested_count: int
+    single_source_count: int
+    no_empirical_count: int
+    structural_fragility: str
+    neighborhood_risk: float
+
+
+class QuestionSummaryData(TypedDict):
+    uri: URIRef
+    question: str
+    label: str
+    text: str
+    claim_count: int
+    neighborhood_count: int
+    avg_risk_score: float
+    contested_claim_count: int
+    single_source_claim_count: int
+    no_empirical_claim_count: int
+    priority_score: float
+
+
+class InquirySummaryData(TypedDict):
+    uri: URIRef
+    inquiry: str
+    label: str
+    inquiry_type: str
+    status: str
+    claim_count: int
+    backed_claim_count: int
+    avg_risk_score: float
+    contested_claim_count: int
+    single_source_claim_count: int
+    no_empirical_claim_count: int
+    priority_score: float
+
 VALID_INQUIRY_TYPES: tuple[str, ...] = ("general", "causal")
 
 GRAPH_LAYERS: tuple[str, ...] = (
@@ -2239,20 +2281,12 @@ def _claim_summary_adjacency(knowledge, summary_uris: set[URIRef]) -> dict[URIRe
     return adjacency
 
 
-def query_neighborhood_summary(
-    graph_path: Path,
-    top: int,
-    hops: int,
-) -> list[dict[str, str]]:
-    dataset = _load_dataset(graph_path)
-    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
-    provenance = dataset.graph(_graph_uri("graph/provenance"))
-
+def _neighborhood_summary_data_rows(knowledge, provenance, *, hops: int) -> list[NeighborhoodSummaryData]:
     summary_rows = _claim_summaries(knowledge, provenance, include_hypotheses=False)
     by_uri: dict[URIRef, ClaimSummaryData] = {summary["uri"]: summary for summary in summary_rows}
     adjacency = _claim_summary_adjacency(knowledge, set(by_uri))
 
-    rows: list[dict[str, str]] = []
+    rows: list[NeighborhoodSummaryData] = []
     for center_uri, center_summary in by_uri.items():
         visited: set[URIRef] = {center_uri}
         queue: deque[tuple[URIRef, int]] = deque([(center_uri, 0)])
@@ -2279,20 +2313,285 @@ def query_neighborhood_summary(
 
         rows.append(
             {
-                "center_claim": str(center_uri),
+                "center_uri": center_uri,
                 "label": str(center_summary["label"]),
                 "text": str(center_summary["text"]),
-                "neighbor_claim_count": str(neighbor_claim_count),
-                "avg_risk_score": f"{avg_risk_score:.2f}",
-                "contested_count": str(contested_count),
-                "single_source_count": str(single_source_count),
-                "no_empirical_count": str(no_empirical_count),
+                "neighbor_claim_count": neighbor_claim_count,
+                "avg_risk_score": avg_risk_score,
+                "contested_count": contested_count,
+                "single_source_count": single_source_count,
+                "no_empirical_count": no_empirical_count,
                 "structural_fragility": structural_fragility,
-                "neighborhood_risk": f"{neighborhood_risk:.2f}",
+                "neighborhood_risk": neighborhood_risk,
             }
         )
 
+    return rows
+
+
+def _format_neighborhood_summary_row(summary: NeighborhoodSummaryData) -> dict[str, str]:
+    return {
+        "center_claim": str(summary["center_uri"]),
+        "label": str(summary["label"]),
+        "text": str(summary["text"]),
+        "neighbor_claim_count": str(summary["neighbor_claim_count"]),
+        "avg_risk_score": f"{summary['avg_risk_score']:.2f}",
+        "contested_count": str(summary["contested_count"]),
+        "single_source_count": str(summary["single_source_count"]),
+        "no_empirical_count": str(summary["no_empirical_count"]),
+        "structural_fragility": str(summary["structural_fragility"]),
+        "neighborhood_risk": f"{summary['neighborhood_risk']:.2f}",
+    }
+
+
+def query_neighborhood_summary(
+    graph_path: Path,
+    top: int,
+    hops: int,
+) -> list[dict[str, str]]:
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    provenance = dataset.graph(_graph_uri("graph/provenance"))
+
+    rows = [_format_neighborhood_summary_row(summary) for summary in _neighborhood_summary_data_rows(knowledge, provenance, hops=hops)]
     rows.sort(key=lambda row: (-float(row["neighborhood_risk"]), row["text"]))
+    return rows[:top]
+
+
+def _question_claims(knowledge, question_uri: URIRef) -> list[URIRef]:
+    claims: set[URIRef] = set()
+    for claim_uri, _, _ in knowledge.triples((None, SCI_NS.addresses, question_uri)):
+        if not isinstance(claim_uri, URIRef):
+            continue
+        if (claim_uri, RDF.type, SCI_NS.Claim) in knowledge:
+            claims.add(claim_uri)
+    return sorted(claims, key=str)
+
+
+def _inquiry_claims(knowledge, inquiry_graph, inquiry_uri: URIRef) -> tuple[list[URIRef], list[URIRef]]:
+    backed_claims: set[URIRef] = set()
+    for statement_uri, _, _ in inquiry_graph.triples((None, RDF.type, RDF.Statement)):
+        for claim_uri in inquiry_graph.objects(statement_uri, SCI_NS.backedByClaim):
+            if isinstance(claim_uri, URIRef) and (claim_uri, RDF.type, SCI_NS.Claim) in knowledge:
+                backed_claims.add(claim_uri)
+
+    targeted_claims: set[URIRef] = set()
+    target_uri = next(inquiry_graph.objects(inquiry_uri, SCI_NS.target), None)
+    if isinstance(target_uri, URIRef) and (target_uri, RDF.type, SCI_NS.Claim) in knowledge:
+        targeted_claims.add(target_uri)
+
+    claim_uris = sorted(backed_claims | targeted_claims, key=str)
+    return claim_uris, sorted(backed_claims, key=str)
+
+
+def _rollup_claim_group(
+    claim_uris: list[URIRef],
+    claim_by_uri: dict[URIRef, ClaimSummaryData],
+    neighborhood_by_center: dict[URIRef, NeighborhoodSummaryData],
+    *,
+    grounding_penalty: float = 0.0,
+) -> dict[str, float | int]:
+    claim_count = len(claim_uris)
+    neighborhood_rows = [neighborhood_by_center[uri] for uri in claim_uris if uri in neighborhood_by_center]
+    neighborhood_count = len(neighborhood_rows)
+
+    risk_values: list[float] = []
+    contested_claim_count = 0
+    single_source_claim_count = 0
+    no_empirical_claim_count = 0
+
+    for claim_uri in claim_uris:
+        summary = claim_by_uri.get(claim_uri)
+        if summary is None:
+            risk_values.append(1.0)
+            no_empirical_claim_count += 1
+            continue
+
+        risk_values.append(float(summary["risk_score"]))
+        if "contested" in list(summary["signals"]):
+            contested_claim_count += 1
+        if "single_source" in list(summary["signals"]):
+            single_source_claim_count += 1
+        if not bool(summary["has_empirical_data"]):
+            no_empirical_claim_count += 1
+
+    avg_risk_score = sum(risk_values) / claim_count if claim_count else 0.0
+    avg_neighborhood_risk = (
+        sum(float(summary["neighborhood_risk"]) for summary in neighborhood_rows) / neighborhood_count if neighborhood_count else 0.0
+    )
+    priority_score = (
+        avg_risk_score
+        + (0.5 * avg_neighborhood_risk)
+        + (0.75 * contested_claim_count)
+        + (0.5 * single_source_claim_count)
+        + (0.5 * no_empirical_claim_count)
+        + grounding_penalty
+    )
+
+    return {
+        "claim_count": claim_count,
+        "neighborhood_count": neighborhood_count,
+        "avg_risk_score": avg_risk_score,
+        "contested_claim_count": contested_claim_count,
+        "single_source_claim_count": single_source_claim_count,
+        "no_empirical_claim_count": no_empirical_claim_count,
+        "priority_score": priority_score,
+    }
+
+
+def _question_summary_data(
+    knowledge,
+    question_uri: URIRef,
+    claim_by_uri: dict[URIRef, ClaimSummaryData],
+    neighborhood_by_center: dict[URIRef, NeighborhoodSummaryData],
+) -> QuestionSummaryData:
+    question_text_obj = next(knowledge.objects(question_uri, SCHEMA_NS.text), None)
+    question_text = str(question_text_obj) if question_text_obj else _short_name(str(question_uri))
+    question_label_obj = next(knowledge.objects(question_uri, SKOS.prefLabel), None)
+    question_identifier_obj = next(knowledge.objects(question_uri, SCHEMA_NS.identifier), None)
+    question_label = (
+        str(question_label_obj) if question_label_obj else str(question_identifier_obj) if question_identifier_obj else question_text
+    )
+
+    metrics = _rollup_claim_group(
+        _question_claims(knowledge, question_uri),
+        claim_by_uri,
+        neighborhood_by_center,
+    )
+    return {
+        "uri": question_uri,
+        "question": str(question_uri),
+        "label": question_label,
+        "text": question_text,
+        "claim_count": cast(int, metrics["claim_count"]),
+        "neighborhood_count": cast(int, metrics["neighborhood_count"]),
+        "avg_risk_score": cast(float, metrics["avg_risk_score"]),
+        "contested_claim_count": cast(int, metrics["contested_claim_count"]),
+        "single_source_claim_count": cast(int, metrics["single_source_claim_count"]),
+        "no_empirical_claim_count": cast(int, metrics["no_empirical_claim_count"]),
+        "priority_score": cast(float, metrics["priority_score"]),
+    }
+
+
+def _format_question_summary_row(summary: QuestionSummaryData) -> dict[str, str]:
+    return {
+        "question": str(summary["question"]),
+        "label": str(summary["label"]),
+        "text": str(summary["text"]),
+        "claim_count": str(summary["claim_count"]),
+        "neighborhood_count": str(summary["neighborhood_count"]),
+        "avg_risk_score": f"{summary['avg_risk_score']:.2f}",
+        "contested_claim_count": str(summary["contested_claim_count"]),
+        "single_source_claim_count": str(summary["single_source_claim_count"]),
+        "no_empirical_claim_count": str(summary["no_empirical_claim_count"]),
+        "priority_score": f"{summary['priority_score']:.2f}",
+    }
+
+
+def query_question_summary(
+    graph_path: Path,
+    top: int,
+) -> list[dict[str, str]]:
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    provenance = dataset.graph(_graph_uri("graph/provenance"))
+
+    claim_by_uri = {summary["uri"]: summary for summary in _claim_summaries(knowledge, provenance, include_hypotheses=False)}
+    neighborhood_by_center = {
+        summary["center_uri"]: summary for summary in _neighborhood_summary_data_rows(knowledge, provenance, hops=1)
+    }
+
+    rows = [
+        _format_question_summary_row(_question_summary_data(knowledge, question_uri, claim_by_uri, neighborhood_by_center))
+        for question_uri, _, _ in knowledge.triples((None, RDF.type, SCI_NS.Question))
+        if isinstance(question_uri, URIRef)
+    ]
+    rows.sort(key=lambda row: (-float(row["priority_score"]), row["text"]))
+    return rows[:top]
+
+
+def _inquiry_summary_data(
+    knowledge,
+    inquiry_graph,
+    inquiry_uri: URIRef,
+    claim_by_uri: dict[URIRef, ClaimSummaryData],
+    neighborhood_by_center: dict[URIRef, NeighborhoodSummaryData],
+) -> InquirySummaryData:
+    claim_uris, backed_claims = _inquiry_claims(knowledge, inquiry_graph, inquiry_uri)
+    metrics = _rollup_claim_group(
+        claim_uris,
+        claim_by_uri,
+        neighborhood_by_center,
+        grounding_penalty=0.5 if not backed_claims else 0.0,
+    )
+
+    label_obj = next(inquiry_graph.objects(inquiry_uri, SKOS.prefLabel), None)
+    label = str(label_obj) if label_obj else _short_name(str(inquiry_uri))
+    status_obj = next(inquiry_graph.objects(inquiry_uri, SCI_NS.inquiryStatus), None)
+    inquiry_type_obj = next(inquiry_graph.objects(inquiry_uri, SCI_NS.inquiryType), None)
+
+    return {
+        "uri": inquiry_uri,
+        "inquiry": str(inquiry_uri),
+        "label": label,
+        "inquiry_type": str(inquiry_type_obj) if inquiry_type_obj else "general",
+        "status": str(status_obj) if status_obj else "",
+        "claim_count": cast(int, metrics["claim_count"]),
+        "backed_claim_count": len(backed_claims),
+        "avg_risk_score": cast(float, metrics["avg_risk_score"]),
+        "contested_claim_count": cast(int, metrics["contested_claim_count"]),
+        "single_source_claim_count": cast(int, metrics["single_source_claim_count"]),
+        "no_empirical_claim_count": cast(int, metrics["no_empirical_claim_count"]),
+        "priority_score": cast(float, metrics["priority_score"]),
+    }
+
+
+def _format_inquiry_summary_row(summary: InquirySummaryData) -> dict[str, str]:
+    return {
+        "inquiry": str(summary["inquiry"]),
+        "label": str(summary["label"]),
+        "inquiry_type": str(summary["inquiry_type"]),
+        "status": str(summary["status"]) or "-",
+        "claim_count": str(summary["claim_count"]),
+        "backed_claim_count": str(summary["backed_claim_count"]),
+        "avg_risk_score": f"{summary['avg_risk_score']:.2f}",
+        "contested_claim_count": str(summary["contested_claim_count"]),
+        "single_source_claim_count": str(summary["single_source_claim_count"]),
+        "no_empirical_claim_count": str(summary["no_empirical_claim_count"]),
+        "priority_score": f"{summary['priority_score']:.2f}",
+    }
+
+
+def query_inquiry_summary(
+    graph_path: Path,
+    top: int,
+) -> list[dict[str, str]]:
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    provenance = dataset.graph(_graph_uri("graph/provenance"))
+
+    claim_by_uri = {summary["uri"]: summary for summary in _claim_summaries(knowledge, provenance, include_hypotheses=False)}
+    neighborhood_by_center = {
+        summary["center_uri"]: summary for summary in _neighborhood_summary_data_rows(knowledge, provenance, hops=1)
+    }
+
+    inquiry_prefix = str(PROJECT_NS) + "inquiry/"
+    rows: list[dict[str, str]] = []
+    for inquiry_graph in dataset.graphs():
+        graph_id = str(inquiry_graph.identifier)
+        if not graph_id.startswith(inquiry_prefix):
+            continue
+        inquiry_uri = URIRef(graph_id)
+        if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
+            continue
+
+        rows.append(
+            _format_inquiry_summary_row(
+                _inquiry_summary_data(knowledge, inquiry_graph, inquiry_uri, claim_by_uri, neighborhood_by_center)
+            )
+        )
+
+    rows.sort(key=lambda row: (-float(row["priority_score"]), row["label"]))
     return rows[:top]
 
 

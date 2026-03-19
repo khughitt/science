@@ -210,6 +210,211 @@ class TestInquiryShow:
         assert "Test" in result.output
 
 
+class TestInquirySummary:
+    def test_inquiry_summary_reports_claim_backing_and_priority(self, runner: CliRunner, graph_path: Path) -> None:
+        p = str(graph_path)
+        runner.invoke(
+            main,
+            [
+                "inquiry",
+                "init",
+                "summary-test",
+                "--label",
+                "Summary Test Inquiry",
+                "--target",
+                "hypothesis:h01",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(main, ["graph", "add", "concept", "a", "--path", p])
+        runner.invoke(main, ["graph", "add", "concept", "b", "--path", p])
+        runner.invoke(main, ["graph", "add", "concept", "c", "--path", p])
+
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "concept:a",
+                "sci:feedsInto",
+                "concept:b",
+                "--id",
+                "flow_a_b",
+                "--source",
+                "paper:doi_test",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "concept:b",
+                "sci:feedsInto",
+                "concept:c",
+                "--id",
+                "flow_b_c",
+                "--source",
+                "paper:doi_test",
+                "--path",
+                p,
+            ],
+        )
+
+        runner.invoke(
+            main,
+            [
+                "inquiry",
+                "add-edge",
+                "summary-test",
+                "concept:a",
+                "sci:feedsInto",
+                "concept:b",
+                "--claim",
+                "relation_claim:flow_a_b",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(
+            main,
+            [
+                "inquiry",
+                "add-edge",
+                "summary-test",
+                "concept:b",
+                "sci:feedsInto",
+                "concept:c",
+                "--claim",
+                "relation_claim:flow_b_c",
+                "--path",
+                p,
+            ],
+        )
+
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "claim",
+                "Empirical evidence for inquiry-backed claim",
+                "--source",
+                "paper:doi_test",
+                "--evidence-type",
+                "empirical_data_evidence",
+                "--id",
+                "flow_a_b_support",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "claim/flow_a_b_support",
+                "cito:supports",
+                "relation_claim:flow_a_b",
+                "--source",
+                "paper:doi_test",
+                "--path",
+                p,
+            ],
+        )
+
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "claim",
+                "Literature support for contested inquiry-backed claim",
+                "--source",
+                "paper:doi_test",
+                "--evidence-type",
+                "literature_evidence",
+                "--id",
+                "flow_b_c_support",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "claim/flow_b_c_support",
+                "cito:supports",
+                "relation_claim:flow_b_c",
+                "--source",
+                "paper:doi_test",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "claim",
+                "Negative result disputing inquiry-backed claim",
+                "--source",
+                "paper:doi_test",
+                "--evidence-type",
+                "negative_result",
+                "--id",
+                "flow_b_c_dispute",
+                "--path",
+                p,
+            ],
+        )
+        runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "relation-claim",
+                "claim/flow_b_c_dispute",
+                "cito:disputes",
+                "relation_claim:flow_b_c",
+                "--source",
+                "paper:doi_test",
+                "--path",
+                p,
+            ],
+        )
+
+        result = runner.invoke(main, ["graph", "inquiry-summary", "--format", "json", "--path", p])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        row = payload["rows"][0]
+        assert row["inquiry"] == "http://example.org/project/inquiry/summary_test"
+        assert row["claim_count"] == "2"
+        assert row["backed_claim_count"] == "2"
+        assert row["contested_claim_count"] == "1"
+        assert row["single_source_claim_count"] == "2"
+        assert row["no_empirical_claim_count"] == "1"
+        assert float(row["avg_risk_score"]) > 0.0
+        assert float(row["priority_score"]) > 0.0
+
+    def test_inquiry_summary_table_headers_are_sensible(self, runner: CliRunner, graph_path: Path) -> None:
+        result = runner.invoke(main, ["graph", "inquiry-summary", "--path", str(graph_path)])
+        assert result.exit_code == 0
+        assert "Graph Inquiry Summary" in result.output
+        assert "Inquiry" in result.output
+
+
 class TestInquiryValidate:
     def test_validate_valid(self, runner: CliRunner, graph_path: Path) -> None:
         p = str(graph_path)
