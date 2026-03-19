@@ -188,9 +188,7 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
                 claim_parts.append(f"supports: {claim['support_count']}")
                 claim_parts.append(f"disputes: {claim['dispute_count']}")
                 if claim["sources"]:
-                    claim_parts.append(
-                        "sources: " + ", ".join(shorten_uri(source) for source in claim["sources"])
-                    )
+                    claim_parts.append("sources: " + ", ".join(shorten_uri(source) for source in claim["sources"]))
                 claim_summaries.append(", ".join(claim_parts))
             comment_parts.append(" | ".join(claim_summaries))
         comment = f"  # {', '.join(comment_parts)}" if comment_parts else ""

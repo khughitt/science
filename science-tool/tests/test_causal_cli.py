@@ -100,8 +100,12 @@ class TestInquiryTypeInOutput:
 class TestExportCLI:
     def test_export_pgmpy_includes_inquiry_local_causal_edges(self, runner: CliRunner, graph_path: Path) -> None:
         p = str(graph_path)
-        runner.invoke(main, ["graph", "add", "concept", "X", "--type", "sci:Variable", "--status", "active", "--path", p])
-        runner.invoke(main, ["graph", "add", "concept", "Y", "--type", "sci:Variable", "--status", "active", "--path", p])
+        runner.invoke(
+            main, ["graph", "add", "concept", "X", "--type", "sci:Variable", "--status", "active", "--path", p]
+        )
+        runner.invoke(
+            main, ["graph", "add", "concept", "Y", "--type", "sci:Variable", "--status", "active", "--path", p]
+        )
         runner.invoke(main, ["graph", "add", "hypothesis", "test hyp", "--source", "paper:doi_test", "--path", p])
         runner.invoke(
             main,
@@ -122,7 +126,8 @@ class TestExportCLI:
         runner.invoke(main, ["inquiry", "add-node", "local-dag", "concept/x", "--role", "BoundaryIn", "--path", p])
         runner.invoke(main, ["inquiry", "add-node", "local-dag", "concept/y", "--role", "BoundaryOut", "--path", p])
         runner.invoke(
-            main, ["inquiry", "set-estimand", "local-dag", "--treatment", "concept/x", "--outcome", "concept/y", "--path", p]
+            main,
+            ["inquiry", "set-estimand", "local-dag", "--treatment", "concept/x", "--outcome", "concept/y", "--path", p],
         )
         runner.invoke(
             main,

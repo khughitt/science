@@ -118,6 +118,7 @@ class ProjectSummaryData(TypedDict):
     no_empirical_claim_count: int
     priority_score: float
 
+
 VALID_INQUIRY_TYPES: tuple[str, ...] = ("general", "causal")
 
 GRAPH_LAYERS: tuple[str, ...] = (
@@ -1532,9 +1533,21 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     {"predicate": "skos:related", "description": "General association between concepts", "layer": "graph/knowledge"},
     {"predicate": "skos:broader", "description": "Broader concept hierarchy", "layer": "graph/knowledge"},
     {"predicate": "skos:narrower", "description": "Narrower concept hierarchy", "layer": "graph/knowledge"},
-    {"predicate": "cito:supports", "description": "Relation-claim predicate for support evidence", "layer": "relation-claim"},
-    {"predicate": "cito:disputes", "description": "Relation-claim predicate for disputing evidence", "layer": "relation-claim"},
-    {"predicate": "cito:discusses", "description": "Relation-claim predicate for claim/hypothesis discussion", "layer": "relation-claim"},
+    {
+        "predicate": "cito:supports",
+        "description": "Relation-claim predicate for support evidence",
+        "layer": "relation-claim",
+    },
+    {
+        "predicate": "cito:disputes",
+        "description": "Relation-claim predicate for disputing evidence",
+        "layer": "relation-claim",
+    },
+    {
+        "predicate": "cito:discusses",
+        "description": "Relation-claim predicate for claim/hypothesis discussion",
+        "layer": "relation-claim",
+    },
     {"predicate": "cito:extends", "description": "Work extends prior research", "layer": "graph/knowledge"},
     {"predicate": "cito:usesMethodIn", "description": "Uses method from another work", "layer": "graph/knowledge"},
     {"predicate": "cito:citesAsDataSource", "description": "Cites as data source", "layer": "graph/knowledge"},
@@ -1545,7 +1558,11 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     {"predicate": "sci:measuredBy", "description": "Variable measured by dataset", "layer": "graph/datasets"},
     {"predicate": "sci:projectStatus", "description": "Project status of entity", "layer": "graph/knowledge"},
     {"predicate": "sci:confidence", "description": "Confidence score (0.0-1.0)", "layer": "graph/provenance"},
-    {"predicate": "sci:evidenceType", "description": "Evidence classification for claims/evidence items", "layer": "graph/provenance"},
+    {
+        "predicate": "sci:evidenceType",
+        "description": "Evidence classification for claims/evidence items",
+        "layer": "graph/provenance",
+    },
     {"predicate": "sci:epistemicStatus", "description": "Epistemic status of claim", "layer": "graph/provenance"},
     {"predicate": "sci:maturity", "description": "Maturity of open question", "layer": "graph/knowledge"},
     {"predicate": "scic:causes", "description": "Causal relationship", "layer": "graph/causal"},
@@ -1911,9 +1928,7 @@ def _append_evidence_rows(
 
         claim_subject = next(knowledge.objects(relation_claim_uri, SCI_NS.claimSubject), None)
         evidence_uri = claim_subject if isinstance(claim_subject, URIRef) else relation_claim_uri
-        relation = next(
-            label for allowed_predicate, label in allowed_predicates if predicate_uri == allowed_predicate
-        )
+        relation = next(label for allowed_predicate, label in allowed_predicates if predicate_uri == allowed_predicate)
         _append_row(
             rows=rows,
             seen=seen,
@@ -2227,7 +2242,10 @@ def query_dashboard_summary(
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
 
-    rows = [_format_claim_summary_row(summary) for summary in _claim_summaries(knowledge, provenance, include_hypotheses=True)]
+    rows = [
+        _format_claim_summary_row(summary)
+        for summary in _claim_summaries(knowledge, provenance, include_hypotheses=True)
+    ]
     rows.sort(key=lambda row: (-float(row["risk_score"]), row["text"]))
     return rows[:top]
 
@@ -2321,8 +2339,8 @@ def _neighborhood_summary_data_rows(knowledge, provenance, *, hops: int) -> list
         single_source_count = sum("single_source" in list(item["signals"]) for item in neighborhood)
         no_empirical_count = sum(not bool(item["has_empirical_data"]) for item in neighborhood)
         structural_fragility = "isolated" if neighbor_claim_count == 0 else "connected"
-        neighborhood_risk = avg_risk_score + (0.75 * contested_count) + (0.5 * single_source_count) + (
-            0.5 * no_empirical_count
+        neighborhood_risk = (
+            avg_risk_score + (0.75 * contested_count) + (0.5 * single_source_count) + (0.5 * no_empirical_count)
         )
 
         rows.append(
@@ -2367,7 +2385,10 @@ def query_neighborhood_summary(
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
 
-    rows = [_format_neighborhood_summary_row(summary) for summary in _neighborhood_summary_data_rows(knowledge, provenance, hops=hops)]
+    rows = [
+        _format_neighborhood_summary_row(summary)
+        for summary in _neighborhood_summary_data_rows(knowledge, provenance, hops=hops)
+    ]
     rows.sort(key=lambda row: (-float(row["neighborhood_risk"]), row["text"]))
     return rows[:top]
 
@@ -2444,7 +2465,9 @@ def _rollup_claim_group(
 
     avg_risk_score = sum(risk_values) / claim_count if claim_count else 0.0
     avg_neighborhood_risk = (
-        sum(float(summary["neighborhood_risk"]) for summary in neighborhood_rows) / neighborhood_count if neighborhood_count else 0.0
+        sum(float(summary["neighborhood_risk"]) for summary in neighborhood_rows) / neighborhood_count
+        if neighborhood_count
+        else 0.0
     )
     priority_score = (
         avg_risk_score
@@ -2477,7 +2500,11 @@ def _question_summary_data(
     question_label_obj = next(knowledge.objects(question_uri, SKOS.prefLabel), None)
     question_identifier_obj = next(knowledge.objects(question_uri, SCHEMA_NS.identifier), None)
     question_label = (
-        str(question_label_obj) if question_label_obj else str(question_identifier_obj) if question_identifier_obj else question_text
+        str(question_label_obj)
+        if question_label_obj
+        else str(question_identifier_obj)
+        if question_identifier_obj
+        else question_text
     )
 
     metrics = _rollup_claim_group(
@@ -2523,13 +2550,17 @@ def query_question_summary(
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
 
-    claim_by_uri = {summary["uri"]: summary for summary in _claim_summaries(knowledge, provenance, include_hypotheses=False)}
+    claim_by_uri = {
+        summary["uri"]: summary for summary in _claim_summaries(knowledge, provenance, include_hypotheses=False)
+    }
     neighborhood_by_center = {
         summary["center_uri"]: summary for summary in _neighborhood_summary_data_rows(knowledge, provenance, hops=1)
     }
 
     rows = [
-        _format_question_summary_row(_question_summary_data(knowledge, question_uri, claim_by_uri, neighborhood_by_center))
+        _format_question_summary_row(
+            _question_summary_data(knowledge, question_uri, claim_by_uri, neighborhood_by_center)
+        )
         for question_uri, _, _ in knowledge.triples((None, RDF.type, SCI_NS.Question))
         if isinstance(question_uri, URIRef)
     ]
@@ -2597,7 +2628,9 @@ def query_inquiry_summary(
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
 
-    claim_by_uri = {summary["uri"]: summary for summary in _claim_summaries(knowledge, provenance, include_hypotheses=False)}
+    claim_by_uri = {
+        summary["uri"]: summary for summary in _claim_summaries(knowledge, provenance, include_hypotheses=False)
+    }
     neighborhood_by_center = {
         summary["center_uri"]: summary for summary in _neighborhood_summary_data_rows(knowledge, provenance, hops=1)
     }
@@ -2699,9 +2732,15 @@ def query_project_summary(graph_path: Path) -> list[dict[str, str]]:
         inquiry_uri = URIRef(graph_id)
         if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
             continue
-        inquiry_rows.append(_inquiry_summary_data(knowledge, inquiry_graph, inquiry_uri, claim_by_uri, neighborhood_by_center))
+        inquiry_rows.append(
+            _inquiry_summary_data(knowledge, inquiry_graph, inquiry_uri, claim_by_uri, neighborhood_by_center)
+        )
 
-    return [_format_project_summary_row(_project_summary_data(project_root, profile, claim_by_uri, neighborhood_rows, question_rows, inquiry_rows))]
+    return [
+        _format_project_summary_row(
+            _project_summary_data(project_root, profile, claim_by_uri, neighborhood_rows, question_rows, inquiry_rows)
+        )
+    ]
 
 
 def query_coverage(

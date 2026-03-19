@@ -713,7 +713,11 @@ def quality_dashboard(
             )
         _neighborhood_panel = mo.md(
             "### High-Uncertainty Neighborhoods\n\n"
-            + ("\n".join(_neighborhood_items[:20]) if _neighborhood_items else "_No high-uncertainty neighborhoods found._")
+            + (
+                "\n".join(_neighborhood_items[:20])
+                if _neighborhood_items
+                else "_No high-uncertainty neighborhoods found._"
+            )
         )
 
         _summary_error_panel = None
@@ -738,8 +742,7 @@ def quality_dashboard(
             )
         elif _project_summary_error:
             _project_panel = mo.md(
-                "### Research Project Summary\n\n"
-                f"_Project summary unavailable: `{_project_summary_error}`_"
+                f"### Research Project Summary\n\n_Project summary unavailable: `{_project_summary_error}`_"
             )
         elif _summary_error:
             _project_panel = mo.md(

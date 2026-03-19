@@ -496,7 +496,11 @@ class TestInquirySummary:
         result = runner.invoke(main, ["graph", "inquiry-summary", "--format", "json", "--path", p])
         assert result.exit_code == 0
         payload = json.loads(result.output)
-        row = next(item for item in payload["rows"] if item["inquiry"] == "http://example.org/project/inquiry/hypothesis_target")
+        row = next(
+            item
+            for item in payload["rows"]
+            if item["inquiry"] == "http://example.org/project/inquiry/hypothesis_target"
+        )
         assert row["claim_count"] == "1"
         assert row["backed_claim_count"] == "0"
         assert row["no_empirical_claim_count"] == "1"
@@ -614,7 +618,9 @@ class TestInquirySummary:
         result = runner.invoke(main, ["graph", "inquiry-summary", "--format", "json", "--path", p])
         assert result.exit_code == 0
         payload = json.loads(result.output)
-        row = next(item for item in payload["rows"] if item["inquiry"] == "http://example.org/project/inquiry/question_target")
+        row = next(
+            item for item in payload["rows"] if item["inquiry"] == "http://example.org/project/inquiry/question_target"
+        )
         assert row["claim_count"] == "1"
         assert row["backed_claim_count"] == "0"
         assert float(row["avg_risk_score"]) > 0.0

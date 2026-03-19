@@ -918,7 +918,9 @@ def inquiry_add_edge(
 ) -> None:
     """Add an edge within an inquiry subgraph."""
     try:
-        s, p, o = add_inquiry_edge(graph_path, slug, subject, predicate, object, list(claim_refs) if claim_refs else None)
+        s, p, o = add_inquiry_edge(
+            graph_path, slug, subject, predicate, object, list(claim_refs) if claim_refs else None
+        )
         click.echo(f"Added edge: {shorten_uri(str(s))} --[{shorten_uri(str(p))}]--> {shorten_uri(str(o))}")
     except ValueError as e:
         raise click.ClickException(str(e))

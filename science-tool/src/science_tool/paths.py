@@ -2,11 +2,11 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypeAlias
 
 import yaml
 
-type ProjectProfile = Literal["research", "software"]
+ProjectProfile: TypeAlias = Literal["research", "software"]
 
 _COMMON_DEFAULTS: dict[str, str] = {
     "doc_dir": "doc",

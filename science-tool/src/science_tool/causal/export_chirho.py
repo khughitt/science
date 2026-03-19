@@ -162,9 +162,7 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
                     prov_parts.append(f"supports: {claim['support_count']}")
                     prov_parts.append(f"disputes: {claim['dispute_count']}")
                     if claim["sources"]:
-                        prov_parts.append(
-                            "sources: " + ", ".join(shorten_uri(source) for source in claim["sources"])
-                        )
+                        prov_parts.append("sources: " + ", ".join(shorten_uri(source) for source in claim["sources"]))
                     if prov_parts:
                         claim_comments.append(", ".join(prov_parts))
                 if claim_comments:

@@ -8,6 +8,7 @@ from rdflib import Dataset, Literal
 from rdflib.namespace import PROV, RDF, SKOS, Namespace
 
 from science_tool.cli import main
+
 EXPECTED_GRAPHS = (
     "graph/knowledge",
     "graph/causal",
@@ -294,7 +295,11 @@ def test_graph_add_relation_claim_writes_claim_types_and_relation_metadata() -> 
         assert (claim_uri, SCI.claimSubject, PROJECT_NS["concept/brca1"]) in knowledge
         assert (claim_uri, SCI.claimPredicate, Namespace("http://purl.org/spar/cito/").supports) in knowledge
         assert (claim_uri, SCI.claimObject, PROJECT_NS["hypothesis/h3"]) in knowledge
-        assert (PROJECT_NS["concept/brca1"], Namespace("http://purl.org/spar/cito/").supports, PROJECT_NS["hypothesis/h3"]) not in knowledge
+        assert (
+            PROJECT_NS["concept/brca1"],
+            Namespace("http://purl.org/spar/cito/").supports,
+            PROJECT_NS["hypothesis/h3"],
+        ) not in knowledge
         assert (claim_uri, SCHEMA.text, Literal("brca1 supports h3")) in knowledge
         assert (claim_uri, PROV.wasDerivedFrom, PROJECT_NS["paper/doi_10_1038_s41586_023_06957_x"]) in provenance
         assert any(pred == SCI.confidence for _, pred, _ in provenance.triples((claim_uri, None, None)))
@@ -1292,7 +1297,13 @@ def test_graph_evidence_ignores_non_claim_discusses_subjects_for_hypothesis_link
         dataset = Dataset()
         dataset.parse(source="knowledge/graph.trig", format="trig")
         knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        knowledge.add((PROJECT_NS["concept/brca1"], Namespace("http://purl.org/spar/cito/").discusses, PROJECT_NS["hypothesis/h1"]))
+        knowledge.add(
+            (
+                PROJECT_NS["concept/brca1"],
+                Namespace("http://purl.org/spar/cito/").discusses,
+                PROJECT_NS["hypothesis/h1"],
+            )
+        )
         dataset.serialize(destination="knowledge/graph.trig", format="trig")
         assert (
             runner.invoke(
@@ -2938,12 +2949,17 @@ def test_graph_project_summary_rolls_up_research_profile() -> None:
             ("claim/project_empirical_support", "cito:supports", "claim/project_empirical", "paper:doi_10_9999_i"),
         ):
             assert (
-                runner.invoke(main, ["graph", "add", "relation-claim", subject, predicate, obj, "--source", source]).exit_code
+                runner.invoke(
+                    main, ["graph", "add", "relation-claim", subject, predicate, obj, "--source", source]
+                ).exit_code
                 == 0
             )
 
         for claim_ref in ("claim/project_contested", "claim/project_empirical"):
-            assert runner.invoke(main, ["graph", "add", "edge", claim_ref, "sci:addresses", "question/qproj"]).exit_code == 0
+            assert (
+                runner.invoke(main, ["graph", "add", "edge", claim_ref, "sci:addresses", "question/qproj"]).exit_code
+                == 0
+            )
 
         assert (
             runner.invoke(
