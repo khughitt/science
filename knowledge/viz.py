@@ -150,6 +150,7 @@ def dashboard_summary_data(graph_path_input):
     _question_rows: list[dict[str, str]] = []
     _inquiry_rows: list[dict[str, str]] = []
     _project_rows: list[dict[str, str]] = []
+    _project_summary_error = ""
     _summary_error = ""
     try:
         from science_tool.graph.store import (
@@ -159,16 +160,41 @@ def dashboard_summary_data(graph_path_input):
             query_project_summary,
             query_question_summary,
         )
+    except Exception as exc:
+        _summary_error = str(exc)
+        return (
+            _dashboard_rows,
+            _inquiry_rows,
+            _neighborhood_rows,
+            _project_rows,
+            _project_summary_error,
+            _question_rows,
+            _summary_error,
+        )
 
+    try:
         _dashboard_rows = query_dashboard_summary(graph_path=_graph_path, top=25)
         _neighborhood_rows = query_neighborhood_summary(graph_path=_graph_path, top=15, hops=1)
         _question_rows = query_question_summary(graph_path=_graph_path, top=10)
         _inquiry_rows = query_inquiry_summary(graph_path=_graph_path, top=10)
-        _project_rows = query_project_summary(graph_path=_graph_path)
     except Exception as exc:
         _summary_error = str(exc)
 
-    return _dashboard_rows, _inquiry_rows, _neighborhood_rows, _project_rows, _question_rows, _summary_error
+    if not _summary_error:
+        try:
+            _project_rows = query_project_summary(graph_path=_graph_path)
+        except Exception as exc:
+            _project_summary_error = str(exc)
+
+    return (
+        _dashboard_rows,
+        _inquiry_rows,
+        _neighborhood_rows,
+        _project_rows,
+        _project_summary_error,
+        _question_rows,
+        _summary_error,
+    )
 
 
 # ── Stats overview ───────────────────────────────────────────────────
@@ -586,7 +612,19 @@ def neighborhood_graph(alt, df, entity_input, hops_slider, math, mo, n_triples, 
 
 # ── Quality dashboard ────────────────────────────────────────────────
 @app.cell
-def quality_dashboard(_dashboard_rows, _inquiry_rows, _neighborhood_rows, _project_rows, _question_rows, _summary_error, df, mo, n_triples, pl):
+def quality_dashboard(
+    _dashboard_rows,
+    _inquiry_rows,
+    _neighborhood_rows,
+    _project_rows,
+    _project_summary_error,
+    _question_rows,
+    _summary_error,
+    df,
+    mo,
+    n_triples,
+    pl,
+):
     if n_triples == 0:
         _out = mo.vstack([mo.md("## Quality Dashboard"), mo.md("_No data._")])
     else:
@@ -698,8 +736,15 @@ def quality_dashboard(_dashboard_rows, _inquiry_rows, _neighborhood_rows, _proje
                 f"- claims: `{_project_row['claim_count']}`\n"
                 f"- high-risk neighborhoods: `{_project_row['high_risk_neighborhood_count']}`"
             )
+        elif _project_summary_error:
+            _project_panel = mo.md(
+                "### Research Project Summary\n\n"
+                f"_Project summary unavailable: `{_project_summary_error}`_"
+            )
         elif _summary_error:
-            _project_panel = mo.md("### Research Project Summary\n\n_Project summary unavailable while store summaries fail._")
+            _project_panel = mo.md(
+                "### Research Project Summary\n\n_Project summary unavailable while store summaries fail._"
+            )
         else:
             _project_panel = mo.md("### Research Project Summary\n\n_Project summary unavailable for this graph._")
 

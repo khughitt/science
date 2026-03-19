@@ -342,9 +342,11 @@ For knowledge-graph projects, `knowledge/graph.trig` is generated from canonical
 
 Once the graph is materialized, use the summary stack top-down:
 
-- `science-tool graph project-summary` for the research-level rollup
+- `science-tool graph project-summary` for the research-level rollup in `research` projects
 - `science-tool graph question-summary` and `science-tool graph inquiry-summary` for thread-level prioritization
 - `science-tool graph dashboard-summary` and `science-tool graph neighborhood-summary` for claim-level and local-cluster detail
+
+For `software` projects, skip `project-summary` for now; that command is intentionally research-only in the current reasoning layer.
 
 Use `knowledge/` for live dashboards, `doc/interpretations/` and `doc/reports/` for durable writeups, and `tasks/` for follow-up work derived from the summary outputs.
 

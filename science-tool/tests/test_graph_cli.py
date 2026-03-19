@@ -76,6 +76,7 @@ def test_graph_init_viz_notebook_uses_store_summaries_for_dashboard_panels() -> 
         assert "query_question_summary" in content
         assert "query_inquiry_summary" in content
         assert "query_project_summary" in content
+        assert "_project_summary_error" in content
         assert "Research Project Summary" in content
         assert "High-Priority Questions" in content
         assert "High-Priority Inquiries" in content
