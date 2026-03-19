@@ -502,6 +502,7 @@ def graph_inquiry_summary(top: int, output_format: str, graph_path: Path) -> Non
         columns=[
             ("inquiry", "Inquiry"),
             ("label", "Label"),
+            ("text", "Text"),
             ("priority_score", "Priority"),
             ("avg_risk_score", "Avg Risk"),
             ("claim_count", "Claims"),

@@ -221,6 +221,8 @@ class TestInquirySummary:
                 "summary-test",
                 "--label",
                 "Summary Test Inquiry",
+                "--description",
+                "Summary Test Inquiry Text",
                 "--target",
                 "hypothesis:h01",
                 "--path",
@@ -400,6 +402,7 @@ class TestInquirySummary:
         payload = json.loads(result.output)
         row = payload["rows"][0]
         assert row["inquiry"] == "http://example.org/project/inquiry/summary_test"
+        assert row["text"] == "Summary Test Inquiry Text"
         assert row["claim_count"] == "2"
         assert row["backed_claim_count"] == "2"
         assert row["contested_claim_count"] == "1"

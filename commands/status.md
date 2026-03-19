@@ -60,6 +60,8 @@ science-tool graph uncertainty --format json
 science-tool graph gaps --format json
 ```
 
+For `software` projects, skip `project-summary` for now and start from `question-summary` / `inquiry-summary`.
+
 2. Surface:
 - research project summary
 - high-priority questions
@@ -72,7 +74,7 @@ science-tool graph gaps --format json
 - structurally fragile areas
 
 3. Prefer the higher-level drill path:
-- `project-summary` for the top-level rollup
+- `project-summary` for the top-level rollup on `research` projects only
 - `question-summary` and `inquiry-summary` for research-thread prioritization
 - `dashboard-summary` and `neighborhood-summary` for exact weak points
 - `uncertainty` and `gaps` as secondary support views rather than the main dashboard

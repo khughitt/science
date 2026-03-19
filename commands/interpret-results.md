@@ -146,8 +146,10 @@ to anchor the prioritization section, especially for:
 - single-source claims
 - contested local clusters
 
+For `software` projects, skip `project-summary` for now and start at `question-summary` / `inquiry-summary`.
+
 Use them in this order:
-1. `project-summary` to see the current research-level rollup
+1. `project-summary` to see the current research-level rollup, when the project is `research`
 2. `question-summary` and `inquiry-summary` to find which threads deserve attention
 3. `dashboard-summary` and `neighborhood-summary` to identify the exact claims and clusters driving that priority
 

@@ -2585,6 +2585,8 @@ def _inquiry_summary_data(
 
     label_obj = next(inquiry_graph.objects(inquiry_uri, SKOS.prefLabel), None)
     label = str(label_obj) if label_obj else _short_name(str(inquiry_uri))
+    text_obj = next(inquiry_graph.objects(inquiry_uri, SKOS.note), None)
+    text = str(text_obj) if text_obj else label
     status_obj = next(inquiry_graph.objects(inquiry_uri, SCI_NS.inquiryStatus), None)
     inquiry_type_obj = next(inquiry_graph.objects(inquiry_uri, SCI_NS.inquiryType), None)
 
@@ -2592,6 +2594,7 @@ def _inquiry_summary_data(
         "uri": inquiry_uri,
         "inquiry": str(inquiry_uri),
         "label": label,
+        "text": text,
         "inquiry_type": str(inquiry_type_obj) if inquiry_type_obj else "general",
         "status": str(status_obj) if status_obj else "",
         "claim_count": cast(int, metrics["claim_count"]),
@@ -2608,6 +2611,7 @@ def _format_inquiry_summary_row(summary: InquirySummaryData) -> dict[str, str]:
     return {
         "inquiry": str(summary["inquiry"]),
         "label": str(summary["label"]),
+        "text": str(summary["text"]),
         "inquiry_type": str(summary["inquiry_type"]),
         "status": str(summary["status"]) or "-",
         "claim_count": str(summary["claim_count"]),
