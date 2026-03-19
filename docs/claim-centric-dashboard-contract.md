@@ -20,10 +20,10 @@ The dashboard contract currently defines six summary units:
 - `inquiry_summary`
 - `project_summary`
 
-`claim_summary` is the primary unit already exposed in `graph dashboard-summary`.
-`neighborhood_summary` is the next required unit for local uncertainty prioritization.
+`claim_summary` is the primary unit exposed in `graph dashboard-summary`.
+`neighborhood_summary` is exposed in `graph neighborhood-summary`.
 `evidence_mix_summary` is a reusable logical sub-summary that may be embedded in larger outputs rather than always emitted on its own.
-`question_summary`, `inquiry_summary`, and `project_summary` are the higher-level rollup units that sit above the claim and neighborhood layers.
+`question_summary`, `inquiry_summary`, and `project_summary` are the current higher-level rollup units that sit above the claim and neighborhood layers.
 
 ## Required Dashboard Panels
 
@@ -252,9 +252,9 @@ This contract should evolve conservatively.
 ## Relationship To The Roadmap
 
 This document is the Phase 2 contract artifact described in [`2026-03-18-claim-centric-reasoning-roadmap.md`](./plans/2026-03-18-claim-centric-reasoning-roadmap.md).
-It should remain the canonical dashboard-summary contract even as later phases add:
+It should remain the canonical summary contract for the currently implemented claim, neighborhood, question, inquiry, and first-pass research-project rollups, even as later phases add:
 
 - richer evidence-item modeling
 - neighborhood diffusion refinements
-- inquiry and project summaries
+- software-profile overlays and other higher-level summary variants
 - action-oriented next-step outputs

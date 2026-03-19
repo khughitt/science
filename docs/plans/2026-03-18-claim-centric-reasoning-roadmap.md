@@ -25,20 +25,24 @@ Several of its early phases now have concrete first-pass implementations in the 
 - Phase 1 is largely complete.
 - Phase 2 is complete for the first stable contract pass.
 - Phase 3 is complete for the first claim-neighborhood pass.
-- Phase 5 is partially underway through store-backed claim and neighborhood dashboards.
+- Phase 5 is complete for the first `research`-profile pass.
 
 What has landed so far:
 
-- a canonical dashboard contract for `claim_summary`, `neighborhood_summary`, and `evidence_mix_summary`
+- a canonical dashboard contract for `claim_summary`, `neighborhood_summary`, `evidence_mix_summary`, `question_summary`, `inquiry_summary`, and `project_summary`
 - `graph dashboard-summary`
 - `graph neighborhood-summary`
+- `graph question-summary`
+- `graph inquiry-summary`
+- `graph project-summary` for `research` projects
 - a store-backed marimo dashboard that consumes those summary queries
-- shared guidance that teaches dashboard-guided prioritization and migration posture
+- shared guidance that teaches project -> question/inquiry -> claim/neighborhood drill-down and migration posture
 
 Important caveats:
 
 - richer evidence-item-first authoring and structured study/result metadata are still future work
-- higher-level summaries for questions, inquiries, and projects do not exist yet in the repository state captured by this roadmap snapshot
+- the current `project_summary` is intentionally first-pass and `research`-only
+- `software`-profile reasoning overlays are still undefined and remain future work
 - prioritization is still mostly ranking-oriented rather than decision-oriented
 - the remaining phases should now assume the profile-based organization model from `2026-03-18-project-organization-design.md`
 
@@ -263,7 +267,7 @@ Profile implication:
 ### Phase 5: Multi-Scale Research Summaries
 
 Status:
-- partially underway
+- complete for the first `research`-profile pass
 
 Goal:
 - let users navigate uncertainty across the project at multiple levels
@@ -290,20 +294,21 @@ Exit criteria:
 - users can move cleanly from a project view down to the exact weak claims and evidence gaps driving that summary
 
 Current state:
-- claim and neighborhood summaries exist
-- the notebook consumes those store summaries directly
-- `question_summary`, `inquiry_summary`, and `project_summary` are still missing in the repository state captured by this roadmap snapshot and remain the next real expansion of this phase
+- `question_summary`, `inquiry_summary`, and `project_summary` now exist in the store and CLI
+- the notebook consumes store-owned project, question, inquiry, claim, and neighborhood summaries directly
+- shared guidance now teaches the project -> question/inquiry -> claim/neighborhood drill path
+- `project_summary` is intentionally first-pass and limited to `research` projects
 
 Profile implication:
 - `question_summary` and `inquiry_summary` are primarily `research`-profile outputs
 - `project_summary` should support both profiles, but with different expectations:
-  - `research` projects should roll up claims, evidence, neighborhoods, questions, and inquiries
-  - `software` projects should support lighter reasoning overlays, such as benchmark/evaluation claim clusters, without requiring full inquiry structure
+  - `research` projects now roll up claims, evidence, neighborhoods, questions, and inquiries in the first-pass implementation
+  - `software` projects should eventually support lighter reasoning overlays, such as benchmark/evaluation claim clusters, without requiring full inquiry structure
 
 ### Phase 6: Action-Oriented Prioritization
 
 Status:
-- not implemented, but partially scaffolded by current guidance
+- not implemented, but now scaffolded by current guidance and multi-scale summaries
 
 Goal:
 - convert uncertainty summaries into next-step guidance
@@ -326,7 +331,7 @@ Exit criteria:
 - users can use the graph not just to inspect beliefs, but to plan research effort
 
 Current state:
-- guidance now tells users to prioritize contested neighborhoods, single-source claims, and claims lacking empirical support
+- guidance now tells users to prioritize contested neighborhoods, single-source claims, claims lacking empirical support, and high-priority questions/inquiries
 - the store does not yet produce explicit next-step or decision summaries
 
 ### Phase 7: Optional Formalization
