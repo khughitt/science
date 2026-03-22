@@ -32,6 +32,53 @@ data/
 └── README.md               # Overview of all data in the project
 ```
 
+## Result Packages
+
+Analysis outputs follow the same Frictionless Data Package convention as input
+data. Each workflow run produces a self-describing result package:
+
+### Directory Convention
+
+```
+results/
+├── {workflow-name}/
+│   └── aNNN-{description}/
+│       ├── datapackage.json      # Frictionless manifest + provenance
+│       ├── config.yaml           # Frozen config snapshot
+│       ├── sequences/            # FASTA outputs (when applicable)
+│       ├── *.parquet             # Tabular results
+│       ├── *.json                # Structured results
+│       └── *.png                 # Visualizations
+```
+
+### Analysis Slugs
+
+- Format: `aNNN-description` (e.g., `a001-protein-sp-tmr`)
+- Global counter: monotonically increasing across the project
+- Gaps allowed: number by workflow group for readability
+
+### Manifest Schema
+
+See the project spec for the full `datapackage.json` schema. Key custom blocks:
+
+- `workflow` — which workflow produced this, git commit at run time
+- `entities` — cross-references to questions, hypotheses, tasks
+- `provenance` — step DAG, environment, timing
+
+### Sequence Outputs
+
+When a workflow processes or generates biological sequences, output them as
+FASTA files in the `sequences/` subdirectory. Annotate with EDAM terms:
+
+```json
+{
+  "edam": {
+    "data": "http://edamontology.org/data_2044",
+    "format": "http://edamontology.org/format_1929"
+  }
+}
+```
+
 ## When Adding a New Data Source
 
 1. Document it using the framework `dataset.md` template (or a project override in `.ai/templates/`) — save to `doc/datasets/data-<source-name>.md`
