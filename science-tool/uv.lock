@@ -1335,6 +1335,7 @@ dev = [
     { name = "networkx" },
     { name = "numpy" },
     { name = "pytest" },
+    { name = "ruff" },
     { name = "scipy" },
 ]
 
@@ -1363,6 +1364,7 @@ dev = [
     { name = "networkx", specifier = ">=3.2" },
     { name = "numpy", specifier = ">=2.4.2" },
     { name = "pytest", specifier = ">=9.0.2" },
+    { name = "ruff", specifier = ">=0.15.6" },
     { name = "scipy", specifier = ">=1.17.1" },
 ]
 
