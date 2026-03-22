@@ -80,3 +80,12 @@ def test_workflow_run_entity_round_trip():
     assert d["type"] == "workflow-run"
     e2 = Entity.model_validate(d)
     assert e2 == e
+
+
+def test_new_types_accessible_from_package():
+    """New entity types are accessible via the top-level import."""
+    from science_model import EntityType
+
+    assert EntityType.WORKFLOW == "workflow"
+    assert EntityType.WORKFLOW_RUN == "workflow-run"
+    assert EntityType.WORKFLOW_STEP == "workflow-step"
