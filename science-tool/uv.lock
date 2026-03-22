@@ -1298,7 +1298,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=9.0" }]
+dev = [
+    { name = "pytest", specifier = ">=9.0" },
+    { name = "ruff", specifier = ">=0.15.7" },
+]
 
 [[package]]
 name = "science-tool"
