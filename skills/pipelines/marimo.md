@@ -101,6 +101,33 @@ def export(data):
     return ()
 ```
 
+### Result Manifests
+
+When a notebook produces durable results (saved to `results/`), generate a
+`datapackage.json` alongside the outputs:
+
+```python
+import json
+from datetime import datetime
+from pathlib import Path
+
+manifest = {
+    "name": "aNNN-analysis-slug",
+    "title": "Analysis description",
+    "created": datetime.now().isoformat(),
+    "resources": [
+        {"name": "results", "path": "results.parquet", "format": "parquet"},
+        # ... list all output files
+    ],
+    "workflow": {"name": "standalone", "path": "code/notebooks/"},
+    "entities": {"tests": ["question:qNN"], "tasks": ["task:tNNN"]},
+}
+
+output_dir = Path("results/standalone/aNNN-slug/")
+output_dir.mkdir(parents=True, exist_ok=True)
+(output_dir / "datapackage.json").write_text(json.dumps(manifest, indent=2))
+```
+
 ## Best Practices
 
 ### Data access
