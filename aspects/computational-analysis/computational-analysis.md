@@ -74,6 +74,8 @@ For each pipeline stage (each `sci:Transformation` node), define:
 **Failure mode:**
 - Default: hard stop (assertion failure halts the pipeline)
 - Document any stages where a logged warning is acceptable instead, with justification
+- **Manifest generation:** verify `datapackage.json` is produced and passes
+  `frictionless validate`
 
 Add QA checkpoints as first-class steps in the pipeline plan, not as afterthoughts. Each transformation task should include its assertions alongside the implementation steps.
 
@@ -107,3 +109,27 @@ Include QA Coverage as an additional row in the rubric results table.
 ## Available commands
 
 (none)
+
+## Workflow Lifecycle
+
+Computational projects track work through a formal lifecycle:
+
+1. **Method definition** — conceptual approach documented as a `method` entity
+2. **Workflow registration** — executable pipeline registered as a `workflow` entity
+   with `sci:realizes` link to the method
+3. **Run execution** — each invocation creates a `workflow-run` entity with
+   `sci:executes` link to the workflow
+4. **Manifest generation** — run produces `datapackage.json` with resources,
+   entity cross-references, and provenance DAG
+5. **Interpretation** — results interpreted via `interpret-results` command,
+   linked back to the run via `workflow_run` field
+6. **Supersession** — when a run is re-executed with updated parameters, the new
+   run uses `sci:supersedes` to link to the prior run
+
+### QA Checkpoint: Manifest Validation
+
+After each workflow run, validate the manifest:
+- All output files listed as resources
+- Entity cross-references present and valid
+- Config snapshot matches actual config used
+- Provenance DAG covers all rules that executed
