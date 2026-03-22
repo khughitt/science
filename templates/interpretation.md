@@ -9,6 +9,7 @@ related: []
 created: "{{YYYY-MM-DD}}"
 updated: "{{YYYY-MM-DD}}"
 input: "{{path to results, notebook, or prose description}}"
+workflow_run: "<workflow-run-slug>"  # optional: links to the run that produced the interpreted results
 ---
 
 # Interpretation: {{Short Title}}

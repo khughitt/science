@@ -12,6 +12,12 @@ updated: "<YYYY-MM-DD>"
 
 # <Experiment Name>
 
+## Purpose
+
+> **Note:** Use the `experiment` type for hypothesis-testing designs with explicit
+> controls and expected outcomes. For computational workflow executions that produce
+> durable result packages, use `workflow-run` instead.
+
 ## Hypothesis Context
 
 <!--

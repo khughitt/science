@@ -30,10 +30,16 @@ uv run science-tool inquiry show "<slug>" --format json
 
 `$ARGUMENTS` may be:
 - a path to a results file, notebook, or output directory
+- a path to a `datapackage.json` in a result directory
 - a prose description of findings
 - an inquiry slug
 
 If given a directory, scan for result files and summarize what is available.
+
+- **Workflow-run manifest** — path to a `datapackage.json` in a result directory.
+  The manifest provides entity cross-references, config snapshot, and resource
+  listing. Load the manifest to identify which questions/hypotheses the run
+  addresses, then interpret the results resources.
 
 ## Modes
 

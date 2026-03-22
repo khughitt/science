@@ -131,4 +131,74 @@ snakemake --dag | dot -Tpng > dag.png
 2. **Config parameters** map to inquiry `AnnotatedParam` values
 3. **Validation rules** call `science-tool datasets validate`
 4. **Output** goes to `data/processed/` with its own `datapackage.json`
-5. Document each rule using the framework `pipeline-step.md` template (or a project override in `.ai/templates/`)
+5. Document each rule using the framework `workflow-step.md` template (or a project override in `.ai/templates/`)
+
+## Manifest Generation
+
+Every workflow should produce a `datapackage.json` manifest in its output
+directory. Use a Snakemake `onsuccess` handler or a dedicated final rule:
+
+### Option A: onsuccess handler (recommended for simple workflows)
+
+```python
+onsuccess:
+    from datetime import datetime
+    from pathlib import Path
+    import json
+
+    manifest = {
+        "name": config.get("analysis_slug", "unnamed"),
+        "title": config.get("title", ""),
+        "created": datetime.now().isoformat(),
+        "resources": [],  # populated from rule outputs
+        "workflow": {
+            "name": workflow.basedir.name,
+            "path": str(workflow.basedir),
+        },
+        "entities": config.get("entities", {}),
+        "provenance": {"steps": [], "environment": {}},
+    }
+
+    output_dir = Path(config["output_dir"])
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "datapackage.json").write_text(
+        json.dumps(manifest, indent=2)
+    )
+```
+
+### Option B: Final rule (for complex workflows)
+
+```python
+rule generate_manifest:
+    input:
+        # all terminal outputs from the workflow
+    output:
+        "results/{workflow}/{slug}/datapackage.json"
+    run:
+        # build manifest from snakemake DAG + config
+```
+
+### Resource Entries
+
+Each output file becomes a resource entry:
+
+```json
+{
+  "name": "descriptive-name",
+  "path": "relative/path/from/analysis/dir",
+  "format": "parquet",
+  "mediatype": "application/vnd.apache.parquet",
+  "description": "What this file contains"
+}
+```
+
+For FASTA sequence files, add EDAM annotations:
+
+```json
+{
+  "edam": {
+    "data": "http://edamontology.org/data_2044",
+    "format": "http://edamontology.org/format_1929"
+  }
+}
+```

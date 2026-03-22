@@ -57,6 +57,11 @@ From `tasks/active.md`, show:
 - **Blocked tasks** — what's blocking them
 - **Hypothesis / question status** — one-line summary per hypothesis from `specs/hypotheses/`, or per open question from `doc/questions/` if no formal hypotheses exist
 
+#### Workflow Runs
+- Scan `results/` for `datapackage.json` manifests
+- Report: recent runs (last 7 days), superseded runs, runs with status `draft`
+- Flag any workflow-run that has no corresponding interpretation document
+
 ### 3. Coverage Gap Analysis
 
 Analyze project coverage across key dimensions. Use these five default dimensions, but adapt or replace them if the project's actual gaps are better described by different categories (e.g., "infrastructure built vs. exploited", "theoretical grounding", domain-specific axes):

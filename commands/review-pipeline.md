@@ -26,7 +26,7 @@ uv run science-tool <command>
 ## Rules
 
 - **MUST** run structural validation first (`inquiry validate`)
-- **MUST** evaluate all 8 rubric dimensions
+- **MUST** evaluate all 9 rubric dimensions
 - **MUST** be critical — surface weaknesses, don't just confirm the plan is good
 - **MUST** provide specific, actionable recommendations for each issue
 - **MUST** save review report to `doc/inquiries/<slug>-review.md`
@@ -116,6 +116,16 @@ For each `BoundaryIn` node:
 
 **Scoring:** PASS (all boundaries verified), WARN (some unchecked), FAIL (mismatches found)
 
+#### Dimension 9: Manifest Completeness
+
+- Does the workflow produce a `datapackage.json` manifest in its output directory?
+- Are all output resources listed?
+- Are entity cross-references specified?
+- Is provenance DAG included?
+
+**Scoring:** PASS (complete manifest with resources + entities + provenance) /
+WARN (manifest present but incomplete) / FAIL (no manifest generation)
+
 ### Step 3: Write review report
 
 Save to `doc/inquiries/<slug>-review.md`:
@@ -143,6 +153,7 @@ Save to `doc/inquiries/<slug>-review.md`:
 | Validation criteria | {{score}} | {{brief}} |
 | Scope check | {{score}} | {{brief}} |
 | Integration boundaries | {{score}} | {{brief}} |
+| Manifest completeness | {{score}} | {{brief}} |
 
 ## Detailed Findings
 
