@@ -104,6 +104,15 @@ science-tool graph add concept "<check name>" --type sci:ValidationCheck \
 science-tool inquiry add-edge "<slug>" "concept:<step>" "sci:validatedBy" "concept:<check>"
 ```
 
+#### Register Workflow Entity
+
+If this plan creates a new pipeline (not extending an existing one), register
+a `workflow` entity:
+
+1. Create `doc/workflows/workflow-<slug>.md` using the `workflow.md` template
+2. Link to the method it realizes: `sci:realizes` → `method:<slug>`
+3. Document the steps it contains: `sci:contains` → `workflow-step:<slug>` for each rule
+
 ### Step 4: Write the implementation plan
 
 Save to `doc/plans/YYYY-MM-DD-<slug>-pipeline-plan.md` using the standard plan format:
