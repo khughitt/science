@@ -46,3 +46,37 @@ def test_entity_optional_fields_default_none():
     assert e.datasets is None
     assert e.created is None
     assert e.updated is None
+
+
+def test_workflow_entity_types_exist():
+    """New workflow entity types are defined and serialize correctly."""
+    assert EntityType.WORKFLOW == "workflow"
+    assert EntityType.WORKFLOW_RUN == "workflow-run"
+    assert EntityType.WORKFLOW_STEP == "workflow-step"
+
+
+def test_pipeline_step_renamed_to_workflow_step():
+    """PIPELINE_STEP is removed; WORKFLOW_STEP replaces it."""
+    assert not hasattr(EntityType, "PIPELINE_STEP")
+    assert EntityType.WORKFLOW_STEP == "workflow-step"
+
+
+def test_workflow_run_entity_round_trip():
+    """A workflow-run entity can be created and round-tripped."""
+    e = Entity(
+        id="workflow-run:a001-protein-sp-tmr",
+        type=EntityType.WORKFLOW_RUN,
+        title="Protein SP/TMR feature evaluation",
+        status="complete",
+        project="seq-feats",
+        tags=["feature-eval"],
+        ontology_terms=[],
+        related=["workflow:feature-eval"],
+        source_refs=[],
+        content_preview="Feature evaluation run for SP and TMR",
+        file_path="results/feature-eval/a001-protein-sp-tmr/datapackage.json",
+    )
+    d = e.model_dump()
+    assert d["type"] == "workflow-run"
+    e2 = Entity.model_validate(d)
+    assert e2 == e

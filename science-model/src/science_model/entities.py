@@ -33,7 +33,9 @@ class EntityType(StrEnum):
     BIAS_AUDIT = "bias-audit"
     EVIDENCE = "evidence"
     ARTICLE = "article"
-    PIPELINE_STEP = "pipeline-step"
+    WORKFLOW = "workflow"
+    WORKFLOW_RUN = "workflow-run"
+    WORKFLOW_STEP = "workflow-step"
     UNKNOWN = "unknown"
 
 
