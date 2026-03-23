@@ -77,6 +77,7 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         related=fm.get("related") or [],
         source_refs=fm.get("source_refs") or [],
         content_preview=body[:200] if body else "",
+        content=body or "",
         file_path=rel_path,
         maturity=fm.get("maturity"),
         confidence=fm.get("confidence"),

@@ -64,6 +64,7 @@ class Entity(BaseModel):
     related: list[str]
     source_refs: list[str]
     content_preview: str
+    content: str = ""
     file_path: str
     # Type-specific
     maturity: str | None = None
