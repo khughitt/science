@@ -61,7 +61,7 @@ Three complementary mechanisms:
 ```
 core (strictness: "core")
   ├── bio (strictness: "curated")
-  ├── neuro (strictness: "curated")
+  ├── <other domain profiles> (strictness: "curated")
   └── cross-project (strictness: "curated", dynamically populated)
        └── project_specific (strictness: "typed-extension")
 ```
@@ -69,11 +69,29 @@ core (strictness: "core")
 The `cross-project` profile has `strictness: "curated"`. Its `entity_kinds` and
 `relation_kinds` are populated by sync rather than hand-curated.
 
+**Dynamic profile loading:** Unlike `CORE_PROFILE` and `BIO_PROFILE`, which are
+static Python constants, the cross-project profile is loaded at runtime from
+`~/.config/science/registry/manifest.yaml`. This requires:
+
+1. A `load_cross_project_profile() -> ProfileManifest | None` function that reads
+   the YAML manifest and returns a `ProfileManifest` (or `None` if registry does
+   not exist yet).
+2. The `_CORE_KINDS` set in `sources.py` (used by `_default_profile_for_kind()`)
+   is currently computed once at import time. This must become a function
+   `_known_kinds(profiles)` that includes entity kinds from all active profiles
+   (core + curated + cross-project) so that cross-project entity kinds are
+   correctly routed.
+3. Profile resolution in `load_project_sources()` must handle `"cross-project"` in
+   `KnowledgeProfiles.curated` by calling the runtime loader rather than looking
+   up a Python constant.
+
 ### Automatic Project Registration
 
-Any science command that reads `science.yaml` also registers the project in
-`~/.config/science/config.yaml`. This is a lightweight side-effect: read the global
-config, check if this project path is listed, add it if not.
+Any science CLI command that resolves a project root also registers the project in
+`~/.config/science/config.yaml`. Registration is implemented as a standalone
+function `ensure_registered(project_root, project_name)` called from the CLI
+entry-point (not from `_read_project_config()`, which remains a pure reader). This
+runs once per CLI invocation — a cheap read + conditional write.
 
 ```yaml
 # ~/.config/science/config.yaml
@@ -146,6 +164,66 @@ entity_kinds: []      # Populated dynamically — entity kinds seen across 2+ pr
 relation_kinds: []    # Same — novel relation kinds shared across projects
 ```
 
+### Pydantic Models
+
+New models for the registry and sync state:
+
+```python
+class SyncSource(BaseModel):
+    """Provenance marker for sync-propagated entities."""
+    project: str
+    entity_id: str
+    sync_date: date
+
+class RegistryEntitySource(BaseModel):
+    """Per-project presence record in the registry."""
+    project: str
+    status: str | None = None
+    first_seen: date
+
+class RegistryEntity(BaseModel):
+    """An entity tracked across projects in the registry."""
+    canonical_id: str
+    kind: str
+    title: str
+    profile: str
+    aliases: list[str] = Field(default_factory=list)
+    ontology_terms: list[str] = Field(default_factory=list)
+    source_projects: list[RegistryEntitySource] = Field(default_factory=list)
+
+class RegistryRelation(BaseModel):
+    """A relation tracked across projects in the registry."""
+    subject: str
+    predicate: str
+    object: str
+    graph_layer: str = "graph/knowledge"
+    source_projects: list[str] = Field(default_factory=list)
+
+class RegisteredProject(BaseModel):
+    """A project registered in the global config."""
+    path: str
+    name: str
+    registered: date
+
+class GlobalConfig(BaseModel):
+    """Global science config at ~/.config/science/config.yaml."""
+    sync: SyncSettings = Field(default_factory=lambda: SyncSettings())
+    projects: list[RegisteredProject] = Field(default_factory=list)
+
+class SyncSettings(BaseModel):
+    stale_after_days: int = 7
+
+class ProjectSyncState(BaseModel):
+    last_synced: datetime
+    entity_count: int
+    entity_hash: str
+
+class SyncState(BaseModel):
+    """Sync state at ~/.config/science/sync_state.yaml."""
+    last_sync: datetime | None = None
+    projects: dict[str, ProjectSyncState] = Field(default_factory=dict)
+```
+
 ### Entity Matching Strategy
 
 When sync or proactive checks determine whether a new entity matches an existing
@@ -198,13 +276,15 @@ propagate it to project B.
 | Entity type | Propagates? | Rationale |
 |---|---|---|
 | `question` | Yes | Open questions about shared entities are relevant |
-| `claim` / `relation_claim` | Yes | Claims about shared entities inform other projects |
+| `claim` | Yes | Claims about shared entities inform other projects |
+| `relation_claim` | Yes | Requires adding `RELATION_CLAIM` to the `EntityType` enum (currently only a profile entity kind, not a frontmatter-parseable type) |
 | `hypothesis` | Yes | Testable conjectures touching shared entities |
 | `evidence` | Yes | Evidence about shared entities strengthens other projects |
 | `task` | Selectively | Only tasks with `tags: [cross-project]` |
 | `experiment` / `workflow` / `workflow-run` | No | Implementation-specific |
 | `model` / `variable` / `parameter` | No | Project-local structure |
-| `concept` / `topic` / `paper` | No | Background material, not actionable |
+| `dataset` / `method` | Selectively | Only with `tags: [cross-project]` — some methods/datasets about shared entities have cross-project value |
+| `concept` / `topic` / `paper` | No | Background material, not actionable. Fuzzy matches between these types across projects are surfaced in the sync report for manual reconciliation. |
 
 **Propagation algorithm:**
 
@@ -219,7 +299,13 @@ for each shared_entity in registry where len(source_projects) >= 2:
 
 **Propagated entity format:**
 
-Written to `doc/sync/` subdirectory with provenance metadata:
+Written to `doc/sync/` subdirectory with provenance metadata. Note: `doc/sync/`
+is a subdirectory of `doc/`, which is already scanned by
+`_load_markdown_entities()` via `rglob("*.md")`. No separate loading path is
+needed — propagated entities participate in graph materialization automatically.
+
+Propagated files should be committed to version control (they are project
+artifacts, not ephemeral).
 
 ```yaml
 ---
@@ -288,6 +374,10 @@ projects:
     entity_hash: "def456"
 ```
 
+**Entity hash:** SHA-256 of the sorted, newline-joined canonical IDs of all
+`SourceEntity` records in the project. Used for quick staleness detection without
+re-loading full project sources.
+
 ---
 
 ## 4. Proactive Checks
@@ -348,8 +438,10 @@ function that commands can call.
 
 - **`profiles/__init__.py`** — add `load_cross_project_profile()` for runtime YAML
   loading
-- **`entities.py`** — add optional `sync_source: SyncSource | None` field to
-  `Entity`, with `SyncSource` model (`project`, `entity_id`, `sync_date`)
+- **`entities.py`** — add `RELATION_CLAIM = "relation_claim"` to `EntityType`
+  enum (currently only a profile entity kind, not a parseable type). Add optional
+  `sync_source: SyncSource | None` field to `Entity`, with `SyncSource` model
+  (`project`, `entity_id`, `sync_date`).
 - **`frontmatter.py`** — parse `sync_source` from frontmatter
 
 ### science-tool
@@ -357,8 +449,8 @@ function that commands can call.
 - **`graph/sources.py`** — extend `_read_project_config` and
   `load_project_sources` to include `cross-project` in resolved profiles when
   registry exists. Add `check_registry()` function.
-- **`cli.py`** — new `sync` command group: `sync run`, `sync status`,
-  `sync projects`, `sync rebuild`
+- **`cli.py`** — new `sync` command group: `sync run` (with `--dry-run` flag to
+  preview without writing), `sync status`, `sync projects`, `sync rebuild`
 - **`cli.py`** — modify `graph build` to call proactive checks
 
 ### New module: `science-tool/src/science_tool/registry/`
@@ -405,3 +497,19 @@ registry/
 - **Registry as source of truth** — the registry is an index, not authoritative.
   Projects own their entities. Registry can be rebuilt from scratch:
   `science-tool sync rebuild`.
+
+---
+
+## 8. Edge Cases & Bootstrap
+
+- **Zero registered projects:** `/sync` is a no-op (nothing to sync). The registry
+  is not created until at least one project is registered.
+- **One registered project:** `/sync` populates the registry from that project's
+  entities/relations but performs no propagation (no other project to propagate to).
+  This is useful: the next project registered will immediately benefit from the
+  pre-populated registry.
+- **Project path no longer exists:** Sync warns and skips it. The project remains
+  in `config.yaml` (user can remove with `sync projects remove`).
+- **Registry does not exist yet:** Proactive checks gracefully return empty results.
+  `load_cross_project_profile()` returns `None`. No profile is added to the
+  project's active profiles.
