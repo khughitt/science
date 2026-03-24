@@ -231,7 +231,7 @@ def run_sync(
         now = datetime.now()
         state = SyncState(last_sync=now, projects={})
         for sources in all_sources:
-            ids = [e.canonical_id for e in sources.entities]
+            ids = [f"{sources.project_name}::{e.canonical_id}" for e in sources.entities]
             state.projects[sources.project_name] = ProjectSyncState(
                 last_synced=now,
                 entity_count=len(ids),
