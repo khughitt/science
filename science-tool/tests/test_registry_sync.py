@@ -114,16 +114,30 @@ def test_full_sync_two_projects(tmp_path: Path) -> None:
     _write_project(proj_b, "proj-b")
 
     _write_entity_md(
-        proj_a, "tp53.md", "gene:tp53", "concept", "TP53",
-        ontology_terms=["NCBIGene:7157"], aliases=["p53"],
+        proj_a,
+        "tp53.md",
+        "gene:tp53",
+        "concept",
+        "TP53",
+        ontology_terms=["NCBIGene:7157"],
+        aliases=["p53"],
     )
     _write_entity_md(
-        proj_a, "q1.md", "question:q1", "question", "TP53 question",
+        proj_a,
+        "q1.md",
+        "question:q1",
+        "question",
+        "TP53 question",
         related=["gene:tp53"],
     )
     _write_entity_md(
-        proj_b, "tp53.md", "gene:tp53", "concept", "TP53",
-        ontology_terms=["NCBIGene:7157"], aliases=["p53"],
+        proj_b,
+        "tp53.md",
+        "gene:tp53",
+        "concept",
+        "TP53",
+        ontology_terms=["NCBIGene:7157"],
+        aliases=["p53"],
     )
 
     report = run_sync(
@@ -143,12 +157,22 @@ def test_sync_idempotent(tmp_path: Path) -> None:
     _write_project(proj_a, "proj-a")
     _write_project(proj_b, "proj-b")
     _write_entity_md(
-        proj_a, "tp53.md", "gene:tp53", "concept", "TP53",
-        ontology_terms=["NCBIGene:7157"], aliases=["p53"],
+        proj_a,
+        "tp53.md",
+        "gene:tp53",
+        "concept",
+        "TP53",
+        ontology_terms=["NCBIGene:7157"],
+        aliases=["p53"],
     )
     _write_entity_md(
-        proj_b, "tp53.md", "gene:tp53", "concept", "TP53",
-        ontology_terms=["NCBIGene:7157"], aliases=["p53"],
+        proj_b,
+        "tp53.md",
+        "gene:tp53",
+        "concept",
+        "TP53",
+        ontology_terms=["NCBIGene:7157"],
+        aliases=["p53"],
     )
     _write_entity_md(proj_a, "q1.md", "question:q1", "question", "Q1", related=["gene:tp53"])
 
