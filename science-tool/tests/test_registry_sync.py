@@ -4,7 +4,7 @@ from pathlib import Path
 
 from science_tool.graph.sources import SourceEntity
 from science_tool.registry.index import RegistryIndex
-from science_tool.registry.sync import align_registry, collect_all_project_sources
+from science_tool.registry.sync import SyncReport, align_registry, collect_all_project_sources, run_sync
 
 
 def _write_project(root: Path, name: str) -> None:
@@ -89,3 +89,54 @@ def test_align_deduplicates_across_projects() -> None:
     aliases = set(tp53_entries[0].aliases)
     assert "p53" in aliases
     assert "TP53" in aliases
+
+
+def test_full_sync_two_projects(tmp_path: Path) -> None:
+    # Set up two projects sharing gene:tp53
+    proj_a = tmp_path / "proj-a"
+    proj_b = tmp_path / "proj-b"
+    _write_project(proj_a, "proj-a")
+    _write_project(proj_b, "proj-b")
+
+    # proj-a has question:q1 about gene:tp53
+    _write_entity_md(proj_a, "tp53.md", "gene:tp53", "concept", "TP53", ontology_terms=["NCBIGene:7157"])
+    _write_entity_md(proj_a, "q1.md", "question:q1", "question", "TP53 question", related=["gene:tp53"])
+
+    # proj-b also has gene:tp53
+    _write_entity_md(proj_b, "tp53.md", "gene:tp53", "concept", "TP53", ontology_terms=["NCBIGene:7157"])
+
+    state_path = tmp_path / "sync_state.yaml"
+    registry_dir = tmp_path / "registry"
+
+    report = run_sync(
+        project_paths=[proj_a, proj_b],
+        state_path=state_path,
+        registry_dir=registry_dir,
+    )
+
+    assert isinstance(report, SyncReport)
+    assert report.entities_total > 0
+    # Check propagation created file in proj-b
+    sync_files = list((proj_b / "doc" / "sync").glob("*.md"))
+    assert len(sync_files) >= 1
+
+
+def test_sync_idempotent(tmp_path: Path) -> None:
+    proj_a = tmp_path / "proj-a"
+    proj_b = tmp_path / "proj-b"
+    _write_project(proj_a, "proj-a")
+    _write_project(proj_b, "proj-b")
+    _write_entity_md(proj_a, "tp53.md", "gene:tp53", "concept", "TP53")
+    _write_entity_md(proj_b, "tp53.md", "gene:tp53", "concept", "TP53")
+    _write_entity_md(proj_a, "q1.md", "question:q1", "question", "Q1", related=["gene:tp53"])
+
+    kwargs: dict[str, object] = dict(
+        project_paths=[proj_a, proj_b],
+        state_path=tmp_path / "sync_state.yaml",
+        registry_dir=tmp_path / "registry",
+    )
+    run_sync(**kwargs)  # type: ignore[arg-type]
+    run_sync(**kwargs)  # type: ignore[arg-type]
+    # Second run should not duplicate propagations
+    sync_files = list((proj_b / "doc" / "sync").glob("*.md"))
+    assert len(sync_files) <= 1  # at most 1, not duplicated

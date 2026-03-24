@@ -3,14 +3,25 @@
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
+
+from pydantic import BaseModel, Field
 
 from science_tool.graph.sources import ProjectSources, SourceEntity, load_project_sources
 from science_tool.registry.index import (
     RegistryEntity,
     RegistryEntitySource,
     RegistryIndex,
+    load_registry_index,
+    save_registry_index,
+)
+from science_tool.registry.propagation import compute_propagations, write_propagated_entity
+from science_tool.registry.state import (
+    ProjectSyncState,
+    SyncState,
+    compute_entity_hash,
+    save_sync_state,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,3 +102,80 @@ def _ensure_project_listed(entry: RegistryEntity, project_name: str, today: date
         entry.source_projects.append(
             RegistryEntitySource(project=project_name, first_seen=today)
         )
+
+
+class SyncReport(BaseModel):
+    """Summary of a sync run."""
+
+    entities_total: int = 0
+    entities_new: int = 0
+    relations_total: int = 0
+    propagated: dict[str, int] = Field(default_factory=dict)  # "proj-a -> proj-b": count
+    drift_warnings: list[str] = Field(default_factory=list)
+
+
+def run_sync(
+    *,
+    project_paths: list[Path],
+    registry_dir: Path,
+    state_path: Path,
+    dry_run: bool = False,
+) -> SyncReport:
+    """Execute full sync: collect -> align -> propagate -> save -> update state."""
+    report = SyncReport()
+
+    # Phase 1: Collect
+    all_sources = collect_all_project_sources(project_paths=project_paths)
+    if not all_sources:
+        return report
+
+    # Phase 2: Align
+    existing_index = load_registry_index(registry_dir)
+    old_count = len(existing_index.entities)
+
+    project_entity_map: dict[str, list[SourceEntity]] = {}
+    for sources in all_sources:
+        project_entity_map[sources.project_name] = sources.entities
+
+    new_index = align_registry(existing_index, project_entity_map)
+    report.entities_total = len(new_index.entities)
+    report.entities_new = len(new_index.entities) - old_count
+    report.relations_total = len(new_index.relations)
+
+    # Phase 3: Propagate
+    shared = [e for e in new_index.entities if len(e.source_projects) >= 2]
+    actions = compute_propagations(
+        shared_entities=shared,
+        project_sources=project_entity_map,
+    )
+
+    if not dry_run:
+        name_to_root: dict[str, Path] = {s.project_name: Path(s.project_root) for s in all_sources}
+        today = date.today()
+        for action in actions:
+            target_root = name_to_root.get(action.target_project)
+            if target_root:
+                write_propagated_entity(
+                    entity=action.entity,
+                    source_project=action.source_project,
+                    target_project_root=target_root,
+                    sync_date=today,
+                )
+                key = f"{action.source_project} -> {action.target_project}"
+                report.propagated[key] = report.propagated.get(key, 0) + 1
+
+        # Phase 4/5: Save registry and update state
+        save_registry_index(new_index, registry_dir)
+
+        now = datetime.now()
+        state = SyncState(last_sync=now, projects={})
+        for sources in all_sources:
+            ids = [e.canonical_id for e in sources.entities]
+            state.projects[sources.project_name] = ProjectSyncState(
+                last_synced=now,
+                entity_count=len(ids),
+                entity_hash=compute_entity_hash(ids),
+            )
+        save_sync_state(state, state_path)
+
+    return report
