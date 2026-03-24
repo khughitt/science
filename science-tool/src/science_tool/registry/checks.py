@@ -19,8 +19,10 @@ def check_registry(
 ) -> list[MatchResult]:
     """Check if an entity matches anything in the registry.
 
-    Read-only, advisory. Returns matches sorted by tier (highest first).
-    If registry_index is not provided, loads from default path (cached).
+    Read-only, advisory. After registry namespacing, Tier 1 (exact canonical ID)
+    matching is effectively disabled for cross-project lookups since registry entities
+    use namespaced IDs (project::local_id). Matching still works via Tier 2 (aliases)
+    and Tier 3 (ontology terms).
     """
     if registry_index is None:
         registry_index = _get_cached_index()

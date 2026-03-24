@@ -16,6 +16,7 @@ from science_tool.registry.index import (
     load_registry_index,
     save_registry_index,
 )
+from science_tool.registry.matching import MatchTier, find_matches
 from science_tool.registry.propagation import compute_propagations, write_propagated_entity
 from science_tool.registry.state import (
     ProjectSyncState,
@@ -109,6 +110,61 @@ def _ensure_project_listed(entry: RegistryEntity, project_name: str, today: date
         entry.source_projects.append(RegistryEntitySource(project=project_name, first_seen=today))
 
 
+def _find_cross_project_matches(
+    index: RegistryIndex,
+    project_sources: dict[str, list[SourceEntity]],
+) -> list[tuple[str, str, str, str]]:
+    """Find entity pairs that match across projects.
+
+    Returns list of (local_id_a, local_id_b, project_a, project_b) tuples.
+    Only tiers 1-3 (exact, alias, ontology) count as genuine matches.
+    Checks both directions to avoid asymmetric matching.
+    """
+    seen: set[tuple[str, str, str, str]] = set()
+    project_names = list(project_sources.keys())
+
+    for i, proj_a in enumerate(project_names):
+        for proj_b in project_names[i + 1 :]:
+            entities_b_registry = [
+                e for e in index.entities if e.source_projects and e.source_projects[0].project == proj_b
+            ]
+            entities_a_registry = [
+                e for e in index.entities if e.source_projects and e.source_projects[0].project == proj_a
+            ]
+
+            # Direction A -> B
+            for src_a in project_sources[proj_a]:
+                results = find_matches(
+                    src_a.canonical_id,
+                    aliases=src_a.aliases,
+                    ontology_terms=src_a.ontology_terms,
+                    registry_entities=entities_b_registry,
+                    candidate_kind=src_a.kind,
+                    candidate_title=src_a.title,
+                )
+                for result in results:
+                    if result.tier <= MatchTier.ONTOLOGY:
+                        local_id_b = result.entity.canonical_id.split("::", 1)[-1]
+                        seen.add((src_a.canonical_id, local_id_b, proj_a, proj_b))
+
+            # Direction B -> A
+            for src_b in project_sources[proj_b]:
+                results = find_matches(
+                    src_b.canonical_id,
+                    aliases=src_b.aliases,
+                    ontology_terms=src_b.ontology_terms,
+                    registry_entities=entities_a_registry,
+                    candidate_kind=src_b.kind,
+                    candidate_title=src_b.title,
+                )
+                for result in results:
+                    if result.tier <= MatchTier.ONTOLOGY:
+                        local_id_a = result.entity.canonical_id.split("::", 1)[-1]
+                        seen.add((local_id_a, src_b.canonical_id, proj_a, proj_b))
+
+    return list(seen)
+
+
 class SyncReport(BaseModel):
     """Summary of a sync run."""
 
@@ -147,10 +203,10 @@ def run_sync(
     report.entities_new = len(new_index.entities) - old_count
     report.relations_total = len(new_index.relations)
 
-    # Phase 3: Propagate
-    shared = [e for e in new_index.entities if len(e.source_projects) >= 2]
+    # Phase 3: Propagate — find genuinely shared entities via matching
+    shared_pairs = _find_cross_project_matches(new_index, project_entity_map)
     actions = compute_propagations(
-        shared_entities=shared,
+        shared_pairs=shared_pairs,
         project_sources=project_entity_map,
     )
 

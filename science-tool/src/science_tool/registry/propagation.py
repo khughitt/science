@@ -8,7 +8,6 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from science_tool.graph.sources import SourceEntity
-from science_tool.registry.index import RegistryEntity
 
 # Entity kinds eligible for propagation
 _ALWAYS_PROPAGATE = frozenset({"question", "claim", "relation_claim", "hypothesis", "evidence"})
@@ -26,45 +25,63 @@ class PropagationAction(BaseModel):
 
 def compute_propagations(
     *,
-    shared_entities: list[RegistryEntity],
+    shared_pairs: list[tuple[str, str, str, str]],  # (local_id_a, local_id_b, project_a, project_b)
     project_sources: dict[str, list[SourceEntity]],
 ) -> list[PropagationAction]:
-    """Compute which entities should be propagated across projects."""
-    # Build lookup: project -> set of canonical_ids
+    """Compute which entities should be propagated across projects.
+
+    shared_pairs: each tuple (local_id_a, local_id_b, project_a, project_b) indicates
+    that the two local IDs represent the same real-world entity across projects.
+    """
     project_ids: dict[str, set[str]] = {
         name: {e.canonical_id for e in entities} for name, entities in project_sources.items()
     }
 
+    # Build per-project lookup: local_id -> set of partner projects
+    project_shared: dict[str, dict[str, set[str]]] = {}
+    for local_id_a, local_id_b, proj_a, proj_b in shared_pairs:
+        project_shared.setdefault(proj_a, {}).setdefault(local_id_a, set()).add(proj_b)
+        project_shared.setdefault(proj_b, {}).setdefault(local_id_b, set()).add(proj_a)
+
+    # Collect all shared local IDs for related-field checking
+    all_shared_local_ids: set[str] = set()
+    for local_id_a, local_id_b, _, _ in shared_pairs:
+        all_shared_local_ids.add(local_id_a)
+        all_shared_local_ids.add(local_id_b)
+
     actions: list[PropagationAction] = []
 
-    for shared in shared_entities:
-        shared_project_names = {sp.project for sp in shared.source_projects}
-        if len(shared_project_names) < 2:
+    for source_project, entities in project_sources.items():
+        shared_in_project = project_shared.get(source_project, {})
+        if not shared_in_project:
             continue
 
-        for source_project, entities in project_sources.items():
-            if source_project not in shared_project_names:
+        for entity in entities:
+            if not _is_propagatable(entity):
                 continue
 
-            for entity in entities:
-                if not _is_propagatable(entity):
-                    continue
-                if shared.canonical_id not in entity.related:
-                    continue
+            # Check if entity references any shared local ID
+            referenced_shared = all_shared_local_ids & set(entity.related)
+            if not referenced_shared:
+                continue
 
-                for target_project in shared_project_names:
-                    if target_project == source_project:
-                        continue
-                    if entity.canonical_id in project_ids.get(target_project, set()):
-                        continue
-                    actions.append(
-                        PropagationAction(
-                            source_project=source_project,
-                            target_project=target_project,
-                            entity=entity,
-                            shared_via=shared.canonical_id,
-                        )
+            # Find target projects
+            target_projects: set[str] = set()
+            for ref_id in referenced_shared:
+                if ref_id in shared_in_project:
+                    target_projects.update(shared_in_project[ref_id])
+
+            for target_project in target_projects:
+                if entity.canonical_id in project_ids.get(target_project, set()):
+                    continue
+                actions.append(
+                    PropagationAction(
+                        source_project=source_project,
+                        target_project=target_project,
+                        entity=entity,
+                        shared_via=next(iter(referenced_shared)),
                     )
+                )
 
     return actions
 
