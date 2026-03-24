@@ -184,41 +184,106 @@ The `shared` profile (cross-project registry) is no longer declared in
 `~/.config/science/registry/manifest.yaml`. Like `core`, it's infrastructure —
 not a per-project opt-in.
 
+In `load_project_sources()`, the current `if "shared" in profiles.curated`
+check is replaced with an unconditional attempt to load the shared profile:
+
+```python
+# Always try to load shared profile (no longer gated on curated list)
+shared = load_shared_profile()
+if shared is not None:
+    extra_profiles.append(shared)
+```
+
+### Validation
+
+- **Unknown ontology in `science.yaml`:** if `ontologies` lists a name not in
+  the built-in registry, `load_project_sources()` raises an error at config
+  load time: `"Unknown ontology 'chebi'. Available: biolink"`
+- **Unknown entity kind during graph build:** if an entity's `kind` doesn't
+  match any core kind, declared ontology type, or local kind, print a warning
+  but do not fail. The entity is assigned to the local profile as a fallback.
+- **Undeclared ontology type:** if an entity uses a kind that matches a known
+  but undeclared ontology type (e.g., `type: gene` without `ontologies: [biolink]`),
+  this is surfaced by the suggestion mechanism, not as an error.
+
 ---
 
-## 3. Graph Layer Changes
+## 3. Graph Materialization Changes
 
-### Flat `layer/domain`
+### Current state: all entities go to `graph/knowledge`
 
-All ontology-typed entities go into a single `layer/domain` layer, regardless
-of which ontology defines their type:
+The materializer uses named graphs `graph/knowledge`, `graph/bridge`,
+`graph/causal`, `graph/provenance`, `graph/datasets` (defined in `store.py`
+`GRAPH_LAYERS`). Currently **all** entities go into `graph/knowledge` regardless
+of their profile's `layer` field — the `layer` field on `EntityKind` is profile
+metadata, not a routing directive.
 
-| Layer | Contents |
-|---|---|
-| `layer/core` | Science-native entities |
-| `layer/domain` | All domain entities (biolink-typed, GO-typed, etc.) |
-| `layer/shared` | Cross-project shared entities |
-| `layer/local` | Project-specific extensions |
-| `layer/bridge` | External term references |
-| `layer/provenance` | Confidence, epistemic status, parameter bindings |
-| `layer/causal` | Causal structure |
-| `layer/datasets` | Dataset linkage |
+This spec does **not** change that behavior. All entities (core, domain,
+shared, local) continue to go into `graph/knowledge`. The `layer` field on
+`EntityKind` continues to be metadata that downstream consumers (dashboard, etc.)
+can use for display grouping.
 
-The ontology a type comes from is tracked via the CURIE prefix on each entity,
-not the graph layer. This avoids layer proliferation when multiple ontologies are
+### Profile metadata for ontology-typed entities
+
+Ontology-typed entities get `profile` set to the ontology name (e.g.,
+`"biolink"`) and the `EntityKind.layer` metadata is `"layer/domain"` (flat,
+not per-ontology). This replaces the old `"layer/domain/bio"`.
+
+**Breaking change:** existing `layer/domain/bio` metadata in profiles becomes
+`layer/domain`. Since this is metadata only (not a named graph URI), the impact
+is limited to profile definitions and any downstream consumers reading the
+`layer` field. Projects should rebuild graphs to pick up updated metadata.
+
+### Entity kind routing in `_default_profile_for_kind()`
+
+This function currently routes entities to `"core"` or the local profile. With
+ontologies, it adds a check:
+
+1. Kind matches a `core` entity kind → profile `"core"`
+2. Kind matches a declared ontology entity type (by `name` field) → profile
+   set to ontology name (e.g., `"biolink"`)
+3. Otherwise → local profile
+
+The `known_kinds()` function is updated to accept loaded ontology catalogs in
+addition to extra profiles:
+
+```python
+def known_kinds(
+    extra_profiles: list[ProfileManifest] | None = None,
+    ontology_catalogs: list[OntologyCatalog] | None = None,
+) -> frozenset[str]:
+    kinds = set(_CORE_KINDS)
+    for profile in extra_profiles or []:
+        kinds.update(kind.name for kind in profile.entity_kinds)
+    for catalog in ontology_catalogs or []:
+        kinds.update(et.name for et in catalog.entity_types)
+    return frozenset(kinds)
+```
+
+### `SourceEntity.profile` for ontology-typed entities
+
+Entities whose `kind` matches a declared ontology type get
+`profile = "<ontology_name>"` (e.g., `"biolink"`). This flows through to the
+materialized graph as a `sci:profile` triple and is used by the registry sync
+system.
+
+### `_EXTERNAL_PREFIXES` becomes dynamic
+
+The hardcoded `_EXTERNAL_PREFIXES` frozenset in `sources.py` (used by
+`is_external_reference()`) is replaced by a function that collects CURIE
+prefixes from declared ontology catalogs:
+
+```python
+def external_prefixes(ontology_catalogs: list[OntologyCatalog]) -> frozenset[str]:
+    prefixes: set[str] = set()
+    for catalog in ontology_catalogs:
+        for et in catalog.entity_types:
+            prefixes.update(p.lower() for p in et.curie_prefixes)
+    return frozenset(prefixes)
+```
+
+The existing hardcoded set is kept as a fallback for when no ontologies are
 declared.
-
-**Breaking change:** existing `layer/domain/bio` URIs in `graph.trig` files
-become `layer/domain`. Projects must rebuild their graphs.
-
-### Entity kind routing during graph build
-
-For each entity:
-1. Kind matches a `core` entity kind → `layer/core`
-2. Kind matches a declared ontology entity type → `layer/domain`
-3. Kind matches a `shared` entity kind → `layer/shared`
-4. Kind matches a `local` entity kind → `layer/local`
-5. No match → warning (unknown entity kind)
 
 ---
 
@@ -277,8 +342,22 @@ for ontology adoption opportunities.
 ### `_external_profile()` in materialize.py
 
 This function currently checks `if "bio" in curated_profiles` to assign CURIEs
-to the bio profile. Replace with ontology-based assignment: check if the CURIE
-prefix matches any declared ontology's `curie_prefixes`.
+to the bio profile, returning the string `"bio"` or `"external"`. Replace with
+ontology-based assignment:
+
+- Accept `declared_ontologies: list[OntologyCatalog]` instead of
+  `curated_profiles: list[str]`
+- Check if the CURIE prefix matches any declared ontology's `curie_prefixes`
+- Return the ontology name (e.g., `"biolink"`) or `"external"`
+
+The `curated_profiles` parameter is removed from `materialize_graph()` and
+replaced with `ontology_catalogs`.
+
+### `ProfileManifest.strictness`
+
+The `Literal["core", "curated", "typed-extension"]` type keeps `"curated"` as a
+valid value. The shared profile (loaded from registry YAML) uses `"curated"`
+strictness. Removing the value would break the shared profile. Leave as-is.
 
 ---
 
@@ -306,11 +385,13 @@ science-model/src/science_model/profiles/bio.py
 
 ```
 science-model/src/science_model/profiles/__init__.py     # remove BIO_PROFILE
+science-model/src/science_model/profiles/schema.py       # no changes (keep "curated" strictness)
 science-model/src/science_model/__init__.py              # update exports
-science-model/tests/test_profile_manifests.py            # remove bio tests
+science-model/tests/test_profile_manifests.py            # remove bio tests, add ontology tests
 
-science-tool/src/science_tool/graph/sources.py           # remove curated, add ontologies
-science-tool/src/science_tool/graph/materialize.py       # update _external_profile, layer URIs
+science-tool/src/science_tool/graph/sources.py           # remove curated, add ontologies, refactor known_kinds, dynamic external_prefixes
+science-tool/src/science_tool/graph/materialize.py       # update _external_profile to use ontology catalogs
+science-tool/src/science_tool/graph/store.py             # no named graph changes (entities stay in graph/knowledge)
 science-tool/src/science_tool/cli.py                     # add suggestion output in graph build
 
 commands/create-project.md                               # update science.yaml template
@@ -327,7 +408,29 @@ For each of `seq-feats`, `3d-attention-bias`, `natural-systems`, `cats`:
 
 ---
 
-## 7. Known Limitations (v1)
+## 7. Relationship to Layer Naming Spec
+
+The layer naming standardization spec (`doc/specs/2026-03-24-layer-naming-standardization.md`)
+has already been implemented. It renamed `project_specific` → `local` and
+`cross-project` → `shared`. This spec builds on those names.
+
+The layer naming spec also referenced `curated: [bio]` which this spec removes.
+The implementation plan should be sequenced after the layer naming changes
+(already merged).
+
+---
+
+## 8. Catalog Extraction
+
+The biolink term catalog should be extracted programmatically from the
+biolink-model source using the `linkml` Python package or the Biolink Model
+Toolkit (BMT). A one-time extraction script produces `catalog.yaml` which is
+then committed as package data. The script is not part of the runtime — it's a
+development tool run when updating the bundled catalog to a new biolink version.
+
+---
+
+## 9. Known Limitations (v1)
 
 - **No ontology hierarchy** — term catalog is flat (no `is_a` / subclass
   reasoning). Entity type `biolink:Protein` is not automatically recognized as a
@@ -342,7 +445,7 @@ For each of `seq-feats`, `3d-attention-bias`, `natural-systems`, `cats`:
 
 ---
 
-## 8. Future Direction
+## 10. Future Direction
 
 1. **Ontology hierarchy (v2)** — parse `is_a` relationships for type
    compatibility reasoning.
