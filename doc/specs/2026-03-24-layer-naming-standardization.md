@@ -53,8 +53,10 @@ re-materialize project graphs.
 | What | From | To |
 |---|---|---|
 | Profile name | `"cross-project"` | `"shared"` |
+| Python function | `load_cross_project_profile` | `load_shared_profile` |
 | Layer URI | `layer/cross-project` | `layer/shared` |
 | Code references | `"cross-project"` string | `"shared"` string |
+| `science.yaml` | `curated: [cross-project]` | `curated: [shared]` |
 
 ---
 
@@ -65,7 +67,7 @@ re-materialize project graphs.
 | File | Change |
 |---|---|
 | `profiles/project_specific.py` → `profiles/local.py` | Rename file, change `name` to `"local"`, flatten layers to `layer/local` |
-| `profiles/__init__.py` | Import `LOCAL_PROFILE` from `local`, update `__all__`, change `"cross-project"` → `"shared"` in `load_cross_project_profile` default path |
+| `profiles/__init__.py` | Import `LOCAL_PROFILE` from `local`, update `__all__`, rename `load_cross_project_profile` → `load_shared_profile`, change `"cross-project"` → `"shared"` in default path |
 | `tests/test_profile_manifests.py` | Rename test, update imports, update `"cross-project"` → `"shared"` in cross-project profile tests |
 | `tests/test_profiles.py` | Update profile name assertion |
 | `tests/test_source_contracts.py` | Update `profile` and `source_path` strings |
@@ -74,12 +76,15 @@ re-materialize project graphs.
 
 | File | Change |
 |---|---|
-| `graph/sources.py` | Change default `"project_specific"` → `"local"`, change `"cross-project"` → `"shared"` |
-| `graph/migrate.py` | Rename `write_project_specific_sources` → `write_local_sources`, update default profile |
+| `graph/sources.py` | Change default `"project_specific"` → `"local"`, rename `load_cross_project_profile` → `load_shared_profile`, change `"cross-project"` → `"shared"` |
+| `graph/migrate.py` | Rename `write_project_specific_sources` → `write_local_sources`, update `_coerce_local_profile` default return to `"local"` |
 | `cli.py` | Update import and call to renamed migrate function |
-| `registry/propagation.py` | Update `"cross-project"` tag check to remain as-is (the *tag* on entities is `cross-project`, which is a user-facing label, not a profile name — keep it) |
-| `registry/sync.py` | Update `"cross-project"` → `"shared"` if used as profile name |
+| `registry/sync.py` | No profile-name references to update (uses function imports) |
+| `scripts/validate.sh` | Update `LOCAL_PROFILE="project_specific"` → `LOCAL_PROFILE="local"` and inline Python fallback |
 | Tests (6+ files) | Update `project_specific` → `local` in all test helpers and assertions |
+
+**No change needed:**
+- `registry/propagation.py` — the `"cross-project"` tag check is a user-facing entity label, not a profile name (see Section 3)
 
 ### Commands
 
@@ -89,23 +94,34 @@ re-materialize project graphs.
 | `import-project.md` | Same |
 | `create-graph.md` | Update profile references and source dir examples |
 | `update-graph.md` | Update default profile mention |
+| `sync.md` | "cross-project profile" → "shared profile" (line 37) |
+
+**Note:** Some command files use "cross-project" as English prose (e.g., "cross-project
+sync" in sync.md, status.md, next-steps.md). These are natural language descriptions
+meaning "across projects" and should **not** be renamed — only references to the
+profile name "cross-project" change to "shared."
+
+### Living documentation
+
+| File | Change |
+|---|---|
+| `docs/project-organization-profiles.md` | Update `project_specific` → `local` |
+| `references/science-yaml-schema.md` | Update `local: project_specific` → `local: local` in schema and examples |
+| `README.md` | Update `local: project_specific` → `local: local` |
+
+Planning docs in `docs/plans/` are historical and should **not** be updated.
 
 ### Projects (4 projects)
 
 For each of `seq-feats`, `3d-attention-bias`, `natural-systems`, `cats`:
 1. `science.yaml`: `local: project_specific` → `local: local`
+   (also update `curated: [cross-project]` → `curated: [shared]` if present)
 2. Rename `knowledge/sources/project_specific/` → `knowledge/sources/local/`
 3. Update any internal `profile:` or `source_path:` references in YAML source
    files (e.g., `profile: project_specific` → `profile: local`,
    `source_path: knowledge/sources/project_specific/...` →
    `source_path: knowledge/sources/local/...`)
 4. Run `science-tool graph build` to re-materialize
-
-### Docs
-
-Planning docs in `docs/plans/` are historical and should **not** be updated —
-they describe what was true at the time. Only update living documentation:
-- `docs/project-organization-profiles.md`
 
 ---
 
