@@ -5,8 +5,8 @@ def test_model_source_round_trip() -> None:
     source = ModelSource(
         canonical_id="model:navier-stokes",
         title="Navier-Stokes equations",
-        profile="project_specific",
-        source_path="knowledge/sources/project_specific/models.yaml",
+        profile="local",
+        source_path="knowledge/sources/local/models.yaml",
         domain="fluid-dynamics",
         aliases=["NavierStokes"],
         source_refs=["paper:legatiuk2021"],
@@ -24,8 +24,8 @@ def test_parameter_source_defaults_optional_fields() -> None:
         canonical_id="parameter:kinematic-viscosity",
         title="Kinematic viscosity",
         symbol="nu",
-        profile="project_specific",
-        source_path="knowledge/sources/project_specific/parameters.yaml",
+        profile="local",
+        source_path="knowledge/sources/local/parameters.yaml",
     )
 
     assert source.related == []
@@ -37,7 +37,7 @@ def test_binding_source_round_trip() -> None:
     binding = BindingSource(
         model="model:navier-stokes",
         parameter="parameter:kinematic-viscosity",
-        source_path="knowledge/sources/project_specific/bindings.yaml",
+        source_path="knowledge/sources/local/bindings.yaml",
         symbol="nu",
         role="viscosity",
         confidence=1.0,

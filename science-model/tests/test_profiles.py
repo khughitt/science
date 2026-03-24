@@ -3,7 +3,7 @@ from science_model.profiles.schema import EntityKind, ProfileManifest, RelationK
 
 def test_profile_manifest_requires_imports_for_extension_profiles() -> None:
     manifest = ProfileManifest(
-        name="project_specific",
+        name="local",
         imports=["core"],
         entity_kinds=[],
         relation_kinds=[],
