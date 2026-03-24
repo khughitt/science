@@ -74,49 +74,79 @@ def test_collect_loads_project(tmp_path: Path) -> None:
     assert any(e.canonical_id == "question:q1" for e in results[0].entities)
 
 
-def test_align_deduplicates_across_projects() -> None:
+def test_align_deduplicates_within_project() -> None:
+    """Same entity loaded twice from same project is deduplicated."""
     existing = RegistryIndex()
     project_sources = {
-        "proj-a": [_source_entity("gene:tp53", "gene", "TP53", ["p53"], ["NCBIGene:7157"])],
-        "proj-b": [_source_entity("gene:tp53", "gene", "TP53 tumor protein", ["TP53"], ["NCBIGene:7157"])],
+        "proj-a": [
+            _source_entity("gene:tp53", "gene", "TP53", ["p53"], ["NCBIGene:7157"]),
+            _source_entity("gene:tp53", "gene", "TP53", ["TP53"], ["NCBIGene:7157"]),
+        ],
     }
     result = align_registry(existing, project_sources)
-    tp53_entries = [e for e in result.entities if e.canonical_id == "gene:tp53"]
+    tp53_entries = [e for e in result.entities if "gene:tp53" in e.canonical_id]
     assert len(tp53_entries) == 1
-    projects = {sp.project for sp in tp53_entries[0].source_projects}
-    assert projects == {"proj-a", "proj-b"}
-    # Aliases merged
     aliases = set(tp53_entries[0].aliases)
     assert "p53" in aliases
     assert "TP53" in aliases
 
 
+def test_align_does_not_merge_same_id_different_projects() -> None:
+    """task:t001 in proj-a and task:t001 in proj-b are different entities."""
+    existing = RegistryIndex()
+    project_sources = {
+        "proj-a": [_source_entity("task:t001", "task", "Run analysis on dataset X")],
+        "proj-b": [_source_entity("task:t001", "task", "Set up CI pipeline")],
+    }
+    result = align_registry(existing, project_sources)
+    t001_entries = [e for e in result.entities if "task:t001" in e.canonical_id]
+    assert len(t001_entries) == 2
+    for entry in t001_entries:
+        assert len(entry.source_projects) == 1
+    project_names = {entry.source_projects[0].project for entry in t001_entries}
+    assert project_names == {"proj-a", "proj-b"}
+
+
 def test_full_sync_two_projects(tmp_path: Path) -> None:
-    # Set up two projects sharing gene:tp53
     proj_a = tmp_path / "proj-a"
     proj_b = tmp_path / "proj-b"
     _write_project(proj_a, "proj-a")
     _write_project(proj_b, "proj-b")
 
-    # proj-a has question:q1 about gene:tp53
-    _write_entity_md(proj_a, "tp53.md", "gene:tp53", "concept", "TP53", ontology_terms=["NCBIGene:7157"])
-    _write_entity_md(proj_a, "q1.md", "question:q1", "question", "TP53 question", related=["gene:tp53"])
-
-    # proj-b also has gene:tp53
-    _write_entity_md(proj_b, "tp53.md", "gene:tp53", "concept", "TP53", ontology_terms=["NCBIGene:7157"])
-
-    state_path = tmp_path / "sync_state.yaml"
-    registry_dir = tmp_path / "registry"
+    _write_entity_md(
+        proj_a,
+        "tp53.md",
+        "gene:tp53",
+        "concept",
+        "TP53",
+        ontology_terms=["NCBIGene:7157"],
+        aliases=["p53"],
+    )
+    _write_entity_md(
+        proj_a,
+        "q1.md",
+        "question:q1",
+        "question",
+        "TP53 question",
+        related=["gene:tp53"],
+    )
+    _write_entity_md(
+        proj_b,
+        "tp53.md",
+        "gene:tp53",
+        "concept",
+        "TP53",
+        ontology_terms=["NCBIGene:7157"],
+        aliases=["p53"],
+    )
 
     report = run_sync(
         project_paths=[proj_a, proj_b],
-        state_path=state_path,
-        registry_dir=registry_dir,
+        state_path=tmp_path / "sync_state.yaml",
+        registry_dir=tmp_path / "registry",
     )
-
     assert isinstance(report, SyncReport)
     assert report.entities_total > 0
-    # Check propagation created file in proj-b
     sync_files = list((proj_b / "doc" / "sync").glob("*.md"))
     assert len(sync_files) >= 1
 
@@ -126,8 +156,24 @@ def test_sync_idempotent(tmp_path: Path) -> None:
     proj_b = tmp_path / "proj-b"
     _write_project(proj_a, "proj-a")
     _write_project(proj_b, "proj-b")
-    _write_entity_md(proj_a, "tp53.md", "gene:tp53", "concept", "TP53")
-    _write_entity_md(proj_b, "tp53.md", "gene:tp53", "concept", "TP53")
+    _write_entity_md(
+        proj_a,
+        "tp53.md",
+        "gene:tp53",
+        "concept",
+        "TP53",
+        ontology_terms=["NCBIGene:7157"],
+        aliases=["p53"],
+    )
+    _write_entity_md(
+        proj_b,
+        "tp53.md",
+        "gene:tp53",
+        "concept",
+        "TP53",
+        ontology_terms=["NCBIGene:7157"],
+        aliases=["p53"],
+    )
     _write_entity_md(proj_a, "q1.md", "question:q1", "question", "Q1", related=["gene:tp53"])
 
     kwargs: dict[str, object] = dict(
@@ -140,3 +186,19 @@ def test_sync_idempotent(tmp_path: Path) -> None:
     # Second run should not duplicate propagations
     sync_files = list((proj_b / "doc" / "sync").glob("*.md"))
     assert len(sync_files) <= 1  # at most 1, not duplicated
+
+
+def test_resync_with_existing_namespaced_registry(tmp_path: Path) -> None:
+    proj_a = tmp_path / "proj-a"
+    _write_project(proj_a, "proj-a")
+    _write_entity_md(proj_a, "q1.md", "question:q1", "question", "Question 1")
+
+    kwargs: dict[str, object] = dict(
+        project_paths=[proj_a],
+        state_path=tmp_path / "sync_state.yaml",
+        registry_dir=tmp_path / "registry",
+    )
+    report1 = run_sync(**kwargs)  # type: ignore[arg-type]
+    report2 = run_sync(**kwargs)  # type: ignore[arg-type]
+    assert report1.entities_total == report2.entities_total
+    assert report2.entities_new == 0
