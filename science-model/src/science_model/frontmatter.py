@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 from science_model.entities import Entity, EntityType
+from science_model.sync import SyncSource
 
 
 def parse_frontmatter(path: Path) -> tuple[dict, str] | None:
@@ -37,6 +38,20 @@ def _coerce_date(val: str | date | None) -> date | None:
     if isinstance(val, date):
         return val
     return date.fromisoformat(str(val))
+
+
+def _parse_sync_source(raw: dict | None) -> SyncSource | None:
+    if not isinstance(raw, dict):
+        return None
+    project = raw.get("project")
+    entity_id = raw.get("entity_id")
+    raw_date = raw.get("sync_date")
+    if not project or not entity_id or not raw_date:
+        return None
+    sync_date = _coerce_date(raw_date)
+    if sync_date is None:
+        return None
+    return SyncSource(project=str(project), entity_id=str(entity_id), sync_date=sync_date)
 
 
 def _resolve_type(raw: str) -> EntityType:
@@ -82,4 +97,5 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         maturity=fm.get("maturity"),
         confidence=fm.get("confidence"),
         datasets=fm.get("datasets"),
+        sync_source=_parse_sync_source(fm.get("sync_source")),
     )

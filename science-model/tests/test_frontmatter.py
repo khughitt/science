@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from science_model.frontmatter import parse_frontmatter, parse_entity_file
+from science_model.frontmatter import parse_entity_file, parse_frontmatter
 
 
 def test_parse_frontmatter_basic(tmp_path: Path):
@@ -57,3 +57,29 @@ Body text here.
     assert entity.type.value == "question"
     assert entity.project == "my-project"
     assert entity.content_preview == "Body text here."
+
+
+def test_parse_entity_file_with_sync_source(tmp_path: Path):
+    config = tmp_path / "science.yaml"
+    config.write_text("name: test-project\n", encoding="utf-8")
+    doc = tmp_path / "doc" / "sync"
+    doc.mkdir(parents=True)
+    f = doc / "q-from-other.md"
+    f.write_text(
+        "---\n"
+        'id: "question:q-from-other"\n'
+        "type: question\n"
+        'title: "Propagated question"\n'
+        "sync_source:\n"
+        '  project: "aging-clocks"\n'
+        '  entity_id: "question:q4-tp53"\n'
+        '  sync_date: "2026-03-23"\n'
+        "---\n"
+        "Body text.\n",
+        encoding="utf-8",
+    )
+    entity = parse_entity_file(f, project_slug="test-project")
+    assert entity is not None
+    assert entity.sync_source is not None
+    assert entity.sync_source.project == "aging-clocks"
+    assert entity.sync_source.entity_id == "question:q4-tp53"
