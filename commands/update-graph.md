@@ -20,6 +20,10 @@ uv run science-tool <command>
 
 For brevity, the examples below write just `science-tool <command>`; always expand them to `uv run science-tool <command>` when executing.
 
+## Cross-Project Registry Check
+
+When adding new entities as part of the update, the cross-project registry is consulted during `graph build` to detect potential duplicates across projects. If matches are found, prefer reusing existing canonical IDs and aliases from the registry.
+
 ## Workflow
 
 ### Step 1: Check whether canonical inputs changed

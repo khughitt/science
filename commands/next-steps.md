@@ -169,6 +169,15 @@ Display the output in the terminal using rich formatting:
 
 > **Note:** This command saves output to disk (unlike the previous read-only version). This is intentional — ephemeral analysis that disappears after the session is less useful than a versioned record.
 
+## Cross-Project Sync Check
+
+Before writing, run `science-tool sync status` to check cross-project sync staleness.
+If sync is stale, include a note in the Recommended Next Actions table:
+
+| Priority | Action | Rationale | Command |
+|---|---|---|---|
+| P2 | Cross-project sync | Sync is N days stale; N projects may have relevant updates | `/science:sync` |
+
 ## After Writing
 
 1. Save to `doc/meta/next-steps-<YYYY-MM-DD>.md`. In delta mode, append to the existing file rather than creating a new one — git tracks history, so overwriting the date-stamped file is acceptable.

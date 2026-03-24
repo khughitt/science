@@ -1,4 +1,6 @@
-from science_model.profiles import BIO_PROFILE, CORE_PROFILE, PROJECT_SPECIFIC_PROFILE
+import yaml
+
+from science_model.profiles import BIO_PROFILE, CORE_PROFILE, PROJECT_SPECIFIC_PROFILE, load_cross_project_profile
 
 
 def test_core_profile_contains_task_and_hypothesis() -> None:
@@ -52,3 +54,39 @@ def test_project_specific_profile_is_typed_extension() -> None:
 def test_bio_profile_encodes_targets_protein() -> None:
     encodes = next(relation for relation in BIO_PROFILE.relation_kinds if relation.name == "encodes")
     assert encodes.target_kinds == ["protein"]
+
+
+def test_load_cross_project_profile_from_yaml(tmp_path: object) -> None:
+    from pathlib import Path
+
+    assert isinstance(tmp_path, Path)
+    manifest = {
+        "name": "cross-project",
+        "imports": ["core"],
+        "strictness": "curated",
+        "entity_kinds": [
+            {
+                "name": "protein-complex",
+                "canonical_prefix": "protein-complex",
+                "layer": "layer/cross-project",
+                "description": "Shared protein complex kind.",
+            },
+        ],
+        "relation_kinds": [],
+    }
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+    profile = load_cross_project_profile(manifest_path)
+    assert profile is not None
+    assert profile.name == "cross-project"
+    assert profile.strictness == "curated"
+    assert len(profile.entity_kinds) == 1
+    assert profile.entity_kinds[0].name == "protein-complex"
+
+
+def test_load_cross_project_profile_missing(tmp_path: object) -> None:
+    from pathlib import Path
+
+    assert isinstance(tmp_path, Path)
+    profile = load_cross_project_profile(tmp_path / "missing.yaml")
+    assert profile is None

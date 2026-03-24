@@ -98,6 +98,17 @@ Flag:
 - old untouched hypotheses
 - graph/doc drift if the graph changed but interpretation/docs did not
 
+**Cross-project sync staleness:**
+
+Run `science-tool sync status` to check when the last cross-project sync was performed.
+If sync is stale (over the configured threshold), mention it:
+
+> Cross-project sync is N days stale. Run `/science:sync` to align with N other registered projects.
+
+If the current project has new entities since last sync, also mention:
+
+> This project has N new entities since last sync.
+
 ### 7. Document Inventory
 
 Count key document classes:

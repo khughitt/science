@@ -7,6 +7,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
 
+from science_model.sync import SyncSource
+
 
 class EntityType(StrEnum):
     """Known entity types across Science projects."""
@@ -36,6 +38,7 @@ class EntityType(StrEnum):
     WORKFLOW = "workflow"
     WORKFLOW_RUN = "workflow-run"
     WORKFLOW_STEP = "workflow-step"
+    RELATION_CLAIM = "relation_claim"
     UNKNOWN = "unknown"
 
 
@@ -71,6 +74,7 @@ class Entity(BaseModel):
     confidence: float | None = None
     datasets: list[str] | None = None
     aliases: list[str] = Field(default_factory=list)
+    sync_source: SyncSource | None = None
 
     @model_validator(mode="after")
     def _fill_derived_defaults(self) -> "Entity":

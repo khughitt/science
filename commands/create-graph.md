@@ -29,6 +29,10 @@ For brevity, the examples below write just `science-tool <command>`; always expa
 - **MUST** run `science-tool graph audit` before `science-tool graph build`.
 - **MUST** keep tasks as graph entities; do not treat them as out-of-band metadata.
 
+## Cross-Project Registry Check
+
+Before adding new entities, check the cross-project registry for existing definitions. Run `science-tool sync status` to see if the registry is populated. If it is, new entities added during graph creation will be checked against the registry during `graph build` to detect potential duplicates across projects. If a match is found, prefer reusing the existing canonical ID and aliases rather than creating a new entity.
+
 ## Canonical Inputs
 
 Build the graph from these upstream sources:

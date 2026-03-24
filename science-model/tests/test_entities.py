@@ -82,6 +82,11 @@ def test_workflow_run_entity_round_trip():
     assert e2 == e
 
 
+def test_relation_claim_entity_type():
+    assert EntityType.RELATION_CLAIM == "relation_claim"
+    assert EntityType("relation_claim") == EntityType.RELATION_CLAIM
+
+
 def test_new_types_accessible_from_package():
     """New entity types are accessible via the top-level import."""
     from science_model import EntityType

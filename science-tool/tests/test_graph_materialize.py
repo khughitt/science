@@ -603,3 +603,27 @@ def test_graph_build_fails_cleanly_on_unresolved_references(tmp_path: Path) -> N
 
     assert result.exit_code != 0
     assert "unresolved references" in result.output.lower()
+
+
+def test_known_kinds_includes_cross_project() -> None:
+    from science_model.profiles.schema import EntityKind, ProfileManifest
+
+    from science_tool.graph.sources import known_kinds
+
+    cross_project = ProfileManifest(
+        name="cross-project",
+        imports=["core"],
+        strictness="curated",
+        entity_kinds=[
+            EntityKind(
+                name="protein-complex",
+                canonical_prefix="protein-complex",
+                layer="layer/cross-project",
+                description="Shared kind.",
+            ),
+        ],
+        relation_kinds=[],
+    )
+    kinds = known_kinds(extra_profiles=[cross_project])
+    assert "protein-complex" in kinds
+    assert "hypothesis" in kinds  # core kinds still present

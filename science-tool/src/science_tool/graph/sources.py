@@ -9,7 +9,8 @@ from typing import TypeVar
 import yaml
 from pydantic import BaseModel, Field
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
-from science_model.profiles import CORE_PROFILE
+from science_model.profiles import CORE_PROFILE, load_cross_project_profile
+from science_model.profiles.schema import ProfileManifest
 from science_model.source_contracts import AuthoredTargetedRelation, BindingSource, ModelSource, ParameterSource
 
 from science_tool.paths import resolve_paths
@@ -19,6 +20,14 @@ _SHORT_ID_RE = re.compile(r"^(?P<token>[a-z]\d+)(?:[-_].*)?$", re.IGNORECASE)
 _EXTERNAL_PREFIXES = frozenset({"go", "mesh", "doid", "hp", "so", "ncbitaxon", "ncbigene", "ensembl"})
 _CORE_KINDS = frozenset(kind.name for kind in CORE_PROFILE.entity_kinds)
 _SourceRecordT = TypeVar("_SourceRecordT", bound=BaseModel)
+
+
+def known_kinds(extra_profiles: list[ProfileManifest] | None = None) -> frozenset[str]:
+    """Return entity kind names from core + any extra profiles."""
+    kinds = set(_CORE_KINDS)
+    for profile in extra_profiles or []:
+        kinds.update(kind.name for kind in profile.entity_kinds)
+    return frozenset(kinds)
 
 
 class AliasCollisionError(ValueError):
@@ -48,6 +57,7 @@ class SourceEntity(BaseModel):
     source_refs: list[str] = Field(default_factory=list)
     ontology_terms: list[str] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
 
 
 class KnowledgeProfiles(BaseModel):
@@ -89,6 +99,15 @@ def load_project_sources(project_root: Path) -> ProjectSources:
     paths = resolve_paths(project_root)
     profiles = KnowledgeProfiles.model_validate(config["knowledge_profiles"])
 
+    # Resolve dynamic profiles
+    extra_profiles: list[ProfileManifest] = []
+    if "cross-project" in profiles.curated:
+        xp = load_cross_project_profile()
+        if xp is not None:
+            extra_profiles.append(xp)
+
+    active_kinds = known_kinds(extra_profiles=extra_profiles)
+
     entities: list[SourceEntity] = []
     local_profile = profiles.local
     entities.extend(
@@ -96,10 +115,13 @@ def load_project_sources(project_root: Path) -> ProjectSources:
             project_root,
             [paths.doc_dir, paths.specs_dir],
             local_profile=local_profile,
+            active_kinds=active_kinds,
         )
     )
-    entities.extend(_load_task_entities(project_root, paths.tasks_dir, local_profile=local_profile))
-    entities.extend(_load_structured_entities(project_root, local_profile=local_profile))
+    entities.extend(
+        _load_task_entities(project_root, paths.tasks_dir, local_profile=local_profile, active_kinds=active_kinds)
+    )
+    entities.extend(_load_structured_entities(project_root, local_profile=local_profile, active_kinds=active_kinds))
     model_entities, model_relations = _load_model_sources(project_root, local_profile=local_profile)
     parameter_entities, parameter_relations = _load_parameter_sources(project_root, local_profile=local_profile)
     entities.extend(model_entities)
@@ -148,7 +170,9 @@ def is_external_reference(raw: str) -> bool:
     return prefix.lower() in _EXTERNAL_PREFIXES
 
 
-def _load_markdown_entities(project_root: Path, roots: list[Path], *, local_profile: str) -> list[SourceEntity]:
+def _load_markdown_entities(
+    project_root: Path, roots: list[Path], *, local_profile: str, active_kinds: frozenset[str] | None = None
+) -> list[SourceEntity]:
     entities: list[SourceEntity] = []
     for root in roots:
         if not root.is_dir():
@@ -160,7 +184,9 @@ def _load_markdown_entities(project_root: Path, roots: list[Path], *, local_prof
 
             frontmatter = parse_frontmatter(path)
             raw_aliases: list[str] = []
-            raw_profile = _default_profile_for_kind(entity.type.value, local_profile=local_profile)
+            raw_profile = _default_profile_for_kind(
+                entity.type.value, local_profile=local_profile, active_kinds=active_kinds
+            )
             if frontmatter is not None:
                 fm, _ = frontmatter
                 aliases = fm.get("aliases") or []
@@ -187,12 +213,15 @@ def _load_markdown_entities(project_root: Path, roots: list[Path], *, local_prof
                         entity.canonical_id,
                         [*raw_aliases, *_aliases_from_source_path(entity.type.value, entity.file_path)],
                     ),
+                    tags=[str(t) for t in (entity.tags or [])],
                 )
             )
     return entities
 
 
-def _load_task_entities(project_root: Path, tasks_dir: Path, *, local_profile: str) -> list[SourceEntity]:
+def _load_task_entities(
+    project_root: Path, tasks_dir: Path, *, local_profile: str, active_kinds: frozenset[str] | None = None
+) -> list[SourceEntity]:
     entities: list[SourceEntity] = []
     for path in _task_paths(tasks_dir):
         rel_path = path.relative_to(project_root).as_posix()
@@ -203,7 +232,7 @@ def _load_task_entities(project_root: Path, tasks_dir: Path, *, local_profile: s
                     canonical_id=canonical_id,
                     kind="task",
                     title=task.title,
-                    profile=_default_profile_for_kind("task", local_profile=local_profile),
+                    profile=_default_profile_for_kind("task", local_profile=local_profile, active_kinds=active_kinds),
                     source_path=rel_path,
                     status=task.status,
                     content_preview=task.description,
@@ -215,7 +244,9 @@ def _load_task_entities(project_root: Path, tasks_dir: Path, *, local_profile: s
     return entities
 
 
-def _load_structured_entities(project_root: Path, *, local_profile: str) -> list[SourceEntity]:
+def _load_structured_entities(
+    project_root: Path, *, local_profile: str, active_kinds: frozenset[str] | None = None
+) -> list[SourceEntity]:
     entities_path = local_profile_sources_dir(project_root, local_profile=local_profile) / "entities.yaml"
     if not entities_path.is_file():
         return []
@@ -537,8 +568,9 @@ def _register_alias(alias_map: dict[str, str], alias: str, canonical_id: str) ->
     alias_map[alias] = canonical_id
 
 
-def _default_profile_for_kind(kind: str, *, local_profile: str) -> str:
-    if kind in _CORE_KINDS:
+def _default_profile_for_kind(kind: str, *, local_profile: str, active_kinds: frozenset[str] | None = None) -> str:
+    check = active_kinds if active_kinds is not None else _CORE_KINDS
+    if kind in check:
         return "core"
     return local_profile
 
