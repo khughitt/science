@@ -9,7 +9,7 @@ from typing import TypeVar
 import yaml
 from pydantic import BaseModel, Field
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
-from science_model.profiles import CORE_PROFILE, load_cross_project_profile
+from science_model.profiles import CORE_PROFILE, load_shared_profile
 from science_model.profiles.schema import ProfileManifest
 from science_model.source_contracts import AuthoredTargetedRelation, BindingSource, ModelSource, ParameterSource
 
@@ -64,7 +64,7 @@ class KnowledgeProfiles(BaseModel):
     """Selected knowledge profiles for a project."""
 
     curated: list[str] = Field(default_factory=list)
-    local: str = "project_specific"
+    local: str = "local"
 
 
 class SourceRelation(BaseModel):
@@ -101,8 +101,8 @@ def load_project_sources(project_root: Path) -> ProjectSources:
 
     # Resolve dynamic profiles
     extra_profiles: list[ProfileManifest] = []
-    if "cross-project" in profiles.curated:
-        xp = load_cross_project_profile()
+    if "shared" in profiles.curated:
+        xp = load_shared_profile()
         if xp is not None:
             extra_profiles.append(xp)
 
@@ -457,7 +457,7 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
         "name": str(data.get("name") or project_root.name),
         "knowledge_profiles": {
             "curated": list(knowledge_profiles.get("curated") or []),
-            "local": str(knowledge_profiles.get("local") or "project_specific"),
+            "local": str(knowledge_profiles.get("local") or "local"),
         },
     }
 

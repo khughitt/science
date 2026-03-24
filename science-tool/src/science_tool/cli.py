@@ -18,7 +18,7 @@ from science_tool.graph.migrate import (
     audit_project_graph,
     rewrite_project_ids_in_sources,
     write_migration_report,
-    write_project_specific_sources,
+    write_local_sources,
 )
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
@@ -161,7 +161,7 @@ def graph_migrate(output_format: str, project_root: Path) -> None:
     project_root = project_root.resolve()
     initial_report = audit_project_graph(project_root)
     rewritten_files = rewrite_project_ids_in_sources(project_root, initial_report["alias_map"])
-    write_project_specific_sources(project_root, dict(initial_report))
+    write_local_sources(project_root, dict(initial_report))
 
     final_report = audit_project_graph(project_root)
     final_report_payload: dict[str, Any] = dict(final_report)
