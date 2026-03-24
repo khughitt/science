@@ -33,7 +33,8 @@ def collect_all_project_sources(
 ) -> list[ProjectSources]:
     """Phase 1: Load sources for each registered project, skipping missing."""
     results: list[ProjectSources] = []
-    for path in project_paths:
+    for raw_path in project_paths:
+        path = raw_path.expanduser().resolve()
         if not path.is_dir() or not (path / "science.yaml").is_file():
             logger.warning("Skipping missing project at %s", path)
             continue
