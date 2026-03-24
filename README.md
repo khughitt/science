@@ -33,6 +33,8 @@ Science provides **skills** (structured research methodology), **commands** (int
 - **Create research projects** with consistent, version-controlled structure
 - **Import existing projects** into the Science framework without restructuring
 - **Validate project structure** with automated checks (template conformance, citation integrity)
+- **Synchronize across projects** — align entities, propagate content, and detect duplicates
+- **Use domain ontologies** — standard vocabulary from community ontologies (e.g., biolink-model) for entity types and relation predicates
 
 ## Reasoning Model
 
@@ -86,16 +88,24 @@ claude --plugin-dir /path/to/science
 | `/science:review-pipeline` | Audit plan against evidence rubric with QA coverage |
 | `/science:create-graph` | Build canonical KG sources, audit them, and materialize the graph |
 | `/science:update-graph` | Re-audit and re-materialize the graph after source changes |
+| `/science:sync` | Synchronize knowledge model and content across registered projects |
 
 ## Skills
+
+Auto-triggered skills activate based on the task at hand:
 
 | Skill | Triggers When |
 |---|---|
 | `research-methodology` | Conducting literature review, evaluating sources, synthesizing findings |
 | `scientific-writing` | Writing research documents, background sections, summaries |
 | `data-management` | Working with datasets, data packages, provenance |
-| `knowledge-graph` | Reference skill loaded by `create-graph` and `update-graph` as background context |
-| `causal-dag` | Reference skill loaded by `sketch-model` (causal mode) and `critique-approach` |
+
+Reference skills are loaded by specific commands as background context:
+
+| Skill | Loaded By |
+|---|---|
+| `knowledge-graph` | `create-graph`, `update-graph`, `sketch-model`, `specify-model`, `critique-approach` |
+| `causal-dag` | `sketch-model` (causal mode), `critique-approach` |
 
 ## Aspects
 
@@ -123,7 +133,7 @@ All Science-managed projects draw from a common root set:
 
 ```
 project/
-├── science.yaml              # Project manifest (profile, aspects, metadata, knowledge_profiles)
+├── science.yaml              # Project manifest (profile, ontologies, aspects, knowledge_profiles)
 ├── AGENTS.md                 # Primary operational guide
 ├── CLAUDE.md                 # Contains only: @AGENTS.md
 ├── README.md
@@ -184,18 +194,17 @@ A research project typically moves through these phases. Commands can be repeate
 
 Interactive conversation refines your research question, then scaffolds the full directory structure, populates core files, and makes the initial git commit. You'll end up with `science.yaml`, `specs/research-question.md`, a starter `doc/01-overview.md`, and empty slots for everything else.
 
-Projects that use the knowledge graph should also declare profile composition in `science.yaml`:
+Projects that use the knowledge graph should also declare ontologies and profile composition in `science.yaml`:
 
 ```yaml
 profile: research
 layout_version: 2
+ontologies: [biolink]
 knowledge_profiles:
-  curated: [bio]
   local: local
 ```
 
-`local` controls the directory name under `knowledge/sources/`. Most projects should keep the default
-`local`, but the tooling now honors a different local profile name when explicitly configured.
+`ontologies` declares which community ontologies provide vocabulary for entity types and relation predicates (currently available: `biolink`). Entities whose `kind` matches an ontology type (e.g., `gene`, `protein`, `pathway`) automatically get routed to that ontology's profile. `local` controls the directory name under `knowledge/sources/`.
 
 ### 2. State your hypotheses
 
@@ -314,7 +323,9 @@ Searches public dataset repositories (via LLM knowledge + repository APIs), rank
 /science:create-graph
 ```
 
-Reads all project documents and extracts entities (concepts, papers, claims, hypotheses, questions) and their relationships into a formal knowledge graph (`knowledge/graph.trig`). Uses ontology-aligned types and controlled predicates (`cito:supports`, `skos:related`, `scic:causes`, etc.). Source documents get annotated with ontology terms.
+Materializes a project knowledge graph (`knowledge/graph.trig`) from canonical upstream sources in `specs/`, `doc/`, `tasks/`, and `knowledge/sources/`. Entity types and relation predicates use vocabulary from declared ontologies (e.g., biolink-model) and controlled predicates (`cito:supports`, `skos:related`, `sci:causes`, etc.).
+
+If the project declares `ontologies: [biolink]`, entities with kinds like `gene`, `protein`, or `pathway` are automatically assigned to the biolink profile. During build, the system suggests undeclared ontologies when it detects matching CURIE prefixes or entity kinds.
 
 After subsequent research rounds, run:
 
@@ -324,29 +335,45 @@ After subsequent research rounds, run:
 
 This detects stale canonical sources, runs migration/audit checks for unresolved references, and then re-materializes `knowledge/graph.trig` from upstream inputs.
 
+### 12. Sync across projects
+
+```
+/science:sync
+```
+
+Aligns knowledge models across registered Science projects. Detects shared entities via tiered matching (canonical ID, alias, ontology term, fuzzy), propagates relevant content, and maintains a cross-project registry at `~/.config/science/registry/`. Projects are auto-registered on `graph build`.
+
 ### Iterate
 
 Research isn't linear. A typical session might look like:
 
 ```
 research-topic → add-hypothesis → pre-register → search-literature → research-paper ×3
-→ compare-hypotheses → next-steps → discuss → bias-audit → update-graph
+→ compare-hypotheses → next-steps → discuss → bias-audit
 → sketch-model → specify-model → critique-approach
 → find-datasets → plan-pipeline → review-pipeline
-→ [run analysis] → interpret-results → next-steps
+→ [run analysis] → interpret-results → update-graph → sync → next-steps
 ```
 
 Each command reads existing project state and builds on it. All artifacts are version-controlled, cross-linked, and validated by `bash validate.sh`.
 
 For knowledge-graph projects, `knowledge/graph.trig` is generated from canonical upstream sources in `specs/`, `doc/`, `tasks/`, and `knowledge/sources/`. If the graph is wrong, fix the source artifact and re-materialize; do not patch the TriG file directly.
 
-Once the graph is materialized, use the summary stack top-down:
+Once the graph is materialized, use the `science-tool` CLI for summaries and sync:
 
-- `science-tool graph project-summary` for the research-level rollup in `research` projects
-- `science-tool graph question-summary` and `science-tool graph inquiry-summary` for thread-level prioritization
-- `science-tool graph dashboard-summary` and `science-tool graph neighborhood-summary` for claim-level and local-cluster detail
+```bash
+# Summary stack (top-down)
+science-tool graph project-summary     # Research-level rollup (research projects only)
+science-tool graph question-summary    # Thread-level prioritization
+science-tool graph inquiry-summary     # Inquiry-level detail
+science-tool graph dashboard-summary   # Claim-level overview
+science-tool graph neighborhood-summary # Local-cluster detail
 
-For `software` projects, skip `project-summary` for now; that command is intentionally research-only in the current reasoning layer.
+# Cross-project sync
+science-tool sync status               # Check current sync state
+science-tool sync projects             # List registered projects
+science-tool sync run                  # Run full sync (--dry-run to preview)
+```
 
 Use `knowledge/` for live dashboards, `doc/interpretations/` and `doc/reports/` for durable writeups, and `tasks/` for follow-up work derived from the summary outputs.
 
@@ -356,8 +383,8 @@ Science includes two Python packages that back the plugin commands:
 
 | Package | Description |
 |---|---|
-| `science-model` | Shared Pydantic data models — entities, relations, tasks, profiles, and project config |
-| `science-tool` | CLI (`science-tool`) for knowledge graph operations, causal export, dataset validation, and task management |
+| `science-model` | Shared Pydantic data models — entities, relations, tasks, profiles, ontology catalogs, and project config |
+| `science-tool` | CLI (`science-tool`) for knowledge graph operations, cross-project sync, causal export, dataset validation, and task management |
 
 Both require Python >= 3.11. `science-tool` depends on `science-model` and provides optional extras for causal modeling (`pgmpy`, `ChiRho`), dataset discovery (`httpx`, `pooch`), and graph distillation (`PyKEEN`, `OpenAlex`).
 

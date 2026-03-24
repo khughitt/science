@@ -100,12 +100,12 @@ profile: research
 layout_version: 2
 aspects:
   - computational-analysis
+ontologies: [biolink]
 knowledge_profiles:
-  curated: [bio]
   local: local
 ```
 
-`knowledge_profiles` remains part of the canonical manifest and should be kept up to date as projects add or change graph inputs.
+`ontologies` declares domain vocabulary from community ontologies. `knowledge_profiles` remains part of the canonical manifest and should be kept up to date as projects add or change graph inputs.
 
 ## Migration Rules
 

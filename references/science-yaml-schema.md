@@ -23,10 +23,13 @@ data_sources:                # Known data sources
     url: "string"           # Access URL
     access: "string"        # public, restricted, requires-application
 
+# Optional — domain ontologies for entity types and relation predicates
+ontologies:                    # Default: [] (none)
+  - "string"                   # Ontology name, e.g. biolink. Validated against built-in registry.
+
 # Required for knowledge-graph-enabled projects
 knowledge_profiles:
-  curated: ["string"]        # Curated graph profiles, e.g. [bio]
-  local: "string"            # Local source directory name, e.g. local
+  local: "string"              # Local source directory name, e.g. local
 
 # Optional — project aspects (composable mixins)
 # Each aspect contributes additional sections, signal categories, and guidance to commands.
@@ -71,8 +74,8 @@ data_sources:
     type: "text"
     url: "https://api.openalex.org/"
     access: "public"
+ontologies: [biolink]
 knowledge_profiles:
-  curated: [bio]
   local: local
 aspects:
   - causal-modeling
@@ -96,7 +99,6 @@ tags:
   - tooling
 data_sources: []
 knowledge_profiles:
-  curated: []
   local: local
 aspects:
   - software-development
