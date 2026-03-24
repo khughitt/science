@@ -13,9 +13,7 @@ def _setup_projects(tmp_path: Path) -> tuple[Path, Path, Path]:
     proj_b = tmp_path / "proj-b"
     for proj, name in [(proj_a, "proj-a"), (proj_b, "proj-b")]:
         proj.mkdir()
-        (proj / "science.yaml").write_text(
-            f"name: {name}\nknowledge_profiles:\n  curated: []\n  local: project_specific\n"
-        )
+        (proj / "science.yaml").write_text(f"name: {name}\nknowledge_profiles:\n  curated: []\n  local: local\n")
         for d in ("doc", "specs", "tasks", "knowledge"):
             (proj / d).mkdir()
 
