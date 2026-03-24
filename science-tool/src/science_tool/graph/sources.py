@@ -57,6 +57,7 @@ class SourceEntity(BaseModel):
     source_refs: list[str] = Field(default_factory=list)
     ontology_terms: list[str] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
 
 
 class KnowledgeProfiles(BaseModel):
@@ -212,6 +213,7 @@ def _load_markdown_entities(
                         entity.canonical_id,
                         [*raw_aliases, *_aliases_from_source_path(entity.type.value, entity.file_path)],
                     ),
+                    tags=[str(t) for t in (entity.tags or [])],
                 )
             )
     return entities
