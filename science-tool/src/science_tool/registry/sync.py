@@ -52,20 +52,27 @@ def align_registry(
     """Phase 2: Align entities across projects into the registry.
 
     project_sources maps project_name -> list of SourceEntity.
+    Registry keys are namespaced as ``project_name::canonical_id`` to prevent
+    false deduplication of sequential IDs across unrelated projects.
     """
+    for project_name in project_sources:
+        if "::" in project_name:
+            raise ValueError(f"Project name must not contain '::': {project_name!r}")
+
     entity_map: dict[str, RegistryEntity] = {e.canonical_id: e for e in existing.entities}
 
     for project_name, entities in project_sources.items():
         today = date.today()
         for src in entities:
-            if src.canonical_id in entity_map:
-                entry = entity_map[src.canonical_id]
+            registry_id = f"{project_name}::{src.canonical_id}"
+            if registry_id in entity_map:
+                entry = entity_map[registry_id]
                 _merge_aliases(entry, src.aliases)
                 _merge_ontology_terms(entry, src.ontology_terms)
                 _ensure_project_listed(entry, project_name, today)
             else:
-                entity_map[src.canonical_id] = RegistryEntity(
-                    canonical_id=src.canonical_id,
+                entity_map[registry_id] = RegistryEntity(
+                    canonical_id=registry_id,
                     kind=src.kind,
                     title=src.title,
                     profile=src.profile,
