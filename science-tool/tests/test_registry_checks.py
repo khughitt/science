@@ -7,8 +7,9 @@ from science_tool.registry.index import RegistryEntity, RegistryEntitySource, Re
 from science_tool.registry.matching import MatchTier
 
 
-def _index_with_entity(canonical_id: str, aliases: list[str] | None = None,
-                        ontology_terms: list[str] | None = None) -> RegistryIndex:
+def _index_with_entity(
+    canonical_id: str, aliases: list[str] | None = None, ontology_terms: list[str] | None = None
+) -> RegistryIndex:
     return RegistryIndex(
         entities=[
             RegistryEntity(

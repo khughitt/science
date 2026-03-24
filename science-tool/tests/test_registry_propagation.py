@@ -16,9 +16,7 @@ def _reg_entity(canonical_id: str, projects: list[str]) -> RegistryEntity:
         kind="gene",
         title="Test",
         profile="bio",
-        source_projects=[
-            RegistryEntitySource(project=p, first_seen=date(2026, 3, 1)) for p in projects
-        ],
+        source_projects=[RegistryEntitySource(project=p, first_seen=date(2026, 3, 1)) for p in projects],
     )
 
 

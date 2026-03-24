@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from science_tool.registry.index import RegistryEntity, RegistryEntitySource
-from science_tool.registry.matching import MatchResult, MatchTier, find_matches
+from science_tool.registry.matching import MatchTier, find_matches
 
 
 def _make_entity(
@@ -71,8 +71,6 @@ def test_no_match():
 def test_highest_tier_wins():
     entity = _make_entity("gene:tp53", aliases=["p53"], ontology_terms=["NCBIGene:7157"])
     registry = [entity]
-    matches = find_matches(
-        "gene:tp53", aliases=["p53"], ontology_terms=["NCBIGene:7157"], registry_entities=registry
-    )
+    matches = find_matches("gene:tp53", aliases=["p53"], ontology_terms=["NCBIGene:7157"], registry_entities=registry)
     assert len(matches) == 1
     assert matches[0].tier == MatchTier.EXACT  # highest tier

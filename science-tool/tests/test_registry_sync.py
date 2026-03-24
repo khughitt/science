@@ -33,7 +33,7 @@ def _write_entity_md(
     ont = ontology_terms or []
     als = aliases or []
     (doc_dir / filename).write_text(
-        f"---\nid: \"{entity_id}\"\ntype: {entity_type}\ntitle: \"{title}\"\n"
+        f'---\nid: "{entity_id}"\ntype: {entity_type}\ntitle: "{title}"\n'
         f"related: {rel}\nontology_terms: {ont}\naliases: {als}\n---\nBody.\n",
         encoding="utf-8",
     )

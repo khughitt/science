@@ -99,9 +99,7 @@ def _merge_ontology_terms(entry: RegistryEntity, new_terms: list[str]) -> None:
 def _ensure_project_listed(entry: RegistryEntity, project_name: str, today: date) -> None:
     project_names = {sp.project for sp in entry.source_projects}
     if project_name not in project_names:
-        entry.source_projects.append(
-            RegistryEntitySource(project=project_name, first_seen=today)
-        )
+        entry.source_projects.append(RegistryEntitySource(project=project_name, first_seen=today))
 
 
 class SyncReport(BaseModel):
