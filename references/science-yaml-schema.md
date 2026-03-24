@@ -26,7 +26,7 @@ data_sources:                # Known data sources
 # Required for knowledge-graph-enabled projects
 knowledge_profiles:
   curated: ["string"]        # Curated graph profiles, e.g. [bio]
-  local: "string"            # Local source directory name, e.g. project_specific
+  local: "string"            # Local source directory name, e.g. local
 
 # Optional — project aspects (composable mixins)
 # Each aspect contributes additional sections, signal categories, and guidance to commands.
@@ -73,7 +73,7 @@ data_sources:
     access: "public"
 knowledge_profiles:
   curated: [bio]
-  local: project_specific
+  local: local
 aspects:
   - causal-modeling
   - hypothesis-testing
@@ -97,7 +97,7 @@ tags:
 data_sources: []
 knowledge_profiles:
   curated: []
-  local: project_specific
+  local: local
 aspects:
   - software-development
 ```

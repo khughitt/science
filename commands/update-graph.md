@@ -89,5 +89,5 @@ If the update involved legacy ID cleanup or new project-local semantics, keep th
 
 - Incremental updates still happen at the source layer; `graph.trig` is always regenerated.
 - Tasks are graph entities and must stay linked canonically.
-- `<local-profile>` comes from `science.yaml` `knowledge_profiles.local` and defaults to `project_specific`.
+- `<local-profile>` comes from `science.yaml` `knowledge_profiles.local` and defaults to `local`.
 - If `graph diff` reports staleness after a rebuild, inspect the source file change rather than patching the graph output.

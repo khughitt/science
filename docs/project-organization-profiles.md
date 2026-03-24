@@ -102,7 +102,7 @@ aspects:
   - computational-analysis
 knowledge_profiles:
   curated: [bio]
-  local: project_specific
+  local: local
 ```
 
 `knowledge_profiles` remains part of the canonical manifest and should be kept up to date as projects add or change graph inputs.

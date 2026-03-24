@@ -34,7 +34,7 @@ After sync completes, present the report:
 
 - How many entities are now tracked across projects
 - How many are new since last sync
-- Any shared entity kinds promoted to the cross-project profile
+- Any shared entity kinds promoted to the shared profile
 
 ### Alignment
 
