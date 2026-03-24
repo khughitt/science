@@ -133,7 +133,7 @@ def migrate_project_ids(text: str, alias_map: dict[str, str]) -> str:
     return _LIST_FIELD_RE.sub(replace, text)
 
 
-def write_project_specific_sources(project_root: Path, report: dict[str, object]) -> None:
+def write_local_sources(project_root: Path, report: dict[str, object]) -> None:
     """Write structured migration artifacts for the configured local profile."""
     local_profile = _coerce_local_profile(report.get("local_profile"))
     base = local_profile_sources_dir(project_root, local_profile=local_profile)
@@ -351,7 +351,7 @@ def _coerce_alias_map(value: object) -> dict[str, str]:
 def _coerce_local_profile(value: object) -> str:
     if isinstance(value, str) and value.strip():
         return value
-    return "project_specific"
+    return "local"
 
 
 def _migration_target_paths(project_root: Path) -> list[Path]:

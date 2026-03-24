@@ -23,7 +23,7 @@ def _write_common_files(root: Path, profile: str) -> None:
                 "data_sources: []",
                 "knowledge_profiles:",
                 "  curated: []",
-                "  local: project_specific",
+                "  local: local",
                 "aspects: []",
                 "",
             ]
@@ -46,7 +46,7 @@ def _write_common_files(root: Path, profile: str) -> None:
     (root / "doc" / "reports").mkdir(parents=True)
     (root / "doc" / "meta").mkdir(parents=True)
     (root / "doc" / "plans").mkdir(parents=True)
-    (root / "knowledge" / "sources" / "project_specific").mkdir(parents=True)
+    (root / "knowledge" / "sources" / "local").mkdir(parents=True)
 
 
 def test_validate_accepts_research_profile_with_root_src_and_code(tmp_path: Path) -> None:

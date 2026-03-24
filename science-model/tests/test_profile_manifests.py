@@ -1,6 +1,6 @@
 import yaml
 
-from science_model.profiles import BIO_PROFILE, CORE_PROFILE, PROJECT_SPECIFIC_PROFILE, load_cross_project_profile
+from science_model.profiles import BIO_PROFILE, CORE_PROFILE, LOCAL_PROFILE, load_shared_profile
 
 
 def test_core_profile_contains_task_and_hypothesis() -> None:
@@ -47,8 +47,8 @@ def test_bio_profile_imports_core() -> None:
     assert BIO_PROFILE.imports == ["core"]
 
 
-def test_project_specific_profile_is_typed_extension() -> None:
-    assert PROJECT_SPECIFIC_PROFILE.strictness == "typed-extension"
+def test_local_profile_is_typed_extension() -> None:
+    assert LOCAL_PROFILE.strictness == "typed-extension"
 
 
 def test_bio_profile_encodes_targets_protein() -> None:
@@ -56,19 +56,19 @@ def test_bio_profile_encodes_targets_protein() -> None:
     assert encodes.target_kinds == ["protein"]
 
 
-def test_load_cross_project_profile_from_yaml(tmp_path: object) -> None:
+def test_load_shared_profile_from_yaml(tmp_path: object) -> None:
     from pathlib import Path
 
     assert isinstance(tmp_path, Path)
     manifest = {
-        "name": "cross-project",
+        "name": "shared",
         "imports": ["core"],
         "strictness": "curated",
         "entity_kinds": [
             {
                 "name": "protein-complex",
                 "canonical_prefix": "protein-complex",
-                "layer": "layer/cross-project",
+                "layer": "layer/shared",
                 "description": "Shared protein complex kind.",
             },
         ],
@@ -76,17 +76,17 @@ def test_load_cross_project_profile_from_yaml(tmp_path: object) -> None:
     }
     manifest_path = tmp_path / "manifest.yaml"
     manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
-    profile = load_cross_project_profile(manifest_path)
+    profile = load_shared_profile(manifest_path)
     assert profile is not None
-    assert profile.name == "cross-project"
+    assert profile.name == "shared"
     assert profile.strictness == "curated"
     assert len(profile.entity_kinds) == 1
     assert profile.entity_kinds[0].name == "protein-complex"
 
 
-def test_load_cross_project_profile_missing(tmp_path: object) -> None:
+def test_load_shared_profile_missing(tmp_path: object) -> None:
     from pathlib import Path
 
     assert isinstance(tmp_path, Path)
-    profile = load_cross_project_profile(tmp_path / "missing.yaml")
+    profile = load_shared_profile(tmp_path / "missing.yaml")
     assert profile is None

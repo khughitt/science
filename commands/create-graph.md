@@ -44,7 +44,7 @@ Build the graph from these upstream sources:
   - `knowledge/sources/<local-profile>/relations.yaml`
   - `knowledge/sources/<local-profile>/mappings.yaml`
 
-Use `science-model/core` semantics for shared entity and relation types. Enable curated domain profiles such as `bio` through `science.yaml`. Put anything project-local but still useful in the configured local profile directory, which defaults to `project_specific`.
+Use `science-model/core` semantics for shared entity and relation types. Enable curated domain profiles such as `bio` through `science.yaml`. Put anything project-local but still useful in the configured local profile directory, which defaults to `local`.
 
 ## Workflow
 
@@ -55,11 +55,11 @@ Ensure `science.yaml` declares the graph profiles you want to compose:
 ```yaml
 knowledge_profiles:
   curated: [bio]
-  local: project_specific
+  local: local
 ```
 
 `core` is always implied. Add more curated profiles only when the project genuinely uses them.
-`local` also determines the directory name under `knowledge/sources/`; if omitted, use `project_specific`.
+`local` also determines the directory name under `knowledge/sources/`; if omitted, use `local`.
 
 ### Step 2: Author canonical sources
 
@@ -82,8 +82,8 @@ entities:
   - canonical_id: topic:evaluation
     kind: topic
     title: Evaluation
-    profile: project_specific
-    source_path: knowledge/sources/project_specific/entities.yaml
+    profile: local
+    source_path: knowledge/sources/local/entities.yaml
 ```
 
 ### Step 3: Audit canonical reference resolution

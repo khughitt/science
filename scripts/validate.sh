@@ -71,7 +71,7 @@ TASKS_DIR="tasks"
 MODELS_DIR="models"
 RESULTS_DIR="results"
 PROFILE="research"
-LOCAL_PROFILE="project_specific"
+LOCAL_PROFILE="local"
 LOCAL_PROFILE_DIR="$KNOWLEDGE_DIR/sources/$LOCAL_PROFILE"
 
 if [ -f "science.yaml" ] && command -v python3 &>/dev/null; then
@@ -99,9 +99,9 @@ print(profile)
 import yaml
 with open('science.yaml') as f:
     d = yaml.safe_load(f) or {}
-profile = ((d.get('knowledge_profiles') or {}).get('local') or 'project_specific')
-print(str(profile).strip() or 'project_specific')
-" 2>/dev/null || echo "project_specific")
+profile = ((d.get('knowledge_profiles') or {}).get('local') or 'local')
+print(str(profile).strip() or 'local')
+" 2>/dev/null || echo "local")
     LOCAL_PROFILE_DIR="$KNOWLEDGE_DIR/sources/$LOCAL_PROFILE"
 fi
 

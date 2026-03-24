@@ -191,11 +191,11 @@ profile: research
 layout_version: 2
 knowledge_profiles:
   curated: [bio]
-  local: project_specific
+  local: local
 ```
 
 `local` controls the directory name under `knowledge/sources/`. Most projects should keep the default
-`project_specific`, but the tooling now honors a different local profile name when explicitly configured.
+`local`, but the tooling now honors a different local profile name when explicitly configured.
 
 ### 2. State your hypotheses
 

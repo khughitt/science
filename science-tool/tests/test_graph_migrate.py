@@ -7,7 +7,7 @@ import yaml
 from click.testing import CliRunner
 
 from science_tool.cli import main
-from science_tool.graph.migrate import audit_project_graph, migrate_project_ids, write_project_specific_sources
+from science_tool.graph.migrate import audit_project_graph, migrate_project_ids, write_local_sources
 
 
 def test_audit_project_graph_reports_unresolved_related_refs(tmp_path: Path) -> None:
@@ -101,7 +101,7 @@ def test_audit_project_graph_serializes_report(tmp_path: Path) -> None:
     assert "unresolved_reference_count" in payload
 
 
-def test_audit_project_graph_loads_project_specific_entities_and_manual_aliases(tmp_path: Path) -> None:
+def test_audit_project_graph_loads_local_entities_and_manual_aliases(tmp_path: Path) -> None:
     root = tmp_path / "project"
     root.mkdir()
     (root / "science.yaml").write_text("name: demo\n", encoding="utf-8")
@@ -122,9 +122,9 @@ def test_audit_project_graph_loads_project_specific_entities_and_manual_aliases(
         ),
         encoding="utf-8",
     )
-    project_specific = root / "knowledge" / "sources" / "project_specific"
-    project_specific.mkdir(parents=True)
-    (project_specific / "entities.yaml").write_text(
+    local_sources = root / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
         yaml.safe_dump(
             {
                 "entities": [
@@ -144,7 +144,7 @@ def test_audit_project_graph_loads_project_specific_entities_and_manual_aliases(
         ),
         encoding="utf-8",
     )
-    (project_specific / "mappings.yaml").write_text(
+    (local_sources / "mappings.yaml").write_text(
         yaml.safe_dump({"aliases": {"Q31": "question:q31-legacy-open-question"}}, sort_keys=True),
         encoding="utf-8",
     )
@@ -216,9 +216,9 @@ def test_audit_project_graph_reports_unresolved_structured_relation_refs(tmp_pat
     root = tmp_path / "project"
     root.mkdir()
     (root / "science.yaml").write_text("name: demo\n", encoding="utf-8")
-    project_specific = root / "knowledge" / "sources" / "project_specific"
-    project_specific.mkdir(parents=True)
-    (project_specific / "entities.yaml").write_text(
+    local_sources = root / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
         yaml.safe_dump(
             {
                 "entities": [
@@ -233,7 +233,7 @@ def test_audit_project_graph_reports_unresolved_structured_relation_refs(tmp_pat
         ),
         encoding="utf-8",
     )
-    (project_specific / "relations.yaml").write_text(
+    (local_sources / "relations.yaml").write_text(
         yaml.safe_dump(
             {
                 "relations": [
@@ -260,17 +260,17 @@ def test_audit_project_graph_reports_unresolved_binding_refs(tmp_path: Path) -> 
     root = tmp_path / "project"
     root.mkdir()
     (root / "science.yaml").write_text("name: demo\n", encoding="utf-8")
-    project_specific = root / "knowledge" / "sources" / "project_specific"
-    project_specific.mkdir(parents=True)
-    (project_specific / "models.yaml").write_text(
+    local_sources = root / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "models.yaml").write_text(
         yaml.safe_dump(
             {
                 "models": [
                     {
                         "canonical_id": "model:navier-stokes",
                         "title": "Navier-Stokes equations",
-                        "profile": "project_specific",
-                        "source_path": "knowledge/sources/project_specific/models.yaml",
+                        "profile": "local",
+                        "source_path": "knowledge/sources/local/models.yaml",
                     }
                 ]
             },
@@ -278,14 +278,14 @@ def test_audit_project_graph_reports_unresolved_binding_refs(tmp_path: Path) -> 
         ),
         encoding="utf-8",
     )
-    (project_specific / "bindings.yaml").write_text(
+    (local_sources / "bindings.yaml").write_text(
         yaml.safe_dump(
             {
                 "bindings": [
                     {
                         "model": "model:navier-stokes",
                         "parameter": "parameter:kinematic-viscosity",
-                        "source_path": "knowledge/sources/project_specific/bindings.yaml",
+                        "source_path": "knowledge/sources/local/bindings.yaml",
                     }
                 ]
             },
@@ -303,11 +303,11 @@ def test_audit_project_graph_reports_unresolved_binding_refs(tmp_path: Path) -> 
     )
 
 
-def test_write_project_specific_sources_preserves_existing_curation_and_deduplicates(tmp_path: Path) -> None:
+def test_write_local_sources_preserves_existing_curation_and_deduplicates(tmp_path: Path) -> None:
     root = tmp_path / "project"
-    project_specific = root / "knowledge" / "sources" / "project_specific"
-    project_specific.mkdir(parents=True)
-    (project_specific / "entities.yaml").write_text(
+    local_sources = root / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
         yaml.safe_dump(
             {
                 "entities": [
@@ -315,7 +315,7 @@ def test_write_project_specific_sources_preserves_existing_curation_and_deduplic
                         "canonical_id": "topic:evaluation",
                         "kind": "topic",
                         "title": "Evaluation",
-                        "profile": "project_specific",
+                        "profile": "local",
                         "source_path": "manual",
                     }
                 ]
@@ -324,11 +324,11 @@ def test_write_project_specific_sources_preserves_existing_curation_and_deduplic
         ),
         encoding="utf-8",
     )
-    (project_specific / "relations.yaml").write_text(
+    (local_sources / "relations.yaml").write_text(
         yaml.safe_dump({"relations": [{"kind": "related_to"}]}, sort_keys=False),
         encoding="utf-8",
     )
-    (project_specific / "mappings.yaml").write_text(
+    (local_sources / "mappings.yaml").write_text(
         yaml.safe_dump({"aliases": {"legacy:q31": "question:q31-legacy-open-question"}}, sort_keys=True),
         encoding="utf-8",
     )
@@ -374,11 +374,11 @@ def test_write_project_specific_sources_preserves_existing_curation_and_deduplic
         ],
     }
 
-    write_project_specific_sources(root, report)
+    write_local_sources(root, report)
 
-    entities = yaml.safe_load((project_specific / "entities.yaml").read_text(encoding="utf-8"))
-    relations = yaml.safe_load((project_specific / "relations.yaml").read_text(encoding="utf-8"))
-    mappings = yaml.safe_load((project_specific / "mappings.yaml").read_text(encoding="utf-8"))
+    entities = yaml.safe_load((local_sources / "entities.yaml").read_text(encoding="utf-8"))
+    relations = yaml.safe_load((local_sources / "relations.yaml").read_text(encoding="utf-8"))
+    mappings = yaml.safe_load((local_sources / "mappings.yaml").read_text(encoding="utf-8"))
 
     assert entities == {
         "entities": [
@@ -386,14 +386,14 @@ def test_write_project_specific_sources_preserves_existing_curation_and_deduplic
                 "canonical_id": "question:q31-legacy-open-question",
                 "kind": "question",
                 "title": "Q31 Legacy Open Question",
-                "profile": "project_specific",
+                "profile": "local",
                 "source_path": "migration:audit",
             },
             {
                 "canonical_id": "topic:evaluation",
                 "kind": "topic",
                 "title": "Evaluation",
-                "profile": "project_specific",
+                "profile": "local",
                 "source_path": "manual",
             },
         ]
@@ -407,7 +407,7 @@ def test_write_project_specific_sources_preserves_existing_curation_and_deduplic
     }
 
 
-def test_write_project_specific_sources_uses_configured_local_profile_directory(tmp_path: Path) -> None:
+def test_write_local_sources_uses_configured_local_profile_directory(tmp_path: Path) -> None:
     root = tmp_path / "project"
     report = {
         "local_profile": "lab_local",
@@ -424,7 +424,7 @@ def test_write_project_specific_sources_uses_configured_local_profile_directory(
         ],
     }
 
-    write_project_specific_sources(root, report)
+    write_local_sources(root, report)
 
     local_sources = root / "knowledge" / "sources" / "lab_local"
     entities = yaml.safe_load((local_sources / "entities.yaml").read_text(encoding="utf-8"))
@@ -440,7 +440,7 @@ def test_write_project_specific_sources_uses_configured_local_profile_directory(
             }
         ]
     }
-    assert not (root / "knowledge" / "sources" / "project_specific").exists()
+    assert not (root / "knowledge" / "sources" / "local").exists()
 
 
 def test_graph_migrate_command_rewrites_alias_refs_and_writes_report(tmp_path: Path) -> None:
@@ -452,7 +452,7 @@ def test_graph_migrate_command_rewrites_alias_refs_and_writes_report(tmp_path: P
                 "name: demo",
                 "knowledge_profiles:",
                 "  curated: []",
-                "  local: project_specific",
+                "  local: local",
                 "",
             ]
         ),
@@ -516,7 +516,7 @@ def test_graph_migrate_command_rewrites_alias_refs_and_writes_report(tmp_path: P
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["has_failures"] is False
 
-    entities_path = root / "knowledge" / "sources" / "project_specific" / "entities.yaml"
+    entities_path = root / "knowledge" / "sources" / "local" / "entities.yaml"
     entities = yaml.safe_load(entities_path.read_text(encoding="utf-8"))
     assert entities == {
         "entities": [
@@ -524,7 +524,7 @@ def test_graph_migrate_command_rewrites_alias_refs_and_writes_report(tmp_path: P
                 "canonical_id": "topic:evaluation",
                 "kind": "topic",
                 "title": "Evaluation",
-                "profile": "project_specific",
+                "profile": "local",
                 "source_path": "migration:audit",
             }
         ]
@@ -597,4 +597,4 @@ def test_graph_migrate_command_uses_configured_local_profile_paths(tmp_path: Pat
 
     assert entities_path.exists()
     assert report_path.exists()
-    assert not (root / "knowledge" / "sources" / "project_specific").exists()
+    assert not (root / "knowledge" / "sources" / "local").exists()

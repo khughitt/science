@@ -144,7 +144,7 @@ tags:
 data_sources: []
 knowledge_profiles:
   curated: []
-  local: project_specific
+  local: local
 aspects: []
 ```
 

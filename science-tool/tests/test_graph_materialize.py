@@ -37,7 +37,7 @@ def _write_demo_project(
                 "name: demo",
                 "knowledge_profiles:",
                 "  curated: [bio]",
-                "  local: project_specific",
+                "  local: local",
                 "",
             ]
         ),
@@ -255,9 +255,9 @@ def test_materialize_graph_uses_configured_local_profile_sources(tmp_path: Path)
 def test_materialize_graph_materializes_structured_entity_confidence_in_provenance(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    project_specific = project / "knowledge" / "sources" / "project_specific"
-    project_specific.mkdir(parents=True)
-    (project_specific / "entities.yaml").write_text(
+    local_sources = project / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
         "\n".join(
             [
                 "entities:",
@@ -288,9 +288,9 @@ def test_materialize_graph_materializes_structured_entity_confidence_in_provenan
 def test_materialize_graph_applies_structured_relations_with_internal_targets(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    project_specific = project / "knowledge" / "sources" / "project_specific"
-    project_specific.mkdir(parents=True)
-    (project_specific / "entities.yaml").write_text(
+    local_sources = project / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
         "\n".join(
             [
                 "entities:",
@@ -302,7 +302,7 @@ def test_materialize_graph_applies_structured_relations_with_internal_targets(tm
         ),
         encoding="utf-8",
     )
-    (project_specific / "relations.yaml").write_text(
+    (local_sources / "relations.yaml").write_text(
         "\n".join(
             [
                 "relations:",
@@ -331,9 +331,9 @@ def test_materialize_graph_applies_structured_relations_with_internal_targets(tm
 def test_materialize_graph_applies_structured_relations_with_external_targets(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    project_specific = project / "knowledge" / "sources" / "project_specific"
-    project_specific.mkdir(parents=True)
-    (project_specific / "entities.yaml").write_text(
+    local_sources = project / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
         "\n".join(
             [
                 "entities:",
@@ -345,7 +345,7 @@ def test_materialize_graph_applies_structured_relations_with_external_targets(tm
         ),
         encoding="utf-8",
     )
-    (project_specific / "relations.yaml").write_text(
+    (local_sources / "relations.yaml").write_text(
         "\n".join(
             [
                 "relations:",
@@ -400,16 +400,16 @@ def test_materialize_graph_accepts_bare_ontology_terms(tmp_path: Path) -> None:
 def test_materialize_graph_materializes_model_parameter_bindings(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
-    project_specific = project / "knowledge" / "sources" / "project_specific"
-    project_specific.mkdir(parents=True)
-    (project_specific / "models.yaml").write_text(
+    local_sources = project / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "models.yaml").write_text(
         "\n".join(
             [
                 "models:",
                 "  - canonical_id: model:navier-stokes",
                 '    title: "Navier-Stokes equations"',
-                "    profile: project_specific",
-                "    source_path: knowledge/sources/project_specific/models.yaml",
+                "    profile: local",
+                "    source_path: knowledge/sources/local/models.yaml",
                 "    domain: fluid-dynamics",
                 "    source_refs: [hypothesis:h01-demo]",
                 "    related: [question:q01-demo]",
@@ -418,22 +418,22 @@ def test_materialize_graph_materializes_model_parameter_bindings(tmp_path: Path)
                 "        target: model:stokes",
                 "  - canonical_id: model:stokes",
                 '    title: "Stokes equations"',
-                "    profile: project_specific",
-                "    source_path: knowledge/sources/project_specific/models.yaml",
+                "    profile: local",
+                "    source_path: knowledge/sources/local/models.yaml",
                 "",
             ]
         ),
         encoding="utf-8",
     )
-    (project_specific / "parameters.yaml").write_text(
+    (local_sources / "parameters.yaml").write_text(
         "\n".join(
             [
                 "parameters:",
                 "  - canonical_id: parameter:kinematic-viscosity",
                 '    title: "Kinematic viscosity"',
                 "    symbol: nu",
-                "    profile: project_specific",
-                "    source_path: knowledge/sources/project_specific/parameters.yaml",
+                "    profile: local",
+                "    source_path: knowledge/sources/local/parameters.yaml",
                 "    units: m^2/s",
                 "    quantity_group: velocity",
                 "    source_refs: [hypothesis:h01-demo]",
@@ -442,13 +442,13 @@ def test_materialize_graph_materializes_model_parameter_bindings(tmp_path: Path)
         ),
         encoding="utf-8",
     )
-    (project_specific / "bindings.yaml").write_text(
+    (local_sources / "bindings.yaml").write_text(
         "\n".join(
             [
                 "bindings:",
                 "  - model: model:navier-stokes",
                 "    parameter: parameter:kinematic-viscosity",
-                "    source_path: knowledge/sources/project_specific/bindings.yaml",
+                "    source_path: knowledge/sources/local/bindings.yaml",
                 "    symbol: nu",
                 "    role: viscosity",
                 "    confidence: 1.0",
@@ -605,25 +605,25 @@ def test_graph_build_fails_cleanly_on_unresolved_references(tmp_path: Path) -> N
     assert "unresolved references" in result.output.lower()
 
 
-def test_known_kinds_includes_cross_project() -> None:
+def test_known_kinds_includes_shared() -> None:
     from science_model.profiles.schema import EntityKind, ProfileManifest
 
     from science_tool.graph.sources import known_kinds
 
-    cross_project = ProfileManifest(
-        name="cross-project",
+    shared = ProfileManifest(
+        name="shared",
         imports=["core"],
         strictness="curated",
         entity_kinds=[
             EntityKind(
                 name="protein-complex",
                 canonical_prefix="protein-complex",
-                layer="layer/cross-project",
+                layer="layer/shared",
                 description="Shared kind.",
             ),
         ],
         relation_kinds=[],
     )
-    kinds = known_kinds(extra_profiles=[cross_project])
+    kinds = known_kinds(extra_profiles=[shared])
     assert "protein-complex" in kinds
     assert "hypothesis" in kinds  # core kinds still present

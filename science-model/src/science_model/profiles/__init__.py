@@ -6,16 +6,16 @@ import yaml
 
 from science_model.profiles.bio import BIO_PROFILE
 from science_model.profiles.core import CORE_PROFILE
-from science_model.profiles.project_specific import PROJECT_SPECIFIC_PROFILE
+from science_model.profiles.local import LOCAL_PROFILE
 from science_model.profiles.schema import EntityKind, ProfileManifest, RelationKind
 
 _DEFAULT_MANIFEST_PATH = Path.home() / ".config" / "science" / "registry" / "manifest.yaml"
 
 
-def load_cross_project_profile(
+def load_shared_profile(
     manifest_path: Path = _DEFAULT_MANIFEST_PATH,
 ) -> ProfileManifest | None:
-    """Load the cross-project profile from YAML. Returns None if not found."""
+    """Load the shared cross-project profile from YAML. Returns None if not found."""
     if not manifest_path.is_file():
         return None
     data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
@@ -27,9 +27,9 @@ def load_cross_project_profile(
 __all__ = [
     "BIO_PROFILE",
     "CORE_PROFILE",
-    "PROJECT_SPECIFIC_PROFILE",
+    "LOCAL_PROFILE",
     "EntityKind",
     "ProfileManifest",
     "RelationKind",
-    "load_cross_project_profile",
+    "load_shared_profile",
 ]

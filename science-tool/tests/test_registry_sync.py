@@ -10,7 +10,7 @@ from science_tool.registry.sync import SyncReport, align_registry, collect_all_p
 def _write_project(root: Path, name: str) -> None:
     root.mkdir(parents=True, exist_ok=True)
     (root / "science.yaml").write_text(
-        f"name: {name}\nknowledge_profiles:\n  curated: []\n  local: project_specific\n",
+        f"name: {name}\nknowledge_profiles:\n  curated: []\n  local: local\n",
         encoding="utf-8",
     )
     for subdir in ("doc", "specs", "tasks", "knowledge"):
