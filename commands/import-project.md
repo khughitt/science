@@ -137,8 +137,8 @@ profile: "<research-or-software>"
 layout_version: 2
 tags: []
 data_sources: []
+ontologies: []
 knowledge_profiles:
-  curated: []
   local: local
 aspects: []
 ```

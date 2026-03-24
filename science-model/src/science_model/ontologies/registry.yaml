@@ -1,0 +1,6 @@
+ontologies:
+  - name: biolink
+    version: "4.3.7"
+    source_url: "https://github.com/biolink/biolink-model"
+    description: "Biolink Model — biomedical and translational science data model"
+    catalog_path: "biolink/catalog.yaml"

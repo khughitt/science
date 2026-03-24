@@ -163,7 +163,6 @@ def test_audit_project_graph_uses_configured_local_profile_directory(tmp_path: P
             [
                 "name: demo",
                 "knowledge_profiles:",
-                "  curated: []",
                 "  local: lab_local",
                 "",
             ]
@@ -451,7 +450,6 @@ def test_graph_migrate_command_rewrites_alias_refs_and_writes_report(tmp_path: P
             [
                 "name: demo",
                 "knowledge_profiles:",
-                "  curated: []",
                 "  local: local",
                 "",
             ]
@@ -539,7 +537,6 @@ def test_graph_migrate_command_uses_configured_local_profile_paths(tmp_path: Pat
             [
                 "name: demo",
                 "knowledge_profiles:",
-                "  curated: []",
                 "  local: lab_local",
                 "",
             ]

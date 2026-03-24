@@ -117,6 +117,24 @@ def graph_build(project_root: Path) -> None:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Materialized graph at {trig_path}")
 
+    # Non-blocking ontology suggestions
+    from science_tool.graph.sources import load_project_sources
+    from science_tool.graph.suggest import suggest_ontologies
+
+    try:
+        sources = load_project_sources(project_root)
+        suggestions = suggest_ontologies(
+            entities=sources.entities,
+            declared_ontologies=[c.ontology for c in sources.ontology_catalogs],
+        )
+        for s in suggestions:
+            click.echo(
+                f"  Ontology suggestion: {s.entity_count} entities match '{s.ontology_name}' "
+                f"— consider adding `ontologies: [{s.ontology_name}]` to science.yaml"
+            )
+    except Exception:  # noqa: BLE001
+        pass  # Suggestions are non-blocking
+
 
 @graph.command("audit")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)

@@ -137,11 +137,9 @@ if not isinstance(profiles, dict):
 elif not isinstance(profiles.get("local"), str) or not profiles.get("local"):
     print("missing-local")
 else:
-    curated = profiles.get("curated")
-    if curated is None:
-        print("missing-curated")
-    elif not isinstance(curated, list):
-        print("invalid-curated")
+    ontologies = data.get("ontologies")
+    if ontologies is not None and not isinstance(ontologies, list):
+        print("invalid-ontologies")
     else:
         print("ok")
 PYEOF
@@ -154,11 +152,8 @@ PYEOF
         missing-local)
             error "science.yaml knowledge_profiles.local missing or empty"
             ;;
-        missing-curated)
-            error "science.yaml knowledge_profiles.curated missing"
-            ;;
-        invalid-curated)
-            error "science.yaml knowledge_profiles.curated must be a list"
+        invalid-ontologies)
+            error "science.yaml ontologies must be a list"
             ;;
         error)
             error "science.yaml knowledge_profiles could not be parsed"

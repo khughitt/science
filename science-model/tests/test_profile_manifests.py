@@ -1,6 +1,6 @@
 import yaml
 
-from science_model.profiles import BIO_PROFILE, CORE_PROFILE, LOCAL_PROFILE, load_shared_profile
+from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE, load_shared_profile
 
 
 def test_core_profile_contains_task_and_hypothesis() -> None:
@@ -43,17 +43,8 @@ def test_feeds_into_relation() -> None:
     assert feeds.predicate == "sci:feedsInto"
 
 
-def test_bio_profile_imports_core() -> None:
-    assert BIO_PROFILE.imports == ["core"]
-
-
 def test_local_profile_is_typed_extension() -> None:
     assert LOCAL_PROFILE.strictness == "typed-extension"
-
-
-def test_bio_profile_encodes_targets_protein() -> None:
-    encodes = next(relation for relation in BIO_PROFILE.relation_kinds if relation.name == "encodes")
-    assert encodes.target_kinds == ["protein"]
 
 
 def test_load_shared_profile_from_yaml(tmp_path: object) -> None:

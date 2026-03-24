@@ -1,0 +1,730 @@
+# Biolink Model term catalog — extracted from biolink-model v4.3.7
+# https://github.com/biolink/biolink-model
+#
+# Refresh with: uv run --with linkml-runtime scripts/extract_biolink_catalog.py
+# Entity types: descendants of NamedThing (non-abstract, non-mixin)
+# Predicates: relationship slots with NamedThing-descended range
+# recommended: true marks commonly-used terms highlighted by the suggestion system
+
+ontology: biolink
+version: "4.3.7"
+prefix: biolink
+prefix_uri: "https://w3id.org/biolink/vocab/"
+
+entity_types:
+  # --- Genomic entities ---
+  - id: "biolink:Gene"
+    name: gene
+    description: "A region (or regions) that includes all of the sequence elements necessary to encode a functional transcript."
+    curie_prefixes: [NCBIGene, ENSEMBL, HGNC, MGI, ZFIN, dictyBase, WB, WormBase, FB, RGD, SGD, PomBase]
+    recommended: true
+  - id: "biolink:Genome"
+    name: genome
+    description: "A genome is the sum of genetic material within a cell or virion."
+    curie_prefixes: [ENSEMBL]
+  - id: "biolink:Exon"
+    name: exon
+    description: "A region of the transcript sequence within a gene which is not removed from the primary RNA transcript by RNA splicing."
+    curie_prefixes: [ENSEMBL]
+  - id: "biolink:Transcript"
+    name: transcript
+    description: "An RNA synthesized on a DNA or RNA template by an RNA polymerase."
+    curie_prefixes: [ENSEMBL, RefSeq]
+  - id: "biolink:CodingSequence"
+    name: coding_sequence
+    description: "The coding sequence within a transcript."
+    curie_prefixes: [ENSEMBL]
+  - id: "biolink:GeneFamily"
+    name: gene_family
+    description: "Any grouping of multiple genes or gene products by common descent."
+    curie_prefixes: [PANTHER.FAMILY, HGNC.FAMILY, InterPro]
+    recommended: true
+  - id: "biolink:Genotype"
+    name: genotype
+    description: "An information content entity that describes a genome by specifying the total variation in genomic sequence."
+    curie_prefixes: [ZFIN, FB]
+    recommended: true
+  - id: "biolink:Haplotype"
+    name: haplotype
+    description: "A set of zero or more Alleles on a single instance of a Sequence."
+    curie_prefixes: []
+  - id: "biolink:SequenceVariant"
+    name: sequence_variant
+    description: "A genomic feature representing one of a set of coexisting sequence variants at a particular genomic locus."
+    curie_prefixes: [CLINVAR, DBSNP, ClinVarVariant, MYVARIANT_HG19, MYVARIANT_HG38]
+    recommended: true
+  - id: "biolink:Snv"
+    name: snv
+    description: "SNVs are single nucleotide positions in genomic DNA at which different sequence alternatives exist."
+    curie_prefixes: [CLINVAR, DBSNP]
+  - id: "biolink:ReagentTargetedGene"
+    name: reagent_targeted_gene
+    description: "A gene altered in its expression level in the context of some experiment as a result of being targeted by gene silencing reagent."
+    curie_prefixes: []
+  - id: "biolink:NucleicAcidEntity"
+    name: nucleic_acid_entity
+    description: "A nucleic acid entity is a molecular entity characterized by availability in gene databases."
+    curie_prefixes: [ENSEMBL, RefSeq]
+    recommended: true
+  - id: "biolink:RNAProduct"
+    name: rna_product
+    description: "An RNA molecule that is the product of transcription."
+    curie_prefixes: [RNAcentral]
+    recommended: true
+  - id: "biolink:RNAProductIsoform"
+    name: rna_product_isoform
+    description: "Represents an RNA that is a specific isoform of the canonical or reference RNA."
+    curie_prefixes: [RNAcentral]
+  - id: "biolink:NoncodingRNAProduct"
+    name: noncoding_rna_product
+    description: "A non-coding RNA product."
+    curie_prefixes: [RNAcentral]
+    recommended: true
+  - id: "biolink:MicroRNA"
+    name: micro_rna
+    description: "A small non-coding RNA molecule that functions in RNA silencing and post-transcriptional regulation."
+    curie_prefixes: [miRBase]
+    recommended: true
+  - id: "biolink:SiRNA"
+    name: si_rna
+    description: "A small RNA molecule that is the product of a longer exogenous or endogenous dsRNA."
+    curie_prefixes: []
+
+  # --- Protein entities ---
+  - id: "biolink:Protein"
+    name: protein
+    description: "A gene product that is composed of a chain of amino acid sequences and is produced by ribosome-mediated translation."
+    curie_prefixes: [UniProtKB, PR, ENSEMBL]
+    recommended: true
+  - id: "biolink:ProteinIsoform"
+    name: protein_isoform
+    description: "Represents a protein that is a specific isoform of the canonical or reference protein."
+    curie_prefixes: [UniProtKB, PR, ENSEMBL]
+  - id: "biolink:ProteinDomain"
+    name: protein_domain
+    description: "A conserved part of protein sequence and (usually) structure that can evolve, function, and exist independently."
+    curie_prefixes: [InterPro, Pfam, SMART, CDD]
+  - id: "biolink:ProteinFamily"
+    name: protein_family
+    description: "A grouping of proteins that share common ancestry."
+    curie_prefixes: [PANTHER.FAMILY, InterPro, Pfam]
+  - id: "biolink:Polypeptide"
+    name: polypeptide
+    description: "A polypeptide is a molecular entity characterized by availability in protein databases."
+    curie_prefixes: [PR, UniProtKB]
+    recommended: true
+
+  # --- Chemical entities ---
+  - id: "biolink:ChemicalEntity"
+    name: chemical_entity
+    description: "A chemical entity is a physical entity that pertains to chemistry or biochemistry."
+    curie_prefixes: [CHEBI, DRUGBANK, MESH, HMDB, INCHIKEY, PUBCHEM.COMPOUND, CHEMBL.COMPOUND, UNII, KEGG.COMPOUND]
+    recommended: true
+  - id: "biolink:SmallMolecule"
+    name: small_molecule
+    description: "A small molecule entity is a molecular entity characterized by availability in small-molecule databases."
+    curie_prefixes: [CHEBI, DRUGBANK, MESH, HMDB, INCHIKEY, PUBCHEM.COMPOUND, CHEMBL.COMPOUND, UNII, KEGG.COMPOUND]
+    recommended: true
+  - id: "biolink:Drug"
+    name: drug
+    description: "A substance intended for use in the diagnosis, cure, mitigation, treatment, or prevention of disease."
+    curie_prefixes: [DRUGBANK, CHEBI, DrugCentral, MESH, RXCUI, NDC, UNII]
+    recommended: true
+  - id: "biolink:DrugExposure"
+    name: drug_exposure
+    description: "A drug exposure is an intake of a particular drug."
+    curie_prefixes: [DrugCentral, CHEBI]
+  - id: "biolink:ChemicalMixture"
+    name: chemical_mixture
+    description: "A chemical mixture is a chemical entity composed of two or more molecular entities."
+    curie_prefixes: [CHEBI, MESH]
+  - id: "biolink:ComplexMolecularMixture"
+    name: complex_molecular_mixture
+    description: "A complex molecular mixture composed of two or more molecular entities with unknown concentration."
+    curie_prefixes: [CHEBI]
+  - id: "biolink:ProcessedMaterial"
+    name: processed_material
+    description: "A chemical entity that can be used to treat or prevent disease."
+    curie_prefixes: [DRUGBANK]
+  - id: "biolink:MolecularMixture"
+    name: molecular_mixture
+    description: "A molecular mixture composed of two or more molecular entities with known concentration."
+    curie_prefixes: [CHEBI]
+
+  # --- Disease and phenotype ---
+  - id: "biolink:Disease"
+    name: disease
+    description: "A disorder of structure or function, especially one that produces specific symptoms."
+    curie_prefixes: [MONDO, DOID, OMIM, ORPHANET, EFO, NCIT, HP, MESH]
+    recommended: true
+  - id: "biolink:PhenotypicFeature"
+    name: phenotypic_feature
+    description: "A combination of entity and quality that makes up a phenotyping statement."
+    curie_prefixes: [HP, MP, ZP, WBPhenotype, FYPO, APO, SNOMEDCT, MESH, UMLS]
+    recommended: true
+  - id: "biolink:BehavioralFeature"
+    name: behavioral_feature
+    description: "A phenotypic feature which is behavioral in nature."
+    curie_prefixes: []
+  - id: "biolink:ClinicalFinding"
+    name: clinical_finding
+    description: "A clinical finding derived from a patient examination or diagnostic test."
+    curie_prefixes: [LOINC, NCIT, SNOMEDCT]
+  - id: "biolink:DiseaseOrPhenotypicFeature"
+    name: disease_or_phenotypic_feature
+    description: "Either one of a disease or an individual phenotypic feature."
+    curie_prefixes: [MONDO, HP, DOID, MESH]
+
+  # --- Biological process and function ---
+  - id: "biolink:BiologicalProcess"
+    name: biological_process
+    description: "One or more causally connected executions of molecular functions."
+    curie_prefixes: [GO, REACT, MetaCyc, KEGG.PATHWAY, WikiPathways, FB]
+    recommended: true
+  - id: "biolink:MolecularActivity"
+    name: molecular_activity
+    description: "An execution of a molecular function carried out by a gene product."
+    curie_prefixes: [GO, REACT, MetaCyc, RHEA, KEGG.REACTION]
+    recommended: true
+  - id: "biolink:Pathway"
+    name: pathway
+    description: "A set of biochemical events connected to one another."
+    curie_prefixes: [GO, REACT, KEGG.PATHWAY, WikiPathways, PANTHER.PATHWAY, PharmGKB, SMPDB]
+    recommended: true
+  - id: "biolink:PhysiologicalProcess"
+    name: physiological_process
+    description: "A physiological process."
+    curie_prefixes: [GO]
+  - id: "biolink:CellularComponent"
+    name: cellular_component
+    description: "A location in or around a cell."
+    curie_prefixes: [GO]
+    recommended: true
+
+  # --- Anatomy and organism ---
+  - id: "biolink:AnatomicalEntity"
+    name: anatomical_entity
+    description: "A subcellular location, cell type or gross anatomical part."
+    curie_prefixes: [UBERON, GO, CL, UMLS, MESH, NCIT]
+    recommended: true
+  - id: "biolink:Cell"
+    name: cell
+    description: "An anatomical entity that is a single cell."
+    curie_prefixes: [CL, GO]
+    recommended: true
+  - id: "biolink:CellLine"
+    name: cell_line
+    description: "A cell line is a cell culture developed from a single cell."
+    curie_prefixes: [CLO, EFO]
+    recommended: true
+  - id: "biolink:GrossAnatomicalStructure"
+    name: gross_anatomical_structure
+    description: "A gross anatomical structure."
+    curie_prefixes: [UBERON, UMLS]
+  - id: "biolink:OrganismTaxon"
+    name: organism_taxon
+    description: "A classification of a set of organisms."
+    curie_prefixes: [NCBITaxon, MESH]
+    recommended: true
+  - id: "biolink:PopulationOfIndividualOrganisms"
+    name: population_of_individual_organisms
+    description: "A collection of individuals from the same taxonomic class."
+    curie_prefixes: [NCBITaxon, HANCESTRO]
+
+  # --- Information entities ---
+  - id: "biolink:InformationContentEntity"
+    name: information_content_entity
+    description: "A piece of information that typically describes some topic of discourse or is used as support."
+    curie_prefixes: []
+    recommended: true
+  - id: "biolink:Publication"
+    name: publication
+    description: "Any published piece of information."
+    curie_prefixes: [PMID, PMC, doi, NLMID]
+    recommended: true
+  - id: "biolink:Book"
+    name: book
+    description: "A book is a published work."
+    curie_prefixes: [isbn]
+  - id: "biolink:BookChapter"
+    name: book_chapter
+    description: "A chapter of a book."
+    curie_prefixes: []
+  - id: "biolink:Serial"
+    name: serial
+    description: "A serial publication (journal, proceedings, etc)."
+    curie_prefixes: [NLMID, issn]
+  - id: "biolink:Article"
+    name: article
+    description: "A written composition in prose."
+    curie_prefixes: [PMID, PMC, doi]
+  - id: "biolink:Dataset"
+    name: dataset
+    description: "An item that refers to a collection of data."
+    curie_prefixes: []
+    recommended: true
+  - id: "biolink:DatasetDistribution"
+    name: dataset_distribution
+    description: "An available form of a dataset."
+    curie_prefixes: []
+  - id: "biolink:DatasetVersion"
+    name: dataset_version
+    description: "A version of a dataset."
+    curie_prefixes: []
+  - id: "biolink:ConfidenceLevel"
+    name: confidence_level
+    description: "Level of confidence in a statement."
+    curie_prefixes: []
+  - id: "biolink:EvidenceType"
+    name: evidence_type
+    description: "Class of evidence that supports a statement."
+    curie_prefixes: [ECO]
+  - id: "biolink:Study"
+    name: study
+    description: "A detailed investigation and/or analysis."
+    curie_prefixes: []
+    recommended: true
+  - id: "biolink:StudyResult"
+    name: study_result
+    description: "A result of a study."
+    curie_prefixes: []
+  - id: "biolink:StudyVariable"
+    name: study_variable
+    description: "A variable measured in a study."
+    curie_prefixes: []
+
+  # --- Clinical entities ---
+  - id: "biolink:ClinicalTrial"
+    name: clinical_trial
+    description: "A clinical trial."
+    curie_prefixes: [clinicaltrials]
+  - id: "biolink:ClinicalIntervention"
+    name: clinical_intervention
+    description: "A clinical intervention."
+    curie_prefixes: []
+  - id: "biolink:Treatment"
+    name: treatment
+    description: "A treatment is targeted at a disease or phenotype and may involve multiple drug therapies."
+    curie_prefixes: []
+  - id: "biolink:DiagnosticAid"
+    name: diagnostic_aid
+    description: "A device or substance used to help diagnose disease or other conditions."
+    curie_prefixes: []
+
+  # --- Exposure and environment ---
+  - id: "biolink:ChemicalExposure"
+    name: chemical_exposure
+    description: "A chemical exposure is an intake of a particular chemical entity."
+    curie_prefixes: [CHEBI, ECTO]
+  - id: "biolink:EnvironmentalExposure"
+    name: environmental_exposure
+    description: "An environmental exposure."
+    curie_prefixes: [ECTO]
+
+  # --- Activity and entity ---
+  - id: "biolink:Procedure"
+    name: procedure
+    description: "A series of actions conducted in a certain order or manner."
+    curie_prefixes: [MAXO, NCIT, SNOMEDCT]
+  - id: "biolink:Phenomenon"
+    name: phenomenon
+    description: "A fact or situation that is observed to exist or happen."
+    curie_prefixes: []
+  - id: "biolink:NamedThing"
+    name: named_thing
+    description: "A databased entity or concept/class."
+    curie_prefixes: [MESH, UMLS, NCIT]
+  - id: "biolink:PhysicalEntity"
+    name: physical_entity
+    description: "An entity that has material reality."
+    curie_prefixes: []
+  - id: "biolink:BiologicalEntity"
+    name: biological_entity
+    description: "A biological entity."
+    curie_prefixes: []
+  - id: "biolink:Device"
+    name: device
+    description: "A thing made or adapted for a particular purpose."
+    curie_prefixes: []
+
+predicates:
+  # --- Core relationship predicates ---
+  - id: "biolink:related_to"
+    name: related_to
+    description: "A relationship that is asserted between two named things."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:interacts_with"
+    name: interacts_with
+    description: "Holds between any two entities that directly or indirectly interact with each other."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:physically_interacts_with"
+    name: physically_interacts_with
+    description: "Holds between two entities that make physical contact as part of some interaction."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:genetically_interacts_with"
+    name: genetically_interacts_with
+    description: "Holds between two genes whose phenotypic effects are dependent on each other."
+    domain: "biolink:Gene"
+    range: "biolink:Gene"
+    recommended: true
+  - id: "biolink:affects"
+    name: affects
+    description: "Describes qualitative relationship where the subject affects the object."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:regulates"
+    name: regulates
+    description: "The affected entity's behavior is controlled or modulated."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:positively_regulates"
+    name: positively_regulates
+    description: "The subject activates or increases the activity of the object."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:negatively_regulates"
+    name: negatively_regulates
+    description: "The subject deactivates or decreases the activity of the object."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:causes"
+    name: causes
+    description: "Holds between two entities where the occurrence of one causes the other."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:contributes_to"
+    name: contributes_to
+    description: "The occurrence or activity of one contributes to the other."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:predisposes"
+    name: predisposes
+    description: "Exposure to one entity increases the chance of developing the other."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:prevents"
+    name: prevents
+    description: "Application or use reduces the likelihood of a potential outcome."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+
+  # --- Treatment and clinical ---
+  - id: "biolink:treats"
+    name: treats
+    description: "Holds between a therapeutic procedure or chemical entity and a disease or phenotypic feature."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:ameliorates_condition"
+    name: ameliorates_condition
+    description: "Holds between an entity and a condition that it ameliorates."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:exacerbates_condition"
+    name: exacerbates_condition
+    description: "Holds between an entity and a condition that it makes worse."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+
+  # --- Gene/protein relationships ---
+  - id: "biolink:encodes"
+    name: encodes
+    description: "Holds between a gene and the molecular entity it encodes."
+    domain: "biolink:Gene"
+    range: "biolink:Protein"
+    recommended: true
+  - id: "biolink:has_gene_product"
+    name: has_gene_product
+    description: "Holds between a gene and a gene product (protein or RNA)."
+    domain: "biolink:Gene"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:is_sequence_variant_of"
+    name: is_sequence_variant_of
+    description: "Holds between a sequence variant and a genomic entity."
+    domain: "biolink:SequenceVariant"
+    range: "biolink:Gene"
+    recommended: true
+  - id: "biolink:gene_associated_with_condition"
+    name: gene_associated_with_condition
+    description: "Holds between a gene and a disease or phenotypic feature."
+    domain: "biolink:Gene"
+    range: "biolink:DiseaseOrPhenotypicFeature"
+    recommended: true
+  - id: "biolink:target_for"
+    name: target_for
+    description: "A gene that is a target of a drug used to treat a disease."
+    domain: "biolink:Gene"
+    range: "biolink:Disease"
+    recommended: true
+
+  # --- Structural relationships ---
+  - id: "biolink:has_part"
+    name: has_part
+    description: "Holds between wholes and their parts."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:part_of"
+    name: part_of
+    description: "Holds between parts and wholes."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:has_input"
+    name: has_input
+    description: "Holds between a process and a continuant consumed by the process."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:has_output"
+    name: has_output
+    description: "Holds between a process and a continuant produced by the process."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:has_participant"
+    name: has_participant
+    description: "Holds between a process and a continuant that is a participant."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:participates_in"
+    name: participates_in
+    description: "Holds between a continuant and a process in which it participates."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:located_in"
+    name: located_in
+    description: "Holds between a material entity and the location in which it is found."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:location_of"
+    name: location_of
+    description: "Holds between a location and the material entity found there."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:expressed_in"
+    name: expressed_in
+    description: "Holds between a gene or gene product and an anatomical entity in which it is expressed."
+    domain: "biolink:Gene"
+    range: "biolink:AnatomicalEntity"
+    recommended: true
+  - id: "biolink:expresses"
+    name: expresses
+    description: "Holds between an anatomical entity and gene or gene product expressed there."
+    domain: "biolink:AnatomicalEntity"
+    range: "biolink:Gene"
+  - id: "biolink:enables"
+    name: enables
+    description: "Holds between a physical entity and a process where the entity carries out the process."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:actively_involved_in"
+    name: actively_involved_in
+    description: "Holds between a continuant and a process in which it is directly involved."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+
+  # --- Grouping / classification ---
+  - id: "biolink:subclass_of"
+    name: subclass_of
+    description: "Holds between two classes where one is a subclass of the other."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:member_of"
+    name: member_of
+    description: "Holds between an entity and the group/family it belongs to."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:has_member"
+    name: has_member
+    description: "Holds between a group and a member of that group."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:overlaps"
+    name: overlaps
+    description: "Holds between entities that overlap in some way."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:colocalizes_with"
+    name: colocalizes_with
+    description: "Holds between two entities that are observed to be co-located in the same place."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+
+  # --- Phenotype and disease ---
+  - id: "biolink:has_phenotype"
+    name: has_phenotype
+    description: "Holds between a biological entity and a phenotype."
+    domain: "biolink:BiologicalEntity"
+    range: "biolink:PhenotypicFeature"
+    recommended: true
+  - id: "biolink:has_mode_of_inheritance"
+    name: has_mode_of_inheritance
+    description: "Holds between a disease and the mode of inheritance."
+    domain: "biolink:Disease"
+    range: "biolink:NamedThing"
+  - id: "biolink:manifestation_of"
+    name: manifestation_of
+    description: "Holds between a phenotypic feature and a disease."
+    domain: "biolink:PhenotypicFeature"
+    range: "biolink:Disease"
+
+  # --- Correlation and association ---
+  - id: "biolink:correlated_with"
+    name: correlated_with
+    description: "Holds between two entities that are observed to be correlated."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:positively_correlated_with"
+    name: positively_correlated_with
+    description: "Holds between two entities that tend to increase or decrease together."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:negatively_correlated_with"
+    name: negatively_correlated_with
+    description: "Holds between two entities where increase in one correlates with decrease in the other."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+    recommended: true
+  - id: "biolink:associated_with"
+    name: associated_with
+    description: "Holds between two entities that are associated by some unspecified relationship."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:coexists_with"
+    name: coexists_with
+    description: "Holds between entities that co-occur in the same individual."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+
+  # --- Similarity and homology ---
+  - id: "biolink:similar_to"
+    name: similar_to
+    description: "Holds between two entities that are similar to each other."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:homologous_to"
+    name: homologous_to
+    description: "Holds between two biological entities that have common evolutionary origin."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:orthologous_to"
+    name: orthologous_to
+    description: "A homology relationship between entities that diverged after a speciation event."
+    domain: "biolink:Gene"
+    range: "biolink:Gene"
+  - id: "biolink:paralogous_to"
+    name: paralogous_to
+    description: "A homology relationship between entities that diverged after a duplication event."
+    domain: "biolink:Gene"
+    range: "biolink:Gene"
+
+  # --- Provenance ---
+  - id: "biolink:has_evidence"
+    name: has_evidence
+    description: "Connects an association to an instance of supporting evidence."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:has_confidence_level"
+    name: has_confidence_level
+    description: "Connects an association to a qualitative confidence value."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+
+  # --- Model and study ---
+  - id: "biolink:model_of"
+    name: model_of
+    description: "Holds between an entity that is a model of a disease or phenotype."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+
+  # --- Chemical metabolism ---
+  - id: "biolink:is_metabolite_of"
+    name: is_metabolite_of
+    description: "Holds between a metabolite and the entity it is a metabolite of."
+    domain: "biolink:ChemicalEntity"
+    range: "biolink:ChemicalEntity"
+  - id: "biolink:has_metabolite"
+    name: has_metabolite
+    description: "Holds between an entity and its metabolite."
+    domain: "biolink:ChemicalEntity"
+    range: "biolink:ChemicalEntity"
+
+  # --- Temporal ---
+  - id: "biolink:precedes"
+    name: precedes
+    description: "Holds between two processes where one completes before the other begins."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:preceded_by"
+    name: preceded_by
+    description: "Holds between two processes where one begins after the other completes."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+
+  # --- Derivation and production ---
+  - id: "biolink:derives_from"
+    name: derives_from
+    description: "Holds between two entities where one is derived from the other."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:derives_into"
+    name: derives_into
+    description: "Holds between two entities where one derives into the other."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:produces"
+    name: produces
+    description: "Holds between a material entity and a product that is generated."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:produced_by"
+    name: produced_by
+    description: "Holds between a product and the entity that produces it."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+
+  # --- Equivalence ---
+  - id: "biolink:same_as"
+    name: same_as
+    description: "Holds between two entities that are considered equivalent."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:close_match"
+    name: close_match
+    description: "Holds between two entities that are closely similar."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:exact_match"
+    name: exact_match
+    description: "Holds between two entities that are considered identical."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"
+  - id: "biolink:occurs_in"
+    name: occurs_in
+    description: "Holds between a process and a location in which the process takes place."
+    domain: "biolink:NamedThing"
+    range: "biolink:NamedThing"

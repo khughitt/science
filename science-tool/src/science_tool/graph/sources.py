@@ -9,6 +9,8 @@ from typing import TypeVar
 import yaml
 from pydantic import BaseModel, Field
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
+from science_model.ontologies import load_catalogs_for_names
+from science_model.ontologies.schema import OntologyCatalog
 from science_model.profiles import CORE_PROFILE, load_shared_profile
 from science_model.profiles.schema import ProfileManifest
 from science_model.source_contracts import AuthoredTargetedRelation, BindingSource, ModelSource, ParameterSource
@@ -22,12 +24,26 @@ _CORE_KINDS = frozenset(kind.name for kind in CORE_PROFILE.entity_kinds)
 _SourceRecordT = TypeVar("_SourceRecordT", bound=BaseModel)
 
 
-def known_kinds(extra_profiles: list[ProfileManifest] | None = None) -> frozenset[str]:
-    """Return entity kind names from core + any extra profiles."""
+def known_kinds(
+    extra_profiles: list[ProfileManifest] | None = None,
+    ontology_catalogs: list[OntologyCatalog] | None = None,
+) -> frozenset[str]:
+    """Return entity kind names from core + extra profiles + ontology catalogs."""
     kinds = set(_CORE_KINDS)
     for profile in extra_profiles or []:
         kinds.update(kind.name for kind in profile.entity_kinds)
+    for catalog in ontology_catalogs or []:
+        kinds.update(et.name for et in catalog.entity_types)
     return frozenset(kinds)
+
+
+def external_prefixes(ontology_catalogs: list[OntologyCatalog]) -> frozenset[str]:
+    """Collect CURIE prefixes from declared ontology catalogs."""
+    prefixes: set[str] = set()
+    for catalog in ontology_catalogs:
+        for et in catalog.entity_types:
+            prefixes.update(p.lower() for p in et.curie_prefixes)
+    return frozenset(prefixes)
 
 
 class AliasCollisionError(ValueError):
@@ -63,7 +79,6 @@ class SourceEntity(BaseModel):
 class KnowledgeProfiles(BaseModel):
     """Selected knowledge profiles for a project."""
 
-    curated: list[str] = Field(default_factory=list)
     local: str = "local"
 
 
@@ -87,6 +102,7 @@ class ProjectSources(BaseModel):
     relations: list[SourceRelation] = Field(default_factory=list)
     bindings: list[BindingSource] = Field(default_factory=list)
     manual_aliases: dict[str, str] = Field(default_factory=dict)
+    ontology_catalogs: list[OntologyCatalog] = Field(default_factory=list)
 
 
 SourceBinding = BindingSource
@@ -99,14 +115,17 @@ def load_project_sources(project_root: Path) -> ProjectSources:
     paths = resolve_paths(project_root)
     profiles = KnowledgeProfiles.model_validate(config["knowledge_profiles"])
 
-    # Resolve dynamic profiles
-    extra_profiles: list[ProfileManifest] = []
-    if "shared" in profiles.curated:
-        xp = load_shared_profile()
-        if xp is not None:
-            extra_profiles.append(xp)
+    # Load declared ontology catalogs
+    declared_ontologies: list[str] = list(config.get("ontologies") or [])  # type: ignore[union-attr]
+    ontology_catalogs = load_catalogs_for_names(declared_ontologies) if declared_ontologies else []
 
-    active_kinds = known_kinds(extra_profiles=extra_profiles)
+    # Always try to load shared profile (no longer gated on curated list)
+    extra_profiles: list[ProfileManifest] = []
+    shared = load_shared_profile()
+    if shared is not None:
+        extra_profiles.append(shared)
+
+    active_kinds = known_kinds(extra_profiles=extra_profiles, ontology_catalogs=ontology_catalogs)
 
     entities: list[SourceEntity] = []
     local_profile = profiles.local
@@ -116,12 +135,26 @@ def load_project_sources(project_root: Path) -> ProjectSources:
             [paths.doc_dir, paths.specs_dir],
             local_profile=local_profile,
             active_kinds=active_kinds,
+            ontology_catalogs=ontology_catalogs,
         )
     )
     entities.extend(
-        _load_task_entities(project_root, paths.tasks_dir, local_profile=local_profile, active_kinds=active_kinds)
+        _load_task_entities(
+            project_root,
+            paths.tasks_dir,
+            local_profile=local_profile,
+            active_kinds=active_kinds,
+            ontology_catalogs=ontology_catalogs,
+        )
     )
-    entities.extend(_load_structured_entities(project_root, local_profile=local_profile, active_kinds=active_kinds))
+    entities.extend(
+        _load_structured_entities(
+            project_root,
+            local_profile=local_profile,
+            active_kinds=active_kinds,
+            ontology_catalogs=ontology_catalogs,
+        )
+    )
     model_entities, model_relations = _load_model_sources(project_root, local_profile=local_profile)
     parameter_entities, parameter_relations = _load_parameter_sources(project_root, local_profile=local_profile)
     entities.extend(model_entities)
@@ -142,6 +175,7 @@ def load_project_sources(project_root: Path) -> ProjectSources:
         relations=relations,
         bindings=bindings,
         manual_aliases=_load_manual_aliases(project_root, local_profile=local_profile),
+        ontology_catalogs=ontology_catalogs,
     )
 
 
@@ -160,18 +194,24 @@ def build_alias_map(entities: list[SourceEntity], manual_aliases: dict[str, str]
     return alias_map
 
 
-def is_external_reference(raw: str) -> bool:
+def is_external_reference(raw: str, *, known_prefixes: frozenset[str] | None = None) -> bool:
     """Return True when a reference points outside the project graph."""
     if raw.startswith(("http://", "https://")):
         return True
     if ":" not in raw:
         return False
     prefix, _ = raw.split(":", 1)
-    return prefix.lower() in _EXTERNAL_PREFIXES
+    check_set = known_prefixes if known_prefixes is not None else _EXTERNAL_PREFIXES
+    return prefix.lower() in check_set
 
 
 def _load_markdown_entities(
-    project_root: Path, roots: list[Path], *, local_profile: str, active_kinds: frozenset[str] | None = None
+    project_root: Path,
+    roots: list[Path],
+    *,
+    local_profile: str,
+    active_kinds: frozenset[str] | None = None,
+    ontology_catalogs: list[OntologyCatalog] | None = None,
 ) -> list[SourceEntity]:
     entities: list[SourceEntity] = []
     for root in roots:
@@ -185,7 +225,10 @@ def _load_markdown_entities(
             frontmatter = parse_frontmatter(path)
             raw_aliases: list[str] = []
             raw_profile = _default_profile_for_kind(
-                entity.type.value, local_profile=local_profile, active_kinds=active_kinds
+                entity.type.value,
+                local_profile=local_profile,
+                active_kinds=active_kinds,
+                ontology_catalogs=ontology_catalogs,
             )
             if frontmatter is not None:
                 fm, _ = frontmatter
@@ -220,7 +263,12 @@ def _load_markdown_entities(
 
 
 def _load_task_entities(
-    project_root: Path, tasks_dir: Path, *, local_profile: str, active_kinds: frozenset[str] | None = None
+    project_root: Path,
+    tasks_dir: Path,
+    *,
+    local_profile: str,
+    active_kinds: frozenset[str] | None = None,
+    ontology_catalogs: list[OntologyCatalog] | None = None,
 ) -> list[SourceEntity]:
     entities: list[SourceEntity] = []
     for path in _task_paths(tasks_dir):
@@ -232,7 +280,12 @@ def _load_task_entities(
                     canonical_id=canonical_id,
                     kind="task",
                     title=task.title,
-                    profile=_default_profile_for_kind("task", local_profile=local_profile, active_kinds=active_kinds),
+                    profile=_default_profile_for_kind(
+                        "task",
+                        local_profile=local_profile,
+                        active_kinds=active_kinds,
+                        ontology_catalogs=ontology_catalogs,
+                    ),
                     source_path=rel_path,
                     status=task.status,
                     content_preview=task.description,
@@ -245,7 +298,11 @@ def _load_task_entities(
 
 
 def _load_structured_entities(
-    project_root: Path, *, local_profile: str, active_kinds: frozenset[str] | None = None
+    project_root: Path,
+    *,
+    local_profile: str,
+    active_kinds: frozenset[str] | None = None,
+    ontology_catalogs: list[OntologyCatalog] | None = None,
 ) -> list[SourceEntity]:
     entities_path = local_profile_sources_dir(project_root, local_profile=local_profile) / "entities.yaml"
     if not entities_path.is_file():
@@ -453,12 +510,16 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     if not isinstance(knowledge_profiles, dict):
         knowledge_profiles = {}
 
+    raw_ontologies = data.get("ontologies") or []
+    if not isinstance(raw_ontologies, list):
+        raw_ontologies = []
+
     return {
         "name": str(data.get("name") or project_root.name),
         "knowledge_profiles": {
-            "curated": list(knowledge_profiles.get("curated") or []),
             "local": str(knowledge_profiles.get("local") or "local"),
         },
+        "ontologies": [str(o) for o in raw_ontologies],
     }
 
 
@@ -568,10 +629,18 @@ def _register_alias(alias_map: dict[str, str], alias: str, canonical_id: str) ->
     alias_map[alias] = canonical_id
 
 
-def _default_profile_for_kind(kind: str, *, local_profile: str, active_kinds: frozenset[str] | None = None) -> str:
-    check = active_kinds if active_kinds is not None else _CORE_KINDS
-    if kind in check:
+def _default_profile_for_kind(
+    kind: str,
+    *,
+    local_profile: str,
+    active_kinds: frozenset[str] | None = None,
+    ontology_catalogs: list[OntologyCatalog] | None = None,
+) -> str:
+    if kind in _CORE_KINDS:
         return "core"
+    for catalog in ontology_catalogs or []:
+        if any(et.name == kind for et in catalog.entity_types):
+            return catalog.ontology
     return local_profile
 
 

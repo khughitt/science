@@ -5,6 +5,7 @@ from science_model.config import ConfigUpdate, DashboardConfig, LodWeights
 from science_model.entities import Entity, EntityType, EntityUpdate
 from science_model.graph import GraphData, GraphEdge, GraphNode, GraphSummary
 from science_model.ids import CanonicalId, normalize_alias
+from science_model.ontologies.schema import OntologyCatalog, OntologyPredicate, OntologyRegistryEntry, OntologyTermType
 from science_model.projects import Project, ProjectDetail
 from science_model.profiles import EntityKind, ProfileManifest, RelationKind
 from science_model.relations import build_relation_registry
@@ -44,4 +45,8 @@ __all__ = [
     "TaskUpdate",
     "build_relation_registry",
     "normalize_alias",
+    "OntologyCatalog",
+    "OntologyPredicate",
+    "OntologyRegistryEntry",
+    "OntologyTermType",
 ]

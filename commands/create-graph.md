@@ -44,21 +44,21 @@ Build the graph from these upstream sources:
   - `knowledge/sources/<local-profile>/relations.yaml`
   - `knowledge/sources/<local-profile>/mappings.yaml`
 
-Use `science-model/core` semantics for shared entity and relation types. Enable curated domain profiles such as `bio` through `science.yaml`. Put anything project-local but still useful in the configured local profile directory, which defaults to `local`.
+Use `science-model/core` semantics for shared entity and relation types. Declare domain ontologies (e.g., `biolink`) in `science.yaml` to enable vocabulary for entity types and relation predicates. Put anything project-local but still useful in the configured local profile directory, which defaults to `local`.
 
 ## Workflow
 
 ### Step 1: Configure profiles
 
-Ensure `science.yaml` declares the graph profiles you want to compose:
+Ensure `science.yaml` declares the ontologies and profiles you want to compose:
 
 ```yaml
+ontologies: [biolink]
 knowledge_profiles:
-  curated: [bio]
   local: local
 ```
 
-`core` is always implied. Add more curated profiles only when the project genuinely uses them.
+`ontologies` declares which community ontologies provide vocabulary for entity types and relation predicates. Currently available: `biolink`. `core` is always implied.
 `local` also determines the directory name under `knowledge/sources/`; if omitted, use `local`.
 
 ### Step 2: Author canonical sources
@@ -126,4 +126,4 @@ At completion, the project should have:
 
 - Prefer fixing the upstream source over adding a temporary alias.
 - If you feel compelled to hand-edit `graph.trig`, stop and add or repair the missing upstream source instead.
-- Curated domain profiles should stay opinionated and small; do not mirror whole external ontologies into a project repo.
+- Ontology declarations enable standard vocabulary; use them when the project works with domain entities.

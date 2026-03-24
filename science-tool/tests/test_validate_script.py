@@ -22,7 +22,6 @@ def _write_common_files(root: Path, profile: str) -> None:
                 "tags: []",
                 "data_sources: []",
                 "knowledge_profiles:",
-                "  curated: []",
                 "  local: local",
                 "aspects: []",
                 "",

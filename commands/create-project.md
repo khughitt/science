@@ -142,8 +142,8 @@ tags:
   - "<tag1>"
   - "<tag2>"
 data_sources: []
+ontologies: []
 knowledge_profiles:
-  curated: []
   local: local
 aspects: []
 ```

@@ -4,7 +4,6 @@ from pathlib import Path
 
 import yaml
 
-from science_model.profiles.bio import BIO_PROFILE
 from science_model.profiles.core import CORE_PROFILE
 from science_model.profiles.local import LOCAL_PROFILE
 from science_model.profiles.schema import EntityKind, ProfileManifest, RelationKind
@@ -25,7 +24,6 @@ def load_shared_profile(
 
 
 __all__ = [
-    "BIO_PROFILE",
     "CORE_PROFILE",
     "LOCAL_PROFILE",
     "EntityKind",

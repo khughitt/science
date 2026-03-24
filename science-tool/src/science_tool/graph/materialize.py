@@ -9,13 +9,16 @@ from urllib.parse import quote
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
 from science_model import normalize_alias
+from science_model.ontologies.schema import OntologyCatalog
 
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.sources import (
     SourceBinding,
     SourceEntity,
     SourceRelation,
+    _EXTERNAL_PREFIXES,
     build_alias_map,
+    external_prefixes,
     is_external_reference,
     load_project_sources,
 )
@@ -50,6 +53,7 @@ def materialize_graph(project_root: Path) -> Path:
 
     alias_map = build_alias_map(sources.entities, manual_aliases=sources.manual_aliases)
     entity_index = {entity.canonical_id: entity for entity in sources.entities}
+    ext_prefixes = _EXTERNAL_PREFIXES | external_prefixes(sources.ontology_catalogs)
 
     for entity in sources.entities:
         _add_entity(entity=entity, knowledge=knowledge, provenance=provenance)
@@ -62,7 +66,8 @@ def materialize_graph(project_root: Path) -> Path:
             knowledge=knowledge,
             bridge=bridge,
             provenance=provenance,
-            curated_profiles=sources.profiles.curated,
+            ontology_catalogs=sources.ontology_catalogs,
+            ext_prefixes=ext_prefixes,
         )
 
     for relation in sources.relations:
@@ -72,7 +77,8 @@ def materialize_graph(project_root: Path) -> Path:
             entity_index=entity_index,
             alias_map=alias_map,
             bridge=bridge,
-            curated_profiles=sources.profiles.curated,
+            ontology_catalogs=sources.ontology_catalogs,
+            ext_prefixes=ext_prefixes,
         )
 
     for binding in sources.bindings:
@@ -134,13 +140,14 @@ def _add_relations(
     knowledge,
     bridge,
     provenance,
-    curated_profiles: list[str],
+    ontology_catalogs: list[OntologyCatalog],
+    ext_prefixes: frozenset[str],
 ) -> None:
     entity_uri = _entity_uri(entity.canonical_id)
 
     for raw_target in sorted(entity.related):
-        if is_external_reference(raw_target):
-            _link_external_term(entity_uri, raw_target, bridge=bridge, curated_profiles=curated_profiles)
+        if is_external_reference(raw_target, known_prefixes=ext_prefixes):
+            _link_external_term(entity_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)
             continue
 
         canonical_target = normalize_alias(raw_target, alias_map)
@@ -162,11 +169,11 @@ def _add_relations(
         knowledge.add((entity_uri, SCI_NS.blockedBy, _entity_uri(target.canonical_id)))
 
     for raw_target in sorted(entity.ontology_terms):
-        _link_external_term(entity_uri, raw_target, bridge=bridge, curated_profiles=curated_profiles)
+        _link_external_term(entity_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)
 
     for raw_target in sorted(entity.source_refs):
-        if is_external_reference(raw_target):
-            _link_external_term(entity_uri, raw_target, bridge=bridge, curated_profiles=curated_profiles)
+        if is_external_reference(raw_target, known_prefixes=ext_prefixes):
+            _link_external_term(entity_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)
             continue
         canonical_target = normalize_alias(raw_target, alias_map)
         target = entity_index.get(canonical_target)
@@ -175,16 +182,20 @@ def _add_relations(
         provenance.add((entity_uri, PROV.wasDerivedFrom, _entity_uri(target.canonical_id)))
 
 
-def _link_external_term(source_uri: URIRef, raw_target: str, *, bridge, curated_profiles: list[str]) -> None:
+def _link_external_term(
+    source_uri: URIRef, raw_target: str, *, bridge, ontology_catalogs: list[OntologyCatalog]
+) -> None:
     target_uri = _external_uri(raw_target)
     bridge.add((source_uri, SCI_NS.about, target_uri))
-    _register_external_term(target_uri, raw_target, bridge=bridge, curated_profiles=curated_profiles)
+    _register_external_term(target_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)
 
 
-def _register_external_term(target_uri: URIRef, raw_target: str, *, bridge, curated_profiles: list[str]) -> None:
+def _register_external_term(
+    target_uri: URIRef, raw_target: str, *, bridge, ontology_catalogs: list[OntologyCatalog]
+) -> None:
     bridge.add((target_uri, RDF.type, SCI_NS.ExternalTerm))
     bridge.add((target_uri, SCHEMA_NS.identifier, Literal(raw_target)))
-    bridge.add((target_uri, SCI_NS.profile, Literal(_external_profile(raw_target, curated_profiles))))
+    bridge.add((target_uri, SCI_NS.profile, Literal(_external_profile(raw_target, ontology_catalogs))))
 
 
 def _add_authored_relation(
@@ -194,15 +205,16 @@ def _add_authored_relation(
     entity_index: dict[str, SourceEntity],
     alias_map: dict[str, str],
     bridge,
-    curated_profiles: list[str],
+    ontology_catalogs: list[OntologyCatalog],
+    ext_prefixes: frozenset[str],
 ) -> None:
     graph = dataset.graph(_graph_uri(relation.graph_layer))
     subject_uri = _canonical_entity_uri(relation.subject, entity_index=entity_index, alias_map=alias_map)
     predicate_uri = _resolve_relation_term(relation.predicate)
 
-    if is_external_reference(relation.object):
+    if is_external_reference(relation.object, known_prefixes=ext_prefixes):
         object_uri = _external_uri(relation.object)
-        _register_external_term(object_uri, relation.object, bridge=bridge, curated_profiles=curated_profiles)
+        _register_external_term(object_uri, relation.object, bridge=bridge, ontology_catalogs=ontology_catalogs)
     else:
         object_uri = _canonical_entity_uri(relation.object, entity_index=entity_index, alias_map=alias_map)
 
@@ -333,12 +345,14 @@ def _kind_class_name(kind: str) -> str:
     return "".join(part.capitalize() for part in kind.replace("_", "-").split("-"))
 
 
-def _external_profile(raw_target: str, curated_profiles: list[str]) -> str:
-    if ":" in raw_target:
-        prefix, _ = raw_target.split(":", 1)
-        if (
-            prefix.lower() in {"go", "mesh", "doid", "hp", "so", "ncbitaxon", "ncbigene", "ensembl"}
-            and "bio" in curated_profiles
-        ):
-            return "bio"
+def _external_profile(raw_target: str, ontology_catalogs: list[OntologyCatalog]) -> str:
+    """Return the ontology name for a CURIE, or 'external' if no match."""
+    if ":" not in raw_target:
+        return "external"
+    prefix, _ = raw_target.split(":", 1)
+    prefix_lower = prefix.lower()
+    for catalog in ontology_catalogs:
+        for et in catalog.entity_types:
+            if prefix_lower in {p.lower() for p in et.curie_prefixes}:
+                return catalog.ontology
     return "external"
