@@ -258,3 +258,47 @@ def test_find_duplicate_different_target_no_match(tmp_path: Path):
     )
     dup = find_duplicate(tmp_path, target="command:discuss", summary="Add User Questions section")
     assert dup is None
+
+
+from science_tool.feedback import group_for_triage, render_report
+
+
+def test_group_for_triage(tmp_path: Path):
+    _make_entry(tmp_path, "fb-2026-03-25-001", target="command:discuss", project="proj-a")
+    _make_entry(tmp_path, "fb-2026-03-25-002", target="command:discuss", project="proj-b")
+    _make_entry(tmp_path, "fb-2026-03-25-003", target="command:next-steps", project="proj-a")
+
+    groups = group_for_triage(tmp_path)
+    assert "command:discuss" in groups
+    assert "command:next-steps" in groups
+    assert len(groups["command:discuss"]["entries"]) == 2
+    assert groups["command:discuss"]["projects"] == {"proj-a", "proj-b"}
+    assert groups["command:discuss"]["total_recurrence"] == 2
+
+
+def test_group_for_triage_with_target_glob(tmp_path: Path):
+    _make_entry(tmp_path, "fb-2026-03-25-001", target="command:discuss")
+    _make_entry(tmp_path, "fb-2026-03-25-002", target="template:discussion")
+    groups = group_for_triage(tmp_path, target="command:*")
+    assert "command:discuss" in groups
+    assert "template:discussion" not in groups
+
+
+def test_render_report(tmp_path: Path):
+    _make_entry(
+        tmp_path,
+        "fb-2026-03-25-001",
+        target="command:discuss",
+        category="friction",
+        summary="Test issue",
+        project="seq-feats",
+    )
+    report = render_report(tmp_path)
+    assert "command:discuss" in report
+    assert "Test issue" in report
+    assert "friction" in report
+
+
+def test_render_report_empty(tmp_path: Path):
+    report = render_report(tmp_path)
+    assert "No feedback entries" in report

@@ -157,3 +157,67 @@ def find_duplicate(
         if summary_lower in entry_summary_lower or entry_summary_lower in summary_lower:
             return entry
     return None
+
+
+def group_for_triage(
+    feedback_dir: Path,
+    *,
+    target: str | None = None,
+) -> dict[str, dict]:
+    """Group open entries by target for triage display.
+
+    Returns: {target: {entries: [...], projects: set, total_recurrence: int}}
+    Sorted by total_recurrence descending.
+    """
+    entries = list_entries(feedback_dir, status="open", target=target)
+
+    groups: dict[str, dict] = {}
+    for entry in entries:
+        if entry.target not in groups:
+            groups[entry.target] = {
+                "entries": [],
+                "projects": set(),
+                "total_recurrence": 0,
+            }
+        groups[entry.target]["entries"].append(entry)
+        if entry.project:
+            groups[entry.target]["projects"].add(entry.project)
+        groups[entry.target]["total_recurrence"] += entry.recurrence
+
+    # Sort groups by total recurrence descending
+    return dict(
+        sorted(groups.items(), key=lambda item: -item[1]["total_recurrence"])
+    )
+
+
+def render_report(
+    feedback_dir: Path,
+    *,
+    status: str | None = None,
+    project: str | None = None,
+) -> str:
+    """Render a human-readable markdown report of feedback entries."""
+    entries = list_entries(feedback_dir, status=status, project=project)
+
+    if not entries:
+        return "No feedback entries found.\n"
+
+    # Group by target
+    by_target: dict[str, list[FeedbackEntry]] = {}
+    for entry in entries:
+        by_target.setdefault(entry.target, []).append(entry)
+
+    lines = ["# Feedback Report", ""]
+    for target, group in sorted(by_target.items()):
+        lines.append(f"## {target}")
+        lines.append("")
+        for entry in group:
+            status_badge = f"[{entry.status}]"
+            lines.append(f"- **{entry.id}** {status_badge} ({entry.category}) — {entry.summary}")
+            if entry.recurrence > 1:
+                lines.append(f"  - Recurrence: {entry.recurrence}")
+            if entry.resolution:
+                lines.append(f"  - Resolution: {entry.resolution}")
+        lines.append("")
+
+    return "\n".join(lines)
