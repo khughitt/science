@@ -98,3 +98,62 @@ def list_entries(
     entries.sort(key=lambda e: (e.recurrence, e.created), reverse=True)
 
     return entries
+
+
+def update_entry(
+    feedback_dir: Path,
+    entry_id: str,
+    *,
+    status: str | None = None,
+    resolution: str | None = None,
+    category: str | None = None,
+    summary: str | None = None,
+    detail: str | None = None,
+    related: list[str] | None = None,
+) -> FeedbackEntry:
+    """Update fields on an existing entry. Raises FileNotFoundError if not found."""
+    path = feedback_dir / f"{entry_id}.yaml"
+    if not path.exists():
+        msg = f"Feedback entry not found: {entry_id}"
+        raise FileNotFoundError(msg)
+
+    entry = load_entry(path)
+
+    if status is not None:
+        if status in ("addressed", "deferred", "wontfix") and resolution is None:
+            msg = f"--resolution is required when setting status to '{status}'"
+            raise ValueError(msg)
+        entry.status = status
+    if resolution is not None:
+        entry.resolution = resolution
+    if category is not None:
+        entry.category = category
+    if summary is not None:
+        entry.summary = summary
+    if detail is not None:
+        entry.detail = detail
+    if related is not None:
+        entry.related = related
+
+    save_entry(feedback_dir, entry)
+    return entry
+
+
+def find_duplicate(
+    feedback_dir: Path,
+    *,
+    target: str,
+    summary: str,
+) -> FeedbackEntry | None:
+    """Find an existing open entry with the same target and similar summary.
+
+    Uses bidirectional substring matching: returns a match if either summary
+    is a substring of the other.
+    """
+    entries = list_entries(feedback_dir, status="open", target=target)
+    summary_lower = summary.lower()
+    for entry in entries:
+        entry_summary_lower = entry.summary.lower()
+        if summary_lower in entry_summary_lower or entry_summary_lower in summary_lower:
+            return entry
+    return None

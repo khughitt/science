@@ -10,11 +10,13 @@ from science_tool.feedback import (
     FeedbackEntry,
     VALID_CATEGORIES,
     VALID_STATUSES,
+    find_duplicate,
     list_entries,
     load_all_entries,
     load_entry,
     save_entry,
     next_feedback_id,
+    update_entry,
 )
 
 
@@ -168,3 +170,91 @@ def test_list_entries_multiple_filters_and(tmp_path: Path):
     result = list_entries(tmp_path, target="command:discuss", category="friction", project="seq-feats")
     assert len(result) == 1
     assert result[0].id == "fb-2026-03-25-001"
+
+
+def test_update_entry_status(tmp_path: Path):
+    _make_entry(tmp_path, "fb-2026-03-25-001")
+    updated = update_entry(
+        tmp_path,
+        "fb-2026-03-25-001",
+        status="addressed",
+        resolution="commit:abc123 — fixed it",
+    )
+    assert updated.status == "addressed"
+    assert updated.resolution == "commit:abc123 — fixed it"
+    reloaded = load_entry(tmp_path / "fb-2026-03-25-001.yaml")
+    assert reloaded.status == "addressed"
+
+
+def test_update_entry_not_found(tmp_path: Path):
+    with pytest.raises(FileNotFoundError):
+        update_entry(tmp_path, "fb-2026-03-25-999", status="addressed")
+
+
+def test_update_entry_resolution_required_for_terminal_status(tmp_path: Path):
+    _make_entry(tmp_path, "fb-2026-03-25-001")
+    with pytest.raises(ValueError, match="resolution"):
+        update_entry(tmp_path, "fb-2026-03-25-001", status="addressed")
+
+
+def test_update_entry_category(tmp_path: Path):
+    _make_entry(tmp_path, "fb-2026-03-25-001", category="suggestion")
+    updated = update_entry(tmp_path, "fb-2026-03-25-001", category="friction")
+    assert updated.category == "friction"
+
+
+def test_find_duplicate_exact_match(tmp_path: Path):
+    _make_entry(
+        tmp_path,
+        "fb-2026-03-25-001",
+        target="command:discuss",
+        summary="Add User Questions section",
+    )
+    dup = find_duplicate(tmp_path, target="command:discuss", summary="Add User Questions section")
+    assert dup is not None
+    assert dup.id == "fb-2026-03-25-001"
+
+
+def test_find_duplicate_substring_match(tmp_path: Path):
+    _make_entry(
+        tmp_path,
+        "fb-2026-03-25-001",
+        target="command:discuss",
+        summary="Add User Questions section to interpretation template",
+    )
+    dup = find_duplicate(tmp_path, target="command:discuss", summary="User Questions section")
+    assert dup is not None
+
+
+def test_find_duplicate_no_match(tmp_path: Path):
+    _make_entry(
+        tmp_path,
+        "fb-2026-03-25-001",
+        target="command:discuss",
+        summary="Something else entirely",
+    )
+    dup = find_duplicate(tmp_path, target="command:discuss", summary="User Questions section")
+    assert dup is None
+
+
+def test_find_duplicate_ignores_non_open(tmp_path: Path):
+    _make_entry(
+        tmp_path,
+        "fb-2026-03-25-001",
+        target="command:discuss",
+        summary="Add User Questions section",
+        status="addressed",
+    )
+    dup = find_duplicate(tmp_path, target="command:discuss", summary="Add User Questions section")
+    assert dup is None
+
+
+def test_find_duplicate_different_target_no_match(tmp_path: Path):
+    _make_entry(
+        tmp_path,
+        "fb-2026-03-25-001",
+        target="command:next-steps",
+        summary="Add User Questions section",
+    )
+    dup = find_duplicate(tmp_path, target="command:discuss", summary="Add User Questions section")
+    assert dup is None
