@@ -1749,5 +1749,163 @@ def sync_rebuild(config_path: str | None) -> None:
     click.echo(f"Rebuild complete. {report.entities_total} entities, {report.relations_total} relations.")
 
 
+# ── feedback ────────────────────────────────────────────────────────────────
+
+_FB_CATEGORIES = ("friction", "gap", "guidance", "suggestion", "positive")
+_FB_STATUSES = ("open", "addressed", "deferred", "wontfix")
+
+
+@main.group()
+def feedback() -> None:
+    """Feedback management commands."""
+
+
+def _get_feedback_dir() -> Path:
+    import os
+
+    from science_tool.registry.config import SCIENCE_CONFIG_DIR
+
+    return Path(os.environ.get("SCIENCE_FEEDBACK_DIR", str(SCIENCE_CONFIG_DIR / "feedback")))
+
+
+@feedback.command("add")
+@click.option("--target", required=True, help="What the feedback is about (e.g., command:interpret-results)")
+@click.option("--summary", required=True, help="One-line description")
+@click.option("--category", default="suggestion", type=click.Choice(_FB_CATEGORIES))
+@click.option("--detail", default=None, help="Optional prose detail")
+@click.option("--project", default=None, help="Project name (auto-detected if omitted)")
+@click.option("--related", multiple=True, help="Related feedback entry IDs")
+def feedback_add(
+    target: str,
+    summary: str,
+    category: str,
+    detail: str | None,
+    project: str | None,
+    related: tuple[str, ...],
+) -> None:
+    """Add a feedback entry."""
+    from datetime import date as _date
+
+    from science_tool.feedback import (
+        FeedbackEntry,
+        detect_project,
+        find_duplicate,
+        next_feedback_id,
+        save_entry,
+    )
+
+    fb_dir = _get_feedback_dir()
+
+    if project is None:
+        project = detect_project(Path.cwd())
+
+    # Check for duplicates
+    dup = find_duplicate(fb_dir, target=target, summary=summary)
+    if dup is not None:
+        dup.recurrence += 1
+        save_entry(fb_dir, dup)
+        click.echo(f"Incremented recurrence on {dup.id} (now {dup.recurrence})")
+        return
+
+    today = _date.today().isoformat()
+    entry_id = next_feedback_id(fb_dir, today)
+
+    entry = FeedbackEntry(
+        id=entry_id,
+        created=today,
+        project=project,
+        target=target,
+        category=category,
+        summary=summary,
+        detail=detail,
+        related=list(related),
+    )
+    save_entry(fb_dir, entry)
+    click.echo(f"Created {entry.id}: {entry.summary}")
+
+
+@feedback.command("list")
+@click.option("--status", default="open", help="Filter by status (omit for 'open'; use 'all' for all statuses)")
+@click.option("--target", default=None, help="Filter by target (supports fnmatch globs)")
+@click.option("--category", default=None, type=click.Choice(_FB_CATEGORIES))
+@click.option("--project", default=None, help="Filter by project")
+@click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
+def feedback_list(
+    status: str | None,
+    target: str | None,
+    category: str | None,
+    project: str | None,
+    output_format: str,
+) -> None:
+    """List feedback entries (default: open only)."""
+    from science_tool.feedback import list_entries
+
+    if status == "all":
+        status = None
+
+    fb_dir = _get_feedback_dir()
+    entries = list_entries(fb_dir, status=status, target=target, category=category, project=project)
+
+    columns = [
+        ("id", "ID"),
+        ("created", "Date"),
+        ("project", "Project"),
+        ("target", "Target"),
+        ("category", "Category"),
+        ("summary", "Summary"),
+        ("recurrence", "Recur"),
+    ]
+    rows = [
+        {
+            "id": e.id,
+            "created": e.created,
+            "project": e.project,
+            "target": e.target,
+            "category": e.category,
+            "summary": e.summary,
+            "recurrence": e.recurrence,
+        }
+        for e in entries
+    ]
+    emit_query_rows(output_format=output_format, title="Feedback", columns=columns, rows=rows)
+
+
+@feedback.command("update")
+@click.argument("entry_id")
+@click.option("--status", default=None, type=click.Choice(_FB_STATUSES))
+@click.option("--resolution", default=None, help="Required when setting terminal status")
+@click.option("--category", default=None, type=click.Choice(_FB_CATEGORIES))
+@click.option("--summary", default=None)
+@click.option("--detail", default=None)
+@click.option("--related", multiple=True, help="Related feedback entry IDs")
+def feedback_update(
+    entry_id: str,
+    status: str | None,
+    resolution: str | None,
+    category: str | None,
+    summary: str | None,
+    detail: str | None,
+    related: tuple[str, ...],
+) -> None:
+    """Update a feedback entry."""
+    from science_tool.feedback import update_entry as _update
+
+    fb_dir = _get_feedback_dir()
+    try:
+        entry = _update(
+            fb_dir,
+            entry_id,
+            status=status,
+            resolution=resolution,
+            category=category,
+            summary=summary,
+            detail=detail,
+            related=list(related) if related else None,
+        )
+    except (FileNotFoundError, ValueError) as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(f"Updated {entry.id}")
+
+
 if __name__ == "__main__":
     main()
