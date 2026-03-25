@@ -49,6 +49,15 @@ If given a directory, scan for result files and summarize what is available.
 
 Always note the mode at the top of the output when not in standard write mode.
 
+### Cross-Referencing Prior Interpretations
+
+When interpreting multiple tasks jointly or building on a prior interpretation, list which earlier interpretation documents this one extends or supersedes using the `prior_interpretations` frontmatter field.
+
+- **Combined interpretations:** When interpreting 2+ tasks as a single arc, list any prior single-task interpretations that this combined document supersedes. The prior documents remain for provenance; the combined one is canonical for downstream reference.
+- **Update mode:** When updating an existing interpretation with new evidence, reference the prior version's ID.
+
+This creates a provenance chain across interpretation documents.
+
 ## Workflow
 
 ### 1. Summarize The Findings
@@ -59,6 +68,7 @@ Extract the main findings and classify each as:
 - `null`
 - `ambiguous`
 - `methodological`
+- `descriptive` — structural or qualitative findings from exploratory/visualization analyses where statistical testing is not applicable (e.g., UMAP cluster structure, k-mer landscape patterns). Distinct from `suggestive`: the finding is qualitative by nature, not merely weak.
 
 Also identify the evidence type where possible:
 - `literature_evidence`
@@ -96,14 +106,20 @@ For each relevant open question:
 ### 4. Check Evidence Quality
 
 Before updating beliefs, check:
-- data quality
-- sample counts
-- control integrity
+- **Control uniqueness:** are controls distinct from test samples? No duplicate sequences, no shared samples across conditions
+- **Dimensionality:** do embedding sizes, feature counts, and output shapes match expectations?
+- **Sample counts:** do they match the experimental design? Spot-check against the data source
+- **Data quality issues:** flag any anomalies discovered during interpretation as findings with signal strength `methodological`
 - whether the result is confirmatory or exploratory
 - whether the result is independent of prior supporting evidence or largely redundant
 - whether it adds empirical support to a claim that previously had only literature or simulation support
 
 If the finding is fragile, say so explicitly.
+
+**Suspiciously good results:** When results substantially exceed pre-registered upper bounds (observed >> expected), do not accept them uncritically. Before proceeding:
+- Enumerate plausible inflators: confounds, data leakage, overfitting, control inadequacy
+- Reference the pre-registration document (in `doc/meta/pre-registration-*.md`) and compare observed vs. expected range explicitly
+- State whether the result survives scrutiny or needs additional verification
 
 ### 5. Update Claim Support / Dispute
 
@@ -162,6 +178,7 @@ Use them in this order:
 ## Writing
 
 Follow `templates/interpretation.md`.
+If the project uses open questions rather than formal hypotheses, adapt section headers in the output document accordingly — e.g., "Question-Level Implications" instead of "Hypothesis-Level Implications". Evaluate against questions in `doc/questions/` rather than hypothesis files in `specs/hypotheses/`.
 Save to `doc/interpretations/YYYY-MM-DD-<slug>.md`.
 
 Populate frontmatter:

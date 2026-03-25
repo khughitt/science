@@ -10,6 +10,7 @@ created: "{{YYYY-MM-DD}}"
 updated: "{{YYYY-MM-DD}}"
 input: "{{path to results, notebook, or prose description}}"
 workflow_run: "<workflow-run-slug>"  # optional: links to the run that produced the interpreted results
+prior_interpretations: []  # optional: interpretation IDs this document extends or supersedes
 ---
 
 # Interpretation: {{Short Title}}
@@ -31,6 +32,17 @@ Before updating beliefs, record:
 - dependence or independence relative to prior evidence
 -->
 
+## Data Quality Checks
+
+<!-- Any data quality concerns discovered during interpretation?
+- Control uniqueness: are controls distinct from test samples?
+- Sample counts: do they match the experimental design?
+- Dimensionality: do embedding sizes / feature counts match expectations?
+- Unexpected duplicates or anomalies?
+
+If no issues found, note "No data quality concerns identified."
+Flag any issues as findings with signal strength "methodological". -->
+
 ## Claim-Level Updates
 
 <!--
@@ -44,10 +56,12 @@ This is the core epistemic section.
 
 ## Hypothesis-Level Implications
 
-<!--
-How do the claim-level updates affect the broader hypothesis?
+<!-- How do the claim-level updates affect the broader hypothesis?
 Avoid direct "proved/refuted" language unless the case is genuinely overwhelming.
--->
+
+If the project uses open questions rather than formal hypotheses,
+rename this section to "Question-Level Implications" and evaluate
+against questions in doc/questions/ instead. -->
 
 ## Evidence vs. Open Questions
 
@@ -63,6 +77,13 @@ For each new question:
 - type
 - suggested next evidence
 -->
+
+## User Questions
+
+<!-- Questions the user raised during interpretation, with answers.
+These are often the most insightful prompts — record them as part of the
+interpretation rather than losing them to conversation history.
+Omit if no user questions were raised. -->
 
 ## Limitations & Residual Uncertainty
 

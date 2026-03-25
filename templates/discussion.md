@@ -39,6 +39,7 @@ rather than splitting into a separate section. -->
 | Priority | Action | Why now | Dependencies |
 |---|---|---|---|
 | P1 | <action> | <rationale> | <deps> |
+| P1 [actionable now] | <low-cost change> | <can verify immediately> | none |
 
 ## Synthesis
 

@@ -82,13 +82,15 @@ Present as a coverage map with a **Direction** column when a prior analysis exis
 
 The Direction column (improving / stable / regressing / new) shows momentum since the last analysis. This makes regressions and stale areas immediately visible.
 
-### 3b. Newly Unblocked
+### 3b. Status Transitions
 
-If a prior next-steps analysis exists (`doc/meta/next-steps-*.md`), compare against it:
-- Which tasks were previously blocked but are now unblocked?
-- What changed to unblock them?
+If a prior next-steps analysis exists (`doc/meta/next-steps-*.md`), compare against it and surface all three directions:
 
-This longitudinal view makes progress visible and highlights newly actionable work.
+- **Newly unblocked:** tasks that were blocked but are now actionable. What changed to unblock them?
+- **Newly blocked:** tasks that lost a dependency or had assumptions invalidated since the last analysis.
+- **Newly irrelevant:** tasks superseded by results or no longer decision-relevant. These are pruning opportunities — removing stale work from the queue is as valuable as adding new work.
+
+This longitudinal view makes progress visible and highlights both forward momentum and pruning opportunities.
 
 ### 3c. Task Tracking Gaps
 
@@ -118,6 +120,8 @@ For each suggestion, include:
 - A brief rationale (1 sentence)
 - The suggested command to run (e.g., `/science:research-topic`, `/science:tasks add ...`)
 
+**Design constraints:** If the user has provided actionable design feedback during the session that doesn't fit the task/question/hypothesis taxonomy (e.g., page density preferences, API constraints, performance requirements), capture it as a row in the Recommended Next Actions table with a note to record it in project memory or a design doc.
+
 ## Writing
 
 Save output to `doc/meta/next-steps-<YYYY-MM-DD>.md`. If a file for today already exists (delta mode), append an `## Update — HH:MM` section instead of creating a new file.
@@ -140,8 +144,8 @@ Save output to `doc/meta/next-steps-<YYYY-MM-DD>.md`. If a file for today alread
 ### High-Impact Gaps
 <prioritized gap descriptions with evidence links>
 
-## Newly Unblocked (if prior analysis exists)
-<tasks that became actionable since last analysis>
+## Status Transitions (if prior analysis exists)
+<newly unblocked, newly blocked, newly irrelevant tasks since last analysis>
 
 ## Task Tracking Gaps (if any)
 <implementation work in plans not tracked as tasks>

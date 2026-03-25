@@ -41,6 +41,7 @@ Follow the source hierarchy strictly:
 1. Fetch metadata/abstract from the URL.
 2. Supplement with LLM context.
 3. Cross-check key facts.
+4. **If the URL returns a paywall, 403, or redirect loop:** fall back to DOI resolution → PubMed/preprint search (bioRxiv, arXiv, SSRN) → press coverage → GitHub README/repo. Do not abandon the paper — most paywalled papers have accessible metadata through alternative channels. Note the fallback source in the `Source:` frontmatter field.
 
 ### If the paper cannot be found:
 
@@ -64,6 +65,16 @@ Follow `templates/paper-summary.md` and fill every section.
 3. Add new questions to `doc/questions/` using `templates/question.md` when appropriate.
 4. Note approach implications in `doc/04-approach.md` when relevant.
 5. Commit: `git add -A && git commit -m "papers: research <citekey> - <short title>"`
+
+## Batch Processing
+
+When processing multiple papers in a single session (2+ papers with a shared thematic connection), after all individual summaries are written:
+
+1. Produce a brief cross-paper synthesis document at `doc/papers/synthesis-YYYY-MM-DD-<theme>.md`.
+2. Contents: shared themes, tensions between papers, and combined implications for the project.
+3. Cross-reference the individual paper summaries by their `id` fields.
+
+This only applies when papers share a thematic connection. Unrelated papers processed in the same session do not need synthesis.
 
 ## Process Reflection
 

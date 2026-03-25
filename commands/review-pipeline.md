@@ -47,7 +47,10 @@ Also read:
 - `doc/plans/*<slug>*` — implementation plan (if exists)
 - `specs/scope-boundaries.md` — project scope
 
-**Sub-plan handling:** If the plan being reviewed is a sub-plan of a larger inquiry (e.g., Tasks 2-3 of a broader inquiry), the inquiry-level validation may pass trivially. In this case, apply the rubric dimensions to the plan's internal consistency, not just the parent inquiry's structure.
+**Sub-plan handling:** If the plan being reviewed is a sub-plan of a larger inquiry (e.g., Tasks 2-3 of a broader inquiry), the inquiry-level validation may pass trivially. In this case:
+- Apply the rubric dimensions to the plan's internal consistency, not just the parent inquiry's structure.
+- Dimensions 1 (Evidence Coverage) and 7 (Scope Check) may be marked **N/A — inherited from parent plan** if the parent plan has already passed review on these dimensions. Reference the parent plan's review document.
+- Focus review effort on dimensions specific to the sub-plan: validation criteria (Dim 6), assumption audit (Dim 2), integration boundaries (Dim 8).
 
 ### Step 2: Evaluate each rubric dimension
 

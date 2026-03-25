@@ -74,6 +74,7 @@ Sections:
 3. If discussion changes hypothesis wording, update relevant file in `specs/hypotheses/`.
 4. **Task reframing check:** Review whether the discussion reframes the meaning of any existing tasks. If a task's purpose or scope has changed, update its description in `tasks/active.md` to reflect the new framing.
 5. Commit: `git add -A && git commit -m "doc: discuss <slug> and update priorities"`
+6. **Actionable recommendations:** If the discussion produced a concrete, low-cost design change or implementation recommendation (something testable in under an hour), it should be flagged with `[actionable now]` in the Prioritized Follow-Ups table. Offer to implement it immediately rather than creating a task for later. This prevents useful small changes from being buried in discussion documents.
 
 ## Process Reflection
 

@@ -38,9 +38,31 @@ updated: "{{YYYY-MM-DD}}"
 
 <!-- How does this connect to our research questions/hypotheses? Reference hypothesis IDs. -->
 
+## Project Framework Mapping
+
+<!-- If the project has an existing ontology, schema, or classification framework,
+map the paper's concepts to the project's vocabulary:
+
+| Paper Concept | Project Concept | Notes |
+|---|---|---|
+| <their term> | <our term> | <correspondence notes> |
+
+Omit if no structured framework exists to map against. -->
+
 ## Limitations
 
 <!-- What did they NOT address? Questionable assumptions? Known weaknesses? -->
+
+## Model / Tool Availability
+
+<!-- If the paper describes a model, tool, or dataset intended for reuse:
+- Available checkpoints / versions
+- Hardware requirements
+- License
+- Quantization options (if applicable)
+- Access restrictions
+
+Omit for papers that don't release artifacts. -->
 
 ## Follow-up
 

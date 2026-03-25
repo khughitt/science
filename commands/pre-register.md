@@ -46,6 +46,8 @@ For each hypothesis under test:
 - Is the analysis sufficiently powered to detect the expected effect?
 - What would you do next if results are ambiguous?
 
+**Pilot experiments:** If this is a pilot (1-2 seeds, small N, exploratory scope), explicitly state what it CAN and CANNOT establish. A pilot can suggest directions and calibrate effect sizes but cannot confirm or refute a hypothesis. Frame decision criteria accordingly — a pilot's null result means "insufficient signal to justify scaling up", not "hypothesis is wrong."
+
 ### 4b. Plan for Suspicious/Unexpected Results
 
 - What would "too good to be true" look like? (e.g., AUC > 0.95, perfect accuracy)
@@ -66,6 +68,15 @@ If the primary metric has changed from prior analyses, or if the metric choice i
 - Which analyses are pre-registered (confirmatory)?
 - Which are explicitly exploratory?
 - Are there analyses you plan to run "just to see what happens"? Label them.
+
+### 5b. Sampling Strategy Rationale (if applicable)
+
+If the experimental design involves non-obvious sampling decisions (stratified sampling, subsampling from a larger population, context selection), document the rationale and trade-offs:
+- What sampling strategy was chosen?
+- What was the alternative?
+- Why was this approach preferred?
+
+Omit when sampling is straightforward (e.g., "use all available data").
 
 ## Writing
 

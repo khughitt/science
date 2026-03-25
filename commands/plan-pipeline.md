@@ -34,7 +34,7 @@ For brevity, the examples below write just `science-tool <command>` — **always
 - **SHOULD** include AnnotatedParam metadata for all pipeline parameters
 - **SHOULD** reference tool-specific skills where applicable
 - **SHOULD** suggest a pilot/phased approach for complex pipelines
-- **MUST NOT** embed tool-specific logic (Snakemake rules, etc.) — reference skills instead
+- **SHOULD** keep plans tool-agnostic by default — reference tool-specific skills. However, when the user explicitly requests a specific orchestration tool (Snakemake, Nextflow, Make, etc.), include a tool-specific section with the workflow definition while keeping the rest of the plan tool-agnostic.
 
 ## Input Modes
 
@@ -126,7 +126,7 @@ Save to `doc/plans/YYYY-MM-DD-<slug>-pipeline-plan.md` using the standard plan f
 
 **Architecture:** <derived from transformation graph>
 
-**Tech Stack:** <tools identified in steps 2-3>
+**New Dependencies:** <libraries, tools, or data sources not already in the project>
 
 **Inquiry:** `<slug>` — see `doc/inquiries/<slug>.md` and knowledge graph
 
@@ -135,6 +135,14 @@ Save to `doc/plans/YYYY-MM-DD-<slug>-pipeline-plan.md` using the standard plan f
 ## Task N: <Transformation step>
 ...
 ```
+
+#### Conditional Plan Sections
+
+Include these sections when applicable:
+
+- **Changes to Existing Code** (Task mode / extend-existing-workflow plans): Which existing files are modified and why? What's the diff from the current working pipeline? Omit when building from scratch.
+- **Decision Criteria** (exploratory/research plans): What would change our mind about pursuing this? What result at what stage would make us stop or pivot? This is a top-level go/no-go, distinct from per-task validation criteria. Omit for straightforward implementation plans.
+- **Reusable Infrastructure:** If any task produces infrastructure (tools, indices, data pipelines) with value beyond this specific analysis, flag it with `reusable: true` and briefly describe the broader applicability.
 
 Each task should reference the inquiry node it implements and include TDD steps.
 
@@ -158,7 +166,7 @@ science-tool graph stamp-revision
 
 ## Important Notes
 
-- **Plans are tool-agnostic by default.** Reference tool-specific skills rather than embedding their conventions.
+- **Plans are tool-agnostic by default.** Reference tool-specific skills rather than embedding their conventions. Exception: when the user explicitly requests a specific tool, include a dedicated tool-specific section.
 - **Pilot first.** For complex pipelines, suggest a pilot phase with reduced scope.
 - **Validation criteria are mandatory.** Every transformation must have a way to verify it worked.
 - **The inquiry is the source of truth.** The plan document is a rendering of the inquiry's computational layer.
