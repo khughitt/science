@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
+from fnmatch import fnmatch
 from pathlib import Path
 
 import yaml
@@ -61,3 +62,39 @@ def next_feedback_id(feedback_dir: Path, date_str: str) -> str:
                 max_num = max(max_num, int(m.group(2)))
 
     return f"fb-{date_str}-{max_num + 1:03d}"
+
+
+def load_all_entries(feedback_dir: Path) -> list[FeedbackEntry]:
+    """Load all feedback entries from a directory."""
+    if not feedback_dir.is_dir():
+        return []
+    entries = []
+    for path in sorted(feedback_dir.glob("fb-*.yaml")):
+        entries.append(load_entry(path))
+    return entries
+
+
+def list_entries(
+    feedback_dir: Path,
+    *,
+    status: str | None = "open",
+    target: str | None = None,
+    category: str | None = None,
+    project: str | None = None,
+) -> list[FeedbackEntry]:
+    """Filter feedback entries. Default: open entries only. Pass status=None for all."""
+    entries = load_all_entries(feedback_dir)
+
+    if status is not None:
+        entries = [e for e in entries if e.status == status]
+    if target is not None:
+        entries = [e for e in entries if fnmatch(e.target, target)]
+    if category is not None:
+        entries = [e for e in entries if e.category == category]
+    if project is not None:
+        entries = [e for e in entries if e.project == project]
+
+    # Sort by recurrence descending, then date descending (most recent first)
+    entries.sort(key=lambda e: (e.recurrence, e.created), reverse=True)
+
+    return entries
