@@ -221,3 +221,22 @@ def render_report(
         lines.append("")
 
     return "\n".join(lines)
+
+
+def detect_project(start: Path) -> str:
+    """Detect the project name by walking up to find science.yaml.
+
+    Returns the directory name of the nearest ancestor containing science.yaml,
+    or the start directory name if none found. Walk stops at $HOME.
+    """
+    home = Path.home()
+    current = start.resolve()
+
+    while current != current.parent:
+        if (current / "science.yaml").exists():
+            return current.name
+        if current == home:
+            break
+        current = current.parent
+
+    return start.resolve().name

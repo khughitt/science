@@ -302,3 +302,30 @@ def test_render_report(tmp_path: Path):
 def test_render_report_empty(tmp_path: Path):
     report = render_report(tmp_path)
     assert "No feedback entries" in report
+
+
+from science_tool.feedback import detect_project
+
+
+def test_detect_project_from_science_yaml(tmp_path: Path):
+    project_dir = tmp_path / "my-project"
+    project_dir.mkdir()
+    (project_dir / "science.yaml").write_text("profile: research\n")
+    result = detect_project(project_dir)
+    assert result == "my-project"
+
+
+def test_detect_project_walks_up(tmp_path: Path):
+    project_dir = tmp_path / "my-project"
+    sub_dir = project_dir / "src" / "deep"
+    sub_dir.mkdir(parents=True)
+    (project_dir / "science.yaml").write_text("profile: research\n")
+    result = detect_project(sub_dir)
+    assert result == "my-project"
+
+
+def test_detect_project_no_science_yaml_uses_cwd_name(tmp_path: Path):
+    leaf = tmp_path / "some-dir"
+    leaf.mkdir()
+    result = detect_project(leaf)
+    assert result == "some-dir"
