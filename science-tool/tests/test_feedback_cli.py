@@ -126,3 +126,58 @@ class TestFeedbackUpdate:
             env=env,
         )
         assert result.exit_code != 0
+
+
+class TestFeedbackTriage:
+    def test_triage_shows_grouped_output(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:discuss", "--summary", "Issue A", "--project", "proj-a"],
+            env=env,
+        )
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:discuss", "--summary", "Issue B", "--project", "proj-b"],
+            env=env,
+        )
+        result = runner.invoke(main, ["feedback", "triage"], env=env)
+        assert result.exit_code == 0
+        assert "command:discuss" in result.output
+
+    def test_triage_with_target_glob(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:discuss", "--summary", "A"],
+            env=env,
+        )
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "template:discussion", "--summary", "B"],
+            env=env,
+        )
+        result = runner.invoke(main, ["feedback", "triage", "--target", "command:*"], env=env)
+        assert result.exit_code == 0
+        assert "command:discuss" in result.output
+        assert "template:discussion" not in result.output
+
+
+class TestFeedbackReport:
+    def test_report_generates_markdown(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        runner.invoke(
+            main,
+            ["feedback", "add", "--target", "command:discuss", "--summary", "Test issue"],
+            env=env,
+        )
+        result = runner.invoke(main, ["feedback", "report"], env=env)
+        assert result.exit_code == 0
+        assert "Feedback Report" in result.output
+        assert "Test issue" in result.output
+
+    def test_report_empty(self, runner: CliRunner, tmp_path):
+        env = {"SCIENCE_FEEDBACK_DIR": str(tmp_path)}
+        result = runner.invoke(main, ["feedback", "report"], env=env)
+        assert result.exit_code == 0
+        assert "No feedback entries" in result.output

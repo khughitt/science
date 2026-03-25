@@ -1907,5 +1907,40 @@ def feedback_update(
     click.echo(f"Updated {entry.id}")
 
 
+@feedback.command("triage")
+@click.option("--target", default=None, help="Filter by target (fnmatch glob)")
+def feedback_triage(target: str | None) -> None:
+    """Show open entries grouped by target for triage."""
+    from science_tool.feedback import group_for_triage
+
+    fb_dir = _get_feedback_dir()
+    groups = group_for_triage(fb_dir, target=target)
+
+    if not groups:
+        click.echo("No open feedback entries.")
+        return
+
+    for target_key, group in groups.items():
+        n_projects = len(group["projects"])
+        n_entries = len(group["entries"])
+        total_recur = group["total_recurrence"]
+        projects_str = ", ".join(sorted(group["projects"])) if group["projects"] else "unknown"
+        click.echo(f"\n## {target_key}  ({n_entries} entries, {total_recur} recurrences, {n_projects} projects: {projects_str})")
+        for entry in group["entries"]:
+            click.echo(f"  - {entry.id} [{entry.category}] {entry.summary}")
+
+
+@feedback.command("report")
+@click.option("--status", default=None, help="Filter by status")
+@click.option("--project", default=None, help="Filter by project")
+def feedback_report(status: str | None, project: str | None) -> None:
+    """Generate a markdown report of feedback entries."""
+    from science_tool.feedback import render_report
+
+    fb_dir = _get_feedback_dir()
+    report = render_report(fb_dir, status=status, project=project)
+    click.echo(report)
+
+
 if __name__ == "__main__":
     main()
