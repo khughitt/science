@@ -78,39 +78,22 @@ This only applies when papers share a thematic connection. Unrelated papers proc
 
 ## Process Reflection
 
-Reflect on the **paper-summary template** sections and the **cross-checking** guidance.
+Reflect on the **template** and **workflow** used above.
 
-After completing the task above, append a brief entry to `doc/meta/skill-feedback.md` (create the file and directory if they don't exist).
+If you have feedback (friction, gaps, suggestions, or things that worked well),
+report each item via:
 
-Use this format:
-
-```markdown
-## YYYY-MM-DD — research-paper
-
-**Template/structure friction:**
-- Any section you left empty, filled with boilerplate, or that felt forced
-
-**Missing capture:**
-- Information you wanted to record but had no natural place for
-
-**Guidance issues:**
-- Command instructions that were confusing, contradictory, or didn't help
-
-**Suggested improvement:**
-- Concrete proposal for fixing any friction above (optional but encouraged)
-
-**What worked well:**
-- A section or instruction that genuinely improved the output
+```bash
+science-tool feedback add \
+  --target "command:research-paper" \
+  --category <friction|gap|guidance|suggestion|positive> \
+  --summary "<one-line summary>" \
+  --detail "<optional prose>"
 ```
 
 Guidelines:
-- Be concrete and specific, not generic ("the Limitations section felt redundant for a methods paper" > "some sections could be improved")
-- 2-5 bullets total. Skip categories that have nothing to report.
-- If the same issue has occurred before, note the recurrence (e.g., "3rd time this section was not applicable") — recurring patterns are the strongest signal for needed changes
-- If everything worked smoothly, a single "No friction encountered" is fine — don't manufacture feedback
-
-Aspect fit check:
-- Are the current project aspects the right fit for this work?
-- If sections were missing that an unloaded aspect would have provided, suggest adding it
-- If aspect-contributed sections were consistently skipped or filled with boilerplate, suggest removing the aspect
-- Note any aspect suggestions in the feedback entry under "Suggested improvement"
+- One entry per distinct issue (not one big dump)
+- If the same issue has occurred before, the tool will detect it and
+  increment recurrence automatically
+- Skip if everything worked smoothly — no feedback is valid feedback
+- For template-specific issues, use `--target "template:<name>"` instead

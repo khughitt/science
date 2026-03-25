@@ -95,33 +95,22 @@ Source-check titles and authors via web search before presenting them.
 
 ## Process Reflection
 
-Reflect on the **hypothesis template** sections and the **claim-bundle / falsifiability** prompts.
+Reflect on the **template** and **workflow** used above.
 
-After completing the task above, append a brief entry to `doc/meta/skill-feedback.md` (create the file and directory if they don't exist).
+If you have feedback (friction, gaps, suggestions, or things that worked well),
+report each item via:
 
-Use this format:
-
-```markdown
-## YYYY-MM-DD — add-hypothesis
-
-**Template/structure friction:**
-- Any section you left empty, filled with boilerplate, or that felt forced
-
-**Missing capture:**
-- Information you wanted to record but had no natural place for
-
-**Guidance issues:**
-- Command instructions that were confusing, contradictory, or didn't help
-
-**Suggested improvement:**
-- Concrete proposal for fixing any friction above (optional but encouraged)
-
-**What worked well:**
-- A section or instruction that genuinely improved the output
+```bash
+science-tool feedback add \
+  --target "command:add-hypothesis" \
+  --category <friction|gap|guidance|suggestion|positive> \
+  --summary "<one-line summary>" \
+  --detail "<optional prose>"
 ```
 
 Guidelines:
-- Be concrete and specific.
-- 2-5 bullets total. Skip categories that have nothing to report.
-- If the same issue has occurred before, note the recurrence.
-- If everything worked smoothly, a single "No friction encountered" is fine.
+- One entry per distinct issue (not one big dump)
+- If the same issue has occurred before, the tool will detect it and
+  increment recurrence automatically
+- Skip if everything worked smoothly — no feedback is valid feedback
+- For template-specific issues, use `--target "template:<name>"` instead

@@ -109,9 +109,22 @@ Save to `doc/discussions/comparison-<slug>.md`.
 
 ## Process Reflection
 
-Reflect on whether the comparison stayed focused on:
-- claims rather than slogans
-- evidence quality rather than evidence count
-- uncertainty reduction rather than premature verdicts
+Reflect on the **template** and **workflow** used above.
 
-After completing the task above, append a brief entry to `doc/meta/skill-feedback.md`.
+If you have feedback (friction, gaps, suggestions, or things that worked well),
+report each item via:
+
+```bash
+science-tool feedback add \
+  --target "command:compare-hypotheses" \
+  --category <friction|gap|guidance|suggestion|positive> \
+  --summary "<one-line summary>" \
+  --detail "<optional prose>"
+```
+
+Guidelines:
+- One entry per distinct issue (not one big dump)
+- If the same issue has occurred before, the tool will detect it and
+  increment recurrence automatically
+- Skip if everything worked smoothly — no feedback is valid feedback
+- For template-specific issues, use `--target "template:<name>"` instead
