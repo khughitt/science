@@ -4,3 +4,13 @@ ontologies:
     source_url: "https://github.com/biolink/biolink-model"
     description: "Biolink Model — biomedical and translational science data model"
     catalog_path: "biolink/catalog.yaml"
+  - name: physics
+    version: "1.0.0"
+    source_url: "project-authored"
+    description: "Physics — entity types and predicates for physical systems research"
+    catalog_path: "physics/catalog.yaml"
+  - name: qudt
+    version: "3.2.0"
+    source_url: "https://github.com/qudt/qudt-public-repo"
+    description: "QUDT — quantity kinds for measurement and quantitative modeling"
+    catalog_path: "qudt/catalog.yaml"

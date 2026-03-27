@@ -1,0 +1,1108 @@
+# QUDT Quantity Kind catalog — extracted from QUDT v3.2.0
+# https://qudt.org/
+#
+# Refresh with: uv run --with rdflib scripts/extract_qudt_catalog.py
+# Entity types: QUDT quantity kinds relevant to physics and general science
+# Predicates: hand-authored measurement-oriented relations
+# recommended: true marks commonly-used terms highlighted by the suggestion system
+
+ontology: qudt
+version: "3.2.0"
+prefix: qudt
+prefix_uri: https://qudt.org/vocab/quantitykind/
+entity_types:
+- id: qudt:Acceleration
+  name: acceleration
+  description: Acceleration is the (instantaneous) rate of change of velocity. Acceleration may be either linear acceleration,
+    or angular acceleration. It is a vector quantity with dimension length/time^{2} for line
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Action
+  name: action
+  description: An action is usually an integral over time. But for action pertaining to fields, it may be integrated over
+    spatial variables as well. In some cases, the action is integrated along the path followed by
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Angle
+  name: angle
+  description: The abstract notion of angle. Narrow concepts include plane angle and solid angle. While both plane angle and
+    solid angle are dimensionless, they are actually length/length and area/area respectively.
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:AngularMomentum
+  name: angular_momentum
+  description: 'Angular Momentum of an object rotating about some reference point is the measure of the extent to which the
+    object will continue to rotate about that point unless acted upon by an external torque. In '
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Area
+  name: area
+  description: Area is a quantity expressing the two-dimensional size of a defined part of a surface, typically a region bounded
+    by a closed curve.
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Conductance
+  name: conductance
+  description: Conductance, for a resistive two-terminal element or two-terminal circuit with terminals A and B, quotient
+    of the electric current i in the element or circuit by the voltage u_{AB} between the termina
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Density
+  name: density
+  description: 'The mass density or density of a material is defined as its mass per unit volume. The symbol most often used
+    for density is rho. Mathematically, density is defined as mass divided by volume: rho = m/V'
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:ElectricCharge
+  name: electric_charge
+  description: '"Electric Charge" is a fundamental conserved property of some subatomic particles, which determines their
+    electromagnetic interaction. Electrically charged matter is influenced by, and produces, elect'
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:ElectricCurrent
+  name: electric_current
+  description: '"Electric Current" is the flow (movement) of electric charge. The amount of electric current through some
+    surface, for example, a section through a copper conductor, is defined as the amount of electr'
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Energy
+  name: energy
+  description: Energy is the quantity characterizing the ability of a system to do work.
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Entropy
+  name: entropy
+  description: When a small amount of heat dQ is received by a system whose thermodynamic temperature is T, the entropy of
+    the system increases by dQ/T, provided that no irreversible change takes place in the system
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Force
+  name: force
+  description: '"Force" is an influence that causes mass to accelerate. It may be experienced as a lift, a push, or a pull.
+    Force is defined by Newton''s Second Law as F = m times a , where F is force, m is mass and a'
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Frequency
+  name: frequency
+  description: '"Frequency" is the number of occurrences of a repeating event per unit time. The repetition of the events
+    may be periodic (that is. the length of time between event repetitions is fixed) or aperiodic '
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Impedance
+  name: impedance
+  description: '"Impedance" is the measure of the opposition that a circuit presents to the passage of a current when a voltage
+    is applied. In quantitative terms, it is the complex ratio of the voltage to the current'
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Length
+  name: length
+  description: In geometric measurements, length most commonly refers to the est dimension of an object. In some contexts,
+    the term "length" is reserved for a certain dimension of an object along which the length is
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:LuminousIntensity
+  name: luminous_intensity
+  description: Luminous Intensity is a measure of the wavelength-weighted power emitted by a light source in a particular
+    direction per unit solid angle. The weighting is determined by the luminosity function, a sta
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:MagneticFluxDensity
+  name: magnetic_flux_density
+  description: '"Magnetic Flux Density" is a vector quantity and is the magnetic flux per unit area of a magnetic field at
+    right angles to the magnetic force. It can be defined in terms of the effects the field has, '
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Mass
+  name: mass
+  description: In physics, mass, more specifically inertial mass, can be defined as a quantitative measure of an object's
+    resistance to acceleration. The SI unit of mass is the kilogram (kg)
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Momentum
+  name: momentum
+  description: The momentum of a system of particles is given by the sum of the momentums of the individual particles which
+    make up the system or by the product of the total mass of the system and the velocity of th
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Permittivity
+  name: permittivity
+  description: '"Permittivity" is a physical quantity that describes how an electric field affects, and is affected by a dielectric
+    medium, and is determined by the ability of a material to polarize in response to th'
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Power
+  name: power
+  description: Power is the rate at which work is performed or energy is transmitted, or the amount of energy required or
+    expended for a given unit of time. As a rate of change of work done or the energy of a subsys
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Pressure
+  name: pressure
+  description: Pressure is an effect which occurs when a force is applied on a surface. Pressure is the amount of force acting
+    on a unit area. Pressure is distinct from stress, as the former is the ratio of the comp
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Temperature
+  name: temperature
+  description: Temperature is a physical property of matter that quantitatively expresses the common notions of hot and cold.
+    Objects of low temperature are cold, while various degrees of higher temperatures are ref
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Time
+  name: time
+  description: Time is a basic component of the measuring system used to sequence events, to compare the durations of events
+    and the intervals between them, and to quantify the motions of objects.
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Velocity
+  name: velocity
+  description: In kinematics, velocity is the speed of an object and a specification of its direction of motion. Speed describes
+    only how fast an object is moving, whereas velocity gives both how fast and in what di
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Viscosity
+  name: viscosity
+  description: Viscosity is a measure of the resistance of a fluid which is being deformed by either shear stress or extensional
+    stress. In general terms it is the resistance of a liquid to flow, or its "thickness".
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Voltage
+  name: voltage
+  description: Voltage, also referred to as Electric Tension, is the difference between electrical potentials of two points.
+    For an electric field within a medium, U_{ab} = - int_{r_a}^{r_b} E . {dr}, where E is ele
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Volume
+  name: volume
+  description: The volume of a solid object is the three-dimensional concept of how much space it occupies, often quantified
+    numerically. One-dimensional figures (such as lines) and two-dimensional shapes (such as s
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Wavelength
+  name: wavelength
+  description: 'For a monochromatic wave, "wavelength" is the distance between two successive points in a direction perpendicular
+    to the wavefront where at a given instant the phase differs by 2pi. The wavelength of '
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:Work
+  name: work
+  description: A force is said to do Work when it acts on a body so that there is a displacement of the point of application,
+    however small, in the direction of the force. The concepts of work and energy are closely
+  curie_prefixes:
+  - QUDT
+  recommended: true
+- id: qudt:AbsorbedDose
+  name: absorbed_dose
+  description: '"Absorbed Dose" (also known as Total Ionizing Dose, TID) is a measure of the energy deposited in a medium
+    by ionizing radiation. It is equal to the energy deposited per unit mass of medium, and so has'
+  curie_prefixes:
+  - QUDT
+- id: qudt:AbsorbedDoseRate
+  name: absorbed_dose_rate
+  description: '"Absorbed Dose Rate" is the absorbed dose of ionizing radiation imparted at a given location per unit of time
+    (second, minute, hour, or day).'
+  curie_prefixes:
+  - QUDT
+- id: qudt:Absorptance
+  name: absorptance
+  description: Absorptance is the ratio of the radiation absorbed by a surface to that incident upon it. Also known as absorbance.
+  curie_prefixes:
+  - QUDT
+- id: qudt:AccelerationOfGravity
+  name: acceleration_of_gravity
+  description: The acceleration of freely falling bodies under the influence of terrestrial gravity, equal to approximately
+    9.81 meters (32 feet) per second per second.
+  curie_prefixes:
+  - QUDT
+- id: qudt:Acidity
+  name: acidity
+  description: Chemicals or substances having a pH less than 7 are said to be acidic; lower pH means higher acidity.
+  curie_prefixes:
+  - QUDT
+- id: qudt:AcousticImpedance
+  name: acoustic_impedance
+  description: Acoustic impedance at a surface is the complex quotient of the average sound pressure over that surface by
+    the sound volume flow rate through that surface.
+  curie_prefixes:
+  - QUDT
+- id: qudt:ActivePower
+  name: active_power
+  description: An Active Power is, under periodic conditions, the mean value, taken over one period T, of the instantaneous
+    power p. In complex notation, P = mathbf{Re} \; underline{S}, where underline{S} is complex
+  curie_prefixes:
+  - QUDT
+- id: qudt:Activity
+  name: activity
+  description: Activity is the number of decays per unit time of a radioactive sample, the term used to characterise the number
+    of nuclei which disintegrate in a radioactive substance per unit time. Activity is usua
+  curie_prefixes:
+  - QUDT
+- id: qudt:ActivityCoefficient
+  name: activity_coefficient
+  description: An "Activity Coefficient" is a factor used in thermodynamics to account for deviations from ideal behaviour
+    in a mixture of chemical substances. In an ideal mixture, the interactions between each pair
+  curie_prefixes:
+  - QUDT
+- id: qudt:Admittance
+  name: admittance
+  description: '"Admittance" is a measure of how easily a circuit or device will allow a current to flow. It is defined as
+    the inverse of the impedance (Z).'
+  curie_prefixes:
+  - QUDT
+- id: qudt:Altitude
+  name: altitude
+  description: 'Altitude or height is defined based on the context in which it is used (aviation, geometry, geographical survey,
+    sport, and more). As a general definition, altitude is a distance measurement, usually '
+  curie_prefixes:
+  - QUDT
+- id: qudt:AmountOfSubstance
+  name: amount_of_substance
+  description: 'Amount of Substance is a standards-defined quantity that measures the size of an ensemble of elementary entities,
+    such as atoms, molecules, electrons, and other particles. It is sometimes referred to '
+  curie_prefixes:
+  - QUDT
+- id: qudt:AmountOfSubstanceConcentration
+  name: amount_of_substance_concentration
+  description: '"Amount of Substance of Concentration of B" is defined as the amount of a constituent divided by the volume
+    of the mixture.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:AngularAcceleration
+  name: angular_acceleration
+  description: Angular acceleration is the rate of change of angular velocity over time. Measurement of the change made in
+    the rate of change of an angle that a spinning object undergoes per unit time. It is a vecto
+  curie_prefixes:
+  - QUDT
+- id: qudt:AngularDistance
+  name: angular_distance
+  description: Angular distance travelled by orbiting vehicle measured from the azimuth of closest approach.
+  curie_prefixes:
+  - QUDT
+- id: qudt:AngularFrequency
+  name: angular_frequency
+  description: '"Angular frequency", symbol omega (also referred to by the terms angular speed, radial frequency, circular
+    frequency, orbital frequency, radian frequency, and pulsatance) is a scalar measure of rotati'
+  curie_prefixes:
+  - QUDT
+- id: qudt:AngularImpulse
+  name: angular_impulse
+  description: The Angular Impulse, also known as angular momentum, is the moment of linear momentum around a point. It is
+    defined asH = int Mdt, where M is the moment of force and t is time.
+  curie_prefixes:
+  - QUDT
+- id: qudt:AngularVelocity
+  name: angular_velocity
+  description: The change of angle per unit time; specifically, in celestial mechanics, the change in angle of the radius
+    vector per unit time.
+  curie_prefixes:
+  - QUDT
+- id: qudt:ApparentPower
+  name: apparent_power
+  description: '"Apparent Power" is the product of the rms voltage U between the terminals of a two-terminal element or two-terminal
+    circuit and the rms electric current I in the element or circuit. Under sinusoidal '
+  curie_prefixes:
+  - QUDT
+- id: qudt:AtomicEnergy
+  name: atomic_energy
+  description: skalare Größe von Elementarteilchen, die bei beliebiger Umwandlung innerhalb eines Systems erhalten bleibt
+    und als gespeichertes Arbeitsvermögen die Fähigkeit eines physikalischen Systems darstellt, A
+  curie_prefixes:
+  - QUDT
+- id: qudt:AtomicMass
+  name: atomic_mass
+  description: The "Atomic Mass" is the mass of a specific isotope, most often expressed in unified atomic mass units.
+  curie_prefixes:
+  - QUDT
+- id: qudt:AtomicNumber
+  name: atomic_number
+  description: The "Atomic Number", also known as the proton number, is the number of protons found in the nucleus of an atom
+    and therefore identical to the charge number of the nucleus. A nuclide is a species of at
+  curie_prefixes:
+  - QUDT
+- id: qudt:Basicity
+  name: basicity
+  description: Chemicals or substances having a pH higher than 7 are said to be basic; higher pH means higher basicity.
+  curie_prefixes:
+  - QUDT
+- id: qudt:BindingFraction
+  name: binding_fraction
+  description: The "Binding Fraction" is the ratio of the binding energy of a nucleus to the atomic mass number.
+  curie_prefixes:
+  - QUDT
+- id: qudt:BoilingPoint
+  name: boiling_point
+  description: A temperature that is the one at which a substance will change its physical state from a liquid to a gas. It
+    is also the temperature where the liquid and gaseous forms of a pure substance can exist in
+  curie_prefixes:
+  - QUDT
+- id: qudt:Breadth
+  name: breadth
+  description: '"Breadth" is the extent or measure of how broad or wide something is.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:BulkModulus
+  name: bulk_modulus
+  description: 'The bulk modulus of a substance measures the substance''s resistance to uniform compression. It is defined
+    as the ratio of the infinitesimal pressure increase to the resulting relative decrease of the '
+  curie_prefixes:
+  - QUDT
+- id: qudt:Capacitance
+  name: capacitance
+  description: '"Capacitance" is the ability of a body to hold an electrical charge; it is quantified as the amount of electric
+    charge stored for a given electric potential. Capacitance is a scalar-valued quantity.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:CatalyticActivity
+  name: catalytic_activity
+  description: An index of the actual or potential activity of a catalyst. The catalytic activity of an enzyme or an enzyme-containing
+    preparation is defined as the property measured by the increase in the rate of c
+  curie_prefixes:
+  - QUDT
+- id: qudt:CelsiusTemperature
+  name: celsius_temperature
+  description: '"Celsius Temperature", the thermodynamic temperature T_0, is exactly 0.01 kelvin below the thermodynamic temperature
+    of the triple point of water.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:ChemicalPotential
+  name: chemical_potential
+  description: '"Chemical Potential", also known as partial molar free energy, is a form of potential energy that can be absorbed
+    or released during a chemical reaction.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:Circulation
+  name: circulation
+  description: In fluid dynamics, circulation is the line integral around a closed curve of the fluid velocity. It has dimensions
+    of length squared over time.
+  curie_prefixes:
+  - QUDT
+- id: qudt:ComplexPower
+  name: complex_power
+  description: Complex Power, under sinusoidal conditions, is the product of the phasor mathbf{U} representing the voltage
+    between the terminals of a linear two-terminal element, or two-terminal circuit and the comp
+  curie_prefixes:
+  - QUDT
+- id: qudt:Compressibility
+  name: compressibility
+  description: Compressibility is a measure of the relative volume change of a fluid or solid as a response to a pressure
+    (or mean stress) change.
+  curie_prefixes:
+  - QUDT
+- id: qudt:Concentration
+  name: concentration
+  description: In chemistry, concentration is defined as the abundance of a constituent divided by the total volume of a mixture.
+    Furthermore, in chemistry, four types of mathematical description can be distinguishe
+  curie_prefixes:
+  - QUDT
+- id: qudt:Conductivity
+  name: conductivity
+  description: '"Conductivity" is a scalar or tensor quantity the product of which by the electric field strength in a medium
+    is equal to the electric current density. For an isotropic medium the conductivity is a sc'
+  curie_prefixes:
+  - QUDT
+- id: qudt:Count
+  name: count
+  description: '"Count" is the value of a count of items.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:CrossSection
+  name: cross_section
+  description: '"Cross-section" is used to express the likelihood of interaction between particles. For a specified target
+    particle and for a specified reaction or process produced by incident charged or uncharged pa'
+  curie_prefixes:
+  - QUDT
+- id: qudt:Curvature
+  name: curvature
+  description: The canonical example of extrinsic curvature is that of a circle, which has curvature equal to the inverse
+    of its radius everywhere. Smaller circles bend more sharply, and hence have higher curvature.
+  curie_prefixes:
+  - QUDT
+- id: qudt:DecayConstant
+  name: decay_constant
+  description: The "Decay Constant" is the proportionality between the size of a population of radioactive atoms and the rate
+    at which the population decreases because of radioactive decay.
+  curie_prefixes:
+  - QUDT
+- id: qudt:Depth
+  name: depth
+  description: Depth typically refers to the vertical measure of length from the surface of a liquid.
+  curie_prefixes:
+  - QUDT
+- id: qudt:Dimensionless
+  name: dimensionless
+  description: In dimensional analysis, a dimensionless quantity or quantity of dimension one is a quantity without an associated
+    physical dimension. It is thus a "pure" number, and as such always has a dimension of
+  curie_prefixes:
+  - QUDT
+- id: qudt:Displacement
+  name: displacement
+  description: '"Displacement" is the shortest distance from the initial to the final position of a point P.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:Distance
+  name: distance
+  description: '"Distance" is a numerical description of how far apart objects are.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:DynamicViscosity
+  name: dynamic_viscosity
+  description: A measure of the molecular frictional resistance of a fluid as calculated using Newton's law.
+  curie_prefixes:
+  - QUDT
+- id: qudt:Efficiency
+  name: efficiency
+  description: Efficiency is the ratio of output power to input power.
+  curie_prefixes:
+  - QUDT
+- id: qudt:ElectricChargeDensity
+  name: electric_charge_density
+  description: 'In electromagnetism, charge density is a measure of electric charge per unit volume of space, in one, two
+    or three dimensions. More specifically: the linear, surface, or volume charge density is the a'
+  curie_prefixes:
+  - QUDT
+- id: qudt:ElectricCurrentDensity
+  name: electric_current_density
+  description: '"Electric Current Density" is a measure of the density of flow of electric charge; it is the electric current
+    per unit area of cross section. Electric current density is a vector-valued quantity. Elec'
+  curie_prefixes:
+  - QUDT
+- id: qudt:ElectricDipoleMoment
+  name: electric_dipole_moment
+  description: '"Electric Dipole Moment" is a measure of the separation of positive and negative electrical charges in a system
+    of (discrete or continuous) charges. It is a vector-valued quantity. If the system of ch'
+  curie_prefixes:
+  - QUDT
+- id: qudt:ElectricField
+  name: electric_field
+  description: The space surrounding an electric charge or in the presence of a time-varying magnetic field has a property
+    called an electric field. This electric field exerts a force on other electrically charged o
+  curie_prefixes:
+  - QUDT
+- id: qudt:ElectricFieldStrength
+  name: electric_field_strength
+  description: Electric Field Strength is the magnitude and direction of an electric field, expressed by the value of E, also
+    referred to as color{indigo} {electric field intensity} or simply the electric field.
+  curie_prefixes:
+  - QUDT
+- id: qudt:ElectricPolarization
+  name: electric_polarization
+  description: '"Electric Polarization" is the relative shift of positive and negative electric charge in opposite directions
+    within an insulator, or dielectric, induced by an external electric field. Polarization oc'
+  curie_prefixes:
+  - QUDT
+- id: qudt:ElectricPotential
+  name: electric_potential
+  description: 'The Electric Potential is a scalar valued quantity associated with an electric field. The electric potential
+    phi(x) at a point, x, is formally defined as the line integral of the electric field taken '
+  curie_prefixes:
+  - QUDT
+- id: qudt:EnergyDensity
+  name: energy_density
+  description: Energy density is defined as energy per unit volume. The SI unit for energy density is the joule per cubic
+    meter.
+  curie_prefixes:
+  - QUDT
+- id: qudt:EnergyPerArea
+  name: energy_per_area
+  description: Energy per unit area is a measure of the energy either impinging upon or generated from a given unit of area.
+    This can be a measure of the "toughness" of a material, being the amount of energy that ne
+  curie_prefixes:
+  - QUDT
+- id: qudt:ForcePerArea
+  name: force_per_area
+  description: The force applied to a unit area of surface; measured in pascals (SI unit) or in dynes (cgs unit)
+  curie_prefixes:
+  - QUDT
+- id: qudt:ForcePerLength
+  name: force_per_length
+  description: Applicable units are those of quantitykind:ForcePerLength
+  curie_prefixes:
+  - QUDT
+- id: qudt:Friction
+  name: friction
+  description: '"Friction" is the force of two surfaces In contact, or the force of a medium acting on a moving object (that
+    is air on an aircraft). When contacting surfaces move relative to each other, the friction '
+  curie_prefixes:
+  - QUDT
+- id: qudt:GravitationalAttraction
+  name: gravitational_attraction
+  description: The force of attraction between all masses in the universe; especially the attraction of the earth's mass for
+    bodies near its surface; the more remote the body the less the gravity; the gravitation be
+  curie_prefixes:
+  - QUDT
+- id: qudt:Half-Life
+  name: half_life
+  description: The "Half-Life" is the average duration required for the decay of one half of the atoms or nuclei.
+  curie_prefixes:
+  - QUDT
+- id: qudt:HeatCapacity
+  name: heat_capacity
+  description: '"Heat Capacity" (usually denoted by a capital C, often with subscripts), or thermal capacity, is the measurable
+    physical quantity that characterizes the amount of heat required to change a substance''s'
+  curie_prefixes:
+  - QUDT
+- id: qudt:HeatFlowRate
+  name: heat_flow_rate
+  description: The rate of heat flow between two systems is measured in watts (joules per second). The formula for rate of
+    heat flow is bigtriangleup Q / bigtriangleup t = -K times A times bigtriangleup T/x, where b
+  curie_prefixes:
+  - QUDT
+- id: qudt:Height
+  name: height
+  description: '"Height" is the measurement of vertical distance, but has two meanings in common use. It can either indicate
+    how "tall" something is, or how "high up" it is.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:Illuminance
+  name: illuminance
+  description: Illuminance is the total luminous flux incident on a surface, per unit area. It is a measure of the intensity
+    of the incident light, wavelength-weighted by the luminosity function to correlate with hu
+  curie_prefixes:
+  - QUDT
+- id: qudt:Impulse
+  name: impulse
+  description: Produkt aus Kraft und Zeit
+  curie_prefixes:
+  - QUDT
+- id: qudt:Inductance
+  name: inductance
+  description: '"Inductance" is an electromagentic quantity that characterizes a circuit''s resistance to any change of electric
+    current; a change in the electric current through induces an opposing electromotive forc'
+  curie_prefixes:
+  - QUDT
+- id: qudt:InternalEnergy
+  name: internal_energy
+  description: '"Internal Energy" is simply its energy. "internal" refers to the fact that some energy contributions are not
+    considered. For instance, when the total system is in uniform motion, it has kinetic energy'
+  curie_prefixes:
+  - QUDT
+- id: qudt:Irradiance
+  name: irradiance
+  description: 'Irradiance and Radiant Emittance are radiometry terms for the power per unit area of electromagnetic radiation
+    at a surface. "Irradiance" is used when the electromagnetic radiation is incident on the '
+  curie_prefixes:
+  - QUDT
+- id: qudt:KinematicViscosity
+  name: kinematic_viscosity
+  description: 'The ratio of the viscosity of a liquid to its density. Viscosity is a measure of the resistance of a fluid
+    which is being deformed by either shear stress or tensile stress. In many situations, we are '
+  curie_prefixes:
+  - QUDT
+- id: qudt:KineticEnergy
+  name: kinetic_energy
+  description: 'Kinetic Energy is the energy which a body possesses as a consequence of its motion, defined as one-half the
+    product of its mass m and the square of its speed v, frac{1}{2} mv^{2} . The kinetic energy '
+  curie_prefixes:
+  - QUDT
+- id: qudt:LengthRatio
+  name: length_ratio
+  description: Applicable units are those of quantitykind:DimensionlessRatio
+  curie_prefixes:
+  - QUDT
+- id: qudt:LinearMomentum
+  name: linear_momentum
+  description: Linear momentum is the quantity obtained by multiplying the mass of a body by its linear velocity. The momentum
+    of a continuous medium is given by the integral of the velocity over the mass of the med
+  curie_prefixes:
+  - QUDT
+- id: qudt:Luminance
+  name: luminance
+  description: Luminance is a photometric measure of the luminous intensity per unit area of light travelling in a given direction.
+    It describes the amount of light that passes through or is emitted from a particula
+  curie_prefixes:
+  - QUDT
+- id: qudt:LuminousEfficacy
+  name: luminous_efficacy
+  description: Luminous Efficacy is the ratio of luminous flux (in lumens) to power (usually measured in watts). Depending
+    on context, the power can be either the radiant flux of the source's output, or it can be th
+  curie_prefixes:
+  - QUDT
+- id: qudt:LuminousFlux
+  name: luminous_flux
+  description: Luminous Flux or Luminous Power is the measure of the perceived power of light. It differs from radiant flux,
+    the measure of the total power of light emitted, in that luminous flux is adjusted to refl
+  curie_prefixes:
+  - QUDT
+- id: qudt:MachNumber
+  name: mach_number
+  description: '"Mach Number" is a dimensionless quantity representing the speed of an object moving through air or other
+    fluid divided by the local speed of sound. It is commonly used to represent the speed of an ob'
+  curie_prefixes:
+  - QUDT
+- id: qudt:MagneticDipoleMoment
+  name: magnetic_dipole_moment
+  description: '"Magnetic Dipole Moment" is the magnetic moment of a system is a measure of the magnitude and the direction
+    of its magnetism. Magnetic moment usually refers to its Magnetic Dipole Moment, and quantifi'
+  curie_prefixes:
+  - QUDT
+- id: qudt:MagneticField
+  name: magnetic_field
+  description: The Magnetic Field, denoted B, is a fundamental field in electrodynamics which characterizes the magnetic force
+    exerted by electric currents. It is closely related to the auxillary magnetic field H (s
+  curie_prefixes:
+  - QUDT
+- id: qudt:MagneticFlux
+  name: magnetic_flux
+  description: '"Magnetic Flux" is the product of the average magnetic field times the perpendicular area that it penetrates.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:Magnetization
+  name: magnetization
+  description: '"Magnetization" is defined as the ratio of magnetic moment per unit volume. It is a vector-valued quantity.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:MassDensity
+  name: mass_density
+  description: The mass density or density of a material is its mass per unit volume.
+  curie_prefixes:
+  - QUDT
+- id: qudt:MassFlowRate
+  name: mass_flow_rate
+  description: '"Mass Flow Rate" is a measure of Mass flux. The common symbol is dot{m} (pronounced m-dot), although sometimes
+    mu is used. The SI units are kg s-1.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:MassPerArea
+  name: mass_per_area
+  description: 'The area density (also known as areal density, surface density, or superficial density) of a two-dimensional
+    object is calculated as the mass per unit area. The SI derived unit is: kilogram per square'
+  curie_prefixes:
+  - QUDT
+- id: qudt:MassPerLength
+  name: mass_per_length
+  description: Linear density, linear mass density or linear mass is a measure of mass per unit of length, and it is a characteristic
+    of strings or other one-dimensional objects. The SI unit of linear density is the
+  curie_prefixes:
+  - QUDT
+- id: qudt:MassRatio
+  name: mass_ratio
+  description: In aerospace engineering, mass ratio is a measure of the efficiency of a rocket. It describes how much more
+    massive the vehicle is with propellant than without; that is, it is the ratio of the rocket'
+  curie_prefixes:
+  - QUDT
+- id: qudt:MeanFreePath
+  name: mean_free_path
+  description: '"Mean Free Path" is the average distance travelled by a moving particle (such as an atom, a molecule, a photon)
+    between successive impacts (collisions) which modify its direction or energy or other pa'
+  curie_prefixes:
+  - QUDT
+- id: qudt:MeltingPoint
+  name: melting_point
+  description: A temperature that is the one at which a substance will change its physical state from a solid to a liquid.
+    It is also the temperature where the solid and liquid forms of a pure substance can exist in
+  curie_prefixes:
+  - QUDT
+- id: qudt:ModulusOfElasticity
+  name: modulus_of_elasticity
+  description: The Modulus of Elasticity is the mathematical description of an object or substance's tendency to be deformed
+    elastically (that is, non-permanently) when a force is applied to it.
+  curie_prefixes:
+  - QUDT
+- id: qudt:MolalityOfSolute
+  name: molality_of_solute
+  description: The "Molality of Solute" of a solution is defined as the amount of substance of solute divided by the mass
+    in kg of the solvent.
+  curie_prefixes:
+  - QUDT
+- id: qudt:MolarEnergy
+  name: molar_energy
+  description: '"Molar Energy" is the total energy contained by a thermodynamic system. The unit is J/mol, also expressed
+    as joule/mole, or joules per mole. This unit is commonly used in the SI unit system. The quant'
+  curie_prefixes:
+  - QUDT
+- id: qudt:MolarEntropy
+  name: molar_entropy
+  description: The "Standard Molar Entropy" is the entropy content of one mole of substance, under standard conditions (not
+    standard temperature and pressure STP).
+  curie_prefixes:
+  - QUDT
+- id: qudt:MolarHeatCapacity
+  name: molar_heat_capacity
+  description: '"Molar Heat Capacity" is the amount of heat energy required to raise the temperature of 1 mole of a substance.
+    In SI units, molar heat capacity (symbol: cn) is the amount of heat in joules required to'
+  curie_prefixes:
+  - QUDT
+- id: qudt:MolarMass
+  name: molar_mass
+  description: In chemistry, the molar mass M is defined as the mass of a given substance (chemical element or chemical compound)
+    divided by its amount of substance. It is a physical property of a given substance. T
+  curie_prefixes:
+  - QUDT
+- id: qudt:MolarVolume
+  name: molar_volume
+  description: The molar volume, symbol V_m, is the volume occupied by one mole of a substance (chemical element or chemical
+    compound) at a given temperature and pressure. It is equal to the molar mass (M) divided b
+  curie_prefixes:
+  - QUDT
+- id: qudt:MomentOfInertia
+  name: moment_of_inertia
+  description: The rotational inertia or resistance to change in direction or speed of rotation about a defined axis.
+  curie_prefixes:
+  - QUDT
+- id: qudt:Period
+  name: period
+  description: Duration of one cycle of a periodic phenomenon.
+  curie_prefixes:
+  - QUDT
+- id: qudt:Permeability
+  name: permeability
+  description: Applicable units are those of quantitykind:Permeability
+  curie_prefixes:
+  - QUDT
+- id: qudt:Polarizability
+  name: polarizability
+  description: Maß für die Deformierbarkeit der Elektronenhülle von Molekülen und Atomen
+  curie_prefixes:
+  - QUDT
+- id: qudt:PotentialEnergy
+  name: potential_energy
+  description: Energy possessed by a body by virtue of its position in a gravity field in contrast with kinetic energy, that
+    possessed by virtue of its motion.
+  curie_prefixes:
+  - QUDT
+- id: qudt:Radiance
+  name: radiance
+  description: '"Radiance" is a radiometric measure that describes the amount of light that passes through or is emitted from
+    a particular area, and falls within a given solid angle in a specified direction.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:RadiantEnergy
+  name: radiant_energy
+  description: In radiometry,"Radiant Energy} is the energy of electromagnetic waves. The quantity of radiant energy may be
+    calculated by integrating radiant flux (or power) with respect to time. In nuclear physics,
+  curie_prefixes:
+  - QUDT
+- id: qudt:RadiantFlux
+  name: radiant_flux
+  description: Radiant Flux, or radiant power, is the measure of the total power of electromagnetic radiation (including infrared,
+    ultraviolet, and visible light). The power may be the total emitted from a source, o
+  curie_prefixes:
+  - QUDT
+- id: qudt:RadiantIntensity
+  name: radiant_intensity
+  description: Radiant Intensity is a measure of the intensity of electromagnetic radiation. It is defined as power per unit
+    solid angle.
+  curie_prefixes:
+  - QUDT
+- id: qudt:Radius
+  name: radius
+  description: In classical geometry, the "Radius" of a circle or sphere is any line segment from its center to its perimeter
+    the radius of a circle or sphere is the length of any such segment.
+  curie_prefixes:
+  - QUDT
+- id: qudt:Ratio
+  name: ratio
+  description: Applicable units are those of quantitykind:Ratio
+  curie_prefixes:
+  - QUDT
+- id: qudt:Reactance
+  name: reactance
+  description: '"Reactance" is the opposition of a circuit element to a change of electric current or voltage, due to that
+    element''s inductance or capacitance. A built-up electric field resists the change of voltage '
+  curie_prefixes:
+  - QUDT
+- id: qudt:ReactivePower
+  name: reactive_power
+  description: '"Reactive Power", for a linear two-terminal element or two-terminal circuit, under sinusoidal conditions,
+    is the quantity equal to the product of the apparent power S and the sine of the displacement '
+  curie_prefixes:
+  - QUDT
+- id: qudt:Reflectance
+  name: reflectance
+  description: Reflectance generally refers to the fraction of incident power that is reflected at an interface, while the
+    term "reflection coefficient" is used for the fraction of electric field reflected. Reflecta
+  curie_prefixes:
+  - QUDT
+- id: qudt:RefractiveIndex
+  name: refractive_index
+  description: '"refractive index" or index of refraction n of a substance (optical medium) is a dimensionless number that
+    describes how light, or any other radiation, propagates through that medium.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:Resistance
+  name: resistance
+  description: The electrical resistance of an object is a measure of its opposition to the passage of a steady electric current.
+  curie_prefixes:
+  - QUDT
+- id: qudt:Resistivity
+  name: resistivity
+  description: '"Resistivity" is the inverse of the conductivity when this inverse exists.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:ReynoldsNumber
+  name: reynolds_number
+  description: The "Reynolds Number" (Re) is a dimensionless number that gives a measure of the ratio of inertial forces to
+    viscous forces and consequently quantifies the relative importance of these two types of fo
+  curie_prefixes:
+  - QUDT
+- id: qudt:SolidAngle
+  name: solid_angle
+  description: The solid angle subtended by a surface S is defined as the surface area of a unit sphere covered by the surface
+    S's projection onto the sphere. A solid angle is related to the surface of a sphere in t
+  curie_prefixes:
+  - QUDT
+- id: qudt:SoundIntensity
+  name: sound_intensity
+  description: Sound intensity or acoustic intensity (I) is defined as the sound power P_a per unit area A. The usual context
+    is the noise measurement of sound intensity in the air at a listener's location as a soun
+  curie_prefixes:
+  - QUDT
+- id: qudt:SoundPowerLevel
+  name: sound_power_level
+  description: Sound Power Level abbreviated as SWL expresses sound power more practically as a relation to the threshold
+    of hearing - 1 picoW - in a logarithmic scale.
+  curie_prefixes:
+  - QUDT
+- id: qudt:SoundPressure
+  name: sound_pressure
+  description: Sound Pressure is the difference between instantaneous total pressure and static pressure.
+  curie_prefixes:
+  - QUDT
+- id: qudt:SoundPressureLevel
+  name: sound_pressure_level
+  description: 'Sound pressure level (SPL) or sound level is a logarithmic measure of the effective sound pressure of a sound
+    relative to a reference value. It is measured in decibels (dB) above a standard reference '
+  curie_prefixes:
+  - QUDT
+- id: qudt:SpecificEnergy
+  name: specific_energy
+  description: Specific Energy is defined as the energy per unit mass. Common metric units are J/kg. It is an intensive property.
+    Contrast this with energy, which is an extensive property. There are two main types o
+  curie_prefixes:
+  - QUDT
+- id: qudt:SpecificEntropy
+  name: specific_entropy
+  description: '"Specific Entropy" is entropy per unit of mass.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:SpecificHeatCapacity
+  name: specific_heat_capacity
+  description: Specific Heat Capacity of a solid or liquid is defined as the heat required to raise unit mass of substance
+    by one degree of temperature. This is Heat Capacity divided by Mass. Note that there are cor
+  curie_prefixes:
+  - QUDT
+- id: qudt:SpecificVolume
+  name: specific_volume
+  description: '"Specific Volume" (nu) is the volume occupied by a unit of mass of a material. It is equal to the inverse
+    of density.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:Speed
+  name: speed
+  description: Speed is the magnitude of velocity.
+  curie_prefixes:
+  - QUDT
+- id: qudt:SpeedOfLight
+  name: speed_of_light
+  description: The quantity kind text{Speed of Light} is the speed of electomagnetic waves in a given medium.
+  curie_prefixes:
+  - QUDT
+- id: qudt:SpeedOfSound
+  name: speed_of_sound
+  description: The speed of sound is the distance travelled during a unit of time by a sound wave propagating through an elastic
+    medium.
+  curie_prefixes:
+  - QUDT
+- id: qudt:Spin
+  name: spin
+  description: In quantum mechanics and particle physics "Spin" is an intrinsic form of angular momentum carried by elementary
+    particles, composite particles (hadrons), and atomic nuclei.
+  curie_prefixes:
+  - QUDT
+- id: qudt:SpinQuantumNumber
+  name: spin_quantum_number
+  description: The "Spin Quantum Number" describes the spin (intrinsic angular momentum) of the electron within that orbital,
+    and gives the projection of the spin angular momentum S along the specified axis
+  curie_prefixes:
+  - QUDT
+- id: qudt:StaticFriction
+  name: static_friction
+  description: Static friction is friction between two or more solid objects that are not moving relative to each other. For
+    example, static friction can prevent an object from sliding down a sloped surface.
+  curie_prefixes:
+  - QUDT
+- id: qudt:StatisticalWeight
+  name: statistical_weight
+  description: A "Statistical Weight" is the relative probability (possibly unnormalized) of a particular feature of a state.
+  curie_prefixes:
+  - QUDT
+- id: qudt:Strain
+  name: strain
+  description: In any branch of science dealing with materials and their behaviour, strain is the geometrical expression of
+    deformation caused by the action of stress on a physical body. Strain is calculated by firs
+  curie_prefixes:
+  - QUDT
+- id: qudt:Stress
+  name: stress
+  description: Stress is a measure of the average amount of force exerted per unit area of a surface within a deformable body
+    on which internal forces act. In other words, it is a measure of the intensity or interna
+  curie_prefixes:
+  - QUDT
+- id: qudt:SurfaceTension
+  name: surface_tension
+  description: '"Surface Tension" is a contractive tendency of the surface of a liquid that allows it to resist an external
+    force.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:Susceptance
+  name: susceptance
+  description: '"Susceptance" is the imaginary part of admittance. The inverse of admittance is impedance and the real part
+    of admittance is conductance.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:ThermalConductivity
+  name: thermal_conductivity
+  description: In physics, thermal conductivity, k (also denoted as lambda), is the property of a material's ability to conduct
+    heat. It appears primarily in Fourier's Law for heat conduction and is the areic heat f
+  curie_prefixes:
+  - QUDT
+- id: qudt:ThermalDiffusivity
+  name: thermal_diffusivity
+  description: In heat transfer analysis, thermal diffusivity (usually denoted alpha but a, kappa,k, and D are also used)
+    is the thermal conductivity divided by density and specific heat capacity at constant pressur
+  curie_prefixes:
+  - QUDT
+- id: qudt:ThermalExpansionCoefficient
+  name: thermal_expansion_coefficient
+  description: The "Thermal Expansion Coefficient" is a measure of the thermal expansion coefficient of a material, which
+    expresses its elongation (as a ratio) per temperature difference. It is usually measured in 1
+  curie_prefixes:
+  - QUDT
+- id: qudt:ThermodynamicEnergy
+  name: thermodynamic_energy
+  description: Applicable units are those of quantitykind:Energy
+  curie_prefixes:
+  - QUDT
+- id: qudt:ThermodynamicEntropy
+  name: thermodynamic_entropy
+  description: 'Thermodynamic Entropy is a measure of the unavailability of a system’s energy to do work. It is a measure
+    of the randomness of molecules in a system and is central to the second law of thermodynamics '
+  curie_prefixes:
+  - QUDT
+- id: qudt:ThermodynamicTemperature
+  name: thermodynamic_temperature
+  description: Thermodynamic temperature is the absolute measure of temperature and is one of the principal parameters of
+    thermodynamics. Temperature is a physical property of matter that quantitatively expresses th
+  curie_prefixes:
+  - QUDT
+- id: qudt:Thickness
+  name: thickness
+  description: '"Thickness" is the the smallest of three dimensions: length, width, thickness.'
+  curie_prefixes:
+  - QUDT
+- id: qudt:TimeRatio
+  name: time_ratio
+  description: Applicable units are those of quantitykind:TimeRatio
+  curie_prefixes:
+  - QUDT
+- id: qudt:Torque
+  name: torque
+  description: 'In physics, a torque (tau) is a vector that measures the tendency of a force to rotate an object about some
+    axis. The magnitude of a torque is defined as force times its lever arm. Just as a force is '
+  curie_prefixes:
+  - QUDT
+- id: qudt:Transmittance
+  name: transmittance
+  description: Transmittance is the fraction of incident light (electromagnetic radiation) at a specified wavelength that
+    passes through a sample.
+  curie_prefixes:
+  - QUDT
+- id: qudt:VolumeFlowRate
+  name: volume_flow_rate
+  description: Volumetric Flow Rate, (also known as volume flow rate, rate of fluid flow or volume velocity) is the volume
+    of fluid which passes through a given surface per unit time.
+  curie_prefixes:
+  - QUDT
+- id: qudt:VolumeStrain
+  name: volume_strain
+  description: Volume, or volumetric, Strain, or dilatation (the relative variation of the volume) is the trace of the tensor
+    vartheta.
+  curie_prefixes:
+  - QUDT
+- id: qudt:Vorticity
+  name: vorticity
+  description: In the simplest sense, vorticity is the tendency for elements of a fluid to "spin." More formally, vorticity
+    can be related to the amount of "circulation" or "rotation" (or more strictly, the local an
+  curie_prefixes:
+  - QUDT
+- id: qudt:Wavenumber
+  name: wavenumber
+  description: '"Wavenumber" is the spatial frequency of a wave - the number of waves that exist over a specified distance.
+    More formally, it is the reciprocal of the wavelength. It is also the magnitude of the wave '
+  curie_prefixes:
+  - QUDT
+- id: qudt:Weight
+  name: weight
+  description: 'The force with which a body is attracted toward an astronomical body. Or, the product of the mass of a body
+    and the acceleration acting on a body. In a dynamic situation, the weight can be a multiple '
+  curie_prefixes:
+  - QUDT
+- id: qudt:Width
+  name: width
+  description: '"Width" is the middle of three dimensions: length, width, thickness.'
+  curie_prefixes:
+  - QUDT
+predicates:
+- id: qudt:has_quantity_kind
+  name: has_quantity_kind
+  description: Associates a quantity or measurement with its quantity kind.
+  domain: qudt:Quantity
+  range: qudt:QuantityKind
+  recommended: true
+- id: qudt:has_dimension
+  name: has_dimension
+  description: Associates a quantity kind with its dimensional analysis vector.
+  domain: qudt:QuantityKind
+  range: qudt:DimensionVector
+  recommended: true
+- id: qudt:has_unit
+  name: has_unit
+  description: Associates a quantity or quantity kind with a measurement unit.
+  domain: qudt:Quantity
+  range: qudt:Unit
+  recommended: true
+- id: qudt:measured_in
+  name: measured_in
+  description: Indicates the unit in which a measurement is expressed.
+  domain: qudt:Quantity
+  range: qudt:Unit
+  recommended: true
+- id: qudt:proportional_to
+  name: proportional_to
+  description: Indicates that one quantity kind is directly proportional to another.
+  domain: qudt:QuantityKind
+  range: qudt:QuantityKind
+- id: qudt:inversely_proportional_to
+  name: inversely_proportional_to
+  description: Indicates that one quantity kind is inversely proportional to another.
+  domain: qudt:QuantityKind
+  range: qudt:QuantityKind

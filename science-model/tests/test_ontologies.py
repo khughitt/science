@@ -52,7 +52,9 @@ def test_load_catalogs_for_names_returns_declared() -> None:
 
 def test_available_ontology_names() -> None:
     names = available_ontology_names()
-    assert names == ["biolink"]
+    assert "biolink" in names
+    assert "physics" in names
+    assert "qudt" in names
 
 
 def test_ontology_term_type_round_trip() -> None:
@@ -66,6 +68,96 @@ def test_ontology_term_type_round_trip() -> None:
     data = term.model_dump()
     restored = OntologyTermType.model_validate(data)
     assert restored == term
+
+
+# --- Physics catalog tests ---
+
+
+def test_load_physics_catalog_parses_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["physics"])
+    assert len(catalogs) == 1
+    catalog = catalogs[0]
+    assert catalog.ontology == "physics"
+    type_names = {et.name for et in catalog.entity_types}
+    assert "elementary_particle" in type_names
+    assert "quantum_state" in type_names
+    assert "physical_system" in type_names
+
+    particle = next(et for et in catalog.entity_types if et.name == "elementary_particle")
+    assert "PDGID" in particle.curie_prefixes
+    assert "WD" in particle.curie_prefixes
+    assert particle.recommended is True
+
+
+def test_load_physics_catalog_parses_predicates() -> None:
+    catalogs = load_catalogs_for_names(["physics"])
+    catalog = catalogs[0]
+    pred_names = {p.name for p in catalog.predicates}
+    assert "decays_to" in pred_names
+    assert "mediates" in pred_names
+    assert "composed_of" in pred_names
+
+    decays = next(p for p in catalog.predicates if p.name == "decays_to")
+    assert decays.recommended is True
+
+
+def test_physics_recommended_counts() -> None:
+    catalogs = load_catalogs_for_names(["physics"])
+    catalog = catalogs[0]
+    rec_types = sum(1 for et in catalog.entity_types if et.recommended)
+    rec_preds = sum(1 for p in catalog.predicates if p.recommended)
+    assert 20 <= rec_types <= 50, f"Expected 20-50 recommended types, got {rec_types}"
+    assert 15 <= rec_preds <= 35, f"Expected 15-35 recommended predicates, got {rec_preds}"
+
+
+def test_physics_curie_prefixes() -> None:
+    catalogs = load_catalogs_for_names(["physics"])
+    catalog = catalogs[0]
+    quark = next(et for et in catalog.entity_types if et.name == "quark")
+    assert len(quark.curie_prefixes) > 0
+    crystal = next(et for et in catalog.entity_types if et.name == "crystal")
+    assert "COD" in crystal.curie_prefixes
+
+
+# --- QUDT catalog tests ---
+
+
+def test_load_qudt_catalog_parses_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["qudt"])
+    assert len(catalogs) == 1
+    catalog = catalogs[0]
+    assert catalog.ontology == "qudt"
+    type_names = {et.name for et in catalog.entity_types}
+    assert "mass" in type_names
+    assert "energy" in type_names
+    assert "temperature" in type_names
+    assert "velocity" in type_names
+
+
+def test_load_qudt_catalog_parses_predicates() -> None:
+    catalogs = load_catalogs_for_names(["qudt"])
+    catalog = catalogs[0]
+    pred_names = {p.name for p in catalog.predicates}
+    assert "has_quantity_kind" in pred_names
+    assert "has_unit" in pred_names
+    assert "measured_in" in pred_names
+    assert len(catalog.predicates) == 6
+
+
+def test_qudt_recommended_counts() -> None:
+    catalogs = load_catalogs_for_names(["qudt"])
+    catalog = catalogs[0]
+    rec_types = sum(1 for et in catalog.entity_types if et.recommended)
+    assert 20 <= rec_types <= 50, f"Expected 20-50 recommended quantity kinds, got {rec_types}"
+    rec_preds = sum(1 for p in catalog.predicates if p.recommended)
+    assert rec_preds == 4
+
+
+def test_qudt_curie_prefixes() -> None:
+    catalogs = load_catalogs_for_names(["qudt"])
+    catalog = catalogs[0]
+    mass = next(et for et in catalog.entity_types if et.name == "mass")
+    assert "QUDT" in mass.curie_prefixes
 
 
 def test_ontology_catalog_round_trip() -> None:

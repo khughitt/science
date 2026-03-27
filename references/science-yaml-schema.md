@@ -25,7 +25,7 @@ data_sources:                # Known data sources
 
 # Optional — domain ontologies for entity types and relation predicates
 ontologies:                    # Default: [] (none)
-  - "string"                   # Ontology name, e.g. biolink. Validated against built-in registry.
+  - "string"                   # Ontology name, e.g. biolink, physics, qudt. Validated against built-in registry.
 
 # Required for knowledge-graph-enabled projects
 knowledge_profiles:

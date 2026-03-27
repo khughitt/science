@@ -1,0 +1,458 @@
+# Physics ontology — hand-authored, Wikidata-referenced
+# Entity types and predicates for physical systems research
+#
+# Source taxonomy reference: Wikidata (https://www.wikidata.org/)
+# Not a runtime dependency — used for authoring correctness only
+
+ontology: physics
+version: "1.0.0"
+prefix: physics
+prefix_uri: "https://science-tool.dev/ontologies/physics/"
+
+entity_types:
+  # --- Fundamental particles & matter ---
+  - id: "physics:ElementaryParticle"
+    name: elementary_particle
+    description: "A particle with no known substructure"
+    curie_prefixes: [PDGID, WD]
+    recommended: true
+  - id: "physics:Quark"
+    name: quark
+    description: "A fundamental fermion that interacts via the strong force"
+    curie_prefixes: [PDGID, WD]
+    recommended: true
+  - id: "physics:Lepton"
+    name: lepton
+    description: "A fundamental fermion that does not interact via the strong force"
+    curie_prefixes: [PDGID, WD]
+    recommended: true
+  - id: "physics:Boson"
+    name: boson
+    description: "A particle with integer spin that mediates fundamental forces"
+    curie_prefixes: [PDGID, WD]
+    recommended: true
+  - id: "physics:Neutrino"
+    name: neutrino
+    description: "A nearly massless lepton that interacts only via the weak force"
+    curie_prefixes: [PDGID, WD]
+  - id: "physics:Hadron"
+    name: hadron
+    description: "A composite particle made of quarks bound by the strong force"
+    curie_prefixes: [PDGID, WD]
+    recommended: true
+  - id: "physics:Baryon"
+    name: baryon
+    description: "A hadron composed of three quarks"
+    curie_prefixes: [PDGID, WD]
+  - id: "physics:Meson"
+    name: meson
+    description: "A hadron composed of a quark-antiquark pair"
+    curie_prefixes: [PDGID, WD]
+  - id: "physics:Atom"
+    name: atom
+    description: "A nucleus of protons and neutrons surrounded by an electron cloud"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:Isotope"
+    name: isotope
+    description: "An atom with a specific number of neutrons in its nucleus"
+    curie_prefixes: [WD]
+  - id: "physics:Ion"
+    name: ion
+    description: "An atom or molecule with a net electric charge"
+    curie_prefixes: [WD]
+  - id: "physics:Molecule"
+    name: molecule
+    description: "A group of atoms bonded together by electromagnetic forces"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:Plasma"
+    name: plasma
+    description: "An ionized gas exhibiting collective electromagnetic behavior"
+    curie_prefixes: [WD]
+  - id: "physics:Antiparticle"
+    name: antiparticle
+    description: "A particle with the same mass but opposite quantum numbers to its counterpart"
+    curie_prefixes: [PDGID, WD]
+
+  # --- Forces & interactions ---
+  - id: "physics:FundamentalForce"
+    name: fundamental_force
+    description: "One of the four fundamental interactions of nature"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:GravitationalInteraction"
+    name: gravitational_interaction
+    description: "The attractive force between masses, mediated by spacetime curvature"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:ElectromagneticInteraction"
+    name: electromagnetic_interaction
+    description: "The force between electric charges, mediated by photons"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:StrongInteraction"
+    name: strong_interaction
+    description: "The force binding quarks into hadrons, mediated by gluons"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:WeakInteraction"
+    name: weak_interaction
+    description: "The force responsible for radioactive decay, mediated by W and Z bosons"
+    curie_prefixes: [WD]
+    recommended: true
+
+  # --- Fields & waves ---
+  - id: "physics:Field"
+    name: field
+    description: "A physical quantity with a value at every point in space and time"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:ElectricField"
+    name: electric_field
+    description: "A vector field produced by electric charges"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:MagneticField"
+    name: magnetic_field
+    description: "A vector field produced by moving charges and magnetic dipoles"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:GravitationalField"
+    name: gravitational_field
+    description: "A field describing the gravitational influence of mass-energy"
+    curie_prefixes: [WD]
+  - id: "physics:QuantumField"
+    name: quantum_field
+    description: "A field whose excitations are quantized as particles"
+    curie_prefixes: [WD]
+  - id: "physics:Wave"
+    name: wave
+    description: "A propagating disturbance that transfers energy through a medium or field"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:ElectromagneticWave"
+    name: electromagnetic_wave
+    description: "A wave of oscillating electric and magnetic fields propagating at the speed of light"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:GravitationalWave"
+    name: gravitational_wave
+    description: "A ripple in spacetime curvature propagating at the speed of light"
+    curie_prefixes: [WD]
+
+  # --- Classical mechanics & dynamics ---
+  - id: "physics:PhysicalSystem"
+    name: physical_system
+    description: "A portion of the physical universe chosen for analysis"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:DynamicalSystem"
+    name: dynamical_system
+    description: "A system whose state evolves in time according to a deterministic or stochastic rule"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:RigidBody"
+    name: rigid_body
+    description: "An idealized solid body with no internal deformation"
+    curie_prefixes: [WD]
+  - id: "physics:Oscillator"
+    name: oscillator
+    description: "A system exhibiting periodic or quasi-periodic motion"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:Fluid"
+    name: fluid
+    description: "A substance that deforms continuously under applied shear stress"
+    curie_prefixes: [WD]
+
+  # --- Thermodynamics & statistical mechanics ---
+  - id: "physics:ThermodynamicSystem"
+    name: thermodynamic_system
+    description: "A macroscopic system described by state variables such as temperature, pressure, and volume"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:Phase"
+    name: phase
+    description: "A distinct state of matter with uniform physical properties"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:PhaseTransition"
+    name: phase_transition
+    description: "A transformation between distinct phases of matter"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:StatisticalEnsemble"
+    name: statistical_ensemble
+    description: "A large collection of microstates used for statistical mechanical analysis"
+    curie_prefixes: [WD]
+
+  # --- Quantum mechanics ---
+  - id: "physics:QuantumState"
+    name: quantum_state
+    description: "A state vector in a quantum-mechanical Hilbert space"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:QuantumSystem"
+    name: quantum_system
+    description: "A physical system governed by the laws of quantum mechanics"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:WaveFunction"
+    name: wave_function
+    description: "A complex-valued function whose squared modulus gives probability density"
+    curie_prefixes: [WD]
+  - id: "physics:Observable"
+    name: observable
+    description: "A measurable physical quantity represented by a Hermitian operator"
+    curie_prefixes: [WD]
+  - id: "physics:QuantumOperator"
+    name: quantum_operator
+    description: "A linear operator acting on quantum states in Hilbert space"
+    curie_prefixes: [WD]
+
+  # --- Spacetime & relativity ---
+  - id: "physics:Spacetime"
+    name: spacetime
+    description: "The four-dimensional continuum unifying space and time"
+    curie_prefixes: [WD]
+  - id: "physics:ReferenceFrame"
+    name: reference_frame
+    description: "A coordinate system and clock used to describe motion and events"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:BlackHole"
+    name: black_hole
+    description: "A region of spacetime where gravity is too strong for anything to escape"
+    curie_prefixes: [WD]
+
+  # --- Materials & condensed matter ---
+  - id: "physics:Crystal"
+    name: crystal
+    description: "A solid with atoms arranged in a highly ordered periodic lattice"
+    curie_prefixes: [COD, WD]
+    recommended: true
+  - id: "physics:Lattice"
+    name: lattice
+    description: "A periodic arrangement of points in space defining crystal structure"
+    curie_prefixes: [WD]
+  - id: "physics:Semiconductor"
+    name: semiconductor
+    description: "A material with electrical conductivity between a conductor and an insulator"
+    curie_prefixes: [WD]
+  - id: "physics:Superconductor"
+    name: superconductor
+    description: "A material exhibiting zero electrical resistance below a critical temperature"
+    curie_prefixes: [WD]
+
+  # --- Astrophysical objects ---
+  - id: "physics:Star"
+    name: star
+    description: "A luminous sphere of plasma held together by its own gravity"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:Galaxy"
+    name: galaxy
+    description: "A gravitationally bound system of stars, gas, dust, and dark matter"
+    curie_prefixes: [WD]
+  - id: "physics:Nebula"
+    name: nebula
+    description: "An interstellar cloud of gas and dust"
+    curie_prefixes: [WD]
+
+  # --- Cross-cutting ---
+  - id: "physics:Symmetry"
+    name: symmetry
+    description: "An invariance of a physical system under a transformation"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:ConservationLaw"
+    name: conservation_law
+    description: "A law stating that a physical quantity remains constant in an isolated system"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:PhysicalConstant"
+    name: physical_constant
+    description: "A universal constant of nature with a fixed numerical value"
+    curie_prefixes: [CODATA, WD]
+    recommended: true
+  - id: "physics:Equation"
+    name: equation
+    description: "A mathematical relationship between physical quantities"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:Measurement"
+    name: measurement
+    description: "A quantitative observation of a physical property"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "physics:PhysicalProperty"
+    name: physical_property
+    description: "A measurable characteristic of a physical system"
+    curie_prefixes: [WD]
+    recommended: true
+
+predicates:
+  # --- Composition & structure ---
+  - id: "physics:composed_of"
+    name: composed_of
+    description: "Entity is made of components"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:has_component"
+    name: has_component
+    description: "Entity contains a component (inverse of composed_of)"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:is_form_of"
+    name: is_form_of
+    description: "Entity is a variant or form of another"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+
+  # --- Interactions & forces ---
+  - id: "physics:interacts_via"
+    name: interacts_via
+    description: "Two entities interact through a force or field"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:mediates"
+    name: mediates
+    description: "A particle mediates a fundamental force"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:exerts_force_on"
+    name: exerts_force_on
+    description: "One entity exerts a force on another"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:couples_to"
+    name: couples_to
+    description: "A field or particle couples to another entity"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+
+  # --- Transformations & processes ---
+  - id: "physics:decays_to"
+    name: decays_to
+    description: "A particle or state decays into others"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:transforms_to"
+    name: transforms_to
+    description: "A system or state changes into another"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:emits"
+    name: emits
+    description: "A source produces a particle or radiation"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:absorbs"
+    name: absorbs
+    description: "An entity absorbs a particle or radiation"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:scatters_from"
+    name: scatters_from
+    description: "An entity scatters from another in a collision or interaction"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+
+  # --- Spatial & structural ---
+  - id: "physics:part_of"
+    name: part_of
+    description: "Structural containment of one entity within another"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:located_in"
+    name: located_in
+    description: "Spatial relationship between entities"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:confined_to"
+    name: confined_to
+    description: "An entity is quantum or spatially confined to another"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+
+  # --- Properties & description ---
+  - id: "physics:has_property"
+    name: has_property
+    description: "Entity has a measurable physical property"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:has_symmetry"
+    name: has_symmetry
+    description: "System exhibits a symmetry"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:obeys"
+    name: obeys
+    description: "System obeys a conservation law or equation"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:described_by"
+    name: described_by
+    description: "Entity is described by an equation or theoretical model"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:violates"
+    name: violates
+    description: "System violates a symmetry or conservation law"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+
+  # --- Causal & temporal ---
+  - id: "physics:causes"
+    name: causes
+    description: "Causal relationship between physical events or processes"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:precedes"
+    name: precedes
+    description: "Temporal ordering of physical events"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+  - id: "physics:induces"
+    name: induces
+    description: "One phenomenon induces another"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+
+  # --- Classification & equivalence ---
+  - id: "physics:is_antiparticle_of"
+    name: is_antiparticle_of
+    description: "Particle-antiparticle pairing"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
+  - id: "physics:is_dual_to"
+    name: is_dual_to
+    description: "Duality relationship between physical descriptions"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+  - id: "physics:is_subtype_of"
+    name: is_subtype_of
+    description: "Classification hierarchy between entity types"
+    domain: "physics:NamedThing"
+    range: "physics:NamedThing"
+    recommended: true
