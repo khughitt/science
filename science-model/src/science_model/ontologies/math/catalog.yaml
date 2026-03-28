@@ -62,7 +62,7 @@ entity_types:
     name: variation
     description: "An infinitesimal perturbation of a function used in the calculus of variations"
     curie_prefixes: [MATHWORLD, DLMF]
-    recommended: false
+    recommended: true
   - id: "math:Functional"
     name: functional
     description: "A mapping from a function space to scalars, as in variational calculus"

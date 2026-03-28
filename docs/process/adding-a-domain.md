@@ -1,7 +1,7 @@
 # Adding a Domain to Science
 
 **Audience:** AI agent executing the process
-**Reference implementation:** biolink (biology/translational science)
+**Reference implementation:** biology (biology/translational science)
 
 This document describes the end-to-end process for adding a new scientific domain
 to the science knowledge model. A "domain" means a community ontology (or
@@ -15,8 +15,8 @@ The process has two parts:
 2. **Implementation checklist** — create files, wire integration, write tests.
    This is mechanical.
 
-The biolink implementation is the canonical example. When in doubt, look at
-what biolink does and follow the same pattern.
+The biology implementation is the canonical example. When in doubt, look at
+what biology does and follow the same pattern.
 
 ---
 
@@ -111,15 +111,15 @@ Once the ontology is chosen, produce the term catalog.
 
 1. **Write the extraction script** (if using a community ontology):
    - Create `scripts/extract_<ontology>_catalog.py`
-   - Follow `scripts/extract_biolink_catalog.py` as the template
+   - Follow `scripts/extract_biology_catalog.py` as the template
    - The script fetches/parses the ontology source and outputs `catalog.yaml`
    - Key decisions embedded in the script:
-     - **Entity type filter**: which classes to include (biolink: non-abstract
+     - **Entity type filter**: which classes to include (biology: non-abstract
        descendants of NamedThing)
-     - **Predicate filter**: which slots/properties to include (biolink: those
+     - **Predicate filter**: which slots/properties to include (biology: those
        with NamedThing range)
      - **Name normalization**: CamelCase → snake_case (follow `_camel_to_snake`
-       in the biolink script)
+       in the biology script)
      - **Description truncation**: cap at 200 chars
 
 2. **Mark recommended terms**:
@@ -130,14 +130,14 @@ Once the ontology is chosen, produce the term catalog.
      a typical research project, not overly specialized
    - Define the recommended sets as constants in the extraction script
      (see `RECOMMENDED_ENTITY_TYPES` and `RECOMMENDED_PREDICATES` in the
-     biolink script)
+     biology script)
 
 3. **Map CURIE prefixes**:
    - For each entity type, list the identifier systems whose CURIEs reference
      entities of that type
    - These drive `external_prefixes()` in `sources.py` and the suggestion
      mechanism's CURIE prefix matching
-   - If the ontology source includes `id_prefixes` (as biolink does), extract
+   - If the ontology source includes `id_prefixes` (as biology does), extract
      them automatically
 
 4. **Run the extraction script** and inspect the output:
@@ -158,7 +158,7 @@ feed directly into Step 1.
 
 **Create:** `scripts/extract_<ontology>_catalog.py`
 
-Pattern to follow: `scripts/extract_biolink_catalog.py`
+Pattern to follow: `scripts/extract_biology_catalog.py`
 
 The script must:
 - Define `<ONTOLOGY>_VERSION` and source URL constants
@@ -286,12 +286,12 @@ Create a few test entities using the new ontology's entity types and verify:
 | Ontology Pydantic models | `science-model/src/science_model/ontologies/schema.py` |
 | Ontology loading functions | `science-model/src/science_model/ontologies/__init__.py` |
 | Ontology registry | `science-model/src/science_model/ontologies/registry.yaml` |
-| Biolink catalog (example) | `science-model/src/science_model/ontologies/biolink/catalog.yaml` |
-| Biolink extraction script (example) | `scripts/extract_biolink_catalog.py` |
+| Biology catalog (example) | `science-model/src/science_model/ontologies/biology/catalog.yaml` |
+| Biology extraction script (example) | `scripts/extract_biology_catalog.py` |
 | Entity source loading & profile routing | `science-tool/src/science_tool/graph/sources.py` |
 | Ontology suggestion mechanism | `science-tool/src/science_tool/graph/suggest.py` |
 | Graph materialization | `science-tool/src/science_tool/graph/materialize.py` |
 | Ontology tests | `science-model/tests/test_ontologies.py` |
 | Suggestion tests | `science-tool/tests/test_ontology_suggest.py` |
 | Project manifest schema | `references/science-yaml-schema.md` |
-| Design spec (biolink, example) | `docs/specs/2026-03-24-ontology-consumption-design.md` |
+| Design spec (biology, example) | `docs/specs/2026-03-24-ontology-consumption-design.md` |
