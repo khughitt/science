@@ -375,6 +375,40 @@ def test_information_catalog_has_recommended_predicates() -> None:
     assert 8 <= len(recommended) <= 35
 
 
+def test_biology_catalog_has_ecology_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["biology"])
+    catalog = catalogs[0]
+    type_names = {et.name for et in catalog.entity_types}
+    assert "population" in type_names
+    assert "ecosystem" in type_names
+    assert "food_web" in type_names
+    assert "speciation" in type_names
+    assert "carrying_capacity" in type_names
+
+
+def test_biology_catalog_has_ecology_predicates() -> None:
+    catalogs = load_catalogs_for_names(["biology"])
+    catalog = catalogs[0]
+    pred_names = {p.name for p in catalog.predicates}
+    assert "preys_on" in pred_names
+    assert "competes_with" in pred_names
+    assert "occupies_niche" in pred_names
+
+
+def test_biology_catalog_has_recommended_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["biology"])
+    catalog = catalogs[0]
+    recommended = [et for et in catalog.entity_types if et.recommended]
+    assert 20 <= len(recommended) <= 70
+
+
+def test_biology_catalog_has_recommended_predicates() -> None:
+    catalogs = load_catalogs_for_names(["biology"])
+    catalog = catalogs[0]
+    recommended = [p for p in catalog.predicates if p.recommended]
+    assert 20 <= len(recommended) <= 70
+
+
 def test_ontology_catalog_round_trip() -> None:
     catalog = OntologyCatalog(
         ontology="test",
