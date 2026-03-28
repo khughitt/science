@@ -34,3 +34,8 @@ ontologies:
     source_url: "project-authored"
     description: "Astronomy — astronomical objects and cosmological processes"
     catalog_path: "astronomy/catalog.yaml"
+  - name: information
+    version: "1.0.0"
+    source_url: "project-authored"
+    description: "Information — information theory, computation, and network science"
+    catalog_path: "information/catalog.yaml"

@@ -1,0 +1,234 @@
+# Information ontology — hand-authored
+# Entity types and predicates for information theory, computation, and network science
+#
+# Prefix references:
+#   WD: https://www.wikidata.org/wiki/  (Wikidata)
+
+ontology: information
+version: "1.0.0"
+prefix: information
+prefix_uri: "https://example.org/science/information/"
+
+entity_types:
+  # --- Information Theory ---
+  - id: "information:EntropyInformation"
+    name: entropy_information
+    description: "A measure of uncertainty or disorder in a probability distribution; average information content of a source"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:MutualInformation"
+    name: mutual_information
+    description: "A measure of the statistical dependence between two random variables; shared information"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:Channel"
+    name: channel
+    description: "A communication medium that transmits signals from a source to a receiver, subject to noise"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:Signal"
+    name: signal
+    description: "A physical quantity that carries information and varies over time or space"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:Noise"
+    name: noise
+    description: "Unwanted random variation that corrupts a signal during transmission or storage"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:Code"
+    name: code
+    description: "A mapping from a source alphabet to a target alphabet used for efficient or robust communication"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:Compression"
+    name: compression
+    description: "The process of encoding data to reduce its representation size while preserving information"
+    curie_prefixes: [WD]
+    recommended: true
+
+  # --- Networks ---
+  - id: "information:Network"
+    name: network
+    description: "A collection of nodes connected by edges, representing relational structure in a system"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:GraphStructure"
+    name: graph_structure
+    description: "The abstract combinatorial structure of vertices and edges underlying a network"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:SmallWorld"
+    name: small_world
+    description: "A network topology with short average path lengths and high clustering, as in Watts-Strogatz graphs"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:ScaleFreeNetwork"
+    name: scale_free_network
+    description: "A network whose degree distribution follows a power law, characterized by hubs"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:Percolation"
+    name: percolation
+    description: "The study of connectivity and flow through random networks, especially near critical thresholds"
+    curie_prefixes: [WD]
+    recommended: true
+
+  # --- Computation ---
+  - id: "information:Automaton"
+    name: automaton
+    description: "A self-operating abstract machine that transitions between states based on input rules"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:TuringMachine"
+    name: turing_machine
+    description: "A theoretical model of computation with infinite tape and a finite set of transition rules"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:CellularAutomaton"
+    name: cellular_automaton
+    description: "A discrete computational model on a grid where cells evolve according to local neighborhood rules"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:BooleanFunction"
+    name: boolean_function
+    description: "A function mapping binary inputs to binary outputs, forming the basis of digital logic"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:Algorithm"
+    name: algorithm
+    description: "A finite sequence of well-defined instructions for solving a computational problem"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:ComplexityClass"
+    name: complexity_class
+    description: "A set of computational problems sharing the same resource requirements (e.g., P, NP, PSPACE)"
+    curie_prefixes: [WD]
+    recommended: false
+
+  # --- Control & Game Theory ---
+  - id: "information:FeedbackLoop"
+    name: feedback_loop
+    description: "A system component that routes output back as input, enabling self-regulation"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:ControlSystem"
+    name: control_system
+    description: "A system that regulates its own behavior or the behavior of another system using feedback"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:Filter"
+    name: filter
+    description: "A device or algorithm that selectively passes or suppresses signals based on defined criteria"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:Agent"
+    name: agent
+    description: "An autonomous entity that perceives its environment and acts to achieve goals"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:Game"
+    name: game
+    description: "A strategic interaction among rational agents whose outcomes depend on all participants' choices"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:NashEquilibrium"
+    name: nash_equilibrium
+    description: "A stable state in a game where no agent can improve by unilaterally changing strategy"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "information:Strategy"
+    name: strategy
+    description: "A complete plan specifying actions for an agent in all possible game situations"
+    curie_prefixes: [WD]
+    recommended: true
+
+  # --- Stochastic ---
+  - id: "information:RandomWalk"
+    name: random_walk
+    description: "A stochastic process describing a path of successive random steps on a lattice or continuous space"
+    curie_prefixes: [WD]
+    recommended: true
+
+predicates:
+  # --- Information transmission ---
+  - id: "information:encodes"
+    name: encodes
+    description: "One entity represents or stores information about another in a coded form"
+    domain: "information:NamedThing"
+    range: "information:NamedThing"
+    recommended: true
+  - id: "information:transmits"
+    name: transmits
+    description: "An entity conveys a signal or message through a channel to a receiver"
+    domain: "information:NamedThing"
+    range: "information:NamedThing"
+    recommended: true
+  - id: "information:filters"
+    name: filters
+    description: "A process selectively passes or attenuates components of a signal or data stream"
+    domain: "information:NamedThing"
+    range: "information:NamedThing"
+    recommended: true
+  - id: "information:compresses"
+    name: compresses
+    description: "An encoding reduces the representation size of data while retaining information content"
+    domain: "information:NamedThing"
+    range: "information:NamedThing"
+    recommended: true
+
+  # --- Network relations ---
+  - id: "information:connected_to"
+    name: connected_to
+    description: "Two nodes in a network are linked by an edge, enabling flow or interaction"
+    domain: "information:NamedThing"
+    range: "information:NamedThing"
+    recommended: true
+  - id: "information:percolates_through"
+    name: percolates_through
+    description: "A quantity or state spreads across a network by traversing connected edges"
+    domain: "information:NamedThing"
+    range: "information:NamedThing"
+    recommended: true
+
+  # --- Computation ---
+  - id: "information:computes"
+    name: computes
+    description: "An automaton or algorithm transforms an input into an output following defined rules"
+    domain: "information:NamedThing"
+    range: "information:NamedThing"
+    recommended: true
+  - id: "information:simulates"
+    name: simulates
+    description: "One computational model or system replicates the behavior of another system"
+    domain: "information:NamedThing"
+    range: "information:NamedThing"
+    recommended: true
+
+  # --- Control ---
+  - id: "information:controls"
+    name: controls
+    description: "A controller regulates the state or behavior of a target system via feedback"
+    domain: "information:NamedThing"
+    range: "information:NamedThing"
+    recommended: true
+  - id: "information:feedbacks_to"
+    name: feedbacks_to
+    description: "Output from one component is routed back as input to a prior stage of the system"
+    domain: "information:NamedThing"
+    range: "information:NamedThing"
+    recommended: true
+
+  # --- Game theory ---
+  - id: "information:plays_against"
+    name: plays_against
+    description: "An agent competes or cooperates with another agent in a game-theoretic interaction"
+    domain: "information:NamedThing"
+    range: "information:NamedThing"
+    recommended: true
+  - id: "information:optimizes"
+    name: optimizes
+    description: "An agent or algorithm seeks to maximize or minimize an objective function"
+    domain: "information:NamedThing"
+    range: "information:NamedThing"
+    recommended: true

@@ -332,6 +332,49 @@ def test_astronomy_catalog_has_recommended_predicates() -> None:
     assert 8 <= len(recommended) <= 35
 
 
+def test_load_registry_returns_information_entry() -> None:
+    registry = load_registry()
+    names = [entry.name for entry in registry]
+    assert "information" in names
+
+
+def test_load_information_catalog_parses_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["information"])
+    assert len(catalogs) == 1
+    catalog = catalogs[0]
+    assert catalog.ontology == "information"
+    assert catalog.prefix == "information"
+    type_names = {et.name for et in catalog.entity_types}
+    assert "entropy_information" in type_names
+    assert "network" in type_names
+    assert "cellular_automaton" in type_names
+    assert "feedback_loop" in type_names
+    assert "nash_equilibrium" in type_names
+
+
+def test_information_catalog_has_recommended_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["information"])
+    catalog = catalogs[0]
+    recommended = [et for et in catalog.entity_types if et.recommended]
+    assert 12 <= len(recommended) <= 30
+
+
+def test_information_catalog_has_predicates() -> None:
+    catalogs = load_catalogs_for_names(["information"])
+    catalog = catalogs[0]
+    pred_names = {p.name for p in catalog.predicates}
+    assert "encodes" in pred_names
+    assert "connected_to" in pred_names
+    assert len(catalog.predicates) >= 8
+
+
+def test_information_catalog_has_recommended_predicates() -> None:
+    catalogs = load_catalogs_for_names(["information"])
+    catalog = catalogs[0]
+    recommended = [p for p in catalog.predicates if p.recommended]
+    assert 8 <= len(recommended) <= 35
+
+
 def test_ontology_catalog_round_trip() -> None:
     catalog = OntologyCatalog(
         ontology="test",
