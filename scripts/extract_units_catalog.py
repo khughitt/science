@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Extract a QUDT quantity-kind catalog from the RDF/Turtle source.
+"""Extract a units (QUDT) quantity-kind catalog from the RDF/Turtle source.
 
 One-time dev script — not part of the runtime package.
-Produces science-model/src/science_model/ontologies/qudt/catalog.yaml.
+Produces science-model/src/science_model/ontologies/units/catalog.yaml.
 
 Usage:
-    uv run --with rdflib scripts/extract_qudt_catalog.py
+    uv run --with rdflib scripts/extract_units_catalog.py
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ try:
     from rdflib import Graph, Namespace, URIRef
     from rdflib.namespace import DCTERMS, RDF, RDFS, SKOS
 except ImportError:
-    print("Error: rdflib not available. Run with: uv run --with rdflib scripts/extract_qudt_catalog.py", file=sys.stderr)
+    print("Error: rdflib not available. Run with: uv run --with rdflib scripts/extract_units_catalog.py", file=sys.stderr)
     sys.exit(1)
 
 QUDT_VERSION = "3.2.0"
@@ -29,7 +29,7 @@ QUDT_VERSION = "3.2.0"
 QUDT_QK_URL = "https://qudt.org/2.1/vocab/quantitykind"
 QUDT_QK_NS = "http://qudt.org/vocab/quantitykind/"
 
-OUTPUT_PATH = Path(__file__).resolve().parent.parent / "science-model/src/science_model/ontologies/qudt/catalog.yaml"
+OUTPUT_PATH = Path(__file__).resolve().parent.parent / "science-model/src/science_model/ontologies/units/catalog.yaml"
 
 # Namespace for QUDT schema properties
 QUDT = Namespace("http://qudt.org/schema/qudt/")
@@ -340,14 +340,14 @@ def main() -> None:
         "# QUDT Quantity Kind catalog — extracted from QUDT v%s\n"
         "# https://qudt.org/\n"
         "#\n"
-        "# Refresh with: uv run --with rdflib scripts/extract_qudt_catalog.py\n"
+        "# Refresh with: uv run --with rdflib scripts/extract_units_catalog.py\n"
         "# Entity types: QUDT quantity kinds relevant to physics and general science\n"
         "# Predicates: hand-authored measurement-oriented relations\n"
         "# recommended: true marks commonly-used terms highlighted by the suggestion system\n"
     ) % QUDT_VERSION
 
     catalog: dict[str, object] = {
-        "ontology": "qudt",
+        "ontology": "units",
         "version": QUDT_VERSION,
         "prefix": "qudt",
         "prefix_uri": "https://qudt.org/vocab/quantitykind/",

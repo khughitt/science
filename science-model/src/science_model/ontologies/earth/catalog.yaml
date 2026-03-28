@@ -1,0 +1,349 @@
+# Earth ontology — hand-authored
+# Entity types and predicates for natural systems, phenomena, environments, and geological processes
+#
+# Prefix references:
+#   ENVO:  https://www.ebi.ac.uk/ols/ontologies/envo  (Environment Ontology)
+#   GCMD:  https://gcmd.earthdata.nasa.gov/           (NASA Global Change Master Directory keywords)
+#   WD:    https://www.wikidata.org/wiki/             (Wikidata)
+
+ontology: earth
+version: "1.0.0"
+prefix: earth
+prefix_uri: "https://example.org/science/earth/"
+
+entity_types:
+  # --- Atmosphere ---
+  - id: "earth:Cloud"
+    name: cloud
+    description: "A visible mass of water droplets or ice crystals suspended in the atmosphere"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Storm"
+    name: storm
+    description: "A violent atmospheric disturbance with strong winds, precipitation, and low pressure"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Tornado"
+    name: tornado
+    description: "A rapidly rotating column of air extending from a thunderstorm to the ground"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Lightning"
+    name: lightning
+    description: "A sudden electrostatic discharge between clouds or between a cloud and the ground"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Wind"
+    name: wind
+    description: "The bulk movement of air through the atmosphere driven by pressure differences"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:JetStream"
+    name: jet_stream
+    description: "A narrow band of fast-moving air currents near the top of the troposphere"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Monsoon"
+    name: monsoon
+    description: "A seasonal wind pattern that brings heavy rainfall to tropical and subtropical regions"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Aurora"
+    name: aurora
+    description: "A luminous display of colored lights in the night sky caused by solar wind particles entering the atmosphere"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: false
+
+  # --- Hydrosphere ---
+  - id: "earth:River"
+    name: river
+    description: "A large natural stream of fresh water flowing toward the sea, a lake, or another river"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:OceanCurrent"
+    name: ocean_current
+    description: "A directed movement of ocean water driven by wind, temperature, salinity, or the Coriolis effect"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:WaveOcean"
+    name: wave_ocean
+    description: "A periodic disturbance on the ocean surface transferring energy without net water movement"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Tide"
+    name: tide
+    description: "The periodic rise and fall of sea level caused by gravitational forces from the Moon and Sun"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Waterfall"
+    name: waterfall
+    description: "A steep descent of water over a cliff or rocky ledge in a river or stream"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: false
+  - id: "earth:Glacier"
+    name: glacier
+    description: "A slow-moving mass of ice formed from compacted snow that flows under its own weight"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Aquifer"
+    name: aquifer
+    description: "A permeable underground layer of rock or sediment that holds and transmits groundwater"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Estuary"
+    name: estuary
+    description: "A coastal water body where a river meets the sea and fresh and salt water mix"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+
+  # --- Lithosphere ---
+  - id: "earth:Volcano"
+    name: volcano
+    description: "A vent or opening in Earth's crust through which molten rock, ash, and gases erupt"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Earthquake"
+    name: earthquake
+    description: "A sudden shaking of the ground caused by the movement of tectonic plates or faults"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Mountain"
+    name: mountain
+    description: "A large natural elevation of Earth's surface rising prominently above surrounding terrain"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Canyon"
+    name: canyon
+    description: "A deep, narrow valley with steep sides carved through rock by a river or erosive forces"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Cave"
+    name: cave
+    description: "A natural hollow space in rock or beneath the ground, often formed by water dissolution"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: false
+  - id: "earth:Dune"
+    name: dune
+    description: "A mound or ridge of sand shaped by wind in deserts or along coastlines"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Coastline"
+    name: coastline
+    description: "The boundary where land meets the sea, continuously shaped by waves, tides, and erosion"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:TectonicPlate"
+    name: tectonic_plate
+    description: "A massive segment of Earth's lithosphere that moves slowly over the mantle"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+
+  # --- Biosphere ---
+  - id: "earth:Forest"
+    name: forest
+    description: "A large area dominated by trees and the associated communities of plants, animals, and microbes"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:CoralReef"
+    name: coral_reef
+    description: "A shallow underwater ecosystem built from coral skeletons that supports enormous biodiversity"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Wetland"
+    name: wetland
+    description: "A land area saturated or inundated with water that supports hydric soils and water-tolerant plants"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Desert"
+    name: desert
+    description: "An arid region receiving very little precipitation where vegetation is sparse"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Grassland"
+    name: grassland
+    description: "An open landscape dominated by grasses and other herbaceous plants with few trees"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:KelpForest"
+    name: kelp_forest
+    description: "An underwater habitat dominated by large brown algae that form dense canopy-like structures"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: false
+  - id: "earth:Mangrove"
+    name: mangrove
+    description: "A coastal shrub or tree ecosystem growing in saline or brackish intertidal zones"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Tundra"
+    name: tundra
+    description: "A cold, treeless biome with permanently frozen subsoil found at high latitudes or altitudes"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+
+  # --- Processes & Phenomena ---
+  - id: "earth:Erosion"
+    name: erosion
+    description: "The wearing away of rock or soil by wind, water, ice, or biological activity"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Sedimentation"
+    name: sedimentation
+    description: "The deposition of particles carried by water, wind, or ice to form layers of sediment"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Weathering"
+    name: weathering
+    description: "The breakdown of rock and minerals at Earth's surface by physical, chemical, or biological processes"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Crystallization"
+    name: crystallization
+    description: "The process by which atoms or molecules arrange into an ordered crystal lattice as a material cools or precipitates"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:ConvectionCell"
+    name: convection_cell
+    description: "A circulatory pattern of fluid motion driven by temperature-induced density differences"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:TurbulenceNatural"
+    name: turbulence_natural
+    description: "Chaotic, irregular fluid motion in rivers, oceans, and the atmosphere characterized by eddies and mixing"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Meander"
+    name: meander
+    description: "A sinuous bend in a river formed by the lateral migration of the channel over a floodplain"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Avalanche"
+    name: avalanche
+    description: "A sudden rapid flow of snow, ice, or rock down a slope triggered by instability"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Wildfire"
+    name: wildfire
+    description: "An uncontrolled fire spreading through vegetation in natural or semi-natural landscapes"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:PermafrostThaw"
+    name: permafrost_thaw
+    description: "The melting of permanently frozen ground releasing stored carbon and altering landscape stability"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+
+  # --- Patterns in Nature ---
+  - id: "earth:FractalCoastline"
+    name: fractal_coastline
+    description: "A coastline whose measured length increases as the measurement scale decreases, exhibiting self-similar geometry"
+    curie_prefixes: [ENVO, WD]
+    recommended: true
+  - id: "earth:HexagonalBasalt"
+    name: hexagonal_basalt
+    description: "A regular array of hexagonal columns formed when lava cools and contracts uniformly"
+    curie_prefixes: [ENVO, WD]
+    recommended: true
+  - id: "earth:RiverNetwork"
+    name: river_network
+    description: "A branching dendritic system of streams and tributaries draining a watershed"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:SandRipple"
+    name: sand_ripple
+    description: "A small periodic ridge of sand formed on a bed or surface by flowing water or wind"
+    curie_prefixes: [ENVO, GCMD, WD]
+    recommended: true
+  - id: "earth:Snowflake"
+    name: snowflake
+    description: "A single ice crystal with six-fold symmetry formed by water vapor freezing in the atmosphere"
+    curie_prefixes: [ENVO, WD]
+    recommended: true
+  - id: "earth:SpiralShell"
+    name: spiral_shell
+    description: "The logarithmic spiral shell of a mollusc whose growth follows a constant ratio of radius to angle"
+    curie_prefixes: [ENVO, WD]
+    recommended: false
+  - id: "earth:StripePattern"
+    name: stripe_pattern
+    description: "Alternating bands of contrasting color or texture arising from reaction-diffusion or flow instabilities in nature"
+    curie_prefixes: [ENVO, WD]
+    recommended: false
+  - id: "earth:BranchingPattern"
+    name: branching_pattern
+    description: "A self-similar tree-like structure found in river networks, lightning, leaf veins, and coral growth"
+    curie_prefixes: [ENVO, WD]
+    recommended: true
+
+predicates:
+  - id: "earth:occurs_in"
+    name: occurs_in
+    description: "A phenomenon or process takes place within a particular environment or system"
+    domain: "earth:NamedThing"
+    range: "earth:NamedThing"
+    recommended: true
+  - id: "earth:produces"
+    name: produces
+    description: "A natural process or system generates or gives rise to another phenomenon or feature"
+    domain: "earth:NamedThing"
+    range: "earth:NamedThing"
+    recommended: true
+  - id: "earth:drives"
+    name: drives
+    description: "One Earth system component provides the energy or force that sustains another process"
+    domain: "earth:NamedThing"
+    range: "earth:NamedThing"
+    recommended: true
+  - id: "earth:shaped_by"
+    name: shaped_by
+    description: "A landform or environment has its structure determined by a given process or force"
+    domain: "earth:NamedThing"
+    range: "earth:NamedThing"
+    recommended: true
+  - id: "earth:contains"
+    name: contains
+    description: "One natural system or environment holds or includes another entity within its boundaries"
+    domain: "earth:NamedThing"
+    range: "earth:NamedThing"
+    recommended: true
+  - id: "earth:transitions_to"
+    name: transitions_to
+    description: "A system, environment, or state changes into another under shifting conditions"
+    domain: "earth:NamedThing"
+    range: "earth:NamedThing"
+    recommended: true
+  - id: "earth:exhibits_pattern"
+    name: exhibits_pattern
+    description: "A natural system or phenomenon displays a recognizable spatial or temporal pattern"
+    domain: "earth:NamedThing"
+    range: "earth:NamedThing"
+    recommended: true
+  - id: "earth:modeled_by"
+    name: modeled_by
+    description: "A natural phenomenon is described or approximated by a mathematical or physical model"
+    domain: "earth:NamedThing"
+    range: "earth:NamedThing"
+    recommended: true
+  - id: "earth:observed_at_scale"
+    name: observed_at_scale
+    description: "A phenomenon is most clearly observed or measured at a characteristic spatial or temporal scale"
+    domain: "earth:NamedThing"
+    range: "earth:NamedThing"
+    recommended: true
+  - id: "earth:coupled_with"
+    name: coupled_with
+    description: "Two Earth system components exchange energy or matter in a way that links their dynamics"
+    domain: "earth:NamedThing"
+    range: "earth:NamedThing"
+    recommended: true
+  - id: "earth:formed_by"
+    name: formed_by
+    description: "A landform or material structure came into existence through a particular geological or physical process"
+    domain: "earth:NamedThing"
+    range: "earth:NamedThing"
+    recommended: true
+  - id: "earth:sustains"
+    name: sustains
+    description: "One natural system provides the conditions necessary for another system or process to persist"
+    domain: "earth:NamedThing"
+    range: "earth:NamedThing"
+    recommended: true

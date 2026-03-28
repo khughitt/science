@@ -1,16 +1,26 @@
 ontologies:
-  - name: biolink
+  - name: biology
     version: "4.3.7"
     source_url: "https://github.com/biolink/biolink-model"
-    description: "Biolink Model — biomedical and translational science data model"
-    catalog_path: "biolink/catalog.yaml"
+    description: "Biology — biomedical, organismal, and ecological entity types and predicates"
+    catalog_path: "biology/catalog.yaml"
   - name: physics
     version: "1.0.0"
     source_url: "project-authored"
     description: "Physics — entity types and predicates for physical systems research"
     catalog_path: "physics/catalog.yaml"
-  - name: qudt
+  - name: units
     version: "3.2.0"
     source_url: "https://github.com/qudt/qudt-public-repo"
-    description: "QUDT — quantity kinds for measurement and quantitative modeling"
-    catalog_path: "qudt/catalog.yaml"
+    description: "Units — quantity kinds for measurement and quantitative modeling"
+    catalog_path: "units/catalog.yaml"
+  - name: math
+    version: "1.0.0"
+    source_url: "project-authored"
+    description: "Mathematics — objects, operations, and structures for mathematical modeling"
+    catalog_path: "math/catalog.yaml"
+  - name: earth
+    version: "1.0.0"
+    source_url: "project-authored"
+    description: "Earth — natural systems, phenomena, environments, and geological processes"
+    catalog_path: "earth/catalog.yaml"

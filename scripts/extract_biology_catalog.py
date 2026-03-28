@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Extract a biolink-model term catalog from the LinkML source.
+"""Extract a biology (biolink-model) term catalog from the LinkML source.
 
 One-time dev script — not part of the runtime package.
-Produces science-model/src/science_model/ontologies/biolink/catalog.yaml.
+Produces science-model/src/science_model/ontologies/biology/catalog.yaml.
 
 Usage:
-    uv run scripts/extract_biolink_catalog.py
-    # or: uvx --from biolink-model-toolkit python scripts/extract_biolink_catalog.py
+    uv run scripts/extract_biology_catalog.py
+    # or: uvx --from biolink-model-toolkit python scripts/extract_biology_catalog.py
 
 Requires: linkml (pip install linkml) or biolink-model-toolkit.
 """
@@ -22,7 +22,7 @@ BIOLINK_VERSION = "4.3.7"
 BIOLINK_SCHEMA_URL = (
     f"https://raw.githubusercontent.com/biolink/biolink-model/v{BIOLINK_VERSION}/biolink-model.yaml"
 )
-OUTPUT_PATH = Path(__file__).resolve().parent.parent / "science-model/src/science_model/ontologies/biolink/catalog.yaml"
+OUTPUT_PATH = Path(__file__).resolve().parent.parent / "science-model/src/science_model/ontologies/biology/catalog.yaml"
 
 # Recommended entity types — commonly used in translational science projects.
 RECOMMENDED_ENTITY_TYPES: set[str] = {
@@ -182,7 +182,7 @@ def main() -> None:
 
     # --- Build catalog ---
     catalog: dict[str, object] = {
-        "ontology": "biolink",
+        "ontology": "biology",
         "version": BIOLINK_VERSION,
         "prefix": "biolink",
         "prefix_uri": "https://w3id.org/biolink/vocab/",

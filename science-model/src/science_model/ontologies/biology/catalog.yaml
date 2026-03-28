@@ -1,12 +1,12 @@
 # Biolink Model term catalog — extracted from biolink-model v4.3.7
 # https://github.com/biolink/biolink-model
 #
-# Refresh with: uv run --with linkml-runtime scripts/extract_biolink_catalog.py
+# Refresh with: uv run --with linkml-runtime scripts/extract_biology_catalog.py
 # Entity types: descendants of NamedThing (non-abstract, non-mixin)
 # Predicates: relationship slots with NamedThing-descended range
 # recommended: true marks commonly-used terms highlighted by the suggestion system
 
-ontology: biolink
+ontology: biology
 version: "4.3.7"
 prefix: biolink
 prefix_uri: "https://w3id.org/biolink/vocab/"

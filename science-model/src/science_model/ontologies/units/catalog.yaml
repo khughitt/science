@@ -1,12 +1,12 @@
 # QUDT Quantity Kind catalog — extracted from QUDT v3.2.0
 # https://qudt.org/
 #
-# Refresh with: uv run --with rdflib scripts/extract_qudt_catalog.py
+# Refresh with: uv run --with rdflib scripts/extract_units_catalog.py
 # Entity types: QUDT quantity kinds relevant to physics and general science
 # Predicates: hand-authored measurement-oriented relations
 # recommended: true marks commonly-used terms highlighted by the suggestion system
 
-ontology: qudt
+ontology: units
 version: "3.2.0"
 prefix: qudt
 prefix_uri: https://qudt.org/vocab/quantitykind/

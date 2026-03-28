@@ -1,0 +1,361 @@
+# Mathematics ontology — hand-authored
+# Entity types and predicates for mathematical objects, operations, and structures
+#
+# Prefix references:
+#   MATHWORLD: https://mathworld.wolfram.com/  (Eric Weisstein's MathWorld)
+#   NLAB:      https://ncatlab.org/nlab/show/  (nLab category theory wiki)
+#   DLMF:      https://dlmf.nist.gov/          (NIST Digital Library of Mathematical Functions)
+
+ontology: math
+version: "1.0.0"
+prefix: math
+prefix_uri: "https://example.org/science/math/"
+
+entity_types:
+  # --- Calculus & Analysis ---
+  - id: "math:Derivative"
+    name: derivative
+    description: "The instantaneous rate of change of a function with respect to a variable"
+    curie_prefixes: [MATHWORLD, DLMF]
+    recommended: true
+  - id: "math:PartialDerivative"
+    name: partial_derivative
+    description: "The derivative of a multivariable function with respect to one variable, holding others fixed"
+    curie_prefixes: [MATHWORLD, DLMF]
+    recommended: true
+  - id: "math:Gradient"
+    name: gradient
+    description: "A vector field pointing in the direction of greatest increase of a scalar function"
+    curie_prefixes: [MATHWORLD, DLMF]
+    recommended: true
+  - id: "math:Divergence"
+    name: divergence
+    description: "A scalar measure of the net outward flux of a vector field at a point"
+    curie_prefixes: [MATHWORLD, DLMF]
+    recommended: true
+  - id: "math:Curl"
+    name: curl
+    description: "A vector measure of the infinitesimal rotation of a vector field at a point"
+    curie_prefixes: [MATHWORLD, DLMF]
+    recommended: true
+  - id: "math:Laplacian"
+    name: laplacian
+    description: "The divergence of the gradient of a scalar function; sum of second partial derivatives"
+    curie_prefixes: [MATHWORLD, DLMF]
+    recommended: true
+  - id: "math:Integral"
+    name: integral
+    description: "A mathematical operation summing a function over a domain, inverse to differentiation"
+    curie_prefixes: [MATHWORLD, DLMF]
+    recommended: true
+  - id: "math:Limit"
+    name: limit
+    description: "The value a function or sequence approaches as the input tends to some value"
+    curie_prefixes: [MATHWORLD, DLMF]
+    recommended: true
+  - id: "math:DifferentialForm"
+    name: differential_form
+    description: "A geometric object that can be integrated over manifolds, generalizing functions and vector fields"
+    curie_prefixes: [MATHWORLD, NLAB]
+    recommended: false
+  - id: "math:Variation"
+    name: variation
+    description: "An infinitesimal perturbation of a function used in the calculus of variations"
+    curie_prefixes: [MATHWORLD, DLMF]
+    recommended: true
+  - id: "math:Functional"
+    name: functional
+    description: "A mapping from a function space to scalars, as in variational calculus"
+    curie_prefixes: [MATHWORLD, NLAB]
+    recommended: true
+  - id: "math:Series"
+    name: series
+    description: "An infinite sum of terms that may converge to a finite value"
+    curie_prefixes: [MATHWORLD, DLMF]
+    recommended: true
+
+  # --- Linear Algebra ---
+  - id: "math:Vector"
+    name: vector
+    description: "An element of a vector space with magnitude and direction"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:Matrix"
+    name: matrix
+    description: "A rectangular array of numbers representing a linear transformation"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:Tensor"
+    name: tensor
+    description: "A multilinear map between vector spaces that generalizes scalars, vectors, and matrices"
+    curie_prefixes: [MATHWORLD, NLAB]
+    recommended: true
+  - id: "math:Eigenvalue"
+    name: eigenvalue
+    description: "A scalar factor by which an eigenvector is scaled under a linear transformation"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:Eigenvector"
+    name: eigenvector
+    description: "A nonzero vector that changes only by a scalar factor under a linear transformation"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:LinearOperator"
+    name: linear_operator
+    description: "A map between vector spaces that preserves addition and scalar multiplication"
+    curie_prefixes: [MATHWORLD, NLAB]
+    recommended: true
+  - id: "math:InnerProduct"
+    name: inner_product
+    description: "A bilinear pairing on a vector space generalizing the dot product"
+    curie_prefixes: [MATHWORLD, NLAB]
+    recommended: false
+  - id: "math:Basis"
+    name: basis
+    description: "A linearly independent spanning set for a vector space"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+
+  # --- Dynamical Systems ---
+  - id: "math:FixedPoint"
+    name: fixed_point
+    description: "A point mapped to itself under a dynamical system or function"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:Attractor"
+    name: attractor
+    description: "A set toward which a dynamical system evolves over time"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:LimitCycle"
+    name: limit_cycle
+    description: "An isolated closed trajectory in the phase space of a dynamical system"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:Bifurcation"
+    name: bifurcation
+    description: "A qualitative change in the behavior of a dynamical system as a parameter varies"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:PhaseSpace"
+    name: phase_space
+    description: "The space of all possible states of a dynamical system"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:Trajectory"
+    name: trajectory
+    description: "The path traced by a point in phase space over time"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:LyapunovExponent"
+    name: lyapunov_exponent
+    description: "A measure of the rate of separation of infinitesimally close trajectories"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:BasinOfAttraction"
+    name: basin_of_attraction
+    description: "The set of initial conditions that evolve toward a given attractor"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:StrangeAttractor"
+    name: strange_attractor
+    description: "A fractal attractor in a chaotic dynamical system"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:Stability"
+    name: stability
+    description: "The property of a dynamical system to return to equilibrium after perturbation"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+
+  # --- Topology & Geometry ---
+  - id: "math:Manifold"
+    name: manifold
+    description: "A topological space that locally resembles Euclidean space"
+    curie_prefixes: [MATHWORLD, NLAB]
+    recommended: true
+  - id: "math:Metric"
+    name: metric
+    description: "A function defining distances between points in a metric space"
+    curie_prefixes: [MATHWORLD, NLAB]
+    recommended: true
+  - id: "math:Curvature"
+    name: curvature
+    description: "A measure of how much a geometric object deviates from being flat"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:FiberBundle"
+    name: fiber_bundle
+    description: "A space that locally looks like a product of a base space and a fiber space"
+    curie_prefixes: [MATHWORLD, NLAB]
+    recommended: false
+  - id: "math:Homeomorphism"
+    name: homeomorphism
+    description: "A continuous bijection with a continuous inverse between topological spaces"
+    curie_prefixes: [MATHWORLD, NLAB]
+    recommended: false
+  - id: "math:TopologicalInvariant"
+    name: topological_invariant
+    description: "A property preserved by homeomorphisms that classifies topological spaces"
+    curie_prefixes: [MATHWORLD, NLAB]
+    recommended: false
+
+  # --- Algebra & Category Theory ---
+  - id: "math:Group"
+    name: group
+    description: "A set with an associative binary operation, identity, and inverses"
+    curie_prefixes: [MATHWORLD, NLAB]
+    recommended: true
+  - id: "math:Ring"
+    name: ring
+    description: "A set with two operations (addition and multiplication) satisfying distributivity"
+    curie_prefixes: [MATHWORLD, NLAB]
+    recommended: false
+  - id: "math:FieldAlgebraic"
+    name: field_algebraic
+    description: "A commutative ring where every nonzero element has a multiplicative inverse"
+    curie_prefixes: [MATHWORLD, NLAB]
+    recommended: false
+  - id: "math:SymmetryGroup"
+    name: symmetry_group
+    description: "The group of all symmetry transformations of a mathematical or physical object"
+    curie_prefixes: [MATHWORLD, NLAB]
+    recommended: true
+  - id: "math:Functor"
+    name: functor
+    description: "A structure-preserving map between categories"
+    curie_prefixes: [NLAB]
+    recommended: true
+  - id: "math:NaturalTransformation"
+    name: natural_transformation
+    description: "A morphism between functors that preserves categorical structure"
+    curie_prefixes: [NLAB]
+    recommended: false
+
+  # --- Probability & Stochastic ---
+  - id: "math:RandomVariable"
+    name: random_variable
+    description: "A variable whose values are determined by a probability distribution"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:ProbabilityDistribution"
+    name: probability_distribution
+    description: "A function assigning probabilities to the values of a random variable"
+    curie_prefixes: [MATHWORLD, DLMF]
+    recommended: true
+  - id: "math:StochasticProcess"
+    name: stochastic_process
+    description: "A collection of random variables indexed by time or space"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:MarkovChain"
+    name: markov_chain
+    description: "A stochastic process where the next state depends only on the current state"
+    curie_prefixes: [MATHWORLD]
+    recommended: true
+  - id: "math:Martingale"
+    name: martingale
+    description: "A stochastic process whose expected future value equals its current value"
+    curie_prefixes: [MATHWORLD]
+    recommended: false
+
+predicates:
+  # --- Operations & domains ---
+  - id: "math:operates_on"
+    name: operates_on
+    description: "A mathematical operator or transformation acts on a mathematical object"
+    domain: "math:NamedThing"
+    range: "math:NamedThing"
+    recommended: true
+  - id: "math:produces"
+    name: produces
+    description: "An operation or process yields a mathematical output"
+    domain: "math:NamedThing"
+    range: "math:NamedThing"
+    recommended: true
+  - id: "math:defined_on"
+    name: defined_on
+    description: "A mathematical entity is defined on a particular domain or space"
+    domain: "math:NamedThing"
+    range: "math:NamedThing"
+    recommended: true
+
+  # --- Hierarchy & classification ---
+  - id: "math:generalizes"
+    name: generalizes
+    description: "One mathematical concept extends or subsumes another"
+    domain: "math:NamedThing"
+    range: "math:NamedThing"
+    recommended: true
+  - id: "math:special_case_of"
+    name: special_case_of
+    description: "One concept is a restricted or particular instance of another"
+    domain: "math:NamedThing"
+    range: "math:NamedThing"
+    recommended: true
+  - id: "math:classifies"
+    name: classifies
+    description: "A mathematical invariant or criterion categorizes objects into classes"
+    domain: "math:NamedThing"
+    range: "math:NamedThing"
+    recommended: true
+
+  # --- Duality & structure ---
+  - id: "math:dual_to"
+    name: dual_to
+    description: "Two mathematical objects are related by a duality correspondence"
+    domain: "math:NamedThing"
+    range: "math:NamedThing"
+    recommended: true
+  - id: "math:composed_of"
+    name: composed_of
+    description: "A mathematical structure is built from component parts"
+    domain: "math:NamedThing"
+    range: "math:NamedThing"
+    recommended: true
+  - id: "math:preserves"
+    name: preserves
+    description: "A map or transformation leaves a property or structure invariant"
+    domain: "math:NamedThing"
+    range: "math:NamedThing"
+    recommended: true
+  - id: "math:invariant_under"
+    name: invariant_under
+    description: "A property or quantity does not change under a given transformation"
+    domain: "math:NamedThing"
+    range: "math:NamedThing"
+    recommended: true
+
+  # --- Measurement & convergence ---
+  - id: "math:measures"
+    name: measures
+    description: "A mathematical quantity quantifies or characterizes another object"
+    domain: "math:NamedThing"
+    range: "math:NamedThing"
+    recommended: true
+  - id: "math:converges_to"
+    name: converges_to
+    description: "A sequence, series, or process approaches a limiting value"
+    domain: "math:NamedThing"
+    range: "math:NamedThing"
+    recommended: true
+  - id: "math:approximates"
+    name: approximates
+    description: "One mathematical expression is a finite or asymptotic approximation of another"
+    domain: "math:NamedThing"
+    range: "math:NamedThing"
+    recommended: true
+
+  # --- Transformation & decomposition ---
+  - id: "math:transforms"
+    name: transforms
+    description: "An operation maps an object to another representation or form"
+    domain: "math:NamedThing"
+    range: "math:NamedThing"
+    recommended: true
+  - id: "math:decomposes"
+    name: decomposes
+    description: "A mathematical object is factored or split into simpler components"
+    domain: "math:NamedThing"
+    range: "math:NamedThing"
+    recommended: true
