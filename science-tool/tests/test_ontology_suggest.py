@@ -158,3 +158,73 @@ def test_no_suggestion_earth_when_declared() -> None:
     suggestions = suggest_ontologies(entities, declared_ontologies=["earth"])
     earth_suggestions = [s for s in suggestions if s.ontology_name == "earth"]
     assert len(earth_suggestions) == 0
+
+
+# --- Chemistry suggestion tests ---
+
+
+def test_suggests_chemistry_for_chebi_curie() -> None:
+    entities = [_entity(ontology_terms=["CHEBI:15377"])]
+    suggestions = suggest_ontologies(entities, declared_ontologies=[])
+    chem_suggestions = [s for s in suggestions if s.ontology_name == "chemistry"]
+    assert len(chem_suggestions) == 1
+    assert "CURIE" in chem_suggestions[0].reason
+
+
+def test_suggests_chemistry_for_element_kind() -> None:
+    entities = [_entity(kind="element")]
+    suggestions = suggest_ontologies(entities, declared_ontologies=[])
+    chem_suggestions = [s for s in suggestions if s.ontology_name == "chemistry"]
+    assert len(chem_suggestions) == 1
+    assert "kind" in chem_suggestions[0].reason
+
+
+def test_no_suggestion_chemistry_when_declared() -> None:
+    entities = [_entity(kind="element")]
+    suggestions = suggest_ontologies(entities, declared_ontologies=["chemistry"])
+    chem_suggestions = [s for s in suggestions if s.ontology_name == "chemistry"]
+    assert len(chem_suggestions) == 0
+
+
+# --- Astronomy suggestion tests ---
+
+
+def test_suggests_astronomy_for_simbad_curie() -> None:
+    entities = [_entity(ontology_terms=["SIMBAD:HD209458"])]
+    suggestions = suggest_ontologies(entities, declared_ontologies=[])
+    astro_suggestions = [s for s in suggestions if s.ontology_name == "astronomy"]
+    assert len(astro_suggestions) == 1
+    assert "CURIE" in astro_suggestions[0].reason
+
+
+def test_suggests_astronomy_for_star_kind() -> None:
+    entities = [_entity(kind="star")]
+    suggestions = suggest_ontologies(entities, declared_ontologies=[])
+    astro_suggestions = [s for s in suggestions if s.ontology_name == "astronomy"]
+    assert len(astro_suggestions) == 1
+    assert "kind" in astro_suggestions[0].reason
+
+
+def test_no_suggestion_astronomy_when_declared() -> None:
+    entities = [_entity(kind="star")]
+    suggestions = suggest_ontologies(entities, declared_ontologies=["astronomy"])
+    astro_suggestions = [s for s in suggestions if s.ontology_name == "astronomy"]
+    assert len(astro_suggestions) == 0
+
+
+# --- Information suggestion tests ---
+
+
+def test_suggests_information_for_network_kind() -> None:
+    entities = [_entity(kind="network")]
+    suggestions = suggest_ontologies(entities, declared_ontologies=[])
+    info_suggestions = [s for s in suggestions if s.ontology_name == "information"]
+    assert len(info_suggestions) == 1
+    assert "kind" in info_suggestions[0].reason
+
+
+def test_no_suggestion_information_when_declared() -> None:
+    entities = [_entity(kind="network")]
+    suggestions = suggest_ontologies(entities, declared_ontologies=["information"])
+    info_suggestions = [s for s in suggestions if s.ontology_name == "information"]
+    assert len(info_suggestions) == 0
