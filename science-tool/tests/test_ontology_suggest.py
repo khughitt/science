@@ -69,30 +69,30 @@ def test_no_physics_suggestions_when_declared() -> None:
     assert physics_suggestions == []
 
 
-# --- QUDT suggestion tests ---
+# --- Units suggestion tests ---
 
 
-def test_suggests_qudt_for_curie_prefixes() -> None:
+def test_suggests_units_for_curie_prefixes() -> None:
     entities = [_entity(ontology_terms=["QUDT:Mass"])]
     suggestions = suggest_ontologies(entities, declared_ontologies=[])
-    qudt_suggestions = [s for s in suggestions if s.ontology_name == "qudt"]
-    assert len(qudt_suggestions) == 1
-    assert "CURIE" in qudt_suggestions[0].reason
+    units_suggestions = [s for s in suggestions if s.ontology_name == "units"]
+    assert len(units_suggestions) == 1
+    assert "CURIE" in units_suggestions[0].reason
 
 
-def test_suggests_qudt_for_kind_match() -> None:
+def test_suggests_units_for_kind_match() -> None:
     entities = [_entity(kind="mass")]
     suggestions = suggest_ontologies(entities, declared_ontologies=[])
-    qudt_suggestions = [s for s in suggestions if s.ontology_name == "qudt"]
-    assert len(qudt_suggestions) == 1
-    assert "kind" in qudt_suggestions[0].reason
+    units_suggestions = [s for s in suggestions if s.ontology_name == "units"]
+    assert len(units_suggestions) == 1
+    assert "kind" in units_suggestions[0].reason
 
 
-def test_no_qudt_suggestions_when_declared() -> None:
+def test_no_units_suggestions_when_declared() -> None:
     entities = [_entity(kind="mass", ontology_terms=["QUDT:Mass"])]
-    suggestions = suggest_ontologies(entities, declared_ontologies=["qudt"])
-    qudt_suggestions = [s for s in suggestions if s.ontology_name == "qudt"]
-    assert qudt_suggestions == []
+    suggestions = suggest_ontologies(entities, declared_ontologies=["units"])
+    units_suggestions = [s for s in suggestions if s.ontology_name == "units"]
+    assert units_suggestions == []
 
 
 def test_suggests_counts_both_prefix_and_kind() -> None:

@@ -9,8 +9,8 @@ ontologies:
     source_url: "project-authored"
     description: "Physics — entity types and predicates for physical systems research"
     catalog_path: "physics/catalog.yaml"
-  - name: qudt
+  - name: units
     version: "3.2.0"
     source_url: "https://github.com/qudt/qudt-public-repo"
-    description: "QUDT — quantity kinds for measurement and quantitative modeling"
-    catalog_path: "qudt/catalog.yaml"
+    description: "Units — quantity kinds for measurement and quantitative modeling"
+    catalog_path: "units/catalog.yaml"

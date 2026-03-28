@@ -54,7 +54,7 @@ def test_available_ontology_names() -> None:
     names = available_ontology_names()
     assert "biolink" in names
     assert "physics" in names
-    assert "qudt" in names
+    assert "units" in names
 
 
 def test_ontology_term_type_round_trip() -> None:
@@ -119,14 +119,14 @@ def test_physics_curie_prefixes() -> None:
     assert "COD" in crystal.curie_prefixes
 
 
-# --- QUDT catalog tests ---
+# --- Units catalog tests ---
 
 
-def test_load_qudt_catalog_parses_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["qudt"])
+def test_load_units_catalog_parses_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["units"])
     assert len(catalogs) == 1
     catalog = catalogs[0]
-    assert catalog.ontology == "qudt"
+    assert catalog.ontology == "units"
     type_names = {et.name for et in catalog.entity_types}
     assert "mass" in type_names
     assert "energy" in type_names
@@ -134,8 +134,8 @@ def test_load_qudt_catalog_parses_entity_types() -> None:
     assert "velocity" in type_names
 
 
-def test_load_qudt_catalog_parses_predicates() -> None:
-    catalogs = load_catalogs_for_names(["qudt"])
+def test_load_units_catalog_parses_predicates() -> None:
+    catalogs = load_catalogs_for_names(["units"])
     catalog = catalogs[0]
     pred_names = {p.name for p in catalog.predicates}
     assert "has_quantity_kind" in pred_names
@@ -144,8 +144,8 @@ def test_load_qudt_catalog_parses_predicates() -> None:
     assert len(catalog.predicates) == 6
 
 
-def test_qudt_recommended_counts() -> None:
-    catalogs = load_catalogs_for_names(["qudt"])
+def test_units_recommended_counts() -> None:
+    catalogs = load_catalogs_for_names(["units"])
     catalog = catalogs[0]
     rec_types = sum(1 for et in catalog.entity_types if et.recommended)
     assert 20 <= rec_types <= 50, f"Expected 20-50 recommended quantity kinds, got {rec_types}"
@@ -153,8 +153,8 @@ def test_qudt_recommended_counts() -> None:
     assert rec_preds == 4
 
 
-def test_qudt_curie_prefixes() -> None:
-    catalogs = load_catalogs_for_names(["qudt"])
+def test_units_curie_prefixes() -> None:
+    catalogs = load_catalogs_for_names(["units"])
     catalog = catalogs[0]
     mass = next(et for et in catalog.entity_types if et.name == "mass")
     assert "QUDT" in mass.curie_prefixes
