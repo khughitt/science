@@ -1,0 +1,236 @@
+# Astronomy ontology — hand-authored
+# Entity types and predicates for astronomical objects and cosmological processes
+#
+# Prefix references:
+#   SIMBAD: https://simbad.u-strasbg.fr/simbad/   (SIMBAD Astronomical Database)
+#   WD:     https://www.wikidata.org/wiki/          (Wikidata)
+
+ontology: astronomy
+version: "1.0.0"
+prefix: astronomy
+prefix_uri: "https://example.org/science/astronomy/"
+
+entity_types:
+  # --- Stellar ---
+  - id: "astronomy:Star"
+    name: star
+    description: "A luminous sphere of plasma held together by gravity and powered by nuclear fusion in its core"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:MainSequence"
+    name: main_sequence
+    description: "A star in the stable phase of hydrogen burning on the Hertzsprung-Russell main sequence"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:RedGiant"
+    name: red_giant
+    description: "An evolved, luminous star that has expanded after exhausting its core hydrogen supply"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:WhiteDwarf"
+    name: white_dwarf
+    description: "The dense remnant core of a low-mass star after it has shed its outer layers"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:NeutronStar"
+    name: neutron_star
+    description: "An extremely dense stellar remnant composed almost entirely of neutrons, formed in a supernova"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:Pulsar"
+    name: pulsar
+    description: "A rapidly rotating neutron star that emits beams of electromagnetic radiation at regular intervals"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:Supernova"
+    name: supernova
+    description: "A powerful and luminous stellar explosion marking the end-of-life of a massive star"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:BinarySystem"
+    name: binary_system
+    description: "A gravitationally bound pair of stars orbiting their common center of mass"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+
+  # --- Planetary ---
+  - id: "astronomy:Planet"
+    name: planet
+    description: "A celestial body orbiting a star, massive enough for self-gravity to give it a near-spherical shape"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:Moon"
+    name: moon
+    description: "A natural satellite gravitationally bound to and orbiting a planet or dwarf planet"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:Asteroid"
+    name: asteroid
+    description: "A rocky, metallic, or icy small body orbiting the Sun, too small to be a planet"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:Comet"
+    name: comet
+    description: "A small icy body that releases gas and dust as it approaches the Sun, forming a visible coma and tail"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:Exoplanet"
+    name: exoplanet
+    description: "A planet orbiting a star outside the Solar System, detected via transit, radial velocity, or imaging"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:ProtoplanetaryDisk"
+    name: protoplanetary_disk
+    description: "A rotating circumstellar disk of dense gas and dust around a young star from which planets form"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:RingSystem"
+    name: ring_system
+    description: "A disk of dust, ice, and rock fragments orbiting a planet in a flattened plane"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: false
+
+  # --- Galactic ---
+  - id: "astronomy:Galaxy"
+    name: galaxy
+    description: "A gravitationally bound system of stars, gas, dust, and dark matter containing billions of stars"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:Nebula"
+    name: nebula
+    description: "An interstellar cloud of gas and dust that may be a stellar nursery or the remnant of a supernova"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:CosmicWeb"
+    name: cosmic_web
+    description: "The large-scale structure of the universe consisting of filaments, voids, and clusters of galaxies"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "astronomy:Quasar"
+    name: quasar
+    description: "An extremely luminous active galactic nucleus powered by a supermassive black hole accreting matter"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:ActiveGalacticNucleus"
+    name: active_galactic_nucleus
+    description: "A compact, highly luminous region at the center of a galaxy driven by accretion onto a supermassive black hole"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+
+  # --- Exotic ---
+  - id: "astronomy:BlackHole"
+    name: black_hole
+    description: "A region of spacetime where gravity is so strong that nothing, not even light, can escape"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:DarkMatter"
+    name: dark_matter
+    description: "A hypothetical form of matter that does not interact electromagnetically but accounts for gravitational effects"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "astronomy:DarkEnergy"
+    name: dark_energy
+    description: "A hypothetical form of energy permeating all space, responsible for the accelerating expansion of the universe"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "astronomy:GravitationalWave"
+    name: gravitational_wave
+    description: "A ripple in spacetime curvature propagating at the speed of light, produced by accelerating massive objects"
+    curie_prefixes: [WD]
+    recommended: true
+
+  # --- Flows ---
+  - id: "astronomy:AccretionDisk"
+    name: accretion_disk
+    description: "A rotating disk of infalling gas and dust spiraling inward toward a compact object such as a black hole or neutron star"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+  - id: "astronomy:SolarWind"
+    name: solar_wind
+    description: "A stream of charged particles ejected from the outer atmosphere of a star into the surrounding space"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "astronomy:CosmicRay"
+    name: cosmic_ray
+    description: "High-energy charged particles, mostly protons and atomic nuclei, traveling through space at near-light speed"
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "astronomy:StellarWind"
+    name: stellar_wind
+    description: "A flow of gas ejected from the upper atmosphere of a star driven by radiation pressure or magnetic fields"
+    curie_prefixes: [SIMBAD, WD]
+    recommended: true
+
+predicates:
+  - id: "astronomy:orbits"
+    name: orbits
+    description: "One astronomical body follows a gravitationally determined trajectory around another"
+    domain: "astronomy:NamedThing"
+    range: "astronomy:NamedThing"
+    recommended: true
+  - id: "astronomy:accretes_from"
+    name: accretes_from
+    description: "A compact object accumulates mass by drawing in surrounding gas, dust, or material"
+    domain: "astronomy:NamedThing"
+    range: "astronomy:NamedThing"
+    recommended: true
+  - id: "astronomy:emits"
+    name: emits
+    description: "An astronomical object releases radiation, particles, or a wind into the surrounding medium"
+    domain: "astronomy:NamedThing"
+    range: "astronomy:NamedThing"
+    recommended: true
+  - id: "astronomy:collapses_to"
+    name: collapses_to
+    description: "A stellar object undergoes gravitational collapse to form a more compact remnant"
+    domain: "astronomy:NamedThing"
+    range: "astronomy:NamedThing"
+    recommended: true
+  - id: "astronomy:fuses"
+    name: fuses
+    description: "A star combines lighter atomic nuclei into heavier ones through thermonuclear fusion in its core"
+    domain: "astronomy:NamedThing"
+    range: "astronomy:NamedThing"
+    recommended: true
+  - id: "astronomy:ejects"
+    name: ejects
+    description: "A stellar or galactic object expels material such as jets, shells, or stellar winds into surrounding space"
+    domain: "astronomy:NamedThing"
+    range: "astronomy:NamedThing"
+    recommended: true
+  - id: "astronomy:tidally_locked_to"
+    name: tidally_locked_to
+    description: "One body's rotation period equals its orbital period around another due to tidal dissipation"
+    domain: "astronomy:NamedThing"
+    range: "astronomy:NamedThing"
+    recommended: true
+  - id: "astronomy:gravitationally_bound_to"
+    name: gravitationally_bound_to
+    description: "Two or more objects are gravitationally associated and do not have enough energy to escape each other"
+    domain: "astronomy:NamedThing"
+    range: "astronomy:NamedThing"
+    recommended: true
+  - id: "astronomy:ionizes"
+    name: ionizes
+    description: "Energetic radiation or particles from an object strip electrons from surrounding gas"
+    domain: "astronomy:NamedThing"
+    range: "astronomy:NamedThing"
+    recommended: true
+  - id: "astronomy:illuminates"
+    name: illuminates
+    description: "A radiation source lights up or heats a surrounding nebula, disk, or companion object"
+    domain: "astronomy:NamedThing"
+    range: "astronomy:NamedThing"
+    recommended: true
+  - id: "astronomy:evolved_from"
+    name: evolved_from
+    description: "An astronomical object is the product of the stellar or galactic evolution of an earlier object"
+    domain: "astronomy:NamedThing"
+    range: "astronomy:NamedThing"
+    recommended: true
+  - id: "astronomy:hosts"
+    name: hosts
+    description: "A larger astronomical structure contains or harbors a smaller one within its bounds"
+    domain: "astronomy:NamedThing"
+    range: "astronomy:NamedThing"
+    recommended: true

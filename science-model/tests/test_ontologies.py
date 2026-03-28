@@ -289,6 +289,49 @@ def test_chemistry_catalog_has_recommended_predicates() -> None:
     assert 8 <= len(recommended) <= 35
 
 
+def test_load_registry_returns_astronomy_entry() -> None:
+    registry = load_registry()
+    names = [entry.name for entry in registry]
+    assert "astronomy" in names
+
+
+def test_load_astronomy_catalog_parses_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["astronomy"])
+    assert len(catalogs) == 1
+    catalog = catalogs[0]
+    assert catalog.ontology == "astronomy"
+    assert catalog.prefix == "astronomy"
+    type_names = {et.name for et in catalog.entity_types}
+    assert "star" in type_names
+    assert "galaxy" in type_names
+    assert "black_hole" in type_names
+    assert "nebula" in type_names
+    assert "exoplanet" in type_names
+
+
+def test_astronomy_catalog_has_recommended_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["astronomy"])
+    catalog = catalogs[0]
+    recommended = [et for et in catalog.entity_types if et.recommended]
+    assert 15 <= len(recommended) <= 35
+
+
+def test_astronomy_catalog_has_predicates() -> None:
+    catalogs = load_catalogs_for_names(["astronomy"])
+    catalog = catalogs[0]
+    pred_names = {p.name for p in catalog.predicates}
+    assert "orbits" in pred_names
+    assert "emits" in pred_names
+    assert len(catalog.predicates) >= 8
+
+
+def test_astronomy_catalog_has_recommended_predicates() -> None:
+    catalogs = load_catalogs_for_names(["astronomy"])
+    catalog = catalogs[0]
+    recommended = [p for p in catalog.predicates if p.recommended]
+    assert 8 <= len(recommended) <= 35
+
+
 def test_ontology_catalog_round_trip() -> None:
     catalog = OntologyCatalog(
         ontology="test",
