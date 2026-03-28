@@ -347,6 +347,133 @@ entity_types:
     description: "A thing made or adapted for a particular purpose."
     curie_prefixes: []
 
+  # --- Ecology & Evolution (hand-authored extensions) ---
+  - id: "biology:Population"
+    name: population
+    description: "A group of organisms of the same species occupying a defined area."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:Species"
+    name: species
+    description: "A group of organisms capable of interbreeding and producing fertile offspring."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:Community"
+    name: community
+    description: "An assemblage of populations of different species occupying the same area."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:Ecosystem"
+    name: ecosystem
+    description: "A biological community and its physical environment functioning as a unit."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:FoodWeb"
+    name: food_web
+    description: "A network of trophic relationships among species in an ecosystem."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:Predation"
+    name: predation
+    description: "An ecological interaction where one organism kills and consumes another."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:Mutualism"
+    name: mutualism
+    description: "A symbiotic interaction benefiting both participating species."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:Parasitism"
+    name: parasitism
+    description: "A symbiotic interaction benefiting one species at the expense of the other."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:Competition"
+    name: competition
+    description: "An interaction where organisms vie for the same limited resources."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:Migration"
+    name: migration
+    description: "Seasonal or permanent movement of organisms between habitats."
+    curie_prefixes: [WD]
+    recommended: false
+  - id: "biology:Speciation"
+    name: speciation
+    description: "The evolutionary process by which new species arise from ancestral populations."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:NaturalSelection"
+    name: natural_selection
+    description: "Differential survival and reproduction of organisms with advantageous traits."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:Fitness"
+    name: fitness
+    description: "A measure of an organism's ability to survive and reproduce in its environment."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:CarryingCapacity"
+    name: carrying_capacity
+    description: "The maximum population size an environment can sustain indefinitely."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:TrophicLevel"
+    name: trophic_level
+    description: "The position an organism occupies in a food chain or food web."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:Succession"
+    name: succession
+    description: "The progressive change in species composition of a community over time."
+    curie_prefixes: [WD]
+    recommended: false
+  - id: "biology:Morphogenesis"
+    name: morphogenesis
+    description: "The biological process governing the shape and spatial organization of an organism."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:Chemotaxis"
+    name: chemotaxis
+    description: "Directed movement of an organism in response to a chemical gradient."
+    curie_prefixes: [WD]
+    recommended: false
+  - id: "biology:Biofilm"
+    name: biofilm
+    description: "A structured community of microorganisms adhering to a surface."
+    curie_prefixes: [WD]
+    recommended: false
+  - id: "biology:Symbiosis"
+    name: symbiosis
+    description: "A close and prolonged interaction between two or more different biological species."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:Adaptation"
+    name: adaptation
+    description: "A heritable trait that increases an organism's fitness in its environment."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:Niche"
+    name: niche
+    description: "The ecological role and set of environmental conditions occupied by a species."
+    curie_prefixes: [WD]
+    recommended: true
+  - id: "biology:Biodiversity"
+    name: biodiversity
+    description: "The variety of life forms at genetic, species, and ecosystem levels."
+    curie_prefixes: [WD]
+    recommended: false
+  - id: "biology:Phylogeny"
+    name: phylogeny
+    description: "The evolutionary history and relationships among groups of organisms."
+    curie_prefixes: [WD]
+    recommended: false
+  - id: "biology:Allometry"
+    name: allometry
+    description: "The study of how organism characteristics scale with body size."
+    curie_prefixes: [WD]
+    recommended: false
+
 predicates:
   # --- Core relationship predicates ---
   - id: "biolink:related_to"
@@ -728,3 +855,65 @@ predicates:
     description: "Holds between a process and a location in which the process takes place."
     domain: "biolink:NamedThing"
     range: "biolink:NamedThing"
+
+  # --- Ecology & Evolution predicates (hand-authored extensions) ---
+  - id: "biology:preysOn"
+    name: preys_on
+    description: "An organism hunts and consumes another organism."
+    domain: "biology:NamedThing"
+    range: "biology:NamedThing"
+    recommended: true
+  - id: "biology:competesWith"
+    name: competes_with
+    description: "Two organisms or populations vie for the same resources."
+    domain: "biology:NamedThing"
+    range: "biology:NamedThing"
+    recommended: true
+  - id: "biology:symbiotOf"
+    name: symbiont_of
+    description: "An organism lives in close association with another species."
+    domain: "biology:NamedThing"
+    range: "biology:NamedThing"
+    recommended: true
+  - id: "biology:pollinates"
+    name: pollinates
+    description: "An organism transfers pollen enabling plant reproduction."
+    domain: "biology:NamedThing"
+    range: "biology:NamedThing"
+    recommended: true
+  - id: "biology:decomposes"
+    name: decomposes
+    description: "An organism breaks down dead organic matter."
+    domain: "biology:NamedThing"
+    range: "biology:NamedThing"
+    recommended: true
+  - id: "biology:migratesTo"
+    name: migrates_to
+    description: "An organism moves seasonally to a different habitat."
+    domain: "biology:NamedThing"
+    range: "biology:NamedThing"
+    recommended: false
+  - id: "biology:evolvesInto"
+    name: evolves_into
+    description: "A lineage gives rise to a new form through evolutionary change."
+    domain: "biology:NamedThing"
+    range: "biology:NamedThing"
+    recommended: true
+  - id: "biology:occupiesNiche"
+    name: occupies_niche
+    description: "A species fills a particular ecological role in its environment."
+    domain: "biology:NamedThing"
+    range: "biology:NamedThing"
+    recommended: true
+  - id: "biology:limitsGrowthOf"
+    name: limits_growth_of
+    description: "A factor constrains the population growth of an organism."
+    domain: "biology:NamedThing"
+    range: "biology:NamedThing"
+    recommended: true
+  - id: "biology:regulatesPopulation"
+    name: regulates_population
+    description: "A process controls the size of a population."
+    domain: "biology:NamedThing"
+    range: "biology:NamedThing"
+    recommended: true

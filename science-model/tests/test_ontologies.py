@@ -246,6 +246,169 @@ def test_earth_catalog_has_recommended_predicates() -> None:
     assert 8 <= len(recommended) <= 35
 
 
+def test_load_registry_returns_chemistry_entry() -> None:
+    registry = load_registry()
+    names = [entry.name for entry in registry]
+    assert "chemistry" in names
+
+
+def test_load_chemistry_catalog_parses_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["chemistry"])
+    assert len(catalogs) == 1
+    catalog = catalogs[0]
+    assert catalog.ontology == "chemistry"
+    assert catalog.prefix == "chemistry"
+    type_names = {et.name for et in catalog.entity_types}
+    assert "element" in type_names
+    assert "molecule" in type_names
+    assert "reaction" in type_names
+    assert "catalyst" in type_names
+    assert "polymer" in type_names
+
+
+def test_chemistry_catalog_has_recommended_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["chemistry"])
+    catalog = catalogs[0]
+    recommended = [et for et in catalog.entity_types if et.recommended]
+    assert 15 <= len(recommended) <= 35
+
+
+def test_chemistry_catalog_has_predicates() -> None:
+    catalogs = load_catalogs_for_names(["chemistry"])
+    catalog = catalogs[0]
+    pred_names = {p.name for p in catalog.predicates}
+    assert "reacts_with" in pred_names
+    assert "catalyzes" in pred_names
+    assert len(catalog.predicates) >= 8
+
+
+def test_chemistry_catalog_has_recommended_predicates() -> None:
+    catalogs = load_catalogs_for_names(["chemistry"])
+    catalog = catalogs[0]
+    recommended = [p for p in catalog.predicates if p.recommended]
+    assert 8 <= len(recommended) <= 35
+
+
+def test_load_registry_returns_astronomy_entry() -> None:
+    registry = load_registry()
+    names = [entry.name for entry in registry]
+    assert "astronomy" in names
+
+
+def test_load_astronomy_catalog_parses_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["astronomy"])
+    assert len(catalogs) == 1
+    catalog = catalogs[0]
+    assert catalog.ontology == "astronomy"
+    assert catalog.prefix == "astronomy"
+    type_names = {et.name for et in catalog.entity_types}
+    assert "star" in type_names
+    assert "galaxy" in type_names
+    assert "black_hole" in type_names
+    assert "nebula" in type_names
+    assert "exoplanet" in type_names
+
+
+def test_astronomy_catalog_has_recommended_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["astronomy"])
+    catalog = catalogs[0]
+    recommended = [et for et in catalog.entity_types if et.recommended]
+    assert 15 <= len(recommended) <= 35
+
+
+def test_astronomy_catalog_has_predicates() -> None:
+    catalogs = load_catalogs_for_names(["astronomy"])
+    catalog = catalogs[0]
+    pred_names = {p.name for p in catalog.predicates}
+    assert "orbits" in pred_names
+    assert "emits" in pred_names
+    assert len(catalog.predicates) >= 8
+
+
+def test_astronomy_catalog_has_recommended_predicates() -> None:
+    catalogs = load_catalogs_for_names(["astronomy"])
+    catalog = catalogs[0]
+    recommended = [p for p in catalog.predicates if p.recommended]
+    assert 8 <= len(recommended) <= 35
+
+
+def test_load_registry_returns_information_entry() -> None:
+    registry = load_registry()
+    names = [entry.name for entry in registry]
+    assert "information" in names
+
+
+def test_load_information_catalog_parses_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["information"])
+    assert len(catalogs) == 1
+    catalog = catalogs[0]
+    assert catalog.ontology == "information"
+    assert catalog.prefix == "information"
+    type_names = {et.name for et in catalog.entity_types}
+    assert "entropy_information" in type_names
+    assert "network" in type_names
+    assert "cellular_automaton" in type_names
+    assert "feedback_loop" in type_names
+    assert "nash_equilibrium" in type_names
+
+
+def test_information_catalog_has_recommended_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["information"])
+    catalog = catalogs[0]
+    recommended = [et for et in catalog.entity_types if et.recommended]
+    assert 12 <= len(recommended) <= 30
+
+
+def test_information_catalog_has_predicates() -> None:
+    catalogs = load_catalogs_for_names(["information"])
+    catalog = catalogs[0]
+    pred_names = {p.name for p in catalog.predicates}
+    assert "encodes" in pred_names
+    assert "connected_to" in pred_names
+    assert len(catalog.predicates) >= 8
+
+
+def test_information_catalog_has_recommended_predicates() -> None:
+    catalogs = load_catalogs_for_names(["information"])
+    catalog = catalogs[0]
+    recommended = [p for p in catalog.predicates if p.recommended]
+    assert 8 <= len(recommended) <= 35
+
+
+def test_biology_catalog_has_ecology_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["biology"])
+    catalog = catalogs[0]
+    type_names = {et.name for et in catalog.entity_types}
+    assert "population" in type_names
+    assert "ecosystem" in type_names
+    assert "food_web" in type_names
+    assert "speciation" in type_names
+    assert "carrying_capacity" in type_names
+
+
+def test_biology_catalog_has_ecology_predicates() -> None:
+    catalogs = load_catalogs_for_names(["biology"])
+    catalog = catalogs[0]
+    pred_names = {p.name for p in catalog.predicates}
+    assert "preys_on" in pred_names
+    assert "competes_with" in pred_names
+    assert "occupies_niche" in pred_names
+
+
+def test_biology_catalog_has_recommended_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["biology"])
+    catalog = catalogs[0]
+    recommended = [et for et in catalog.entity_types if et.recommended]
+    assert 20 <= len(recommended) <= 70
+
+
+def test_biology_catalog_has_recommended_predicates() -> None:
+    catalogs = load_catalogs_for_names(["biology"])
+    catalog = catalogs[0]
+    recommended = [p for p in catalog.predicates if p.recommended]
+    assert 20 <= len(recommended) <= 70
+
+
 def test_ontology_catalog_round_trip() -> None:
     catalog = OntologyCatalog(
         ontology="test",

@@ -1,0 +1,234 @@
+# Chemistry ontology — hand-authored
+# Entity types and predicates for chemical entities, reactions, and molecular properties
+#
+# Prefix references:
+#   CHEBI: https://www.ebi.ac.uk/chebi/  (Chemical Entities of Biological Interest)
+#   WD:    https://www.wikidata.org/wiki/ (Wikidata)
+
+ontology: chemistry
+version: "1.0.0"
+prefix: chemistry
+prefix_uri: "https://example.org/science/chemistry/"
+
+entity_types:
+  # --- Substances ---
+  - id: "chemistry:Element"
+    name: element
+    description: "A pure substance made of only one kind of atom, defined by its atomic number"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Molecule"
+    name: molecule
+    description: "Two or more atoms bonded together that form the smallest unit of a chemical compound"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Compound"
+    name: compound
+    description: "A substance formed from two or more elements chemically combined in fixed proportions"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Ion"
+    name: ion
+    description: "An atom or molecule that has gained or lost electrons and carries a net electric charge"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Isotope"
+    name: isotope
+    description: "A variant of an element with the same atomic number but a different number of neutrons"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Polymer"
+    name: polymer
+    description: "A large molecule made of many repeating structural units (monomers) linked by covalent bonds"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Alloy"
+    name: alloy
+    description: "A metallic material composed of two or more elements mixed to enhance mechanical or chemical properties"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Colloid"
+    name: colloid
+    description: "A mixture in which microscopic particles of one substance are dispersed throughout another"
+    curie_prefixes: [CHEBI, WD]
+    recommended: false
+
+  # --- Bonds & Structure ---
+  - id: "chemistry:Bond"
+    name: bond
+    description: "A lasting attraction between atoms or ions that enables the formation of chemical compounds"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:CovalentBond"
+    name: covalent_bond
+    description: "A chemical bond formed by the sharing of electron pairs between atoms"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:IonicBond"
+    name: ionic_bond
+    description: "A chemical bond formed by the electrostatic attraction between oppositely charged ions"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:CrystalStructure"
+    name: crystal_structure
+    description: "The ordered arrangement of atoms, ions, or molecules in a crystalline solid"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Orbital"
+    name: orbital
+    description: "A mathematical function describing the probability of finding an electron in a region of space around an atom"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Valence"
+    name: valence
+    description: "The combining capacity of an atom determined by the number of electrons it can lose, gain, or share"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+
+  # --- Reactions ---
+  - id: "chemistry:Reaction"
+    name: reaction
+    description: "A process in which one or more substances are converted into one or more different substances through breaking and forming chemical bonds"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Catalyst"
+    name: catalyst
+    description: "A substance that increases the rate of a chemical reaction without being consumed in the process"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Enzyme"
+    name: enzyme
+    description: "A biological catalyst, typically a protein, that accelerates specific biochemical reactions"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:ActivationEnergy"
+    name: activation_energy
+    description: "The minimum energy required to initiate a chemical reaction between reactants"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:ReactionRate"
+    name: reaction_rate
+    description: "The speed at which reactants are consumed or products are formed in a chemical reaction"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Equilibrium"
+    name: equilibrium
+    description: "The state in a reversible reaction where the forward and reverse reaction rates are equal and concentrations remain constant"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+
+  # --- Properties ---
+  - id: "chemistry:Acid"
+    name: acid
+    description: "A substance that donates protons or accepts electron pairs in chemical reactions, with pH below 7"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Base"
+    name: base
+    description: "A substance that accepts protons or donates electron pairs in chemical reactions, with pH above 7"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Oxidant"
+    name: oxidant
+    description: "A substance that gains electrons from another substance, causing it to be oxidized"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Reductant"
+    name: reductant
+    description: "A substance that loses electrons to another substance, causing the other to be reduced"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Solubility"
+    name: solubility
+    description: "The maximum amount of a substance that can dissolve in a solvent at a given temperature and pressure"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Electronegativity"
+    name: electronegativity
+    description: "A measure of an atom's tendency to attract electrons in a chemical bond"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:PH"
+    name: pH
+    description: "A logarithmic scale measuring the concentration of hydrogen ions and thus the acidity or basicity of a solution"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+  - id: "chemistry:Concentration"
+    name: concentration
+    description: "The amount of a substance per unit volume of a solution or mixture"
+    curie_prefixes: [CHEBI, WD]
+    recommended: true
+
+predicates:
+  - id: "chemistry:reacts_with"
+    name: reacts_with
+    description: "A chemical entity undergoes a chemical change in the presence of another entity"
+    domain: "chemistry:NamedThing"
+    range: "chemistry:NamedThing"
+    recommended: true
+  - id: "chemistry:catalyzes"
+    name: catalyzes
+    description: "A catalyst or enzyme accelerates a specific chemical reaction without being consumed"
+    domain: "chemistry:NamedThing"
+    range: "chemistry:NamedThing"
+    recommended: true
+  - id: "chemistry:bonds_to"
+    name: bonds_to
+    description: "An atom or molecule forms a chemical bond with another atom or molecule"
+    domain: "chemistry:NamedThing"
+    range: "chemistry:NamedThing"
+    recommended: true
+  - id: "chemistry:dissolves_in"
+    name: dissolves_in
+    description: "A solute disperses uniformly into a solvent to form a homogeneous solution"
+    domain: "chemistry:NamedThing"
+    range: "chemistry:NamedThing"
+    recommended: true
+  - id: "chemistry:oxidizes"
+    name: oxidizes
+    description: "An oxidant causes another substance to lose electrons in a redox reaction"
+    domain: "chemistry:NamedThing"
+    range: "chemistry:NamedThing"
+    recommended: true
+  - id: "chemistry:reduces"
+    name: reduces
+    description: "A reductant causes another substance to gain electrons in a redox reaction"
+    domain: "chemistry:NamedThing"
+    range: "chemistry:NamedThing"
+    recommended: true
+  - id: "chemistry:inhibits"
+    name: inhibits
+    description: "A substance decreases the rate or extent of a chemical reaction or enzymatic activity"
+    domain: "chemistry:NamedThing"
+    range: "chemistry:NamedThing"
+    recommended: true
+  - id: "chemistry:polymerizes_to"
+    name: polymerizes_to
+    description: "Monomer units link together through repeated bond formation to form a polymer chain"
+    domain: "chemistry:NamedThing"
+    range: "chemistry:NamedThing"
+    recommended: true
+  - id: "chemistry:isomer_of"
+    name: isomer_of
+    description: "Two molecules share the same molecular formula but differ in the arrangement of their atoms"
+    domain: "chemistry:NamedThing"
+    range: "chemistry:NamedThing"
+    recommended: true
+  - id: "chemistry:decomposes_to"
+    name: decomposes_to
+    description: "A chemical compound breaks down into simpler substances through a chemical reaction"
+    domain: "chemistry:NamedThing"
+    range: "chemistry:NamedThing"
+    recommended: true
+  - id: "chemistry:precipitates_from"
+    name: precipitates_from
+    description: "A solid substance separates out of a solution when its concentration exceeds solubility"
+    domain: "chemistry:NamedThing"
+    range: "chemistry:NamedThing"
+    recommended: true
+  - id: "chemistry:buffers"
+    name: buffers
+    description: "A substance resists changes in pH when small amounts of acid or base are added to a solution"
+    domain: "chemistry:NamedThing"
+    range: "chemistry:NamedThing"
+    recommended: true
