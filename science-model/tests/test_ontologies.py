@@ -160,6 +160,49 @@ def test_units_curie_prefixes() -> None:
     assert "QUDT" in mass.curie_prefixes
 
 
+def test_load_registry_returns_math_entry() -> None:
+    registry = load_registry()
+    names = [entry.name for entry in registry]
+    assert "math" in names
+
+
+def test_load_math_catalog_parses_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["math"])
+    assert len(catalogs) == 1
+    catalog = catalogs[0]
+    assert catalog.ontology == "math"
+    assert catalog.prefix == "math"
+    type_names = {et.name for et in catalog.entity_types}
+    assert "gradient" in type_names
+    assert "eigenvalue" in type_names
+    assert "bifurcation" in type_names
+    assert "manifold" in type_names
+    assert "functor" in type_names
+
+
+def test_math_catalog_has_recommended_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["math"])
+    catalog = catalogs[0]
+    recommended = [et for et in catalog.entity_types if et.recommended]
+    assert 20 <= len(recommended) <= 50
+
+
+def test_math_catalog_has_predicates() -> None:
+    catalogs = load_catalogs_for_names(["math"])
+    catalog = catalogs[0]
+    pred_names = {p.name for p in catalog.predicates}
+    assert "operates_on" in pred_names
+    assert "generalizes" in pred_names
+    assert len(catalog.predicates) >= 10
+
+
+def test_math_catalog_has_recommended_predicates() -> None:
+    catalogs = load_catalogs_for_names(["math"])
+    catalog = catalogs[0]
+    recommended = [p for p in catalog.predicates if p.recommended]
+    assert 10 <= len(recommended) <= 35
+
+
 def test_ontology_catalog_round_trip() -> None:
     catalog = OntologyCatalog(
         ontology="test",

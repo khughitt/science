@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Extract a biolink-model term catalog from the LinkML source.
+"""Extract a biology (biolink-model) term catalog from the LinkML source.
 
 One-time dev script — not part of the runtime package.
-Produces science-model/src/science_model/ontologies/biolink/catalog.yaml.
+Produces science-model/src/science_model/ontologies/biology/catalog.yaml.
 
 Usage:
-    uv run scripts/extract_biolink_catalog.py
-    # or: uvx --from biolink-model-toolkit python scripts/extract_biolink_catalog.py
+    uv run scripts/extract_biology_catalog.py
+    # or: uvx --from biolink-model-toolkit python scripts/extract_biology_catalog.py
 
 Requires: linkml (pip install linkml) or biolink-model-toolkit.
 """

@@ -14,3 +14,8 @@ ontologies:
     source_url: "https://github.com/qudt/qudt-public-repo"
     description: "Units — quantity kinds for measurement and quantitative modeling"
     catalog_path: "units/catalog.yaml"
+  - name: math
+    version: "1.0.0"
+    source_url: "project-authored"
+    description: "Mathematics — objects, operations, and structures for mathematical modeling"
+    catalog_path: "math/catalog.yaml"
