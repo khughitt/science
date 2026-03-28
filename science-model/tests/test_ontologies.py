@@ -203,6 +203,49 @@ def test_math_catalog_has_recommended_predicates() -> None:
     assert 10 <= len(recommended) <= 35
 
 
+def test_load_registry_returns_earth_entry() -> None:
+    registry = load_registry()
+    names = [entry.name for entry in registry]
+    assert "earth" in names
+
+
+def test_load_earth_catalog_parses_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["earth"])
+    assert len(catalogs) == 1
+    catalog = catalogs[0]
+    assert catalog.ontology == "earth"
+    assert catalog.prefix == "earth"
+    type_names = {et.name for et in catalog.entity_types}
+    assert "cloud" in type_names
+    assert "river" in type_names
+    assert "volcano" in type_names
+    assert "erosion" in type_names
+    assert "branching_pattern" in type_names
+
+
+def test_earth_catalog_has_recommended_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["earth"])
+    catalog = catalogs[0]
+    recommended = [et for et in catalog.entity_types if et.recommended]
+    assert 20 <= len(recommended) <= 55
+
+
+def test_earth_catalog_has_predicates() -> None:
+    catalogs = load_catalogs_for_names(["earth"])
+    catalog = catalogs[0]
+    pred_names = {p.name for p in catalog.predicates}
+    assert "occurs_in" in pred_names
+    assert "shaped_by" in pred_names
+    assert len(catalog.predicates) >= 10
+
+
+def test_earth_catalog_has_recommended_predicates() -> None:
+    catalogs = load_catalogs_for_names(["earth"])
+    catalog = catalogs[0]
+    recommended = [p for p in catalog.predicates if p.recommended]
+    assert 8 <= len(recommended) <= 35
+
+
 def test_ontology_catalog_round_trip() -> None:
     catalog = OntologyCatalog(
         ontology="test",

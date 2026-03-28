@@ -19,3 +19,8 @@ ontologies:
     source_url: "project-authored"
     description: "Mathematics — objects, operations, and structures for mathematical modeling"
     catalog_path: "math/catalog.yaml"
+  - name: earth
+    version: "1.0.0"
+    source_url: "project-authored"
+    description: "Earth — natural systems, phenomena, environments, and geological processes"
+    catalog_path: "earth/catalog.yaml"
