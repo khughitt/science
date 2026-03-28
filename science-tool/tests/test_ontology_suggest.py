@@ -106,3 +106,55 @@ def test_suggests_counts_both_prefix_and_kind() -> None:
     assert s.ontology_name == "biology"
     # gene matches both prefix and kind, protein matches kind only
     assert s.entity_count >= 2
+
+
+# --- Math suggestion tests ---
+
+
+def test_suggests_math_for_mathworld_curie() -> None:
+    entities = [_entity(ontology_terms=["MATHWORLD:Laplacian"])]
+    suggestions = suggest_ontologies(entities, declared_ontologies=[])
+    math_suggestions = [s for s in suggestions if s.ontology_name == "math"]
+    assert len(math_suggestions) == 1
+    assert "CURIE" in math_suggestions[0].reason
+
+
+def test_suggests_math_for_gradient_kind() -> None:
+    entities = [_entity(kind="gradient")]
+    suggestions = suggest_ontologies(entities, declared_ontologies=[])
+    math_suggestions = [s for s in suggestions if s.ontology_name == "math"]
+    assert len(math_suggestions) == 1
+    assert "kind" in math_suggestions[0].reason
+
+
+def test_no_suggestion_math_when_declared() -> None:
+    entities = [_entity(kind="gradient")]
+    suggestions = suggest_ontologies(entities, declared_ontologies=["math"])
+    math_suggestions = [s for s in suggestions if s.ontology_name == "math"]
+    assert len(math_suggestions) == 0
+
+
+# --- Earth suggestion tests ---
+
+
+def test_suggests_earth_for_envo_curie() -> None:
+    entities = [_entity(ontology_terms=["ENVO:00000015"])]
+    suggestions = suggest_ontologies(entities, declared_ontologies=[])
+    earth_suggestions = [s for s in suggestions if s.ontology_name == "earth"]
+    assert len(earth_suggestions) == 1
+    assert "CURIE" in earth_suggestions[0].reason
+
+
+def test_suggests_earth_for_cloud_kind() -> None:
+    entities = [_entity(kind="cloud")]
+    suggestions = suggest_ontologies(entities, declared_ontologies=[])
+    earth_suggestions = [s for s in suggestions if s.ontology_name == "earth"]
+    assert len(earth_suggestions) == 1
+    assert "kind" in earth_suggestions[0].reason
+
+
+def test_no_suggestion_earth_when_declared() -> None:
+    entities = [_entity(kind="cloud")]
+    suggestions = suggest_ontologies(entities, declared_ontologies=["earth"])
+    earth_suggestions = [s for s in suggestions if s.ontology_name == "earth"]
+    assert len(earth_suggestions) == 0
