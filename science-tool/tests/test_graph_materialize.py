@@ -35,7 +35,7 @@ def _write_demo_project(
         "\n".join(
             [
                 "name: demo",
-                "ontologies: [biolink]",
+                "ontologies: [biology]",
                 "knowledge_profiles:",
                 "  local: local",
                 "",
@@ -214,7 +214,7 @@ def test_materialize_graph_uses_configured_local_profile_sources(tmp_path: Path)
         "\n".join(
             [
                 "name: demo",
-                "ontologies: [biolink]",
+                "ontologies: [biology]",
                 "knowledge_profiles:",
                 "  local: lab_local",
                 "",
