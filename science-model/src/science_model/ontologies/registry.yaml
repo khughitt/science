@@ -1,9 +1,9 @@
 ontologies:
-  - name: biolink
+  - name: biology
     version: "4.3.7"
     source_url: "https://github.com/biolink/biolink-model"
-    description: "Biolink Model — biomedical and translational science data model"
-    catalog_path: "biolink/catalog.yaml"
+    description: "Biology — biomedical, organismal, and ecological entity types and predicates"
+    catalog_path: "biology/catalog.yaml"
   - name: physics
     version: "1.0.0"
     source_url: "project-authored"

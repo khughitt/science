@@ -15,24 +15,24 @@ def _entity(*, kind: str = "hypothesis", ontology_terms: list[str] | None = None
 
 def test_no_suggestions_when_ontology_declared() -> None:
     entities = [_entity(ontology_terms=["NCBIGene:7157"])]
-    suggestions = suggest_ontologies(entities, declared_ontologies=["biolink"])
+    suggestions = suggest_ontologies(entities, declared_ontologies=["biology"])
     assert suggestions == []
 
 
-def test_suggests_biolink_for_curie_prefixes() -> None:
+def test_suggests_biology_for_curie_prefixes() -> None:
     entities = [_entity(ontology_terms=["NCBIGene:7157"])]
     suggestions = suggest_ontologies(entities, declared_ontologies=[])
     assert len(suggestions) == 1
-    assert suggestions[0].ontology_name == "biolink"
+    assert suggestions[0].ontology_name == "biology"
     assert suggestions[0].entity_count >= 1
     assert "CURIE" in suggestions[0].reason
 
 
-def test_suggests_biolink_for_kind_match() -> None:
+def test_suggests_biology_for_kind_match() -> None:
     entities = [_entity(kind="gene")]
     suggestions = suggest_ontologies(entities, declared_ontologies=[])
     assert len(suggestions) == 1
-    assert suggestions[0].ontology_name == "biolink"
+    assert suggestions[0].ontology_name == "biology"
     assert "kind" in suggestions[0].reason
 
 
@@ -103,6 +103,6 @@ def test_suggests_counts_both_prefix_and_kind() -> None:
     suggestions = suggest_ontologies(entities, declared_ontologies=[])
     assert len(suggestions) == 1
     s = suggestions[0]
-    assert s.ontology_name == "biolink"
+    assert s.ontology_name == "biology"
     # gene matches both prefix and kind, protein matches kind only
     assert s.entity_count >= 2

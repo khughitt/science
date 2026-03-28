@@ -6,7 +6,7 @@
 # Predicates: relationship slots with NamedThing-descended range
 # recommended: true marks commonly-used terms highlighted by the suggestion system
 
-ontology: biolink
+ontology: biology
 version: "4.3.7"
 prefix: biolink
 prefix_uri: "https://w3id.org/biolink/vocab/"

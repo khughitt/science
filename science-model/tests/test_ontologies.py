@@ -4,17 +4,17 @@ from science_model.ontologies import available_ontology_names, load_catalogs_for
 from science_model.ontologies.schema import OntologyCatalog, OntologyTermType
 
 
-def test_load_registry_returns_biolink_entry() -> None:
+def test_load_registry_returns_biology_entry() -> None:
     registry = load_registry()
     names = [entry.name for entry in registry]
-    assert "biolink" in names
+    assert "biology" in names
 
 
-def test_load_biolink_catalog_parses_entity_types() -> None:
-    catalogs = load_catalogs_for_names(["biolink"])
+def test_load_biology_catalog_parses_entity_types() -> None:
+    catalogs = load_catalogs_for_names(["biology"])
     assert len(catalogs) == 1
     catalog = catalogs[0]
-    assert catalog.ontology == "biolink"
+    assert catalog.ontology == "biology"
     type_names = {et.name for et in catalog.entity_types}
     assert "gene" in type_names
     assert "protein" in type_names
@@ -27,8 +27,8 @@ def test_load_biolink_catalog_parses_entity_types() -> None:
     assert gene.recommended is True
 
 
-def test_load_biolink_catalog_parses_predicates() -> None:
-    catalogs = load_catalogs_for_names(["biolink"])
+def test_load_biology_catalog_parses_predicates() -> None:
+    catalogs = load_catalogs_for_names(["biology"])
     catalog = catalogs[0]
     pred_names = {p.name for p in catalog.predicates}
     assert "interacts_with" in pred_names
@@ -45,14 +45,14 @@ def test_load_catalogs_for_names_raises_on_unknown() -> None:
 
 
 def test_load_catalogs_for_names_returns_declared() -> None:
-    catalogs = load_catalogs_for_names(["biolink"])
+    catalogs = load_catalogs_for_names(["biology"])
     assert len(catalogs) == 1
-    assert catalogs[0].ontology == "biolink"
+    assert catalogs[0].ontology == "biology"
 
 
 def test_available_ontology_names() -> None:
     names = available_ontology_names()
-    assert "biolink" in names
+    assert "biology" in names
     assert "physics" in names
     assert "units" in names
 
