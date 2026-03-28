@@ -24,3 +24,13 @@ ontologies:
     source_url: "project-authored"
     description: "Earth — natural systems, phenomena, environments, and geological processes"
     catalog_path: "earth/catalog.yaml"
+  - name: chemistry
+    version: "1.0.0"
+    source_url: "project-authored"
+    description: "Chemistry — chemical entities, reactions, and molecular properties"
+    catalog_path: "chemistry/catalog.yaml"
+  - name: astronomy
+    version: "1.0.0"
+    source_url: "project-authored"
+    description: "Astronomy — astronomical objects and cosmological processes"
+    catalog_path: "astronomy/catalog.yaml"
