@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -162,3 +165,112 @@ class TestCellSchema:
     def test_parse_cells_rejects_unknown_type(self) -> None:
         with pytest.raises(ValueError, match="Unknown cell type"):
             parse_cells([{"type": "unknown"}])
+
+
+from science_model.packages.validation import ValidationResult, check_freshness, validate_package
+
+
+class TestValidatePackage:
+    def test_valid_package(self, tmp_path: Path) -> None:
+        pkg_dir = tmp_path / "pkg"
+        pkg_dir.mkdir()
+        (pkg_dir / "data").mkdir()
+        (pkg_dir / "prose").mkdir()
+        (pkg_dir / "data" / "scores.csv").write_text("a,b\n1,2\n")
+        (pkg_dir / "prose" / "01-intro.md").write_text("# Intro\n")
+
+        descriptor = _valid_package()
+        descriptor["research"]["cells"] = "cells.json"
+        (pkg_dir / "datapackage.json").write_text(json.dumps(descriptor))
+
+        cells = [
+            {"type": "narrative", "content": "prose/01-intro.md"},
+            {"type": "data-table", "resource": "scores"},
+            {"type": "provenance"},
+        ]
+        (pkg_dir / "cells.json").write_text(json.dumps(cells))
+
+        result = validate_package(pkg_dir)
+        assert result.ok
+        assert result.errors == []
+
+    def test_missing_datapackage_json(self, tmp_path: Path) -> None:
+        result = validate_package(tmp_path)
+        assert not result.ok
+        assert any("datapackage.json" in e for e in result.errors)
+
+    def test_missing_resource_file(self, tmp_path: Path) -> None:
+        pkg_dir = tmp_path / "pkg"
+        pkg_dir.mkdir()
+        descriptor = _valid_package()
+        (pkg_dir / "datapackage.json").write_text(json.dumps(descriptor))
+        (pkg_dir / "cells.json").write_text("[]")
+        result = validate_package(pkg_dir)
+        assert not result.ok
+        assert any("scores" in e for e in result.errors)
+
+    def test_cell_references_unknown_resource(self, tmp_path: Path) -> None:
+        pkg_dir = tmp_path / "pkg"
+        pkg_dir.mkdir()
+        (pkg_dir / "data").mkdir()
+        (pkg_dir / "data" / "scores.csv").write_text("a\n1\n")
+        descriptor = _valid_package()
+        (pkg_dir / "datapackage.json").write_text(json.dumps(descriptor))
+        cells = [{"type": "data-table", "resource": "nonexistent"}]
+        (pkg_dir / "cells.json").write_text(json.dumps(cells))
+        result = validate_package(pkg_dir)
+        assert not result.ok
+        assert any("nonexistent" in e for e in result.errors)
+
+    def test_narrative_cell_missing_file(self, tmp_path: Path) -> None:
+        pkg_dir = tmp_path / "pkg"
+        pkg_dir.mkdir()
+        (pkg_dir / "data").mkdir()
+        (pkg_dir / "data" / "scores.csv").write_text("a\n1\n")
+        descriptor = _valid_package()
+        (pkg_dir / "datapackage.json").write_text(json.dumps(descriptor))
+        cells = [{"type": "narrative", "content": "prose/missing.md"}]
+        (pkg_dir / "cells.json").write_text(json.dumps(cells))
+        result = validate_package(pkg_dir)
+        assert not result.ok
+        assert any("missing.md" in e for e in result.errors)
+
+    def test_validation_result_to_dict(self) -> None:
+        result = ValidationResult(package_dir="/tmp/pkg", errors=["error1"], warnings=["warn1"])
+        d = result.to_dict()
+        assert d["ok"] is False
+        assert d["errors"] == ["error1"]
+        assert d["warnings"] == ["warn1"]
+
+
+class TestCheckFreshness:
+    def test_fresh_inputs(self, tmp_path: Path) -> None:
+        import hashlib
+        pkg_dir = tmp_path / "pkg"
+        pkg_dir.mkdir()
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        input_file = project_root / "src" / "foo.ts"
+        input_file.parent.mkdir(parents=True)
+        input_file.write_text("content")
+        sha = hashlib.sha256(b"content").hexdigest()
+        descriptor = _valid_package()
+        descriptor["research"]["provenance"]["inputs"] = [{"path": "src/foo.ts", "sha256": sha}]
+        (pkg_dir / "datapackage.json").write_text(json.dumps(descriptor))
+        result = check_freshness(pkg_dir, project_root)
+        assert result.warnings == []
+
+    def test_stale_input(self, tmp_path: Path) -> None:
+        pkg_dir = tmp_path / "pkg"
+        pkg_dir.mkdir()
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        input_file = project_root / "src" / "foo.ts"
+        input_file.parent.mkdir(parents=True)
+        input_file.write_text("changed content")
+        descriptor = _valid_package()
+        descriptor["research"]["provenance"]["inputs"] = [{"path": "src/foo.ts", "sha256": "wrong_hash"}]
+        (pkg_dir / "datapackage.json").write_text(json.dumps(descriptor))
+        result = check_freshness(pkg_dir, project_root)
+        assert len(result.warnings) == 1
+        assert "stale" in result.warnings[0].lower() or "changed" in result.warnings[0].lower()
