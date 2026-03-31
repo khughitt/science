@@ -73,6 +73,18 @@ CORE_PROFILE = ProfileManifest(
             layer="layer/core",
             description="Individual step within a workflow definition or run.",
         ),
+        EntityKind(
+            name="data-package",
+            canonical_prefix="data-package",
+            layer="layer/core",
+            description="Frictionless research package containing analysis results, prose, and provenance metadata.",
+        ),
+        EntityKind(
+            name="artifact",
+            canonical_prefix="artifact",
+            layer="layer/core",
+            description="Downstream consumer of research results (web page, figure, report section).",
+        ),
     ],
     relation_kinds=[
         RelationKind(
@@ -146,6 +158,22 @@ CORE_PROFILE = ProfileManifest(
             target_kinds=["workflow-step"],
             layer="layer/core",
             description="A workflow step feeds data into another step.",
+        ),
+        RelationKind(
+            name="derived_from",
+            predicate="sci:derivedFrom",
+            source_kinds=["artifact"],
+            target_kinds=["data-package"],
+            layer="layer/core",
+            description="An artifact is derived from a data package.",
+        ),
+        RelationKind(
+            name="produced_by",
+            predicate="sci:producedBy",
+            source_kinds=["data-package"],
+            target_kinds=["workflow-run"],
+            layer="layer/core",
+            description="A data package was produced by a specific workflow run.",
         ),
     ],
 )

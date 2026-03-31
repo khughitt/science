@@ -12,6 +12,7 @@ from science_model.relations import build_relation_registry
 from science_model.search import Filters, SearchResult
 from science_model.sync import SyncSource
 from science_model.source_contracts import AuthoredTargetedRelation, BindingSource, ModelSource, ParameterSource
+from science_model.packages import ResearchPackageDescriptor, ValidationResult, check_freshness, parse_cells, validate_package
 from science_model.tasks import Task, TaskCreate, TaskStatus, TaskUpdate
 
 __all__ = [
@@ -37,16 +38,21 @@ __all__ = [
     "BindingSource",
     "AuthoredTargetedRelation",
     "RelationKind",
+    "ResearchPackageDescriptor",
     "SearchResult",
     "SyncSource",
     "Task",
     "TaskCreate",
     "TaskStatus",
     "TaskUpdate",
+    "ValidationResult",
     "build_relation_registry",
+    "check_freshness",
     "normalize_alias",
     "OntologyCatalog",
     "OntologyPredicate",
     "OntologyRegistryEntry",
     "OntologyTermType",
+    "parse_cells",
+    "validate_package",
 ]

@@ -64,11 +64,15 @@ from science_tool.graph.store import (
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows
 from science_tool.prose import scan_prose
 from science_tool.refs import check_refs
+from science_tool.research_package.cli import research_package_group
 
 
 @click.group()
 def main() -> None:
     """Science CLI tools."""
+
+
+main.add_command(research_package_group)
 
 
 @main.group()

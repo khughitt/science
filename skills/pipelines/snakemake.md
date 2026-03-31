@@ -202,3 +202,56 @@ For FASTA sequence files, add EDAM annotations:
   }
 }
 ```
+
+## Research Package Integration
+
+Use `science-tool research-package build` as a terminal Snakemake rule to bundle
+analysis results, narrative context, and execution provenance into a standardized
+research package.
+
+### Terminal rule
+
+```python
+rule build_package:
+    input:
+        results=directory("results")
+    output:
+        "research/packages/{lens}/{section}/datapackage.json"
+    shell:
+        "science-tool research-package build --results {input.results} --config config.yaml --output research/packages/{config[lens]}/{config[section]}/"
+```
+
+### Config structure for research packages
+
+```yaml
+# config.yaml
+lens: theme          # top-level grouping (used in package path)
+section: chaos       # section slug (used in package path)
+
+prose_dir: prose/                  # directory of narrative .md files
+cells_file: cells.json             # ordered cell sequence for rendering
+provenance_inputs:                 # files tracked by SHA-256 for freshness
+  - data/raw/dataset.csv
+scripts:                           # scripts contributing to the analysis
+  - scripts/analyze.py
+code_excerpts:                     # extracted code snippets to embed
+  - name: model-fit
+    source: scripts/analyze.py
+    lines: "10-45"
+repository: "https://github.com/org/repo"  # empty string for non-GitHub repos
+```
+
+### Workflow-step traceability
+
+`workflow-step` entities should carry a `script_path` property pointing to the
+script file that implements the step. This enables downstream provenance tools to
+generate accurate GitHub permalinks and cross-reference code excerpts.
+
+```yaml
+# In a workflow-step entity doc
+script_path: code/workflows/scripts/analyze.py
+```
+
+For full schema documentation — including `cells.json` structure, cell types, and
+the `science-research-package` datapackage profile — see the
+`skills/research/provenance.md` skill.
