@@ -151,6 +151,8 @@ PROJECT_ENTITY_PREFIXES: set[str] = {
     "evidence",
     "inquiry",
     "task",
+    "data-package",
+    "artifact",
 }
 RELATION_CLAIM_PREDICATE_URIS: frozenset[URIRef] = frozenset(
     {
@@ -630,6 +632,57 @@ def add_transformation(
             if "refs" in meta:
                 for ref in meta["refs"] if isinstance(meta["refs"], list) else [meta["refs"]]:
                     inquiry_graph.add((uri, SCI_NS.paramRef, Literal(ref)))
+
+    _save_dataset(dataset, graph_path)
+    return uri
+
+
+def add_data_package(
+    graph_path: Path,
+    package_id: str,
+    title: str,
+    *,
+    produced_by: str | None = None,
+) -> URIRef:
+    """Add a data-package entity to the knowledge graph."""
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+
+    uri = URIRef(PROJECT_NS[f"data-package/{_slug(package_id)}"])
+    knowledge.add((uri, RDF.type, SCI_NS.DataPackage))
+    knowledge.add((uri, SKOS.prefLabel, Literal(title)))
+    knowledge.add((uri, SCHEMA_NS.identifier, Literal(package_id)))
+
+    if produced_by:
+        knowledge.add((uri, SCI_NS.producedBy, _resolve_term(produced_by)))
+
+    _save_dataset(dataset, graph_path)
+    return uri
+
+
+def add_artifact(
+    graph_path: Path,
+    artifact_id: str,
+    title: str,
+    *,
+    artifact_type: str,
+    target: str | None = None,
+    derived_from: str | None = None,
+) -> URIRef:
+    """Add an artifact entity to the knowledge graph."""
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+
+    uri = URIRef(PROJECT_NS[f"artifact/{_slug(artifact_id)}"])
+    knowledge.add((uri, RDF.type, SCI_NS.Artifact))
+    knowledge.add((uri, SKOS.prefLabel, Literal(title)))
+    knowledge.add((uri, SCHEMA_NS.identifier, Literal(artifact_id)))
+    knowledge.add((uri, SCI_NS.artifactType, Literal(artifact_type)))
+
+    if target:
+        knowledge.add((uri, SCI_NS.target, Literal(target)))
+    if derived_from:
+        knowledge.add((uri, SCI_NS.derivedFrom, _resolve_term(derived_from)))
 
     _save_dataset(dataset, graph_path)
     return uri
