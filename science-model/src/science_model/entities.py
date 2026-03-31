@@ -38,6 +38,8 @@ class EntityType(StrEnum):
     WORKFLOW = "workflow"
     WORKFLOW_RUN = "workflow-run"
     WORKFLOW_STEP = "workflow-step"
+    DATA_PACKAGE = "data-package"
+    ARTIFACT = "artifact"
     RELATION_CLAIM = "relation_claim"
     UNKNOWN = "unknown"
 

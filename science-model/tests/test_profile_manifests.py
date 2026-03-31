@@ -75,6 +75,38 @@ def test_load_shared_profile_from_yaml(tmp_path: object) -> None:
     assert profile.entity_kinds[0].name == "protein-complex"
 
 
+def test_core_profile_has_data_package_kind() -> None:
+    kind_names = {k.name for k in CORE_PROFILE.entity_kinds}
+    assert "data-package" in kind_names
+
+
+def test_core_profile_has_artifact_kind() -> None:
+    kind_names = {k.name for k in CORE_PROFILE.entity_kinds}
+    assert "artifact" in kind_names
+
+
+def test_core_profile_has_derived_from_relation() -> None:
+    rel_names = {r.name for r in CORE_PROFILE.relation_kinds}
+    assert "derived_from" in rel_names
+
+
+def test_core_profile_has_produced_by_relation() -> None:
+    rel_names = {r.name for r in CORE_PROFILE.relation_kinds}
+    assert "produced_by" in rel_names
+
+
+def test_derived_from_connects_artifact_to_data_package() -> None:
+    rel = next(r for r in CORE_PROFILE.relation_kinds if r.name == "derived_from")
+    assert "artifact" in rel.source_kinds
+    assert "data-package" in rel.target_kinds
+
+
+def test_produced_by_connects_data_package_to_workflow_run() -> None:
+    rel = next(r for r in CORE_PROFILE.relation_kinds if r.name == "produced_by")
+    assert "data-package" in rel.source_kinds
+    assert "workflow-run" in rel.target_kinds
+
+
 def test_load_shared_profile_missing(tmp_path: object) -> None:
     from pathlib import Path
 
