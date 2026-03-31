@@ -103,3 +103,62 @@ class TestResearchPackageDescriptor:
     def test_provenance_input(self) -> None:
         inp = ProvenanceInput(path="src/foo.ts", sha256="abc123")
         assert inp.sha256 == "abc123"
+
+
+from science_model.packages.cells import (
+    Cell,
+    CodeReferenceCell,
+    DataTableCell,
+    FigureCell,
+    NarrativeCell,
+    ProvenanceCell,
+    VegaLiteCell,
+    parse_cells,
+)
+
+
+class TestCellSchema:
+    def test_narrative_cell(self) -> None:
+        cell = NarrativeCell(type="narrative", content="prose/01-intro.md")
+        assert cell.content == "prose/01-intro.md"
+
+    def test_data_table_cell(self) -> None:
+        cell = DataTableCell(type="data-table", resource="scores")
+        assert cell.columns is None
+        assert cell.caption is None
+
+    def test_data_table_cell_with_columns(self) -> None:
+        cell = DataTableCell(type="data-table", resource="scores", columns=["a", "b"], caption="My table")
+        assert cell.columns == ["a", "b"]
+
+    def test_figure_cell(self) -> None:
+        cell = FigureCell(type="figure", ref="confusion-matrix")
+        assert cell.ref == "confusion-matrix"
+
+    def test_vegalite_cell(self) -> None:
+        cell = VegaLiteCell(type="vegalite", ref="chart", caption="My chart")
+        assert cell.caption == "My chart"
+
+    def test_code_reference_cell(self) -> None:
+        cell = CodeReferenceCell(type="code-reference", excerpt="kappa")
+        assert cell.description is None
+
+    def test_provenance_cell(self) -> None:
+        cell = ProvenanceCell(type="provenance")
+        assert cell.type == "provenance"
+
+    def test_parse_cells_from_list(self) -> None:
+        raw = [
+            {"type": "narrative", "content": "prose/01.md"},
+            {"type": "data-table", "resource": "scores"},
+            {"type": "provenance"},
+        ]
+        cells = parse_cells(raw)
+        assert len(cells) == 3
+        assert isinstance(cells[0], NarrativeCell)
+        assert isinstance(cells[1], DataTableCell)
+        assert isinstance(cells[2], ProvenanceCell)
+
+    def test_parse_cells_rejects_unknown_type(self) -> None:
+        with pytest.raises(ValueError, match="Unknown cell type"):
+            parse_cells([{"type": "unknown"}])
