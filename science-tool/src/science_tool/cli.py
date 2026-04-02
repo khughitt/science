@@ -1641,6 +1641,85 @@ def tasks_summary() -> None:
 
 
 @main.group()
+def project() -> None:
+    """Project-level commands."""
+
+
+@project.command("index")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+def project_index(output_format: str, project_root: Path) -> None:
+    """Produce a compact index of questions and hypotheses for this project."""
+    import yaml as _yaml
+
+    from science_tool.paths import resolve_paths
+
+    project_root = project_root.resolve()
+    paths = resolve_paths(project_root)
+
+    rows: list[dict[str, str]] = []
+
+    # Scan hypotheses
+    hyp_dir = paths.specs_dir / "hypotheses"
+    if hyp_dir.is_dir():
+        for md in sorted(hyp_dir.glob("*.md")):
+            title, status = _extract_title_status(md, _yaml)
+            rows.append({"kind": "hypothesis", "file": md.relative_to(project_root).as_posix(), "title": title, "status": status})
+
+    # Scan questions
+    q_dir = paths.doc_dir / "questions"
+    if q_dir.is_dir():
+        for md in sorted(q_dir.glob("*.md")):
+            title, status = _extract_title_status(md, _yaml)
+            rows.append({"kind": "question", "file": md.relative_to(project_root).as_posix(), "title": title, "status": status})
+
+    emit_query_rows(
+        output_format=output_format,
+        title="Project Index",
+        columns=[
+            ("kind", "Kind"),
+            ("file", "File"),
+            ("title", "Title"),
+            ("status", "Status"),
+        ],
+        rows=rows,
+    )
+
+
+def _extract_title_status(path: Path, _yaml: Any) -> tuple[str, str]:
+    """Extract title and status from markdown frontmatter or first heading."""
+    text = path.read_text(encoding="utf-8")
+    title = path.stem
+    status = ""
+
+    # Try frontmatter
+    if text.startswith("---"):
+        end = text.find("---", 3)
+        if end != -1:
+            try:
+                fm = _yaml.safe_load(text[3:end])
+                if isinstance(fm, dict):
+                    title = str(fm.get("title") or title)
+                    status = str(fm.get("status") or "")
+            except _yaml.YAMLError:
+                pass
+
+    # Fallback: first H1/H2 heading
+    if title == path.stem:
+        for line in text.splitlines():
+            if line.startswith("# "):
+                title = line.lstrip("# ").strip()
+                break
+
+    return title, status
+
+
+@main.group()
 def sync() -> None:
     """Cross-project sync commands."""
 
@@ -1692,7 +1771,8 @@ def sync_status(config_path: str | None) -> None:
 
     cfg_path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
     config = load_global_config(cfg_path)
-    state = load_sync_state()
+    state_path = cfg_path.parent / "sync_state.yaml"
+    state = load_sync_state(state_path)
 
     if state.last_sync is None:
         click.echo("No sync has been performed yet.")
@@ -1730,12 +1810,17 @@ def sync_rebuild(config_path: str | None) -> None:
     """Rebuild registry from scratch by scanning all projects."""
     import shutil
 
-    from science_tool.registry.config import DEFAULT_CONFIG_PATH, load_global_config
+    from science_tool.registry.config import DEFAULT_CONFIG_PATH, load_global_config, prune_missing_projects
     from science_tool.registry.index import DEFAULT_REGISTRY_DIR
     from science_tool.registry.state import DEFAULT_STATE_PATH
     from science_tool.registry.sync import run_sync as do_sync
 
     cfg_path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+
+    pruned = prune_missing_projects(cfg_path)
+    for path in pruned:
+        click.echo(f"Pruned missing project: {path}")
+
     config = load_global_config(cfg_path)
     if not config.projects:
         click.echo("No registered projects.")

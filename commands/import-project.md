@@ -145,6 +145,16 @@ aspects: []
 
 Do not add broad `paths:` mappings as the long-term solution.
 
+### `.env`
+
+Create or update `.env` with the **resolved absolute path** to `science-tool`:
+
+```env
+SCIENCE_TOOL_PATH=<absolute-path-to-science-tool>
+```
+
+Resolve `${CLAUDE_PLUGIN_ROOT}/science-tool` to its absolute path at creation time. Ensure `.env` is in `.gitignore`.
+
 ### `AGENTS.md`
 
 Extend or create `AGENTS.md` so it reflects:

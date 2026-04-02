@@ -14,12 +14,11 @@ Follow `references/command-preamble.md` (role: `research-assistant`).
 Additionally, read (skip any that don't exist):
 1. `tasks/active.md`
 2. Recent completed tasks: scan `tasks/done/` for the most recent file
-3. `specs/hypotheses/` — status of each hypothesis
+3. **Hypothesis and question status:** run `science-tool project index --format json` to get a compact index of all hypotheses and questions with their titles and statuses. Only read individual files when you need full detail (e.g., to assess evidence quality for a specific hypothesis).
 4. `specs/scope-boundaries.md` — project scope
-5. Open questions: check `doc/questions/` first; if it doesn't exist, scan for `*questions*.md` or `*open-questions*.md` in the doc directory
-6. `doc/topics/` or equivalent topic coverage files in the doc directory
-7. `doc/papers/` — paper coverage
-8. `doc/meta/next-steps-*.md` — prior next-steps analyses (most recent)
+5. `doc/topics/` or equivalent topic coverage files in the doc directory
+6. `doc/papers/` — paper coverage
+7. `doc/meta/next-steps-*.md` — prior next-steps analyses (most recent)
 
 Also run: `git log --oneline -15 --format="%h %s (%cr)"`
 
@@ -55,7 +54,7 @@ From `tasks/active.md`, show:
 - **P0 tasks** (critical path) — full detail
 - **P1 tasks** (active work) — title and status
 - **Blocked tasks** — what's blocking them
-- **Hypothesis / question status** — one-line summary per hypothesis from `specs/hypotheses/`, or per open question from `doc/questions/` if no formal hypotheses exist
+- **Hypothesis / question status** — use the project index from setup (one-line summary per hypothesis/question). Read individual files only when deeper context is needed.
 
 #### Workflow Runs
 - Scan `results/` for `datapackage.json` manifests

@@ -51,6 +51,23 @@ def save_global_config(config: GlobalConfig, config_path: Path = DEFAULT_CONFIG_
     config_path.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False), encoding="utf-8")
 
 
+def prune_missing_projects(config_path: Path = DEFAULT_CONFIG_PATH) -> list[str]:
+    """Remove projects whose paths no longer exist. Returns list of pruned paths."""
+    cfg = load_global_config(config_path)
+    pruned: list[str] = []
+    kept: list[RegisteredProject] = []
+    for project in cfg.projects:
+        resolved = Path(project.path).expanduser().resolve()
+        if resolved.is_dir() and (resolved / "science.yaml").is_file():
+            kept.append(project)
+        else:
+            pruned.append(project.path)
+    if pruned:
+        cfg.projects = kept
+        save_global_config(cfg, config_path)
+    return pruned
+
+
 def ensure_registered(
     project_root: Path,
     project_name: str,

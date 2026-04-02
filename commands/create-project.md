@@ -150,6 +150,16 @@ aspects: []
 
 Add the requested aspects and any known data sources.
 
+### `.env`
+
+Populate with the **resolved absolute path** to `science-tool` so `validate.sh` and other tooling can find it:
+
+```env
+SCIENCE_TOOL_PATH=<absolute-path-to-science-tool>
+```
+
+Resolve `${CLAUDE_PLUGIN_ROOT}/science-tool` to its absolute path at creation time.
+
 ### `.gitignore`
 
 Include at minimum:

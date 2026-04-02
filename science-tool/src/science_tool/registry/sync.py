@@ -206,9 +206,18 @@ def run_sync(
 
     # Phase 3: Propagate — find genuinely shared entities via matching
     shared_pairs = _find_cross_project_matches(new_index, project_entity_map)
+
+    # Build ontology prefix map for relevance filtering
+    project_ontology_prefixes: dict[str, set[str]] = {}
+    for sources in all_sources:
+        prefixes = {cat.prefix.lower() for cat in sources.ontology_catalogs}
+        if prefixes:
+            project_ontology_prefixes[sources.project_name] = prefixes
+
     actions = compute_propagations(
         shared_pairs=shared_pairs,
         project_sources=project_entity_map,
+        project_ontology_prefixes=project_ontology_prefixes if project_ontology_prefixes else None,
     )
 
     if not dry_run:

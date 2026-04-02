@@ -9,6 +9,7 @@ from science_tool.registry.config import (
     SyncSettings,
     ensure_registered,
     load_global_config,
+    prune_missing_projects,
     save_global_config,
 )
 
@@ -69,3 +70,48 @@ def test_ensure_registered_multiple_projects(tmp_path):
     assert len(cfg.projects) == 2
     names = {p.name for p in cfg.projects}
     assert names == {"proj-a", "proj-b"}
+
+
+def test_prune_missing_projects_removes_nonexistent(tmp_path):
+    """Prune removes projects whose paths don't exist."""
+    config_path = tmp_path / "config.yaml"
+
+    # Create one real project with science.yaml
+    real_project = tmp_path / "real-proj"
+    real_project.mkdir()
+    (real_project / "science.yaml").write_text("name: real-proj\n")
+
+    cfg = GlobalConfig(
+        projects=[
+            RegisteredProject(path=str(real_project), name="real-proj", registered=date(2026, 3, 15)),
+            RegisteredProject(path="/nonexistent/fake-proj", name="fake-proj", registered=date(2026, 3, 15)),
+        ],
+    )
+    save_global_config(cfg, config_path)
+
+    pruned = prune_missing_projects(config_path)
+    assert pruned == ["/nonexistent/fake-proj"]
+
+    reloaded = load_global_config(config_path)
+    assert len(reloaded.projects) == 1
+    assert reloaded.projects[0].name == "real-proj"
+
+
+def test_prune_missing_projects_no_change(tmp_path):
+    """Prune is a no-op when all projects exist."""
+    config_path = tmp_path / "config.yaml"
+
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "science.yaml").write_text("name: proj\n")
+
+    cfg = GlobalConfig(
+        projects=[RegisteredProject(path=str(proj), name="proj", registered=date(2026, 3, 15))],
+    )
+    save_global_config(cfg, config_path)
+
+    pruned = prune_missing_projects(config_path)
+    assert pruned == []
+
+    reloaded = load_global_config(config_path)
+    assert len(reloaded.projects) == 1

@@ -46,6 +46,10 @@ If given a directory, scan for result files and summarize what is available.
 - **Write mode:** no existing interpretation document yet
 - **Update mode:** an interpretation already exists; update framework implications without rewriting the whole narrative
 - **Dev mode:** the result is about tooling or workflow rather than substantive empirical evidence
+- **Conceptual mode:** the input is a discussion document, synthesis, or free-form user observations — not empirical data, notebooks, or pipeline output. Auto-select this mode when:
+  - the input is a `doc/discussions/*.md` file
+  - the user describes observations or insights without pointing to data files
+  - the input has no associated data quality characteristics (no sample counts, effect sizes, or controls)
 
 Always note the mode at the top of the output when not in standard write mode.
 
@@ -69,6 +73,7 @@ Extract the main findings and classify each as:
 - `ambiguous`
 - `methodological`
 - `descriptive` — structural or qualitative findings from exploratory/visualization analyses where statistical testing is not applicable (e.g., UMAP cluster structure, k-mer landscape patterns). Distinct from `suggestive`: the finding is qualitative by nature, not merely weak.
+- `conceptual` — (conceptual mode only) insights from discussion, synthesis, or reasoning that reframe understanding without new empirical evidence
 
 Also identify the evidence type where possible:
 - `literature_evidence`
@@ -79,6 +84,11 @@ Also identify the evidence type where possible:
 - `negative_result`
 
 Include effect sizes, uncertainty intervals, and sample counts where available.
+
+**Conceptual mode adaptation:** Most findings will be `expert_judgment` or `literature_evidence`. Instead of effect sizes and sample counts, characterize each insight by:
+- **Novelty:** does this reframe existing understanding, or confirm what was already believed?
+- **Grounding:** is the insight anchored in specific prior evidence/literature, or is it speculative?
+- **Actionability:** does it suggest concrete next steps or tests?
 
 ### 2. Map Findings To Claims
 
@@ -105,7 +115,15 @@ For each relevant open question:
 
 ### 4. Check Evidence Quality
 
-Before updating beliefs, check:
+**Conceptual mode:** Skip the empirical quality checks below. Instead, assess:
+- **Reasoning quality:** Are the arguments logically sound? Are there hidden assumptions or circular reasoning?
+- **Completeness:** Does the discussion consider alternative explanations or counterarguments?
+- **Independence:** Is this a genuinely new perspective, or does it merely restate an existing claim in different words?
+- **Testability:** Does the insight suggest concrete predictions or experiments that could validate it?
+
+Then proceed to Step 5.
+
+**Empirical modes (write/update/dev):** Before updating beliefs, check:
 - **Control uniqueness:** are controls distinct from test samples? No duplicate sequences, no shared samples across conditions
 - **Dimensionality:** do embedding sizes, feature counts, and output shapes match expectations?
 - **Sample counts:** do they match the experimental design? Spot-check against the data source

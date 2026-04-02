@@ -27,11 +27,17 @@ def compute_propagations(
     *,
     shared_pairs: list[tuple[str, str, str, str]],  # (local_id_a, local_id_b, project_a, project_b)
     project_sources: dict[str, list[SourceEntity]],
+    project_ontology_prefixes: dict[str, set[str]] | None = None,
 ) -> list[PropagationAction]:
     """Compute which entities should be propagated across projects.
 
     shared_pairs: each tuple (local_id_a, local_id_b, project_a, project_b) indicates
     that the two local IDs represent the same real-world entity across projects.
+
+    project_ontology_prefixes: optional mapping of project_name -> set of ontology
+    prefixes the project declares. When provided, entities with ontology_terms are
+    only propagated to projects whose prefixes overlap. Entities without ontology_terms
+    are propagated regardless (no filtering possible).
     """
     project_ids: dict[str, set[str]] = {
         name: {e.canonical_id for e in entities} for name, entities in project_sources.items()
@@ -73,6 +79,8 @@ def compute_propagations(
 
             for target_project in target_projects:
                 if entity.canonical_id in project_ids.get(target_project, set()):
+                    continue
+                if not _ontology_relevant(entity, target_project, project_ontology_prefixes):
                     continue
                 actions.append(
                     PropagationAction(
@@ -123,6 +131,30 @@ def write_propagated_entity(
     )
     output_path.write_text(content, encoding="utf-8")
     return output_path
+
+
+def _ontology_relevant(
+    entity: SourceEntity,
+    target_project: str,
+    project_ontology_prefixes: dict[str, set[str]] | None,
+) -> bool:
+    """Check whether an entity is ontology-relevant to the target project.
+
+    Returns True (allow propagation) when:
+    - No prefix map is provided (filtering disabled)
+    - The target project declares no ontologies (accepts everything)
+    - The entity has no ontology_terms (can't filter, allow by default)
+    - Any entity ontology_term prefix matches a target project prefix
+    """
+    if project_ontology_prefixes is None:
+        return True
+    target_prefixes = project_ontology_prefixes.get(target_project)
+    if not target_prefixes:
+        return True
+    if not entity.ontology_terms:
+        return True
+    entity_prefixes = {term.split(":")[0].lower() for term in entity.ontology_terms if ":" in term}
+    return bool(entity_prefixes & target_prefixes)
 
 
 def _is_propagatable(entity: SourceEntity) -> bool:

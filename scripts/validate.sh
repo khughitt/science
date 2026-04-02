@@ -9,6 +9,14 @@ set -uo pipefail
 
 export UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/uv-cache}"
 
+# Source .env for SCIENCE_TOOL_PATH and other project-local settings
+if [ -f ".env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . ./.env
+    set +a
+fi
+
 VERBOSE="${1:-}"
 ERRORS=0
 WARNINGS=0
@@ -542,7 +550,7 @@ SCIENCE_TOOL="${SCIENCE_TOOL:-$(resolve_science_tool)}"
 if [ -z "$SCIENCE_TOOL" ]; then
     warn "science-tool unavailable; skipping graph source audit and graph validation"
 else
-    audit_output=$($SCIENCE_TOOL graph audit --project-root . --format json 2>&1) || true
+    audit_output=$($SCIENCE_TOOL graph audit --project-root . --format json 2>/dev/null) || true
     if printf "%s" "$audit_output" | python3 -c "import sys,json; json.load(sys.stdin)" &>/dev/null; then
         audit_rows=$(printf "%s" "$audit_output" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['rows']))")
         if [ "$audit_rows" -eq 0 ]; then
@@ -568,7 +576,7 @@ for row in json.load(sys.stdin)['rows']:
 ")
         fi
     else
-        error "graph audit produced unparseable output"
+        warn "graph audit produced unparseable output (expected for fresh projects)"
     fi
 fi
 
@@ -579,7 +587,7 @@ if [ -f "$KNOWLEDGE_DIR/graph.trig" ]; then
         info "Using: ${SCIENCE_TOOL}"
 
         # 13a-d: Run graph validate (parseable, provenance, acyclicity, orphaned)
-        validate_output=$($SCIENCE_TOOL graph validate --format json --path "$KNOWLEDGE_DIR/graph.trig" 2>&1) || true
+        validate_output=$($SCIENCE_TOOL graph validate --format json --path "$KNOWLEDGE_DIR/graph.trig" 2>/dev/null) || true
         if printf "%s" "$validate_output" | python3 -c "import sys,json; json.load(sys.stdin)" &>/dev/null; then
             while IFS= read -r row; do
                 check=$(printf "%s" "$row" | python3 -c "import sys,json; print(json.load(sys.stdin)['check'])")
@@ -603,7 +611,7 @@ for row in json.load(sys.stdin)['rows']:
         fi
 
         # 13e: Graph-prose sync staleness
-        diff_output=$($SCIENCE_TOOL graph diff --format json --path "$KNOWLEDGE_DIR/graph.trig" 2>&1) || true
+        diff_output=$($SCIENCE_TOOL graph diff --format json --path "$KNOWLEDGE_DIR/graph.trig" 2>/dev/null) || true
         if printf "%s" "$diff_output" | python3 -c "import sys,json; json.load(sys.stdin)" &>/dev/null; then
             stale_count=$(printf "%s" "$diff_output" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['rows']))")
             if [ "$stale_count" -gt 0 ]; then
