@@ -23,17 +23,18 @@ from science_tool.graph.migrate import (
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
     GRAPH_LAYERS,
+    add_article,
     add_assumption,
-    add_claim,
     add_concept,
     add_edge,
+    add_evidence_edge,
     add_hypothesis,
     add_inquiry,
     add_inquiry_edge,
     add_inquiry_node,
-    add_paper,
+    add_observation,
+    add_proposition,
     add_question,
-    add_relation_claim,
     add_transformation,
     build_graph_dot,
     diff_graph_inputs,
@@ -712,85 +713,93 @@ def graph_add_concept(
     click.echo(f"Added concept: {concept_uri}")
 
 
-@graph_add.command("paper")
-@click.option("--doi", required=True)
+@graph_add.command("article")
+@click.argument("doi")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_add_paper(doi: str, graph_path: Path) -> None:
-    """Add a paper node to the knowledge graph."""
+def add_article_cmd(doi: str, graph_path: Path) -> None:
+    """Add an external literature reference by DOI."""
+    uri = add_article(graph_path, doi)
+    click.echo(f"Added article: {uri}")
 
-    paper_uri = add_paper(graph_path=graph_path, doi=doi)
-    click.echo(f"Added paper: {paper_uri}")
 
-
-@graph_add.command("claim")
+@graph_add.command("proposition")
 @click.argument("text")
-@click.option("--source", required=True)
+@click.option("--source", required=True, help="Provenance reference")
 @click.option("--confidence", type=float, default=None)
-@click.option("--evidence-type", type=click.Choice(EVIDENCE_TYPES), default=None)
-@click.option("--id", "claim_id", default=None)
+@click.option("--evidence-type", default=None)
+@click.option("--id", "proposition_id", default=None, help="Custom proposition ID slug")
+@click.option("--subject", default=None, help="Structured S-P-O: subject entity")
+@click.option("--predicate", default=None, help="Structured S-P-O: predicate")
+@click.option("--object", "obj", default=None, help="Structured S-P-O: object entity")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_add_claim(
+def add_proposition_cmd(
     text: str,
     source: str,
     confidence: float | None,
     evidence_type: str | None,
-    claim_id: str | None,
+    proposition_id: str | None,
+    subject: str | None,
+    predicate: str | None,
+    obj: str | None,
     graph_path: Path,
 ) -> None:
-    """Add a claim with provenance."""
-
-    claim_uri = add_claim(
-        graph_path=graph_path,
-        text=text,
-        source=source,
-        confidence=confidence,
-        evidence_type=evidence_type,
-        claim_id=claim_id,
-    )
-    click.echo(f"Added claim: {claim_uri}")
+    """Add a proposition to the knowledge graph."""
+    uri = add_proposition(graph_path, text, source, confidence, evidence_type, proposition_id, subject, predicate, obj)
+    click.echo(f"Added proposition: {uri}")
 
 
-@graph_add.command("relation-claim")
-@click.argument("subject")
-@click.argument("predicate")
-@click.argument("object", metavar="OBJECT")
-@click.option("--source", required=True)
-@click.option("--confidence", type=float, default=None)
-@click.option("--evidence-type", type=click.Choice(EVIDENCE_TYPES), default=None)
-@click.option("--text", default=None)
-@click.option("--id", "claim_id", default=None)
+@graph_add.command("observation")
+@click.argument("description")
+@click.option("--data-source", required=True, help="Reference to data-package or dataset")
+@click.option("--metric", default=None)
+@click.option("--value", default=None)
+@click.option("--uncertainty", default=None)
+@click.option("--conditions", default=None)
+@click.option("--id", "observation_id", default=None)
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_add_relation_claim(
-    subject: str,
-    predicate: str,
-    object: str,
-    source: str,
-    confidence: float | None,
-    evidence_type: str | None,
-    text: str | None,
-    claim_id: str | None,
+def add_observation_cmd(
+    description: str,
+    data_source: str,
+    metric: str | None,
+    value: str | None,
+    uncertainty: str | None,
+    conditions: str | None,
+    observation_id: str | None,
     graph_path: Path,
 ) -> None:
-    """Add a claim whose content is an explicit subject-predicate-object relation."""
+    """Add an observation — a concrete empirical fact anchored to data."""
+    uri = add_observation(graph_path, description, data_source, metric, value, uncertainty, conditions, observation_id)
+    click.echo(f"Added observation: {uri}")
 
-    claim_uri = add_relation_claim(
-        graph_path=graph_path,
-        subject=subject,
-        predicate=predicate,
-        obj=object,
-        source=source,
-        confidence=confidence,
-        evidence_type=evidence_type,
-        text=text,
-        claim_id=claim_id,
-    )
-    click.echo(f"Added relation claim: {claim_uri}")
+
+@graph_add.command("evidence")
+@click.argument("source_entity")
+@click.argument("target_entity")
+@click.option("--stance", required=True, type=click.Choice(["supports", "disputes"]))
+@click.option("--strength", default=None, type=click.Choice(["strong", "moderate", "weak"]))
+@click.option("--caveats", default=None)
+@click.option("--method", "evidence_method", default=None)
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def add_evidence_cmd(
+    source_entity: str,
+    target_entity: str,
+    stance: str,
+    strength: str | None,
+    caveats: str | None,
+    evidence_method: str | None,
+    graph_path: Path,
+) -> None:
+    """Add an evidence edge (supports/disputes) between entities."""
+    add_evidence_edge(graph_path, source_entity, target_entity, stance, strength, caveats, evidence_method)
+    click.echo(f"Added {stance} edge: {source_entity} \u2192 {target_entity}")
 
 
 @graph_add.command("hypothesis")

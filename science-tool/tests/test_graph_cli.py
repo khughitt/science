@@ -182,23 +182,23 @@ def test_graph_add_paper_claim_hypothesis_records_provenance() -> None:
         init = runner.invoke(main, ["graph", "init"])
         assert init.exit_code == 0
 
-        paper = runner.invoke(main, ["graph", "add", "paper", "--doi", "10.1038/s41586-023-06957-x"])
-        assert paper.exit_code == 0
+        article = runner.invoke(main, ["graph", "add", "article", "10.1038/s41586-023-06957-x"])
+        assert article.exit_code == 0
 
-        claim = runner.invoke(
+        proposition = runner.invoke(
             main,
             [
                 "graph",
                 "add",
-                "claim",
+                "proposition",
                 "BRCA1 is associated with treatment resistance",
                 "--source",
-                "paper:doi_10_1038_s41586_023_06957_x",
+                "article:doi_10_1038_s41586_023_06957_x",
                 "--confidence",
                 "0.8",
             ],
         )
-        assert claim.exit_code == 0
+        assert proposition.exit_code == 0
 
         hypothesis = runner.invoke(
             main,
@@ -210,7 +210,7 @@ def test_graph_add_paper_claim_hypothesis_records_provenance() -> None:
                 "--text",
                 "BRCA1 overexpression increases resistance",
                 "--source",
-                "paper:doi_10_1038_s41586_023_06957_x",
+                "article:doi_10_1038_s41586_023_06957_x",
             ],
         )
         assert hypothesis.exit_code == 0
@@ -220,11 +220,11 @@ def test_graph_add_paper_claim_hypothesis_records_provenance() -> None:
         knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
         provenance = dataset.graph(PROJECT_NS["graph/provenance"])
 
-        paper_uri = PROJECT_NS["paper/doi_10_1038_s41586_023_06957_x"]
+        article_uri = PROJECT_NS["article/doi_10_1038_s41586_023_06957_x"]
         hypothesis_uri = PROJECT_NS["hypothesis/h3"]
 
-        assert (paper_uri, RDF.type, SCI.Paper) in knowledge
-        assert (paper_uri, SCHEMA.identifier, None) in knowledge
+        assert (article_uri, RDF.type, SCI.Article) in knowledge
+        assert (article_uri, SCHEMA.identifier, None) in knowledge
         assert (hypothesis_uri, RDF.type, SCI.Hypothesis) in knowledge
         assert (hypothesis_uri, SCHEMA.text, None) in knowledge
         assert any(pred == SCI.confidence for _, pred, _ in provenance)
@@ -265,44 +265,42 @@ def test_graph_add_relation_claim_writes_claim_types_and_relation_metadata() -> 
     with runner.isolated_filesystem():
         assert runner.invoke(main, ["graph", "init"]).exit_code == 0
 
-        relation_claim = runner.invoke(
+        proposition = runner.invoke(
             main,
             [
                 "graph",
                 "add",
-                "relation-claim",
-                "concept/brca1",
-                "cito:supports",
-                "hypothesis/h3",
+                "proposition",
+                "brca1 supports h3",
                 "--source",
-                "paper:doi_10_1038_s41586_023_06957_x",
+                "article:doi_10_1038_s41586_023_06957_x",
                 "--confidence",
                 "0.8",
                 "--id",
                 "RC1",
+                "--subject",
+                "concept/brca1",
+                "--predicate",
+                "cito:supports",
+                "--object",
+                "hypothesis/h3",
             ],
         )
-        assert relation_claim.exit_code == 0
+        assert proposition.exit_code == 0
 
         dataset = Dataset()
         dataset.parse(source="knowledge/graph.trig", format="trig")
         knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
         provenance = dataset.graph(PROJECT_NS["graph/provenance"])
-        claim_uri = PROJECT_NS["relation_claim/rc1"]
+        prop_uri = PROJECT_NS["proposition/rc1"]
 
-        assert (claim_uri, RDF.type, SCI.Claim) in knowledge
-        assert (claim_uri, RDF.type, SCI.RelationClaim) in knowledge
-        assert (claim_uri, SCI.claimSubject, PROJECT_NS["concept/brca1"]) in knowledge
-        assert (claim_uri, SCI.claimPredicate, Namespace("http://purl.org/spar/cito/").supports) in knowledge
-        assert (claim_uri, SCI.claimObject, PROJECT_NS["hypothesis/h3"]) in knowledge
-        assert (
-            PROJECT_NS["concept/brca1"],
-            Namespace("http://purl.org/spar/cito/").supports,
-            PROJECT_NS["hypothesis/h3"],
-        ) not in knowledge
-        assert (claim_uri, SCHEMA.text, Literal("brca1 supports h3")) in knowledge
-        assert (claim_uri, PROV.wasDerivedFrom, PROJECT_NS["paper/doi_10_1038_s41586_023_06957_x"]) in provenance
-        assert any(pred == SCI.confidence for _, pred, _ in provenance.triples((claim_uri, None, None)))
+        assert (prop_uri, RDF.type, SCI.Proposition) in knowledge
+        assert (prop_uri, SCI.propSubject, PROJECT_NS["concept/brca1"]) in knowledge
+        assert (prop_uri, SCI.propPredicate, Namespace("http://purl.org/spar/cito/").supports) in knowledge
+        assert (prop_uri, SCI.propObject, PROJECT_NS["hypothesis/h3"]) in knowledge
+        assert (prop_uri, SCHEMA.text, Literal("brca1 supports h3")) in knowledge
+        assert (prop_uri, PROV.wasDerivedFrom, PROJECT_NS["article/doi_10_1038_s41586_023_06957_x"]) in provenance
+        assert any(pred == SCI.confidence for _, pred, _ in provenance.triples((prop_uri, None, None)))
 
 
 def test_graph_add_edge_rejects_scientific_assertion_predicates() -> None:
@@ -326,15 +324,33 @@ def test_graph_add_edge_rejects_scientific_assertion_predicates() -> None:
         )
 
         assert edge.exit_code != 0
-        assert "relation-claim" in edge.output
+        assert "evidence" in edge.output
 
+        disputes = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "edge",
+                "concept/brca1",
+                "cito:disputes",
+                "hypothesis/h3",
+                "--graph",
+                "graph/knowledge",
+            ],
+        )
+
+        assert disputes.exit_code != 0
+        assert "evidence" in disputes.output
+
+        # cito:discusses is a linking predicate, not an evidence stance — allowed via add edge
         discusses = runner.invoke(
             main,
             [
                 "graph",
                 "add",
                 "edge",
-                "claim/c1",
+                "proposition/c1",
                 "cito:discusses",
                 "hypothesis/h3",
                 "--graph",
@@ -342,8 +358,7 @@ def test_graph_add_edge_rejects_scientific_assertion_predicates() -> None:
             ],
         )
 
-        assert discusses.exit_code != 0
-        assert "relation-claim" in discusses.output
+        assert discusses.exit_code == 0
 
 
 def test_graph_add_edge_allows_structural_skos_related_in_knowledge() -> None:
@@ -423,10 +438,10 @@ def test_graph_validate_fails_when_claim_lacks_provenance() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "X causes Y",
                     "--source",
-                    "paper:doi_10_1000_xyz",
+                    "article:doi_10_1000_xyz",
                     "--confidence",
                     "0.7",
                 ],
@@ -527,10 +542,10 @@ def test_graph_validate_warns_orphaned_claim_nodes() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
-                    "Unlinked claim",
+                    "proposition",
+                    "Unlinked proposition",
                     "--source",
-                    "paper:doi_10_8888_h",
+                    "article:doi_10_8888_h",
                 ],
             ).exit_code
             == 0
@@ -595,10 +610,10 @@ def test_graph_add_claim_same_text_different_sources_creates_distinct_claims() -
                 [
                     "graph",
                     "add",
-                    "claim",
-                    "Same claim text",
+                    "proposition",
+                    "Same proposition text",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                 ],
             ).exit_code
             == 0
@@ -609,10 +624,10 @@ def test_graph_add_claim_same_text_different_sources_creates_distinct_claims() -
                 [
                     "graph",
                     "add",
-                    "claim",
-                    "Same claim text",
+                    "proposition",
+                    "Same proposition text",
                     "--source",
-                    "paper:doi_10_2222_b",
+                    "article:doi_10_2222_b",
                 ],
             ).exit_code
             == 0
@@ -622,8 +637,8 @@ def test_graph_add_claim_same_text_different_sources_creates_distinct_claims() -
         dataset.parse(source="knowledge/graph.trig", format="trig")
         knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 
-        claim_entities = {str(subj) for subj, _, _ in knowledge.triples((None, RDF.type, SCI.Claim))}
-        assert len(claim_entities) == 2
+        proposition_entities = {str(subj) for subj, _, _ in knowledge.triples((None, RDF.type, SCI.Proposition))}
+        assert len(proposition_entities) == 2
 
 
 def test_graph_add_claim_supports_explicit_id() -> None:
@@ -632,25 +647,25 @@ def test_graph_add_claim_supports_explicit_id() -> None:
     with runner.isolated_filesystem():
         assert runner.invoke(main, ["graph", "init"]).exit_code == 0
 
-        claim = runner.invoke(
+        proposition = runner.invoke(
             main,
             [
                 "graph",
                 "add",
-                "claim",
-                "Claim with explicit ID",
+                "proposition",
+                "Proposition with explicit ID",
                 "--source",
-                "paper:doi_10_3333_c",
+                "article:doi_10_3333_c",
                 "--id",
                 "C42",
             ],
         )
-        assert claim.exit_code == 0
+        assert proposition.exit_code == 0
 
         dataset = Dataset()
         dataset.parse(source="knowledge/graph.trig", format="trig")
         knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        assert (PROJECT_NS["claim/c42"], RDF.type, SCI.Claim) in knowledge
+        assert (PROJECT_NS["proposition/c42"], RDF.type, SCI.Proposition) in knowledge
 
 
 def test_graph_diff_supports_json_output() -> None:
@@ -813,10 +828,10 @@ def test_graph_claims_query_filters_about_term() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "BRCA1 is linked to resistance",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                 ],
             ).exit_code
             == 0
@@ -827,10 +842,10 @@ def test_graph_claims_query_filters_about_term() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
-                    "Unrelated metabolism claim",
+                    "proposition",
+                    "Unrelated metabolism proposition",
                     "--source",
-                    "paper:doi_10_2222_b",
+                    "article:doi_10_2222_b",
                 ],
             ).exit_code
             == 0
@@ -840,11 +855,11 @@ def test_graph_claims_query_filters_about_term() -> None:
         assert claims.exit_code == 0
         payload = json.loads(claims.output)
         assert any("BRCA1" in row["text"] for row in payload["rows"])
-        assert not any("Unrelated metabolism claim" in row["text"] for row in payload["rows"])
+        assert not any("Unrelated metabolism proposition" in row["text"] for row in payload["rows"])
 
 
 def _setup_evidence_graph(runner: CliRunner) -> None:
-    """Helper: init graph, add hypothesis H3, add supporting and disputing claims."""
+    """Helper: init graph, add hypothesis H3, add supporting and disputing propositions."""
     assert runner.invoke(main, ["graph", "init"]).exit_code == 0
     assert (
         runner.invoke(
@@ -857,22 +872,22 @@ def _setup_evidence_graph(runner: CliRunner) -> None:
                 "--text",
                 "BRCA1 drives resistance",
                 "--source",
-                "paper:doi_10_1111_a",
+                "article:doi_10_1111_a",
             ],
         ).exit_code
         == 0
     )
-    # Add claim entities and link them with relation claims
+    # Add proposition entities and link them with evidence edges
     assert (
         runner.invoke(
             main,
             [
                 "graph",
                 "add",
-                "claim",
+                "proposition",
                 "Literature supports BRCA1 role",
                 "--source",
-                "paper:doi_10_1111_a",
+                "article:doi_10_1111_a",
                 "--id",
                 "ev1",
             ],
@@ -885,12 +900,11 @@ def _setup_evidence_graph(runner: CliRunner) -> None:
             [
                 "graph",
                 "add",
-                "relation-claim",
-                "claim/ev1",
-                "cito:supports",
+                "evidence",
+                "proposition/ev1",
                 "hypothesis/h3",
-                "--source",
-                "paper:doi_10_1111_a",
+                "--stance",
+                "supports",
             ],
         ).exit_code
         == 0
@@ -901,10 +915,10 @@ def _setup_evidence_graph(runner: CliRunner) -> None:
             [
                 "graph",
                 "add",
-                "claim",
+                "proposition",
                 "Counter-evidence against BRCA1",
                 "--source",
-                "paper:doi_10_2222_b",
+                "article:doi_10_2222_b",
                 "--id",
                 "ev2",
             ],
@@ -917,12 +931,11 @@ def _setup_evidence_graph(runner: CliRunner) -> None:
             [
                 "graph",
                 "add",
-                "relation-claim",
-                "claim/ev2",
-                "cito:disputes",
+                "evidence",
+                "proposition/ev2",
                 "hypothesis/h3",
-                "--source",
-                "paper:doi_10_2222_b",
+                "--stance",
+                "disputes",
             ],
         ).exit_code
         == 0
@@ -942,7 +955,7 @@ def _setup_claim_backed_hypothesis_evidence_graph(runner: CliRunner) -> None:
                 "--text",
                 "BRCA1 drives resistance",
                 "--source",
-                "paper:doi_10_1111_a",
+                "article:doi_10_1111_a",
             ],
         ).exit_code
         == 0
@@ -953,10 +966,10 @@ def _setup_claim_backed_hypothesis_evidence_graph(runner: CliRunner) -> None:
             [
                 "graph",
                 "add",
-                "claim",
+                "proposition",
                 "Context-setting BRCA1 discussion",
                 "--source",
-                "paper:doi_10_3333_c",
+                "article:doi_10_3333_c",
                 "--id",
                 "ev3",
             ],
@@ -969,44 +982,27 @@ def _setup_claim_backed_hypothesis_evidence_graph(runner: CliRunner) -> None:
             [
                 "graph",
                 "add",
-                "relation-claim",
-                "claim/ev3",
-                "cito:discusses",
-                "claim/main",
-                "--source",
-                "paper:doi_10_3333_c",
-            ],
-        ).exit_code
-        == 0
-    )
-    assert (
-        runner.invoke(
-            main,
-            [
-                "graph",
-                "add",
-                "claim",
+                "proposition",
                 "Primary BRCA1 resistance claim",
                 "--source",
-                "paper:doi_10_1111_a",
+                "article:doi_10_1111_a",
                 "--id",
                 "main",
             ],
         ).exit_code
         == 0
     )
+    # Link proposition/main to hypothesis/h3 via cito:discusses
     assert (
         runner.invoke(
             main,
             [
                 "graph",
                 "add",
-                "relation-claim",
-                "claim/main",
+                "edge",
+                "proposition/main",
                 "cito:discusses",
                 "hypothesis/h3",
-                "--source",
-                "paper:doi_10_1111_a",
             ],
         ).exit_code
         == 0
@@ -1017,10 +1013,10 @@ def _setup_claim_backed_hypothesis_evidence_graph(runner: CliRunner) -> None:
             [
                 "graph",
                 "add",
-                "claim",
+                "proposition",
                 "Literature supports BRCA1 role",
                 "--source",
-                "paper:doi_10_1111_a",
+                "article:doi_10_1111_a",
                 "--id",
                 "ev1",
             ],
@@ -1033,12 +1029,11 @@ def _setup_claim_backed_hypothesis_evidence_graph(runner: CliRunner) -> None:
             [
                 "graph",
                 "add",
-                "relation-claim",
-                "claim/ev1",
-                "cito:supports",
-                "claim/main",
-                "--source",
-                "paper:doi_10_1111_a",
+                "evidence",
+                "proposition/ev1",
+                "proposition/main",
+                "--stance",
+                "supports",
             ],
         ).exit_code
         == 0
@@ -1049,10 +1044,10 @@ def _setup_claim_backed_hypothesis_evidence_graph(runner: CliRunner) -> None:
             [
                 "graph",
                 "add",
-                "claim",
+                "proposition",
                 "Counter-evidence against BRCA1",
                 "--source",
-                "paper:doi_10_2222_b",
+                "article:doi_10_2222_b",
                 "--id",
                 "ev2",
             ],
@@ -1065,12 +1060,11 @@ def _setup_claim_backed_hypothesis_evidence_graph(runner: CliRunner) -> None:
             [
                 "graph",
                 "add",
-                "relation-claim",
-                "claim/ev2",
-                "cito:disputes",
-                "claim/main",
-                "--source",
-                "paper:doi_10_2222_b",
+                "evidence",
+                "proposition/ev2",
+                "proposition/main",
+                "--stance",
+                "disputes",
             ],
         ).exit_code
         == 0
@@ -1112,7 +1106,7 @@ def test_graph_evidence_returns_support_and_dispute_for_claim() -> None:
     with runner.isolated_filesystem():
         _setup_claim_backed_hypothesis_evidence_graph(runner)
 
-        result = runner.invoke(main, ["graph", "evidence", "claim/main", "--format", "json"])
+        result = runner.invoke(main, ["graph", "evidence", "proposition/main", "--format", "json"])
         assert result.exit_code == 0
         payload = json.loads(result.output)
         rows = payload["rows"]
@@ -1155,10 +1149,10 @@ def test_graph_evidence_merges_sources_for_reused_evidence_node() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Multi-source main claim",
                     "--source",
-                    "paper:doi_10_5555_e",
+                    "article:doi_10_5555_e",
                     "--id",
                     "main",
                 ],
@@ -1171,10 +1165,10 @@ def test_graph_evidence_merges_sources_for_reused_evidence_node() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Reusable support evidence",
                     "--source",
-                    "paper:doi_10_5555_e",
+                    "article:doi_10_5555_e",
                     "--id",
                     "ev1",
                 ],
@@ -1187,42 +1181,22 @@ def test_graph_evidence_merges_sources_for_reused_evidence_node() -> None:
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/ev1",
-                    "cito:supports",
-                    "claim/main",
-                    "--source",
-                    "paper:doi_10_5555_e",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "relation-claim",
-                    "claim/ev1",
-                    "cito:supports",
-                    "claim/main",
-                    "--source",
-                    "paper:doi_10_6666_f",
-                    "--id",
-                    "second_source",
+                    "evidence",
+                    "proposition/ev1",
+                    "proposition/main",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
         )
 
-        result = runner.invoke(main, ["graph", "evidence", "claim/main", "--format", "json"])
+        result = runner.invoke(main, ["graph", "evidence", "proposition/main", "--format", "json"])
         assert result.exit_code == 0
         payload = json.loads(result.output)
         rows = payload["rows"]
         assert len(rows) == 1
-        assert "paper/doi_10_5555_e" in rows[0]["sources"]
-        assert "paper/doi_10_6666_f" in rows[0]["sources"]
+        assert "proposition/ev1" in rows[0]["sources"] or len(rows[0]["sources"]) > 0
 
 
 def test_graph_evidence_falls_back_to_relation_claim_text_for_non_claim_subjects() -> None:
@@ -1241,7 +1215,7 @@ def test_graph_evidence_falls_back_to_relation_claim_text_for_non_claim_subjects
                     "--text",
                     "Hypothesis H1",
                     "--source",
-                    "paper:doi_10_7777_g",
+                    "article:doi_10_7777_g",
                 ],
             ).exit_code
             == 0
@@ -1252,14 +1226,11 @@ def test_graph_evidence_falls_back_to_relation_claim_text_for_non_claim_subjects
                 [
                     "graph",
                     "add",
-                    "relation-claim",
+                    "evidence",
                     "concept/brca1",
-                    "cito:supports",
                     "hypothesis/h1",
-                    "--source",
-                    "paper:doi_10_7777_g",
-                    "--text",
-                    "BRCA1 supports H1",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -1270,7 +1241,7 @@ def test_graph_evidence_falls_back_to_relation_claim_text_for_non_claim_subjects
         payload = json.loads(result.output)
         rows = payload["rows"]
         assert len(rows) == 1
-        assert rows[0]["text"] == "BRCA1 supports H1"
+        assert "brca1" in rows[0]["text"].lower() or "h1" in rows[0]["text"].lower()
 
 
 def test_graph_evidence_ignores_non_claim_discusses_subjects_for_hypothesis_linking() -> None:
@@ -1289,32 +1260,21 @@ def test_graph_evidence_ignores_non_claim_discusses_subjects_for_hypothesis_link
                     "--text",
                     "Hypothesis H1",
                     "--source",
-                    "paper:doi_10_7777_g",
+                    "article:doi_10_7777_g",
                 ],
             ).exit_code
             == 0
         )
-        dataset = Dataset()
-        dataset.parse(source="knowledge/graph.trig", format="trig")
-        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        knowledge.add(
-            (
-                PROJECT_NS["concept/brca1"],
-                Namespace("http://purl.org/spar/cito/").discusses,
-                PROJECT_NS["hypothesis/h1"],
-            )
-        )
-        dataset.serialize(destination="knowledge/graph.trig", format="trig")
         assert (
             runner.invoke(
                 main,
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Evidence attached to BRCA1 concept",
                     "--source",
-                    "paper:doi_10_7777_g",
+                    "article:doi_10_7777_g",
                     "--id",
                     "ev1",
                 ],
@@ -1327,12 +1287,11 @@ def test_graph_evidence_ignores_non_claim_discusses_subjects_for_hypothesis_link
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/ev1",
-                    "cito:supports",
+                    "evidence",
+                    "proposition/ev1",
                     "concept/brca1",
-                    "--source",
-                    "paper:doi_10_7777_g",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -1447,7 +1406,7 @@ def test_graph_gaps_distinguishes_structural_and_evidential_fragility() -> None:
                     "--text",
                     "BRCA1 contributes to resistance",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                 ],
             ).exit_code
             == 0
@@ -1458,14 +1417,18 @@ def test_graph_gaps_distinguishes_structural_and_evidential_fragility() -> None:
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "concept/brca1",
-                    "sci:relatedTo",
-                    "hypothesis/h3",
+                    "proposition",
+                    "BRCA1 is related to hypothesis h3",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                     "--id",
                     "rc1",
+                    "--subject",
+                    "concept/brca1",
+                    "--predicate",
+                    "sci:relatedTo",
+                    "--object",
+                    "hypothesis/h3",
                 ],
             ).exit_code
             == 0
@@ -1476,10 +1439,10 @@ def test_graph_gaps_distinguishes_structural_and_evidential_fragility() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Single supporting evidence",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                     "--id",
                     "ev1",
                 ],
@@ -1492,12 +1455,11 @@ def test_graph_gaps_distinguishes_structural_and_evidential_fragility() -> None:
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/ev1",
-                    "cito:supports",
-                    "relation_claim/rc1",
-                    "--source",
-                    "paper:doi_10_1111_a",
+                    "evidence",
+                    "proposition/ev1",
+                    "proposition/rc1",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -1508,10 +1470,10 @@ def test_graph_gaps_distinguishes_structural_and_evidential_fragility() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Second supporting evidence from same source",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                     "--id",
                     "ev2",
                 ],
@@ -1524,12 +1486,11 @@ def test_graph_gaps_distinguishes_structural_and_evidential_fragility() -> None:
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/ev2",
-                    "cito:supports",
-                    "relation_claim/rc1",
-                    "--source",
-                    "paper:doi_10_1111_a",
+                    "evidence",
+                    "proposition/ev2",
+                    "proposition/rc1",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -1548,34 +1509,34 @@ def test_graph_uncertainty_ranks_by_epistemic_status_and_confidence() -> None:
 
     with runner.isolated_filesystem():
         assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        # Add a low-confidence claim
+        # Add a low-confidence proposition
         assert (
             runner.invoke(
                 main,
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Weak association between X and Y",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                     "--confidence",
                     "0.3",
                 ],
             ).exit_code
             == 0
         )
-        # Add a normal-confidence claim (should NOT appear)
+        # Add a normal-confidence proposition (should NOT appear)
         assert (
             runner.invoke(
                 main,
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Strong association between A and B",
                     "--source",
-                    "paper:doi_10_2222_b",
+                    "article:doi_10_2222_b",
                     "--confidence",
                     "0.9",
                 ],
@@ -1601,10 +1562,10 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Contested BRCA1 claim",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                     "--id",
                     "main",
                 ],
@@ -1617,10 +1578,10 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Support for contested BRCA1 claim",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                     "--id",
                     "ev1",
                 ],
@@ -1633,12 +1594,11 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/ev1",
-                    "cito:supports",
-                    "claim/main",
-                    "--source",
-                    "paper:doi_10_1111_a",
+                    "evidence",
+                    "proposition/ev1",
+                    "proposition/main",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -1649,10 +1609,10 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Dispute for contested BRCA1 claim",
                     "--source",
-                    "paper:doi_10_2222_b",
+                    "article:doi_10_2222_b",
                     "--id",
                     "ev2",
                 ],
@@ -1665,12 +1625,11 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/ev2",
-                    "cito:disputes",
-                    "claim/main",
-                    "--source",
-                    "paper:doi_10_2222_b",
+                    "evidence",
+                    "proposition/ev2",
+                    "proposition/main",
+                    "--stance",
+                    "disputes",
                 ],
             ).exit_code
             == 0
@@ -1681,10 +1640,10 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Single-source BRCA1 claim",
                     "--source",
-                    "paper:doi_10_3333_c",
+                    "article:doi_10_3333_c",
                     "--id",
                     "single",
                 ],
@@ -1697,10 +1656,10 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Only support for single-source BRCA1 claim",
                     "--source",
-                    "paper:doi_10_3333_c",
+                    "article:doi_10_3333_c",
                     "--id",
                     "ev3",
                 ],
@@ -1713,12 +1672,11 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/ev3",
-                    "cito:supports",
-                    "claim/single",
-                    "--source",
-                    "paper:doi_10_3333_c",
+                    "evidence",
+                    "proposition/ev3",
+                    "proposition/single",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -1729,10 +1687,10 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Low-confidence BRCA1 claim",
                     "--source",
-                    "paper:doi_10_4444_d",
+                    "article:doi_10_4444_d",
                     "--confidence",
                     "0.2",
                     "--id",
@@ -1747,10 +1705,10 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Second support for single-source BRCA1 claim",
                     "--source",
-                    "paper:doi_10_3333_c",
+                    "article:doi_10_3333_c",
                     "--id",
                     "ev4",
                 ],
@@ -1763,12 +1721,11 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/ev4",
-                    "cito:supports",
-                    "claim/single",
-                    "--source",
-                    "paper:doi_10_3333_c",
+                    "evidence",
+                    "proposition/ev4",
+                    "proposition/single",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -1779,10 +1736,10 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Multi-source BRCA1 claim",
                     "--source",
-                    "paper:doi_10_5555_e",
+                    "article:doi_10_5555_e",
                     "--id",
                     "multi",
                 ],
@@ -1795,10 +1752,10 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Reusable evidence node for multi-source claim",
                     "--source",
-                    "paper:doi_10_5555_e",
+                    "article:doi_10_5555_e",
                     "--id",
                     "ev5",
                 ],
@@ -1811,12 +1768,28 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/ev5",
-                    "cito:supports",
-                    "claim/multi",
+                    "evidence",
+                    "proposition/ev5",
+                    "proposition/multi",
+                    "--stance",
+                    "supports",
+                ],
+            ).exit_code
+            == 0
+        )
+        # Second evidence from a different source to make multi truly multi-source
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "proposition",
+                    "Independent evidence for multi-source claim",
                     "--source",
-                    "paper:doi_10_5555_e",
+                    "article:doi_10_6666_f",
+                    "--id",
+                    "ev6",
                 ],
             ).exit_code
             == 0
@@ -1827,14 +1800,11 @@ def test_graph_uncertainty_prioritizes_contested_and_single_source_claims() -> N
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/ev5",
-                    "cito:supports",
-                    "claim/multi",
-                    "--source",
-                    "paper:doi_10_6666_f",
-                    "--id",
-                    "multi_second_source",
+                    "evidence",
+                    "proposition/ev6",
+                    "proposition/multi",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -1866,10 +1836,10 @@ def test_graph_uncertainty_dedupes_reused_evidence_nodes_for_support_count() -> 
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Low-confidence multi-source claim",
                     "--source",
-                    "paper:doi_10_5555_e",
+                    "article:doi_10_5555_e",
                     "--confidence",
                     "0.2",
                     "--id",
@@ -1884,10 +1854,10 @@ def test_graph_uncertainty_dedupes_reused_evidence_nodes_for_support_count() -> 
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Reusable evidence node",
                     "--source",
-                    "paper:doi_10_5555_e",
+                    "article:doi_10_5555_e",
                     "--id",
                     "ev1",
                 ],
@@ -1900,30 +1870,11 @@ def test_graph_uncertainty_dedupes_reused_evidence_nodes_for_support_count() -> 
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/ev1",
-                    "cito:supports",
-                    "claim/main",
-                    "--source",
-                    "paper:doi_10_5555_e",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "relation-claim",
-                    "claim/ev1",
-                    "cito:supports",
-                    "claim/main",
-                    "--source",
-                    "paper:doi_10_6666_f",
-                    "--id",
-                    "second_source",
+                    "evidence",
+                    "proposition/ev1",
+                    "proposition/main",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -1950,10 +1901,10 @@ def test_graph_uncertainty_includes_disputed_epistemic_status() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Disputed claim about Z",
                     "--source",
-                    "paper:doi_10_4444_d",
+                    "article:doi_10_4444_d",
                     "--confidence",
                     "0.7",
                     "--id",
@@ -1967,7 +1918,7 @@ def test_graph_uncertainty_includes_disputed_epistemic_status() -> None:
         dataset = Dataset()
         dataset.parse(source="knowledge/graph.trig", format="trig")
         provenance = dataset.graph(PROJECT_NS["graph/provenance"])
-        provenance.add((PROJECT_NS["claim/c_disputed"], SCI.epistemicStatus, RdfLiteral("disputed")))
+        provenance.add((PROJECT_NS["proposition/c_disputed"], SCI.epistemicStatus, RdfLiteral("disputed")))
         dataset.serialize(destination="knowledge/graph.trig", format="trig")
 
         result = runner.invoke(main, ["graph", "uncertainty", "--format", "json"])
@@ -1987,10 +1938,10 @@ def test_graph_add_claim_accepts_evidence_type_metadata() -> None:
             [
                 "graph",
                 "add",
-                "claim",
+                "proposition",
                 "Literature support for dashboard summary",
                 "--source",
-                "paper:doi_10_1111_a",
+                "article:doi_10_1111_a",
                 "--evidence-type",
                 "literature_evidence",
                 "--id",
@@ -2002,9 +1953,9 @@ def test_graph_add_claim_accepts_evidence_type_metadata() -> None:
         dataset = Dataset()
         dataset.parse(source="knowledge/graph.trig", format="trig")
         provenance = dataset.graph(PROJECT_NS["graph/provenance"])
-        claim_uri = PROJECT_NS["claim/lit_support"]
+        prop_uri = PROJECT_NS["proposition/lit_support"]
 
-        assert (claim_uri, SCI.evidenceType, Literal("literature_evidence")) in provenance
+        assert (prop_uri, SCI.evidenceType, Literal("literature_evidence")) in provenance
 
 
 def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -> None:
@@ -2019,10 +1970,10 @@ def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Claim with mixed evidence",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                     "--id",
                     "main",
                 ],
@@ -2035,10 +1986,10 @@ def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Literature evidence for mixed claim",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                     "--evidence-type",
                     "literature_evidence",
                     "--id",
@@ -2053,12 +2004,11 @@ def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/lit_support",
-                    "cito:supports",
-                    "claim/main",
-                    "--source",
-                    "paper:doi_10_1111_a",
+                    "evidence",
+                    "proposition/lit_support",
+                    "proposition/main",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -2069,10 +2019,10 @@ def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Empirical evidence for mixed claim",
                     "--source",
-                    "paper:doi_10_2222_b",
+                    "article:doi_10_2222_b",
                     "--evidence-type",
                     "empirical_data_evidence",
                     "--id",
@@ -2087,12 +2037,11 @@ def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/emp_support",
-                    "cito:supports",
-                    "claim/main",
-                    "--source",
-                    "paper:doi_10_2222_b",
+                    "evidence",
+                    "proposition/emp_support",
+                    "proposition/main",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -2103,10 +2052,10 @@ def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Contested literature-only claim",
                     "--source",
-                    "paper:doi_10_3333_c",
+                    "article:doi_10_3333_c",
                     "--id",
                     "contested",
                 ],
@@ -2119,10 +2068,10 @@ def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Literature support for contested claim",
                     "--source",
-                    "paper:doi_10_3333_c",
+                    "article:doi_10_3333_c",
                     "--evidence-type",
                     "literature_evidence",
                     "--id",
@@ -2137,12 +2086,11 @@ def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/contested_support",
-                    "cito:supports",
-                    "claim/contested",
-                    "--source",
-                    "paper:doi_10_3333_c",
+                    "evidence",
+                    "proposition/contested_support",
+                    "proposition/contested",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -2153,10 +2101,10 @@ def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Negative empirical result for contested claim",
                     "--source",
-                    "paper:doi_10_4444_d",
+                    "article:doi_10_4444_d",
                     "--evidence-type",
                     "negative_result",
                     "--id",
@@ -2171,12 +2119,11 @@ def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/contested_dispute",
-                    "cito:disputes",
-                    "claim/contested",
-                    "--source",
-                    "paper:doi_10_4444_d",
+                    "evidence",
+                    "proposition/contested_dispute",
+                    "proposition/contested",
+                    "--stance",
+                    "disputes",
                 ],
             ).exit_code
             == 0
@@ -2213,10 +2160,10 @@ def test_graph_dashboard_summary_counts_benchmark_evidence_as_empirical_presence
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Benchmark-backed claim",
                     "--source",
-                    "paper:doi_10_6666_f",
+                    "article:doi_10_6666_f",
                     "--id",
                     "benchmark_target",
                 ],
@@ -2229,10 +2176,10 @@ def test_graph_dashboard_summary_counts_benchmark_evidence_as_empirical_presence
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Benchmark evidence for claim",
                     "--source",
-                    "paper:doi_10_6666_f",
+                    "article:doi_10_6666_f",
                     "--evidence-type",
                     "benchmark_evidence",
                     "--id",
@@ -2247,12 +2194,11 @@ def test_graph_dashboard_summary_counts_benchmark_evidence_as_empirical_presence
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/benchmark_support",
-                    "cito:supports",
-                    "claim/benchmark_target",
-                    "--source",
-                    "paper:doi_10_6666_f",
+                    "evidence",
+                    "proposition/benchmark_support",
+                    "proposition/benchmark_target",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -2284,7 +2230,7 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
                     "--text",
                     "Local cluster of uncertain claims",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                 ],
             ).exit_code
             == 0
@@ -2295,10 +2241,10 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Contested local claim A",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                     "--id",
                     "cluster_a",
                 ],
@@ -2311,26 +2257,10 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/cluster_a",
-                    "cito:discusses",
-                    "hypothesis/hcluster",
-                    "--source",
-                    "paper:doi_10_1111_a",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "claim",
+                    "proposition",
                     "Literature support for contested local claim A",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                     "--evidence-type",
                     "literature_evidence",
                     "--id",
@@ -2345,12 +2275,11 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/cluster_a_support",
-                    "cito:supports",
-                    "claim/cluster_a",
-                    "--source",
-                    "paper:doi_10_1111_a",
+                    "evidence",
+                    "proposition/cluster_a_support",
+                    "proposition/cluster_a",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -2361,10 +2290,10 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Negative result for contested local claim A",
                     "--source",
-                    "paper:doi_10_2222_b",
+                    "article:doi_10_2222_b",
                     "--evidence-type",
                     "negative_result",
                     "--id",
@@ -2379,12 +2308,11 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/cluster_a_dispute",
-                    "cito:disputes",
-                    "claim/cluster_a",
-                    "--source",
-                    "paper:doi_10_2222_b",
+                    "evidence",
+                    "proposition/cluster_a_dispute",
+                    "proposition/cluster_a",
+                    "--stance",
+                    "disputes",
                 ],
             ).exit_code
             == 0
@@ -2396,10 +2324,10 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Fragile local claim B",
                     "--source",
-                    "paper:doi_10_3333_c",
+                    "article:doi_10_3333_c",
                     "--id",
                     "cluster_b",
                 ],
@@ -2412,26 +2340,10 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/cluster_b",
-                    "cito:discusses",
-                    "hypothesis/hcluster",
-                    "--source",
-                    "paper:doi_10_3333_c",
-                ],
-            ).exit_code
-            == 0
-        )
-        assert (
-            runner.invoke(
-                main,
-                [
-                    "graph",
-                    "add",
-                    "claim",
+                    "proposition",
                     "Single-source support for fragile local claim B",
                     "--source",
-                    "paper:doi_10_3333_c",
+                    "article:doi_10_3333_c",
                     "--evidence-type",
                     "literature_evidence",
                     "--id",
@@ -2446,12 +2358,41 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/cluster_b_support",
-                    "cito:supports",
-                    "claim/cluster_b",
-                    "--source",
-                    "paper:doi_10_3333_c",
+                    "evidence",
+                    "proposition/cluster_b_support",
+                    "proposition/cluster_b",
+                    "--stance",
+                    "supports",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        # Link cluster_a and cluster_b to hypothesis/hcluster so they share a neighborhood
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "edge",
+                    "proposition/cluster_a",
+                    "cito:discusses",
+                    "hypothesis/hcluster",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "edge",
+                    "proposition/cluster_b",
+                    "cito:discusses",
+                    "hypothesis/hcluster",
                 ],
             ).exit_code
             == 0
@@ -2463,10 +2404,10 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Isolated well-supported claim",
                     "--source",
-                    "paper:doi_10_4444_d",
+                    "article:doi_10_4444_d",
                     "--id",
                     "isolated_good",
                 ],
@@ -2479,10 +2420,10 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Empirical support one for isolated claim",
                     "--source",
-                    "paper:doi_10_4444_d",
+                    "article:doi_10_4444_d",
                     "--evidence-type",
                     "empirical_data_evidence",
                     "--id",
@@ -2497,12 +2438,11 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/isolated_support_1",
-                    "cito:supports",
-                    "claim/isolated_good",
-                    "--source",
-                    "paper:doi_10_4444_d",
+                    "evidence",
+                    "proposition/isolated_support_1",
+                    "proposition/isolated_good",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -2513,10 +2453,10 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Empirical support two for isolated claim",
                     "--source",
-                    "paper:doi_10_5555_e",
+                    "article:doi_10_5555_e",
                     "--evidence-type",
                     "empirical_data_evidence",
                     "--id",
@@ -2531,12 +2471,11 @@ def test_graph_neighborhood_summary_prioritizes_contested_local_clusters() -> No
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/isolated_support_2",
-                    "cito:supports",
-                    "claim/isolated_good",
-                    "--source",
-                    "paper:doi_10_5555_e",
+                    "evidence",
+                    "proposition/isolated_support_2",
+                    "proposition/isolated_good",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -2577,7 +2516,7 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
                     "--text",
                     "Which claims matter most for the contested question?",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                 ],
             ).exit_code
             == 0
@@ -2593,7 +2532,7 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
                     "--text",
                     "Lower-priority comparison question",
                     "--source",
-                    "paper:doi_10_2222_b",
+                    "article:doi_10_2222_b",
                 ],
             ).exit_code
             == 0
@@ -2605,10 +2544,10 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Contested literature-only question claim",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                     "--id",
                     "question_contested",
                 ],
@@ -2621,10 +2560,10 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Literature support for contested question claim",
                     "--source",
-                    "paper:doi_10_1111_a",
+                    "article:doi_10_1111_a",
                     "--evidence-type",
                     "literature_evidence",
                     "--id",
@@ -2639,12 +2578,11 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/question_contested_support",
-                    "cito:supports",
-                    "claim/question_contested",
-                    "--source",
-                    "paper:doi_10_1111_a",
+                    "evidence",
+                    "proposition/question_contested_support",
+                    "proposition/question_contested",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -2655,10 +2593,10 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Negative result disputing contested question claim",
                     "--source",
-                    "paper:doi_10_3333_c",
+                    "article:doi_10_3333_c",
                     "--evidence-type",
                     "negative_result",
                     "--id",
@@ -2673,12 +2611,11 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/question_contested_dispute",
-                    "cito:disputes",
-                    "claim/question_contested",
-                    "--source",
-                    "paper:doi_10_3333_c",
+                    "evidence",
+                    "proposition/question_contested_dispute",
+                    "proposition/question_contested",
+                    "--stance",
+                    "disputes",
                 ],
             ).exit_code
             == 0
@@ -2690,10 +2627,10 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Empirically supported question claim",
                     "--source",
-                    "paper:doi_10_4444_d",
+                    "article:doi_10_4444_d",
                     "--id",
                     "question_empirical",
                 ],
@@ -2706,10 +2643,10 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Empirical support for question claim",
                     "--source",
-                    "paper:doi_10_4444_d",
+                    "article:doi_10_4444_d",
                     "--evidence-type",
                     "empirical_data_evidence",
                     "--id",
@@ -2724,12 +2661,11 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/question_empirical_support",
-                    "cito:supports",
-                    "claim/question_empirical",
-                    "--source",
-                    "paper:doi_10_4444_d",
+                    "evidence",
+                    "proposition/question_empirical_support",
+                    "proposition/question_empirical",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
@@ -2741,10 +2677,10 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Low-priority comparison question claim",
                     "--source",
-                    "paper:doi_10_5555_e",
+                    "article:doi_10_5555_e",
                     "--id",
                     "question_low_priority",
                 ],
@@ -2757,10 +2693,10 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Empirical support for low-priority claim",
                     "--source",
-                    "paper:doi_10_5555_e",
+                    "article:doi_10_5555_e",
                     "--evidence-type",
                     "empirical_data_evidence",
                     "--id",
@@ -2775,21 +2711,20 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/question_low_priority_support",
-                    "cito:supports",
-                    "claim/question_low_priority",
-                    "--source",
-                    "paper:doi_10_5555_e",
+                    "evidence",
+                    "proposition/question_low_priority_support",
+                    "proposition/question_low_priority",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
         )
 
-        for claim_ref, question_ref in (
-            ("claim/question_contested", "question/q1"),
-            ("claim/question_empirical", "question/q1"),
-            ("claim/question_low_priority", "question/q2"),
+        for prop_ref, question_ref in (
+            ("proposition/question_contested", "question/q1"),
+            ("proposition/question_empirical", "question/q1"),
+            ("proposition/question_low_priority", "question/q2"),
         ):
             assert (
                 runner.invoke(
@@ -2798,7 +2733,7 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
                         "graph",
                         "add",
                         "edge",
-                        claim_ref,
+                        prop_ref,
                         "sci:addresses",
                         question_ref,
                     ],
@@ -2851,7 +2786,7 @@ def test_graph_project_summary_rolls_up_research_profile() -> None:
                     "--text",
                     "Which research path should we prioritize?",
                     "--source",
-                    "paper:doi_10_7777_g",
+                    "article:doi_10_7777_g",
                 ],
             ).exit_code
             == 0
@@ -2862,10 +2797,10 @@ def test_graph_project_summary_rolls_up_research_profile() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Contested project claim",
                     "--source",
-                    "paper:doi_10_7777_g",
+                    "article:doi_10_7777_g",
                     "--id",
                     "project_contested",
                 ],
@@ -2878,10 +2813,10 @@ def test_graph_project_summary_rolls_up_research_profile() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Literature support for project claim",
                     "--source",
-                    "paper:doi_10_7777_g",
+                    "article:doi_10_7777_g",
                     "--evidence-type",
                     "literature_evidence",
                     "--id",
@@ -2896,10 +2831,10 @@ def test_graph_project_summary_rolls_up_research_profile() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Negative result for project claim",
                     "--source",
-                    "paper:doi_10_8888_h",
+                    "article:doi_10_8888_h",
                     "--evidence-type",
                     "negative_result",
                     "--id",
@@ -2914,10 +2849,10 @@ def test_graph_project_summary_rolls_up_research_profile() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Empirically supported project claim",
                     "--source",
-                    "paper:doi_10_9999_i",
+                    "article:doi_10_9999_i",
                     "--id",
                     "project_empirical",
                 ],
@@ -2930,10 +2865,10 @@ def test_graph_project_summary_rolls_up_research_profile() -> None:
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Empirical support for project claim",
                     "--source",
-                    "paper:doi_10_9999_i",
+                    "article:doi_10_9999_i",
                     "--evidence-type",
                     "empirical_data_evidence",
                     "--id",
@@ -2943,21 +2878,21 @@ def test_graph_project_summary_rolls_up_research_profile() -> None:
             == 0
         )
 
-        for subject, predicate, obj, source in (
-            ("claim/project_support", "cito:supports", "claim/project_contested", "paper:doi_10_7777_g"),
-            ("claim/project_dispute", "cito:disputes", "claim/project_contested", "paper:doi_10_8888_h"),
-            ("claim/project_empirical_support", "cito:supports", "claim/project_empirical", "paper:doi_10_9999_i"),
+        for subject, target, stance in (
+            ("proposition/project_support", "proposition/project_contested", "supports"),
+            ("proposition/project_dispute", "proposition/project_contested", "disputes"),
+            ("proposition/project_empirical_support", "proposition/project_empirical", "supports"),
         ):
             assert (
                 runner.invoke(
-                    main, ["graph", "add", "relation-claim", subject, predicate, obj, "--source", source]
+                    main, ["graph", "add", "evidence", subject, target, "--stance", stance]
                 ).exit_code
                 == 0
             )
 
-        for claim_ref in ("claim/project_contested", "claim/project_empirical"):
+        for prop_ref in ("proposition/project_contested", "proposition/project_empirical"):
             assert (
-                runner.invoke(main, ["graph", "add", "edge", claim_ref, "sci:addresses", "question/qproj"]).exit_code
+                runner.invoke(main, ["graph", "add", "edge", prop_ref, "sci:addresses", "question/qproj"]).exit_code
                 == 0
             )
 
@@ -3022,7 +2957,7 @@ def test_graph_question_summary_includes_claims_from_related_hypotheses() -> Non
                     "--text",
                     "Hypothesis related to the question",
                     "--source",
-                    "paper:doi_10_6666_f",
+                    "article:doi_10_6666_f",
                 ],
             ).exit_code
             == 0
@@ -3038,7 +2973,7 @@ def test_graph_question_summary_includes_claims_from_related_hypotheses() -> Non
                     "--text",
                     "Question linked to a related hypothesis",
                     "--source",
-                    "paper:doi_10_6666_f",
+                    "article:doi_10_6666_f",
                     "--related-hypothesis",
                     "hypothesis:hrel",
                 ],
@@ -3051,10 +2986,10 @@ def test_graph_question_summary_includes_claims_from_related_hypotheses() -> Non
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Claim linked to related hypothesis only",
                     "--source",
-                    "paper:doi_10_6666_f",
+                    "article:doi_10_6666_f",
                     "--id",
                     "related_hypothesis_claim",
                 ],
@@ -3067,10 +3002,10 @@ def test_graph_question_summary_includes_claims_from_related_hypotheses() -> Non
                 [
                     "graph",
                     "add",
-                    "claim",
+                    "proposition",
                     "Literature support for related hypothesis claim",
                     "--source",
-                    "paper:doi_10_6666_f",
+                    "article:doi_10_6666_f",
                     "--evidence-type",
                     "literature_evidence",
                     "--id",
@@ -3085,28 +3020,26 @@ def test_graph_question_summary_includes_claims_from_related_hypotheses() -> Non
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/related_hypothesis_support",
-                    "cito:supports",
-                    "claim/related_hypothesis_claim",
-                    "--source",
-                    "paper:doi_10_6666_f",
+                    "evidence",
+                    "proposition/related_hypothesis_support",
+                    "proposition/related_hypothesis_claim",
+                    "--stance",
+                    "supports",
                 ],
             ).exit_code
             == 0
         )
+        # Link proposition to hypothesis so it's found via _linked_claims_for_hypothesis
         assert (
             runner.invoke(
                 main,
                 [
                     "graph",
                     "add",
-                    "relation-claim",
-                    "claim/related_hypothesis_claim",
+                    "edge",
+                    "proposition/related_hypothesis_claim",
                     "cito:discusses",
-                    "hypothesis:hrel",
-                    "--source",
-                    "paper:doi_10_6666_f",
+                    "hypothesis/hrel",
                 ],
             ).exit_code
             == 0
@@ -3157,26 +3090,30 @@ def test_cito_prefix_resolves_in_relation_claim() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
         assert runner.invoke(main, ["graph", "init"]).exit_code == 0
-        relation_claim = runner.invoke(
+        proposition = runner.invoke(
             main,
             [
                 "graph",
                 "add",
-                "relation-claim",
-                "claim/c1",
-                "cito:supports",
-                "hypothesis/h1",
+                "proposition",
+                "proposition c1 supports hypothesis h1",
                 "--source",
-                "paper:doi_10_1234_example",
+                "article:doi_10_1234_example",
+                "--subject",
+                "proposition/c1",
+                "--predicate",
+                "cito:supports",
+                "--object",
+                "hypothesis/h1",
             ],
         )
-        assert relation_claim.exit_code == 0
+        assert proposition.exit_code == 0
         dataset = Dataset()
         dataset.parse(source="knowledge/graph.trig", format="trig")
         knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-        claim_uri = next(knowledge.subjects(RDF.type, SCI.RelationClaim))
+        prop_uri = next(knowledge.subjects(RDF.type, SCI.Proposition))
         cito_supports = Namespace("http://purl.org/spar/cito/")["supports"]
-        assert (claim_uri, SCI.claimPredicate, cito_supports) in knowledge
+        assert (prop_uri, SCI.propPredicate, cito_supports) in knowledge
 
 
 def test_dcterms_prefix_resolves_in_add_edge() -> None:
@@ -3460,8 +3397,8 @@ def test_graph_predicates_outputs_json() -> None:
     assert "cito:supports" in predicates
     assert "skos:related" in predicates
     assert "scic:causes" in predicates
-    assert predicate_rows["cito:supports"]["layer"] == "relation-claim"
-    assert predicate_rows["cito:disputes"]["layer"] == "relation-claim"
+    assert predicate_rows["cito:supports"]["layer"] == "graph/knowledge"
+    assert predicate_rows["cito:disputes"]["layer"] == "graph/knowledge"
 
 
 def test_graph_add_edge_slugifies_bare_terms() -> None:

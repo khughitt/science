@@ -141,20 +141,22 @@ CURIE_PREFIXES: dict[str, Namespace] = {
     "dcterms": DCTERMS_NS,
 }
 PROJECT_ENTITY_PREFIXES: set[str] = {
-    "paper",
+    "proposition",
+    "observation",
     "concept",
-    "claim",
-    "relation_claim",
     "hypothesis",
     "dataset",
     "question",
-    "evidence",
     "inquiry",
     "task",
     "data-package",
-    "artifact",
+    "finding",
+    "interpretation",
+    "story",
+    "paper",
+    "article",
 }
-RELATION_CLAIM_PREDICATE_URIS: frozenset[URIRef] = frozenset(
+STRUCTURED_PROPOSITION_PREDICATES: frozenset[URIRef] = frozenset(
     {
         SCI_NS.relatedTo,
         SCIC_NS.causes,
@@ -162,6 +164,14 @@ RELATION_CLAIM_PREDICATE_URIS: frozenset[URIRef] = frozenset(
         CITO_NS.supports,
         CITO_NS.disputes,
         CITO_NS.discusses,
+    }
+)
+
+# Predicates that require explicit epistemic tracking via add_evidence_edge
+EVIDENCE_STANCE_PREDICATES: frozenset[URIRef] = frozenset(
+    {
+        CITO_NS.supports,
+        CITO_NS.disputes,
     }
 )
 
@@ -253,95 +263,151 @@ def add_concept(
     return concept_uri
 
 
-def add_paper(graph_path: Path, doi: str) -> URIRef:
+def add_article(graph_path: Path, doi: str) -> URIRef:
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
 
     doi_slug = _slug(doi)
-    paper_uri = URIRef(PROJECT_NS[f"paper/doi_{doi_slug}"])
-    knowledge.add((paper_uri, RDF.type, SCI_NS.Paper))
-    knowledge.add((paper_uri, SCHEMA_NS.identifier, Literal(doi)))
+    article_uri = URIRef(PROJECT_NS[f"article/doi_{doi_slug}"])
+    knowledge.add((article_uri, RDF.type, SCI_NS.Article))
+    knowledge.add((article_uri, SCHEMA_NS.identifier, Literal(doi)))
 
     _save_dataset(dataset, graph_path)
-    return paper_uri
+    return article_uri
 
 
-def add_claim(
+def add_proposition(
     graph_path: Path,
     text: str,
     source: str,
-    confidence: float | None,
+    confidence: float | None = None,
     evidence_type: str | None = None,
-    claim_id: str | None = None,
+    proposition_id: str | None = None,
+    subject: str | None = None,
+    predicate: str | None = None,
+    obj: str | None = None,
 ) -> URIRef:
+    """Add a proposition to the knowledge graph.
+
+    When subject/predicate/obj are provided, the proposition has structured
+    S-P-O form (replacing the former relation_claim).
+    """
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
 
-    if claim_id is not None:
-        token = _slug(claim_id)
+    if proposition_id is not None:
+        token = _slug(proposition_id)
         if not token:
-            raise click.ClickException("Claim ID must contain at least one alphanumeric character")
+            raise click.ClickException("Proposition ID must contain at least one alphanumeric character")
     else:
         token = hashlib.sha1(f"{source}|{text}".encode("utf-8")).hexdigest()[:12]
 
-    claim_uri = URIRef(PROJECT_NS[f"claim/{token}"])
-    knowledge.add((claim_uri, RDF.type, SCI_NS.Claim))
-    knowledge.add((claim_uri, SCHEMA_NS.text, Literal(text)))
+    prop_uri = URIRef(PROJECT_NS[f"proposition/{token}"])
+    knowledge.add((prop_uri, RDF.type, SCI_NS.Proposition))
+    knowledge.add((prop_uri, SCHEMA_NS.text, Literal(text)))
 
-    provenance.add((claim_uri, PROV.wasDerivedFrom, _resolve_term(source)))
+    # Structured S-P-O form (optional)
+    if subject and predicate and obj:
+        subject_uri = _resolve_term(subject)
+        predicate_uri = _resolve_term(predicate)
+        object_uri = _resolve_term(obj)
+        knowledge.add((prop_uri, SCI_NS.propSubject, subject_uri))
+        knowledge.add((prop_uri, SCI_NS.propPredicate, predicate_uri))
+        knowledge.add((prop_uri, SCI_NS.propObject, object_uri))
+
+    provenance.add((prop_uri, PROV.wasDerivedFrom, _resolve_term(source)))
     if confidence is not None:
-        provenance.add((claim_uri, SCI_NS.confidence, Literal(confidence, datatype=XSD.decimal)))
+        provenance.add((prop_uri, SCI_NS.confidence, Literal(confidence, datatype=XSD.decimal)))
     if evidence_type is not None:
-        provenance.add((claim_uri, SCI_NS.evidenceType, Literal(evidence_type)))
+        provenance.add((prop_uri, SCI_NS.evidenceType, Literal(evidence_type)))
 
     _save_dataset(dataset, graph_path)
-    return claim_uri
+    return prop_uri
 
 
-def add_relation_claim(
+def add_observation(
     graph_path: Path,
-    subject: str,
-    predicate: str,
-    obj: str,
-    source: str,
-    confidence: float | None,
-    evidence_type: str | None = None,
-    text: str | None = None,
-    claim_id: str | None = None,
+    description: str,
+    data_source: str,
+    metric: str | None = None,
+    value: str | None = None,
+    uncertainty: str | None = None,
+    conditions: str | None = None,
+    observation_id: str | None = None,
 ) -> URIRef:
+    """Add an observation — a concrete empirical fact anchored to data."""
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
-    provenance = dataset.graph(_graph_uri("graph/provenance"))
 
-    if claim_id is not None:
-        token = _slug(claim_id)
+    if observation_id is not None:
+        token = _slug(observation_id)
         if not token:
-            raise click.ClickException("Claim ID must contain at least one alphanumeric character")
+            raise click.ClickException("Observation ID must contain at least one alphanumeric character")
     else:
-        token = hashlib.sha1(f"{subject}|{predicate}|{obj}|{source}".encode("utf-8")).hexdigest()[:12]
+        token = hashlib.sha1(f"{data_source}|{description}".encode("utf-8")).hexdigest()[:12]
 
-    claim_uri = URIRef(PROJECT_NS[f"relation_claim/{token}"])
-    subject_uri = _resolve_term(subject)
-    predicate_uri = _resolve_term(predicate)
-    object_uri = _resolve_term(obj)
-    claim_text = text or _derive_relation_claim_text(subject_uri, predicate_uri, object_uri)
-
-    knowledge.add((claim_uri, RDF.type, SCI_NS.Claim))
-    knowledge.add((claim_uri, RDF.type, SCI_NS.RelationClaim))
-    knowledge.add((claim_uri, SCHEMA_NS.text, Literal(claim_text)))
-    knowledge.add((claim_uri, SCI_NS.claimSubject, subject_uri))
-    knowledge.add((claim_uri, SCI_NS.claimPredicate, predicate_uri))
-    knowledge.add((claim_uri, SCI_NS.claimObject, object_uri))
-
-    provenance.add((claim_uri, PROV.wasDerivedFrom, _resolve_term(source)))
-    if confidence is not None:
-        provenance.add((claim_uri, SCI_NS.confidence, Literal(confidence, datatype=XSD.decimal)))
-    if evidence_type is not None:
-        provenance.add((claim_uri, SCI_NS.evidenceType, Literal(evidence_type)))
+    obs_uri = URIRef(PROJECT_NS[f"observation/{token}"])
+    knowledge.add((obs_uri, RDF.type, SCI_NS.Observation))
+    knowledge.add((obs_uri, SCHEMA_NS.description, Literal(description)))
+    knowledge.add((obs_uri, SCI_NS.dataSource, _resolve_term(data_source)))
+    if metric:
+        knowledge.add((obs_uri, SCI_NS.metric, Literal(metric)))
+    if value:
+        knowledge.add((obs_uri, SCI_NS.value, Literal(value)))
+    if uncertainty:
+        knowledge.add((obs_uri, SCI_NS.uncertainty, Literal(uncertainty)))
+    if conditions:
+        knowledge.add((obs_uri, SCI_NS.conditions, Literal(conditions)))
 
     _save_dataset(dataset, graph_path)
-    return claim_uri
+    return obs_uri
+
+
+def add_evidence_edge(
+    graph_path: Path,
+    source_entity: str,
+    target_entity: str,
+    stance: str,
+    strength: str | None = None,
+    caveats: str | None = None,
+    method: str | None = None,
+) -> None:
+    """Add a supports/disputes evidence edge with annotations.
+
+    Evidence is a relation (annotated edge), not a node.
+    In RDF: reified statement in the provenance layer.
+    """
+    if stance not in ("supports", "disputes"):
+        raise click.ClickException(f"Stance must be 'supports' or 'disputes', got '{stance}'")
+
+    dataset = _load_dataset(graph_path)
+    provenance = dataset.graph(_graph_uri("graph/provenance"))
+
+    source_uri = _resolve_term(source_entity)
+    target_uri = _resolve_term(target_entity)
+    predicate_uri = CITO_NS.supports if stance == "supports" else CITO_NS.disputes
+
+    # Add the direct edge in knowledge layer
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+    knowledge.add((source_uri, predicate_uri, target_uri))
+
+    # Reify in provenance for annotations
+    stmt_token = hashlib.sha1(f"{source_entity}|{stance}|{target_entity}".encode("utf-8")).hexdigest()[:12]
+    stmt_uri = URIRef(PROJECT_NS[f"evidence/{stmt_token}"])
+    provenance.add((stmt_uri, RDF.type, RDF.Statement))
+    provenance.add((stmt_uri, RDF.subject, source_uri))
+    provenance.add((stmt_uri, RDF.predicate, predicate_uri))
+    provenance.add((stmt_uri, RDF.object, target_uri))
+
+    if strength:
+        provenance.add((stmt_uri, SCI_NS.evidenceStrength, Literal(strength)))
+    if caveats:
+        provenance.add((stmt_uri, SCI_NS.evidenceCaveats, Literal(caveats)))
+    if method:
+        provenance.add((stmt_uri, SCI_NS.evidenceMethod, Literal(method)))
+
+    _save_dataset(dataset, graph_path)
 
 
 def add_hypothesis(graph_path: Path, hypothesis_id: str, text: str, source: str, status: str | None = None) -> URIRef:
@@ -412,9 +478,9 @@ def add_edge(
     p_uri = _resolve_term(predicate)
     o_uri = _resolve_term(obj)
 
-    if graph_layer == "graph/knowledge" and p_uri in RELATION_CLAIM_PREDICATE_URIS:
+    if graph_layer == "graph/knowledge" and p_uri in EVIDENCE_STANCE_PREDICATES:
         raise click.ClickException(
-            f"Predicate '{predicate}' is an uncertain scientific assertion; use 'graph add relation-claim' instead."
+            f"Predicate '{predicate}' is an evidence stance predicate; use 'graph add evidence' instead."
         )
 
     # Warn if subject/object URIs don't exist in any graph yet
@@ -655,34 +721,6 @@ def add_data_package(
 
     if produced_by:
         knowledge.add((uri, SCI_NS.producedBy, _resolve_term(produced_by)))
-
-    _save_dataset(dataset, graph_path)
-    return uri
-
-
-def add_artifact(
-    graph_path: Path,
-    artifact_id: str,
-    title: str,
-    *,
-    artifact_type: str,
-    target: str | None = None,
-    derived_from: str | None = None,
-) -> URIRef:
-    """Add an artifact entity to the knowledge graph."""
-    dataset = _load_dataset(graph_path)
-    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
-
-    uri = URIRef(PROJECT_NS[f"artifact/{_slug(artifact_id)}"])
-    knowledge.add((uri, RDF.type, SCI_NS.Artifact))
-    knowledge.add((uri, SKOS.prefLabel, Literal(title)))
-    knowledge.add((uri, SCHEMA_NS.identifier, Literal(artifact_id)))
-    knowledge.add((uri, SCI_NS.artifactType, Literal(artifact_type)))
-
-    if target:
-        knowledge.add((uri, SCI_NS.target, Literal(target)))
-    if derived_from:
-        knowledge.add((uri, SCI_NS.derivedFrom, _resolve_term(derived_from)))
 
     _save_dataset(dataset, graph_path)
     return uri
@@ -1586,21 +1624,9 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     {"predicate": "skos:related", "description": "General association between concepts", "layer": "graph/knowledge"},
     {"predicate": "skos:broader", "description": "Broader concept hierarchy", "layer": "graph/knowledge"},
     {"predicate": "skos:narrower", "description": "Narrower concept hierarchy", "layer": "graph/knowledge"},
-    {
-        "predicate": "cito:supports",
-        "description": "Relation-claim predicate for support evidence",
-        "layer": "relation-claim",
-    },
-    {
-        "predicate": "cito:disputes",
-        "description": "Relation-claim predicate for disputing evidence",
-        "layer": "relation-claim",
-    },
-    {
-        "predicate": "cito:discusses",
-        "description": "Relation-claim predicate for claim/hypothesis discussion",
-        "layer": "relation-claim",
-    },
+    {"predicate": "cito:supports", "description": "Evidence edge: supports proposition", "layer": "graph/knowledge"},
+    {"predicate": "cito:disputes", "description": "Evidence edge: disputes proposition", "layer": "graph/knowledge"},
+    {"predicate": "cito:discusses", "description": "Structural link to hypothesis/topic", "layer": "graph/knowledge"},
     {"predicate": "cito:extends", "description": "Work extends prior research", "layer": "graph/knowledge"},
     {"predicate": "cito:usesMethodIn", "description": "Uses method from another work", "layer": "graph/knowledge"},
     {"predicate": "cito:citesAsDataSource", "description": "Cites as data source", "layer": "graph/knowledge"},
@@ -1613,10 +1639,21 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     {"predicate": "sci:confidence", "description": "Confidence score (0.0-1.0)", "layer": "graph/provenance"},
     {
         "predicate": "sci:evidenceType",
-        "description": "Evidence classification for claims/evidence items",
+        "description": "Evidence classification for propositions",
         "layer": "graph/provenance",
     },
-    {"predicate": "sci:epistemicStatus", "description": "Epistemic status of claim", "layer": "graph/provenance"},
+    {"predicate": "sci:epistemicStatus", "description": "Epistemic status of proposition", "layer": "graph/provenance"},
+    # Project Model compositional predicates
+    {"predicate": "sci:addresses", "description": "Question addresses proposition", "layer": "graph/knowledge"},
+    {"predicate": "sci:groundedBy", "description": "Finding grounded by data-package or workflow-run", "layer": "graph/knowledge"},
+    {"predicate": "sci:synthesizes", "description": "Story synthesizes interpretation", "layer": "graph/knowledge"},
+    {"predicate": "sci:organizedBy", "description": "Story organized by question or hypothesis", "layer": "graph/knowledge"},
+    {"predicate": "sci:comprises", "description": "Paper comprises stories", "layer": "graph/knowledge"},
+    {"predicate": "sci:grounds", "description": "Workflow-run grounds observation", "layer": "graph/provenance"},
+    {"predicate": "sci:dataSource", "description": "Observation data source reference", "layer": "graph/knowledge"},
+    {"predicate": "sci:evidenceStrength", "description": "Evidence edge strength annotation", "layer": "graph/provenance"},
+    {"predicate": "sci:evidenceCaveats", "description": "Evidence edge caveats annotation", "layer": "graph/provenance"},
+    {"predicate": "sci:evidenceMethod", "description": "Evidence edge method annotation", "layer": "graph/provenance"},
     {"predicate": "sci:maturity", "description": "Maturity of open question", "layer": "graph/knowledge"},
     {"predicate": "scic:causes", "description": "Causal relationship", "layer": "graph/causal"},
     {"predicate": "scic:confounds", "description": "Confounding relationship", "layer": "graph/causal"},
@@ -1633,7 +1670,7 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
     {"predicate": "sci:paramRef", "description": "Parameter reference", "layer": "inquiry"},
     {"predicate": "sci:paramNote", "description": "Parameter rationale", "layer": "inquiry"},
     {"predicate": "sci:observability", "description": "Variable observability status", "layer": "graph/knowledge"},
-    {"predicate": "sci:backedByClaim", "description": "Inquiry edge backed by relation claim", "layer": "inquiry"},
+    {"predicate": "sci:backedByClaim", "description": "Inquiry edge backed by proposition", "layer": "inquiry"},
     {"predicate": "sci:validatedBy", "description": "Step validated by criterion", "layer": "inquiry"},
     {"predicate": "sci:inquiryType", "description": "Inquiry type (general, causal)", "layer": "inquiry"},
     {
@@ -1699,7 +1736,7 @@ def validate_graph(graph_path: Path) -> tuple[list[dict[str, str]], bool]:
     causal = dataset.graph(_graph_uri("graph/causal"))
 
     provenance_failures = 0
-    for entity_type in (SCI_NS.Claim, SCI_NS.Hypothesis):
+    for entity_type in (SCI_NS.Proposition, SCI_NS.Hypothesis):
         for entity, _, _ in knowledge.triples((None, RDF.type, entity_type)):
             if not any(provenance.triples((entity, PROV.wasDerivedFrom, None))):
                 provenance_failures += 1
@@ -1709,7 +1746,7 @@ def validate_graph(graph_path: Path) -> tuple[list[dict[str, str]], bool]:
             {
                 "check": "provenance_completeness",
                 "status": "fail",
-                "details": f"{provenance_failures} claim/hypothesis entities missing prov:wasDerivedFrom",
+                "details": f"{provenance_failures} proposition/hypothesis entities missing prov:wasDerivedFrom",
             }
         )
     else:
@@ -1717,7 +1754,7 @@ def validate_graph(graph_path: Path) -> tuple[list[dict[str, str]], bool]:
             {
                 "check": "provenance_completeness",
                 "status": "pass",
-                "details": "all claims and hypotheses have provenance links",
+                "details": "all propositions and hypotheses have provenance links",
             }
         )
 
@@ -1741,7 +1778,7 @@ def validate_graph(graph_path: Path) -> tuple[list[dict[str, str]], bool]:
 
     # Orphaned nodes: entities with rdf:type but no other triples as subject or object
     typed_entities = set()
-    for entity_type in (SCI_NS.Concept, SCI_NS.Claim, SCI_NS.Hypothesis, SCI_NS.Question, SCI_NS.Task):
+    for entity_type in (SCI_NS.Concept, SCI_NS.Proposition, SCI_NS.Hypothesis, SCI_NS.Question, SCI_NS.Task):
         for entity, _, _ in knowledge.triples((None, RDF.type, entity_type)):
             typed_entities.add(entity)
     for entity, _, _ in knowledge.triples((None, RDF.type, SCIC_NS.Variable)):
@@ -1883,18 +1920,18 @@ def query_claims(graph_path: Path, about: str, limit: int) -> list[dict[str, str
 
     tokens = _about_tokens(about)
     rows: list[dict[str, str]] = []
-    for claim_uri, _, _ in knowledge.triples((None, RDF.type, SCI_NS.Claim)):
-        text_obj = next(knowledge.objects(claim_uri, SCHEMA_NS.text), None)
+    for prop_uri, _, _ in knowledge.triples((None, RDF.type, SCI_NS.Proposition)):
+        text_obj = next(knowledge.objects(prop_uri, SCHEMA_NS.text), None)
         if text_obj is None:
             continue
         text = str(text_obj)
         if not any(token in text.lower() for token in tokens):
             continue
 
-        sources = sorted({str(src) for src in provenance.objects(claim_uri, PROV.wasDerivedFrom)})
+        sources = sorted({str(src) for src in provenance.objects(prop_uri, PROV.wasDerivedFrom)})
         rows.append(
             {
-                "claim": str(claim_uri),
+                "claim": str(prop_uri),
                 "text": text,
                 "sources": "; ".join(sources),
             }
@@ -1967,31 +2004,6 @@ def _append_evidence_rows(
                     relation=relation,
                 )
 
-    for relation_claim_uri, _, predicate_uri in knowledge.triples((None, SCI_NS.claimPredicate, None)):
-        if not isinstance(relation_claim_uri, URIRef) or not isinstance(predicate_uri, URIRef):
-            continue
-        if (relation_claim_uri, RDF.type, SCI_NS.RelationClaim) not in knowledge:
-            continue
-        if not any(predicate_uri == allowed_predicate for allowed_predicate, _ in allowed_predicates):
-            continue
-
-        claim_object = next(knowledge.objects(relation_claim_uri, SCI_NS.claimObject), None)
-        if claim_object != target_uri:
-            continue
-
-        claim_subject = next(knowledge.objects(relation_claim_uri, SCI_NS.claimSubject), None)
-        evidence_uri = claim_subject if isinstance(claim_subject, URIRef) else relation_claim_uri
-        relation = next(label for allowed_predicate, label in allowed_predicates if predicate_uri == allowed_predicate)
-        _append_row(
-            rows=rows,
-            seen=seen,
-            knowledge=knowledge,
-            provenance=provenance,
-            evidence_uri=evidence_uri,
-            relation=relation,
-            fallback_uri=relation_claim_uri,
-        )
-
 
 def _append_row(
     rows: list[dict[str, str]],
@@ -2003,8 +2015,12 @@ def _append_row(
     fallback_uri: URIRef | None = None,
 ) -> None:
     key = (str(evidence_uri), relation)
-    text_obj = next(knowledge.objects(evidence_uri, SCHEMA_NS.text), None)
-    text = str(text_obj) if text_obj else ""
+    text_obj = (
+        next(knowledge.objects(evidence_uri, SCHEMA_NS.text), None)
+        or next(knowledge.objects(evidence_uri, SCHEMA_NS.description), None)
+        or next(knowledge.objects(evidence_uri, SKOS.prefLabel), None)
+    )
+    text = str(text_obj) if text_obj else _short_name(str(evidence_uri))
 
     sources = _source_strings(provenance, evidence_uri, fallback_uri)
     if fallback_uri is not None and not text:
@@ -2035,21 +2051,9 @@ def _linked_claims_for_hypothesis(knowledge, hypothesis_uri: URIRef) -> list[URI
     seen: set[URIRef] = set()
 
     for subj, _, _ in knowledge.triples((None, CITO_NS.discusses, hypothesis_uri)):
-        if isinstance(subj, URIRef) and (subj, RDF.type, SCI_NS.Claim) in knowledge and subj not in seen:
+        if isinstance(subj, URIRef) and (subj, RDF.type, SCI_NS.Proposition) in knowledge and subj not in seen:
             linked_claims.append(subj)
             seen.add(subj)
-
-    for relation_claim_uri, _, _ in knowledge.triples((None, SCI_NS.claimPredicate, CITO_NS.discusses)):
-        if not isinstance(relation_claim_uri, URIRef):
-            continue
-        if (relation_claim_uri, RDF.type, SCI_NS.RelationClaim) not in knowledge:
-            continue
-
-        claim_object = next(knowledge.objects(relation_claim_uri, SCI_NS.claimObject), None)
-        claim_subject = next(knowledge.objects(relation_claim_uri, SCI_NS.claimSubject), None)
-        if claim_object == hypothesis_uri and isinstance(claim_subject, URIRef) and claim_subject not in seen:
-            linked_claims.append(claim_subject)
-            seen.add(claim_subject)
 
     return linked_claims
 
@@ -2091,22 +2095,6 @@ def _collect_evidence_signals(knowledge, provenance, target_uri: URIRef) -> dict
             if isinstance(subj, URIRef):
                 record("disputes", subj)
 
-        for relation_claim_uri, _, predicate_uri in knowledge.triples((None, SCI_NS.claimPredicate, None)):
-            if not isinstance(relation_claim_uri, URIRef) or not isinstance(predicate_uri, URIRef):
-                continue
-            if (relation_claim_uri, RDF.type, SCI_NS.RelationClaim) not in knowledge:
-                continue
-            if predicate_uri not in (CITO_NS.supports, CITO_NS.disputes):
-                continue
-
-            claim_object = next(knowledge.objects(relation_claim_uri, SCI_NS.claimObject), None)
-            if claim_object != aggregate_target:
-                continue
-
-            claim_subject = next(knowledge.objects(relation_claim_uri, SCI_NS.claimSubject), None)
-            evidence_uri = claim_subject if isinstance(claim_subject, URIRef) else relation_claim_uri
-            record("supports" if predicate_uri == CITO_NS.supports else "disputes", evidence_uri, relation_claim_uri)
-
     total_evidence = len(support_items) + len(dispute_items)
     unique_source_count = len(support_sources | dispute_sources)
     if unique_source_count == 0 and total_evidence > 0:
@@ -2142,22 +2130,6 @@ def _collect_evidence_types(knowledge, provenance, target_uri: URIRef) -> set[st
             if isinstance(subj, URIRef):
                 record(subj)
 
-        for relation_claim_uri, _, predicate_uri in knowledge.triples((None, SCI_NS.claimPredicate, None)):
-            if not isinstance(relation_claim_uri, URIRef) or not isinstance(predicate_uri, URIRef):
-                continue
-            if (relation_claim_uri, RDF.type, SCI_NS.RelationClaim) not in knowledge:
-                continue
-            if predicate_uri not in (CITO_NS.supports, CITO_NS.disputes):
-                continue
-
-            claim_object = next(knowledge.objects(relation_claim_uri, SCI_NS.claimObject), None)
-            if claim_object != aggregate_target:
-                continue
-
-            claim_subject = next(knowledge.objects(relation_claim_uri, SCI_NS.claimSubject), None)
-            evidence_uri = claim_subject if isinstance(claim_subject, URIRef) else relation_claim_uri
-            record(evidence_uri, relation_claim_uri)
-
     return evidence_types
 
 
@@ -2178,7 +2150,7 @@ def _belief_state(
 
 
 def _summary_targets(knowledge, *, include_hypotheses: bool) -> list[URIRef]:
-    entity_types = [SCI_NS.Claim]
+    entity_types = [SCI_NS.Proposition]
     if include_hypotheses:
         entity_types.append(SCI_NS.Hypothesis)
 
@@ -2310,19 +2282,6 @@ def _hypotheses_for_claim(knowledge, claim_uri: URIRef) -> set[URIRef]:
         if isinstance(obj, URIRef) and (obj, RDF.type, SCI_NS.Hypothesis) in knowledge:
             hypotheses.add(obj)
 
-    for relation_claim_uri, _, _ in knowledge.triples((None, SCI_NS.claimPredicate, CITO_NS.discusses)):
-        if not isinstance(relation_claim_uri, URIRef):
-            continue
-        if (relation_claim_uri, RDF.type, SCI_NS.RelationClaim) not in knowledge:
-            continue
-
-        claim_subject = next(knowledge.objects(relation_claim_uri, SCI_NS.claimSubject), None)
-        claim_object = next(knowledge.objects(relation_claim_uri, SCI_NS.claimObject), None)
-        if claim_subject != claim_uri:
-            continue
-        if isinstance(claim_object, URIRef) and (claim_object, RDF.type, SCI_NS.Hypothesis) in knowledge:
-            hypotheses.add(claim_object)
-
     return hypotheses
 
 
@@ -2341,18 +2300,6 @@ def _claim_summary_adjacency(knowledge, summary_uris: set[URIRef]) -> dict[URIRe
             continue
         if isinstance(subj, URIRef) and isinstance(obj, URIRef) and subj in summary_uris and obj in summary_uris:
             connect(subj, obj)
-
-    for relation_claim_uri, _, predicate_uri in knowledge.triples((None, SCI_NS.claimPredicate, None)):
-        if not isinstance(relation_claim_uri, URIRef) or predicate_uri not in link_predicates:
-            continue
-        if (relation_claim_uri, RDF.type, SCI_NS.RelationClaim) not in knowledge:
-            continue
-
-        claim_subject = next(knowledge.objects(relation_claim_uri, SCI_NS.claimSubject), None)
-        claim_object = next(knowledge.objects(relation_claim_uri, SCI_NS.claimObject), None)
-        if isinstance(claim_subject, URIRef) and isinstance(claim_object, URIRef):
-            if claim_subject in summary_uris and claim_object in summary_uris:
-                connect(claim_subject, claim_object)
 
     claims_by_hypothesis: dict[URIRef, set[URIRef]] = {}
     for claim_uri in summary_uris:
@@ -2448,11 +2395,11 @@ def query_neighborhood_summary(
 
 def _question_claims(knowledge, question_uri: URIRef) -> list[URIRef]:
     claims: set[URIRef] = set()
-    for claim_uri, _, _ in knowledge.triples((None, SCI_NS.addresses, question_uri)):
-        if not isinstance(claim_uri, URIRef):
+    for prop_uri, _, _ in knowledge.triples((None, SCI_NS.addresses, question_uri)):
+        if not isinstance(prop_uri, URIRef):
             continue
-        if (claim_uri, RDF.type, SCI_NS.Claim) in knowledge:
-            claims.add(claim_uri)
+        if (prop_uri, RDF.type, SCI_NS.Proposition) in knowledge:
+            claims.add(prop_uri)
 
     for related_uri in knowledge.objects(question_uri, SKOS.related):
         if not isinstance(related_uri, URIRef):
@@ -2468,13 +2415,13 @@ def _inquiry_claims(knowledge, inquiry_graph, inquiry_uri: URIRef) -> tuple[list
     backed_claims: set[URIRef] = set()
     for statement_uri, _, _ in inquiry_graph.triples((None, RDF.type, RDF.Statement)):
         for claim_uri in inquiry_graph.objects(statement_uri, SCI_NS.backedByClaim):
-            if isinstance(claim_uri, URIRef) and (claim_uri, RDF.type, SCI_NS.Claim) in knowledge:
+            if isinstance(claim_uri, URIRef) and (claim_uri, RDF.type, SCI_NS.Proposition) in knowledge:
                 backed_claims.add(claim_uri)
 
     targeted_claims: set[URIRef] = set()
     target_uri = next(inquiry_graph.objects(inquiry_uri, SCI_NS.target), None)
     if isinstance(target_uri, URIRef):
-        if (target_uri, RDF.type, SCI_NS.Claim) in knowledge:
+        if (target_uri, RDF.type, SCI_NS.Proposition) in knowledge:
             targeted_claims.add(target_uri)
         elif (target_uri, RDF.type, SCI_NS.Hypothesis) in knowledge:
             targeted_claims.update(_linked_claims_for_hypothesis(knowledge, target_uri))
@@ -2883,8 +2830,8 @@ def query_gaps(
         if degree <= 1:
             issues.append(f"structural_fragility(low_connectivity,degree={degree})")
 
-        # Claim and hypothesis evidence/provenance fragility
-        if (uri, RDF.type, SCI_NS.Claim) in knowledge or (uri, RDF.type, SCI_NS.Hypothesis) in knowledge:
+        # Proposition and hypothesis evidence/provenance fragility
+        if (uri, RDF.type, SCI_NS.Proposition) in knowledge or (uri, RDF.type, SCI_NS.Hypothesis) in knowledge:
             if not any(provenance.triples((uri, PROV.wasDerivedFrom, None))):
                 issues.append("missing_provenance")
 
@@ -2937,7 +2884,7 @@ def query_uncertainty(
     rows: list[dict[str, str]] = []
     # Collect all entities with epistemic metadata
     seen: set[URIRef] = set()
-    for entity_type in (SCI_NS.Claim, SCI_NS.Hypothesis):
+    for entity_type in (SCI_NS.Proposition, SCI_NS.Hypothesis):
         for uri, _, _ in knowledge.triples((None, RDF.type, entity_type)):
             if not isinstance(uri, URIRef) or uri in seen:
                 continue
@@ -3126,12 +3073,12 @@ def _attach_edge_claims(
         if claim_uri in seen:
             continue
         seen.add(claim_uri)
-        if (claim_uri, RDF.type, SCI_NS.RelationClaim) not in knowledge:
-            raise click.ClickException(f"Attached claim '{claim_ref}' must resolve to a relation_claim entity")
+        if (claim_uri, RDF.type, SCI_NS.Proposition) not in knowledge:
+            raise click.ClickException(f"Attached claim '{claim_ref}' must resolve to a proposition entity")
 
-        claim_subject = next(knowledge.objects(claim_uri, SCI_NS.claimSubject), None)
-        claim_predicate = next(knowledge.objects(claim_uri, SCI_NS.claimPredicate), None)
-        claim_object = next(knowledge.objects(claim_uri, SCI_NS.claimObject), None)
+        claim_subject = next(knowledge.objects(claim_uri, SCI_NS.propSubject), None)
+        claim_predicate = next(knowledge.objects(claim_uri, SCI_NS.propPredicate), None)
+        claim_object = next(knowledge.objects(claim_uri, SCI_NS.propObject), None)
         if (claim_subject, claim_predicate, claim_object) != (subject_uri, predicate_uri, object_uri):
             raise click.ClickException(
                 f"Attached claim '{claim_ref}' must assert the same subject, predicate, and object as the edge"

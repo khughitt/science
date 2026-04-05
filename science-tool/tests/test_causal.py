@@ -22,7 +22,7 @@ from science_tool.graph.store import (
     add_edge,
     add_hypothesis,
     add_inquiry,
-    add_relation_claim,
+    add_proposition,
     get_inquiry,
     set_boundary_role,
     set_treatment_outcome,
@@ -214,15 +214,15 @@ class TestExportPgmpy:
         set_boundary_role(graph_path, "prov-pgmpy", "concept/drug", "BoundaryIn")
         set_boundary_role(graph_path, "prov-pgmpy", "concept/recovery", "BoundaryOut")
         set_treatment_outcome(graph_path, "prov-pgmpy", treatment="concept/drug", outcome="concept/recovery")
-        add_relation_claim(
+        add_proposition(
             graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            source="paper:doi_10.1234/study",
-            confidence=0.85,
             text="Drug treatment improves recovery time",
-            claim_id="drug_causes_recovery",
+            source="article:doi_10.1234/study",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_causes_recovery",
         )
         add_edge(
             graph_path,
@@ -230,7 +230,7 @@ class TestExportPgmpy:
             "scic:causes",
             "concept/recovery",
             graph_layer="graph/causal",
-            claim_refs=["relation_claim:drug_causes_recovery"],
+            claim_refs=["proposition:drug_causes_recovery"],
         )
         script = export_pgmpy_script(graph_path, "prov-pgmpy")
         assert "confidence: 0.85" in script
@@ -332,15 +332,15 @@ class TestExportChirho:
         set_boundary_role(graph_path, "prov-chirho", "concept/drug", "BoundaryIn")
         set_boundary_role(graph_path, "prov-chirho", "concept/recovery", "BoundaryOut")
         set_treatment_outcome(graph_path, "prov-chirho", treatment="concept/drug", outcome="concept/recovery")
-        add_relation_claim(
+        add_proposition(
             graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            source="paper:doi_10.1234/study",
-            confidence=0.85,
             text="Drug treatment improves recovery time",
-            claim_id="drug_causes_recovery",
+            source="article:doi_10.1234/study",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_causes_recovery",
         )
         add_edge(
             graph_path,
@@ -348,7 +348,7 @@ class TestExportChirho:
             "scic:causes",
             "concept/recovery",
             graph_layer="graph/causal",
-            claim_refs=["relation_claim:drug_causes_recovery"],
+            claim_refs=["proposition:drug_causes_recovery"],
         )
         script = export_chirho_script(graph_path, "prov-chirho")
         assert "confidence: 0.85" in script
@@ -365,25 +365,25 @@ class TestExportChirho:
         set_boundary_role(graph_path, "multi-parent", "concept/y", "BoundaryOut")
         set_boundary_role(graph_path, "multi-parent", "concept/z", "BoundaryIn")
         set_treatment_outcome(graph_path, "multi-parent", treatment="concept/x", outcome="concept/y")
-        add_relation_claim(
+        add_proposition(
             graph_path,
-            "concept/x",
-            "scic:causes",
-            "concept/y",
-            source="paper:doi_x",
-            confidence=0.8,
             text="X causes Y",
-            claim_id="x_causes_y",
+            source="article:doi_x",
+            confidence=0.8,
+            subject="concept/x",
+            predicate="scic:causes",
+            obj="concept/y",
+            proposition_id="x_causes_y",
         )
-        add_relation_claim(
+        add_proposition(
             graph_path,
-            "concept/z",
-            "scic:causes",
-            "concept/y",
-            source="paper:doi_z",
-            confidence=0.9,
             text="Z causes Y",
-            claim_id="z_causes_y",
+            source="article:doi_z",
+            confidence=0.9,
+            subject="concept/z",
+            predicate="scic:causes",
+            obj="concept/y",
+            proposition_id="z_causes_y",
         )
         add_edge(
             graph_path,
@@ -391,7 +391,7 @@ class TestExportChirho:
             "scic:causes",
             "concept/y",
             graph_layer="graph/causal",
-            claim_refs=["relation_claim:x_causes_y"],
+            claim_refs=["proposition:x_causes_y"],
         )
         add_edge(
             graph_path,
@@ -399,7 +399,7 @@ class TestExportChirho:
             "scic:causes",
             "concept/y",
             graph_layer="graph/causal",
-            claim_refs=["relation_claim:z_causes_y"],
+            claim_refs=["proposition:z_causes_y"],
         )
 
         script = export_chirho_script(graph_path, "multi-parent")
@@ -472,25 +472,25 @@ class TestEdgeProvenance:
         set_boundary_role(graph_path, "prov-dag", "concept/recovery", "BoundaryOut")
         set_boundary_role(graph_path, "prov-dag", "concept/severity", "BoundaryIn")
         set_treatment_outcome(graph_path, "prov-dag", treatment="concept/drug", outcome="concept/recovery")
-        add_relation_claim(
+        add_proposition(
             graph_path,
-            "concept/drug",
-            "scic:causes",
-            "concept/recovery",
-            source="paper:doi_10.1234/drug_recovery",
-            confidence=0.85,
             text="Drug treatment improves recovery time",
-            claim_id="drug_causes_recovery",
+            source="article:doi_10.1234/drug_recovery",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_causes_recovery",
         )
-        add_relation_claim(
+        add_proposition(
             graph_path,
-            "concept/severity",
-            "scic:causes",
-            "concept/recovery",
-            source="paper:doi_10.5678/severity",
-            confidence=0.90,
             text="Disease severity affects recovery outcomes",
-            claim_id="severity_causes_recovery",
+            source="article:doi_10.5678/severity",
+            confidence=0.90,
+            subject="concept/severity",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="severity_causes_recovery",
         )
         add_edge(
             graph_path,
@@ -498,7 +498,7 @@ class TestEdgeProvenance:
             "scic:causes",
             "concept/recovery",
             graph_layer="graph/causal",
-            claim_refs=["relation_claim:drug_causes_recovery"],
+            claim_refs=["proposition:drug_causes_recovery"],
         )
         add_edge(
             graph_path,
@@ -506,7 +506,7 @@ class TestEdgeProvenance:
             "scic:causes",
             "concept/recovery",
             graph_layer="graph/causal",
-            claim_refs=["relation_claim:severity_causes_recovery"],
+            claim_refs=["proposition:severity_causes_recovery"],
         )
         add_edge(graph_path, "concept/severity", "scic:causes", "concept/drug", graph_layer="graph/causal")
         return "prov-dag"
