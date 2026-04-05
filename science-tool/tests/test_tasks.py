@@ -19,7 +19,9 @@ from science_tool.tasks import (
     parse_tasks,
     render_task,
     render_tasks,
+    retire_task,
     unblock_task,
+    warn_invalid_statuses,
 )
 
 
@@ -39,6 +41,18 @@ SINGLE_TASK = """\
 - created: 2026-03-08
 
 Short description of what needs to happen and why.
+"""
+
+TAGGED_TASK = """\
+## [t010] Tagged task
+- type: dev
+- priority: P2
+- status: proposed
+- tags: [lens-system, umap]
+- group: visualization
+- created: 2026-04-01
+
+A task with tags and a group.
 """
 
 MULTI_TASK = """\
@@ -459,3 +473,199 @@ Another dev desc.
         result = list_tasks(tasks_dir, task_type="dev", priority="P2")
         assert len(result) == 1
         assert result[0].id == "t003"
+
+
+MIXED_STATUS_TASKS = """\
+## [t001] Open task
+- type: dev
+- priority: P1
+- status: proposed
+- created: 2026-03-01
+
+Open.
+
+## [t002] Done task
+- type: dev
+- priority: P2
+- status: done
+- created: 2026-03-02
+- completed: 2026-03-05
+
+Done.
+
+## [t003] Retired task
+- type: dev
+- priority: P3
+- status: retired
+- created: 2026-03-03
+- completed: 2026-03-06
+
+Retired.
+
+## [t004] Active task
+- type: research
+- priority: P1
+- status: active
+- created: 2026-03-04
+
+Active.
+"""
+
+
+class TestDoneHiding:
+    def _setup(self, tmp_path: Path) -> Path:
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir()
+        _write(tasks_dir / "active.md", MIXED_STATUS_TASKS)
+        return tasks_dir
+
+    def test_default_hides_done_and_retired(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup(tmp_path)
+        result = list_tasks(tasks_dir)
+        ids = {t.id for t in result}
+        assert ids == {"t001", "t004"}
+
+    def test_include_done_shows_all(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup(tmp_path)
+        result = list_tasks(tasks_dir, include_done=True)
+        assert len(result) == 4
+
+    def test_status_filter_done_returns_done(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup(tmp_path)
+        result = list_tasks(tasks_dir, status="done")
+        assert len(result) == 1
+        assert result[0].id == "t002"
+
+    def test_status_filter_retired_returns_retired(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup(tmp_path)
+        result = list_tasks(tasks_dir, status="retired")
+        assert len(result) == 1
+        assert result[0].id == "t003"
+
+
+class TestInvalidStatusWarning:
+    def test_warns_on_invalid_status(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        tasks = [
+            Task(id="t001", title="Bad", type="dev", priority="P1", status="complete", created=date(2026, 3, 1)),
+            Task(id="t002", title="Good", type="dev", priority="P1", status="done", created=date(2026, 3, 1)),
+        ]
+        warn_invalid_statuses(tasks)
+        captured = capsys.readouterr()
+        assert "WARNING: [t001] has invalid status 'complete'" in captured.err
+        assert "t002" not in captured.err
+
+    def test_no_warning_for_valid_statuses(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        tasks = [
+            Task(id="t001", title="A", type="dev", priority="P1", status="proposed", created=date(2026, 3, 1)),
+            Task(id="t002", title="B", type="dev", priority="P1", status="done", created=date(2026, 3, 1)),
+            Task(id="t003", title="C", type="dev", priority="P1", status="retired", created=date(2026, 3, 1)),
+        ]
+        warn_invalid_statuses(tasks)
+        captured = capsys.readouterr()
+        assert captured.err == ""
+
+
+class TestTagsAndGroups:
+    def test_parse_tags_and_group(self, tmp_path: Path) -> None:
+        f = _write(tmp_path / "active.md", TAGGED_TASK)
+        tasks = parse_tasks(f)
+        assert len(tasks) == 1
+        t = tasks[0]
+        assert t.tags == ["lens-system", "umap"]
+        assert t.group == "visualization"
+
+    def test_roundtrip_tags_and_group(self, tmp_path: Path) -> None:
+        f = _write(tmp_path / "active.md", TAGGED_TASK)
+        tasks1 = parse_tasks(f)
+        rendered = render_tasks(tasks1)
+        f2 = _write(tmp_path / "roundtrip.md", rendered)
+        tasks2 = parse_tasks(f2)
+        assert tasks1[0].tags == tasks2[0].tags
+        assert tasks1[0].group == tasks2[0].group
+
+    def test_add_with_tags_and_group(self, tmp_path: Path) -> None:
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir()
+        t = add_task(
+            tasks_dir,
+            title="Tagged task",
+            task_type="dev",
+            priority="P2",
+            tags=["symmetry", "umap"],
+            group="lens-system",
+        )
+        assert t.tags == ["symmetry", "umap"]
+        assert t.group == "lens-system"
+        # Verify persisted
+        tasks = parse_tasks(tasks_dir / "active.md")
+        assert tasks[0].tags == ["symmetry", "umap"]
+        assert tasks[0].group == "lens-system"
+
+    def test_edit_tags(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        t = edit_task(tasks_dir, "t001", tags=["new-tag"])
+        assert t.tags == ["new-tag"]
+
+    def test_edit_group(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        t = edit_task(tasks_dir, "t001", group="my-group")
+        assert t.group == "my-group"
+
+    def test_list_by_tag(self, tmp_path: Path) -> None:
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir()
+        add_task(tasks_dir, "T1", "dev", "P1", tags=["alpha", "beta"])
+        add_task(tasks_dir, "T2", "dev", "P2", tags=["beta", "gamma"])
+        add_task(tasks_dir, "T3", "dev", "P1", tags=["alpha"])
+        result = list_tasks(tasks_dir, tag="alpha")
+        assert len(result) == 2
+        assert {t.id for t in result} == {"t001", "t003"}
+
+    def test_list_by_group(self, tmp_path: Path) -> None:
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir()
+        add_task(tasks_dir, "T1", "dev", "P1", group="lens")
+        add_task(tasks_dir, "T2", "dev", "P2", group="formula")
+        add_task(tasks_dir, "T3", "dev", "P1", group="lens")
+        result = list_tasks(tasks_dir, group="lens")
+        assert len(result) == 2
+
+    def test_empty_tags_not_rendered(self) -> None:
+        t = Task(
+            id="t001",
+            title="Plain task",
+            type="dev",
+            priority="P1",
+            status="active",
+            created=date(2026, 3, 1),
+            description="Desc.",
+        )
+        rendered = render_task(t)
+        assert "- tags:" not in rendered
+        assert "- group:" not in rendered
+
+
+class TestRetireTask:
+    def test_retire_moves_to_done(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        t = retire_task(tasks_dir, "t001")
+        assert t.status == "retired"
+        assert t.completed == date.today()
+        # active.md should be empty
+        active_tasks = parse_tasks(tasks_dir / "active.md")
+        assert len(active_tasks) == 0
+        # done file should have the task
+        done_path = tasks_dir / "done" / f"{date.today().strftime('%Y-%m')}.md"
+        done_tasks = parse_tasks(done_path)
+        assert len(done_tasks) == 1
+        assert done_tasks[0].status == "retired"
+
+    def test_retire_with_reason(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        t = retire_task(tasks_dir, "t001", reason="Superseded by newer approach")
+        assert "**Retired:** Superseded by newer approach" in t.description
+
+    def test_retire_not_found_raises(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        with pytest.raises(KeyError):
+            retire_task(tasks_dir, "t999")

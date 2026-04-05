@@ -207,6 +207,52 @@ class TestTasksList:
             assert "Dev task" in result.output
             assert "Research task" not in result.output
 
+    def test_list_hides_done_by_default(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            from pathlib import Path
+
+            # Manually write a file with both open and done tasks
+            tasks_dir = Path("tasks")
+            tasks_dir.mkdir()
+            (tasks_dir / "active.md").write_text(
+                "## [t001] Open task\n- type: dev\n- priority: P1\n- status: proposed\n- created: 2026-03-01\n\nOpen.\n\n"
+                "## [t002] Done task\n- type: dev\n- priority: P2\n- status: done\n- created: 2026-03-02\n- completed: 2026-03-05\n\nDone.\n"
+            )
+            result = runner.invoke(main, ["tasks", "list"])
+            assert result.exit_code == 0
+            assert "Open task" in result.output
+            assert "Done task" not in result.output
+
+    def test_list_all_shows_done(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            from pathlib import Path
+
+            tasks_dir = Path("tasks")
+            tasks_dir.mkdir()
+            (tasks_dir / "active.md").write_text(
+                "## [t001] Open task\n- type: dev\n- priority: P1\n- status: proposed\n- created: 2026-03-01\n\nOpen.\n\n"
+                "## [t002] Done task\n- type: dev\n- priority: P2\n- status: done\n- created: 2026-03-02\n- completed: 2026-03-05\n\nDone.\n"
+            )
+            result = runner.invoke(main, ["tasks", "list", "--all"])
+            assert result.exit_code == 0
+            assert "Open task" in result.output
+            assert "Done task" in result.output
+
+    def test_list_status_done_filter(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            from pathlib import Path
+
+            tasks_dir = Path("tasks")
+            tasks_dir.mkdir()
+            (tasks_dir / "active.md").write_text(
+                "## [t001] Open task\n- type: dev\n- priority: P1\n- status: proposed\n- created: 2026-03-01\n\nOpen.\n\n"
+                "## [t002] Done task\n- type: dev\n- priority: P2\n- status: done\n- created: 2026-03-02\n- completed: 2026-03-05\n\nDone.\n"
+            )
+            result = runner.invoke(main, ["tasks", "list", "--status", "done"])
+            assert result.exit_code == 0
+            assert "Done task" in result.output
+            assert "Open task" not in result.output
+
     def test_list_json_format(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
             runner.invoke(main, ["tasks", "add", "JSON task", "--type", "dev", "--priority", "P1"])
@@ -230,6 +276,88 @@ class TestTasksShow:
         with runner.isolated_filesystem():
             result = runner.invoke(main, ["tasks", "show", "t999"])
             assert result.exit_code != 0
+
+
+class TestTasksRetire:
+    def test_retire_sets_retired(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            runner.invoke(main, ["tasks", "add", "To retire", "--type", "dev", "--priority", "P2"])
+            result = runner.invoke(main, ["tasks", "retire", "t001"])
+            assert result.exit_code == 0
+            assert "retired" in result.output.lower()
+
+    def test_retire_with_reason(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            runner.invoke(main, ["tasks", "add", "To retire", "--type", "dev", "--priority", "P2"])
+            result = runner.invoke(main, ["tasks", "retire", "t001", "--reason", "No longer relevant"])
+            assert result.exit_code == 0
+
+    def test_retire_missing_task(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            result = runner.invoke(main, ["tasks", "retire", "t999"])
+            assert result.exit_code != 0
+
+
+class TestTasksTagsAndGroups:
+    def test_add_with_tags(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                main,
+                ["tasks", "add", "Tagged", "--type", "dev", "--priority", "P1", "--tags", "lens", "--tags", "umap"],
+            )
+            assert result.exit_code == 0
+
+    def test_add_with_group(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                main,
+                ["tasks", "add", "Grouped", "--type", "dev", "--priority", "P1", "--group", "visualization"],
+            )
+            assert result.exit_code == 0
+
+    def test_edit_tags(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            runner.invoke(main, ["tasks", "add", "To edit", "--type", "dev", "--priority", "P1"])
+            result = runner.invoke(main, ["tasks", "edit", "t001", "--tags", "new-tag"])
+            assert result.exit_code == 0
+
+    def test_edit_group(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            runner.invoke(main, ["tasks", "add", "To edit", "--type", "dev", "--priority", "P1"])
+            result = runner.invoke(main, ["tasks", "edit", "t001", "--group", "my-group"])
+            assert result.exit_code == 0
+
+    def test_list_by_tag(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            runner.invoke(
+                main, ["tasks", "add", "T1", "--type", "dev", "--priority", "P1", "--tags", "alpha"]
+            )
+            runner.invoke(
+                main, ["tasks", "add", "T2", "--type", "dev", "--priority", "P2", "--tags", "beta"]
+            )
+            result = runner.invoke(main, ["tasks", "list", "--tag", "alpha"])
+            assert result.exit_code == 0
+            assert "T1" in result.output
+            assert "T2" not in result.output
+
+    def test_list_by_group(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            runner.invoke(
+                main, ["tasks", "add", "T1", "--type", "dev", "--priority", "P1", "--group", "lens"]
+            )
+            runner.invoke(
+                main, ["tasks", "add", "T2", "--type", "dev", "--priority", "P2", "--group", "formula"]
+            )
+            result = runner.invoke(main, ["tasks", "list", "--group", "lens"])
+            assert result.exit_code == 0
+            assert "T1" in result.output
+            assert "T2" not in result.output
+
+    def test_edit_status_retired(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            runner.invoke(main, ["tasks", "add", "To retire", "--type", "dev", "--priority", "P1"])
+            result = runner.invoke(main, ["tasks", "edit", "t001", "--status", "retired"])
+            assert result.exit_code == 0
 
 
 class TestTasksSummary:

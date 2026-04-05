@@ -1451,6 +1451,8 @@ def tasks() -> None:
 @click.option("--priority", required=True, type=click.Choice(["P0", "P1", "P2", "P3"]))
 @click.option("--related", multiple=True)
 @click.option("--blocked-by", multiple=True)
+@click.option("--tags", multiple=True)
+@click.option("--group", default="")
 @click.option("--description", default="")
 def tasks_add(
     title: str,
@@ -1458,6 +1460,8 @@ def tasks_add(
     priority: str,
     related: tuple[str, ...],
     blocked_by: tuple[str, ...],
+    tags: tuple[str, ...],
+    group: str,
     description: str,
 ) -> None:
     """Add a new task."""
@@ -1470,6 +1474,8 @@ def tasks_add(
         priority=priority,
         related=list(related) or None,
         blocked_by=list(blocked_by) or None,
+        tags=list(tags) or None,
+        group=group,
         description=description,
     )
     click.echo(f"Created [{task.id}] {task.title}")
@@ -1503,6 +1509,20 @@ def tasks_defer(task_id: str, reason: str | None) -> None:
     click.echo(f"[{task.id}] deferred")
 
 
+@tasks.command("retire")
+@click.argument("task_id")
+@click.option("--reason", default=None)
+def tasks_retire(task_id: str, reason: str | None) -> None:
+    """Retire a task (closed without completion — no longer a priority)."""
+    from science_tool.tasks import retire_task
+
+    try:
+        task = retire_task(DEFAULT_TASKS_DIR, task_id, reason=reason)
+    except KeyError as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(f"[{task.id}] retired")
+
+
 @tasks.command("block")
 @click.argument("task_id")
 @click.option("--by", "blocked_by", required=True)
@@ -1533,15 +1553,19 @@ def tasks_unblock(task_id: str) -> None:
 @tasks.command("edit")
 @click.argument("task_id")
 @click.option("--priority", default=None, type=click.Choice(["P0", "P1", "P2", "P3"]))
-@click.option("--status", default=None, type=click.Choice(["proposed", "active", "blocked", "deferred"]))
+@click.option("--status", default=None, type=click.Choice(["proposed", "active", "blocked", "deferred", "retired"]))
 @click.option("--type", "task_type", default=None, type=click.Choice(["research", "dev"]))
 @click.option("--related", multiple=True)
+@click.option("--tags", multiple=True)
+@click.option("--group", default=None)
 def tasks_edit(
     task_id: str,
     priority: str | None,
     status: str | None,
     task_type: str | None,
     related: tuple[str, ...],
+    tags: tuple[str, ...],
+    group: str | None,
 ) -> None:
     """Edit a task's fields."""
     from science_tool.tasks import edit_task
@@ -1554,6 +1578,8 @@ def tasks_edit(
             status=status,
             task_type=task_type,
             related=list(related) if related else None,
+            tags=list(tags) if tags else None,
+            group=group,
         )
     except KeyError as e:
         raise click.ClickException(str(e)) from e
@@ -1563,21 +1589,40 @@ def tasks_edit(
 @tasks.command("list")
 @click.option("--type", "task_type", default=None, type=click.Choice(["research", "dev"]))
 @click.option("--priority", default=None, type=click.Choice(["P0", "P1", "P2", "P3"]))
-@click.option("--status", default=None, type=click.Choice(["proposed", "active", "blocked", "deferred"]))
+@click.option(
+    "--status",
+    default=None,
+    type=click.Choice(["proposed", "active", "blocked", "deferred", "retired", "done"]),
+)
 @click.option("--related", default=None)
+@click.option("--tag", default=None, help="Filter by tag (exact match)")
+@click.option("--group", default=None, help="Filter by group (exact match)")
+@click.option("--all", "show_all", is_flag=True, default=False, help="Include done and retired tasks")
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
 def tasks_list(
     task_type: str | None,
     priority: str | None,
     status: str | None,
     related: str | None,
+    tag: str | None,
+    group: str | None,
+    show_all: bool,
     output_format: str,
 ) -> None:
-    """List active tasks."""
+    """List tasks. Done/retired tasks are hidden by default; use --all or --status=done to include them."""
     from science_tool.tasks import list_tasks
     from science_tool.tasks_display import render_tasks_table, sort_tasks
 
-    matched = list_tasks(DEFAULT_TASKS_DIR, task_type=task_type, priority=priority, status=status, related=related)
+    matched = list_tasks(
+        DEFAULT_TASKS_DIR,
+        task_type=task_type,
+        priority=priority,
+        status=status,
+        related=related,
+        tag=tag,
+        group=group,
+        include_done=show_all,
+    )
     matched = sort_tasks(matched)
 
     if output_format == "json":
@@ -1587,6 +1632,8 @@ def tasks_list(
             ("type", "Type"),
             ("priority", "Priority"),
             ("status", "Status"),
+            ("group", "Group"),
+            ("tags", "Tags"),
             ("created", "Created"),
         ]
         rows = [
@@ -1596,6 +1643,8 @@ def tasks_list(
                 "type": t.type,
                 "priority": t.priority,
                 "status": t.status,
+                "group": t.group,
+                "tags": ", ".join(t.tags),
                 "created": t.created.isoformat(),
             }
             for t in matched
@@ -1620,24 +1669,29 @@ def tasks_show(task_id: str) -> None:
 
 @tasks.command("summary")
 def tasks_summary() -> None:
-    """Print summary counts by status, type, and priority."""
+    """Print summary counts by status, type, priority, and group."""
     from collections import Counter
 
-    from science_tool.tasks import parse_tasks
+    from science_tool.tasks import parse_tasks, warn_invalid_statuses
 
     active = parse_tasks(DEFAULT_TASKS_DIR / "active.md")
     if not active:
         click.echo("No active tasks.")
         return
 
+    warn_invalid_statuses(active)
+
     by_status = Counter(t.status for t in active)
     by_type = Counter(t.type for t in active)
     by_priority = Counter(t.priority for t in active)
+    by_group = Counter(t.group for t in active if t.group)
 
     click.echo(f"Total: {len(active)}")
-    click.echo("By status:  " + ", ".join(f"{k}: {v}" for k, v in sorted(by_status.items())))
-    click.echo("By type:    " + ", ".join(f"{k}: {v}" for k, v in sorted(by_type.items())))
+    click.echo("By status:   " + ", ".join(f"{k}: {v}" for k, v in sorted(by_status.items())))
+    click.echo("By type:     " + ", ".join(f"{k}: {v}" for k, v in sorted(by_type.items())))
     click.echo("By priority: " + ", ".join(f"{k}: {v}" for k, v in sorted(by_priority.items())))
+    if by_group:
+        click.echo("By group:    " + ", ".join(f"{k}: {v}" for k, v in sorted(by_group.items())))
 
 
 @main.group()

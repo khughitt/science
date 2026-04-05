@@ -6,12 +6,15 @@ The Task model is defined in science-model and re-exported here for convenience.
 from __future__ import annotations
 
 import re
+import sys
 from datetime import date
 from pathlib import Path
 
 from science_model.tasks import Task, TaskCreate, TaskStatus, TaskUpdate
 
-__all__ = ["Task", "TaskCreate", "TaskStatus", "TaskUpdate"]
+__all__ = ["Task", "TaskCreate", "TaskStatus", "TaskUpdate", "retire_task"]
+
+_VALID_STATUSES = {s.value for s in TaskStatus}
 
 
 _HEADER_RE = re.compile(r"^##\s+\[(\w+)\]\s+(.+)$")
@@ -68,6 +71,8 @@ def _parse_task_block(lines: list[str]) -> Task:
         description=description,
         related=_parse_list_value(fields.get("related", "")),
         blocked_by=_parse_list_value(fields.get("blocked-by", "")),
+        tags=_parse_list_value(fields.get("tags", "")),
+        group=fields.get("group", ""),
         completed=completed,
     )
 
@@ -111,6 +116,11 @@ def render_task(task: Task) -> str:
     if task.blocked_by:
         items = ", ".join(task.blocked_by)
         lines.append(f"- blocked-by: [{items}]")
+    if task.tags:
+        items = ", ".join(task.tags)
+        lines.append(f"- tags: [{items}]")
+    if task.group:
+        lines.append(f"- group: {task.group}")
     lines.append(f"- created: {task.created.isoformat()}")
     if task.completed is not None:
         lines.append(f"- completed: {task.completed.isoformat()}")
@@ -171,6 +181,8 @@ def add_task(
     priority: str,
     related: list[str] | None = None,
     blocked_by: list[str] | None = None,
+    tags: list[str] | None = None,
+    group: str = "",
     description: str = "",
 ) -> Task:
     """Create a task with status 'proposed', auto-assign ID, write to active.md."""
@@ -184,6 +196,8 @@ def add_task(
         created=date.today(),
         related=related or [],
         blocked_by=blocked_by or [],
+        tags=tags or [],
+        group=group,
         description=description,
     )
     tasks = _read_active(tasks_dir)
@@ -230,6 +244,31 @@ def defer_task(tasks_dir: Path, task_id: str, reason: str | None = None) -> Task
     return task
 
 
+def retire_task(tasks_dir: Path, task_id: str, reason: str | None = None) -> Task:
+    """Set status to 'retired', append reason. Moves to done/ archive like complete_task."""
+    tasks = _read_active(tasks_dir)
+    task = _find_task(tasks, task_id)
+
+    task.status = "retired"
+    task.completed = date.today()
+    if reason:
+        task.description = f"{task.description}\n\n**Retired:** {reason}".strip()
+
+    # Remove from active
+    tasks = [t for t in tasks if t.id != task_id]
+    _write_active(tasks_dir, tasks)
+
+    # Append to done file (retired tasks archived alongside done tasks)
+    done_dir = tasks_dir / "done"
+    done_dir.mkdir(parents=True, exist_ok=True)
+    done_path = done_dir / f"{date.today().strftime('%Y-%m')}.md"
+    existing_done = parse_tasks(done_path)
+    existing_done.append(task)
+    done_path.write_text(render_tasks(existing_done))
+
+    return task
+
+
 def block_task(tasks_dir: Path, task_id: str, blocked_by: str) -> Task:
     """Add blocker to blocked_by list, set status to 'blocked'."""
     tasks = _read_active(tasks_dir)
@@ -262,6 +301,8 @@ def edit_task(
     status: str | None = None,
     task_type: str | None = None,
     related: list[str] | None = None,
+    tags: list[str] | None = None,
+    group: str | None = None,
 ) -> Task:
     """Update specified fields on a task."""
     tasks = _read_active(tasks_dir)
@@ -275,9 +316,28 @@ def edit_task(
         task.type = task_type
     if related is not None:
         task.related = related
+    if tags is not None:
+        task.tags = tags
+    if group is not None:
+        task.group = group
 
     _write_active(tasks_dir, tasks)
     return task
+
+
+def warn_invalid_statuses(tasks: list[Task]) -> None:
+    """Print warnings to stderr for tasks with non-canonical statuses."""
+    for t in tasks:
+        if t.status not in _VALID_STATUSES:
+            print(
+                f"WARNING: [{t.id}] has invalid status '{t.status}' "
+                f"(expected one of: {', '.join(sorted(_VALID_STATUSES))})",
+                file=sys.stderr,
+            )
+
+
+# Statuses that represent closed tasks (excluded from default listing)
+_CLOSED_STATUSES = {TaskStatus.DONE, TaskStatus.RETIRED}
 
 
 def list_tasks(
@@ -286,9 +346,18 @@ def list_tasks(
     priority: str | None = None,
     status: str | None = None,
     related: str | None = None,
+    tag: str | None = None,
+    group: str | None = None,
+    include_done: bool = False,
 ) -> list[Task]:
-    """Filter active tasks by optional criteria."""
+    """Filter active tasks by optional criteria.
+
+    By default, done and retired tasks are excluded. Pass ``include_done=True``
+    or filter by a specific ``status`` to include them.
+    """
     tasks = _read_active(tasks_dir)
+
+    warn_invalid_statuses(tasks)
 
     if task_type is not None:
         tasks = [t for t in tasks if t.type == task_type]
@@ -296,7 +365,13 @@ def list_tasks(
         tasks = [t for t in tasks if t.priority == priority]
     if status is not None:
         tasks = [t for t in tasks if t.status == status]
+    elif not include_done:
+        tasks = [t for t in tasks if t.status not in _CLOSED_STATUSES]
     if related is not None:
         tasks = [t for t in tasks if any(related in r for r in t.related)]
+    if tag is not None:
+        tasks = [t for t in tasks if tag in t.tags]
+    if group is not None:
+        tasks = [t for t in tasks if t.group == group]
 
     return tasks

@@ -16,6 +16,7 @@ class TaskStatus(StrEnum):
     DONE = "done"
     DEFERRED = "deferred"
     BLOCKED = "blocked"
+    RETIRED = "retired"
 
 
 class Task(BaseModel):
@@ -30,6 +31,8 @@ class Task(BaseModel):
     status: str = TaskStatus.PROPOSED
     blocked_by: list[str] = []
     related: list[str] = []
+    tags: list[str] = []
+    group: str = ""
     created: date = Field(default_factory=date.today)
     completed: date | None = None
 
@@ -42,6 +45,8 @@ class TaskCreate(BaseModel):
     priority: str = "P2"
     related: list[str] = []
     blocked_by: list[str] = []
+    tags: list[str] = []
+    group: str = ""
     description: str = ""
 
 
@@ -55,3 +60,5 @@ class TaskUpdate(BaseModel):
     type: str | None = None
     related: list[str] | None = None
     blocked_by: list[str] | None = None
+    tags: list[str] | None = None
+    group: str | None = None

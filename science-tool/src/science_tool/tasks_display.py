@@ -18,6 +18,7 @@ _STATUS_ORDER: dict[str, int] = {
     "proposed": 2,
     "deferred": 3,
     "done": 4,
+    "retired": 5,
 }
 
 _STATUS_STYLE: dict[str, str] = {
@@ -26,6 +27,7 @@ _STATUS_STYLE: dict[str, str] = {
     "proposed": "yellow",
     "deferred": "dim",
     "done": "blue",
+    "retired": "dim strike",
 }
 
 # ── Type colors ──────────────────────────────────────────────────────────
@@ -81,12 +83,20 @@ def sort_tasks(tasks: list[Task]) -> list[Task]:
 
 def render_tasks_table(tasks: list[Task]) -> None:
     """Render a colored Rich table of tasks to stdout."""
+    # Only show group/tags columns if any task uses them
+    has_groups = any(t.group for t in tasks)
+    has_tags = any(t.tags for t in tasks)
+
     table = Table(title="Tasks", show_lines=False)
     table.add_column("ID", style="bold")
     table.add_column("Title")
     table.add_column("Type")
     table.add_column("Pri")
     table.add_column("Status")
+    if has_groups:
+        table.add_column("Group")
+    if has_tags:
+        table.add_column("Tags")
     table.add_column("Created")
 
     for t in tasks:
@@ -97,7 +107,14 @@ def render_tasks_table(tasks: list[Task]) -> None:
         status_text = Text(t.status, style=_STATUS_STYLE.get(t.status, ""))
         created_text = Text(t.created.isoformat(), style=_age_style(t.created))
 
-        table.add_row(id_text, title_text, type_text, pri_text, status_text, created_text)
+        row: list[Text] = [id_text, title_text, type_text, pri_text, status_text]
+        if has_groups:
+            row.append(Text(t.group, style="cyan"))
+        if has_tags:
+            row.append(Text(", ".join(t.tags), style="dim"))
+        row.append(created_text)
+
+        table.add_row(*row)
 
     console = Console()
     console.print(table)
