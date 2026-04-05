@@ -82,9 +82,32 @@ def test_workflow_run_entity_round_trip():
     assert e2 == e
 
 
-def test_relation_claim_entity_type():
-    assert EntityType.RELATION_CLAIM == "relation_claim"
-    assert EntityType("relation_claim") == EntityType.RELATION_CLAIM
+def test_proposition_entity_type():
+    assert EntityType.PROPOSITION == "proposition"
+    assert EntityType("proposition") == EntityType.PROPOSITION
+
+
+def test_observation_entity_type():
+    assert EntityType.OBSERVATION == "observation"
+    assert EntityType("observation") == EntityType.OBSERVATION
+
+
+def test_finding_entity_type():
+    assert EntityType.FINDING == "finding"
+    assert EntityType("finding") == EntityType.FINDING
+
+
+def test_story_entity_type():
+    assert EntityType.STORY == "story"
+    assert EntityType("story") == EntityType.STORY
+
+
+def test_removed_types_absent():
+    """CLAIM, RELATION_CLAIM, EVIDENCE, ARTIFACT are removed from EntityType."""
+    assert not hasattr(EntityType, "CLAIM")
+    assert not hasattr(EntityType, "RELATION_CLAIM")
+    assert not hasattr(EntityType, "EVIDENCE")
+    assert not hasattr(EntityType, "ARTIFACT")
 
 
 def test_new_types_accessible_from_package():
