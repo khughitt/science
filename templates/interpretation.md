@@ -43,10 +43,10 @@ Before updating beliefs, record:
 If no issues found, note "No data quality concerns identified."
 Flag any issues as findings with signal strength "methodological". -->
 
-## Claim-Level Updates
+## Proposition-Level Updates
 
 <!--
-For each relevant claim or relation-claim:
+For each relevant proposition:
 - what supports it?
 - what disputes it?
 - what remains unresolved?
@@ -96,7 +96,7 @@ What remains fragile, contested, or underdetermined?
 
 <!--
 Given these findings, what should happen next?
-- claims to investigate further
+- propositions to investigate further
 - tasks to add or reprioritize
 - evidence gaps worth targeting
 -->

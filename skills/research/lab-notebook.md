@@ -53,12 +53,12 @@ A runtime loader that:
 
 CSV parsing should handle RFC 4180 (quoted fields with commas).
 
-## Artifact Entity
+## Data-Package Entity
 
-Register a `web_route` artifact in the knowledge graph:
-- `artifact_type`: `"web_route"`
+Register a `web_route` data-package in the knowledge graph:
+- `type`: `"web_route"`
 - `target`: the rendered route path (e.g., `/guide/theme/chaos/src`)
-- `derived_from`: the data-package canonical ID
+- `grounded_by`: the source data-package canonical ID
 
 ## Reference Implementation
 

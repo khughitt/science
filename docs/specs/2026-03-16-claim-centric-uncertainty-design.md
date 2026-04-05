@@ -1,6 +1,6 @@
 # Claim-Centric Uncertainty Design
 
-> Canonical reference: [`docs/claim-and-evidence-model.md`](../claim-and-evidence-model.md) defines the reasoning model terminology and belief-update rules used by this design.
+> Canonical reference: [`docs/proposition-and-evidence-model.md`](../proposition-and-evidence-model.md) defines the current reasoning model terminology and belief-update rules. (This spec predates the rename from `claim`/`relation_claim` to `proposition`.)
 > Dashboard contract: [`docs/claim-centric-dashboard-contract.md`](../claim-centric-dashboard-contract.md) defines the stable claim and neighborhood summary shapes that should drive uncertainty views.
 > Long-term roadmap: [`2026-03-18-claim-centric-reasoning-roadmap.md`](./2026-03-18-claim-centric-reasoning-roadmap.md) extends this design into a phased reasoning architecture for summaries, prioritization, and multi-scale views.
 
@@ -168,7 +168,7 @@ These should inform the semantic design without forcing full ontology adoption i
 
 ## Canonical Reference Document
 
-`docs/claim-and-evidence-model.md` is the canonical home for:
+`docs/proposition-and-evidence-model.md` is the canonical home for:
 
 - reasoning-model definitions
 - evidence taxonomy and stance language

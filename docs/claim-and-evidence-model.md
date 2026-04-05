@@ -1,5 +1,10 @@
 # Claim And Evidence Model
 
+> **Superseded.** This document used the old `claim`/`relation_claim` terminology.
+> The canonical reference is now [`docs/proposition-and-evidence-model.md`](proposition-and-evidence-model.md).
+> All new work should use `proposition` (with optional S-P-O structure) instead of `claim`/`relation_claim`,
+> and evidence edges + observations instead of `evidence` nodes.
+
 This document is the canonical reference for the Science reasoning model.
 It defines the primary units of uncertainty, how evidence updates belief, and which fields should be authored versus derived.
 

@@ -20,29 +20,29 @@ Summarize each hypothesis as an organizing conjecture plus its main claim bundle
 
 ### {{H01 — Title}}
 
-<!-- Core claim bundle, mechanism, and main predictions. -->
+<!-- Core proposition bundle, mechanism, and main predictions. -->
 
 ### {{H02 — Title}}
 
-<!-- Core claim bundle, mechanism, and main predictions. -->
+<!-- Core proposition bundle, mechanism, and main predictions. -->
 
-## Claim-Level Comparison
+## Proposition-Level Comparison
 
 <!--
-What are the key claims that matter most in this comparison?
-Which claims are shared, and which genuinely differ?
+What are the key propositions that matter most in this comparison?
+Which propositions are shared, and which genuinely differ?
 -->
 
 ## Evidence Inventory
 
 <!--
-For each important claim, record how the current evidence bears on each hypothesis.
+For each important proposition, record how the current evidence bears on each hypothesis.
 Prefer support/dispute framing over winner/loser framing.
 -->
 
-| Claim / Evidence | H01 | H02 | Residual uncertainty |
+| Proposition / Evidence | H01 | H02 | Residual uncertainty |
 |---|---|---|---|
-| {{claim or evidence item}} | {{supports / disputes / unclear}} | {{supports / disputes / unclear}} | {{what still needs resolution}} |
+| {{proposition or evidence item}} | {{supports / disputes / unclear}} | {{supports / disputes / unclear}} | {{what still needs resolution}} |
 
 ## Discriminating Predictions
 
@@ -55,7 +55,7 @@ These are the highest-value places to gather evidence.
 
 <!--
 What evidence would most efficiently shift belief between them?
-Be explicit about which claim each proposed test bears on.
+Be explicit about which proposition each proposed test bears on.
 -->
 
 ## Current Assessment
@@ -73,6 +73,6 @@ Avoid overstating certainty.
 ## Synthesis Or Coexistence
 
 <!--
-Could both hypotheses contain valid claims?
+Could both hypotheses contain valid propositions?
 Could they apply in different settings, scales, or mechanisms?
 -->

@@ -74,12 +74,12 @@ rule build_package:
 ## Knowledge Graph Integration
 
 New entity types in core profile:
-- `data-package`: produced by a `workflow-run`, contains analysis results
-- `artifact`: derived from a `data-package`, represents downstream consumers
+- `data-package` (with `type: result`): produced by a `workflow-run`, contains analysis results
+- `data-package` (with `type: downstream`): grounded by a source `data-package`, represents downstream consumers
 
 Relations:
 - `produced_by` (sci:producedBy): data-package → workflow-run
-- `derived_from` (sci:derivedFrom): artifact → data-package
+- `grounded_by` (sci:groundedBy): downstream data-package → source data-package
 
 ## Provenance Model
 

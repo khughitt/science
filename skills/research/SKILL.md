@@ -7,12 +7,12 @@ description: Core research methodology for scientific investigation. This skill 
 
 This skill defines how to approach scientific research tasks within a Science project. Read this before any research activity: literature review, paper summarization, hypothesis development, evidence evaluation, or topic exploration.
 
-Science uses a skeptical, claim-centric model:
+Science uses a skeptical, proposition-centric model:
 - hypotheses are organizing conjectures
-- claims and relation-claims are the main units of belief
-- evidence supports or disputes claims
+- propositions are the main units of belief
+- observations and propositions support or dispute propositions via evidence edges
 - sparse or single-source support should be treated as fragile
-- contested neighborhoods and claims lacking empirical support should be treated as prioritization signals, not just annotations
+- contested neighborhoods and propositions lacking empirical support should be treated as prioritization signals, not just annotations
 
 ## Source Hierarchy
 
@@ -68,9 +68,9 @@ When writing about multiple sources:
 
 Hypotheses in this project follow a structured format (see the framework `hypothesis.md` template, or a project override in `.ai/templates/`). When developing or evaluating hypotheses:
 
-- Treat the hypothesis as a **bundle of claims**, not a single binary truth value
-- Every important claim should be **falsifiable** — specify what evidence would lower confidence
-- Distinguish **organizing conjecture** from **claim-level updates**
+- Treat the hypothesis as a **bundle of propositions**, not a single binary truth value
+- Every important proposition should be **falsifiable** — specify what evidence would lower confidence
+- Distinguish **organizing conjecture** from **proposition-level updates**
 - Prefer **support / dispute / unresolved** language over premature verdicts
 - Note the **evidence type** when possible: literature, empirical-data, simulation, benchmark
 - Track **residual uncertainty** explicitly, especially for single-source or indirect support
@@ -88,7 +88,7 @@ When updating the project model, prefer the canonical evidence categories:
 
 Use `empirical_data_evidence` for project-run analyses over observed data.
 Use `simulation_evidence` only when the result primarily comes from a model world.
-Use `negative_result` when the finding meaningfully disputes a claim or undermines prior support.
+Use `negative_result` when the finding meaningfully disputes a proposition or undermines prior support.
 
 Do not collapse these into a generic "computational evidence" label.
 
@@ -98,13 +98,13 @@ Treat a project as only partially migrated when:
 
 - hypothesis documents carry most of the real reasoning
 - scalar `confidence` on hypotheses or questions is still doing most of the epistemic work
-- claims are not yet decomposed from broad hypotheses
+- propositions are not yet decomposed from broad hypotheses
 - evidence is not yet attached as explicit support/dispute
 
 In those cases:
 
-- prefer creating or refining claims over editing prose alone
-- prefer claim-backed graph updates over summary-only status changes
+- prefer creating or refining propositions over editing prose alone
+- prefer proposition-backed graph updates over summary-only status changes
 - call out that the project still needs migration work when that affects interpretation quality
 
 ## Using Dashboard Summaries
@@ -116,9 +116,9 @@ When `knowledge/graph.trig` exists, use the store summaries to guide effort:
 
 Use them to identify:
 
-- contested claims
-- single-source claims
-- claims lacking empirical support
+- contested propositions
+- single-source propositions
+- propositions lacking empirical support
 - high-uncertainty neighborhoods
 
 These are high-value places to direct reading, replication, experimental work, or model cleanup.
@@ -143,7 +143,7 @@ Before writing any document, check:
 
 This prevents duplication and ensures new work connects to the existing knowledge base.
 
-For terminology and modeling details, see `docs/claim-and-evidence-model.md`.
+For terminology and modeling details, see `docs/proposition-and-evidence-model.md`.
 
 ## Template Usage
 

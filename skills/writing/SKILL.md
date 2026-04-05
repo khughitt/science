@@ -9,8 +9,8 @@ This skill defines writing conventions for documents within a Science project. R
 
 The default epistemic posture is skeptical:
 - write hypotheses as organizing conjectures
-- write claims as uncertain unless the evidence base is unusually strong
-- describe evidence as supporting, disputing, or leaving a claim unresolved
+- write propositions as uncertain unless the evidence base is unusually strong
+- describe evidence as supporting, disputing, or leaving a proposition unresolved
 
 ## Voice and Tone
 
@@ -53,14 +53,14 @@ Every BibTeX key used in a document must have a corresponding entry in `papers/r
 When writing any document, actively connect the content to the project's research framework:
 
 - Reference relevant **hypotheses** by ID: `(see Hypothesis H01)`
-- Reference important **claims** or `relation_claim`s when they are the real unit being updated
+- Reference important **propositions** when they are the real unit being updated
 - Note implications for **open questions** in `doc/questions/`
 - Suggest updates to **next steps** when findings change priorities
 - Flag any findings that affect the **causal model** in `models/`
 
 Avoid writing as if one result has proved a hypothesis or validated an edge unless that standard is genuinely met.
 
-For the project’s reasoning model, see `docs/claim-and-evidence-model.md`.
+For the project’s reasoning model, see `docs/proposition-and-evidence-model.md`.
 
 ## Formatting Conventions
 

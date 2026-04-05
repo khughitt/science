@@ -24,10 +24,10 @@ updated: "<YYYY-MM-DD>"
 What higher-level hypothesis or inquiry does this experiment bear on?
 -->
 
-## Claim(s) Under Test
+## Proposition(s) Under Test
 
 <!--
-List the specific claims or relation-claims this experiment is intended to update.
+List the specific propositions this experiment is intended to update.
 -->
 
 ## Evidence Type
@@ -66,10 +66,10 @@ What result would remain ambiguous?
 
 <!-- Fill in after running. Include effect sizes, uncertainty, and key diagnostics. -->
 
-## Claim Update
+## Proposition Update
 
 <!--
-How should these results update the claim(s) under test?
+How should these results update the proposition(s) under test?
 Use support/dispute/ambiguous language and note residual uncertainty.
 -->
 

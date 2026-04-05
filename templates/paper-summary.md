@@ -1,6 +1,6 @@
 ---
-id: "paper:{{bibtex_key}}"
-type: "paper"
+id: "article:{{bibtex_key}}"
+type: "article"
 title: "{{Title}}"
 status: "active"
 tags: []

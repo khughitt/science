@@ -20,23 +20,23 @@ State the overarching conjecture in plain language.
 This is the umbrella idea, not the final unit of evidence aggregation.
 -->
 
-## Claim Bundle
+## Proposition Bundle
 
 <!--
-List the key claims that make up this hypothesis.
-Prefer explicit subclaims, especially relation-claims of the form:
+List the key propositions that make up this hypothesis.
+Prefer explicit sub-propositions, especially those with explicit S-P-O structure:
 - subject
 - predicate
 - object
 -->
 
-### Core Claims
+### Core Propositions
 
-<!-- Claims that must be roughly true for the hypothesis to survive. -->
+<!-- Propositions that must be roughly true for the hypothesis to survive. -->
 
-### Supporting Or Auxiliary Claims
+### Supporting Or Auxiliary Propositions
 
-<!-- Claims that strengthen or elaborate the hypothesis but are not essential. -->
+<!-- Propositions that strengthen or elaborate the hypothesis but are not essential. -->
 
 ## Current Uncertainty
 
@@ -62,7 +62,7 @@ Be specific about what would force revision.
 ## Supporting Evidence
 
 <!--
-Existing evidence that supports one or more claims in this bundle.
+Existing evidence that supports one or more propositions in this bundle.
 Note evidence type where possible:
 - literature
 - empirical-data
@@ -73,7 +73,7 @@ Note evidence type where possible:
 ## Disputing Evidence
 
 <!--
-Existing evidence that weakens or contests one or more claims.
+Existing evidence that weakens or contests one or more propositions.
 Include null or conflicting findings here.
 -->
 
