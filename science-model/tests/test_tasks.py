@@ -30,3 +30,19 @@ def test_task_update_partial():
     tu = TaskUpdate(status=TaskStatus.ACTIVE)
     assert tu.title is None
     assert tu.status == "active"
+
+
+def test_task_has_artifacts_field():
+    t = Task(id="1", title="Run analysis", artifacts=["data-package:results-01"])
+    assert t.artifacts == ["data-package:results-01"]
+
+
+def test_task_has_findings_field():
+    t = Task(id="1", title="Run analysis", findings=["finding:f01"])
+    assert t.findings == ["finding:f01"]
+
+
+def test_task_artifacts_and_findings_default_empty():
+    t = Task(id="1", title="Simple task")
+    assert t.artifacts == []
+    assert t.findings == []

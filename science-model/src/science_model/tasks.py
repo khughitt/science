@@ -33,6 +33,8 @@ class Task(BaseModel):
     related: list[str] = []
     tags: list[str] = []
     group: str = ""
+    artifacts: list[str] = Field(default_factory=list)
+    findings: list[str] = Field(default_factory=list)
     created: date = Field(default_factory=date.today)
     completed: date | None = None
 
