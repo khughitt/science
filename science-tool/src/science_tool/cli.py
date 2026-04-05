@@ -216,6 +216,26 @@ def graph_migrate(output_format: str, project_root: Path) -> None:
         raise click.exceptions.Exit(1)
 
 
+@graph.command("migrate-model")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+def graph_migrate_model(project_root: Path) -> None:
+    """Migrate project sources from old entity model to Project Model."""
+    from science_tool.graph.project_model_migration import migrate_entity_sources
+
+    project_root = project_root.resolve()
+    stats = migrate_entity_sources(project_root)
+    click.echo(
+        f"Migration complete: {stats['migrated']} migrated, {stats['skipped']} skipped, {stats['errors']} errors"
+    )
+    if stats["errors"] > 0:
+        click.echo("Review errors manually — some files may need manual migration.")
+
+
 @graph.command("stats")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 @click.option(
@@ -1732,14 +1752,23 @@ def project_index(output_format: str, project_root: Path) -> None:
     if hyp_dir.is_dir():
         for md in sorted(hyp_dir.glob("*.md")):
             title, status = _extract_title_status(md, _yaml)
-            rows.append({"kind": "hypothesis", "file": md.relative_to(project_root).as_posix(), "title": title, "status": status})
+            rows.append(
+                {
+                    "kind": "hypothesis",
+                    "file": md.relative_to(project_root).as_posix(),
+                    "title": title,
+                    "status": status,
+                }
+            )
 
     # Scan questions
     q_dir = paths.doc_dir / "questions"
     if q_dir.is_dir():
         for md in sorted(q_dir.glob("*.md")):
             title, status = _extract_title_status(md, _yaml)
-            rows.append({"kind": "question", "file": md.relative_to(project_root).as_posix(), "title": title, "status": status})
+            rows.append(
+                {"kind": "question", "file": md.relative_to(project_root).as_posix(), "title": title, "status": status}
+            )
 
     emit_query_rows(
         output_format=output_format,
@@ -2077,7 +2106,9 @@ def feedback_triage(target: str | None) -> None:
         n_entries = len(group["entries"])
         total_recur = group["total_recurrence"]
         projects_str = ", ".join(sorted(group["projects"])) if group["projects"] else "unknown"
-        click.echo(f"\n## {target_key}  ({n_entries} entries, {total_recur} recurrences, {n_projects} projects: {projects_str})")
+        click.echo(
+            f"\n## {target_key}  ({n_entries} entries, {total_recur} recurrences, {n_projects} projects: {projects_str})"
+        )
         for entry in group["entries"]:
             click.echo(f"  - {entry.id} [{entry.category}] {entry.summary}")
 
