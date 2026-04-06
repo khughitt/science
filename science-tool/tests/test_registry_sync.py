@@ -147,8 +147,9 @@ def test_full_sync_two_projects(tmp_path: Path) -> None:
     )
     assert isinstance(report, SyncReport)
     assert report.entities_total > 0
-    sync_files = list((proj_b / "doc" / "sync").glob("*.md"))
-    assert len(sync_files) >= 1
+    # Propagation is disabled — registry-only sync does not write doc/sync/ files
+    sync_dir = proj_b / "doc" / "sync"
+    assert not sync_dir.exists() or len(list(sync_dir.glob("*.md"))) == 0
 
 
 def test_sync_idempotent(tmp_path: Path) -> None:

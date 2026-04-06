@@ -1938,10 +1938,6 @@ def sync_run(config_path: str | None, dry_run: bool) -> None:
     click.echo(f"{prefix}Sync complete.")
     click.echo(f"  Entities: {report.entities_total} (+{report.entities_new} new)")
     click.echo(f"  Relations: {report.relations_total}")
-    if report.propagated:
-        click.echo("  Propagated:")
-        for key, count in report.propagated.items():
-            click.echo(f"    {key}: {count}")
     if report.drift_warnings:
         click.echo("  Drift warnings:")
         for warning in report.drift_warnings:

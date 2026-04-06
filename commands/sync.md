@@ -4,7 +4,10 @@ description: Synchronize knowledge model and content across registered science p
 
 # Cross-Project Sync
 
-Run a full cross-project sync to align knowledge models and propagate relevant content between registered science projects.
+Run a cross-project sync to align the registry — a shared index of entities across
+all registered science projects. The registry enables cross-project awareness (e.g.,
+querying which projects reference a given gene or concept) without copying content
+between projects.
 
 ## Setup
 
@@ -34,30 +37,16 @@ After sync completes, present the report:
 
 - How many entities are now tracked across projects
 - How many are new since last sync
-- Any shared entity kinds promoted to the shared profile
 
-### Alignment
+### Drift Warnings
 
-- Entities deduplicated across projects
-- Drift detected (same entity, conflicting metadata)
-
-### Propagated Content
-
-- What was propagated and where (questions, claims, hypotheses, evidence)
-- Propagated files land in `doc/sync/` in each target project
-
-### Fuzzy Matches for Review
-
-- Near-matches that couldn't be auto-resolved (tier 4)
-- Present these for the user to review and decide
+- Same entity with conflicting metadata across projects
 
 ## Follow-Up
 
 Suggest the user:
-1. Review propagated entities in `doc/sync/` — remove any that aren't relevant
-2. Resolve drift warnings by updating entity metadata
-3. Review fuzzy matches and decide whether to merge or keep separate
-4. Run `science-tool graph build` to incorporate propagated entities into the knowledge graph
+1. Resolve any drift warnings by updating entity metadata
+2. Run `science-tool graph build` if entity metadata changed
 
 ## Rebuild
 
