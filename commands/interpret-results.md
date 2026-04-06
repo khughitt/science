@@ -150,6 +150,25 @@ When graph updates are warranted, frame them as claim updates:
 Do not use hypothesis status changes as the primary output.
 Hypothesis-level summaries can be updated later as a secondary reflection of underlying claim changes.
 
+### Structured Output
+
+After analyzing results, create structured entities in addition to the prose document:
+
+1. For each concrete empirical fact:
+   `science-tool graph add observation "<description>" --data-source <data-package-ref> --metric <what> --value <value>`
+
+2. For each interpretive claim:
+   `science-tool graph add proposition "<text>" --source <data-package-ref> --confidence <0-1>`
+
+3. For each observation that bears on a proposition:
+   `science-tool graph add evidence <observation-ref> <proposition-ref> --stance supports|disputes --strength strong|moderate|weak`
+
+4. Bundle into a finding:
+   `science-tool graph add finding "<summary>" --confidence moderate --proposition <ref> --observation <ref> --source <data-package-ref>`
+
+5. Create the interpretation:
+   `science-tool graph add interpretation "<summary>" --finding <ref> --context "<what prompted this>"`
+
 ### 6. Surface New Questions
 
 Identify new questions raised by the results.

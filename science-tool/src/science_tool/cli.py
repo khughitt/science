@@ -28,13 +28,17 @@ from science_tool.graph.store import (
     add_concept,
     add_edge,
     add_evidence_edge,
+    add_finding,
     add_hypothesis,
     add_inquiry,
     add_inquiry_edge,
     add_inquiry_node,
+    add_interpretation,
     add_observation,
+    add_paper_entity,
     add_proposition,
     add_question,
+    add_story,
     add_transformation,
     build_graph_dot,
     diff_graph_inputs,
@@ -908,6 +912,98 @@ def graph_add_edge(
     click.echo(
         f"Added edge in {graph_layer}: {shorten_uri(str(s_uri))} {shorten_uri(str(p_uri))} {shorten_uri(str(o_uri))}"
     )
+
+
+@graph_add.command("finding")
+@click.argument("summary")
+@click.option("--confidence", required=True, type=click.Choice(["high", "moderate", "low", "speculative"]))
+@click.option("--proposition", "propositions", multiple=True, required=True, help="Proposition ref(s)")
+@click.option("--observation", "observations", multiple=True, required=True, help="Observation ref(s)")
+@click.option("--source", required=True, help="data-package or workflow-run that produced the observations")
+@click.option("--id", "finding_id", default=None, help="Custom finding ID slug")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def add_finding_cmd(
+    summary: str,
+    confidence: str,
+    propositions: tuple[str, ...],
+    observations: tuple[str, ...],
+    source: str,
+    finding_id: str | None,
+    graph_path: Path,
+) -> None:
+    """Add a finding — propositions grounded by observations."""
+    uri = add_finding(graph_path, summary, confidence, list(propositions), list(observations), source, finding_id)
+    click.echo(f"Added finding: {uri}")
+
+
+@graph_add.command("interpretation")
+@click.argument("summary")
+@click.option("--finding", "findings", multiple=True, required=True, help="Finding ref(s)")
+@click.option("--context", "interp_context", default=None, help="What prompted this analysis")
+@click.option("--prior", default=None, help="Previous interpretation ref (provenance chain)")
+@click.option("--id", "interpretation_id", default=None, help="Custom interpretation ID slug")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def add_interpretation_cmd(
+    summary: str,
+    findings: tuple[str, ...],
+    interp_context: str | None,
+    prior: str | None,
+    interpretation_id: str | None,
+    graph_path: Path,
+) -> None:
+    """Add an interpretation — one analysis session's narrative and findings."""
+    uri = add_interpretation(graph_path, summary, list(findings), interp_context, prior, interpretation_id)
+    click.echo(f"Added interpretation: {uri}")
+
+
+@graph_add.command("story")
+@click.argument("title")
+@click.option("--summary", required=True, help="Brief summary of the narrative arc")
+@click.option("--about", required=True, help="Question or hypothesis this story is about")
+@click.option("--interpretation", "interpretations", multiple=True, required=True, help="Interpretation ref(s)")
+@click.option("--status", default="draft", type=click.Choice(["draft", "developing", "mature"]))
+@click.option("--id", "story_id", default=None, help="Custom story ID slug")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def add_story_cmd(
+    title: str,
+    summary: str,
+    about: str,
+    interpretations: tuple[str, ...],
+    status: str,
+    story_id: str | None,
+    graph_path: Path,
+) -> None:
+    """Add a story — a narrative arc around a question or hypothesis."""
+    uri = add_story(graph_path, title, summary, about, list(interpretations), status, story_id)
+    click.echo(f"Added story: {uri}")
+
+
+@graph_add.command("paper")
+@click.argument("title")
+@click.option("--story", "stories", multiple=True, required=True, help="Story ref(s)")
+@click.option("--status", default="outline", type=click.Choice(["outline", "draft", "revision", "final"]))
+@click.option("--abstract", default=None, help="Paper abstract")
+@click.option("--id", "paper_id", default=None, help="Custom paper ID slug")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def add_paper_cmd(
+    title: str,
+    stories: tuple[str, ...],
+    status: str,
+    abstract: str | None,
+    paper_id: str | None,
+    graph_path: Path,
+) -> None:
+    """Add a paper — a composition of stories for communication."""
+    uri = add_paper_entity(graph_path, title, list(stories), status, abstract, paper_id)
+    click.echo(f"Added paper: {uri}")
 
 
 @main.group()
