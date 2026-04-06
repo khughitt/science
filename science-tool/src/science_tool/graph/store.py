@@ -410,6 +410,157 @@ def add_evidence_edge(
     _save_dataset(dataset, graph_path)
 
 
+def add_finding(
+    graph_path: Path,
+    summary: str,
+    confidence: str,
+    propositions: list[str],
+    observations: list[str],
+    source: str,
+    finding_id: str | None = None,
+) -> URIRef:
+    """Add a finding — propositions grounded by observations from an analysis."""
+    if confidence not in ("high", "moderate", "low", "speculative"):
+        raise click.ClickException(f"Confidence must be high/moderate/low/speculative, got '{confidence}'")
+
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+
+    if finding_id is not None:
+        token = _slug(finding_id)
+        if not token:
+            raise click.ClickException("Finding ID must contain at least one alphanumeric character")
+    else:
+        token = hashlib.sha1(f"{source}|{summary}".encode("utf-8")).hexdigest()[:12]
+
+    finding_uri = URIRef(PROJECT_NS[f"finding/{token}"])
+    knowledge.add((finding_uri, RDF.type, SCI_NS.Finding))
+    knowledge.add((finding_uri, SCHEMA_NS.description, Literal(summary)))
+    knowledge.add((finding_uri, SCI_NS.confidence, Literal(confidence)))
+
+    for prop_ref in propositions:
+        knowledge.add((finding_uri, SCI_NS.contains, _resolve_term(prop_ref)))
+
+    for obs_ref in observations:
+        knowledge.add((finding_uri, SCI_NS.contains, _resolve_term(obs_ref)))
+
+    knowledge.add((finding_uri, SCI_NS.groundedBy, _resolve_term(source)))
+
+    _save_dataset(dataset, graph_path)
+    return finding_uri
+
+
+def add_interpretation(
+    graph_path: Path,
+    summary: str,
+    findings: list[str],
+    context: str | None = None,
+    prior: str | None = None,
+    interpretation_id: str | None = None,
+) -> URIRef:
+    """Add an interpretation — one analysis session's narrative and findings."""
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+
+    if interpretation_id is not None:
+        token = _slug(interpretation_id)
+        if not token:
+            raise click.ClickException("Interpretation ID must contain at least one alphanumeric character")
+    else:
+        token = hashlib.sha1(f"{summary}".encode("utf-8")).hexdigest()[:12]
+
+    interp_uri = URIRef(PROJECT_NS[f"interpretation/{token}"])
+    knowledge.add((interp_uri, RDF.type, SCI_NS.Interpretation))
+    knowledge.add((interp_uri, SCHEMA_NS.description, Literal(summary)))
+
+    if context:
+        knowledge.add((interp_uri, SCI_NS.context, Literal(context)))
+
+    for finding_ref in findings:
+        knowledge.add((interp_uri, SCI_NS.contains, _resolve_term(finding_ref)))
+
+    if prior:
+        provenance = dataset.graph(_graph_uri("graph/provenance"))
+        provenance.add((interp_uri, PROV.wasDerivedFrom, _resolve_term(prior)))
+
+    _save_dataset(dataset, graph_path)
+    return interp_uri
+
+
+def add_story(
+    graph_path: Path,
+    title: str,
+    summary: str,
+    about: str,
+    interpretations: list[str],
+    status: str = "draft",
+    story_id: str | None = None,
+) -> URIRef:
+    """Add a story — a narrative arc synthesizing interpretations around a question or hypothesis."""
+    if status not in ("draft", "developing", "mature"):
+        raise click.ClickException(f"Story status must be draft/developing/mature, got '{status}'")
+
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+
+    if story_id is not None:
+        token = _slug(story_id)
+        if not token:
+            raise click.ClickException("Story ID must contain at least one alphanumeric character")
+    else:
+        token = hashlib.sha1(f"{title}".encode("utf-8")).hexdigest()[:12]
+
+    story_uri = URIRef(PROJECT_NS[f"story/{token}"])
+    knowledge.add((story_uri, RDF.type, SCI_NS.Story))
+    knowledge.add((story_uri, SKOS.prefLabel, Literal(title)))
+    knowledge.add((story_uri, SCHEMA_NS.description, Literal(summary)))
+    knowledge.add((story_uri, SCI_NS.projectStatus, Literal(status)))
+    knowledge.add((story_uri, SCI_NS.organizedBy, _resolve_term(about)))
+
+    for interp_ref in interpretations:
+        knowledge.add((story_uri, SCI_NS.synthesizes, _resolve_term(interp_ref)))
+
+    _save_dataset(dataset, graph_path)
+    return story_uri
+
+
+def add_paper_entity(
+    graph_path: Path,
+    title: str,
+    stories: list[str],
+    status: str = "outline",
+    abstract: str | None = None,
+    paper_id: str | None = None,
+) -> URIRef:
+    """Add a paper — an ordered composition of stories for communication."""
+    if status not in ("outline", "draft", "revision", "final"):
+        raise click.ClickException(f"Paper status must be outline/draft/revision/final, got '{status}'")
+
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+
+    if paper_id is not None:
+        token = _slug(paper_id)
+        if not token:
+            raise click.ClickException("Paper ID must contain at least one alphanumeric character")
+    else:
+        token = hashlib.sha1(f"{title}".encode("utf-8")).hexdigest()[:12]
+
+    paper_uri = URIRef(PROJECT_NS[f"paper/{token}"])
+    knowledge.add((paper_uri, RDF.type, SCI_NS.Paper))
+    knowledge.add((paper_uri, SKOS.prefLabel, Literal(title)))
+    knowledge.add((paper_uri, SCI_NS.projectStatus, Literal(status)))
+
+    if abstract:
+        knowledge.add((paper_uri, SCHEMA_NS.description, Literal(abstract)))
+
+    for story_ref in stories:
+        knowledge.add((paper_uri, SCI_NS.comprises, _resolve_term(story_ref)))
+
+    _save_dataset(dataset, graph_path)
+    return paper_uri
+
+
 def add_hypothesis(graph_path: Path, hypothesis_id: str, text: str, source: str, status: str | None = None) -> URIRef:
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
