@@ -29,7 +29,7 @@ def migrate_entity_sources(project_root: Path) -> dict[str, int]:
     """Migrate all entity source files in a project to the new model."""
     stats = {"migrated": 0, "skipped": 0, "errors": 0}
 
-    for md_dir in ["doc", "specs"]:
+    for md_dir in ["doc", "specs", "tasks"]:
         scan_dir = project_root / md_dir
         if not scan_dir.exists():
             continue
@@ -91,11 +91,10 @@ def _migrate_file(path: Path) -> bool:
             fm["id"] = f"{_PREFIX_RENAMES[prefix]}:{slug}"
             changed = True
 
-    for field in ("related", "source_refs", "blocked_by"):
-        refs = fm.get(field, [])
-        if isinstance(refs, list):
-            new_refs = [_rename_ref(r) for r in refs]
-            if new_refs != refs:
+    for field, value in fm.items():
+        if isinstance(value, list) and value and isinstance(value[0], str):
+            new_refs = [_rename_ref(r) for r in value]
+            if new_refs != value:
                 fm[field] = new_refs
                 changed = True
 

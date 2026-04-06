@@ -137,6 +137,34 @@ def test_migrate_blocked_by_cross_references(tmp_path: Path) -> None:
     assert "observation:e02" in content
 
 
+def test_migrate_tasks_directory(tmp_path: Path) -> None:
+    """Migration scans tasks/ directory."""
+    source = tmp_path / "tasks" / "active.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "---\nid: task:t01\ntype: task\ntitle: Do something\nrelated:\n  - paper:Walker2024\n---\n"
+    )
+    results = migrate_entity_sources(tmp_path)
+    content = source.read_text()
+    assert "article:Walker2024" in content
+    assert results["migrated"] >= 1
+
+
+def test_migrate_custom_list_fields(tmp_path: Path) -> None:
+    """Migration renames refs in any list-of-string field, not just related/source_refs/blocked_by."""
+    source = tmp_path / "doc" / "synthesis.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "---\nid: synthesis:s01\ntype: synthesis\ntitle: Synthesis\npapers:\n  - paper:Smith2024\n  - paper:Jones2023\n---\n"
+    )
+    results = migrate_entity_sources(tmp_path)
+    content = source.read_text()
+    assert "article:Smith2024" in content
+    assert "article:Jones2023" in content
+    assert "paper:" not in content
+    assert results["migrated"] >= 1
+
+
 def test_migrate_returns_correct_stats(tmp_path: Path) -> None:
     (tmp_path / "doc").mkdir()
     migrated = tmp_path / "doc" / "claim.md"
