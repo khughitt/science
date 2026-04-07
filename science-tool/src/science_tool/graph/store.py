@@ -487,6 +487,43 @@ def add_interpretation(
     return interp_uri
 
 
+def add_discussion(
+    graph_path: Path,
+    summary: str,
+    propositions: list[str],
+    context: str | None = None,
+    prior: str | None = None,
+    discussion_id: str | None = None,
+) -> URIRef:
+    """Add a discussion — theoretical reasoning producing propositions without empirical grounding."""
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+
+    if discussion_id is not None:
+        token = _slug(discussion_id)
+        if not token:
+            raise click.ClickException("Discussion ID must contain at least one alphanumeric character")
+    else:
+        token = hashlib.sha1(f"{summary}".encode("utf-8")).hexdigest()[:12]
+
+    disc_uri = URIRef(PROJECT_NS[f"discussion/{token}"])
+    knowledge.add((disc_uri, RDF.type, SCI_NS.Discussion))
+    knowledge.add((disc_uri, SCHEMA_NS.description, Literal(summary)))
+
+    if context:
+        knowledge.add((disc_uri, SCI_NS.context, Literal(context)))
+
+    for prop_ref in propositions:
+        knowledge.add((disc_uri, SCI_NS.contains, _resolve_term(prop_ref)))
+
+    if prior:
+        provenance = dataset.graph(_graph_uri("graph/provenance"))
+        provenance.add((disc_uri, PROV.wasDerivedFrom, _resolve_term(prior)))
+
+    _save_dataset(dataset, graph_path)
+    return disc_uri
+
+
 def add_story(
     graph_path: Path,
     title: str,

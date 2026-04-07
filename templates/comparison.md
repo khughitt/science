@@ -1,9 +1,9 @@
 ---
-id: "comparison:{{slug}}"
-type: "comparison"
+id: "discussion:{{slug}}"
+type: "discussion"
 title: "{{Short Title}}"
 status: "active"
-tags: []
+tags: [comparison]
 source_refs: []
 related: []
 created: "{{YYYY-MM-DD}}"

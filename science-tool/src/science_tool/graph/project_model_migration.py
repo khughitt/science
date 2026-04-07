@@ -13,6 +13,8 @@ _TYPE_RENAMES = {
     "relation_claim": "proposition",
     "evidence": "observation",
     "artifact": "data-package",
+    "comparison": "discussion",
+    "bias-audit": "task",
 }
 
 # ID prefix renames (same as type renames, plus paper→article)
@@ -22,6 +24,8 @@ _PREFIX_RENAMES = {
     "evidence": "observation",
     "artifact": "data-package",
     "paper": "article",
+    "comparison": "discussion",
+    "bias-audit": "task",
 }
 
 
@@ -82,6 +86,11 @@ def _migrate_file(path: Path) -> bool:
         changed = True
     elif entity_type == "paper":
         fm["type"] = "article"
+        changed = True
+    elif entity_type == "pre-registration":
+        # Pre-registrations become plain documents (not graph entities)
+        fm.pop("type", None)
+        fm.pop("id", None)
         changed = True
 
     entity_id = fm.get("id", "")

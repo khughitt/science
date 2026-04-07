@@ -26,6 +26,7 @@ from science_tool.graph.store import (
     add_article,
     add_assumption,
     add_concept,
+    add_discussion,
     add_edge,
     add_evidence_edge,
     add_finding,
@@ -958,6 +959,28 @@ def add_interpretation_cmd(
     """Add an interpretation — one analysis session's narrative and findings."""
     uri = add_interpretation(graph_path, summary, list(findings), interp_context, prior, interpretation_id)
     click.echo(f"Added interpretation: {uri}")
+
+
+@graph_add.command("discussion")
+@click.argument("summary")
+@click.option("--proposition", "propositions", multiple=True, required=True, help="Proposition ref(s)")
+@click.option("--context", "disc_context", default=None, help="What prompted this discussion")
+@click.option("--prior", default=None, help="Previous discussion ref (provenance chain)")
+@click.option("--id", "discussion_id", default=None, help="Custom discussion ID slug")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def add_discussion_cmd(
+    summary: str,
+    propositions: tuple[str, ...],
+    disc_context: str | None,
+    prior: str | None,
+    discussion_id: str | None,
+    graph_path: Path,
+) -> None:
+    """Add a discussion — theoretical reasoning producing propositions."""
+    uri = add_discussion(graph_path, summary, list(propositions), disc_context, prior, discussion_id)
+    click.echo(f"Added discussion: {uri}")
 
 
 @graph_add.command("story")

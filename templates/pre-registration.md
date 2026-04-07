@@ -1,13 +1,7 @@
 ---
-id: "pre-registration:{{slug}}"
-type: "pre-registration"
-title: "{{Short Title}}"
-status: "active"
-tags: []
-source_refs: []
-related: []
+title: "Pre-registration: {{Short Title}}"
+tags: [pre-registration]
 created: "{{YYYY-MM-DD}}"
-updated: "{{YYYY-MM-DD}}"
 ---
 
 # Pre-registration: {{Short Title}}

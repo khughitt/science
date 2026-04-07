@@ -23,21 +23,18 @@ class EntityType(StrEnum):
     INTERPRETATION = "interpretation"
     DISCUSSION = "discussion"
     MODEL = "model"
-    PRE_REGISTRATION = "pre-registration"
     PLAN = "plan"
     ASSUMPTION = "assumption"
     TRANSFORMATION = "transformation"
     VARIABLE = "variable"
     DATASET = "dataset"
     METHOD = "method"
-    COMPARISON = "comparison"
     EXPERIMENT = "experiment"
     ARTICLE = "article"
     WORKFLOW = "workflow"
     WORKFLOW_RUN = "workflow-run"
     WORKFLOW_STEP = "workflow-step"
     DATA_PACKAGE = "data-package"
-    BIAS_AUDIT = "bias-audit"
     FINDING = "finding"
     STORY = "story"
     PAPER = "paper"
@@ -76,6 +73,8 @@ class Entity(BaseModel):
     confidence: float | None = None
     datasets: list[str] | None = None
     aliases: list[str] = Field(default_factory=list)
+    pre_registered: bool = False
+    pre_registered_date: date | None = None
     sync_source: SyncSource | None = None
 
     @model_validator(mode="after")

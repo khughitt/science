@@ -138,7 +138,7 @@ def test_grounded_by_relation() -> None:
 def test_synthesizes_relation() -> None:
     rel = next(r for r in CORE_PROFILE.relation_kinds if r.name == "synthesizes")
     assert rel.source_kinds == ["story"]
-    assert rel.target_kinds == ["interpretation"]
+    assert set(rel.target_kinds) == {"interpretation", "discussion"}
     assert rel.predicate == "sci:synthesizes"
 
 
@@ -168,6 +168,7 @@ def test_contains_broadened() -> None:
     assert "workflow" in contains.source_kinds
     assert "finding" in contains.source_kinds
     assert "interpretation" in contains.source_kinds
+    assert "discussion" in contains.source_kinds
     assert "workflow-step" in contains.target_kinds
     assert "proposition" in contains.target_kinds
     assert "observation" in contains.target_kinds

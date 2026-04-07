@@ -150,10 +150,10 @@ CORE_PROFILE = ProfileManifest(
         RelationKind(
             name="contains",
             predicate="sci:contains",
-            source_kinds=["workflow", "finding", "interpretation"],
+            source_kinds=["workflow", "finding", "interpretation", "discussion"],
             target_kinds=["workflow-step", "proposition", "observation", "finding"],
             layer="layer/core",
-            description="A workflow contains workflow steps; a finding or interpretation contains propositions, observations, or findings.",
+            description="A container entity includes its components: workflow→steps, finding→propositions/observations, interpretation/discussion→findings/propositions.",
         ),
         RelationKind(
             name="executes",
@@ -191,9 +191,9 @@ CORE_PROFILE = ProfileManifest(
             name="synthesizes",
             predicate="sci:synthesizes",
             source_kinds=["story"],
-            target_kinds=["interpretation"],
+            target_kinds=["interpretation", "discussion"],
             layer="layer/core",
-            description="A story synthesizes one or more interpretations.",
+            description="A story synthesizes interpretations and discussions.",
         ),
         RelationKind(
             name="organized_by",

@@ -1,9 +1,9 @@
 ---
-id: "bias-audit:{{slug}}"
-type: "bias-audit"
-title: "{{Short Title}}"
-status: "active"
-tags: []
+id: "task:{{slug}}"
+type: "task"
+title: "Bias Audit: {{Short Title}}"
+status: "proposed"
+tags: [bias-audit]
 source_refs: []
 related: []
 created: "{{YYYY-MM-DD}}"

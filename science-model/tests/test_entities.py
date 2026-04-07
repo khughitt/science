@@ -103,11 +103,50 @@ def test_story_entity_type():
 
 
 def test_removed_types_absent():
-    """CLAIM, RELATION_CLAIM, EVIDENCE, ARTIFACT are removed from EntityType."""
+    """Retired entity types are removed from EntityType."""
     assert not hasattr(EntityType, "CLAIM")
     assert not hasattr(EntityType, "RELATION_CLAIM")
     assert not hasattr(EntityType, "EVIDENCE")
     assert not hasattr(EntityType, "ARTIFACT")
+    assert not hasattr(EntityType, "COMPARISON")
+    assert not hasattr(EntityType, "BIAS_AUDIT")
+    assert not hasattr(EntityType, "PRE_REGISTRATION")
+
+
+def test_pre_registered_fields():
+    e = Entity(
+        id="proposition:p01",
+        type=EntityType.PROPOSITION,
+        title="Test",
+        project="p",
+        tags=[],
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path="doc/p01.md",
+        pre_registered=True,
+        pre_registered_date=date(2026, 4, 1),
+    )
+    assert e.pre_registered is True
+    assert e.pre_registered_date == date(2026, 4, 1)
+
+
+def test_pre_registered_defaults_false():
+    e = Entity(
+        id="proposition:p02",
+        type=EntityType.PROPOSITION,
+        title="Test",
+        project="p",
+        tags=[],
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path="doc/p02.md",
+    )
+    assert e.pre_registered is False
+    assert e.pre_registered_date is None
 
 
 def test_new_types_accessible_from_package():
