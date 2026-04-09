@@ -3525,7 +3525,6 @@ def _build_input_manifest(graph_path: Path) -> dict[str, dict[str, int | str]]:
             pp.doc_dir,
             pp.specs_dir,
             pp.papers_dir / "summaries",
-            pp.data_dir,
             pp.code_dir,
             pp.tasks_dir,
             pp.knowledge_dir / "sources",
@@ -3534,7 +3533,7 @@ def _build_input_manifest(graph_path: Path) -> dict[str, dict[str, int | str]]:
         if notes_dir.is_dir():
             include_dirs.append(notes_dir)
     except Exception:
-        include_dirs = [project_root / d for d in ("doc", "specs", "notes", "papers/summaries", "data", "code")]
+        include_dirs = [project_root / d for d in ("doc", "specs", "notes", "papers/summaries", "code")]
 
     include_files = ("RESEARCH_PLAN.md", "science.yaml", "CLAUDE.md", "AGENTS.md")
 

@@ -1,0 +1,10 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def isolate_science_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(tmp_path / ".science-config"))

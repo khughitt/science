@@ -1940,21 +1940,23 @@ def sync() -> None:
 @click.option("--dry-run", is_flag=True, help="Preview without writing changes")
 def sync_run(config_path: str | None, dry_run: bool) -> None:
     """Run cross-project sync."""
-    from science_tool.registry.config import DEFAULT_CONFIG_PATH, load_global_config
-    from science_tool.registry.index import DEFAULT_REGISTRY_DIR
-    from science_tool.registry.state import DEFAULT_STATE_PATH
+    from science_tool.registry.config import get_default_config_path, load_global_config
+    from science_tool.registry.index import get_default_registry_dir
+    from science_tool.registry.state import get_default_state_path
     from science_tool.registry.sync import run_sync as do_sync
 
-    cfg_path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    cfg_path = Path(config_path) if config_path else get_default_config_path()
     config = load_global_config(cfg_path)
     if not config.projects:
         click.echo("No registered projects. Run science commands in project directories first.")
         return
 
+    registry_dir = get_default_registry_dir()
+    state_path = get_default_state_path()
     report = do_sync(
         project_paths=[Path(p.path) for p in config.projects],
-        registry_dir=DEFAULT_REGISTRY_DIR,
-        state_path=DEFAULT_STATE_PATH,
+        registry_dir=registry_dir,
+        state_path=state_path,
         dry_run=dry_run,
     )
     prefix = "[dry run] " if dry_run else ""
@@ -1973,10 +1975,10 @@ def sync_status(config_path: str | None) -> None:
     """Show sync status and staleness."""
     from datetime import datetime
 
-    from science_tool.registry.config import DEFAULT_CONFIG_PATH, load_global_config
+    from science_tool.registry.config import get_default_config_path, load_global_config
     from science_tool.registry.state import load_sync_state
 
-    cfg_path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    cfg_path = Path(config_path) if config_path else get_default_config_path()
     config = load_global_config(cfg_path)
     state_path = cfg_path.parent / "sync_state.yaml"
     state = load_sync_state(state_path)
@@ -2000,9 +2002,9 @@ def sync_status(config_path: str | None) -> None:
 @click.option("--config", "config_path", type=click.Path(), default=None)
 def sync_projects(config_path: str | None) -> None:
     """List registered projects."""
-    from science_tool.registry.config import DEFAULT_CONFIG_PATH, load_global_config
+    from science_tool.registry.config import get_default_config_path, load_global_config
 
-    cfg_path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    cfg_path = Path(config_path) if config_path else get_default_config_path()
     config = load_global_config(cfg_path)
     if not config.projects:
         click.echo("No registered projects.")
@@ -2017,12 +2019,14 @@ def sync_rebuild(config_path: str | None) -> None:
     """Rebuild registry from scratch by scanning all projects."""
     import shutil
 
-    from science_tool.registry.config import DEFAULT_CONFIG_PATH, load_global_config, prune_missing_projects
-    from science_tool.registry.index import DEFAULT_REGISTRY_DIR
-    from science_tool.registry.state import DEFAULT_STATE_PATH
+    from science_tool.registry.config import get_default_config_path, load_global_config, prune_missing_projects
+    from science_tool.registry.index import get_default_registry_dir
+    from science_tool.registry.state import get_default_state_path
     from science_tool.registry.sync import run_sync as do_sync
 
-    cfg_path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    cfg_path = Path(config_path) if config_path else get_default_config_path()
+    registry_dir = get_default_registry_dir()
+    state_path = get_default_state_path()
 
     pruned = prune_missing_projects(cfg_path)
     for path in pruned:
@@ -2033,14 +2037,14 @@ def sync_rebuild(config_path: str | None) -> None:
         click.echo("No registered projects.")
         return
 
-    if DEFAULT_REGISTRY_DIR.is_dir():
-        shutil.rmtree(DEFAULT_REGISTRY_DIR)
+    if registry_dir.is_dir():
+        shutil.rmtree(registry_dir)
     click.echo("Registry cleared. Rebuilding...")
 
     report = do_sync(
         project_paths=[Path(p.path) for p in config.projects],
-        registry_dir=DEFAULT_REGISTRY_DIR,
-        state_path=DEFAULT_STATE_PATH,
+        registry_dir=registry_dir,
+        state_path=state_path,
     )
     click.echo(f"Rebuild complete. {report.entities_total} entities, {report.relations_total} relations.")
 
@@ -2059,9 +2063,9 @@ def feedback() -> None:
 def _get_feedback_dir() -> Path:
     import os
 
-    from science_tool.registry.config import SCIENCE_CONFIG_DIR
+    from science_tool.registry.config import get_science_config_dir
 
-    return Path(os.environ.get("SCIENCE_FEEDBACK_DIR", str(SCIENCE_CONFIG_DIR / "feedback")))
+    return Path(os.environ.get("SCIENCE_FEEDBACK_DIR", str(get_science_config_dir() / "feedback")))
 
 
 @feedback.command("add")

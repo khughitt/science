@@ -72,6 +72,28 @@ def test_ensure_registered_multiple_projects(tmp_path):
     assert names == {"proj-a", "proj-b"}
 
 
+def test_ensure_registered_uses_runtime_science_config_dir(tmp_path, monkeypatch):
+    from science_tool.registry import config as registry_config
+
+    project_root = tmp_path / "proj-a"
+    project_root.mkdir()
+
+    legacy_dir = tmp_path / "legacy-config"
+    isolated_dir = tmp_path / "isolated-config"
+    monkeypatch.setattr(registry_config, "DEFAULT_CONFIG_PATH", legacy_dir / "config.yaml")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(isolated_dir))
+
+    registry_config.ensure_registered(project_root, "proj-a")
+
+    isolated_config_path = isolated_dir / "config.yaml"
+    assert isolated_config_path.exists()
+    assert not (legacy_dir / "config.yaml").exists()
+
+    cfg = registry_config.load_global_config(isolated_config_path)
+    assert len(cfg.projects) == 1
+    assert cfg.projects[0].path == str(project_root.resolve())
+
+
 def test_prune_missing_projects_removes_nonexistent(tmp_path):
     """Prune removes projects whose paths don't exist."""
     config_path = tmp_path / "config.yaml"

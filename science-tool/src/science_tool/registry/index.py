@@ -8,9 +8,15 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field
 
-from science_tool.registry.config import SCIENCE_CONFIG_DIR
+from science_tool.registry.config import get_science_config_dir
 
-DEFAULT_REGISTRY_DIR = SCIENCE_CONFIG_DIR / "registry"
+
+def get_default_registry_dir() -> Path:
+    """Resolve the default registry directory at runtime."""
+    return get_science_config_dir() / "registry"
+
+
+DEFAULT_REGISTRY_DIR = get_default_registry_dir()
 
 
 class RegistryEntitySource(BaseModel):
@@ -50,8 +56,9 @@ class RegistryIndex(BaseModel):
     relations: list[RegistryRelation] = Field(default_factory=list)
 
 
-def load_registry_index(registry_dir: Path = DEFAULT_REGISTRY_DIR) -> RegistryIndex:
+def load_registry_index(registry_dir: Path | None = None) -> RegistryIndex:
     """Load entity and relation indices from the registry directory."""
+    registry_dir = registry_dir or get_default_registry_dir()
     entities: list[RegistryEntity] = []
     relations: list[RegistryRelation] = []
 
@@ -72,8 +79,9 @@ def load_registry_index(registry_dir: Path = DEFAULT_REGISTRY_DIR) -> RegistryIn
     return RegistryIndex(entities=entities, relations=relations)
 
 
-def save_registry_index(index: RegistryIndex, registry_dir: Path = DEFAULT_REGISTRY_DIR) -> None:
+def save_registry_index(index: RegistryIndex, registry_dir: Path | None = None) -> None:
     """Save entity and relation indices to the registry directory."""
+    registry_dir = registry_dir or get_default_registry_dir()
     registry_dir.mkdir(parents=True, exist_ok=True)
 
     entities_data = {"entities": [e.model_dump(mode="json") for e in index.entities]}
