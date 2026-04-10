@@ -38,6 +38,9 @@ class EntityType(StrEnum):
     FINDING = "finding"
     STORY = "story"
     PAPER = "paper"
+    SEARCH = "search"
+    REPORT = "report"
+    VALIDATION_REPORT = "validation-report"
     UNKNOWN = "unknown"
 
 
