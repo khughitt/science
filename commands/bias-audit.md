@@ -10,10 +10,10 @@ Use `$ARGUMENTS` to scope the audit to a specific hypothesis, inquiry, or pipeli
 
 ## Setup
 
-Follow `references/command-preamble.md` (role: `research-assistant`).
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
 Additionally:
-1. Read `templates/bias-audit.md`.
+1. Read `.ai/templates/bias-audit.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/bias-audit.md`.
 2. Determine audit scope:
    - If `$ARGUMENTS` names a hypothesis: read that hypothesis and its related documents
    - If `$ARGUMENTS` names an inquiry: load the inquiry and its related documents
@@ -108,7 +108,7 @@ This makes mitigation recommendations actionable — HIGH severity + EASY to fix
 
 ## Writing
 
-Follow `templates/bias-audit.md` and fill all sections.
+Follow `.ai/templates/bias-audit.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/bias-audit.md`, and fill all sections.
 Save to `doc/meta/bias-audit-<slug>.md`.
 
 ## After Writing

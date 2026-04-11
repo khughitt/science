@@ -18,7 +18,7 @@ Output goes to the terminal unless `$ARGUMENTS` contains `--save`.
 
 1. Read `specs/research-question.md`.
 2. Read `science.yaml`.
-3. If present, read `docs/claim-and-evidence-model.md`.
+3. If present, read `${CLAUDE_PLUGIN_ROOT}/docs/proposition-and-evidence-model.md`.
 
 ## Sections
 
@@ -52,7 +52,7 @@ When `knowledge/graph.trig` exists:
 
 ```bash
 science-tool graph project-summary --format json
-science-tool graph question-summary --format json
+science-tool graph question-summary --format json  # full by default; add --top to narrow
 science-tool graph inquiry-summary --format json
 science-tool graph dashboard-summary --format json
 science-tool graph neighborhood-summary --format json
@@ -64,7 +64,7 @@ For `software` projects, skip `project-summary` for now and start from `question
 
 2. Surface:
 - research project summary
-- high-priority questions
+- high-priority questions from the full question rollup
 - high-priority inquiries
 - contested claims
 - single-source claims
@@ -75,7 +75,8 @@ For `software` projects, skip `project-summary` for now and start from `question
 
 3. Prefer the higher-level drill path:
 - `project-summary` for the top-level rollup on `research` projects only
-- `question-summary` and `inquiry-summary` for research-thread prioritization
+- `question-summary` for the full question rollup; add `--top` to narrow it
+- `inquiry-summary` for research-thread prioritization
 - `dashboard-summary` and `neighborhood-summary` for exact weak points
 - `uncertainty` and `gaps` as secondary support views rather than the main dashboard
 

@@ -9,10 +9,10 @@ The input may be a paper title, author name(s), DOI, URL, or a file path to a PD
 
 ## Setup
 
-Follow `references/command-preamble.md` (role: `research-assistant`).
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
 Additionally:
-1. Read `templates/paper-summary.md`.
+1. Read `.ai/templates/paper-summary.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/paper-summary.md`.
 2. Check `doc/papers/` for existing summary; ask before overwriting.
 
 ## Source Strategy
@@ -52,7 +52,7 @@ Follow the source hierarchy strictly:
 
 ## Writing
 
-Follow `templates/paper-summary.md` and fill every section.
+Follow `.ai/templates/paper-summary.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/paper-summary.md`, and fill every section.
 
 - Include frontmatter `Source:` describing provenance (`LLM knowledge`, `web search`, `PDF`, or combination).
 - Generate BibTeX key as `FirstAuthorLastNameYear` (with suffix if needed).
@@ -62,7 +62,7 @@ Follow `templates/paper-summary.md` and fill every section.
 
 1. Add/update the BibTeX entry in `papers/references.bib` (create file with header if missing).
 2. Link relevance to existing hypotheses in `specs/hypotheses/`.
-3. Add new questions to `doc/questions/` using `templates/question.md` when appropriate.
+3. Add new questions to `doc/questions/` using `.ai/templates/question.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/question.md` when appropriate.
 4. Note approach implications in `doc/04-approach.md` when relevant.
 5. Commit: `git add -A && git commit -m "papers: research <citekey> - <short title>"`
 

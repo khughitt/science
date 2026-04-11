@@ -3479,3 +3479,64 @@ def test_graph_add_edge_echoes_resolved_uris() -> None:
         # Output should show resolved short forms, not raw input
         assert "concept/brca1" in edge.output
         assert "skos:broader" in edge.output
+
+
+def test_graph_question_summary_returns_all_rows_by_default() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        for i in range(30):
+            question_ref = f"question/q{i:02d}"
+            proposition_ref = f"proposition/q{i:02d}"
+            assert (
+                runner.invoke(
+                    main,
+                    [
+                        "graph",
+                        "add",
+                        "question",
+                        f"Q{i:02d}",
+                        "--text",
+                        f"Question {i}",
+                        "--source",
+                        "article:doi_10_5555_all",
+                    ],
+                ).exit_code
+                == 0
+            )
+            assert (
+                runner.invoke(
+                    main,
+                    [
+                        "graph",
+                        "add",
+                        "proposition",
+                        f"Claim {i}",
+                        "--source",
+                        "article:doi_10_5555_all",
+                        "--id",
+                        f"q{i:02d}",
+                    ],
+                ).exit_code
+                == 0
+            )
+            assert (
+                runner.invoke(
+                    main,
+                    [
+                        "graph",
+                        "add",
+                        "edge",
+                        proposition_ref,
+                        "sci:addresses",
+                        question_ref,
+                    ],
+                ).exit_code
+                == 0
+            )
+
+        result = runner.invoke(main, ["graph", "question-summary", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert len(payload["rows"]) == 30

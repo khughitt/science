@@ -58,6 +58,7 @@ If the target profile is `research`, also gather:
 
 - `doc/` becomes the canonical root for Science-managed documents
 - `CLAUDE.md` becomes `@AGENTS.md`
+- root `pyproject.toml` is the home for project-local Science tooling
 - `.ai/` is for project-specific prompt/template overrides only
 - framework prompt/template defaults are not copied into the project
 - `archive/` is allowed for superseded material
@@ -69,6 +70,7 @@ Target structure:
 ```text
 project/
 ├── science.yaml
+├── pyproject.toml
 ├── AGENTS.md
 ├── CLAUDE.md
 ├── doc/
@@ -102,6 +104,7 @@ Target structure:
 ```text
 project/
 ├── science.yaml
+├── pyproject.toml
 ├── AGENTS.md
 ├── CLAUDE.md
 ├── doc/
@@ -144,6 +147,31 @@ aspects: []
 ```
 
 Do not add broad `paths:` mappings as the long-term solution.
+
+### `pyproject.toml`
+
+Create or update the root tool manifest so Science tooling is installed locally for every project.
+If the repository already has a root `pyproject.toml`, extend it. Otherwise create a minimal tool-only manifest.
+This applies even to non-Python repos because the manifest is for project-local tooling, not the app runtime.
+
+Minimum shape:
+
+```toml
+[project]
+name = "<project-slug>-science-tools"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = []
+```
+
+Install `science-tool` into the manifest with:
+
+```bash
+uv add --dev --editable "$SCIENCE_TOOL_PATH"
+```
 
 ### `.env`
 

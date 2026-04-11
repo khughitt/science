@@ -2739,7 +2739,7 @@ def _format_question_summary_row(summary: QuestionSummaryData) -> dict[str, str]
 
 def query_question_summary(
     graph_path: Path,
-    top: int,
+    top: int | None,
 ) -> list[dict[str, str]]:
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
@@ -2760,7 +2760,7 @@ def query_question_summary(
         if isinstance(question_uri, URIRef)
     ]
     rows.sort(key=lambda row: (-float(row["priority_score"]), row["text"]))
-    return rows[:top]
+    return rows if top is None else rows[:top]
 
 
 def _inquiry_summary_data(

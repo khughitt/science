@@ -8,10 +8,10 @@ Write a structured background synthesis on the topic specified by `$ARGUMENTS`.
 
 ## Setup
 
-Follow `references/command-preamble.md` (role: `research-assistant`).
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
 Additionally:
-1. Read `templates/background-topic.md`.
+1. Read `.ai/templates/background-topic.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/background-topic.md`.
 2. Check `doc/topics/` for existing coverage; ask before overwriting.
 3. Check `doc/papers/` for relevant summaries.
 
@@ -23,7 +23,7 @@ Additionally:
 
 ## Writing
 
-Follow `templates/background-topic.md` and fill all sections.
+Follow `.ai/templates/background-topic.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/background-topic.md`, and fill all sections.
 Save to `doc/topics/<topic-slug>.md`.
 
 The output should include:
@@ -38,7 +38,7 @@ If loaded aspects contribute additional sections (e.g., Tooling & Implementation
 ## After Writing
 
 1. Add new references to `papers/references.bib` (create with header if missing).
-2. Add newly surfaced questions to `doc/questions/` using `templates/question.md`.
+2. Add newly surfaced questions to `doc/questions/` using `.ai/templates/question.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/question.md`.
 3. Offer to create follow-up tasks via `science-tool tasks add` derived from the synthesis.
 4. Commit: `git add -A && git commit -m "doc: research topic <topic>"`
 

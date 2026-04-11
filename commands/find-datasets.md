@@ -9,12 +9,12 @@ If no argument is provided, derive candidate search terms from `specs/research-q
 
 ## Setup
 
-Follow `references/command-preamble.md` (role: `research-assistant`).
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
 Additionally:
-1. Read `skills/data/SKILL.md` for data management conventions.
-2. If present, read `skills/data/frictionless.md` for Data Package guidance.
-3. Read `templates/dataset.md` for dataset documentation format.
+1. Read `${CLAUDE_PLUGIN_ROOT}/skills/data/SKILL.md` for data management conventions.
+2. If present, read `${CLAUDE_PLUGIN_ROOT}/skills/data/frictionless.md` for Data Package guidance.
+3. Read `.ai/templates/dataset.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/dataset.md`.
 4. Read project context:
    - `specs/research-question.md`
    - `specs/scope-boundaries.md`
@@ -33,7 +33,7 @@ All `science-tool` commands below use this pattern:
 uv run science-tool <command>
 ```
 
-For brevity, the examples below write just `science-tool <command>` — **always expand to `uv run science-tool <command>` when executing. See command-preamble step 8 for fallback.**
+For brevity, the examples below write just `science-tool <command>` — **always expand to `uv run science-tool <command>` when executing. See step 8 of `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` for the fallback.**
 
 ## Workflow
 
@@ -99,7 +99,7 @@ Label each as:
 
 For each `Use now` or `Evaluate next` dataset, create a dataset note:
 
-**File:** `doc/datasets/data-<slug>.md` using `templates/dataset.md`
+**File:** `doc/datasets/data-<slug>.md` using `.ai/templates/dataset.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/dataset.md`
 
 Fill in all available fields. For fields you cannot verify, mark as `[UNVERIFIED]`.
 

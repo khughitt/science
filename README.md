@@ -2,15 +2,15 @@
 
 ![Science](extra/Science.webp)
 
-Science is a Claude Code plugin that helps scientists and researchers develop ideas, refine hypotheses, represent uncertain claims, and build reproducible computational pipelines.
+Science is a Claude Code plugin that helps scientists and researchers develop ideas, refine hypotheses, represent uncertain propositions, and build reproducible computational pipelines.
 
 Its default stance is _skeptical_:
 - hypotheses are organizing conjectures
-- claims and relation-claims are the main units of belief
-- evidence supports or disputes claims rather than proving them outright
+- propositions and evidence are the main units of belief
+- evidence supports or disputes propositions rather than proving them outright
 - uncertainty is something to inspect and prioritize, not hide
 
-See [docs/claim-and-evidence-model.md](docs/claim-and-evidence-model.md) for the canonical reasoning model.
+See [docs/proposition-and-evidence-model.md](docs/proposition-and-evidence-model.md) for the canonical reasoning model.
 
 ## What It Does
 
@@ -21,12 +21,12 @@ Science provides **skills** (structured research methodology), **commands** (int
 - **Identify research gaps** and turn them into prioritized next tasks
 - **Run structured discussions** (including optional double-blind mode)
 - **Review and reprioritize task plans** using explicit rationale
-- **Interpret results** as support/dispute updates on claims, hypotheses, and priorities
-- **Develop hypotheses** as bundles of uncertain claims with structured falsifiability criteria
+- **Interpret results** as support/dispute updates on propositions, hypotheses, and priorities
+- **Develop hypotheses** as bundles of uncertain propositions with structured falsifiability criteria
 - **Pre-register expectations** — formalize predictions and decision criteria before analysis
 - **Compare competing hypotheses** — head-to-head evidence evaluation with discriminating predictions
 - **Audit for biases** — systematic cognitive and methodological bias checklist
-- **Sketch and formalize models** — capture variables, candidate relationships, and unknowns, then attach claim and evidence provenance
+- **Sketch and formalize models** — capture variables, candidate relationships, and unknowns, then attach proposition and evidence provenance
 - **Build and critique causal DAGs** — identify treatment, outcome, confounders, and check identifiability
 - **Plan and review pipelines** — translate inquiries into computational steps with validation criteria
 - **Find datasets** from public repositories, ranked by project relevance
@@ -41,11 +41,11 @@ Science provides **skills** (structured research methodology), **commands** (int
 Science treats research graphs as uncertain by default.
 
 - hypotheses are organizing conjectures
-- claims and relation-claims are the units of belief
-- evidence supports or disputes claims
-- dashboard summaries should help you find fragile claims, contested regions, and claims lacking empirical support
+- propositions and evidence are the units of belief
+- evidence supports or disputes propositions
+- dashboard summaries should help you find fragile propositions, contested regions, and propositions lacking empirical support
 
-If a project still mainly expresses confidence as scalar values on hypotheses or questions, and does not yet expose claim-backed evidence, it is only partially migrated to the current model.
+If a project still mainly expresses confidence as scalar values on hypotheses or questions, and does not yet expose proposition-backed evidence, it is only partially migrated to the current model.
 
 ## Installation
 
@@ -76,13 +76,13 @@ claude --plugin-dir /path/to/science
 | `/science:tasks` | Manage research and development tasks — add, complete, defer, list, filter |
 | `/science:search-literature` | Search OpenAlex/PubMed, rank results, and create a prioritized reading queue |
 | `/science:find-datasets` | Discover and document candidate datasets from public repositories |
-| `/science:add-hypothesis` | Develop and refine a hypothesis as a bundle of uncertain claims |
+| `/science:add-hypothesis` | Develop and refine a hypothesis as a bundle of uncertain propositions |
 | `/science:pre-register` | Formalize expectations and decision criteria before analysis |
-| `/science:compare-hypotheses` | Head-to-head comparison of competing claim bundles |
+| `/science:compare-hypotheses` | Head-to-head comparison of competing proposition bundles |
 | `/science:bias-audit` | Systematic bias and threat-to-validity check |
-| `/science:interpret-results` | Interpret results as claim-level support/dispute updates |
-| `/science:sketch-model` | Sketch a research model with tentative claims and unknowns |
-| `/science:specify-model` | Formalize a model with explicit claims, evidence, and uncertainty |
+| `/science:interpret-results` | Interpret results as proposition-level support/dispute updates |
+| `/science:sketch-model` | Sketch a research model with tentative propositions and unknowns |
+| `/science:specify-model` | Formalize a model with explicit propositions, evidence, and uncertainty |
 | `/science:critique-approach` | Review model for problems, sensitivity analysis |
 | `/science:plan-pipeline` | Generate implementation plan with QA checkpoints |
 | `/science:review-pipeline` | Audit plan against evidence rubric with QA coverage |
@@ -118,7 +118,7 @@ Aspects are project-type modifiers declared in `science.yaml` that tailor comman
 | `computational-analysis` | Computational and exploratory data analysis |
 | `software-development` | Software engineering — applications, tools, and libraries |
 
-For example, with `hypothesis-testing` active, `/science:interpret-results` can add more explicit claim and evidence evaluation. With `causal-modeling`, it adds causal-model implications instead. Aspects compose — a project can activate several at once.
+For example, with `hypothesis-testing` active, `/science:interpret-results` can add more explicit proposition and evidence evaluation. With `causal-modeling`, it adds causal-model implications instead. Aspects compose — a project can activate several at once.
 
 ## Project Structure
 
@@ -134,6 +134,7 @@ All Science-managed projects draw from a common root set:
 ```
 project/
 ├── science.yaml              # Project manifest (profile, ontologies, aspects, knowledge_profiles)
+├── pyproject.toml            # Root tool manifest for project-local Science tooling
 ├── AGENTS.md                 # Primary operational guide
 ├── CLAUDE.md                 # Contains only: @AGENTS.md
 ├── README.md
@@ -142,6 +143,13 @@ project/
 ├── doc/
 ├── knowledge/
 └── .ai/                      # Optional project-specific AI overrides/additions
+```
+
+The root `pyproject.toml` is a tool-only manifest when the repository is not a Python project. It is where
+`science-tool` gets installed for project-local tooling such as task management, feedback, validation, and graph workflows:
+
+```bash
+uv add --dev --editable "$SCIENCE_TOOL_PATH"
 ```
 
 Research-profile projects add the research execution/data roots:
@@ -212,10 +220,10 @@ knowledge_profiles:
 /science:add-hypothesis
 ```
 
-For each conjecture — even vague ones — this command walks you through clarifying the organizing idea, decomposing it into testable claims, defining falsifiability criteria, listing predictions, and identifying required evidence. Output lands in `specs/hypotheses/` and gets cross-linked to open questions.
+For each conjecture — even vague ones — this command walks you through clarifying the organizing idea, decomposing it into testable propositions, defining falsifiability criteria, listing predictions, and identifying required evidence. Output lands in `specs/hypotheses/` and gets cross-linked to open questions.
 
-As the project matures, treat each hypothesis as a claim bundle rather than a single verdict target.
-Important claims should accumulate explicit support or dispute from:
+As the project matures, treat each hypothesis as a proposition bundle rather than a single verdict target.
+Important propositions should accumulate explicit support or dispute from:
 
 - `literature_evidence`
 - `empirical_data_evidence`
@@ -296,7 +304,7 @@ Systematic check of cognitive and methodological biases against current project 
 /science:critique-approach
 ```
 
-`sketch-model` captures variables, candidate relationships, data sources, and unknowns as an inquiry subgraph — auto-detecting causal mode when appropriate. `specify-model` formalizes the sketch with explicit claims, support/dispute links, and evidence provenance.
+`sketch-model` captures variables, candidate relationships, data sources, and unknowns as an inquiry subgraph — auto-detecting causal mode when appropriate. `specify-model` formalizes the sketch with explicit propositions, support/dispute links, and evidence provenance.
 
 `critique-approach` reviews the model for missing confounders, identifiability issues, structural problems, and sensitivity analysis.
 
@@ -363,10 +371,10 @@ Once the graph is materialized, use the `science-tool` CLI for summaries and syn
 
 ```bash
 # Summary stack (top-down)
-science-tool graph project-summary     # Research-level rollup (research projects only)
-science-tool graph question-summary    # Thread-level prioritization
-science-tool graph inquiry-summary     # Inquiry-level detail
-science-tool graph dashboard-summary   # Claim-level overview
+science-tool graph project-summary      # Research-level rollup (research projects only)
+science-tool graph question-summary     # Thread-level prioritization (full by default; add --top to narrow)
+science-tool graph inquiry-summary      # Inquiry-level detail
+science-tool graph dashboard-summary    # Proposition/evidence overview
 science-tool graph neighborhood-summary # Local-cluster detail
 
 # Cross-project sync

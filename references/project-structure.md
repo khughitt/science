@@ -11,6 +11,7 @@ This document describes the standard directory layouts for Science-managed proje
 | `.gitignore` | Git ignore rules | Agent on project creation |
 | `CLAUDE.md` | Single-line pointer to `AGENTS.md` | Agent on project creation |
 | `AGENTS.md` | Operational guide (tools, validation, conventions) | Agent during loops |
+| `pyproject.toml` | Root tool manifest for project-local Science tooling | Agent on project creation / import |
 | `RESEARCH_PLAN.md` | Optional high-level research strategy when not inlined into `README.md` | Agent during planning |
 | `validate.sh` | Structural validation script | Copied from plugin |
 
@@ -86,6 +87,31 @@ and tests in root `tests/`. Do not nest the package under `code/`.
 - `templates/` — optional project-specific template overrides/additions
 
 Framework defaults for prompts/templates are resolved from the Science framework at runtime.
+
+### `pyproject.toml` — Project-Local Tooling Manifest
+
+Use the root `pyproject.toml` as the home for project-local Science tooling, even for non-Python repos.
+If the project already has a root Python manifest, extend it instead of creating a second one.
+This is a tool-only manifest, not a signal that the project itself is a Python app.
+
+Minimum shape:
+
+```toml
+[project]
+name = "<project-slug>-science-tools"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = []
+```
+
+Install `science-tool` into it with:
+
+```bash
+uv add --dev --editable "$SCIENCE_TOOL_PATH"
+```
 
 ### `archive/` — Optional Archived Material
 

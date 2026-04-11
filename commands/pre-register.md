@@ -8,10 +8,10 @@ Formalize the user's expectations, decision criteria, and null-result plans befo
 
 ## Setup
 
-Follow `references/command-preamble.md` (role: `research-assistant`).
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
 Additionally:
-1. Read `templates/pre-registration.md`.
+1. Read `.ai/templates/pre-registration.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/pre-registration.md`.
 2. Read active hypotheses in `specs/hypotheses/`.
 3. Read existing inquiries: run `science-tool inquiry list` (if available).
 4. Read existing pipeline plans in `doc/plans/` (if any).
@@ -80,7 +80,7 @@ Omit when sampling is straightforward (e.g., "use all available data").
 
 ## Writing
 
-After the conversation, write the pre-registration document following `templates/pre-registration.md`.
+After the conversation, write the pre-registration document using `.ai/templates/pre-registration.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/pre-registration.md`.
 
 ### Naming
 

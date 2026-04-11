@@ -1,20 +1,20 @@
 ---
-description: Develop and refine a research hypothesis interactively. Use when the user wants to add a new hypothesis, formalize a conjecture, or organize a set of uncertain claims around one research direction. Also use when the user says "I think", "what if", "could it be that", or proposes a potential mechanism or relationship.
+description: Develop and refine a research hypothesis interactively. Use when the user wants to add a new hypothesis, formalize a conjecture, or organize a set of uncertain propositions around one research direction. Also use when the user says "I think", "what if", "could it be that", or proposes a potential mechanism or relationship.
 ---
 
 # Add a Hypothesis
 
 Develop a structured hypothesis from the user's input in `$ARGUMENTS`.
 
-In this project, a hypothesis is an organizing conjecture, not a settled fact. Treat it as a bundle of uncertain claims that may later gain or lose support.
+In this project, a hypothesis is an organizing conjecture, not a settled fact. Treat it as a bundle of uncertain propositions that may later gain or lose support.
 
 ## Setup
 
-Follow `references/command-preamble.md` (role: `research-assistant`).
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
 Additionally:
-1. Read `docs/claim-and-evidence-model.md`.
-2. Read `templates/hypothesis.md`.
+1. Read `${CLAUDE_PLUGIN_ROOT}/docs/proposition-and-evidence-model.md`.
+2. Read `.ai/templates/hypothesis.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/hypothesis.md`.
 3. Read existing hypotheses in `specs/hypotheses/` to avoid duplication.
 4. Check `doc/questions/` — the new hypothesis may address an existing open question.
 
@@ -24,24 +24,24 @@ Have a natural conversation with the user to develop the hypothesis. The questio
 
 ### 1. Clarify the Conjecture
 - What is the overall research idea?
-- What are the main claims inside it?
-- Which claims are causal, mechanistic, predictive, or descriptive?
+- What are the main propositions inside it?
+- Which propositions are causal, mechanistic, predictive, or descriptive?
 
 Try to separate:
 - the high-level hypothesis
-- the concrete `claim` or `relation_claim` units that would actually be tested
+- the concrete proposition units that would actually be tested
 
-### 2. Define the Claim Bundle
+### 2. Define the Proposition Bundle
 
-For each important subclaim, identify:
+For each important proposition, identify:
 - subject, predicate, and object when it is naturally relational
 - what would count as supporting evidence
 - what would count as disputing evidence
-- whether the claim is currently speculative, fragile, or already somewhat supported
+- whether the proposition is currently speculative, fragile, or already somewhat supported
 
 ### 3. Test for Falsifiability
 - What evidence would materially lower confidence in this hypothesis?
-- What observation or result would force revision of one of its key claims?
+- What observation or result would force revision of one of its key propositions?
 - If the user cannot name a disconfirming result, the hypothesis needs to be sharper.
 
 ### 4. Identify Predictions And Evidence Needs
@@ -51,16 +51,16 @@ For each important subclaim, identify:
 
 ### 5. Check Connections
 - Does this relate to existing hypotheses, questions, or inquiries?
-- Does it imply candidate `relation_claim`s for the graph?
+- Does it imply candidate propositions for the graph?
 - Does it suggest a future inquiry or experiment?
 
 ## Writing
 
-After the conversation, write the hypothesis document following `templates/hypothesis.md`.
+After the conversation, write the hypothesis document using `.ai/templates/hypothesis.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/hypothesis.md`.
 
 Write the hypothesis as:
 - one organizing conjecture
-- a small set of explicit subclaims or relation-claims
+- a small set of explicit propositions
 - a skeptical assessment of current uncertainty
 
 Do not frame a single paper or result as proving the hypothesis.
@@ -86,7 +86,7 @@ Avoid status labels like `supported` or `refuted` as the default outcome of auth
 
 1. Save to `specs/hypotheses/hNN-short-title.md`.
 2. If the hypothesis addresses an open question, update the relevant file in `doc/questions/`.
-3. If the hypothesis naturally decomposes into graph-native claims, note the likely `relation_claim`s the user may want to formalize later.
+3. If the hypothesis naturally decomposes into graph-native propositions, note the likely propositions the user may want to formalize later.
 4. Suggest 2-3 papers that may be relevant to testing this hypothesis.
 Source-check titles and authors via web search before presenting them.
 5. If the hypothesis is ready to be formalized in the graph, suggest `/science:specify-model`.

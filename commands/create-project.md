@@ -58,6 +58,7 @@ Always create:
 ```text
 <project>/
 ├── science.yaml
+├── pyproject.toml
 ├── .env
 ├── .gitignore
 ├── AGENTS.md
@@ -149,6 +150,32 @@ aspects: []
 ```
 
 Add the requested aspects and any known data sources.
+
+### `pyproject.toml`
+
+Create a root tool manifest so the project can install Science tooling locally, even for non-Python repos.
+If the repository already has a root `pyproject.toml`, extend it instead of creating a second one.
+
+Minimum shape:
+
+```toml
+[project]
+name = "<project-slug>-science-tools"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = []
+```
+
+Install `science-tool` into that manifest with:
+
+```bash
+uv add --dev --editable "$SCIENCE_TOOL_PATH"
+```
+
+This applies even to non-Python repos because the manifest is for project-local tooling.
 
 ### `.env`
 

@@ -516,12 +516,12 @@ def graph_neighborhood_summary(top: int, hops: int, output_format: str, graph_pa
 
 
 @graph.command("question-summary")
-@click.option("--top", type=int, default=25, show_default=True)
+@click.option("--top", type=int)
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
-def graph_question_summary(top: int, output_format: str, graph_path: Path) -> None:
+def graph_question_summary(top: int | None, output_format: str, graph_path: Path) -> None:
     """Show question-level rollups derived from claim and neighborhood summaries."""
 
     rows = query_question_summary(graph_path=graph_path, top=top)

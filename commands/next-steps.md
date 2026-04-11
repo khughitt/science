@@ -9,7 +9,7 @@ Use `$ARGUMENTS` as optional filters, for example: `dev only`, `this week`, `rel
 
 ## Setup
 
-Follow `references/command-preamble.md` (role: `research-assistant`).
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
 Additionally, read (skip any that don't exist):
 1. `tasks/active.md`

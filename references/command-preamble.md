@@ -41,7 +41,9 @@ Before executing any research command:
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
 8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   use `uv run science-tool <command>` (requires science-tool as a project
-   dependency). If that fails (no pyproject.toml or science-tool not in
-   dependencies), fall back to:
+   prefer the project-local install path: `uv run science-tool <command>`.
+   This assumes the root `pyproject.toml` includes `science-tool` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
+   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+   fall back to:
    `uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool <command>`

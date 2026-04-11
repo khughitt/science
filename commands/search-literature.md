@@ -9,13 +9,13 @@ If no argument is provided, derive candidate search foci from `specs/research-qu
 
 ## Setup
 
-Follow `references/command-preamble.md` (role: `research-assistant`).
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
 Additionally:
-1. If present, read source-specific skills:
-   - `skills/data/sources/openalex.md`
-   - `skills/data/sources/pubmed.md`
-2. Read `templates/paper-summary.md`.
+1. If present, read source-specific skills from `${CLAUDE_PLUGIN_ROOT}`:
+   - `${CLAUDE_PLUGIN_ROOT}/skills/data/sources/openalex.md`
+   - `${CLAUDE_PLUGIN_ROOT}/skills/data/sources/pubmed.md`
+2. Read `.ai/templates/paper-summary.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/paper-summary.md`.
 3. Read project context:
    - `specs/research-question.md`
    - `specs/scope-boundaries.md`
@@ -114,7 +114,7 @@ Include the normalized candidate list, dedupe keys, source provenance, and rank/
 
 1. Offer to create tasks for the top `Core now` papers via `science-tool tasks add`.
 2. For selected high-priority papers, run `/science:research-paper` (or create a task for later).
-3. Create or update compact article notes in `doc/papers/<citekey>.md` for `Core now` items using `templates/paper-summary.md`.
+3. Create or update compact article notes in `doc/papers/<citekey>.md` for `Core now` items using `.ai/templates/paper-summary.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/paper-summary.md`.
 4. Populate note metadata fields:
    - `tags` for project-specific labels.
    - `ontology_terms` for normalized ontology CURIEs (for example MeSH, GO, Biolink terms).

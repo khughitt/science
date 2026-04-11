@@ -68,6 +68,11 @@ resolve_science_tool() {
     printf ""
 }
 
+SCIENCE_TOOL="${SCIENCE_TOOL:-$(resolve_science_tool)}"
+if [ -z "$SCIENCE_TOOL" ]; then
+    error "science-tool is required for task management, feedback, and graph workflows"
+fi
+
 # ─── Canonical path/profile resolution from science.yaml ───────────
 DOC_DIR="doc"
 CODE_DIR="code"
@@ -545,11 +550,7 @@ fi
 echo ""
 echo "Checking knowledge graph..."
 
-SCIENCE_TOOL="${SCIENCE_TOOL:-$(resolve_science_tool)}"
-
-if [ -z "$SCIENCE_TOOL" ]; then
-    warn "science-tool unavailable; skipping graph source audit and graph validation"
-else
+if [ -n "$SCIENCE_TOOL" ]; then
     audit_output=$($SCIENCE_TOOL graph audit --project-root . --format json 2>/dev/null) || true
     if printf "%s" "$audit_output" | python3 -c "import sys,json; json.load(sys.stdin)" &>/dev/null; then
         audit_rows=$(printf "%s" "$audit_output" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['rows']))")
@@ -578,12 +579,8 @@ for row in json.load(sys.stdin)['rows']:
     else
         warn "graph audit produced unparseable output (expected for fresh projects)"
     fi
-fi
 
-if [ -f "$KNOWLEDGE_DIR/graph.trig" ]; then
-    if [ -z "$SCIENCE_TOOL" ]; then
-        error "$KNOWLEDGE_DIR/graph.trig exists but science-tool is not available (set SCIENCE_TOOL_PATH or install science-tool)"
-    else
+    if [ -f "$KNOWLEDGE_DIR/graph.trig" ]; then
         info "Using: ${SCIENCE_TOOL}"
 
         # 13a-d: Run graph validate (parseable, provenance, acyclicity, orphaned)
@@ -632,8 +629,6 @@ for row in json.load(sys.stdin)['rows']:
             info "graph diff: no revision metadata (expected for new graphs)"
         fi
     fi
-else
-    info "No $KNOWLEDGE_DIR/graph.trig — skipping graph checks"
 fi
 
 # ─── 14. Inquiry validation ──────────────────────────────────────

@@ -9,10 +9,10 @@ If no argument is provided, sample a discussion focus from `doc/questions/`, `sp
 
 ## Setup
 
-Follow `references/command-preamble.md` (role: `discussant`).
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `discussant`).
 
 Additionally:
-1. Read `templates/discussion.md`.
+1. Read `.ai/templates/discussion.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/discussion.md`.
 2. Read relevant context tied to the chosen focus:
    - `doc/topics/`
    - `specs/hypotheses/`
@@ -69,7 +69,7 @@ Sections:
 
 ## After Discussion
 
-1. Add/adjust entries in `doc/questions/` using `templates/question.md`.
+1. Add/adjust entries in `doc/questions/` using `.ai/templates/question.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/question.md`.
 2. Offer to create follow-up tasks via `science-tool tasks add` with appropriate priority and related entities.
 3. If discussion changes hypothesis wording, update relevant file in `specs/hypotheses/`.
 4. **Task reframing check:** Review whether the discussion reframes the meaning of any existing tasks. If a task's purpose or scope has changed, update its description in `tasks/active.md` to reflect the new framing.

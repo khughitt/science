@@ -1,22 +1,22 @@
 ---
-description: Interpret analysis results and feed findings back into the research framework. Use when the user has pipeline output, notebook results, statistical summaries, or preliminary findings to evaluate against claims and hypotheses and update project priorities.
+description: Interpret analysis results and feed findings back into the research framework. Use when the user has pipeline output, notebook results, statistical summaries, or preliminary findings to evaluate against propositions and hypotheses and update project priorities.
 ---
 
 # Interpret Results
 
-Interpret the results specified by `$ARGUMENTS` and update the project in a claim-centric way.
+Interpret the results specified by `$ARGUMENTS` and update the project in a proposition/evidence-centric way.
 
-In this project, results do not automatically prove or refute a hypothesis. They shift support, dispute, and uncertainty for specific claims.
+In this project, results do not automatically prove or refute a hypothesis. They shift support, dispute, and uncertainty for specific propositions.
 
 If no argument is provided, ask the user to describe their findings or point to a results file.
 
 ## Setup
 
-Follow `references/command-preamble.md` (role: `research-assistant`).
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
 Additionally:
-1. Read `docs/claim-and-evidence-model.md`.
-2. Read `templates/interpretation.md`.
+1. Read `${CLAUDE_PLUGIN_ROOT}/docs/proposition-and-evidence-model.md`.
+2. Read `.ai/templates/interpretation.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/interpretation.md`.
 3. Read active hypotheses in `specs/hypotheses/`.
 4. Read open questions in `doc/questions/`.
 5. Read relevant prior interpretations in `doc/interpretations/`.
@@ -90,17 +90,17 @@ Include effect sizes, uncertainty intervals, and sample counts where available.
 - **Grounding:** is the insight anchored in specific prior evidence/literature, or is it speculative?
 - **Actionability:** does it suggest concrete next steps or tests?
 
-### 2. Map Findings To Claims
+### 2. Map Findings To Propositions
 
 For each relevant hypothesis or inquiry, ask:
-- Which specific claims are touched by these results?
-- Does this result support, dispute, or leave each claim unresolved?
+- Which specific propositions are touched by these results?
+- Does this result support, dispute, or leave each proposition unresolved?
 - How much does it actually move belief?
 
 Prefer outputs like:
-- “supports claim C1 modestly”
-- “disputes relation-claim RC3”
-- “leaves the hypothesis organizing idea intact but increases uncertainty in claim C2”
+- “supports proposition P1 modestly”
+- “disputes proposition P3”
+- “leaves the hypothesis organizing idea intact but increases uncertainty in proposition P2”
 
 Avoid outputs like:
 - “the hypothesis is now proved”
@@ -118,7 +118,7 @@ For each relevant open question:
 **Conceptual mode:** Skip the empirical quality checks below. Instead, assess:
 - **Reasoning quality:** Are the arguments logically sound? Are there hidden assumptions or circular reasoning?
 - **Completeness:** Does the discussion consider alternative explanations or counterarguments?
-- **Independence:** Is this a genuinely new perspective, or does it merely restate an existing claim in different words?
+- **Independence:** Is this a genuinely new perspective, or does it merely restate an existing proposition in different words?
 - **Testability:** Does the insight suggest concrete predictions or experiments that could validate it?
 
 Then proceed to Step 5.
@@ -130,7 +130,7 @@ Then proceed to Step 5.
 - **Data quality issues:** flag any anomalies discovered during interpretation as findings with signal strength `methodological`
 - whether the result is confirmatory or exploratory
 - whether the result is independent of prior supporting evidence or largely redundant
-- whether it adds empirical support to a claim that previously had only literature or simulation support
+- whether it adds empirical support to a proposition that previously had only literature or simulation support
 
 If the finding is fragile, say so explicitly.
 
@@ -139,16 +139,16 @@ If the finding is fragile, say so explicitly.
 - Reference the pre-registration document (in `doc/meta/pre-registration-*.md`) and compare observed vs. expected range explicitly
 - State whether the result survives scrutiny or needs additional verification
 
-### 5. Update Claim Support / Dispute
+### 5. Update Proposition Support / Dispute
 
-When graph updates are warranted, frame them as claim updates:
-- add a project claim describing the result
-- attach it as `cito:supports` or `cito:disputes` to the affected `relation_claim`
+When graph updates are warranted, frame them as proposition updates:
+- add a project proposition describing the result
+- attach it as `cito:supports` or `cito:disputes` to the affected proposition
 - note residual uncertainty, especially when evidence is single-source, weak, or contested
 - classify the new evidence explicitly using the canonical evidence types above
 
 Do not use hypothesis status changes as the primary output.
-Hypothesis-level summaries can be updated later as a secondary reflection of underlying claim changes.
+Hypothesis-level summaries can be updated later as a secondary reflection of underlying proposition changes.
 
 ### Structured Output
 
@@ -157,7 +157,7 @@ After analyzing results, create structured entities in addition to the prose doc
 1. For each concrete empirical fact:
    `science-tool graph add observation "<description>" --data-source <data-package-ref> --metric <what> --value <value>`
 
-2. For each interpretive claim:
+2. For each interpretive proposition:
    `science-tool graph add proposition "<text>" --source <data-package-ref> --confidence <0-1>`
 
 3. For each observation that bears on a proposition:
@@ -182,7 +182,7 @@ For each:
 
 Propose changes to the task queue:
 - new tasks to add
-- claims needing more empirical evidence
+- propositions needing more empirical evidence
 - contested areas needing direct comparison or replication
 - weakly supported regions of the graph worth prioritizing
 - high-uncertainty neighborhoods that look likely to pay off with targeted follow-up
@@ -191,7 +191,7 @@ When `knowledge/graph.trig` exists, prefer using:
 
 ```bash
 science-tool graph project-summary --format json
-science-tool graph question-summary --format json
+science-tool graph question-summary --format json  # full by default; add --top to narrow
 science-tool graph inquiry-summary --format json
 science-tool graph dashboard-summary --format json
 science-tool graph neighborhood-summary --format json
@@ -201,20 +201,21 @@ to anchor the prioritization section, especially for:
 - the overall research-project rollup
 - high-priority questions
 - high-priority inquiries
-- claims lacking empirical support
-- single-source claims
+- propositions lacking empirical support
+- single-source propositions
 - contested local clusters
 
 For `software` projects, skip `project-summary` for now and start at `question-summary` / `inquiry-summary`.
 
 Use them in this order:
 1. `project-summary` to see the current research-level rollup, when the project is `research`
-2. `question-summary` and `inquiry-summary` to find which threads deserve attention
-3. `dashboard-summary` and `neighborhood-summary` to identify the exact claims and clusters driving that priority
+2. `question-summary` for the full question rollup, with `--top` as optional narrowing
+3. `inquiry-summary` to find which threads deserve attention
+4. `dashboard-summary` and `neighborhood-summary` to identify the exact propositions and clusters driving that priority
 
 ## Writing
 
-Follow `templates/interpretation.md`.
+Follow `.ai/templates/interpretation.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/interpretation.md`.
 If the project uses open questions rather than formal hypotheses, adapt section headers in the output document accordingly — e.g., "Question-Level Implications" instead of "Hypothesis-Level Implications". Evaluate against questions in `doc/questions/` rather than hypothesis files in `specs/hypotheses/`.
 Save to `doc/interpretations/YYYY-MM-DD-<slug>.md`.
 
@@ -233,8 +234,8 @@ Do not mechanically flip them to `supported` or `refuted`.
 2. Add new questions to `doc/questions/` when needed.
 3. Update tasks via `science-tool tasks`.
 Write durable result interpretations under `doc/interpretations/`, and when the findings change the project-level narrative or current state substantially, summarize that in `doc/reports/` as well.
-4. If graph updates were proposed, point the user to the exact claim or relation-claim updates to make.
-5. If the project still lacks claim-backed evidence summaries, say that it appears partially migrated and that interpretation quality is constrained by that gap.
+4. If graph updates were proposed, point the user to the exact proposition or evidence updates to make.
+5. If the project still lacks proposition-backed evidence summaries, say that it appears partially migrated and that interpretation quality is constrained by that gap.
 6. Suggest next steps:
    - `/science:compare-hypotheses`
    - `/science:discuss`

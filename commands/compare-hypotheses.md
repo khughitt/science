@@ -1,5 +1,5 @@
 ---
-description: Head-to-head evaluation of competing explanations. Use when 2+ hypotheses exist for the same phenomenon and need structured comparison at the claim level.
+description: Head-to-head evaluation of competing explanations. Use when 2+ hypotheses exist for the same phenomenon and need structured comparison at the proposition level.
 ---
 
 # Compare Hypotheses
@@ -7,8 +7,8 @@ description: Head-to-head evaluation of competing explanations. Use when 2+ hypo
 Perform a structured comparison of competing hypotheses from `$ARGUMENTS`.
 
 The goal is not merely to pick a winner. The goal is to identify:
-- which claims each hypothesis depends on
-- which claims are supported or disputed
+- which propositions each hypothesis depends on
+- which propositions are supported or disputed
 - where uncertainty is concentrated
 - what evidence would actually shift belief
 
@@ -16,26 +16,26 @@ If no arguments are provided, scan `specs/hypotheses/` and propose a high-value 
 
 ## Setup
 
-Follow `references/command-preamble.md` (role: `research-assistant`).
+Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
 Additionally:
-1. Read `docs/claim-and-evidence-model.md`.
-2. Read `templates/comparison.md`.
+1. Read `${CLAUDE_PLUGIN_ROOT}/docs/proposition-and-evidence-model.md`.
+2. Read `.ai/templates/comparison.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/comparison.md`.
 3. Read relevant hypotheses in `specs/hypotheses/`.
 4. Read existing evidence in `doc/topics/`, `doc/papers/`, `doc/interpretations/`, and `doc/discussions/`.
 
 ## Workflow
 
-### 1. Summarize Each Hypothesis As A Claim Bundle
+### 1. Summarize Each Hypothesis As A Proposition Bundle
 
 For each hypothesis:
 - state the organizing conjecture
-- list its key subclaims or relation-claims
-- identify which claims are essential versus optional
+- list its key propositions or subpropositions
+- identify which propositions are essential versus optional
 
-### 2. Build A Claim-Centric Evidence Inventory
+### 2. Build A Proposition-Centric Evidence Inventory
 
-For each major claim:
+For each major proposition:
 - what supports it?
 - what disputes it?
 - what is merely suggestive?
@@ -47,10 +47,10 @@ Distinguish:
 - simulation support
 - methodological objections
 
-### 3. Identify Discriminating Claims And Predictions
+### 3. Identify Discriminating Propositions And Predictions
 
 Find places where the hypotheses genuinely diverge:
-- claims that cannot both be true as stated
+- propositions that cannot both be true as stated
 - predictions that would separate them
 - edges or mechanisms that would rise or fall differently under new evidence
 
@@ -60,19 +60,19 @@ This is the most important section.
 
 Identify the most useful next evidence to gather:
 - what would be measured
-- which claim it bears on
+- which proposition it bears on
 - how it would update each hypothesis
 - whether the likely output is support, dispute, or just uncertainty reduction
 
 Prefer evidence that:
-- targets the most central uncertain claims
+- targets the most central uncertain propositions
 - is empirically grounded
 - has high discriminatory power
 
 ### 5. Assess The Current State
 
 Summarize the comparison in skeptical terms:
-- which hypothesis currently has the better-supported claim bundle
+- which hypothesis currently has the better-supported proposition bundle
 - which one remains more fragile
 - where both remain weakly supported
 - where the real answer may still be “insufficient evidence”
@@ -90,11 +90,11 @@ Avoid overstating certainty.
 Ask whether the hypotheses are:
 - truly competing
 - complementary at different scales or contexts
-- different bundles that share some valid claims and differ only in a few decisive places
+- different bundles that share some valid propositions and differ only in a few decisive places
 
 ## Writing
 
-Follow `templates/comparison.md`.
+Follow `.ai/templates/comparison.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/comparison.md`.
 Save to `doc/discussions/comparison-<slug>.md`.
 
 ## After Writing
