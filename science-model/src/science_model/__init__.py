@@ -8,6 +8,7 @@ from science_model.ids import CanonicalId, normalize_alias
 from science_model.ontologies.schema import OntologyCatalog, OntologyPredicate, OntologyRegistryEntry, OntologyTermType
 from science_model.projects import Project, ProjectDetail
 from science_model.profiles import EntityKind, ProfileManifest, RelationKind
+from science_model.provenance import EvidenceIndependence, ProvenanceType
 from science_model.relations import build_relation_registry
 from science_model.search import Filters, SearchResult
 from science_model.sync import SyncSource
@@ -23,6 +24,7 @@ __all__ = [
     "Entity",
     "EntityKind",
     "EntityType",
+    "EvidenceIndependence",
     "EntityUpdate",
     "Filters",
     "GraphData",
@@ -32,6 +34,7 @@ __all__ = [
     "LodWeights",
     "ProfileManifest",
     "Project",
+    "ProvenanceType",
     "ProjectDetail",
     "ModelSource",
     "ParameterSource",
