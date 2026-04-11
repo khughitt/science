@@ -37,7 +37,11 @@ def _coerce_date(val: str | date | None) -> date | None:
         return None
     if isinstance(val, date):
         return val
-    return date.fromisoformat(str(val))
+    text = str(val)
+    # Strip time component if present (e.g. "2026-04-08T20:00")
+    if "T" in text:
+        text = text.split("T", 1)[0]
+    return date.fromisoformat(text)
 
 
 def _parse_sync_source(raw: dict | None) -> SyncSource | None:
@@ -54,11 +58,35 @@ def _parse_sync_source(raw: dict | None) -> SyncSource | None:
     return SyncSource(project=str(project), entity_id=str(entity_id), sync_date=sync_date)
 
 
+def _coerce_confidence(val: object) -> float | None:
+    """Coerce a frontmatter confidence value to float, returning None for non-numeric."""
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    try:
+        return float(str(val))
+    except (ValueError, TypeError):
+        return None
+
+
 def _resolve_type(raw: str) -> EntityType:
     try:
         return EntityType(raw)
     except ValueError:
         return EntityType.UNKNOWN
+
+
+def _infer_type_from_id(entity_id: str) -> str | None:
+    """Infer entity type from the id prefix (e.g. 'hypothesis:h01' → 'hypothesis')."""
+    if ":" not in entity_id:
+        return None
+    prefix = entity_id.split(":", 1)[0]
+    try:
+        EntityType(prefix)
+        return prefix
+    except ValueError:
+        return None
 
 
 def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
@@ -69,7 +97,13 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
 
     fm, body = result
     if not fm.get("type"):
-        return None
+        # Infer type from id prefix when explicit type is missing
+        entity_id = fm.get("id", "")
+        inferred = _infer_type_from_id(entity_id) if entity_id else None
+        if inferred:
+            fm["type"] = inferred
+        else:
+            return None
 
     rel_path = str(path)
     # Try to make relative to project root
@@ -95,7 +129,7 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         content=body or "",
         file_path=rel_path,
         maturity=fm.get("maturity"),
-        confidence=fm.get("confidence"),
+        confidence=_coerce_confidence(fm.get("confidence")),
         datasets=fm.get("datasets"),
         sync_source=_parse_sync_source(fm.get("sync_source")),
     )

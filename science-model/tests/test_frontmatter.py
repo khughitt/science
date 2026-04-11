@@ -59,6 +59,39 @@ Body text here.
     assert entity.content_preview == "Body text here."
 
 
+def test_parse_entity_file_infers_type_from_id_prefix(tmp_path: Path):
+    """When type is missing but id has a recognized prefix, infer the type."""
+    md = tmp_path / "h01.md"
+    md.write_text("""---
+id: "hypothesis:h01-test"
+title: "Hypothesis without explicit type"
+status: proposed
+tags: []
+created: 2026-03-01
+---
+
+Body text.
+""")
+    entity = parse_entity_file(md, project_slug="test-project")
+    assert entity is not None
+    assert entity.type.value == "hypothesis"
+    assert entity.id == "hypothesis:h01-test"
+
+
+def test_parse_entity_file_returns_none_without_type_or_id(tmp_path: Path):
+    """Files with neither type nor a recognizable id prefix are skipped."""
+    md = tmp_path / "plain.md"
+    md.write_text("""---
+title: "No type no id prefix"
+status: draft
+---
+
+Body text.
+""")
+    entity = parse_entity_file(md, project_slug="test-project")
+    assert entity is None
+
+
 def test_parse_entity_file_with_sync_source(tmp_path: Path):
     config = tmp_path / "science.yaml"
     config.write_text("name: test-project\n", encoding="utf-8")
