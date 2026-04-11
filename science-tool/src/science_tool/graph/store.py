@@ -372,6 +372,7 @@ def add_evidence_edge(
     strength: str | None = None,
     caveats: str | None = None,
     method: str | None = None,
+    independence: str | None = None,
 ) -> None:
     """Add a supports/disputes evidence edge with annotations.
 
@@ -406,6 +407,12 @@ def add_evidence_edge(
         provenance.add((stmt_uri, SCI_NS.evidenceCaveats, Literal(caveats)))
     if method:
         provenance.add((stmt_uri, SCI_NS.evidenceMethod, Literal(method)))
+    if independence:
+        if independence not in ("independent", "shared-source", "circular"):
+            raise click.ClickException(
+                f"Independence must be independent/shared-source/circular, got '{independence}'"
+            )
+        provenance.add((stmt_uri, SCI_NS.evidenceIndependence, Literal(independence)))
 
     _save_dataset(dataset, graph_path)
 

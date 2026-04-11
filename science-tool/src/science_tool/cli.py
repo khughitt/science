@@ -810,6 +810,8 @@ def add_observation_cmd(
 @click.option("--strength", default=None, type=click.Choice(["strong", "moderate", "weak"]))
 @click.option("--caveats", default=None)
 @click.option("--method", "evidence_method", default=None)
+@click.option("--independence", default=None, type=click.Choice(["independent", "shared-source", "circular"]),
+              help="Independence of evidence source from validation target")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
@@ -820,10 +822,11 @@ def add_evidence_cmd(
     strength: str | None,
     caveats: str | None,
     evidence_method: str | None,
+    independence: str | None,
     graph_path: Path,
 ) -> None:
     """Add an evidence edge (supports/disputes) between entities."""
-    add_evidence_edge(graph_path, source_entity, target_entity, stance, strength, caveats, evidence_method)
+    add_evidence_edge(graph_path, source_entity, target_entity, stance, strength, caveats, evidence_method, independence)
     click.echo(f"Added {stance} edge: {source_entity} \u2192 {target_entity}")
 
 
