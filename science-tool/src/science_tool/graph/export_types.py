@@ -2,11 +2,23 @@
 
 from __future__ import annotations
 
+from typing import Literal, TypeAlias
+
 from pydantic import BaseModel, ConfigDict, Field
 
 # V1 terminology:
 # - base edge: one exported (subject, predicate, object, layer) edge
 # - supporting claim: one proposition attached to a base edge
+
+GraphExportScopeKind: TypeAlias = Literal["project", "inquiry"]
+
+
+def build_graph_export_node_id(uri: str) -> str:
+    return uri
+
+
+def build_graph_export_edge_id(*, subject: str, predicate: str, obj: str, graph_layer: str) -> str:
+    return f"{graph_layer}::{subject}::{predicate}::{obj}"
 
 
 class GraphExportNode(BaseModel):
@@ -46,7 +58,7 @@ class GraphExportScope(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
-    kind: str
+    kind: GraphExportScopeKind
     label: str
     node_ids: list[str] = Field(default_factory=list)
     edge_ids: list[str] = Field(default_factory=list)

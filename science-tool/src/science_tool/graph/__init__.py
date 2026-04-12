@@ -38,6 +38,8 @@ from science_tool.graph.export_types import (
     GraphExportOverlays,
     GraphExportPayload,
     GraphExportScope,
+    build_graph_export_edge_id,
+    build_graph_export_node_id,
 )
 
 __all__ = [
@@ -49,6 +51,8 @@ __all__ = [
     "GraphExportOverlays",
     "GraphExportPayload",
     "GraphExportScope",
+    "build_graph_export_edge_id",
+    "build_graph_export_node_id",
     "PREDICATE_REGISTRY",
     "materialization_audit",
     "materialize_graph",
