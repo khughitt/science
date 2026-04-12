@@ -112,6 +112,15 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
             rel_path = str(path.relative_to(parent))
             break
 
+    # Merge legacy tags into related as topic: references
+    related = list(fm.get("related") or [])
+    legacy_tags = fm.get("tags") or []
+    for tag in legacy_tags:
+        tag_str = str(tag)
+        tag_ref = f"topic:{tag_str}" if ":" not in tag_str else tag_str
+        if tag_ref not in related:
+            related.append(tag_ref)
+
     return Entity(
         id=fm.get("id", f"{fm['type']}:{path.stem}"),
         type=_resolve_type(fm["type"]),
@@ -119,11 +128,10 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         status=fm.get("status"),
         project=project_slug,
         domain=None,  # computed later by domain assignment
-        tags=fm.get("tags") or [],
         ontology_terms=fm.get("ontology_terms") or [],
         created=_coerce_date(fm.get("created")),
         updated=_coerce_date(fm.get("updated")),
-        related=fm.get("related") or [],
+        related=related,
         source_refs=fm.get("source_refs") or [],
         content_preview=body[:200] if body else "",
         content=body or "",
