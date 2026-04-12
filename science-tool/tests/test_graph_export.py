@@ -17,6 +17,7 @@ from science_tool.graph.store import (
     add_concept,
     add_edge,
     add_inquiry,
+    add_inquiry_node,
     export_graph_payload,
     set_boundary_role,
     set_treatment_outcome,
@@ -46,6 +47,7 @@ def graph_path(tmp_path: Path) -> Path:
 
     add_inquiry(gp, "dangling-dag", "Dangling DAG", "concept/recovery", inquiry_type="causal")
     set_treatment_outcome(gp, "dangling-dag", "concept/drug", "concept/unexported_outcome")
+    set_boundary_role(gp, "dangling-dag", "concept/unexported_boundary", "BoundaryOut")
 
     return gp
 
@@ -158,3 +160,63 @@ def test_export_graph_payload_inquiry_scopes_only_reference_exported_nodes(graph
         "http://example.org/project/concept/unexported_outcome" not in scope.node_ids for scope in inquiry_scopes
     )
     assert all(set(scope.node_ids) <= node_ids for scope in inquiry_scopes)
+
+
+def test_export_graph_payload_includes_causal_overlay_for_inquiry(graph_path: Path) -> None:
+    payload = export_graph_payload(graph_path, overlays=["causal"])
+
+    causal_overlay = payload.overlays.causal
+    inquiry = causal_overlay["inquiries"]["inquiry/test_dag"]
+    edge_id = build_graph_export_edge_id(
+        subject="http://example.org/project/concept/drug",
+        predicate="http://example.org/science/vocab/causal/causes",
+        obj="http://example.org/project/concept/recovery",
+        graph_layer="graph/causal",
+    )
+    edge = inquiry["edges"][edge_id]
+
+    assert inquiry["treatment"] == "http://example.org/project/concept/drug"
+    assert inquiry["outcome"] == "http://example.org/project/concept/recovery"
+    assert inquiry["boundary_roles"]["http://example.org/project/concept/drug"] == "BoundaryIn"
+    assert inquiry["boundary_roles"]["http://example.org/project/concept/recovery"] == "BoundaryOut"
+    assert edge["kind"] == "causes"
+
+
+def test_export_graph_payload_includes_confounds_edges_in_causal_overlay(graph_path: Path) -> None:
+    add_concept(graph_path, "Modifier", None, None, source="http://example.org/project/source/modifier")
+    add_inquiry_node(graph_path, "test-dag", "concept/modifier")
+    add_edge(
+        graph_path,
+        "concept/modifier",
+        "scic:confounds",
+        "concept/recovery",
+        "graph/causal",
+    )
+
+    payload = export_graph_payload(graph_path, overlays=["causal"])
+    inquiry = payload.overlays.causal["inquiries"]["inquiry/test_dag"]
+    edge_id = build_graph_export_edge_id(
+        subject="http://example.org/project/concept/modifier",
+        predicate="http://example.org/science/vocab/causal/confounds",
+        obj="http://example.org/project/concept/recovery",
+        graph_layer="graph/causal",
+    )
+
+    assert inquiry["edges"][edge_id]["kind"] == "confounds"
+
+
+def test_export_graph_payload_warns_for_missing_causal_referent(graph_path: Path) -> None:
+    payload = export_graph_payload(graph_path, overlays=["causal"])
+
+    assert any(
+        "skipped missing outcome ref http://example.org/project/concept/unexported_outcome" in warning
+        for warning in payload.warnings
+    )
+
+
+def test_export_graph_payload_excludes_missing_boundary_roles_from_causal_overlay(graph_path: Path) -> None:
+    payload = export_graph_payload(graph_path, overlays=["causal"])
+
+    inquiry = payload.overlays.causal["inquiries"]["inquiry/dangling_dag"]
+
+    assert "http://example.org/project/concept/unexported_boundary" not in inquiry["boundary_roles"]

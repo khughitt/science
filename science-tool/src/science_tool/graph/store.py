@@ -19,6 +19,7 @@ from science_tool.graph.export_types import (
     GraphExportEdge,
     GraphExportLayer,
     GraphExportNode,
+    GraphExportOverlays,
     GraphExportPayload,
     GraphExportScope,
     build_graph_export_edge_id,
@@ -1164,8 +1165,13 @@ def set_param_metadata(
     _save_dataset(dataset, graph_path)
 
 
-def export_graph_payload(graph_path: Path) -> GraphExportPayload:
+def export_graph_payload(graph_path: Path, overlays: list[str] | None = None) -> GraphExportPayload:
     """Export the base project graph as a reusable JSON-ready payload."""
+    requested_overlays = set(overlays or [])
+    unsupported_overlays = requested_overlays - {"causal"}
+    if unsupported_overlays:
+        raise click.ClickException(f"Unsupported graph export overlay(s): {', '.join(sorted(unsupported_overlays))}")
+
     dataset = _load_dataset(graph_path)
     provenance = dataset.graph(_graph_uri("graph/provenance"))
     layer_graphs = [(layer, dataset.graph(_graph_uri(layer))) for layer in GRAPH_EXPORT_VISIBLE_LAYERS]
@@ -1174,6 +1180,7 @@ def export_graph_payload(graph_path: Path) -> GraphExportPayload:
     node_layers: dict[str, set[str]] = {}
     edge_records: dict[str, GraphExportEdge] = {}
     layer_edge_ids: dict[str, set[str]] = {layer: set() for layer in GRAPH_EXPORT_VISIBLE_LAYERS}
+    warnings: list[str] = []
 
     for layer, layer_graph in layer_graphs:
         for subject, predicate, object_ in layer_graph:
@@ -1253,6 +1260,13 @@ def export_graph_payload(graph_path: Path) -> GraphExportPayload:
         except ValueError as exc:
             raise click.ClickException(f"Invalid confidence value for {shorten_uri(str(node_uri))}") from exc
 
+    def _causal_edge_kind(predicate: str) -> str | None:
+        if predicate == str(SCIC_NS.causes):
+            return "causes"
+        if predicate == str(SCIC_NS.confounds):
+            return "confounds"
+        return None
+
     nodes: list[GraphExportNode] = []
     for node_id in sorted(node_layers):
         node_uri = URIRef(node_id)
@@ -1300,6 +1314,7 @@ def export_graph_payload(graph_path: Path) -> GraphExportPayload:
     )
 
     inquiry_scopes: list[GraphExportScope] = []
+    causal_inquiries: dict[str, dict[str, object]] = {}
     inquiry_prefix = str(PROJECT_NS) + "inquiry/"
 
     for graph in dataset.graphs():
@@ -1348,6 +1363,42 @@ def export_graph_payload(graph_path: Path) -> GraphExportPayload:
 
         edge_ids = [edge.id for edge in edges if edge.subject in member_nodes and edge.object in member_nodes]
 
+        if "causal" in requested_overlays:
+            inquiry_key = f"inquiry/{slug}"
+            causal_edge_ids: list[str] = []
+            causal_edge_map: dict[str, dict[str, str]] = {}
+
+            for edge in edges:
+                if edge.graph_layer != "graph/causal":
+                    continue
+                if edge.subject not in member_nodes or edge.object not in member_nodes:
+                    continue
+                kind = _causal_edge_kind(edge.predicate)
+                if kind is None:
+                    continue
+                causal_edge_ids.append(edge.id)
+                causal_edge_map[edge.id] = {"kind": kind}
+
+            treatment = str(treatment_obj) if treatment_obj is not None and str(treatment_obj) in member_nodes else None
+            if treatment_obj is not None and treatment is None:
+                warnings.append(f"{inquiry_key}: skipped missing treatment ref {str(treatment_obj)}")
+
+            outcome = str(outcome_obj) if outcome_obj is not None and str(outcome_obj) in member_nodes else None
+            if outcome_obj is not None and outcome is None:
+                warnings.append(f"{inquiry_key}: skipped missing outcome ref {str(outcome_obj)}")
+
+            boundary_roles = {node_id: "BoundaryIn" for node_id in boundary_in if node_id in member_nodes}
+            boundary_roles.update({node_id: "BoundaryOut" for node_id in boundary_out if node_id in member_nodes})
+
+            causal_inquiries[inquiry_key] = {
+                "node_ids": sorted(member_nodes),
+                "edge_ids": sorted(causal_edge_ids),
+                "treatment": treatment,
+                "outcome": outcome,
+                "boundary_roles": boundary_roles,
+                "edges": causal_edge_map,
+            }
+
         inquiry_scopes.append(
             GraphExportScope(
                 id=f"inquiry/{slug}",
@@ -1373,7 +1424,8 @@ def export_graph_payload(graph_path: Path) -> GraphExportPayload:
         edges=edges,
         layers=layers,
         scopes=[project_scope, *sorted(inquiry_scopes, key=lambda scope: scope.id)],
-        warnings=[],
+        overlays=GraphExportOverlays(causal={"inquiries": causal_inquiries} if "causal" in requested_overlays else {}),
+        warnings=warnings,
     )
 
 
