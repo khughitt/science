@@ -1187,7 +1187,7 @@ def export_graph_payload(graph_path: Path) -> GraphExportPayload:
                 object_id = str(object_)
                 node_layers.setdefault(object_id, set()).add(layer)
 
-            if not isinstance(subject, URIRef) or not isinstance(object_, URIRef):
+            if not isinstance(subject, URIRef) or not isinstance(predicate, URIRef) or not isinstance(object_, URIRef):
                 continue
             if predicate in GRAPH_EXPORT_EDGE_METADATA_PREDICATES:
                 continue
@@ -1273,10 +1273,10 @@ def export_graph_payload(graph_path: Path) -> GraphExportPayload:
 
     edges = [edge_records[edge_id] for edge_id in sorted(edge_records)]
 
-    layer_node_counts: dict[str, int] = {layer: 0 for layer in GRAPH_EXPORT_VISIBLE_LAYERS}
-    for node in nodes:
-        if node.graph_layer in layer_node_counts:
-            layer_node_counts[node.graph_layer] += 1
+    layer_node_counts: dict[str, int] = {
+        layer: sum(1 for membership_layers in node_layers.values() if layer in membership_layers)
+        for layer in GRAPH_EXPORT_VISIBLE_LAYERS
+    }
 
     layers: list[GraphExportLayer] = []
     for layer in GRAPH_EXPORT_VISIBLE_LAYERS:
@@ -1344,6 +1344,7 @@ def export_graph_payload(graph_path: Path) -> GraphExportPayload:
             ):
                 member_nodes.add(str(object_))
         member_nodes.difference_update(statement_nodes_in_inquiry)
+        member_nodes.intersection_update(node.id for node in nodes)
 
         edge_ids = [edge.id for edge in edges if edge.subject in member_nodes and edge.object in member_nodes]
 

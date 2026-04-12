@@ -44,6 +44,9 @@ def graph_path(tmp_path: Path) -> Path:
     set_boundary_role(gp, "test-dag", "concept/recovery", "BoundaryOut")
     set_treatment_outcome(gp, "test-dag", "concept/drug", "concept/recovery")
 
+    add_inquiry(gp, "dangling-dag", "Dangling DAG", "concept/recovery", inquiry_type="causal")
+    set_treatment_outcome(gp, "dangling-dag", "concept/drug", "concept/unexported_outcome")
+
     return gp
 
 
@@ -139,7 +142,19 @@ def test_export_graph_payload_includes_base_nodes_edges_layers(graph_path: Path)
 
     assert drug.label == "Drug"
     assert edge.graph_layer == "graph/causal"
+    assert causal_layer.node_count == 2
     assert causal_layer.edge_count == 1
     assert "http://example.org/project/concept/drug" in inquiry_scope.node_ids
     assert edge.id in inquiry_scope.edge_ids
     assert edge.id in project_scope.edge_ids
+
+
+def test_export_graph_payload_inquiry_scopes_only_reference_exported_nodes(graph_path: Path) -> None:
+    payload = export_graph_payload(graph_path)
+    node_ids = {node.id for node in payload.nodes}
+    inquiry_scopes = [scope for scope in payload.scopes if scope.kind == "inquiry"]
+
+    assert all(
+        "http://example.org/project/concept/unexported_outcome" not in scope.node_ids for scope in inquiry_scopes
+    )
+    assert all(set(scope.node_ids) <= node_ids for scope in inquiry_scopes)
