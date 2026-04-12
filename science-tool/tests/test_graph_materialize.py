@@ -61,7 +61,6 @@ def _write_demo_project(
                 'type: "hypothesis"',
                 'title: "Demo hypothesis"',
                 'status: "proposed"',
-                "tags: [demo]",
                 "ontology_terms: [GO:0008150]",
                 "source_refs: []",
                 f"related: {related}",
@@ -84,7 +83,6 @@ def _write_demo_project(
                 'type: "question"',
                 'title: "Demo question"',
                 'status: "open"',
-                "tags: [demo]",
                 "ontology_terms: []",
                 'source_refs: ["hypothesis:h01-demo"]',
                 'related: ["task:t001"]',
@@ -109,8 +107,7 @@ def _write_demo_project(
                     'title: "Conflicting alias hypothesis"',
                     "aliases: [H01]",
                     'status: "proposed"',
-                    "tags: [demo]",
-                    "ontology_terms: []",
+                        "ontology_terms: []",
                     "source_refs: []",
                     "related: []",
                     'created: "2026-03-12"',
@@ -603,6 +600,13 @@ def test_graph_build_fails_cleanly_on_unresolved_references(tmp_path: Path) -> N
 
     assert result.exit_code != 0
     assert "unresolved references" in result.output.lower()
+
+
+def test_source_entity_has_no_tags_field():
+    """After unification, SourceEntity should not have a tags field."""
+    from science_tool.graph.sources import SourceEntity
+
+    assert "tags" not in SourceEntity.model_fields
 
 
 def test_known_kinds_includes_shared() -> None:
