@@ -182,6 +182,12 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
                     evidence_lines = claim.get("evidence_lines")
                     if evidence_lines:
                         prov_parts.append(f"evidence_lines: {len(evidence_lines)}")
+                    falsifications = claim.get("falsifications")
+                    if falsifications:
+                        prov_parts.append(f"falsifications: {len(falsifications)}")
+                        latest_decision = falsifications[-1].get("decision")
+                        if latest_decision:
+                            prov_parts.append(f"latest_decision: {latest_decision}")
                     if prov_parts:
                         claim_comments.append(", ".join(prov_parts))
                 if claim_comments:

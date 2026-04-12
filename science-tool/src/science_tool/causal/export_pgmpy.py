@@ -15,6 +15,7 @@ from science_tool.graph.store import (
     _collect_evidence_signals,
     _edge_claims,
     _graph_uri,
+    _load_proposition_falsifications,
     _load_proposition_phase1_metadata,
     _load_dataset,
     _slug,
@@ -37,6 +38,7 @@ class ClaimBundle(TypedDict):
     platform_pattern: NotRequired[str]
     dataset_effects: NotRequired[dict[str, float]]
     evidence_lines: NotRequired[list[dict[str, object]]]
+    falsifications: NotRequired[list[dict[str, str]]]
 
 
 class CausalEdge(TypedDict):
@@ -145,6 +147,9 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[CausalEdg
                         "dispute_count": cast(int, evidence["dispute_count"]),
                     }
                     claim_bundle.update(_load_proposition_phase1_metadata(provenance_graph, claim_uri))
+                    falsifications = _load_proposition_falsifications(knowledge_graph, claim_uri)
+                    if falsifications:
+                        claim_bundle["falsifications"] = falsifications
                     edge["claims"].append(claim_bundle)
 
     return list(edge_map.values())
@@ -216,6 +221,12 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
                 evidence_lines = claim.get("evidence_lines")
                 if evidence_lines:
                     claim_parts.append(f"evidence_lines: {len(cast(list[dict[str, object]], evidence_lines))}")
+                falsifications = claim.get("falsifications")
+                if falsifications:
+                    claim_parts.append(f"falsifications: {len(cast(list[dict[str, str]], falsifications))}")
+                    latest_decision = cast(list[dict[str, str]], falsifications)[-1].get("decision")
+                    if latest_decision:
+                        claim_parts.append(f"latest_decision: {latest_decision}")
                 claim_summaries.append(", ".join(claim_parts))
             comment_parts.append(" | ".join(claim_summaries))
         comment = f"  # {', '.join(comment_parts)}" if comment_parts else ""

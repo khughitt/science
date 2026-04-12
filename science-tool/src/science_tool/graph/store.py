@@ -105,6 +105,15 @@ class PropositionPhase1Metadata(TypedDict, total=False):
     evidence_lines: list[PropositionEvidenceLine]
 
 
+class FalsificationRecord(TypedDict, total=False):
+    uri: str
+    predicted: str
+    observed: str
+    decision: str
+    source_of_prediction: str
+    supersedes_claim: str
+
+
 class InquirySummaryData(TypedDict):
     uri: URIRef
     inquiry: str
@@ -170,6 +179,7 @@ PROJECT_ENTITY_PREFIXES: set[str] = {
     "story",
     "paper",
     "article",
+    "falsification",
 }
 STRUCTURED_PROPOSITION_PREDICATES: frozenset[URIRef] = frozenset(
     {
@@ -567,6 +577,45 @@ def add_discussion(
 
     _save_dataset(dataset, graph_path)
     return disc_uri
+
+
+def add_falsification(
+    graph_path: Path,
+    predicted: str,
+    source_of_prediction: str,
+    observed: str,
+    decision: str,
+    proposition_ref: str,
+    falsification_id: str | None = None,
+    supersedes_claim: str | None = None,
+) -> URIRef:
+    """Add a falsification record linked to a proposition-backed claim."""
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+
+    if falsification_id is not None:
+        token = _slug(falsification_id)
+        if not token:
+            raise click.ClickException("Falsification ID must contain at least one alphanumeric character")
+    else:
+        token = hashlib.sha1(f"{predicted}|{observed}|{decision}".encode("utf-8")).hexdigest()[:12]
+
+    proposition_uri = _resolve_term(proposition_ref)
+    if (proposition_uri, RDF.type, SCI_NS.Proposition) not in knowledge:
+        raise click.ClickException(f"Falsification target '{proposition_ref}' must resolve to a proposition entity")
+
+    falsification_uri = URIRef(PROJECT_NS[f"falsification/{token}"])
+    knowledge.add((falsification_uri, RDF.type, SCI_NS.Falsification))
+    knowledge.add((falsification_uri, SCI_NS.predicted, Literal(predicted)))
+    knowledge.add((falsification_uri, SCI_NS.observed, Literal(observed)))
+    knowledge.add((falsification_uri, SCI_NS.decision, Literal(decision)))
+    knowledge.add((falsification_uri, SCI_NS.sourceOfPrediction, Literal(source_of_prediction)))
+    knowledge.add((falsification_uri, SCI_NS.falsifies, proposition_uri))
+    if supersedes_claim:
+        knowledge.add((falsification_uri, SCI_NS.supersedesClaim, _resolve_term(supersedes_claim)))
+
+    _save_dataset(dataset, graph_path)
+    return falsification_uri
 
 
 def add_story(
@@ -1905,6 +1954,28 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "description": "Structured evidence-line provenance encoded as JSON",
         "layer": "graph/provenance",
     },
+    {
+        "predicate": "sci:falsifies",
+        "description": "Falsification record linked to a proposition",
+        "layer": "graph/knowledge",
+    },
+    {
+        "predicate": "sci:sourceOfPrediction",
+        "description": "Origin of the prediction that was later falsified",
+        "layer": "graph/knowledge",
+    },
+    {"predicate": "sci:predicted", "description": "Predicted claim before falsification", "layer": "graph/knowledge"},
+    {
+        "predicate": "sci:observed",
+        "description": "Observed result contradicting the prediction",
+        "layer": "graph/knowledge",
+    },
+    {"predicate": "sci:decision", "description": "Decision taken after falsification", "layer": "graph/knowledge"},
+    {
+        "predicate": "sci:supersedesClaim",
+        "description": "Claim superseded by a falsification decision",
+        "layer": "graph/knowledge",
+    },
     {"predicate": "sci:epistemicStatus", "description": "Epistemic status of proposition", "layer": "graph/provenance"},
     # Project Model compositional predicates
     {"predicate": "sci:addresses", "description": "Question addresses proposition", "layer": "graph/knowledge"},
@@ -2384,6 +2455,25 @@ def _load_proposition_phase1_metadata(provenance, proposition_uri: URIRef) -> Pr
     return metadata
 
 
+def _load_proposition_falsifications(knowledge, proposition_uri: URIRef) -> list[FalsificationRecord]:
+    falsifications: list[FalsificationRecord] = []
+    for falsification_uri in sorted(knowledge.subjects(SCI_NS.falsifies, proposition_uri), key=str):
+        if not isinstance(falsification_uri, URIRef):
+            continue
+        record: FalsificationRecord = {
+            "uri": str(falsification_uri),
+            "predicted": str(next(knowledge.objects(falsification_uri, SCI_NS.predicted), "")),
+            "observed": str(next(knowledge.objects(falsification_uri, SCI_NS.observed), "")),
+            "decision": str(next(knowledge.objects(falsification_uri, SCI_NS.decision), "")),
+            "source_of_prediction": str(next(knowledge.objects(falsification_uri, SCI_NS.sourceOfPrediction), "")),
+        }
+        supersedes_claim_obj = next(knowledge.objects(falsification_uri, SCI_NS.supersedesClaim), None)
+        if supersedes_claim_obj is not None:
+            record["supersedes_claim"] = str(supersedes_claim_obj)
+        falsifications.append(record)
+    return falsifications
+
+
 def _evidence_targets_for_uri(knowledge, target_uri: URIRef) -> list[URIRef]:
     if (target_uri, RDF.type, SCI_NS.Hypothesis) not in knowledge:
         return [target_uri]
@@ -2523,6 +2613,9 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
     if confidence is not None and confidence < 0.5:
         signals.append("low_confidence")
         risk_score += 1.0 + (0.5 - confidence)
+    if _load_proposition_falsifications(knowledge, uri):
+        signals.append("falsified")
+        risk_score += 3.0
     if status:
         signals.append(f"status:{status}")
         risk_score += 0.5

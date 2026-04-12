@@ -20,6 +20,7 @@ from science_tool.graph.store import (
     VALID_INQUIRY_TYPES,
     add_concept,
     add_edge,
+    add_falsification,
     add_hypothesis,
     add_inquiry,
     add_proposition,
@@ -647,6 +648,96 @@ class TestEdgeProvenance:
         assert "platform: MMRF-dominant" in script
         assert "dataset_effects: MMRF=0.70, GSE24080=0.07" in script
         assert "evidence_lines: 1" in script
+
+    def test_enriched_edges_include_linked_falsifications(self, graph_path: Path) -> None:
+        """Claim bundles include linked falsification records when present."""
+        from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
+
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "fals-dag", "Falsification DAG", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "fals-dag", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "fals-dag", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "fals-dag", treatment="concept/drug", outcome="concept/recovery")
+        add_proposition(
+            graph_path,
+            text="Drug treatment improves recovery time",
+            source="article:doi_10.1234/drug_recovery",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_causes_recovery_falsified",
+        )
+        add_falsification(
+            graph_path,
+            predicted="Drug treatment improves recovery time",
+            source_of_prediction="topic:drug-mechanism",
+            observed="Randomized follow-up showed no improvement",
+            decision="Reject mechanistic interpretation",
+            proposition_ref="proposition:drug_causes_recovery_falsified",
+            falsification_id="drug-recovery-null",
+        )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["proposition:drug_causes_recovery_falsified"],
+        )
+
+        edges = _get_causal_edges_for_inquiry(graph_path, "fals-dag")
+        edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
+        claim = edge["claims"][0]
+
+        assert len(claim["falsifications"]) == 1
+        falsification = claim["falsifications"][0]
+        assert falsification["predicted"] == "Drug treatment improves recovery time"
+        assert falsification["decision"] == "Reject mechanistic interpretation"
+
+    def test_export_pgmpy_includes_falsification_comments(self, graph_path: Path) -> None:
+        """pgmpy export comments summarize linked falsifications."""
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "fals-export", "Falsification Export", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "fals-export", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "fals-export", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "fals-export", treatment="concept/drug", outcome="concept/recovery")
+        add_proposition(
+            graph_path,
+            text="Drug treatment improves recovery time",
+            source="article:doi_10.1234/drug_recovery",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_causes_recovery_falsified_export",
+        )
+        add_falsification(
+            graph_path,
+            predicted="Drug treatment improves recovery time",
+            source_of_prediction="topic:drug-mechanism",
+            observed="Randomized follow-up showed no improvement",
+            decision="Reject mechanistic interpretation",
+            proposition_ref="proposition:drug_causes_recovery_falsified_export",
+            falsification_id="drug-recovery-null-export",
+        )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["proposition:drug_causes_recovery_falsified_export"],
+        )
+
+        script = export_pgmpy_script(graph_path, "fals-export")
+
+        assert "falsifications: 1" in script
+        assert "latest_decision: Reject mechanistic interpretation" in script
 
 
 class TestConfoundersDeclared:

@@ -30,6 +30,7 @@ from science_tool.graph.store import (
     add_discussion,
     add_edge,
     add_evidence_edge,
+    add_falsification,
     add_finding,
     add_hypothesis,
     add_inquiry,
@@ -1125,6 +1126,41 @@ def add_discussion_cmd(
     """Add a discussion — theoretical reasoning producing propositions."""
     uri = add_discussion(graph_path, summary, list(propositions), disc_context, prior, discussion_id)
     click.echo(f"Added discussion: {uri}")
+
+
+@graph_add.command("falsification")
+@click.option("--predicted", required=True, help="Prediction made before analysis")
+@click.option("--source-of-prediction", required=True, help="Origin of the falsified prediction")
+@click.option("--observed", required=True, help="Observed result that contradicted the prediction")
+@click.option("--decision", required=True, help="Decision taken after the falsification")
+@click.option("--proposition", "proposition_ref", required=True, help="Proposition ref that was falsified")
+@click.option("--supersedes-claim", default=None, help="Optional superseded claim ref")
+@click.option("--id", "falsification_id", default=None, help="Custom falsification ID slug")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def add_falsification_cmd(
+    predicted: str,
+    source_of_prediction: str,
+    observed: str,
+    decision: str,
+    proposition_ref: str,
+    supersedes_claim: str | None,
+    falsification_id: str | None,
+    graph_path: Path,
+) -> None:
+    """Add a falsification record linked to a proposition."""
+    uri = add_falsification(
+        graph_path=graph_path,
+        predicted=predicted,
+        source_of_prediction=source_of_prediction,
+        observed=observed,
+        decision=decision,
+        proposition_ref=proposition_ref,
+        falsification_id=falsification_id,
+        supersedes_claim=supersedes_claim,
+    )
+    click.echo(f"Added falsification: {uri}")
 
 
 @graph_add.command("story")
