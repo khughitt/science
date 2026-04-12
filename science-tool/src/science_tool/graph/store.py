@@ -148,6 +148,37 @@ class FalsificationRecord(TypedDict, total=False):
     supersedes_claim: str
 
 
+class EvidenceClaimBundle(TypedDict, total=False):
+    uri: str
+    text: str
+    confidence: float | None
+    sources: list[str]
+    support_count: int
+    dispute_count: int
+    compositional_status: str
+    compositional_method: str
+    compositional_note: str
+    platform_pattern: str
+    dataset_effects: dict[str, float]
+    evidence_lines: list[PropositionEvidenceLine]
+    statistical_support: str
+    mechanistic_support: str
+    replication_scope: str
+    claim_status: str
+    pre_registrations: list[str]
+    interaction_terms: list[PropositionInteractionTerm]
+    bridge_between: list[str]
+    falsifications: list[FalsificationRecord]
+
+
+class EvidenceEdgeOverlay(TypedDict):
+    claims: list[EvidenceClaimBundle]
+
+
+class EvidenceOverlayData(TypedDict):
+    edges: dict[str, EvidenceEdgeOverlay]
+
+
 class InquirySummaryData(TypedDict):
     uri: URIRef
     inquiry: str
@@ -220,6 +251,7 @@ GRAPH_EXPORT_EDGE_METADATA_PREDICATES: frozenset[URIRef] = frozenset(
         SCI_NS.paramSource,
         SCI_NS.paramNote,
         SCI_NS.paramRef,
+        SCI_NS.backedByClaim,
         SCI_NS.validatedBy,
         SCI_NS.projectStatus,
         SCI_NS.confidence,
@@ -1168,11 +1200,12 @@ def set_param_metadata(
 def export_graph_payload(graph_path: Path, overlays: list[str] | None = None) -> GraphExportPayload:
     """Export the base project graph as a reusable JSON-ready payload."""
     requested_overlays = set(overlays or [])
-    unsupported_overlays = requested_overlays - {"causal"}
+    unsupported_overlays = requested_overlays - {"causal", "evidence"}
     if unsupported_overlays:
         raise click.ClickException(f"Unsupported graph export overlay(s): {', '.join(sorted(unsupported_overlays))}")
 
     dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
     layer_graphs = [(layer, dataset.graph(_graph_uri(layer))) for layer in GRAPH_EXPORT_VISIBLE_LAYERS]
 
@@ -1267,6 +1300,51 @@ def export_graph_payload(graph_path: Path, overlays: list[str] | None = None) ->
             return "confounds"
         return None
 
+    def _evidence_claim_bundle(claim_uri: URIRef) -> EvidenceClaimBundle | None:
+        if (claim_uri, RDF.type, SCI_NS.Proposition) not in knowledge:
+            return None
+
+        evidence_summary = _collect_evidence_signals(knowledge, provenance, claim_uri)
+        support_count = cast(int, evidence_summary["support_count"])
+        dispute_count = cast(int, evidence_summary["dispute_count"])
+
+        bundle: EvidenceClaimBundle = {
+            "uri": str(claim_uri),
+            "text": str(next(knowledge.objects(claim_uri, SCHEMA_NS.text), shorten_uri(str(claim_uri)))),
+            "confidence": None,
+            "sources": _source_strings(provenance, claim_uri),
+            "support_count": support_count,
+            "dispute_count": dispute_count,
+        }
+
+        confidence_obj = next(provenance.objects(claim_uri, SCI_NS.confidence), None)
+        if confidence_obj is not None:
+            try:
+                bundle["confidence"] = float(str(confidence_obj))
+            except ValueError as exc:
+                raise click.ClickException(f"Invalid confidence value for {shorten_uri(str(claim_uri))}") from exc
+
+        bundle.update(_load_proposition_phase1_metadata(provenance, claim_uri))
+        bundle.update(_load_proposition_evidence_semantics(provenance, claim_uri))
+
+        pre_registrations = _load_proposition_pre_registrations(provenance, claim_uri)
+        if pre_registrations:
+            bundle["pre_registrations"] = pre_registrations
+
+        interaction_terms = _load_proposition_interaction_terms(provenance, claim_uri)
+        if interaction_terms:
+            bundle["interaction_terms"] = interaction_terms
+
+        bridge_between = _load_proposition_bridge_hypotheses(provenance, claim_uri)
+        if bridge_between:
+            bundle["bridge_between"] = bridge_between
+
+        falsifications = _load_proposition_falsifications(knowledge, claim_uri)
+        if falsifications:
+            bundle["falsifications"] = falsifications
+
+        return bundle
+
     nodes: list[GraphExportNode] = []
     for node_id in sorted(node_layers):
         node_uri = URIRef(node_id)
@@ -1315,6 +1393,7 @@ def export_graph_payload(graph_path: Path, overlays: list[str] | None = None) ->
 
     inquiry_scopes: list[GraphExportScope] = []
     causal_inquiries: dict[str, dict[str, object]] = {}
+    evidence_edges: dict[str, EvidenceEdgeOverlay] = {}
     inquiry_prefix = str(PROJECT_NS) + "inquiry/"
 
     for graph in dataset.graphs():
@@ -1418,13 +1497,33 @@ def export_graph_payload(graph_path: Path, overlays: list[str] | None = None) ->
             )
         )
 
+    if "evidence" in requested_overlays:
+        for edge in edges:
+            if not edge.claim_ids:
+                continue
+
+            claim_bundles: list[EvidenceClaimBundle] = []
+            for claim_id in edge.claim_ids:
+                claim_uri = URIRef(claim_id)
+                claim_bundle = _evidence_claim_bundle(claim_uri)
+                if claim_bundle is None:
+                    warnings.append(f"{edge.id}: missing claim ref {claim_id}")
+                    continue
+                claim_bundles.append(claim_bundle)
+
+            if claim_bundles:
+                evidence_edges[edge.id] = {"claims": claim_bundles}
+
     return GraphExportPayload(
         schema_version=GRAPH_EXPORT_SCHEMA_VERSION,
         nodes=nodes,
         edges=edges,
         layers=layers,
         scopes=[project_scope, *sorted(inquiry_scopes, key=lambda scope: scope.id)],
-        overlays=GraphExportOverlays(causal={"inquiries": causal_inquiries} if "causal" in requested_overlays else {}),
+        overlays=GraphExportOverlays(
+            causal={"inquiries": causal_inquiries} if "causal" in requested_overlays else {},
+            evidence={"edges": evidence_edges} if "evidence" in requested_overlays else {},
+        ),
         warnings=warnings,
     )
 

@@ -18,10 +18,18 @@ from science_tool.graph.store import (
     add_edge,
     add_inquiry,
     add_inquiry_node,
+    add_hypothesis,
+    add_proposition,
     export_graph_payload,
+    _graph_uri,
+    _load_dataset,
+    _save_dataset,
     set_boundary_role,
     set_treatment_outcome,
+    SCI_NS,
 )
+from rdflib import URIRef
+from rdflib.namespace import RDF
 
 
 @pytest.fixture
@@ -33,12 +41,55 @@ def graph_path(tmp_path: Path) -> Path:
 
     add_concept(gp, "Drug", None, None, source="http://example.org/project/source/drug")
     add_concept(gp, "Recovery", None, None, source="http://example.org/project/source/recovery")
+    add_hypothesis(gp, "h1", "Hypothesis 1", source="paper:h1")
+    add_hypothesis(gp, "h2", "Hypothesis 2", source="paper:h2")
     add_edge(
         gp,
         "concept/drug",
         "scic:causes",
         "concept/recovery",
         "graph/causal",
+    )
+    add_proposition(
+        gp,
+        text="Drug treatment improves recovery time",
+        source="article:doi_10.1234/drug_recovery",
+        confidence=0.85,
+        subject="concept/drug",
+        predicate="scic:causes",
+        obj="concept/recovery",
+        proposition_id="drug_causes_recovery_evidence",
+        compositional_status="clr_attenuated",
+        compositional_method="CLR",
+        compositional_note="beta attenuates after CLR normalization",
+        platform_pattern="MMRF-dominant",
+        dataset_effects={"MMRF": 0.7, "GSE24080": 0.07},
+        evidence_lines=[
+            {"source": "Johnson 2024 ChIP", "kind": "external_biochem", "datasets": []},
+            {"source": "t133", "kind": "internal_correlation", "datasets": ["MMRF"]},
+        ],
+        statistical_support="replicated",
+        mechanistic_support="direct",
+        replication_scope="cross_dataset",
+        claim_status="active",
+        pre_registration_refs=["pre-registration:edge-ribosome-e2f1"],
+        interaction_terms=[
+            {
+                "modifier": "concept/kras",
+                "effect": "amplifies",
+                "note": "stronger slope in KRAS-mutant cases",
+            }
+        ],
+        bridge_between_refs=["hypothesis:h1", "hypothesis:h2"],
+    )
+    add_concept(gp, "KRAS", None, None, source="http://example.org/project/source/kras")
+    add_edge(
+        gp,
+        "concept/drug",
+        "scic:causes",
+        "concept/recovery",
+        "graph/causal",
+        claim_refs=["proposition:drug_causes_recovery_evidence"],
     )
     add_inquiry(gp, "test-dag", "Test DAG", "concept/recovery", inquiry_type="causal")
     set_boundary_role(gp, "test-dag", "concept/drug", "BoundaryIn")
@@ -220,3 +271,28 @@ def test_export_graph_payload_excludes_missing_boundary_roles_from_causal_overla
     inquiry = payload.overlays.causal["inquiries"]["inquiry/dangling_dag"]
 
     assert "http://example.org/project/concept/unexported_boundary" not in inquiry["boundary_roles"]
+
+
+def test_export_graph_payload_includes_evidence_overlay_for_claim_backed_edge(graph_path: Path) -> None:
+    payload = export_graph_payload(graph_path, overlays=["evidence"])
+    edge_id = next(edge.id for edge in payload.edges if edge.predicate.endswith("/causes"))
+    edge_evidence = payload.overlays.evidence["edges"][edge_id]
+
+    assert edge_evidence["claims"][0]["bridge_between"] == ["hypothesis/h1", "hypothesis/h2"]
+    assert edge_evidence["claims"][0]["statistical_support"] == "replicated"
+    assert edge_evidence["claims"][0]["pre_registrations"] == ["pre-registration/edge-ribosome-e2f1"]
+
+
+def test_export_graph_payload_skips_missing_claim_refs_with_warning(graph_path: Path) -> None:
+    dataset = _load_dataset(graph_path)
+    causal_graph = dataset.graph(_graph_uri("graph/causal"))
+    edge_subject = URIRef("http://example.org/project/concept/drug")
+    statement_uri = next(causal_graph.subjects(RDF.subject, edge_subject))
+    causal_graph.add(
+        (statement_uri, SCI_NS.backedByClaim, URIRef("http://example.org/project/proposition/missing_claim"))
+    )
+    _save_dataset(dataset, graph_path)
+
+    payload = export_graph_payload(graph_path, overlays=["evidence"])
+
+    assert any("missing claim ref" in warning for warning in payload.warnings)
