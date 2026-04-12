@@ -163,6 +163,25 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
                     prov_parts.append(f"disputes: {claim['dispute_count']}")
                     if claim["sources"]:
                         prov_parts.append("sources: " + ", ".join(shorten_uri(source) for source in claim["sources"]))
+                    compositional_status = claim.get("compositional_status")
+                    if compositional_status:
+                        compositional_method = claim.get("compositional_method")
+                        if compositional_method:
+                            prov_parts.append(f"compositional: {compositional_status} ({compositional_method})")
+                        else:
+                            prov_parts.append(f"compositional: {compositional_status}")
+                    platform_pattern = claim.get("platform_pattern")
+                    if platform_pattern:
+                        prov_parts.append(f"platform: {platform_pattern}")
+                    dataset_effects = claim.get("dataset_effects")
+                    if dataset_effects:
+                        effect_summary = ", ".join(
+                            f"{dataset}={effect:.2f}" for dataset, effect in dataset_effects.items()
+                        )
+                        prov_parts.append(f"dataset_effects: {effect_summary}")
+                    evidence_lines = claim.get("evidence_lines")
+                    if evidence_lines:
+                        prov_parts.append(f"evidence_lines: {len(evidence_lines)}")
                     if prov_parts:
                         claim_comments.append(", ".join(prov_parts))
                 if claim_comments:

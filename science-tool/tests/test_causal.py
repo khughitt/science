@@ -555,6 +555,99 @@ class TestEdgeProvenance:
         assert len(edges) == 1
         assert edges[0]["claims"] == []
 
+    def test_enriched_edges_include_phase1_claim_metadata(self, graph_path: Path) -> None:
+        """Claim bundles expose compositional, heterogeneity, and evidence-line metadata."""
+        from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
+
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "meta-dag", "Metadata DAG", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "meta-dag", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "meta-dag", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "meta-dag", treatment="concept/drug", outcome="concept/recovery")
+        add_proposition(
+            graph_path,
+            text="Drug treatment improves recovery time",
+            source="article:doi_10.1234/drug_recovery",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_causes_recovery",
+            compositional_status="clr_attenuated",
+            compositional_method="CLR",
+            compositional_note="beta attenuates after CLR normalization",
+            platform_pattern="MMRF-dominant",
+            dataset_effects={"MMRF": 0.7, "GSE24080": 0.07},
+            evidence_lines=[
+                {"source": "Johnson 2024 ChIP", "kind": "external_biochem", "datasets": []},
+                {"source": "t133", "kind": "internal_correlation", "datasets": ["MMRF"]},
+                {"source": "t135", "kind": "internal_bayesian_edge", "datasets": ["MMRF", "GSE24080"]},
+            ],
+        )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["proposition:drug_causes_recovery"],
+        )
+
+        edges = _get_causal_edges_for_inquiry(graph_path, "meta-dag")
+        edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
+        claim = edge["claims"][0]
+
+        assert claim["compositional_status"] == "clr_attenuated"
+        assert claim["compositional_method"] == "CLR"
+        assert claim["platform_pattern"] == "MMRF-dominant"
+        assert claim["dataset_effects"] == {"MMRF": 0.7, "GSE24080": 0.07}
+        assert len(claim["evidence_lines"]) == 3
+        assert claim["evidence_lines"][2]["datasets"] == ["MMRF", "GSE24080"]
+
+    def test_export_pgmpy_includes_phase1_claim_metadata_comments(self, graph_path: Path) -> None:
+        """pgmpy export comments include the richer claim metadata when present."""
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "meta-export", "Metadata Export", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "meta-export", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "meta-export", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "meta-export", treatment="concept/drug", outcome="concept/recovery")
+        add_proposition(
+            graph_path,
+            text="Drug treatment improves recovery time",
+            source="article:doi_10.1234/drug_recovery",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_causes_recovery_export",
+            compositional_status="clr_attenuated",
+            compositional_method="CLR",
+            platform_pattern="MMRF-dominant",
+            dataset_effects={"MMRF": 0.7, "GSE24080": 0.07},
+            evidence_lines=[
+                {"source": "t133", "kind": "internal_correlation", "datasets": ["MMRF"]},
+            ],
+        )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["proposition:drug_causes_recovery_export"],
+        )
+
+        script = export_pgmpy_script(graph_path, "meta-export")
+
+        assert "compositional: clr_attenuated (CLR)" in script
+        assert "platform: MMRF-dominant" in script
+        assert "dataset_effects: MMRF=0.70, GSE24080=0.07" in script
+        assert "evidence_lines: 1" in script
+
 
 class TestConfoundersDeclared:
     def test_confounder_declared_passes(self, graph_path: Path) -> None:

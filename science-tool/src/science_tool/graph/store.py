@@ -90,6 +90,21 @@ class QuestionSummaryData(TypedDict):
     priority_score: float
 
 
+class PropositionEvidenceLine(TypedDict):
+    source: str
+    kind: str
+    datasets: list[str]
+
+
+class PropositionPhase1Metadata(TypedDict, total=False):
+    compositional_status: str
+    compositional_method: str
+    compositional_note: str
+    platform_pattern: str
+    dataset_effects: dict[str, float]
+    evidence_lines: list[PropositionEvidenceLine]
+
+
 class InquirySummaryData(TypedDict):
     uri: URIRef
     inquiry: str
@@ -286,6 +301,12 @@ def add_proposition(
     subject: str | None = None,
     predicate: str | None = None,
     obj: str | None = None,
+    compositional_status: str | None = None,
+    compositional_method: str | None = None,
+    compositional_note: str | None = None,
+    platform_pattern: str | None = None,
+    dataset_effects: dict[str, float] | None = None,
+    evidence_lines: list[PropositionEvidenceLine] | None = None,
 ) -> URIRef:
     """Add a proposition to the knowledge graph.
 
@@ -321,6 +342,25 @@ def add_proposition(
         provenance.add((prop_uri, SCI_NS.confidence, Literal(confidence, datatype=XSD.decimal)))
     if evidence_type is not None:
         provenance.add((prop_uri, SCI_NS.evidenceType, Literal(evidence_type)))
+    if compositional_status is not None:
+        provenance.add((prop_uri, SCI_NS.compositionalStatus, Literal(compositional_status)))
+    if compositional_method is not None:
+        provenance.add((prop_uri, SCI_NS.compositionalMethod, Literal(compositional_method)))
+    if compositional_note is not None:
+        provenance.add((prop_uri, SCI_NS.compositionalNote, Literal(compositional_note)))
+    if platform_pattern is not None:
+        provenance.add((prop_uri, SCI_NS.platformPattern, Literal(platform_pattern)))
+    if dataset_effects is not None:
+        normalized_dataset_effects = {str(name): float(value) for name, value in dataset_effects.items()}
+        provenance.add((prop_uri, SCI_NS.datasetEffects, Literal(json.dumps(normalized_dataset_effects))))
+    if evidence_lines is not None:
+        for line in evidence_lines:
+            normalized_line: PropositionEvidenceLine = {
+                "source": str(line["source"]),
+                "kind": str(line["kind"]),
+                "datasets": [str(dataset) for dataset in line["datasets"]],
+            }
+            provenance.add((prop_uri, SCI_NS.evidenceLine, Literal(json.dumps(normalized_line))))
 
     _save_dataset(dataset, graph_path)
     return prop_uri
@@ -409,9 +449,7 @@ def add_evidence_edge(
         provenance.add((stmt_uri, SCI_NS.evidenceMethod, Literal(method)))
     if independence:
         if independence not in ("independent", "shared-source", "circular"):
-            raise click.ClickException(
-                f"Independence must be independent/shared-source/circular, got '{independence}'"
-            )
+            raise click.ClickException(f"Independence must be independent/shared-source/circular, got '{independence}'")
         provenance.add((stmt_uri, SCI_NS.evidenceIndependence, Literal(independence)))
 
     _save_dataset(dataset, graph_path)
@@ -1837,17 +1875,63 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "description": "Evidence classification for propositions",
         "layer": "graph/provenance",
     },
+    {
+        "predicate": "sci:compositionalStatus",
+        "description": "Compositional robustness status for proposition-backed claims",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:compositionalMethod",
+        "description": "Normalization or per-cell method used for compositional checks",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:compositionalNote",
+        "description": "Free-text note about compositional robustness results",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:platformPattern",
+        "description": "Summary label for cross-platform heterogeneity",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:datasetEffects",
+        "description": "Per-dataset effect summary encoded as JSON",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:evidenceLine",
+        "description": "Structured evidence-line provenance encoded as JSON",
+        "layer": "graph/provenance",
+    },
     {"predicate": "sci:epistemicStatus", "description": "Epistemic status of proposition", "layer": "graph/provenance"},
     # Project Model compositional predicates
     {"predicate": "sci:addresses", "description": "Question addresses proposition", "layer": "graph/knowledge"},
-    {"predicate": "sci:groundedBy", "description": "Finding grounded by data-package or workflow-run", "layer": "graph/knowledge"},
+    {
+        "predicate": "sci:groundedBy",
+        "description": "Finding grounded by data-package or workflow-run",
+        "layer": "graph/knowledge",
+    },
     {"predicate": "sci:synthesizes", "description": "Story synthesizes interpretation", "layer": "graph/knowledge"},
-    {"predicate": "sci:organizedBy", "description": "Story organized by question or hypothesis", "layer": "graph/knowledge"},
+    {
+        "predicate": "sci:organizedBy",
+        "description": "Story organized by question or hypothesis",
+        "layer": "graph/knowledge",
+    },
     {"predicate": "sci:comprises", "description": "Paper comprises stories", "layer": "graph/knowledge"},
     {"predicate": "sci:grounds", "description": "Workflow-run grounds observation", "layer": "graph/provenance"},
     {"predicate": "sci:dataSource", "description": "Observation data source reference", "layer": "graph/knowledge"},
-    {"predicate": "sci:evidenceStrength", "description": "Evidence edge strength annotation", "layer": "graph/provenance"},
-    {"predicate": "sci:evidenceCaveats", "description": "Evidence edge caveats annotation", "layer": "graph/provenance"},
+    {
+        "predicate": "sci:evidenceStrength",
+        "description": "Evidence edge strength annotation",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:evidenceCaveats",
+        "description": "Evidence edge caveats annotation",
+        "layer": "graph/provenance",
+    },
     {"predicate": "sci:evidenceMethod", "description": "Evidence edge method annotation", "layer": "graph/provenance"},
     {"predicate": "sci:maturity", "description": "Maturity of open question", "layer": "graph/knowledge"},
     {"predicate": "scic:causes", "description": "Causal relationship", "layer": "graph/causal"},
@@ -2258,6 +2342,46 @@ def _source_strings(provenance, primary_uri: URIRef, fallback_uri: URIRef | None
     if fallback_uri is not None:
         sources.update(str(src) for src in provenance.objects(fallback_uri, PROV.wasDerivedFrom))
     return sorted(sources)
+
+
+def _load_proposition_phase1_metadata(provenance, proposition_uri: URIRef) -> PropositionPhase1Metadata:
+    metadata: PropositionPhase1Metadata = {}
+
+    compositional_status_obj = next(provenance.objects(proposition_uri, SCI_NS.compositionalStatus), None)
+    if compositional_status_obj is not None:
+        metadata["compositional_status"] = str(compositional_status_obj)
+
+    compositional_method_obj = next(provenance.objects(proposition_uri, SCI_NS.compositionalMethod), None)
+    if compositional_method_obj is not None:
+        metadata["compositional_method"] = str(compositional_method_obj)
+
+    compositional_note_obj = next(provenance.objects(proposition_uri, SCI_NS.compositionalNote), None)
+    if compositional_note_obj is not None:
+        metadata["compositional_note"] = str(compositional_note_obj)
+
+    platform_pattern_obj = next(provenance.objects(proposition_uri, SCI_NS.platformPattern), None)
+    if platform_pattern_obj is not None:
+        metadata["platform_pattern"] = str(platform_pattern_obj)
+
+    dataset_effects_obj = next(provenance.objects(proposition_uri, SCI_NS.datasetEffects), None)
+    if dataset_effects_obj is not None:
+        parsed_dataset_effects = json.loads(str(dataset_effects_obj))
+        metadata["dataset_effects"] = {str(name): float(value) for name, value in parsed_dataset_effects.items()}
+
+    evidence_line_values = list(provenance.objects(proposition_uri, SCI_NS.evidenceLine))
+    if evidence_line_values:
+        metadata["evidence_lines"] = []
+        for value in evidence_line_values:
+            parsed_line = json.loads(str(value))
+            metadata["evidence_lines"].append(
+                {
+                    "source": str(parsed_line["source"]),
+                    "kind": str(parsed_line["kind"]),
+                    "datasets": [str(dataset) for dataset in parsed_line.get("datasets", [])],
+                }
+            )
+
+    return metadata
 
 
 def _evidence_targets_for_uri(knowledge, target_uri: URIRef) -> list[URIRef]:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import NotRequired, TypedDict, cast
 
 from rdflib import URIRef
 
@@ -15,6 +15,7 @@ from science_tool.graph.store import (
     _collect_evidence_signals,
     _edge_claims,
     _graph_uri,
+    _load_proposition_phase1_metadata,
     _load_dataset,
     _slug,
     _source_strings,
@@ -30,6 +31,12 @@ class ClaimBundle(TypedDict):
     sources: list[str]
     support_count: int
     dispute_count: int
+    compositional_status: NotRequired[str]
+    compositional_method: NotRequired[str]
+    compositional_note: NotRequired[str]
+    platform_pattern: NotRequired[str]
+    dataset_effects: NotRequired[dict[str, float]]
+    evidence_lines: NotRequired[list[dict[str, object]]]
 
 
 class CausalEdge(TypedDict):
@@ -137,6 +144,7 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[CausalEdg
                         "support_count": cast(int, evidence["support_count"]),
                         "dispute_count": cast(int, evidence["dispute_count"]),
                     }
+                    claim_bundle.update(_load_proposition_phase1_metadata(provenance_graph, claim_uri))
                     edge["claims"].append(claim_bundle)
 
     return list(edge_map.values())
@@ -189,6 +197,25 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
                 claim_parts.append(f"disputes: {claim['dispute_count']}")
                 if claim["sources"]:
                     claim_parts.append("sources: " + ", ".join(shorten_uri(source) for source in claim["sources"]))
+                compositional_status = claim.get("compositional_status")
+                if compositional_status:
+                    compositional_method = claim.get("compositional_method")
+                    if compositional_method:
+                        claim_parts.append(f"compositional: {compositional_status} ({compositional_method})")
+                    else:
+                        claim_parts.append(f"compositional: {compositional_status}")
+                platform_pattern = claim.get("platform_pattern")
+                if platform_pattern:
+                    claim_parts.append(f"platform: {platform_pattern}")
+                dataset_effects = claim.get("dataset_effects")
+                if dataset_effects:
+                    effect_summary = ", ".join(
+                        f"{dataset}={effect:.2f}" for dataset, effect in cast(dict[str, float], dataset_effects).items()
+                    )
+                    claim_parts.append(f"dataset_effects: {effect_summary}")
+                evidence_lines = claim.get("evidence_lines")
+                if evidence_lines:
+                    claim_parts.append(f"evidence_lines: {len(cast(list[dict[str, object]], evidence_lines))}")
                 claim_summaries.append(", ".join(claim_parts))
             comment_parts.append(" | ".join(claim_summaries))
         comment = f"  # {', '.join(comment_parts)}" if comment_parts else ""

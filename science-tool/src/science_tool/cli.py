@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import click
 
@@ -23,6 +23,7 @@ from science_tool.graph.migrate import (
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
     GRAPH_LAYERS,
+    PropositionEvidenceLine,
     add_article,
     add_assumption,
     add_concept,
@@ -76,6 +77,54 @@ from science_tool.research_package.cli import research_package_group
 @click.group()
 def main() -> None:
     """Science CLI tools."""
+
+
+def _parse_dataset_effects(entries: tuple[str, ...]) -> dict[str, float] | None:
+    if not entries:
+        return None
+
+    dataset_effects: dict[str, float] = {}
+    for entry in entries:
+        if "=" not in entry:
+            raise click.ClickException(f"Dataset effect must be DATASET=VALUE, got '{entry}'")
+        dataset, value = entry.split("=", 1)
+        dataset_name = dataset.strip()
+        if not dataset_name:
+            raise click.ClickException(f"Dataset effect must include a dataset name, got '{entry}'")
+        try:
+            dataset_effects[dataset_name] = float(value.strip())
+        except ValueError as exc:
+            raise click.ClickException(f"Dataset effect value must be numeric, got '{entry}'") from exc
+    return dataset_effects
+
+
+def _parse_evidence_lines(entries: tuple[str, ...]) -> list[dict[str, object]] | None:
+    if not entries:
+        return None
+
+    evidence_lines: list[dict[str, object]] = []
+    for entry in entries:
+        try:
+            parsed = json.loads(entry)
+        except json.JSONDecodeError as exc:
+            raise click.ClickException(f"Evidence line must be valid JSON, got '{entry}'") from exc
+        if not isinstance(parsed, dict):
+            raise click.ClickException("Evidence line JSON must decode to an object")
+        if not isinstance(parsed.get("source"), str) or not parsed["source"].strip():
+            raise click.ClickException("Evidence line JSON must include a non-empty 'source' string")
+        if not isinstance(parsed.get("kind"), str) or not parsed["kind"].strip():
+            raise click.ClickException("Evidence line JSON must include a non-empty 'kind' string")
+        datasets = parsed.get("datasets", [])
+        if not isinstance(datasets, list) or any(not isinstance(item, str) for item in datasets):
+            raise click.ClickException("Evidence line JSON 'datasets' must be a list of strings")
+        evidence_lines.append(
+            {
+                "source": parsed["source"],
+                "kind": parsed["kind"],
+                "datasets": datasets,
+            }
+        )
+    return evidence_lines
 
 
 main.add_command(research_package_group)
@@ -806,6 +855,21 @@ def add_article_cmd(doi: str, graph_path: Path) -> None:
 @click.option("--predicate", default=None, help="Structured S-P-O: predicate")
 @click.option("--object", "obj", default=None, help="Structured S-P-O: object entity")
 @click.option(
+    "--compositional-status",
+    default=None,
+    type=click.Choice(["not_run", "clr_tested", "clr_robust", "clr_attenuated"]),
+)
+@click.option("--compositional-method", default=None, help="Normalization or per-cell method used")
+@click.option("--compositional-note", default=None, help="Brief note on compositional robustness outcome")
+@click.option("--platform-pattern", default=None, help="Summary label for platform heterogeneity")
+@click.option("--dataset-effect", "dataset_effect_entries", multiple=True, help="Per-dataset effect as DATASET=VALUE")
+@click.option(
+    "--evidence-line",
+    "evidence_line_entries",
+    multiple=True,
+    help='Evidence-line JSON, e.g. {"source":"t133","kind":"internal_correlation","datasets":["MMRF"]}',
+)
+@click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def add_proposition_cmd(
@@ -817,10 +881,34 @@ def add_proposition_cmd(
     subject: str | None,
     predicate: str | None,
     obj: str | None,
+    compositional_status: str | None,
+    compositional_method: str | None,
+    compositional_note: str | None,
+    platform_pattern: str | None,
+    dataset_effect_entries: tuple[str, ...],
+    evidence_line_entries: tuple[str, ...],
     graph_path: Path,
 ) -> None:
     """Add a proposition to the knowledge graph."""
-    uri = add_proposition(graph_path, text, source, confidence, evidence_type, proposition_id, subject, predicate, obj)
+    dataset_effects = _parse_dataset_effects(dataset_effect_entries)
+    evidence_lines = _parse_evidence_lines(evidence_line_entries)
+    uri = add_proposition(
+        graph_path,
+        text,
+        source,
+        confidence,
+        evidence_type,
+        proposition_id,
+        subject,
+        predicate,
+        obj,
+        compositional_status=compositional_status,
+        compositional_method=compositional_method,
+        compositional_note=compositional_note,
+        platform_pattern=platform_pattern,
+        dataset_effects=dataset_effects,
+        evidence_lines=cast(list[PropositionEvidenceLine] | None, evidence_lines),
+    )
     click.echo(f"Added proposition: {uri}")
 
 
@@ -857,8 +945,12 @@ def add_observation_cmd(
 @click.option("--strength", default=None, type=click.Choice(["strong", "moderate", "weak"]))
 @click.option("--caveats", default=None)
 @click.option("--method", "evidence_method", default=None)
-@click.option("--independence", default=None, type=click.Choice(["independent", "shared-source", "circular"]),
-              help="Independence of evidence source from validation target")
+@click.option(
+    "--independence",
+    default=None,
+    type=click.Choice(["independent", "shared-source", "circular"]),
+    help="Independence of evidence source from validation target",
+)
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
@@ -873,7 +965,9 @@ def add_evidence_cmd(
     graph_path: Path,
 ) -> None:
     """Add an evidence edge (supports/disputes) between entities."""
-    add_evidence_edge(graph_path, source_entity, target_entity, stance, strength, caveats, evidence_method, independence)
+    add_evidence_edge(
+        graph_path, source_entity, target_entity, stance, strength, caveats, evidence_method, independence
+    )
     click.echo(f"Added {stance} edge: {source_entity} \u2192 {target_entity}")
 
 
