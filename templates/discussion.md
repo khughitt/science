@@ -3,7 +3,6 @@ id: "discussion:{{YYYY-MM-DD-slug}}"
 type: "discussion"
 title: "{{discussion title}}"
 status: "in-progress"
-tags: []
 source_refs: []
 related: []
 created: "{{YYYY-MM-DD}}"

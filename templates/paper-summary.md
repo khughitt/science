@@ -3,7 +3,6 @@ id: "article:{{bibtex_key}}"
 type: "article"
 title: "{{Title}}"
 status: "active"
-tags: []
 ontology_terms: []
 datasets: []
 source_refs:

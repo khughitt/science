@@ -3,7 +3,6 @@ id: "workflow-run:<slug>"
 type: "workflow-run"
 title: "<Run Description>"
 status: "complete"
-tags: []
 workflow: "<workflow-slug>"
 created: "<YYYY-MM-DD>"
 updated: "<YYYY-MM-DD>"

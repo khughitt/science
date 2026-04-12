@@ -3,7 +3,6 @@ id: "step:<slug>"
 type: "workflow-step"
 title: "<Step Name>"
 status: "planned"
-tags: []
 workflow: "<workflow-slug>"
 run: "<workflow-run-slug>"
 inquiry: "<inquiry-slug>"

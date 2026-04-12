@@ -3,7 +3,6 @@ id: "method:<slug>"
 type: "method"
 title: "<Method Name>"
 status: "active"
-tags: []
 ontology_terms: []
 datasets: []
 source_refs: []

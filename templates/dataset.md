@@ -3,7 +3,6 @@ id: "dataset:<accession-or-slug>"
 type: "dataset"
 title: "<Dataset Name>"
 status: "active"
-tags: []
 ontology_terms: []
 datasets:
   - "<accession>"

@@ -1,6 +1,5 @@
 ---
 title: "Pre-registration: {{Short Title}}"
-tags: [pre-registration]
 created: "{{YYYY-MM-DD}}"
 ---
 

@@ -3,7 +3,6 @@ id: "question:<nn>-<slug>"
 type: "question"
 title: "<Question>"
 status: "active"
-tags: []
 ontology_terms: []
 datasets: []
 source_refs: []

@@ -3,7 +3,6 @@ id: "workflow:<slug>"
 type: "workflow"
 title: "<Workflow Name>"
 status: "active"
-tags: []
 method: "<method-slug>"
 created: "<YYYY-MM-DD>"
 updated: "<YYYY-MM-DD>"

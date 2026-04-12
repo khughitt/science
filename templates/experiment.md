@@ -3,7 +3,6 @@ id: "experiment:<slug>"
 type: "experiment"
 title: "<Experiment Name>"
 status: "planned"
-tags: []
 inquiry: "<inquiry-slug>"
 hypothesis: "<hypothesis-id>"
 created: "<YYYY-MM-DD>"

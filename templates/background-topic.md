@@ -3,7 +3,6 @@ id: "topic:{{slug}}"
 type: "topic"
 title: "{{Title}}"
 status: "active"
-tags: []
 ontology_terms: []
 datasets: []                    # omit if not applicable to this topic
 source_refs: []

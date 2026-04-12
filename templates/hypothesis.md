@@ -3,7 +3,6 @@ id: "hypothesis:h{{nn}}-{{slug}}"
 type: "hypothesis"
 title: "{{Short Title}}"
 status: "proposed"
-tags: []
 source_refs: []
 related: []
 created: "{{YYYY-MM-DD}}"

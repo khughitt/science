@@ -3,7 +3,6 @@ id: "inquiry:{{slug}}"
 type: "inquiry"
 title: "{{label}}"
 status: "{{status}}"
-tags: []
 source_refs: []
 related: []
 created: "{{created}}"

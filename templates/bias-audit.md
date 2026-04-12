@@ -3,7 +3,6 @@ id: "task:{{slug}}"
 type: "task"
 title: "Bias Audit: {{Short Title}}"
 status: "proposed"
-tags: [bias-audit]
 source_refs: []
 related: []
 created: "{{YYYY-MM-DD}}"
