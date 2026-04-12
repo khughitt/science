@@ -6,9 +6,8 @@ from typing import Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# V1 terminology:
-# - base edge: one exported (subject, predicate, object, layer) edge
-# - supporting claim: one proposition attached to a base edge
+BASE_EDGE_DEFINITION: str = "one exported (subject, predicate, object, layer) edge"
+SUPPORTING_CLAIM_DEFINITION: str = "one proposition attached to a base edge"
 
 GraphExportScopeKind: TypeAlias = Literal["project", "inquiry"]
 
@@ -82,3 +81,6 @@ class GraphExportPayload(BaseModel):
     scopes: list[GraphExportScope]
     overlays: GraphExportOverlays = Field(default_factory=GraphExportOverlays)
     warnings: list[str] = Field(default_factory=list)
+
+
+GraphExportPayload.model_rebuild()
