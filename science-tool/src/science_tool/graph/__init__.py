@@ -31,10 +31,24 @@ from science_tool.graph.store import (
     stamp_revision,
     validate_graph,
 )
+from science_tool.graph.export_types import (
+    GraphExportEdge,
+    GraphExportLayer,
+    GraphExportNode,
+    GraphExportOverlays,
+    GraphExportPayload,
+    GraphExportScope,
+)
 
 __all__ = [
     "DEFAULT_GRAPH_PATH",
     "GRAPH_LAYERS",
+    "GraphExportEdge",
+    "GraphExportLayer",
+    "GraphExportNode",
+    "GraphExportOverlays",
+    "GraphExportPayload",
+    "GraphExportScope",
     "PREDICATE_REGISTRY",
     "materialization_audit",
     "materialize_graph",
