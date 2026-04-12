@@ -39,8 +39,8 @@ class TestRewriteFrontmatter:
         assert migration.tag_values == ["genomics", "ml"]
         assert migration.added_to_related == ["topic:genomics", "topic:ml"]
         assert "tags:" not in new_text
-        # Existing quoted ref is preserved as-is; new refs are appended unquoted
-        assert 'related: ["question:q01", topic:genomics, topic:ml]' in new_text
+        # Quotes are normalized away — refs appear unquoted after merge
+        assert "related: [question:q01, topic:genomics, topic:ml]" in new_text
 
     def test_creates_related_when_missing(self) -> None:
         text = _entity_md(tags="genomics")
@@ -65,14 +65,24 @@ class TestRewriteFrontmatter:
         new_text, _ = rewrite_frontmatter(text)
         assert "related: [hypothesis:h02]" in new_text
 
+    def test_strips_quotes_from_tag_values(self) -> None:
+        """YAML list items with surrounding quotes should be unquoted so that
+        `tags: ["chromatin-3d"]` becomes `topic:chromatin-3d`, not `topic:"chromatin-3d"`."""
+        text = _entity_md(tags='"chromatin-3d", "hi-c"')
+        new_text, migration = rewrite_frontmatter(text)
+        assert migration is not None
+        assert migration.tag_values == ["chromatin-3d", "hi-c"]
+        assert "related: [topic:chromatin-3d, topic:hi-c]" in new_text
+        assert '"' not in new_text.split("related:")[1].split("]")[0]
+
     def test_empty_tags_just_removed(self) -> None:
         text = _entity_md(tags="", related='"question:q01"')
         new_text, migration = rewrite_frontmatter(text)
         assert migration is not None
         assert migration.tag_values == []
         assert "tags:" not in new_text
-        # Existing related is preserved untouched
-        assert 'related: ["question:q01"]' in new_text
+        # Existing related is preserved (no new refs to merge since tags was empty)
+        assert "question:q01" in new_text
 
     def test_no_tags_line_is_noop(self) -> None:
         text = _entity_md(tags=None, related='"question:q01"')

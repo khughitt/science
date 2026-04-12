@@ -43,8 +43,16 @@ class MigrationReport:
     errors: list[tuple[Path, str]] = field(default_factory=list)
 
 
+def _unquote(item: str) -> str:
+    """Strip surrounding single or double quotes from a YAML list item."""
+    s = item.strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in ('"', "'"):
+        return s[1:-1]
+    return s
+
+
 def _parse_list_body(body: str) -> list[str]:
-    return [item.strip() for item in body.split(",") if item.strip()]
+    return [_unquote(item) for item in body.split(",") if item.strip()]
 
 
 def _format_list_body(items: list[str]) -> str:
