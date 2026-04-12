@@ -1237,9 +1237,9 @@ def export_graph_payload(graph_path: Path, overlays: list[str] | None = None) ->
         raise click.ClickException(f"Unsupported graph export overlay(s): {', '.join(sorted(unsupported_overlays))}")
 
     dataset = _load_dataset(graph_path)
+    export_layers = _export_graph_layers(dataset)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
-    export_layers = _export_graph_layers(dataset)
     layer_graphs = [(layer, dataset.graph(_graph_uri(layer))) for layer in export_layers]
 
     statement_nodes: set[str] = set()

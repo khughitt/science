@@ -240,6 +240,37 @@ def test_export_graph_payload_includes_dashboard_style_named_layers(tmp_path: Pa
     assert next(layer for layer in payload.layers if layer.id == "graph/model").node_count == 1
 
 
+def test_export_graph_payload_excludes_unmaterialized_default_layers(tmp_path: Path) -> None:
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir(parents=True)
+    graph_path.write_text(
+        """\
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix sci:  <http://example.org/science/vocab/> .
+@prefix schema: <https://schema.org/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix model: <http://example.org/project/model/> .
+@prefix source: <http://example.org/project/source/> .
+
+<http://example.org/project/graph/model> {
+    model:lorenz-attractor rdf:type sci:Model .
+    model:lorenz-attractor skos:prefLabel "Lorenz attractor" .
+    model:lorenz-attractor schema:identifier "model:lorenz-attractor" .
+}
+
+<http://example.org/project/graph/provenance> {
+    model:lorenz-attractor prov:wasDerivedFrom source:model .
+}
+""",
+        encoding="utf-8",
+    )
+
+    payload = export_graph_payload(graph_path)
+
+    assert [layer.id for layer in payload.layers] == ["graph/model", "graph/provenance"]
+
+
 def test_export_graph_payload_includes_causal_overlay_for_inquiry(graph_path: Path) -> None:
     payload = export_graph_payload(graph_path, overlays=["causal"])
 
