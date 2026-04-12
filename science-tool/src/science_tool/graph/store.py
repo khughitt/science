@@ -631,8 +631,9 @@ def add_question(
     source: str,
     maturity: str = "open",
     status: str | None = None,
-    related_hypotheses: list[str] | None = None,
+    related: list[str] | None = None,
 ) -> URIRef:
+    """Add an open question with provenance to the graph."""
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
@@ -648,9 +649,9 @@ def add_question(
 
     provenance.add((question_uri, PROV.wasDerivedFrom, _resolve_term(source)))
 
-    if related_hypotheses:
-        for hyp_ref in related_hypotheses:
-            knowledge.add((question_uri, SKOS.related, _resolve_term(hyp_ref)))
+    if related:
+        for ref in related:
+            knowledge.add((question_uri, SKOS.related, _resolve_term(ref)))
 
     _save_dataset(dataset, graph_path)
     return question_uri

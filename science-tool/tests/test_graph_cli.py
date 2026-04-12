@@ -2974,7 +2974,7 @@ def test_graph_question_summary_includes_claims_from_related_hypotheses() -> Non
                     "Question linked to a related hypothesis",
                     "--source",
                     "article:doi_10_6666_f",
-                    "--related-hypothesis",
+                    "--related",
                     "hypothesis:hrel",
                 ],
             ).exit_code
@@ -3340,7 +3340,7 @@ def test_graph_add_question_with_maturity_and_related_hypothesis() -> None:
                 "paper:doi_10_2222_b",
                 "--maturity",
                 "partially-resolved",
-                "--related-hypothesis",
+                "--related",
                 "hypothesis/h1",
             ],
         )
@@ -3351,6 +3351,44 @@ def test_graph_add_question_with_maturity_and_related_hypothesis() -> None:
         q_uri = PROJECT_NS["question/q05"]
         maturity_vals = [str(o) for o in knowledge.objects(q_uri, SCI["maturity"])]
         assert "partially-resolved" in maturity_vals
+        related = [str(o) for o in knowledge.objects(q_uri, SKOS.related)]
+        assert any("hypothesis/h1" in r for r in related)
+
+
+def test_graph_add_question_with_generic_related() -> None:
+    """graph add question --related should accept any entity reference, not just hypotheses."""
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        # Add a hypothesis entity first
+        assert (
+            runner.invoke(
+                main, ["graph", "add", "hypothesis", "H1", "--text", "Test", "--source", "paper:doi_10_1111_a"]
+            ).exit_code
+            == 0
+        )
+
+        add = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "question",
+                "Q10",
+                "--text",
+                "How does X relate to Y?",
+                "--source",
+                "paper:doi_10_2222_b",
+                "--related",
+                "hypothesis/h1",
+            ],
+        )
+        assert add.exit_code == 0, add.output
+
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        q_uri = PROJECT_NS["question/q10"]
         related = [str(o) for o in knowledge.objects(q_uri, SKOS.related)]
         assert any("hypothesis/h1" in r for r in related)
 

@@ -859,7 +859,7 @@ def graph_add_hypothesis(hypothesis_id: str, text: str, source: str, status: str
     "--maturity", default="open", show_default=True, type=click.Choice(("open", "partially-resolved", "resolved"))
 )
 @click.option("--status", default=None, type=click.Choice(PROJECT_STATUSES), help="Project status")
-@click.option("--related-hypothesis", "related_hypotheses", multiple=True, help="Hypothesis reference (repeatable)")
+@click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
@@ -869,7 +869,7 @@ def graph_add_question(
     source: str,
     maturity: str,
     status: str | None,
-    related_hypotheses: tuple[str, ...],
+    related_refs: tuple[str, ...],
     graph_path: Path,
 ) -> None:
     """Add an open question with provenance."""
@@ -881,7 +881,7 @@ def graph_add_question(
         source=source,
         maturity=maturity,
         status=status,
-        related_hypotheses=list(related_hypotheses) if related_hypotheses else None,
+        related=list(related_refs) if related_refs else None,
     )
     click.echo(f"Added question: {question_uri}")
 
