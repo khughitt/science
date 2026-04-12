@@ -45,6 +45,7 @@ from science_tool.graph.store import (
     add_transformation,
     build_graph_dot,
     diff_graph_inputs,
+    export_graph_payload,
     get_inquiry,
     import_snapshot,
     init_graph_file,
@@ -776,6 +777,18 @@ def graph_viz(
         click.echo(f"Wrote DOT to {output_path}")
         return
     click.echo(dot)
+
+
+@graph.command("export-json")
+@click.option("--overlay", "overlays", multiple=True, type=click.Choice(("causal", "evidence")))
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_export_json(overlays: tuple[str, ...], graph_path: Path) -> None:
+    """Export the graph payload as JSON."""
+
+    payload = export_graph_payload(graph_path, overlays=list(overlays) if overlays else None)
+    click.echo(json.dumps(payload.model_dump(mode="json"), indent=2, sort_keys=True))
 
 
 @graph.command("import")

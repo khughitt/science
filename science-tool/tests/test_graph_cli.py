@@ -93,6 +93,118 @@ def test_graph_init_viz_notebook_uses_store_summaries_for_dashboard_panels() -> 
         assert "click" in pyproject_content
 
 
+def test_graph_export_json_emits_selected_overlays() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert runner.invoke(main, ["graph", "add", "concept", "Drug"]).exit_code == 0
+        assert runner.invoke(main, ["graph", "add", "concept", "Recovery"]).exit_code == 0
+        assert (
+            runner.invoke(main, ["graph", "add", "hypothesis", "H1", "--text", "H1", "--source", "paper:h1"]).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(main, ["graph", "add", "hypothesis", "H2", "--text", "H2", "--source", "paper:h2"]).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "proposition",
+                    "Drug treatment improves recovery time",
+                    "--source",
+                    "article:doi_10.1234/drug_recovery",
+                    "--id",
+                    "drug_causes_recovery",
+                    "--subject",
+                    "concept/drug",
+                    "--predicate",
+                    "scic:causes",
+                    "--object",
+                    "concept/recovery",
+                    "--bridge-between",
+                    "hypothesis:h1",
+                    "--bridge-between",
+                    "hypothesis:h2",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "edge",
+                    "concept/drug",
+                    "scic:causes",
+                    "concept/recovery",
+                    "--graph",
+                    "graph/causal",
+                    "--claim",
+                    "proposition:drug_causes_recovery",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "inquiry",
+                    "init",
+                    "test-dag",
+                    "--label",
+                    "Test DAG",
+                    "--target",
+                    "concept/recovery",
+                    "--type",
+                    "causal",
+                ],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(main, ["inquiry", "add-node", "test-dag", "concept/drug", "--role", "BoundaryIn"]).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main, ["inquiry", "add-node", "test-dag", "concept/recovery", "--role", "BoundaryOut"]
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                ["inquiry", "set-estimand", "test-dag", "--treatment", "concept/drug", "--outcome", "concept/recovery"],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "export-json", "--overlay", "causal", "--overlay", "evidence"])
+
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["schema_version"] == "1"
+        assert "causal" in payload["overlays"]
+        assert "evidence" in payload["overlays"]
+        assert (
+            payload["overlays"]["causal"]["inquiries"]["inquiry/test_dag"]["treatment"]
+            == "http://example.org/project/concept/drug"
+        )
+        edge_id = next(edge["id"] for edge in payload["edges"] if edge["predicate"].endswith("/causes"))
+        assert payload["overlays"]["evidence"]["edges"][edge_id]["claims"][0]["bridge_between"] == [
+            "hypothesis/h1",
+            "hypothesis/h2",
+        ]
+
+
 def test_graph_init_fails_if_graph_exists() -> None:
     runner = CliRunner()
 
