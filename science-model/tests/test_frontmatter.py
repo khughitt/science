@@ -45,7 +45,6 @@ id: "question:q01-test"
 type: question
 title: "What is X?"
 status: open
-tags: []
 created: 2026-03-01
 ---
 
@@ -66,7 +65,6 @@ def test_parse_entity_file_infers_type_from_id_prefix(tmp_path: Path):
 id: "hypothesis:h01-test"
 title: "Hypothesis without explicit type"
 status: proposed
-tags: []
 created: 2026-03-01
 ---
 
