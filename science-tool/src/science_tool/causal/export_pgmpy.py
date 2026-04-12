@@ -15,6 +15,7 @@ from science_tool.graph.store import (
     _collect_evidence_signals,
     _edge_claims,
     _graph_uri,
+    _load_proposition_bridge_hypotheses,
     _load_proposition_evidence_semantics,
     _load_proposition_falsifications,
     _load_proposition_interaction_terms,
@@ -48,6 +49,7 @@ class ClaimBundle(TypedDict):
     claim_status: NotRequired[str]
     pre_registrations: NotRequired[list[str]]
     interaction_terms: NotRequired[list[dict[str, str]]]
+    bridge_between: NotRequired[list[str]]
 
 
 class CausalEdge(TypedDict):
@@ -163,6 +165,9 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[CausalEdg
                     interaction_terms = _load_proposition_interaction_terms(provenance_graph, claim_uri)
                     if interaction_terms:
                         claim_bundle["interaction_terms"] = interaction_terms
+                    bridge_between = _load_proposition_bridge_hypotheses(provenance_graph, claim_uri)
+                    if bridge_between:
+                        claim_bundle["bridge_between"] = bridge_between
                     falsifications = _load_proposition_falsifications(knowledge_graph, claim_uri)
                     if falsifications:
                         claim_bundle["falsifications"] = falsifications
@@ -260,6 +265,10 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
                     claim_parts.append(
                         "modified_by: " + ", ".join(f"{term['modifier']}({term['effect']})" for term in term_list)
                     )
+                bridge_between = claim.get("bridge_between")
+                if bridge_between:
+                    claim_parts.append(f"bridge_between: {len(cast(list[str], bridge_between))}")
+                    claim_parts.append("bridges: " + ", ".join(cast(list[str], bridge_between)))
                 falsifications = claim.get("falsifications")
                 if falsifications:
                     claim_parts.append(f"falsifications: {len(cast(list[dict[str, str]], falsifications))}")

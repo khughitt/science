@@ -67,6 +67,8 @@ class ClaimSummaryData(TypedDict):
     pre_registrations: list[str]
     interaction_count: int
     interaction_modifiers: list[str]
+    bridge_count: int
+    bridge_hypotheses: list[str]
     signals: list[str]
     risk_score: float
 
@@ -345,6 +347,7 @@ def add_proposition(
     claim_status: str | None = None,
     pre_registration_refs: list[str] | None = None,
     interaction_terms: list[PropositionInteractionTerm] | None = None,
+    bridge_between_refs: list[str] | None = None,
 ) -> URIRef:
     """Add a proposition to the knowledge graph.
 
@@ -419,6 +422,11 @@ def add_proposition(
             if "note" in term and term["note"]:
                 normalized_term["note"] = str(term["note"])
             provenance.add((prop_uri, SCI_NS.interactionTerm, Literal(json.dumps(normalized_term))))
+    if bridge_between_refs is not None:
+        for bridge_ref in bridge_between_refs:
+            bridge_uri = _resolve_term(bridge_ref)
+            knowledge.add((prop_uri, CITO_NS.discusses, bridge_uri))
+            provenance.add((prop_uri, SCI_NS.bridgeBetween, bridge_uri))
 
     _save_dataset(dataset, graph_path)
     return prop_uri
@@ -2033,6 +2041,11 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "layer": "graph/provenance",
     },
     {
+        "predicate": "sci:bridgeBetween",
+        "description": "Claim explicitly bridges multiple hypotheses",
+        "layer": "graph/provenance",
+    },
+    {
         "predicate": "sci:falsifies",
         "description": "Falsification record linked to a proposition",
         "layer": "graph/knowledge",
@@ -2574,6 +2587,10 @@ def _load_proposition_interaction_terms(provenance, proposition_uri: URIRef) -> 
     return interaction_terms
 
 
+def _load_proposition_bridge_hypotheses(provenance, proposition_uri: URIRef) -> list[str]:
+    return sorted(shorten_uri(str(uri)) for uri in provenance.objects(proposition_uri, SCI_NS.bridgeBetween))
+
+
 def _load_proposition_falsifications(knowledge, proposition_uri: URIRef) -> list[FalsificationRecord]:
     falsifications: list[FalsificationRecord] = []
     for falsification_uri in sorted(knowledge.subjects(SCI_NS.falsifies, proposition_uri), key=str):
@@ -2713,6 +2730,8 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
     interaction_terms = _load_proposition_interaction_terms(provenance, uri)
     interaction_count = len(interaction_terms)
     interaction_modifiers = [f"{term['modifier']}({term['effect']})" for term in interaction_terms]
+    bridge_hypotheses = _load_proposition_bridge_hypotheses(provenance, uri)
+    bridge_count = len(bridge_hypotheses)
     has_explicit_semantics = any((statistical_support, mechanistic_support, replication_scope, claim_status))
 
     status_obj = next(provenance.objects(uri, SCI_NS.epistemicStatus), None)
@@ -2756,6 +2775,8 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
         signals.append("pre_registered")
     if interaction_count > 0:
         signals.append("effect_modified")
+    if bridge_count > 0:
+        signals.append("cross_hypothesis_bridge")
     if status:
         signals.append(f"status:{status}")
         risk_score += 0.5
@@ -2767,6 +2788,7 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
         and not has_explicit_semantics
         and pre_registration_count == 0
         and interaction_count == 0
+        and bridge_count == 0
     ):
         return None
 
@@ -2794,6 +2816,8 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
         "pre_registrations": pre_registrations,
         "interaction_count": interaction_count,
         "interaction_modifiers": interaction_modifiers,
+        "bridge_count": bridge_count,
+        "bridge_hypotheses": bridge_hypotheses,
         "signals": signals,
         "risk_score": risk_score,
     }
@@ -2822,6 +2846,8 @@ def _format_claim_summary_row(summary: ClaimSummaryData) -> dict[str, str]:
         "interaction_modifiers": "; ".join(summary["interaction_modifiers"])
         if summary["interaction_modifiers"]
         else "-",
+        "bridge_count": str(summary["bridge_count"]),
+        "bridge_hypotheses": "; ".join(summary["bridge_hypotheses"]) if summary["bridge_hypotheses"] else "-",
         "signals": "; ".join(signals) if signals else "-",
         "risk_score": f"{summary['risk_score']:.2f}",
     }

@@ -355,6 +355,41 @@ class TestExportChirho:
         assert "confidence: 0.85" in script
         assert "doi_10.1234/study" in script
 
+    def test_export_chirho_includes_bridge_comments(self, graph_path: Path) -> None:
+        """ChiRho export comments include cross-hypothesis bridge metadata when present."""
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Hypothesis 1", source="paper:doi_h1")
+        add_hypothesis(graph_path, "h2", "Hypothesis 2", source="paper:doi_h2")
+        add_inquiry(graph_path, "bridge-chirho", "Bridge ChiRho", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "bridge-chirho", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "bridge-chirho", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "bridge-chirho", treatment="concept/drug", outcome="concept/recovery")
+        add_proposition(
+            graph_path,
+            text="Drug treatment improves recovery time",
+            source="article:doi_10.1234/bridge",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_bridge_chirho",
+            bridge_between_refs=["hypothesis:h1", "hypothesis:h2"],
+        )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["proposition:drug_bridge_chirho"],
+        )
+
+        script = export_chirho_script(graph_path, "bridge-chirho")
+
+        assert "bridge_between: 2" in script
+        assert "bridges: hypothesis/h1, hypothesis/h2" in script
+
     def test_export_chirho_preserves_parent_specific_claims(self, graph_path: Path) -> None:
         """Each incoming causal edge keeps its own attached claim provenance."""
         add_concept(graph_path, "X", concept_type="sci:Variable", ontology_id=None)
@@ -740,6 +775,44 @@ class TestEdgeProvenance:
         assert interaction_term["modifier"] == "concept/kras"
         assert interaction_term["effect"] == "amplifies"
 
+    def test_enriched_edges_include_cross_hypothesis_bridge_metadata(self, graph_path: Path) -> None:
+        """Claim bundles expose cross-hypothesis bridge metadata when present."""
+        from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
+
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Hypothesis 1", source="paper:doi_h1")
+        add_hypothesis(graph_path, "h2", "Hypothesis 2", source="paper:doi_h2")
+        add_inquiry(graph_path, "bridge-dag", "Bridge DAG", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "bridge-dag", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "bridge-dag", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "bridge-dag", treatment="concept/drug", outcome="concept/recovery")
+        add_proposition(
+            graph_path,
+            text="Drug treatment improves recovery time",
+            source="article:doi_10.1234/drug_recovery",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_bridge_claim",
+            bridge_between_refs=["hypothesis:h1", "hypothesis:h2"],
+        )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["proposition:drug_bridge_claim"],
+        )
+
+        edges = _get_causal_edges_for_inquiry(graph_path, "bridge-dag")
+        edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
+        claim = edge["claims"][0]
+
+        assert claim["bridge_between"] == ["hypothesis/h1", "hypothesis/h2"]
+
     def test_export_pgmpy_includes_phase1_claim_metadata_comments(self, graph_path: Path) -> None:
         """pgmpy export comments include the richer claim metadata when present."""
         add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
@@ -895,6 +968,41 @@ class TestEdgeProvenance:
 
         assert "interaction_terms: 1" in script
         assert "modified_by: concept/kras(amplifies)" in script
+
+    def test_export_pgmpy_includes_bridge_comments(self, graph_path: Path) -> None:
+        """pgmpy export comments include cross-hypothesis bridge metadata when present."""
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Hypothesis 1", source="paper:doi_h1")
+        add_hypothesis(graph_path, "h2", "Hypothesis 2", source="paper:doi_h2")
+        add_inquiry(graph_path, "bridge-export", "Bridge Export", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "bridge-export", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "bridge-export", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "bridge-export", treatment="concept/drug", outcome="concept/recovery")
+        add_proposition(
+            graph_path,
+            text="Drug treatment improves recovery time",
+            source="article:doi_10.1234/drug_recovery",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_bridge_export",
+            bridge_between_refs=["hypothesis:h1", "hypothesis:h2"],
+        )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["proposition:drug_bridge_export"],
+        )
+
+        script = export_pgmpy_script(graph_path, "bridge-export")
+
+        assert "bridge_between: 2" in script
+        assert "bridges: hypothesis/h1, hypothesis/h2" in script
 
     def test_enriched_edges_include_linked_falsifications(self, graph_path: Path) -> None:
         """Claim bundles include linked falsification records when present."""

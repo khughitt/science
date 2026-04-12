@@ -615,6 +615,8 @@ def graph_dashboard_summary(top: int, output_format: str, graph_path: Path) -> N
             ("pre_registrations", "Pre-registrations"),
             ("interaction_count", "Interaction Count"),
             ("interaction_modifiers", "Interaction Modifiers"),
+            ("bridge_count", "Bridge Count"),
+            ("bridge_hypotheses", "Bridge Hypotheses"),
         ],
         rows=rows,
     )
@@ -934,6 +936,7 @@ def add_article_cmd(doi: str, graph_path: Path) -> None:
     multiple=True,
     help='Interaction-term JSON, e.g. {"modifier":"concept/kras","effect":"amplifies","note":"..."}',
 )
+@click.option("--bridge-between", "bridge_between_refs", multiple=True, help="Hypothesis ref bridged by this claim")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
@@ -958,6 +961,7 @@ def add_proposition_cmd(
     claim_status: str | None,
     pre_registration_refs: tuple[str, ...],
     interaction_term_entries: tuple[str, ...],
+    bridge_between_refs: tuple[str, ...],
     graph_path: Path,
 ) -> None:
     """Add a proposition to the knowledge graph."""
@@ -986,6 +990,7 @@ def add_proposition_cmd(
         claim_status=claim_status,
         pre_registration_refs=list(pre_registration_refs) if pre_registration_refs else None,
         interaction_terms=cast(list[dict[str, str]] | None, interaction_terms),
+        bridge_between_refs=list(bridge_between_refs) if bridge_between_refs else None,
     )
     click.echo(f"Added proposition: {uri}")
 

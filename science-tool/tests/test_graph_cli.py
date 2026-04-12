@@ -19,6 +19,7 @@ PROJECT_NS = Namespace("http://example.org/project/")
 SCI = Namespace("http://example.org/science/vocab/")
 SCHEMA = Namespace("https://schema.org/")
 BIOLINK = Namespace("https://w3id.org/biolink/vocab/")
+CITO = Namespace("http://purl.org/spar/cito/")
 
 
 def test_graph_init_creates_trig_with_named_graphs() -> None:
@@ -2076,6 +2077,55 @@ def test_graph_add_claim_accepts_interaction_terms() -> None:
         assert payload["effect"] == "amplifies"
 
 
+def test_graph_add_claim_accepts_bridge_between_hypotheses() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main, ["graph", "add", "hypothesis", "H1", "--text", "Hypothesis 1", "--source", "paper:doi_h1"]
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main, ["graph", "add", "hypothesis", "H2", "--text", "Hypothesis 2", "--source", "paper:doi_h2"]
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "proposition",
+                "Bridge claim between H1 and H2",
+                "--source",
+                "article:doi_10_1515_bridge",
+                "--id",
+                "bridge_claim",
+                "--bridge-between",
+                "hypothesis:h1",
+                "--bridge-between",
+                "hypothesis:h2",
+            ],
+        )
+        assert result.exit_code == 0
+
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+        prop_uri = PROJECT_NS["proposition/bridge_claim"]
+
+        assert (prop_uri, SCI.bridgeBetween, PROJECT_NS["hypothesis/h1"]) in provenance
+        assert (prop_uri, SCI.bridgeBetween, PROJECT_NS["hypothesis/h2"]) in provenance
+        assert (prop_uri, CITO.discusses, PROJECT_NS["hypothesis/h1"]) in knowledge
+        assert (prop_uri, CITO.discusses, PROJECT_NS["hypothesis/h2"]) in knowledge
+
+
 def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -> None:
     runner = CliRunner()
 
@@ -2377,6 +2427,53 @@ def test_graph_dashboard_summary_reports_interaction_terms() -> None:
 
         assert row["interaction_count"] == "1"
         assert row["interaction_modifiers"] == "concept/kras(amplifies)"
+
+
+def test_graph_dashboard_summary_reports_cross_hypothesis_bridges() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main, ["graph", "add", "hypothesis", "H1", "--text", "Hypothesis 1", "--source", "paper:doi_h1"]
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main, ["graph", "add", "hypothesis", "H2", "--text", "Hypothesis 2", "--source", "paper:doi_h2"]
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "proposition",
+                    "Bridge claim between H1 and H2",
+                    "--source",
+                    "article:doi_10_1616_bridge",
+                    "--id",
+                    "bridge_summary_claim",
+                    "--bridge-between",
+                    "hypothesis:h1",
+                    "--bridge-between",
+                    "hypothesis:h2",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "dashboard-summary", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        row = next(item for item in payload["rows"] if item["text"] == "Bridge claim between H1 and H2")
+
+        assert row["bridge_count"] == "2"
+        assert row["bridge_hypotheses"] == "hypothesis/h1; hypothesis/h2"
 
 
 def test_graph_dashboard_summary_counts_benchmark_evidence_as_empirical_presence() -> None:

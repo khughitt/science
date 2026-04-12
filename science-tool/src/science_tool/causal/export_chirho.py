@@ -205,6 +205,10 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
                             "modified_by: "
                             + ", ".join(f"{term['modifier']}({term['effect']})" for term in interaction_terms)
                         )
+                    bridge_between = claim.get("bridge_between")
+                    if bridge_between:
+                        prov_parts.append(f"bridge_between: {len(bridge_between)}")
+                        prov_parts.append("bridges: " + ", ".join(bridge_between))
                     falsifications = claim.get("falsifications")
                     if falsifications:
                         prov_parts.append(f"falsifications: {len(falsifications)}")
