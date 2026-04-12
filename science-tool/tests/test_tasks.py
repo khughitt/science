@@ -76,6 +76,13 @@ Second description.
 """
 
 
+def test_task_has_no_tags_field():
+    """After unification, Task should not have a tags field in its schema."""
+    from science_model.tasks import Task
+
+    assert "tags" not in Task.model_fields
+
+
 def test_parse_single_task_all_fields(tmp_path: Path) -> None:
     f = _write(tmp_path / "active.md", SINGLE_TASK)
     tasks = parse_tasks(f)
