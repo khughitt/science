@@ -128,6 +128,35 @@ def _parse_evidence_lines(entries: tuple[str, ...]) -> list[dict[str, object]] |
     return evidence_lines
 
 
+def _parse_interaction_terms(entries: tuple[str, ...]) -> list[dict[str, str]] | None:
+    if not entries:
+        return None
+
+    interaction_terms: list[dict[str, str]] = []
+    for entry in entries:
+        try:
+            parsed = json.loads(entry)
+        except json.JSONDecodeError as exc:
+            raise click.ClickException(f"Interaction term must be valid JSON, got '{entry}'") from exc
+        if not isinstance(parsed, dict):
+            raise click.ClickException("Interaction term JSON must decode to an object")
+        modifier = parsed.get("modifier")
+        effect = parsed.get("effect")
+        if not isinstance(modifier, str) or not modifier.strip():
+            raise click.ClickException("Interaction term JSON must include a non-empty 'modifier' string")
+        if not isinstance(effect, str) or not effect.strip():
+            raise click.ClickException("Interaction term JSON must include a non-empty 'effect' string")
+        interaction_term: dict[str, str] = {
+            "modifier": modifier,
+            "effect": effect,
+        }
+        note = parsed.get("note")
+        if isinstance(note, str) and note.strip():
+            interaction_term["note"] = note
+        interaction_terms.append(interaction_term)
+    return interaction_terms
+
+
 main.add_command(research_package_group)
 
 
@@ -584,6 +613,8 @@ def graph_dashboard_summary(top: int, output_format: str, graph_path: Path) -> N
             ("claim_status", "Claim Status"),
             ("pre_registration_count", "Pre-reg Count"),
             ("pre_registrations", "Pre-registrations"),
+            ("interaction_count", "Interaction Count"),
+            ("interaction_modifiers", "Interaction Modifiers"),
         ],
         rows=rows,
     )
@@ -898,6 +929,12 @@ def add_article_cmd(doi: str, graph_path: Path) -> None:
 )
 @click.option("--pre-registration", "pre_registration_refs", multiple=True, help="Linked pre-registration ref")
 @click.option(
+    "--interaction-term",
+    "interaction_term_entries",
+    multiple=True,
+    help='Interaction-term JSON, e.g. {"modifier":"concept/kras","effect":"amplifies","note":"..."}',
+)
+@click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def add_proposition_cmd(
@@ -920,11 +957,13 @@ def add_proposition_cmd(
     replication_scope: str | None,
     claim_status: str | None,
     pre_registration_refs: tuple[str, ...],
+    interaction_term_entries: tuple[str, ...],
     graph_path: Path,
 ) -> None:
     """Add a proposition to the knowledge graph."""
     dataset_effects = _parse_dataset_effects(dataset_effect_entries)
     evidence_lines = _parse_evidence_lines(evidence_line_entries)
+    interaction_terms = _parse_interaction_terms(interaction_term_entries)
     uri = add_proposition(
         graph_path,
         text,
@@ -946,6 +985,7 @@ def add_proposition_cmd(
         replication_scope=replication_scope,
         claim_status=claim_status,
         pre_registration_refs=list(pre_registration_refs) if pre_registration_refs else None,
+        interaction_terms=cast(list[dict[str, str]] | None, interaction_terms),
     )
     click.echo(f"Added proposition: {uri}")
 

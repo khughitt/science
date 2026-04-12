@@ -693,6 +693,53 @@ class TestEdgeProvenance:
             "pre-registration/edge-ribosome-e2f1",
         ]
 
+    def test_enriched_edges_include_interaction_terms(self, graph_path: Path) -> None:
+        """Claim bundles expose interaction/effect-modification terms when present."""
+        from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
+
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "KRAS", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "interaction-dag", "Interaction DAG", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "interaction-dag", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "interaction-dag", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "interaction-dag", treatment="concept/drug", outcome="concept/recovery")
+        add_proposition(
+            graph_path,
+            text="Drug treatment improves recovery time",
+            source="article:doi_10.1234/drug_recovery",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_interaction_claim",
+            interaction_terms=[
+                {
+                    "modifier": "concept/kras",
+                    "effect": "amplifies",
+                    "note": "stronger slope in KRAS-mutant cases",
+                }
+            ],
+        )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["proposition:drug_interaction_claim"],
+        )
+
+        edges = _get_causal_edges_for_inquiry(graph_path, "interaction-dag")
+        edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
+        claim = edge["claims"][0]
+
+        assert len(claim["interaction_terms"]) == 1
+        interaction_term = claim["interaction_terms"][0]
+        assert interaction_term["modifier"] == "concept/kras"
+        assert interaction_term["effect"] == "amplifies"
+
     def test_export_pgmpy_includes_phase1_claim_metadata_comments(self, graph_path: Path) -> None:
         """pgmpy export comments include the richer claim metadata when present."""
         add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
@@ -807,6 +854,47 @@ class TestEdgeProvenance:
 
         assert "pre_registrations: 1" in script
         assert "pre-registration/edge-ribosome-e2f1" in script
+
+    def test_export_pgmpy_includes_interaction_comments(self, graph_path: Path) -> None:
+        """pgmpy export comments include interaction/effect-modification terms when present."""
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "KRAS", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "interaction-export", "Interaction Export", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "interaction-export", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "interaction-export", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "interaction-export", treatment="concept/drug", outcome="concept/recovery")
+        add_proposition(
+            graph_path,
+            text="Drug treatment improves recovery time",
+            source="article:doi_10.1234/drug_recovery",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_interaction_export",
+            interaction_terms=[
+                {
+                    "modifier": "concept/kras",
+                    "effect": "amplifies",
+                    "note": "stronger slope in KRAS-mutant cases",
+                }
+            ],
+        )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["proposition:drug_interaction_export"],
+        )
+
+        script = export_pgmpy_script(graph_path, "interaction-export")
+
+        assert "interaction_terms: 1" in script
+        assert "modified_by: concept/kras(amplifies)" in script
 
     def test_enriched_edges_include_linked_falsifications(self, graph_path: Path) -> None:
         """Claim bundles include linked falsification records when present."""

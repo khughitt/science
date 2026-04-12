@@ -17,6 +17,7 @@ from science_tool.graph.store import (
     _graph_uri,
     _load_proposition_evidence_semantics,
     _load_proposition_falsifications,
+    _load_proposition_interaction_terms,
     _load_proposition_phase1_metadata,
     _load_proposition_pre_registrations,
     _load_dataset,
@@ -46,6 +47,7 @@ class ClaimBundle(TypedDict):
     replication_scope: NotRequired[str]
     claim_status: NotRequired[str]
     pre_registrations: NotRequired[list[str]]
+    interaction_terms: NotRequired[list[dict[str, str]]]
 
 
 class CausalEdge(TypedDict):
@@ -158,6 +160,9 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[CausalEdg
                     pre_registrations = _load_proposition_pre_registrations(provenance_graph, claim_uri)
                     if pre_registrations:
                         claim_bundle["pre_registrations"] = pre_registrations
+                    interaction_terms = _load_proposition_interaction_terms(provenance_graph, claim_uri)
+                    if interaction_terms:
+                        claim_bundle["interaction_terms"] = interaction_terms
                     falsifications = _load_proposition_falsifications(knowledge_graph, claim_uri)
                     if falsifications:
                         claim_bundle["falsifications"] = falsifications
@@ -248,6 +253,13 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
                 if pre_registrations:
                     claim_parts.append(f"pre_registrations: {len(cast(list[str], pre_registrations))}")
                     claim_parts.append("pre_registered_in: " + ", ".join(cast(list[str], pre_registrations)))
+                interaction_terms = claim.get("interaction_terms")
+                if interaction_terms:
+                    term_list = cast(list[dict[str, str]], interaction_terms)
+                    claim_parts.append(f"interaction_terms: {len(term_list)}")
+                    claim_parts.append(
+                        "modified_by: " + ", ".join(f"{term['modifier']}({term['effect']})" for term in term_list)
+                    )
                 falsifications = claim.get("falsifications")
                 if falsifications:
                     claim_parts.append(f"falsifications: {len(cast(list[dict[str, str]], falsifications))}")

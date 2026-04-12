@@ -2040,6 +2040,42 @@ def test_graph_add_claim_accepts_pre_registration_links() -> None:
         ) in provenance
 
 
+def test_graph_add_claim_accepts_interaction_terms() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert runner.invoke(main, ["graph", "add", "concept", "KRAS", "--type", "sci:Variable"]).exit_code == 0
+
+        result = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "proposition",
+                "KRAS modifies the drug to recovery slope",
+                "--source",
+                "article:doi_10_1313_interaction",
+                "--id",
+                "interaction_claim",
+                "--interaction-term",
+                '{"modifier":"concept/kras","effect":"amplifies","note":"stronger survival slope in KRAS-mutant cases"}',
+            ],
+        )
+        assert result.exit_code == 0
+
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+        prop_uri = PROJECT_NS["proposition/interaction_claim"]
+
+        interaction_terms = list(provenance.objects(prop_uri, SCI.interactionTerm))
+        assert len(interaction_terms) == 1
+        payload = json.loads(str(interaction_terms[0]))
+        assert payload["modifier"] == "http://example.org/project/concept/kras"
+        assert payload["effect"] == "amplifies"
+
+
 def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -> None:
     runner = CliRunner()
 
@@ -2304,6 +2340,43 @@ def test_graph_dashboard_summary_reports_pre_registration_links() -> None:
 
         assert row["pre_registration_count"] == "1"
         assert row["pre_registrations"] == "pre-registration/edge-ribosome-e2f1"
+
+
+def test_graph_dashboard_summary_reports_interaction_terms() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert runner.invoke(main, ["graph", "add", "concept", "KRAS", "--type", "sci:Variable"]).exit_code == 0
+
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "proposition",
+                    "Interaction-typed causal claim",
+                    "--source",
+                    "article:doi_10_1414_interaction",
+                    "--id",
+                    "interaction_typed_claim",
+                    "--confidence",
+                    "0.8",
+                    "--interaction-term",
+                    '{"modifier":"concept/kras","effect":"amplifies","note":"slope stronger in KRAS-mutant samples"}',
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "dashboard-summary", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        row = next(item for item in payload["rows"] if item["text"] == "Interaction-typed causal claim")
+
+        assert row["interaction_count"] == "1"
+        assert row["interaction_modifiers"] == "concept/kras(amplifies)"
 
 
 def test_graph_dashboard_summary_counts_benchmark_evidence_as_empirical_presence() -> None:

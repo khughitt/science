@@ -198,6 +198,13 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
                     if pre_registrations:
                         prov_parts.append(f"pre_registrations: {len(pre_registrations)}")
                         prov_parts.append("pre_registered_in: " + ", ".join(pre_registrations))
+                    interaction_terms = claim.get("interaction_terms")
+                    if interaction_terms:
+                        prov_parts.append(f"interaction_terms: {len(interaction_terms)}")
+                        prov_parts.append(
+                            "modified_by: "
+                            + ", ".join(f"{term['modifier']}({term['effect']})" for term in interaction_terms)
+                        )
                     falsifications = claim.get("falsifications")
                     if falsifications:
                         prov_parts.append(f"falsifications: {len(falsifications)}")

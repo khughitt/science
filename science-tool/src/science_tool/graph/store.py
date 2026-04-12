@@ -65,6 +65,8 @@ class ClaimSummaryData(TypedDict):
     claim_status: str
     pre_registration_count: int
     pre_registrations: list[str]
+    interaction_count: int
+    interaction_modifiers: list[str]
     signals: list[str]
     risk_score: float
 
@@ -116,6 +118,12 @@ class PropositionEvidenceSemantics(TypedDict, total=False):
     mechanistic_support: str
     replication_scope: str
     claim_status: str
+
+
+class PropositionInteractionTerm(TypedDict, total=False):
+    modifier: str
+    effect: str
+    note: str
 
 
 class FalsificationRecord(TypedDict, total=False):
@@ -336,6 +344,7 @@ def add_proposition(
     replication_scope: str | None = None,
     claim_status: str | None = None,
     pre_registration_refs: list[str] | None = None,
+    interaction_terms: list[PropositionInteractionTerm] | None = None,
 ) -> URIRef:
     """Add a proposition to the knowledge graph.
 
@@ -401,6 +410,15 @@ def add_proposition(
     if pre_registration_refs is not None:
         for pre_registration_ref in pre_registration_refs:
             provenance.add((prop_uri, SCI_NS.preRegisteredIn, _resolve_term(pre_registration_ref)))
+    if interaction_terms is not None:
+        for term in interaction_terms:
+            normalized_term: PropositionInteractionTerm = {
+                "modifier": str(_resolve_term(term["modifier"])),
+                "effect": str(term["effect"]),
+            }
+            if "note" in term and term["note"]:
+                normalized_term["note"] = str(term["note"])
+            provenance.add((prop_uri, SCI_NS.interactionTerm, Literal(json.dumps(normalized_term))))
 
     _save_dataset(dataset, graph_path)
     return prop_uri
@@ -2010,6 +2028,11 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "layer": "graph/provenance",
     },
     {
+        "predicate": "sci:interactionTerm",
+        "description": "Structured interaction/effect-modification term encoded as JSON",
+        "layer": "graph/provenance",
+    },
+    {
         "predicate": "sci:falsifies",
         "description": "Falsification record linked to a proposition",
         "layer": "graph/knowledge",
@@ -2536,6 +2559,21 @@ def _load_proposition_pre_registrations(provenance, proposition_uri: URIRef) -> 
     return sorted(shorten_uri(str(uri)) for uri in provenance.objects(proposition_uri, SCI_NS.preRegisteredIn))
 
 
+def _load_proposition_interaction_terms(provenance, proposition_uri: URIRef) -> list[PropositionInteractionTerm]:
+    interaction_terms: list[PropositionInteractionTerm] = []
+    for value in provenance.objects(proposition_uri, SCI_NS.interactionTerm):
+        parsed = json.loads(str(value))
+        term: PropositionInteractionTerm = {
+            "modifier": shorten_uri(str(parsed["modifier"])),
+            "effect": str(parsed["effect"]),
+        }
+        note = parsed.get("note")
+        if isinstance(note, str) and note:
+            term["note"] = note
+        interaction_terms.append(term)
+    return interaction_terms
+
+
 def _load_proposition_falsifications(knowledge, proposition_uri: URIRef) -> list[FalsificationRecord]:
     falsifications: list[FalsificationRecord] = []
     for falsification_uri in sorted(knowledge.subjects(SCI_NS.falsifies, proposition_uri), key=str):
@@ -2672,6 +2710,9 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
     claim_status = evidence_semantics.get("claim_status", "")
     pre_registrations = _load_proposition_pre_registrations(provenance, uri)
     pre_registration_count = len(pre_registrations)
+    interaction_terms = _load_proposition_interaction_terms(provenance, uri)
+    interaction_count = len(interaction_terms)
+    interaction_modifiers = [f"{term['modifier']}({term['effect']})" for term in interaction_terms]
     has_explicit_semantics = any((statistical_support, mechanistic_support, replication_scope, claim_status))
 
     status_obj = next(provenance.objects(uri, SCI_NS.epistemicStatus), None)
@@ -2713,6 +2754,8 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
             risk_score += 2.0
     if pre_registration_count > 0:
         signals.append("pre_registered")
+    if interaction_count > 0:
+        signals.append("effect_modified")
     if status:
         signals.append(f"status:{status}")
         risk_score += 0.5
@@ -2723,6 +2766,7 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
         and not status
         and not has_explicit_semantics
         and pre_registration_count == 0
+        and interaction_count == 0
     ):
         return None
 
@@ -2748,6 +2792,8 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
         "claim_status": claim_status,
         "pre_registration_count": pre_registration_count,
         "pre_registrations": pre_registrations,
+        "interaction_count": interaction_count,
+        "interaction_modifiers": interaction_modifiers,
         "signals": signals,
         "risk_score": risk_score,
     }
@@ -2772,6 +2818,10 @@ def _format_claim_summary_row(summary: ClaimSummaryData) -> dict[str, str]:
         "claim_status": str(summary["claim_status"]) or "-",
         "pre_registration_count": str(summary["pre_registration_count"]),
         "pre_registrations": "; ".join(summary["pre_registrations"]) if summary["pre_registrations"] else "-",
+        "interaction_count": str(summary["interaction_count"]),
+        "interaction_modifiers": "; ".join(summary["interaction_modifiers"])
+        if summary["interaction_modifiers"]
+        else "-",
         "signals": "; ".join(signals) if signals else "-",
         "risk_score": f"{summary['risk_score']:.2f}",
     }
