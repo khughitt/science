@@ -107,7 +107,7 @@ def _write_demo_project(
                     'title: "Conflicting alias hypothesis"',
                     "aliases: [H01]",
                     'status: "proposed"',
-                        "ontology_terms: []",
+                    "ontology_terms: []",
                     "source_refs: []",
                     "related: []",
                     'created: "2026-03-12"',

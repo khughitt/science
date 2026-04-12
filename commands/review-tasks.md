@@ -21,7 +21,7 @@ Read `tasks/active.md` for full task descriptions. Note the total count and dist
 
 ### 2. Identify review scope
 
-If $ARGUMENTS specifies a filter (priority, type, group, tag), apply it. Otherwise review all open tasks (non-done, non-retired).
+If $ARGUMENTS specifies a filter (priority, type, group, related), apply it. Otherwise review all open tasks (non-done, non-retired).
 
 ### 3. Status verification
 

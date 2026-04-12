@@ -21,10 +21,10 @@ Show active tasks sorted by priority (P0 first). Use:
 uv run science-tool tasks list
 ```
 
-Filter by tag or group:
+Filter by related entity or group:
 
 ```bash
-uv run science-tool tasks list --tag=lens --group=visualization
+uv run science-tool tasks list --related=topic:lens --group=visualization
 ```
 
 ### "add <description>"
@@ -32,14 +32,13 @@ uv run science-tool tasks list --tag=lens --group=visualization
 Interactively create a task. Ask the user for:
 - **Type:** research or dev
 - **Priority:** P0-P3
-- **Related entities:** (optional) e.g. hypothesis:h01, topic:protein-folding
-- **Tags:** (optional) multi-dimensional labels, e.g. lens-system, umap, formula
+- **Related entities:** (optional) typed refs for hypotheses, topics, questions, etc. — e.g. hypothesis:h01, topic:protein-folding, topic:umap
 - **Group:** (optional) single group label for thematic clustering
 
 Then run:
 
 ```bash
-uv run science-tool tasks add "<title>" --type=<type> --priority=<priority> [--related=<ref>...] [--tags=<tag>...] [--group=<group>]
+uv run science-tool tasks add "<title>" --type=<type> --priority=<priority> [--related=<ref>...] [--group=<group>]
 ```
 
 ### "done <task_id>"
@@ -74,9 +73,9 @@ Mark a task as blocked by another task.
 
 Remove all blockers and set status to active.
 
-### "edit <task_id> [--priority P0] [--status active] [--type dev] [--related hypothesis:h01] [--tags lens] [--group viz]"
+### "edit <task_id> [--priority P0] [--status active] [--type dev] [--related hypothesis:h01] [--related topic:lens] [--group viz]"
 
-Update task fields. Supports `--tags` (multiple) and `--group` (single value).
+Update task fields. Supports `--related` (repeatable) and `--group` (single value).
 
 ### "show <task_id>"
 
@@ -116,7 +115,7 @@ When working through tasks, follow these principles:
 - **Mark progress as you go.** Set tasks to `active` when starting, `done` when complete. Don't leave tasks in ambiguous states.
 - **Retire rather than delete.** When a task is no longer relevant, use `retire` instead of deleting. This preserves the decision record.
 - **Use groups for thematic clusters.** When multiple tasks share a theme (e.g., "lens-system", "formula-integration"), assign a group to enable filtered views.
-- **Use tags for cross-cutting concerns.** Tags allow filtering across groups (e.g., `umap` tasks may span multiple groups).
+- **Use `related` for cross-cutting connections.** Link tasks to hypotheses, topics, or other entities with `--related` (e.g., `--related=topic:umap`). Related entries become edges in the knowledge graph, and the same entity can appear across multiple groups.
 
 ## After Changes
 

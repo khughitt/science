@@ -1295,7 +1295,6 @@ def render_inquiry_doc(graph_path: Path, slug: str) -> str:
         'type: "inquiry"',
         f'title: "{info["label"]}"',
         f'status: "{info["status"]}"',
-        "tags: []",
         "source_refs: []",
         "related: []",
         f'created: "{info["created"]}"',
