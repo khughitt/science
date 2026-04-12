@@ -1602,7 +1602,6 @@ def tasks() -> None:
 @click.option("--priority", required=True, type=click.Choice(["P0", "P1", "P2", "P3"]))
 @click.option("--related", multiple=True)
 @click.option("--blocked-by", multiple=True)
-@click.option("--tags", multiple=True)
 @click.option("--group", default="")
 @click.option("--description", default="")
 def tasks_add(
@@ -1611,7 +1610,6 @@ def tasks_add(
     priority: str,
     related: tuple[str, ...],
     blocked_by: tuple[str, ...],
-    tags: tuple[str, ...],
     group: str,
     description: str,
 ) -> None:
@@ -1625,7 +1623,6 @@ def tasks_add(
         priority=priority,
         related=list(related) or None,
         blocked_by=list(blocked_by) or None,
-        tags=list(tags) or None,
         group=group,
         description=description,
     )
@@ -1707,7 +1704,6 @@ def tasks_unblock(task_id: str) -> None:
 @click.option("--status", default=None, type=click.Choice(["proposed", "active", "blocked", "deferred", "retired"]))
 @click.option("--type", "task_type", default=None, type=click.Choice(["research", "dev"]))
 @click.option("--related", multiple=True)
-@click.option("--tags", multiple=True)
 @click.option("--group", default=None)
 def tasks_edit(
     task_id: str,
@@ -1715,7 +1711,6 @@ def tasks_edit(
     status: str | None,
     task_type: str | None,
     related: tuple[str, ...],
-    tags: tuple[str, ...],
     group: str | None,
 ) -> None:
     """Edit a task's fields."""
@@ -1729,7 +1724,6 @@ def tasks_edit(
             status=status,
             task_type=task_type,
             related=list(related) if related else None,
-            tags=list(tags) if tags else None,
             group=group,
         )
     except KeyError as e:
@@ -1746,7 +1740,6 @@ def tasks_edit(
     type=click.Choice(["proposed", "active", "blocked", "deferred", "retired", "done"]),
 )
 @click.option("--related", default=None)
-@click.option("--tag", default=None, help="Filter by tag (exact match)")
 @click.option("--group", default=None, help="Filter by group (exact match)")
 @click.option("--all", "show_all", is_flag=True, default=False, help="Include done and retired tasks")
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
@@ -1755,7 +1748,6 @@ def tasks_list(
     priority: str | None,
     status: str | None,
     related: str | None,
-    tag: str | None,
     group: str | None,
     show_all: bool,
     output_format: str,
@@ -1770,7 +1762,6 @@ def tasks_list(
         priority=priority,
         status=status,
         related=related,
-        tag=tag,
         group=group,
         include_done=show_all,
     )
@@ -1784,7 +1775,7 @@ def tasks_list(
             ("priority", "Priority"),
             ("status", "Status"),
             ("group", "Group"),
-            ("tags", "Tags"),
+            ("related", "Related"),
             ("created", "Created"),
         ]
         rows = [
@@ -1795,7 +1786,7 @@ def tasks_list(
                 "priority": t.priority,
                 "status": t.status,
                 "group": t.group,
-                "tags": ", ".join(t.tags),
+                "related": ", ".join(t.related),
                 "created": t.created.isoformat(),
             }
             for t in matched

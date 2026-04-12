@@ -83,9 +83,8 @@ def sort_tasks(tasks: list[Task]) -> list[Task]:
 
 def render_tasks_table(tasks: list[Task]) -> None:
     """Render a colored Rich table of tasks to stdout."""
-    # Only show group/tags columns if any task uses them
     has_groups = any(t.group for t in tasks)
-    has_tags = any(t.tags for t in tasks)
+    has_related = any(t.related for t in tasks)
 
     table = Table(title="Tasks", show_lines=False)
     table.add_column("ID", style="bold")
@@ -95,8 +94,8 @@ def render_tasks_table(tasks: list[Task]) -> None:
     table.add_column("Status")
     if has_groups:
         table.add_column("Group")
-    if has_tags:
-        table.add_column("Tags")
+    if has_related:
+        table.add_column("Related")
     table.add_column("Created")
 
     for t in tasks:
@@ -110,8 +109,8 @@ def render_tasks_table(tasks: list[Task]) -> None:
         row: list[Text] = [id_text, title_text, type_text, pri_text, status_text]
         if has_groups:
             row.append(Text(t.group, style="cyan"))
-        if has_tags:
-            row.append(Text(", ".join(t.tags), style="dim"))
+        if has_related:
+            row.append(Text(", ".join(t.related), style="dim"))
         row.append(created_text)
 
         table.add_row(*row)

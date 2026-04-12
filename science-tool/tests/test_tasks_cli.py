@@ -298,15 +298,7 @@ class TestTasksRetire:
             assert result.exit_code != 0
 
 
-class TestTasksTagsAndGroups:
-    def test_add_with_tags(self, runner: CliRunner) -> None:
-        with runner.isolated_filesystem():
-            result = runner.invoke(
-                main,
-                ["tasks", "add", "Tagged", "--type", "dev", "--priority", "P1", "--tags", "lens", "--tags", "umap"],
-            )
-            assert result.exit_code == 0
-
+class TestTasksGroups:
     def test_add_with_group(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
             result = runner.invoke(
@@ -315,27 +307,21 @@ class TestTasksTagsAndGroups:
             )
             assert result.exit_code == 0
 
-    def test_edit_tags(self, runner: CliRunner) -> None:
-        with runner.isolated_filesystem():
-            runner.invoke(main, ["tasks", "add", "To edit", "--type", "dev", "--priority", "P1"])
-            result = runner.invoke(main, ["tasks", "edit", "t001", "--tags", "new-tag"])
-            assert result.exit_code == 0
-
     def test_edit_group(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
             runner.invoke(main, ["tasks", "add", "To edit", "--type", "dev", "--priority", "P1"])
             result = runner.invoke(main, ["tasks", "edit", "t001", "--group", "my-group"])
             assert result.exit_code == 0
 
-    def test_list_by_tag(self, runner: CliRunner) -> None:
+    def test_list_by_related(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
             runner.invoke(
-                main, ["tasks", "add", "T1", "--type", "dev", "--priority", "P1", "--tags", "alpha"]
+                main, ["tasks", "add", "T1", "--type", "dev", "--priority", "P1", "--related", "topic:alpha"]
             )
             runner.invoke(
-                main, ["tasks", "add", "T2", "--type", "dev", "--priority", "P2", "--tags", "beta"]
+                main, ["tasks", "add", "T2", "--type", "dev", "--priority", "P2", "--related", "topic:beta"]
             )
-            result = runner.invoke(main, ["tasks", "list", "--tag", "alpha"])
+            result = runner.invoke(main, ["tasks", "list", "--related", "alpha"])
             assert result.exit_code == 0
             assert "T1" in result.output
             assert "T2" not in result.output
