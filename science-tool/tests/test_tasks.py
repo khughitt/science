@@ -83,6 +83,16 @@ def test_task_has_no_tags_field():
     assert "tags" not in Task.model_fields
 
 
+def test_render_and_parse_task_without_tags(tmp_path: Path) -> None:
+    """Tasks should render and parse without any tags field."""
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    t = add_task(tasks_dir, "Test task", "dev", "P1", related=["topic:umap"])
+    assert "- tags:" not in render_task(t)
+    tasks = parse_tasks(tasks_dir / "active.md")
+    assert tasks[0].related == ["topic:umap"]
+
+
 def test_parse_single_task_all_fields(tmp_path: Path) -> None:
     f = _write(tmp_path / "active.md", SINGLE_TASK)
     tasks = parse_tasks(f)
@@ -573,24 +583,40 @@ class TestInvalidStatusWarning:
 
 
 class TestTagsAndGroups:
-    def test_parse_tags_and_group(self, tmp_path: Path) -> None:
+    def test_legacy_tags_merged_into_related(self, tmp_path: Path) -> None:
         f = _write(tmp_path / "active.md", TAGGED_TASK)
         tasks = parse_tasks(f)
         assert len(tasks) == 1
         t = tasks[0]
-        assert t.tags == ["lens-system", "umap"]
+        assert "topic:lens-system" in t.related
+        assert "topic:umap" in t.related
         assert t.group == "visualization"
 
-    def test_roundtrip_tags_and_group(self, tmp_path: Path) -> None:
+    def test_roundtrip_without_tags(self, tmp_path: Path) -> None:
         f = _write(tmp_path / "active.md", TAGGED_TASK)
         tasks1 = parse_tasks(f)
         rendered = render_tasks(tasks1)
+        assert "- tags:" not in rendered
         f2 = _write(tmp_path / "roundtrip.md", rendered)
         tasks2 = parse_tasks(f2)
-        assert tasks1[0].tags == tasks2[0].tags
+        assert "topic:lens-system" in tasks2[0].related
         assert tasks1[0].group == tasks2[0].group
 
-    def test_add_with_tags_and_group(self, tmp_path: Path) -> None:
+    def test_empty_tags_not_rendered(self) -> None:
+        t = Task(
+            id="t001",
+            title="Plain task",
+            type="dev",
+            priority="P2",
+            status="proposed",
+            created=date(2026, 4, 1),
+            description="Desc.",
+        )
+        rendered = render_task(t)
+        assert "- tags:" not in rendered
+        assert "- group:" not in rendered
+
+    def test_add_with_related_and_group(self, tmp_path: Path) -> None:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
         t = add_task(
@@ -598,33 +624,27 @@ class TestTagsAndGroups:
             title="Tagged task",
             task_type="dev",
             priority="P2",
-            tags=["symmetry", "umap"],
+            related=["topic:symmetry", "topic:umap"],
             group="lens-system",
         )
-        assert t.tags == ["symmetry", "umap"]
+        assert t.related == ["topic:symmetry", "topic:umap"]
         assert t.group == "lens-system"
-        # Verify persisted
         tasks = parse_tasks(tasks_dir / "active.md")
-        assert tasks[0].tags == ["symmetry", "umap"]
+        assert tasks[0].related == ["topic:symmetry", "topic:umap"]
         assert tasks[0].group == "lens-system"
-
-    def test_edit_tags(self, tmp_path: Path) -> None:
-        tasks_dir = _make_tasks_dir(tmp_path)
-        t = edit_task(tasks_dir, "t001", tags=["new-tag"])
-        assert t.tags == ["new-tag"]
 
     def test_edit_group(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        t = edit_task(tasks_dir, "t001", group="my-group")
-        assert t.group == "my-group"
+        t = edit_task(tasks_dir, "t001", group="new-group")
+        assert t.group == "new-group"
 
-    def test_list_by_tag(self, tmp_path: Path) -> None:
+    def test_list_by_related(self, tmp_path: Path) -> None:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
-        add_task(tasks_dir, "T1", "dev", "P1", tags=["alpha", "beta"])
-        add_task(tasks_dir, "T2", "dev", "P2", tags=["beta", "gamma"])
-        add_task(tasks_dir, "T3", "dev", "P1", tags=["alpha"])
-        result = list_tasks(tasks_dir, tag="alpha")
+        add_task(tasks_dir, "T1", "dev", "P1", related=["topic:alpha", "topic:beta"])
+        add_task(tasks_dir, "T2", "dev", "P2", related=["topic:beta", "topic:gamma"])
+        add_task(tasks_dir, "T3", "dev", "P1", related=["topic:alpha"])
+        result = list_tasks(tasks_dir, related="topic:alpha")
         assert len(result) == 2
         assert {t.id for t in result} == {"t001", "t003"}
 
@@ -632,24 +652,10 @@ class TestTagsAndGroups:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
         add_task(tasks_dir, "T1", "dev", "P1", group="lens")
-        add_task(tasks_dir, "T2", "dev", "P2", group="formula")
-        add_task(tasks_dir, "T3", "dev", "P1", group="lens")
+        add_task(tasks_dir, "T2", "dev", "P2", group="lens")
+        add_task(tasks_dir, "T3", "dev", "P1", group="other")
         result = list_tasks(tasks_dir, group="lens")
         assert len(result) == 2
-
-    def test_empty_tags_not_rendered(self) -> None:
-        t = Task(
-            id="t001",
-            title="Plain task",
-            type="dev",
-            priority="P1",
-            status="active",
-            created=date(2026, 3, 1),
-            description="Desc.",
-        )
-        rendered = render_task(t)
-        assert "- tags:" not in rendered
-        assert "- group:" not in rendered
 
 
 class TestRetireTask:

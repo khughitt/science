@@ -61,6 +61,13 @@ def _parse_task_block(lines: list[str]) -> Task:
     completed_raw = fields.get("completed")
     completed = date.fromisoformat(completed_raw) if completed_raw else None
 
+    # Merge legacy tags into related as topic: references
+    related = _parse_list_value(fields.get("related", ""))
+    for tag in _parse_list_value(fields.get("tags", "")):
+        tag_ref = f"topic:{tag}" if ":" not in tag else tag
+        if tag_ref not in related:
+            related.append(tag_ref)
+
     return Task(
         id=task_id,
         title=title,
@@ -69,9 +76,8 @@ def _parse_task_block(lines: list[str]) -> Task:
         status=fields.get("status", ""),
         created=created,
         description=description,
-        related=_parse_list_value(fields.get("related", "")),
+        related=related,
         blocked_by=_parse_list_value(fields.get("blocked-by", "")),
-        tags=_parse_list_value(fields.get("tags", "")),
         group=fields.get("group", ""),
         completed=completed,
     )
@@ -116,9 +122,6 @@ def render_task(task: Task) -> str:
     if task.blocked_by:
         items = ", ".join(task.blocked_by)
         lines.append(f"- blocked-by: [{items}]")
-    if task.tags:
-        items = ", ".join(task.tags)
-        lines.append(f"- tags: [{items}]")
     if task.group:
         lines.append(f"- group: {task.group}")
     lines.append(f"- created: {task.created.isoformat()}")
@@ -181,7 +184,6 @@ def add_task(
     priority: str,
     related: list[str] | None = None,
     blocked_by: list[str] | None = None,
-    tags: list[str] | None = None,
     group: str = "",
     description: str = "",
 ) -> Task:
@@ -196,7 +198,6 @@ def add_task(
         created=date.today(),
         related=related or [],
         blocked_by=blocked_by or [],
-        tags=tags or [],
         group=group,
         description=description,
     )
@@ -301,7 +302,6 @@ def edit_task(
     status: str | None = None,
     task_type: str | None = None,
     related: list[str] | None = None,
-    tags: list[str] | None = None,
     group: str | None = None,
 ) -> Task:
     """Update specified fields on a task."""
@@ -316,8 +316,6 @@ def edit_task(
         task.type = task_type
     if related is not None:
         task.related = related
-    if tags is not None:
-        task.tags = tags
     if group is not None:
         task.group = group
 
@@ -346,7 +344,6 @@ def list_tasks(
     priority: str | None = None,
     status: str | None = None,
     related: str | None = None,
-    tag: str | None = None,
     group: str | None = None,
     include_done: bool = False,
 ) -> list[Task]:
@@ -369,8 +366,6 @@ def list_tasks(
         tasks = [t for t in tasks if t.status not in _CLOSED_STATUSES]
     if related is not None:
         tasks = [t for t in tasks if any(related in r for r in t.related)]
-    if tag is not None:
-        tasks = [t for t in tasks if tag in t.tags]
     if group is not None:
         tasks = [t for t in tasks if t.group == group]
 
