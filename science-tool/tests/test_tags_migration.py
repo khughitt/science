@@ -9,6 +9,7 @@ from science_tool.cli import main
 from science_tool.graph.tags_migration import (
     migrate_tags_to_related,
     rewrite_frontmatter,
+    rewrite_task_file,
 )
 
 
@@ -164,6 +165,98 @@ class TestMigrateTagsToRelated:
         assert "- tags:" not in new_text
         assert "topic:lens-system" in new_text
         assert "topic:umap" in new_text
+
+
+class TestRewriteTaskFile:
+    def test_preserves_header_and_unknown_fields(self) -> None:
+        """The migration must preserve the file header and any custom fields that
+        aren't recognized by the task parser (e.g. `- depends-on:`)."""
+        text = (
+            "# Active Tasks\n"
+            "\n"
+            "## [t001] Legacy task\n"
+            "- type: dev\n"
+            "- priority: P2\n"
+            "- status: proposed\n"
+            "- related: [hypothesis:h01]\n"
+            "- depends-on: [task:t002]\n"
+            "- tags: [lens-system, umap]\n"
+            "- created: 2026-04-01\n"
+            "\n"
+            "Task description.\n"
+        )
+        new_text, added = rewrite_task_file(text)
+        # Header preserved
+        assert new_text.startswith("# Active Tasks\n")
+        # Unknown field preserved verbatim
+        assert "- depends-on: [task:t002]" in new_text
+        # Tags line removed
+        assert "- tags:" not in new_text
+        # Tags merged into existing related
+        assert "- related: [hypothesis:h01, topic:lens-system, topic:umap]" in new_text
+        # Description preserved
+        assert "Task description." in new_text
+        assert added == [["topic:lens-system", "topic:umap"]]
+
+    def test_creates_related_when_missing_in_task(self) -> None:
+        text = (
+            "## [t001] Task\n"
+            "- type: dev\n"
+            "- priority: P2\n"
+            "- status: proposed\n"
+            "- tags: [foo]\n"
+            "- created: 2026-04-01\n"
+            "\n"
+            "Desc.\n"
+        )
+        new_text, _ = rewrite_task_file(text)
+        assert "- tags:" not in new_text
+        assert "- related: [topic:foo]" in new_text
+
+    def test_multiple_task_blocks_independent(self) -> None:
+        """Each task block's tags merge only into its own related line."""
+        text = (
+            "## [t001] First\n"
+            "- type: dev\n"
+            "- priority: P1\n"
+            "- status: active\n"
+            "- related: [hypothesis:h01]\n"
+            "- tags: [foo]\n"
+            "- created: 2026-04-01\n"
+            "\n"
+            "Desc 1.\n"
+            "\n"
+            "## [t002] Second\n"
+            "- type: dev\n"
+            "- priority: P2\n"
+            "- status: proposed\n"
+            "- related: [hypothesis:h02]\n"
+            "- tags: [bar]\n"
+            "- created: 2026-04-02\n"
+            "\n"
+            "Desc 2.\n"
+        )
+        new_text, added = rewrite_task_file(text)
+        assert new_text.count("- tags:") == 0
+        # t001 gets topic:foo merged, not topic:bar
+        assert "- related: [hypothesis:h01, topic:foo]" in new_text
+        assert "- related: [hypothesis:h02, topic:bar]" in new_text
+        assert len(added) == 2
+
+    def test_no_tags_is_noop(self) -> None:
+        text = (
+            "## [t001] Task\n"
+            "- type: dev\n"
+            "- priority: P2\n"
+            "- status: proposed\n"
+            "- related: [hypothesis:h01]\n"
+            "- created: 2026-04-01\n"
+            "\n"
+            "Desc.\n"
+        )
+        new_text, added = rewrite_task_file(text)
+        assert new_text == text
+        assert added == []
 
     def test_handles_missing_directories(self, tmp_path: Path) -> None:
         (tmp_path / "science.yaml").write_text("name: test\n")

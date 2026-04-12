@@ -1,4 +1,4 @@
-"""Migration script: rewrite legacy `tags:` frontmatter into `related: [topic:<tag>, ...]`.
+"""Migration script: rewrite legacy `tags:` into `related: [topic:<tag>, ...]`.
 
 The frontmatter parser already merges legacy tags into `related` at parse time
 (science_model.frontmatter.parse_entity_file), so the system works without this
@@ -7,8 +7,10 @@ disappears from frontmatter entirely and tag values become typed entity refs
 in `related`.
 
 Preserves YAML formatting by rewriting only the `tags:` and `related:` lines.
-Task files (tasks/active.md, tasks/done/*.md) are migrated by reading through
-the task parser (which does the merge) and re-rendering.
+Task files (tasks/active.md, tasks/done/*.md) are migrated with the same
+surgical approach — each task block is treated like a mini-frontmatter with
+`- field: value` lines. Unknown fields (e.g. custom `depends-on:`) and
+surrounding content (headers, descriptions) are preserved verbatim.
 """
 
 from __future__ import annotations
@@ -17,11 +19,15 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from science_tool.tasks import parse_tasks, render_tasks
 
 _TAGS_LINE_RE = re.compile(r"^(?P<indent>[ \t]*)tags:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE)
 _RELATED_LINE_RE = re.compile(r"^(?P<indent>[ \t]*)related:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE)
 _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n?", re.DOTALL)
+
+# Task-file line patterns (dash-prefixed)
+_TASK_HEADER_RE = re.compile(r"^## \[\w+\]", re.MULTILINE)
+_TASK_TAGS_LINE_RE = re.compile(r"^(?P<indent>[ \t]*)- tags:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE)
+_TASK_RELATED_LINE_RE = re.compile(r"^(?P<indent>[ \t]*)- related:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE)
 
 
 @dataclass
@@ -133,23 +139,89 @@ def _migrate_entity_file(path: Path, apply: bool) -> FileMigration | None:
     return migration
 
 
-def _migrate_task_file(path: Path, apply: bool) -> bool:
-    """Migrate one task markdown file by round-tripping through the parser.
+def _rewrite_task_block(block: str) -> tuple[str, list[str]]:
+    """Surgically rewrite one task block: drop `- tags: [...]`, merge values into `- related:`.
 
-    The task parser already merges legacy `- tags: [...]` into `related` (Task 5
-    of the tags→related unification). Reading and re-rendering is sufficient.
-
-    Returns True if the file's contents would change.
+    Returns (new_block, added_refs). Preserves all other lines verbatim, including
+    unknown fields (`- depends-on:` etc.), headers, and description body.
     """
-    tasks = parse_tasks(path)
-    if not tasks:
-        return False
-    rendered = render_tasks(tasks)
-    original = path.read_text(encoding="utf-8")
-    if rendered == original:
+    tag_match = _TASK_TAGS_LINE_RE.search(block)
+    if tag_match is None:
+        return block, []
+
+    tag_values = _parse_list_body(tag_match.group("body"))
+    tag_refs = [_tag_to_ref(t) for t in tag_values]
+
+    tags_start, tags_end = tag_match.span()
+    # Drop the `- tags: [...]` line and its trailing newline
+    newline_end = tags_end + 1 if tags_end < len(block) and block[tags_end] == "\n" else tags_end
+    new_block = block[:tags_start] + block[newline_end:]
+
+    added: list[str] = []
+    if tag_refs:
+        related_match = _TASK_RELATED_LINE_RE.search(new_block)
+        if related_match is not None:
+            existing = _parse_list_body(related_match.group("body"))
+            merged = list(existing)
+            for ref in tag_refs:
+                if ref not in merged:
+                    merged.append(ref)
+                    added.append(ref)
+            if added:
+                indent = related_match.group("indent")
+                replacement = f"{indent}- related: [{_format_list_body(merged)}]"
+                new_block = (
+                    new_block[: related_match.start()] + replacement + new_block[related_match.end() :]
+                )
+        else:
+            # No related: line — insert one where the tags: line was
+            indent = tag_match.group("indent")
+            insert_line = f"{indent}- related: [{_format_list_body(tag_refs)}]\n"
+            new_block = new_block[:tags_start] + insert_line + new_block[tags_start:]
+            added = list(tag_refs)
+
+    return new_block, added
+
+
+def rewrite_task_file(text: str) -> tuple[str, list[list[str]]]:
+    """Rewrite a task markdown file: migrate each task block's `- tags:` into `- related:`.
+
+    Returns (new_text, per_block_added_refs). per_block_added_refs is a list of
+    added-refs lists (one entry per task block that changed).
+    """
+    # Find all task block boundaries
+    headers = list(_TASK_HEADER_RE.finditer(text))
+    if not headers:
+        # No task headers; try treating the whole file as one block (may be a partial file)
+        new_block, added = _rewrite_task_block(text)
+        if added or new_block != text:
+            return new_block, [added]
+        return text, []
+
+    # Build output: preamble (before first header) + each block rewritten
+    parts: list[str] = [text[: headers[0].start()]]
+    per_block_added: list[list[str]] = []
+
+    for i, hdr in enumerate(headers):
+        start = hdr.start()
+        end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
+        block = text[start:end]
+        new_block, added = _rewrite_task_block(block)
+        parts.append(new_block)
+        if added or new_block != block:
+            per_block_added.append(added)
+
+    return "".join(parts), per_block_added
+
+
+def _migrate_task_file(path: Path, apply: bool) -> bool:
+    """Migrate one task markdown file surgically. Returns True if changes would be made."""
+    text = path.read_text(encoding="utf-8")
+    new_text, _ = rewrite_task_file(text)
+    if new_text == text:
         return False
     if apply:
-        path.write_text(rendered, encoding="utf-8")
+        path.write_text(new_text, encoding="utf-8")
     return True
 
 
