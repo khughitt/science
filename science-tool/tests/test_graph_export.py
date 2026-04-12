@@ -29,7 +29,8 @@ from science_tool.graph.store import (
     SCI_NS,
 )
 from rdflib import URIRef
-from rdflib.namespace import RDF
+from rdflib import Literal
+from rdflib.namespace import PROV, RDF, SKOS
 
 
 @pytest.fixture
@@ -211,6 +212,32 @@ def test_export_graph_payload_inquiry_scopes_only_reference_exported_nodes(graph
         "http://example.org/project/concept/unexported_outcome" not in scope.node_ids for scope in inquiry_scopes
     )
     assert all(set(scope.node_ids) <= node_ids for scope in inquiry_scopes)
+
+
+def test_export_graph_payload_includes_dashboard_style_named_layers(tmp_path: Path) -> None:
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir(parents=True)
+    graph_path.write_text(INITIAL_GRAPH_TEMPLATE, encoding="utf-8")
+
+    dataset = _load_dataset(graph_path)
+    model_graph = dataset.graph(_graph_uri("graph/model"))
+    provenance_graph = dataset.graph(_graph_uri("graph/provenance"))
+    model_uri = URIRef("http://example.org/project/model/lorenz-attractor")
+
+    model_graph.add((model_uri, RDF.type, SCI_NS.Model))
+    model_graph.add((model_uri, SKOS.prefLabel, Literal("Lorenz attractor")))
+    provenance_graph.add((model_uri, PROV.wasDerivedFrom, URIRef("http://example.org/project/source/model")))
+    _save_dataset(dataset, graph_path)
+
+    payload = export_graph_payload(graph_path)
+    layer_ids = {layer.id for layer in payload.layers}
+    model = next(node for node in payload.nodes if node.id == str(model_uri))
+
+    assert "graph/model" in layer_ids
+    assert "graph/provenance" in layer_ids
+    assert model.label == "Lorenz attractor"
+    assert model.graph_layer == "graph/model"
+    assert next(layer for layer in payload.layers if layer.id == "graph/model").node_count == 1
 
 
 def test_export_graph_payload_includes_causal_overlay_for_inquiry(graph_path: Path) -> None:

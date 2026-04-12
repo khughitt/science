@@ -281,6 +281,38 @@ GRAPH_EXPORT_EDGE_METADATA_PREDICATES: frozenset[URIRef] = frozenset(
     }
 )
 
+
+def _export_graph_layers(dataset: Dataset) -> list[str]:
+    """Return named graph layers that should be exported as base graph content."""
+    project_prefix = str(PROJECT_NS)
+    inquiry_prefix = f"{project_prefix}inquiry/"
+    seen: set[str] = set()
+    layers: list[str] = []
+
+    for graph in dataset.graphs():
+        graph_id = str(graph.identifier)
+        if not graph_id.startswith(project_prefix) or graph_id.startswith(inquiry_prefix):
+            continue
+
+        layer = graph_id[len(project_prefix) :]
+        if not layer.startswith("graph/") or layer in seen:
+            continue
+        seen.add(layer)
+        layers.append(layer)
+
+    preferred_layers = [layer for layer in GRAPH_LAYERS if layer != "graph/provenance"]
+    preferred_order = {layer: index for index, layer in enumerate(preferred_layers)}
+
+    def _sort_key(layer: str) -> tuple[int, int | str]:
+        if layer in preferred_order:
+            return (0, preferred_order[layer])
+        if layer == "graph/provenance":
+            return (2, layer)
+        return (1, layer)
+
+    return sorted(layers, key=_sort_key)
+
+
 CURIE_PREFIXES: dict[str, Namespace] = {
     "sci": SCI_NS,
     "scic": SCIC_NS,
@@ -1207,12 +1239,13 @@ def export_graph_payload(graph_path: Path, overlays: list[str] | None = None) ->
     dataset = _load_dataset(graph_path)
     knowledge = dataset.graph(_graph_uri("graph/knowledge"))
     provenance = dataset.graph(_graph_uri("graph/provenance"))
-    layer_graphs = [(layer, dataset.graph(_graph_uri(layer))) for layer in GRAPH_EXPORT_VISIBLE_LAYERS]
+    export_layers = _export_graph_layers(dataset)
+    layer_graphs = [(layer, dataset.graph(_graph_uri(layer))) for layer in export_layers]
 
     statement_nodes: set[str] = set()
     node_layers: dict[str, set[str]] = {}
     edge_records: dict[str, GraphExportEdge] = {}
-    layer_edge_ids: dict[str, set[str]] = {layer: set() for layer in GRAPH_EXPORT_VISIBLE_LAYERS}
+    layer_edge_ids: dict[str, set[str]] = {layer: set() for layer in export_layers}
     warnings: list[str] = []
 
     for layer, layer_graph in layer_graphs:
@@ -1348,7 +1381,7 @@ def export_graph_payload(graph_path: Path, overlays: list[str] | None = None) ->
     nodes: list[GraphExportNode] = []
     for node_id in sorted(node_layers):
         node_uri = URIRef(node_id)
-        primary_layer = next((layer for layer in GRAPH_EXPORT_VISIBLE_LAYERS if layer in node_layers[node_id]), None)
+        primary_layer = next((layer for layer in export_layers if layer in node_layers[node_id]), None)
         if primary_layer is None:
             continue
         nodes.append(
@@ -1367,11 +1400,11 @@ def export_graph_payload(graph_path: Path, overlays: list[str] | None = None) ->
 
     layer_node_counts: dict[str, int] = {
         layer: sum(1 for membership_layers in node_layers.values() if layer in membership_layers)
-        for layer in GRAPH_EXPORT_VISIBLE_LAYERS
+        for layer in export_layers
     }
 
     layers: list[GraphExportLayer] = []
-    for layer in GRAPH_EXPORT_VISIBLE_LAYERS:
+    for layer in export_layers:
         layers.append(
             GraphExportLayer(
                 id=layer,
