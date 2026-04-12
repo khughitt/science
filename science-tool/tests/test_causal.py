@@ -607,6 +607,49 @@ class TestEdgeProvenance:
         assert len(claim["evidence_lines"]) == 3
         assert claim["evidence_lines"][2]["datasets"] == ["MMRF", "GSE24080"]
 
+    def test_enriched_edges_include_explicit_evidence_semantics(self, graph_path: Path) -> None:
+        """Claim bundles expose explicit statistical/mechanistic semantics when present."""
+        from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
+
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "semantics-dag", "Semantics DAG", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "semantics-dag", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "semantics-dag", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "semantics-dag", treatment="concept/drug", outcome="concept/recovery")
+        add_proposition(
+            graph_path,
+            text="Drug treatment improves recovery time",
+            source="article:doi_10.1234/drug_recovery",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_causal_semantics",
+            statistical_support="replicated",
+            mechanistic_support="direct",
+            replication_scope="cross_dataset",
+            claim_status="active",
+        )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["proposition:drug_causal_semantics"],
+        )
+
+        edges = _get_causal_edges_for_inquiry(graph_path, "semantics-dag")
+        edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
+        claim = edge["claims"][0]
+
+        assert claim["statistical_support"] == "replicated"
+        assert claim["mechanistic_support"] == "direct"
+        assert claim["replication_scope"] == "cross_dataset"
+        assert claim["claim_status"] == "active"
+
     def test_export_pgmpy_includes_phase1_claim_metadata_comments(self, graph_path: Path) -> None:
         """pgmpy export comments include the richer claim metadata when present."""
         add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
@@ -648,6 +691,45 @@ class TestEdgeProvenance:
         assert "platform: MMRF-dominant" in script
         assert "dataset_effects: MMRF=0.70, GSE24080=0.07" in script
         assert "evidence_lines: 1" in script
+
+    def test_export_pgmpy_includes_explicit_evidence_semantics_comments(self, graph_path: Path) -> None:
+        """pgmpy export comments include explicit evidence semantics when present."""
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "semantics-export", "Semantics Export", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "semantics-export", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "semantics-export", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "semantics-export", treatment="concept/drug", outcome="concept/recovery")
+        add_proposition(
+            graph_path,
+            text="Drug treatment improves recovery time",
+            source="article:doi_10.1234/drug_recovery",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_causal_semantics_export",
+            statistical_support="replicated",
+            mechanistic_support="direct",
+            replication_scope="cross_dataset",
+            claim_status="active",
+        )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["proposition:drug_causal_semantics_export"],
+        )
+
+        script = export_pgmpy_script(graph_path, "semantics-export")
+
+        assert "statistical_support: replicated" in script
+        assert "mechanistic_support: direct" in script
+        assert "replication_scope: cross_dataset" in script
+        assert "claim_status: active" in script
 
     def test_enriched_edges_include_linked_falsifications(self, graph_path: Path) -> None:
         """Claim bundles include linked falsification records when present."""

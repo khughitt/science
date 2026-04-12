@@ -578,6 +578,10 @@ def graph_dashboard_summary(top: int, output_format: str, graph_path: Path) -> N
             ("source_count", "Sources"),
             ("evidence_types", "Evidence Types"),
             ("has_empirical_data", "Empirical"),
+            ("statistical_support", "Stat Support"),
+            ("mechanistic_support", "Mech Support"),
+            ("replication_scope", "Replication"),
+            ("claim_status", "Claim Status"),
         ],
         rows=rows,
     )
@@ -871,6 +875,26 @@ def add_article_cmd(doi: str, graph_path: Path) -> None:
     help='Evidence-line JSON, e.g. {"source":"t133","kind":"internal_correlation","datasets":["MMRF"]}',
 )
 @click.option(
+    "--statistical-support",
+    default=None,
+    type=click.Choice(["none", "single_dataset", "replicated", "heterogeneous"]),
+)
+@click.option(
+    "--mechanistic-support",
+    default=None,
+    type=click.Choice(["none", "inferred", "direct"]),
+)
+@click.option(
+    "--replication-scope",
+    default=None,
+    type=click.Choice(["none", "single_source", "multi_source", "cross_dataset"]),
+)
+@click.option(
+    "--claim-status",
+    default=None,
+    type=click.Choice(["active", "null", "weakened", "retired", "falsified"]),
+)
+@click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def add_proposition_cmd(
@@ -888,6 +912,10 @@ def add_proposition_cmd(
     platform_pattern: str | None,
     dataset_effect_entries: tuple[str, ...],
     evidence_line_entries: tuple[str, ...],
+    statistical_support: str | None,
+    mechanistic_support: str | None,
+    replication_scope: str | None,
+    claim_status: str | None,
     graph_path: Path,
 ) -> None:
     """Add a proposition to the knowledge graph."""
@@ -909,6 +937,10 @@ def add_proposition_cmd(
         platform_pattern=platform_pattern,
         dataset_effects=dataset_effects,
         evidence_lines=cast(list[PropositionEvidenceLine] | None, evidence_lines),
+        statistical_support=statistical_support,
+        mechanistic_support=mechanistic_support,
+        replication_scope=replication_scope,
+        claim_status=claim_status,
     )
     click.echo(f"Added proposition: {uri}")
 

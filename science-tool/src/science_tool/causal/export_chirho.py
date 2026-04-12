@@ -182,6 +182,18 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
                     evidence_lines = claim.get("evidence_lines")
                     if evidence_lines:
                         prov_parts.append(f"evidence_lines: {len(evidence_lines)}")
+                    statistical_support = claim.get("statistical_support")
+                    if statistical_support:
+                        prov_parts.append(f"statistical_support: {statistical_support}")
+                    mechanistic_support = claim.get("mechanistic_support")
+                    if mechanistic_support:
+                        prov_parts.append(f"mechanistic_support: {mechanistic_support}")
+                    replication_scope = claim.get("replication_scope")
+                    if replication_scope:
+                        prov_parts.append(f"replication_scope: {replication_scope}")
+                    claim_status = claim.get("claim_status")
+                    if claim_status:
+                        prov_parts.append(f"claim_status: {claim_status}")
                     falsifications = claim.get("falsifications")
                     if falsifications:
                         prov_parts.append(f"falsifications: {len(falsifications)}")

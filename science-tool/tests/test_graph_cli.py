@@ -1958,6 +1958,46 @@ def test_graph_add_claim_accepts_evidence_type_metadata() -> None:
         assert (prop_uri, SCI.evidenceType, Literal("literature_evidence")) in provenance
 
 
+def test_graph_add_claim_accepts_explicit_evidence_semantics() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        result = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "proposition",
+                "Cross-dataset but mechanistically indirect claim",
+                "--source",
+                "article:doi_10_7777_semantics",
+                "--id",
+                "semantics_claim",
+                "--statistical-support",
+                "replicated",
+                "--mechanistic-support",
+                "inferred",
+                "--replication-scope",
+                "cross_dataset",
+                "--claim-status",
+                "weakened",
+            ],
+        )
+        assert result.exit_code == 0
+
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+        prop_uri = PROJECT_NS["proposition/semantics_claim"]
+
+        assert (prop_uri, SCI.statisticalSupport, Literal("replicated")) in provenance
+        assert (prop_uri, SCI.mechanisticSupport, Literal("inferred")) in provenance
+        assert (prop_uri, SCI.replicationScope, Literal("cross_dataset")) in provenance
+        assert (prop_uri, SCI.claimStatus, Literal("weakened")) in provenance
+
+
 def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -> None:
     runner = CliRunner()
 
@@ -2146,6 +2186,48 @@ def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -
         assert contested_row["has_empirical_data"] == "no"
         assert contested_row["belief_state"] == "contested"
         assert contested_row["evidence_types"] == "literature_evidence; negative_result"
+
+
+def test_graph_dashboard_summary_reports_explicit_evidence_semantics() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "proposition",
+                    "Explicitly typed causal claim",
+                    "--source",
+                    "article:doi_10_8888_semantics",
+                    "--id",
+                    "typed_claim",
+                    "--statistical-support",
+                    "replicated",
+                    "--mechanistic-support",
+                    "direct",
+                    "--replication-scope",
+                    "cross_dataset",
+                    "--claim-status",
+                    "active",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "dashboard-summary", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        row = next(item for item in payload["rows"] if item["text"] == "Explicitly typed causal claim")
+
+        assert row["statistical_support"] == "replicated"
+        assert row["mechanistic_support"] == "direct"
+        assert row["replication_scope"] == "cross_dataset"
+        assert row["claim_status"] == "active"
 
 
 def test_graph_dashboard_summary_counts_benchmark_evidence_as_empirical_presence() -> None:
@@ -2883,12 +2965,7 @@ def test_graph_project_summary_rolls_up_research_profile() -> None:
             ("proposition/project_dispute", "proposition/project_contested", "disputes"),
             ("proposition/project_empirical_support", "proposition/project_empirical", "supports"),
         ):
-            assert (
-                runner.invoke(
-                    main, ["graph", "add", "evidence", subject, target, "--stance", stance]
-                ).exit_code
-                == 0
-            )
+            assert runner.invoke(main, ["graph", "add", "evidence", subject, target, "--stance", stance]).exit_code == 0
 
         for prop_ref in ("proposition/project_contested", "proposition/project_empirical"):
             assert (

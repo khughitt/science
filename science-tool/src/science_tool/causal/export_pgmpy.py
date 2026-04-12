@@ -15,6 +15,7 @@ from science_tool.graph.store import (
     _collect_evidence_signals,
     _edge_claims,
     _graph_uri,
+    _load_proposition_evidence_semantics,
     _load_proposition_falsifications,
     _load_proposition_phase1_metadata,
     _load_dataset,
@@ -39,6 +40,10 @@ class ClaimBundle(TypedDict):
     dataset_effects: NotRequired[dict[str, float]]
     evidence_lines: NotRequired[list[dict[str, object]]]
     falsifications: NotRequired[list[dict[str, str]]]
+    statistical_support: NotRequired[str]
+    mechanistic_support: NotRequired[str]
+    replication_scope: NotRequired[str]
+    claim_status: NotRequired[str]
 
 
 class CausalEdge(TypedDict):
@@ -147,6 +152,7 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[CausalEdg
                         "dispute_count": cast(int, evidence["dispute_count"]),
                     }
                     claim_bundle.update(_load_proposition_phase1_metadata(provenance_graph, claim_uri))
+                    claim_bundle.update(_load_proposition_evidence_semantics(provenance_graph, claim_uri))
                     falsifications = _load_proposition_falsifications(knowledge_graph, claim_uri)
                     if falsifications:
                         claim_bundle["falsifications"] = falsifications
@@ -221,6 +227,18 @@ def export_pgmpy_script(graph_path: Path, slug: str) -> str:
                 evidence_lines = claim.get("evidence_lines")
                 if evidence_lines:
                     claim_parts.append(f"evidence_lines: {len(cast(list[dict[str, object]], evidence_lines))}")
+                statistical_support = claim.get("statistical_support")
+                if statistical_support:
+                    claim_parts.append(f"statistical_support: {statistical_support}")
+                mechanistic_support = claim.get("mechanistic_support")
+                if mechanistic_support:
+                    claim_parts.append(f"mechanistic_support: {mechanistic_support}")
+                replication_scope = claim.get("replication_scope")
+                if replication_scope:
+                    claim_parts.append(f"replication_scope: {replication_scope}")
+                claim_status = claim.get("claim_status")
+                if claim_status:
+                    claim_parts.append(f"claim_status: {claim_status}")
                 falsifications = claim.get("falsifications")
                 if falsifications:
                     claim_parts.append(f"falsifications: {len(cast(list[dict[str, str]], falsifications))}")

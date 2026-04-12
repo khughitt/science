@@ -59,6 +59,10 @@ class ClaimSummaryData(TypedDict):
     source_count: int
     evidence_types: list[str]
     has_empirical_data: bool
+    statistical_support: str
+    mechanistic_support: str
+    replication_scope: str
+    claim_status: str
     signals: list[str]
     risk_score: float
 
@@ -103,6 +107,13 @@ class PropositionPhase1Metadata(TypedDict, total=False):
     platform_pattern: str
     dataset_effects: dict[str, float]
     evidence_lines: list[PropositionEvidenceLine]
+
+
+class PropositionEvidenceSemantics(TypedDict, total=False):
+    statistical_support: str
+    mechanistic_support: str
+    replication_scope: str
+    claim_status: str
 
 
 class FalsificationRecord(TypedDict, total=False):
@@ -317,6 +328,10 @@ def add_proposition(
     platform_pattern: str | None = None,
     dataset_effects: dict[str, float] | None = None,
     evidence_lines: list[PropositionEvidenceLine] | None = None,
+    statistical_support: str | None = None,
+    mechanistic_support: str | None = None,
+    replication_scope: str | None = None,
+    claim_status: str | None = None,
 ) -> URIRef:
     """Add a proposition to the knowledge graph.
 
@@ -371,6 +386,14 @@ def add_proposition(
                 "datasets": [str(dataset) for dataset in line["datasets"]],
             }
             provenance.add((prop_uri, SCI_NS.evidenceLine, Literal(json.dumps(normalized_line))))
+    if statistical_support is not None:
+        provenance.add((prop_uri, SCI_NS.statisticalSupport, Literal(statistical_support)))
+    if mechanistic_support is not None:
+        provenance.add((prop_uri, SCI_NS.mechanisticSupport, Literal(mechanistic_support)))
+    if replication_scope is not None:
+        provenance.add((prop_uri, SCI_NS.replicationScope, Literal(replication_scope)))
+    if claim_status is not None:
+        provenance.add((prop_uri, SCI_NS.claimStatus, Literal(claim_status)))
 
     _save_dataset(dataset, graph_path)
     return prop_uri
@@ -1955,6 +1978,26 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "layer": "graph/provenance",
     },
     {
+        "predicate": "sci:statisticalSupport",
+        "description": "Explicit statistical support classification for a proposition",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:mechanisticSupport",
+        "description": "Explicit mechanistic support classification for a proposition",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:replicationScope",
+        "description": "Explicit replication scope classification for a proposition",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:claimStatus",
+        "description": "Explicit current lifecycle status for a proposition-backed claim",
+        "layer": "graph/provenance",
+    },
+    {
         "predicate": "sci:falsifies",
         "description": "Falsification record linked to a proposition",
         "layer": "graph/knowledge",
@@ -2455,6 +2498,28 @@ def _load_proposition_phase1_metadata(provenance, proposition_uri: URIRef) -> Pr
     return metadata
 
 
+def _load_proposition_evidence_semantics(provenance, proposition_uri: URIRef) -> PropositionEvidenceSemantics:
+    semantics: PropositionEvidenceSemantics = {}
+
+    statistical_support_obj = next(provenance.objects(proposition_uri, SCI_NS.statisticalSupport), None)
+    if statistical_support_obj is not None:
+        semantics["statistical_support"] = str(statistical_support_obj)
+
+    mechanistic_support_obj = next(provenance.objects(proposition_uri, SCI_NS.mechanisticSupport), None)
+    if mechanistic_support_obj is not None:
+        semantics["mechanistic_support"] = str(mechanistic_support_obj)
+
+    replication_scope_obj = next(provenance.objects(proposition_uri, SCI_NS.replicationScope), None)
+    if replication_scope_obj is not None:
+        semantics["replication_scope"] = str(replication_scope_obj)
+
+    claim_status_obj = next(provenance.objects(proposition_uri, SCI_NS.claimStatus), None)
+    if claim_status_obj is not None:
+        semantics["claim_status"] = str(claim_status_obj)
+
+    return semantics
+
+
 def _load_proposition_falsifications(knowledge, proposition_uri: URIRef) -> list[FalsificationRecord]:
     falsifications: list[FalsificationRecord] = []
     for falsification_uri in sorted(knowledge.subjects(SCI_NS.falsifies, proposition_uri), key=str):
@@ -2584,6 +2649,12 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
         evidence_type in {"empirical_data_evidence", "benchmark_evidence"} for evidence_type in evidence_types
     )
     belief_state = _belief_state(support_count=support_count, dispute_count=dispute_count, source_count=source_count)
+    evidence_semantics = _load_proposition_evidence_semantics(provenance, uri)
+    statistical_support = evidence_semantics.get("statistical_support", "")
+    mechanistic_support = evidence_semantics.get("mechanistic_support", "")
+    replication_scope = evidence_semantics.get("replication_scope", "")
+    claim_status = evidence_semantics.get("claim_status", "")
+    has_explicit_semantics = any((statistical_support, mechanistic_support, replication_scope, claim_status))
 
     status_obj = next(provenance.objects(uri, SCI_NS.epistemicStatus), None)
     status = str(status_obj) if status_obj else ""
@@ -2616,11 +2687,17 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
     if _load_proposition_falsifications(knowledge, uri):
         signals.append("falsified")
         risk_score += 3.0
+    if claim_status:
+        signals.append(f"claim_status:{claim_status}")
+        if claim_status in {"null", "weakened"}:
+            risk_score += 1.0
+        elif claim_status in {"retired", "falsified"}:
+            risk_score += 2.0
     if status:
         signals.append(f"status:{status}")
         risk_score += 0.5
 
-    if total_evidence == 0 and confidence is None and not status:
+    if total_evidence == 0 and confidence is None and not status and not has_explicit_semantics:
         return None
 
     text_obj = next(knowledge.objects(uri, SCHEMA_NS.text), None)
@@ -2639,6 +2716,10 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
         "source_count": source_count,
         "evidence_types": evidence_types,
         "has_empirical_data": has_empirical_data,
+        "statistical_support": statistical_support,
+        "mechanistic_support": mechanistic_support,
+        "replication_scope": replication_scope,
+        "claim_status": claim_status,
         "signals": signals,
         "risk_score": risk_score,
     }
@@ -2657,6 +2738,10 @@ def _format_claim_summary_row(summary: ClaimSummaryData) -> dict[str, str]:
         "source_count": str(summary["source_count"]),
         "evidence_types": "; ".join(evidence_types) if evidence_types else "-",
         "has_empirical_data": "yes" if bool(summary["has_empirical_data"]) else "no",
+        "statistical_support": str(summary["statistical_support"]) or "-",
+        "mechanistic_support": str(summary["mechanistic_support"]) or "-",
+        "replication_scope": str(summary["replication_scope"]) or "-",
+        "claim_status": str(summary["claim_status"]) or "-",
         "signals": "; ".join(signals) if signals else "-",
         "risk_score": f"{summary['risk_score']:.2f}",
     }
