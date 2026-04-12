@@ -241,6 +241,53 @@ def graph_migrate_model(project_root: Path) -> None:
         click.echo("Review errors manually — some files may need manual migration.")
 
 
+@graph.command("migrate-tags")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+@click.option("--apply", is_flag=True, default=False, help="Write changes to disk (default is dry-run).")
+def graph_migrate_tags(project_root: Path, apply: bool) -> None:
+    """Rewrite legacy `tags:` frontmatter into `related:` topic refs in-place.
+
+    Entity frontmatter: `tags: [genomics]` → adds `topic:genomics` to `related`, removes `tags:` line.
+    Task markdown: same idea for `- tags: [foo]` in tasks/active.md and tasks/done/*.md.
+    Dry-run by default; pass --apply to actually write.
+    """
+    from science_tool.graph.tags_migration import migrate_tags_to_related
+
+    project_root = project_root.resolve()
+    report = migrate_tags_to_related(project_root, apply=apply)
+
+    if not report.entity_files and not report.task_files and not report.errors:
+        click.echo("No legacy tags found — nothing to migrate.")
+        return
+
+    prefix = "Would migrate" if not apply else "Migrated"
+    for fm in report.entity_files:
+        rel = fm.path.relative_to(project_root) if fm.path.is_absolute() else fm.path
+        added = ", ".join(fm.added_to_related) if fm.added_to_related else "(no new refs)"
+        click.echo(f"{prefix}: {rel}  tags={fm.tag_values} → related+={added}")
+
+    for task_file in report.task_files:
+        rel = task_file.relative_to(project_root) if task_file.is_absolute() else task_file
+        click.echo(f"{prefix}: {rel}  (task file re-rendered)")
+
+    for path, err in report.errors:
+        rel = path.relative_to(project_root) if path.is_absolute() else path
+        click.echo(f"ERROR: {rel}: {err}", err=True)
+
+    total = len(report.entity_files) + len(report.task_files)
+    action = "Migrated" if apply else "Would migrate"
+    click.echo(f"\n{action} {total} file(s).")
+    if not apply:
+        click.echo("Re-run with --apply to write changes.")
+    if report.errors:
+        raise click.exceptions.Exit(1)
+
+
 @graph.command("stats")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 @click.option(
