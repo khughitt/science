@@ -63,6 +63,8 @@ class ClaimSummaryData(TypedDict):
     mechanistic_support: str
     replication_scope: str
     claim_status: str
+    pre_registration_count: int
+    pre_registrations: list[str]
     signals: list[str]
     risk_score: float
 
@@ -191,6 +193,7 @@ PROJECT_ENTITY_PREFIXES: set[str] = {
     "paper",
     "article",
     "falsification",
+    "pre-registration",
 }
 STRUCTURED_PROPOSITION_PREDICATES: frozenset[URIRef] = frozenset(
     {
@@ -332,6 +335,7 @@ def add_proposition(
     mechanistic_support: str | None = None,
     replication_scope: str | None = None,
     claim_status: str | None = None,
+    pre_registration_refs: list[str] | None = None,
 ) -> URIRef:
     """Add a proposition to the knowledge graph.
 
@@ -394,6 +398,9 @@ def add_proposition(
         provenance.add((prop_uri, SCI_NS.replicationScope, Literal(replication_scope)))
     if claim_status is not None:
         provenance.add((prop_uri, SCI_NS.claimStatus, Literal(claim_status)))
+    if pre_registration_refs is not None:
+        for pre_registration_ref in pre_registration_refs:
+            provenance.add((prop_uri, SCI_NS.preRegisteredIn, _resolve_term(pre_registration_ref)))
 
     _save_dataset(dataset, graph_path)
     return prop_uri
@@ -1998,6 +2005,11 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "layer": "graph/provenance",
     },
     {
+        "predicate": "sci:preRegisteredIn",
+        "description": "Link from a claim to an existing pre-registration record or slug",
+        "layer": "graph/provenance",
+    },
+    {
         "predicate": "sci:falsifies",
         "description": "Falsification record linked to a proposition",
         "layer": "graph/knowledge",
@@ -2520,6 +2532,10 @@ def _load_proposition_evidence_semantics(provenance, proposition_uri: URIRef) ->
     return semantics
 
 
+def _load_proposition_pre_registrations(provenance, proposition_uri: URIRef) -> list[str]:
+    return sorted(shorten_uri(str(uri)) for uri in provenance.objects(proposition_uri, SCI_NS.preRegisteredIn))
+
+
 def _load_proposition_falsifications(knowledge, proposition_uri: URIRef) -> list[FalsificationRecord]:
     falsifications: list[FalsificationRecord] = []
     for falsification_uri in sorted(knowledge.subjects(SCI_NS.falsifies, proposition_uri), key=str):
@@ -2654,6 +2670,8 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
     mechanistic_support = evidence_semantics.get("mechanistic_support", "")
     replication_scope = evidence_semantics.get("replication_scope", "")
     claim_status = evidence_semantics.get("claim_status", "")
+    pre_registrations = _load_proposition_pre_registrations(provenance, uri)
+    pre_registration_count = len(pre_registrations)
     has_explicit_semantics = any((statistical_support, mechanistic_support, replication_scope, claim_status))
 
     status_obj = next(provenance.objects(uri, SCI_NS.epistemicStatus), None)
@@ -2693,11 +2711,19 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
             risk_score += 1.0
         elif claim_status in {"retired", "falsified"}:
             risk_score += 2.0
+    if pre_registration_count > 0:
+        signals.append("pre_registered")
     if status:
         signals.append(f"status:{status}")
         risk_score += 0.5
 
-    if total_evidence == 0 and confidence is None and not status and not has_explicit_semantics:
+    if (
+        total_evidence == 0
+        and confidence is None
+        and not status
+        and not has_explicit_semantics
+        and pre_registration_count == 0
+    ):
         return None
 
     text_obj = next(knowledge.objects(uri, SCHEMA_NS.text), None)
@@ -2720,6 +2746,8 @@ def _claim_summary_data(knowledge, provenance, uri: URIRef) -> ClaimSummaryData 
         "mechanistic_support": mechanistic_support,
         "replication_scope": replication_scope,
         "claim_status": claim_status,
+        "pre_registration_count": pre_registration_count,
+        "pre_registrations": pre_registrations,
         "signals": signals,
         "risk_score": risk_score,
     }
@@ -2742,6 +2770,8 @@ def _format_claim_summary_row(summary: ClaimSummaryData) -> dict[str, str]:
         "mechanistic_support": str(summary["mechanistic_support"]) or "-",
         "replication_scope": str(summary["replication_scope"]) or "-",
         "claim_status": str(summary["claim_status"]) or "-",
+        "pre_registration_count": str(summary["pre_registration_count"]),
+        "pre_registrations": "; ".join(summary["pre_registrations"]) if summary["pre_registrations"] else "-",
         "signals": "; ".join(signals) if signals else "-",
         "risk_score": f"{summary['risk_score']:.2f}",
     }

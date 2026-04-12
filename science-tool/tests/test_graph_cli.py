@@ -1998,6 +1998,48 @@ def test_graph_add_claim_accepts_explicit_evidence_semantics() -> None:
         assert (prop_uri, SCI.claimStatus, Literal("weakened")) in provenance
 
 
+def test_graph_add_claim_accepts_pre_registration_links() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        result = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "proposition",
+                "Claim linked to a pre-registration",
+                "--source",
+                "article:doi_10_9999_prereg",
+                "--id",
+                "prereg_claim",
+                "--pre-registration",
+                "pre-registration:edge-ribosome-e2f1",
+                "--pre-registration",
+                "pre-registration:edge-mtor-ribosome",
+            ],
+        )
+        assert result.exit_code == 0
+
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+        prop_uri = PROJECT_NS["proposition/prereg_claim"]
+
+        assert (
+            prop_uri,
+            SCI.preRegisteredIn,
+            PROJECT_NS["pre-registration/edge-ribosome-e2f1"],
+        ) in provenance
+        assert (
+            prop_uri,
+            SCI.preRegisteredIn,
+            PROJECT_NS["pre-registration/edge-mtor-ribosome"],
+        ) in provenance
+
+
 def test_graph_dashboard_summary_reports_evidence_mix_and_empirical_presence() -> None:
     runner = CliRunner()
 
@@ -2228,6 +2270,40 @@ def test_graph_dashboard_summary_reports_explicit_evidence_semantics() -> None:
         assert row["mechanistic_support"] == "direct"
         assert row["replication_scope"] == "cross_dataset"
         assert row["claim_status"] == "active"
+
+
+def test_graph_dashboard_summary_reports_pre_registration_links() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "proposition",
+                    "Pre-registered causal claim",
+                    "--source",
+                    "article:doi_10_1212_prereg",
+                    "--id",
+                    "pre_registered_claim",
+                    "--pre-registration",
+                    "pre-registration:edge-ribosome-e2f1",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(main, ["graph", "dashboard-summary", "--format", "json"])
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        row = next(item for item in payload["rows"] if item["text"] == "Pre-registered causal claim")
+
+        assert row["pre_registration_count"] == "1"
+        assert row["pre_registrations"] == "pre-registration/edge-ribosome-e2f1"
 
 
 def test_graph_dashboard_summary_counts_benchmark_evidence_as_empirical_presence() -> None:

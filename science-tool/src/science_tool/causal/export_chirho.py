@@ -194,6 +194,10 @@ def export_chirho_script(graph_path: Path, slug: str) -> str:
                     claim_status = claim.get("claim_status")
                     if claim_status:
                         prov_parts.append(f"claim_status: {claim_status}")
+                    pre_registrations = claim.get("pre_registrations")
+                    if pre_registrations:
+                        prov_parts.append(f"pre_registrations: {len(pre_registrations)}")
+                        prov_parts.append("pre_registered_in: " + ", ".join(pre_registrations))
                     falsifications = claim.get("falsifications")
                     if falsifications:
                         prov_parts.append(f"falsifications: {len(falsifications)}")

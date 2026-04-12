@@ -582,6 +582,8 @@ def graph_dashboard_summary(top: int, output_format: str, graph_path: Path) -> N
             ("mechanistic_support", "Mech Support"),
             ("replication_scope", "Replication"),
             ("claim_status", "Claim Status"),
+            ("pre_registration_count", "Pre-reg Count"),
+            ("pre_registrations", "Pre-registrations"),
         ],
         rows=rows,
     )
@@ -894,6 +896,7 @@ def add_article_cmd(doi: str, graph_path: Path) -> None:
     default=None,
     type=click.Choice(["active", "null", "weakened", "retired", "falsified"]),
 )
+@click.option("--pre-registration", "pre_registration_refs", multiple=True, help="Linked pre-registration ref")
 @click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
@@ -916,6 +919,7 @@ def add_proposition_cmd(
     mechanistic_support: str | None,
     replication_scope: str | None,
     claim_status: str | None,
+    pre_registration_refs: tuple[str, ...],
     graph_path: Path,
 ) -> None:
     """Add a proposition to the knowledge graph."""
@@ -941,6 +945,7 @@ def add_proposition_cmd(
         mechanistic_support=mechanistic_support,
         replication_scope=replication_scope,
         claim_status=claim_status,
+        pre_registration_refs=list(pre_registration_refs) if pre_registration_refs else None,
     )
     click.echo(f"Added proposition: {uri}")
 

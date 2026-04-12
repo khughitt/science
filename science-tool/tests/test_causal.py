@@ -650,6 +650,49 @@ class TestEdgeProvenance:
         assert claim["replication_scope"] == "cross_dataset"
         assert claim["claim_status"] == "active"
 
+    def test_enriched_edges_include_pre_registration_links(self, graph_path: Path) -> None:
+        """Claim bundles expose linked pre-registration refs when present."""
+        from science_tool.causal.export_pgmpy import _get_causal_edges_for_inquiry
+
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "prereg-dag", "Pre-reg DAG", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "prereg-dag", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "prereg-dag", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "prereg-dag", treatment="concept/drug", outcome="concept/recovery")
+        add_proposition(
+            graph_path,
+            text="Drug treatment improves recovery time",
+            source="article:doi_10.1234/drug_recovery",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_preregistered",
+            pre_registration_refs=[
+                "pre-registration:edge-ribosome-e2f1",
+                "pre-registration:edge-mtor-ribosome",
+            ],
+        )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["proposition:drug_preregistered"],
+        )
+
+        edges = _get_causal_edges_for_inquiry(graph_path, "prereg-dag")
+        edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
+        claim = edge["claims"][0]
+
+        assert sorted(claim["pre_registrations"]) == [
+            "pre-registration/edge-mtor-ribosome",
+            "pre-registration/edge-ribosome-e2f1",
+        ]
+
     def test_export_pgmpy_includes_phase1_claim_metadata_comments(self, graph_path: Path) -> None:
         """pgmpy export comments include the richer claim metadata when present."""
         add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
@@ -730,6 +773,40 @@ class TestEdgeProvenance:
         assert "mechanistic_support: direct" in script
         assert "replication_scope: cross_dataset" in script
         assert "claim_status: active" in script
+
+    def test_export_pgmpy_includes_pre_registration_comments(self, graph_path: Path) -> None:
+        """pgmpy export comments include linked pre-registration refs when present."""
+        add_concept(graph_path, "Drug", concept_type="sci:Variable", ontology_id=None)
+        add_concept(graph_path, "Recovery", concept_type="sci:Variable", ontology_id=None)
+        add_hypothesis(graph_path, "h1", "Test hypothesis", source="paper:doi_test")
+        add_inquiry(graph_path, "prereg-export", "Pre-reg Export", "hypothesis:h1", inquiry_type="causal")
+        set_boundary_role(graph_path, "prereg-export", "concept/drug", "BoundaryIn")
+        set_boundary_role(graph_path, "prereg-export", "concept/recovery", "BoundaryOut")
+        set_treatment_outcome(graph_path, "prereg-export", treatment="concept/drug", outcome="concept/recovery")
+        add_proposition(
+            graph_path,
+            text="Drug treatment improves recovery time",
+            source="article:doi_10.1234/drug_recovery",
+            confidence=0.85,
+            subject="concept/drug",
+            predicate="scic:causes",
+            obj="concept/recovery",
+            proposition_id="drug_preregistered_export",
+            pre_registration_refs=["pre-registration:edge-ribosome-e2f1"],
+        )
+        add_edge(
+            graph_path,
+            "concept/drug",
+            "scic:causes",
+            "concept/recovery",
+            graph_layer="graph/causal",
+            claim_refs=["proposition:drug_preregistered_export"],
+        )
+
+        script = export_pgmpy_script(graph_path, "prereg-export")
+
+        assert "pre_registrations: 1" in script
+        assert "pre-registration/edge-ribosome-e2f1" in script
 
     def test_enriched_edges_include_linked_falsifications(self, graph_path: Path) -> None:
         """Claim bundles include linked falsification records when present."""
