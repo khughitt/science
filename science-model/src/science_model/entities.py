@@ -48,7 +48,7 @@ class EntityUpdate(BaseModel):
     """Partial update for entity metadata (written back to frontmatter)."""
 
     status: str | None = None
-    tags: list[str] | None = None
+    related: list[str] | None = None
 
 
 class Entity(BaseModel):
@@ -62,7 +62,6 @@ class Entity(BaseModel):
     project: str
     profile: str = "core"
     domain: str | None = None
-    tags: list[str]
     ontology_terms: list[str]
     created: date | None = None
     updated: date | None = None

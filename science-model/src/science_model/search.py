@@ -14,7 +14,6 @@ class Filters(BaseModel):
     entity_type: str | None = None
     status: str | None = None
     domain: str | None = None
-    tags: list[str] | None = None
 
 
 class SearchResult(BaseModel):

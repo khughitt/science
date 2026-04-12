@@ -9,7 +9,6 @@ def test_entity_round_trip():
         title="Test hypothesis",
         status="proposed",
         project="my-project",
-        tags=["genomics"],
         ontology_terms=["GO:0006915"],
         created=date(2026, 3, 1),
         updated=date(2026, 3, 10),
@@ -32,7 +31,6 @@ def test_entity_optional_fields_default_none():
         type=EntityType.CONCEPT,
         title="Foo",
         project="p",
-        tags=[],
         ontology_terms=[],
         related=[],
         source_refs=[],
@@ -69,7 +67,6 @@ def test_workflow_run_entity_round_trip():
         title="Protein SP/TMR feature evaluation",
         status="complete",
         project="seq-feats",
-        tags=["feature-eval"],
         ontology_terms=[],
         related=["workflow:feature-eval"],
         source_refs=[],
@@ -119,7 +116,6 @@ def test_pre_registered_fields():
         type=EntityType.PROPOSITION,
         title="Test",
         project="p",
-        tags=[],
         ontology_terms=[],
         related=[],
         source_refs=[],
@@ -138,7 +134,6 @@ def test_pre_registered_defaults_false():
         type=EntityType.PROPOSITION,
         title="Test",
         project="p",
-        tags=[],
         ontology_terms=[],
         related=[],
         source_refs=[],
@@ -156,3 +151,8 @@ def test_new_types_accessible_from_package():
     assert EntityType.WORKFLOW == "workflow"
     assert EntityType.WORKFLOW_RUN == "workflow-run"
     assert EntityType.WORKFLOW_STEP == "workflow-step"
+
+
+def test_entity_has_no_tags_field():
+    """After unification, Entity should not have a tags field in its schema."""
+    assert "tags" not in Entity.model_fields
