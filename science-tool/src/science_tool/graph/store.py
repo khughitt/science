@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import NotRequired, TypedDict, cast
 
 import click
-from rdflib import Dataset, Literal, Namespace, URIRef
+from rdflib import Dataset, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
 
 from science_tool.graph.export_types import (
@@ -284,21 +284,49 @@ GRAPH_EXPORT_EDGE_METADATA_PREDICATES: frozenset[URIRef] = frozenset(
 
 def _export_graph_layers(dataset: Dataset) -> list[str]:
     """Return named graph layers that should be exported as base graph content."""
+    return _sort_export_layers(_export_layer_graph_map(dataset))
+
+
+def _canonical_export_layer_id(graph_id: str) -> str | None:
     project_prefix = str(PROJECT_NS)
     inquiry_prefix = f"{project_prefix}inquiry/"
-    seen: set[str] = set()
-    layers: list[str] = []
+    if not graph_id.startswith(project_prefix) or graph_id.startswith(inquiry_prefix):
+        return None
+
+    layer = graph_id[len(project_prefix) :]
+    if not layer:
+        return None
+    if not layer.startswith("graph/"):
+        layer = f"graph/{layer}"
+    return layer
+
+
+def _export_layer_graph_map(dataset: Dataset) -> dict[str, Graph]:
+    graphs_by_layer: dict[str, list[Graph]] = {}
 
     for graph in dataset.graphs():
-        graph_id = str(graph.identifier)
-        if not graph_id.startswith(project_prefix) or graph_id.startswith(inquiry_prefix):
+        layer = _canonical_export_layer_id(str(graph.identifier))
+        if layer is None:
+            continue
+        graphs_by_layer.setdefault(layer, []).append(graph)
+
+    combined_graphs: dict[str, Graph] = {}
+    for layer, graphs in graphs_by_layer.items():
+        if len(graphs) == 1:
+            combined_graphs[layer] = graphs[0]
             continue
 
-        layer = graph_id[len(project_prefix) :]
-        if not layer.startswith("graph/") or layer in seen:
-            continue
-        seen.add(layer)
-        layers.append(layer)
+        merged_graph = Graph()
+        for graph in graphs:
+            for triple in graph:
+                merged_graph.add(triple)
+        combined_graphs[layer] = merged_graph
+
+    return combined_graphs
+
+
+def _sort_export_layers(layer_graphs: dict[str, Graph]) -> list[str]:
+    layers = list(layer_graphs)
 
     preferred_layers = [layer for layer in GRAPH_LAYERS if layer != "graph/provenance"]
     preferred_order = {layer: index for index, layer in enumerate(preferred_layers)}
@@ -1237,10 +1265,11 @@ def export_graph_payload(graph_path: Path, overlays: list[str] | None = None) ->
         raise click.ClickException(f"Unsupported graph export overlay(s): {', '.join(sorted(unsupported_overlays))}")
 
     dataset = _load_dataset(graph_path)
-    export_layers = _export_graph_layers(dataset)
-    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
-    provenance = dataset.graph(_graph_uri("graph/provenance"))
-    layer_graphs = [(layer, dataset.graph(_graph_uri(layer))) for layer in export_layers]
+    layer_graph_by_id = _export_layer_graph_map(dataset)
+    export_layers = _sort_export_layers(layer_graph_by_id)
+    knowledge = layer_graph_by_id.get("graph/knowledge", dataset.graph(_graph_uri("graph/knowledge")))
+    provenance = layer_graph_by_id.get("graph/provenance", dataset.graph(_graph_uri("graph/provenance")))
+    layer_graphs = [(layer, layer_graph_by_id[layer]) for layer in export_layers]
 
     statement_nodes: set[str] = set()
     node_layers: dict[str, set[str]] = {}

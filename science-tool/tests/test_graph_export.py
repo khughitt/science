@@ -240,6 +240,36 @@ def test_export_graph_payload_includes_dashboard_style_named_layers(tmp_path: Pa
     assert next(layer for layer in payload.layers if layer.id == "graph/model").node_count == 1
 
 
+def test_export_graph_payload_supports_legacy_project_named_layers(tmp_path: Path) -> None:
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir(parents=True)
+    graph_path.write_text(
+        """\
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix sci: <http://example.org/science/vocab/> .
+@prefix schema: <https://schema.org/> .
+@prefix project: <http://example.org/project/> .
+@prefix gene: <http://example.org/project/gene/> .
+
+project:knowledge {
+    gene:tp53 rdf:type sci:Gene ;
+        skos:prefLabel "TP53" ;
+        schema:identifier "gene:tp53" ;
+        sci:profile "biology" .
+}
+""",
+        encoding="utf-8",
+    )
+
+    payload = export_graph_payload(graph_path)
+    node = next(node for node in payload.nodes if node.id == "http://example.org/project/gene/tp53")
+
+    assert node.label == "TP53"
+    assert node.graph_layer == "graph/knowledge"
+    assert next(layer for layer in payload.layers if layer.id == "graph/knowledge").node_count == 1
+
+
 def test_export_graph_payload_excludes_unmaterialized_default_layers(tmp_path: Path) -> None:
     graph_path = tmp_path / "knowledge" / "graph.trig"
     graph_path.parent.mkdir(parents=True)
