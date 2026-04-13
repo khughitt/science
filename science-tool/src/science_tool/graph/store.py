@@ -25,6 +25,7 @@ from science_tool.graph.export_types import (
     build_graph_export_edge_id,
     build_graph_export_node_id,
 )
+from science_tool.graph.sources import is_metadata_reference
 
 DEFAULT_GRAPH_PATH = Path("knowledge/graph.trig")
 PROJECT_NS = Namespace("http://example.org/project/")
@@ -959,6 +960,8 @@ def add_question(
 
     if related:
         for ref in related:
+            if is_metadata_reference(ref):
+                continue
             knowledge.add((question_uri, SKOS.related, _resolve_term(ref)))
 
     _save_dataset(dataset, graph_path)
@@ -975,6 +978,11 @@ def add_edge(
 ) -> tuple[URIRef, URIRef, URIRef]:
     if graph_layer not in GRAPH_LAYERS:
         raise click.ClickException(f"Unsupported graph layer: {graph_layer}")
+    if is_metadata_reference(subject) or is_metadata_reference(obj):
+        raise click.ClickException(
+            f"meta: refs are intentional metadata and cannot be subject or object of a graph edge "
+            f"(got subject={subject!r}, object={obj!r})"
+        )
 
     dataset = _load_dataset(graph_path)
 
