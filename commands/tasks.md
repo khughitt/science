@@ -115,7 +115,7 @@ When working through tasks, follow these principles:
 - **Mark progress as you go.** Set tasks to `active` when starting, `done` when complete. Don't leave tasks in ambiguous states.
 - **Retire rather than delete.** When a task is no longer relevant, use `retire` instead of deleting. This preserves the decision record.
 - **Use groups for thematic clusters.** When multiple tasks share a theme (e.g., "lens-system", "formula-integration"), assign a group to enable filtered views.
-- **Use `related` for cross-cutting connections.** Link tasks to hypotheses, topics, or other entities with `--related` (e.g., `--related=topic:umap`). Related entries become edges in the knowledge graph, and the same entity can appear across multiple groups.
+- **Use `related` for cross-cutting connections.** Link tasks to hypotheses, topics, or other entities with `--related` (e.g., `--related=topic:umap`). Related entries become edges in the knowledge graph, and the same entity can appear across multiple groups. Use the `meta:` prefix for annotations you want to keep visible but exclude from the KG (e.g., `--related=meta:phase3b`).
 
 ## After Changes
 
