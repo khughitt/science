@@ -165,6 +165,8 @@ def _add_relations(
         knowledge.add((entity_uri, predicate, target_uri))
 
     for raw_target in sorted(entity.blocked_by):
+        if is_metadata_reference(raw_target):
+            continue
         canonical_target = normalize_alias(raw_target, alias_map)
         target = entity_index.get(canonical_target)
         if target is None:
@@ -177,6 +179,8 @@ def _add_relations(
     for raw_target in sorted(entity.source_refs):
         if is_external_reference(raw_target, known_prefixes=ext_prefixes):
             _link_external_term(entity_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)
+            continue
+        if is_metadata_reference(raw_target):
             continue
         canonical_target = normalize_alias(raw_target, alias_map)
         target = entity_index.get(canonical_target)

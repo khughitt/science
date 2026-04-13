@@ -1130,6 +1130,12 @@ def add_inquiry_edge(
     if (inquiry_uri, RDF.type, SCI_NS.Inquiry) not in inquiry_graph:
         raise ValueError(f"Inquiry 'inquiry/{safe_slug}' does not exist")
 
+    if is_metadata_reference(subject) or is_metadata_reference(obj):
+        raise click.ClickException(
+            f"meta: refs are intentional metadata and cannot be subject or object of a graph edge "
+            f"(got subject={subject!r}, object={obj!r})"
+        )
+
     s_uri = _resolve_term(subject)
     p_uri = _resolve_term(predicate)
     o_uri = _resolve_term(obj)

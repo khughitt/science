@@ -1,10 +1,14 @@
-"""Migration script: rewrite legacy `tags:` into `related: [topic:<tag>, ...]`.
+"""Migration script: rewrite legacy `tags:` into `related: [meta:<tag>, ...]`.
 
-The frontmatter parser already merges legacy tags into `related` at parse time
-(science_model.frontmatter.parse_entity_file), so the system works without this
-migration. This script physically rewrites the on-disk files so that `tags:`
-disappears from frontmatter entirely and tag values become typed entity refs
-in `related`.
+The parse-time merge that previously absorbed `tags:` into `related` was removed,
+so this physical migration is now the only path to convert legacy `tags:` data
+into materializable `related` refs. Without running it, `tags:` lines in
+frontmatter or task markdown are silently dropped on parse (the `health` command
+flags them).
+
+Default conversion is `meta:<tag>` (intentional metadata, no KG materialization).
+Pass `as_topic=True` (or `--as-topic` on the CLI) for projects where every tag
+value has been verified as a real domain topic — that switches to `topic:<tag>`.
 
 Preserves YAML formatting by rewriting only the `tags:` and `related:` lines.
 Task files (tasks/active.md, tasks/done/*.md) are migrated with the same

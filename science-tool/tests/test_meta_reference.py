@@ -160,3 +160,108 @@ class TestMetaRefsInAddQuestion:
         related_objs = [str(o) for o in knowledge.objects(q_uri, SKOS.related)]
         assert any("hypothesis/h1" in r for r in related_objs)
         assert not any("meta" in r for r in related_objs)
+
+
+class TestMetaRefsInBlockedByAndSourceRefs:
+    def test_meta_ref_in_blocked_by_not_materialized(self, tmp_path: Path) -> None:
+        """meta: refs in blocked_by must not produce sci:blockedBy edges."""
+        from rdflib import Dataset
+        from science_tool.graph.materialize import materialize_graph
+        from science_tool.graph.store import SCI_NS
+
+        (tmp_path / "science.yaml").write_text("name: test\n")
+        spec_dir = tmp_path / "specs" / "hypotheses"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "h01.md").write_text(
+            '---\nid: "hypothesis:h01-test"\ntype: "hypothesis"\n'
+            'title: "Test"\nstatus: "proposed"\nrelated: []\n'
+            "blocked_by: [meta:phase3b]\n"
+            "source_refs: []\ncreated: \"2026-04-13\"\n---\nBody.\n"
+        )
+
+        trig_path = materialize_graph(tmp_path)
+        dataset = Dataset()
+        dataset.parse(source=str(trig_path), format="trig")
+
+        for graph in dataset.graphs():
+            for s, p, o in graph.triples((None, SCI_NS.blockedBy, None)):
+                assert "meta" not in str(o), f"meta blocked_by leaked into KG: {s} {p} {o}"
+
+    def test_meta_ref_in_source_refs_not_materialized(self, tmp_path: Path) -> None:
+        """meta: refs in source_refs must not produce prov:wasDerivedFrom edges."""
+        from rdflib import Dataset
+        from rdflib.namespace import PROV
+
+        from science_tool.graph.materialize import materialize_graph
+
+        (tmp_path / "science.yaml").write_text("name: test\n")
+        spec_dir = tmp_path / "specs" / "hypotheses"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "h01.md").write_text(
+            '---\nid: "hypothesis:h01-test"\ntype: "hypothesis"\n'
+            'title: "Test"\nstatus: "proposed"\nrelated: []\n'
+            "source_refs: [meta:phase3b]\n"
+            'created: "2026-04-13"\n---\nBody.\n'
+        )
+
+        trig_path = materialize_graph(tmp_path)
+        dataset = Dataset()
+        dataset.parse(source=str(trig_path), format="trig")
+
+        for graph in dataset.graphs():
+            for s, p, o in graph.triples((None, PROV.wasDerivedFrom, None)):
+                assert "meta" not in str(o), f"meta source_ref leaked into KG: {s} {p} {o}"
+
+
+class TestMetaRefsInAddInquiryEdge:
+    def test_add_inquiry_edge_rejects_meta_subject(self, tmp_path: Path) -> None:
+        from science_tool.graph.store import (
+            add_inquiry,
+            add_inquiry_edge,
+            init_graph_file,
+        )
+
+        graph_path = tmp_path / "graph.trig"
+        init_graph_file(graph_path)
+        add_inquiry(
+            graph_path=graph_path,
+            slug="i1",
+            label="Test",
+            target="hypothesis:h01",
+        )
+
+        with pytest.raises(click.ClickException) as exc:
+            add_inquiry_edge(
+                graph_path=graph_path,
+                inquiry_slug="i1",
+                subject="meta:phase3b",
+                predicate="skos:related",
+                obj="hypothesis/h01",
+            )
+        assert "meta" in str(exc.value).lower()
+
+    def test_add_inquiry_edge_rejects_meta_object(self, tmp_path: Path) -> None:
+        from science_tool.graph.store import (
+            add_inquiry,
+            add_inquiry_edge,
+            init_graph_file,
+        )
+
+        graph_path = tmp_path / "graph.trig"
+        init_graph_file(graph_path)
+        add_inquiry(
+            graph_path=graph_path,
+            slug="i1",
+            label="Test",
+            target="hypothesis:h01",
+        )
+
+        with pytest.raises(click.ClickException) as exc:
+            add_inquiry_edge(
+                graph_path=graph_path,
+                inquiry_slug="i1",
+                subject="hypothesis/h01",
+                predicate="skos:related",
+                obj="meta:phase3b",
+            )
+        assert "meta" in str(exc.value).lower()

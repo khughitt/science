@@ -23,8 +23,12 @@ class UnresolvedRef(TypedDict):
     looks_like: str  # "topic" | "task" | "hypothesis" | "unknown"
 
 
-_TASK_ID_RE = re.compile(r"^topic:t\d+$", re.IGNORECASE)
+# Heuristic patterns for classifying mis-prefixed `topic:` refs.
+# All anchored at start; trailing slug (e.g. h01-some-suffix) is allowed since
+# real entity IDs commonly have a numeric ID followed by a kebab-case slug.
+_TASK_ID_RE = re.compile(r"^topic:t\d+", re.IGNORECASE)
 _HYPOTHESIS_ID_RE = re.compile(r"^topic:h\d+", re.IGNORECASE)
+_QUESTION_ID_RE = re.compile(r"^topic:q\d+", re.IGNORECASE)
 
 
 def _classify(target: str) -> str:
@@ -33,6 +37,8 @@ def _classify(target: str) -> str:
         return "task"
     if _HYPOTHESIS_ID_RE.match(target):
         return "hypothesis"
+    if _QUESTION_ID_RE.match(target):
+        return "question"
     if target.startswith("topic:"):
         return "topic"
     return "unknown"

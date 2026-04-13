@@ -65,6 +65,24 @@ class TestCollectUnresolvedRefs:
         assert unresolved[0]["target"] == "topic:t143"
         assert unresolved[0]["looks_like"] == "task"
 
+    def test_looks_like_classifies_question_and_hypothesis(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import collect_unresolved_refs
+
+        (tmp_path / "science.yaml").write_text("name: test\n")
+        spec = tmp_path / "specs" / "hypotheses"
+        spec.mkdir(parents=True)
+        (spec / "h01.md").write_text(
+            '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
+            'status: "proposed"\nrelated: [topic:q05-foo, topic:h99-bar, topic:genomics]\n'
+            'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
+        )
+
+        unresolved = collect_unresolved_refs(tmp_path)
+        by_target = {row["target"]: row["looks_like"] for row in unresolved}
+        assert by_target["topic:q05-foo"] == "question"
+        assert by_target["topic:h99-bar"] == "hypothesis"
+        assert by_target["topic:genomics"] == "topic"
+
 
 class TestCollectLingeringTags:
     def test_finds_tags_lines_in_entity_files(self, tmp_path: Path) -> None:
