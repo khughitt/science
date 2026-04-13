@@ -18,6 +18,7 @@ from science_tool.graph.sources import (
     SourceRelation,
     build_alias_map,
     is_external_reference,
+    is_metadata_reference,
     load_project_sources,
     local_profile_sources_dir,
 )
@@ -294,6 +295,8 @@ def _audit_reference(
     alias_map: dict[str, str],
 ) -> list[AuditRow]:
     if is_external_reference(raw_target):
+        return []
+    if is_metadata_reference(raw_target):
         return []
 
     resolved = normalize_alias(raw_target, alias_map)
