@@ -141,3 +141,59 @@ class TestBuildHealthReport:
 
         assert report["unresolved_refs"] == []
         assert report["lingering_tags_lines"] == []
+
+
+class TestHealthCLI:
+    def test_table_output_default(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+
+        (tmp_path / "science.yaml").write_text("name: test\n")
+        spec = tmp_path / "specs" / "hypotheses"
+        spec.mkdir(parents=True)
+        (spec / "h01.md").write_text(
+            '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
+            'status: "proposed"\nrelated: [topic:missing]\n'
+            'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["health", "--project-root", str(tmp_path)])
+
+        assert result.exit_code == 0, result.output
+        assert "topic:missing" in result.output
+
+    def test_json_output(self, tmp_path: Path) -> None:
+        import json
+        from click.testing import CliRunner
+        from science_tool.cli import main
+
+        (tmp_path / "science.yaml").write_text("name: test\n")
+        spec = tmp_path / "specs" / "hypotheses"
+        spec.mkdir(parents=True)
+        (spec / "h01.md").write_text(
+            '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
+            'status: "proposed"\nrelated: [topic:missing]\n'
+            'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main, ["health", "--project-root", str(tmp_path), "--format", "json"]
+        )
+
+        assert result.exit_code == 0, result.output
+        report = json.loads(result.output)
+        assert "unresolved_refs" in report
+        assert report["unresolved_refs"][0]["target"] == "topic:missing"
+
+    def test_clean_project_exits_zero(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+
+        (tmp_path / "science.yaml").write_text("name: test\n")
+        runner = CliRunner()
+        result = runner.invoke(main, ["health", "--project-root", str(tmp_path)])
+
+        assert result.exit_code == 0
+        assert "no issues" in result.output.lower() or "clean" in result.output.lower()

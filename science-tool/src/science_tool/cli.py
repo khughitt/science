@@ -2168,6 +2168,67 @@ def project_index(output_format: str, project_root: Path) -> None:
     )
 
 
+@main.command("health")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+@click.option(
+    "--format",
+    "output_format",
+    default="table",
+    show_default=True,
+    type=click.Choice(["table", "json"]),
+)
+def health_command(project_root: Path, output_format: str) -> None:
+    """Aggregate diagnostics for the project: unresolved refs, lingering tags, etc."""
+    import json as _json
+
+    from rich.console import Console
+    from rich.table import Table
+
+    from science_tool.graph.health import build_health_report
+
+    project_root = project_root.resolve()
+    report = build_health_report(project_root)
+
+    if output_format == "json":
+        click.echo(_json.dumps(report, indent=2))
+        return
+
+    total_issues = len(report["unresolved_refs"]) + len(report["lingering_tags_lines"])
+    if total_issues == 0:
+        click.echo("Project is clean — no issues found.")
+        return
+
+    console = Console()
+
+    if report["unresolved_refs"]:
+        table = Table(title="Unresolved References")
+        table.add_column("Target", style="bold")
+        table.add_column("Mentions", justify="right")
+        table.add_column("Looks Like")
+        table.add_column("Sources (first 3)")
+        for row in report["unresolved_refs"]:
+            srcs = ", ".join(row["sources"][:3])
+            if len(row["sources"]) > 3:
+                srcs += f", … (+{len(row['sources']) - 3})"
+            table.add_row(
+                row["target"], str(row["mention_count"]), row["looks_like"], srcs
+            )
+        console.print(table)
+
+    if report["lingering_tags_lines"]:
+        table = Table(title="Lingering tags: Lines")
+        table.add_column("File", style="bold")
+        table.add_column("Values")
+        for row in report["lingering_tags_lines"]:
+            table.add_row(row["file"], ", ".join(row["values"]) or "(empty)")
+        console.print(table)
+
+
 def _extract_title_status(path: Path, _yaml: Any) -> tuple[str, str]:
     """Extract title and status from markdown frontmatter or first heading."""
     text = path.read_text(encoding="utf-8")
