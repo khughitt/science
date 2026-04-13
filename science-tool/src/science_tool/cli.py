@@ -2216,10 +2216,10 @@ def health_command(project_root: Path, output_format: str) -> None:
     console = Console()
 
     if report["unresolved_refs"]:
-        table = Table(title="Unresolved References")
+        table = Table(title=f"Unresolved references ({len(report['unresolved_refs'])})")
         table.add_column("Target", style="bold")
         table.add_column("Mentions", justify="right")
-        table.add_column("Looks Like")
+        table.add_column("Looks like")
         table.add_column("Sources (first 3)")
         for row in report["unresolved_refs"]:
             srcs = ", ".join(row["sources"][:3])
@@ -2231,12 +2231,28 @@ def health_command(project_root: Path, output_format: str) -> None:
         console.print(table)
 
     if report["lingering_tags_lines"]:
-        table = Table(title="Lingering tags: Lines")
-        table.add_column("File", style="bold")
-        table.add_column("Values")
-        for row in report["lingering_tags_lines"]:
-            table.add_row(row["file"], ", ".join(row["values"]) or "(empty)")
-        console.print(table)
+        with_values = [r for r in report["lingering_tags_lines"] if r["values"]]
+        empty_count = len(report["lingering_tags_lines"]) - len(with_values)
+
+        if with_values:
+            title = f"Legacy `tags:` fields to migrate ({len(with_values)})"
+            table = Table(title=title)
+            table.add_column("File", style="bold")
+            table.add_column("Values")
+            for row in with_values:
+                table.add_row(row["file"], ", ".join(row["values"]))
+            console.print(table)
+
+        if empty_count:
+            console.print(
+                f"[dim]...and {empty_count} additional file(s) with empty `tags: []` "
+                f"(cosmetic only — migrate-tags will strip them).[/dim]"
+            )
+
+        console.print(
+            "\n[bold]Next:[/bold] run "
+            "[cyan]science-tool graph migrate-tags --apply[/cyan] to migrate these."
+        )
 
 
 def _extract_title_status(path: Path, _yaml: Any) -> tuple[str, str]:
