@@ -61,13 +61,6 @@ def _parse_task_block(lines: list[str]) -> Task:
     completed_raw = fields.get("completed")
     completed = date.fromisoformat(completed_raw) if completed_raw else None
 
-    # Merge legacy tags into related as topic: references
-    related = _parse_list_value(fields.get("related", ""))
-    for tag in _parse_list_value(fields.get("tags", "")):
-        tag_ref = f"topic:{tag}" if ":" not in tag else tag
-        if tag_ref not in related:
-            related.append(tag_ref)
-
     return Task(
         id=task_id,
         title=title,
@@ -76,7 +69,7 @@ def _parse_task_block(lines: list[str]) -> Task:
         status=fields.get("status", ""),
         created=created,
         description=description,
-        related=related,
+        related=_parse_list_value(fields.get("related", "")),
         blocked_by=_parse_list_value(fields.get("blocked-by", "")),
         group=fields.get("group", ""),
         completed=completed,

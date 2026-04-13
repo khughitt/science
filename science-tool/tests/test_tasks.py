@@ -583,13 +583,16 @@ class TestInvalidStatusWarning:
 
 
 class TestTagsAndGroups:
-    def test_legacy_tags_merged_into_related(self, tmp_path: Path) -> None:
+    def test_legacy_tags_silently_dropped(self, tmp_path: Path) -> None:
+        """After parse-time merge removal, `- tags:` in task markdown is silently ignored.
+        Use `science-tool graph migrate-tags` to migrate legacy task tags."""
         f = _write(tmp_path / "active.md", TAGGED_TASK)
         tasks = parse_tasks(f)
         assert len(tasks) == 1
         t = tasks[0]
-        assert "topic:lens-system" in t.related
-        assert "topic:umap" in t.related
+        assert "topic:lens-system" not in t.related
+        assert "topic:umap" not in t.related
+        assert "meta:lens-system" not in t.related
         assert t.group == "visualization"
 
     def test_roundtrip_without_tags(self, tmp_path: Path) -> None:
@@ -599,7 +602,8 @@ class TestTagsAndGroups:
         assert "- tags:" not in rendered
         f2 = _write(tmp_path / "roundtrip.md", rendered)
         tasks2 = parse_tasks(f2)
-        assert "topic:lens-system" in tasks2[0].related
+        # Tags are dropped on parse, so round-trip drops them
+        assert tasks1[0].related == tasks2[0].related
         assert tasks1[0].group == tasks2[0].group
 
     def test_empty_tags_not_rendered(self) -> None:
