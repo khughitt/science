@@ -77,7 +77,7 @@ Body text.
 
 
 def test_parse_entity_file_returns_none_without_type_or_id(tmp_path: Path):
-    """Files with neither type nor a recognizable id prefix are skipped."""
+    """Files in non-entity directories with neither type nor a recognizable id prefix are skipped."""
     md = tmp_path / "plain.md"
     md.write_text("""---
 title: "No type no id prefix"
@@ -88,6 +88,60 @@ Body text.
 """)
     entity = parse_entity_file(md, project_slug="test-project")
     assert entity is None
+
+
+def test_parse_entity_file_infers_type_from_parent_directory(tmp_path: Path):
+    """When type and id are missing, the parent directory name (e.g. 'interpretations/')
+    determines the entity type, and the id is derived from the filename stem."""
+    interp_dir = tmp_path / "interpretations"
+    interp_dir.mkdir()
+    md = interp_dir / "2026-04-11-foo-bar.md"
+    md.write_text("""---
+title: "Foo Bar Analysis"
+related: ["question:q01"]
+---
+
+Body text.
+""")
+    entity = parse_entity_file(md, project_slug="test-project")
+    assert entity is not None
+    assert entity.type.value == "interpretation"
+    assert entity.id == "interpretation:2026-04-11-foo-bar"
+
+
+def test_parse_entity_file_infers_spec_type_from_specs_dir(tmp_path: Path):
+    """Files under specs/ without frontmatter id/type are inferred as spec entities."""
+    specs_dir = tmp_path / "specs"
+    specs_dir.mkdir()
+    md = specs_dir / "scope-boundaries.md"
+    md.write_text("""---
+title: "Scope Boundaries"
+---
+
+Body.
+""")
+    entity = parse_entity_file(md, project_slug="test-project")
+    assert entity is not None
+    assert entity.id == "spec:scope-boundaries"
+
+
+def test_parse_entity_file_explicit_id_overrides_path_inference(tmp_path: Path):
+    """Explicit id: in frontmatter takes precedence over directory-based inference."""
+    interp_dir = tmp_path / "interpretations"
+    interp_dir.mkdir()
+    md = interp_dir / "anything.md"
+    md.write_text("""---
+id: "discussion:custom-id"
+type: discussion
+title: "Misfiled but explicitly typed"
+---
+
+Body.
+""")
+    entity = parse_entity_file(md, project_slug="test-project")
+    assert entity is not None
+    assert entity.type.value == "discussion"
+    assert entity.id == "discussion:custom-id"
 
 
 def test_legacy_tags_silently_dropped(tmp_path: Path) -> None:

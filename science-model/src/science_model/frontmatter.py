@@ -89,6 +89,39 @@ def _infer_type_from_id(entity_id: str) -> str | None:
         return None
 
 
+# Maps canonical entity-bearing directory names (plural) to their singular entity type.
+# Used as a fallback when frontmatter omits both `type:` and `id:`. Keep aligned with
+# convention: `doc/<plural>/` files are entities of `<singular>` type, plus root `specs/`.
+_DIR_TO_TYPE: dict[str, str] = {
+    "interpretations": "interpretation",
+    "discussions": "discussion",
+    "questions": "question",
+    "hypotheses": "hypothesis",
+    "topics": "topic",
+    "concepts": "concept",
+    "observations": "observation",
+    "inquiries": "inquiry",
+    "propositions": "proposition",
+    "plans": "plan",
+    "models": "model",
+    "reports": "report",
+    "stories": "story",
+    "experiments": "experiment",
+    "methods": "method",
+    "datasets": "dataset",
+    "workflows": "workflow",
+    "findings": "finding",
+    "papers": "paper",
+    "articles": "article",
+    "specs": "spec",
+}
+
+
+def _infer_type_from_path(path: Path) -> str | None:
+    """Infer entity type from the immediate parent directory (e.g. 'interpretations/' → 'interpretation')."""
+    return _DIR_TO_TYPE.get(path.parent.name)
+
+
 def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
     """Parse a markdown file into an Entity. Returns None on parse failure."""
     result = parse_frontmatter(path)
@@ -97,9 +130,11 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
 
     fm, body = result
     if not fm.get("type"):
-        # Infer type from id prefix when explicit type is missing
+        # Infer type from id prefix, then fall back to parent directory convention.
         entity_id = fm.get("id", "")
         inferred = _infer_type_from_id(entity_id) if entity_id else None
+        if not inferred:
+            inferred = _infer_type_from_path(path)
         if inferred:
             fm["type"] = inferred
         else:
