@@ -204,6 +204,15 @@ def is_external_reference(raw: str, *, known_prefixes: frozenset[str] | None = N
     return prefix.lower() in check_set
 
 
+def is_metadata_reference(raw: str) -> bool:
+    """Return True for `meta:*` refs.
+
+    Meta refs are intentional annotations preserved in source files but
+    excluded from KG materialization (no entity required, no edge created).
+    """
+    return raw.startswith("meta:")
+
+
 def _load_markdown_entities(
     project_root: Path,
     roots: list[Path],
