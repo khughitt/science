@@ -131,3 +131,4 @@ git add tasks/ && git commit -m "tasks: backlog review — N status corrections,
 - Check `tasks/done/` for recently completed tasks that might inform gap analysis
 - Cross-reference `doc/discussions/` and `doc/interpretations/` for research context
 - The `science:next-steps` skill produces complementary forward-looking analysis; this skill is backward-looking (auditing what exists)
+- For a broader project audit beyond just tasks (unresolved references, lingering tags, knowledge gaps), use `/science:health`.
