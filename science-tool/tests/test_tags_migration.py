@@ -38,27 +38,28 @@ class TestRewriteFrontmatter:
         new_text, migration = rewrite_frontmatter(text)
         assert migration is not None
         assert migration.tag_values == ["genomics", "ml"]
-        assert migration.added_to_related == ["topic:genomics", "topic:ml"]
+        # Default is meta: (safe, no KG pollution)
+        assert migration.added_to_related == ["meta:genomics", "meta:ml"]
         assert "tags:" not in new_text
         # Quotes are normalized away — refs appear unquoted after merge
-        assert "related: [question:q01, topic:genomics, topic:ml]" in new_text
+        assert "related: [question:q01, meta:genomics, meta:ml]" in new_text
 
     def test_creates_related_when_missing(self) -> None:
         text = _entity_md(tags="genomics")
         new_text, migration = rewrite_frontmatter(text)
         assert migration is not None
         assert "tags:" not in new_text
-        assert "related: [topic:genomics]" in new_text
+        assert "related: [meta:genomics]" in new_text
 
-    def test_dedups_against_existing_topic_ref(self) -> None:
-        text = _entity_md(tags="genomics", related="topic:genomics")
+    def test_dedups_against_existing_meta_ref(self) -> None:
+        text = _entity_md(tags="genomics", related="meta:genomics")
         new_text, migration = rewrite_frontmatter(text)
         assert migration is not None
         # No new addition since it's already there
         assert migration.added_to_related == []
         assert "tags:" not in new_text
         # related should remain as-is
-        assert "related: [topic:genomics]" in new_text
+        assert "related: [meta:genomics]" in new_text
 
     def test_preserves_typed_refs_in_tags(self) -> None:
         """A tag value with a colon is treated as an already-typed reference."""
@@ -68,13 +69,20 @@ class TestRewriteFrontmatter:
 
     def test_strips_quotes_from_tag_values(self) -> None:
         """YAML list items with surrounding quotes should be unquoted so that
-        `tags: ["chromatin-3d"]` becomes `topic:chromatin-3d`, not `topic:"chromatin-3d"`."""
+        `tags: ["chromatin-3d"]` becomes `meta:chromatin-3d`, not `meta:"chromatin-3d"`."""
         text = _entity_md(tags='"chromatin-3d", "hi-c"')
         new_text, migration = rewrite_frontmatter(text)
         assert migration is not None
         assert migration.tag_values == ["chromatin-3d", "hi-c"]
-        assert "related: [topic:chromatin-3d, topic:hi-c]" in new_text
+        assert "related: [meta:chromatin-3d, meta:hi-c]" in new_text
         assert '"' not in new_text.split("related:")[1].split("]")[0]
+
+    def test_as_topic_flag_uses_topic_prefix(self) -> None:
+        """When as_topic=True, tags become topic: refs (legacy behavior)."""
+        text = _entity_md(tags="genomics")
+        new_text, migration = rewrite_frontmatter(text, as_topic=True)
+        assert migration is not None
+        assert "related: [topic:genomics]" in new_text
 
     def test_empty_tags_just_removed(self) -> None:
         text = _entity_md(tags="", related='"question:q01"')
@@ -127,8 +135,8 @@ class TestMigrateTagsToRelated:
         assert report.applied is True
         h01_text = (tmp_path / "doc/hypotheses/h01.md").read_text()
         assert "tags:" not in h01_text
-        assert "topic:genomics" in h01_text
-        assert "topic:ml" in h01_text
+        assert "meta:genomics" in h01_text
+        assert "meta:ml" in h01_text
         # h02 has no tags, so unchanged
         assert len(report.entity_files) == 1
 
@@ -163,8 +171,8 @@ class TestMigrateTagsToRelated:
         assert len(report.task_files) == 1
         new_text = (tasks_dir / "active.md").read_text()
         assert "- tags:" not in new_text
-        assert "topic:lens-system" in new_text
-        assert "topic:umap" in new_text
+        assert "meta:lens-system" in new_text
+        assert "meta:umap" in new_text
 
 
 class TestRewriteTaskFile:
@@ -193,10 +201,10 @@ class TestRewriteTaskFile:
         # Tags line removed
         assert "- tags:" not in new_text
         # Tags merged into existing related
-        assert "- related: [hypothesis:h01, topic:lens-system, topic:umap]" in new_text
+        assert "- related: [hypothesis:h01, meta:lens-system, meta:umap]" in new_text
         # Description preserved
         assert "Task description." in new_text
-        assert added == [["topic:lens-system", "topic:umap"]]
+        assert added == [["meta:lens-system", "meta:umap"]]
 
     def test_creates_related_when_missing_in_task(self) -> None:
         text = (
@@ -211,6 +219,14 @@ class TestRewriteTaskFile:
         )
         new_text, _ = rewrite_task_file(text)
         assert "- tags:" not in new_text
+        assert "- related: [meta:foo]" in new_text
+
+    def test_as_topic_flag_in_task_file(self) -> None:
+        text = (
+            "## [t001] Task\n- type: dev\n- priority: P1\n- status: active\n"
+            "- tags: [foo]\n- created: 2026-04-13\n\nDesc.\n"
+        )
+        new_text, _ = rewrite_task_file(text, as_topic=True)
         assert "- related: [topic:foo]" in new_text
 
     def test_multiple_task_blocks_independent(self) -> None:
@@ -238,9 +254,9 @@ class TestRewriteTaskFile:
         )
         new_text, added = rewrite_task_file(text)
         assert new_text.count("- tags:") == 0
-        # t001 gets topic:foo merged, not topic:bar
-        assert "- related: [hypothesis:h01, topic:foo]" in new_text
-        assert "- related: [hypothesis:h02, topic:bar]" in new_text
+        # t001 gets meta:foo merged, not meta:bar
+        assert "- related: [hypothesis:h01, meta:foo]" in new_text
+        assert "- related: [hypothesis:h02, meta:bar]" in new_text
         assert len(added) == 2
 
     def test_no_tags_is_noop(self) -> None:
@@ -268,7 +284,7 @@ class TestRewriteTaskFile:
 
     def test_migrated_entity_file_parses_correctly(self, tmp_path: Path) -> None:
         """After migration, the file should still parse via parse_entity_file, with
-        tag values surfacing in entity.related as topic: refs."""
+        tag values surfacing in entity.related as meta: refs (default)."""
         from science_model.frontmatter import parse_entity_file
 
         (tmp_path / "science.yaml").write_text("name: test\n")
@@ -281,8 +297,8 @@ class TestRewriteTaskFile:
 
         entity = parse_entity_file(md_path, "test")
         assert entity is not None
-        assert "topic:genomics" in entity.related
-        assert "topic:ml" in entity.related
+        assert "meta:genomics" in entity.related
+        assert "meta:ml" in entity.related
         assert "question:q01" in entity.related
 
 
@@ -319,7 +335,7 @@ class TestCLI:
         assert result.exit_code == 0
         assert "Migrated 1 file" in result.output
         assert "tags:" not in md.read_text()
-        assert "topic:genomics" in md.read_text()
+        assert "meta:genomics" in md.read_text()
 
     def test_no_changes_message(self, tmp_path: Path) -> None:
         (tmp_path / "science.yaml").write_text("name: test\n")
@@ -332,3 +348,22 @@ class TestCLI:
 
         assert result.exit_code == 0
         assert "No legacy tags found" in result.output
+
+    def test_as_topic_cli_flag(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+
+        (tmp_path / "science.yaml").write_text("name: test\n")
+        doc = tmp_path / "doc" / "hypotheses"
+        doc.mkdir(parents=True)
+        md = doc / "h01.md"
+        md.write_text(_entity_md(tags="genomics"))
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["graph", "migrate-tags", "--project-root", str(tmp_path), "--apply", "--as-topic"],
+        )
+
+        assert result.exit_code == 0
+        assert "topic:genomics" in md.read_text()

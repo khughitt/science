@@ -65,11 +65,18 @@ def _format_list_body(items: list[str]) -> str:
     return ", ".join(items)
 
 
-def _tag_to_ref(tag: str) -> str:
-    return tag if ":" in tag else f"topic:{tag}"
+def _tag_to_ref(tag: str, as_topic: bool = False) -> str:
+    """Convert a bare tag value to a typed ref.
+
+    Default is `meta:<tag>` — safe metadata that won't pollute the KG.
+    Pass as_topic=True for projects where all tags are verified domain topics.
+    """
+    if ":" in tag:
+        return tag  # Already typed
+    return f"topic:{tag}" if as_topic else f"meta:{tag}"
 
 
-def rewrite_frontmatter(text: str) -> tuple[str, FileMigration | None]:
+def rewrite_frontmatter(text: str, as_topic: bool = False) -> tuple[str, FileMigration | None]:
     """Rewrite a file's YAML frontmatter to drop `tags:` and merge into `related:`.
 
     Returns (new_text, migration_record). migration_record is None if no change.
@@ -84,7 +91,7 @@ def rewrite_frontmatter(text: str) -> tuple[str, FileMigration | None]:
         return text, None
 
     tag_values = _parse_list_body(tag_match.group("body"))
-    tag_refs = [_tag_to_ref(t) for t in tag_values]
+    tag_refs = [_tag_to_ref(t, as_topic=as_topic) for t in tag_values]
 
     # Remove the tags: line (including trailing newline if present)
     tags_start, tags_end = tag_match.span()
@@ -127,10 +134,10 @@ def rewrite_frontmatter(text: str) -> tuple[str, FileMigration | None]:
     )
 
 
-def _migrate_entity_file(path: Path, apply: bool) -> FileMigration | None:
+def _migrate_entity_file(path: Path, apply: bool, as_topic: bool = False) -> FileMigration | None:
     """Migrate one entity markdown file. Returns a record if changes were made."""
     text = path.read_text(encoding="utf-8")
-    new_text, migration = rewrite_frontmatter(text)
+    new_text, migration = rewrite_frontmatter(text, as_topic=as_topic)
     if migration is None:
         return None
     migration.path = path
@@ -139,7 +146,7 @@ def _migrate_entity_file(path: Path, apply: bool) -> FileMigration | None:
     return migration
 
 
-def _rewrite_task_block(block: str) -> tuple[str, list[str]]:
+def _rewrite_task_block(block: str, as_topic: bool = False) -> tuple[str, list[str]]:
     """Surgically rewrite one task block: drop `- tags: [...]`, merge values into `- related:`.
 
     Returns (new_block, added_refs). Preserves all other lines verbatim, including
@@ -150,7 +157,7 @@ def _rewrite_task_block(block: str) -> tuple[str, list[str]]:
         return block, []
 
     tag_values = _parse_list_body(tag_match.group("body"))
-    tag_refs = [_tag_to_ref(t) for t in tag_values]
+    tag_refs = [_tag_to_ref(t, as_topic=as_topic) for t in tag_values]
 
     tags_start, tags_end = tag_match.span()
     # Drop the `- tags: [...]` line and its trailing newline
@@ -183,7 +190,7 @@ def _rewrite_task_block(block: str) -> tuple[str, list[str]]:
     return new_block, added
 
 
-def rewrite_task_file(text: str) -> tuple[str, list[list[str]]]:
+def rewrite_task_file(text: str, as_topic: bool = False) -> tuple[str, list[list[str]]]:
     """Rewrite a task markdown file: migrate each task block's `- tags:` into `- related:`.
 
     Returns (new_text, per_block_added_refs). per_block_added_refs is a list of
@@ -193,7 +200,7 @@ def rewrite_task_file(text: str) -> tuple[str, list[list[str]]]:
     headers = list(_TASK_HEADER_RE.finditer(text))
     if not headers:
         # No task headers; try treating the whole file as one block (may be a partial file)
-        new_block, added = _rewrite_task_block(text)
+        new_block, added = _rewrite_task_block(text, as_topic=as_topic)
         if added or new_block != text:
             return new_block, [added]
         return text, []
@@ -206,7 +213,7 @@ def rewrite_task_file(text: str) -> tuple[str, list[list[str]]]:
         start = hdr.start()
         end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
         block = text[start:end]
-        new_block, added = _rewrite_task_block(block)
+        new_block, added = _rewrite_task_block(block, as_topic=as_topic)
         parts.append(new_block)
         if added or new_block != block:
             per_block_added.append(added)
@@ -214,10 +221,10 @@ def rewrite_task_file(text: str) -> tuple[str, list[list[str]]]:
     return "".join(parts), per_block_added
 
 
-def _migrate_task_file(path: Path, apply: bool) -> bool:
+def _migrate_task_file(path: Path, apply: bool, as_topic: bool = False) -> bool:
     """Migrate one task markdown file surgically. Returns True if changes would be made."""
     text = path.read_text(encoding="utf-8")
-    new_text, _ = rewrite_task_file(text)
+    new_text, _ = rewrite_task_file(text, as_topic=as_topic)
     if new_text == text:
         return False
     if apply:
@@ -225,12 +232,16 @@ def _migrate_task_file(path: Path, apply: bool) -> bool:
     return True
 
 
-def migrate_tags_to_related(project_root: Path, apply: bool = False) -> MigrationReport:
+def migrate_tags_to_related(
+    project_root: Path, apply: bool = False, as_topic: bool = False
+) -> MigrationReport:
     """Walk a project and rewrite legacy `tags:` frontmatter into `related:` refs.
 
     Args:
         project_root: Project directory (typically contains science.yaml, doc/, tasks/).
         apply: If True, write changes to disk. If False, just report what would change.
+        as_topic: If True, convert bare tags to `topic:<tag>` refs (legacy behavior).
+            Default (False) uses `meta:<tag>` — safe metadata that won't pollute the KG.
 
     Returns:
         MigrationReport summarizing files that were (or would be) changed.
@@ -244,7 +255,7 @@ def migrate_tags_to_related(project_root: Path, apply: bool = False) -> Migratio
             continue
         for md_file in sorted(base.rglob("*.md")):
             try:
-                migration = _migrate_entity_file(md_file, apply)
+                migration = _migrate_entity_file(md_file, apply, as_topic=as_topic)
                 if migration is not None:
                     report.entity_files.append(migration)
             except Exception as exc:  # noqa: BLE001
@@ -260,7 +271,7 @@ def migrate_tags_to_related(project_root: Path, apply: bool = False) -> Migratio
 
     for task_file in candidate_task_files:
         try:
-            if _migrate_task_file(task_file, apply):
+            if _migrate_task_file(task_file, apply, as_topic=as_topic):
                 report.task_files.append(task_file)
         except Exception as exc:  # noqa: BLE001
             report.errors.append((task_file, str(exc)))

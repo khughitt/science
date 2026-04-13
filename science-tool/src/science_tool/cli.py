@@ -329,17 +329,27 @@ def graph_migrate_model(project_root: Path) -> None:
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
 )
 @click.option("--apply", is_flag=True, default=False, help="Write changes to disk (default is dry-run).")
-def graph_migrate_tags(project_root: Path, apply: bool) -> None:
-    """Rewrite legacy `tags:` frontmatter into `related:` topic refs in-place.
+@click.option(
+    "--as-topic",
+    is_flag=True,
+    default=False,
+    help="Convert bare tags to topic: refs instead of the default meta: refs.",
+)
+def graph_migrate_tags(project_root: Path, apply: bool, as_topic: bool) -> None:
+    """Rewrite legacy `tags:` frontmatter into `related:` refs in-place.
 
-    Entity frontmatter: `tags: [genomics]` → adds `topic:genomics` to `related`, removes `tags:` line.
+    Default: bare tag values become `meta:<tag>` (intentional metadata,
+    no KG pollution). Pass --as-topic for projects where all tags are
+    verified domain topics.
+
+    Entity frontmatter: `tags: [genomics]` → adds `meta:genomics` to `related`, removes `tags:` line.
     Task markdown: same idea for `- tags: [foo]` in tasks/active.md and tasks/done/*.md.
     Dry-run by default; pass --apply to actually write.
     """
     from science_tool.graph.tags_migration import migrate_tags_to_related
 
     project_root = project_root.resolve()
-    report = migrate_tags_to_related(project_root, apply=apply)
+    report = migrate_tags_to_related(project_root, apply=apply, as_topic=as_topic)
 
     if not report.entity_files and not report.task_files and not report.errors:
         click.echo("No legacy tags found — nothing to migrate.")
