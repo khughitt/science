@@ -68,3 +68,63 @@ def collect_unresolved_refs(project_root: Path) -> list[UnresolvedRef]:
     ]
     result.sort(key=lambda r: (-r["mention_count"], r["target"]))
     return result
+
+
+class LingeringTagsRecord(TypedDict):
+    file: str
+    values: list[str]
+
+
+_FRONTMATTER_TAGS_RE = re.compile(
+    r"^tags:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE
+)
+_TASK_TAGS_RE = re.compile(
+    r"^- tags:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE
+)
+
+
+def _parse_list_body(body: str) -> list[str]:
+    items = [item.strip() for item in body.split(",") if item.strip()]
+    cleaned: list[str] = []
+    for item in items:
+        if len(item) >= 2 and item[0] == item[-1] and item[0] in ('"', "'"):
+            cleaned.append(item[1:-1])
+        else:
+            cleaned.append(item)
+    return cleaned
+
+
+def collect_lingering_tags(project_root: Path) -> list[LingeringTagsRecord]:
+    """Find any files still containing `tags:` lines (frontmatter or task)."""
+    project_root = project_root.resolve()
+    results: list[LingeringTagsRecord] = []
+
+    for scan_dir in ["doc", "specs"]:
+        base = project_root / scan_dir
+        if not base.is_dir():
+            continue
+        for md_file in sorted(base.rglob("*.md")):
+            text = md_file.read_text(encoding="utf-8")
+            for match in _FRONTMATTER_TAGS_RE.finditer(text):
+                results.append({
+                    "file": str(md_file.relative_to(project_root)),
+                    "values": _parse_list_body(match.group("body")),
+                })
+
+    tasks_dir = project_root / "tasks"
+    candidate_task_files: list[Path] = []
+    if (tasks_dir / "active.md").is_file():
+        candidate_task_files.append(tasks_dir / "active.md")
+    done_dir = tasks_dir / "done"
+    if done_dir.is_dir():
+        candidate_task_files.extend(sorted(done_dir.glob("*.md")))
+
+    for task_file in candidate_task_files:
+        text = task_file.read_text(encoding="utf-8")
+        for match in _TASK_TAGS_RE.finditer(text):
+            results.append({
+                "file": str(task_file.relative_to(project_root)),
+                "values": _parse_list_body(match.group("body")),
+            })
+
+    return results
