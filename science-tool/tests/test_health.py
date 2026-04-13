@@ -111,3 +111,33 @@ class TestCollectLingeringTags:
         assert len(results) == 1
         assert results[0]["file"].endswith("active.md")
         assert results[0]["values"] == ["foo", "bar"]
+
+
+class TestBuildHealthReport:
+    def test_aggregates_all_checks(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        (tmp_path / "science.yaml").write_text("name: test\n")
+        spec = tmp_path / "specs" / "hypotheses"
+        spec.mkdir(parents=True)
+        (spec / "h01.md").write_text(
+            '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
+            'status: "proposed"\ntags: [legacy]\nrelated: [topic:foo]\n'
+            'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
+        )
+
+        report = build_health_report(tmp_path)
+
+        assert "unresolved_refs" in report
+        assert "lingering_tags_lines" in report
+        assert len(report["unresolved_refs"]) >= 1
+        assert len(report["lingering_tags_lines"]) >= 1
+
+    def test_empty_project_has_clean_report(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        (tmp_path / "science.yaml").write_text("name: test\n")
+        report = build_health_report(tmp_path)
+
+        assert report["unresolved_refs"] == []
+        assert report["lingering_tags_lines"] == []

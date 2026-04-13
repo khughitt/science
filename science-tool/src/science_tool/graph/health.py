@@ -128,3 +128,16 @@ def collect_lingering_tags(project_root: Path) -> list[LingeringTagsRecord]:
             })
 
     return results
+
+
+class HealthReport(TypedDict):
+    unresolved_refs: list[UnresolvedRef]
+    lingering_tags_lines: list[LingeringTagsRecord]
+
+
+def build_health_report(project_root: Path) -> HealthReport:
+    """Aggregate all health checks for a project."""
+    return {
+        "unresolved_refs": collect_unresolved_refs(project_root),
+        "lingering_tags_lines": collect_lingering_tags(project_root),
+    }
