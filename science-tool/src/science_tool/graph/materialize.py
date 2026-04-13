@@ -20,6 +20,7 @@ from science_tool.graph.sources import (
     build_alias_map,
     external_prefixes,
     is_external_reference,
+    is_metadata_reference,
     load_project_sources,
 )
 from science_tool.graph.store import (
@@ -148,6 +149,8 @@ def _add_relations(
     for raw_target in sorted(entity.related):
         if is_external_reference(raw_target, known_prefixes=ext_prefixes):
             _link_external_term(entity_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)
+            continue
+        if is_metadata_reference(raw_target):
             continue
 
         canonical_target = normalize_alias(raw_target, alias_map)

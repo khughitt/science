@@ -56,3 +56,31 @@ class TestMetaRefsInAudit:
         # No row should mention the meta refs as unresolved
         unresolved = [r for r in rows if r["status"] == "fail"]
         assert unresolved == []
+
+
+class TestMetaRefsInMaterialize:
+    def test_meta_ref_produces_no_skos_related_triple(self, tmp_path: Path) -> None:
+        """A meta: ref in related should not be materialized as a SKOS.related edge."""
+        from rdflib import Dataset
+        from rdflib.namespace import SKOS
+
+        from science_tool.graph.materialize import materialize_graph
+
+        (tmp_path / "science.yaml").write_text("name: test\n")
+        spec_dir = tmp_path / "specs" / "hypotheses"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "h01.md").write_text(
+            '---\nid: "hypothesis:h01-test"\ntype: "hypothesis"\n'
+            'title: "Test"\nstatus: "proposed"\n'
+            "related: [meta:phase3b]\n"
+            "source_refs: []\ncreated: \"2026-04-13\"\n---\nBody.\n"
+        )
+
+        trig_path = materialize_graph(tmp_path)
+        dataset = Dataset()
+        dataset.parse(source=str(trig_path), format="trig")
+
+        # No SKOS.related edge should originate from h01 with a meta target
+        for graph in dataset.graphs():
+            for s, p, o in graph.triples((None, SKOS.related, None)):
+                assert "meta" not in str(o), f"meta ref leaked into KG: {s} {p} {o}"
