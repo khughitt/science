@@ -7,6 +7,13 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
 
+from science_model.reasoning import (
+    ClaimLayer,
+    IdentificationStrength,
+    MeasurementModel,
+    ProxyDirectness,
+    SupportScope,
+)
 from science_model.sync import SyncSource
 
 
@@ -78,6 +85,13 @@ class Entity(BaseModel):
     pre_registered: bool = False
     pre_registered_date: date | None = None
     sync_source: SyncSource | None = None
+    claim_layer: ClaimLayer | None = None
+    identification_strength: IdentificationStrength | None = None
+    proxy_directness: ProxyDirectness | None = None
+    supports_scope: SupportScope | None = None
+    independence_group: str | None = None
+    measurement_model: MeasurementModel | None = None
+    rival_model_packet_ref: str | None = None
 
     @model_validator(mode="after")
     def _fill_derived_defaults(self) -> "Entity":

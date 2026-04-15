@@ -7,6 +7,16 @@ from science_model.graph import GraphData, GraphEdge, GraphNode, GraphSummary
 from science_model.ids import CanonicalId, normalize_alias
 from science_model.ontologies.schema import OntologyCatalog, OntologyPredicate, OntologyRegistryEntry, OntologyTermType
 from science_model.projects import Project, ProjectDetail
+from science_model.reasoning import (
+    ClaimLayer,
+    EvidenceLineMetadata,
+    EvidenceRole,
+    IdentificationStrength,
+    MeasurementModel,
+    ProxyDirectness,
+    RivalModelPacket,
+    SupportScope,
+)
 from science_model.profiles import EntityKind, ProfileManifest, RelationKind
 from science_model.provenance import EvidenceIndependence, ProvenanceType
 from science_model.relations import build_relation_registry
@@ -21,28 +31,36 @@ __all__ = [
     "CanonicalId",
     "ConfigUpdate",
     "DashboardConfig",
+    "ClaimLayer",
     "Entity",
     "EntityKind",
     "EntityType",
     "EvidenceIndependence",
+    "EvidenceLineMetadata",
+    "EvidenceRole",
     "EntityUpdate",
     "Filters",
     "GraphData",
     "GraphEdge",
     "GraphNode",
     "GraphSummary",
+    "IdentificationStrength",
     "LodWeights",
     "ProfileManifest",
     "Project",
     "ProvenanceType",
     "ProjectDetail",
+    "MeasurementModel",
     "ModelSource",
     "ParameterSource",
     "BindingSource",
     "AuthoredTargetedRelation",
+    "ProxyDirectness",
     "RelationKind",
+    "RivalModelPacket",
     "ResearchPackageDescriptor",
     "SearchResult",
+    "SupportScope",
     "SyncSource",
     "Task",
     "TaskCreate",
