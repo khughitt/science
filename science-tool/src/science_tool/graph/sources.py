@@ -401,7 +401,6 @@ def _load_model_sources(project_root: Path, *, local_profile: str) -> tuple[list
                 related=record.related,
                 source_refs=record.source_refs,
                 aliases=_derive_aliases(record.canonical_id, record.aliases),
-                **_load_reasoning_metadata(record.model_dump(mode="json")),
             )
         )
         relations.extend(_nested_relations(record.canonical_id, record.relations, source_path=record.source_path))
@@ -436,7 +435,6 @@ def _load_parameter_sources(
                 source_refs=record.source_refs,
                 ontology_terms=record.ontology_terms,
                 aliases=_derive_aliases(record.canonical_id, record.aliases),
-                **_load_reasoning_metadata(record.model_dump(mode="json")),
             )
         )
         relations.extend(_nested_relations(record.canonical_id, record.relations, source_path=record.source_path))

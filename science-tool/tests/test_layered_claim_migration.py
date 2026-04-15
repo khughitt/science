@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from rdflib import Dataset, Literal, Namespace
 from rdflib.namespace import PROV, RDF
+from pydantic import ValidationError
 
 from science_model.reasoning import (
     ClaimLayer,
@@ -15,6 +17,7 @@ from science_model.reasoning import (
     RivalModelPacket,
     SupportScope,
 )
+from science_tool.graph import sources as sources_module
 from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.store import (
@@ -97,6 +100,96 @@ def _write_graph() -> Path:
     graph_path = Path("/tmp/science-layered-claims-upstream-test.graph.trig")
     graph_path.write_text(INITIAL_GRAPH_TEMPLATE, encoding="utf-8")
     return graph_path
+
+
+class _FakeTypedRecord:
+    def __init__(self, *, canonical_id: str, title: str, profile: str, source_path: str) -> None:
+        self.canonical_id = canonical_id
+        self.title = title
+        self.profile = profile
+        self.source_path = source_path
+        self.symbol = "symbol:demo"
+        self.units = None
+        self.quantity_group = None
+        self.domain = "biology"
+        self.aliases = ["alias-1"]
+        self.source_refs = ["source:1"]
+        self.related = ["related:1"]
+        self.ontology_terms = ["term:1"]
+        self.relations: list[dict[str, str]] = []
+
+    def model_dump(self, mode: str = "json") -> dict[str, object]:
+        return {
+            "canonical_id": self.canonical_id,
+            "title": self.title,
+            "profile": self.profile,
+            "source_path": self.source_path,
+            "domain": self.domain,
+            "aliases": self.aliases,
+            "source_refs": self.source_refs,
+            "related": self.related,
+            "ontology_terms": self.ontology_terms,
+            "claim_layer": "causal_effect",
+            "identification_strength": "interventional",
+            "proxy_directness": "indirect",
+            "supports_scope": "project_wide",
+            "independence_group": "batch-9",
+            "evidence_role": "direct_test",
+            "measurement_model": {
+                "observed_entity": "observation:obs-9",
+                "latent_construct": "latent:state",
+            },
+            "rival_model_packet": {
+                "packet_id": "packet:9",
+                "current_working_model": "model:working",
+            },
+        }
+
+
+def test_model_and_parameter_source_loading_ignores_layered_claim_metadata_from_typed_records(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_model = _FakeTypedRecord(
+        canonical_id="model:demo",
+        title="Model Demo",
+        profile="local",
+        source_path="models.yaml",
+    )
+    fake_parameter = _FakeTypedRecord(
+        canonical_id="parameter:demo",
+        title="Parameter Demo",
+        profile="local",
+        source_path="parameters.yaml",
+    )
+
+    def fake_load_typed_records(
+        project_root: Path,
+        *,
+        local_profile: str,
+        file_name: str,
+        root_key: str,
+        model: type[object],
+    ) -> list[object]:
+        if file_name == "models.yaml":
+            return [fake_model]
+        if file_name == "parameters.yaml":
+            return [fake_parameter]
+        return []
+
+    monkeypatch.setattr(sources_module, "_load_typed_records", fake_load_typed_records)
+
+    model_entities, _ = sources_module._load_model_sources(tmp_path / "project", local_profile="local")
+    parameter_entities, _ = sources_module._load_parameter_sources(tmp_path / "project", local_profile="local")
+
+    for entity in model_entities + parameter_entities:
+        assert entity.claim_layer is None
+        assert entity.identification_strength is None
+        assert entity.proxy_directness is None
+        assert entity.supports_scope is None
+        assert entity.independence_group is None
+        assert entity.evidence_role is None
+        assert entity.measurement_model is None
+        assert entity.rival_model_packet is None
 
 
 def test_load_project_sources_preserves_layered_claim_metadata_from_frontmatter(tmp_path: Path) -> None:
@@ -233,6 +326,30 @@ def test_export_graph_payload_includes_layered_claim_metadata_for_claim_backed_e
     assert claim["evidence_role"] == "model_criticism"
     assert claim["measurement_model"]["observed_entity"] == "observation:obs-2"
     assert claim["rival_model_packet"]["packet_id"] == "packet:drug-vs-null"
+
+
+@pytest.mark.parametrize(
+    ("field_name", "payload"),
+    [
+        ("measurement_model", {"latent_construct": "latent:state"}),
+        ("rival_model_packet", {"current_working_model": "model:working"}),
+    ],
+)
+def test_add_proposition_validates_raw_reasoning_metadata_dicts(
+    tmp_path: Path,
+    field_name: str,
+    payload: dict[str, object],
+) -> None:
+    graph_path = _write_graph()
+
+    with pytest.raises(ValidationError):
+        add_proposition(
+            graph_path,
+            text="Raw dict validation should reject incomplete metadata",
+            source="article:layered-claims",
+            proposition_id="raw-dict-validation",
+            **{field_name: payload},
+        )
 
 
 def test_materialize_graph_without_layered_claim_metadata_keeps_legacy_shape(tmp_path: Path) -> None:

@@ -614,9 +614,21 @@ def add_proposition(
     if evidence_role is not None:
         provenance.add((prop_uri, SCI_NS.evidenceRole, Literal(str(evidence_role))))
     if measurement_model is not None:
-        provenance.add((prop_uri, SCI_NS.measurementModel, Literal(_json_literal(measurement_model))))
+        provenance.add(
+            (
+                prop_uri,
+                SCI_NS.measurementModel,
+                Literal(_json_literal(measurement_model, MeasurementModel)),
+            )
+        )
     if rival_model_packet is not None:
-        provenance.add((prop_uri, SCI_NS.rivalModelPacket, Literal(_json_literal(rival_model_packet))))
+        provenance.add(
+            (
+                prop_uri,
+                SCI_NS.rivalModelPacket,
+                Literal(_json_literal(rival_model_packet, RivalModelPacket)),
+            )
+        )
     if pre_registration_refs is not None:
         for pre_registration_ref in pre_registration_refs:
             provenance.add((prop_uri, SCI_NS.preRegisteredIn, _resolve_term(pre_registration_ref)))
@@ -3231,8 +3243,15 @@ def _load_proposition_falsifications(knowledge, proposition_uri: URIRef) -> list
     return falsifications
 
 
-def _json_literal(value: MeasurementModel | RivalModelPacket | dict[str, object]) -> str:
-    if hasattr(value, "model_dump"):
+def _json_literal(
+    value: MeasurementModel | RivalModelPacket | dict[str, object],
+    model_type: type[MeasurementModel] | type[RivalModelPacket] | None = None,
+) -> str:
+    if isinstance(value, dict):
+        if model_type is None:
+            raise TypeError("Raw dict inputs require a model type for validation")
+        payload = model_type.model_validate(value).model_dump(mode="json")
+    elif hasattr(value, "model_dump"):
         payload = cast(MeasurementModel | RivalModelPacket, value).model_dump(mode="json")
     else:
         payload = value
