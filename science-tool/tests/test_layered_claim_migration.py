@@ -238,12 +238,25 @@ def test_export_graph_payload_includes_layered_claim_metadata_for_claim_backed_e
 def test_materialize_graph_without_layered_claim_metadata_keeps_legacy_shape(tmp_path: Path) -> None:
     project = _write_project(tmp_path / "legacy", with_layered_metadata=False)
 
-    trig_path = materialize_graph(project)
-    dataset = Dataset()
-    dataset.parse(source=str(trig_path), format="trig")
-    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+    first_trig_path = materialize_graph(project)
+    first_dataset = Dataset()
+    first_dataset.parse(source=str(first_trig_path), format="trig")
+    first_snapshot = {
+        (str(subject), str(predicate), str(obj), str(graph))
+        for subject, predicate, obj, graph in first_dataset.quads((None, None, None, None))
+    }
+
+    second_trig_path = materialize_graph(project)
+    second_dataset = Dataset()
+    second_dataset.parse(source=str(second_trig_path), format="trig")
+    second_snapshot = {
+        (str(subject), str(predicate), str(obj), str(graph))
+        for subject, predicate, obj, graph in second_dataset.quads((None, None, None, None))
+    }
+    provenance = second_dataset.graph(PROJECT_NS["graph/provenance"])
     proposition_uri = PROJECT_NS["proposition/p01-layered"]
 
+    assert first_snapshot == second_snapshot
     assert (proposition_uri, PROV.wasDerivedFrom, None) in provenance
     assert (proposition_uri, SCI_NS.claimLayer, None) not in provenance
     assert (proposition_uri, SCI_NS.measurementModel, None) not in provenance
