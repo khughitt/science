@@ -46,6 +46,42 @@ def test_reasoning_enums_reject_invalid_values() -> None:
             raise AssertionError("expected validation error")
 
 
+def test_identification_strength_rejects_invalid_values() -> None:
+    class _Envelope(BaseModel):
+        identification_strength: IdentificationStrength
+
+    try:
+        _Envelope.model_validate({"identification_strength": "not-a-strength"})
+    except ValidationError as exc:
+        assert "identification_strength" in str(exc)
+    else:  # pragma: no cover - defensive
+        raise AssertionError("expected validation error")
+
+
+def test_proxy_directness_rejects_invalid_values() -> None:
+    class _Envelope(BaseModel):
+        proxy_directness: ProxyDirectness
+
+    try:
+        _Envelope.model_validate({"proxy_directness": "not-a-directness"})
+    except ValidationError as exc:
+        assert "proxy_directness" in str(exc)
+    else:  # pragma: no cover - defensive
+        raise AssertionError("expected validation error")
+
+
+def test_support_scope_rejects_invalid_values() -> None:
+    class _Envelope(BaseModel):
+        supports_scope: SupportScope
+
+    try:
+        _Envelope.model_validate({"supports_scope": "not-a-scope"})
+    except ValidationError as exc:
+        assert "supports_scope" in str(exc)
+    else:  # pragma: no cover - defensive
+        raise AssertionError("expected validation error")
+
+
 def test_measurement_model_and_rival_model_packet_validate() -> None:
     measurement = MeasurementModel(
         observed_entity="observation:obs-1",
