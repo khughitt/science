@@ -9,6 +9,15 @@ from typing import TypeVar
 import yaml
 from pydantic import BaseModel, Field
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
+from science_model.reasoning import (
+    ClaimLayer,
+    EvidenceRole,
+    IdentificationStrength,
+    MeasurementModel,
+    ProxyDirectness,
+    RivalModelPacket,
+    SupportScope,
+)
 from science_model.ontologies import load_catalogs_for_names
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.profiles import CORE_PROFILE, load_shared_profile
@@ -73,6 +82,14 @@ class SourceEntity(BaseModel):
     source_refs: list[str] = Field(default_factory=list)
     ontology_terms: list[str] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
+    claim_layer: ClaimLayer | None = None
+    identification_strength: IdentificationStrength | None = None
+    proxy_directness: ProxyDirectness | None = None
+    supports_scope: SupportScope | None = None
+    independence_group: str | None = None
+    evidence_role: EvidenceRole | None = None
+    measurement_model: MeasurementModel | None = None
+    rival_model_packet: RivalModelPacket | None = None
 
 
 class KnowledgeProfiles(BaseModel):
@@ -264,6 +281,7 @@ def _load_markdown_entities(
                         entity.canonical_id,
                         [*raw_aliases, *_aliases_from_source_path(entity.type.value, entity.file_path)],
                     ),
+                    **_load_reasoning_metadata(frontmatter[0] if frontmatter is not None else None),
                 )
             )
     return entities
@@ -353,6 +371,7 @@ def _load_structured_entities(
                 source_refs=_coerce_string_list(item.get("source_refs")),
                 ontology_terms=_coerce_string_list(item.get("ontology_terms")),
                 aliases=_derive_aliases(canonical_id, aliases),
+                **_load_reasoning_metadata(item),
             )
         )
 
@@ -382,6 +401,7 @@ def _load_model_sources(project_root: Path, *, local_profile: str) -> tuple[list
                 related=record.related,
                 source_refs=record.source_refs,
                 aliases=_derive_aliases(record.canonical_id, record.aliases),
+                **_load_reasoning_metadata(record.model_dump(mode="json")),
             )
         )
         relations.extend(_nested_relations(record.canonical_id, record.relations, source_path=record.source_path))
@@ -416,6 +436,7 @@ def _load_parameter_sources(
                 source_refs=record.source_refs,
                 ontology_terms=record.ontology_terms,
                 aliases=_derive_aliases(record.canonical_id, record.aliases),
+                **_load_reasoning_metadata(record.model_dump(mode="json")),
             )
         )
         relations.extend(_nested_relations(record.canonical_id, record.relations, source_path=record.source_path))
@@ -480,6 +501,27 @@ def _load_structured_relations(project_root: Path, *, local_profile: str) -> lis
         )
 
     return relations
+
+
+def _load_reasoning_metadata(raw: dict[str, object] | None) -> dict[str, object]:
+    if not isinstance(raw, dict):
+        return {}
+
+    metadata: dict[str, object] = {}
+    for field in (
+        "claim_layer",
+        "identification_strength",
+        "proxy_directness",
+        "supports_scope",
+        "independence_group",
+        "evidence_role",
+        "measurement_model",
+        "rival_model_packet",
+    ):
+        value = raw.get(field)
+        if value is not None:
+            metadata[field] = value
+    return metadata
 
 
 def _load_typed_records(

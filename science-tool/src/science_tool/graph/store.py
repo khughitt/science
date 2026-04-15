@@ -14,6 +14,7 @@ from typing import NotRequired, TypedDict, cast
 import click
 from rdflib import Dataset, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
+from science_model.reasoning import MeasurementModel, RivalModelPacket
 
 from science_tool.graph.export_types import (
     GraphExportEdge,
@@ -125,6 +126,10 @@ class PropositionPhase1Metadata(TypedDict, total=False):
     platform_pattern: str
     dataset_effects: dict[str, float]
     evidence_lines: list[PropositionEvidenceLine]
+    claim_layer: str
+    supports_scope: str
+    measurement_model: dict[str, object]
+    rival_model_packet: dict[str, object]
 
 
 class PropositionEvidenceSemantics(TypedDict, total=False):
@@ -132,6 +137,10 @@ class PropositionEvidenceSemantics(TypedDict, total=False):
     mechanistic_support: str
     replication_scope: str
     claim_status: str
+    identification_strength: str
+    proxy_directness: str
+    independence_group: str
+    evidence_role: str
 
 
 class PropositionInteractionTerm(TypedDict, total=False):
@@ -156,6 +165,14 @@ class EvidenceClaimBundle(TypedDict, total=False):
     sources: list[str]
     support_count: int
     dispute_count: int
+    claim_layer: str
+    identification_strength: str
+    proxy_directness: str
+    supports_scope: str
+    independence_group: str
+    evidence_role: str
+    measurement_model: dict[str, object]
+    rival_model_packet: dict[str, object]
     compositional_status: str
     compositional_method: str
     compositional_note: str
@@ -514,6 +531,14 @@ def add_proposition(
     pre_registration_refs: list[str] | None = None,
     interaction_terms: list[PropositionInteractionTerm] | None = None,
     bridge_between_refs: list[str] | None = None,
+    claim_layer: str | None = None,
+    identification_strength: str | None = None,
+    proxy_directness: str | None = None,
+    supports_scope: str | None = None,
+    independence_group: str | None = None,
+    evidence_role: str | None = None,
+    measurement_model: MeasurementModel | dict[str, object] | None = None,
+    rival_model_packet: RivalModelPacket | dict[str, object] | None = None,
 ) -> URIRef:
     """Add a proposition to the knowledge graph.
 
@@ -576,6 +601,22 @@ def add_proposition(
         provenance.add((prop_uri, SCI_NS.replicationScope, Literal(replication_scope)))
     if claim_status is not None:
         provenance.add((prop_uri, SCI_NS.claimStatus, Literal(claim_status)))
+    if claim_layer is not None:
+        provenance.add((prop_uri, SCI_NS.claimLayer, Literal(str(claim_layer))))
+    if identification_strength is not None:
+        provenance.add((prop_uri, SCI_NS.identificationStrength, Literal(str(identification_strength))))
+    if proxy_directness is not None:
+        provenance.add((prop_uri, SCI_NS.proxyDirectness, Literal(str(proxy_directness))))
+    if supports_scope is not None:
+        provenance.add((prop_uri, SCI_NS.supportsScope, Literal(str(supports_scope))))
+    if independence_group is not None:
+        provenance.add((prop_uri, SCI_NS.independenceGroup, Literal(independence_group)))
+    if evidence_role is not None:
+        provenance.add((prop_uri, SCI_NS.evidenceRole, Literal(str(evidence_role))))
+    if measurement_model is not None:
+        provenance.add((prop_uri, SCI_NS.measurementModel, Literal(_json_literal(measurement_model))))
+    if rival_model_packet is not None:
+        provenance.add((prop_uri, SCI_NS.rivalModelPacket, Literal(_json_literal(rival_model_packet))))
     if pre_registration_refs is not None:
         for pre_registration_ref in pre_registration_refs:
             provenance.add((prop_uri, SCI_NS.preRegisteredIn, _resolve_term(pre_registration_ref)))
@@ -2542,6 +2583,42 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "description": "Explicit current lifecycle status for a proposition-backed claim",
         "layer": "graph/provenance",
     },
+    {"predicate": "sci:claimLayer", "description": "Authored claim layer for a proposition", "layer": "graph/provenance"},
+    {
+        "predicate": "sci:identificationStrength",
+        "description": "Normalized causal leverage or identification strength",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:proxyDirectness",
+        "description": "How directly a claim or evidence line refers to the target construct",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:supportsScope",
+        "description": "Authored review-radius hint for how widely a claim update should propagate",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:independenceGroup",
+        "description": "Authored independence grouping for evidence lines or proposition bundles",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:evidenceRole",
+        "description": "Role of a proposition or evidence line in support / criticism",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:measurementModel",
+        "description": "JSON-encoded measurement/proxy model for a proposition",
+        "layer": "graph/provenance",
+    },
+    {
+        "predicate": "sci:rivalModelPacket",
+        "description": "JSON-encoded rival-model packet for a proposition",
+        "layer": "graph/provenance",
+    },
     {
         "predicate": "sci:preRegisteredIn",
         "description": "Link from a claim to an existing pre-registration record or slug",
@@ -3055,6 +3132,22 @@ def _load_proposition_phase1_metadata(provenance, proposition_uri: URIRef) -> Pr
                 }
             )
 
+    claim_layer_obj = next(provenance.objects(proposition_uri, SCI_NS.claimLayer), None)
+    if claim_layer_obj is not None:
+        metadata["claim_layer"] = str(claim_layer_obj)
+
+    supports_scope_obj = next(provenance.objects(proposition_uri, SCI_NS.supportsScope), None)
+    if supports_scope_obj is not None:
+        metadata["supports_scope"] = str(supports_scope_obj)
+
+    measurement_model_obj = next(provenance.objects(proposition_uri, SCI_NS.measurementModel), None)
+    if measurement_model_obj is not None:
+        metadata["measurement_model"] = cast(dict[str, object], json.loads(str(measurement_model_obj)))
+
+    rival_model_packet_obj = next(provenance.objects(proposition_uri, SCI_NS.rivalModelPacket), None)
+    if rival_model_packet_obj is not None:
+        metadata["rival_model_packet"] = cast(dict[str, object], json.loads(str(rival_model_packet_obj)))
+
     return metadata
 
 
@@ -3076,6 +3169,22 @@ def _load_proposition_evidence_semantics(provenance, proposition_uri: URIRef) ->
     claim_status_obj = next(provenance.objects(proposition_uri, SCI_NS.claimStatus), None)
     if claim_status_obj is not None:
         semantics["claim_status"] = str(claim_status_obj)
+
+    identification_strength_obj = next(provenance.objects(proposition_uri, SCI_NS.identificationStrength), None)
+    if identification_strength_obj is not None:
+        semantics["identification_strength"] = str(identification_strength_obj)
+
+    proxy_directness_obj = next(provenance.objects(proposition_uri, SCI_NS.proxyDirectness), None)
+    if proxy_directness_obj is not None:
+        semantics["proxy_directness"] = str(proxy_directness_obj)
+
+    independence_group_obj = next(provenance.objects(proposition_uri, SCI_NS.independenceGroup), None)
+    if independence_group_obj is not None:
+        semantics["independence_group"] = str(independence_group_obj)
+
+    evidence_role_obj = next(provenance.objects(proposition_uri, SCI_NS.evidenceRole), None)
+    if evidence_role_obj is not None:
+        semantics["evidence_role"] = str(evidence_role_obj)
 
     return semantics
 
@@ -3120,6 +3229,14 @@ def _load_proposition_falsifications(knowledge, proposition_uri: URIRef) -> list
             record["supersedes_claim"] = str(supersedes_claim_obj)
         falsifications.append(record)
     return falsifications
+
+
+def _json_literal(value: MeasurementModel | RivalModelPacket | dict[str, object]) -> str:
+    if hasattr(value, "model_dump"):
+        payload = cast(MeasurementModel | RivalModelPacket, value).model_dump(mode="json")
+    else:
+        payload = value
+    return json.dumps(payload)
 
 
 def _evidence_targets_for_uri(knowledge, target_uri: URIRef) -> list[URIRef]:

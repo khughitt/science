@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from urllib.parse import quote
 
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
 from science_model import normalize_alias
+from science_model.reasoning import MeasurementModel, RivalModelPacket
 from science_model.ontologies.schema import OntologyCatalog
 
 from science_tool.graph.migrate import audit_project_sources
@@ -129,6 +131,7 @@ def _add_entity(*, entity: SourceEntity, knowledge, provenance) -> None:
     provenance.add((uri, PROV.wasDerivedFrom, source_uri))
     if entity.confidence is not None:
         provenance.add((uri, SCI_NS.confidence, Literal(str(entity.confidence), datatype=XSD.decimal)))
+    _add_reasoning_metadata(uri=uri, provenance=provenance, entity=entity)
     provenance.add((source_uri, RDF.type, PROV.Entity))
     provenance.add((source_uri, SCHEMA_NS.identifier, Literal(entity.source_path)))
 
@@ -271,6 +274,42 @@ def _add_binding(
                 _binding_reference_uri(target, entity_index=entity_index, alias_map=alias_map),
             )
         )
+
+
+def _add_reasoning_metadata(*, uri: URIRef, provenance, entity: SourceEntity) -> None:
+    scalar_predicates = {
+        "claim_layer": SCI_NS.claimLayer,
+        "identification_strength": SCI_NS.identificationStrength,
+        "proxy_directness": SCI_NS.proxyDirectness,
+        "supports_scope": SCI_NS.supportsScope,
+        "independence_group": SCI_NS.independenceGroup,
+        "evidence_role": SCI_NS.evidenceRole,
+    }
+    for field, predicate in scalar_predicates.items():
+        value = getattr(entity, field)
+        if value is not None:
+            provenance.add((uri, predicate, Literal(str(value))))
+
+    if entity.measurement_model is not None:
+        provenance.add(
+            (
+                uri,
+                SCI_NS.measurementModel,
+                Literal(_model_to_json(entity.measurement_model)),
+            )
+        )
+    if entity.rival_model_packet is not None:
+        provenance.add(
+            (
+                uri,
+                SCI_NS.rivalModelPacket,
+                Literal(_model_to_json(entity.rival_model_packet)),
+            )
+        )
+
+
+def _model_to_json(value: MeasurementModel | RivalModelPacket) -> str:
+    return json.dumps(value.model_dump(mode="json"))
 
 
 def _canonical_entity_uri(
