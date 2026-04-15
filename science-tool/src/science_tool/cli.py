@@ -14,6 +14,7 @@ from science_tool.distill.openalex import distill_openalex
 from science_tool.distill.pykeen_source import distill_pykeen
 from science_tool.doi import lookup_doi_metadata
 from science_tool.graph.materialize import materialization_audit, materialize_graph
+from science_tool.graph.cross_impact import query_cross_impact
 from science_tool.graph.migrate import (
     audit_project_graph,
     rewrite_project_ids_in_sources,
@@ -530,6 +531,39 @@ def graph_evidence(target_ref: str, limit: int, output_format: str, graph_path: 
         title="Graph Evidence",
         columns=[("evidence", "Evidence"), ("relation", "Relation"), ("text", "Text"), ("sources", "Sources")],
         rows=rows,
+    )
+
+
+@graph.command("cross-impact")
+@click.argument("target_ref")
+@click.option("--limit", type=int, default=200, show_default=True)
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_cross_impact(target_ref: str, limit: int, output_format: str, graph_path: Path) -> None:
+    """Show conservative cross-impact for a proposition or evidence line."""
+
+    payload = query_cross_impact(graph_path=graph_path, target_ref=target_ref, limit=limit)
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
+    emit_query_rows(
+        output_format=output_format,
+        title=f"Cross Impact: {payload['target']} ({payload['scope']})",
+        columns=[
+            ("dependent_proposition", "Dependent Proposition"),
+            ("dependent_text", "Text"),
+            ("relation", "Relation"),
+            ("hypotheses", "Hypotheses"),
+            ("interpretations", "Interpretations"),
+            ("discussions", "Discussions"),
+            ("questions", "Questions"),
+            ("scope", "Scope"),
+            ("scope_reason", "Reason"),
+        ],
+        rows=payload["rows"],
     )
 
 
