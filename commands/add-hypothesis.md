@@ -35,9 +35,12 @@ Try to separate:
 
 For each important proposition, identify:
 - subject, predicate, and object when it is naturally relational
+- whether it is best treated as `empirical_regularity`, `causal_effect`, `mechanistic_narrative`, or `structural_claim`
 - what would count as supporting evidence
 - what would count as disputing evidence
 - whether the proposition is currently speculative, fragile, or already somewhat supported
+
+If a proposition relies on an indirect proxy, note that early and record the likely `measurement_model` rather than treating the proxy as direct evidence.
 
 ### 3. Test for Falsifiability
 - What evidence would materially lower confidence in this hypothesis?
@@ -48,6 +51,11 @@ For each important proposition, identify:
 - If the hypothesis is useful, what downstream predictions follow?
 - What empirical-data evidence, simulation evidence, or literature evidence would shift belief?
 - What would be the most discriminating test?
+
+If the hypothesis has genuinely competing structural readings, note the likely rival-model packet:
+- shared observables
+- discriminating predictions
+- an optional `current_working_model` only if one already exists
 
 ### 5. Check Connections
 - Does this relate to existing hypotheses, questions, or inquiries?
@@ -79,6 +87,13 @@ Check existing files in `specs/hypotheses/` and assign the next sequential numbe
 - `related`: list related hypotheses, questions, or topics
 - `source_refs`: papers or prior project artifacts cited in the document
 - `created` and `updated`: today's date
+
+Use optional layered-claim fields only when they reduce ambiguity:
+- `claim_layer`
+- `identification_strength`
+- `measurement_model`
+- `supports_scope` as a review hint, not as a graph override
+- `rival_model_packet`
 
 Avoid status labels like `supported` or `refuted` as the default outcome of authoring a new hypothesis.
 

@@ -32,6 +32,7 @@ For each hypothesis:
 - state the organizing conjecture
 - list its key propositions or subpropositions
 - identify which propositions are essential versus optional
+- note each proposition's layer when it matters: `empirical_regularity`, `causal_effect`, `mechanistic_narrative`, or `structural_claim`
 
 ### 2. Build A Proposition-Centric Evidence Inventory
 
@@ -47,12 +48,18 @@ Distinguish:
 - simulation support
 - methodological objections
 
+Also distinguish:
+- direct observations versus proxy-mediated support that should carry `measurement_model`
+- independent support versus support concentrated in one `independence_group`
+
 ### 3. Identify Discriminating Propositions And Predictions
 
 Find places where the hypotheses genuinely diverge:
 - propositions that cannot both be true as stated
 - predictions that would separate them
 - edges or mechanisms that would rise or fall differently under new evidence
+
+If the comparison is really among bounded alternative models, represent that explicitly as a rival-model packet and treat `current_working_model` as optional rather than mandatory.
 
 This is the most important section.
 

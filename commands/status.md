@@ -94,7 +94,7 @@ Surface, at minimum:
 - causal-leaning proposition `identification_strength` coverage,
 - unsupported mechanistic narratives still flagged by the migration helper,
 - proxy-mediated propositions still missing `measurement_model`,
-- rival-model packets missing discriminating predictions.
+- rival-model packets missing discriminating predictions or overstating a `current_working_model` without real adjudication evidence.
 
 If high-impact claims still carry only one visible `independence_group`, call that out explicitly as a fragility note even if the project has not yet promoted it into a first-class dashboard metric.
 

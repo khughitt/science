@@ -71,6 +71,7 @@ For every `scic:causes` edge in the DAG, ask:
 3. **Selection bias**: "Could the study design or data collection process condition on a descendant of this edge?"
 4. **Temporal ordering**: "Does A occur before B? Is there evidence for temporal precedence?"
 5. **Evidence quality**: "What is the confidence and source for this edge? Is it well-established or speculative?"
+6. **Measurement path**: "Is this edge supported by a direct observation, or by a proxy that should have `measurement_model` and `proxy_directness` called out explicitly?"
 
 ### Step 4: Check for missing confounders
 
@@ -83,6 +84,8 @@ For each identified missing confounder:
 - Note it in the review
 - Suggest adding it to the DAG
 - Assess whether it's observable or latent
+
+Also check whether supposedly independent support lines really collapse into one `independence_group`.
 
 ### Step 5: Check for structural problems
 
@@ -128,6 +131,8 @@ For each key assumption or causal edge identified in steps 3-5, assess sensitivi
 5. **Boundary conditions**
    - Under what conditions does the model break down entirely?
    - Are there population, temporal, or contextual limits to applicability?
+
+For mixed empirical / mechanistic arguments, ask whether the inquiry is silently promoting an empirical regularity into a mechanistic narrative without enough lower-layer support.
 
 Include a sensitivity summary table in the review report:
 
@@ -183,6 +188,8 @@ Summarize the key findings to the user:
 - Important concerns (should investigate)
 - Minor notes (awareness items)
 - Recommended next steps
+
+If `science-tool health --format json` surfaces proxy gaps, unsupported mechanistic narratives, or rival-model packet issues related to this inquiry, mention them explicitly in the critique summary.
 
 ## Process Reflection
 

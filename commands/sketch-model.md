@@ -86,6 +86,7 @@ Have a natural, adaptive conversation.
    - What can be observed directly?
    - What is latent, inferred, or computed?
    - What datasets or assays touch these variables?
+   - Which variables are only available through proxies and will later need `measurement_model`?
 
 3. **Candidate Relations**
    - What seems related to what?
@@ -106,6 +107,8 @@ If causal mode is active, also ask:
 - What is the outcome?
 - What variables might confound both?
 - Which causal arrows are most uncertain?
+
+If the sketch is mostly formal or architectural rather than empirical, say so explicitly and treat the key propositions as likely `structural_claim`s rather than as causal or mechanistic claims.
 
 ### Step 3: Build the Inquiry Subgraph
 
@@ -176,6 +179,7 @@ The summary should explicitly note:
 - tentative relation-claims
 - unresolved unknowns
 - which parts are structurally useful but epistemically weak
+- where `supports_scope` should later widen review output, while still remaining only a hint rather than a graph override
 
 ### Step 5: Finalize
 

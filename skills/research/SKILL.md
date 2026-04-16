@@ -82,6 +82,7 @@ When the project uses layered-claim metadata:
 - keep `measurement_model` separate from the concrete `observation`
 - do not promote mechanistic prose into `mechanistic_narrative` unless the supporting lower-layer structure is explicit
 - if rival models are genuinely in play, prefer a bounded `rival_model_packet` over free-form prose comparison
+- treat `current_working_model` as optional; do not invent one just to satisfy a schema
 
 ## Evidence Classification
 

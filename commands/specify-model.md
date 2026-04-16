@@ -84,7 +84,8 @@ For each non-trivial scientific relation in the inquiry:
 
 1. Clarify the content of the claim
    - What exactly is being asserted?
-   - Is it causal, mechanistic, predictive, or descriptive?
+   - Is it `empirical_regularity`, `causal_effect`, `mechanistic_narrative`, or `structural_claim`?
+   - Is the observed evidence direct or proxy-mediated?
 
 2. Create a `relation_claim`
 
@@ -107,12 +108,22 @@ science-tool inquiry add-edge "<slug>" "concept:<subject>" "<predicate>" "concep
 
 Use direct structural edges without claims only when the edge is organizational or procedural rather than epistemic.
 
+When the claim is materially clearer with layered metadata, author it explicitly:
+- `claim_layer`
+- `identification_strength`
+- `proxy_directness`
+- `measurement_model`
+- `supports_scope` as a review hint only
+- `rival_model_packet` using optional `current_working_model`
+
 ### Step 4: Attach Support And Dispute
 
 For each important claim, ask:
 - What currently supports it?
 - What currently disputes it?
 - What evidence is missing?
+- Does the support come from one independence group only?
+- Is any support actually a proxy that still needs a measurement model?
 
 When the project has concrete supporting or disputing project claims, represent them explicitly:
 

@@ -97,6 +97,11 @@ For each relevant hypothesis or inquiry, ask:
 - Does this result support, dispute, or leave each proposition unresolved?
 - How much does it actually move belief?
 
+When a result bundle mixes levels, split them explicitly:
+- empirical regularity
+- causal effect claim
+- mechanistic narrative or structural interpretation
+
 Prefer outputs like:
 - “supports proposition P1 modestly”
 - “disputes proposition P3”
@@ -134,6 +139,11 @@ Then proceed to Step 5.
 
 If the finding is fragile, say so explicitly.
 
+Also ask:
+- does this result rest on a proxy that needs `measurement_model` rather than prose-only caveats?
+- is the evidence independent, or does it collapse into one `independence_group`?
+- if the result adjudicates among alternatives, should it update a `rival_model_packet` and its `current_working_model`?
+
 **Suspiciously good results:** When results substantially exceed pre-registered upper bounds (observed >> expected), do not accept them uncritically. Before proceeding:
 - Enumerate plausible inflators: confounds, data leakage, overfitting, control inadequacy
 - Reference the pre-registration document (in `doc/meta/pre-registration-*.md`) and compare observed vs. expected range explicitly
@@ -149,6 +159,17 @@ When graph updates are warranted, frame them as proposition updates:
 
 Do not use hypothesis status changes as the primary output.
 Hypothesis-level summaries can be updated later as a secondary reflection of underlying proposition changes.
+
+After drafting the interpretation, run:
+
+```bash
+science-tool health --project-root . --format json
+```
+
+Call out any remaining:
+- unsupported mechanistic narratives
+- proxy-mediated propositions lacking `measurement_model`
+- rival-model packets lacking discriminating predictions
 
 ### Structured Output
 
