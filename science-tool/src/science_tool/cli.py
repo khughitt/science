@@ -17,6 +17,7 @@ from science_tool.graph.materialize import materialization_audit, materialize_gr
 from science_tool.graph.cross_impact import query_cross_impact
 from science_tool.graph.migrate import (
     audit_project_graph,
+    build_layered_claim_migration_report,
     rewrite_project_ids_in_sources,
     write_migration_report,
     write_local_sources,
@@ -273,9 +274,11 @@ def graph_migrate(output_format: str, project_root: Path) -> None:
     write_local_sources(project_root, dict(initial_report))
 
     final_report = audit_project_graph(project_root)
+    layered_claim_report = build_layered_claim_migration_report(project_root)
     final_report_payload: dict[str, Any] = dict(final_report)
     final_report_payload["rewritten_files"] = rewritten_files
     final_report_payload["rewritten_file_count"] = len(rewritten_files)
+    final_report_payload["layered_claim_migration"] = layered_claim_report
     report_path = write_migration_report(project_root, final_report_payload)
     final_report_payload["report_path"] = str(report_path)
 
@@ -297,6 +300,12 @@ def graph_migrate(output_format: str, project_root: Path) -> None:
         )
         click.echo(f"Report: {report_path}")
         click.echo(f"Rewritten files: {len(rewritten_files)}")
+        click.echo(
+            "Layered-claim scan: "
+            f"{layered_claim_report['summary']['proposition_count']} propositions, "
+            f"{layered_claim_report['summary']['warning_count']} warnings, "
+            f"{layered_claim_report['summary']['todo_count']} TODOs"
+        )
 
     if final_report["has_failures"]:
         raise click.exceptions.Exit(1)
@@ -2242,7 +2251,19 @@ def health_command(project_root: Path, output_format: str) -> None:
         click.echo(_json.dumps(report, indent=2))
         return
 
-    total_issues = len(report["unresolved_refs"]) + len(report["lingering_tags_lines"])
+    layered_claims = report["layered_claims"]
+    layered_claim_issue_count = len(layered_claims["migration_issues"]) + len(
+        layered_claims["rival_model_packets_missing_discriminating_predictions"]
+    )
+    coverage_gaps = 0
+    for metric in (
+        layered_claims["proposition_claim_layer_coverage"],
+        layered_claims["causal_leaning_identification_coverage"],
+    ):
+        if metric["denominator"] > 0 and metric["numerator"] < metric["denominator"]:
+            coverage_gaps += 1
+
+    total_issues = len(report["unresolved_refs"]) + len(report["lingering_tags_lines"]) + layered_claim_issue_count + coverage_gaps
     if total_issues == 0:
         click.echo("Project is clean — no issues found.")
         return
@@ -2287,6 +2308,47 @@ def health_command(project_root: Path, output_format: str) -> None:
             "\n[bold]Next:[/bold] run "
             "[cyan]science-tool graph migrate-tags --apply[/cyan] to migrate these."
         )
+
+    adoption_table = Table(title="Layered-Claim Adoption")
+    adoption_table.add_column("Check", style="bold")
+    adoption_table.add_column("Coverage", justify="right")
+    adoption_table.add_column("Fraction", justify="right")
+    for label, metric in (
+        ("Propositions with authored claim_layer", layered_claims["proposition_claim_layer_coverage"]),
+        ("Causal-leaning propositions with authored identification_strength", layered_claims["causal_leaning_identification_coverage"]),
+    ):
+        adoption_table.add_row(
+            label,
+            f"{metric['numerator']}/{metric['denominator']}",
+            f"{metric['fraction']:.2f}",
+        )
+    console.print(adoption_table)
+
+    if layered_claims["migration_issues"]:
+        issue_table = Table(title=f"Layered-Claim Migration Issues ({len(layered_claims['migration_issues'])})")
+        issue_table.add_column("Proposition", style="bold")
+        issue_table.add_column("Warnings")
+        issue_table.add_column("TODOs")
+        for row in layered_claims["migration_issues"]:
+            issue_table.add_row(
+                row["proposition"],
+                "; ".join(row["warnings"]) or "-",
+                "; ".join(row["todos"]) or "-",
+            )
+        console.print(issue_table)
+
+    if layered_claims["rival_model_packets_missing_discriminating_predictions"]:
+        rival_table = Table(
+            title=(
+                "Rival-model packets missing discriminating predictions "
+                f"({len(layered_claims['rival_model_packets_missing_discriminating_predictions'])})"
+            )
+        )
+        rival_table.add_column("Proposition", style="bold")
+        rival_table.add_column("Packet")
+        for row in layered_claims["rival_model_packets_missing_discriminating_predictions"]:
+            rival_table.add_row(row["proposition"], row["packet_id"])
+        console.print(rival_table)
 
 
 def _extract_title_status(path: Path, _yaml: Any) -> tuple[str, str]:

@@ -12,7 +12,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TypedDict
 
-from science_tool.graph.migrate import audit_project_sources
+from science_tool.graph.migrate import audit_project_sources, build_layered_claim_migration_report
 from science_tool.graph.sources import load_project_sources
 
 
@@ -139,11 +139,95 @@ def collect_lingering_tags(project_root: Path) -> list[LingeringTagsRecord]:
 class HealthReport(TypedDict):
     unresolved_refs: list[UnresolvedRef]
     lingering_tags_lines: list[LingeringTagsRecord]
+    layered_claims: "LayeredClaimHealthReport"
+
+
+class CoverageMetric(TypedDict):
+    numerator: int
+    denominator: int
+    fraction: float
+
+
+class RivalModelGap(TypedDict):
+    proposition: str
+    source_path: str
+    packet_id: str
+
+
+class LayeredClaimIssue(TypedDict):
+    proposition: str
+    source_path: str
+    warnings: list[str]
+    todos: list[str]
+
+
+class LayeredClaimHealthReport(TypedDict):
+    proposition_claim_layer_coverage: CoverageMetric
+    causal_leaning_identification_coverage: CoverageMetric
+    rival_model_packets_missing_discriminating_predictions: list[RivalModelGap]
+    migration_issues: list[LayeredClaimIssue]
 
 
 def build_health_report(project_root: Path) -> HealthReport:
     """Aggregate all health checks for a project."""
+    project_root = project_root.resolve()
+    sources = load_project_sources(project_root)
+    proposition_entities = [entity for entity in sources.entities if entity.kind == "proposition"]
+    migration_report = build_layered_claim_migration_report(project_root)
+    causal_leaning_rows = [
+        row
+        for row in migration_report["rows"]
+        if row["authored_claim_layer"] in {"causal_effect", "mechanistic_narrative"}
+        or row["authored_identification_strength"] is not None
+        or row["inferred_identification_strength"] is not None
+        or any("mechanistic" in warning.lower() for warning in row["warnings"])
+    ]
+    rival_model_gaps: list[RivalModelGap] = []
+    for entity in proposition_entities:
+        packet = entity.rival_model_packet
+        if packet is None or packet.discriminating_predictions:
+            continue
+        rival_model_gaps.append(
+            {
+                "proposition": entity.canonical_id,
+                "source_path": entity.source_path,
+                "packet_id": packet.packet_id,
+            }
+        )
+
+    migration_issues: list[LayeredClaimIssue] = [
+        {
+            "proposition": row["proposition"],
+            "source_path": row["source_path"],
+            "warnings": row["warnings"],
+            "todos": row["todos"],
+        }
+        for row in migration_report["rows"]
+        if row["warnings"] or row["todos"]
+    ]
+
     return {
         "unresolved_refs": collect_unresolved_refs(project_root),
         "lingering_tags_lines": collect_lingering_tags(project_root),
+        "layered_claims": {
+            "proposition_claim_layer_coverage": _coverage_metric(
+                numerator=sum(1 for entity in proposition_entities if entity.claim_layer is not None),
+                denominator=len(proposition_entities),
+            ),
+            "causal_leaning_identification_coverage": _coverage_metric(
+                numerator=sum(1 for row in causal_leaning_rows if row["authored_identification_strength"] is not None),
+                denominator=len(causal_leaning_rows),
+            ),
+            "rival_model_packets_missing_discriminating_predictions": rival_model_gaps,
+            "migration_issues": migration_issues,
+        },
+    }
+
+
+def _coverage_metric(*, numerator: int, denominator: int) -> CoverageMetric:
+    fraction = 1.0 if denominator == 0 else numerator / denominator
+    return {
+        "numerator": numerator,
+        "denominator": denominator,
+        "fraction": fraction,
     }

@@ -9,6 +9,7 @@ from typing import TypedDict
 
 import yaml
 from science_model import normalize_alias
+from science_model.frontmatter import parse_frontmatter
 
 from science_tool.graph.sources import (
     AliasCollisionError,
@@ -46,6 +47,60 @@ class AuditProjectReport(TypedDict):
     rows: list[AuditRow]
     alias_map: dict[str, str]
     manual_aliases: dict[str, str]
+
+
+class LayeredClaimMigrationRow(TypedDict):
+    """One proposition-focused layered-claim migration suggestion row."""
+
+    proposition: str
+    source_path: str
+    authored_claim_layer: str | None
+    authored_identification_strength: str | None
+    inferred_claim_layer: str | None
+    inferred_identification_strength: str | None
+    warnings: list[str]
+    todos: list[str]
+
+
+class LayeredClaimMigrationSummary(TypedDict):
+    """Aggregate counts for layered-claim migration guidance."""
+
+    proposition_count: int
+    authored_claim_layer_count: int
+    authored_identification_strength_count: int
+    warning_count: int
+    todo_count: int
+
+
+class LayeredClaimMigrationReport(TypedDict):
+    """Structured proposition scan for layered-claim migration."""
+
+    project_root: str
+    rows: list[LayeredClaimMigrationRow]
+    summary: LayeredClaimMigrationSummary
+
+
+_INTERVENTIONAL_RE = re.compile(
+    r"\b(crispr|knockout|knockdown|perturb(?:ation)?|randomi[sz]ed(?: intervention)?)\b",
+    re.IGNORECASE,
+)
+_LONGITUDINAL_RE = re.compile(
+    r"\b(before[- ]after|follow[- ]up|longitudinal|time[- ]course|pre[- ]post)\b",
+    re.IGNORECASE,
+)
+_STRUCTURAL_RE = re.compile(
+    r"\b(benchmark|model structure|defines? the model structure|definitional|mathematical relationship|equation|by definition)\b",
+    re.IGNORECASE,
+)
+_OBSERVATIONAL_RE = re.compile(
+    r"\b(association|associated|correlation|correlated|linked to|empirical association)\b",
+    re.IGNORECASE,
+)
+_PROXY_RE = re.compile(r"\b(proxy|latent)\b", re.IGNORECASE)
+_MECHANISTIC_RE = re.compile(
+    r"\b(mechanistic|activates?|inhibits?|suppresses?|cascade|pathway|through)\b",
+    re.IGNORECASE,
+)
 
 
 def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool]:
@@ -98,6 +153,31 @@ def audit_project_graph(project_root: Path) -> AuditProjectReport:
         "rows": rows,
         "alias_map": dict(sorted(alias_map.items())),
         "manual_aliases": dict(sorted(sources.manual_aliases.items())),
+    }
+
+
+def build_layered_claim_migration_report(project_root: Path) -> LayeredClaimMigrationReport:
+    """Scan proposition sources and emit conservative layered-claim migration guidance."""
+    project_root = project_root.resolve()
+    sources = load_project_sources(project_root)
+
+    rows: list[LayeredClaimMigrationRow] = []
+    for entity in sources.entities:
+        if entity.kind != "proposition":
+            continue
+        rows.append(_build_layered_claim_row(project_root, entity))
+
+    rows.sort(key=lambda row: row["proposition"])
+    return {
+        "project_root": str(project_root),
+        "rows": rows,
+        "summary": {
+            "proposition_count": len(rows),
+            "authored_claim_layer_count": sum(1 for row in rows if row["authored_claim_layer"]),
+            "authored_identification_strength_count": sum(1 for row in rows if row["authored_identification_strength"]),
+            "warning_count": sum(len(row["warnings"]) for row in rows),
+            "todo_count": sum(len(row["todos"]) for row in rows),
+        },
     }
 
 
@@ -207,6 +287,95 @@ def _audit_entity(entity: SourceEntity, alias_map: dict[str, str]) -> list[Audit
     for target in entity.source_refs:
         rows.extend(_audit_reference(entity, "source_refs", target, alias_map))
     return rows
+
+
+def _build_layered_claim_row(project_root: Path, entity: SourceEntity) -> LayeredClaimMigrationRow:
+    text = _read_entity_body(project_root, entity)
+    inferred_claim_layer = _infer_claim_layer(text)
+    inferred_identification_strength = _infer_identification_strength(text)
+    warnings: list[str] = []
+    todos: list[str] = []
+
+    authored_claim_layer = str(entity.claim_layer) if entity.claim_layer is not None else None
+    authored_identification_strength = (
+        str(entity.identification_strength) if entity.identification_strength is not None else None
+    )
+
+    if authored_claim_layer is None and inferred_claim_layer is None:
+        todos.append("TODO: classify claim_layer manually")
+    if authored_identification_strength is None and inferred_identification_strength is None and inferred_claim_layer != "structural_claim":
+        todos.append("TODO: classify identification_strength manually")
+
+    if _is_proxy_mediated(entity, text) and entity.measurement_model is None:
+        warnings.append("Proxy-mediated proposition lacks measurement metadata.")
+        todos.append("TODO: add measurement_model or justify why the proxy is treated as direct.")
+
+    if _is_mechanistic(entity, text) and not _has_lower_layer_support(entity):
+        warnings.append("Mechanistic proposition lacks linked lower-layer supporting propositions or observations.")
+        todos.append("TODO: link lower-layer empirical support or mark the mechanistic claim as provisional.")
+
+    return {
+        "proposition": entity.canonical_id,
+        "source_path": entity.source_path,
+        "authored_claim_layer": authored_claim_layer,
+        "authored_identification_strength": authored_identification_strength,
+        "inferred_claim_layer": None if authored_claim_layer is not None else inferred_claim_layer,
+        "inferred_identification_strength": (
+            None if authored_identification_strength is not None else inferred_identification_strength
+        ),
+        "warnings": _dedupe_preserve_order(warnings),
+        "todos": _dedupe_preserve_order(todos),
+    }
+
+
+def _read_entity_body(project_root: Path, entity: SourceEntity) -> str:
+    source_path = project_root / entity.source_path
+    frontmatter = parse_frontmatter(source_path) if source_path.is_file() else None
+    if frontmatter is not None:
+        _, body = frontmatter
+        if body.strip():
+            return body
+    return entity.content_preview
+
+
+def _infer_claim_layer(text: str) -> str | None:
+    if _STRUCTURAL_RE.search(text):
+        return "structural_claim"
+    return None
+
+
+def _infer_identification_strength(text: str) -> str | None:
+    if _INTERVENTIONAL_RE.search(text):
+        return "interventional"
+    if _LONGITUDINAL_RE.search(text):
+        return "longitudinal"
+    if _OBSERVATIONAL_RE.search(text):
+        return "observational"
+    return None
+
+
+def _is_proxy_mediated(entity: SourceEntity, text: str) -> bool:
+    return str(entity.proxy_directness) in {"indirect", "derived"} or bool(_PROXY_RE.search(text))
+
+
+def _is_mechanistic(entity: SourceEntity, text: str) -> bool:
+    return str(entity.claim_layer) == "mechanistic_narrative" or bool(_MECHANISTIC_RE.search(text))
+
+
+def _has_lower_layer_support(entity: SourceEntity) -> bool:
+    support_prefixes = ("proposition:", "observation:", "finding:")
+    return any(target.startswith(support_prefixes) for target in [*entity.related, *entity.source_refs])
+
+
+def _dedupe_preserve_order(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
 
 
 def _audit_relation(relation: SourceRelation, alias_map: dict[str, str]) -> list[AuditRow]:

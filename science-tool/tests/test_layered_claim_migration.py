@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ from science_model.reasoning import (
     SupportScope,
 )
 from science_tool.graph import sources as sources_module
+from science_tool.graph.migrate import build_layered_claim_migration_report
 from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.store import (
@@ -30,6 +32,67 @@ from science_tool.graph.store import (
 )
 
 PROJECT_NS = Namespace("http://example.org/project/")
+
+
+def _write_scan_project(root: Path, propositions: list[dict[str, object]]) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "science.yaml").write_text(
+        "\n".join(
+            [
+                "name: layered-claims-scan-demo",
+                "knowledge_profiles:",
+                "  local: local",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    prop_dir = root / "specs" / "propositions"
+    prop_dir.mkdir(parents=True, exist_ok=True)
+    for proposal in propositions:
+        proposition_id = str(proposal["id"])
+        title = str(proposal["title"])
+        body = str(proposal["body"])
+        extra_frontmatter = proposal.get("frontmatter")
+        lines = [
+            "---",
+            f'id: "{proposition_id}"',
+            'type: "proposition"',
+            f'title: "{title}"',
+            'status: "draft"',
+            "related: []",
+            "source_refs: []",
+        ]
+        if isinstance(extra_frontmatter, dict):
+            for key, value in extra_frontmatter.items():
+                if isinstance(value, str):
+                    lines.append(f'{key}: "{value}"')
+                elif isinstance(value, list):
+                    rendered = ", ".join(f'"{item}"' for item in value)
+                    lines.append(f"{key}: [{rendered}]")
+                elif isinstance(value, dict):
+                    lines.append(f"{key}:")
+                    for nested_key, nested_value in value.items():
+                        if isinstance(nested_value, str):
+                            lines.append(f'  {nested_key}: "{nested_value}"')
+                        elif isinstance(nested_value, list):
+                            rendered = ", ".join(f'"{item}"' for item in nested_value)
+                            lines.append(f"  {nested_key}: [{rendered}]")
+                else:
+                    lines.append(f"{key}: {value}")
+        lines.extend(
+            [
+                'created: "2026-04-15"',
+                "---",
+                "",
+                body,
+                "",
+            ]
+        )
+        file_name = proposition_id.split(":", 1)[1]
+        (prop_dir / f"{file_name}.md").write_text("\n".join(lines), encoding="utf-8")
+    return root
 
 
 def _write_project(root: Path, *, with_layered_metadata: bool) -> Path:
@@ -378,3 +441,134 @@ def test_materialize_graph_without_layered_claim_metadata_keeps_legacy_shape(tmp
     assert (proposition_uri, SCI_NS.claimLayer, None) not in provenance
     assert (proposition_uri, SCI_NS.measurementModel, None) not in provenance
     assert (proposition_uri, SCI_NS.rivalModelPacket, None) not in provenance
+
+
+def test_layered_claim_migration_report_infers_safe_fields(tmp_path: Path) -> None:
+    project = _write_scan_project(
+        tmp_path / "scan-project",
+        [
+            {
+                "id": "proposition:p01",
+                "title": "Safe inference",
+                "body": "A CRISPR knockout benchmark defines the model structure for this comparison.",
+            }
+        ],
+    )
+
+    report = build_layered_claim_migration_report(project)
+    row = report["rows"][0]
+
+    assert row["inferred_identification_strength"] == "interventional"
+    assert row["inferred_claim_layer"] == "structural_claim"
+    assert row["todos"] == []
+    assert row["warnings"] == []
+
+
+def test_layered_claim_migration_report_emits_todo_for_ambiguous_proposition(tmp_path: Path) -> None:
+    project = _write_scan_project(
+        tmp_path / "scan-project",
+        [
+            {
+                "id": "proposition:p02",
+                "title": "Ambiguous proposition",
+                "body": "This result is interesting but not yet classified.",
+            }
+        ],
+    )
+
+    report = build_layered_claim_migration_report(project)
+    row = report["rows"][0]
+
+    assert row["inferred_claim_layer"] is None
+    assert row["inferred_identification_strength"] is None
+    assert row["todos"]
+    assert any("TODO" in todo for todo in row["todos"])
+
+
+def test_layered_claim_migration_report_warns_on_proxy_overclaim(tmp_path: Path) -> None:
+    project = _write_scan_project(
+        tmp_path / "scan-project",
+        [
+            {
+                "id": "proposition:p03",
+                "title": "Proxy proposition",
+                "body": "This proxy tracks the latent cell state but has no explicit measurement model.",
+            }
+        ],
+    )
+
+    report = build_layered_claim_migration_report(project)
+    row = report["rows"][0]
+
+    assert row["warnings"]
+    assert any("proxy" in warning.lower() for warning in row["warnings"])
+    assert any("measurement" in warning.lower() for warning in row["warnings"])
+    assert row["todos"]
+
+
+def test_layered_claim_migration_report_warns_on_unsupported_mechanistic_claim(tmp_path: Path) -> None:
+    project = _write_scan_project(
+        tmp_path / "scan-project",
+        [
+            {
+                "id": "proposition:p04",
+                "title": "Mechanistic claim",
+                "body": "PHF19 activates PRC2 and IFN signaling through a mechanistic cascade.",
+            }
+        ],
+    )
+
+    report = build_layered_claim_migration_report(project)
+    row = report["rows"][0]
+
+    assert row["warnings"]
+    assert any("mechanistic" in warning.lower() for warning in row["warnings"])
+    assert row["todos"]
+
+
+def test_layered_claim_migration_report_runtime_guard(tmp_path: Path) -> None:
+    propositions = [
+        {
+            "id": f"proposition:p{i:03d}",
+            "title": f"Prop {i}",
+            "body": "This is a plain empirical association description for a synthetic corpus.",
+        }
+        for i in range(120)
+    ]
+    project = _write_scan_project(tmp_path / "scan-project", propositions)
+
+    start = time.perf_counter()
+    report = build_layered_claim_migration_report(project)
+    elapsed = time.perf_counter() - start
+
+    assert elapsed < 30
+    assert report["summary"]["proposition_count"] == 120
+
+
+def test_graph_migrate_command_includes_layered_claim_scan_payload(tmp_path: Path) -> None:
+    from click.testing import CliRunner
+
+    from science_tool.cli import main
+
+    project = _write_scan_project(
+        tmp_path / "scan-project",
+        [
+            {
+                "id": "proposition:p05",
+                "title": "Observed association",
+                "body": "This empirical association links the observed marker to stage.",
+            }
+        ],
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "migrate", "--project-root", str(project), "--format", "json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+
+    assert "layered_claim_migration" in payload
+    assert payload["layered_claim_migration"]["summary"]["proposition_count"] == 1
+    row = payload["layered_claim_migration"]["rows"][0]
+    assert row["proposition"] == "proposition:p05"
+    assert row["inferred_identification_strength"] == "observational"

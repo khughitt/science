@@ -2,7 +2,57 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+
+def _write_layered_claim_project(tmp_path: Path) -> Path:
+    (tmp_path / "science.yaml").write_text("name: test\n")
+    propositions_dir = tmp_path / "specs" / "propositions"
+    propositions_dir.mkdir(parents=True)
+    (propositions_dir / "p01.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "proposition:p01"',
+                'type: "proposition"',
+                'title: "Causal proposition"',
+                'status: "draft"',
+                'claim_layer: "causal_effect"',
+                "related: []",
+                "source_refs: []",
+                "rival_model_packet:",
+                '  packet_id: "packet:p01"',
+                '  target_hypothesis: "hypothesis:h01"',
+                'created: "2026-04-15"',
+                "---",
+                "",
+                "A CRISPR perturbation supports this causal interpretation.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (propositions_dir / "p02.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "proposition:p02"',
+                'type: "proposition"',
+                'title: "Mechanistic proposition"',
+                'status: "draft"',
+                "related: []",
+                "source_refs: []",
+                'created: "2026-04-15"',
+                "---",
+                "",
+                "PHF19 activates PRC2 through a mechanistic cascade.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return tmp_path
 
 
 class TestCollectUnresolvedRefs:
@@ -148,6 +198,7 @@ class TestBuildHealthReport:
 
         assert "unresolved_refs" in report
         assert "lingering_tags_lines" in report
+        assert "layered_claims" in report
         assert len(report["unresolved_refs"]) >= 1
         assert len(report["lingering_tags_lines"]) >= 1
 
@@ -159,6 +210,29 @@ class TestBuildHealthReport:
 
         assert report["unresolved_refs"] == []
         assert report["lingering_tags_lines"] == []
+        assert report["layered_claims"]["migration_issues"] == []
+
+    def test_layered_claim_report_surfaces_adoption_gaps_and_rival_model_issues(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        project = _write_layered_claim_project(tmp_path)
+
+        report = build_health_report(project)
+
+        assert report["layered_claims"]["proposition_claim_layer_coverage"] == {
+            "numerator": 1,
+            "denominator": 2,
+            "fraction": 0.5,
+        }
+        assert report["layered_claims"]["causal_leaning_identification_coverage"] == {
+            "numerator": 0,
+            "denominator": 2,
+            "fraction": 0.0,
+        }
+        rival_gaps = report["layered_claims"]["rival_model_packets_missing_discriminating_predictions"]
+        assert rival_gaps[0]["packet_id"] == "packet:p01"
+        migration_issues = report["layered_claims"]["migration_issues"]
+        assert any("mechanistic" in " ".join(row["warnings"]).lower() for row in migration_issues)
 
 
 class TestHealthCLI:
@@ -182,7 +256,6 @@ class TestHealthCLI:
         assert "topic:missing" in result.output
 
     def test_json_output(self, tmp_path: Path) -> None:
-        import json
         from click.testing import CliRunner
         from science_tool.cli import main
 
@@ -204,6 +277,19 @@ class TestHealthCLI:
         report = json.loads(result.output)
         assert "unresolved_refs" in report
         assert report["unresolved_refs"][0]["target"] == "topic:missing"
+
+    def test_table_output_includes_layered_claim_sections(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+
+        project = _write_layered_claim_project(tmp_path)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["health", "--project-root", str(project)])
+
+        assert result.exit_code == 0, result.output
+        assert "Layered-Claim Adoption" in result.output
+        assert "packet:p01" in result.output
 
     def test_clean_project_exits_zero(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
