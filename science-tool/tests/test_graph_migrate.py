@@ -442,7 +442,108 @@ def test_write_local_sources_uses_configured_local_profile_directory(tmp_path: P
     assert not (root / "knowledge" / "sources" / "local").exists()
 
 
-def test_graph_migrate_command_rewrites_alias_refs_and_writes_report(tmp_path: Path) -> None:
+def test_graph_migrate_command_is_dry_run_by_default(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "science.yaml").write_text(
+        "\n".join(
+            [
+                "name: demo",
+                "knowledge_profiles:",
+                "  local: local",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (root / "specs" / "hypotheses").mkdir(parents=True)
+    (root / "specs" / "hypotheses" / "h01-demo.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "hypothesis:h01-demo"',
+                'type: "hypothesis"',
+                'title: "Demo hypothesis"',
+                'status: "proposed"',
+                "source_refs: []",
+                "related: []",
+                'created: "2026-03-12"',
+                'updated: "2026-03-12"',
+                "---",
+                "",
+                "Body.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (root / "tasks").mkdir(parents=True)
+    (root / "tasks" / "active.md").write_text(
+        "\n".join(
+            [
+                "## [t001] Explore evaluation topic",
+                "- type: research",
+                "- priority: P1",
+                "- status: active",
+                "- related: [H01, topic:evaluation]",
+                "- created: 2026-03-12",
+                "",
+                "Do it.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    local_sources = root / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "entities": [
+                    {
+                        "canonical_id": "topic:evaluation",
+                        "kind": "topic",
+                        "title": "Evaluation",
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "migrate", "--project-root", str(root), "--format", "json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["apply"] is False
+    assert payload["rewritten_file_count"] == 1
+    assert payload["has_failures"] is False
+    assert payload["unresolved_reference_count"] == 0
+
+    task_text = (root / "tasks" / "active.md").read_text(encoding="utf-8")
+    assert "related: [H01, topic:evaluation]" in task_text
+    assert "hypothesis:h01-demo" not in task_text
+
+    report_path = root / "knowledge" / "reports" / "kg-migration-audit.json"
+    assert not report_path.exists()
+    assert payload["report_path"] is None
+
+    entities_path = root / "knowledge" / "sources" / "local" / "entities.yaml"
+    entities = yaml.safe_load(entities_path.read_text(encoding="utf-8"))
+    assert entities == {
+        "entities": [
+            {
+                "canonical_id": "topic:evaluation",
+                "kind": "topic",
+                "title": "Evaluation",
+            }
+        ]
+    }
+
+
+def test_graph_migrate_command_rewrites_alias_refs_and_writes_report_with_apply(tmp_path: Path) -> None:
     root = tmp_path / "project"
     root.mkdir()
     (root / "science.yaml").write_text(
@@ -496,10 +597,11 @@ def test_graph_migrate_command_rewrites_alias_refs_and_writes_report(tmp_path: P
     )
 
     runner = CliRunner()
-    result = runner.invoke(main, ["graph", "migrate", "--project-root", str(root), "--format", "json"])
+    result = runner.invoke(main, ["graph", "migrate", "--project-root", str(root), "--format", "json", "--apply"])
 
     assert result.exit_code == 0
     payload = json.loads(result.output)
+    assert payload["apply"] is True
     assert payload["report_path"].endswith("knowledge/reports/kg-migration-audit.json")
     assert payload["rewritten_file_count"] == 1
     assert payload["has_failures"] is False
@@ -581,17 +683,41 @@ def test_graph_migrate_command_uses_configured_local_profile_paths(tmp_path: Pat
         ),
         encoding="utf-8",
     )
+    local_sources = root / "knowledge" / "sources" / "lab_local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "entities": [
+                    {
+                        "canonical_id": "topic:evaluation",
+                        "kind": "topic",
+                        "title": "Evaluation",
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
 
     runner = CliRunner()
     result = runner.invoke(main, ["graph", "migrate", "--project-root", str(root), "--format", "json"])
 
     assert result.exit_code == 0
     payload = json.loads(result.output)
+    assert payload["apply"] is False
     assert payload["local_profile"] == "lab_local"
 
     entities_path = root / "knowledge" / "sources" / "lab_local" / "entities.yaml"
     report_path = root / "knowledge" / "reports" / "kg-migration-audit.json"
 
     assert entities_path.exists()
-    assert report_path.exists()
+    assert not report_path.exists()
     assert not (root / "knowledge" / "sources" / "local").exists()
+
+    result = runner.invoke(main, ["graph", "migrate", "--project-root", str(root), "--format", "json", "--apply"])
+
+    assert result.exit_code == 0
+    assert entities_path.exists()
+    assert report_path.exists()

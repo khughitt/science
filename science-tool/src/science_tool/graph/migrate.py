@@ -264,6 +264,18 @@ def rewrite_project_ids_in_sources(project_root: Path, alias_map: dict[str, str]
     return rewritten_paths
 
 
+def preview_project_id_rewrites(project_root: Path, alias_map: dict[str, str]) -> list[str]:
+    """List source files that would be rewritten by alias migration without mutating them."""
+    rewritten_paths: list[str] = []
+    for path in _migration_target_paths(project_root):
+        original = path.read_text(encoding="utf-8")
+        updated = migrate_project_ids(original, alias_map)
+        if updated == original:
+            continue
+        rewritten_paths.append(path.relative_to(project_root).as_posix())
+    return rewritten_paths
+
+
 def write_migration_report(project_root: Path, report: dict[str, object]) -> Path:
     """Persist the migration audit report under the project's knowledge reports directory."""
     report_path = migration_report_path(project_root)

@@ -18,6 +18,7 @@ from science_tool.graph.cross_impact import query_cross_impact
 from science_tool.graph.migrate import (
     audit_project_graph,
     build_layered_claim_migration_report,
+    preview_project_id_rewrites,
     rewrite_project_ids_in_sources,
     write_migration_report,
     write_local_sources,
@@ -259,28 +260,37 @@ def graph_audit(output_format: str, project_root: Path) -> None:
 
 @graph.command("migrate")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option("--apply", is_flag=True, default=False, help="Write source rewrites and migration artifacts to disk.")
 @click.option(
     "--project-root",
     default=".",
     show_default=True,
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
 )
-def graph_migrate(output_format: str, project_root: Path) -> None:
-    """Rewrite alias-based refs, scaffold local sources, and persist a migration audit report."""
+def graph_migrate(output_format: str, apply: bool, project_root: Path) -> None:
+    """Audit graph migration state; pass --apply to rewrite refs and persist migration artifacts."""
 
     project_root = project_root.resolve()
     initial_report = audit_project_graph(project_root)
-    rewritten_files = rewrite_project_ids_in_sources(project_root, initial_report["alias_map"])
-    write_local_sources(project_root, dict(initial_report))
+    if apply:
+        rewritten_files = rewrite_project_ids_in_sources(project_root, initial_report["alias_map"])
+        write_local_sources(project_root, dict(initial_report))
+    else:
+        rewritten_files = preview_project_id_rewrites(project_root, initial_report["alias_map"])
 
     final_report = audit_project_graph(project_root)
     layered_claim_report = build_layered_claim_migration_report(project_root)
     final_report_payload: dict[str, Any] = dict(final_report)
+    final_report_payload["apply"] = apply
     final_report_payload["rewritten_files"] = rewritten_files
     final_report_payload["rewritten_file_count"] = len(rewritten_files)
     final_report_payload["layered_claim_migration"] = layered_claim_report
-    report_path = write_migration_report(project_root, final_report_payload)
-    final_report_payload["report_path"] = str(report_path)
+    if apply:
+        report_path = write_migration_report(project_root, final_report_payload)
+        final_report_payload["report_path"] = str(report_path)
+    else:
+        report_path = None
+        final_report_payload["report_path"] = None
 
     if output_format == "json":
         click.echo(json.dumps(final_report_payload, indent=2, sort_keys=True))
@@ -298,14 +308,19 @@ def graph_migrate(output_format: str, project_root: Path) -> None:
             ],
             rows=[dict(row) for row in final_report["rows"]],
         )
-        click.echo(f"Report: {report_path}")
-        click.echo(f"Rewritten files: {len(rewritten_files)}")
+        if report_path is None:
+            click.echo("Mode: dry-run (no project files written)")
+        else:
+            click.echo(f"Report: {report_path}")
+        click.echo(f"Potential rewritten files: {len(rewritten_files)}")
         click.echo(
             "Layered-claim scan: "
             f"{layered_claim_report['summary']['proposition_count']} propositions, "
             f"{layered_claim_report['summary']['warning_count']} warnings, "
             f"{layered_claim_report['summary']['todo_count']} TODOs"
         )
+        if not apply and rewritten_files:
+            click.echo("Re-run with --apply to write the previewed rewrites and migration artifacts.")
 
     if final_report["has_failures"]:
         raise click.exceptions.Exit(1)

@@ -145,6 +145,7 @@ Use `rival_model_packet` when a proposition participates in an explicit bounded 
 ## Migration And Health Surfaces
 
 The layered-claim migration helper is intentionally conservative.
+Treat it as an audit/validator surface first, not as a primary authoring workflow.
 Run:
 
 ```bash
@@ -152,12 +153,19 @@ uv run science-tool graph migrate --project-root <root> --format json
 uv run science-tool health --project-root <root> --format json
 ```
 
+`graph migrate` is dry-run by default. It previews alias rewrites and layered-claim migration
+state without mutating the project. Pass `--apply` only when you explicitly want it to write
+source rewrites, local-source scaffolding, and `knowledge/reports/kg-migration-audit.json`.
+
 Use the migration output for:
 
 - safe first-pass `claim_layer` and `identification_strength` suggestions,
 - explicit TODOs for ambiguous propositions,
 - warnings for unsupported mechanistic narratives,
 - warnings for proxy-mediated propositions that still lack `measurement_model`.
+
+Prefer authored proposition files plus explicit metadata for the real migration work. Use the
+helper afterward to check coverage, warnings, and remaining manual judgment calls.
 
 Use the health output for:
 

@@ -96,6 +96,9 @@ Surface, at minimum:
 - proxy-mediated propositions still missing `measurement_model`,
 - rival-model packets missing discriminating predictions or overstating a `current_working_model` without real adjudication evidence.
 
+Treat `science-tool graph migrate` as an audit-first command. Reach for `--apply` only after the
+preview confirms that the proposed rewrites and local-source scaffolding are actually wanted.
+
 If high-impact claims still carry only one visible `independence_group`, call that out explicitly as a fragility note even if the project has not yet promoted it into a first-class dashboard metric.
 
 ### 5. Recent Activity

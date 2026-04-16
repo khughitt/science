@@ -63,9 +63,18 @@ science-tool graph migrate --project-root . --format json
 science-tool graph audit --project-root . --format json
 ```
 
-Use `graph migrate` when you want the tool to rewrite alias-resolvable refs, scaffold local-profile
-source files, and persist `knowledge/reports/kg-migration-audit.json` before the final audit. If any
-unresolved references remain after migration, fix the upstream sources first. Do not build until the audit is clean.
+Use `graph migrate` first as a dry-run audit. It previews alias-resolvable rewrites, layered-claim
+migration gaps, and projected cleanup without mutating the project.
+
+If the preview looks correct, re-run with:
+
+```bash
+science-tool graph migrate --project-root . --format json --apply
+```
+
+Only `--apply` writes alias rewrites, scaffolds local-profile source files, and persists
+`knowledge/reports/kg-migration-audit.json`. If unresolved references remain after the audit or
+apply pass, fix the upstream sources first. Do not build until the audit is clean.
 
 ### Step 5: Re-materialize and validate
 
