@@ -62,6 +62,11 @@ If a project still mainly expresses confidence as scalar values on hypotheses or
 claude --plugin-dir /path/to/science
 ```
 
+### Codex
+
+See [docs/README.codex.md](docs/README.codex.md).
+Codex support uses generated `science-*` skills from `codex-skills/` rather than Claude slash commands.
+
 ## Commands
 
 | Command | Description |
