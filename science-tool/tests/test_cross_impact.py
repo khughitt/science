@@ -275,6 +275,14 @@ def _build_mm30_sized_fixture_graph(graph_path: Path) -> None:
     save_graph_dataset(dataset, graph_path)
 
 
+@pytest.fixture
+def mm30_sized_graph_path(tmp_path: Path) -> Path:
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir(parents=True)
+    _build_mm30_sized_fixture_graph(graph_path)
+    return graph_path
+
+
 def test_cross_impact_local_only_update_returns_local_scope(runner: CliRunner, graph_path: Path) -> None:
     _build_local_graph(runner, graph_path)
 
@@ -344,13 +352,15 @@ def test_cross_impact_json_output_is_deterministic(runner: CliRunner, graph_path
     assert isinstance(payload["rows"], list)
 
 
-def test_cross_impact_query_stays_under_five_seconds_on_large_fixture(tmp_path: Path) -> None:
-    graph_path = tmp_path / "knowledge" / "graph.trig"
-    graph_path.parent.mkdir(parents=True)
-    _build_mm30_sized_fixture_graph(graph_path)
-
+def test_cross_impact_query_stays_under_five_seconds_on_large_fixture(
+    mm30_sized_graph_path: Path,
+) -> None:
     started = time.perf_counter()
-    payload = query_cross_impact(graph_path=graph_path, target_ref="proposition/root", limit=1000)
+    payload = query_cross_impact(
+        graph_path=mm30_sized_graph_path,
+        target_ref="proposition/root",
+        limit=1000,
+    )
     elapsed = time.perf_counter() - started
 
     assert elapsed < 5.0
