@@ -82,6 +82,22 @@ For `software` projects, skip `project-summary` for now and start from `question
 
 4. If the graph does not expose claim-backed evidence summaries yet, say that the project appears only partially migrated and treat the uncertainty section as provisional.
 
+Also run:
+
+```bash
+science-tool health --project-root . --format json
+```
+
+Surface, at minimum:
+
+- proposition `claim_layer` coverage,
+- causal-leaning proposition `identification_strength` coverage,
+- unsupported mechanistic narratives still flagged by the migration helper,
+- proxy-mediated propositions still missing `measurement_model`,
+- rival-model packets missing discriminating predictions.
+
+If high-impact claims still carry only one visible `independence_group`, call that out explicitly as a fragility note even if the project has not yet promoted it into a first-class dashboard metric.
+
 ### 5. Recent Activity
 
 Run:

@@ -75,6 +75,14 @@ Hypotheses in this project follow a structured format (see the framework `hypoth
 - Note the **evidence type** when possible: literature, empirical-data, simulation, benchmark
 - Track **residual uncertainty** explicitly, especially for single-source or indirect support
 
+When the project uses layered-claim metadata:
+
+- use `claim_layer` only when the authored proposition really needs that distinction
+- treat `identification_strength` as an evidence-design label, not as confidence
+- keep `measurement_model` separate from the concrete `observation`
+- do not promote mechanistic prose into `mechanistic_narrative` unless the supporting lower-layer structure is explicit
+- if rival models are genuinely in play, prefer a bounded `rival_model_packet` over free-form prose comparison
+
 ## Evidence Classification
 
 When updating the project model, prefer the canonical evidence categories:

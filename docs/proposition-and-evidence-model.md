@@ -90,6 +90,82 @@ They include:
 Derived fields should be recomputed from evidence structure.
 They are interpretations of the record, not primary authored facts.
 
+## Optional Layered-Claim Metadata
+
+Some projects need a little more authored structure than proposition text plus evidence stance.
+Use these fields when they materially clarify what kind of claim is being made or how directly the evidence speaks to it.
+Do not fill them performatively.
+
+### `claim_layer`
+
+`claim_layer` is an authored classification for the proposition itself:
+
+- `empirical_regularity`
+- `causal_effect`
+- `mechanistic_narrative`
+- `structural_claim`
+
+Use `structural_claim` for definitional, benchmark, or model-structure assertions.
+Do not auto-upgrade a proposition to `mechanistic_narrative` just because the prose sounds mechanistic.
+
+### `identification_strength`
+
+`identification_strength` records how much leverage the evidence line or proposition has:
+
+- `observational`
+- `longitudinal`
+- `interventional`
+- `structural`
+
+This is not a confidence score.
+It answers "what kind of identification situation is this?" rather than "how much do we believe it?"
+
+### `measurement_model`
+
+Many useful propositions depend on a proxy for a latent construct.
+In those cases:
+
+- keep `observation` as the concrete empirical finding node,
+- treat `measurement_model` as sibling metadata,
+- use it to say which observed entity is serving as a proxy for which latent construct,
+- record known failure modes when they matter.
+
+Do not replace the `observation` node with a second observation-like construct.
+
+### `supports_scope`
+
+`supports_scope` is a review-radius hint.
+It can widen review output, but it must not override explicit graph dependencies.
+
+### `rival_model_packet`
+
+Use `rival_model_packet` when a proposition participates in an explicit bounded comparison among competing models.
+`current_working_model` is optional; teams do not need to pretend a preferred model exists before one emerges.
+
+## Migration And Health Surfaces
+
+The layered-claim migration helper is intentionally conservative.
+Run:
+
+```bash
+uv run science-tool graph migrate --project-root <root> --format json
+uv run science-tool health --project-root <root> --format json
+```
+
+Use the migration output for:
+
+- safe first-pass `claim_layer` and `identification_strength` suggestions,
+- explicit TODOs for ambiguous propositions,
+- warnings for unsupported mechanistic narratives,
+- warnings for proxy-mediated propositions that still lack `measurement_model`.
+
+Use the health output for:
+
+- authored `claim_layer` coverage across propositions,
+- authored `identification_strength` coverage across causal-leaning propositions,
+- rival-model packets missing discriminating predictions,
+- migration issues that still need manual judgment.
+
 ## Skeptical Default Stance
 
 Every new proposition starts from skepticism.

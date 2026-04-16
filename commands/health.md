@@ -19,6 +19,11 @@ uv run science-tool health --project-root <root> --format=json
 Parse the JSON output. Fields:
 - `unresolved_refs`: list of `{target, mention_count, sources, looks_like}`
 - `lingering_tags_lines`: list of `{file, values}`
+- `layered_claims`: object with:
+  - `proposition_claim_layer_coverage`
+  - `causal_leaning_identification_coverage`
+  - `rival_model_packets_missing_discriminating_predictions`
+  - `migration_issues`
 
 ### 2. Cluster issues
 
@@ -49,6 +54,16 @@ Lingering tags: lines: M files
 
 Total issues: X
 ```
+
+Include the layered-claim section explicitly:
+
+- authored `claim_layer` coverage across propositions
+- authored `identification_strength` coverage across causal-leaning propositions
+- unsupported mechanistic narratives still lacking lower-layer support
+- proxy-mediated propositions still lacking `measurement_model`
+- rival-model packets missing discriminating predictions
+
+If the project is using `independence_group` on only one visible support line for a high-impact proposition, mention that as a fragility note even if it is still being surfaced manually rather than by a dedicated metric.
 
 ### 4. Propose batch actions
 
