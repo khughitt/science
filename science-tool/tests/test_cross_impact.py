@@ -250,6 +250,31 @@ def _build_cross_hypothesis_graph(runner: CliRunner, graph_path: Path) -> None:
     _set_supports_scope(graph_path, "proposition/root", "project_wide")
 
 
+def _build_mm30_sized_fixture_graph(graph_path: Path) -> None:
+    dataset = Dataset()
+    dataset.parse(data=INITIAL_GRAPH_TEMPLATE, format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+
+    root = PROJECT_NS["proposition/root"]
+    knowledge.add((root, RDF.type, SCI_NS.Proposition))
+    knowledge.add((root, SCHEMA.text, Literal("Root proposition")))
+
+    for index in range(800):
+        prop = PROJECT_NS[f"proposition/dependent_{index:04d}"]
+        hyp_a = PROJECT_NS["hypothesis/h1" if index % 2 == 0 else "hypothesis/h2"]
+        hyp_b = PROJECT_NS["hypothesis/h2" if index % 2 == 0 else "hypothesis/h1"]
+        knowledge.add((prop, RDF.type, SCI_NS.Proposition))
+        knowledge.add((prop, SCHEMA.text, Literal(f"Dependent proposition {index}")))
+        knowledge.add((prop, CITO.discusses, hyp_a))
+        knowledge.add((prop, CITO.discusses, hyp_b))
+        knowledge.add((prop, CITO.supports, root))
+        provenance.add((prop, PROV.wasDerivedFrom, URIRef(f"http://example.org/source/{index}")))
+
+    provenance.add((root, SCI_NS.supportsScope, Literal("project_wide")))
+    save_graph_dataset(dataset, graph_path)
+
+
 def test_cross_impact_local_only_update_returns_local_scope(runner: CliRunner, graph_path: Path) -> None:
     _build_local_graph(runner, graph_path)
 
@@ -322,29 +347,7 @@ def test_cross_impact_json_output_is_deterministic(runner: CliRunner, graph_path
 def test_cross_impact_query_stays_under_five_seconds_on_large_fixture(tmp_path: Path) -> None:
     graph_path = tmp_path / "knowledge" / "graph.trig"
     graph_path.parent.mkdir(parents=True)
-
-    dataset = Dataset()
-    dataset.parse(data=INITIAL_GRAPH_TEMPLATE, format="trig")
-    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
-
-    root = PROJECT_NS["proposition/root"]
-    knowledge.add((root, RDF.type, SCI_NS.Proposition))
-    knowledge.add((root, SCHEMA.text, Literal("Root proposition")))
-
-    for index in range(800):
-        prop = PROJECT_NS[f"proposition/dependent_{index:04d}"]
-        hyp_a = PROJECT_NS["hypothesis/h1" if index % 2 == 0 else "hypothesis/h2"]
-        hyp_b = PROJECT_NS["hypothesis/h2" if index % 2 == 0 else "hypothesis/h1"]
-        knowledge.add((prop, RDF.type, SCI_NS.Proposition))
-        knowledge.add((prop, SCHEMA.text, Literal(f"Dependent proposition {index}")))
-        knowledge.add((prop, CITO.discusses, hyp_a))
-        knowledge.add((prop, CITO.discusses, hyp_b))
-        knowledge.add((prop, CITO.supports, root))
-        provenance.add((prop, PROV.wasDerivedFrom, URIRef(f"http://example.org/source/{index}")))
-
-    provenance.add((root, SCI_NS.supportsScope, Literal("project_wide")))
-    save_graph_dataset(dataset, graph_path)
+    _build_mm30_sized_fixture_graph(graph_path)
 
     started = time.perf_counter()
     payload = query_cross_impact(graph_path=graph_path, target_ref="proposition/root", limit=1000)

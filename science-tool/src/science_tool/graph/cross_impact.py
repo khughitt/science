@@ -59,18 +59,21 @@ def query_cross_impact(graph_path: Path, target_ref: str, limit: int) -> CrossIm
     target_text = _entity_text(knowledge, target_uri)
 
     indexes = _build_cross_impact_indexes(knowledge, provenance)
-    rows = _build_cross_impact_rows(knowledge=knowledge, provenance=provenance, target_uri=target_uri, indexes=indexes)
-
-    if limit >= 0:
-        rows = rows[:limit]
+    full_rows = _build_cross_impact_rows(
+        knowledge=knowledge,
+        provenance=provenance,
+        target_uri=target_uri,
+        indexes=indexes,
+    )
 
     scope = _scope_label_from_rank(
         max(
-            [_scope_rank_for_row(row["scope"]) for row in rows] + [_scope_rank_for_hints(provenance, target_uri)],
+            [_scope_rank_for_row(row["scope"]) for row in full_rows] + [_scope_rank_for_hints(provenance, target_uri)],
             default=_SCOPE_RANK["local"],
         )
     )
-    scope_reason = _payload_scope_reason(rows, provenance, target_uri)
+    scope_reason = _payload_scope_reason(full_rows, provenance, target_uri)
+    rows = full_rows[:limit] if limit >= 0 else full_rows
 
     return {
         "target": shorten_uri(str(target_uri)),
