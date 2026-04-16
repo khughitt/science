@@ -526,6 +526,30 @@ def test_layered_claim_migration_report_warns_on_unsupported_mechanistic_claim(t
     assert row["todos"]
 
 
+def test_layered_claim_migration_report_does_not_require_identification_for_authored_structural_claim(
+    tmp_path: Path,
+) -> None:
+    project = _write_scan_project(
+        tmp_path / "scan-project",
+        [
+            {
+                "id": "proposition:p04b",
+                "title": "Structural proposition",
+                "body": "This benchmark defines the model structure for the comparison.",
+                "frontmatter": {
+                    "claim_layer": "structural_claim",
+                },
+            }
+        ],
+    )
+
+    report = build_layered_claim_migration_report(project)
+    row = report["rows"][0]
+
+    assert row["authored_claim_layer"] == "structural_claim"
+    assert row["todos"] == []
+
+
 def test_layered_claim_migration_report_runtime_guard(tmp_path: Path) -> None:
     propositions = [
         {

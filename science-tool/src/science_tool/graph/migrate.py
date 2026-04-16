@@ -300,10 +300,15 @@ def _build_layered_claim_row(project_root: Path, entity: SourceEntity) -> Layere
     authored_identification_strength = (
         str(entity.identification_strength) if entity.identification_strength is not None else None
     )
+    resolved_claim_layer = authored_claim_layer or inferred_claim_layer
 
     if authored_claim_layer is None and inferred_claim_layer is None:
         todos.append("TODO: classify claim_layer manually")
-    if authored_identification_strength is None and inferred_identification_strength is None and inferred_claim_layer != "structural_claim":
+    if (
+        authored_identification_strength is None
+        and inferred_identification_strength is None
+        and resolved_claim_layer != "structural_claim"
+    ):
         todos.append("TODO: classify identification_strength manually")
 
     if _is_proxy_mediated(entity, text) and entity.measurement_model is None:
