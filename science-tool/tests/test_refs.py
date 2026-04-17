@@ -200,3 +200,53 @@ def test_external_url_links_ignored() -> None:
         issues = check_refs(root)
         link_issues = [i for i in issues if i.ref_type == "link"]
         assert len(link_issues) == 0
+
+
+def test_valid_task_ref() -> None:
+    """A doc citing t05 is fine when [t05] is declared in tasks/active.md."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "tasks").mkdir(parents=True, exist_ok=True)
+        (root / "tasks" / "active.md").write_text("## [t05] Build pipeline\n- status: proposed\n")
+        (root / "doc" / "background" / "topics" / "pipeline.md").write_text(
+            "# Pipeline\nCompleted in t05.\n"
+        )
+        issues = check_refs(root)
+        task_issues = [i for i in issues if i.ref_type == "task"]
+        assert task_issues == []
+
+
+def test_broken_task_ref() -> None:
+    """A doc citing t99 must flag when no such task is declared."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "tasks").mkdir(parents=True, exist_ok=True)
+        (root / "tasks" / "active.md").write_text("## [t05] Build pipeline\n- status: proposed\n")
+        (root / "doc" / "background" / "topics" / "pipeline.md").write_text(
+            "# Pipeline\nDriven by t99 which does not exist.\n"
+        )
+        issues = check_refs(root)
+        task_issues = [i for i in issues if i.ref_type == "task"]
+        assert len(task_issues) == 1
+        assert task_issues[0].ref_value == "t99"
+
+
+def test_task_ref_in_done_file_resolves() -> None:
+    """Task IDs declared only in tasks/done/*.md should still resolve."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "tasks" / "done").mkdir(parents=True, exist_ok=True)
+        (root / "tasks" / "active.md").write_text("")
+        (root / "tasks" / "done" / "2026-04.md").write_text("## [t12] Completed work\n- status: done\n")
+        (root / "doc" / "background" / "topics" / "x.md").write_text("# X\nFollows t12.\n")
+        issues = check_refs(root)
+        task_issues = [i for i in issues if i.ref_type == "task"]
+        assert task_issues == []
+
+

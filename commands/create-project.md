@@ -236,6 +236,17 @@ Create a concise project-specific operational guide that covers:
 - data access notes
 - known issues
 
+If the project has (or will have) curated orientation docs under `core/`,
+include `@core/overview.md` and `@core/decisions.md` near the top of `AGENTS.md`
+so they load at session start. The directives must tolerate missing files —
+the `core/` directory is optional. See `core/` in
+`${CLAUDE_PLUGIN_ROOT}/references/project-structure.md` for conventions and
+length caps.
+
+Offer to scaffold `core/overview.md` and `core/decisions.md` from
+`${CLAUDE_PLUGIN_ROOT}/templates/core-overview.md` and
+`${CLAUDE_PLUGIN_ROOT}/templates/core-decisions.md`. Skip if the user declines.
+
 ### `RESEARCH_PLAN.md`
 
 For `research` projects, create `RESEARCH_PLAN.md` unless the user prefers to inline the high-level plan into `README.md`.

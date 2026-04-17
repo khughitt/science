@@ -14,6 +14,7 @@ from typing import NotRequired, TypedDict, cast
 import click
 from rdflib import Dataset, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
+from science_model.profiles import CORE_PROFILE
 from science_model.reasoning import MeasurementModel, RivalModelPacket
 
 from science_tool.graph.export_types import (
@@ -388,6 +389,32 @@ PROJECT_ENTITY_PREFIXES: set[str] = {
     "falsification",
     "pre-registration",
 }
+
+# Lookup of `predicate URI -> (allowed source kinds, allowed target kinds)`,
+# derived once from CORE_PROFILE so add_edge can warn on direction mistakes
+# without scanning the profile on every call.
+_RELATION_KIND_BY_PREDICATE: dict[URIRef, tuple[frozenset[str], frozenset[str]]] = {
+    URIRef(SCI_NS[rk.predicate.split(":", 1)[1]] if rk.predicate.startswith("sci:") else rk.predicate): (
+        frozenset(rk.source_kinds),
+        frozenset(rk.target_kinds),
+    )
+    for rk in CORE_PROFILE.relation_kinds
+    if rk.predicate.startswith("sci:")
+}
+
+
+def _entity_kind_from_uri(uri: URIRef) -> str | None:
+    """Extract the project entity kind (e.g. 'proposition', 'question') from a URI.
+
+    Returns None when the URI is not a project-namespaced entity URI — in that
+    case the caller should skip kind-based validation.
+    """
+    raw = str(uri)
+    if not raw.startswith(str(PROJECT_NS)):
+        return None
+    suffix = raw[len(str(PROJECT_NS)) :]
+    head = suffix.split("/", 1)[0]
+    return head if head in PROJECT_ENTITY_PREFIXES else None
 STRUCTURED_PROPOSITION_PREDICATES: frozenset[URIRef] = frozenset(
     {
         SCI_NS.relatedTo,
@@ -1021,6 +1048,47 @@ def add_question(
     return question_uri
 
 
+def _warn_on_relation_direction_mismatch(
+    predicate_uri: URIRef,
+    subject_uri: URIRef,
+    object_uri: URIRef,
+    *,
+    predicate: str,
+) -> None:
+    """Echo a warning when an edge violates the CORE_PROFILE source/target kinds.
+
+    Profile is descriptive, not enforced — emit a stderr warning so users learn
+    about direction mistakes (e.g. `prop sci:addresses question` when the
+    canonical direction is `question sci:addresses prop`) without breaking
+    existing workflows. Silent when subject/object URIs are not project
+    entities, when the predicate has no profile entry, or when the kinds match.
+    """
+    constraint = _RELATION_KIND_BY_PREDICATE.get(predicate_uri)
+    if constraint is None:
+        return
+    allowed_subject_kinds, allowed_object_kinds = constraint
+    subject_kind = _entity_kind_from_uri(subject_uri)
+    object_kind = _entity_kind_from_uri(object_uri)
+    if subject_kind is None or object_kind is None:
+        return
+    if subject_kind in allowed_subject_kinds and object_kind in allowed_object_kinds:
+        return
+    if object_kind in allowed_subject_kinds and subject_kind in allowed_object_kinds:
+        click.echo(
+            f"Warning: '{predicate}' direction looks reversed — "
+            f"profile expects {sorted(allowed_subject_kinds)} -> {sorted(allowed_object_kinds)} "
+            f"but got {subject_kind} -> {object_kind}.",
+            err=True,
+        )
+        return
+    click.echo(
+        f"Warning: '{predicate}' edge has unexpected kinds — "
+        f"profile expects {sorted(allowed_subject_kinds)} -> {sorted(allowed_object_kinds)}, "
+        f"got {subject_kind} -> {object_kind}.",
+        err=True,
+    )
+
+
 def add_edge(
     graph_path: Path,
     subject: str,
@@ -1048,6 +1116,8 @@ def add_edge(
             f"Predicate '{predicate}' is an evidence stance predicate; use 'graph add evidence' instead."
         )
 
+    _warn_on_relation_direction_mismatch(p_uri, s_uri, o_uri, predicate=predicate)
+
     # Warn if subject/object URIs don't exist in any graph yet
     for uri, label in [(s_uri, subject), (o_uri, obj)]:
         if not any((uri, None, None) in g for g in dataset.graphs()):
@@ -1069,6 +1139,47 @@ def add_edge(
 
     _save_dataset(dataset, graph_path)
     return s_uri, p_uri, o_uri
+
+
+def migrate_addresses_direction(graph_path: Path, *, apply: bool) -> dict[str, int]:
+    """Flip anti-canonical `?prop sci:addresses ?question` triples to the canonical
+    `?question sci:addresses ?prop` direction declared by the CORE_PROFILE
+    (source=question, target=proposition).
+
+    Only triples where the subject is typed sci:Proposition AND the object is typed
+    sci:Question are migrated; everything else is left alone (including triples
+    that already match the canonical direction).
+
+    With apply=False, returns counts without writing.
+    """
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+
+    flipped: list[tuple[URIRef, URIRef]] = []
+    already_canonical = 0
+    for s, _, o in knowledge.triples((None, SCI_NS.addresses, None)):
+        if not (isinstance(s, URIRef) and isinstance(o, URIRef)):
+            continue
+        s_is_question = (s, RDF.type, SCI_NS.Question) in knowledge
+        s_is_proposition = (s, RDF.type, SCI_NS.Proposition) in knowledge
+        o_is_question = (o, RDF.type, SCI_NS.Question) in knowledge
+        o_is_proposition = (o, RDF.type, SCI_NS.Proposition) in knowledge
+        if s_is_question and o_is_proposition:
+            already_canonical += 1
+            continue
+        if s_is_proposition and o_is_question:
+            flipped.append((s, o))
+
+    if apply and flipped:
+        for prop_uri, question_uri in flipped:
+            knowledge.remove((prop_uri, SCI_NS.addresses, question_uri))
+            knowledge.add((question_uri, SCI_NS.addresses, prop_uri))
+        _save_dataset(dataset, graph_path)
+
+    return {
+        "flipped": len(flipped),
+        "already_canonical": already_canonical,
+    }
 
 
 def add_inquiry(
@@ -3646,7 +3757,7 @@ def query_neighborhood_summary(
 
 def _question_claims(knowledge, question_uri: URIRef) -> list[URIRef]:
     claims: set[URIRef] = set()
-    for prop_uri, _, _ in knowledge.triples((None, SCI_NS.addresses, question_uri)):
+    for _, _, prop_uri in knowledge.triples((question_uri, SCI_NS.addresses, None)):
         if not isinstance(prop_uri, URIRef):
             continue
         if (prop_uri, RDF.type, SCI_NS.Proposition) in knowledge:

@@ -3173,9 +3173,9 @@ def test_graph_question_summary_reports_rollup_metrics_and_top_limit() -> None:
                         "graph",
                         "add",
                         "edge",
-                        prop_ref,
-                        "sci:addresses",
                         question_ref,
+                        "sci:addresses",
+                        prop_ref,
                     ],
                 ).exit_code
                 == 0
@@ -3207,6 +3207,93 @@ def test_graph_question_summary_table_headers_are_sensible() -> None:
         assert "Graph Question Summary" in result.output
         assert "Question" in result.output
         assert "Text" in result.output
+
+
+def test_graph_migrate_addresses_flips_anti_canonical_triples() -> None:
+    """Anti-canonical (?prop sci:addresses ?question) triples must flip to canonical
+    (?question sci:addresses ?prop) and become visible to question-summary."""
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                ["graph", "add", "question", "Q1", "--text", "Why?", "--source", "article:a"],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                ["graph", "add", "proposition", "Because.", "--source", "article:a", "--id", "p1"],
+            ).exit_code
+            == 0
+        )
+
+        # Write the edge in the anti-canonical direction by going straight through
+        # the store helper, bypassing the warning-only validation in add_edge.
+        from rdflib import Dataset
+
+        from science_tool.graph.store import (
+            DEFAULT_GRAPH_PATH,
+            PROJECT_NS,
+            SCI_NS,
+            _graph_uri,
+            _save_dataset,
+        )
+
+        dataset = Dataset()
+        dataset.parse(source=str(DEFAULT_GRAPH_PATH), format="trig")
+        knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+        prop_uri = PROJECT_NS["proposition/p1"]
+        question_uri = PROJECT_NS["question/q1"]
+        knowledge.add((prop_uri, SCI_NS.addresses, question_uri))
+        _save_dataset(dataset, DEFAULT_GRAPH_PATH)
+
+        # Dry-run reports the flip but does not write.
+        dry = runner.invoke(main, ["graph", "migrate-addresses"])
+        assert dry.exit_code == 0
+        assert "Would flip 1" in dry.output
+
+        # Apply actually rewrites.
+        applied = runner.invoke(main, ["graph", "migrate-addresses", "--apply"])
+        assert applied.exit_code == 0
+        assert "Flipped 1" in applied.output
+
+        # Re-running on already-canonical data is a no-op.
+        again = runner.invoke(main, ["graph", "migrate-addresses"])
+        assert again.exit_code == 0
+        assert "No anti-canonical" in again.output
+
+
+def test_graph_add_edge_warns_on_reversed_addresses_direction() -> None:
+    """The bonus validation should warn (but not fail) on anti-canonical writes."""
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                ["graph", "add", "question", "Q1", "--text", "Why?", "--source", "article:a"],
+            ).exit_code
+            == 0
+        )
+        assert (
+            runner.invoke(
+                main,
+                ["graph", "add", "proposition", "Because.", "--source", "article:a", "--id", "p1"],
+            ).exit_code
+            == 0
+        )
+
+        result = runner.invoke(
+            main,
+            ["graph", "add", "edge", "proposition/p1", "sci:addresses", "question/q1"],
+        )
+        assert result.exit_code == 0
+        assert "direction looks reversed" in result.output
 
 
 def test_graph_project_summary_rolls_up_research_profile() -> None:
@@ -3327,7 +3414,7 @@ def test_graph_project_summary_rolls_up_research_profile() -> None:
 
         for prop_ref in ("proposition/project_contested", "proposition/project_empirical"):
             assert (
-                runner.invoke(main, ["graph", "add", "edge", prop_ref, "sci:addresses", "question/qproj"]).exit_code
+                runner.invoke(main, ["graph", "add", "edge", "question/qproj", "sci:addresses", prop_ref]).exit_code
                 == 0
             )
 
@@ -4001,9 +4088,9 @@ def test_graph_question_summary_returns_all_rows_by_default() -> None:
                         "graph",
                         "add",
                         "edge",
-                        proposition_ref,
-                        "sci:addresses",
                         question_ref,
+                        "sci:addresses",
+                        proposition_ref,
                     ],
                 ).exit_code
                 == 0

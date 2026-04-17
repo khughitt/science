@@ -95,6 +95,23 @@ This longitudinal view makes progress visible and highlights both forward moment
 
 Scan pipeline plans in `doc/plans/` for implementation tasks that are not tracked in `tasks/active.md`. Surface any development work buried in plan documents that should be trackable tasks.
 
+### 3c-bis. Stale Task Status Detection (mandatory)
+
+Before recommending next actions, audit task status against on-disk evidence. For each task in `tasks/active.md` with status `proposed`, `blocked`, or `in_progress`, check whether the work appears already done by scanning for any of:
+
+- a result file under `results/` whose path or `datapackage.json` references the task ID
+- a doc under `doc/interpretations/`, `doc/findings/`, `doc/reports/`, or `doc/discussions/` whose frontmatter `source_refs` includes the task ID
+- recent git commits (since the task was added) whose message body mentions the task ID
+- a workflow-run manifest whose `tasks` list includes the task ID
+
+For each match, surface the task in a short `### Status Drift` table:
+
+| Task | Current status | Evidence | Suggested update |
+|---|---|---|---|
+| t075 | proposed | results/2026-04-09-t075/datapackage.json | mark `done` and write interpretation |
+
+This detection is mandatory — a `next-steps` run that does not perform it must say so explicitly. Drift between code and task status is one of the most consistent failure modes; finding it once during analysis avoids re-litigating the same recommendations across sessions.
+
 ### 3d. Strategic Decision Point (if applicable)
 
 If the project is at a fork — a moment where the next direction depends on a choice between competing approaches, depth-first vs breadth-first, or a go/no-go gate — add a "Strategic Decision Point" section that frames:

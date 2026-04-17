@@ -103,6 +103,26 @@ For each `Use now` or `Evaluate next` dataset, create a dataset note:
 
 Fill in all available fields. For fields you cannot verify, mark as `[UNVERIFIED]`.
 
+Required frontmatter fields to populate (see template comments for enum values):
+
+- `tier` — one of `use-now`, `evaluate-next`, `track` (mirror the ranking label from Step 4)
+- `access` — one of `public`, `controlled`, `mixed`
+- `license` — SPDX identifier or `unknown`
+- `formats` — list of lower-case format slugs
+- `size_estimate` — with unit (e.g., `"12 GB"`, `"~500 MB"`, `"unknown"`)
+- `update_cadence` — `static`, `rolling`, `monthly`, `quarterly`, `annual`, or `versioned-releases`
+- `ontology_terms` — canonical CURIEs (UBERON:*, CL:*, MONDO:*, DOID:*, EFO:*, etc.), not free text
+
+#### Multi-accession resources
+
+If a resource spans multiple accessions (primary + mirror, atlas + component studies, etc.), pick one pattern:
+
+1. **One record, multi-accession list** — preferred default. List every accession in `datasets:`.
+2. **Parent + overview + children** — preferred for atlases. One overview record, one per component, linked via `related:`.
+3. **One record per accession** — last resort, when accessions share little context.
+
+See the `## Multi-accession resources` comment block in `${CLAUDE_PLUGIN_ROOT}/templates/dataset.md` for examples.
+
 ### Step 6: Variable mapping (if inquiry exists)
 
 If the project has an active inquiry, create a coverage matrix:

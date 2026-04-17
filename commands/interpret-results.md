@@ -45,7 +45,7 @@ If given a directory, scan for result files and summarize what is available.
 
 - **Write mode:** no existing interpretation document yet
 - **Update mode:** an interpretation already exists; update framework implications without rewriting the whole narrative
-- **Dev mode:** the result is about tooling or workflow rather than substantive empirical evidence
+- **Dev mode:** the result is about tooling or workflow rather than substantive empirical evidence. Use the dedicated `templates/interpretation-dev.md` (see Writing below) — the empirical-mode sections are dead weight for infrastructure work.
 - **Conceptual mode:** the input is a discussion document, synthesis, or free-form user observations — not empirical data, notebooks, or pipeline output. Auto-select this mode when:
   - the input is a `doc/discussions/*.md` file
   - the user describes observations or insights without pointing to data files
@@ -144,6 +144,11 @@ Also ask:
 - is the evidence independent, or does it collapse into one `independence_group`?
 - if the result adjudicates among alternatives, should it update a `rival_model_packet` and its `current_working_model`?
 
+**Aggregator-circularity check.** If "external validation" comes from a literature-aggregating resource (Open Targets, ChEMBL, DrugBank, PharmGKB, DisGeNET, OMIM, etc.), treat the agreement as partly circular: the resource's evidence pool may already include the project's own findings or the same upstream studies. Mitigations:
+- prefer per-datatype breakdowns (genetic, somatic, animal-model, drug, RNA) over combined overall scores
+- check the resource's source-evidence list for direct citations of the analyses driving the project's finding
+- when redundancy is unavoidable, downgrade the evidence weight and label it as `redundant-with-prior` rather than independent corroboration
+
 **Suspiciously good results:** When results substantially exceed pre-registered upper bounds (observed >> expected), do not accept them uncritically. Before proceeding:
 - Enumerate plausible inflators: confounds, data leakage, overfitting, control inadequacy
 - Reference the pre-registration document (in `doc/meta/pre-registration-*.md`) and compare observed vs. expected range explicitly
@@ -236,7 +241,11 @@ Use them in this order:
 
 ## Writing
 
-Follow `.ai/templates/interpretation.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/interpretation.md`.
+Pick the template that matches the mode:
+
+- **Dev mode:** follow `.ai/templates/interpretation-dev.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/interpretation-dev.md`. Skip the empirical sections (Evidence Quality, Data Quality Checks, Proposition-Level Updates, Evidence vs. Open Questions) entirely — the dev template omits them on purpose.
+- **All other modes (write / update / conceptual):** follow `.ai/templates/interpretation.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/interpretation.md`.
+
 If the project uses open questions rather than formal hypotheses, adapt section headers in the output document accordingly — e.g., "Question-Level Implications" instead of "Hypothesis-Level Implications". Evaluate against questions in `doc/questions/` rather than hypothesis files in `specs/hypotheses/`.
 Save to `doc/interpretations/YYYY-MM-DD-<slug>.md`.
 

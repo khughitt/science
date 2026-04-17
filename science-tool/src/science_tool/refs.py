@@ -30,6 +30,20 @@ _CITATION_RE = re.compile(r"\[@([^\]]+)\]")
 _LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 _UNVERIFIED_RE = re.compile(r"\[UNVERIFIED\]")
 _NEEDS_CITATION_RE = re.compile(r"\[NEEDS CITATION\]")
+# Task IDs — `tNN` or `tNNN`, optionally inside square brackets. Anchored on
+# word boundaries so adjacent letters do not produce false positives.
+_TASK_ID_RE = re.compile(r"\bt(\d{2,})\b")
+# Task ID *declarations* in tasks/active.md and tasks/done/*.md headers, of the
+# form `## [tNN] ...` or `## [tNNN] ...`.
+_TASK_DECL_RE = re.compile(r"^\s*#+\s*\[t(\d{2,})\]")
+# Tokens that should not trigger task-ID validation when they happen to match
+# the regex above (e.g. the `t` of an article slug).
+_TASK_FALSE_POSITIVE_PARENTS = (
+    ".bib",
+    ".csv",
+    ".tsv",
+    ".bibtex",
+)
 
 # Directories/files to scan
 _SCAN_DIRS = ("doc", "specs")
@@ -74,6 +88,31 @@ def _load_hypothesis_ids(root: Path) -> dict[str, Path]:
     return result
 
 
+def _load_task_ids(root: Path) -> set[str]:
+    """Collect all declared task IDs from tasks/active.md and tasks/done/*.md.
+
+    A task is "declared" when it appears as a markdown header of the form
+    `## [tNN] ...` (the canonical format produced by `science-tool tasks add`).
+    Returns the set of bare numeric IDs (e.g. `"75"`, not `"t75"`).
+    """
+    declared: set[str] = set()
+    candidates: list[Path] = []
+    active = root / "tasks" / "active.md"
+    if active.is_file():
+        candidates.append(active)
+    done_dir = root / "tasks" / "done"
+    if done_dir.is_dir():
+        candidates.extend(done_dir.glob("*.md"))
+    for path in candidates:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for match in _TASK_DECL_RE.finditer(text):
+            declared.add(match.group(1))
+    return declared
+
+
 def _load_bib_keys(root: Path) -> set[str]:
     """Extract all BibTeX entry keys from references.bib."""
     bib_path = root / "papers" / "references.bib"
@@ -105,6 +144,7 @@ def check_refs(root: Path) -> list[RefIssue]:
     files = _collect_markdown_files(root)
     hyp_ids = _load_hypothesis_ids(root)
     bib_keys = _load_bib_keys(root)
+    task_ids = _load_task_ids(root)
 
     for file_path in files:
         rel_path = str(file_path.relative_to(root))
@@ -118,10 +158,33 @@ def check_refs(root: Path) -> list[RefIssue]:
         except (OSError, UnicodeDecodeError):
             continue
 
+        # Skip task-ID validation in files where `tNN` tokens are noisy
+        # (BibTeX-derived bibliographies, exported tabular data).
+        skip_task_check = any(rel_path.endswith(suffix) for suffix in _TASK_FALSE_POSITIVE_PARENTS)
+        # Files inside tasks/ legitimately reference their own and other task
+        # IDs in headers — declarations are not "broken refs". Skip those.
+        skip_task_check = skip_task_check or rel_path.startswith("tasks/")
+
         for line_num, line in enumerate(lines, start=1):
             # Skip headings and frontmatter for hypothesis checks
             if _is_heading_line(line):
                 continue
+
+            # --- Task ID references ---
+            if not skip_task_check and task_ids:
+                for m in _TASK_ID_RE.finditer(line):
+                    task_num = m.group(1)
+                    if task_num in task_ids:
+                        continue
+                    issues.append(
+                        RefIssue(
+                            file=rel_path,
+                            line=line_num,
+                            ref_type="task",
+                            ref_value=f"t{task_num}",
+                            message=f"t{task_num} — no matching declaration in tasks/active.md or tasks/done/*.md",
+                        )
+                    )
 
             # --- Hypothesis references ---
             for m in _HYPOTHESIS_RE.finditer(line):

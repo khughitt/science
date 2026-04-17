@@ -22,7 +22,7 @@ class ZenodoAdapter:
     def search(self, query: str, *, max_results: int = 20) -> list[DatasetResult]:
         resp = self._client.get(
             "/records",
-            params={"q": query, "type": "dataset", "size": max_results, "sort": "mostrecent"},
+            params={"q": query, "type": "dataset", "size": max_results, "sort": "bestmatch"},
         )
         resp.raise_for_status()
         return [self._parse_record(hit) for hit in resp.json()["hits"]["hits"]]

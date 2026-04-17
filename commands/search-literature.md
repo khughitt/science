@@ -45,12 +45,12 @@ Default constraints unless user specifies otherwise:
 
 Use this execution order:
 
-1. Prefer shared runtime if available:
-   - `uv run science-tool literature search ...`
-2. If shared runtime is not available, run direct source queries:
-   - OpenAlex API
-   - PubMed E-utilities
-3. If source APIs are temporarily unavailable, use web search as fallback and mark source as `fallback-web`.
+1. Run direct source queries:
+   - OpenAlex API (primary broad-discovery source)
+   - PubMed E-utilities (for biomedical scope)
+2. If source APIs are temporarily unavailable, use web search as fallback and mark source as `fallback-web`.
+
+At least one query must hit OpenAlex with a broad conceptual framing and return ≥30 candidates before ranking. If every query is seed/author/title-driven and returns <30 results, you are in verify-mode, not discover-mode — stop and reformulate at least one query as a broad conceptual search.
 
 For each candidate, capture identifiers where available:
 
@@ -80,6 +80,24 @@ Label each ranked item as one of:
 - `Core now` (read immediately)
 - `Relevant next` (read if time allows)
 - `Peripheral monitor` (track but defer)
+
+## Coverage Audit (before writing)
+
+Before writing output, enumerate the project's declared scope and check which parts this search does **not** cover.
+
+Sources of declared scope (read all that exist):
+
+- `science.yaml` aspects
+- `doc/topics/` (topic slugs and their subtopics)
+- `doc/questions/` (open questions)
+- `specs/hypotheses/` (active hypotheses)
+
+For each declared item, mark whether the current search surfaced at least one ranked candidate that materially addresses it. If gaps exist, either:
+
+1. Run one additional targeted query per uncovered item and fold results into the run, or
+2. Record the uncovered item explicitly in `## Coverage Notes and Gaps` with a suggested follow-up query.
+
+Do not skip this step — a reading queue that silently omits declared scope is worse than one that flags the omission.
 
 ## Writing Output
 
@@ -114,8 +132,12 @@ Include the normalized candidate list, dedupe keys, source provenance, and rank/
 
 1. Offer to create tasks for the top `Core now` papers via `science-tool tasks add`.
 2. For selected high-priority papers, run `/science:research-paper` (or create a task for later).
-3. Create or update compact article notes in `doc/papers/<citekey>.md` for `Core now` items using `.ai/templates/paper-summary.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/paper-summary.md`.
-4. Populate note metadata fields:
+3. For `Core now` items, create a **stub-only** note at `doc/papers/<citekey>.md` using `.ai/templates/paper-summary.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/paper-summary.md`. The stub must contain:
+   - Template frontmatter filled from search metadata only (title, authors, year, identifiers).
+   - Every prose/content section (Key Contribution, Methods, Key Findings, etc.) replaced with a single line: `UNREAD — populate after reading the paper`.
+   - Do **not** write plausible-sounding summaries from the LLM prior; those are hard to distinguish from real notes later and cause stub-drift when the paper is actually read.
+   Full content is populated later by `/science:research-paper` or during task execution.
+4. Populate note metadata fields from search results only (do not infer):
    - `tags` for project-specific labels.
    - `ontology_terms` for normalized ontology CURIEs (for example MeSH, GO, Biolink terms).
    - `datasets` for relevant dataset accessions when identified.

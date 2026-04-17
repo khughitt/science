@@ -81,6 +81,25 @@ The canonical root for Science-managed written output.
 If a research project ships an installable Python package, keep the package in root `src/`
 and tests in root `tests/`. Do not nest the package under `code/`.
 
+### `core/` — Curated Project Orientation (optional)
+
+Short, human-edited orientation docs loaded at session start via `AGENTS.md`.
+Complement to dynamic outputs from `/science:status` and `/science:next-steps`:
+those tools regenerate every session; `core/` is the stable institutional
+knowledge an agent (or new collaborator) needs to be useful in five minutes.
+
+Recommended files (each capped at ~100-150 lines):
+
+- `core/overview.md` — what the project is, why it exists, current state, open
+  fronts. Avoid duplicating `science.yaml`/`README.md` content; include only the
+  judgment calls that the manifest can't capture.
+- `core/decisions.md` — load-bearing decisions and why they were made (chosen
+  approaches, rejected alternatives, hard constraints). Append-only; do not
+  rewrite history when a decision is superseded — record the supersession.
+
+`AGENTS.md` should `@core/overview.md` and `@core/decisions.md` when they exist;
+both files are optional and AGENTS.md must tolerate their absence.
+
 ### `.ai/` — Project-Specific AI Overrides
 
 - `prompts/` — optional project-specific prompt overrides/additions

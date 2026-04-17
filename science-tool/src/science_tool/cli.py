@@ -346,6 +346,40 @@ def graph_migrate_model(project_root: Path) -> None:
         click.echo("Review errors manually — some files may need manual migration.")
 
 
+@graph.command("migrate-addresses")
+@click.option("--apply", is_flag=True, default=False, help="Write changes to disk (default is dry-run).")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_migrate_addresses(apply: bool, graph_path: Path) -> None:
+    """Flip anti-canonical sci:addresses edges to the canonical direction.
+
+    The CORE_PROFILE declares `addresses` with source=question, target=proposition,
+    so the canonical RDF triple is `?question sci:addresses ?proposition`. Earlier
+    workflows produced the reversed direction (`?proposition sci:addresses ?question`),
+    which made `question-summary` undercount. This command rewrites those triples
+    in place. Triples already in the canonical direction are left untouched.
+
+    Dry-run by default; pass --apply to write.
+    """
+    from science_tool.graph.store import migrate_addresses_direction
+
+    stats = migrate_addresses_direction(graph_path, apply=apply)
+    if stats["flipped"] == 0:
+        click.echo(
+            f"No anti-canonical sci:addresses triples found "
+            f"({stats['already_canonical']} already canonical)."
+        )
+        return
+    verb = "Flipped" if apply else "Would flip"
+    click.echo(
+        f"{verb} {stats['flipped']} sci:addresses triple(s) "
+        f"({stats['already_canonical']} already canonical)."
+    )
+    if not apply:
+        click.echo("Re-run with --apply to write changes.")
+
+
 @graph.command("migrate-tags")
 @click.option(
     "--project-root",
