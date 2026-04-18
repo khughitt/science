@@ -19,7 +19,17 @@ Before executing any research command:
 3. Load the `research-methodology` and `scientific-writing` skills.
 4. Read `specs/research-question.md` for project context when it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
-   For each aspect, read `aspects/<name>/<name>.md`.
+   For each declared aspect, resolve the aspect file in this order:
+   1. `aspects/<name>/<name>.md` — canonical Science aspects
+   2. `.ai/aspects/<name>.md` — project-local aspect override or addition
+
+   If neither path exists (the project declares an aspect that isn't shipped with
+   Science and has no project-local definition), do not block: log a single line
+   like `aspect "<name>" declared in science.yaml but no definition found —
+   proceeding without it` and continue. Suggest the user either (a) drop the
+   aspect from `science.yaml`, (b) author it under `.ai/aspects/<name>.md`, or
+   (c) align the name with one shipped under `aspects/`.
+
    When executing command steps, incorporate the additional sections, guidance,
    and signal categories from loaded aspects. Aspect-contributed sections are
    whole sections inserted at the placement indicated in each aspect file.
@@ -116,9 +126,18 @@ science-tool graph migrate --project-root . --format json
 science-tool graph audit --project-root . --format json
 ```
 
-Use `graph migrate` when you want the tool to rewrite alias-resolvable refs, scaffold local-profile
-source files, and persist `knowledge/reports/kg-migration-audit.json` before the final audit. If any
-unresolved references remain after migration, fix the upstream sources first. Do not build until the audit is clean.
+Use `graph migrate` first as a dry-run audit. It previews alias-resolvable rewrites, layered-claim
+migration gaps, and projected cleanup without mutating the project.
+
+If the preview looks correct, re-run with:
+
+```bash
+science-tool graph migrate --project-root . --format json --apply
+```
+
+Only `--apply` writes alias rewrites, scaffolds local-profile source files, and persists
+`knowledge/reports/kg-migration-audit.json`. If unresolved references remain after the audit or
+apply pass, fix the upstream sources first. Do not build until the audit is clean.
 
 ### Step 5: Re-materialize and validate
 

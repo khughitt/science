@@ -1,11 +1,18 @@
 ---
-description: Research and summarize a single scientific paper.
+description: Research and summarize one or more scientific papers.
 ---
 
-# Research a Paper
+# Research Papers
 
-Research and summarize the paper specified by `$ARGUMENTS`.
-The input may be a paper title, author name(s), DOI, URL, or a file path to a PDF.
+Research and summarize one or more papers specified by `$ARGUMENTS`.
+Each paper may be given as a title, author name(s), DOI, URL, or a file path to a PDF.
+
+`$ARGUMENTS` may contain a single paper or a list. Parse lists liberally:
+- Newline-separated items
+- Numbered or bulleted items (`1.`, `2.`, `-`, `*`)
+- Comma-separated DOIs/titles on one line when unambiguous
+
+If the split is ambiguous (e.g., a title that contains commas), ask the user to confirm before dispatching.
 
 ## Dispatch Strategy
 
@@ -13,19 +20,20 @@ This command runs in two roles. Determine which you are before proceeding.
 
 ### If you are the orchestrator
 
-(You received the `/research-paper` slash command directly from the user.)
+(You received the `/research-papers` slash command directly from the user.)
 
-1. **Pre-dispatch check:** Look at `doc/papers/` for an existing summary that likely covers this paper (fuzzy match on title/author/DOI). If one may exist, ask the user whether to overwrite, skip, or produce a supplementary summary. Carry their decision forward into the subagent prompt.
-2. **Dispatch** the `paper-researcher` subagent via the Agent tool:
+1. **Parse** `$ARGUMENTS` into a list of paper references. Let `N` be the count.
+2. **Pre-dispatch check:** For each paper, look at `doc/papers/` for an existing summary (fuzzy match on title/author/DOI). If any may exist, ask the user whether to overwrite, skip, or supplement — resolve per-paper, then carry each decision into that paper's subagent prompt.
+3. **Dispatch** the `paper-researcher` subagent *once per paper*. When `N > 1`, issue all Agent calls **in parallel** (multiple tool uses in a single message) so they overlap — the shared rate limiter in `science-tool paper-fetch` keeps per-host traffic polite automatically.
    - `subagent_type: paper-researcher`
-   - `description`: a short identifier for the paper
-   - `prompt`: the full `$ARGUMENTS` plus the overwrite decision from step 1, plus any project-specific context the subagent would not otherwise discover
-3. Do **not** perform the Setup / Source Strategy / Writing / After Writing steps below yourself — those are the subagent's job and dispatching preserves the cost savings this command exists for.
-4. When the subagent reports back, continue at **Orchestrator Post-Dispatch** below.
+   - `description`: a short identifier for that paper
+   - `prompt`: the single paper's reference + its overwrite decision + any project-specific context the subagent would not otherwise discover
+4. Do **not** perform the Setup / Source Strategy / Writing / After Writing steps below yourself — those are each subagent's job, and dispatching preserves the cost savings this command exists for.
+5. When all subagents report back, continue at **Orchestrator Post-Dispatch**. For `N ≥ 2` papers with a shared thematic connection, also run **Batch Processing**.
 
 ### If you are the `paper-researcher` subagent
 
-Skip the Dispatch Strategy section and execute Setup → Source Strategy → Writing → After Writing. Then report back per the response contract in your agent definition.
+Skip the Dispatch Strategy section and execute Setup → Source Strategy → Writing → After Writing for your one assigned paper. Then report back per the response contract in your agent definition.
 
 ## Setup
 
@@ -96,14 +104,13 @@ After the subagent returns its report:
 
 ## Batch Processing (orchestrator)
 
-When processing multiple papers in a single session (2+ papers with a shared thematic connection):
+When the dispatched batch contained `N ≥ 2` papers with a shared thematic connection, after all subagent reports return:
 
-1. Dispatch the `paper-researcher` subagent once per paper. When the papers are independent lookups, issue the Agent calls **in parallel** (multiple tool uses in a single message) to reduce wall-clock time.
-2. After all subagent reports return, produce a brief cross-paper synthesis yourself at `doc/papers/synthesis-YYYY-MM-DD-<theme>.md`. Synthesis is an orchestrator responsibility because it requires holding all papers in context at once.
-3. Contents: shared themes, tensions between papers, and combined implications for the project.
-4. Cross-reference the individual paper summaries by their `id` fields.
+1. Produce a brief cross-paper synthesis at `doc/papers/synthesis-YYYY-MM-DD-<theme>.md`. Synthesis is an orchestrator responsibility because it requires holding all papers in context at once — the subagents do not talk to each other.
+2. Contents: shared themes, tensions between papers, and combined implications for the project.
+3. Cross-reference the individual paper summaries by their `id` fields.
 
-This only applies when papers share a thematic connection. Unrelated papers processed in the same session do not need synthesis.
+Skip synthesis when the papers are unrelated (e.g., the user dropped a mixed list for cleanup). A shared connection is the trigger, not the count.
 
 ## Process Reflection
 
@@ -114,7 +121,7 @@ report each item via:
 
 ```bash
 science-tool feedback add \
-  --target "command:research-paper" \
+  --target "command:research-papers" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \
   --detail "<optional prose>"

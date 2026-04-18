@@ -19,7 +19,17 @@ Before executing any research command:
 3. Load the `research-methodology` and `scientific-writing` skills.
 4. Read `specs/research-question.md` for project context when it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
-   For each aspect, read `aspects/<name>/<name>.md`.
+   For each declared aspect, resolve the aspect file in this order:
+   1. `aspects/<name>/<name>.md` — canonical Science aspects
+   2. `.ai/aspects/<name>.md` — project-local aspect override or addition
+
+   If neither path exists (the project declares an aspect that isn't shipped with
+   Science and has no project-local definition), do not block: log a single line
+   like `aspect "<name>" declared in science.yaml but no definition found —
+   proceeding without it` and continue. Suggest the user either (a) drop the
+   aspect from `science.yaml`, (b) author it under `.ai/aspects/<name>.md`, or
+   (c) align the name with one shipped under `aspects/`.
+
    When executing command steps, incorporate the additional sections, guidance,
    and signal categories from loaded aspects. Aspect-contributed sections are
    whole sections inserted at the placement indicated in each aspect file.
@@ -147,6 +157,23 @@ This longitudinal view makes progress visible and highlights both forward moment
 ### 3c. Task Tracking Gaps
 
 Scan pipeline plans in `doc/plans/` for implementation tasks that are not tracked in `tasks/active.md`. Surface any development work buried in plan documents that should be trackable tasks.
+
+### 3c-bis. Stale Task Status Detection (mandatory)
+
+Before recommending next actions, audit task status against on-disk evidence. For each task in `tasks/active.md` with status `proposed`, `blocked`, or `in_progress`, check whether the work appears already done by scanning for any of:
+
+- a result file under `results/` whose path or `datapackage.json` references the task ID
+- a doc under `doc/interpretations/`, `doc/findings/`, `doc/reports/`, or `doc/discussions/` whose frontmatter `source_refs` includes the task ID
+- recent git commits (since the task was added) whose message body mentions the task ID
+- a workflow-run manifest whose `tasks` list includes the task ID
+
+For each match, surface the task in a short `### Status Drift` table:
+
+| Task | Current status | Evidence | Suggested update |
+|---|---|---|---|
+| t075 | proposed | results/2026-04-09-t075/datapackage.json | mark `done` and write interpretation |
+
+This detection is mandatory — a `next-steps` run that does not perform it must say so explicitly. Drift between code and task status is one of the most consistent failure modes; finding it once during analysis avoids re-litigating the same recommendations across sessions.
 
 ### 3d. Strategic Decision Point (if applicable)
 

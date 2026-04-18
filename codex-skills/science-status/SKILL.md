@@ -19,7 +19,17 @@ Before executing any research command:
 3. Load the `research-methodology` and `scientific-writing` skills.
 4. Read `specs/research-question.md` for project context when it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
-   For each aspect, read `aspects/<name>/<name>.md`.
+   For each declared aspect, resolve the aspect file in this order:
+   1. `aspects/<name>/<name>.md` — canonical Science aspects
+   2. `.ai/aspects/<name>.md` — project-local aspect override or addition
+
+   If neither path exists (the project declares an aspect that isn't shipped with
+   Science and has no project-local definition), do not block: log a single line
+   like `aspect "<name>" declared in science.yaml but no definition found —
+   proceeding without it` and continue. Suggest the user either (a) drop the
+   aspect from `science.yaml`, (b) author it under `.ai/aspects/<name>.md`, or
+   (c) align the name with one shipped under `aspects/`.
+
    When executing command steps, incorporate the additional sections, guidance,
    and signal categories from loaded aspects. Aspect-contributed sections are
    whole sections inserted at the placement indicated in each aspect file.
@@ -148,6 +158,9 @@ Surface, at minimum:
 - unsupported mechanistic narratives still flagged by the migration helper,
 - proxy-mediated propositions still missing `measurement_model`,
 - rival-model packets missing discriminating predictions or overstating a `current_working_model` without real adjudication evidence.
+
+Treat `science-tool graph migrate` as an audit-first command. Reach for `--apply` only after the
+preview confirms that the proposed rewrites and local-source scaffolding are actually wanted.
 
 If high-impact claims still carry only one visible `independence_group`, call that out explicitly as a fragility note even if the project has not yet promoted it into a first-class dashboard metric.
 

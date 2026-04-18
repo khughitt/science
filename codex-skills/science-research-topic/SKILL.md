@@ -19,7 +19,17 @@ Before executing any research command:
 3. Load the `research-methodology` and `scientific-writing` skills.
 4. Read `specs/research-question.md` for project context when it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
-   For each aspect, read `aspects/<name>/<name>.md`.
+   For each declared aspect, resolve the aspect file in this order:
+   1. `aspects/<name>/<name>.md` — canonical Science aspects
+   2. `.ai/aspects/<name>.md` — project-local aspect override or addition
+
+   If neither path exists (the project declares an aspect that isn't shipped with
+   Science and has no project-local definition), do not block: log a single line
+   like `aspect "<name>" declared in science.yaml but no definition found —
+   proceeding without it` and continue. Suggest the user either (a) drop the
+   aspect from `science.yaml`, (b) author it under `.ai/aspects/<name>.md`, or
+   (c) align the name with one shipped under `aspects/`.
+
    When executing command steps, incorporate the additional sections, guidance,
    and signal categories from loaded aspects. Aspect-contributed sections are
    whole sections inserted at the placement indicated in each aspect file.
@@ -59,6 +69,26 @@ Before executing any research command:
 
 Write a structured background synthesis on the topic specified by the user.
 
+## Dispatch Strategy
+
+This command runs in two roles. Determine which you are before proceeding.
+
+### If you are the orchestrator
+
+(You received the `/research-topic` slash command directly from the user.)
+
+1. **Pre-dispatch check:** Look at `doc/topics/` for existing coverage of the topic. If a file likely overlaps, ask the user whether to overwrite, skip, or produce a supplementary synthesis. Pass their decision into the subagent prompt.
+2. **Dispatch** the `topic-researcher` subagent via the Agent tool:
+   - `subagent_type: topic-researcher`
+   - `description`: a short identifier for the topic
+   - `prompt`: the full the user input plus the overwrite decision, plus any scope narrowing the user has hinted at
+3. Do **not** perform the Setup / Research Process / Writing / After Writing steps below yourself — those are the subagent's job and dispatching preserves the cost savings this command exists for.
+4. When the subagent reports back, continue at **Orchestrator Post-Dispatch** below.
+
+### If you are the `topic-researcher` subagent
+
+Skip the Dispatch Strategy section and execute Setup → Research Process → Writing → After Writing. Then report back per the response contract in your agent definition.
+
 ## Setup
 
 Follow the Science Codex Command Preamble before executing this skill. Use the `research-assistant` role prompt.
@@ -92,8 +122,18 @@ If loaded aspects contribute additional sections (e.g., Tooling & Implementation
 
 1. Add new references to `papers/references.bib` (create with header if missing).
 2. Add newly surfaced questions to `doc/questions/` using `.ai/templates/question.md` first, then `templates/question.md`.
-3. Offer to create follow-up tasks via `science-tool tasks add` derived from the synthesis.
-4. Commit: `git add -A && git commit -m "doc: research topic <topic>"`
+3. Commit: `git add -A && git commit -m "doc: research topic <topic>"`
+
+Note: "Offer to create follow-up tasks via `science-tool tasks add`" is intentionally deferred to the orchestrator — it is a user-interactive step and the subagent cannot prompt the user directly.
+
+## Orchestrator Post-Dispatch
+
+After the subagent returns its report:
+
+1. Review the scope the subagent settled on. If it narrowed too aggressively (or not enough), flag that to the user before moving on.
+2. Review suggested follow-up research tasks in the subagent's report. Offer to create them via `science-tool tasks add`, grouping related items where sensible and including the rationale the subagent provided.
+3. If the subagent flagged contradictions or open questions that overlap existing hypotheses in `specs/hypotheses/`, make small follow-up edits as a separate commit.
+4. Read the written synthesis only if you need its content for downstream reasoning. Otherwise, trust the report.
 
 ## Process Reflection
 

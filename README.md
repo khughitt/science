@@ -74,7 +74,7 @@ Codex support uses generated `science-*` skills from `codex-skills/` rather than
 | `/science:status` | Curated project orientation — hypotheses, questions, uncertainty hotspots, activity, next steps |
 | `/science:create-project` | Scaffold a new Science-managed project using the `research` or `software` profile |
 | `/science:import-project` | Migrate an existing project into a canonical Science project profile |
-| `/science:research-paper` | Research and synthesize a paper (LLM knowledge → web search → PDF) |
+| `/science:research-papers` | Research and synthesize one or more papers (LLM knowledge → web search → PDF) |
 | `/science:research-topic` | Research and synthesize a topic with project context |
 | `/science:next-steps` | Gap analysis + progress synthesis + prioritized recommendations |
 | `/science:discuss` | Structured critical discussion for ideas, hypotheses, or approaches |
@@ -272,7 +272,7 @@ When 2+ hypotheses exist for the same phenomenon, this command performs a struct
 ### 5. Summarize key papers
 
 ```
-/science:research-paper "Doe et al. 2023 circadian immune oscillations"
+/science:research-papers "Doe et al. 2023 circadian immune oscillations"
 ```
 
 For each high-priority paper from the search, this command synthesizes a structured summary (from LLM knowledge, web search, or a provided PDF), saves it to `doc/papers/`, and updates the bibliography.
@@ -361,7 +361,7 @@ Aligns knowledge models across registered Science projects. Detects shared entit
 Research isn't linear. A typical session might look like:
 
 ```
-research-topic → add-hypothesis → pre-register → search-literature → research-paper ×3
+research-topic → add-hypothesis → pre-register → search-literature → research-papers ×3
 → compare-hypotheses → next-steps → discuss → bias-audit
 → sketch-model → specify-model → critique-approach
 → find-datasets → plan-pipeline → review-pipeline

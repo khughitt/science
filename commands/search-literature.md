@@ -131,12 +131,12 @@ Include the normalized candidate list, dedupe keys, source provenance, and rank/
 ## After Search
 
 1. Offer to create tasks for the top `Core now` papers via `science-tool tasks add`.
-2. For selected high-priority papers, run `/science:research-paper` (or create a task for later).
+2. For selected high-priority papers, run `/science:research-papers` (or create a task for later).
 3. For `Core now` items, create a **stub-only** note at `doc/papers/<citekey>.md` using `.ai/templates/paper-summary.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/paper-summary.md`. The stub must contain:
    - Template frontmatter filled from search metadata only (title, authors, year, identifiers).
    - Every prose/content section (Key Contribution, Methods, Key Findings, etc.) replaced with a single line: `UNREAD — populate after reading the paper`.
    - Do **not** write plausible-sounding summaries from the LLM prior; those are hard to distinguish from real notes later and cause stub-drift when the paper is actually read.
-   Full content is populated later by `/science:research-paper` or during task execution.
+   Full content is populated later by `/science:research-papers` or during task execution.
 4. Populate note metadata fields from search results only (do not infer):
    - `tags` for project-specific labels.
    - `ontology_terms` for normalized ontology CURIEs (for example MeSH, GO, Biolink terms).

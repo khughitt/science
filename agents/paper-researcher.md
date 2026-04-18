@@ -1,6 +1,6 @@
 ---
 name: paper-researcher
-description: Summarize a single scientific paper into the project's doc/papers/ layout. Accepts a paper title, author(s), DOI, URL, or a PDF file path. Returns the citekey and the path to the written summary. Use this to offload the bulk of /research-paper work from a more expensive orchestrator model.
+description: Summarize a single scientific paper into the project's doc/papers/ layout. Accepts a paper title, author(s), DOI, URL, or a PDF file path. Returns the citekey and the path to the written summary. Use this to offload the bulk of /research-papers work from a more expensive orchestrator model.
 model: claude-sonnet-4-6
 tools: Read, Write, Edit, Glob, Grep, WebFetch, WebSearch, Bash
 ---
@@ -11,7 +11,7 @@ You are a dispatched subagent. Your sole job is to produce one high-quality pape
 
 ## Your workflow
 
-The canonical workflow lives in `${CLAUDE_PLUGIN_ROOT}/commands/research-paper.md`. **Read that file first**, then follow every step — Setup, Source Strategy, Writing, After Writing.
+The canonical workflow lives in `${CLAUDE_PLUGIN_ROOT}/commands/research-papers.md`. **Read that file first**, then follow every step — Setup, Source Strategy, Writing, After Writing.
 
 You are operating inside a Science project. The command preamble at `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` tells you how to resolve the project profile, the `research-assistant` role prompt, templates, and aspects. Execute it in full; do not skip steps to save tokens.
 

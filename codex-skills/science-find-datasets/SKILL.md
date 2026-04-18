@@ -19,7 +19,17 @@ Before executing any research command:
 3. Load the `research-methodology` and `scientific-writing` skills.
 4. Read `specs/research-question.md` for project context when it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
-   For each aspect, read `aspects/<name>/<name>.md`.
+   For each declared aspect, resolve the aspect file in this order:
+   1. `aspects/<name>/<name>.md` — canonical Science aspects
+   2. `.ai/aspects/<name>.md` — project-local aspect override or addition
+
+   If neither path exists (the project declares an aspect that isn't shipped with
+   Science and has no project-local definition), do not block: log a single line
+   like `aspect "<name>" declared in science.yaml but no definition found —
+   proceeding without it` and continue. Suggest the user either (a) drop the
+   aspect from `science.yaml`, (b) author it under `.ai/aspects/<name>.md`, or
+   (c) align the name with one shipped under `aspects/`.
+
    When executing command steps, incorporate the additional sections, guidance,
    and signal categories from loaded aspects. Aspect-contributed sections are
    whole sections inserted at the placement indicated in each aspect file.
@@ -155,6 +165,26 @@ For each `Use now` or `Evaluate next` dataset, create a dataset note:
 **File:** `doc/datasets/data-<slug>.md` using `.ai/templates/dataset.md` first, then `templates/dataset.md`
 
 Fill in all available fields. For fields you cannot verify, mark as `[UNVERIFIED]`.
+
+Required frontmatter fields to populate (see template comments for enum values):
+
+- `tier` — one of `use-now`, `evaluate-next`, `track` (mirror the ranking label from Step 4)
+- `access` — one of `public`, `controlled`, `mixed`
+- `license` — SPDX identifier or `unknown`
+- `formats` — list of lower-case format slugs
+- `size_estimate` — with unit (e.g., `"12 GB"`, `"~500 MB"`, `"unknown"`)
+- `update_cadence` — `static`, `rolling`, `monthly`, `quarterly`, `annual`, or `versioned-releases`
+- `ontology_terms` — canonical CURIEs (UBERON:*, CL:*, MONDO:*, DOID:*, EFO:*, etc.), not free text
+
+#### Multi-accession resources
+
+If a resource spans multiple accessions (primary + mirror, atlas + component studies, etc.), pick one pattern:
+
+1. **One record, multi-accession list** — preferred default. List every accession in `datasets:`.
+2. **Parent + overview + children** — preferred for atlases. One overview record, one per component, linked via `related:`.
+3. **One record per accession** — last resort, when accessions share little context.
+
+See the `## Multi-accession resources` comment block in `templates/dataset.md` for examples.
 
 ### Step 6: Variable mapping (if inquiry exists)
 
