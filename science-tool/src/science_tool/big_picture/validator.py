@@ -46,6 +46,22 @@ def validate_synthesis_file(path: Path, project_root: Path) -> list[ValidationIs
                 )
             )
 
+    fm = read_frontmatter(path) or {}
+    if fm.get("provenance_coverage") == "thin":
+        arc = _extract_section(text, "Arc")
+        word_count = len(arc.split())
+        if word_count > 150:
+            issues.append(
+                ValidationIssue(
+                    kind="thin_coverage_marker_mismatch",
+                    message=(
+                        f"provenance_coverage is 'thin' but Arc has {word_count} words "
+                        "(expected ≤150 when thin)."
+                    ),
+                    path=path,
+                )
+            )
+
     return issues
 
 
@@ -86,3 +102,21 @@ def validate_rollup_file(path: Path, project_root: Path) -> list[ValidationIssue
             )
 
     return issues
+
+
+def _extract_section(text: str, heading: str) -> str:
+    """Extract the body of a markdown section by its heading."""
+    lines = text.splitlines()
+    out: list[str] = []
+    in_section = False
+    for line in lines:
+        stripped = line.lstrip("#").strip()
+        if line.startswith("#"):
+            if in_section:
+                break
+            if stripped == heading:
+                in_section = True
+                continue
+        if in_section:
+            out.append(line)
+    return "\n".join(out).strip()

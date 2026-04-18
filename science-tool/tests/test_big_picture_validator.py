@@ -80,3 +80,46 @@ synthesized_from: []
     )
     issues = validate_rollup_file(rollup, project_root=FIXTURE)
     assert not any(i.kind == "orphan_count_mismatch" for i in issues)
+
+
+def test_thin_coverage_flagged_when_arc_is_long(tmp_path: Path) -> None:
+    body = "word " * 400  # A long Arc section.
+    synth = _write(
+        tmp_path,
+        "h1-alpha.md",
+        f"""---
+id: "synthesis:h1-alpha"
+hypothesis: "hypothesis:h1-alpha"
+provenance_coverage: "thin"
+---
+
+## State
+
+Empty.
+
+## Arc
+
+{body}
+""",
+    )
+    issues = validate_synthesis_file(synth, project_root=FIXTURE)
+    assert any(i.kind == "thin_coverage_marker_mismatch" for i in issues)
+
+
+def test_thin_coverage_passes_when_arc_is_short(tmp_path: Path) -> None:
+    synth = _write(
+        tmp_path,
+        "h1-alpha.md",
+        """---
+id: "synthesis:h1-alpha"
+hypothesis: "hypothesis:h1-alpha"
+provenance_coverage: "thin"
+---
+
+## Arc
+
+Arc reconstruction is limited because no prior_interpretations chains exist.
+""",
+    )
+    issues = validate_synthesis_file(synth, project_root=FIXTURE)
+    assert not any(i.kind == "thin_coverage_marker_mismatch" for i in issues)
