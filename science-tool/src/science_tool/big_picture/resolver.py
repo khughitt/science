@@ -33,7 +33,7 @@ class ResolverOutput:
 def resolve_questions(project_root: Path) -> dict[str, ResolverOutput]:
     """Resolve all questions in ``project_root`` to hypothesis associations."""
     questions = _load_entities(project_root / "doc" / "questions")
-    hypotheses = _load_entities(project_root / "specs" / "hypotheses")  # noqa: F841 — used in Tasks 5-6
+    hypotheses = _load_entities(project_root / "specs" / "hypotheses")
 
     results: dict[str, dict[str, HypothesisMatch]] = {qid: {} for qid in questions}
 
@@ -41,6 +41,12 @@ def resolve_questions(project_root: Path) -> dict[str, ResolverOutput]:
     for qid, qfm in questions.items():
         for hid in _as_list(qfm.get("hypothesis")):
             results[qid][hid] = HypothesisMatch(hid, "direct", 1.0)
+
+    # Inverse: hypothesis.related lists the question.
+    for hid, hfm in hypotheses.items():
+        for ref in _as_list(hfm.get("related")):
+            if ref in results and hid not in results[ref]:
+                results[ref][hid] = HypothesisMatch(hid, "inverse", 0.8)
 
     return {qid: _finalize(matches) for qid, matches in results.items()}
 
