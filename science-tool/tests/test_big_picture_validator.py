@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from science_tool.big_picture.validator import validate_synthesis_file
+from science_tool.big_picture.validator import validate_rollup_file, validate_synthesis_file
 
 FIXTURE = Path(__file__).parent / "fixtures" / "big_picture" / "minimal_project"
 
@@ -49,3 +49,34 @@ The investigation built on interpretation:i01-h1-q03.
     )
     issues = validate_synthesis_file(synth, project_root=FIXTURE)
     assert not any(i.kind == "nonexistent_reference" for i in issues)
+
+
+def test_rollup_orphan_count_mismatch(tmp_path: Path) -> None:
+    rollup = _write(
+        tmp_path,
+        "synthesis.md",
+        """---
+type: "synthesis-rollup"
+orphan_question_count: 99
+synthesized_from: []
+---
+""",
+    )
+    issues = validate_rollup_file(rollup, project_root=FIXTURE)
+    # FIXTURE has exactly one orphan (q05-orphan).
+    assert any(i.kind == "orphan_count_mismatch" and "expected 1" in i.message for i in issues)
+
+
+def test_rollup_orphan_count_matches(tmp_path: Path) -> None:
+    rollup = _write(
+        tmp_path,
+        "synthesis.md",
+        """---
+type: "synthesis-rollup"
+orphan_question_count: 1
+synthesized_from: []
+---
+""",
+    )
+    issues = validate_rollup_file(rollup, project_root=FIXTURE)
+    assert not any(i.kind == "orphan_count_mismatch" for i in issues)
