@@ -73,6 +73,7 @@ from science_tool.graph.store import (
     validate_graph,
     validate_inquiry,
 )
+from science_tool.big_picture.cli import big_picture_group
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows
 from science_tool.prose import scan_prose
 from science_tool.refs import check_refs
@@ -162,6 +163,7 @@ def _parse_interaction_terms(entries: tuple[str, ...]) -> list[dict[str, str]] |
 
 
 main.add_command(research_package_group)
+main.add_command(big_picture_group)
 
 
 @main.group()
