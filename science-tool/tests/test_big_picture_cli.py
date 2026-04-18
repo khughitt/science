@@ -33,3 +33,51 @@ def test_resolve_questions_emits_json() -> None:
         "hypothesis:h2-beta",
     }
     assert payload["question:q05-orphan"]["primary_hypothesis"] is None
+
+
+def test_validate_exits_nonzero_on_issues(tmp_path: Path) -> None:
+    synth_dir = tmp_path / "doc" / "reports" / "synthesis"
+    synth_dir.mkdir(parents=True)
+    (synth_dir / "h1-alpha.md").write_text(
+        """---
+id: "synthesis:h1-alpha"
+hypothesis: "hypothesis:h1-alpha"
+provenance_coverage: "high"
+---
+
+## Arc
+
+Built on interpretation:i99-fake.
+"""
+    )
+
+    # Copy fixture project files into tmp_path so referenced IDs are available
+    import shutil
+
+    shutil.copytree(FIXTURE / "specs", tmp_path / "specs")
+    shutil.copytree(FIXTURE / "doc" / "questions", tmp_path / "doc" / "questions")
+    shutil.copytree(FIXTURE / "doc" / "interpretations", tmp_path / "doc" / "interpretations")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["big-picture", "validate", "--project-root", str(tmp_path)],
+    )
+    assert result.exit_code == 1
+    assert "nonexistent_reference" in result.output
+    assert "i99-fake" in result.output
+
+
+def test_validate_passes_on_clean_project(tmp_path: Path) -> None:
+    import shutil
+
+    shutil.copytree(FIXTURE / "specs", tmp_path / "specs")
+    shutil.copytree(FIXTURE / "doc", tmp_path / "doc")
+    (tmp_path / "doc" / "reports" / "synthesis").mkdir(parents=True, exist_ok=True)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["big-picture", "validate", "--project-root", str(tmp_path)],
+    )
+    assert result.exit_code == 0
