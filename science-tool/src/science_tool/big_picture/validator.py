@@ -13,7 +13,6 @@ from science_tool.big_picture.resolver import resolve_questions
 IssueKind = Literal[
     "nonexistent_reference",
     "thin_coverage_marker_mismatch",
-    "empty_section",
     "orphan_count_mismatch",
 ]
 
