@@ -2400,6 +2400,49 @@ def health_command(project_root: Path, output_format: str) -> None:
         console.print(rival_table)
 
 
+@main.command("paper-fetch")
+@click.option("--doi", default=None, help="DOI (bare, doi: prefix, or doi.org URL)")
+@click.option("--url", default=None, help="URL to a DOI-resolving landing page")
+@click.option("--pmid", default=None, help="PubMed ID")
+@click.option(
+    "--email",
+    default=None,
+    help="Contact email for polite-pool APIs (falls back to $SCIENCE_CONTACT_EMAIL)",
+)
+@click.option(
+    "--cache-dir",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Override cache directory (defaults to $SCIENCE_CACHE_DIR or ~/.cache/science)",
+)
+def paper_fetch_cmd(
+    doi: str | None, url: str | None, pmid: str | None, email: str | None, cache_dir: Path | None
+) -> None:
+    """Probe agent-friendly sources for a paper and emit a JSON decision record.
+
+    Intended for the paper-researcher subagent: call this first, branch on the
+    ``status`` field, and only fall back to open-ended search when it reports
+    status=not_found. A status of paywalled or blocked_but_oa means the caller
+    should ask the user for a PDF rather than scavenge the web.
+    """
+    import json as _json
+    import os as _os
+
+    from science_tool.paper_fetch import FetchConfig, fetch_paper
+
+    resolved_email = email or _os.environ.get("SCIENCE_CONTACT_EMAIL")
+    if not resolved_email:
+        raise click.ClickException(
+            "Contact email is required. Pass --email or set $SCIENCE_CONTACT_EMAIL."
+        )
+    cfg_kwargs: dict[str, Any] = {"email": resolved_email}
+    if cache_dir is not None:
+        cfg_kwargs["cache_dir"] = cache_dir
+    cfg = FetchConfig(**cfg_kwargs)
+    result = fetch_paper(doi=doi, url=url, pmid=pmid, cfg=cfg)
+    click.echo(_json.dumps(result.to_dict(), indent=2))
+
+
 def _extract_title_status(path: Path, _yaml: Any) -> tuple[str, str]:
     """Extract title and status from markdown frontmatter or first heading."""
     text = path.read_text(encoding="utf-8")

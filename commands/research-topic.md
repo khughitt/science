@@ -6,6 +6,26 @@ description: Research and summarize a scientific topic with project-context link
 
 Write a structured background synthesis on the topic specified by `$ARGUMENTS`.
 
+## Dispatch Strategy
+
+This command runs in two roles. Determine which you are before proceeding.
+
+### If you are the orchestrator
+
+(You received the `/research-topic` slash command directly from the user.)
+
+1. **Pre-dispatch check:** Look at `doc/topics/` for existing coverage of the topic. If a file likely overlaps, ask the user whether to overwrite, skip, or produce a supplementary synthesis. Pass their decision into the subagent prompt.
+2. **Dispatch** the `topic-researcher` subagent via the Agent tool:
+   - `subagent_type: topic-researcher`
+   - `description`: a short identifier for the topic
+   - `prompt`: the full `$ARGUMENTS` plus the overwrite decision, plus any scope narrowing the user has hinted at
+3. Do **not** perform the Setup / Research Process / Writing / After Writing steps below yourself — those are the subagent's job and dispatching preserves the cost savings this command exists for.
+4. When the subagent reports back, continue at **Orchestrator Post-Dispatch** below.
+
+### If you are the `topic-researcher` subagent
+
+Skip the Dispatch Strategy section and execute Setup → Research Process → Writing → After Writing. Then report back per the response contract in your agent definition.
+
 ## Setup
 
 Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
@@ -39,8 +59,18 @@ If loaded aspects contribute additional sections (e.g., Tooling & Implementation
 
 1. Add new references to `papers/references.bib` (create with header if missing).
 2. Add newly surfaced questions to `doc/questions/` using `.ai/templates/question.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/question.md`.
-3. Offer to create follow-up tasks via `science-tool tasks add` derived from the synthesis.
-4. Commit: `git add -A && git commit -m "doc: research topic <topic>"`
+3. Commit: `git add -A && git commit -m "doc: research topic <topic>"`
+
+Note: "Offer to create follow-up tasks via `science-tool tasks add`" is intentionally deferred to the orchestrator — it is a user-interactive step and the subagent cannot prompt the user directly.
+
+## Orchestrator Post-Dispatch
+
+After the subagent returns its report:
+
+1. Review the scope the subagent settled on. If it narrowed too aggressively (or not enough), flag that to the user before moving on.
+2. Review suggested follow-up research tasks in the subagent's report. Offer to create them via `science-tool tasks add`, grouping related items where sensible and including the rationale the subagent provided.
+3. If the subagent flagged contradictions or open questions that overlap existing hypotheses in `specs/hypotheses/`, make small follow-up edits as a separate commit.
+4. Read the written synthesis only if you need its content for downstream reasoning. Otherwise, trust the report.
 
 ## Process Reflection
 
