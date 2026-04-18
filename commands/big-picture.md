@@ -145,3 +145,53 @@ git hash-object doc/reports/synthesis/_emergent-threads.md
 ```
 
 **Citation inheritance**: the rollup inherits the citation and grounding requirements from the per-hypothesis files. Every factual claim traces back to a specific per-hypothesis file's content. No new unsupported claims are introduced at the rollup level.
+
+## Phase 4: Write
+
+All canonical artifacts are overwritten on regen.
+
+- Per-hypothesis files: already written by sub-agents in Phase 2.
+- Emergent-threads file: already written by sub-agent in Phase 2.
+- Project rollup: write `doc/reports/synthesis.md` (from Phase 3).
+
+If `--snapshot` is set:
+
+```bash
+mkdir -p doc/reports/synthesis-history
+ts="$(date -u +%Y-%m-%dT%H%M%SZ)"
+cp doc/reports/synthesis.md "doc/reports/synthesis-history/${ts}.md"
+```
+
+If `--dry-run` is set: do not write any files. Print, for each intended file, the target path and a summary (section word counts). Do not invoke sub-agents.
+
+If `--commit` is set: stage all written files and commit with message `doc(big-picture): regenerate synthesis YYYY-MM-DD`.
+
+## Staleness check for partial regen
+
+After any `--hypothesis <id>` invocation, the rollup's `synthesized_from` frontmatter still references the old per-hypothesis SHAs. On the next invocation (any invocation), before Phase 1, compare each entry in the rollup's `synthesized_from` to the current file's SHA:
+
+```bash
+for each entry in synthesized_from:
+  current_sha = git hash-object <entry.file>
+  if current_sha != entry.sha:
+    print warning: "Rollup is stale relative to <entry.file>. Run /science:big-picture without --hypothesis to refresh."
+```
+
+The staleness warning is informational — do not block execution.
+
+## `--since` handling
+
+If `--since <date>` is set:
+
+- Require `--output <path>` as well. If absent, refuse with: "`--since` requires `--output <path>` to avoid overwriting canonical artifacts. Pass `--output doc/reports/some-scoped-name.md`."
+- Do NOT write canonical files (`doc/reports/synthesis.md`, `doc/reports/synthesis/`, `_emergent-threads.md`). Write only to `--output`.
+- In the output, include `since: <date>` in frontmatter, and a banner at the top: `> **Scoped synthesis:** includes only activity after <date>. Not the authoritative project synthesis.`
+
+## Output to user
+
+After all phases:
+
+- Show the list of files written.
+- Show any staleness warnings.
+- Show any sub-agent "unused in synthesis" reports — these are candidates for future bundle improvements.
+- Suggest running `science-tool big-picture validate --project-root .` to sanity-check the output.
