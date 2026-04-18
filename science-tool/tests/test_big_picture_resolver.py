@@ -20,3 +20,11 @@ def test_inverse_match() -> None:
     assert q02.primary_hypothesis == "hypothesis:h1-alpha"
     match = next(m for m in q02.hypotheses if m.id == "hypothesis:h1-alpha")
     assert match.confidence == "inverse"
+
+
+def test_transitive_match() -> None:
+    result = resolve_questions(FIXTURE)
+    q03 = result["question:q03-transitive-via-interp"]
+    assert q03.primary_hypothesis == "hypothesis:h1-alpha"
+    match = next(m for m in q03.hypotheses if m.id == "hypothesis:h1-alpha")
+    assert match.confidence == "transitive"

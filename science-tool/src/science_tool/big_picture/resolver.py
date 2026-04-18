@@ -48,6 +48,17 @@ def resolve_questions(project_root: Path) -> dict[str, ResolverOutput]:
             if ref in results and hid not in results[ref]:
                 results[ref][hid] = HypothesisMatch(hid, "inverse", 0.8)
 
+    # Transitive: interpretation lists both a question and a hypothesis.
+    interpretations = _load_entities(project_root / "doc" / "interpretations")
+    for _iid, ifm in interpretations.items():
+        refs = _as_list(ifm.get("related"))
+        q_refs = [r for r in refs if r in results]
+        h_refs = [r for r in refs if r in hypotheses]
+        for qid in q_refs:
+            for hid in h_refs:
+                if hid not in results[qid]:
+                    results[qid][hid] = HypothesisMatch(hid, "transitive", 0.5)
+
     return {qid: _finalize(matches) for qid, matches in results.items()}
 
 
