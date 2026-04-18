@@ -61,6 +61,47 @@ git -C <project-root> rev-parse HEAD
 
 Record `generated_at` as the current ISO-8601 UTC timestamp.
 
-## Phase 2: Dispatch (see subsequent phases in Task 16+)
+## Phase 2: Dispatch
 
-(Next phases are added in Task 16.)
+Dispatch sub-agents in parallel using `Agent` tool calls. Send all dispatches in a single message.
+
+For each hypothesis (unless `--hypothesis <id>` is set, in which case only that one):
+
+```
+Agent(
+  subagent_type="hypothesis-synthesizer",
+  description="Synthesize <hyp-id>",
+  prompt=<<the prompt below>>
+)
+```
+
+The prompt passed to each sub-agent includes:
+
+- Project root path.
+- Hypothesis ID and `hypothesis_path`.
+- The bundle (inlined in the prompt as structured text — the sub-agent does not have access to your in-memory bundle directly).
+- Target output path: `doc/reports/synthesis/<hyp-id>.md`.
+- `generated_at` and `source_commit` values.
+- `provenance_coverage` value.
+- If `--since <date>` is set: pass it through AND the `--output <path>` target. Tell the sub-agent to include `since: <date>` in its frontmatter.
+
+Also dispatch one emergent-threads sub-agent:
+
+```
+Agent(
+  subagent_type="emergent-threads-synthesizer",
+  description="Synthesize emergent threads",
+  prompt=<<the prompt below>>
+)
+```
+
+The prompt includes:
+
+- Project root path.
+- Full resolver output (JSON from Phase 1).
+- Target output path: `doc/reports/synthesis/_emergent-threads.md`.
+- `generated_at` and `source_commit` values.
+
+**Important**: if `--hypothesis <id>` is set, skip the emergent-threads dispatch (it's a whole-project artifact).
+
+Collect all sub-agent reports. Expect each to report: the path written, word counts, and any bundle items it could not ground.
