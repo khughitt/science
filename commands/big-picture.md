@@ -105,3 +105,43 @@ The prompt includes:
 **Important**: if `--hypothesis <id>` is set, skip the emergent-threads dispatch (it's a whole-project artifact).
 
 Collect all sub-agent reports. Expect each to report: the path written, word counts, and any bundle items it could not ground.
+
+## Phase 3: Synthesize (project rollup)
+
+Skip this phase if `--hypothesis <id>` is set.
+
+After the dispatch phase completes, read back each just-written per-hypothesis file and the emergent-threads file. You (the orchestrator, on Opus 4.7) are the only agent with visibility across all hypotheses, so cross-hypothesis synthesis happens here — do not dispatch another sub-agent for this.
+
+Write `doc/reports/synthesis.md` with this structure:
+
+Frontmatter:
+
+```yaml
+---
+type: "synthesis-rollup"
+generated_at: "<ISO-8601>"
+source_commit: "<SHA>"
+synthesized_from:
+  - { hypothesis: "<hyp-id>", file: "doc/reports/synthesis/<hyp-id>.md", sha: "<SHA>" }
+  # one entry per hypothesis
+emergent_threads_sha: "<SHA>"
+orphan_question_count: <int>
+---
+```
+
+Body sections (~1000–1500 words total):
+
+- **TL;DR** — 5–7 bullets, most salient project-wide facts. Distilled from each per-hypothesis State, not a per-hypothesis recap.
+- **State** — cross-hypothesis consolidation. What the project collectively believes, where the strongest evidence sits, what's contested.
+- **Arc** — one paragraph per hypothesis, plus a framing paragraph on how the hypotheses relate.
+- **Research fronts** — ranked list across all hypotheses. Signals: uncertainty density, recent activity, explicit task priority. Cite source: "from <hyp-id>" for each front.
+- **Emergent threads** — 2–3 sentence pointer to `_emergent-threads.md`. Include the orphan-question count.
+
+Computing SHAs:
+
+```bash
+git hash-object doc/reports/synthesis/<hyp-id>.md
+git hash-object doc/reports/synthesis/_emergent-threads.md
+```
+
+**Citation inheritance**: the rollup inherits the citation and grounding requirements from the per-hypothesis files. Every factual claim traces back to a specific per-hypothesis file's content. No new unsupported claims are introduced at the rollup level.
