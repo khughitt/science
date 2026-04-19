@@ -33,3 +33,12 @@ def resolve_entity_aspects(
     if entity_aspects is None:
         return list(project_aspects)
     return list(entity_aspects)
+
+
+def matches_aspect_filter(resolved: list[str], filter_set: set[str]) -> bool:
+    """Return True iff ``resolved`` intersects ``filter_set``.
+
+    The sole aspect-filter rule used by downstream commands. Callers choose
+    ``filter_set``; this helper does not invent the filter.
+    """
+    return bool(set(resolved) & filter_set)
