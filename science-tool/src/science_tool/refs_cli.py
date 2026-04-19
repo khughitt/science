@@ -125,5 +125,5 @@ def migrate_paper(
     total = sum(r.match_count for r in rewrites)
     click.echo(
         f"Rewrote {total} legacy paper references in {len(rewrites)} files. "
-        "Run `science-tool refs check-refs` to verify."
+        "Run `science-tool refs check --root <project-root>` to verify."
     )

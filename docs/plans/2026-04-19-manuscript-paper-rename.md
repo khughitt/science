@@ -835,7 +835,7 @@ def migrate_paper(project_root: Path, apply: bool, force: bool, verbose: bool) -
     total = sum(r.match_count for r in rewrites)
     click.echo(
         f"Rewrote {total} legacy paper references in {len(rewrites)} files. "
-        "Run `science-tool refs check-refs` to verify."
+        "Run `science-tool refs check --root <project-root>` to verify."
     )
 ```
 
@@ -1383,10 +1383,10 @@ git commit -m "refactor: migrate article: → paper: across framework docs"
 cd ~/d/mm30   # or wherever mm30 lives
 uv run science-tool refs migrate-paper --project-root .
 uv run science-tool refs migrate-paper --project-root . --apply
-uv run science-tool refs check-refs --project-root .
+uv run science-tool refs check --root .
 ```
 
-Expected: the dry-run shows plausible hits; `--apply` rewrites them; `check-refs` reports no new dangling references.
+Expected: the dry-run shows plausible hits; `--apply` rewrites them; `refs check` reports no new dangling references.
 
 - [ ] **Step 2: On natural-systems**
 
