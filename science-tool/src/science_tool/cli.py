@@ -2282,7 +2282,13 @@ def health_command(project_root: Path, output_format: str) -> None:
         if metric["denominator"] > 0 and metric["numerator"] < metric["denominator"]:
             coverage_gaps += 1
 
-    total_issues = len(report["unresolved_refs"]) + len(report["lingering_tags_lines"]) + layered_claim_issue_count + coverage_gaps
+    total_issues = (
+        len(report["unresolved_refs"])
+        + len(report["lingering_tags_lines"])
+        + len(report["legacy_structured_literature_prefixes"])
+        + layered_claim_issue_count
+        + coverage_gaps
+    )
     if total_issues == 0:
         click.echo("Project is clean — no issues found.")
         return
@@ -2327,6 +2333,19 @@ def health_command(project_root: Path, output_format: str) -> None:
             "\n[bold]Next:[/bold] run "
             "[cyan]science-tool graph migrate-tags --apply[/cyan] to migrate these."
         )
+
+    if report["legacy_structured_literature_prefixes"]:
+        table = Table(
+            title=(
+                "Legacy `article:` prefixes in structured sources "
+                f"({len(report['legacy_structured_literature_prefixes'])})"
+            )
+        )
+        table.add_column("File", style="bold")
+        table.add_column("Legacy Ref")
+        for row in report["legacy_structured_literature_prefixes"]:
+            table.add_row(row["source_file"], row["legacy_ref"])
+        console.print(table)
 
     adoption_table = Table(title="Layered-Claim Adoption")
     adoption_table.add_column("Check", style="bold")

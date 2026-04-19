@@ -12,6 +12,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TypedDict
 
+from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.graph.migrate import audit_project_sources, build_layered_claim_migration_report
 from science_tool.graph.sources import load_project_sources
 
@@ -158,6 +159,7 @@ class HealthReport(TypedDict):
     layered_claims: "LayeredClaimHealthReport"
     legacy_task_type: list["LegacyTaskTypeFinding"]
     invalid_entity_aspects: list["InvalidEntityAspectsFinding"]
+    legacy_structured_literature_prefixes: list["LegacyStructuredLiteraturePrefixFinding"]
 
 
 class CoverageMetric(TypedDict):
@@ -241,6 +243,7 @@ def build_health_report(project_root: Path) -> HealthReport:
         },
         "legacy_task_type": collect_legacy_task_type(project_root),
         "invalid_entity_aspects": collect_invalid_entity_aspects(project_root),
+        "legacy_structured_literature_prefixes": collect_legacy_structured_literature_prefixes(project_root),
     }
 
 
@@ -290,6 +293,14 @@ class InvalidEntityAspectsFinding(TypedDict):
     message: str
 
 
+class LegacyStructuredLiteraturePrefixFinding(TypedDict):
+    source_file: str
+    legacy_ref: str
+
+
+_LEGACY_ARTICLE_REF_RE = re.compile(r"\barticle:[A-Za-z0-9_.-]+\b")
+
+
 def collect_invalid_entity_aspects(project_root: Path) -> list[InvalidEntityAspectsFinding]:
     """Return a list of entity files carrying invalid explicit `aspects:` values."""
     from science_model.aspects import (
@@ -336,4 +347,31 @@ def collect_invalid_entity_aspects(project_root: Path) -> list[InvalidEntityAspe
                         message=str(exc),
                     )
                 )
+    return findings
+
+
+def collect_legacy_structured_literature_prefixes(project_root: Path) -> list[LegacyStructuredLiteraturePrefixFinding]:
+    """Return legacy `article:` refs still present in structured KG source YAML."""
+    findings: list[LegacyStructuredLiteraturePrefixFinding] = []
+    sources_dir = project_root / "knowledge" / "sources"
+    if not sources_dir.is_dir():
+        return findings
+
+    for path in sorted(sources_dir.rglob("*.yaml")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        seen: set[str] = set()
+        for match in _LEGACY_ARTICLE_REF_RE.finditer(text):
+            legacy_ref = match.group(0)
+            if canonical_paper_id(legacy_ref) == legacy_ref or legacy_ref in seen:
+                continue
+            seen.add(legacy_ref)
+            findings.append(
+                LegacyStructuredLiteraturePrefixFinding(
+                    source_file=str(path.relative_to(project_root)),
+                    legacy_ref=legacy_ref,
+                )
+            )
     return findings

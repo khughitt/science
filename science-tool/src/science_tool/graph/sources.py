@@ -20,14 +20,6 @@ from science_model.reasoning import (
     RivalModelPacket,
     SupportScope,
 )
-
-_ENUM_FIELDS: dict[str, type[StrEnum]] = {
-    "claim_layer": ClaimLayer,
-    "identification_strength": IdentificationStrength,
-    "proxy_directness": ProxyDirectness,
-    "supports_scope": SupportScope,
-    "evidence_role": EvidenceRole,
-}
 from science_model.ontologies import load_catalogs_for_names
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.profiles import CORE_PROFILE, load_shared_profile
@@ -37,6 +29,14 @@ from science_model.source_contracts import AuthoredTargetedRelation, BindingSour
 from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.paths import resolve_paths
 from science_tool.tasks import parse_tasks
+
+_ENUM_FIELDS: dict[str, type[StrEnum]] = {
+    "claim_layer": ClaimLayer,
+    "identification_strength": IdentificationStrength,
+    "proxy_directness": ProxyDirectness,
+    "supports_scope": SupportScope,
+    "evidence_role": EvidenceRole,
+}
 
 _SHORT_ID_RE = re.compile(r"^(?P<token>[a-z]\d+)(?:[-_].*)?$", re.IGNORECASE)
 _EXTERNAL_PREFIXES = frozenset({"go", "mesh", "doid", "hp", "so", "ncbitaxon", "ncbigene", "ensembl"})
