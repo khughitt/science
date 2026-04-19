@@ -1,11 +1,12 @@
 # Dataset Entity Lifecycle and `science-pkg` Schema
 
 **Date:** 2026-04-19
-**Status:** Draft (rev 2.1 — unified external + derived data; design-review revisions)
+**Status:** Draft (rev 2.2 — adds plan-review clarifications: parallel-runs lifecycle, model-level invariants, single canonical loader)
 **Supersedes:** rev 1 of this file (external-dataset-only access verification gate)
 **Revision history:**
 - rev 2 — unified `dataset` entity covering external + derived (`origin:` discriminator); science-pkg schema family; `data-package` → `research-package` rename.
-- rev 2.1 (this rev) — design-review fixes: ship `data-package migrate` in v1; per-output runtime datapackages; entity-vs-runtime ownership table (entity drops `resources[]`); plan gate vs runtime stageability split (Dim 3 escalates); `outputs[].resource_names` (renamed); symmetric research-package backlinks (invariant #11).
+- rev 2.1 — design-review fixes: ship `data-package migrate` in v1; per-output runtime datapackages; entity-vs-runtime ownership table (entity drops `resources[]`); plan gate vs runtime stageability split (Dim 3 escalates); `outputs[].resource_names` (renamed); symmetric research-package backlinks (invariant #11).
+- rev 2.2 (this rev) — plan-review clarifications: parallel derived datasets per `(workflow, run, output)` tuple coexist; per-output runtime datapackages are *views* into the run-aggregate (resources stay in place, `basepath: ".."`); model-level invariant enforcement at Pydantic construction (not only JSON Schema); single canonical loader (`parse_entity_file` extended, not parallel function); recursion-safe transitive gate walk; comment-preserving frontmatter edits.
 **Related (forward):** `docs/specs/2026-04-19-multi-backend-entity-resolver-design.md` (Spec Y, sibling — written immediately after this one)
 
 ## Motivation
@@ -442,6 +443,12 @@ Execution          Pipeline reads from the runtime datapackage.yaml at the
 Review             /science:review-pipeline Dim 3 verifies gate state, backlinks,
                      invariants, freshness.
 ```
+
+### Parallel runs of the same workflow
+
+Repeated invocations of the same workflow produce **parallel** derived dataset entities — one per `(workflow, run, output-slug)` tuple. Both `dataset:wf-r1-out` and `dataset:wf-r2-out` exist as `status: "active"` entities side-by-side; neither automatically supersedes the other. Each carries its own `consumed_by` independently, so a downstream plan that referenced the older run's output continues to resolve. Supersession is a manual user action (a future `science-tool dataset supersede <slug>` follow-on may automate it). v1's invariant: a derived dataset's identity is permanent; the workflow-run that produced it never changes; `consumed_by` grows monotonically.
+
+The per-output runtime datapackage at `results/<wf>/<r1>/<output>/datapackage.yaml` is a **view** into the run-aggregate's resources at `results/<wf>/<r1>/`. Resource paths inside the per-output datapackage are kept relative to the run-aggregate root (the per-output datapackage sets `basepath: ".."`), so files stay where the workflow wrote them and the per-output datapackage acts as a slice/manifest, not a relocation. This avoids file-moves at registration time and keeps the workflow's existing on-disk layout intact.
 
 ### Derived — workflow run → registration → planning downstream
 

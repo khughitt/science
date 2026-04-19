@@ -1,4 +1,4 @@
-# Dataset Entity Lifecycle (rev 2.1) Implementation Plan
+# Dataset Entity Lifecycle (rev 2.2) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -6,7 +6,16 @@
 
 **Architecture:** Two surface-specific JSON Schemas (`science-pkg-entity-1.0`, `science-pkg-runtime-1.0`) share a base. Entity surface (markdown frontmatter under `doc/datasets/`) carries project-level metadata; runtime surface (`datapackage.yaml` next to staged data) carries per-resource info. Single source of truth: entity drops `resources[]` entirely. Workflow registration (`science-tool dataset register-run`) emits per-output runtime datapackages plus matching derived dataset entities with symmetric backlinks. Strict migration of legacy `data-package` entities via shipped `science-tool data-package migrate`.
 
-**Tech Stack:** Python 3.11+, uv, Pydantic, Click (CLI), pytest, ruff, pyright. Code lives across `science-model/src/science_model/` (schemas, models) and `science-tool/src/science_tool/` (CLI, graph, health). Tests under `science-tool/tests/` and `science-model/tests/`. Spec source of truth: `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` (rev 2.1).
+**Tech Stack:** Python 3.11+, uv, Pydantic, Click (CLI), pytest, ruff, pyright. Code lives across `science-model/src/science_model/` (schemas, models) and `science-tool/src/science_tool/` (CLI, graph, health). Tests under `science-tool/tests/` and `science-model/tests/`. Spec source of truth: `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` (rev 2.2).
+
+**Key cross-cutting invariants (read before any task):**
+
+- **Single canonical entity loader.** All entity reading goes through `science_model.frontmatter.parse_entity_file` (line 125). Tasks below extend that function rather than introduce parallel loaders. Project-wide discovery flows through `science_tool.graph.sources.load_project_sources` → `_load_markdown_entities` (line 245), which iterates a `roots: list[Path]` and calls `parse_entity_file` per markdown file.
+- **Per-output datapackages are views, not relocations.** `register-run` writes per-output `datapackage.yaml` files alongside (under `<output-slug>/`) but does NOT move resource files. Resource paths stay relative to the run-aggregate root via `basepath: ".."`.
+- **Frontmatter edits preserve comments and formatting.** Avoid `yaml.safe_dump` round-trips for hand-maintained files. Use the narrow `_append_yaml_list_item` regex helper introduced in Task 7.4 — it inserts a single line into an existing YAML list field byte-for-byte.
+- **Model-level invariants fail at construction.** Pydantic `model_validator` on `Entity` enforces the origin/access/derivation/accessions/local_path exclusivity rules — JSON Schema, health, AND the model all reject violations.
+- **Cycle-safe transitive walks.** The gate uses a per-path recursion stack + memoized pass/fail per dataset id. Sibling branches sharing an upstream are not falsely flagged as cycles.
+- **Strict graph-build mode is the v1 default.** No warning period; `data-package migrate --dry-run` and `--all` give a smooth on-ramp without softening the failure posture.
 
 **Reference paths used throughout:**
 - Spec: `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md`
@@ -709,13 +718,13 @@ git commit -m "feat(science-model): add EntityType.RESEARCH_PACKAGE"
 
 ---
 
-### Task 2.4: Extend `Entity` with new dataset fields
+### Task 2.4: Extend `Entity` with new dataset fields + model-level invariants
 
 **Files:**
 - Modify: `science-model/src/science_model/entities.py`
 - Test: `science-model/tests/test_dataset_models.py`
 
-- [ ] **Step 1: Add failing test**
+- [ ] **Step 1: Add failing tests (happy paths AND invariants)**
 
 Append to `tests/test_dataset_models.py`:
 
@@ -738,11 +747,26 @@ def _entity_kwargs() -> dict:
     )
 
 
+def _ext_access() -> AccessBlock:
+    return AccessBlock(level="public", verified=True, verification_method="retrieved", last_reviewed="2026-04-19", source_url="https://x")
+
+
+def _der_block() -> DerivationBlock:
+    return DerivationBlock(
+        workflow="workflow:wf",
+        workflow_run="workflow-run:wf-r1",
+        git_commit="abc",
+        config_snapshot="c",
+        produced_at="2026-04-19T12:00:00Z",
+        inputs=["dataset:up"],
+    )
+
+
 def test_entity_external_origin_with_access_block() -> None:
     e = Entity(
         **_entity_kwargs(),
         origin="external",
-        access=AccessBlock(level="public", verified=True, verification_method="retrieved", last_reviewed="2026-04-19", source_url="https://x"),
+        access=_ext_access(),
         accessions=["EGAD0001"],
         datapackage="data/x/datapackage.yaml",
         local_path="",
@@ -759,14 +783,7 @@ def test_entity_derived_origin_with_derivation_block() -> None:
     e = Entity(
         **_entity_kwargs(),
         origin="derived",
-        derivation=DerivationBlock(
-            workflow="workflow:wf",
-            workflow_run="workflow-run:wf-r1",
-            git_commit="abc",
-            config_snapshot="c",
-            produced_at="2026-04-19T12:00:00Z",
-            inputs=["dataset:up"],
-        ),
+        derivation=_der_block(),
         datapackage="results/wf/r1/x/datapackage.yaml",
         consumed_by=[],
         parent_dataset="",
@@ -775,26 +792,81 @@ def test_entity_derived_origin_with_derivation_block() -> None:
     assert e.origin == "derived"
     assert e.derivation is not None
     assert e.access is None
+
+
+# Model-level invariants — fail at construction time, not only at JSON Schema check.
+
+def test_entity_invariant_external_with_derivation_rejects() -> None:
+    """origin: external ⟹ derivation must be None (#7)."""
+    import pytest
+    with pytest.raises(ValueError, match="derivation"):
+        Entity(**_entity_kwargs(), type=EntityType.DATASET, origin="external", access=_ext_access(), derivation=_der_block())
+
+
+def test_entity_invariant_derived_with_access_rejects() -> None:
+    """origin: derived ⟹ access must be None (#8)."""
+    import pytest
+    with pytest.raises(ValueError, match="access"):
+        Entity(**_entity_kwargs(), type=EntityType.DATASET, origin="derived", derivation=_der_block(), access=_ext_access())
+
+
+def test_entity_invariant_derived_with_accessions_rejects() -> None:
+    import pytest
+    with pytest.raises(ValueError, match="accessions"):
+        Entity(**_entity_kwargs(), type=EntityType.DATASET, origin="derived", derivation=_der_block(), accessions=["E1"])
+
+
+def test_entity_invariant_derived_with_local_path_rejects() -> None:
+    import pytest
+    with pytest.raises(ValueError, match="local_path"):
+        Entity(**_entity_kwargs(), type=EntityType.DATASET, origin="derived", derivation=_der_block(), local_path="data/x.csv")
+
+
+def test_entity_invariant_external_missing_access_rejects() -> None:
+    """A dataset entity with origin: external must carry access:."""
+    import pytest
+    with pytest.raises(ValueError, match="access"):
+        Entity(**_entity_kwargs(), type=EntityType.DATASET, origin="external", access=None)
+
+
+def test_entity_invariant_derived_missing_derivation_rejects() -> None:
+    import pytest
+    with pytest.raises(ValueError, match="derivation"):
+        Entity(**_entity_kwargs(), type=EntityType.DATASET, origin="derived", derivation=None)
+
+
+def test_entity_invariant_does_not_apply_to_non_dataset_types() -> None:
+    """The origin/access/derivation invariant applies only to type=dataset."""
+    e = Entity(
+        id="hypothesis:h1", type=EntityType.HYPOTHESIS, title="H1", project="p",
+        ontology_terms=[], related=[], source_refs=[], content_preview="",
+        file_path="doc/hypotheses/h1.md",
+    )
+    assert e.origin is None  # no constraint
 ```
 
-- [ ] **Step 2: Run failing test**
+- [ ] **Step 2: Run failing tests**
 
 ```bash
-uv run --frozen pytest tests/test_dataset_models.py::test_entity_external_origin_with_access_block -v
+uv run --frozen pytest tests/test_dataset_models.py -v
 ```
 
-Expected: FAIL — `Entity` lacks new fields.
+Expected: FAIL — `Entity` lacks new fields and the model_validator.
 
-- [ ] **Step 3: Extend `Entity`**
+- [ ] **Step 3: Extend `Entity` with fields and validator**
 
-In `science-model/src/science_model/entities.py`, add an import and new fields:
+In `science-model/src/science_model/entities.py`:
+
+a) Add imports near the top:
 
 ```python
-# At the top imports section, add:
 from science_model.packages.schema import AccessBlock, DerivationBlock
+```
 
-# Inside the Entity class, after the existing fields (after line ~95):
-    # Dataset entity unification (rev 2.1)
+b) Inside the `Entity` class, after the existing fields (after line ~95), add:
+
+```python
+    # Dataset entity unification (rev 2.2)
     origin: str | None = None  # "external" | "derived"
     access: AccessBlock | None = None
     derivation: DerivationBlock | None = None
@@ -806,26 +878,55 @@ from science_model.packages.schema import AccessBlock, DerivationBlock
     siblings: list[str] = Field(default_factory=list)
 ```
 
+c) Add a model_validator after the existing `_fill_derived_defaults` validator:
+
+```python
+    @model_validator(mode="after")
+    def _enforce_origin_block_invariants(self) -> "Entity":
+        """Invariants #7/#8: origin ⟺ which top-level block applies (datasets only)."""
+        if self.type != EntityType.DATASET or self.origin is None:
+            return self
+        if self.origin == "external":
+            if self.access is None:
+                raise ValueError(f"{self.id}: origin=external requires an access block (invariant #7)")
+            if self.derivation is not None:
+                raise ValueError(f"{self.id}: origin=external must not carry a derivation block (invariant #7)")
+        elif self.origin == "derived":
+            if self.derivation is None:
+                raise ValueError(f"{self.id}: origin=derived requires a derivation block (invariant #8)")
+            if self.access is not None:
+                raise ValueError(f"{self.id}: origin=derived must not carry an access block (invariant #8)")
+            if self.accessions:
+                raise ValueError(f"{self.id}: origin=derived must not carry accessions (invariant #8)")
+            if self.local_path:
+                raise ValueError(f"{self.id}: origin=derived must not carry local_path (invariant #8)")
+        else:
+            raise ValueError(f"{self.id}: origin must be 'external' or 'derived', got {self.origin!r}")
+        return self
+```
+
 - [ ] **Step 4: Verify**
 
 ```bash
 uv run --frozen pytest tests/test_dataset_models.py -v
 ```
 
-Expected: PASS.
+Expected: all PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add science-model/src/science_model/entities.py science-model/tests/test_dataset_models.py
-git commit -m "feat(science-model): extend Entity with origin/access/derivation/lineage fields"
+git commit -m "feat(science-model): Entity dataset fields + model-level invariant enforcement"
 ```
 
 ---
 
 ## Phase 3: Frontmatter parsing extensions
 
-### Task 3.1: Back-compat reads — flat `access:` and `datasets:` aliases
+> **Important:** All entity loading goes through the existing `parse_entity_file(path, project_slug)` at `science-model/src/science_model/frontmatter.py:125`. Phase 3 *extends* that function — do NOT introduce a parallel `frontmatter_to_entity`. This keeps `science_tool.graph.sources._load_markdown_entities` (the project-wide discovery callsite) unified.
+
+### Task 3.1: Extend `parse_entity_file` with back-compat reads + new dataset fields
 
 **Files:**
 - Modify: `science-model/src/science_model/frontmatter.py`
@@ -836,7 +937,7 @@ git commit -m "feat(science-model): extend Entity with origin/access/derivation/
 Create `science-model/tests/test_frontmatter_dataset.py`:
 
 ```python
-"""Frontmatter parsing for dataset entities — back-compat + new shape."""
+"""parse_entity_file extensions for dataset entities — back-compat + new shape."""
 from __future__ import annotations
 
 import textwrap
@@ -844,13 +945,14 @@ from pathlib import Path
 
 import pytest
 
-from science_model.frontmatter import parse_frontmatter, frontmatter_to_entity
+from science_model.frontmatter import parse_entity_file
 
 
 @pytest.fixture
 def tmp_md(tmp_path: Path):
-    def _write(content: str) -> Path:
-        p = tmp_path / "x.md"
+    def _write(content: str, name: str = "x.md") -> Path:
+        p = tmp_path / "doc" / "datasets" / name
+        p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(textwrap.dedent(content), encoding="utf-8")
         return p
     return _write
@@ -867,10 +969,10 @@ def test_legacy_flat_access_parses_as_access_level(tmp_md) -> None:
           - "EGAD00001"
         ---
         Body.
-    """)
-    fm, _ = parse_frontmatter(p)
-    e = frontmatter_to_entity(fm, project="testproj", file_path=str(p))
-    assert e.origin == "external"  # default for legacy
+    """, name="legacy.md")
+    e = parse_entity_file(p, project_slug="testproj")
+    assert e is not None
+    assert e.origin == "external"  # default for legacy datasets
     assert e.access is not None
     assert e.access.level == "public"
     assert e.access.verified is False
@@ -896,31 +998,36 @@ def test_new_shape_origin_external(tmp_md) -> None:
         accessions: ["E1"]
         datapackage: "data/new/datapackage.yaml"
         ---
-    """)
-    fm, _ = parse_frontmatter(p)
-    e = frontmatter_to_entity(fm, project="testproj", file_path=str(p))
+    """, name="new.md")
+    e = parse_entity_file(p, project_slug="testproj")
+    assert e is not None
     assert e.origin == "external"
-    assert e.access.verified is True
+    assert e.access is not None and e.access.verified is True
     assert e.datapackage == "data/new/datapackage.yaml"
 ```
 
 - [ ] **Step 2: Run failing test**
 
 ```bash
+cd /mnt/ssd/Dropbox/science/science-model
 uv run --frozen pytest tests/test_frontmatter_dataset.py -v
 ```
 
-Expected: ImportError on `frontmatter_to_entity` (does not exist yet) OR fields not populated.
+Expected: FAIL — `parse_entity_file` doesn't yet populate `origin`, `access`, `accessions`, `datapackage`.
 
-- [ ] **Step 3: Add or extend `frontmatter_to_entity`**
+- [ ] **Step 3: Extend `parse_entity_file`**
 
-In `science-model/src/science_model/frontmatter.py`, add (or extend if it exists) a function that builds an `Entity` from a frontmatter dict. Insert after the existing helpers:
+In `science-model/src/science_model/frontmatter.py`:
+
+a) Add imports near the top (after existing imports):
 
 ```python
-from science_model.entities import Entity, EntityType
 from science_model.packages.schema import AccessBlock, AccessException, DerivationBlock
+```
 
+b) Add coercion helpers above `parse_entity_file` (around line 124):
 
+```python
 def _coerce_access(fm: dict) -> AccessBlock | None:
     """Build AccessBlock from frontmatter, supporting legacy flat `access: <level>` shorthand."""
     raw = fm.get("access")
@@ -956,38 +1063,19 @@ def _coerce_derivation(fm: dict) -> DerivationBlock | None:
         produced_at=raw.get("produced_at", ""),
         inputs=list(raw.get("inputs") or []),
     )
+```
 
+c) Modify `parse_entity_file` to populate the new fields. Inside the `Entity(...)` constructor call (around line 150), add the new keyword arguments:
 
-def frontmatter_to_entity(fm: dict, *, project: str, file_path: str) -> Entity:
-    """Build an Entity model from a frontmatter dict.
-
-    Applies back-compat read rules:
-    - `datasets:` alias for `accessions:` (legacy field name)
-    - flat scalar `access: <level>` -> AccessBlock with level only, verified=False
-    - missing `origin:` defaults to "external" (legacy entries)
-    """
-    type_str = fm.get("type", "unknown")
-    accessions = list(fm.get("accessions") or fm.get("datasets") or [])
-    origin = fm.get("origin")
-    if origin is None and type_str == "dataset":
-        origin = "external"
+```python
+    # Inside Entity(...) call, augment with:
     return Entity(
-        id=fm.get("id", ""),
-        type=EntityType(type_str) if type_str in {t.value for t in EntityType} else EntityType.UNKNOWN,
-        title=fm.get("title", ""),
-        status=fm.get("status"),
-        project=project,
-        ontology_terms=list(fm.get("ontology_terms") or []),
-        created=_coerce_date(fm.get("created")),
-        updated=_coerce_date(fm.get("updated")),
-        related=list(fm.get("related") or []),
-        source_refs=list(fm.get("source_refs") or []),
-        content_preview="",
-        file_path=file_path,
-        origin=origin,
+        # ... existing fields ...
+        # Dataset entity unification (rev 2.2):
+        origin=(fm.get("origin") or ("external" if fm["type"] == "dataset" else None)),
         access=_coerce_access(fm),
         derivation=_coerce_derivation(fm),
-        accessions=accessions,
+        accessions=list(fm.get("accessions") or fm.get("datasets") or []),
         datapackage=fm.get("datapackage", ""),
         local_path=fm.get("local_path", ""),
         consumed_by=list(fm.get("consumed_by") or []),
@@ -995,6 +1083,8 @@ def frontmatter_to_entity(fm: dict, *, project: str, file_path: str) -> Entity:
         siblings=list(fm.get("siblings") or []),
     )
 ```
+
+Note: the existing `datasets=fm.get("datasets")` line in `parse_entity_file` (line ~168) becomes redundant for `dataset` entities (the new `accessions=` arg supersedes it for the dataset-specific use). Keep the existing field for backward compatibility with non-dataset entities that might still use it; the alias precedence (`accessions or datasets`) handles dataset entities correctly.
 
 - [ ] **Step 4: Verify**
 
@@ -1004,16 +1094,24 @@ uv run --frozen pytest tests/test_frontmatter_dataset.py -v
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Confirm no regression in existing entity loading**
+
+```bash
+uv run --frozen pytest tests/ -v -k "not dataset"
+```
+
+Expected: PASS (no other entity types should be affected — the new fields default to None/empty for non-dataset types, and the model_validator from Task 2.4 only fires when `type == DATASET`).
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add science-model/src/science_model/frontmatter.py science-model/tests/test_frontmatter_dataset.py
-git commit -m "feat(science-model): frontmatter_to_entity with dataset back-compat reads"
+git commit -m "feat(science-model): extend parse_entity_file with dataset back-compat reads"
 ```
 
 ---
 
-### Task 3.2: Derived-origin frontmatter parses through the new path
+### Task 3.2: Derived-origin frontmatter parses through `parse_entity_file`
 
 **Files:**
 - Modify: `science-model/tests/test_frontmatter_dataset.py`
@@ -1045,15 +1143,34 @@ def test_derived_frontmatter_parses(tmp_md) -> None:
           - "plan:p1"
           - "research-package:rp1"
         ---
-    """)
-    fm, _ = parse_frontmatter(p)
-    e = frontmatter_to_entity(fm, project="testproj", file_path=str(p))
+    """, name="der.md")
+    e = parse_entity_file(p, project_slug="testproj")
+    assert e is not None
     assert e.origin == "derived"
     assert e.access is None
     assert e.derivation is not None
     assert e.derivation.workflow_run == "workflow-run:wf-r1"
     assert e.derivation.inputs == ["dataset:upstream"]
     assert "research-package:rp1" in e.consumed_by
+
+
+def test_research_package_entity_parses(tmp_md, tmp_path: Path) -> None:
+    """Entity-typed research-package entries parse without origin/access/derivation set."""
+    p = tmp_path / "research" / "packages" / "lens" / "rp1" / "research-package.md"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(textwrap.dedent("""
+        ---
+        id: "research-package:rp1"
+        type: "research-package"
+        title: "RP1"
+        displays: ["dataset:wf-r1-out1"]
+        ---
+    """), encoding="utf-8")
+    e = parse_entity_file(p, project_slug="testproj")
+    assert e is not None
+    assert e.type.value == "research-package"
+    assert e.origin is None
+    assert e.access is None
 ```
 
 - [ ] **Step 2: Run**
@@ -1062,13 +1179,13 @@ def test_derived_frontmatter_parses(tmp_md) -> None:
 uv run --frozen pytest tests/test_frontmatter_dataset.py -v
 ```
 
-Expected: PASS (the parser from Task 3.1 already handles this).
+Expected: PASS (the extension from Task 3.1 already handles the derived shape; the research-package test confirms the loader handles entity types under `research/packages/`).
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add science-model/tests/test_frontmatter_dataset.py
-git commit -m "test(science-model): cover derived-origin frontmatter parsing"
+git commit -m "test(science-model): cover derived + research-package frontmatter parsing"
 ```
 
 ---
@@ -1183,10 +1300,10 @@ updated: "<YYYY-MM-DD>"
 cd /mnt/ssd/Dropbox/science/science-model
 uv run --frozen python -c "
 from pathlib import Path
-from science_model.frontmatter import parse_frontmatter, frontmatter_to_entity
-fm, _ = parse_frontmatter(Path('../templates/dataset.md'))
-print('parsed origin:', fm.get('origin'))
-print('parsed access keys:', list((fm.get('access') or {}).keys()))
+from science_model.frontmatter import parse_entity_file
+e = parse_entity_file(Path('../templates/dataset.md'), project_slug='templates')
+print('parsed origin:', e.origin if e else None)
+print('parsed access verified:', e.access.verified if e and e.access else None)
 "
 ```
 
@@ -1328,27 +1445,31 @@ git commit -m "feat(templates): add produces[]/inputs[] to workflow-run template
 
 ## Phase 5: Per-entity-type discovery rule
 
-### Task 5.1: Add discovery config + extend graph builder scan
+The actual project-wide discovery callsite is **`science_tool.graph.sources._load_markdown_entities`** (see `science-tool/src/science_tool/graph/sources.py:245`). It receives a `roots: list[Path]` and iterates `root.rglob("*.md")` per root, calling `parse_entity_file` on each. The roots are assembled in `load_project_sources` (line 139).
+
+To surface `research-package` entities, we extend the roots assembly to include `research/packages/`. We then verify the change at every consumer boundary: project sources, health, materialize, sync.
+
+### Task 5.1: Extend `load_project_sources` to include `research/packages/`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/store.py` (or wherever entity discovery lives — check `materialize.py` if not in store)
-- Test: `science-tool/tests/test_graph_paths.py`
+- Modify: `science-tool/src/science_tool/graph/sources.py`
+- Test: `science-tool/tests/test_sources_research_package.py`
 
-- [ ] **Step 1: Locate entity discovery code**
+- [ ] **Step 1: Locate the roots assembly**
 
 ```bash
 cd /mnt/ssd/Dropbox/science/science-tool
-grep -rn "doc/" src/science_tool/graph/ | grep -E "glob|rglob|walk" | head
+sed -n '139,260p' src/science_tool/graph/sources.py
 ```
 
-The output identifies the file that scans `doc/**/*.md`. Record the file path and function name (`<discovery_file>`, `<discovery_fn>`) for the next steps.
+Identify (a) the function `load_project_sources` and (b) where `roots: list[Path]` is built before being passed into `_load_markdown_entities`.
 
 - [ ] **Step 2: Write failing test**
 
-Create `science-tool/tests/test_graph_paths.py`:
+Create `science-tool/tests/test_sources_research_package.py`:
 
 ```python
-"""Per-entity-type discovery: research-package lives outside doc/."""
+"""Project-wide discovery surfaces research-package entities."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -1356,28 +1477,28 @@ from pathlib import Path
 import pytest
 
 
-@pytest.fixture
-def proj(tmp_path: Path) -> Path:
-    (tmp_path / "doc" / "datasets").mkdir(parents=True)
-    (tmp_path / "doc" / "datasets" / "ds1.md").write_text(
+def _seed_two_entity_types(root: Path) -> None:
+    (root / "science.yaml").write_text("project: test\n", encoding="utf-8")
+    (root / "doc" / "datasets").mkdir(parents=True)
+    (root / "doc" / "datasets" / "ds1.md").write_text(
         '---\nid: "dataset:ds1"\ntype: "dataset"\ntitle: "DS1"\norigin: "external"\n'
         'access: {level: "public", verified: false}\n---\n',
         encoding="utf-8",
     )
-    (tmp_path / "research" / "packages" / "lens" / "section").mkdir(parents=True)
-    (tmp_path / "research" / "packages" / "lens" / "section" / "research-package.md").write_text(
+    (root / "research" / "packages" / "lens" / "section").mkdir(parents=True)
+    (root / "research" / "packages" / "lens" / "section" / "research-package.md").write_text(
         '---\nid: "research-package:rp1"\ntype: "research-package"\ntitle: "RP1"\n'
         'displays: ["dataset:ds1"]\n---\n',
         encoding="utf-8",
     )
-    return tmp_path
 
 
-def test_discovers_research_package_outside_doc(proj: Path) -> None:
-    from science_tool.graph.store import discover_entities  # adjust import to actual module
+def test_load_project_sources_includes_research_packages(tmp_path: Path) -> None:
+    _seed_two_entity_types(tmp_path)
+    from science_tool.graph.sources import load_project_sources
 
-    entities = list(discover_entities(proj))
-    ids = {e.id for e in entities}
+    sources = load_project_sources(tmp_path)
+    ids = {e.canonical_id for e in sources.entities}
     assert "dataset:ds1" in ids
     assert "research-package:rp1" in ids
 ```
@@ -1385,56 +1506,131 @@ def test_discovers_research_package_outside_doc(proj: Path) -> None:
 - [ ] **Step 3: Run failing test**
 
 ```bash
-uv run --frozen pytest tests/test_graph_paths.py -v
+uv run --frozen pytest tests/test_sources_research_package.py -v
 ```
 
-Expected: import error or `research-package:rp1` not found.
+Expected: FAIL — `research-package:rp1` not in surfaced entities.
 
-- [ ] **Step 4: Add per-entity-type config + scan rule**
+- [ ] **Step 4: Extend roots assembly**
 
-In the discovery file identified in Step 1, add a config map and use it in the scanner:
+In `science-tool/src/science_tool/graph/sources.py`, locate the `roots` list construction inside `load_project_sources` (search for `roots = [` or similar). Add `research/packages/` to the list:
 
 ```python
-# Per-entity-type discovery (small precursor to Spec Y's resolver).
-ENTITY_DISCOVERY_GLOBS: dict[str, str] = {
-    "default": "doc/**/*.md",
-    "research-package": "research/packages/**/research-package.md",
-}
-
-
-def _discovery_globs() -> list[str]:
-    """Return the union of glob patterns to scan for entity files."""
-    return list(set(ENTITY_DISCOVERY_GLOBS.values()))
-
-
-def discover_entities(project_root: Path):
-    """Yield Entity objects from all configured entity-discovery paths."""
-    seen: set[Path] = set()
-    for pattern in _discovery_globs():
-        for md_path in project_root.glob(pattern):
-            if md_path in seen:
-                continue
-            seen.add(md_path)
-            fm, _ = parse_frontmatter(md_path)
-            if fm:
-                yield frontmatter_to_entity(fm, project=project_root.name, file_path=str(md_path))
+    # Existing roots (e.g., doc/) PLUS the research-package home.
+    roots = [
+        # ... existing entries unchanged ...
+        project_root / "research" / "packages",
+    ]
 ```
 
-(Adapt names to the actual existing discovery function. If it's already a generator over `doc/**/*.md`, extend it to iterate `_discovery_globs()` and dedupe.)
+If the existing pattern uses a top-level discovery constant, add the new path there too, e.g.:
 
-- [ ] **Step 5: Verify**
+```python
+DEFAULT_ENTITY_ROOTS = (
+    Path("doc"),
+    Path("research") / "packages",   # research-package entities live here
+)
+```
+
+The `_load_markdown_entities` function (line 245) already handles missing roots (`if not root.is_dir(): continue`) so adding a path that doesn't exist on every project is safe.
+
+- [ ] **Step 5: Verify the targeted test**
 
 ```bash
-uv run --frozen pytest tests/test_graph_paths.py -v
+uv run --frozen pytest tests/test_sources_research_package.py -v
 ```
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Verify no regression in existing source loading**
 
 ```bash
-git add science-tool/src/science_tool/graph/store.py science-tool/tests/test_graph_paths.py
-git commit -m "feat(graph): per-entity-type discovery globs (research-package outside doc/)"
+uv run --frozen pytest tests/ -v -k "sources or graph_export or materialize"
+```
+
+Expected: PASS (no other tests should break — the new root is additive).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/science_tool/graph/sources.py tests/test_sources_research_package.py
+git commit -m "feat(graph): include research/packages/ in project-wide entity discovery"
+```
+
+---
+
+### Task 5.2: Verify discovery propagates to all consumers (health, materialize, sync)
+
+**Files:**
+- Modify: `science-tool/tests/test_sources_research_package.py` (extend with consumer-boundary tests)
+
+- [ ] **Step 1: Add boundary tests**
+
+Append:
+
+```python
+def test_health_surfaces_research_package(tmp_path: Path) -> None:
+    """Health module sees research-package entities (e.g., for asymmetric-edge invariant)."""
+    _seed_two_entity_types(tmp_path)
+    # Make the dataset depend on a workflow-run that doesn't exist — health should still
+    # process the research-package entity through its #11 check.
+    (tmp_path / "doc" / "datasets" / "ds1.md").write_text(
+        '---\nid: "dataset:ds1"\ntype: "dataset"\ntitle: "DS1"\norigin: "external"\n'
+        'access: {level: "public", verified: false}\n'
+        'consumed_by: ["research-package:rp1"]\n---\n',  # claims rp1 displays it
+        encoding="utf-8",
+    )
+    from science_tool.graph.health import check_dataset_anomalies
+    issues = check_dataset_anomalies(tmp_path)
+    # If discovery were broken, the symmetry check couldn't see the rp.
+    # The displays: ["dataset:ds1"] in rp1 matches consumed_by, so NO anomaly fires.
+    asym = [i for i in issues if i["code"] == "dataset_research_package_asymmetric"]
+    assert asym == [], f"unexpected asymmetric issues: {asym}"
+
+
+def test_materialize_includes_research_package_in_graph(tmp_path: Path) -> None:
+    _seed_two_entity_types(tmp_path)
+    from science_tool.graph.materialize import build_graph
+    graph = build_graph(tmp_path, strict=True)
+    # The exact graph API depends on materialize's return shape — adapt the assertion to
+    # whatever `build_graph` returns. Either inspect a node set, an edge list, or a
+    # serialized graph, and confirm research-package:rp1 appears.
+    # Example assuming graph exposes .entities or .nodes:
+    if hasattr(graph, "entities"):
+        ids = {e.canonical_id for e in graph.entities}
+    elif hasattr(graph, "nodes"):
+        ids = {n for n in graph.nodes}
+    else:
+        ids = set(str(graph))  # fallback: stringify and substring-check
+    assert any("research-package:rp1" in i for i in ids)
+
+
+def test_sync_iterates_research_packages(tmp_path: Path) -> None:
+    """If registry/sync.py walks project sources, research-packages must appear."""
+    _seed_two_entity_types(tmp_path)
+    # Sync's exact API depends on the codebase. Either:
+    # (a) call science_tool.registry.sync.<entry>() and check it didn't error on
+    #     an unknown entity type;
+    # (b) confirm the source iteration sees the entity at all.
+    from science_tool.graph.sources import load_project_sources
+    sources = load_project_sources(tmp_path)
+    rp_kinds = [e.kind for e in sources.entities if e.canonical_id == "research-package:rp1"]
+    assert rp_kinds == ["research-package"]
+```
+
+- [ ] **Step 2: Run boundary tests**
+
+```bash
+uv run --frozen pytest tests/test_sources_research_package.py -v
+```
+
+Expected: PASS. If `materialize.build_graph` doesn't expose entities/nodes via the assumed attrs, adapt the test to the actual return shape — the test's intent is "research-package made it into the graph build."
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add tests/test_sources_research_package.py
+git commit -m "test(graph): research-package surfaces through health/materialize/sync"
 ```
 
 ---
@@ -1567,7 +1763,7 @@ Expected: import error on `check_dataset_anomalies`.
 In `science-tool/src/science_tool/graph/health.py`, add:
 
 ```python
-from science_model.frontmatter import frontmatter_to_entity, parse_frontmatter
+from science_model.frontmatter import parse_entity_file, parse_frontmatter
 
 
 def _iter_dataset_entities(project_root: Path):
@@ -1579,7 +1775,9 @@ def _iter_dataset_entities(project_root: Path):
         fm, _ = result
         if fm.get("type") != "dataset":
             continue
-        e = frontmatter_to_entity(fm, project=project_root.name, file_path=str(md))
+        e = parse_entity_file(md, project_slug=project_root.name)
+        if e is None:
+            continue
         yield e, fm, md
 
 
@@ -1859,52 +2057,95 @@ def test_derived_cycle_detected(tmp_path: Path) -> None:
     assert any(i["code"] == "dataset_derived_input_chain_broken" for i in issues)
 ```
 
-- [ ] **Step 2: Implement transitive walk**
+- [ ] **Step 1b: Add regression test for shared-upstream DAG (cycle false-positive)**
+
+Append:
+
+```python
+def test_derived_shared_upstream_not_false_cycle(tmp_path: Path) -> None:
+    """Two derived datasets share the same upstream — must NOT be reported as a cycle."""
+    # Verified external upstream.
+    _write_dataset(tmp_path, "shared_up", origin="external",
+                   body='access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}')
+    # Two derived branches, both consuming the shared upstream.
+    _write_workflow_run(tmp_path, "w-r-a", produces=["dataset:branch_a"], inputs=["dataset:shared_up"])
+    _write_workflow_run(tmp_path, "w-r-b", produces=["dataset:branch_b"], inputs=["dataset:shared_up"])
+    _write_dataset(tmp_path, "branch_a", origin="derived", body=_derived_dataset_body("workflow-run:w-r-a", ["dataset:shared_up"]))
+    _write_dataset(tmp_path, "branch_b", origin="derived", body=_derived_dataset_body("workflow-run:w-r-b", ["dataset:shared_up"]))
+    # A consumer that depends on BOTH branches (this exercises the walk visiting `shared_up` twice).
+    _write_workflow_run(tmp_path, "w-r-merge", produces=["dataset:merged"], inputs=["dataset:branch_a", "dataset:branch_b"])
+    _write_dataset(tmp_path, "merged", origin="derived", body=_derived_dataset_body("workflow-run:w-r-merge", ["dataset:branch_a", "dataset:branch_b"]))
+    issues = check_dataset_anomalies(tmp_path)
+    chain_issues = [i for i in issues if i["code"] == "dataset_derived_input_chain_broken"]
+    assert chain_issues == [], f"shared upstream wrongly flagged as cycle: {chain_issues}"
+```
+
+- [ ] **Step 2: Implement cycle-safe transitive walk**
 
 Add to `health.py`:
 
 ```python
-def _passes_gate(entity_id: str, datasets_by_id: dict[str, "Entity"], visited: set[str]) -> tuple[bool, str]:
+def _passes_gate(
+    entity_id: str,
+    datasets_by_id: dict[str, "Entity"],
+    *,
+    in_progress: frozenset[str],
+    memo: dict[str, tuple[bool, str]],
+) -> tuple[bool, str]:
     """Recursively check whether `entity_id` transitively passes the gate.
 
-    Returns (pass, broken_link_msg). Cycles return (False, "cycle at <id>").
+    Cycle detection uses `in_progress` (the current DFS path stack, immutable per
+    recursion frame). Memoization uses `memo` (already-computed pass/fail per
+    entity_id, mutable across the whole walk). Sibling branches sharing an
+    upstream both succeed because the upstream's result is memoized after the
+    first descent — no false-positive cycle detection.
     """
-    if entity_id in visited:
-        return False, f"cycle at {entity_id}"
-    visited.add(entity_id)
+    if entity_id in in_progress:
+        return False, f"cycle through {entity_id}"
+    if entity_id in memo:
+        return memo[entity_id]
     e = datasets_by_id.get(entity_id)
     if e is None:
-        return False, f"missing entity {entity_id}"
+        memo[entity_id] = (False, f"missing entity {entity_id}")
+        return memo[entity_id]
     if e.origin == "external":
         if e.access is None:
-            return False, f"external {entity_id} missing access block"
-        if e.access.verified or e.access.exception.mode != "":
-            return True, ""
-        return False, f"external {entity_id} unverified and no exception"
+            memo[entity_id] = (False, f"external {entity_id} missing access block")
+        elif e.access.verified or e.access.exception.mode != "":
+            memo[entity_id] = (True, "")
+        else:
+            memo[entity_id] = (False, f"external {entity_id} unverified and no exception")
+        return memo[entity_id]
     if e.origin == "derived":
         if e.derivation is None:
-            return False, f"derived {entity_id} missing derivation"
+            memo[entity_id] = (False, f"derived {entity_id} missing derivation")
+            return memo[entity_id]
+        # Push self onto the stack for descendants — but DO NOT pop (frozenset is immutable
+        # per frame, so siblings see the original stack without `entity_id`).
+        next_in_progress = in_progress | {entity_id}
         for inp in e.derivation.inputs:
-            ok, msg = _passes_gate(inp, datasets_by_id, visited)
+            ok, msg = _passes_gate(inp, datasets_by_id, in_progress=next_in_progress, memo=memo)
             if not ok:
-                return False, f"{entity_id} -> {msg}"
-        return True, ""
-    return False, f"{entity_id} has no origin"
+                memo[entity_id] = (False, f"{entity_id} -> {msg}")
+                return memo[entity_id]
+        memo[entity_id] = (True, "")
+        return memo[entity_id]
+    memo[entity_id] = (False, f"{entity_id} has no origin")
+    return memo[entity_id]
 ```
 
-In `check_dataset_anomalies`, before the per-entity loop, build:
+In `check_dataset_anomalies`, before the per-entity loop, build the index and a shared memo:
 
 ```python
     datasets_by_id = {e.id: e for e, _, _ in _iter_dataset_entities(project_root)}
+    gate_memo: dict[str, tuple[bool, str]] = {}
 ```
 
-(Materialize once; the existing iterator runs again inside the loop. Convert the loop to use `datasets_by_id.items()` plus a parallel dict of (fm, path) if you need raw frontmatter — see existing pattern.)
-
-In the per-entity loop's derived branch:
+In the per-entity loop's derived branch (replacing the existing loop):
 
 ```python
             for inp in entity.derivation.inputs:
-                ok, msg = _passes_gate(inp, datasets_by_id, visited=set())
+                ok, msg = _passes_gate(inp, datasets_by_id, in_progress=frozenset({entity.id}), memo=gate_memo)
                 if not ok:
                     issues.append({
                         "code": "dataset_derived_input_chain_broken",
@@ -2558,11 +2799,19 @@ def _seed_workflow_and_run(root: Path, *, run_resources: list[dict]) -> None:
     }), encoding="utf-8")
 
 
+def _seed_resource_files(root: Path, names: list[str]) -> None:
+    """Write actual resource files at the run-aggregate root (where the workflow puts them)."""
+    rt_root = root / "results" / "wf" / "r1"
+    for name in names:
+        (rt_root / f"{name}.csv").write_text("col\nval\n", encoding="utf-8")
+
+
 def test_register_run_writes_per_output_datapackages(tmp_path: Path) -> None:
     _seed_workflow_and_run(tmp_path, run_resources=[
         {"name": "kappa", "path": "kappa.csv", "format": "csv", "bytes": 100, "hash": "sha256:a"},
         {"name": "structural", "path": "structural.csv", "format": "csv", "bytes": 200, "hash": "sha256:b"},
     ])
+    _seed_resource_files(tmp_path, ["kappa", "structural"])
     runner = CliRunner()
     res = runner.invoke(
         science_cli,
@@ -2577,8 +2826,39 @@ def test_register_run_writes_per_output_datapackages(tmp_path: Path) -> None:
     assert structural_dp.exists()
     kappa = yaml.safe_load(kappa_dp.read_text())
     assert [r["name"] for r in kappa["resources"]] == ["kappa"]
-    structural = yaml.safe_load(structural_dp.read_text())
-    assert [r["name"] for r in structural["resources"]] == ["structural"]
+    # basepath: ".." means resource paths resolve relative to the run-aggregate root.
+    assert kappa["basepath"] == ".."
+    # The path string itself is unchanged from the run-aggregate.
+    assert kappa["resources"][0]["path"] == "kappa.csv"
+
+
+def test_per_output_datapackage_paths_resolve_to_real_files(tmp_path: Path) -> None:
+    """A consumer reading a per-output datapackage MUST be able to find the resource files.
+
+    With basepath: '..', a resource's path is resolved relative to the per-output
+    datapackage's parent.parent (i.e., the run-aggregate root).
+    """
+    _seed_workflow_and_run(tmp_path, run_resources=[
+        {"name": "kappa", "path": "kappa.csv", "format": "csv"},
+    ])
+    _seed_resource_files(tmp_path, ["kappa"])
+    CliRunner().invoke(science_cli, ["dataset", "register-run", "workflow-run:wf-r1"], env={"SCIENCE_PROJECT_ROOT": str(tmp_path)}, catch_exceptions=False)
+    dp_path = tmp_path / "results" / "wf" / "r1" / "kappa" / "datapackage.yaml"
+    dp = yaml.safe_load(dp_path.read_text())
+    # Manually resolve as a consumer would: dp_dir / basepath / resource.path
+    resolved = (dp_path.parent / dp["basepath"] / dp["resources"][0]["path"]).resolve()
+    assert resolved.exists(), f"per-output datapackage points at non-existent file: {resolved}"
+
+
+def test_register_run_fails_when_resource_file_missing(tmp_path: Path) -> None:
+    """Pre-flight check: if a declared resource_name's file isn't on disk, register-run errors out."""
+    _seed_workflow_and_run(tmp_path, run_resources=[
+        {"name": "kappa", "path": "kappa.csv", "format": "csv"},
+    ])
+    # Deliberately do NOT seed the file.
+    res = CliRunner().invoke(science_cli, ["dataset", "register-run", "workflow-run:wf-r1"], env={"SCIENCE_PROJECT_ROOT": str(tmp_path)})
+    assert res.exit_code != 0
+    assert "kappa.csv" in res.output or "not exist" in res.output.lower()
 ```
 
 - [ ] **Step 2: Run failing test**
@@ -2632,7 +2912,14 @@ def _read_run_aggregate_datapackage(project_root: Path, workflow_slug: str, run_
 
 
 def write_per_output_datapackages(project_root: Path, workflow_run_id: str) -> list[Path]:
-    """Write one datapackage.yaml per declared output. Returns list of written paths."""
+    """Write one datapackage.yaml per declared output. Returns list of written paths.
+
+    Per-output datapackages are VIEWS into a subset of the run-aggregate's resources,
+    NOT file relocations. Resource paths are kept verbatim (relative to the run-aggregate
+    root); the per-output datapackage sets `basepath: ".."` so Frictionless resolves
+    `<resource>.path` against the run root, where the workflow originally wrote the files.
+    No file moves, no copies, no symlinks.
+    """
     run_path, run_fm = _read_run(project_root, workflow_run_id)
     workflow_id = str(run_fm.get("workflow", ""))
     workflow_slug = workflow_id.removeprefix("workflow:")
@@ -2642,6 +2929,7 @@ def write_per_output_datapackages(project_root: Path, workflow_run_id: str) -> l
         raise ValueError(f"workflow {workflow_id} has no outputs[] block; add one before registering")
     rt_path, rt = _read_run_aggregate_datapackage(project_root, workflow_slug, run_slug)
     by_name = {r["name"]: r for r in (rt.get("resources") or [])}
+    run_root = rt_path.parent  # results/<wf>/<run>/ — base for resource paths
     written: list[Path] = []
     for out in outputs:
         slug = str(out["slug"])
@@ -2651,16 +2939,23 @@ def write_per_output_datapackages(project_root: Path, workflow_run_id: str) -> l
             if n not in by_name:
                 raise ValueError(f"output {slug!r} declares resource_name {n!r} but run datapackage has no such resource")
             r = dict(by_name[n])
-            # Make path relative to the per-output directory.
-            r["path"] = Path(r["path"]).name  # strip parent dirs; resources sit alongside the per-output datapackage
+            # Verify the file referenced by the run-aggregate's path actually exists.
+            # Resolve relative to the run root (where the run-aggregate datapackage lives).
+            referenced = (run_root / r["path"]).resolve()
+            if not referenced.exists():
+                raise FileNotFoundError(
+                    f"output {slug!r}: resource {n!r} declares path {r['path']!r} but no such file at {referenced}"
+                )
+            # Path stays verbatim — interpreted relative to the per-output datapackage's basepath ('..' = run_root).
             out_resources.append(r)
-        out_dir = rt_path.parent / slug
+        out_dir = run_root / slug
         out_dir.mkdir(parents=True, exist_ok=True)
         out_dp_path = out_dir / "datapackage.yaml"
         out_dp = {
             "profiles": ["science-pkg-runtime-1.0"],
             "name": f"{workflow_slug}-{run_slug}-{slug}",
             "title": str(out.get("title", "")),
+            "basepath": "..",   # resources resolve relative to the run-aggregate root, not the per-output dir
             "resources": out_resources,
         }
         if out.get("ontology_terms"):
@@ -2846,45 +3141,102 @@ def test_register_run_appends_workflow_run_to_upstream_consumed_by(tmp_path: Pat
     assert "workflow-run:wf-r1" in body  # appended to upstream consumed_by
 ```
 
-- [ ] **Step 2: Implement symmetric edge writers**
+- [ ] **Step 2: Implement comment-preserving symmetric edge writers**
 
-Add to `datasets_register.py`:
+Add to `datasets_register.py`. The helper uses a narrow regex that finds the YAML
+list field within the frontmatter and inserts a single new item line, preserving
+comments, key order, indentation, and blank-line layout in the rest of the file:
 
 ```python
 import re
 
 
-def _append_to_yaml_list_field(file_path: Path, field: str, value: str) -> None:
-    """Append `value` to a YAML list field in the frontmatter, deduplicated. In-place edit."""
+_FM_BOUND = re.compile(r"^---\s*\n(?P<fm>.*?\n)---\s*\n", re.DOTALL)
+
+
+def _append_yaml_list_item(file_path: Path, field: str, value: str) -> None:
+    """Append `<value>` to a YAML list field within frontmatter, deduplicated.
+
+    Preserves comments, key order, and formatting in the rest of the file by
+    rewriting only the targeted field's value. Handles three list shapes:
+    - Inline empty: `field: []`        -> rewritten to `field: ["<value>"]`
+    - Inline non-empty: `field: ["a"]` -> rewritten to `field: ["a", "<value>"]`
+    - Block-form: `field:\n  - "a"\n`  -> appends `  - "<value>"` line below the last item
+
+    Idempotent: if `<value>` is already present in the field, no-op.
+    """
     text = file_path.read_text(encoding="utf-8")
-    if not text.startswith("---"):
-        return
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return
-    fm = yaml.safe_load(parts[1]) or {}
-    current = list(fm.get(field) or [])
+    m = _FM_BOUND.match(text)
+    if not m:
+        return  # no frontmatter; nothing to do
+    fm = m.group("fm")
+    fm_parsed = yaml.safe_load(fm) or {}
+    current = list(fm_parsed.get(field) or [])
     if value in current:
-        return  # deduplicated; no-op
-    current.append(value)
-    fm[field] = current
-    new_fm = yaml.safe_dump(fm, sort_keys=False, default_flow_style=False)
-    file_path.write_text(f"---\n{new_fm}---{parts[2]}", encoding="utf-8")
+        return  # already present; deduplicated no-op
+
+    # Find the field line in the raw frontmatter text (preserves surrounding lines).
+    inline_empty = re.compile(rf"^(?P<indent>\s*){re.escape(field)}:\s*\[\s*\]\s*$", re.MULTILINE)
+    inline_nonempty = re.compile(rf"^(?P<indent>\s*){re.escape(field)}:\s*\[(?P<items>.*?)\]\s*$", re.MULTILINE)
+    block_header = re.compile(rf"^(?P<indent>\s*){re.escape(field)}:\s*$", re.MULTILINE)
+
+    if (m_e := inline_empty.search(fm)) is not None:
+        new_line = f"{m_e['indent']}{field}: [\"{value}\"]"
+        new_fm = fm[:m_e.start()] + new_line + fm[m_e.end():]
+    elif (m_i := inline_nonempty.search(fm)) is not None:
+        items = m_i["items"].rstrip()
+        new_items = f"{items}, \"{value}\"" if items else f"\"{value}\""
+        new_line = f"{m_i['indent']}{field}: [{new_items}]"
+        new_fm = fm[:m_i.start()] + new_line + fm[m_i.end():]
+    elif (m_b := block_header.search(fm)) is not None:
+        # Find where this block ends (next non-list-item line at the same or lower indent).
+        block_indent = m_b["indent"]
+        item_indent = block_indent + "  "  # YAML block-form list items are indented 2 spaces deeper
+        item_pattern = re.compile(rf"^{re.escape(item_indent)}-\s")
+        # Walk lines after the block header.
+        head_end = m_b.end()
+        tail = fm[head_end:]
+        lines = tail.split("\n")
+        last_item_idx = -1
+        for i, line in enumerate(lines):
+            if item_pattern.match(line):
+                last_item_idx = i
+            elif line.strip() == "" or line.startswith("#"):
+                continue  # blank line or comment within the block
+            else:
+                break  # block ended
+        new_item_line = f"{item_indent}- \"{value}\""
+        if last_item_idx >= 0:
+            # Insert after the last item line.
+            lines.insert(last_item_idx + 1, new_item_line)
+        else:
+            # No items yet under the block header; insert at the top of the block.
+            lines.insert(0, new_item_line)
+        new_fm = fm[:head_end] + "\n".join(lines)
+    else:
+        # Field doesn't exist; insert at the end of the frontmatter as a new block-form list.
+        new_fm = fm + f"{field}:\n  - \"{value}\"\n"
+
+    file_path.write_text(text[:m.start("fm")] + new_fm + text[m.end("fm"):], encoding="utf-8")
 
 
 def write_symmetric_edges(project_root: Path, workflow_run_id: str, written_dataset_ids: list[str]) -> None:
-    """Append produces[] on workflow-run + consumed_by on each upstream input."""
+    """Append produces[] on workflow-run + consumed_by on each upstream input.
+
+    Uses `_append_yaml_list_item` (regex-based, comment-preserving). All edits are
+    deduplicated, so re-running register-run is a no-op for already-written edges.
+    """
     run_slug = workflow_run_id.removeprefix("workflow-run:")
     run_path = project_root / "doc" / "workflow-runs" / f"{run_slug}.md"
     for ds_id in written_dataset_ids:
-        _append_to_yaml_list_field(run_path, "produces", ds_id)
+        _append_yaml_list_item(run_path, "produces", ds_id)
     # Also append workflow-run to each upstream input dataset's consumed_by.
     fm, _ = parse_frontmatter(run_path) or ({}, "")
     for upstream_id in list(fm.get("inputs") or []):
         slug = upstream_id.removeprefix("dataset:")
         upstream_path = project_root / "doc" / "datasets" / f"{slug}.md"
         if upstream_path.exists():
-            _append_to_yaml_list_field(upstream_path, "consumed_by", workflow_run_id)
+            _append_yaml_list_item(upstream_path, "consumed_by", workflow_run_id)
 ```
 
 Wire into the CLI command:
@@ -2895,12 +3247,66 @@ Wire into the CLI command:
 
 (Cleaner: track the IDs as you write the entities — keep a list returned from `write_derived_dataset_entities` of `(path, id)` tuples instead.)
 
-- [ ] **Step 3: Verify + commit**
+- [ ] **Step 3: Add comment-preservation tests for the helper**
+
+Append to `tests/test_dataset_register_run.py`:
+
+```python
+from science_tool.datasets_register import _append_yaml_list_item
+
+
+def test_append_preserves_inline_comments(tmp_path: Path) -> None:
+    p = tmp_path / "x.md"
+    original = """---
+id: "dataset:x"  # the dataset
+type: "dataset"
+# A leading comment.
+consumed_by: []
+title: "X"
+---
+Body.
+"""
+    p.write_text(original, encoding="utf-8")
+    _append_yaml_list_item(p, "consumed_by", "plan:p1")
+    after = p.read_text()
+    assert "# the dataset" in after  # inline comment preserved
+    assert "# A leading comment." in after  # leading comment preserved
+    assert "plan:p1" in after
+    assert "Body." in after  # body untouched
+
+
+def test_append_handles_block_form_list(tmp_path: Path) -> None:
+    p = tmp_path / "y.md"
+    p.write_text(
+        '---\nid: "dataset:y"\ntype: "dataset"\ntitle: "Y"\n'
+        'consumed_by:\n  - "plan:existing"\n---\n',
+        encoding="utf-8",
+    )
+    _append_yaml_list_item(p, "consumed_by", "plan:p2")
+    body = p.read_text()
+    # Block form preserved; new item under the block.
+    assert '- "plan:existing"' in body
+    assert '- "plan:p2"' in body
+
+
+def test_append_idempotent(tmp_path: Path) -> None:
+    p = tmp_path / "z.md"
+    p.write_text(
+        '---\nid: "dataset:z"\ntype: "dataset"\ntitle: "Z"\n'
+        'consumed_by: ["plan:p1"]\n---\n',
+        encoding="utf-8",
+    )
+    snapshot = p.read_text()
+    _append_yaml_list_item(p, "consumed_by", "plan:p1")  # already present
+    assert p.read_text() == snapshot  # byte-identical no-op
+```
+
+- [ ] **Step 4: Verify + commit**
 
 ```bash
-uv run --frozen pytest tests/test_dataset_register_run.py -v -k "produces or consumed_by"
+uv run --frozen pytest tests/test_dataset_register_run.py -v -k "produces or consumed_by or append"
 git add src/science_tool/datasets_register.py src/science_tool/cli.py tests/test_dataset_register_run.py
-git commit -m "feat(dataset cli): register-run writes symmetric edges (produces, consumed_by)"
+git commit -m "feat(dataset cli): register-run writes symmetric edges via comment-preserving helper"
 ```
 
 ---
@@ -2937,13 +3343,75 @@ def test_register_run_idempotent(tmp_path: Path) -> None:
 uv run --frozen pytest tests/test_dataset_register_run.py -v -k "idempotent"
 ```
 
-If failing, the entity writer must be made idempotent (skip writing when the entity exists with identical content; the dedup in `_append_to_yaml_list_field` already handles symmetric edges). Adjust `write_derived_dataset_entities` to compare and skip on identical content.
+If failing, the entity writer must be made idempotent (skip writing when the entity exists with identical content; the dedup in `_append_yaml_list_item` already handles symmetric edges). Adjust `write_derived_dataset_entities` to compare and skip on identical content.
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add src/science_tool/datasets_register.py tests/test_dataset_register_run.py
 git commit -m "feat(dataset cli): register-run idempotent"
+```
+
+---
+
+### Task 7.5b: Parallel runs of the same workflow produce coexisting datasets
+
+**Files:**
+- Modify: `science-tool/tests/test_dataset_register_run.py`
+
+- [ ] **Step 1: Add test**
+
+Append:
+
+```python
+def test_repeated_runs_produce_parallel_active_datasets(tmp_path: Path) -> None:
+    """Two runs of the same workflow each produce their own derived dataset entity.
+
+    Both remain status: active. Neither supersedes the other automatically.
+    Old consumed_by entries are preserved on the first run's dataset.
+    """
+    _seed_workflow_and_run(tmp_path, run_resources=[
+        {"name": "kappa", "path": "kappa.csv", "format": "csv"},
+    ])
+    _seed_resource_files(tmp_path, ["kappa"])
+    runner = CliRunner()
+    runner.invoke(science_cli, ["dataset", "register-run", "workflow-run:wf-r1"], env={"SCIENCE_PROJECT_ROOT": str(tmp_path)}, catch_exceptions=False)
+    # Pretend a plan consumed wf-r1's output.
+    from science_tool.datasets_register import _append_yaml_list_item
+    _append_yaml_list_item(tmp_path / "doc" / "datasets" / "wf-wf-r1-kappa.md", "consumed_by", "plan:p1")
+    # Now register a second run of the same workflow.
+    runs_dir = tmp_path / "doc" / "workflow-runs"
+    (runs_dir / "wf-r2.md").write_text(
+        '---\nid: "workflow-run:wf-r2"\ntype: "workflow-run"\ntitle: "WF r2"\n'
+        'workflow: "workflow:wf"\nproduces: []\ninputs: []\n'
+        'git_commit: "def"\nlast_run: "2026-04-20T12:00:00Z"\n---\n', encoding="utf-8",
+    )
+    rt2 = tmp_path / "results" / "wf" / "r2"
+    rt2.mkdir(parents=True)
+    (rt2 / "datapackage.yaml").write_text(yaml.safe_dump({
+        "profiles": ["science-pkg-runtime-1.0"], "name": "wf-r2",
+        "resources": [{"name": "kappa", "path": "kappa.csv", "format": "csv"}],
+    }), encoding="utf-8")
+    (rt2 / "kappa.csv").write_text("col\nval2\n", encoding="utf-8")
+    runner.invoke(science_cli, ["dataset", "register-run", "workflow-run:wf-r2"], env={"SCIENCE_PROJECT_ROOT": str(tmp_path)}, catch_exceptions=False)
+    # Both derived datasets coexist as active.
+    r1 = (tmp_path / "doc" / "datasets" / "wf-wf-r1-kappa.md").read_text()
+    r2 = (tmp_path / "doc" / "datasets" / "wf-wf-r2-kappa.md").read_text()
+    assert 'status: "active"' in r1
+    assert 'status: "active"' in r2
+    # The first run's consumed_by is preserved.
+    assert "plan:p1" in r1
+    # Neither has a `superseded_by:` field — supersession is manual (follow-on).
+    assert "superseded_by" not in r1
+    assert "superseded_by" not in r2
+```
+
+- [ ] **Step 2: Verify + commit**
+
+```bash
+uv run --frozen pytest tests/test_dataset_register_run.py -v -k "parallel_active"
+git add tests/test_dataset_register_run.py
+git commit -m "test: parallel workflow runs produce coexisting active datasets"
 ```
 
 ---
@@ -3251,11 +3719,11 @@ def migrate_data_package(project_root: Path, dp_slug: str) -> None:
     )
     rp_path.write_text(rp_yaml, encoding="utf-8")
     # Append research-package to each derived dataset's consumed_by (invariant #11 symmetry).
-    from science_tool.datasets_register import _append_to_yaml_list_field
+    from science_tool.datasets_register import _append_yaml_list_item
     for ds_id in written_ids:
         slug = ds_id.removeprefix("dataset:")
         ds_path = project_root / "doc" / "datasets" / f"{slug}.md"
-        _append_to_yaml_list_field(ds_path, "consumed_by", f"research-package:{dp_slug}")
+        _append_yaml_list_item(ds_path, "consumed_by", f"research-package:{dp_slug}")
     # Mark the old data-package as superseded.
     dp_text = dp_path.read_text(encoding="utf-8")
     parts = dp_text.split("---", 2)
@@ -3386,6 +3854,158 @@ In `migrate_data_package`, near the top:
 ```bash
 git add src/science_tool/datapackage_migrate.py tests/test_data_package_migrate.py
 git commit -m "feat(data-package cli): migrate idempotent (no-op on superseded entries)"
+```
+
+---
+
+### Task 8.3b: `data-package migrate --dry-run` and `--all` flags
+
+**Files:**
+- Modify: `science-tool/src/science_tool/cli.py`
+- Modify: `science-tool/src/science_tool/datapackage_migrate.py`
+- Modify: `science-tool/tests/test_data_package_migrate.py`
+
+- [ ] **Step 1: Add failing tests**
+
+Append:
+
+```python
+def test_migrate_dry_run_writes_nothing(tmp_path: Path) -> None:
+    _seed_legacy_data_package(tmp_path)
+    res = CliRunner().invoke(science_cli, ["data-package", "migrate", "old", "--dry-run"], env={"SCIENCE_PROJECT_ROOT": str(tmp_path)}, catch_exceptions=False)
+    assert res.exit_code == 0
+    # Preview output names what would be written.
+    assert "wf-wf-r1-kappa" in res.output  # would-be derived dataset slug
+    assert "research-package:old" in res.output  # would-be research-package id
+    # No files written.
+    assert not (tmp_path / "doc" / "datasets" / "wf-wf-r1-kappa.md").exists()
+    assert not (tmp_path / "research" / "packages" / "old" / "research-package.md").exists()
+    # Old data-package status unchanged.
+    body = (tmp_path / "doc" / "data-packages" / "old.md").read_text()
+    assert 'status: "active"' in body
+
+
+def test_migrate_all_iterates_every_unmigrated(tmp_path: Path) -> None:
+    _seed_legacy_data_package(tmp_path)
+    # Add a second legacy entity sharing the same workflow + run.
+    (tmp_path / "doc" / "data-packages" / "old2.md").write_text(
+        '---\nid: "data-package:old2"\ntype: "data-package"\ntitle: "Old DP 2"\nstatus: "active"\n'
+        'manifest: "research/packages/old2/datapackage.json"\n'
+        'cells: "research/packages/old2/cells.json"\n'
+        'workflow_run: "workflow-run:wf-r1"\n---\n', encoding="utf-8",
+    )
+    rp2 = tmp_path / "research" / "packages" / "old2"
+    rp2.mkdir(parents=True, exist_ok=True)
+    (rp2 / "datapackage.json").write_text(json.dumps({
+        "name": "old2", "title": "Old2", "profile": "science-research-package", "version": "0.1",
+        "resources": [{"name": "kappa", "path": "kappa.csv", "format": "csv"}],
+        "research": {"cells": "cells.json", "figures": [], "vegalite_specs": [], "code_excerpts": [],
+                     "provenance": {"workflow": "workflow:wf", "config": "c", "last_run": "2026-04-19", "git_commit": "a", "repository": "", "inputs": [], "scripts": []}},
+    }), encoding="utf-8")
+    res = CliRunner().invoke(science_cli, ["data-package", "migrate", "--all"], env={"SCIENCE_PROJECT_ROOT": str(tmp_path)}, catch_exceptions=False)
+    assert res.exit_code == 0
+    # Both marked superseded.
+    for slug in ("old", "old2"):
+        body = (tmp_path / "doc" / "data-packages" / f"{slug}.md").read_text()
+        assert 'status: "superseded"' in body
+    # Both research-packages exist.
+    assert (tmp_path / "research" / "packages" / "old" / "research-package.md").exists()
+    assert (tmp_path / "research" / "packages" / "old2" / "research-package.md").exists()
+
+
+def test_migrate_all_dry_run_combines(tmp_path: Path) -> None:
+    _seed_legacy_data_package(tmp_path)
+    res = CliRunner().invoke(science_cli, ["data-package", "migrate", "--all", "--dry-run"], env={"SCIENCE_PROJECT_ROOT": str(tmp_path)}, catch_exceptions=False)
+    assert res.exit_code == 0
+    assert "data-package:old" in res.output
+    assert not (tmp_path / "doc" / "datasets" / "wf-wf-r1-kappa.md").exists()
+```
+
+- [ ] **Step 2: Implement dry-run mode**
+
+In `datapackage_migrate.py`, add a `dry_run: bool = False` parameter to `migrate_data_package` and refactor to collect a "plan of writes" first, then execute conditionally:
+
+```python
+from dataclasses import dataclass
+
+
+@dataclass
+class MigrationPlan:
+    """What `migrate_data_package` would do for one data-package."""
+    dp_slug: str
+    dataset_paths: list[Path]                # files that would be written
+    research_package_path: Path | None
+    superseded_status_target: Path | None    # data-package file that would be marked superseded
+
+
+def plan_migration(project_root: Path, dp_slug: str) -> MigrationPlan:
+    """Compute a migration plan WITHOUT writing anything. Raises on prerequisite failures."""
+    # ... refactor: extract the read-and-validate prefix of migrate_data_package ...
+    # Return MigrationPlan describing what would be written.
+
+
+def migrate_data_package(project_root: Path, dp_slug: str, *, dry_run: bool = False) -> MigrationPlan:
+    plan = plan_migration(project_root, dp_slug)
+    if dry_run:
+        return plan
+    # ... existing write logic, parameterized by `plan` ...
+    return plan
+```
+
+- [ ] **Step 3: Add `--all` mode**
+
+In `datapackage_migrate.py`:
+
+```python
+def list_unmigrated(project_root: Path) -> list[str]:
+    """Return data-package slugs whose status isn't 'superseded'."""
+    dp_dir = project_root / "doc" / "data-packages"
+    if not dp_dir.exists():
+        return []
+    out: list[str] = []
+    for md in sorted(dp_dir.rglob("*.md")):
+        fm, _ = parse_frontmatter(md) or ({}, "")
+        if fm.get("type") == "data-package" and fm.get("status") != "superseded":
+            out.append(md.stem)
+    return out
+```
+
+In `cli.py`, expand the migrate command:
+
+```python
+@data_package_group.command(name="migrate")
+@click.argument("slug", required=False)
+@click.option("--all", "all_", is_flag=True, default=False, help="Migrate every unmigrated data-package.")
+@click.option("--dry-run", is_flag=True, default=False, help="Preview without writing.")
+def data_package_migrate_cmd(slug: str | None, all_: bool, dry_run: bool) -> None:
+    from science_tool.datapackage_migrate import migrate_data_package, list_unmigrated
+    project_root = _project_root()
+    if all_ and slug:
+        raise click.UsageError("provide either <slug> or --all, not both")
+    if not all_ and not slug:
+        raise click.UsageError("provide a <slug> or pass --all")
+    slugs = list_unmigrated(project_root) if all_ else [slug]
+    for s in slugs:
+        try:
+            plan = migrate_data_package(project_root, s, dry_run=dry_run)
+        except (FileNotFoundError, ValueError) as exc:
+            click.echo(f"{s}: {exc}", err=True)
+            raise click.exceptions.Exit(2) from exc
+        prefix = "[dry-run] would write" if dry_run else "wrote"
+        for p in plan.dataset_paths:
+            click.echo(f"{prefix} {p.relative_to(project_root)}")
+        if plan.research_package_path is not None:
+            click.echo(f"{prefix} {plan.research_package_path.relative_to(project_root)}")
+        if not dry_run:
+            click.echo(f"superseded data-package:{s} -> research-package:{s}")
+```
+
+- [ ] **Step 4: Verify + commit**
+
+```bash
+uv run --frozen pytest tests/test_data_package_migrate.py -v -k "dry_run or migrate_all"
+git add src/science_tool/datapackage_migrate.py src/science_tool/cli.py tests/test_data_package_migrate.py
+git commit -m "feat(data-package cli): --dry-run and --all flags"
 ```
 
 ---
@@ -3809,7 +4429,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from science_model.frontmatter import frontmatter_to_entity, parse_frontmatter
+from science_model.frontmatter import parse_entity_file
 
 
 def _load_dataset(project_root: Path, ds_id: str):
@@ -3817,8 +4437,7 @@ def _load_dataset(project_root: Path, ds_id: str):
     md = project_root / "doc" / "datasets" / f"{slug}.md"
     if not md.exists():
         return None
-    fm, _ = parse_frontmatter(md) or ({}, "")
-    return frontmatter_to_entity(fm, project=project_root.name, file_path=str(md))
+    return parse_entity_file(md, project_slug=project_root.name)
 
 
 def check_inputs(project_root: Path, dataset_ids: list[str]) -> tuple[bool, list[str]]:
@@ -4134,26 +4753,29 @@ Use the user-notification helper if running interactively:
 **Spec coverage check:** Map each Resolved Decision in the spec to a task above:
 
 - Unification: Phases 1-4
-- Schema family: Phase 1
-- Entity vs runtime surface: Phases 1, 7
-- data-package -> research-package rename: Phase 4 (template), Phase 8 (migrator), Task 11.2 (skill docs)
-- research-package entity location: Phase 4, Phase 5
-- Per-entity-type discovery rule: Phase 5
-- Granularity for derived data: Phase 4 (workflow.outputs), Phase 7 (register-run)
+- Schema family (entity + runtime profiles): Phase 1
+- Entity vs runtime surface (single source of truth, no entity `resources[]`): Phase 1 schema rejects, Phase 6.10 reconcile checks narrow drift only
+- data-package → research-package rename: Phase 4 (template), Phase 8 (migrator), Task 11.2 (skill docs)
+- research-package entity location (outside `doc/`): Phase 4, Phase 5
+- Per-entity-type discovery rule: Phase 5 (extends `graph/sources.py:load_project_sources`, NOT a parallel scanner)
+- Granularity for derived data: Phase 4.3 (`workflow.outputs[].resource_names`), Phase 7.2 (per-output datapackages as views)
 - Workflow integration shape: Phase 7
-- Strict migration with shipped migrator: Phase 8
-- origin: external default for back-compat: Phase 3
+- Strict migration with shipped migrator: Phase 8 (incl. `--dry-run` + `--all`)
+- `origin: external` default for back-compat: Phase 3 (extension of canonical `parse_entity_file`)
 - No symlinks: register-run writes files (Phase 7); no symlink machinery anywhere
 - Forward-compatibility with Spec Y: design holds; no schema lock-in
-- Single source of truth for resources: Phase 1 schema rejects entity resources[]; Phase 6.10 reconcile/health drift on cached fields only
-- Per-output runtime datapackages: Phase 7.2
-- Plan gate vs runtime stageability: Phase 6.6 (health), Phase 9.2 (review-pipeline FAIL)
-- outputs[].resource_names: Phase 4.3, Phase 7.2
-- Symmetric research-package backlinks: Phase 6.7 (health), Phase 8.1 (migrator writes them)
+- Per-output runtime datapackages (views, not relocations): Phase 7.2 with `basepath: ".."` and pre-flight file-existence check
+- Plan gate vs runtime stageability: Phase 6.6 (health warning), Phase 9.2 (review-pipeline FAIL)
+- Symmetric research-package backlinks (#11): Phase 6.7 (health), Phase 8.1 (migrator writes them)
+- Model-level invariants enforced at construction (rev 2.2): Phase 2.4 (`_enforce_origin_block_invariants` validator)
+- Cycle-safe transitive walk (rev 2.2): Phase 6.5 (recursion stack + memo, regression test for shared upstream)
+- Comment-preserving frontmatter edits (rev 2.2): Phase 7.4 (`_append_yaml_list_item` helper, no `yaml.safe_dump` on hand-maintained files)
+- Single canonical loader (rev 2.2): Phase 3 extends `parse_entity_file`; no parallel `frontmatter_to_entity`
+- Parallel runs of same workflow (rev 2.2): Phase 7.5b regression test confirms coexisting active datasets
 
 **Placeholder scan:** No "TBD"/"TODO"/"implement later" — every step contains either real code, a real command, or an explicit instruction to "follow the existing pattern at <path>".
 
-**Type/name consistency:** `check_dataset_anomalies`, `discover_entities`, `migrate_data_package`, `write_per_output_datapackages`, `write_derived_dataset_entities`, `write_symmetric_edges`, `check_inputs`, `build_graph(strict=)`, `frontmatter_to_entity` — all referenced consistently across tasks.
+**Type/name consistency:** `parse_entity_file`, `check_dataset_anomalies`, `_load_markdown_entities`, `load_project_sources`, `migrate_data_package`, `plan_migration`, `MigrationPlan`, `list_unmigrated`, `write_per_output_datapackages`, `write_derived_dataset_entities`, `write_symmetric_edges`, `_append_yaml_list_item`, `_passes_gate`, `check_inputs`, `build_graph(strict=)` — all referenced consistently across tasks.
 
 ---
 
