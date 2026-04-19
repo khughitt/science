@@ -87,6 +87,19 @@ _FRONTMATTER_TAGS_RE = re.compile(
 _TASK_TAGS_RE = re.compile(
     r"^- tags:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE
 )
+_FRONTMATTER_BLOCK_RE = re.compile(r"\A---\s*\n(?P<body>.*?)\n---\s*\n", re.DOTALL)
+
+
+def _extract_frontmatter_block(text: str) -> str:
+    """Return the YAML frontmatter body, or empty string if none.
+
+    Only the leading `---` … `---` block at the very top of the file is
+    considered frontmatter. `tags:` lines elsewhere (e.g. inside markdown
+    code fences that document an example frontmatter) are body content
+    and must not be flagged as lingering tags.
+    """
+    match = _FRONTMATTER_BLOCK_RE.match(text)
+    return match.group("body") if match else ""
 
 
 def _parse_list_body(body: str) -> list[str]:
@@ -111,7 +124,10 @@ def collect_lingering_tags(project_root: Path) -> list[LingeringTagsRecord]:
             continue
         for md_file in sorted(base.rglob("*.md")):
             text = md_file.read_text(encoding="utf-8")
-            for match in _FRONTMATTER_TAGS_RE.finditer(text):
+            frontmatter_body = _extract_frontmatter_block(text)
+            if not frontmatter_body:
+                continue
+            for match in _FRONTMATTER_TAGS_RE.finditer(frontmatter_body):
                 results.append({
                     "file": str(md_file.relative_to(project_root)),
                     "values": _parse_list_body(match.group("body")),
