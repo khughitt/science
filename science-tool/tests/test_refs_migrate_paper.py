@@ -126,3 +126,33 @@ def test_scan_project_logs_warning_on_non_utf8_file(tmp_path: Path, caplog) -> N
     with caplog.at_level("WARNING", logger="science_tool.refs_migrate"):
         scan_project(project)
     assert any("bad.md" in r.getMessage() for r in caplog.records)
+
+
+def test_apply_rewrites_writes_files(tmp_path: Path) -> None:
+    # Copy fixture into tmp_path so the test doesn't mutate the real fixture.
+    import shutil
+    shutil.copytree(FIXTURE, tmp_path / "legacy_project")
+    project = tmp_path / "legacy_project"
+
+    from science_tool.refs_migrate import apply_rewrites
+    rewrites = scan_project(project)
+    apply_rewrites(rewrites)
+
+    # Verify on-disk text is the new text.
+    for r in rewrites:
+        assert r.path.read_text(encoding="utf-8") == r.new_text
+
+    # Re-scan: should produce 0 rewrites.
+    assert scan_project(project) == []
+
+
+def test_apply_rewrites_preserves_other_files(tmp_path: Path) -> None:
+    import shutil
+    shutil.copytree(FIXTURE, tmp_path / "legacy_project")
+    project = tmp_path / "legacy_project"
+    science_yaml_before = (project / "science.yaml").read_text()
+
+    from science_tool.refs_migrate import apply_rewrites
+    apply_rewrites(scan_project(project))
+
+    assert (project / "science.yaml").read_text() == science_yaml_before

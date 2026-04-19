@@ -7,7 +7,9 @@ canonical rewrite rules.
 from __future__ import annotations
 
 import logging
+import os
 import re
+import tempfile
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -117,3 +119,25 @@ def _iter_markdown_files(project_root: Path) -> Iterator[Path]:
         path = project_root / name
         if path.is_file():
             yield path
+
+
+def apply_rewrites(rewrites: list[FileRewrite]) -> None:
+    """Apply each rewrite to disk using atomic temp-file + rename.
+
+    Per the spec §Open Decisions, per-file writes are atomic but the overall
+    migration is not transactional. Reruns are idempotent.
+    """
+    for rewrite in rewrites:
+        _atomic_write(rewrite.path, rewrite.new_text)
+
+
+def _atomic_write(path: Path, text: str) -> None:
+    directory = path.parent
+    fd, tmp_name = tempfile.mkstemp(prefix=".migrate-", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+            handle.write(text)
+        os.replace(tmp_name, path)
+    except Exception:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
