@@ -65,6 +65,53 @@ def test_hypothesis_ref_in_own_file_ignored() -> None:
         assert len(hyp_issues) == 0
 
 
+def test_slug_named_hypothesis_file_resolves_legacy_h_alias_and_self_reference() -> None:
+    """Slug-based files with canonical frontmatter IDs should still resolve HNN aliases."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        legacy = root / "specs" / "hypotheses" / "h01-test.md"
+        legacy.unlink()
+        (root / "specs" / "hypotheses" / "higher-order-topology.md").write_text(
+            "---\n"
+            "id: hypothesis:h03-higher-order-topology\n"
+            "type: hypothesis\n"
+            "title: Higher-order topology\n"
+            "---\n\n"
+            "# H03: Higher-order topology\n\n"
+            "H03 remains under evaluation.\n"
+        )
+        (root / "doc" / "background" / "topics" / "test.md").write_text("# Test\nThis relates to H03 strongly.\n")
+
+        issues = check_refs(root)
+        hyp_issues = [i for i in issues if i.ref_type == "hypothesis"]
+        assert hyp_issues == []
+
+
+def test_slug_named_hypothesis_file_uses_heading_alias_for_self_reference() -> None:
+    """A slug-only hypothesis file should not flag its own HNN heading label in prose."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        legacy = root / "specs" / "hypotheses" / "h01-test.md"
+        legacy.unlink()
+        (root / "specs" / "hypotheses" / "higher-order-topology.md").write_text(
+            "---\n"
+            "id: hypothesis:higher-order-topology\n"
+            "type: hypothesis\n"
+            "title: Higher-order topology\n"
+            "---\n\n"
+            "# H03: Higher-order topology\n\n"
+            "H03 remains under evaluation.\n"
+        )
+
+        issues = check_refs(root)
+        hyp_issues = [i for i in issues if i.ref_type == "hypothesis"]
+        assert hyp_issues == []
+
+
 def test_valid_citation_ref() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:
@@ -248,5 +295,3 @@ def test_task_ref_in_done_file_resolves() -> None:
         issues = check_refs(root)
         task_issues = [i for i in issues if i.ref_type == "task"]
         assert task_issues == []
-
-

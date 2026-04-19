@@ -11,6 +11,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from science_model.frontmatter import parse_frontmatter
+
 
 @dataclass
 class RefIssue:
@@ -76,15 +78,14 @@ def _collect_markdown_files(root: Path) -> list[Path]:
 
 
 def _load_hypothesis_ids(root: Path) -> dict[str, Path]:
-    """Map hypothesis IDs (e.g. '01') to their files."""
+    """Map legacy HNN aliases (e.g. '03') to hypothesis files."""
     hyp_dir = root / "specs" / "hypotheses"
     if not hyp_dir.is_dir():
         return {}
     result: dict[str, Path] = {}
-    for p in hyp_dir.glob("h*-*.md"):
-        match = re.match(r"h(\d+)-", p.name)
-        if match:
-            result[match.group(1)] = p
+    for p in hyp_dir.glob("*.md"):
+        for alias in _hypothesis_aliases_from_path(p):
+            result.setdefault(alias, p)
     return result
 
 
@@ -133,9 +134,52 @@ def _is_heading_line(line: str) -> bool:
 
 
 def _hypothesis_id_from_path(file_path: Path) -> str | None:
-    """Extract hypothesis number from a hypothesis file path."""
-    match = re.match(r"h(\d+)-", file_path.name)
-    return match.group(1) if match else None
+    """Extract the primary legacy HNN alias from a hypothesis file path, if any."""
+    aliases = _hypothesis_aliases_from_path(file_path)
+    if aliases:
+        return sorted(aliases)[0]
+
+    return None
+
+
+def _extract_hypothesis_aliases_from_id(entity_id: object) -> set[str]:
+    """Extract HNN aliases from a canonical ``hypothesis:<slug>`` id."""
+    if not isinstance(entity_id, str) or not entity_id.startswith("hypothesis:"):
+        return set()
+
+    slug = entity_id.split(":", 1)[1]
+    match = re.match(r"h(\d+)-", slug)
+    if not match:
+        match = re.match(r"h(\d+)$", slug)
+    return {match.group(1)} if match else set()
+
+
+def _extract_hypothesis_aliases_from_heading(body: str) -> set[str]:
+    """Extract the leading HNN label from the first markdown heading in the body."""
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        match = re.match(r"^#+\s*H(\d{2,})\b", stripped)
+        return {match.group(1)} if match else set()
+    return set()
+
+
+def _hypothesis_aliases_from_path(file_path: Path) -> set[str]:
+    """Return all legacy HNN aliases discoverable for a hypothesis markdown file."""
+    aliases: set[str] = set()
+
+    frontmatter = parse_frontmatter(file_path)
+    if frontmatter is not None:
+        fm, body = frontmatter
+        aliases.update(_extract_hypothesis_aliases_from_id(fm.get("id")))
+        aliases.update(_extract_hypothesis_aliases_from_heading(body))
+
+    filename_match = re.match(r"h(\d+)-", file_path.name)
+    if filename_match:
+        aliases.add(filename_match.group(1))
+
+    return aliases
 
 
 def check_refs(root: Path) -> list[RefIssue]:
@@ -149,9 +193,12 @@ def check_refs(root: Path) -> list[RefIssue]:
     for file_path in files:
         rel_path = str(file_path.relative_to(root))
         # Determine if this file IS a hypothesis file (skip self-references)
-        own_hyp_id = None
+        own_hyp_ids: set[str] = set()
         if "hypotheses" in file_path.parts:
             own_hyp_id = _hypothesis_id_from_path(file_path)
+            if own_hyp_id is not None:
+                own_hyp_ids.add(own_hyp_id)
+            own_hyp_ids.update(_hypothesis_aliases_from_path(file_path))
 
         try:
             lines = file_path.read_text(encoding="utf-8").splitlines()
@@ -189,7 +236,7 @@ def check_refs(root: Path) -> list[RefIssue]:
             # --- Hypothesis references ---
             for m in _HYPOTHESIS_RE.finditer(line):
                 hyp_num = m.group(1)
-                if hyp_num == own_hyp_id:
+                if hyp_num in own_hyp_ids:
                     continue  # Self-reference in own file
                 if hyp_num not in hyp_ids:
                     suggestion = None
