@@ -37,7 +37,7 @@ _NEEDS_CITATION_RE = re.compile(r"\[NEEDS CITATION\]")
 _TASK_ID_RE = re.compile(r"\bt(\d{2,})\b")
 # Task ID *declarations* in tasks/active.md and tasks/done/*.md headers, of the
 # form `## [tNN] ...` or `## [tNNN] ...`.
-_TASK_DECL_RE = re.compile(r"^\s*#+\s*\[t(\d{2,})\]")
+_TASK_DECL_RE = re.compile(r"^\s*#+\s*\[t(\d{2,})\]", re.MULTILINE)
 # Tokens that should not trigger task-ID validation when they happen to match
 # the regex above (e.g. the `t` of an article slug).
 _TASK_FALSE_POSITIVE_PARENTS = (
