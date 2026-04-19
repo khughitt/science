@@ -16,6 +16,13 @@ Two observed problems motivate entity-level aspects:
 
 Introduce an `aspects:` field on all primary entity types (tasks, questions, interpretations, hypotheses). The field uses the same vocabulary as `science.yaml`'s `aspects:`, inherits from the project when unset, and acts as an override when explicit. Downstream commands — starting with `/science:big-picture` — filter on the resolved aspects so research synthesis excludes software-oriented entities (and vice versa).
 
+## Design Principles
+
+- **One vocabulary, one resolution rule**. Entity-level and project-level aspects must use the same registry and resolve through one shared helper, not ad hoc command-specific logic.
+- **Inheritance is the default; explicit fields are only for exceptions**. Most entities should continue to inherit from `science.yaml`. Explicit entity `aspects:` exists to mark the minority case that differs from the project default.
+- **No silent fallback from invalid explicit data**. If an entity explicitly declares invalid aspects, aspect-aware commands fail with a clear error; `science-tool health` also surfaces the issue proactively.
+- **Filtering and association are separate concerns**. Aspect filtering decides whether an entity participates in a synthesis view. Resolver/orphan logic continues to answer structural questions inside that filtered set.
+
 ## Scope
 
 ### In scope (v1)
@@ -23,6 +30,7 @@ Introduce an `aspects:` field on all primary entity types (tasks, questions, int
 - Add `aspects:` to entity schemas and templates for: tasks, questions, interpretations, hypotheses.
 - Vocabulary: identical to project-level aspects (the set defined in `science.yaml`'s `aspects:`).
 - Inheritance semantics: entity's resolved aspects = `entity.aspects` if set, else `project.aspects`.
+- Introduce a shared aspect utility in `science-tool` / `science-model` for validation, resolution, and filtering predicates. Commands consume that utility rather than reimplementing aspect logic.
 - Migration: one-shot mandatory migration for tasks carrying legacy `type: research | dev`. Non-task entities inherit by default; no bulk-rewrite required.
 - `science-tool aspects migrate` CLI that performs task migration with dry-run-by-default semantics.
 - `/science:big-picture` bundle assembly and resolver consume entity aspects; research synthesis excludes entities whose resolved aspects are `[software-development]` only.
@@ -55,7 +63,7 @@ Semantics:
 
 - **Absent** (field not declared): the entity inherits `project.aspects` from `science.yaml`.
 - **Present and non-empty list**: full override — the entity's resolved aspects are exactly this list, regardless of project aspects.
-- **Present and empty list (`aspects: []`)**: explicit "no aspects". Functionally the entity is filtered out of every aspect-scoped operation. Rare but valid for entities that deliberately stand apart from all project aspects.
+- **Present and empty list (`aspects: []`)**: invalid. Reject at parse/validation time with a clear message. "No aspects" is not a meaningful steady state for primary entities because it silently drops them from every aspect-aware command and is almost always an editing mistake.
 
 ### Vocabulary
 
@@ -67,6 +75,12 @@ Same as `science.yaml`'s `aspects:` vocabulary, validated against the same regis
 - `software-development`
 
 Entity aspects are validated against `project.aspects`: an entity may not declare an aspect the project hasn't enabled. This prevents typos and aspect drift. `science-tool health` reports violations.
+
+Additional normalization rules:
+
+- Aspect lists are treated as sets for semantics: duplicates are invalid and should be rejected.
+- Order is canonicalized to project-vocabulary order when written by tools. This keeps diffs stable.
+- Hand-edited files may use any order, but resolution utilities normalize before comparison/output.
 
 ### Resolved-aspects function
 
@@ -80,14 +94,39 @@ resolve_aspects(E, P) =
 
 This one-line rule governs every downstream consumer.
 
+Implementation note: commands should call a shared helper such as `resolve_entity_aspects(entity_aspects, project_aspects)` rather than reproducing this inline.
+
+### Validation behavior
+
+Validation must be deterministic:
+
+- **Tool-authored writes** (`tasks add`, `aspects migrate`, future create/edit commands): hard error if an explicit aspect is not in `project.aspects`, if the list is empty, or if duplicates are present.
+- **File parsing for aspect-aware commands** (`big-picture`, `tasks list --aspect`, future aspect-aware surfaces): hard error on invalid explicit aspect metadata. Failing early is preferable to silently producing a misleading synthesis.
+- **`science-tool health`**: reports the same invalidities as structured findings so users can detect and fix them before hitting a command failure.
+
+This resolves the ambiguity between warning-vs-error: health is the early warning surface; commands that depend on aspect semantics do not continue past invalid explicit data.
+
 ## Filter Semantics
+
+Define one shared predicate:
+
+```
+matches_aspect_filter(E, P, filter_set) =
+  resolve_aspects(E, P) ∩ filter_set is non-empty
+```
+
+Commands choose `filter_set`; they do not invent their own resolution semantics.
 
 For `/science:big-picture` specifically:
 
-- **"Research synthesis"** (the default mode): include entity `E` iff `resolve_aspects(E, P) ∩ (P.aspects \ {software-development})` is non-empty.
+- **"Research synthesis"** (the default mode for research-capable projects): include entity `E` iff `resolve_aspects(E, P) ∩ (P.aspects \ {software-development})` is non-empty.
   - In plain language: include the entity if any of its resolved aspects is something other than `software-development`.
   - Entities whose resolved aspects are exactly `[software-development]` are excluded from research-oriented bundles and emergent-threads analysis.
 - **"Software synthesis"** (future, out of scope for this spec): symmetric — include entities whose resolved aspects intersect `{software-development}`. Deferred until there's demand for software-oriented big-picture runs.
+
+Project-level precondition:
+
+- If `project.aspects \ {software-development}` is empty, research synthesis is undefined for that project. `science-tool big-picture` should fail fast with a message explaining that v1 only supports research synthesis for projects with at least one non-software aspect. This is clearer than producing an empty or misleading report.
 
 For `science-tool tasks list`:
 
@@ -97,6 +136,7 @@ For `science-tool tasks list`:
 For `science-tool health`:
 
 - New check: flag tasks whose markdown entry still carries the legacy `type:` field (research or dev). Category: `legacy_task_type_field`. Severity: warning. Remediation hint: "Run `science-tool aspects migrate` to convert."
+- New check: flag explicit entity `aspects:` values that are empty, contain duplicates, or are not a subset of `project.aspects`. Category: `invalid_entity_aspects`. Severity: error. Remediation hint names the file/entity and the invalid values.
 - Existing checks unaffected.
 
 ## Migration
@@ -116,10 +156,16 @@ Behavior:
    - `type: dev` → add `- aspects: [software-development]`, remove the `- type:` line.
    - `type: research` → add `- aspects: <project-research-aspects>`, remove the `- type:` line.
      - `<project-research-aspects>` = `project.aspects \ {software-development}` as a YAML list. If that set is empty (project has only `software-development` as an aspect, which would be unusual), fall back to the full `project.aspects`.
+     - This is intentionally coarse. Legacy `type: research` never distinguished among the non-software aspects, so migration preserves the old "research-scoped" meaning rather than inventing finer-grained specificity.
 3. Without `--apply`: print a unified diff of proposed changes. Exit code 0.
 4. With `--apply`: write the changes in place. Preserve all other formatting (whitespace, surrounding prose). Exit code 0 on success.
 
 Idempotency: a task already carrying `aspects:` and no `type:` is skipped. Re-running migration is safe.
+
+Failure behavior:
+
+- If the project has no `science.yaml` `aspects:` field, migration fails with a clear error; there is no sound default vocabulary to infer from.
+- If a task already contains both `type:` and `aspects:`, migration does not rewrite that task automatically. It reports the task as a conflict for manual cleanup, because the user's explicit `aspects:` may intentionally diverge from the legacy `type:`.
 
 ### Non-task entity migration
 
@@ -178,6 +224,7 @@ Post-migration, new tasks either declare explicit `- aspects: [...]` (when user 
 
 - Remove `--type` flag.
 - Add `--aspects <name>` (repeatable). Validated against `project.aspects`.
+- Repeated flags are deduplicated and stored in canonical vocabulary order.
 - If the user supplies neither, the task is stored without an `aspects:` field (inherits from project). No interactive prompt required; the default is correct for the most common case (research tasks in a research-focused project).
 
 ### `science-tool tasks list`
@@ -204,6 +251,7 @@ Post-migration, new tasks either declare explicit `- aspects: [...]` (when user 
 ```
 
 - The resolver reads `entity.aspects` if present, else `project.aspects`, and returns the resolved list. Downstream consumers (bundle assembly in `commands/big-picture.md`) no longer need to reproduce the resolution rule.
+- `resolve-questions` remains a structural association tool, not a filter. It returns hypothesis matches plus `resolved_aspects` for every question. Whether a matched or unmatched question participates in "orphans" or synthesis output is decided later by the caller's filter set.
 
 ## `/science:big-picture` Updates
 
@@ -215,6 +263,7 @@ Phase 1 bundle assembly:
 Orphan-question counting:
 
 - Orphans are now defined as questions that (a) have no resolved hypothesis association AND (b) have at least one non-software-development aspect in their resolved aspects. A question whose resolved aspects are `[software-development]` only is not an orphan — it's simply out of scope for research synthesis.
+- This is a filtered notion of orphanhood. A software-only question may still have `primary_hypothesis: null` in resolver output; it just does not count as a research orphan and does not appear in `_emergent-threads.md`.
 
 Phase 4 validator integration:
 
@@ -233,9 +282,9 @@ In `science-tool/tests/test_aspects_migration.py`:
 
 In `science-tool/tests/test_big_picture_resolver.py` (extended):
 
-- A question with explicit `aspects: [software-development]` is excluded from research hypothesis matches.
+- A question with explicit `aspects: [software-development]` still resolves structurally as usual, and its `resolved_aspects` field is `[software-development]`.
 - A question with no `aspects:` field in a research project inherits and is included.
-- A question with explicit `aspects: []` is excluded (never matches).
+- Invalid explicit `aspects:` values (`[]`, duplicates, or values outside `project.aspects`) raise a clear resolver/load error.
 
 In `science-tool/tests/test_big_picture_validator.py` (extended):
 
@@ -246,7 +295,8 @@ In `science-tool/tests/test_big_picture_validator.py` (extended):
 Extend the existing minimal_project fixture at `tests/fixtures/big_picture/minimal_project/` with one explicitly software-tagged question (`q06-software-pipeline-concern.md`, `aspects: [software-development]`). Confirm:
 
 - Resolver output shows the question's `resolved_aspects` as `[software-development]`.
-- `big-picture resolve-questions --project-root` output shows it as orphan (no hypothesis match).
+- `big-picture resolve-questions --project-root` output may still show `primary_hypothesis: null` if the question has no structural match.
+- Research bundle assembly and emergent-threads generation exclude the question.
 - Orphan count for the project excludes this question from the "research orphans" tally.
 
 ## Relationship to Existing Specs
@@ -255,11 +305,11 @@ Extend the existing minimal_project fixture at `tests/fixtures/big_picture/minim
 - **2026-04-15 layered-claims-and-causal-methodology spec**: independent. Claim-layer metadata is orthogonal to entity aspects; both can coexist.
 - **Project-level `aspects:` in `science.yaml`**: this spec extends, not replaces. Project aspects remain the source of inheritance defaults.
 
-## Open Questions (to resolve during implementation)
+## Resolved Decisions
 
-- **Validation strictness**: `entity.aspects` must be a subset of `project.aspects`. What happens if a user adds an aspect not declared at the project level? Soft warning from `science-tool health` vs. hard error at parse time. I lean warning — projects evolve, and aspect vocabulary can legitimately expand through normal editing. A hard error would surprise users mid-workflow.
-- **Software-profile projects**: for `profile: software` projects, the default filter mode flips — "research synthesis" no longer makes sense as a default. Big-picture may need a symmetric "software synthesis" mode before this spec is fully useful for such projects. Out of scope for v1 (big-picture on software projects is its own design question), but worth revisiting.
-- **Aspects on discussions, topics, papers**: omitted from v1 scope. If synthesis starts pulling in discussion/topic material that's software-focused, extend the field there. Wait for real evidence before expanding.
+- **Validation strictness**: explicit invalid entity `aspects:` is a hard error for aspect-aware commands and a proactive error finding in `science-tool health`.
+- **Software-profile projects**: v1 does not silently repurpose `/science:big-picture` for software-only projects. If the project has no non-software aspect, research synthesis fails fast and directs the user toward future software-synthesis support.
+- **Aspects on discussions, topics, papers**: omitted from v1. Expand only after observing concrete synthesis pollution from those entity classes.
 
 ## Follow-on Work
 

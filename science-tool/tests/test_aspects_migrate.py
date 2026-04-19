@@ -98,6 +98,21 @@ def test_plan_reports_conflict_for_tasks_with_both_type_and_aspects(tmp_path: Pa
     assert plan.conflicts[0].task_id == "t004"
 
 
+def test_plan_raises_when_project_aspects_outside_known_vocabulary(tmp_path: Path) -> None:
+    (tmp_path / "tasks").mkdir()
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t006] Any\n- type: research\n- priority: P2\n- status: proposed\n"
+        "- created: 2026-04-06\n\nBody.\n"
+    )
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\nprofile: research\n"
+        "aspects: [hypothesis-testing, gene-disease-associations, tumor-heterogeneity]\n"
+    )
+
+    with pytest.raises(AspectsMigrationConflict, match="known vocabulary"):
+        build_migration_plan(tmp_path)
+
+
 def test_plan_raises_when_project_has_no_aspects(tmp_path: Path) -> None:
     (tmp_path / "tasks").mkdir()
     (tmp_path / "tasks" / "active.md").write_text(

@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from science_model.aspects import SOFTWARE_ASPECT, load_project_aspects
+from science_model.aspects import KNOWN_ASPECTS, SOFTWARE_ASPECT, load_project_aspects
 from science_tool.tasks import parse_tasks
 
 
@@ -49,6 +49,13 @@ def build_migration_plan(project_root: Path) -> AspectsMigrationPlan:
         raise AspectsMigrationConflict(
             "Project science.yaml has no 'aspects:' declaration; "
             "migration has no target vocabulary."
+        )
+    unknown = [a for a in project_aspects if a not in KNOWN_ASPECTS]
+    if unknown:
+        raise AspectsMigrationConflict(
+            f"science.yaml declares aspects outside the known vocabulary: "
+            f"{unknown}. Known aspects: {sorted(KNOWN_ASPECTS)}. "
+            f"Fix science.yaml before migrating."
         )
     non_software = [a for a in project_aspects if a != SOFTWARE_ASPECT]
 
