@@ -98,8 +98,8 @@ def _read(path: str) -> str:
             "commands/research-papers.md",
             (
                 "${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md",
-                ".ai/templates/paper-summary.md",
-                "${CLAUDE_PLUGIN_ROOT}/templates/paper-summary.md",
+                ".ai/templates/paper.md",
+                "${CLAUDE_PLUGIN_ROOT}/templates/paper.md",
                 ".ai/templates/question.md",
                 "${CLAUDE_PLUGIN_ROOT}/templates/question.md",
             ),
@@ -120,8 +120,8 @@ def _read(path: str) -> str:
                 "${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md",
                 "${CLAUDE_PLUGIN_ROOT}/skills/data/sources/openalex.md",
                 "${CLAUDE_PLUGIN_ROOT}/skills/data/sources/pubmed.md",
-                ".ai/templates/paper-summary.md",
-                "${CLAUDE_PLUGIN_ROOT}/templates/paper-summary.md",
+                ".ai/templates/paper.md",
+                "${CLAUDE_PLUGIN_ROOT}/templates/paper.md",
             ),
         ),
         (
@@ -231,7 +231,7 @@ def test_project_bootstrap_docs_cover_science_tool_install_contract(
         ),
         ("commands/next-steps.md", ("Follow `references/command-preamble.md`",)),
         ("commands/pre-register.md", ("Follow `references/command-preamble.md`", "Read `templates/pre-registration.md`")),
-        ("commands/research-papers.md", ("Follow `references/command-preamble.md`", "Read `templates/paper-summary.md`")),
+        ("commands/research-papers.md", ("Follow `references/command-preamble.md`", "Read `templates/paper.md`")),
         ("commands/research-topic.md", ("Follow `references/command-preamble.md`", "Read `templates/background-topic.md`")),
         (
             "commands/search-literature.md",

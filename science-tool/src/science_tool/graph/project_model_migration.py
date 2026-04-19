@@ -17,13 +17,17 @@ _TYPE_RENAMES = {
     "bias-audit": "task",
 }
 
-# ID prefix renames (same as type renames, plus paper→article)
+# ID prefix renames. Historically this also contained "paper": "article"
+# as part of the 2026-04-05 project-model transition, but the 2026-04-19
+# manuscript+paper rename reversed that direction: external literature
+# is once again canonically `paper:<bibkey>`. The `paper→article` branch
+# has been removed so running this migration on a post-rename project
+# does NOT undo the rename.
 _PREFIX_RENAMES = {
     "claim": "proposition",
     "relation_claim": "proposition",
     "evidence": "observation",
     "artifact": "data-package",
-    "paper": "article",
     "comparison": "discussion",
     "bias-audit": "task",
 }
@@ -83,9 +87,6 @@ def _migrate_file(path: Path) -> bool:
 
     if entity_type in _TYPE_RENAMES:
         fm["type"] = _TYPE_RENAMES[entity_type]
-        changed = True
-    elif entity_type == "paper":
-        fm["type"] = "article"
         changed = True
     elif entity_type == "pre-registration":
         # Pre-registrations become plain documents (not graph entities)

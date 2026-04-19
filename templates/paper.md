@@ -1,41 +1,68 @@
 ---
-id: "paper:{{paper_id}}"
+id: "paper:{{bibtex_key}}"
 type: "paper"
-title: "{{title}}"
-status: "outline"  # outline | draft | revision | final
-stories:
-  - "story:{{story_id}}"
+title: "{{Title}}"
+status: "active"
+ontology_terms: []
+datasets: []
+source_refs:
+  - "cite:{{bibtex_key}}"
 related: []
-source_refs: []
+created: "{{YYYY-MM-DD}}"
+updated: "{{YYYY-MM-DD}}"
 ---
 
-## Abstract
+# {{Title}}
 
-{{Paper abstract -- written once stories are mature.}}
+- **Authors:** {{authors}}
+- **Year:** {{year}}
+- **Journal:** {{journal}}
+- **DOI/URL:** {{url}}
+- **BibTeX key:** {{bibtex_key}}
+- **Source:** LLM knowledge | web search | PDF
 
-## Outline
+## Key Contribution
 
-### Introduction
+<!-- 2-3 sentences: what is the main claim or result? -->
 
-{{Background, motivation, and aims. References propositions and questions.}}
+## Methods
 
-### Methods
+<!-- What approach did they use? What data? What key assumptions? -->
 
-{{Approach descriptions. References methods, workflows, datasets.}}
+## Key Findings
 
-### Results
+<!-- The specific results that matter for our project -->
 
-<!-- Each story maps to a results subsection. -->
+## Relevance
 
-#### {{Story 1 title}}
+<!-- How does this connect to our research questions/hypotheses? Reference hypothesis IDs. -->
 
-Story: story:{{story_id}}
-Status: {{draft | developing | mature}}
+## Project Framework Mapping
 
-### Discussion
+<!-- If the project has an existing ontology, schema, or classification framework,
+map the paper's concepts to the project's vocabulary:
 
-{{Synthesis, limitations, future directions. References open questions.}}
+| Paper Concept | Project Concept | Notes |
+|---|---|---|
+| <their term> | <our term> | <correspondence notes> |
 
-## Bibliography
+Omit if no structured framework exists to map against. -->
 
-<!-- Populated from article references across all stories. -->
+## Limitations
+
+<!-- What did they NOT address? Questionable assumptions? Known weaknesses? -->
+
+## Model / Tool Availability
+
+<!-- If the paper describes a model, tool, or dataset intended for reuse:
+- Available checkpoints / versions
+- Hardware requirements
+- License
+- Quantization options (if applicable)
+- Access restrictions
+
+Omit for papers that don't release artifacts. -->
+
+## Follow-up
+
+<!-- Papers to read next. Questions this raises for our project. -->

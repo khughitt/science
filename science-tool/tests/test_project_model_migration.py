@@ -42,16 +42,24 @@ def test_migrate_evidence_to_observation(tmp_path: Path) -> None:
     assert "id: observation:e01" in content
 
 
-def test_migrate_paper_to_article(tmp_path: Path) -> None:
+def test_migrate_paper_preserved_unchanged(tmp_path: Path) -> None:
+    """``paper:`` entities pass through migration unchanged.
+
+    The 2026-04-19 manuscript+paper rename reversed the earlier paper→article
+    direction, so a file whose only entity prefix is ``paper:`` is now a no-op
+    for this migration.
+    """
     source = tmp_path / "doc" / "background" / "papers" / "smith-2024.md"
     source.parent.mkdir(parents=True)
     source.write_text(
         "---\nid: paper:smith-2024\ntype: paper\ntitle: Smith 2024\nrelated: []\nsource_refs: []\n---\n"
     )
-    migrate_entity_sources(tmp_path)
+    results = migrate_entity_sources(tmp_path)
     content = source.read_text()
-    assert "type: article" in content
-    assert "id: article:smith-2024" in content
+    assert "type: paper" in content
+    assert "id: paper:smith-2024" in content
+    assert results["migrated"] == 0
+    assert results["skipped"] >= 1
 
 
 def test_migrate_updates_cross_references(tmp_path: Path) -> None:
@@ -64,7 +72,8 @@ def test_migrate_updates_cross_references(tmp_path: Path) -> None:
     content = source.read_text()
     assert "proposition:c01" in content
     assert "observation:e01" in content
-    assert "article:smith-2024" in content
+    # paper: refs are NOT migrated post-2026-04-19 rename.
+    assert "paper:smith-2024" in content
 
 
 def test_migrate_skips_unchanged_files(tmp_path: Path) -> None:
@@ -142,11 +151,11 @@ def test_migrate_tasks_directory(tmp_path: Path) -> None:
     source = tmp_path / "tasks" / "active.md"
     source.parent.mkdir(parents=True)
     source.write_text(
-        "---\nid: task:t01\ntype: task\ntitle: Do something\nrelated:\n  - paper:Walker2024\n---\n"
+        "---\nid: task:t01\ntype: task\ntitle: Do something\nrelated:\n  - claim:Walker2024\n---\n"
     )
     results = migrate_entity_sources(tmp_path)
     content = source.read_text()
-    assert "article:Walker2024" in content
+    assert "proposition:Walker2024" in content
     assert results["migrated"] >= 1
 
 
@@ -155,13 +164,13 @@ def test_migrate_custom_list_fields(tmp_path: Path) -> None:
     source = tmp_path / "doc" / "synthesis.md"
     source.parent.mkdir(parents=True)
     source.write_text(
-        "---\nid: synthesis:s01\ntype: synthesis\ntitle: Synthesis\npapers:\n  - paper:Smith2024\n  - paper:Jones2023\n---\n"
+        "---\nid: synthesis:s01\ntype: synthesis\ntitle: Synthesis\nclaims:\n  - claim:Smith2024\n  - claim:Jones2023\n---\n"
     )
     results = migrate_entity_sources(tmp_path)
     content = source.read_text()
-    assert "article:Smith2024" in content
-    assert "article:Jones2023" in content
-    assert "paper:" not in content
+    assert "proposition:Smith2024" in content
+    assert "proposition:Jones2023" in content
+    assert "claim:" not in content
     assert results["migrated"] >= 1
 
 

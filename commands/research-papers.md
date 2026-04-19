@@ -40,7 +40,7 @@ Skip the Dispatch Strategy section and execute Setup → Source Strategy → Wri
 Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-assistant`).
 
 Additionally:
-1. Read `.ai/templates/paper-summary.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/paper-summary.md`.
+1. Read `.ai/templates/paper.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/paper.md`.
 2. Check `doc/papers/` for existing summary; ask before overwriting.
 
 ## Source Strategy
@@ -79,7 +79,7 @@ Retrieval is centralized through `science-tool paper-fetch`, which handles tiere
 
 ## Writing
 
-Follow `.ai/templates/paper-summary.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/paper-summary.md`, and fill every section.
+Follow `.ai/templates/paper.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/paper.md`, and fill every section.
 
 - Include frontmatter `Source:` describing provenance (`LLM knowledge`, `web search`, `PDF`, or combination).
 - Generate BibTeX key as `FirstAuthorLastNameYear` (with suffix if needed).

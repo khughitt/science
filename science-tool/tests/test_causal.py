@@ -218,7 +218,7 @@ class TestExportPgmpy:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/study",
+            source="paper:doi_10.1234/study",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",
@@ -336,7 +336,7 @@ class TestExportChirho:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/study",
+            source="paper:doi_10.1234/study",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",
@@ -368,7 +368,7 @@ class TestExportChirho:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/bridge",
+            source="paper:doi_10.1234/bridge",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",
@@ -404,7 +404,7 @@ class TestExportChirho:
         add_proposition(
             graph_path,
             text="X causes Y",
-            source="article:doi_x",
+            source="paper:doi_x",
             confidence=0.8,
             subject="concept/x",
             predicate="scic:causes",
@@ -414,7 +414,7 @@ class TestExportChirho:
         add_proposition(
             graph_path,
             text="Z causes Y",
-            source="article:doi_z",
+            source="paper:doi_z",
             confidence=0.9,
             subject="concept/z",
             predicate="scic:causes",
@@ -511,7 +511,7 @@ class TestEdgeProvenance:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/drug_recovery",
+            source="paper:doi_10.1234/drug_recovery",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",
@@ -521,7 +521,7 @@ class TestEdgeProvenance:
         add_proposition(
             graph_path,
             text="Disease severity affects recovery outcomes",
-            source="article:doi_10.5678/severity",
+            source="paper:doi_10.5678/severity",
             confidence=0.90,
             subject="concept/severity",
             predicate="scic:causes",
@@ -605,7 +605,7 @@ class TestEdgeProvenance:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/drug_recovery",
+            source="paper:doi_10.1234/drug_recovery",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",
@@ -656,7 +656,7 @@ class TestEdgeProvenance:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/drug_recovery",
+            source="paper:doi_10.1234/drug_recovery",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",
@@ -699,7 +699,7 @@ class TestEdgeProvenance:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/drug_recovery",
+            source="paper:doi_10.1234/drug_recovery",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",
@@ -743,7 +743,7 @@ class TestEdgeProvenance:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/drug_recovery",
+            source="paper:doi_10.1234/drug_recovery",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",
@@ -790,7 +790,7 @@ class TestEdgeProvenance:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/drug_recovery",
+            source="paper:doi_10.1234/drug_recovery",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",
@@ -825,7 +825,7 @@ class TestEdgeProvenance:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/drug_recovery",
+            source="paper:doi_10.1234/drug_recovery",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",
@@ -867,7 +867,7 @@ class TestEdgeProvenance:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/drug_recovery",
+            source="paper:doi_10.1234/drug_recovery",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",
@@ -906,7 +906,7 @@ class TestEdgeProvenance:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/drug_recovery",
+            source="paper:doi_10.1234/drug_recovery",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",
@@ -941,7 +941,7 @@ class TestEdgeProvenance:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/drug_recovery",
+            source="paper:doi_10.1234/drug_recovery",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",
@@ -982,7 +982,7 @@ class TestEdgeProvenance:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/drug_recovery",
+            source="paper:doi_10.1234/drug_recovery",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",
@@ -1018,7 +1018,7 @@ class TestEdgeProvenance:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/drug_recovery",
+            source="paper:doi_10.1234/drug_recovery",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",
@@ -1064,7 +1064,7 @@ class TestEdgeProvenance:
         add_proposition(
             graph_path,
             text="Drug treatment improves recovery time",
-            source="article:doi_10.1234/drug_recovery",
+            source="paper:doi_10.1234/drug_recovery",
             confidence=0.85,
             subject="concept/drug",
             predicate="scic:causes",

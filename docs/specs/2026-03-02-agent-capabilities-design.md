@@ -95,7 +95,7 @@ Each capability should declare four interfaces:
 
 | Capability | Command surface (proposed) | Prompt profile | Required skills | Output template/artifact |
 |---|---|---|---|---|
-| `research_paper` | `/science:research-paper` | `research-assistant` | `research`, `writing` | `templates/paper-summary.md` |
+| `research_paper` | `/science:research-paper` | `research-assistant` | `research`, `writing` | `templates/paper.md` |
 | `research_topic` | `/science:research-topic` | `research-assistant` | `research`, `writing` | `templates/background-topic.md` |
 | `research_gaps` | `/science:research-gaps` | `research-assistant` | `research`, `writing` | `doc/background/*` + gap table |
 | `find_datasets` | `/science:find-datasets` | `workflow-architect` | `data` (+ source skills) | dataset inventory in `doc/05-data.md` or dedicated file |

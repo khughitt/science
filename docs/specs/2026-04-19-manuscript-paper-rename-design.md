@@ -137,7 +137,7 @@ Behavior:
    - Any other occurrence of `article:<X>` in markdown body or YAML values → `paper:<X>`. The regex is anchored on the literal prefix `article:` followed by a valid entity-ID character class.
 3. Before `--apply`: verify the project git working tree is clean by shelling out to `git status --porcelain` (run in `--project-root`). If non-empty, refuse to proceed unless `--force` is passed. Rationale: the migration produces a wide mechanical rewrite; mixing it with unrelated uncommitted work muddies the audit trail.
 4. Without `--apply`: emit a unified diff (`difflib.unified_diff`) of every pending rewrite followed by a trailing per-file match-count summary, then exit 0 without writing. By default, cap diff output at the first 200 lines plus `"... N more files with changes"`; `--verbose` removes the cap. Users review the diff, then re-run with `--apply`.
-5. With `--apply`: rewrite files in place using temp-file + atomic replace per file. Preserve all other formatting (indentation, whitespace, line endings). Exit 0 on success with a summary: `"Rewrote N legacy paper references in K files. Run `science-tool refs check-refs` to verify."`
+5. With `--apply`: rewrite files in place using temp-file + atomic replace per file. Preserve all other formatting (indentation, whitespace, line endings). Exit 0 on success with a summary: `"Rewrote N legacy paper references in K files. Run `science-tool refs check --root <project-root>` to verify."`
 
 Idempotency: if a project has no remaining `article:` references, the command exits 0 with "No `article:` references found; project is migrated." Re-running on a migrated project is a no-op.
 
@@ -285,9 +285,9 @@ Extend the existing `science-tool/tests/fixtures/big_picture/minimal_project/` o
    ```
    uv run science-tool refs migrate-paper --project-root .               # dry-run, review diff
    uv run science-tool refs migrate-paper --project-root . --apply       # perform rewrite
-   uv run science-tool refs check-refs --project-root .                  # verify no dangling refs
+   uv run science-tool refs check --root .                               # verify no dangling refs
    ```
-   The `check-refs` step catches any mid-migration half-states (e.g., an `article:` reference that the regex missed because the entity ID used an unusual character) before the change is committed.
+   The `check` step catches any mid-migration half-states (e.g., an `article:` reference that the regex missed because the entity ID used an unusual character) before the change is committed.
 3. **Knowledge-gaps spec lands next.** Its coverage metric uses `paper:` as canonical; the dual-acceptance defined here covers any projects not yet migrated.
 4. **Dual-acceptance removal** (separate follow-on spec) once all tracked projects confirm migration.
 

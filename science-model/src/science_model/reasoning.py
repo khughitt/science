@@ -17,13 +17,23 @@ class ClaimLayer(StrEnum):
 
 
 class IdentificationStrength(StrEnum):
-    """How much causal leverage an evidence line carries."""
+    """How much causal leverage an evidence line carries.
+
+    The first five values lie on a rough continuum from weakest to strongest
+    in-system identification. ``ANALOGICAL`` is off the continuum: it covers
+    evidence that is interventional or longitudinal in a model system but
+    only extrapolates to the target system by analogy (e.g. Drosophila
+    perturbation read as an analogue for mammalian mechanism). Use
+    ``proxy_directness`` and ``measurement_model.known_failure_modes`` to
+    record the analogy gap.
+    """
 
     NONE = "none"
     STRUCTURAL = "structural"
     OBSERVATIONAL = "observational"
     LONGITUDINAL = "longitudinal"
     INTERVENTIONAL = "interventional"
+    ANALOGICAL = "analogical"
 
 
 class ProxyDirectness(StrEnum):
