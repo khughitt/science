@@ -67,9 +67,9 @@ synthesized_from: []
 """,
     )
     issues = validate_rollup_file(rollup, project_root=FIXTURE)
-    # FIXTURE has two orphans: q05-orphan and q06-software-pipeline-concern
-    # (both have no hypothesis match; EA-17 will later filter out software-only ones).
-    assert any(i.kind == "orphan_count_mismatch" and "expected 2" in i.message for i in issues)
+    # FIXTURE has one research orphan: q05-orphan (declared no aspects -> inherits
+    # research). q06-software-pipeline-concern is software-only and does not count.
+    assert any(i.kind == "orphan_count_mismatch" and "expected 1" in i.message for i in issues)
 
 
 def test_rollup_orphan_count_matches(tmp_path: Path) -> None:
@@ -78,7 +78,7 @@ def test_rollup_orphan_count_matches(tmp_path: Path) -> None:
         "synthesis.md",
         """---
 type: "synthesis-rollup"
-orphan_question_count: 2
+orphan_question_count: 1
 synthesized_from: []
 ---
 """,
@@ -178,6 +178,22 @@ PHF19 residualization in task:t082 showed 93.8% coefficient retention.
 """,
     )
     issues = validate_synthesis_file(synth, project_root=tmp_path)
-    assert not any(
-        i.kind == "nonexistent_reference" and "t082" in i.message for i in issues
-    )
+    assert not any(i.kind == "nonexistent_reference" and "t082" in i.message for i in issues)
+
+
+def test_orphan_count_excludes_software_only_questions() -> None:
+    # Using the extended minimal_project fixture which now has q06 tagged
+    # aspects: [software-development]. That question has no hypothesis
+    # match, but should NOT count as a research orphan.
+    from science_tool.big_picture.resolver import resolve_questions
+    from science_tool.big_picture.validator import count_research_orphans
+
+    resolved = resolve_questions(FIXTURE)
+    q06 = resolved.get("question:q06-software-pipeline-concern")
+    assert q06 is not None
+    assert q06.primary_hypothesis is None
+
+    count = count_research_orphans(resolved, project_root=FIXTURE)
+    # FIXTURE's research orphans: q05-orphan (declared no aspects -> inherits
+    # research). q06 should NOT count here.
+    assert count == 1

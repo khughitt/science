@@ -7,8 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from science_model.aspects import (
+    SOFTWARE_ASPECT,
+    load_project_aspects,
+    matches_aspect_filter,
+)
 from science_tool.big_picture.frontmatter import read_frontmatter
-from science_tool.big_picture.resolver import resolve_questions
+from science_tool.big_picture.resolver import ResolverOutput, resolve_questions
 
 IssueKind = Literal[
     "nonexistent_reference",
@@ -54,8 +59,7 @@ def validate_synthesis_file(path: Path, project_root: Path) -> list[ValidationIs
                 ValidationIssue(
                     kind="thin_coverage_marker_mismatch",
                     message=(
-                        f"provenance_coverage is 'thin' but Arc has {word_count} words "
-                        "(expected ≤150 when thin)."
+                        f"provenance_coverage is 'thin' but Arc has {word_count} words (expected ≤150 when thin)."
                     ),
                     path=path,
                 )
@@ -104,6 +108,28 @@ def _extract_aggregated_task_ids(path: Path) -> set[str]:
     return {f"task:{m.group(1)}" for m in AGGREGATED_TASK_HEADING.finditer(text)}
 
 
+def count_research_orphans(
+    resolved: dict[str, ResolverOutput],
+    project_root: Path,
+) -> int:
+    """Return the number of research orphans.
+
+    A question counts as a research orphan iff it has no hypothesis match
+    AND at least one of its resolved aspects is not ``software-development``.
+    Pure-software questions without hypothesis matches are out of scope
+    for research synthesis and therefore do not count.
+    """
+    project_aspects = load_project_aspects(project_root)
+    research_filter = {a for a in project_aspects if a != SOFTWARE_ASPECT}
+    count = 0
+    for output in resolved.values():
+        if output.primary_hypothesis is not None:
+            continue
+        if matches_aspect_filter(output.resolved_aspects, research_filter):
+            count += 1
+    return count
+
+
 def validate_rollup_file(path: Path, project_root: Path) -> list[ValidationIssue]:
     """Return structural issues with a generated rollup (synthesis.md)."""
     issues: list[ValidationIssue] = []
@@ -112,7 +138,7 @@ def validate_rollup_file(path: Path, project_root: Path) -> list[ValidationIssue
     claimed = fm.get("orphan_question_count")
     if claimed is not None:
         resolved = resolve_questions(project_root)
-        actual = sum(1 for r in resolved.values() if r.primary_hypothesis is None)
+        actual = count_research_orphans(resolved, project_root)
         if int(claimed) != actual:
             issues.append(
                 ValidationIssue(
