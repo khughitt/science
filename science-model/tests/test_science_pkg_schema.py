@@ -54,3 +54,44 @@ def test_entity_rejects_resources_field(entity_schema: dict) -> None:
     e["resources"] = [{"name": "x", "path": "data/x.csv"}]
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(e, entity_schema)
+
+
+@pytest.fixture
+def runtime_schema() -> dict:
+    return json.loads((SCHEMA_DIR / "science-pkg-runtime-1.0.json").read_text())
+
+
+def _valid_runtime_pkg() -> dict:
+    return {
+        "profiles": ["science-pkg-runtime-1.0"],
+        "name": "example",
+        "resources": [
+            {
+                "name": "table",
+                "path": "data/table.csv",
+                "format": "csv",
+                "mediatype": "text/csv",
+                "bytes": 1234,
+                "hash": "sha256:abc",
+            }
+        ],
+    }
+
+
+def test_runtime_pkg_minimal_valid(runtime_schema: dict) -> None:
+    jsonschema.validate(_valid_runtime_pkg(), runtime_schema)
+
+
+def test_runtime_rejects_top_level_access(runtime_schema: dict) -> None:
+    """Runtime surface MUST NOT carry top-level access: (entity-only block)."""
+    pkg = _valid_runtime_pkg()
+    pkg["access"] = {"level": "public", "verified": True}
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(pkg, runtime_schema)
+
+
+def test_runtime_rejects_top_level_derivation(runtime_schema: dict) -> None:
+    pkg = _valid_runtime_pkg()
+    pkg["derivation"] = {"workflow_run": "workflow-run:x"}
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(pkg, runtime_schema)

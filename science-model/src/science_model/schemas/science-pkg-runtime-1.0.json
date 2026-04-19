@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science-tool/science-pkg-runtime-1.0.json",
+  "title": "science-pkg runtime surface (datapackage.yaml on disk)",
+  "type": "object",
+  "required": ["profiles", "name", "resources"],
+  "properties": {
+    "profiles": {
+      "type": "array",
+      "items": {"type": "string"},
+      "contains": {"const": "science-pkg-runtime-1.0"}
+    },
+    "name": {"type": "string"},
+    "title": {"type": "string"},
+    "description": {"type": "string"},
+    "licenses": {"type": "array"},
+    "ontology_terms": {"type": "array", "items": {"type": "string"}},
+    "license": {"type": "string"},
+    "update_cadence": {"type": "string"},
+    "resources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "path"],
+        "properties": {
+          "name": {"type": "string"},
+          "path": {"type": "string"},
+          "format": {"type": "string"},
+          "mediatype": {"type": "string"},
+          "bytes": {"type": "integer"},
+          "hash": {"type": "string"},
+          "schema": {"type": "object"}
+        }
+      }
+    }
+  },
+  "not": {
+    "anyOf": [
+      {"required": ["access"]},
+      {"required": ["derivation"]},
+      {"required": ["origin"]}
+    ]
+  }
+}
