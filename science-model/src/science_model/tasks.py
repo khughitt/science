@@ -27,6 +27,7 @@ class Task(BaseModel):
     title: str
     description: str = ""
     type: str = ""
+    aspects: list[str] = Field(default_factory=list)
     priority: str = "P2"
     status: str = TaskStatus.PROPOSED
     blocked_by: list[str] = []
@@ -43,6 +44,7 @@ class TaskCreate(BaseModel):
 
     title: str
     type: str = ""
+    aspects: list[str] = Field(default_factory=list)
     priority: str = "P2"
     related: list[str] = []
     blocked_by: list[str] = []
@@ -58,6 +60,7 @@ class TaskUpdate(BaseModel):
     priority: str | None = None
     status: str | None = None
     type: str | None = None
+    aspects: list[str] | None = None
     related: list[str] | None = None
     blocked_by: list[str] | None = None
     group: str | None = None

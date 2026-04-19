@@ -662,6 +662,29 @@ class TestTagsAndGroups:
         assert len(result) == 2
 
 
+def test_task_accepts_aspects_field() -> None:
+    from science_model.tasks import Task
+
+    t = Task(id="t001", title="demo", aspects=["hypothesis-testing"])
+    assert t.aspects == ["hypothesis-testing"]
+
+
+def test_task_defaults_aspects_to_empty_list() -> None:
+    from science_model.tasks import Task
+
+    t = Task(id="t001", title="demo")
+    assert t.aspects == []
+
+
+def test_task_create_and_update_carry_aspects() -> None:
+    from science_model.tasks import TaskCreate, TaskUpdate
+
+    create = TaskCreate(title="demo", aspects=["software-development"])
+    update = TaskUpdate(aspects=["hypothesis-testing"])
+    assert create.aspects == ["software-development"]
+    assert update.aspects == ["hypothesis-testing"]
+
+
 class TestRetireTask:
     def test_retire_moves_to_done(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
