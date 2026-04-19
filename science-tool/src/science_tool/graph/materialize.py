@@ -179,6 +179,21 @@ def _add_relations(
     for raw_target in sorted(entity.ontology_terms):
         _link_external_term(entity_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)
 
+    for raw_target in sorted(entity.same_as):
+        if is_metadata_reference(raw_target):
+            continue
+        if is_external_reference(raw_target, known_prefixes=ext_prefixes):
+            _link_same_as_external(
+                entity_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs
+            )
+            continue
+        # Internal alias: another project entity asserts equivalence with this one.
+        canonical_target = normalize_alias(raw_target, alias_map)
+        target = entity_index.get(canonical_target)
+        if target is None:
+            continue
+        knowledge.add((entity_uri, SKOS.exactMatch, _entity_uri(target.canonical_id)))
+
     for raw_target in sorted(entity.source_refs):
         if is_external_reference(raw_target, known_prefixes=ext_prefixes):
             _link_external_term(entity_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)
@@ -197,6 +212,19 @@ def _link_external_term(
 ) -> None:
     target_uri = _external_uri(raw_target)
     bridge.add((source_uri, SCI_NS.about, target_uri))
+    _register_external_term(target_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)
+
+
+def _link_same_as_external(
+    source_uri: URIRef, raw_target: str, *, bridge, ontology_catalogs: list[OntologyCatalog]
+) -> None:
+    """Assert that a project entity is the same concept as an external CURIE.
+
+    Emits ``skos:exactMatch`` (rather than ``sci:about``) to express identity
+    rather than association — e.g. ``topic:PHF19`` ↔ ``UniProtKB:Q5T6S3``.
+    """
+    target_uri = _external_uri(raw_target)
+    bridge.add((source_uri, SKOS.exactMatch, target_uri))
     _register_external_term(target_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)
 
 

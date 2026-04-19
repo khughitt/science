@@ -394,6 +394,59 @@ def test_materialize_graph_accepts_bare_ontology_terms(tmp_path: Path) -> None:
     assert (external_uri, SCHEMA.identifier, Literal("functor")) in bridge
 
 
+def test_materialize_graph_emits_skos_exact_match_for_same_as_external(tmp_path: Path) -> None:
+    """`same_as: [UniProtKB:Q5T6S3]` on a topic emits skos:exactMatch (not sci:about).
+
+    This is the identity assertion that distinguishes 'this topic IS the PHF19 protein'
+    from 'this topic IS ABOUT the PHF19 protein' (the latter is what ontology_terms emits).
+    """
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    (project / "doc" / "topics").mkdir(parents=True)
+    (project / "doc" / "topics" / "phf19.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "topic:phf19"',
+                'type: "topic"',
+                'title: "PHF19 (PHD finger protein 19)"',
+                "ontology_terms: []",
+                "source_refs: []",
+                "related: []",
+                "same_as:",
+                '  - "UniProtKB:Q5T6S3"',
+                '  - "HGNC:30074"',
+                'created: "2026-04-19"',
+                'updated: "2026-04-19"',
+                "---",
+                "",
+                "PHF19 is a Polycomb component.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    trig_path = materialize_graph(project)
+
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    bridge = dataset.graph(PROJECT_NS["graph/bridge"])
+
+    topic_uri = PROJECT_NS["topic/phf19"]
+    uniprot_uri = PROJECT_NS["external/uniprotkb/Q5T6S3"]
+    hgnc_uri = PROJECT_NS["external/hgnc/30074"]
+
+    # skos:exactMatch (identity), not sci:about (association)
+    assert (topic_uri, SKOS.exactMatch, uniprot_uri) in bridge
+    assert (topic_uri, SKOS.exactMatch, hgnc_uri) in bridge
+    # Same-as targets must NOT also be linked via sci:about
+    assert (topic_uri, SCI.about, uniprot_uri) not in bridge
+    # External terms are still registered as ExternalTerm nodes
+    assert (uniprot_uri, RDF.type, SCI.ExternalTerm) in bridge
+    assert (hgnc_uri, RDF.type, SCI.ExternalTerm) in bridge
+
+
 def test_materialize_graph_materializes_model_parameter_bindings(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)

@@ -91,6 +91,7 @@ class SourceEntity(BaseModel):
     blocked_by: list[str] = Field(default_factory=list)
     source_refs: list[str] = Field(default_factory=list)
     ontology_terms: list[str] = Field(default_factory=list)
+    same_as: list[str] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
     claim_layer: ClaimLayer | None = None
     identification_strength: IdentificationStrength | None = None
@@ -287,6 +288,7 @@ def _load_markdown_entities(
                     related=entity.related,
                     source_refs=entity.source_refs,
                     ontology_terms=entity.ontology_terms,
+                    same_as=entity.same_as,
                     aliases=_derive_aliases(
                         entity.canonical_id,
                         [*raw_aliases, *_aliases_from_source_path(entity.type.value, entity.file_path)],
@@ -383,6 +385,7 @@ def _load_structured_entities(
                 blocked_by=_coerce_string_list(item.get("blocked_by")),
                 source_refs=_coerce_string_list(item.get("source_refs")),
                 ontology_terms=_coerce_string_list(item.get("ontology_terms")),
+                same_as=_coerce_string_list(item.get("same_as")),
                 aliases=_derive_aliases(canonical_id, aliases),
                 **_load_reasoning_metadata(
                     item,

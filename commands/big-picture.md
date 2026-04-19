@@ -52,6 +52,19 @@ For each hypothesis, assemble a bundle. The bundle is a dictionary you construct
 - `edges_yaml`: glob `doc/figures/dags/*.edges.yaml`; include any whose filename stem starts with this hypothesis ID.
 - `uncertainty_slice`: filter the global uncertainty output to entries referring to this hypothesis or its resolved questions.
 - `gaps_slice`: run `uv run science-tool graph gaps "hypothesis:<id>" --format json` for this hypothesis. Skip (empty slice) if the call errors because the hypothesis has no graph neighborhood yet.
+- `topic_gaps`: see below.
+
+**Topic gaps** — in a single call before slicing per hypothesis:
+
+```python
+from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
+
+all_gaps = compute_topic_gaps(project_root, resolved_questions, included_question_ids)
+```
+
+Then for each hypothesis bundle, filter `all_gaps` to topics whose `hypotheses` list includes this hypothesis's ID. Pass the filtered list to the hypothesis-synthesizer agent as `topic_gaps`.
+
+`included_question_ids` is the exact set already computed earlier in Phase 1 for aspect filtering — DO NOT recompute it here.
 
 Compute `provenance_coverage` per hypothesis:
 - `high` if ≥1 `.edges.yaml` is present OR ≥1 graph claim surfaces AND ≥60% of related interpretations have `prior_interpretations` chains.
@@ -140,6 +153,7 @@ Body sections (~1000–1500 words total):
 - **State** — cross-hypothesis consolidation. What the project collectively believes, where the strongest evidence sits, what's contested.
 - **Arc** — one paragraph per hypothesis, plus a framing paragraph on how the hypotheses relate.
 - **Research fronts** — ranked list across all hypotheses. Signals: uncertainty density, recent activity, explicit task priority. Cite source: "from <hyp-id>" for each front.
+- **Knowledge Gaps (rollup)** — The orchestrator reuses the `all_gaps` list computed in Phase 1 (no second call to `compute_topic_gaps`). Render the top 10 entries (by `gap_score` desc, ties broken by topic ID asc) as a markdown table with columns: Topic, Coverage, Demand, Gap, Hypotheses. If `all_gaps` is empty, emit the one-liner: "No knowledge gaps detected this run." and skip the table. Per-hypothesis files render their own Knowledge Gaps sub-bullet inside Research Fronts per the spec (with a rendering cap of 5 `demanding_questions` IDs + "… and N more" tail).
 - **Emergent threads** — 2–3 sentence pointer to `_emergent-threads.md`. Include the orphan-question count.
 
 Computing SHAs:

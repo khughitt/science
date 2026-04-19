@@ -77,6 +77,10 @@ Live questions under this hypothesis, open tasks, gap/uncertainty areas.
 
 Pull live questions from the bundle's resolver output; open tasks from the task listing; gaps from the bundle's filtered uncertainty/gaps data.
 
+- If the bundle includes `topic_gaps`, render them as a `**Knowledge gaps**:` sub-bullet inside the Research Fronts section. Format per topic:
+  ``- `topic:<id>` — N papers vs M questions referencing it (question:q01, question:q12, …)``
+  Cap the rendered question list at 5 IDs followed by `… and K more` if longer. Omit the entire sub-bullet if `topic_gaps` is empty.
+
 ## Hedging discipline
 
 Claims about unreplicated, contested, or transitively-inferred findings use hedged language: "suggestive", "one-source", "not yet replicated", "inferred via interpretation X". Confident prose ("supported by", "established") is reserved for claims whose graph or `.edges.yaml` status is `supported`.

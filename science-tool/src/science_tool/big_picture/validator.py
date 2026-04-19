@@ -21,8 +21,8 @@ IssueKind = Literal[
     "orphan_count_mismatch",
 ]
 
-# Matches "interpretation:<id>", "task:<id>", "question:<id>", "hypothesis:<id>".
-REFERENCE_PATTERN = re.compile(r"\b(interpretation|task|question|hypothesis):([a-zA-Z0-9_\-.]+)\b")
+# Matches "interpretation:<id>", "task:<id>", "question:<id>", "hypothesis:<id>", "topic:<id>".
+REFERENCE_PATTERN = re.compile(r"\b(interpretation|task|question|hypothesis|topic):([a-zA-Z0-9_\-.]+)\b")
 
 
 @dataclass(frozen=True)
@@ -74,6 +74,8 @@ def _collect_project_ids(project_root: Path) -> set[str]:
         "specs/hypotheses",
         "doc/questions",
         "doc/interpretations",
+        "doc/topics",
+        "doc/background/topics",
         "tasks",
     ):
         directory = project_root / relative
