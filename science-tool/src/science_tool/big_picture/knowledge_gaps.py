@@ -151,10 +151,23 @@ def _compute_coverage(
 
     # bibtex_refs(T): T.source_refs entries of the form cite:<key>.
     for ref in topic_fm.get("source_refs", []) or []:
-        if isinstance(ref, str) and ref.startswith("cite:"):
+        if not isinstance(ref, str):
+            _logger.warning(
+                "topic %s has non-string source_refs entry %r; ignoring",
+                topic_id,
+                ref,
+            )
+            continue
+        if ref.startswith("cite:"):
             bibkey = ref[len("cite:"):]
             if bibkey:
                 covering_bibkeys.add(bibkey)
+        else:
+            _logger.warning(
+                "topic %s has malformed source_refs entry %r (expected cite:<key>); ignoring",
+                topic_id,
+                ref,
+            )
 
     return len(covering_bibkeys)
 
@@ -163,18 +176,25 @@ def _compute_demand(
     project_root: Path,
     topic_id: str,
     included_question_ids: set[str],
+    *,
+    known_topic_ids: set[str] | None = None,
 ) -> tuple[int, list[str]]:
     """Return ``(count, sorted_list)`` of aspect-filtered questions
     referencing ``topic_id`` in their ``related:`` field.
 
     Only considers questions present in ``included_question_ids`` (aspect
     filter already applied by the caller).
+
+    If ``known_topic_ids`` is provided, any question's ``related:`` entry
+    of the form ``topic:<X>`` that is not in ``known_topic_ids`` is logged
+    as a warning (once per unknown topic ID across this call).
     """
     questions_dir = project_root / "doc" / "questions"
     if not questions_dir.is_dir():
         return 0, []
 
     demanders: list[str] = []
+    warned: set[str] = set()
     for md in sorted(questions_dir.glob("*.md")):
         fm = read_frontmatter(md) or {}
         qid = fm.get("id")
@@ -183,6 +203,20 @@ def _compute_demand(
         related = fm.get("related", []) or []
         if topic_id in related:
             demanders.append(qid)
+        if known_topic_ids is not None:
+            for ref in related:
+                if (
+                    isinstance(ref, str)
+                    and ref.startswith("topic:")
+                    and ref not in known_topic_ids
+                    and ref not in warned
+                ):
+                    _logger.warning(
+                        "question %s references unknown %s; excluded from demand",
+                        qid,
+                        ref,
+                    )
+                    warned.add(ref)
     return len(demanders), sorted(demanders)
 
 
@@ -204,7 +238,12 @@ def compute_topic_gaps(
 
     gaps: list[TopicGap] = []
     for topic_id in topics:
-        demand, demanders = _compute_demand(project_root, topic_id, included_question_ids)
+        demand, demanders = _compute_demand(
+            project_root,
+            topic_id,
+            included_question_ids,
+            known_topic_ids=set(topics),
+        )
         if demand == 0:
             continue
         coverage = _compute_coverage(topic_id, topics, papers)

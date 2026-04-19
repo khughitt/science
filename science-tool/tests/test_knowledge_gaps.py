@@ -229,3 +229,47 @@ def test_compute_topic_gaps_sort_order_gap_score_desc_tiebreak_topic_id_asc(
     # t02-thin: gap_score=2; t05-also-thin: gap_score=1. t02 first.
     ordered = [g.topic_id for g in gaps]
     assert ordered == ["topic:t02-thin", "topic:t05-also-thin"]
+
+
+# Task 7: Warning log tests
+
+
+def test_dangling_topic_ref_logs_warning(tmp_path: Path, caplog) -> None:  # type: ignore[no-untyped-def]
+    from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
+
+    shutil.copytree(FIXTURE, tmp_path / "p")
+    project = tmp_path / "p"
+    # Add a dangling topic ref to q01.
+    q01 = project / "doc" / "questions" / "q01-direct-to-h1.md"
+    text = q01.read_text()
+    text = text.replace(
+        '  - "topic:t02-thin"',
+        '  - "topic:t02-thin"\n  - "topic:does-not-exist"',
+    )
+    q01.write_text(text)
+
+    resolved = resolve_questions(project)
+    with caplog.at_level("WARNING", logger="science_tool.big_picture.knowledge_gaps"):
+        gaps = compute_topic_gaps(project, resolved, set(resolved))
+    assert any("does-not-exist" in r.getMessage() for r in caplog.records)
+    # Does not raise; does not count toward any topic's demand.
+    assert all(g.topic_id != "topic:does-not-exist" for g in gaps)
+
+
+def test_malformed_source_refs_logs_warning(tmp_path: Path, caplog) -> None:  # type: ignore[no-untyped-def]
+    from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
+
+    shutil.copytree(FIXTURE, tmp_path / "p")
+    project = tmp_path / "p"
+    t03 = project / "doc" / "background" / "topics" / "t03-bibtex-covered.md"
+    text = t03.read_text()
+    text = text.replace(
+        "source_refs: [cite:Smith2024]",
+        "source_refs: [cite:Smith2024, not-a-cite-entry]",
+    )
+    t03.write_text(text)
+
+    resolved = resolve_questions(project)
+    with caplog.at_level("WARNING", logger="science_tool.big_picture.knowledge_gaps"):
+        compute_topic_gaps(project, resolved, set(resolved))
+    assert any("not-a-cite-entry" in r.getMessage() for r in caplog.records)
