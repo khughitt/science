@@ -102,3 +102,27 @@ def build_migration_plan(project_root: Path) -> AspectsMigrationPlan:
             )
 
     return AspectsMigrationPlan(task_rewrites=rewrites, conflicts=conflicts)
+
+
+def apply_migration_plan(plan: AspectsMigrationPlan) -> None:
+    """Apply the rewrites in ``plan`` in place.
+
+    For each `TaskRewrite`: parse the source file, find the task by ID,
+    remove its `type` field and set `aspects` to the target list, then
+    re-render the whole file. Preserves all other task content.
+    """
+    from collections import defaultdict
+
+    from science_tool.tasks import parse_tasks, render_tasks
+
+    rewrites_by_path: dict[Path, dict[str, list[str]]] = defaultdict(dict)
+    for rewrite in plan.task_rewrites:
+        rewrites_by_path[rewrite.source_path][rewrite.task_id] = rewrite.new_aspects
+
+    for path, per_task in rewrites_by_path.items():
+        tasks = parse_tasks(path)
+        for task in tasks:
+            if task.id in per_task:
+                task.aspects = per_task[task.id]
+                task.type = ""  # drop legacy field
+        path.write_text(render_tasks(tasks))

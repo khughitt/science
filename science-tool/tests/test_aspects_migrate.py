@@ -6,6 +6,7 @@ import pytest
 
 from science_tool.aspects.migrate import (
     AspectsMigrationConflict,
+    apply_migration_plan,
     build_migration_plan,
 )
 
@@ -107,3 +108,50 @@ def test_plan_raises_when_project_has_no_aspects(tmp_path: Path) -> None:
 
     with pytest.raises(AspectsMigrationConflict, match="science.yaml"):
         build_migration_plan(tmp_path)
+
+
+def test_apply_rewrites_task_file_in_place(tmp_path: Path) -> None:
+    (tmp_path / "tasks").mkdir()
+    original = (
+        "## [t001] Cleanup\n"
+        "- type: dev\n"
+        "- priority: P2\n"
+        "- status: proposed\n"
+        "- created: 2026-04-01\n"
+        "\n"
+        "Body.\n"
+    )
+    (tmp_path / "tasks" / "active.md").write_text(original)
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\nprofile: research\n"
+        "aspects: [hypothesis-testing, software-development]\n"
+    )
+
+    plan = build_migration_plan(tmp_path)
+    apply_migration_plan(plan)
+
+    body = (tmp_path / "tasks" / "active.md").read_text()
+    assert "- type: dev" not in body
+    assert "- aspects: [software-development]" in body
+
+
+def test_apply_is_idempotent(tmp_path: Path) -> None:
+    (tmp_path / "tasks").mkdir()
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t001] Cleanup\n"
+        "- type: dev\n"
+        "- priority: P2\n"
+        "- status: proposed\n"
+        "- created: 2026-04-01\n"
+        "\n"
+        "Body.\n"
+    )
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\nprofile: research\n"
+        "aspects: [hypothesis-testing, software-development]\n"
+    )
+
+    apply_migration_plan(build_migration_plan(tmp_path))
+    # Second run: no more rewrites because no more `type:` lines.
+    plan2 = build_migration_plan(tmp_path)
+    assert plan2.task_rewrites == []
