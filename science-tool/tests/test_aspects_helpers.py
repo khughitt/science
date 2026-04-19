@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from science_model.aspects import KNOWN_ASPECTS, matches_aspect_filter, resolve_entity_aspects
+import pytest
+
+from science_model.aspects import (
+    KNOWN_ASPECTS,
+    AspectValidationError,
+    matches_aspect_filter,
+    resolve_entity_aspects,
+    validate_entity_aspects,
+)
 
 
 def test_known_aspects_matches_science_yaml_schema() -> None:
@@ -60,3 +68,39 @@ def test_does_not_match_on_empty_filter_set() -> None:
     assert not matches_aspect_filter(
         resolved=["hypothesis-testing"], filter_set=set()
     )
+
+
+PROJECT = ["causal-modeling", "hypothesis-testing", "software-development"]
+
+
+def test_validate_accepts_subset_of_project() -> None:
+    assert validate_entity_aspects(["hypothesis-testing"], PROJECT) == [
+        "hypothesis-testing"
+    ]
+
+
+def test_validate_returns_canonical_order() -> None:
+    # Caller supplied in a non-project order; helper normalizes to project order.
+    assert validate_entity_aspects(
+        ["software-development", "causal-modeling"], PROJECT
+    ) == ["causal-modeling", "software-development"]
+
+
+def test_validate_rejects_empty_list() -> None:
+    with pytest.raises(AspectValidationError, match="empty"):
+        validate_entity_aspects([], PROJECT)
+
+
+def test_validate_rejects_duplicates() -> None:
+    with pytest.raises(AspectValidationError, match="duplicate"):
+        validate_entity_aspects(["hypothesis-testing", "hypothesis-testing"], PROJECT)
+
+
+def test_validate_rejects_aspect_not_in_project() -> None:
+    with pytest.raises(AspectValidationError, match="not declared"):
+        validate_entity_aspects(["computational-analysis"], PROJECT)
+
+
+def test_validate_rejects_aspect_not_in_vocabulary() -> None:
+    with pytest.raises(AspectValidationError, match="vocabulary"):
+        validate_entity_aspects(["typo-aspect"], PROJECT + ["typo-aspect"])

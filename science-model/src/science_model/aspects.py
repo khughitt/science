@@ -42,3 +42,44 @@ def matches_aspect_filter(resolved: list[str], filter_set: set[str]) -> bool:
     ``filter_set``; this helper does not invent the filter.
     """
     return bool(set(resolved) & filter_set)
+
+
+class AspectValidationError(ValueError):
+    """Raised when entity aspects are invalid for a project."""
+
+
+def validate_entity_aspects(
+    entity_aspects: list[str],
+    project_aspects: list[str],
+) -> list[str]:
+    """Validate explicit entity aspects and return them in canonical order.
+
+    Invariants enforced:
+    - Non-empty list.
+    - No duplicates.
+    - Every entry is a member of ``KNOWN_ASPECTS``.
+    - Every entry is declared in ``project_aspects``.
+
+    Returns the canonicalized list: same values, reordered to match
+    ``project_aspects`` ordering for stable diffs.
+    """
+    if not entity_aspects:
+        raise AspectValidationError(
+            "Entity aspects list is empty; use absent field to inherit."
+        )
+    seen: set[str] = set()
+    for aspect in entity_aspects:
+        if aspect in seen:
+            raise AspectValidationError(f"duplicate aspect: {aspect!r}")
+        seen.add(aspect)
+        if aspect not in KNOWN_ASPECTS:
+            raise AspectValidationError(
+                f"{aspect!r} is not in the aspect vocabulary "
+                f"({sorted(KNOWN_ASPECTS)})."
+            )
+        if aspect not in project_aspects:
+            raise AspectValidationError(
+                f"{aspect!r} is not declared in project aspects "
+                f"({project_aspects}); add it to science.yaml first."
+            )
+    return [a for a in project_aspects if a in seen]
