@@ -84,6 +84,27 @@ When the project uses layered-claim metadata:
 - if rival models are genuinely in play, prefer a bounded `rival_model_packet` over free-form prose comparison
 - treat `current_working_model` as optional; do not invent one just to satisfy a schema
 
+### Allowed enum values
+
+These fields are strict enums. **Do not invent values** — if no listed value fits, drop the field and explain in `measurement_model.rationale` or `known_failure_modes` instead.
+
+- **`claim_layer`** — what kind of claim is this?
+  - `empirical_regularity` — observed pattern in data (a correlation, a frequency, a trend)
+  - `causal_effect` — claim about a causal effect of one variable on another
+  - `mechanistic_narrative` — proposed mechanism story; requires linked lower-layer support
+  - `structural_claim` — claim about graph topology, model structure, or definitional scaffolding
+- **`identification_strength`** — how much causal leverage does this evidence carry *in the target system*?
+  - `none` — no causal handle (descriptive only)
+  - `structural` — derived from network/model structure or theory, not data
+  - `observational` — observational study, association adjusted for confounders
+  - `longitudinal` — within-subject change over time
+  - `interventional` — perturbation in the target system
+  - `analogical` — interventional in a *model* system, extrapolated to target by analogy
+- **`proxy_directness`** — `direct` | `indirect` | `derived`
+- **`supports_scope`** — `local_proposition` | `hypothesis_bundle` | `cross_hypothesis` | `project_wide`
+
+Methodological scaffolding (analysis methods, definitional/framework material, historical context) usually does **not** belong as a `proposition`. Use `method:`, `topic:`, or `discussion:` entity types instead — those don't require enum classification.
+
 ## Evidence Classification
 
 When updating the project model, prefer the canonical evidence categories:
