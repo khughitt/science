@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from science_tool.refs_migrate import (
@@ -114,3 +115,14 @@ def test_scan_project_counts_are_accurate() -> None:
     for r in rewrites:
         assert r.new_text != r.original_text
         assert r.match_count > 0
+
+
+def test_scan_project_logs_warning_on_non_utf8_file(tmp_path: Path, caplog) -> None:
+    shutil.copytree(FIXTURE, tmp_path / "p")
+    project = tmp_path / "p"
+    bad = project / "doc" / "questions" / "bad.md"
+    bad.write_bytes(b"\xff\xfe\x00not utf-8\n")
+
+    with caplog.at_level("WARNING", logger="science_tool.refs_migrate"):
+        scan_project(project)
+    assert any("bad.md" in r.getMessage() for r in caplog.records)

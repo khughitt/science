@@ -6,10 +6,13 @@ canonical rewrite rules.
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+
+_logger = logging.getLogger(__name__)
 
 # Entity-ID character class per the spec: [A-Za-z0-9_\-.]
 _ENTITY_ID_CLASS = r"[A-Za-z0-9_\-.]"
@@ -96,8 +99,7 @@ def scan_project(project_root: Path) -> list[FileRewrite]:
         try:
             text = md_path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
-            # Non-UTF-8 files: skip with a logged warning. Spec §Open Decisions
-            # documents this behavior.
+            _logger.warning("Skipping non-UTF-8 file: %s", md_path)
             continue
         new_text, count = rewrite_text(text)
         if count > 0:
