@@ -1974,29 +1974,42 @@ def tasks() -> None:
 
 @tasks.command("add")
 @click.argument("title")
-@click.option("--type", "task_type", required=True, type=click.Choice(["research", "dev"]))
 @click.option("--priority", required=True, type=click.Choice(["P0", "P1", "P2", "P3"]))
+@click.option("--aspects", "aspects", multiple=True)
 @click.option("--related", multiple=True)
 @click.option("--blocked-by", multiple=True)
 @click.option("--group", default="")
 @click.option("--description", default="")
 def tasks_add(
     title: str,
-    task_type: str,
     priority: str,
+    aspects: tuple[str, ...],
     related: tuple[str, ...],
     blocked_by: tuple[str, ...],
     group: str,
     description: str,
 ) -> None:
     """Add a new task."""
+    from science_model.aspects import (
+        AspectValidationError,
+        load_project_aspects,
+        validate_entity_aspects,
+    )
     from science_tool.tasks import add_task
+
+    validated_aspects: list[str] = []
+    if aspects:
+        project_aspects = load_project_aspects(Path.cwd())
+        try:
+            validated_aspects = validate_entity_aspects(list(aspects), project_aspects)
+        except AspectValidationError as exc:
+            raise click.ClickException(str(exc)) from exc
 
     task = add_task(
         tasks_dir=DEFAULT_TASKS_DIR,
         title=title,
-        task_type=task_type,
         priority=priority,
+        aspects=validated_aspects or None,
         related=list(related) or None,
         blocked_by=list(blocked_by) or None,
         group=group,
