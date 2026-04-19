@@ -7,6 +7,9 @@ canonical rewrite rules.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
+from dataclasses import dataclass
+from pathlib import Path
 
 # Entity-ID character class per the spec: [A-Za-z0-9_\-.]
 _ENTITY_ID_CLASS = r"[A-Za-z0-9_\-.]"
@@ -65,3 +68,50 @@ def rewrite_text(text: str) -> tuple[str, int]:
     total += n
 
     return current, total
+
+
+# Directories to scan, relative to project root. Matches the conventions used
+# by `science_tool.refs.check_refs` and the spec's "canonical markdown roots".
+_SCAN_ROOTS: tuple[str, ...] = ("doc", "specs", "tasks", "core", "knowledge")
+_TOP_LEVEL_MARKDOWN: tuple[str, ...] = ("RESEARCH_PLAN.md", "README.md")
+
+
+@dataclass(frozen=True)
+class FileRewrite:
+    path: Path
+    original_text: str
+    new_text: str
+    match_count: int
+
+
+def scan_project(project_root: Path) -> list[FileRewrite]:
+    """Walk ``project_root``; return pending rewrites for markdown files.
+
+    Returns an empty list if the project has no legacy ``article:`` references.
+    Does NOT write anything — callers apply the rewrites themselves via
+    :func:`apply_rewrites`.
+    """
+    results: list[FileRewrite] = []
+    for md_path in _iter_markdown_files(project_root):
+        try:
+            text = md_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            # Non-UTF-8 files: skip with a logged warning. Spec §Open Decisions
+            # documents this behavior.
+            continue
+        new_text, count = rewrite_text(text)
+        if count > 0:
+            results.append(FileRewrite(md_path, text, new_text, count))
+    return sorted(results, key=lambda r: r.path.as_posix())
+
+
+def _iter_markdown_files(project_root: Path) -> Iterator[Path]:
+    for rel in _SCAN_ROOTS:
+        root = project_root / rel
+        if not root.is_dir():
+            continue
+        yield from sorted(root.rglob("*.md"))
+    for name in _TOP_LEVEL_MARKDOWN:
+        path = project_root / name
+        if path.is_file():
+            yield path

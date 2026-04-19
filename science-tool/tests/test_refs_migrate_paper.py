@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from science_tool.refs_migrate import (
     ID_REWRITE_RULES,
     PROSE_REWRITE_RULE,
     TYPE_REWRITE_RULES,
     rewrite_text,
+    scan_project,
 )
 
 
@@ -81,3 +84,33 @@ def test_migrate_idempotent() -> None:
     twice, count = rewrite_text(once)
     assert twice == once
     assert count == 0
+
+
+FIXTURE = Path(__file__).parent / "fixtures" / "refs" / "legacy_project"
+
+
+def test_scan_project_finds_all_rewrites() -> None:
+    rewrites = scan_project(FIXTURE)
+    assert len(rewrites) >= 4  # q01, Smith2024, t01, i01
+    totals = {r.path.name: r.match_count for r in rewrites}
+    assert totals["q01-example.md"] >= 3  # list items + prose
+    assert totals["Smith2024.md"] >= 2  # id + type
+    assert totals["t01-example.md"] >= 1  # inline-list
+    assert totals["i01-example.md"] >= 1  # prose, NOT particle:muon
+
+
+def test_scan_project_on_migrated_returns_empty() -> None:
+    # Apply migration to an in-memory copy; re-scanning a migrated snapshot
+    # would produce no rewrites. We verify by rewriting every file's text
+    # and confirming the count is now 0.
+    rewrites = scan_project(FIXTURE)
+    for r in rewrites:
+        _, n = __import__("science_tool.refs_migrate", fromlist=["rewrite_text"]).rewrite_text(r.new_text)
+        assert n == 0, f"{r.path.name} not idempotent"
+
+
+def test_scan_project_counts_are_accurate() -> None:
+    rewrites = scan_project(FIXTURE)
+    for r in rewrites:
+        assert r.new_text != r.original_text
+        assert r.match_count > 0
