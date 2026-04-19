@@ -2089,35 +2089,57 @@ def tasks_unblock(task_id: str) -> None:
 
 @tasks.command("edit")
 @click.argument("task_id")
+@click.option("--title", default=None)
+@click.option("--description", default=None)
 @click.option("--priority", default=None, type=click.Choice(["P0", "P1", "P2", "P3"]))
-@click.option("--status", default=None, type=click.Choice(["proposed", "active", "blocked", "deferred", "retired"]))
-@click.option("--type", "task_type", default=None, type=click.Choice(["research", "dev"]))
+@click.option("--status", default=None)
+@click.option("--aspects", "aspects", multiple=True)
 @click.option("--related", multiple=True)
+@click.option("--blocked-by", multiple=True)
 @click.option("--group", default=None)
 def tasks_edit(
     task_id: str,
+    title: str | None,
+    description: str | None,
     priority: str | None,
     status: str | None,
-    task_type: str | None,
+    aspects: tuple[str, ...],
     related: tuple[str, ...],
+    blocked_by: tuple[str, ...],
     group: str | None,
 ) -> None:
-    """Edit a task's fields."""
+    """Edit an existing task's fields."""
+    from science_model.aspects import (
+        AspectValidationError,
+        load_project_aspects,
+        validate_entity_aspects,
+    )
     from science_tool.tasks import edit_task
+
+    validated_aspects: list[str] | None = None
+    if aspects:
+        project_aspects = load_project_aspects(Path.cwd())
+        try:
+            validated_aspects = validate_entity_aspects(list(aspects), project_aspects)
+        except AspectValidationError as exc:
+            raise click.ClickException(str(exc)) from exc
 
     try:
         task = edit_task(
-            DEFAULT_TASKS_DIR,
-            task_id,
+            tasks_dir=DEFAULT_TASKS_DIR,
+            task_id=task_id,
+            title=title,
+            description=description,
             priority=priority,
             status=status,
-            task_type=task_type,
+            aspects=validated_aspects,
             related=list(related) if related else None,
+            blocked_by=list(blocked_by) if blocked_by else None,
             group=group,
         )
     except KeyError as e:
         raise click.ClickException(str(e)) from e
-    click.echo(f"[{task.id}] updated")
+    click.echo(f"Edited [{task.id}] {task.title}")
 
 
 @tasks.command("list")

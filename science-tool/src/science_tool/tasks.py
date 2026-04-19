@@ -297,24 +297,33 @@ def unblock_task(tasks_dir: Path, task_id: str) -> Task:
 def edit_task(
     tasks_dir: Path,
     task_id: str,
+    title: str | None = None,
+    description: str | None = None,
     priority: str | None = None,
     status: str | None = None,
-    task_type: str | None = None,
+    aspects: list[str] | None = None,
     related: list[str] | None = None,
+    blocked_by: list[str] | None = None,
     group: str | None = None,
 ) -> Task:
     """Update specified fields on a task."""
     tasks = _read_active(tasks_dir)
     task = _find_task(tasks, task_id)
 
+    if title is not None:
+        task.title = title
+    if description is not None:
+        task.description = description
     if priority is not None:
         task.priority = priority
     if status is not None:
         task.status = status
-    if task_type is not None:
-        task.type = task_type
+    if aspects is not None:
+        task.aspects = aspects
     if related is not None:
         task.related = related
+    if blocked_by is not None:
+        task.blocked_by = blocked_by
     if group is not None:
         task.group = group
 

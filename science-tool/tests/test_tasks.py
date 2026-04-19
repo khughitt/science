@@ -398,10 +398,10 @@ class TestEditTask:
 
     def test_edit_multiple_fields(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        t = edit_task(tasks_dir, "t001", priority="P2", status="todo", task_type="research")
+        t = edit_task(tasks_dir, "t001", priority="P2", status="todo", aspects=["hypothesis-testing"])
         assert t.priority == "P2"
         assert t.status == "todo"
-        assert t.type == "research"
+        assert t.aspects == ["hypothesis-testing"]
 
     def test_edit_related(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)

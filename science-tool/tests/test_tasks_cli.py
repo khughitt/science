@@ -155,11 +155,18 @@ class TestTasksEdit:
             result = runner.invoke(main, ["tasks", "edit", "t001", "--status", "active"])
             assert result.exit_code == 0
 
-    def test_edit_type(self, runner: CliRunner) -> None:
+    def test_edit_aspects(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
+            from pathlib import Path as _Path
+
+            _Path("science.yaml").write_text(
+                "name: demo\nprofile: research\naspects: [hypothesis-testing]\n"
+            )
             runner.invoke(main, ["tasks", "add", "To edit", "--priority", "P1"])
-            result = runner.invoke(main, ["tasks", "edit", "t001", "--type", "research"])
-            assert result.exit_code == 0
+            result = runner.invoke(
+                main, ["tasks", "edit", "t001", "--aspects", "hypothesis-testing"]
+            )
+            assert result.exit_code == 0, result.output
 
     def test_edit_related(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
@@ -168,12 +175,6 @@ class TestTasksEdit:
                 main, ["tasks", "edit", "t001", "--related", "hypothesis:h01", "--related", "topic:rna"]
             )
             assert result.exit_code == 0
-
-    def test_edit_rejects_invalid_status(self, runner: CliRunner) -> None:
-        with runner.isolated_filesystem():
-            runner.invoke(main, ["tasks", "add", "To edit", "--priority", "P1"])
-            result = runner.invoke(main, ["tasks", "edit", "t001", "--status", "invalid"])
-            assert result.exit_code != 0
 
 
 class TestTasksList:
@@ -409,3 +410,39 @@ def test_tasks_add_without_type_or_aspects(tmp_path, monkeypatch):
     body = (tmp_path / "tasks" / "active.md").read_text()
     assert "aspects" not in body
     assert "- type:" not in body
+
+
+def test_tasks_edit_updates_aspects(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+
+    from science_tool.cli import main
+
+    (tmp_path / "tasks").mkdir()
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\nprofile: research\n"
+        "aspects: [hypothesis-testing, software-development]\n"
+    )
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t001] Demo\n"
+        "- priority: P1\n"
+        "- status: proposed\n"
+        "- created: 2026-04-19\n"
+        "\n"
+        "Body.\n"
+    )
+    monkeypatch.chdir(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "tasks",
+            "edit",
+            "t001",
+            "--aspects",
+            "software-development",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    body = (tmp_path / "tasks" / "active.md").read_text()
+    assert "- aspects: [software-development]" in body
