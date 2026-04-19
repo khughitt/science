@@ -26,6 +26,11 @@ from pathlib import Path
 
 _TAGS_LINE_RE = re.compile(r"^(?P<indent>[ \t]*)tags:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE)
 _RELATED_LINE_RE = re.compile(r"^(?P<indent>[ \t]*)related:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE)
+# Block-form `related:` — key on its own line followed by one or more `- "X"` item lines.
+_RELATED_BLOCK_RE = re.compile(
+    r"^(?P<indent>[ \t]*)related:[ \t]*\n(?P<items>(?:[ \t]+-[^\n]*(?:\n|$))+)",
+    re.MULTILINE,
+)
 _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n?", re.DOTALL)
 
 # Task-file line patterns (dash-prefixed)
@@ -63,6 +68,19 @@ def _unquote(item: str) -> str:
 
 def _parse_list_body(body: str) -> list[str]:
     return [_unquote(item) for item in body.split(",") if item.strip()]
+
+
+def _parse_block_items(items_text: str) -> list[str]:
+    """Parse YAML block-list items (`  - "X"`, `  - Y`, etc.) into ref strings."""
+    refs: list[str] = []
+    for line in items_text.splitlines():
+        stripped = line.lstrip(" \t")
+        if not stripped.startswith("-"):
+            continue
+        value = stripped[1:].strip()
+        if value:
+            refs.append(_unquote(value))
+    return refs
 
 
 def _format_list_body(items: list[str]) -> str:
@@ -106,19 +124,40 @@ def rewrite_frontmatter(text: str, as_topic: bool = False) -> tuple[str, FileMig
 
     added: list[str] = []
     if tag_refs:
-        related_match = _RELATED_LINE_RE.search(new_fm)
-        if related_match is not None:
-            existing = _parse_list_body(related_match.group("body"))
+        inline_match = _RELATED_LINE_RE.search(new_fm)
+        block_match = _RELATED_BLOCK_RE.search(new_fm) if inline_match is None else None
+        if inline_match is not None:
+            existing = _parse_list_body(inline_match.group("body"))
             merged = list(existing)
             for ref in tag_refs:
                 if ref not in merged:
                     merged.append(ref)
                     added.append(ref)
             if added:
-                indent = related_match.group("indent")
+                indent = inline_match.group("indent")
                 replacement = f"{indent}related: [{_format_list_body(merged)}]"
                 new_fm = (
-                    new_fm[: related_match.start()] + replacement + new_fm[related_match.end() :]
+                    new_fm[: inline_match.start()] + replacement + new_fm[inline_match.end() :]
+                )
+        elif block_match is not None:
+            items_text = block_match.group("items")
+            existing = _parse_block_items(items_text)
+            # Preserve the item indent from the first existing line (e.g. "  - ").
+            first_item = items_text.splitlines()[0]
+            item_indent = first_item[: len(first_item) - len(first_item.lstrip(" \t"))]
+            for ref in tag_refs:
+                if ref not in existing:
+                    existing.append(ref)
+                    added.append(ref)
+            if added:
+                # Ensure the block ends with a newline before appending new lines.
+                trailing_nl = "" if items_text.endswith("\n") else "\n"
+                added_lines = "".join(f'{item_indent}- "{ref}"\n' for ref in added)
+                new_items = items_text + trailing_nl + added_lines
+                new_fm = (
+                    new_fm[: block_match.start("items")]
+                    + new_items
+                    + new_fm[block_match.end("items") :]
                 )
         else:
             # No related: line — append one

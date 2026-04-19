@@ -106,6 +106,73 @@ class TestRewriteFrontmatter:
         assert new_text == text
 
 
+class TestRewriteFrontmatterBlockForm:
+    """Block-form `related:` (multi-line list) must merge tags in-place, not
+    append a duplicate key — see regression in tags_migration.py."""
+
+    def _entity_md_block_related(self, tags: str, block_items: list[str]) -> str:
+        """Build a doc with tags: plus a block-form related: list."""
+        lines = [
+            "---",
+            'id: "hypothesis:h01-test"',
+            'type: "hypothesis"',
+            'title: "Test"',
+            'status: "proposed"',
+            f"tags: [{tags}]",
+            "related:",
+        ]
+        lines.extend(f'  - "{ref}"' for ref in block_items)
+        lines.extend(['created: "2026-03-01"', "---", "", "Body text."])
+        return "\n".join(lines) + "\n"
+
+    def test_merges_into_block_form_related(self) -> None:
+        text = self._entity_md_block_related(
+            tags="genomics, ml", block_items=["question:q01", "task:t001"]
+        )
+        new_text, migration = rewrite_frontmatter(text)
+        assert migration is not None
+        assert migration.added_to_related == ["meta:genomics", "meta:ml"]
+        # Exactly one `related:` key — no duplicate
+        assert new_text.count("\nrelated:") == 1
+        # Existing block items preserved
+        assert '  - "question:q01"' in new_text
+        assert '  - "task:t001"' in new_text
+        # New items appended in block form
+        assert '  - "meta:genomics"' in new_text
+        assert '  - "meta:ml"' in new_text
+        # YAML parses cleanly — no stray keys
+        import yaml
+
+        fm = new_text.split("---\n", 2)[1]
+        parsed = yaml.safe_load(fm)
+        assert parsed["related"] == [
+            "question:q01",
+            "task:t001",
+            "meta:genomics",
+            "meta:ml",
+        ]
+        assert "tags" not in parsed
+
+    def test_block_form_dedups_existing_refs(self) -> None:
+        text = self._entity_md_block_related(
+            tags="genomics", block_items=["meta:genomics", "question:q01"]
+        )
+        new_text, migration = rewrite_frontmatter(text)
+        assert migration is not None
+        assert migration.added_to_related == []  # Already present
+        assert new_text.count("meta:genomics") == 1
+        assert new_text.count("\nrelated:") == 1
+
+    def test_block_form_as_topic(self) -> None:
+        text = self._entity_md_block_related(
+            tags="genomics", block_items=["question:q01"]
+        )
+        new_text, migration = rewrite_frontmatter(text, as_topic=True)
+        assert migration is not None
+        assert '  - "topic:genomics"' in new_text
+        assert new_text.count("\nrelated:") == 1
+
+
 class TestMigrateTagsToRelated:
     def _write_project(self, root: Path) -> None:
         (root / "science.yaml").write_text("name: test\n")
