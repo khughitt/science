@@ -78,7 +78,7 @@ Additionally:
 1. If present, read source-specific skills from `<science-plugin-root>`:
    - `skills/data/sources/openalex.md`
    - `skills/data/sources/pubmed.md`
-2. Read `.ai/templates/paper-summary.md` first; if not found, read `templates/paper-summary.md`.
+2. Read `.ai/templates/paper.md` first; if not found, read `templates/paper.md`.
 3. Read project context:
    - `specs/research-question.md`
    - `specs/scope-boundaries.md`
@@ -195,7 +195,7 @@ Include the normalized candidate list, dedupe keys, source provenance, and rank/
 
 1. Offer to create tasks for the top `Core now` papers via `science-tool tasks add`.
 2. For selected high-priority papers, run `science-research-papers` (or create a task for later).
-3. For `Core now` items, create a **stub-only** note at `doc/papers/<citekey>.md` using `.ai/templates/paper-summary.md` first, then `templates/paper-summary.md`. The stub must contain:
+3. For `Core now` items, create a **stub-only** note at `doc/papers/<citekey>.md` using `.ai/templates/paper.md` first, then `templates/paper.md`. The stub must contain:
    - Template frontmatter filled from search metadata only (title, authors, year, identifiers).
    - Every prose/content section (Key Contribution, Methods, Key Findings, etc.) replaced with a single line: `UNREAD — populate after reading the paper`.
    - Do **not** write plausible-sounding summaries from the LLM prior; those are hard to distinguish from real notes later and cause stub-drift when the paper is actually read.
