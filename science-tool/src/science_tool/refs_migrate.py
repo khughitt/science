@@ -6,6 +6,7 @@ canonical rewrite rules.
 
 from __future__ import annotations
 
+import difflib
 import logging
 import os
 import re
@@ -141,3 +142,30 @@ def _atomic_write(path: Path, text: str) -> None:
     except Exception:
         Path(tmp_name).unlink(missing_ok=True)
         raise
+
+
+def render_diff(rewrites: list[FileRewrite], max_lines: int | None = 200) -> str:
+    """Return a human-readable unified diff for a list of rewrites.
+
+    ``max_lines=None`` disables capping (used by ``--verbose`` in the CLI).
+    Capped output appends a ``... N more files with changes`` marker.
+    """
+    lines: list[str] = []
+    files_rendered = 0
+    for rewrite in rewrites:
+        diff = difflib.unified_diff(
+            rewrite.original_text.splitlines(keepends=True),
+            rewrite.new_text.splitlines(keepends=True),
+            fromfile=str(rewrite.path),
+            tofile=str(rewrite.path),
+            n=2,
+        )
+        for line in diff:
+            lines.append(line.rstrip("\n"))
+            if max_lines is not None and len(lines) >= max_lines:
+                remaining = len(rewrites) - files_rendered - 1
+                if remaining > 0:
+                    lines.append(f"... {remaining} more files with changes")
+                return "\n".join(lines) + "\n"
+        files_rendered += 1
+    return "\n".join(lines) + ("\n" if lines else "")

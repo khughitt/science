@@ -156,3 +156,34 @@ def test_apply_rewrites_preserves_other_files(tmp_path: Path) -> None:
     apply_rewrites(scan_project(project))
 
     assert (project / "science.yaml").read_text() == science_yaml_before
+
+
+def test_render_diff_emits_unified_diff() -> None:
+    from science_tool.refs_migrate import FileRewrite, render_diff
+    rewrite = FileRewrite(
+        path=Path("doc/x.md"),
+        original_text="id: article:X\n",
+        new_text="id: paper:X\n",
+        match_count=1,
+    )
+    diff = render_diff([rewrite])
+    assert "--- doc/x.md" in diff
+    assert "+++ doc/x.md" in diff
+    assert "-id: article:X" in diff
+    assert "+id: paper:X" in diff
+
+
+def test_render_diff_respects_line_cap() -> None:
+    from science_tool.refs_migrate import FileRewrite, render_diff
+    many = [
+        FileRewrite(
+            path=Path(f"doc/x{i}.md"),
+            original_text=f"article:X{i}\n" * 50,
+            new_text=f"paper:X{i}\n" * 50,
+            match_count=50,
+        )
+        for i in range(10)
+    ]
+    capped = render_diff(many, max_lines=200)
+    assert "... " in capped and " more files with changes" in capped
+    assert capped.count("\n") <= 220  # 200 diff lines + cap marker + slack
