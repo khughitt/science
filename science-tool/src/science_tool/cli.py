@@ -2143,7 +2143,6 @@ def tasks_edit(
 
 
 @tasks.command("list")
-@click.option("--type", "task_type", default=None, type=click.Choice(["research", "dev"]))
 @click.option("--priority", default=None, type=click.Choice(["P0", "P1", "P2", "P3"]))
 @click.option(
     "--status",
@@ -2152,14 +2151,15 @@ def tasks_edit(
 )
 @click.option("--related", default=None)
 @click.option("--group", default=None, help="Filter by group (exact match)")
+@click.option("--aspect", "aspects", multiple=True, help="Filter by aspect (repeatable)")
 @click.option("--all", "show_all", is_flag=True, default=False, help="Include done and retired tasks")
 @click.option("--format", "output_format", default="table", type=click.Choice(OUTPUT_FORMATS))
 def tasks_list(
-    task_type: str | None,
     priority: str | None,
     status: str | None,
     related: str | None,
     group: str | None,
+    aspects: tuple[str, ...],
     show_all: bool,
     output_format: str,
 ) -> None:
@@ -2169,11 +2169,12 @@ def tasks_list(
 
     matched = list_tasks(
         DEFAULT_TASKS_DIR,
-        task_type=task_type,
+        project_root=Path.cwd(),
         priority=priority,
         status=status,
         related=related,
         group=group,
+        aspects=list(aspects) or None,
         include_done=show_all,
     )
     matched = sort_tasks(matched)

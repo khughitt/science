@@ -416,33 +416,38 @@ class TestEditTask:
 
 class TestListTasks:
     def _setup_multi(self, tmp_path: Path) -> Path:
+        _write(
+            tmp_path / "science.yaml",
+            "name: demo\nprofile: research\n"
+            "aspects: [hypothesis-testing, software-development]\n",
+        )
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
         _write(
             tasks_dir / "active.md",
             """\
 ## [t001] Dev task
-- type: dev
 - priority: P1
 - status: active
+- aspects: [software-development]
 - created: 2026-03-01
 
 Dev desc.
 
 ## [t002] Research task
-- type: research
 - priority: P2
 - status: blocked
 - blocked-by: [t001]
+- aspects: [hypothesis-testing]
 - created: 2026-03-02
 
 Research desc.
 
 ## [t003] Another dev task
-- type: dev
 - priority: P2
 - status: active
 - related: [hypothesis:h01]
+- aspects: [software-development]
 - created: 2026-03-03
 
 Another dev desc.
@@ -455,11 +460,11 @@ Another dev desc.
         result = list_tasks(tasks_dir)
         assert len(result) == 3
 
-    def test_list_by_type(self, tmp_path: Path) -> None:
+    def test_list_by_aspect(self, tmp_path: Path) -> None:
         tasks_dir = self._setup_multi(tmp_path)
-        result = list_tasks(tasks_dir, task_type="dev")
+        result = list_tasks(tasks_dir, aspects=["software-development"])
         assert len(result) == 2
-        assert all(t.type == "dev" for t in result)
+        assert {t.id for t in result} == {"t001", "t003"}
 
     def test_list_by_priority(self, tmp_path: Path) -> None:
         tasks_dir = self._setup_multi(tmp_path)
@@ -487,7 +492,7 @@ Another dev desc.
 
     def test_list_combined_filters(self, tmp_path: Path) -> None:
         tasks_dir = self._setup_multi(tmp_path)
-        result = list_tasks(tasks_dir, task_type="dev", priority="P2")
+        result = list_tasks(tasks_dir, aspects=["software-development"], priority="P2")
         assert len(result) == 1
         assert result[0].id == "t003"
 

@@ -192,18 +192,37 @@ class TestTasksList:
             assert "Task A" in result.output
             assert "Task B" in result.output
 
-    def test_list_filter_type(self, runner: CliRunner) -> None:
+    def test_list_rejects_type_flag(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            result = runner.invoke(main, ["tasks", "list", "--type", "dev"])
+            assert result.exit_code != 0
+
+    def test_list_filter_aspect(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
             from pathlib import Path
 
+            Path("science.yaml").write_text(
+                "name: demo\nprofile: research\n"
+                "aspects: [hypothesis-testing, software-development]\n"
+            )
             tasks_dir = Path("tasks")
             tasks_dir.mkdir()
             (tasks_dir / "active.md").write_text(
-                "## [t001] Dev task\n- type: dev\n- priority: P1\n- status: proposed\n- created: 2026-03-01\n\nDev.\n\n"
-                "## [t002] Research task\n- type: research\n- priority: P2\n- status: proposed\n- created: 2026-03-02\n\nRes.\n"
+                "## [t001] Dev task\n"
+                "- priority: P1\n"
+                "- status: proposed\n"
+                "- aspects: [software-development]\n"
+                "- created: 2026-03-01\n\nDev.\n\n"
+                "## [t002] Research task\n"
+                "- priority: P2\n"
+                "- status: proposed\n"
+                "- aspects: [hypothesis-testing]\n"
+                "- created: 2026-03-02\n\nRes.\n"
             )
-            result = runner.invoke(main, ["tasks", "list", "--type", "dev"])
-            assert result.exit_code == 0
+            result = runner.invoke(
+                main, ["tasks", "list", "--aspect", "software-development"]
+            )
+            assert result.exit_code == 0, result.output
             assert "Dev task" in result.output
             assert "Research task" not in result.output
 
@@ -446,3 +465,39 @@ def test_tasks_edit_updates_aspects(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     body = (tmp_path / "tasks" / "active.md").read_text()
     assert "- aspects: [software-development]" in body
+
+
+def test_tasks_list_filter_by_aspect(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+
+    from science_tool.cli import main
+
+    (tmp_path / "tasks").mkdir()
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\nprofile: research\n"
+        "aspects: [hypothesis-testing, software-development]\n"
+    )
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t001] Research task\n"
+        "- priority: P1\n"
+        "- status: proposed\n"
+        "- aspects: [hypothesis-testing]\n"
+        "- created: 2026-04-19\n"
+        "\n"
+        "Body.\n"
+        "\n"
+        "## [t002] Software task\n"
+        "- priority: P1\n"
+        "- status: proposed\n"
+        "- aspects: [software-development]\n"
+        "- created: 2026-04-19\n"
+        "\n"
+        "Body.\n"
+    )
+    monkeypatch.chdir(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["tasks", "list", "--aspect", "hypothesis-testing"])
+    assert result.exit_code == 0, result.output
+    assert "t001" in result.output
+    assert "t002" not in result.output

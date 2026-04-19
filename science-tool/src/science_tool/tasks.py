@@ -348,11 +348,12 @@ _CLOSED_STATUSES = {TaskStatus.DONE, TaskStatus.RETIRED}
 
 def list_tasks(
     tasks_dir: Path,
-    task_type: str | None = None,
+    project_root: Path | None = None,
     priority: str | None = None,
     status: str | None = None,
     related: str | None = None,
     group: str | None = None,
+    aspects: list[str] | None = None,
     include_done: bool = False,
 ) -> list[Task]:
     """Filter active tasks by optional criteria.
@@ -364,8 +365,6 @@ def list_tasks(
 
     warn_invalid_statuses(tasks)
 
-    if task_type is not None:
-        tasks = [t for t in tasks if t.type == task_type]
     if priority is not None:
         tasks = [t for t in tasks if t.priority == priority]
     if status is not None:
@@ -376,5 +375,22 @@ def list_tasks(
         tasks = [t for t in tasks if any(related in r for r in t.related)]
     if group is not None:
         tasks = [t for t in tasks if t.group == group]
+    if aspects:
+        from science_model.aspects import (
+            load_project_aspects,
+            matches_aspect_filter,
+            resolve_entity_aspects,
+        )
+
+        project_aspects = load_project_aspects(project_root or tasks_dir.parent)
+        filter_set = set(aspects)
+        tasks = [
+            t
+            for t in tasks
+            if matches_aspect_filter(
+                resolve_entity_aspects(t.aspects or None, project_aspects),
+                filter_set,
+            )
+        ]
 
     return tasks
