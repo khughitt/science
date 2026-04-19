@@ -20,20 +20,23 @@ Parse `$ARGUMENTS` for:
 
 ## Phase 1: Precompute
 
-Run these in the project root:
+Run these from the project root. All `science-tool` invocations use `uv run science-tool …` so they resolve against the project's editable install (`pyproject.toml` has `science-tool` as a dev dependency in every Science project) and work regardless of whether `science-tool` is on `$PATH`:
 
 ```bash
-science-tool graph project-summary --format json
-science-tool graph question-summary --format json
-science-tool graph inquiry-summary --format json
-science-tool graph dashboard-summary --format json
-science-tool graph uncertainty --format json
-science-tool graph gaps --format json
-science-tool graph neighborhood-summary --format json
-science-tool big-picture resolve-questions --project-root .
+uv run science-tool graph project-summary --format json
+uv run science-tool graph question-summary --format json
+uv run science-tool graph inquiry-summary --format json
+uv run science-tool graph dashboard-summary --format json
+uv run science-tool graph uncertainty --format json
+uv run science-tool graph neighborhood-summary --format json
+uv run science-tool big-picture resolve-questions --project-root .
 ```
 
+All graph summary commands default to `--path knowledge/graph.trig` (the Science convention), so no flag is needed when run from the project root.
+
 For `software` profile projects, skip `graph project-summary` (follows `/science:status` precedent).
+
+**Note on `graph gaps`**: unlike the other summaries, `graph gaps` requires a `CENTER` argument (the node to analyze around). It is **not** called globally in this phase. Per-hypothesis `gaps_slice` is computed during bundle assembly below, centered on each hypothesis ID.
 
 Enumerate hypotheses from `specs/hypotheses/*.md`.
 
@@ -42,11 +45,11 @@ For each hypothesis, assemble a bundle. The bundle is a dictionary you construct
 - `hypothesis_path`: path to the `specs/hypotheses/<id>.md` file.
 - `hypothesis_frontmatter`: parsed YAML.
 - `resolved_questions`: from the resolver output, all questions whose `hypotheses[]` contains this hypothesis. Annotate each with its confidence.
-- `tasks`: glob `tasks/*.md` and `tasks/done/*.md`; parse frontmatter; include entries whose `related:` mentions this hypothesis or any of its resolved questions.
+- `tasks`: glob `tasks/*.md` and `tasks/done/*.md`; parse frontmatter; include entries whose `related:` mentions this hypothesis or any of its resolved questions. If `tasks/active.md` is a single aggregated file (common pattern, e.g., mm30), scan its body for per-task headings and `related:` metadata instead of expecting one file per task.
 - `interpretations`: glob `doc/interpretations/*.md`; parse frontmatter; include entries whose `related:` mentions this hypothesis or any of its resolved questions.
 - `edges_yaml`: glob `doc/figures/dags/*.edges.yaml`; include any whose filename stem starts with this hypothesis ID.
 - `uncertainty_slice`: filter the global uncertainty output to entries referring to this hypothesis or its resolved questions.
-- `gaps_slice`: same filtering for gaps output.
+- `gaps_slice`: run `uv run science-tool graph gaps "hypothesis:<id>" --format json` for this hypothesis. Skip (empty slice) if the call errors because the hypothesis has no graph neighborhood yet.
 
 Compute `provenance_coverage` per hypothesis:
 - `high` if ≥1 `.edges.yaml` is present OR ≥1 graph claim surfaces AND ≥60% of related interpretations have `prior_interpretations` chains.
@@ -194,4 +197,4 @@ After all phases:
 - Show the list of files written.
 - Show any staleness warnings.
 - Show any sub-agent "unused in synthesis" reports — these are candidates for future bundle improvements.
-- Suggest running `science-tool big-picture validate --project-root .` to sanity-check the output.
+- Suggest running `uv run science-tool big-picture validate --project-root .` to sanity-check the output.
