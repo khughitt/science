@@ -1,6 +1,6 @@
 ---
-id: "paper:{{paper_id}}"
-type: "paper"
+id: "manuscript:{{manuscript_id}}"
+type: "manuscript"
 title: "{{title}}"
 status: "outline"  # outline | draft | revision | final
 stories:
