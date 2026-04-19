@@ -65,6 +65,7 @@ def _parse_task_block(lines: list[str]) -> Task:
         id=task_id,
         title=title,
         type=fields.get("type", ""),
+        aspects=_parse_list_value(fields.get("aspects", "")),
         priority=fields.get("priority", ""),
         status=fields.get("status", ""),
         created=created,

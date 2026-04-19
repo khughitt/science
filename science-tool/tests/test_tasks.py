@@ -685,6 +685,24 @@ def test_task_create_and_update_carry_aspects() -> None:
     assert update.aspects == ["hypothesis-testing"]
 
 
+def test_parse_task_reads_aspects_inline_field(tmp_path):
+    from science_tool.tasks import parse_tasks
+
+    active = tmp_path / "active.md"
+    active.write_text(
+        "## [t001] Example\n"
+        "- priority: P1\n"
+        "- status: active\n"
+        "- aspects: [hypothesis-testing, computational-analysis]\n"
+        "- created: 2026-04-01\n"
+        "\n"
+        "Body.\n"
+    )
+    tasks = parse_tasks(active)
+    assert len(tasks) == 1
+    assert tasks[0].aspects == ["hypothesis-testing", "computational-analysis"]
+
+
 class TestRetireTask:
     def test_retire_moves_to_done(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
