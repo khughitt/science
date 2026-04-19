@@ -301,3 +301,43 @@ class TestHealthCLI:
 
         assert result.exit_code == 0
         assert "no issues" in result.output.lower() or "clean" in result.output.lower()
+
+
+def test_health_flags_legacy_task_type_field(tmp_path) -> None:
+    from pathlib import Path
+
+    from science_tool.graph.health import collect_legacy_task_type
+
+    project_root = Path(tmp_path)
+    (project_root / "tasks").mkdir()
+    (project_root / "tasks" / "active.md").write_text(
+        "## [t001] Legacy\n"
+        "- type: research\n"
+        "- priority: P2\n"
+        "- status: proposed\n"
+        "- created: 2026-04-01\n"
+        "\n"
+        "Body.\n"
+    )
+    findings = collect_legacy_task_type(project_root)
+    assert len(findings) == 1
+    assert findings[0]["task_id"] == "t001"
+    assert findings[0]["legacy_type"] == "research"
+
+
+def test_health_flags_invalid_entity_aspects(tmp_path) -> None:
+    from pathlib import Path
+
+    from science_tool.graph.health import collect_invalid_entity_aspects
+
+    project_root = Path(tmp_path)
+    (project_root / "doc" / "questions").mkdir(parents=True)
+    (project_root / "science.yaml").write_text(
+        "name: demo\nprofile: research\naspects: [hypothesis-testing]\n"
+    )
+    (project_root / "doc" / "questions" / "q01.md").write_text(
+        '---\nid: "question:q01"\naspects: ["not-declared"]\n---\nBroken.\n'
+    )
+    findings = collect_invalid_entity_aspects(project_root)
+    assert len(findings) == 1
+    assert "not-declared" in findings[0]["message"]

@@ -231,3 +231,89 @@ def _coverage_metric(*, numerator: int, denominator: int) -> CoverageMetric:
         "denominator": denominator,
         "fraction": fraction,
     }
+
+
+class LegacyTaskTypeFinding(TypedDict):
+    task_id: str
+    legacy_type: str
+    source_file: str
+
+
+def collect_legacy_task_type(project_root: Path) -> list[LegacyTaskTypeFinding]:
+    """Return a list of tasks still carrying the legacy `type:` field."""
+    from science_tool.tasks import parse_tasks
+
+    findings: list[LegacyTaskTypeFinding] = []
+    tasks_dir = project_root / "tasks"
+    candidates = [tasks_dir / "active.md"]
+    done_dir = tasks_dir / "done"
+    if done_dir.is_dir():
+        candidates.extend(sorted(done_dir.glob("*.md")))
+    for path in candidates:
+        if not path.is_file():
+            continue
+        for task in parse_tasks(path):
+            if task.type:
+                findings.append(
+                    LegacyTaskTypeFinding(
+                        task_id=task.id,
+                        legacy_type=task.type,
+                        source_file=str(path.relative_to(project_root)),
+                    )
+                )
+    return findings
+
+
+class InvalidEntityAspectsFinding(TypedDict):
+    entity_id: str
+    source_file: str
+    message: str
+
+
+def collect_invalid_entity_aspects(project_root: Path) -> list[InvalidEntityAspectsFinding]:
+    """Return a list of entity files carrying invalid explicit `aspects:` values."""
+    from science_model.aspects import (
+        AspectValidationError,
+        load_project_aspects,
+        validate_entity_aspects,
+    )
+    from science_model.frontmatter import parse_frontmatter
+
+    try:
+        project_aspects = load_project_aspects(project_root)
+    except FileNotFoundError:
+        return []
+
+    findings: list[InvalidEntityAspectsFinding] = []
+    for relative in ("specs/hypotheses", "doc/questions", "doc/interpretations"):
+        directory = project_root / relative
+        if not directory.is_dir():
+            continue
+        for path in directory.rglob("*.md"):
+            result = parse_frontmatter(path)
+            if result is None:
+                continue
+            fm, _ = result
+            if "aspects" not in fm:
+                continue
+            raw = fm.get("aspects")
+            if not isinstance(raw, list):
+                findings.append(
+                    InvalidEntityAspectsFinding(
+                        entity_id=str(fm.get("id", path.stem)),
+                        source_file=str(path.relative_to(project_root)),
+                        message="aspects must be a list",
+                    )
+                )
+                continue
+            try:
+                validate_entity_aspects([str(a) for a in raw], project_aspects)
+            except AspectValidationError as exc:
+                findings.append(
+                    InvalidEntityAspectsFinding(
+                        entity_id=str(fm.get("id", path.stem)),
+                        source_file=str(path.relative_to(project_root)),
+                        message=str(exc),
+                    )
+                )
+    return findings
