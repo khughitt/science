@@ -341,3 +341,34 @@ def test_health_flags_invalid_entity_aspects(tmp_path) -> None:
     findings = collect_invalid_entity_aspects(project_root)
     assert len(findings) == 1
     assert "not-declared" in findings[0]["message"]
+
+
+def test_build_health_report_includes_aspect_findings(tmp_path) -> None:
+    from pathlib import Path
+
+    from science_tool.graph.health import build_health_report
+
+    project_root = Path(tmp_path)
+    (project_root / "tasks").mkdir()
+    (project_root / "tasks" / "active.md").write_text(
+        "## [t001] Legacy task\n"
+        "- type: dev\n"
+        "- priority: P2\n"
+        "- status: proposed\n"
+        "- created: 2026-04-01\n"
+        "\n"
+        "Body.\n"
+    )
+    (project_root / "doc" / "questions").mkdir(parents=True)
+    (project_root / "science.yaml").write_text(
+        "name: demo\nprofile: research\naspects: [hypothesis-testing]\n"
+    )
+    (project_root / "doc" / "questions" / "q01.md").write_text(
+        '---\nid: "question:q01"\naspects: ["not-declared"]\n---\nBroken.\n'
+    )
+
+    report = build_health_report(project_root)
+    assert "legacy_task_type" in report
+    assert "invalid_entity_aspects" in report
+    assert len(report["legacy_task_type"]) == 1
+    assert len(report["invalid_entity_aspects"]) == 1

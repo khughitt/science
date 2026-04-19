@@ -140,6 +140,8 @@ class HealthReport(TypedDict):
     unresolved_refs: list[UnresolvedRef]
     lingering_tags_lines: list[LingeringTagsRecord]
     layered_claims: "LayeredClaimHealthReport"
+    legacy_task_type: list["LegacyTaskTypeFinding"]
+    invalid_entity_aspects: list["InvalidEntityAspectsFinding"]
 
 
 class CoverageMetric(TypedDict):
@@ -221,6 +223,8 @@ def build_health_report(project_root: Path) -> HealthReport:
             "rival_model_packets_missing_discriminating_predictions": rival_model_gaps,
             "migration_issues": migration_issues,
         },
+        "legacy_task_type": collect_legacy_task_type(project_root),
+        "invalid_entity_aspects": collect_invalid_entity_aspects(project_root),
     }
 
 
