@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from science_tool.big_picture.knowledge_gaps import TopicGap, _load_papers, _load_topics
+from science_tool.big_picture.knowledge_gaps import (
+    TopicGap,
+    _compute_demand,
+    _load_papers,
+    _load_topics,
+)
+from science_tool.big_picture.resolver import resolve_questions
 
 FIXTURE = Path(__file__).parent / "fixtures" / "big_picture" / "minimal_project"
 
@@ -123,3 +129,37 @@ def test_coverage_dedupes_bibkey_across_entity_and_source_refs(tmp_path: Path) -
     topics = _load_topics(project)
     papers = _load_papers(project)
     assert _compute_coverage("topic:t01-covered", topics, papers) == 1
+
+
+# Task 5: Demand computation tests
+
+
+def test_demand_counts_direct_references() -> None:
+    resolved = resolve_questions(FIXTURE)
+    included = set(resolved.keys())
+    # q01 references t02-thin (per fixture task); q02 also references it.
+    demand, demanders = _compute_demand(FIXTURE, "topic:t02-thin", included)
+    assert demand == 2
+    assert set(demanders) == {"question:q01-direct-to-h1", "question:q02-inverse-via-h1"}
+
+
+def test_demand_respects_included_question_ids_filter() -> None:
+    resolved = resolve_questions(FIXTURE)
+    # Exclude q02 via the filter argument; demand for t02 drops to 1.
+    included = {qid for qid in resolved if qid != "question:q02-inverse-via-h1"}
+    demand, demanders = _compute_demand(FIXTURE, "topic:t02-thin", included)
+    assert demand == 1
+    assert demanders == ["question:q01-direct-to-h1"]
+
+
+def test_demand_zero_for_unreferenced_topic(tmp_path: Path) -> None:
+    shutil.copytree(FIXTURE, tmp_path / "p")
+    project = tmp_path / "p"
+    # Add an orphan topic nobody references.
+    (project / "doc" / "background" / "topics" / "t99-orphan.md").write_text(
+        '---\nid: "topic:t99-orphan"\ntype: "topic"\nrelated: []\n---\n'
+    )
+    resolved = resolve_questions(project)
+    demand, demanders = _compute_demand(project, "topic:t99-orphan", set(resolved))
+    assert demand == 0
+    assert demanders == []

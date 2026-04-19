@@ -6,6 +6,7 @@ coverage. See docs/specs/2026-04-19-knowledge-gaps-design.md.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,6 +19,8 @@ from science_tool.big_picture.literature_prefix import (
 
 _TOPIC_DIRS = ("doc/topics", "doc/background/topics")
 _PAPER_DIRS = ("doc/papers", "doc/background/papers")
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -153,3 +156,30 @@ def _compute_coverage(
                 covering_bibkeys.add(bibkey)
 
     return len(covering_bibkeys)
+
+
+def _compute_demand(
+    project_root: Path,
+    topic_id: str,
+    included_question_ids: set[str],
+) -> tuple[int, list[str]]:
+    """Return ``(count, sorted_list)`` of aspect-filtered questions
+    referencing ``topic_id`` in their ``related:`` field.
+
+    Only considers questions present in ``included_question_ids`` (aspect
+    filter already applied by the caller).
+    """
+    questions_dir = project_root / "doc" / "questions"
+    if not questions_dir.is_dir():
+        return 0, []
+
+    demanders: list[str] = []
+    for md in sorted(questions_dir.glob("*.md")):
+        fm = read_frontmatter(md) or {}
+        qid = fm.get("id")
+        if not qid or qid not in included_question_ids:
+            continue
+        related = fm.get("related", []) or []
+        if topic_id in related:
+            demanders.append(qid)
+    return len(demanders), sorted(demanders)
