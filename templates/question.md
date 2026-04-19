@@ -3,6 +3,7 @@ id: "question:<nn>-<slug>"
 type: "question"
 title: "<Question>"
 status: "active"
+# aspects: ["hypothesis-testing"]  # optional override; omitted entities inherit project aspects
 ontology_terms: []
 datasets: []
 source_refs: []
