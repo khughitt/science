@@ -15,6 +15,7 @@ from science_tool.big_picture.literature_prefix import (
     canonical_paper_id,
     is_external_paper_id,
 )
+from science_tool.big_picture.resolver import ResolverOutput
 
 
 _TOPIC_DIRS = ("doc/topics", "doc/background/topics")
@@ -183,3 +184,58 @@ def _compute_demand(
         if topic_id in related:
             demanders.append(qid)
     return len(demanders), sorted(demanders)
+
+
+def compute_topic_gaps(
+    project_root: Path,
+    resolved_questions: dict[str, ResolverOutput],
+    included_question_ids: set[str],
+) -> list[TopicGap]:
+    """Return all topics with demand > 0 and coverage < demand.
+
+    Sorted by ``gap_score`` descending; ties broken by ``topic_id`` ascending.
+
+    The caller (typically the Opus orchestrator) is responsible for computing
+    ``included_question_ids`` via the big-picture aspect filter before
+    invoking this function. See the knowledge-gaps spec §Aspect Integration.
+    """
+    topics = _load_topics(project_root)
+    papers = _load_papers(project_root)
+
+    gaps: list[TopicGap] = []
+    for topic_id in topics:
+        demand, demanders = _compute_demand(project_root, topic_id, included_question_ids)
+        if demand == 0:
+            continue
+        coverage = _compute_coverage(topic_id, topics, papers)
+        if coverage >= demand:
+            continue
+        hypotheses = _hypotheses_for(demanders, resolved_questions)
+        gaps.append(
+            TopicGap(
+                topic_id=topic_id,
+                coverage=coverage,
+                demand=demand,
+                gap_score=max(0, demand - coverage),
+                demanding_questions=demanders,
+                hypotheses=hypotheses,
+            )
+        )
+
+    gaps.sort(key=lambda g: (-g.gap_score, g.topic_id))
+    return gaps
+
+
+def _hypotheses_for(
+    demander_question_ids: list[str],
+    resolved: dict[str, ResolverOutput],
+) -> list[str]:
+    """Return sorted hypothesis IDs associated with any demanding question."""
+    ids: set[str] = set()
+    for qid in demander_question_ids:
+        out = resolved.get(qid)
+        if out is None:
+            continue
+        for match in out.hypotheses:
+            ids.add(match.id)
+    return sorted(ids)

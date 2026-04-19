@@ -163,3 +163,69 @@ def test_demand_zero_for_unreferenced_topic(tmp_path: Path) -> None:
     demand, demanders = _compute_demand(project, "topic:t99-orphan", set(resolved))
     assert demand == 0
     assert demanders == []
+
+
+# Task 6: Entry point tests
+
+
+def test_compute_topic_gaps_end_to_end_on_fixture() -> None:
+    from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
+
+    resolved = resolve_questions(FIXTURE)
+    included = set(resolved.keys())
+    gaps = compute_topic_gaps(FIXTURE, resolved, included)
+
+    # Only t02-thin has demand > coverage in the seeded fixture.
+    assert [g.topic_id for g in gaps] == ["topic:t02-thin"]
+    gap = gaps[0]
+    assert gap.demand == 2
+    assert gap.coverage == 0
+    assert gap.gap_score == 2
+    assert gap.demanding_questions == [
+        "question:q01-direct-to-h1",
+        "question:q02-inverse-via-h1",
+    ]
+
+
+def test_compute_topic_gaps_excludes_zero_demand() -> None:
+    from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
+
+    resolved = resolve_questions(FIXTURE)
+    gaps = compute_topic_gaps(FIXTURE, resolved, set(resolved))
+    # No gap entry for t03 (bibtex-covered, demand=coverage), t01, t04.
+    assert all(g.topic_id != "topic:t01-covered" for g in gaps)
+    assert all(g.topic_id != "topic:t03-bibtex-covered" for g in gaps)
+    assert all(g.topic_id != "topic:t04-legacy-covered" for g in gaps)
+
+
+def test_article_prefix_accepted_during_transition() -> None:
+    from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
+
+    # t04-legacy-covered has demand=1 and coverage=1 only via article:p02.
+    # Ensure NO gap is flagged (transition-window alias must count).
+    resolved = resolve_questions(FIXTURE)
+    gaps = compute_topic_gaps(FIXTURE, resolved, set(resolved))
+    assert all(g.topic_id != "topic:t04-legacy-covered" for g in gaps)
+
+
+def test_compute_topic_gaps_sort_order_gap_score_desc_tiebreak_topic_id_asc(
+    tmp_path: Path,
+) -> None:
+    from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
+
+    # Two topics with equal gap_score → alphabetical tiebreak by topic_id.
+    shutil.copytree(FIXTURE, tmp_path / "p")
+    project = tmp_path / "p"
+    # Add another thin topic with demand=1, coverage=0 (gap_score=1).
+    (project / "doc" / "background" / "topics" / "t05-also-thin.md").write_text(
+        '---\nid: "topic:t05-also-thin"\ntype: "topic"\nrelated: []\nsource_refs: []\n---\n'
+    )
+    # Add a new question referencing only t05 so we have a gap_score=1 topic.
+    (project / "doc" / "questions" / "q99-extra.md").write_text(
+        '---\nid: "question:q99-extra"\ntype: "question"\nrelated:\n  - "topic:t05-also-thin"\n---\nExtra.\n'
+    )
+    resolved = resolve_questions(project)
+    gaps = compute_topic_gaps(project, resolved, set(resolved))
+    # t02-thin: gap_score=2; t05-also-thin: gap_score=1. t02 first.
+    ordered = [g.topic_id for g in gaps]
+    assert ordered == ["topic:t02-thin", "topic:t05-also-thin"]
