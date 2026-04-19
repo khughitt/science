@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from science_tool.big_picture.validator import (
+    REFERENCE_PATTERN,
     _collect_project_ids,
     validate_rollup_file,
     validate_synthesis_file,
@@ -197,3 +198,15 @@ def test_orphan_count_excludes_software_only_questions() -> None:
     # FIXTURE's research orphans: q05-orphan (declared no aspects -> inherits
     # research). q06 should NOT count here.
     assert count == 1
+
+
+def test_reference_pattern_matches_topic_refs() -> None:
+    text = "See topic:ribosome-biogenesis for more."
+    matches = [m.group(0) for m in REFERENCE_PATTERN.finditer(text)]
+    assert "topic:ribosome-biogenesis" in matches
+
+
+def test_collect_project_ids_includes_topic_entities() -> None:
+    ids = _collect_project_ids(FIXTURE)
+    assert "topic:t01-covered" in ids
+    assert "topic:t04-legacy-covered" in ids
