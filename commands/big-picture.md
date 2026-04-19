@@ -46,7 +46,7 @@ For each hypothesis, assemble a bundle. The bundle is a dictionary you construct
 - `hypothesis_frontmatter`: parsed YAML.
 - `resolved_questions`: from the resolver output, all questions whose `hypotheses[]` contains this hypothesis. Annotate each with its confidence.
 - `tasks`: glob `tasks/*.md` and `tasks/done/*.md`; parse frontmatter; include entries whose `related:` mentions this hypothesis or any of its resolved questions. If `tasks/active.md` is a single aggregated file (common pattern, e.g., mm30), scan its body for per-task headings and `related:` metadata instead of expecting one file per task.
-- `interpretations`: glob `doc/interpretations/*.md`; parse frontmatter; include entries whose `related:` mentions this hypothesis or any of its resolved questions.
+- `interpretations`: glob `doc/interpretations/*.md`; parse frontmatter; include entries that either (a) directly reference this hypothesis in `related:`, or (b) reference a question whose **primary** hypothesis (per resolver output) is this hypothesis. Do NOT include interpretations that only reach this hypothesis via transitive-only questions (questions whose primary_hypothesis is a different hypothesis). This tightens transitive pull-in and prevents early work that is really "central to H<other>" from flooding this hypothesis's bundle.
 - `edges_yaml`: glob `doc/figures/dags/*.edges.yaml`; include any whose filename stem starts with this hypothesis ID.
 - `uncertainty_slice`: filter the global uncertainty output to entries referring to this hypothesis or its resolved questions.
 - `gaps_slice`: run `uv run science-tool graph gaps "hypothesis:<id>" --format json` for this hypothesis. Skip (empty slice) if the call errors because the hypothesis has no graph neighborhood yet.
@@ -146,6 +146,8 @@ Computing SHAs:
 git hash-object doc/reports/synthesis/<hyp-id>.md
 git hash-object doc/reports/synthesis/_emergent-threads.md
 ```
+
+**Computing `orphan_question_count`**: compute this value directly from the Phase 1 resolver output — count questions where `primary_hypothesis` is `null`. Do NOT copy the count from `_emergent-threads.md`'s prose or its `orphan_ids:` frontmatter. The emergent-threads sub-agent may have had a stale view of the resolver output if an interpretation's `id:` was added mid-run, and if so the rollup's authoritative value is what the resolver currently reports, not what the sub-agent wrote. If the two disagree, the emergent-threads file is the one to re-dispatch or hand-correct.
 
 **Citation inheritance**: the rollup inherits the citation and grounding requirements from the per-hypothesis files. Every factual claim traces back to a specific per-hypothesis file's content. No new unsupported claims are introduced at the rollup level.
 

@@ -57,6 +57,12 @@ Data source precedence (use highest-priority source with content):
 
 **ID verification**: every cited ID MUST come from the bundle — do not infer, reconstruct from filenames, or guess at the ID format. For interpretation IDs specifically, use the `id:` field from the interpretation's YAML frontmatter, not the markdown filename (filenames often drop suffixes like `-test` or `-dissociation` that the canonical ID carries, or vice versa). Before finalizing output, cross-check every cited ID against the bundle; if a citation doesn't resolve, remove it rather than publishing a broken reference.
 
+**Explicit ID-format prohibitions** (common failure modes — do not do any of these):
+
+- **Never append a file extension to an ID.** Cited IDs are symbolic — `interpretation:2026-04-12-h1-dag-edges-completion` is correct; `interpretation:2026-04-12-h1-dag-edges-completion.md` is wrong. The `.md` suffix is a filesystem detail that never belongs in a citation.
+- **Never abbreviate or truncate a question or interpretation ID to just its prefix.** If the canonical `id:` is `question:q48-composite-limit-generation`, you must cite it in that full form — not `question:q48` or `question:q48-composite`. Use the whole slug verbatim, exactly as the frontmatter declares.
+- **Never fabricate an ID by composing one from file-path components.** If the bundle does not contain an entity with the exact ID you are about to cite, the citation is not grounded and must be removed.
+
 ### Arc (≈200 words)
 
 Narrative of how the investigation evolved. Reconstructed by traversing `prior_interpretations` chains and task creation dates. Not a retelling of every step — a story: initial framing → main investigative moves → what each move resolved → current epistemic position.
