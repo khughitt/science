@@ -727,3 +727,36 @@ class TestRetireTask:
         tasks_dir = _make_tasks_dir(tmp_path)
         with pytest.raises(KeyError):
             retire_task(tasks_dir, "t999")
+
+
+def test_render_task_emits_aspects_when_nonempty() -> None:
+    from datetime import date
+
+    from science_tool.tasks import Task, render_task
+
+    t = Task(
+        id="t001",
+        title="Demo",
+        priority="P1",
+        status="proposed",
+        aspects=["hypothesis-testing", "computational-analysis"],
+        created=date(2026, 4, 19),
+    )
+    rendered = render_task(t)
+    assert "- aspects: [hypothesis-testing, computational-analysis]" in rendered
+
+
+def test_render_task_omits_aspects_when_empty() -> None:
+    from datetime import date
+
+    from science_tool.tasks import Task, render_task
+
+    t = Task(
+        id="t001",
+        title="Demo",
+        priority="P1",
+        status="proposed",
+        created=date(2026, 4, 19),
+    )
+    rendered = render_task(t)
+    assert "aspects" not in rendered

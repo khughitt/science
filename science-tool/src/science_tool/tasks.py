@@ -110,6 +110,9 @@ def render_task(task: Task) -> str:
         lines.append(f"- type: {task.type}")
     lines.append(f"- priority: {task.priority}")
     lines.append(f"- status: {task.status}")
+    if task.aspects:
+        items = ", ".join(task.aspects)
+        lines.append(f"- aspects: [{items}]")
     if task.related:
         items = ", ".join(task.related)
         lines.append(f"- related: [{items}]")
