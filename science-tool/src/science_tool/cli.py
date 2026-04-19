@@ -1002,7 +1002,7 @@ def graph_add_concept(
 def add_article_cmd(doi: str, graph_path: Path) -> None:
     """Add an external literature reference by DOI."""
     uri = add_article(graph_path, doi)
-    click.echo(f"Added article: {uri}")
+    click.echo(f"Added paper: {uri}")
 
 
 @graph_add.command("proposition")
