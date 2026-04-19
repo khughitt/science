@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from science_tool.big_picture.validator import validate_rollup_file, validate_synthesis_file
+from science_tool.big_picture.validator import (
+    _collect_project_ids,
+    validate_rollup_file,
+    validate_synthesis_file,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "big_picture" / "minimal_project"
 
@@ -123,3 +127,56 @@ Arc reconstruction is limited because no prior_interpretations chains exist.
     )
     issues = validate_synthesis_file(synth, project_root=FIXTURE)
     assert not any(i.kind == "thin_coverage_marker_mismatch" for i in issues)
+
+
+def test_collect_project_ids_harvests_aggregated_task_headings(tmp_path: Path) -> None:
+    (tmp_path / "tasks").mkdir()
+    (tmp_path / "tasks" / "active.md").write_text(
+        """# Task queue
+
+## [t082] PHF19 residualization
+type: research
+related: [question:q01]
+
+## [t091] Cross-dataset replication
+related: [question:q02]
+""",
+    )
+    (tmp_path / "tasks" / "done").mkdir()
+    (tmp_path / "tasks" / "done" / "2026-04.md").write_text(
+        """## [t055] Longitudinal virtual FISH
+
+Some notes.
+
+## [t113] Shared covariate structure
+
+More notes.
+""",
+    )
+    ids = _collect_project_ids(tmp_path)
+    assert {"task:t082", "task:t091", "task:t055", "task:t113"}.issubset(ids)
+
+
+def test_aggregated_tasks_unblock_reference_validation(tmp_path: Path) -> None:
+    (tmp_path / "tasks").mkdir()
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t082] PHF19 residualization\n\nBody.\n",
+    )
+    synth = _write(
+        tmp_path,
+        "h1.md",
+        """---
+id: "synthesis:h1"
+hypothesis: "hypothesis:h1"
+provenance_coverage: "high"
+---
+
+## Arc
+
+PHF19 residualization in task:t082 showed 93.8% coefficient retention.
+""",
+    )
+    issues = validate_synthesis_file(synth, project_root=tmp_path)
+    assert not any(
+        i.kind == "nonexistent_reference" and "t082" in i.message for i in issues
+    )

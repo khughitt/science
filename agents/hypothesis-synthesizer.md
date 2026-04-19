@@ -55,6 +55,8 @@ Data source precedence (use highest-priority source with content):
 
 **Citation requirement**: every factual claim in this section MUST name its source inline — an `.edges.yaml` edge ID, an interpretation ID, a task ID, a graph claim IRI, or a question ID. If you cannot name a source, omit the claim.
 
+**ID verification**: every cited ID MUST come from the bundle — do not infer, reconstruct from filenames, or guess at the ID format. For interpretation IDs specifically, use the `id:` field from the interpretation's YAML frontmatter, not the markdown filename (filenames often drop suffixes like `-test` or `-dissociation` that the canonical ID carries, or vice versa). Before finalizing output, cross-check every cited ID against the bundle; if a citation doesn't resolve, remove it rather than publishing a broken reference.
+
 ### Arc (≈200 words)
 
 Narrative of how the investigation evolved. Reconstructed by traversing `prior_interpretations` chains and task creation dates. Not a retelling of every step — a story: initial framing → main investigative moves → what each move resolved → current epistemic position.

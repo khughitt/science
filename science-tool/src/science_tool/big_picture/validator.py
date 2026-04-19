@@ -79,7 +79,29 @@ def _collect_project_ids(project_root: Path) -> set[str]:
             fm = read_frontmatter(path)
             if fm and "id" in fm:
                 ids.add(str(fm["id"]))
+            if relative == "tasks":
+                ids.update(_extract_aggregated_task_ids(path))
     return ids
+
+
+# Matches "## [tNNN]" or "## [t-nnn]" headings used in aggregated task files
+# (e.g., tasks/active.md, tasks/done/2026-04.md), where each heading is a task
+# rather than each file being a task. Captures the ID (e.g., "t082").
+AGGREGATED_TASK_HEADING = re.compile(r"^#{1,6}\s*\[([a-zA-Z][\w\-.]*)\]", re.MULTILINE)
+
+
+def _extract_aggregated_task_ids(path: Path) -> set[str]:
+    """Extract `task:<id>` entries from aggregated task files.
+
+    Many Science projects (e.g., mm30) consolidate tasks into a single
+    markdown file with `## [tNNN]` headings per task, rather than one file
+    per task. This helper harvests those inlined task IDs.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return set()
+    return {f"task:{m.group(1)}" for m in AGGREGATED_TASK_HEADING.finditer(text)}
 
 
 def validate_rollup_file(path: Path, project_root: Path) -> list[ValidationIssue]:

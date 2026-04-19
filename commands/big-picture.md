@@ -194,7 +194,7 @@ If `--since <date>` is set:
 
 After all phases:
 
+- Run the validator automatically: `uv run science-tool big-picture validate --project-root .`. Show the output verbatim. If `nonexistent_reference` issues surface, treat them as real signals — the sub-agents wrote IDs that do not resolve to any entity in the project. Before reporting success, either (a) re-dispatch the relevant per-hypothesis sub-agent with the failed IDs listed as "do not cite; use verified IDs from the bundle", or (b) list the issues for the user to resolve manually. Do NOT silently declare success while citation errors exist.
 - Show the list of files written.
 - Show any staleness warnings.
 - Show any sub-agent "unused in synthesis" reports — these are candidates for future bundle improvements.
-- Suggest running `uv run science-tool big-picture validate --project-root .` to sanity-check the output.
