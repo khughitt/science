@@ -158,6 +158,7 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         created=_coerce_date(fm.get("created")),
         updated=_coerce_date(fm.get("updated")),
         related=fm.get("related") or [],
+        same_as=fm.get("same_as") or [],
         source_refs=fm.get("source_refs") or [],
         content_preview=body[:200] if body else "",
         content=body or "",

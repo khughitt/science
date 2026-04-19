@@ -73,6 +73,7 @@ class Entity(BaseModel):
     created: date | None = None
     updated: date | None = None
     related: list[str]
+    same_as: list[str] = Field(default_factory=list)
     source_refs: list[str]
     content_preview: str
     content: str = ""
