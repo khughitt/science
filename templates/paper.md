@@ -1,6 +1,6 @@
 ---
-id: "article:{{bibtex_key}}"
-type: "article"
+id: "paper:{{bibtex_key}}"
+type: "paper"
 title: "{{Title}}"
 status: "active"
 ontology_terms: []
