@@ -1,0 +1,3 @@
+name: "legacy-project"
+aspects:
+  - hypothesis-testing
