@@ -105,3 +105,51 @@ def _load_papers(project_root: Path) -> dict[str, dict]:
             papers[canonical] = fm
             origins[canonical] = md
     return papers
+
+
+def _bibkey_of(entity_id: str) -> str | None:
+    """Return the bibkey substring (after first colon) or None."""
+    _, _, rest = entity_id.partition(":")
+    return rest or None
+
+
+def _compute_coverage(
+    topic_id: str,
+    topics: dict[str, dict],
+    papers: dict[str, dict],
+) -> int:
+    """Compute |related_papers(T) ∪ inverse_papers(T) ∪ bibtex_refs(T)|.
+
+    Dedup uses bibkey-based comparison per the canonical rule in the
+    manuscript+paper rename spec (§Canonical bibkey extraction).
+    """
+    topic_fm = topics.get(topic_id)
+    if topic_fm is None:
+        return 0
+
+    covering_bibkeys: set[str] = set()
+
+    # related_papers(T): T.related entries that are external paper IDs.
+    for ref in topic_fm.get("related", []) or []:
+        if is_external_paper_id(ref):
+            canonical = canonical_paper_id(ref)
+            bibkey = _bibkey_of(canonical)
+            if bibkey:
+                covering_bibkeys.add(bibkey)
+
+    # inverse_papers(T): papers whose .related lists T.
+    for canonical_pid, paper_fm in papers.items():
+        for ref in paper_fm.get("related", []) or []:
+            if ref == topic_id:
+                bibkey = _bibkey_of(canonical_pid)
+                if bibkey:
+                    covering_bibkeys.add(bibkey)
+
+    # bibtex_refs(T): T.source_refs entries of the form cite:<key>.
+    for ref in topic_fm.get("source_refs", []) or []:
+        if isinstance(ref, str) and ref.startswith("cite:"):
+            bibkey = ref[len("cite:"):]
+            if bibkey:
+                covering_bibkeys.add(bibkey)
+
+    return len(covering_bibkeys)

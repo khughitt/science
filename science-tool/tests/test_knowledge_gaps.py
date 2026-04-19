@@ -64,3 +64,62 @@ def test_duplicate_paper_ids_across_paper_directories_raise(tmp_path: Path) -> N
     )
     with pytest.raises(ValueError, match="p01-example"):
         _load_papers(project)
+
+
+# Task 4: Coverage computation tests
+
+
+def test_coverage_via_entity_linked_paper() -> None:
+    from science_tool.big_picture.knowledge_gaps import _compute_coverage
+
+    topics = _load_topics(FIXTURE)
+    papers = _load_papers(FIXTURE)
+    cov = _compute_coverage("topic:t01-covered", topics, papers)
+    assert cov == 1
+
+
+def test_coverage_zero_for_uncovered_topic() -> None:
+    from science_tool.big_picture.knowledge_gaps import _compute_coverage
+
+    topics = _load_topics(FIXTURE)
+    papers = _load_papers(FIXTURE)
+    assert _compute_coverage("topic:t02-thin", topics, papers) == 0
+
+
+def test_coverage_via_bibtex_source_refs() -> None:
+    from science_tool.big_picture.knowledge_gaps import _compute_coverage
+
+    topics = _load_topics(FIXTURE)
+    papers = _load_papers(FIXTURE)
+    assert _compute_coverage("topic:t03-bibtex-covered", topics, papers) == 1
+
+
+def test_coverage_accepts_article_prefix_paper_as_legacy_alias() -> None:
+    from science_tool.big_picture.knowledge_gaps import _compute_coverage
+
+    topics = _load_topics(FIXTURE)
+    papers = _load_papers(FIXTURE)
+    # p02 has id: article:... which canonicalizes to paper:p02-legacy-article
+    # and lists topic:t04 as a relation.
+    assert _compute_coverage("topic:t04-legacy-covered", topics, papers) == 1
+
+
+def test_coverage_dedupes_bibkey_across_entity_and_source_refs(tmp_path: Path) -> None:
+    from science_tool.big_picture.knowledge_gaps import _compute_coverage
+
+    # Same bibkey reached via both paper entity AND topic's source_refs:
+    # should count as 1, not 2.
+    shutil.copytree(FIXTURE, tmp_path / "p")
+    project = tmp_path / "p"
+    # Edit t01 to also source_refs the same bibkey as its entity-linked paper.
+    t01 = project / "doc" / "background" / "topics" / "t01-covered.md"
+    text = t01.read_text()
+    text = text.replace(
+        "source_refs: []",
+        "source_refs: [cite:p01-example]",
+    )
+    t01.write_text(text)
+
+    topics = _load_topics(project)
+    papers = _load_papers(project)
+    assert _compute_coverage("topic:t01-covered", topics, papers) == 1
