@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import sys
+from enum import StrEnum
 from pathlib import Path
 from typing import TypeVar
 
@@ -18,6 +20,14 @@ from science_model.reasoning import (
     RivalModelPacket,
     SupportScope,
 )
+
+_ENUM_FIELDS: dict[str, type[StrEnum]] = {
+    "claim_layer": ClaimLayer,
+    "identification_strength": IdentificationStrength,
+    "proxy_directness": ProxyDirectness,
+    "supports_scope": SupportScope,
+    "evidence_role": EvidenceRole,
+}
 from science_model.ontologies import load_catalogs_for_names
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.profiles import CORE_PROFILE, load_shared_profile
@@ -281,7 +291,10 @@ def _load_markdown_entities(
                         entity.canonical_id,
                         [*raw_aliases, *_aliases_from_source_path(entity.type.value, entity.file_path)],
                     ),
-                    **_load_reasoning_metadata(frontmatter[0] if frontmatter is not None else None),
+                    **_load_reasoning_metadata(
+                        frontmatter[0] if frontmatter is not None else None,
+                        source_path=path,
+                    ),
                 )
             )
     return entities
@@ -371,7 +384,10 @@ def _load_structured_entities(
                 source_refs=_coerce_string_list(item.get("source_refs")),
                 ontology_terms=_coerce_string_list(item.get("ontology_terms")),
                 aliases=_derive_aliases(canonical_id, aliases),
-                **_load_reasoning_metadata(item),
+                **_load_reasoning_metadata(
+                    item,
+                    source_path=Path(str(item.get("source_path"))) if item.get("source_path") else None,
+                ),
             )
         )
 
@@ -501,7 +517,11 @@ def _load_structured_relations(project_root: Path, *, local_profile: str) -> lis
     return relations
 
 
-def _load_reasoning_metadata(raw: dict[str, object] | None) -> dict[str, object]:
+def _load_reasoning_metadata(
+    raw: dict[str, object] | None,
+    *,
+    source_path: Path | None = None,
+) -> dict[str, object]:
     if not isinstance(raw, dict):
         return {}
 
@@ -517,8 +537,22 @@ def _load_reasoning_metadata(raw: dict[str, object] | None) -> dict[str, object]
         "rival_model_packet",
     ):
         value = raw.get(field)
-        if value is not None:
-            metadata[field] = value
+        if value is None:
+            continue
+        enum_type = _ENUM_FIELDS.get(field)
+        if enum_type is not None and isinstance(value, str):
+            try:
+                enum_type(value)
+            except ValueError:
+                allowed = ", ".join(member.value for member in enum_type)
+                where = f" in {source_path}" if source_path is not None else ""
+                print(
+                    f"warning: unknown {field} value {value!r}{where}; "
+                    f"dropping field. Allowed values: {allowed}",
+                    file=sys.stderr,
+                )
+                continue
+        metadata[field] = value
     return metadata
 
 
