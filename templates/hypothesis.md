@@ -3,6 +3,7 @@ id: "hypothesis:h{{nn}}-{{slug}}"
 type: "hypothesis"
 title: "{{Short Title}}"
 status: "proposed"
+# aspects: ["hypothesis-testing"]  # optional override; omitted entities inherit project aspects
 source_refs: []
 related: []
 created: "{{YYYY-MM-DD}}"

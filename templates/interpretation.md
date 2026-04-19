@@ -3,6 +3,7 @@ id: "interpretation:{{slug}}"
 type: "interpretation"
 title: "{{Short Title}}"
 status: "active"
+# aspects: ["hypothesis-testing"]  # optional override; omitted entities inherit project aspects
 source_refs: []
 related: []
 created: "{{YYYY-MM-DD}}"

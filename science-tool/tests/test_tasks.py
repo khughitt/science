@@ -398,10 +398,10 @@ class TestEditTask:
 
     def test_edit_multiple_fields(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        t = edit_task(tasks_dir, "t001", priority="P2", status="todo", task_type="research")
+        t = edit_task(tasks_dir, "t001", priority="P2", status="todo", aspects=["hypothesis-testing"])
         assert t.priority == "P2"
         assert t.status == "todo"
-        assert t.type == "research"
+        assert t.aspects == ["hypothesis-testing"]
 
     def test_edit_related(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
@@ -416,33 +416,38 @@ class TestEditTask:
 
 class TestListTasks:
     def _setup_multi(self, tmp_path: Path) -> Path:
+        _write(
+            tmp_path / "science.yaml",
+            "name: demo\nprofile: research\n"
+            "aspects: [hypothesis-testing, software-development]\n",
+        )
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
         _write(
             tasks_dir / "active.md",
             """\
 ## [t001] Dev task
-- type: dev
 - priority: P1
 - status: active
+- aspects: [software-development]
 - created: 2026-03-01
 
 Dev desc.
 
 ## [t002] Research task
-- type: research
 - priority: P2
 - status: blocked
 - blocked-by: [t001]
+- aspects: [hypothesis-testing]
 - created: 2026-03-02
 
 Research desc.
 
 ## [t003] Another dev task
-- type: dev
 - priority: P2
 - status: active
 - related: [hypothesis:h01]
+- aspects: [software-development]
 - created: 2026-03-03
 
 Another dev desc.
@@ -455,11 +460,11 @@ Another dev desc.
         result = list_tasks(tasks_dir)
         assert len(result) == 3
 
-    def test_list_by_type(self, tmp_path: Path) -> None:
+    def test_list_by_aspect(self, tmp_path: Path) -> None:
         tasks_dir = self._setup_multi(tmp_path)
-        result = list_tasks(tasks_dir, task_type="dev")
+        result = list_tasks(tasks_dir, aspects=["software-development"])
         assert len(result) == 2
-        assert all(t.type == "dev" for t in result)
+        assert {t.id for t in result} == {"t001", "t003"}
 
     def test_list_by_priority(self, tmp_path: Path) -> None:
         tasks_dir = self._setup_multi(tmp_path)
@@ -487,7 +492,7 @@ Another dev desc.
 
     def test_list_combined_filters(self, tmp_path: Path) -> None:
         tasks_dir = self._setup_multi(tmp_path)
-        result = list_tasks(tasks_dir, task_type="dev", priority="P2")
+        result = list_tasks(tasks_dir, aspects=["software-development"], priority="P2")
         assert len(result) == 1
         assert result[0].id == "t003"
 
@@ -662,6 +667,47 @@ class TestTagsAndGroups:
         assert len(result) == 2
 
 
+def test_task_accepts_aspects_field() -> None:
+    from science_model.tasks import Task
+
+    t = Task(id="t001", title="demo", aspects=["hypothesis-testing"])
+    assert t.aspects == ["hypothesis-testing"]
+
+
+def test_task_defaults_aspects_to_empty_list() -> None:
+    from science_model.tasks import Task
+
+    t = Task(id="t001", title="demo")
+    assert t.aspects == []
+
+
+def test_task_create_and_update_carry_aspects() -> None:
+    from science_model.tasks import TaskCreate, TaskUpdate
+
+    create = TaskCreate(title="demo", aspects=["software-development"])
+    update = TaskUpdate(aspects=["hypothesis-testing"])
+    assert create.aspects == ["software-development"]
+    assert update.aspects == ["hypothesis-testing"]
+
+
+def test_parse_task_reads_aspects_inline_field(tmp_path):
+    from science_tool.tasks import parse_tasks
+
+    active = tmp_path / "active.md"
+    active.write_text(
+        "## [t001] Example\n"
+        "- priority: P1\n"
+        "- status: active\n"
+        "- aspects: [hypothesis-testing, computational-analysis]\n"
+        "- created: 2026-04-01\n"
+        "\n"
+        "Body.\n"
+    )
+    tasks = parse_tasks(active)
+    assert len(tasks) == 1
+    assert tasks[0].aspects == ["hypothesis-testing", "computational-analysis"]
+
+
 class TestRetireTask:
     def test_retire_moves_to_done(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
@@ -686,3 +732,64 @@ class TestRetireTask:
         tasks_dir = _make_tasks_dir(tmp_path)
         with pytest.raises(KeyError):
             retire_task(tasks_dir, "t999")
+
+
+def test_render_task_emits_aspects_when_nonempty() -> None:
+    from datetime import date
+
+    from science_tool.tasks import Task, render_task
+
+    t = Task(
+        id="t001",
+        title="Demo",
+        priority="P1",
+        status="proposed",
+        aspects=["hypothesis-testing", "computational-analysis"],
+        created=date(2026, 4, 19),
+    )
+    rendered = render_task(t)
+    assert "- aspects: [hypothesis-testing, computational-analysis]" in rendered
+
+
+def test_render_task_omits_aspects_when_empty() -> None:
+    from datetime import date
+
+    from science_tool.tasks import Task, render_task
+
+    t = Task(
+        id="t001",
+        title="Demo",
+        priority="P1",
+        status="proposed",
+        created=date(2026, 4, 19),
+    )
+    rendered = render_task(t)
+    assert "aspects" not in rendered
+
+
+def test_add_task_with_aspects(tmp_path) -> None:
+    from science_tool.tasks import add_task, parse_tasks
+
+    (tmp_path / "active.md").write_text("")
+
+    task = add_task(
+        tasks_dir=tmp_path,
+        title="Test task",
+        priority="P1",
+        aspects=["hypothesis-testing"],
+    )
+    assert task.aspects == ["hypothesis-testing"]
+    assert task.type == ""
+
+    reread = parse_tasks(tmp_path / "active.md")
+    assert reread[0].aspects == ["hypothesis-testing"]
+
+
+def test_add_task_without_aspects_writes_no_aspects_line(tmp_path) -> None:
+    from science_tool.tasks import add_task
+
+    (tmp_path / "active.md").write_text("")
+    add_task(tasks_dir=tmp_path, title="Test", priority="P2")
+
+    body = (tmp_path / "active.md").read_text()
+    assert "aspects" not in body

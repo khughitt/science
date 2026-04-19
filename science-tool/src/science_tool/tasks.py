@@ -65,6 +65,7 @@ def _parse_task_block(lines: list[str]) -> Task:
         id=task_id,
         title=title,
         type=fields.get("type", ""),
+        aspects=_parse_list_value(fields.get("aspects", "")),
         priority=fields.get("priority", ""),
         status=fields.get("status", ""),
         created=created,
@@ -109,6 +110,9 @@ def render_task(task: Task) -> str:
         lines.append(f"- type: {task.type}")
     lines.append(f"- priority: {task.priority}")
     lines.append(f"- status: {task.status}")
+    if task.aspects:
+        items = ", ".join(task.aspects)
+        lines.append(f"- aspects: [{items}]")
     if task.related:
         items = ", ".join(task.related)
         lines.append(f"- related: [{items}]")
@@ -173,8 +177,9 @@ def _find_task(tasks: list[Task], task_id: str) -> Task:
 def add_task(
     tasks_dir: Path,
     title: str,
-    task_type: str,
     priority: str,
+    task_type: str = "",
+    aspects: list[str] | None = None,
     related: list[str] | None = None,
     blocked_by: list[str] | None = None,
     group: str = "",
@@ -186,6 +191,7 @@ def add_task(
         id=task_id,
         title=title,
         type=task_type,
+        aspects=aspects or [],
         priority=priority,
         status="proposed",
         created=date.today(),
@@ -291,24 +297,33 @@ def unblock_task(tasks_dir: Path, task_id: str) -> Task:
 def edit_task(
     tasks_dir: Path,
     task_id: str,
+    title: str | None = None,
+    description: str | None = None,
     priority: str | None = None,
     status: str | None = None,
-    task_type: str | None = None,
+    aspects: list[str] | None = None,
     related: list[str] | None = None,
+    blocked_by: list[str] | None = None,
     group: str | None = None,
 ) -> Task:
     """Update specified fields on a task."""
     tasks = _read_active(tasks_dir)
     task = _find_task(tasks, task_id)
 
+    if title is not None:
+        task.title = title
+    if description is not None:
+        task.description = description
     if priority is not None:
         task.priority = priority
     if status is not None:
         task.status = status
-    if task_type is not None:
-        task.type = task_type
+    if aspects is not None:
+        task.aspects = aspects
     if related is not None:
         task.related = related
+    if blocked_by is not None:
+        task.blocked_by = blocked_by
     if group is not None:
         task.group = group
 
@@ -333,11 +348,12 @@ _CLOSED_STATUSES = {TaskStatus.DONE, TaskStatus.RETIRED}
 
 def list_tasks(
     tasks_dir: Path,
-    task_type: str | None = None,
+    project_root: Path | None = None,
     priority: str | None = None,
     status: str | None = None,
     related: str | None = None,
     group: str | None = None,
+    aspects: list[str] | None = None,
     include_done: bool = False,
 ) -> list[Task]:
     """Filter active tasks by optional criteria.
@@ -349,8 +365,6 @@ def list_tasks(
 
     warn_invalid_statuses(tasks)
 
-    if task_type is not None:
-        tasks = [t for t in tasks if t.type == task_type]
     if priority is not None:
         tasks = [t for t in tasks if t.priority == priority]
     if status is not None:
@@ -361,5 +375,22 @@ def list_tasks(
         tasks = [t for t in tasks if any(related in r for r in t.related)]
     if group is not None:
         tasks = [t for t in tasks if t.group == group]
+    if aspects:
+        from science_model.aspects import (
+            load_project_aspects,
+            matches_aspect_filter,
+            resolve_entity_aspects,
+        )
+
+        project_aspects = load_project_aspects(project_root or tasks_dir.parent)
+        filter_set = set(aspects)
+        tasks = [
+            t
+            for t in tasks
+            if matches_aspect_filter(
+                resolve_entity_aspects(t.aspects or None, project_aspects),
+                filter_set,
+            )
+        ]
 
     return tasks

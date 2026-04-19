@@ -1,2 +1,5 @@
 name: "big-picture-minimal"
 profile: "research"
+aspects:
+  - hypothesis-testing
+  - software-development
