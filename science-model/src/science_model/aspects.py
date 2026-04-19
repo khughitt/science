@@ -7,6 +7,10 @@ reimplementing aspect logic.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
+import yaml
+
 KNOWN_ASPECTS: frozenset[str] = frozenset(
     {
         "causal-modeling",
@@ -83,3 +87,21 @@ def validate_entity_aspects(
                 f"({project_aspects}); add it to science.yaml first."
             )
     return [a for a in project_aspects if a in seen]
+
+
+def load_project_aspects(project_root: Path) -> list[str]:
+    """Return the ``aspects:`` list declared in the project's science.yaml.
+
+    Returns an empty list if the field is absent or the list is empty.
+    Raises ``FileNotFoundError`` if science.yaml is missing.
+    """
+    yaml_path = project_root / "science.yaml"
+    if not yaml_path.is_file():
+        raise FileNotFoundError(f"science.yaml not found at {yaml_path}")
+    data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    aspects = data.get("aspects") or []
+    if not isinstance(aspects, list):
+        raise TypeError(
+            f"science.yaml 'aspects' must be a list, got {type(aspects).__name__}"
+        )
+    return [str(a) for a in aspects]

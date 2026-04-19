@@ -5,6 +5,7 @@ import pytest
 from science_model.aspects import (
     KNOWN_ASPECTS,
     AspectValidationError,
+    load_project_aspects,
     matches_aspect_filter,
     resolve_entity_aspects,
     validate_entity_aspects,
@@ -104,3 +105,24 @@ def test_validate_rejects_aspect_not_in_project() -> None:
 def test_validate_rejects_aspect_not_in_vocabulary() -> None:
     with pytest.raises(AspectValidationError, match="vocabulary"):
         validate_entity_aspects(["typo-aspect"], PROJECT + ["typo-aspect"])
+
+
+def test_load_reads_aspects_field(tmp_path) -> None:
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\nprofile: research\naspects:\n  - hypothesis-testing\n"
+        "  - computational-analysis\n"
+    )
+    assert load_project_aspects(tmp_path) == [
+        "hypothesis-testing",
+        "computational-analysis",
+    ]
+
+
+def test_load_returns_empty_list_when_aspects_absent(tmp_path) -> None:
+    (tmp_path / "science.yaml").write_text("name: demo\nprofile: research\n")
+    assert load_project_aspects(tmp_path) == []
+
+
+def test_load_raises_when_yaml_missing(tmp_path) -> None:
+    with pytest.raises(FileNotFoundError):
+        load_project_aspects(tmp_path)
