@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from science_model.aspects import KNOWN_ASPECTS
+from science_model.aspects import KNOWN_ASPECTS, resolve_entity_aspects
 
 
 def test_known_aspects_matches_science_yaml_schema() -> None:
@@ -12,3 +12,27 @@ def test_known_aspects_matches_science_yaml_schema() -> None:
             "software-development",
         }
     )
+
+
+def test_resolve_returns_entity_aspects_when_explicit() -> None:
+    resolved = resolve_entity_aspects(
+        entity_aspects=["software-development"],
+        project_aspects=["hypothesis-testing", "software-development"],
+    )
+    assert resolved == ["software-development"]
+
+
+def test_resolve_inherits_project_when_entity_is_none() -> None:
+    resolved = resolve_entity_aspects(
+        entity_aspects=None,
+        project_aspects=["hypothesis-testing", "computational-analysis"],
+    )
+    assert resolved == ["hypothesis-testing", "computational-analysis"]
+
+
+def test_resolve_preserves_order_of_explicit_entity_aspects() -> None:
+    resolved = resolve_entity_aspects(
+        entity_aspects=["computational-analysis", "hypothesis-testing"],
+        project_aspects=["hypothesis-testing", "computational-analysis"],
+    )
+    assert resolved == ["computational-analysis", "hypothesis-testing"]

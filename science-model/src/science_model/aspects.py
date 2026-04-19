@@ -17,3 +17,19 @@ KNOWN_ASPECTS: frozenset[str] = frozenset(
 )
 
 SOFTWARE_ASPECT: str = "software-development"
+
+
+def resolve_entity_aspects(
+    entity_aspects: list[str] | None,
+    project_aspects: list[str],
+) -> list[str]:
+    """Return the effective aspect list for an entity.
+
+    - If ``entity_aspects`` is None (absent), inherit ``project_aspects``.
+    - If ``entity_aspects`` is a non-empty list, return it unchanged.
+    - Callers are responsible for having validated ``entity_aspects`` before
+      resolution; this function does not re-validate.
+    """
+    if entity_aspects is None:
+        return list(project_aspects)
+    return list(entity_aspects)
