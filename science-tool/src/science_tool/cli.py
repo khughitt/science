@@ -73,6 +73,7 @@ from science_tool.graph.store import (
     validate_graph,
     validate_inquiry,
 )
+from science_tool.aspects.cli import aspects_group
 from science_tool.big_picture.cli import big_picture_group
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows
 from science_tool.prose import scan_prose
@@ -162,6 +163,7 @@ def _parse_interaction_terms(entries: tuple[str, ...]) -> list[dict[str, str]] |
     return interaction_terms
 
 
+main.add_command(aspects_group)
 main.add_command(research_package_group)
 main.add_command(big_picture_group)
 
