@@ -177,8 +177,9 @@ def _find_task(tasks: list[Task], task_id: str) -> Task:
 def add_task(
     tasks_dir: Path,
     title: str,
-    task_type: str,
     priority: str,
+    task_type: str = "",
+    aspects: list[str] | None = None,
     related: list[str] | None = None,
     blocked_by: list[str] | None = None,
     group: str = "",
@@ -190,6 +191,7 @@ def add_task(
         id=task_id,
         title=title,
         type=task_type,
+        aspects=aspects or [],
         priority=priority,
         status="proposed",
         created=date.today(),

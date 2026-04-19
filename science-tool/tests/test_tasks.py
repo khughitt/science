@@ -760,3 +760,31 @@ def test_render_task_omits_aspects_when_empty() -> None:
     )
     rendered = render_task(t)
     assert "aspects" not in rendered
+
+
+def test_add_task_with_aspects(tmp_path) -> None:
+    from science_tool.tasks import add_task, parse_tasks
+
+    (tmp_path / "active.md").write_text("")
+
+    task = add_task(
+        tasks_dir=tmp_path,
+        title="Test task",
+        priority="P1",
+        aspects=["hypothesis-testing"],
+    )
+    assert task.aspects == ["hypothesis-testing"]
+    assert task.type == ""
+
+    reread = parse_tasks(tmp_path / "active.md")
+    assert reread[0].aspects == ["hypothesis-testing"]
+
+
+def test_add_task_without_aspects_writes_no_aspects_line(tmp_path) -> None:
+    from science_tool.tasks import add_task
+
+    (tmp_path / "active.md").write_text("")
+    add_task(tasks_dir=tmp_path, title="Test", priority="P2")
+
+    body = (tmp_path / "active.md").read_text()
+    assert "aspects" not in body
