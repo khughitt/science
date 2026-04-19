@@ -6,8 +6,17 @@ from pathlib import Path
 
 import click
 
+from science_model.aspects import (
+    SOFTWARE_ASPECT,
+    load_project_aspects,
+    matches_aspect_filter,
+)
+from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
 from science_tool.big_picture.resolver import resolve_questions
-from science_tool.big_picture.validator import validate_rollup_file, validate_synthesis_file
+from science_tool.big_picture.validator import (
+    validate_rollup_file,
+    validate_synthesis_file,
+)
 
 
 @click.group("big-picture")
@@ -57,3 +66,44 @@ def validate_cmd(project_root: Path) -> None:
 
     if issues:
         raise click.exceptions.Exit(code=1)
+
+
+@big_picture_group.command("knowledge-gaps")
+@click.option(
+    "--project-root",
+    type=click.Path(file_okay=False, exists=True, path_type=Path),
+    default=Path.cwd(),
+    show_default=True,
+    help="Path to the project root.",
+)
+@click.option(
+    "--limit",
+    type=int,
+    default=None,
+    help="Cap the JSON list to the top N entries (default: no limit).",
+)
+def knowledge_gaps_cmd(project_root: Path, limit: int | None) -> None:
+    """Emit topic-level knowledge gaps as JSON.
+
+    Applies the same research-only aspect filter used by big-picture synthesis
+    (excluding pure software-only questions) before computing demand.
+    """
+    resolved = resolve_questions(project_root)
+    try:
+        project_aspects = load_project_aspects(project_root)
+    except FileNotFoundError:
+        project_aspects = []
+    research_filter = {a for a in project_aspects if a != SOFTWARE_ASPECT}
+    if research_filter:
+        included = {
+            qid
+            for qid, out in resolved.items()
+            if matches_aspect_filter(out.resolved_aspects, research_filter)
+        }
+    else:
+        # No non-software project aspects declared → include everything.
+        included = set(resolved)
+    gaps = compute_topic_gaps(project_root, resolved, included)
+    if limit is not None:
+        gaps = gaps[:limit]
+    click.echo(json.dumps([asdict(g) for g in gaps], indent=2, sort_keys=True))
