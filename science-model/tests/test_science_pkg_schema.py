@@ -1,4 +1,5 @@
 """Tests for science-pkg JSON Schema family."""
+
 from __future__ import annotations
 
 import json
@@ -32,7 +33,13 @@ def _valid_external_entity() -> dict:
             "verified_by": "claude",
             "source_url": "https://example.com/x",
             "credentials_required": "",
-            "exception": {"mode": "", "decision_date": "", "followup_task": "", "superseded_by_dataset": "", "rationale": ""},
+            "exception": {
+                "mode": "",
+                "decision_date": "",
+                "followup_task": "",
+                "superseded_by_dataset": "",
+                "rationale": "",
+            },
         },
     }
 
