@@ -343,6 +343,26 @@ def test_health_flags_invalid_entity_aspects(tmp_path) -> None:
     assert "not-declared" in findings[0]["message"]
 
 
+def test_health_flags_legacy_article_prefixes_in_structured_sources(tmp_path) -> None:
+    from pathlib import Path
+
+    from science_tool.graph.health import collect_legacy_structured_literature_prefixes
+
+    project_root = Path(tmp_path)
+    (project_root / "science.yaml").write_text("name: demo\n")
+    sources_dir = project_root / "knowledge" / "sources" / "local"
+    sources_dir.mkdir(parents=True)
+    (sources_dir / "entities.yaml").write_text(
+        "entities:\n- canonical_id: article:Smith2024\n  kind: paper\n  title: Smith\n",
+        encoding="utf-8",
+    )
+
+    findings = collect_legacy_structured_literature_prefixes(project_root)
+    assert len(findings) == 1
+    assert findings[0]["source_file"] == "knowledge/sources/local/entities.yaml"
+    assert findings[0]["legacy_ref"] == "article:Smith2024"
+
+
 def test_build_health_report_includes_aspect_findings(tmp_path) -> None:
     from pathlib import Path
 
@@ -372,3 +392,22 @@ def test_build_health_report_includes_aspect_findings(tmp_path) -> None:
     assert "invalid_entity_aspects" in report
     assert len(report["legacy_task_type"]) == 1
     assert len(report["invalid_entity_aspects"]) == 1
+
+
+def test_build_health_report_includes_legacy_structured_literature_findings(tmp_path) -> None:
+    from pathlib import Path
+
+    from science_tool.graph.health import build_health_report
+
+    project_root = Path(tmp_path)
+    (project_root / "science.yaml").write_text("name: demo\n")
+    sources_dir = project_root / "knowledge" / "sources" / "local"
+    sources_dir.mkdir(parents=True)
+    (sources_dir / "entities.yaml").write_text(
+        "entities:\n- canonical_id: article:Smith2024\n  kind: paper\n  title: Smith\n",
+        encoding="utf-8",
+    )
+
+    report = build_health_report(project_root)
+    assert "legacy_structured_literature_prefixes" in report
+    assert len(report["legacy_structured_literature_prefixes"]) == 1

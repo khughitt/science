@@ -34,6 +34,7 @@ from science_model.profiles import CORE_PROFILE, load_shared_profile
 from science_model.profiles.schema import ProfileManifest
 from science_model.source_contracts import AuthoredTargetedRelation, BindingSource, ModelSource, ParameterSource
 
+from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.paths import resolve_paths
 from science_tool.tasks import parse_tasks
 
@@ -367,6 +368,9 @@ def _load_structured_entities(
         if not isinstance(title, str) or not title:
             continue
 
+        if kind == "paper":
+            canonical_id = canonical_paper_id(canonical_id)
+
         aliases_raw = item.get("aliases") or []
         aliases = [str(alias) for alias in aliases_raw] if isinstance(aliases_raw, list) else []
 
@@ -381,11 +385,11 @@ def _load_structured_entities(
                 confidence=_coerce_optional_float(item.get("confidence")),
                 status=str(item.get("status")) if item.get("status") is not None else None,
                 content_preview=str(item.get("content_preview") or ""),
-                related=_coerce_string_list(item.get("related")),
-                blocked_by=_coerce_string_list(item.get("blocked_by")),
-                source_refs=_coerce_string_list(item.get("source_refs")),
+                related=_canonicalize_literature_refs(_coerce_string_list(item.get("related"))),
+                blocked_by=_canonicalize_literature_refs(_coerce_string_list(item.get("blocked_by"))),
+                source_refs=_canonicalize_literature_refs(_coerce_string_list(item.get("source_refs"))),
                 ontology_terms=_coerce_string_list(item.get("ontology_terms")),
-                same_as=_coerce_string_list(item.get("same_as")),
+                same_as=_canonicalize_literature_refs(_coerce_string_list(item.get("same_as"))),
                 aliases=_derive_aliases(canonical_id, aliases),
                 **_load_reasoning_metadata(
                     item,
@@ -506,6 +510,9 @@ def _load_structured_relations(project_root: Path, *, local_profile: str) -> lis
             continue
         if not isinstance(obj, str) or not obj:
             continue
+
+        subject = canonical_paper_id(subject)
+        obj = canonical_paper_id(obj)
 
         relations.append(
             SourceRelation(
@@ -628,6 +635,10 @@ def _coerce_string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value]
+
+
+def _canonicalize_literature_refs(values: list[str]) -> list[str]:
+    return [canonical_paper_id(value) for value in values]
 
 
 def _coerce_optional_string(value: object) -> str | None:
