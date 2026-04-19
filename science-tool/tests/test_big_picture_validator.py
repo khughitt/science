@@ -67,8 +67,9 @@ synthesized_from: []
 """,
     )
     issues = validate_rollup_file(rollup, project_root=FIXTURE)
-    # FIXTURE has exactly one orphan (q05-orphan).
-    assert any(i.kind == "orphan_count_mismatch" and "expected 1" in i.message for i in issues)
+    # FIXTURE has two orphans: q05-orphan and q06-software-pipeline-concern
+    # (both have no hypothesis match; EA-17 will later filter out software-only ones).
+    assert any(i.kind == "orphan_count_mismatch" and "expected 2" in i.message for i in issues)
 
 
 def test_rollup_orphan_count_matches(tmp_path: Path) -> None:
@@ -77,7 +78,7 @@ def test_rollup_orphan_count_matches(tmp_path: Path) -> None:
         "synthesis.md",
         """---
 type: "synthesis-rollup"
-orphan_question_count: 1
+orphan_question_count: 2
 synthesized_from: []
 ---
 """,

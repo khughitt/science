@@ -12,6 +12,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from science_model.aspects import (
+    AspectValidationError,
+    load_project_aspects,
+    resolve_entity_aspects,
+    validate_entity_aspects,
+)
 from science_tool.big_picture.frontmatter import read_frontmatter
 
 Confidence = Literal["direct", "inverse", "transitive"]
@@ -28,12 +34,18 @@ class HypothesisMatch:
 class ResolverOutput:
     hypotheses: list[HypothesisMatch] = field(default_factory=list)
     primary_hypothesis: str | None = None
+    resolved_aspects: list[str] = field(default_factory=list)
 
 
 def resolve_questions(project_root: Path) -> dict[str, ResolverOutput]:
     """Resolve all questions in ``project_root`` to hypothesis associations."""
     questions = _load_entities(project_root / "doc" / "questions")
     hypotheses = _load_entities(project_root / "specs" / "hypotheses")
+
+    try:
+        project_aspects = load_project_aspects(project_root)
+    except FileNotFoundError:
+        project_aspects = []
 
     results: dict[str, dict[str, HypothesisMatch]] = {qid: {} for qid in questions}
 
@@ -59,7 +71,29 @@ def resolve_questions(project_root: Path) -> dict[str, ResolverOutput]:
                 if hid not in results[qid]:
                     results[qid][hid] = HypothesisMatch(hid, "transitive", 0.5)
 
-    return {qid: _finalize(matches) for qid, matches in results.items()}
+    out: dict[str, ResolverOutput] = {}
+    for qid, matches in results.items():
+        qfm = questions[qid]
+        raw_aspects = qfm.get("aspects")
+        if raw_aspects is None:
+            resolved = resolve_entity_aspects(None, project_aspects)
+        else:
+            if not isinstance(raw_aspects, list):
+                raise AspectValidationError(
+                    f"{qid}: 'aspects' must be a list, got {type(raw_aspects).__name__}"
+                )
+            validated = validate_entity_aspects(
+                [str(a) for a in raw_aspects], project_aspects
+            )
+            resolved = resolve_entity_aspects(validated, project_aspects)
+
+        finalized = _finalize(matches)
+        out[qid] = ResolverOutput(
+            hypotheses=finalized.hypotheses,
+            primary_hypothesis=finalized.primary_hypothesis,
+            resolved_aspects=resolved,
+        )
+    return out
 
 
 def _load_entities(directory: Path) -> dict[str, dict]:
