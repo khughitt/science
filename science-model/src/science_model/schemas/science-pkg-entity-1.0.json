@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science-tool/science-pkg-entity-1.0.json",
+  "title": "science-pkg entity surface",
+  "type": "object",
+  "required": ["profiles", "id", "type", "title", "status", "origin", "tier"],
+  "properties": {
+    "profiles": {
+      "type": "array",
+      "items": {"type": "string"},
+      "contains": {"const": "science-pkg-entity-1.0"}
+    },
+    "id": {"type": "string", "pattern": "^dataset:"},
+    "type": {"const": "dataset"},
+    "title": {"type": "string"},
+    "status": {"type": "string"},
+    "origin": {"enum": ["external", "derived"]},
+    "tier": {"enum": ["use-now", "evaluate-next", "track"]},
+    "license": {"type": "string"},
+    "update_cadence": {"enum": ["", "static", "rolling", "monthly", "quarterly", "annual", "versioned-releases"]},
+    "ontology_terms": {"type": "array", "items": {"type": "string"}},
+    "datapackage": {"type": "string"},
+    "local_path": {"type": "string"},
+    "consumed_by": {"type": "array", "items": {"type": "string"}},
+    "parent_dataset": {"type": "string"},
+    "siblings": {"type": "array", "items": {"type": "string"}},
+    "accessions": {"type": "array", "items": {"type": "string"}},
+    "access": {"$ref": "#/$defs/access"},
+    "derivation": {"$ref": "#/$defs/derivation"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "related": {"type": "array", "items": {"type": "string"}},
+    "created": {"type": "string"},
+    "updated": {"type": "string"}
+  },
+  "not": {"required": ["resources"]},
+  "allOf": [
+    {
+      "if": {"properties": {"origin": {"const": "external"}}},
+      "then": {
+        "required": ["access"],
+        "not": {"required": ["derivation"]}
+      }
+    },
+    {
+      "if": {"properties": {"origin": {"const": "derived"}}},
+      "then": {
+        "required": ["derivation"],
+        "not": {"anyOf": [{"required": ["access"]}, {"required": ["accessions"]}, {"required": ["local_path"]}]}
+      }
+    }
+  ],
+  "$defs": {
+    "access": {
+      "type": "object",
+      "required": ["level", "verified"],
+      "properties": {
+        "level": {"enum": ["public", "registration", "controlled", "commercial", "mixed"]},
+        "verified": {"type": "boolean"},
+        "verification_method": {"enum": ["", "retrieved", "credential-confirmed"]},
+        "last_reviewed": {"type": "string"},
+        "verified_by": {"type": "string"},
+        "source_url": {"type": "string"},
+        "credentials_required": {"type": "string"},
+        "exception": {
+          "type": "object",
+          "properties": {
+            "mode": {"enum": ["", "scope-reduced", "expanded-to-acquire", "substituted"]},
+            "decision_date": {"type": "string"},
+            "followup_task": {"type": "string"},
+            "superseded_by_dataset": {"type": "string"},
+            "rationale": {"type": "string"}
+          }
+        }
+      }
+    },
+    "derivation": {
+      "type": "object",
+      "required": ["workflow", "workflow_run", "git_commit", "config_snapshot", "produced_at", "inputs"],
+      "properties": {
+        "workflow": {"type": "string", "pattern": "^workflow:"},
+        "workflow_run": {"type": "string", "pattern": "^workflow-run:"},
+        "git_commit": {"type": "string"},
+        "config_snapshot": {"type": "string"},
+        "produced_at": {"type": "string"},
+        "inputs": {"type": "array", "items": {"type": "string", "pattern": "^dataset:"}}
+      }
+    }
+  }
+}
