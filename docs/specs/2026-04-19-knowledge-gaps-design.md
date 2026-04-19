@@ -23,7 +23,8 @@ Add a topic-coverage gap metric to `/science:big-picture` output, at two scales:
 - **One gap definition, two output scales.** The per-hypothesis and rollup views consume the same `compute_topic_gaps` helper with different input scopes. No divergent logic.
 - **Use existing linkage data; do not introduce new fields.** Projects already express topic–paper relationships through `related:` (both directions) and `source_refs:` (bibtex citekeys). The metric unions these; it does not demand a new uniform schema.
 - **Signal over precision.** The feature's job is ranking, not accounting. A topic that appears twice because one entity links to it two ways and another links in the inverse direction is a ranking-order concern, not a correctness failure. Dedup where cheap; tolerate noise at the edges.
-- **Aspect filter cascades from resolver.** Knowledge-gap computation consumes aspect-filtered resolver output. Software-only entities are already excluded upstream; this feature inherits that filter without implementing its own.
+- **Aspect filter is explicit at the call boundary.** `resolve_questions()` currently returns all questions plus resolved aspects; it does not itself filter out software-only questions. Knowledge-gap computation therefore accepts the caller's filtered question-ID set explicitly rather than assuming the input dict has already been trimmed.
+- **Canonicalize path and prefix variants at load boundaries.** Topic discovery must tolerate both `doc/topics/` and `doc/background/topics/`; paper discovery must tolerate both `doc/papers/` and `doc/background/papers/`; external-literature IDs must tolerate both `paper:` and legacy `article:` during the transition window.
 
 ## Scope
 
@@ -35,6 +36,8 @@ Add a topic-coverage gap metric to `/science:big-picture` output, at two scales:
 - Project rollup gains a Knowledge Gaps section; Opus orchestrator computes and renders it.
 - Coverage metric: inclusive (union of entity-linked papers + bibtex `source_refs:` citekeys), deduplicated by bibkey where determinable.
 - Gap criterion: `demand(T) > 0 AND coverage(T) < demand(T)`. Topics with `demand == 0` are excluded as research-irrelevant.
+- Dual-path discovery for topics and papers: scan both current and legacy background directories, deduplicate by entity ID, and fail fast on duplicate IDs with conflicting files.
+- Big-picture validator support for topic refs emitted by this feature.
 - Tests: unit tests for `compute_topic_gaps` against an extended minimal_project fixture; integration against the existing big-picture smoke path.
 - `commands/big-picture.md` prose updated to include knowledge-gap computation in Phase 1 bundle assembly and Phase 3 rollup.
 
@@ -52,6 +55,8 @@ This spec depends on **manuscript + paper terminology normalization** landing fi
 
 Transition handling: for the window between this spec landing and every project completing the terminology migration, `compute_topic_gaps` accepts both `paper:<bibkey>` and `article:<bibkey>` as external-literature entity prefixes. Both count the same toward coverage. The fallback is removed once the migration is complete on tracked projects.
 
+Single-PR landing with the rename spec: both specs MAY land in one PR. In that case, knowledge-gaps tests work on three project states: (a) pre-migration projects via `article:` acceptance, (b) post-migration projects via canonical `paper:`, (c) mixed-state projects during partial migration. The migration-tool ship + dual-acceptance decouple the spec landings from any project's migration timing.
+
 ## Data Model
 
 ### Coverage
@@ -68,7 +73,9 @@ where:
   bibtex_refs(T)    = { cite:<key> ∈ T.source_refs }
 ```
 
-Dedup: the three sets are unioned with bibkey-based comparison where determinable. A `paper:<bibkey>` entity and a `cite:<bibkey>` citation referencing the same bibkey count as one paper. When a citekey cannot be extracted from an entity ID, dedup falls back to entity-ID string equality.
+Dedup: the three sets are unioned with bibkey-based comparison where determinable. A `paper:<bibkey>` entity and a `cite:<bibkey>` citation referencing the same bibkey count as one paper. Bibkey extraction follows the canonical rule defined in the manuscript + paper rename spec (§Canonical bibkey extraction): the full substring after the first `:`, case-sensitive byte equality, no normalization. When a citekey cannot be extracted from an entity ID, dedup falls back to entity-ID string equality.
+
+Note on `T.source_refs`: topics do not conventionally carry `source_refs:` in tracked projects today (the field lives mostly on question/interpretation entities). The `bibtex_refs(T)` union term exists to handle projects that do or will. If tracked projects never populate this field, the term is a no-op but harmless.
 
 ### Demand
 
@@ -104,7 +111,9 @@ class TopicGap:
     hypotheses: list[str]            # hypothesis IDs whose subgraph includes this topic
 ```
 
-`hypotheses` is derived from the resolver output: a hypothesis is associated with a topic if any question under that hypothesis (by `primary_hypothesis` or any resolver-hypothesis match) references the topic.
+`hypotheses` is derived from the resolver output. Concrete rule: a hypothesis `h` is associated with a topic `T` iff any question bucketed under `h` by `resolve_questions` (whether via its `primary_hypothesis` field or any additional related-hypothesis field the resolver already honors) has `T.id ∈ q.frontmatter.related`. No new linkage logic — reuse whatever `resolve_questions` already returns under `h.question_ids`; the knowledge-gaps module does not re-implement hypothesis↔question bucketing.
+
+`demanding_questions` and `hypotheses` are sorted alphabetically for stable JSON and markdown diffs.
 
 ## Output
 
@@ -121,7 +130,9 @@ Each per-hypothesis synthesis file's existing Research Fronts section gains a Kn
   - `topic:epigenetic-memory` — 0 papers vs 2 questions referencing it (question:q04, question:q09)
 ```
 
-Ordering: `gap_score` descending; ties broken alphabetically by topic ID. No cap — hypothesis-local lists are usually short. If zero gaps, the sub-bullet is omitted entirely.
+Ordering: `gap_score` descending; ties broken alphabetically by topic ID. No cap on the number of topic lines — hypothesis-local lists are usually short. If zero gaps, the sub-bullet is omitted entirely.
+
+Rendering rule for `demanding_questions` inline list: if the list exceeds 5 IDs, show the first 5 (alphabetical) followed by `… and N more`. The full list remains in `TopicGap.demanding_questions` and in the CLI JSON emission. Rationale: a heavily-investigated topic can drive 20+ questions; wall-of-text markdown obscures the signal this feature exists to surface.
 
 ### Project rollup (new section)
 
@@ -168,6 +179,7 @@ class TopicGap:
 def compute_topic_gaps(
     project_root: Path,
     resolved_questions: dict[str, ResolverOutput],
+    included_question_ids: set[str],
 ) -> list[TopicGap]:
     """Return all topics with demand > 0 and coverage < demand.
 
@@ -177,22 +189,35 @@ def compute_topic_gaps(
 
 Pure function with only file-reading side effects. Loads:
 
-- Every topic file from `doc/background/topics/` — frontmatter + `related:` + `source_refs:`.
-- Every paper file from `doc/papers/` and `doc/background/papers/` — frontmatter + `related:`. Accepts both `paper:<bibkey>` and `article:<bibkey>` entity prefixes during the transition window.
-- Every question file from `doc/questions/` — frontmatter + `related:` — for demand computation. (Passed-in `resolved_questions` identifies which questions survived aspect filtering; the function re-reads question frontmatter to get `related:` for topic linkage.)
+- Every topic file from `doc/topics/` and `doc/background/topics/` if present — frontmatter + `related:` + `source_refs:`.
+- Every paper file from `doc/papers/` and `doc/background/papers/` if present — frontmatter + `related:`. Accepts both `paper:<bibkey>` and `article:<bibkey>` entity prefixes during the transition window.
+- Every question file from `doc/questions/` — frontmatter + `related:` — for demand computation.
 
-No dependency on the resolver module beyond its `ResolverOutput` type — the function does not call `resolve_questions` itself. The caller (big-picture command orchestrator) computes resolver output once, passes it in.
+Loader rules:
+
+- If the same entity ID appears in two topic files or two paper files across the scanned directories, raise a clear error naming both paths. Silent "first one wins" behavior is not acceptable here because it would make the coverage metric non-deterministic.
+- Normalize external-paper IDs to canonical `paper:<bibkey>` before dedup/counting.
+- A question's `related:` entry of the form `topic:<id>` that does not match any loaded topic file is NOT counted toward demand. Emit one warning per unknown ID via `logging.getLogger(__name__).warning(...)`; do not raise. Dangling-reference enforcement is the big-picture validator's domain (`science_tool.big_picture.validator.validate_synthesis_file`); knowledge-gaps does not duplicate it.
+- `source_refs:` entries that do not match the `cite:<key>` shape are logged at warning level (one warning per malformed entry) and excluded from coverage. This is a deliberate narrow exception to the fail-early principle: citation entries are user-authored free-text and occasional malformedness should not block knowledge-gap reporting across an entire project.
+
+No dependency on the resolver module beyond its `ResolverOutput` type — the function does not call `resolve_questions` itself. The caller computes resolver output once, derives `included_question_ids` using the same aspect filter as the rest of big-picture synthesis, then passes both in.
 
 ### Bundle-assembly integration
 
-`commands/big-picture.md` Phase 1 gains a new bundle slice:
+`commands/big-picture.md` Phase 1 gains a new bundle slice. The **Opus orchestrator** (running Phase 1 and Phase 3) is the sole caller of `compute_topic_gaps`; per-hypothesis bundles do not re-invoke it.
 
 ```
-topic_gaps: filter compute_topic_gaps(project_root, resolved_questions)
-            to the topics in this hypothesis's subgraph. A topic is in the
-            subgraph iff it is referenced by any question the resolver
-            associated with this hypothesis.
+included_question_ids: the exact set of question IDs already computed
+                       upstream in Phase 1 by the big-picture aspect filter
+                       — reuse that variable, do NOT reimplement the filter.
+
+topic_gaps: compute_topic_gaps(project_root, resolved_questions, included_question_ids),
+            filtered per hypothesis to topics in that hypothesis's subgraph.
+            A topic is in the subgraph iff any question bucketed under the
+            hypothesis (see TopicGap.hypotheses rule) references the topic.
 ```
+
+Invocation discipline: exactly one call to `compute_topic_gaps` per big-picture run. The orchestrator invokes it once, slices the result per hypothesis for Phase 1 bundles, and reuses the full list for the Phase 3 rollup table. This guarantees per-hypothesis and rollup views stay consistent.
 
 The hypothesis-synthesizer agent prompt gains one new instruction: "If the bundle includes `topic_gaps`, render them as a Knowledge Gaps sub-bullet inside Research Fronts, following the format in the spec."
 
@@ -200,7 +225,7 @@ The hypothesis-synthesizer agent prompt gains one new instruction: "If the bundl
 
 `commands/big-picture.md` Phase 3 (Opus orchestrator) gains:
 
-- Call `compute_topic_gaps(project_root, resolved_questions)` once to get the full project list.
+- Call `compute_topic_gaps(project_root, resolved_questions, included_question_ids)` once to get the full project list.
 - Render the top 10 into a new Knowledge Gaps section inserted between Research Fronts and Emergent Threads.
 - If zero gaps, emit the "No knowledge gaps detected this run." one-liner and skip the table.
 
@@ -209,17 +234,28 @@ The hypothesis-synthesizer agent prompt gains one new instruction: "If the bundl
 New subcommand in the existing `big-picture` click group:
 
 ```
-science-tool big-picture knowledge-gaps [--project-root <path>]
+science-tool big-picture knowledge-gaps [--project-root <path>] [--limit N]
 ```
 
-Emits JSON of all `TopicGap` entries, sorted by `gap_score` descending. Useful for validation, debugging, and for users who want the numbers without running a full big-picture regeneration. Parallel in shape to the existing `resolve-questions` subcommand.
+Emits JSON of all `TopicGap` entries, sorted by `gap_score` descending. `--limit N` caps the JSON list to the top N entries (useful when a project has many topics and the caller just wants the worst offenders). Default is no limit — emits all gap-flagged topics. The rollup markdown render in Phase 3 applies its own fixed cap of 10 regardless of the CLI flag, keeping the synthesis table compact.
+
+By default the subcommand applies the same research-only aspect filtering used by big-picture synthesis before computing demand. Useful for validation, debugging, and for users who want the numbers without running a full big-picture regeneration. Parallel in shape to the existing `resolve-questions` subcommand.
+
+## Validator Integration
+
+Because this feature emits `topic:<id>` references in generated synthesis markdown, `science_tool.big_picture.validator` must be extended in the same PR:
+
+- `REFERENCE_PATTERN` includes `topic` in addition to the currently supported reference kinds.
+- `_collect_project_ids` scans topic directories (`doc/topics/`, `doc/background/topics/`) so validator lookups can succeed.
+
+This spec does not require validator support for `paper:` references because the generated knowledge-gap sections do not directly emit paper entity IDs.
 
 ## Aspect Integration
 
 Knowledge-gap computation sits downstream of the aspect-filter cascade established by the entity-aspects spec:
 
-- The caller (`commands/big-picture.md` Phase 1) passes the aspect-filtered `resolved_questions` dict to `compute_topic_gaps`. Software-only questions are already excluded from this dict by earlier bundle assembly.
-- `demand(T)` therefore counts only questions that passed the research-aspect filter.
+- The caller passes the full `resolved_questions` map plus an explicit `included_question_ids` set derived from the same research-aspect filter used elsewhere in big-picture synthesis.
+- `demand(T)` therefore counts only questions in `included_question_ids`.
 - A topic referenced only by software-only questions will have `demand == 0` in the filtered view and will be excluded from output.
 - Papers are not aspect-filtered — all papers contribute to `coverage(T)` regardless. (A "software paper" covering a research topic still counts as coverage.)
 
@@ -234,8 +270,14 @@ Extend `science-tool/tests/fixtures/big_picture/minimal_project/`:
 - Add `doc/background/topics/t01-covered.md` — `aspects:` inherited, `related: [paper:p01-example]`.
 - Add `doc/background/topics/t02-thin.md` — `related: []`, `source_refs: []`. No coverage.
 - Add `doc/background/topics/t03-bibtex-covered.md` — `related: []`, `source_refs: [cite:Smith2024]`. Coverage via bibtex only.
+- Add `doc/background/topics/t04-legacy-covered.md` — `related: []`, `source_refs: []`. Coverage arrives via a legacy-prefixed paper file.
 - Add `doc/papers/p01-example.md` — `id: paper:p01-example`, `related: [topic:t01-covered]`.
-- Update `doc/questions/q01-direct-to-h1.md` and `q02-inverse-via-h1.md` to include topic references in `related:`. Exact seeding chosen so `t01-covered` has demand=1 coverage=1 (no gap), `t02-thin` has demand=2 coverage=0 (gap_score=2), `t03-bibtex-covered` has demand=1 coverage=1 (no gap).
+- Add `doc/papers/p02-legacy-article.md` — `id: article:p02-legacy-article`, `related: [topic:t04-legacy-covered]`. Exercises the transition-window `article:` prefix acceptance path (`test_article_prefix_accepted_during_transition`). Keep this file as long as the dual-prefix acceptance does.
+- Update `doc/questions/q01-direct-to-h1.md` and `q02-inverse-via-h1.md` to include topic references in `related:`. Exact seeding:
+  - `t01-covered`: demand=1, coverage=1 (no gap)
+  - `t02-thin`: demand=2, coverage=0 (gap_score=2)
+  - `t03-bibtex-covered`: demand=1, coverage=1 (no gap)
+  - `t04-legacy-covered`: demand=1, coverage=1 via `article:p02-legacy-article` (no gap; transition-window alias counts)
 
 ### Unit tests (`science-tool/tests/test_knowledge_gaps.py`)
 
@@ -249,6 +291,8 @@ Extend `science-tool/tests/fixtures/big_picture/minimal_project/`:
 - `test_software_aspect_question_does_not_count_toward_demand` — question tagged `aspects: [software-development]` references topic T; because caller passes aspect-filtered `resolved_questions`, T's demand excludes the software question.
 - `test_article_prefix_accepted_during_transition` — paper entity with `id: article:Smith2024` counts toward coverage alongside `paper:Smith2024`.
 - `test_sort_order_gap_score_desc_tiebreak_topic_id_asc` — two topics with equal gap_score ordered alphabetically.
+- `test_duplicate_topic_ids_across_topic_directories_raise` — same `topic:<id>` appears in `doc/topics/` and `doc/background/topics/`; computation fails loudly rather than picking one arbitrarily.
+- `test_duplicate_paper_ids_across_paper_directories_raise` — same `paper:<id>` appears in both paper roots; computation fails loudly.
 
 ### Integration tests
 
@@ -278,6 +322,5 @@ Per the `big-picture` pattern, a mm30 + natural-systems smoke run after the sibl
 
 ## Open Decisions (to resolve during implementation)
 
-- **Exact paper-directory discovery**: v1 scans `doc/papers/` and `doc/background/papers/`. If projects introduce other paper directories (e.g., `papers/`), discovery either hard-codes additional paths or adopts a lookup from `science.yaml` — defer until a real project requires it.
 - **Bibtex parsing strictness**: `topic.source_refs: [cite:Smith2024]` is counted as one paper; malformed or non-`cite:` entries are ignored silently. If bibkey validation becomes worthwhile (e.g., typo-detection against an actual `.bib` file), add in a follow-up — do not couple this spec to a bibtex parser.
 - **Ordering of "demanding_questions" list**: alphabetical by question ID for stable diffs, or reverse-chronological by question creation date (most-recent demand first)? v1 uses alphabetical; reconsider if users want "what's been asked recently" as the primary signal.
