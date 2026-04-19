@@ -10,6 +10,7 @@ import difflib
 import logging
 import os
 import re
+import subprocess
 import tempfile
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -169,3 +170,24 @@ def render_diff(rewrites: list[FileRewrite], max_lines: int | None = 200) -> str
                 return "\n".join(lines) + "\n"
         files_rendered += 1
     return "\n".join(lines) + ("\n" if lines else "")
+
+
+def check_git_clean(project_root: Path) -> bool:
+    """Return True if the project's git working tree is clean (or not a repo).
+
+    A non-git directory is treated as clean (returns True) — the user has
+    opted out of git tracking and we don't want to block migration on that.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return True
+    if result.returncode != 0:
+        return True  # Not a git repo (fatal: not a git repository)
+    return result.stdout.strip() == ""

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 from pathlib import Path
 
 from science_tool.refs_migrate import (
@@ -187,3 +188,45 @@ def test_render_diff_respects_line_cap() -> None:
     capped = render_diff(many, max_lines=200)
     assert "... " in capped and " more files with changes" in capped
     assert capped.count("\n") <= 220  # 200 diff lines + cap marker + slack
+
+
+def _init_repo(path: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=path, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "init",
+            "-q",
+        ],
+        cwd=path,
+        check=True,
+    )
+
+
+def test_check_git_clean_true_when_clean(tmp_path: Path) -> None:
+    from science_tool.refs_migrate import check_git_clean
+
+    _init_repo(tmp_path)
+    assert check_git_clean(tmp_path) is True
+
+
+def test_check_git_clean_false_when_dirty(tmp_path: Path) -> None:
+    from science_tool.refs_migrate import check_git_clean
+
+    _init_repo(tmp_path)
+    (tmp_path / "new.txt").write_text("hi")
+    assert check_git_clean(tmp_path) is False
+
+
+def test_check_git_clean_true_for_non_git_dir(tmp_path: Path) -> None:
+    from science_tool.refs_migrate import check_git_clean
+
+    # Spec: if project isn't a git repo, don't block. User accepts the risk.
+    assert check_git_clean(tmp_path) is True
