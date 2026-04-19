@@ -339,7 +339,7 @@ def test_export_graph_payload_includes_layered_claim_metadata_for_claim_backed_e
     add_proposition(
         graph_path,
         text="Drug treatment improves recovery time",
-        source="article:layered-claims",
+        source="paper:layered-claims",
         proposition_id="drug_claim",
         subject="concept/drug",
         predicate="scic:causes",
@@ -409,7 +409,7 @@ def test_add_proposition_validates_raw_reasoning_metadata_dicts(
         add_proposition(
             graph_path,
             text="Raw dict validation should reject incomplete metadata",
-            source="article:layered-claims",
+            source="paper:layered-claims",
             proposition_id="raw-dict-validation",
             **{field_name: payload},
         )

@@ -51,7 +51,7 @@ def test_migrate_paper_to_article(tmp_path: Path) -> None:
     migrate_entity_sources(tmp_path)
     content = source.read_text()
     assert "type: article" in content
-    assert "id: article:smith-2024" in content
+    assert "id: article:smith-2024" in content  # deliberate: legacy alias (migrate_entity_sources maps paper→article)
 
 
 def test_migrate_updates_cross_references(tmp_path: Path) -> None:
@@ -64,7 +64,7 @@ def test_migrate_updates_cross_references(tmp_path: Path) -> None:
     content = source.read_text()
     assert "proposition:c01" in content
     assert "observation:e01" in content
-    assert "article:smith-2024" in content
+    assert "article:smith-2024" in content  # deliberate: legacy alias (migrate_entity_sources maps paper→article)
 
 
 def test_migrate_skips_unchanged_files(tmp_path: Path) -> None:
@@ -146,7 +146,7 @@ def test_migrate_tasks_directory(tmp_path: Path) -> None:
     )
     results = migrate_entity_sources(tmp_path)
     content = source.read_text()
-    assert "article:Walker2024" in content
+    assert "article:Walker2024" in content  # deliberate: legacy alias (migrate_entity_sources maps paper→article)
     assert results["migrated"] >= 1
 
 
@@ -159,8 +159,8 @@ def test_migrate_custom_list_fields(tmp_path: Path) -> None:
     )
     results = migrate_entity_sources(tmp_path)
     content = source.read_text()
-    assert "article:Smith2024" in content
-    assert "article:Jones2023" in content
+    assert "article:Smith2024" in content  # deliberate: legacy alias (migrate_entity_sources maps paper→article)
+    assert "article:Jones2023" in content  # deliberate: legacy alias (migrate_entity_sources maps paper→article)
     assert "paper:" not in content
     assert results["migrated"] >= 1
 

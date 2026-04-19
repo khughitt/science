@@ -29,7 +29,7 @@ def tmp_graph(tmp_path: Path) -> Path:
 
 
 def test_add_finding(tmp_graph: Path) -> None:
-    add_proposition(tmp_graph, text="X correlates with Y", source="article:a", proposition_id="p1")
+    add_proposition(tmp_graph, text="X correlates with Y", source="paper:a", proposition_id="p1")
     add_observation(tmp_graph, description="r=0.73", data_source="data-package:results", observation_id="obs1")
     finding_uri = add_finding(
         tmp_graph,
@@ -54,7 +54,7 @@ def test_add_finding_invalid_confidence(tmp_graph: Path) -> None:
 
 
 def test_add_interpretation(tmp_graph: Path) -> None:
-    add_proposition(tmp_graph, text="X causes Y", source="article:a", proposition_id="p1")
+    add_proposition(tmp_graph, text="X causes Y", source="paper:a", proposition_id="p1")
     add_observation(tmp_graph, description="r=0.73", data_source="data-package:x", observation_id="obs1")
     add_finding(
         tmp_graph,
@@ -79,7 +79,7 @@ def test_add_interpretation(tmp_graph: Path) -> None:
 
 
 def test_add_story(tmp_graph: Path) -> None:
-    add_hypothesis(tmp_graph, "h01", "X regulates Y", "article:smith-2024")
+    add_hypothesis(tmp_graph, "h01", "X regulates Y", "paper:smith-2024")
     story_uri = add_story(
         tmp_graph,
         title="X regulates Y through pathway Z",
@@ -123,10 +123,10 @@ def test_add_paper_entity_invalid_status(tmp_graph: Path) -> None:
 def test_full_composition_chain(tmp_graph: Path) -> None:
     """Test: observation -> proposition -> finding -> interpretation -> story -> paper."""
     # Atoms
-    add_hypothesis(tmp_graph, "h01", "X regulates Y", "article:smith-2024")
+    add_hypothesis(tmp_graph, "h01", "X regulates Y", "paper:smith-2024")
     obs_uri1 = add_observation(tmp_graph, "r=0.73, p<0.001", "data-package:expr", observation_id="obs1")
     add_observation(tmp_graph, "fold-change=2.1", "data-package:expr", observation_id="obs2")
-    prop_uri1 = add_proposition(tmp_graph, "X correlates with Y", "article:smith-2024", proposition_id="p1")
+    prop_uri1 = add_proposition(tmp_graph, "X correlates with Y", "paper:smith-2024", proposition_id="p1")
     add_proposition(tmp_graph, "X upregulates Y expression", "data-package:expr", proposition_id="p2")
 
     # Findings

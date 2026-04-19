@@ -54,7 +54,7 @@ def graph_path(tmp_path: Path) -> Path:
     add_proposition(
         gp,
         text="Drug treatment improves recovery time",
-        source="article:doi_10.1234/drug_recovery",
+        source="paper:doi_10.1234/drug_recovery",
         confidence=0.85,
         subject="concept/drug",
         predicate="scic:causes",
