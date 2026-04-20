@@ -111,7 +111,7 @@ def test_derived_frontmatter_parses(tmp_md) -> None:
     assert "research-package:rp1" in e.consumed_by
 
 
-def test_research_package_entity_parses(tmp_md, tmp_path: Path) -> None:
+def test_research_package_entity_parses(tmp_path: Path) -> None:
     """Entity-typed research-package entries parse without origin/access/derivation set."""
     p = tmp_path / "research" / "packages" / "lens" / "rp1" / "research-package.md"
     p.parent.mkdir(parents=True, exist_ok=True)
