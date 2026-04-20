@@ -1,0 +1,12 @@
+dag: toy
+source_dot: toy.dot
+edges:
+  - id: 1
+    source: a
+    target: b
+    edge_status: supported
+    identification: observational
+    description: bad-prob-sign
+    posterior:
+      beta: 0.3
+      prob_sign: 1.7

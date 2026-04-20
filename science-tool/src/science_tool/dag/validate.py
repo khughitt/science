@@ -7,6 +7,7 @@ acyclicity, posterior-sanity, and JSON-schema-conformance checks.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -120,6 +121,60 @@ def _check_shape_and_refs(
     return findings, model
 
 
+def _check_posterior_sanity(
+    model: EdgesYamlFile, yaml_path: Path
+) -> list[ValidationFinding]:
+    """Numeric-sanity checks on posterior blocks."""
+    findings: list[ValidationFinding] = []
+    for edge in model.edges:
+        post = edge.posterior
+        if post is None:
+            continue
+        if post.beta is not None and not math.isfinite(post.beta):
+            findings.append(
+                ValidationFinding(
+                    dag=model.dag,
+                    edge_id=edge.id,
+                    rule="posterior_finite",
+                    severity="error",
+                    message=f"posterior.beta is not finite (got {post.beta!r})",
+                    location=yaml_path.name,
+                )
+            )
+        if (
+            post.hdi_low is not None
+            and post.hdi_high is not None
+            and post.hdi_low > post.hdi_high
+        ):
+            findings.append(
+                ValidationFinding(
+                    dag=model.dag,
+                    edge_id=edge.id,
+                    rule="posterior_hdi_ordered",
+                    severity="error",
+                    message=(
+                        f"posterior.hdi_low ({post.hdi_low}) > "
+                        f"posterior.hdi_high ({post.hdi_high})"
+                    ),
+                    location=yaml_path.name,
+                )
+            )
+        if post.prob_sign is not None and not (0.0 <= post.prob_sign <= 1.0):
+            findings.append(
+                ValidationFinding(
+                    dag=model.dag,
+                    edge_id=edge.id,
+                    rule="posterior_prob_sign_range",
+                    severity="error",
+                    message=(
+                        f"posterior.prob_sign ({post.prob_sign}) is outside [0, 1]"
+                    ),
+                    location=yaml_path.name,
+                )
+            )
+    return findings
+
+
 def validate_project(
     paths: DagPaths,
     *,
@@ -151,7 +206,10 @@ def validate_project(
             )
             continue
 
-        f, _model = _check_shape_and_refs(yaml_path, project_root)
+        f, model = _check_shape_and_refs(yaml_path, project_root)
         findings.extend(f)
+        if model is None:
+            continue  # shape broken; skip downstream checks on this file
+        findings.extend(_check_posterior_sanity(model, yaml_path))
 
     return ValidationReport(today=today, strict=strict, findings=tuple(findings))

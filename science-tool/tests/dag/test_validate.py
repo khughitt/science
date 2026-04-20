@@ -52,3 +52,30 @@ def test_validation_finding_severity_literal() -> None:
 
     strict_report = ValidationReport(today=date.today(), strict=True, findings=(finding,))
     assert strict_report.ok is False  # strict_error blocks when strict=True
+
+
+def test_posterior_beta_must_be_finite() -> None:
+    paths = load_dag_paths(FIXTURE_MINIMAL / "bad-posterior-infinite")
+    report = validate_project(paths)
+    assert not report.ok
+    rules = {f.rule for f in report.findings}
+    assert "posterior_finite" in rules
+    finite_finding = next(f for f in report.findings if f.rule == "posterior_finite")
+    assert finite_finding.severity == "error"
+    assert finite_finding.edge_id == 1
+
+
+def test_posterior_hdi_must_be_ordered() -> None:
+    paths = load_dag_paths(FIXTURE_MINIMAL / "bad-posterior-hdi-order")
+    report = validate_project(paths)
+    assert not report.ok
+    rules = {f.rule for f in report.findings}
+    assert "posterior_hdi_ordered" in rules
+
+
+def test_posterior_prob_sign_must_be_in_unit_interval() -> None:
+    paths = load_dag_paths(FIXTURE_MINIMAL / "bad-posterior-prob-sign")
+    report = validate_project(paths)
+    assert not report.ok
+    rules = {f.rule for f in report.findings}
+    assert "posterior_prob_sign_range" in rules

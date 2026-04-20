@@ -1,0 +1,13 @@
+dag: toy
+source_dot: toy.dot
+edges:
+  - id: 1
+    source: a
+    target: b
+    edge_status: supported
+    identification: observational
+    description: bad-hdi-order
+    posterior:
+      beta: 0.3
+      hdi_low: 0.5
+      hdi_high: 0.2

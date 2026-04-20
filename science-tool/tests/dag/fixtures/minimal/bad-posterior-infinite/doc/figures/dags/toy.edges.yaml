@@ -1,0 +1,11 @@
+dag: toy
+source_dot: toy.dot
+edges:
+  - id: 1
+    source: a
+    target: b
+    edge_status: supported
+    identification: observational
+    description: bad-infinite
+    posterior:
+      beta: .inf
