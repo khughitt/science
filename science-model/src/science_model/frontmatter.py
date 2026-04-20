@@ -39,11 +39,16 @@ def _coerce_date(val: str | date | None) -> date | None:
         return None
     if isinstance(val, date):
         return val
-    text = str(val)
+    text = str(val).strip()
+    if not text:
+        return None
     # Strip time component if present (e.g. "2026-04-08T20:00")
     if "T" in text:
         text = text.split("T", 1)[0]
-    return date.fromisoformat(text)
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
 
 
 def _parse_sync_source(raw: dict | None) -> SyncSource | None:
