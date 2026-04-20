@@ -2921,5 +2921,74 @@ def dataset_reconcile(slug: str, project_root: Path | None) -> None:
     click.echo("in sync")
 
 
+# ── data-package (legacy migration) ────────────────────────────────────────
+
+
+@main.group(name="data-package")
+def data_package_group() -> None:
+    """Legacy data-package commands."""
+
+
+@data_package_group.command(name="migrate")
+@click.argument("slug", required=False)
+@click.option("--all", "all_", is_flag=True, default=False, help="Migrate every unmigrated data-package.")
+@click.option("--dry-run", is_flag=True, default=False, help="Preview without writing.")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+)
+def data_package_migrate_cmd(slug: str | None, all_: bool, dry_run: bool, project_root: Path | None) -> None:
+    """Split legacy data-package(s) into derived dataset(s) + research-package."""
+    from science_tool.datapackage_migrate import list_unmigrated, migrate_data_package
+
+    proj = project_root or _project_root_from_env()
+    if all_ and slug:
+        raise click.UsageError("provide either <slug> or --all, not both")
+    if not all_ and not slug:
+        raise click.UsageError("provide a <slug> or pass --all")
+    slugs = list_unmigrated(proj) if all_ else [slug]
+    for s in slugs:
+        try:
+            plan = migrate_data_package(proj, s, dry_run=dry_run)
+        except (FileNotFoundError, ValueError) as exc:
+            click.echo(f"{s}: {exc}", err=True)
+            raise click.exceptions.Exit(2) from exc
+        prefix = "[dry-run] would write" if dry_run else "wrote"
+        for p in plan.dataset_paths:
+            click.echo(f"{prefix} {p.relative_to(proj)}")
+        if plan.research_package_path is not None:
+            click.echo(f"{prefix} {plan.research_package_path.relative_to(proj)}")
+        if not dry_run:
+            click.echo(f"superseded data-package:{s} -> research-package:{s}")
+
+
+@data_package_group.command(name="list")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+)
+def data_package_list_cmd(project_root: Path | None) -> None:
+    """List legacy data-package entities (highlighting unmigrated ones)."""
+    from science_model.frontmatter import parse_frontmatter
+
+    proj = project_root or _project_root_from_env()
+    dp_dir = proj / "doc" / "data-packages"
+    if not dp_dir.exists():
+        click.echo("no doc/data-packages/ directory")
+        return
+    for md in sorted(dp_dir.rglob("*.md")):
+        result = parse_frontmatter(md)
+        if not result:
+            continue
+        fm, _ = result
+        if fm.get("type") != "data-package":
+            continue
+        status = fm.get("status", "?")
+        marker = " (UNMIGRATED)" if status != "superseded" else ""
+        click.echo(f"{fm.get('id', md.stem)}\t{status}{marker}")
+
+
 if __name__ == "__main__":
     main()
