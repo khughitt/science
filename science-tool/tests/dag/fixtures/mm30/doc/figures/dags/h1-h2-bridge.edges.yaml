@@ -202,7 +202,7 @@ edges:
     description: Per-cell Boiarsky NB fits; total effect Replicated (P=1.000), prolif-adj direct effect
       Weak-support (P=0.914).
   lit_support:
-  - author_year: PHF19 comprehensive review 2025
+  - paper: PHF19-comprehensive
     description: "MM30 internal comprehensive PHF19 literature synthesis; PHF19 is a PRC2.1 accessory\
       \ subunit (Polycomb-like 3) that physically partners with EZH2/SUZ12 \u2014 expression-level coregulation\
       \ is the expected signature of PRC2.1 complex biology."
@@ -329,7 +329,7 @@ edges:
     author_year: Walker 2024
     description: "1q-amplified PHF19-expressing cells identified as the high-risk compartment in RRMM\
       \ \u2014 primary single-cell evidence linking PHF19 expression to adverse clinical outcome."
-  - author_year: PHF19 comprehensive review 2025
+  - paper: PHF19-comprehensive
     description: "DREAM Challenge 2020 identified PHF19 as the strongest single-gene predictor of MM progression;\
       \ establishes the literature anchor for the PHF19\u2192OS arrow independent of MM30."
   posterior:

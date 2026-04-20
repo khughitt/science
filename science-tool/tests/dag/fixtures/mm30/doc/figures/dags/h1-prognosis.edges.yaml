@@ -95,8 +95,7 @@ edges:
       \ NOT associated with constitutive PRC2 targets (p=0.55), consistent with retargeting to novel loci\
       \ rather than amplifying canonical targets."
   lit_support:
-  - doi: null
-    author_year: PHF19-comprehensive
+  - paper: PHF19-comprehensive
     description: "Mechanism review collating Ballar\xE9 2012 / Brien 2012 Tudor\u2013H3K36me3 biochemistry,\
       \ Ren 2019 broad H3K27me3 domains in MM, and PRC2.1 complex stoichiometry placing PHF19 as the PRC2\
       \ specificity factor in MM."
@@ -160,8 +159,7 @@ edges:
       0.5 \u00b5M/24h dosing \u2014 the IFN arm, like the E2F arm, requires PRC2-complex loss to engage
       (though at higher GSK126 doses t197 achieved engagement in MM.1S anyway)."
   lit_support:
-  - doi: null
-    author_year: PHF19-comprehensive
+  - paper: PHF19-comprehensive
     description: "Reviews Ren 2019 Blood finding that PHF19 depletion in MM derepresses IFN-JAK-STAT genes;\
       \ provides the mechanistic chain (Tudor \u2192 H3K27me3 \u2192 IFN silencing) at the level of chromatin\
       \ biochemistry."
@@ -238,8 +236,7 @@ edges:
       threshold); DDIT3 logFC=+3.4 per-gene is notable but pathway-level UPR is ~2x weaker than E2F
       repression (NES=\u22123.0), so the E2F signal is not parsimoniously a UPR/stress consequence."
   lit_support:
-  - doi: null
-    author_year: PHF19-comprehensive
+  - paper: PHF19-comprehensive
     description: "Ren 2019 Blood review \u2014 PHF19 depletion derepresses cell-cycle inhibitors (CDKN1A/1B/2A\
       \ family) in myeloma; broad H3K27me3 domain biology."
   - doi: 10.1038/s41586-024-07328-w
@@ -360,8 +357,7 @@ edges:
     description: "Proliferation-adjusted refit \u2014 \u03B2=+0.116 [-0.10, +0.36] (NULL). The raw coregulation\
       \ is largely cell-cycle-state-driven."
   lit_support:
-  - doi: null
-    author_year: PHF19-comprehensive
+  - paper: PHF19-comprehensive
     description: Cites Bracken 2003 EMBO J for E2F1 induction of EZH2 at the EZH2 promoter, the canonical
       transcriptional-induction claim the MM30 Bayesian edge tests.
   posterior:
@@ -395,8 +391,7 @@ edges:
     description: "Per-cell Boiarsky replication \u2014 \u03B2=+0.34 [+0.25, +0.43], P(\u03B2>0)=1.000\
       \ unadjusted; prolif-adjusted weak-support P=0.914. Replicated at single-cell resolution."
   lit_support:
-  - doi: null
-    author_year: PHF19-comprehensive
+  - paper: PHF19-comprehensive
     description: "Reviews Ballar\xE9 2012 / Brien 2012 / Beguelin 2016 on EZH2-PHF19 physical complex\
       \ membership in PRC2.1, the mechanism underwriting the tightness of the mRNA coupling."
   posterior:
@@ -462,8 +457,7 @@ edges:
     description: "Ren 2019 PHF19-KD in MM1S \u2014 E2F targets collapse (p=8.3e-89, d=-1.83) on PHF19\
       \ loss, consistent with loss of CCIS silencing re-engaging the checkpoint. Reversed on rescue (p=2.1e-83)."
   lit_support:
-  - doi: null
-    author_year: PHF19-comprehensive
+  - paper: PHF19-comprehensive
     description: "Ren 2019 Blood \u2014 PHF19 depletion derepresses cell-cycle inhibitors, leading to\
       \ G1 arrest and reduced proliferation in MM cells."
 - id: 13
@@ -527,8 +521,7 @@ edges:
     description: Task to test PHF19 survival effect stratified by t(4;14) status is registered but still
       open; the confounder edge is currently untested in MM30.
   lit_support:
-  - doi: null
-    author_year: PHF19-comprehensive
+  - paper: PHF19-comprehensive
     description: "NSD2-driven H3K36me2 expansion antagonizes PRC2 by competing for its genomic territory\
       \ \u2014 reviewed mechanism that motivates the confounder arrow."
 - id: 16

@@ -388,15 +388,13 @@ edges:
       OS rank 1,092; MAP2K2 KRAS-interaction null (BH-p=0.403). NAT10 + YTHDF2 are orthogonal\
       \ stratum-specific candidates."
   lit_support:
-  - doi: null
-    author_year: Wei2022
+  - paper: Wei2022
     description: "NAT10 m1A-acetyltransferase mechanism in MM \u2014 acetylates CEP170 mRNA enhancing\
       \ translation and centrosome amplification. The MM30 t221 lookup confirms NAT10 stratum-\
       specificity in gain(1q)\u2212 patients but CEP170 did NOT show the predicted coupled\
       \ pattern (gain(1q)+ rank 1,749 vs gain(1q)\u2212 3,903); the NAT10+CEP170 coupled-\
       mechanism co-hypothesis is dropped. NAT10 stands alone as a stratum-specific candidate."
-  - doi: null
-    author_year: Hua2022
+  - paper: Hua2022
     description: "YTHDF2/STAT5A/MAP2K2/p-ERK m6A axis in MM. MAP2K2 did NOT replicate in\
       \ t221's MMRF KRAS-interaction model (BH-p=0.403, nominal p=0.070); YTHDF2 did replicate\
       \ at the bulk-meta level as gain(1q)+-preferential with survival-OS support (SumZ rank\
