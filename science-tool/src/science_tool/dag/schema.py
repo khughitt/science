@@ -46,9 +46,14 @@ REF_KINDS: frozenset[str] = frozenset(
 class RefEntry(BaseModel):
     """A single reference entry.
 
-    Exactly one of REF_KINDS must appear as a key.  All other keys (e.g.
-    ``author_year``, ``notes``) are kept as-is via ``extra="allow"``.
-    The kind-tag value may be ``None`` (e.g. ``doi: null`` for a placeholder).
+    Exactly one of REF_KINDS must appear as a key **with a non-null value**.
+    All other keys (e.g. ``author_year``, ``notes``) are kept as-is via
+    ``extra="allow"``.
+
+    ``doi: null`` (and any other ``kind: null``) is treated as **no kind tag
+    present** — such an entry is a dishonest citation and is rejected.
+    Projects migrating from the legacy pattern should replace ``doi: null``
+    with a concrete ``paper: <citekey>`` ref.
     """
 
     model_config = {"extra": "allow"}
@@ -58,11 +63,11 @@ class RefEntry(BaseModel):
     @model_validator(mode="after")
     def _exactly_one_kind(self) -> "RefEntry":
         extra: dict = self.__pydantic_extra__ or {}
-        found = [k for k in extra if k in REF_KINDS]
+        found = [k for k, v in extra.items() if k in REF_KINDS and v is not None]
         if len(found) != 1:
             raise SchemaError(
-                f"ref entry must have exactly one kind tag from {sorted(REF_KINDS)}; "
-                f"got {found!r}"
+                f"ref entry must have exactly one non-null kind tag from "
+                f"{sorted(REF_KINDS)}; got {found!r}"
             )
         return self
 

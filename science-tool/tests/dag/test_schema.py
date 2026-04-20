@@ -34,10 +34,12 @@ def test_ref_entry_valid_doi() -> None:
     assert ref.description == "paper ref"
 
 
-def test_ref_entry_valid_doi_null() -> None:
-    """doi: null is a valid kind tag (value may be None)."""
-    ref = RefEntry.model_validate({"doi": None, "description": "placeholder ref"})
-    assert ref.description == "placeholder ref"
+def test_ref_entry_doi_null_rejected() -> None:
+    """doi: null is a dishonest citation — rejected by the tightened schema.
+    Entries migrating from the legacy pattern must use a concrete paper: ref.
+    """
+    with pytest.raises((ValidationError, SchemaError), match="non-null kind tag"):
+        RefEntry.model_validate({"doi": None, "description": "placeholder ref"})
 
 
 def test_ref_entry_zero_kinds_raises() -> None:
