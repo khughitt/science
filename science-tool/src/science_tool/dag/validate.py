@@ -16,7 +16,7 @@ import yaml
 
 from science_tool.dag.paths import DagPaths
 from science_tool.dag.refs import RefResolutionError, validate_ref_entry
-from science_tool.dag.schema import EdgesYamlFile, SchemaError
+from science_tool.dag.schema import EdgesYamlFile
 
 Severity = Literal["error", "strict_error"]
 
