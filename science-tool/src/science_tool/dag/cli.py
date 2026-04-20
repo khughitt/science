@@ -163,6 +163,12 @@ def staleness_cmd(ctx: click.Context, recent_days: int, as_json: bool, project_p
     help="Execute mutations: open review tasks, write unpropagated-task log.",
 )
 @click.option(
+    "--strict",
+    is_flag=True,
+    default=False,
+    help="Enable strict validation gates.",
+)
+@click.option(
     "--recent-days",
     default=28,
     show_default=True,
@@ -186,18 +192,19 @@ def staleness_cmd(ctx: click.Context, recent_days: int, as_json: bool, project_p
 def audit_cmd(
     ctx: click.Context,
     fix: bool,
+    strict: bool,
     recent_days: int,
     as_json: bool,
     project_path: Path | None,
 ) -> None:
-    """Run full DAG audit (re-render + staleness). Use --fix to open tasks."""
+    """Run full DAG audit (validate + re-render + staleness). Use --fix to open tasks."""
     project = (project_path or Path.cwd()).resolve()
     try:
         paths = load_dag_paths(project)
     except (FileNotFoundError, KeyError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    audit = run_audit(paths, recent_days=recent_days, fix=fix)
+    audit = run_audit(paths, recent_days=recent_days, fix=fix, strict=strict)
 
     if as_json:
         click.echo(json.dumps(audit.to_json(), indent=2))

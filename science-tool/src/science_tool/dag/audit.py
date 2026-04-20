@@ -18,7 +18,6 @@ artifacts, never source files.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -32,6 +31,7 @@ from science_tool.dag.staleness import (
     UnpropagatedTask,
     check_staleness,
 )
+from science_tool.dag.validate import ValidationReport, validate_project
 from science_tool import tasks as _tasks_mod
 
 
@@ -60,17 +60,19 @@ class ProposedMutation:
 
 @dataclass(frozen=True)
 class AuditReport:
-    """Complete audit result: staleness findings + optional mutation record."""
+    """Complete audit result: validation + staleness findings + mutation record."""
 
+    validation: ValidationReport
     staleness: StalenessReport
     mutations: tuple[ProposedMutation, ...]  # empty when fix=False
 
     @property
     def has_findings(self) -> bool:
-        return self.staleness.has_findings
+        return not self.validation.ok or self.staleness.has_findings
 
     def to_json(self) -> dict:  # type: ignore[type-arg]
         return {
+            "validation": self.validation.to_json(),
             "staleness": self.staleness.to_json(),
             "mutations": [m.to_json() for m in self.mutations],
         }
@@ -182,16 +184,12 @@ def run_audit(
     recent_days: int = 28,
     include_curation_freshness: bool = False,
     fix: bool = False,
+    strict: bool = False,
 ) -> AuditReport:
-    """Re-render all DAGs (idempotent) + run drift-based staleness check.
+    """Validate + re-render + staleness check.
 
-    Read-only by default: returns the report and the mutations that *would* be
-    performed if ``fix=True``, but does not actually perform them unless
-    ``fix=True``.
-
-    With ``fix=True``, opens review tasks for drifted edges and writes an
-    unpropagated-task log file.  Unpropagated citations are NOT auto-applied
-    (they require human judgement on which edge to cite in).
+    With ``fix=False`` (default), the report is fully read-only.
+    With ``fix=True``, validation must pass first; failure raises RuntimeError.
 
     Parameters
     ----------
@@ -206,9 +204,21 @@ def run_audit(
     fix:
         When True, execute the mutations (open tasks, write log).
         When False (default), the report is fully read-only.
+    strict:
+        When True, strict validation gates are enabled.
     """
     if today is None:
         today = date.today()
+
+    validation = validate_project(paths, strict=strict, today=today)
+
+    if fix and not validation.ok:
+        blocking = [f for f in validation.findings if validation._blocks(f)]
+        raise RuntimeError(
+            "dag audit --fix refused: validation failed with "
+            f"{len(blocking)} blocking finding(s). Run `science-tool dag validate` "
+            "and address errors before retrying."
+        )
 
     # Re-render all DAGs — idempotent derived-artifact write, always safe.
     render_all(paths)
@@ -222,9 +232,9 @@ def run_audit(
     )
 
     if not fix:
-        return AuditReport(staleness=staleness, mutations=())
+        return AuditReport(validation=validation, staleness=staleness, mutations=())
 
-    # ---- fix=True path: build mutations and execute -------------------------
+    # ---- fix=True path (unchanged from Phase 1) ----------------------------
     mutations: list[ProposedMutation] = []
 
     # Drifted edges → open review tasks.
@@ -248,4 +258,4 @@ def run_audit(
             mutations.append(_build_unpropagated_mutation(task))
         _write_unpropagated_log(paths.dag_dir, today, staleness.unpropagated_tasks)
 
-    return AuditReport(staleness=staleness, mutations=tuple(mutations))
+    return AuditReport(validation=validation, staleness=staleness, mutations=tuple(mutations))

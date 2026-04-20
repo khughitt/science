@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import json
-import shutil
 from datetime import date
 from pathlib import Path
 
 import pytest
 import yaml
 
-from science_tool.dag.audit import AuditReport, ProposedMutation, run_audit
-from science_tool.dag.paths import DagPaths
+from science_tool.dag.audit import AuditReport, run_audit
+from science_tool.dag.paths import DagPaths, load_dag_paths
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures/mm30"
 
@@ -20,9 +19,11 @@ def _build_project(tmp_path: Path, *, with_drift: bool = False) -> DagPaths:
     """Minimal project layout with one h1-prognosis edge + supporting tasks."""
     dag_dir = tmp_path / "doc/figures/dags"
     dag_dir.mkdir(parents=True)
-    (dag_dir / "h1-prognosis.dot").write_text("digraph h1_prognosis {}\n")
+    # DOT must include the a -> b edge so topology validation passes.
+    (dag_dir / "h1-prognosis.dot").write_text("digraph h1_prognosis {\n  a -> b;\n}\n")
     edges = [{
         "id": 1, "source": "a", "target": "b", "description": "x",
+        "identification": "none",
         "data_support": [{"task": "t001", "description": "old"}],
     }]
     (dag_dir / "h1-prognosis.edges.yaml").write_text(
@@ -117,3 +118,30 @@ def test_audit_smoke_on_mm30_fixture() -> None:
     )
     report = run_audit(paths, today=date(2026, 4, 20), fix=False)
     assert isinstance(report, AuditReport)
+
+
+# ---------------------------------------------------------------------------
+# Task 10 tests: validation integration
+# ---------------------------------------------------------------------------
+
+FIXTURE_MINIMAL = Path(__file__).parent / "fixtures" / "minimal"
+
+
+def test_audit_includes_validation_section() -> None:
+    paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
+    report = run_audit(paths)
+    js = report.to_json()
+    assert "validation" in js
+    assert js["validation"]["ok"] is True
+
+
+def test_audit_exit_code_reflects_validation_failure() -> None:
+    paths = load_dag_paths(FIXTURE_MINIMAL / "cyclic")
+    report = run_audit(paths)
+    assert report.has_findings  # validation produced findings → audit reports them
+
+
+def test_audit_fix_blocks_when_validation_fails() -> None:
+    paths = load_dag_paths(FIXTURE_MINIMAL / "cyclic")
+    with pytest.raises(RuntimeError, match="validation failed"):
+        run_audit(paths, fix=True)

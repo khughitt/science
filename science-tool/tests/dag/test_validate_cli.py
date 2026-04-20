@@ -106,3 +106,17 @@ def test_validate_dag_scope() -> None:
         ],
     )
     assert result.exit_code == 0
+
+
+def test_audit_json_includes_validation() -> None:
+    import json
+
+    runner = CliRunner()
+    result = runner.invoke(
+        dag_group,
+        ["audit", "--json", "--project", str(FIXTURE_MINIMAL / "clean")],
+    )
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert "validation" in data
+    assert data["validation"]["ok"] is True
