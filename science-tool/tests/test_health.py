@@ -757,3 +757,20 @@ def test_cached_field_drift_flagged(tmp_path: Path) -> None:
     drift_msgs = [i["message"] for i in issues if i["code"] == "dataset_cached_field_drift"]
     assert any("license" in m for m in drift_msgs)
     assert any("ontology_terms" in m for m in drift_msgs)
+
+
+# ---------------------------------------------------------------------------
+# Task 6.11: dataset anomalies exposed via build_health_report
+# ---------------------------------------------------------------------------
+
+
+def test_health_cli_includes_dataset_section(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path, "u", origin="external", body='access: {level: "public", verified: false}\nconsumed_by: ["plan:p"]'
+    )
+    from science_tool.graph.health import build_health_report
+
+    result = build_health_report(tmp_path)
+    assert "dataset_anomalies" in result
+    codes = {i["code"] for i in result["dataset_anomalies"]}
+    assert "dataset_consumed_but_unverified" in codes

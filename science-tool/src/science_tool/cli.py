@@ -371,16 +371,10 @@ def graph_migrate_addresses(apply: bool, graph_path: Path) -> None:
 
     stats = migrate_addresses_direction(graph_path, apply=apply)
     if stats["flipped"] == 0:
-        click.echo(
-            f"No anti-canonical sci:addresses triples found "
-            f"({stats['already_canonical']} already canonical)."
-        )
+        click.echo(f"No anti-canonical sci:addresses triples found ({stats['already_canonical']} already canonical).")
         return
     verb = "Flipped" if apply else "Would flip"
-    click.echo(
-        f"{verb} {stats['flipped']} sci:addresses triple(s) "
-        f"({stats['already_canonical']} already canonical)."
-    )
+    click.echo(f"{verb} {stats['flipped']} sci:addresses triple(s) ({stats['already_canonical']} already canonical).")
     if not apply:
         click.echo("Re-run with --apply to write changes.")
 
@@ -2288,6 +2282,7 @@ def health_command(project_root: Path, output_format: str) -> None:
         + len(report["legacy_structured_literature_prefixes"])
         + layered_claim_issue_count
         + coverage_gaps
+        + len(report.get("dataset_anomalies") or [])
     )
     if total_issues == 0:
         click.echo("Project is clean — no issues found.")
@@ -2305,9 +2300,7 @@ def health_command(project_root: Path, output_format: str) -> None:
             srcs = ", ".join(row["sources"][:3])
             if len(row["sources"]) > 3:
                 srcs += f", … (+{len(row['sources']) - 3})"
-            table.add_row(
-                row["target"], str(row["mention_count"]), row["looks_like"], srcs
-            )
+            table.add_row(row["target"], str(row["mention_count"]), row["looks_like"], srcs)
         console.print(table)
 
     if report["lingering_tags_lines"]:
@@ -2329,10 +2322,7 @@ def health_command(project_root: Path, output_format: str) -> None:
                 f"(cosmetic only — migrate-tags will strip them).[/dim]"
             )
 
-        console.print(
-            "\n[bold]Next:[/bold] run "
-            "[cyan]science-tool graph migrate-tags --apply[/cyan] to migrate these."
-        )
+        console.print("\n[bold]Next:[/bold] run [cyan]science-tool graph migrate-tags --apply[/cyan] to migrate these.")
 
     if report["legacy_structured_literature_prefixes"]:
         table = Table(
@@ -2353,7 +2343,10 @@ def health_command(project_root: Path, output_format: str) -> None:
     adoption_table.add_column("Fraction", justify="right")
     for label, metric in (
         ("Propositions with authored claim_layer", layered_claims["proposition_claim_layer_coverage"]),
-        ("Causal-leaning propositions with authored identification_strength", layered_claims["causal_leaning_identification_coverage"]),
+        (
+            "Causal-leaning propositions with authored identification_strength",
+            layered_claims["causal_leaning_identification_coverage"],
+        ),
     ):
         adoption_table.add_row(
             label,
@@ -2388,6 +2381,22 @@ def health_command(project_root: Path, output_format: str) -> None:
             rival_table.add_row(row["proposition"], row["packet_id"])
         console.print(rival_table)
 
+    dataset_anomalies = report.get("dataset_anomalies") or []
+    if dataset_anomalies:
+        ds_table = Table(title=f"Dataset Anomalies ({len(dataset_anomalies)})")
+        ds_table.add_column("Code", style="bold")
+        ds_table.add_column("Severity")
+        ds_table.add_column("Entity")
+        ds_table.add_column("Message")
+        for row in dataset_anomalies:
+            ds_table.add_row(
+                row.get("code", ""),
+                row.get("severity", ""),
+                row.get("entity_id", ""),
+                row.get("message", ""),
+            )
+        console.print(ds_table)
+
 
 @main.command("paper-fetch")
 @click.option("--doi", default=None, help="DOI (bare, doi: prefix, or doi.org URL)")
@@ -2421,9 +2430,7 @@ def paper_fetch_cmd(
 
     resolved_email = email or _os.environ.get("SCIENCE_CONTACT_EMAIL")
     if not resolved_email:
-        raise click.ClickException(
-            "Contact email is required. Pass --email or set $SCIENCE_CONTACT_EMAIL."
-        )
+        raise click.ClickException("Contact email is required. Pass --email or set $SCIENCE_CONTACT_EMAIL.")
     cfg_kwargs: dict[str, Any] = {"email": resolved_email}
     if cache_dir is not None:
         cfg_kwargs["cache_dir"] = cache_dir

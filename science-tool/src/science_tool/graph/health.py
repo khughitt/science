@@ -178,6 +178,7 @@ class HealthReport(TypedDict):
     legacy_task_type: list["LegacyTaskTypeFinding"]
     invalid_entity_aspects: list["InvalidEntityAspectsFinding"]
     legacy_structured_literature_prefixes: list["LegacyStructuredLiteraturePrefixFinding"]
+    dataset_anomalies: list[dict]
 
 
 class CoverageMetric(TypedDict):
@@ -262,6 +263,7 @@ def build_health_report(project_root: Path) -> HealthReport:
         "legacy_task_type": collect_legacy_task_type(project_root),
         "invalid_entity_aspects": collect_invalid_entity_aspects(project_root),
         "legacy_structured_literature_prefixes": collect_legacy_structured_literature_prefixes(project_root),
+        "dataset_anomalies": check_dataset_anomalies(project_root),
     }
 
 
