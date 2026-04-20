@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys as _sys
 from pathlib import Path
 
 import click
@@ -10,10 +11,11 @@ import click
 from science_tool.dag.audit import run_audit
 from science_tool.dag.init import init_dag
 from science_tool.dag.number import number_all, number_one
-from science_tool.dag.paths import load_dag_paths
+from science_tool.dag.paths import DagPaths, load_dag_paths
 from science_tool.dag.render import render_all, render_one
 from science_tool.dag.schema import EdgesYamlFile
 from science_tool.dag.staleness import check_staleness
+from science_tool.dag.validate import validate_project
 
 
 @click.group("dag")
@@ -273,6 +275,61 @@ def schema_cmd(output_path: Path | None) -> None:
     else:
         output_path.write_text(canonical, encoding="utf-8")
         click.echo(f"Wrote {output_path}")
+
+
+# ---------------------------------------------------------------------------
+# validate
+# ---------------------------------------------------------------------------
+
+
+@dag_group.command("validate")
+@click.option("--strict", is_flag=True, default=False, help="Enable strict curation gates.")
+@click.option(
+    "--dag",
+    "slug",
+    default=None,
+    help="Scope to one DAG slug. Defaults to every discovered DAG.",
+)
+@click.option("--json", "as_json", is_flag=True, default=False, help="Emit machine-readable JSON.")
+@click.option(
+    "--project",
+    "project_path",
+    default=None,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Project root (default: current working directory).",
+)
+def validate_cmd(strict: bool, slug: str | None, as_json: bool, project_path: Path | None) -> None:
+    """Validate DAG YAML + .dot files for schema, topology, and curation."""
+    project = (project_path or Path.cwd()).resolve()
+    try:
+        paths = load_dag_paths(project)
+    except (FileNotFoundError, KeyError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    # Scope to a single DAG if --dag is given.
+    if slug is not None:
+        paths = DagPaths(
+            dag_dir=paths.dag_dir,
+            tasks_dir=paths.tasks_dir,
+            dags=(slug,),
+        )
+
+    report = validate_project(paths, strict=strict)
+
+    if as_json:
+        click.echo(json.dumps(report.to_json(), indent=2, sort_keys=True))
+    else:
+        if report.ok:
+            click.echo("dag validate: OK")
+        else:
+            for f in report.findings:
+                blocking = f.severity == "error" or (strict and f.severity == "strict_error")
+                prefix = "ERROR" if blocking else "warn"
+                loc = f.location or ""
+                where = f"{f.dag}#{f.edge_id}" if f.edge_id else f.dag or "<project>"
+                click.echo(f"{prefix}: [{f.rule}] {where} ({loc}): {f.message}")
+
+    _sys.exit(0 if report.ok else 1)
 
 
 # ---------------------------------------------------------------------------
