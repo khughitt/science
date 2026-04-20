@@ -1,0 +1,4 @@
+digraph toy {
+  a -> b;
+  orphan;
+}

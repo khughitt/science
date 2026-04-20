@@ -1,0 +1,3 @@
+digraph first {
+  prc2 -> ifn;
+}

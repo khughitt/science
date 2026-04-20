@@ -1,0 +1,3 @@
+digraph second {
+  PRC2 -> other;
+}

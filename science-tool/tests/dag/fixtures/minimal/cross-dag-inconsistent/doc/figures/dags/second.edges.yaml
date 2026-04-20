@@ -1,0 +1,9 @@
+dag: second
+source_dot: second.dot
+edges:
+  - id: 1
+    source: PRC2
+    target: other
+    edge_status: structural
+    identification: structural
+    description: second

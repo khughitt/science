@@ -1,0 +1,9 @@
+dag: first
+source_dot: first.dot
+edges:
+  - id: 1
+    source: prc2
+    target: ifn
+    edge_status: structural
+    identification: structural
+    description: first

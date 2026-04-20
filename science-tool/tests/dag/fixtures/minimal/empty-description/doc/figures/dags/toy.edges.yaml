@@ -1,0 +1,12 @@
+dag: toy
+source_dot: toy.dot
+edges:
+  - id: 1
+    source: a
+    target: b
+    edge_status: supported
+    identification: observational
+    description: empty-desc-fixture
+    data_support:
+      - task: t_exists
+        description: ""    # empty description — strict_error

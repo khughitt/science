@@ -402,6 +402,121 @@ def _check_jsonschema_conformance(
     return findings
 
 
+def _check_identification_explicit(
+    raw: dict,  # type: ignore[type-arg]
+    model: EdgesYamlFile,
+    yaml_path: Path,
+) -> list[ValidationFinding]:
+    """Flag edges where 'identification' key is absent from the raw YAML."""
+    findings: list[ValidationFinding] = []
+    raw_edges = raw.get("edges") if isinstance(raw, dict) else None
+    if not isinstance(raw_edges, list):
+        return findings
+    for raw_edge, edge in zip(raw_edges, model.edges, strict=False):
+        if isinstance(raw_edge, dict) and "identification" not in raw_edge:
+            findings.append(
+                ValidationFinding(
+                    dag=model.dag,
+                    edge_id=edge.id,
+                    rule="identification_missing",
+                    severity="strict_error",
+                    message=(
+                        f"edge {edge.id} ({edge.source} -> {edge.target}) "
+                        "is missing explicit 'identification:' key"
+                    ),
+                    location=yaml_path.name,
+                )
+            )
+    return findings
+
+
+def _check_description_nonempty(
+    model: EdgesYamlFile,
+    yaml_path: Path,
+) -> list[ValidationFinding]:
+    """Flag ref entries (data_support, lit_support, eliminated_by) with empty description."""
+    findings: list[ValidationFinding] = []
+    for edge in model.edges:
+        for ref_list_name in ("data_support", "lit_support", "eliminated_by"):
+            entries = getattr(edge, ref_list_name, None) or []
+            for entry in entries:
+                if not entry.description or not entry.description.strip():
+                    findings.append(
+                        ValidationFinding(
+                            dag=model.dag,
+                            edge_id=edge.id,
+                            rule="description_nonempty",
+                            severity="strict_error",
+                            message=(
+                                f"edge {edge.id}.{ref_list_name}[] has an entry "
+                                f"with empty description"
+                            ),
+                            location=yaml_path.name,
+                        )
+                    )
+    return findings
+
+
+def _check_orphan_dot_nodes(
+    model: EdgesYamlFile,
+    dot_nodes: frozenset[str],
+    dot_edges: frozenset[tuple[str, str]],
+    yaml_path: Path,
+) -> list[ValidationFinding]:
+    """Flag .dot nodes that appear in no edge (neither as source nor target)."""
+    connected: set[str] = set()
+    for s, t in dot_edges:
+        connected.add(s)
+        connected.add(t)
+    orphans = sorted(dot_nodes - connected)
+    if not orphans:
+        return []
+    return [
+        ValidationFinding(
+            dag=model.dag,
+            edge_id=None,
+            rule="dot_nodes_unused",
+            severity="strict_error",
+            message=f"orphan .dot node(s): {orphans}",
+            location=yaml_path.name,
+        )
+    ]
+
+
+def _check_cross_dag_node_consistency(
+    per_dag_nodes: dict[str, frozenset[str]],
+) -> list[ValidationFinding]:
+    """Detect case-differing node names across DAGs (e.g. 'prc2' vs 'PRC2').
+
+    A name is inconsistent iff its case-insensitive bucket has >= 2 distinct
+    case variants across DAGs.
+    """
+    findings: list[ValidationFinding] = []
+    buckets: dict[str, set[tuple[str, str]]] = {}  # lower -> {(dag, variant)}
+    for dag, nodes in per_dag_nodes.items():
+        for node in nodes:
+            buckets.setdefault(node.lower(), set()).add((dag, node))
+    for lower, entries in sorted(buckets.items()):
+        variants = {node for _, node in entries}
+        if len(variants) < 2:
+            continue
+        variants_sorted = sorted(variants)
+        findings.append(
+            ValidationFinding(
+                dag="",
+                edge_id=None,
+                rule="cross_dag_node_consistency",
+                severity="strict_error",
+                message=(
+                    f"node name appears with inconsistent case across DAGs: "
+                    f"{variants_sorted}"
+                ),
+                location=None,
+            )
+        )
+    return findings
+
+
 def validate_project(
     paths: DagPaths,
     *,
@@ -420,6 +535,7 @@ def validate_project(
     # so three parents up recovers the project root.
     project_root = paths.dag_dir.parents[2]
     findings: list[ValidationFinding] = []
+    per_dag_nodes: dict[str, frozenset[str]] = {}
 
     for yaml_path in _discover_edge_yaml_files(paths):
         if not yaml_path.exists():
@@ -435,12 +551,13 @@ def validate_project(
             )
             continue
 
+        raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
         f, model = _check_shape_and_refs(yaml_path, project_root)
         findings.extend(f)
         if model is None:
             continue  # shape broken; skip downstream checks on this file
+
         # JSON-schema conformance tripwire (runs on the raw dict).
-        raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
         findings.extend(_check_jsonschema_conformance(raw, model.dag, yaml_path))
         findings.extend(_check_posterior_sanity(model, yaml_path))
 
@@ -454,8 +571,11 @@ def validate_project(
 
         if dot_path.exists():
             dot_nodes, dot_edges = _parse_dot_topology(dot_path)
+            per_dag_nodes[model.dag] = dot_nodes
             findings.extend(_check_topology_parsed(model, dot_nodes, dot_edges, dot_path, yaml_path))
             findings.extend(_check_acyclicity(model, dot_edges, yaml_path))
+            # Strict-only: orphan .dot nodes.
+            findings.extend(_check_orphan_dot_nodes(model, dot_nodes, dot_edges, yaml_path))
         else:
             findings.append(
                 ValidationFinding(
@@ -467,5 +587,13 @@ def validate_project(
                     location=yaml_path.name,
                 )
             )
+
+        # Strict-only checks (emitted regardless of `strict`; gating is in
+        # ValidationReport.ok).
+        findings.extend(_check_identification_explicit(raw, model, yaml_path))
+        findings.extend(_check_description_nonempty(model, yaml_path))
+
+    # Cross-DAG strict-only check (runs after all per-DAG loops complete).
+    findings.extend(_check_cross_dag_node_consistency(per_dag_nodes))
 
     return ValidationReport(today=today, strict=strict, findings=tuple(findings))

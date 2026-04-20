@@ -174,3 +174,56 @@ def test_jsonschema_conformance_catches_drift(
     report = validate_project(paths)
     rules = {f.rule for f in report.findings}
     assert "jsonschema_conformance" in rules
+
+
+def test_strict_flags_missing_identification() -> None:
+    paths = load_dag_paths(FIXTURE_MINIMAL / "missing-identification")
+    # Non-strict: deprecation warning only, no strict_error exit.
+    non_strict = validate_project(paths, strict=False)
+    assert non_strict.ok, non_strict.findings
+
+    strict = validate_project(paths, strict=True)
+    assert not strict.ok
+    rules_strict = {f.rule for f in strict.findings if f.severity == "strict_error"}
+    assert "identification_missing" in rules_strict
+
+
+def test_strict_flags_empty_description() -> None:
+    paths = load_dag_paths(FIXTURE_MINIMAL / "empty-description")
+    strict = validate_project(paths, strict=True)
+    rules = {f.rule for f in strict.findings if f.severity == "strict_error"}
+    assert "description_nonempty" in rules
+
+
+def test_strict_flags_orphan_dot_node() -> None:
+    paths = load_dag_paths(FIXTURE_MINIMAL / "orphan-dot-node")
+    strict = validate_project(paths, strict=True)
+    rules = {f.rule for f in strict.findings if f.severity == "strict_error"}
+    assert "dot_nodes_unused" in rules
+    msg = next(
+        f.message for f in strict.findings if f.rule == "dot_nodes_unused"
+    )
+    assert "orphan" in msg
+
+
+def test_strict_flags_cross_dag_node_case_mismatch() -> None:
+    paths = load_dag_paths(FIXTURE_MINIMAL / "cross-dag-inconsistent")
+    strict = validate_project(paths, strict=True)
+    rules = {f.rule for f in strict.findings if f.severity == "strict_error"}
+    assert "cross_dag_node_consistency" in rules
+    # And the non-strict variant should NOT block on this.
+    non_strict = validate_project(paths, strict=False)
+    assert non_strict.ok
+
+
+def test_non_strict_does_not_emit_strict_errors_as_blocking() -> None:
+    # missing-identification fixture: strict_error exists but doesn't block
+    # non-strict run.
+    paths = load_dag_paths(FIXTURE_MINIMAL / "missing-identification")
+    non_strict = validate_project(paths, strict=False)
+    assert non_strict.ok
+    # The strict_error finding may still be emitted for JSON surface.
+    all_rules = {f.rule for f in non_strict.findings}
+    # Emitting strict_errors in non-strict output is allowed but not required;
+    # we only assert that non-strict exits OK.
+    _ = all_rules  # suppress "unused variable" warning
