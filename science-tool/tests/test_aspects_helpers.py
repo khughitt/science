@@ -66,25 +66,22 @@ def test_does_not_match_on_empty_resolved() -> None:
 
 
 def test_does_not_match_on_empty_filter_set() -> None:
-    assert not matches_aspect_filter(
-        resolved=["hypothesis-testing"], filter_set=set()
-    )
+    assert not matches_aspect_filter(resolved=["hypothesis-testing"], filter_set=set())
 
 
 PROJECT = ["causal-modeling", "hypothesis-testing", "software-development"]
 
 
 def test_validate_accepts_subset_of_project() -> None:
-    assert validate_entity_aspects(["hypothesis-testing"], PROJECT) == [
-        "hypothesis-testing"
-    ]
+    assert validate_entity_aspects(["hypothesis-testing"], PROJECT) == ["hypothesis-testing"]
 
 
 def test_validate_returns_canonical_order() -> None:
     # Caller supplied in a non-project order; helper normalizes to project order.
-    assert validate_entity_aspects(
-        ["software-development", "causal-modeling"], PROJECT
-    ) == ["causal-modeling", "software-development"]
+    assert validate_entity_aspects(["software-development", "causal-modeling"], PROJECT) == [
+        "causal-modeling",
+        "software-development",
+    ]
 
 
 def test_validate_rejects_empty_list() -> None:
@@ -109,8 +106,7 @@ def test_validate_rejects_aspect_not_in_vocabulary() -> None:
 
 def test_load_reads_aspects_field(tmp_path) -> None:
     (tmp_path / "science.yaml").write_text(
-        "name: demo\nprofile: research\naspects:\n  - hypothesis-testing\n"
-        "  - computational-analysis\n"
+        "name: demo\nprofile: research\naspects:\n  - hypothesis-testing\n  - computational-analysis\n"
     )
     assert load_project_aspects(tmp_path) == [
         "hypothesis-testing",

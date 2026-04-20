@@ -126,9 +126,7 @@ class TestRewriteFrontmatterBlockForm:
         return "\n".join(lines) + "\n"
 
     def test_merges_into_block_form_related(self) -> None:
-        text = self._entity_md_block_related(
-            tags="genomics, ml", block_items=["question:q01", "task:t001"]
-        )
+        text = self._entity_md_block_related(tags="genomics, ml", block_items=["question:q01", "task:t001"])
         new_text, migration = rewrite_frontmatter(text)
         assert migration is not None
         assert migration.added_to_related == ["meta:genomics", "meta:ml"]
@@ -154,9 +152,7 @@ class TestRewriteFrontmatterBlockForm:
         assert "tags" not in parsed
 
     def test_block_form_dedups_existing_refs(self) -> None:
-        text = self._entity_md_block_related(
-            tags="genomics", block_items=["meta:genomics", "question:q01"]
-        )
+        text = self._entity_md_block_related(tags="genomics", block_items=["meta:genomics", "question:q01"])
         new_text, migration = rewrite_frontmatter(text)
         assert migration is not None
         assert migration.added_to_related == []  # Already present
@@ -164,9 +160,7 @@ class TestRewriteFrontmatterBlockForm:
         assert new_text.count("\nrelated:") == 1
 
     def test_block_form_as_topic(self) -> None:
-        text = self._entity_md_block_related(
-            tags="genomics", block_items=["question:q01"]
-        )
+        text = self._entity_md_block_related(tags="genomics", block_items=["question:q01"])
         new_text, migration = rewrite_frontmatter(text, as_topic=True)
         assert migration is not None
         assert '  - "topic:genomics"' in new_text
@@ -395,9 +389,7 @@ class TestCLI:
         md.write_text(_entity_md(tags="genomics"))
 
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["graph", "migrate-tags", "--project-root", str(tmp_path), "--apply"]
-        )
+        result = runner.invoke(main, ["graph", "migrate-tags", "--project-root", str(tmp_path), "--apply"])
 
         assert result.exit_code == 0
         assert "Migrated 1 file" in result.output

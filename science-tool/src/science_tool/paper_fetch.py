@@ -60,10 +60,7 @@ _DEFAULT_HOST_DELAY = 1.0
 # bioRxiv/medRxiv explicitly invite machine analysis in their FAQ but return 403
 # to non-browser User-Agents. Identify politely (mailto still on the UA string)
 # but with a browser-plausible prefix so the server accepts the request.
-_BROWSERLIKE_UA = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0 Safari/537.36"
-)
+_BROWSERLIKE_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 _HOST_USER_AGENTS: dict[str, str] = {
     "www.biorxiv.org": _BROWSERLIKE_UA,
     "www.medrxiv.org": _BROWSERLIKE_UA,
@@ -200,9 +197,7 @@ def _get_json(
         return None, f"{host}: invalid JSON ({exc})"
 
 
-def _download(
-    client: httpx.Client, limiter: RateLimiter, url: str, host: str, dest: Path
-) -> tuple[bool, str | None]:
+def _download(client: httpx.Client, limiter: RateLimiter, url: str, host: str, dest: Path) -> tuple[bool, str | None]:
     limiter.acquire(host)
     headers = _host_headers(host)
     try:
@@ -270,9 +265,7 @@ def _try_crossref(
     authors = message.get("author")
     if isinstance(authors, list):
         meta["authors"] = [
-            " ".join(filter(None, [a.get("given"), a.get("family")]))
-            for a in authors
-            if isinstance(a, dict)
+            " ".join(filter(None, [a.get("given"), a.get("family")])) for a in authors if isinstance(a, dict)
         ]
     return meta, None
 
@@ -299,9 +292,7 @@ def _try_unpaywall(
     }, None
 
 
-def _try_arxiv(
-    doi: str, client: httpx.Client, limiter: RateLimiter, dest: Path
-) -> tuple[Path | None, str | None]:
+def _try_arxiv(doi: str, client: httpx.Client, limiter: RateLimiter, dest: Path) -> tuple[Path | None, str | None]:
     m = _ARXIV_DOI.match(doi)
     if not m:
         return None, None
@@ -311,9 +302,7 @@ def _try_arxiv(
     return (dest if ok else None), err
 
 
-def _try_biorxiv(
-    doi: str, client: httpx.Client, limiter: RateLimiter, dest: Path
-) -> tuple[Path | None, str | None]:
+def _try_biorxiv(doi: str, client: httpx.Client, limiter: RateLimiter, dest: Path) -> tuple[Path | None, str | None]:
     m = _BIORXIV_DOI.match(doi)
     if not m:
         return None, None
@@ -528,8 +517,12 @@ def _fetch(
             papers_dir,
             slug,
             FetchResult(
-                status="ok", source="arxiv", metadata=metadata, tiers_attempted=tiers,
-                pdf_path=arxiv_pdf, errors=errors,
+                status="ok",
+                source="arxiv",
+                metadata=metadata,
+                tiers_attempted=tiers,
+                pdf_path=arxiv_pdf,
+                errors=errors,
             ),
         )
 
@@ -543,8 +536,12 @@ def _fetch(
             papers_dir,
             slug,
             FetchResult(
-                status="ok", source="biorxiv", metadata=metadata, tiers_attempted=tiers,
-                pdf_path=biorxiv_pdf, errors=errors,
+                status="ok",
+                source="biorxiv",
+                metadata=metadata,
+                tiers_attempted=tiers,
+                pdf_path=biorxiv_pdf,
+                errors=errors,
             ),
         )
 
@@ -563,8 +560,12 @@ def _fetch(
                 papers_dir,
                 slug,
                 FetchResult(
-                    status="ok", source="europepmc", metadata=metadata, tiers_attempted=tiers,
-                    text_path=text_path, errors=errors,
+                    status="ok",
+                    source="europepmc",
+                    metadata=metadata,
+                    tiers_attempted=tiers,
+                    text_path=text_path,
+                    errors=errors,
                 ),
             )
 
@@ -579,8 +580,12 @@ def _fetch(
                 papers_dir,
                 slug,
                 FetchResult(
-                    status="ok", source="unpaywall_pdf", metadata=metadata, tiers_attempted=tiers,
-                    pdf_path=pdf_dest, errors=errors,
+                    status="ok",
+                    source="unpaywall_pdf",
+                    metadata=metadata,
+                    tiers_attempted=tiers,
+                    pdf_path=pdf_dest,
+                    errors=errors,
                 ),
             )
 

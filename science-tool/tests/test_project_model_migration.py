@@ -51,9 +51,7 @@ def test_migrate_paper_preserved_unchanged(tmp_path: Path) -> None:
     """
     source = tmp_path / "doc" / "background" / "papers" / "smith-2024.md"
     source.parent.mkdir(parents=True)
-    source.write_text(
-        "---\nid: paper:smith-2024\ntype: paper\ntitle: Smith 2024\nrelated: []\nsource_refs: []\n---\n"
-    )
+    source.write_text("---\nid: paper:smith-2024\ntype: paper\ntitle: Smith 2024\nrelated: []\nsource_refs: []\n---\n")
     results = migrate_entity_sources(tmp_path)
     content = source.read_text()
     assert "type: paper" in content
@@ -79,9 +77,7 @@ def test_migrate_updates_cross_references(tmp_path: Path) -> None:
 def test_migrate_skips_unchanged_files(tmp_path: Path) -> None:
     source = tmp_path / "doc" / "topics" / "topic.md"
     source.parent.mkdir(parents=True)
-    source.write_text(
-        "---\nid: topic:t01\ntype: topic\ntitle: A topic\nrelated: []\nsource_refs: []\n---\nBody\n"
-    )
+    source.write_text("---\nid: topic:t01\ntype: topic\ntitle: A topic\nrelated: []\nsource_refs: []\n---\nBody\n")
     results = migrate_entity_sources(tmp_path)
     assert results["skipped"] >= 1
     assert results["migrated"] == 0
@@ -98,9 +94,7 @@ def test_migrate_skips_files_without_frontmatter(tmp_path: Path) -> None:
 def test_migrate_artifact_to_data_package(tmp_path: Path) -> None:
     source = tmp_path / "doc" / "artifacts" / "a01.md"
     source.parent.mkdir(parents=True)
-    source.write_text(
-        "---\nid: artifact:a01\ntype: artifact\ntitle: Raw dataset\nrelated: []\nsource_refs: []\n---\n"
-    )
+    source.write_text("---\nid: artifact:a01\ntype: artifact\ntitle: Raw dataset\nrelated: []\nsource_refs: []\n---\n")
     migrate_entity_sources(tmp_path)
     content = source.read_text()
     assert "type: data-package" in content
@@ -110,9 +104,7 @@ def test_migrate_artifact_to_data_package(tmp_path: Path) -> None:
 def test_migrate_specs_directory(tmp_path: Path) -> None:
     source = tmp_path / "specs" / "models" / "m01.md"
     source.parent.mkdir(parents=True)
-    source.write_text(
-        "---\nid: claim:m01\ntype: claim\ntitle: Model claim\nrelated: []\nsource_refs: []\n---\n"
-    )
+    source.write_text("---\nid: claim:m01\ntype: claim\ntitle: Model claim\nrelated: []\nsource_refs: []\n---\n")
     results = migrate_entity_sources(tmp_path)
     content = source.read_text()
     assert "type: proposition" in content
@@ -150,9 +142,7 @@ def test_migrate_tasks_directory(tmp_path: Path) -> None:
     """Migration scans tasks/ directory."""
     source = tmp_path / "tasks" / "active.md"
     source.parent.mkdir(parents=True)
-    source.write_text(
-        "---\nid: task:t01\ntype: task\ntitle: Do something\nrelated:\n  - claim:Walker2024\n---\n"
-    )
+    source.write_text("---\nid: task:t01\ntype: task\ntitle: Do something\nrelated:\n  - claim:Walker2024\n---\n")
     results = migrate_entity_sources(tmp_path)
     content = source.read_text()
     assert "proposition:Walker2024" in content
@@ -177,13 +167,9 @@ def test_migrate_custom_list_fields(tmp_path: Path) -> None:
 def test_migrate_returns_correct_stats(tmp_path: Path) -> None:
     (tmp_path / "doc").mkdir()
     migrated = tmp_path / "doc" / "claim.md"
-    migrated.write_text(
-        "---\nid: claim:c01\ntype: claim\ntitle: A claim\n---\n"
-    )
+    migrated.write_text("---\nid: claim:c01\ntype: claim\ntitle: A claim\n---\n")
     skipped = tmp_path / "doc" / "hypothesis.md"
-    skipped.write_text(
-        "---\nid: hypothesis:h01\ntype: hypothesis\ntitle: A hypothesis\n---\n"
-    )
+    skipped.write_text("---\nid: hypothesis:h01\ntype: hypothesis\ntitle: A hypothesis\n---\n")
     no_frontmatter = tmp_path / "doc" / "notes.md"
     no_frontmatter.write_text("# Notes\nJust notes.\n")
 

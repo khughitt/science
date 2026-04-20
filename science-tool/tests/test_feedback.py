@@ -10,12 +10,15 @@ from science_tool.feedback import (
     FeedbackEntry,
     VALID_CATEGORIES,
     VALID_STATUSES,
+    detect_project,
     find_duplicate,
+    group_for_triage,
     list_entries,
     load_all_entries,
     load_entry,
-    save_entry,
     next_feedback_id,
+    render_report,
+    save_entry,
     update_entry,
 )
 
@@ -260,9 +263,6 @@ def test_find_duplicate_different_target_no_match(tmp_path: Path):
     assert dup is None
 
 
-from science_tool.feedback import group_for_triage, render_report
-
-
 def test_group_for_triage(tmp_path: Path):
     _make_entry(tmp_path, "fb-2026-03-25-001", target="command:discuss", project="proj-a")
     _make_entry(tmp_path, "fb-2026-03-25-002", target="command:discuss", project="proj-b")
@@ -302,9 +302,6 @@ def test_render_report(tmp_path: Path):
 def test_render_report_empty(tmp_path: Path):
     report = render_report(tmp_path)
     assert "No feedback entries" in report
-
-
-from science_tool.feedback import detect_project
 
 
 def test_detect_project_from_science_yaml(tmp_path: Path):

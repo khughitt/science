@@ -21,9 +21,12 @@ class TestFeedbackAdd:
         result = runner.invoke(
             main,
             [
-                "feedback", "add",
-                "--target", "command:discuss",
-                "--summary", "Test feedback entry",
+                "feedback",
+                "add",
+                "--target",
+                "command:discuss",
+                "--summary",
+                "Test feedback entry",
             ],
             env=env,
         )
@@ -37,12 +40,18 @@ class TestFeedbackAdd:
         result = runner.invoke(
             main,
             [
-                "feedback", "add",
-                "--target", "template:interpretation",
-                "--category", "friction",
-                "--summary", "Data quality section missing",
-                "--detail", "Found two data bugs at interpretation time",
-                "--project", "seq-feats",
+                "feedback",
+                "add",
+                "--target",
+                "template:interpretation",
+                "--category",
+                "friction",
+                "--summary",
+                "Data quality section missing",
+                "--detail",
+                "Found two data bugs at interpretation time",
+                "--project",
+                "seq-feats",
             ],
             env=env,
         )

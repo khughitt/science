@@ -85,10 +85,10 @@ def _write_science_tool_stub(bin_dir: Path) -> None:
                 "#!/usr/bin/env bash",
                 "set -eu",
                 'if [ "${1:-}" = "graph" ] && [ "${2:-}" = "audit" ]; then',
-                '    printf \'{"rows": []}\\n\'',
+                "    printf '{\"rows\": []}\\n'",
                 "    exit 0",
                 "fi",
-                'printf \'{"rows": []}\\n\'',
+                "printf '{\"rows\": []}\\n'",
                 "exit 0",
                 "",
             ]
@@ -167,7 +167,9 @@ def test_validate_fails_when_science_tool_is_missing(tmp_path: Path) -> None:
     )
 
     assert result.returncode != 0
-    assert "science-tool is required for task management, feedback, and graph workflows" in result.stdout + result.stderr
+    assert (
+        "science-tool is required for task management, feedback, and graph workflows" in result.stdout + result.stderr
+    )
 
 
 def test_validate_reports_missing_science_tool_once_when_graph_exists(tmp_path: Path) -> None:

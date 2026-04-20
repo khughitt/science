@@ -22,12 +22,10 @@ def canonical_paper_id(entity_id: str) -> str:
     Maps ``article:<X>`` → ``paper:<X>``. All other entity IDs pass through.
     """
     if entity_id.startswith(_LEGACY_EXTERNAL_PREFIX):
-        return _CANONICAL_EXTERNAL_PREFIX + entity_id[len(_LEGACY_EXTERNAL_PREFIX):]
+        return _CANONICAL_EXTERNAL_PREFIX + entity_id[len(_LEGACY_EXTERNAL_PREFIX) :]
     return entity_id
 
 
 def is_external_paper_id(entity_id: str) -> bool:
     """True iff ``entity_id`` denotes an external literature entity."""
-    return entity_id.startswith(
-        (_CANONICAL_EXTERNAL_PREFIX, _LEGACY_EXTERNAL_PREFIX)
-    )
+    return entity_id.startswith((_CANONICAL_EXTERNAL_PREFIX, _LEGACY_EXTERNAL_PREFIX))

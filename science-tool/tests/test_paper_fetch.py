@@ -93,9 +93,7 @@ class TestRateLimiter:
 
     def test_different_hosts_do_not_interfere(self, tmp_path: Path) -> None:
         clock = _FakeClock()
-        limiter = RateLimiter(
-            _cfg(tmp_path, host_delays={"a.com": 60.0, "b.com": 60.0}, sleep=clock.sleep)
-        )
+        limiter = RateLimiter(_cfg(tmp_path, host_delays={"a.com": 60.0, "b.com": 60.0}, sleep=clock.sleep))
         limiter.acquire("a.com")
         limiter.acquire("b.com")
         assert clock.slept == []
@@ -167,9 +165,7 @@ class TestFetchPaperBranches:
                 return httpx.Response(200, content=b"%PDF-1.7 fake pdf bytes")
             raise AssertionError(f"unexpected host {req.url.host}")
 
-        result = fetch_paper(
-            doi="10.48550/arxiv.1234.5678", cfg=_cfg(tmp_path), http=_make_client(handler)
-        )
+        result = fetch_paper(doi="10.48550/arxiv.1234.5678", cfg=_cfg(tmp_path), http=_make_client(handler))
         assert result.status == "ok"
         assert result.source == "arxiv"
         assert result.pdf_path is not None
@@ -205,9 +201,7 @@ class TestFetchPaperBranches:
         def handler(_req: httpx.Request) -> httpx.Response:  # pragma: no cover
             raise AssertionError("no HTTP should be issued")
 
-        result = fetch_paper(
-            url="https://example.com/paper", cfg=_cfg(tmp_path), http=_make_client(handler)
-        )
+        result = fetch_paper(url="https://example.com/paper", cfg=_cfg(tmp_path), http=_make_client(handler))
         assert result.status == "not_found"
         assert "no DOI supplied" in result.errors[0]
 

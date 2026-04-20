@@ -120,7 +120,7 @@ def rewrite_frontmatter(text: str, as_topic: bool = False) -> tuple[str, FileMig
     new_fm = fm_text[:tags_start] + fm_text[tags_end:]
     # Collapse the leading newline left behind (if the tags: line was not at the start)
     if tags_start > 0 and new_fm[tags_start - 1 : tags_start + 1] == "\n\n":
-        new_fm = new_fm[: tags_start] + new_fm[tags_start + 1 :]
+        new_fm = new_fm[:tags_start] + new_fm[tags_start + 1 :]
 
     added: list[str] = []
     if tag_refs:
@@ -136,9 +136,7 @@ def rewrite_frontmatter(text: str, as_topic: bool = False) -> tuple[str, FileMig
             if added:
                 indent = inline_match.group("indent")
                 replacement = f"{indent}related: [{_format_list_body(merged)}]"
-                new_fm = (
-                    new_fm[: inline_match.start()] + replacement + new_fm[inline_match.end() :]
-                )
+                new_fm = new_fm[: inline_match.start()] + replacement + new_fm[inline_match.end() :]
         elif block_match is not None:
             items_text = block_match.group("items")
             existing = _parse_block_items(items_text)
@@ -154,11 +152,7 @@ def rewrite_frontmatter(text: str, as_topic: bool = False) -> tuple[str, FileMig
                 trailing_nl = "" if items_text.endswith("\n") else "\n"
                 added_lines = "".join(f'{item_indent}- "{ref}"\n' for ref in added)
                 new_items = items_text + trailing_nl + added_lines
-                new_fm = (
-                    new_fm[: block_match.start("items")]
-                    + new_items
-                    + new_fm[block_match.end("items") :]
-                )
+                new_fm = new_fm[: block_match.start("items")] + new_items + new_fm[block_match.end("items") :]
         else:
             # No related: line — append one
             indent_match = _TAGS_LINE_RE.search(fm_text)  # reuse original for indent
@@ -220,9 +214,7 @@ def _rewrite_task_block(block: str, as_topic: bool = False) -> tuple[str, list[s
             if added:
                 indent = related_match.group("indent")
                 replacement = f"{indent}- related: [{_format_list_body(merged)}]"
-                new_block = (
-                    new_block[: related_match.start()] + replacement + new_block[related_match.end() :]
-                )
+                new_block = new_block[: related_match.start()] + replacement + new_block[related_match.end() :]
         else:
             # No related: line — insert one where the tags: line was
             indent = tag_match.group("indent")
@@ -275,9 +267,7 @@ def _migrate_task_file(path: Path, apply: bool, as_topic: bool = False) -> bool:
     return True
 
 
-def migrate_tags_to_related(
-    project_root: Path, apply: bool = False, as_topic: bool = False
-) -> MigrationReport:
+def migrate_tags_to_related(project_root: Path, apply: bool = False, as_topic: bool = False) -> MigrationReport:
     """Walk a project and rewrite legacy `tags:` frontmatter into `related:` refs.
 
     Args:

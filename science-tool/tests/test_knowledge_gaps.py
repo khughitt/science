@@ -29,6 +29,7 @@ def test_topic_gap_is_frozen_dataclass() -> None:
     assert tg.gap_score == 2
     # Frozen: mutation raises.
     import dataclasses as dc
+
     assert dc.is_dataclass(tg) and tg.__dataclass_params__.frozen  # type: ignore[attr-defined]
 
 

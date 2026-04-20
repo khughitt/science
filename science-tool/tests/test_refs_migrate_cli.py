@@ -70,8 +70,6 @@ def test_migrate_paper_blocks_when_dirty(tmp_path: Path) -> None:
         check=True,
     )
     # No commit: working tree is dirty (all files untracked).
-    result = CliRunner().invoke(
-        refs_group, ["migrate-paper", "--project-root", str(project), "--apply"]
-    )
+    result = CliRunner().invoke(refs_group, ["migrate-paper", "--project-root", str(project), "--apply"])
     assert result.exit_code != 0
     assert "not clean" in result.output.lower()

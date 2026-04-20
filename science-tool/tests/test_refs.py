@@ -257,9 +257,7 @@ def test_valid_task_ref() -> None:
         _scaffold(root)
         (root / "tasks").mkdir(parents=True, exist_ok=True)
         (root / "tasks" / "active.md").write_text("## [t05] Build pipeline\n- status: proposed\n")
-        (root / "doc" / "background" / "topics" / "pipeline.md").write_text(
-            "# Pipeline\nCompleted in t05.\n"
-        )
+        (root / "doc" / "background" / "topics" / "pipeline.md").write_text("# Pipeline\nCompleted in t05.\n")
         issues = check_refs(root)
         task_issues = [i for i in issues if i.ref_type == "task"]
         assert task_issues == []
@@ -305,10 +303,7 @@ def test_task_ref_resolves_when_declaration_is_not_first_header_in_tasks_file() 
         _scaffold(root)
         (root / "tasks").mkdir(parents=True, exist_ok=True)
         (root / "tasks" / "active.md").write_text(
-            "## [t05] Build pipeline\n"
-            "- status: proposed\n\n"
-            "## [t99] Later task\n"
-            "- status: proposed\n"
+            "## [t05] Build pipeline\n- status: proposed\n\n## [t99] Later task\n- status: proposed\n"
         )
         (root / "doc" / "background" / "topics" / "pipeline.md").write_text("# Pipeline\nDriven by t99.\n")
 

@@ -418,8 +418,7 @@ class TestListTasks:
     def _setup_multi(self, tmp_path: Path) -> Path:
         _write(
             tmp_path / "science.yaml",
-            "name: demo\nprofile: research\n"
-            "aspects: [hypothesis-testing, software-development]\n",
+            "name: demo\nprofile: research\naspects: [hypothesis-testing, software-development]\n",
         )
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()

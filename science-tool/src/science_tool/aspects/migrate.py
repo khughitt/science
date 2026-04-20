@@ -1,4 +1,5 @@
 """Build and apply the one-shot aspect migration for legacy task entries."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -47,8 +48,7 @@ def build_migration_plan(project_root: Path) -> AspectsMigrationPlan:
     project_aspects = load_project_aspects(project_root)
     if not project_aspects:
         raise AspectsMigrationConflict(
-            "Project science.yaml has no 'aspects:' declaration; "
-            "migration has no target vocabulary."
+            "Project science.yaml has no 'aspects:' declaration; migration has no target vocabulary."
         )
     unknown = [a for a in project_aspects if a not in KNOWN_ASPECTS]
     if unknown:
@@ -104,9 +104,7 @@ def build_migration_plan(project_root: Path) -> AspectsMigrationPlan:
                 )
                 continue
 
-            rewrites.append(
-                TaskRewrite(task_id=task.id, source_path=path, new_aspects=target)
-            )
+            rewrites.append(TaskRewrite(task_id=task.id, source_path=path, new_aspects=target))
 
     return AspectsMigrationPlan(task_rewrites=rewrites, conflicts=conflicts)
 

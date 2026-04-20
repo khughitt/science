@@ -8,16 +8,23 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from science_model.packages.cells import (
+    CodeReferenceCell,
+    DataTableCell,
+    FigureCell,
+    NarrativeCell,
+    ProvenanceCell,
+    VegaLiteCell,
+    parse_cells,
+)
 from science_model.packages.schema import (
     CodeExcerpt,
-    FigureRef,
-    Provenance,
     ProvenanceInput,
-    ResearchExtension,
     ResearchPackageDescriptor,
     ResourceSchema,
     VegaLiteSpec,
 )
+from science_model.packages.validation import ValidationResult, check_freshness, validate_package
 
 
 def _valid_provenance() -> dict:
@@ -114,18 +121,6 @@ class TestResearchPackageDescriptor:
         assert inp.sha256 == "abc123"
 
 
-from science_model.packages.cells import (
-    Cell,
-    CodeReferenceCell,
-    DataTableCell,
-    FigureCell,
-    NarrativeCell,
-    ProvenanceCell,
-    VegaLiteCell,
-    parse_cells,
-)
-
-
 class TestCellSchema:
     def test_narrative_cell(self) -> None:
         cell = NarrativeCell(type="narrative", content="prose/01-intro.md")
@@ -171,9 +166,6 @@ class TestCellSchema:
     def test_parse_cells_rejects_unknown_type(self) -> None:
         with pytest.raises(ValueError, match="Unknown cell type"):
             parse_cells([{"type": "unknown"}])
-
-
-from science_model.packages.validation import ValidationResult, check_freshness, validate_package
 
 
 class TestValidatePackage:

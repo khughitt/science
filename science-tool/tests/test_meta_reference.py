@@ -49,7 +49,7 @@ class TestMetaRefsInAudit:
             '---\nid: "hypothesis:h01-test"\ntype: "hypothesis"\n'
             'title: "Test"\nstatus: "proposed"\n'
             "related: [meta:phase3b, meta:cycle1]\n"
-            "source_refs: []\ncreated: \"2026-04-13\"\n---\nBody.\n"
+            'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
         )
 
         sources = load_project_sources(tmp_path)
@@ -60,7 +60,9 @@ class TestMetaRefsInAudit:
         unresolved = [r for r in rows if r["status"] == "fail"]
         assert unresolved == []
 
-    def test_load_project_sources_canonicalizes_legacy_article_prefix_in_structured_sources(self, tmp_path: Path) -> None:
+    def test_load_project_sources_canonicalizes_legacy_article_prefix_in_structured_sources(
+        self, tmp_path: Path
+    ) -> None:
         """Structured source YAML should load legacy `article:` papers as canonical `paper:` IDs."""
         from science_tool.graph.sources import load_project_sources
 
@@ -121,7 +123,7 @@ class TestMetaRefsInMaterialize:
             '---\nid: "hypothesis:h01-test"\ntype: "hypothesis"\n'
             'title: "Test"\nstatus: "proposed"\n'
             "related: [meta:phase3b]\n"
-            "source_refs: []\ncreated: \"2026-04-13\"\n---\nBody.\n"
+            'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
         )
 
         trig_path = materialize_graph(tmp_path)
@@ -221,7 +223,7 @@ class TestMetaRefsInBlockedByAndSourceRefs:
             '---\nid: "hypothesis:h01-test"\ntype: "hypothesis"\n'
             'title: "Test"\nstatus: "proposed"\nrelated: []\n'
             "blocked_by: [meta:phase3b]\n"
-            "source_refs: []\ncreated: \"2026-04-13\"\n---\nBody.\n"
+            'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
         )
 
         trig_path = materialize_graph(tmp_path)

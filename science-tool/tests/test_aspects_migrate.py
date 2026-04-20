@@ -14,17 +14,10 @@ from science_tool.aspects.migrate import (
 def test_plan_maps_type_dev_to_software_development(tmp_path: Path) -> None:
     (tmp_path / "tasks").mkdir()
     (tmp_path / "tasks" / "active.md").write_text(
-        "## [t001] Pipeline cleanup\n"
-        "- type: dev\n"
-        "- priority: P2\n"
-        "- status: proposed\n"
-        "- created: 2026-04-01\n"
-        "\n"
-        "Body.\n"
+        "## [t001] Pipeline cleanup\n- type: dev\n- priority: P2\n- status: proposed\n- created: 2026-04-01\n\nBody.\n"
     )
     (tmp_path / "science.yaml").write_text(
-        "name: demo\nprofile: research\n"
-        "aspects: [hypothesis-testing, software-development]\n"
+        "name: demo\nprofile: research\naspects: [hypothesis-testing, software-development]\n"
     )
 
     plan = build_migration_plan(tmp_path)
@@ -46,8 +39,7 @@ def test_plan_maps_type_research_to_non_software_project_aspects(tmp_path: Path)
         "Body.\n"
     )
     (tmp_path / "science.yaml").write_text(
-        "name: demo\nprofile: research\n"
-        "aspects: [hypothesis-testing, computational-analysis, software-development]\n"
+        "name: demo\nprofile: research\naspects: [hypothesis-testing, computational-analysis, software-development]\n"
     )
 
     plan = build_migration_plan(tmp_path)
@@ -66,9 +58,7 @@ def test_plan_skips_tasks_already_migrated(tmp_path: Path) -> None:
         "\n"
         "Body.\n"
     )
-    (tmp_path / "science.yaml").write_text(
-        "name: demo\nprofile: research\naspects: [hypothesis-testing]\n"
-    )
+    (tmp_path / "science.yaml").write_text("name: demo\nprofile: research\naspects: [hypothesis-testing]\n")
 
     plan = build_migration_plan(tmp_path)
     assert plan.task_rewrites == []
@@ -88,8 +78,7 @@ def test_plan_reports_conflict_for_tasks_with_both_type_and_aspects(tmp_path: Pa
         "Body.\n"
     )
     (tmp_path / "science.yaml").write_text(
-        "name: demo\nprofile: research\n"
-        "aspects: [hypothesis-testing, software-development]\n"
+        "name: demo\nprofile: research\naspects: [hypothesis-testing, software-development]\n"
     )
 
     plan = build_migration_plan(tmp_path)
@@ -101,12 +90,10 @@ def test_plan_reports_conflict_for_tasks_with_both_type_and_aspects(tmp_path: Pa
 def test_plan_raises_when_project_aspects_outside_known_vocabulary(tmp_path: Path) -> None:
     (tmp_path / "tasks").mkdir()
     (tmp_path / "tasks" / "active.md").write_text(
-        "## [t006] Any\n- type: research\n- priority: P2\n- status: proposed\n"
-        "- created: 2026-04-06\n\nBody.\n"
+        "## [t006] Any\n- type: research\n- priority: P2\n- status: proposed\n- created: 2026-04-06\n\nBody.\n"
     )
     (tmp_path / "science.yaml").write_text(
-        "name: demo\nprofile: research\n"
-        "aspects: [hypothesis-testing, gene-disease-associations, tumor-heterogeneity]\n"
+        "name: demo\nprofile: research\naspects: [hypothesis-testing, gene-disease-associations, tumor-heterogeneity]\n"
     )
 
     with pytest.raises(AspectsMigrationConflict, match="known vocabulary"):
@@ -116,8 +103,7 @@ def test_plan_raises_when_project_aspects_outside_known_vocabulary(tmp_path: Pat
 def test_plan_raises_when_project_has_no_aspects(tmp_path: Path) -> None:
     (tmp_path / "tasks").mkdir()
     (tmp_path / "tasks" / "active.md").write_text(
-        "## [t005] Any\n- type: research\n- priority: P2\n- status: proposed\n"
-        "- created: 2026-04-05\n\nBody.\n"
+        "## [t005] Any\n- type: research\n- priority: P2\n- status: proposed\n- created: 2026-04-05\n\nBody.\n"
     )
     (tmp_path / "science.yaml").write_text("name: demo\nprofile: research\n")
 
@@ -127,19 +113,10 @@ def test_plan_raises_when_project_has_no_aspects(tmp_path: Path) -> None:
 
 def test_apply_rewrites_task_file_in_place(tmp_path: Path) -> None:
     (tmp_path / "tasks").mkdir()
-    original = (
-        "## [t001] Cleanup\n"
-        "- type: dev\n"
-        "- priority: P2\n"
-        "- status: proposed\n"
-        "- created: 2026-04-01\n"
-        "\n"
-        "Body.\n"
-    )
+    original = "## [t001] Cleanup\n- type: dev\n- priority: P2\n- status: proposed\n- created: 2026-04-01\n\nBody.\n"
     (tmp_path / "tasks" / "active.md").write_text(original)
     (tmp_path / "science.yaml").write_text(
-        "name: demo\nprofile: research\n"
-        "aspects: [hypothesis-testing, software-development]\n"
+        "name: demo\nprofile: research\naspects: [hypothesis-testing, software-development]\n"
     )
 
     plan = build_migration_plan(tmp_path)
@@ -153,17 +130,10 @@ def test_apply_rewrites_task_file_in_place(tmp_path: Path) -> None:
 def test_apply_is_idempotent(tmp_path: Path) -> None:
     (tmp_path / "tasks").mkdir()
     (tmp_path / "tasks" / "active.md").write_text(
-        "## [t001] Cleanup\n"
-        "- type: dev\n"
-        "- priority: P2\n"
-        "- status: proposed\n"
-        "- created: 2026-04-01\n"
-        "\n"
-        "Body.\n"
+        "## [t001] Cleanup\n- type: dev\n- priority: P2\n- status: proposed\n- created: 2026-04-01\n\nBody.\n"
     )
     (tmp_path / "science.yaml").write_text(
-        "name: demo\nprofile: research\n"
-        "aspects: [hypothesis-testing, software-development]\n"
+        "name: demo\nprofile: research\naspects: [hypothesis-testing, software-development]\n"
     )
 
     apply_migration_plan(build_migration_plan(tmp_path))
