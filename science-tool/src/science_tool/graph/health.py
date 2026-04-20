@@ -17,6 +17,22 @@ from science_tool.graph.migrate import audit_project_sources, build_layered_clai
 from science_tool.graph.sources import load_project_sources
 
 
+DATASET_ANOMALY_CODES: tuple[str, ...] = (
+    "dataset_consumed_but_unverified",
+    "dataset_stale_review",
+    "dataset_missing_source_url",
+    "dataset_cached_field_drift",
+    "dataset_invariant_violation",
+    "dataset_derived_missing_workflow_run",
+    "dataset_derived_asymmetric_edge",
+    "dataset_derived_input_chain_broken",
+    "dataset_origin_block_mismatch",
+    "dataset_verified_but_unstageable",
+    "dataset_research_package_asymmetric",
+    "data_package_unmigrated",
+)
+
+
 class UnresolvedRef(TypedDict):
     target: str
     mention_count: int
@@ -82,12 +98,8 @@ class LingeringTagsRecord(TypedDict):
     values: list[str]
 
 
-_FRONTMATTER_TAGS_RE = re.compile(
-    r"^tags:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE
-)
-_TASK_TAGS_RE = re.compile(
-    r"^- tags:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE
-)
+_FRONTMATTER_TAGS_RE = re.compile(r"^tags:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE)
+_TASK_TAGS_RE = re.compile(r"^- tags:\s*\[(?P<body>[^\]]*)\]\s*$", re.MULTILINE)
 _FRONTMATTER_BLOCK_RE = re.compile(r"\A---\s*\n(?P<body>.*?)\n---\s*\n", re.DOTALL)
 
 
@@ -129,10 +141,12 @@ def collect_lingering_tags(project_root: Path) -> list[LingeringTagsRecord]:
             if not frontmatter_body:
                 continue
             for match in _FRONTMATTER_TAGS_RE.finditer(frontmatter_body):
-                results.append({
-                    "file": str(md_file.relative_to(project_root)),
-                    "values": _parse_list_body(match.group("body")),
-                })
+                results.append(
+                    {
+                        "file": str(md_file.relative_to(project_root)),
+                        "values": _parse_list_body(match.group("body")),
+                    }
+                )
 
     tasks_dir = project_root / "tasks"
     candidate_task_files: list[Path] = []
@@ -145,10 +159,12 @@ def collect_lingering_tags(project_root: Path) -> list[LingeringTagsRecord]:
     for task_file in candidate_task_files:
         text = task_file.read_text(encoding="utf-8")
         for match in _TASK_TAGS_RE.finditer(text):
-            results.append({
-                "file": str(task_file.relative_to(project_root)),
-                "values": _parse_list_body(match.group("body")),
-            })
+            results.append(
+                {
+                    "file": str(task_file.relative_to(project_root)),
+                    "values": _parse_list_body(match.group("body")),
+                }
+            )
 
     return results
 

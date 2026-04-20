@@ -269,9 +269,7 @@ class TestHealthCLI:
         )
 
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["health", "--project-root", str(tmp_path), "--format", "json"]
-        )
+        result = runner.invoke(main, ["health", "--project-root", str(tmp_path), "--format", "json"])
 
         assert result.exit_code == 0, result.output
         report = json.loads(result.output)
@@ -311,13 +309,7 @@ def test_health_flags_legacy_task_type_field(tmp_path) -> None:
     project_root = Path(tmp_path)
     (project_root / "tasks").mkdir()
     (project_root / "tasks" / "active.md").write_text(
-        "## [t001] Legacy\n"
-        "- type: research\n"
-        "- priority: P2\n"
-        "- status: proposed\n"
-        "- created: 2026-04-01\n"
-        "\n"
-        "Body.\n"
+        "## [t001] Legacy\n- type: research\n- priority: P2\n- status: proposed\n- created: 2026-04-01\n\nBody.\n"
     )
     findings = collect_legacy_task_type(project_root)
     assert len(findings) == 1
@@ -332,9 +324,7 @@ def test_health_flags_invalid_entity_aspects(tmp_path) -> None:
 
     project_root = Path(tmp_path)
     (project_root / "doc" / "questions").mkdir(parents=True)
-    (project_root / "science.yaml").write_text(
-        "name: demo\nprofile: research\naspects: [hypothesis-testing]\n"
-    )
+    (project_root / "science.yaml").write_text("name: demo\nprofile: research\naspects: [hypothesis-testing]\n")
     (project_root / "doc" / "questions" / "q01.md").write_text(
         '---\nid: "question:q01"\naspects: ["not-declared"]\n---\nBroken.\n'
     )
@@ -371,18 +361,10 @@ def test_build_health_report_includes_aspect_findings(tmp_path) -> None:
     project_root = Path(tmp_path)
     (project_root / "tasks").mkdir()
     (project_root / "tasks" / "active.md").write_text(
-        "## [t001] Legacy task\n"
-        "- type: dev\n"
-        "- priority: P2\n"
-        "- status: proposed\n"
-        "- created: 2026-04-01\n"
-        "\n"
-        "Body.\n"
+        "## [t001] Legacy task\n- type: dev\n- priority: P2\n- status: proposed\n- created: 2026-04-01\n\nBody.\n"
     )
     (project_root / "doc" / "questions").mkdir(parents=True)
-    (project_root / "science.yaml").write_text(
-        "name: demo\nprofile: research\naspects: [hypothesis-testing]\n"
-    )
+    (project_root / "science.yaml").write_text("name: demo\nprofile: research\naspects: [hypothesis-testing]\n")
     (project_root / "doc" / "questions" / "q01.md").write_text(
         '---\nid: "question:q01"\naspects: ["not-declared"]\n---\nBroken.\n'
     )
@@ -411,3 +393,23 @@ def test_build_health_report_includes_legacy_structured_literature_findings(tmp_
     report = build_health_report(project_root)
     assert "legacy_structured_literature_prefixes" in report
     assert len(report["legacy_structured_literature_prefixes"]) == 1
+
+
+def test_dataset_anomaly_codes_registered() -> None:
+    from science_tool.graph.health import DATASET_ANOMALY_CODES
+
+    expected = {
+        "dataset_consumed_but_unverified",
+        "dataset_stale_review",
+        "dataset_missing_source_url",
+        "dataset_cached_field_drift",
+        "dataset_invariant_violation",
+        "dataset_derived_missing_workflow_run",
+        "dataset_derived_asymmetric_edge",
+        "dataset_derived_input_chain_broken",
+        "dataset_origin_block_mismatch",
+        "dataset_verified_but_unstageable",
+        "dataset_research_package_asymmetric",
+        "data_package_unmigrated",
+    }
+    assert expected.issubset(set(DATASET_ANOMALY_CODES))
