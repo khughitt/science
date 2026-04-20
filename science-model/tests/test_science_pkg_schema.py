@@ -150,6 +150,7 @@ def test_invariant_8_derived_with_access_rejects(entity_schema: dict) -> None:
 
 
 def test_invariant_8_derived_with_accessions_rejects(entity_schema: dict) -> None:
+    """origin: derived + accessions: -> reject (#8: external accession IDs forbidden on derived)."""
     e = _valid_derived_entity()
     e["accessions"] = ["EGAD00001"]
     with pytest.raises(jsonschema.ValidationError):
@@ -157,4 +158,5 @@ def test_invariant_8_derived_with_accessions_rejects(entity_schema: dict) -> Non
 
 
 def test_derived_entity_minimal_valid(entity_schema: dict) -> None:
+    """A minimal valid origin: derived entity (with required derivation block) passes validation."""
     jsonschema.validate(_valid_derived_entity(), entity_schema)
