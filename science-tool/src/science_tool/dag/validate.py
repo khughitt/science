@@ -86,10 +86,11 @@ def _check_shape_and_refs(
     raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
     try:
         model = EdgesYamlFile.model_validate(raw)
-    except (SchemaError, ValueError) as exc:
+    except ValueError as exc:
+        fallback_dag = yaml_path.stem.removesuffix(".edges")
         findings.append(
             ValidationFinding(
-                dag=raw.get("dag", yaml_path.stem) if isinstance(raw, dict) else yaml_path.stem,
+                dag=raw.get("dag", fallback_dag) if isinstance(raw, dict) else fallback_dag,
                 edge_id=None,
                 rule="shape",
                 severity="error",
