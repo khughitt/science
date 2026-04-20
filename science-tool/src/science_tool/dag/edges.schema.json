@@ -1,0 +1,380 @@
+{
+  "$defs": {
+    "EdgeRecord": {
+      "additionalProperties": true,
+      "description": "One edge in a DAG edges YAML file.",
+      "properties": {
+        "caveats": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Caveats",
+          "type": "array"
+        },
+        "data_support": {
+          "items": {
+            "$ref": "#/$defs/RefEntry"
+          },
+          "title": "Data Support",
+          "type": "array"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "edge_status": {
+          "$ref": "#/$defs/EdgeStatus",
+          "default": "unknown"
+        },
+        "edge_style": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Edge Style"
+        },
+        "eliminated_by": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/RefEntry"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Eliminated By"
+        },
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "identification": {
+          "$ref": "#/$defs/Identification",
+          "default": "none"
+        },
+        "lit_support": {
+          "items": {
+            "$ref": "#/$defs/RefEntry"
+          },
+          "title": "Lit Support",
+          "type": "array"
+        },
+        "original_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Original Label"
+        },
+        "posterior": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PosteriorBlock"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "relation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relation"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "source_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Label"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "target_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Label"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "target",
+        "description"
+      ],
+      "title": "EdgeRecord",
+      "type": "object"
+    },
+    "EdgeStatus": {
+      "enum": [
+        "supported",
+        "tentative",
+        "structural",
+        "unknown",
+        "eliminated"
+      ],
+      "title": "EdgeStatus",
+      "type": "string"
+    },
+    "Identification": {
+      "enum": [
+        "interventional",
+        "longitudinal",
+        "observational",
+        "structural",
+        "none"
+      ],
+      "title": "Identification",
+      "type": "string"
+    },
+    "PosteriorBlock": {
+      "additionalProperties": true,
+      "description": "Optional posterior-estimate block attached to an edge.",
+      "properties": {
+        "adjusted_for": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adjusted For"
+        },
+        "beta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Beta"
+        },
+        "datasets": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Datasets"
+        },
+        "fit_task": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fit Task"
+        },
+        "hdi_high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hdi High"
+        },
+        "hdi_low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hdi Low"
+        },
+        "hr": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hr"
+        },
+        "hr_range": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hr Range"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "prob_sign": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prob Sign"
+        },
+        "variants": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Variants"
+        }
+      },
+      "title": "PosteriorBlock",
+      "type": "object"
+    },
+    "RefEntry": {
+      "additionalProperties": true,
+      "description": "A single reference entry.\n\nExactly one of REF_KINDS must appear as a key **with a non-null value**.\nAll other keys (e.g. ``author_year``, ``notes``) are kept as-is via\n``extra=\"allow\"``.\n\n``doi: null`` (and any other ``kind: null``) is treated as **no kind tag\npresent** \u2014 such an entry is a dishonest citation and is rejected.\nProjects migrating from the legacy pattern should replace ``doi: null``\nwith a concrete ``paper: <citekey>`` ref.",
+      "properties": {
+        "description": {
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "description"
+      ],
+      "title": "RefEntry",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "Top-level structure of a ``<slug>.edges.yaml`` file.",
+  "properties": {
+    "dag": {
+      "title": "Dag",
+      "type": "string"
+    },
+    "edges": {
+      "items": {
+        "$ref": "#/$defs/EdgeRecord"
+      },
+      "title": "Edges",
+      "type": "array"
+    },
+    "source_dot": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Dot"
+    }
+  },
+  "required": [
+    "dag"
+  ],
+  "title": "EdgesYamlFile",
+  "type": "object"
+}

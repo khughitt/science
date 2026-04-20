@@ -12,6 +12,7 @@ from science_tool.dag.init import init_dag
 from science_tool.dag.number import number_all, number_one
 from science_tool.dag.paths import load_dag_paths
 from science_tool.dag.render import render_all, render_one
+from science_tool.dag.schema import EdgesYamlFile
 from science_tool.dag.staleness import check_staleness
 
 
@@ -248,6 +249,30 @@ def init_cmd(slug: str, label: str | None, project_path: Path | None) -> None:
     click.echo(f"Next steps: add nodes and edges to {slug}.dot, then run:")
     click.echo(f"  science-tool dag number --dag {slug}")
     click.echo(f"  science-tool dag render  --dag {slug}")
+
+
+# ---------------------------------------------------------------------------
+# schema
+# ---------------------------------------------------------------------------
+
+
+@dag_group.command("schema")
+@click.option(
+    "--output",
+    "output_path",
+    default=None,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Write the JSON Schema to this file; default: stdout.",
+)
+def schema_cmd(output_path: Path | None) -> None:
+    """Emit the JSON Schema for edges.yaml files."""
+    schema = EdgesYamlFile.model_json_schema()
+    canonical = json.dumps(schema, indent=2, sort_keys=True) + "\n"
+    if output_path is None:
+        click.echo(canonical, nl=False)
+    else:
+        output_path.write_text(canonical, encoding="utf-8")
+        click.echo(f"Wrote {output_path}")
 
 
 # ---------------------------------------------------------------------------
