@@ -60,7 +60,7 @@ def write_per_output_datapackages(project_root: Path, workflow_run_id: str) -> l
     NOT file relocations. Resource paths kept verbatim; basepath: ".." resolves them
     against the run root where the workflow originally wrote the files.
     """
-    run_path, run_fm = _read_run(project_root, workflow_run_id)
+    _, run_fm = _read_run(project_root, workflow_run_id)
     workflow_id = str(run_fm.get("workflow", ""))
     workflow_slug = workflow_id.removeprefix("workflow:")
     run_entity_slug = workflow_run_id.removeprefix("workflow-run:")
@@ -148,7 +148,7 @@ def _entity_yaml_block(
 
 def write_derived_dataset_entities(project_root: Path, workflow_run_id: str) -> list[tuple[Path, str]]:
     """Returns list of (path, dataset_id) tuples for written entities."""
-    run_path, run_fm = _read_run(project_root, workflow_run_id)
+    _, run_fm = _read_run(project_root, workflow_run_id)
     workflow_id = str(run_fm.get("workflow", ""))
     workflow_slug = workflow_id.removeprefix("workflow:")
     run_entity_slug = workflow_run_id.removeprefix("workflow-run:")
