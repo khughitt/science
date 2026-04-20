@@ -21,7 +21,7 @@ class TestAccessException:
 
     def test_invalid_mode_rejected(self) -> None:
         with pytest.raises(ValueError):
-            AccessException(mode="invalid")
+            AccessException(mode="invalid")  # type: ignore[arg-type]  # runtime validation check
 
 
 class TestAccessBlock:
