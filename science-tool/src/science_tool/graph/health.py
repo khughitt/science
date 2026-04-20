@@ -712,6 +712,27 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
                     }
                 )
 
+    # Task 6.8: data_package_unmigrated
+    dp_dir = project_root / "doc" / "data-packages"
+    if dp_dir.exists():
+        for md in dp_dir.rglob("*.md"):
+            result = parse_frontmatter(md)
+            if not result:
+                continue
+            fm, _ = result
+            if fm.get("type") != "data-package":
+                continue
+            if fm.get("status") != "superseded":
+                issues.append(
+                    {
+                        "code": "data_package_unmigrated",
+                        "severity": "error",
+                        "entity_id": str(fm.get("id", "")),
+                        "file_path": str(md),
+                        "message": "unmigrated data-package; run `science-tool data-package migrate` to split into derived dataset(s) + research-package",
+                    }
+                )
+
     return issues
 
 
