@@ -81,3 +81,26 @@ class ResearchPackageDescriptor(BaseModel):
     version: str
     resources: list[ResourceSchema]
     research: ResearchExtension
+
+
+class AccessException(BaseModel):
+    """Structured Branch-B decision for an unverified-but-consumable external dataset."""
+
+    mode: Literal["", "scope-reduced", "expanded-to-acquire", "substituted"] = ""
+    decision_date: str = ""
+    followup_task: str = ""
+    superseded_by_dataset: str = ""
+    rationale: str = ""
+
+
+class AccessBlock(BaseModel):
+    """External dataset access verification gate state."""
+
+    level: Literal["public", "registration", "controlled", "commercial", "mixed"]
+    verified: bool
+    verification_method: Literal["", "retrieved", "credential-confirmed"] = ""
+    last_reviewed: str = ""
+    verified_by: str = ""
+    source_url: str = ""
+    credentials_required: str = ""
+    exception: AccessException = Field(default_factory=AccessException)
