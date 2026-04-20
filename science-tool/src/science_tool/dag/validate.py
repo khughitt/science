@@ -175,6 +175,14 @@ def _parse_dot_topology(dot_path: Path) -> tuple[frozenset[str], frozenset[tuple
     subgraph declarations — attributes inside ``[...]`` are tolerated but
     multi-line attribute blocks are not supported. This mirrors the style of
     the existing number.py.
+
+    Explicitly NOT handled (silently ignored by the regexes):
+    - Edge chains: ``a -> b -> c;`` (author must split into two statements).
+    - Quoted identifiers: ``"a-b" -> "c";``.
+    - Port syntax: ``a:f1 -> b:f2;``.
+    - Anonymous subgraph edge lists: ``{a b} -> c;``.
+    These are all valid DOT but uncommon in mm30's curated DAGs. If a future
+    project uses them, extend the regex set or swap in a real DOT parser.
     """
     text = dot_path.read_text(encoding="utf-8")
 
@@ -187,7 +195,12 @@ def _parse_dot_topology(dot_path: Path) -> tuple[frozenset[str], frozenset[tuple
         line = re.sub(r"//.*$", "", raw_line).strip()
         if not line or line.startswith(("digraph", "graph", "subgraph", "}", "{")):
             continue
-        # Skip top-level graph/edge/node attribute lines.
+        # Skip top-level graph/edge/node attribute lines. This set is a
+        # secondary safety net: most attribute lines are already rejected by
+        # the edge/node regex terminators (``\[|;|$``), which don't match
+        # ``key=value`` without trailing punctuation. The set below catches
+        # the handful of lines that DO end in ``;`` and would otherwise be
+        # mistaken for node declarations.
         stripped = line.split("=", 1)[0].strip()
         if stripped in {"rankdir", "labelloc", "label", "fontsize", "node", "edge", "style", "color"}:
             continue
