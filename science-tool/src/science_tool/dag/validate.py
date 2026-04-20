@@ -496,7 +496,7 @@ def _check_cross_dag_node_consistency(
     for dag, nodes in per_dag_nodes.items():
         for node in nodes:
             buckets.setdefault(node.lower(), set()).add((dag, node))
-    for lower, entries in sorted(buckets.items()):
+    for _lower, entries in sorted(buckets.items()):
         variants = {node for _, node in entries}
         if len(variants) < 2:
             continue
