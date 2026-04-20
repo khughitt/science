@@ -7,6 +7,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
 
+from science_model.packages.schema import AccessBlock, DerivationBlock
 from science_model.reasoning import (
     ClaimLayer,
     IdentificationStrength,
@@ -94,9 +95,42 @@ class Entity(BaseModel):
     independence_group: str | None = None
     measurement_model: MeasurementModel | None = None
     rival_model_packet_ref: str | None = None
+    # Dataset entity unification (rev 2.2)
+    origin: str | None = None  # "external" | "derived"
+    access: AccessBlock | None = None
+    derivation: DerivationBlock | None = None
+    accessions: list[str] = Field(default_factory=list)
+    datapackage: str = ""
+    local_path: str = ""
+    consumed_by: list[str] = Field(default_factory=list)
+    parent_dataset: str = ""
+    siblings: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _fill_derived_defaults(self) -> "Entity":
         if not self.canonical_id:
             self.canonical_id = self.id
+        return self
+
+    @model_validator(mode="after")
+    def _enforce_origin_block_invariants(self) -> "Entity":
+        """Invariants #7/#8: origin ⟺ which top-level block applies (datasets only)."""
+        if self.type != EntityType.DATASET or self.origin is None:
+            return self
+        if self.origin == "external":
+            if self.access is None:
+                raise ValueError(f"{self.id}: origin=external requires an access block (invariant #7)")
+            if self.derivation is not None:
+                raise ValueError(f"{self.id}: origin=external must not carry a derivation block (invariant #7)")
+        elif self.origin == "derived":
+            if self.derivation is None:
+                raise ValueError(f"{self.id}: origin=derived requires a derivation block (invariant #8)")
+            if self.access is not None:
+                raise ValueError(f"{self.id}: origin=derived must not carry an access block (invariant #8)")
+            if self.accessions:
+                raise ValueError(f"{self.id}: origin=derived must not carry accessions (invariant #8)")
+            if self.local_path:
+                raise ValueError(f"{self.id}: origin=derived must not carry local_path (invariant #8)")
+        else:
+            raise ValueError(f"{self.id}: origin must be 'external' or 'derived', got {self.origin!r}")
         return self
