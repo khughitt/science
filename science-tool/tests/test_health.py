@@ -585,3 +585,33 @@ def test_derived_shared_upstream_not_false_cycle(tmp_path: Path) -> None:
     issues = check_dataset_anomalies(tmp_path)
     chain_issues = [i for i in issues if i["code"] == "dataset_derived_input_chain_broken"]
     assert chain_issues == [], f"shared upstream wrongly flagged as cycle: {chain_issues}"
+
+
+# ---------------------------------------------------------------------------
+# Task 6.6: dataset_verified_but_unstageable
+# ---------------------------------------------------------------------------
+
+
+def test_verified_no_datapackage_no_localpath_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "us",
+        origin="external",
+        body='access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}',
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_verified_but_unstageable" for i in issues)
+
+
+def test_verified_with_local_path_no_flag(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "ls",
+        origin="external",
+        body='local_path: "data/ls/file.csv"\n'
+        'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}',
+    )
+    (tmp_path / "data" / "ls").mkdir(parents=True)
+    (tmp_path / "data" / "ls" / "file.csv").write_text("col\n", encoding="utf-8")
+    issues = check_dataset_anomalies(tmp_path)
+    assert not any(i["code"] == "dataset_verified_but_unstageable" for i in issues)

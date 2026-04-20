@@ -564,6 +564,33 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
                         }
                     )
 
+                # Task 6.6: verified but unstageable
+                datapackage = fm.get("datapackage", "")
+                local_path = fm.get("local_path", "")
+                stageable_path = datapackage or local_path
+                if (verified or exception_mode) and not stageable_path:
+                    issues.append(
+                        {
+                            "code": "dataset_verified_but_unstageable",
+                            "severity": "warning",
+                            "entity_id": entity_id,
+                            "file_path": str(md),
+                            "message": "verified entity has neither datapackage: nor local_path:",
+                        }
+                    )
+                elif stageable_path:
+                    full = project_root / stageable_path
+                    if not full.exists():
+                        issues.append(
+                            {
+                                "code": "dataset_verified_but_unstageable",
+                                "severity": "warning",
+                                "entity_id": entity_id,
+                                "file_path": str(md),
+                                "message": f"runtime path {stageable_path} does not exist on disk",
+                            }
+                        )
+
             # Derived workflow-run checks (invariant #9)
             if origin == "derived":
                 derivation = fm.get("derivation") or {}
