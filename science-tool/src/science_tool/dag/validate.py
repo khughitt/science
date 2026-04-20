@@ -490,6 +490,11 @@ def _check_cross_dag_node_consistency(
 
     A name is inconsistent iff its case-insensitive bucket has >= 2 distinct
     case variants across DAGs.
+
+    Note: DAGs whose ``.dot`` file was missing (and therefore emitted a
+    ``source_dot_missing`` error earlier) are absent from ``per_dag_nodes`` and
+    are not audited here. The cross-DAG check is a hygiene signal that piggy-
+    backs on whatever nodes were successfully parsed.
     """
     findings: list[ValidationFinding] = []
     buckets: dict[str, set[tuple[str, str]]] = {}  # lower -> {(dag, variant)}
