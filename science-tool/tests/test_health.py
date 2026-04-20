@@ -719,3 +719,41 @@ def test_lineage_drift_flagged(tmp_path: Path) -> None:
     )
     issues = check_dataset_anomalies(tmp_path)
     assert any(i["code"] == "dataset_invariant_violation" and "lineage" in i["message"].lower() for i in issues)
+
+
+# ---------------------------------------------------------------------------
+# Task 6.10: dataset_cached_field_drift
+# ---------------------------------------------------------------------------
+
+
+def test_cached_field_drift_flagged(tmp_path: Path) -> None:
+    import yaml
+
+    _write_dataset(
+        tmp_path,
+        "drift",
+        origin="external",
+        body='license: "CC-BY-4.0"\n'
+        'ontology_terms: ["UBERON:0001"]\n'
+        'datapackage: "data/drift/datapackage.yaml"\n'
+        'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}',
+    )
+    rt = tmp_path / "data" / "drift" / "datapackage.yaml"
+    rt.parent.mkdir(parents=True)
+    rt.write_text(
+        yaml.safe_dump(
+            {
+                "profiles": ["science-pkg-runtime-1.0"],
+                "name": "drift",
+                "license": "CC0-1.0",  # drift!
+                "ontology_terms": ["UBERON:0002"],  # drift!
+                "resources": [{"name": "x", "path": "x.csv", "format": "csv"}],
+            }
+        )
+    )
+    # Also seed the resource file so unstageable doesn't fire
+    (tmp_path / "data" / "drift" / "x.csv").write_text("col\n")
+    issues = check_dataset_anomalies(tmp_path)
+    drift_msgs = [i["message"] for i in issues if i["code"] == "dataset_cached_field_drift"]
+    assert any("license" in m for m in drift_msgs)
+    assert any("ontology_terms" in m for m in drift_msgs)

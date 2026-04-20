@@ -12,6 +12,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TypedDict
 
+import yaml as _yaml
+
 from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.graph.migrate import audit_project_sources, build_layered_claim_migration_report
 from science_tool.graph.sources import load_project_sources
@@ -459,6 +461,16 @@ def _load_research_packages(project_root: Path) -> dict[str, list[str]]:
     return rps
 
 
+def _load_runtime_pkg(project_root: Path, datapackage_path: str) -> dict | None:
+    p = project_root / datapackage_path
+    if not p.exists():
+        return None
+    try:
+        return _yaml.safe_load(p.read_text(encoding="utf-8"))
+    except _yaml.YAMLError:
+        return None
+
+
 def check_dataset_anomalies(project_root: Path) -> list[dict]:
     """Run dataset-related health checks and return found anomalies.
 
@@ -679,6 +691,48 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
                                 "entity_id": entity_id,
                                 "file_path": str(md),
                                 "message": f"consumed_by lists {cons} but its displays: doesn't include {entity_id}",
+                            }
+                        )
+
+            # Task 6.10: cached-field drift (datapackage YAML vs entity frontmatter)
+            datapackage_path = fm.get("datapackage", "")
+            if datapackage_path:
+                rt = _load_runtime_pkg(project_root, datapackage_path)
+                if rt is not None:
+                    fm_license = fm.get("license", "")
+                    rt_license = rt.get("license", "")
+                    if fm_license and rt_license and fm_license != rt_license:
+                        issues.append(
+                            {
+                                "code": "dataset_cached_field_drift",
+                                "severity": "warning",
+                                "entity_id": entity_id,
+                                "file_path": str(md),
+                                "message": f"license drift: entity={fm_license!r} runtime={rt_license!r}",
+                            }
+                        )
+                    fm_ot = sorted(list(fm.get("ontology_terms") or []))
+                    rt_ot = sorted(list(rt.get("ontology_terms") or []))
+                    if fm_ot and rt_ot and fm_ot != rt_ot:
+                        issues.append(
+                            {
+                                "code": "dataset_cached_field_drift",
+                                "severity": "warning",
+                                "entity_id": entity_id,
+                                "file_path": str(md),
+                                "message": f"ontology_terms drift: entity={fm_ot} runtime={rt_ot}",
+                            }
+                        )
+                    fm_uc = fm.get("update_cadence", "")
+                    rt_uc = rt.get("update_cadence", "")
+                    if fm_uc and rt_uc and fm_uc != rt_uc:
+                        issues.append(
+                            {
+                                "code": "dataset_cached_field_drift",
+                                "severity": "warning",
+                                "entity_id": entity_id,
+                                "file_path": str(md),
+                                "message": f"update_cadence drift: entity={fm_uc!r} runtime={rt_uc!r}",
                             }
                         )
 
