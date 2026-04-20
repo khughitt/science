@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 
@@ -19,7 +20,7 @@ FIXTURE_MINIMAL = Path(__file__).parent / "fixtures" / "minimal"
 
 
 @pytest.fixture
-def _schema_cache_isolation() -> None:
+def _schema_cache_isolation() -> Iterator[None]:
     """Clear the _load_schema cache after the test so monkeypatched _SCHEMA_PATH
     doesn't leak stale schema bytes into subsequent tests."""
     yield
