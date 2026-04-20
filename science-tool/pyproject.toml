@@ -9,6 +9,7 @@ dependencies = [
   "rich>=13.0",
   "rdflib>=7.0",
   "pyyaml>=6.0",
+  "jsonschema>=4.0",
   "science-model",
   "ruff>=0.15.6",
 ]
