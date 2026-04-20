@@ -2781,5 +2781,145 @@ def feedback_report(status: str | None, project: str | None) -> None:
     click.echo(report)
 
 
+# ── dataset (entity lifecycle) ──────────────────────────────────────────────
+
+
+def _project_root_from_env() -> Path:
+    """Return project root from SCIENCE_PROJECT_ROOT env var or cwd."""
+    import os
+
+    env = os.environ.get("SCIENCE_PROJECT_ROOT")
+    return Path(env).resolve() if env else Path.cwd()
+
+
+@main.group("dataset")
+def dataset_group() -> None:
+    """Dataset entity lifecycle commands (list, register-run, reconcile)."""
+
+
+@dataset_group.command("list")
+@click.option(
+    "--origin",
+    default=None,
+    type=click.Choice(["external", "derived"]),
+    help="Filter by origin (external or derived)",
+)
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
+)
+def dataset_list(origin: str | None, project_root: Path | None) -> None:
+    """List dataset entities in the project."""
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    ds_dir = root / "doc" / "datasets"
+    if not ds_dir.is_dir():
+        click.echo("No doc/datasets directory found.")
+        return
+    from science_model.frontmatter import parse_frontmatter
+
+    for md in sorted(ds_dir.glob("*.md")):
+        result = parse_frontmatter(md)
+        if result is None:
+            continue
+        fm, _ = result
+        ds_origin = fm.get("origin", "")
+        if origin is not None and ds_origin != origin:
+            continue
+        ds_id = fm.get("id", md.stem)
+        title = fm.get("title", "")
+        click.echo(f"{ds_id}  {title}")
+
+
+@dataset_group.command("register-run")
+@click.argument("workflow_run_id")
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
+)
+def dataset_register_run(workflow_run_id: str, project_root: Path | None) -> None:
+    """Register derived datasets for a completed workflow run.
+
+    Writes per-output datapackage.yaml files, creates derived dataset entities,
+    and updates symmetric edges (produces/consumed_by).
+    """
+    from science_tool.datasets_register import (
+        write_derived_dataset_entities,
+        write_per_output_datapackages,
+        write_symmetric_edges,
+    )
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    try:
+        dp_paths = write_per_output_datapackages(root, workflow_run_id)
+    except (FileNotFoundError, ValueError) as exc:
+        click.echo(str(exc), err=True)
+        raise click.exceptions.Exit(1)
+    for p in dp_paths:
+        click.echo(f"wrote {p}")
+
+    try:
+        entities = write_derived_dataset_entities(root, workflow_run_id)
+    except (FileNotFoundError, ValueError) as exc:
+        click.echo(str(exc), err=True)
+        raise click.exceptions.Exit(1)
+    for path, ds_id in entities:
+        click.echo(f"entity {ds_id} -> {path}")
+
+    dataset_ids = [ds_id for _, ds_id in entities]
+    write_symmetric_edges(root, workflow_run_id, dataset_ids)
+    click.echo(f"register-run complete: {len(dp_paths)} outputs, {len(entities)} entities")
+
+
+@dataset_group.command("reconcile")
+@click.argument("slug")
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
+)
+def dataset_reconcile(slug: str, project_root: Path | None) -> None:
+    """Check cached-field drift between dataset entity and its runtime datapackage.yaml."""
+    import yaml as _yaml
+
+    from science_model.frontmatter import parse_frontmatter
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    md = root / "doc" / "datasets" / f"{slug}.md"
+    if not md.exists():
+        click.echo(f"no such dataset entity: {md}", err=True)
+        raise click.exceptions.Exit(2)
+    result = parse_frontmatter(md)
+    fm = result[0] if result else {}
+    dp_rel = fm.get("datapackage", "")
+    if not dp_rel:
+        click.echo("no datapackage: pointer; nothing to reconcile", err=True)
+        raise click.exceptions.Exit(0)
+    rt_path = root / dp_rel
+    if not rt_path.exists():
+        click.echo(f"runtime datapackage missing: {rt_path}", err=True)
+        raise click.exceptions.Exit(1)
+    rt = _yaml.safe_load(rt_path.read_text(encoding="utf-8"))
+    drifts = []
+    for field in ("license", "update_cadence"):
+        e_v = fm.get(field, "")
+        r_v = rt.get(field, "")
+        if e_v and r_v and e_v != r_v:
+            drifts.append(f"{field}: entity={e_v!r} runtime={r_v!r}")
+    e_ot = sorted(fm.get("ontology_terms") or [])
+    r_ot = sorted(rt.get("ontology_terms") or [])
+    if e_ot and r_ot and e_ot != r_ot:
+        drifts.append(f"ontology_terms: entity={e_ot} runtime={r_ot}")
+    if drifts:
+        for d in drifts:
+            click.echo(d)
+        raise click.exceptions.Exit(1)
+    click.echo("in sync")
+
+
 if __name__ == "__main__":
     main()
