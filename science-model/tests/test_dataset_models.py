@@ -142,6 +142,7 @@ def test_entity_external_origin_with_access_block() -> None:
         siblings=[],
     )
     assert e.origin == "external"
+    assert e.access is not None
     assert e.access.verified is True
     assert e.derivation is None
 
