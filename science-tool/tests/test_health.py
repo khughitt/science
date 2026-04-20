@@ -615,3 +615,34 @@ def test_verified_with_local_path_no_flag(tmp_path: Path) -> None:
     (tmp_path / "data" / "ls" / "file.csv").write_text("col\n", encoding="utf-8")
     issues = check_dataset_anomalies(tmp_path)
     assert not any(i["code"] == "dataset_verified_but_unstageable" for i in issues)
+
+
+# ---------------------------------------------------------------------------
+# Task 6.7: dataset_research_package_asymmetric (#11)
+# ---------------------------------------------------------------------------
+
+
+def _write_research_package(p: Path, slug: str, *, displays: list[str]) -> None:
+    f = p / "research" / "packages" / "lens" / slug / "research-package.md"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(
+        f'---\nid: "research-package:{slug}"\ntype: "research-package"\ntitle: "{slug}"\ndisplays: {displays}\n---\n',
+        encoding="utf-8",
+    )
+
+
+def test_rp_displays_dataset_missing_consumed_by_flagged(tmp_path: Path) -> None:
+    _write_research_package(tmp_path, "rp1", displays=["dataset:dr1"])
+    _write_workflow_run(tmp_path, "w-r6", produces=["dataset:dr1"], inputs=[])
+    _write_dataset(tmp_path, "dr1", origin="derived", body=_derived_dataset_body("workflow-run:w-r6", []))
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_research_package_asymmetric" for i in issues)
+
+
+def test_dataset_consumed_by_rp_missing_displays_flagged(tmp_path: Path) -> None:
+    _write_research_package(tmp_path, "rp2", displays=[])
+    _write_workflow_run(tmp_path, "w-r7", produces=["dataset:dr2"], inputs=[])
+    body = _derived_dataset_body("workflow-run:w-r7", []) + '\nconsumed_by: ["research-package:rp2"]'
+    _write_dataset(tmp_path, "dr2", origin="derived", body=body)
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_research_package_asymmetric" for i in issues)

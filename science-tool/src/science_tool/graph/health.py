@@ -441,6 +441,24 @@ def _passes_gate(
     return memo[entity_id]
 
 
+def _load_research_packages(project_root: Path) -> dict[str, list[str]]:
+    """Map research-package:<slug> -> displays list."""
+    from science_model.frontmatter import parse_frontmatter
+
+    rps: dict[str, list[str]] = {}
+    rp_root = project_root / "research" / "packages"
+    if not rp_root.exists():
+        return rps
+    for md in rp_root.rglob("research-package.md"):
+        result = parse_frontmatter(md)
+        if not result:
+            continue
+        fm, _ = result
+        if fm.get("type") == "research-package" and fm.get("id"):
+            rps[str(fm["id"])] = list(fm.get("displays") or [])
+    return rps
+
+
 def check_dataset_anomalies(project_root: Path) -> list[dict]:
     """Run dataset-related health checks and return found anomalies.
 
@@ -467,6 +485,9 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
             if fm.get("type") == "dataset" and fm.get("id"):
                 datasets_by_id[str(fm["id"])] = fm
     gate_memo: dict[str, tuple[bool, str]] = {}
+
+    # Load research packages for symmetry check (task 6.7)
+    research_packages = _load_research_packages(project_root)
 
     if datasets_dir.exists():
         for md in datasets_dir.rglob("*.md"):
@@ -634,6 +655,62 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
                             }
                         )
                         break  # one error per entity is enough
+
+            # Task 6.7: research-package symmetry (forward: dataset.consumed_by -> rp.displays)
+            consumed_by_list = list(fm.get("consumed_by") or [])
+            for cons in consumed_by_list:
+                if str(cons).startswith("research-package:"):
+                    rp_displays = research_packages.get(str(cons))
+                    if rp_displays is None:
+                        issues.append(
+                            {
+                                "code": "dataset_research_package_asymmetric",
+                                "severity": "error",
+                                "entity_id": entity_id,
+                                "file_path": str(md),
+                                "message": f"consumed_by lists {cons} but it doesn't resolve to a research-package",
+                            }
+                        )
+                    elif entity_id not in rp_displays:
+                        issues.append(
+                            {
+                                "code": "dataset_research_package_asymmetric",
+                                "severity": "error",
+                                "entity_id": entity_id,
+                                "file_path": str(md),
+                                "message": f"consumed_by lists {cons} but its displays: doesn't include {entity_id}",
+                            }
+                        )
+
+    # Task 6.7: reverse check (rp.displays -> dataset.consumed_by)
+    # Re-use already-built datasets_by_id to avoid a third rglob pass.
+    ds_consumed_by: dict[str, list[str]] = {
+        ds_id: list(fm.get("consumed_by") or []) for ds_id, fm in datasets_by_id.items()
+    }
+    for rp_id, displays in research_packages.items():
+        for ds_id in displays:
+            ds_id = str(ds_id)
+            cb = ds_consumed_by.get(ds_id)
+            if cb is None:
+                issues.append(
+                    {
+                        "code": "dataset_research_package_asymmetric",
+                        "severity": "error",
+                        "entity_id": rp_id,
+                        "file_path": "",
+                        "message": f"research-package.displays lists {ds_id} but no such dataset entity",
+                    }
+                )
+            elif rp_id not in cb:
+                issues.append(
+                    {
+                        "code": "dataset_research_package_asymmetric",
+                        "severity": "error",
+                        "entity_id": rp_id,
+                        "file_path": "",
+                        "message": f"{rp_id} displays {ds_id} but the dataset's consumed_by doesn't include the research-package",
+                    }
+                )
 
     return issues
 
