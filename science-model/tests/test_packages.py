@@ -88,14 +88,20 @@ class TestResearchPackageDescriptor:
 
     def test_code_excerpt_lines_tuple(self) -> None:
         exc = CodeExcerpt(
-            name="test", path="excerpts/test.ts", source="scripts/test.ts",
-            lines=(10, 50), github_permalink="",
+            name="test",
+            path="excerpts/test.ts",
+            source="scripts/test.ts",
+            lines=(10, 50),
+            github_permalink="",
         )
         assert exc.lines == (10, 50)
 
     def test_github_permalink_defaults_empty(self) -> None:
         exc = CodeExcerpt(
-            name="test", path="excerpts/test.ts", source="scripts/test.ts", lines=(1, 10),
+            name="test",
+            path="excerpts/test.ts",
+            source="scripts/test.ts",
+            lines=(1, 10),
         )
         assert exc.github_permalink == ""
 
@@ -246,6 +252,7 @@ class TestValidatePackage:
 class TestCheckFreshness:
     def test_fresh_inputs(self, tmp_path: Path) -> None:
         import hashlib
+
         pkg_dir = tmp_path / "pkg"
         pkg_dir.mkdir()
         project_root = tmp_path / "project"
