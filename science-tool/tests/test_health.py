@@ -674,3 +674,48 @@ def test_superseded_data_package_no_flag(tmp_path: Path) -> None:
     )
     issues = check_dataset_anomalies(tmp_path)
     assert not any(i["code"] == "data_package_unmigrated" for i in issues)
+
+
+# ---------------------------------------------------------------------------
+# Task 6.9: dataset_invariant_violation (umbrella + lineage)
+# ---------------------------------------------------------------------------
+
+
+def test_umbrella_in_consumed_by_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path, "umb", origin="external", body='access: {level: "mixed", verified: false}\nsiblings: ["dataset:c1"]'
+    )
+    _write_dataset(
+        tmp_path,
+        "c1",
+        origin="external",
+        body='access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}\n'
+        'parent_dataset: "dataset:umb"\nconsumed_by: ["plan:p"]',
+    )
+    _write_dataset(
+        tmp_path,
+        "wrong",
+        origin="external",
+        body='access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://y"}\n'
+        "consumed_by: []",
+    )
+    f = tmp_path / "doc" / "datasets" / "consumer.md"
+    f.write_text(
+        '---\nid: "dataset:consumer"\ntype: "dataset"\ntitle: "Consumer"\norigin: "external"\n'
+        'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://z"}\n'
+        'consumed_by: ["dataset:umb"]\n---\n',
+        encoding="utf-8",
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_invariant_violation" and "umbrella" in i["message"].lower() for i in issues)
+
+
+def test_lineage_drift_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path, "p1", origin="external", body='access: {level: "public", verified: false}\nsiblings: ["dataset:c2"]'
+    )
+    _write_dataset(
+        tmp_path, "c2", origin="external", body='access: {level: "public", verified: false}\nparent_dataset: ""'
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_invariant_violation" and "lineage" in i["message"].lower() for i in issues)

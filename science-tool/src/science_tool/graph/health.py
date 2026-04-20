@@ -682,6 +682,38 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
                             }
                         )
 
+    # Task 6.9: umbrella + lineage invariants (cross-entity, done after per-entity loop)
+    # #1: an umbrella entity (has siblings:) must not appear in any other entity's consumed_by
+    umbrella_ids = {ds_id for ds_id, fm in datasets_by_id.items() if fm.get("siblings")}
+    for ds_id, fm in datasets_by_id.items():
+        for cons in list(fm.get("consumed_by") or []):
+            if str(cons) in umbrella_ids:
+                issues.append(
+                    {
+                        "code": "dataset_invariant_violation",
+                        "severity": "warning",
+                        "entity_id": ds_id,
+                        "file_path": "",
+                        "message": f"umbrella {cons} appears in {ds_id}.consumed_by (invariant #1)",
+                    }
+                )
+
+    # #5: lineage symmetry: parent_dataset ↔ siblings
+    for ds_id, fm in datasets_by_id.items():
+        for sib_id in list(fm.get("siblings") or []):
+            sib_id_str = str(sib_id)
+            child_fm = datasets_by_id.get(sib_id_str)
+            if child_fm is not None and str(child_fm.get("parent_dataset", "")) != ds_id:
+                issues.append(
+                    {
+                        "code": "dataset_invariant_violation",
+                        "severity": "warning",
+                        "entity_id": ds_id,
+                        "file_path": "",
+                        "message": f"lineage drift: {ds_id} lists sibling {sib_id_str} but {sib_id_str}.parent_dataset != {ds_id}",
+                    }
+                )
+
     # Task 6.7: reverse check (rp.displays -> dataset.consumed_by)
     # Re-use already-built datasets_by_id to avoid a third rglob pass.
     ds_consumed_by: dict[str, list[str]] = {
