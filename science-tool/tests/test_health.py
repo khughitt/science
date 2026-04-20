@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from science_tool.graph.health import check_dataset_anomalies
+
 
 def _write_layered_claim_project(tmp_path: Path) -> Path:
     (tmp_path / "science.yaml").write_text("name: test\n")
@@ -413,3 +415,43 @@ def test_dataset_anomaly_codes_registered() -> None:
         "data_package_unmigrated",
     }
     assert expected.issubset(set(DATASET_ANOMALY_CODES))
+
+
+def _write_dataset(p: Path, slug: str, *, origin: str, body: str) -> Path:
+    f = p / "doc" / "datasets" / f"{slug}.md"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(
+        f'---\nid: "dataset:{slug}"\ntype: "dataset"\ntitle: "{slug}"\norigin: "{origin}"\n{body}\n---\n',
+        encoding="utf-8",
+    )
+    return f
+
+
+def test_external_with_derivation_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "x",
+        origin="external",
+        body=(
+            'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19"}\n'
+            'derivation: {workflow: "workflow:w", workflow_run: "workflow-run:w-r1", git_commit: "a", config_snapshot: "c", produced_at: "t", inputs: []}'
+        ),
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    codes = {i["code"] for i in issues}
+    assert "dataset_origin_block_mismatch" in codes
+
+
+def test_derived_with_access_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "y",
+        origin="derived",
+        body=(
+            'derivation: {workflow: "workflow:w", workflow_run: "workflow-run:w-r1", git_commit: "a", config_snapshot: "c", produced_at: "t", inputs: []}\n'
+            'access: {level: "public", verified: true}'
+        ),
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    codes = {i["code"] for i in issues}
+    assert "dataset_origin_block_mismatch" in codes

@@ -391,3 +391,165 @@ def collect_legacy_structured_literature_prefixes(project_root: Path) -> list[Le
                 )
             )
     return findings
+
+
+def check_dataset_anomalies(project_root: Path) -> list[dict]:
+    """Run dataset-related health checks and return found anomalies.
+
+    Each anomaly dict has: code, severity, entity_id, file_path, message.
+
+    Uses raw frontmatter dicts (not the Pydantic model) so that invariant
+    violations — which cause model_validator to raise — can still be flagged.
+    """
+    from science_model.frontmatter import parse_frontmatter
+
+    issues: list[dict] = []
+    workflow_runs = _load_workflow_runs(project_root)
+
+    datasets_dir = project_root / "doc" / "datasets"
+    if not datasets_dir.exists():
+        return issues
+
+    for md in datasets_dir.rglob("*.md"):
+        result = parse_frontmatter(md)
+        if not result:
+            continue
+        fm, _ = result
+        if fm.get("type") != "dataset":
+            continue
+        entity_id = str(fm.get("id", md.stem))
+        origin = fm.get("origin", "external")  # legacy default
+
+        # Invariant #7: external must not carry derivation:
+        if origin == "external" and "derivation" in fm:
+            issues.append(
+                {
+                    "code": "dataset_origin_block_mismatch",
+                    "severity": "error",
+                    "entity_id": entity_id,
+                    "file_path": str(md),
+                    "message": "origin: external entity carries a derivation: block (invariant #7)",
+                }
+            )
+
+        # Invariant #8: derived must not carry access:, accessions:, or local_path:
+        if origin == "derived":
+            forbidden = []
+            if "access" in fm:
+                forbidden.append("access")
+            if fm.get("accessions"):
+                forbidden.append("accessions")
+            if fm.get("local_path"):
+                forbidden.append("local_path")
+            if forbidden:
+                issues.append(
+                    {
+                        "code": "dataset_origin_block_mismatch",
+                        "severity": "error",
+                        "entity_id": entity_id,
+                        "file_path": str(md),
+                        "message": f"origin: derived entity carries forbidden field(s): {', '.join(forbidden)} (invariant #8)",
+                    }
+                )
+
+        # External-access anomalies
+        if origin == "external":
+            access = fm.get("access") or {}
+            if isinstance(access, str):  # legacy flat shorthand
+                access = {"level": access, "verified": False}
+            verified = bool(access.get("verified", False))
+            exception_mode = (access.get("exception") or {}).get("mode", "")
+            consumed_by = list(fm.get("consumed_by") or [])
+
+            # Consumed but unverified (with no exception)
+            if consumed_by and not verified and not exception_mode:
+                issues.append(
+                    {
+                        "code": "dataset_consumed_but_unverified",
+                        "severity": "error",
+                        "entity_id": entity_id,
+                        "file_path": str(md),
+                        "message": f"consumed by {consumed_by} but access.verified is false and no exception is set",
+                    }
+                )
+
+            # Stale review (verified + last_reviewed > 365 days ago)
+            last_reviewed = access.get("last_reviewed", "")
+            if verified and last_reviewed:
+                from datetime import date
+
+                try:
+                    reviewed = date.fromisoformat(last_reviewed)
+                    if (date.today() - reviewed).days > 365:
+                        issues.append(
+                            {
+                                "code": "dataset_stale_review",
+                                "severity": "warning",
+                                "entity_id": entity_id,
+                                "file_path": str(md),
+                                "message": f"last_reviewed {last_reviewed} is older than 12 months",
+                            }
+                        )
+                except ValueError:
+                    pass
+
+            # Missing source_url on verified entity
+            if verified and not access.get("source_url"):
+                issues.append(
+                    {
+                        "code": "dataset_missing_source_url",
+                        "severity": "warning",
+                        "entity_id": entity_id,
+                        "file_path": str(md),
+                        "message": "access.verified is true but source_url is empty",
+                    }
+                )
+
+        # Derived workflow-run checks (invariant #9)
+        if origin == "derived":
+            derivation = fm.get("derivation") or {}
+            wf_run_id = str(derivation.get("workflow_run", ""))
+            if wf_run_id:
+                run_fm = workflow_runs.get(wf_run_id)
+                if run_fm is None:
+                    issues.append(
+                        {
+                            "code": "dataset_derived_missing_workflow_run",
+                            "severity": "error",
+                            "entity_id": entity_id,
+                            "file_path": str(md),
+                            "message": f"derivation.workflow_run {wf_run_id} does not resolve to a workflow-run entity",
+                        }
+                    )
+                else:
+                    produces = list(run_fm.get("produces") or [])
+                    if entity_id not in produces:
+                        issues.append(
+                            {
+                                "code": "dataset_derived_asymmetric_edge",
+                                "severity": "error",
+                                "entity_id": entity_id,
+                                "file_path": str(md),
+                                "message": f"workflow-run {wf_run_id} does not list {entity_id} in produces:",
+                            }
+                        )
+
+    return issues
+
+
+def _load_workflow_runs(project_root: Path) -> dict[str, dict]:
+    """Map workflow-run:<slug> -> raw frontmatter dict."""
+    from science_model.frontmatter import parse_frontmatter
+
+    runs: dict[str, dict] = {}
+    runs_dir = project_root / "doc" / "workflow-runs"
+    if not runs_dir.exists():
+        return runs
+    for md in runs_dir.rglob("*.md"):
+        result = parse_frontmatter(md)
+        if not result:
+            continue
+        fm, _ = result
+        if fm.get("type") == "workflow-run" and fm.get("id"):
+            runs[str(fm["id"])] = fm
+    return runs
