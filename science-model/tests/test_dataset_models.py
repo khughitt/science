@@ -82,3 +82,15 @@ class TestDerivationBlock:
                 produced_at="t",
                 inputs=["not-a-dataset"],
             )
+
+
+from science_model.entities import EntityType
+
+
+def test_research_package_entity_type_exists() -> None:
+    assert EntityType("research-package") == EntityType.RESEARCH_PACKAGE
+
+
+def test_data_package_entity_type_still_parses() -> None:
+    """Back-compat: legacy data-package entries continue to parse as their own type."""
+    assert EntityType("data-package") == EntityType.DATA_PACKAGE

@@ -42,6 +42,7 @@ class EntityType(StrEnum):
     WORKFLOW_RUN = "workflow-run"
     WORKFLOW_STEP = "workflow-step"
     DATA_PACKAGE = "data-package"
+    RESEARCH_PACKAGE = "research-package"
     FINDING = "finding"
     STORY = "story"
     PAPER = "paper"
