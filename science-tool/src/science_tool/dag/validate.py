@@ -293,7 +293,9 @@ def validate_project(
     """
     if today is None:
         today = date.today()
-    project_root = paths.dag_dir.parent.parent  # dag_dir := <root>/doc/figures/dags
+    # dag_dir defaults to <root>/doc/figures/dags under the research profile,
+    # so three parents up recovers the project root.
+    project_root = paths.dag_dir.parents[2]
     findings: list[ValidationFinding] = []
 
     for yaml_path in _discover_edge_yaml_files(paths):
@@ -319,9 +321,7 @@ def validate_project(
         if model.source_dot is not None:
             # source_dot may be project-root-relative (e.g. "doc/figures/dags/foo.dot")
             # or a bare filename (e.g. "foo.dot").
-            # dag_dir is <root>/doc/figures/dags, so project root is 3 levels up.
-            dag_project_root = paths.dag_dir.parent.parent.parent
-            candidate = dag_project_root / model.source_dot
+            candidate = project_root / model.source_dot
             dot_path = candidate if candidate.exists() else yaml_path.parent / model.source_dot
         else:
             dot_path = yaml_path.parent / f"{model.dag}.dot"
