@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 from science_tool.dag.paths import load_dag_paths
 from science_tool.dag.validate import (
     ValidationFinding,
@@ -122,3 +124,40 @@ def test_acyclicity_passes_on_clean() -> None:
     paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
     report = validate_project(paths)
     assert not any(f.rule == "acyclicity" for f in report.findings)
+
+
+def test_jsonschema_conformance_passes_on_clean() -> None:
+    paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
+    report = validate_project(paths)
+    assert not any(f.rule == "jsonschema_conformance" for f in report.findings)
+
+
+def test_jsonschema_conformance_runs_on_mm30_fixture() -> None:
+    # Primary value is proving the check runs on a real multi-edge fixture
+    # without falsely flagging. If the committed schema drifts, this also
+    # catches that (though test_committed_schema_matches_pydantic_emit is the
+    # dedicated drift-guard).
+    paths = load_dag_paths(Path(__file__).parent / "fixtures" / "mm30")
+    report = validate_project(paths)
+    jsonschema_findings = [f for f in report.findings if f.rule == "jsonschema_conformance"]
+    assert jsonschema_findings == []
+
+
+def test_jsonschema_conformance_catches_drift(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Point the schema loader at a bogus schema that rejects everything, then
+    # ensure at least one finding with rule=jsonschema_conformance appears.
+    bogus = tmp_path / "bogus.schema.json"
+    bogus.write_text(
+        '{"type": "object", "properties": {"dag": {"type": "number"}}, "required": ["dag"]}',
+        encoding="utf-8",
+    )
+    import science_tool.dag.validate as v
+
+    monkeypatch.setattr(v, "_SCHEMA_PATH", bogus)
+    # Re-clear the cache so the bogus schema is picked up.
+    v._load_schema.cache_clear()
+
+    paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
+    report = validate_project(paths)
+    rules = {f.rule for f in report.findings}
+    assert "jsonschema_conformance" in rules

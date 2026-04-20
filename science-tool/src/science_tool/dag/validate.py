@@ -7,6 +7,8 @@ acyclicity, posterior-sanity, and JSON-schema-conformance checks.
 
 from __future__ import annotations
 
+import functools
+import json
 import math
 import re
 from dataclasses import dataclass, field
@@ -14,6 +16,7 @@ from datetime import date
 from pathlib import Path
 from typing import Literal
 
+import jsonschema
 import yaml
 
 from science_tool.dag.paths import DagPaths
@@ -345,6 +348,60 @@ def _check_acyclicity(
     ]
 
 
+_SCHEMA_PATH = Path(__file__).with_name("edges.schema.json")
+
+
+@functools.lru_cache(maxsize=1)
+def _load_schema() -> dict:  # type: ignore[type-arg]
+    return json.loads(Path(_SCHEMA_PATH).read_text(encoding="utf-8"))
+
+
+def _check_jsonschema_conformance(
+    raw: dict,  # type: ignore[type-arg]
+    dag_name: str,
+    yaml_path: Path,
+) -> list[ValidationFinding]:
+    """Validate the raw YAML dict against the committed JSON Schema.
+
+    Produces a finding per ValidationError. Schema-driven errors whose
+    substance is already reported by Pydantic ``shape`` will duplicate; that
+    is intentional — the purpose of this check is to act as a drift tripwire
+    on the schema artifact.
+    """
+    try:
+        schema = _load_schema()
+    except FileNotFoundError:
+        return [
+            ValidationFinding(
+                dag=dag_name,
+                edge_id=None,
+                rule="jsonschema_conformance",
+                severity="error",
+                message=(
+                    f"edges.schema.json not found at {_SCHEMA_PATH}; "
+                    "regenerate with `science-tool dag schema --output ...`"
+                ),
+                location=yaml_path.name,
+            )
+        ]
+
+    findings: list[ValidationFinding] = []
+    validator = jsonschema.Draft202012Validator(schema)
+    for err in validator.iter_errors(raw):
+        path_str = "/".join(str(p) for p in err.absolute_path) or "<root>"
+        findings.append(
+            ValidationFinding(
+                dag=dag_name,
+                edge_id=None,
+                rule="jsonschema_conformance",
+                severity="error",
+                message=f"{path_str}: {err.message}",
+                location=yaml_path.name,
+            )
+        )
+    return findings
+
+
 def validate_project(
     paths: DagPaths,
     *,
@@ -382,6 +439,9 @@ def validate_project(
         findings.extend(f)
         if model is None:
             continue  # shape broken; skip downstream checks on this file
+        # JSON-schema conformance tripwire (runs on the raw dict).
+        raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+        findings.extend(_check_jsonschema_conformance(raw, model.dag, yaml_path))
         findings.extend(_check_posterior_sanity(model, yaml_path))
 
         if model.source_dot is not None:
