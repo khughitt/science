@@ -2947,7 +2947,11 @@ def data_package_migrate_cmd(slug: str | None, all_: bool, dry_run: bool, projec
         raise click.UsageError("provide either <slug> or --all, not both")
     if not all_ and not slug:
         raise click.UsageError("provide a <slug> or pass --all")
-    slugs = list_unmigrated(proj) if all_ else [slug]
+    if all_:
+        slugs: list[str] = list_unmigrated(proj)
+    else:
+        assert slug is not None  # narrowed by UsageError above
+        slugs = [slug]
     for s in slugs:
         try:
             plan = migrate_data_package(proj, s, dry_run=dry_run)
