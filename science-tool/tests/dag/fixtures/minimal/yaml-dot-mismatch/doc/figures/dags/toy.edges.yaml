@@ -1,0 +1,15 @@
+dag: toy
+source_dot: toy.dot
+edges:
+  - id: 1
+    source: a
+    target: b
+    edge_status: structural
+    identification: structural
+    description: a->b
+  - id: 2
+    source: a
+    target: zzz
+    edge_status: structural
+    identification: structural
+    description: a->zzz (bogus target)

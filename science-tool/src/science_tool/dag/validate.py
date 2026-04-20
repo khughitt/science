@@ -8,6 +8,7 @@ acyclicity, posterior-sanity, and JSON-schema-conformance checks.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -75,9 +76,7 @@ def _discover_edge_yaml_files(paths: DagPaths) -> list[Path]:
     return sorted(paths.dag_dir.glob("*.edges.yaml"))
 
 
-def _check_shape_and_refs(
-    yaml_path: Path, project_root: Path
-) -> tuple[list[ValidationFinding], EdgesYamlFile | None]:
+def _check_shape_and_refs(yaml_path: Path, project_root: Path) -> tuple[list[ValidationFinding], EdgesYamlFile | None]:
     """Run Pydantic shape validation and per-entry ref resolution.
 
     Returns (findings, parsed_model_or_None). If shape validation fails the
@@ -121,9 +120,7 @@ def _check_shape_and_refs(
     return findings, model
 
 
-def _check_posterior_sanity(
-    model: EdgesYamlFile, yaml_path: Path
-) -> list[ValidationFinding]:
+def _check_posterior_sanity(model: EdgesYamlFile, yaml_path: Path) -> list[ValidationFinding]:
     """Numeric-sanity checks on posterior blocks."""
     findings: list[ValidationFinding] = []
     for edge in model.edges:
@@ -141,21 +138,14 @@ def _check_posterior_sanity(
                     location=yaml_path.name,
                 )
             )
-        if (
-            post.hdi_low is not None
-            and post.hdi_high is not None
-            and post.hdi_low > post.hdi_high
-        ):
+        if post.hdi_low is not None and post.hdi_high is not None and post.hdi_low > post.hdi_high:
             findings.append(
                 ValidationFinding(
                     dag=model.dag,
                     edge_id=edge.id,
                     rule="posterior_hdi_ordered",
                     severity="error",
-                    message=(
-                        f"posterior.hdi_low ({post.hdi_low}) > "
-                        f"posterior.hdi_high ({post.hdi_high})"
-                    ),
+                    message=(f"posterior.hdi_low ({post.hdi_low}) > posterior.hdi_high ({post.hdi_high})"),
                     location=yaml_path.name,
                 )
             )
@@ -166,12 +156,126 @@ def _check_posterior_sanity(
                     edge_id=edge.id,
                     rule="posterior_prob_sign_range",
                     severity="error",
+                    message=(f"posterior.prob_sign ({post.prob_sign}) is outside [0, 1]"),
+                    location=yaml_path.name,
+                )
+            )
+    return findings
+
+
+_DOT_NODE_RE = re.compile(r"^\s*([A-Za-z_][\w]*)\s*(?:\[|;|$)")
+_DOT_EDGE_RE = re.compile(r"^\s*([A-Za-z_][\w]*)\s*->\s*([A-Za-z_][\w]*)\s*(?:\[|;|$)")
+
+
+def _parse_dot_topology(dot_path: Path) -> tuple[frozenset[str], frozenset[tuple[str, str]]]:
+    """Parse nodes + directed edges from a .dot file.
+
+    Regex-based: matches only simple ``id`` and ``id -> id`` statements. Skips
+    comment lines (``//`` and ``/* */``), graph attributes, and nested
+    subgraph declarations — attributes inside ``[...]`` are tolerated but
+    multi-line attribute blocks are not supported. This mirrors the style of
+    the existing number.py.
+    """
+    text = dot_path.read_text(encoding="utf-8")
+
+    # Strip block comments.
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+
+    nodes: set[str] = set()
+    edges: set[tuple[str, str]] = set()
+    for raw_line in text.splitlines():
+        line = re.sub(r"//.*$", "", raw_line).strip()
+        if not line or line.startswith(("digraph", "graph", "subgraph", "}", "{")):
+            continue
+        # Skip top-level graph/edge/node attribute lines.
+        stripped = line.split("=", 1)[0].strip()
+        if stripped in {"rankdir", "labelloc", "label", "fontsize", "node", "edge", "style", "color"}:
+            continue
+
+        edge_m = _DOT_EDGE_RE.match(line)
+        if edge_m:
+            src, tgt = edge_m.group(1), edge_m.group(2)
+            nodes.add(src)
+            nodes.add(tgt)
+            edges.add((src, tgt))
+            continue
+
+        node_m = _DOT_NODE_RE.match(line)
+        if node_m:
+            name = node_m.group(1)
+            # Filter out keywords that look like identifiers.
+            if name not in {"digraph", "graph", "subgraph", "node", "edge"}:
+                nodes.add(name)
+    return frozenset(nodes), frozenset(edges)
+
+
+def _check_topology(model: EdgesYamlFile, dot_path: Path, yaml_path: Path) -> list[ValidationFinding]:
+    """Cross-check YAML edges against .dot topology."""
+    findings: list[ValidationFinding] = []
+
+    if not dot_path.exists():
+        findings.append(
+            ValidationFinding(
+                dag=model.dag,
+                edge_id=None,
+                rule="source_dot_missing",
+                severity="error",
+                message=f"source .dot file not found: {dot_path}",
+                location=yaml_path.name,
+            )
+        )
+        return findings
+
+    dot_nodes, dot_edges = _parse_dot_topology(dot_path)
+    yaml_edges: set[tuple[str, str]] = {(e.source, e.target) for e in model.edges}
+
+    # YAML edges whose source/target is absent from .dot nodes.
+    for edge in model.edges:
+        missing_nodes = [n for n in (edge.source, edge.target) if n not in dot_nodes]
+        if missing_nodes:
+            findings.append(
+                ValidationFinding(
+                    dag=model.dag,
+                    edge_id=edge.id,
+                    rule="topology_node_mismatch",
+                    severity="error",
                     message=(
-                        f"posterior.prob_sign ({post.prob_sign}) is outside [0, 1]"
+                        f"YAML edge {edge.source!r} -> {edge.target!r} references "
+                        f"node(s) {missing_nodes!r} not present in {dot_path.name}"
                     ),
                     location=yaml_path.name,
                 )
             )
+
+    # .dot edges that have no matching YAML record.
+    for src, tgt in sorted(dot_edges - yaml_edges):
+        findings.append(
+            ValidationFinding(
+                dag=model.dag,
+                edge_id=None,
+                rule="topology_missing_in_yaml",
+                severity="error",
+                message=(f".dot edge {src!r} -> {tgt!r} has no matching YAML record"),
+                location=yaml_path.name,
+            )
+        )
+
+    # YAML edges whose (source, target) pair is absent from .dot — only
+    # emit when both endpoints exist as nodes (otherwise topology_node_mismatch
+    # already covers it).
+    for src, tgt in sorted(yaml_edges - dot_edges):
+        if src in dot_nodes and tgt in dot_nodes:
+            findings.append(
+                ValidationFinding(
+                    dag=model.dag,
+                    edge_id=None,
+                    rule="topology_missing_in_dot",
+                    severity="error",
+                    message=(f"YAML edge {src!r} -> {tgt!r} has no matching .dot edge"),
+                    location=yaml_path.name,
+                )
+            )
+
     return findings
 
 
@@ -211,5 +315,16 @@ def validate_project(
         if model is None:
             continue  # shape broken; skip downstream checks on this file
         findings.extend(_check_posterior_sanity(model, yaml_path))
+
+        if model.source_dot is not None:
+            # source_dot may be project-root-relative (e.g. "doc/figures/dags/foo.dot")
+            # or a bare filename (e.g. "foo.dot").
+            # dag_dir is <root>/doc/figures/dags, so project root is 3 levels up.
+            dag_project_root = paths.dag_dir.parent.parent.parent
+            candidate = dag_project_root / model.source_dot
+            dot_path = candidate if candidate.exists() else yaml_path.parent / model.source_dot
+        else:
+            dot_path = yaml_path.parent / f"{model.dag}.dot"
+        findings.extend(_check_topology(model, dot_path, yaml_path))
 
     return ValidationReport(today=today, strict=strict, findings=tuple(findings))

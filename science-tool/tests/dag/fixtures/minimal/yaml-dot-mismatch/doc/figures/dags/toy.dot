@@ -1,0 +1,4 @@
+digraph toy {
+  a -> b;
+  a -> c;   // c is in .dot but not in YAML edges
+}
