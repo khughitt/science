@@ -1,5 +1,6 @@
 """DAG rendering and audit pipeline for science-tool."""
 
+from science_tool.dag.audit import AuditReport, ProposedMutation, run_audit
 from science_tool.dag.number import number_all, number_one
 from science_tool.dag.paths import DagPaths, load_dag_paths
 from science_tool.dag.refs import RefResolutionError, validate_ref_entry
@@ -24,6 +25,9 @@ from science_tool.dag.staleness import (
 )
 
 __all__ = [
+    "AuditReport",
+    "ProposedMutation",
+    "run_audit",
     "DagPaths",
     "load_dag_paths",
     "number_all",
