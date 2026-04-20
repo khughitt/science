@@ -160,7 +160,7 @@ def load_project_sources(project_root: Path) -> ProjectSources:
     entities.extend(
         _load_markdown_entities(
             project_root,
-            [paths.doc_dir, paths.specs_dir],
+            [paths.doc_dir, paths.specs_dir, project_root / "research" / "packages"],
             local_profile=local_profile,
             active_kinds=active_kinds,
             ontology_catalogs=ontology_catalogs,
@@ -557,8 +557,7 @@ def _load_reasoning_metadata(
                 allowed = ", ".join(member.value for member in enum_type)
                 where = f" in {source_path}" if source_path is not None else ""
                 print(
-                    f"warning: unknown {field} value {value!r}{where}; "
-                    f"dropping field. Allowed values: {allowed}",
+                    f"warning: unknown {field} value {value!r}{where}; dropping field. Allowed values: {allowed}",
                     file=sys.stderr,
                 )
                 continue
