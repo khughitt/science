@@ -95,3 +95,11 @@ def test_runtime_rejects_top_level_derivation(runtime_schema: dict) -> None:
     pkg["derivation"] = {"workflow_run": "workflow-run:x"}
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(pkg, runtime_schema)
+
+
+def test_runtime_rejects_top_level_origin(runtime_schema: dict) -> None:
+    """Runtime surface MUST NOT carry top-level origin: (entity-only discriminator)."""
+    pkg = _valid_runtime_pkg()
+    pkg["origin"] = "external"
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(pkg, runtime_schema)
