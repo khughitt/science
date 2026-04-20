@@ -455,3 +455,36 @@ def test_derived_with_access_flagged(tmp_path: Path) -> None:
     issues = check_dataset_anomalies(tmp_path)
     codes = {i["code"] for i in issues}
     assert "dataset_origin_block_mismatch" in codes
+
+
+def test_external_consumed_unverified_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "u",
+        origin="external",
+        body='access: {level: "public", verified: false}\nconsumed_by: ["plan:p1"]',
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_consumed_but_unverified" for i in issues)
+
+
+def test_external_stale_review_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "s",
+        origin="external",
+        body='access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2024-01-01", source_url: "https://x"}',
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_stale_review" for i in issues)
+
+
+def test_external_verified_no_source_url_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "n",
+        origin="external",
+        body='access: {level: "public", verified: true, verification_method: "credential-confirmed", last_reviewed: "2026-04-19"}',
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_missing_source_url" for i in issues)
