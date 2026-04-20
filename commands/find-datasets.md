@@ -153,6 +153,24 @@ Include this mapping in a `## Variable Coverage` section of the search output.
 3. Run `/science:plan-pipeline` to build computational workflow
 4. Run `/science:discuss` to evaluate dataset choices
 
+### Emission rules (rev 2.1)
+
+When emitting `doc/datasets/<slug>.md`:
+
+- One entity per **distinguishable artefact** at a distinct access level. A paper
+  with one public supplement and one controlled EGA deposit produces TWO entities,
+  optionally plus a third umbrella entity linking them via `parent_dataset` /
+  `siblings`.
+- Always set `origin: "external"`.
+- Default `access.verified: false`, `access.last_reviewed: ""`, `consumed_by: []`.
+- Populate `access.level`, `access.source_url`, and `access.credentials_required`
+  from discovery evidence. When uncertain, use the most restrictive known level
+  — the verification step corrects it.
+- The `accessions:` field carries external accession IDs (renamed from `datasets:`;
+  legacy entries continue to read).
+- Do NOT emit `origin: derived` entities — those are produced by `science-tool
+  dataset register-run` after a workflow run.
+
 ## Output Summary
 
 Present a concise summary table:
