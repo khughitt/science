@@ -393,6 +393,54 @@ def collect_legacy_structured_literature_prefixes(project_root: Path) -> list[Le
     return findings
 
 
+def _passes_gate(
+    entity_id: str,
+    datasets_by_id: dict[str, dict],  # raw-frontmatter dict per id
+    *,
+    in_progress: frozenset[str],
+    memo: dict[str, tuple[bool, str]],
+) -> tuple[bool, str]:
+    """Recursively check whether `entity_id` transitively passes the gate.
+
+    Cycle detection uses `in_progress` (DFS path stack — IMMUTABLE per recursion frame).
+    Memoization uses `memo` (already-computed pass/fail per entity_id).
+    Sibling branches sharing an upstream both succeed because the upstream's result is
+    memoized after the first descent — no false-positive cycle detection.
+    """
+    if entity_id in in_progress:
+        return False, f"cycle through {entity_id}"
+    if entity_id in memo:
+        return memo[entity_id]
+    fm = datasets_by_id.get(entity_id)
+    if fm is None:
+        memo[entity_id] = (False, f"missing entity {entity_id}")
+        return memo[entity_id]
+    origin = fm.get("origin", "external")
+    if origin == "external":
+        access = fm.get("access") or {}
+        if isinstance(access, str):
+            access = {"level": access, "verified": False}
+        verified = bool(access.get("verified", False))
+        exception_mode = (access.get("exception") or {}).get("mode", "")
+        if verified or exception_mode:
+            memo[entity_id] = (True, "")
+        else:
+            memo[entity_id] = (False, f"external {entity_id} unverified and no exception")
+        return memo[entity_id]
+    if origin == "derived":
+        derivation = fm.get("derivation") or {}
+        next_in_progress = in_progress | {entity_id}
+        for inp in list(derivation.get("inputs") or []):
+            ok, msg = _passes_gate(str(inp), datasets_by_id, in_progress=next_in_progress, memo=memo)
+            if not ok:
+                memo[entity_id] = (False, f"{entity_id} -> {msg}")
+                return memo[entity_id]
+        memo[entity_id] = (True, "")
+        return memo[entity_id]
+    memo[entity_id] = (False, f"{entity_id} has no origin")
+    return memo[entity_id]
+
+
 def check_dataset_anomalies(project_root: Path) -> list[dict]:
     """Run dataset-related health checks and return found anomalies.
 
@@ -407,132 +455,158 @@ def check_dataset_anomalies(project_root: Path) -> list[dict]:
     workflow_runs = _load_workflow_runs(project_root)
 
     datasets_dir = project_root / "doc" / "datasets"
-    if not datasets_dir.exists():
-        return issues
 
-    for md in datasets_dir.rglob("*.md"):
-        result = parse_frontmatter(md)
-        if not result:
-            continue
-        fm, _ = result
-        if fm.get("type") != "dataset":
-            continue
-        entity_id = str(fm.get("id", md.stem))
-        origin = fm.get("origin", "external")  # legacy default
+    # Build datasets_by_id for transitive gate walk (task 6.5)
+    datasets_by_id: dict[str, dict] = {}
+    if datasets_dir.exists():
+        for md in datasets_dir.rglob("*.md"):
+            result = parse_frontmatter(md)
+            if not result:
+                continue
+            fm, _ = result
+            if fm.get("type") == "dataset" and fm.get("id"):
+                datasets_by_id[str(fm["id"])] = fm
+    gate_memo: dict[str, tuple[bool, str]] = {}
 
-        # Invariant #7: external must not carry derivation:
-        if origin == "external" and "derivation" in fm:
-            issues.append(
-                {
-                    "code": "dataset_origin_block_mismatch",
-                    "severity": "error",
-                    "entity_id": entity_id,
-                    "file_path": str(md),
-                    "message": "origin: external entity carries a derivation: block (invariant #7)",
-                }
-            )
+    if datasets_dir.exists():
+        for md in datasets_dir.rglob("*.md"):
+            result = parse_frontmatter(md)
+            if not result:
+                continue
+            fm, _ = result
+            if fm.get("type") != "dataset":
+                continue
+            entity_id = str(fm.get("id", md.stem))
+            origin = fm.get("origin", "external")  # legacy default
 
-        # Invariant #8: derived must not carry access:, accessions:, or local_path:
-        if origin == "derived":
-            forbidden = []
-            if "access" in fm:
-                forbidden.append("access")
-            if fm.get("accessions"):
-                forbidden.append("accessions")
-            if fm.get("local_path"):
-                forbidden.append("local_path")
-            if forbidden:
+            # Invariant #7: external must not carry derivation:
+            if origin == "external" and "derivation" in fm:
                 issues.append(
                     {
                         "code": "dataset_origin_block_mismatch",
                         "severity": "error",
                         "entity_id": entity_id,
                         "file_path": str(md),
-                        "message": f"origin: derived entity carries forbidden field(s): {', '.join(forbidden)} (invariant #8)",
+                        "message": "origin: external entity carries a derivation: block (invariant #7)",
                     }
                 )
 
-        # External-access anomalies
-        if origin == "external":
-            access = fm.get("access") or {}
-            if isinstance(access, str):  # legacy flat shorthand
-                access = {"level": access, "verified": False}
-            verified = bool(access.get("verified", False))
-            exception_mode = (access.get("exception") or {}).get("mode", "")
-            consumed_by = list(fm.get("consumed_by") or [])
-
-            # Consumed but unverified (with no exception)
-            if consumed_by and not verified and not exception_mode:
-                issues.append(
-                    {
-                        "code": "dataset_consumed_but_unverified",
-                        "severity": "error",
-                        "entity_id": entity_id,
-                        "file_path": str(md),
-                        "message": f"consumed by {consumed_by} but access.verified is false and no exception is set",
-                    }
-                )
-
-            # Stale review (verified + last_reviewed > 365 days ago)
-            last_reviewed = access.get("last_reviewed", "")
-            if verified and last_reviewed:
-                from datetime import date
-
-                try:
-                    reviewed = date.fromisoformat(last_reviewed)
-                    if (date.today() - reviewed).days > 365:
-                        issues.append(
-                            {
-                                "code": "dataset_stale_review",
-                                "severity": "warning",
-                                "entity_id": entity_id,
-                                "file_path": str(md),
-                                "message": f"last_reviewed {last_reviewed} is older than 12 months",
-                            }
-                        )
-                except ValueError:
-                    pass
-
-            # Missing source_url on verified entity
-            if verified and not access.get("source_url"):
-                issues.append(
-                    {
-                        "code": "dataset_missing_source_url",
-                        "severity": "warning",
-                        "entity_id": entity_id,
-                        "file_path": str(md),
-                        "message": "access.verified is true but source_url is empty",
-                    }
-                )
-
-        # Derived workflow-run checks (invariant #9)
-        if origin == "derived":
-            derivation = fm.get("derivation") or {}
-            wf_run_id = str(derivation.get("workflow_run", ""))
-            if wf_run_id:
-                run_fm = workflow_runs.get(wf_run_id)
-                if run_fm is None:
+            # Invariant #8: derived must not carry access:, accessions:, or local_path:
+            if origin == "derived":
+                forbidden = []
+                if "access" in fm:
+                    forbidden.append("access")
+                if fm.get("accessions"):
+                    forbidden.append("accessions")
+                if fm.get("local_path"):
+                    forbidden.append("local_path")
+                if forbidden:
                     issues.append(
                         {
-                            "code": "dataset_derived_missing_workflow_run",
+                            "code": "dataset_origin_block_mismatch",
                             "severity": "error",
                             "entity_id": entity_id,
                             "file_path": str(md),
-                            "message": f"derivation.workflow_run {wf_run_id} does not resolve to a workflow-run entity",
+                            "message": f"origin: derived entity carries forbidden field(s): {', '.join(forbidden)} (invariant #8)",
                         }
                     )
-                else:
-                    produces = list(run_fm.get("produces") or [])
-                    if entity_id not in produces:
+
+            # External-access anomalies
+            if origin == "external":
+                access = fm.get("access") or {}
+                if isinstance(access, str):  # legacy flat shorthand
+                    access = {"level": access, "verified": False}
+                verified = bool(access.get("verified", False))
+                exception_mode = (access.get("exception") or {}).get("mode", "")
+                consumed_by = list(fm.get("consumed_by") or [])
+
+                # Consumed but unverified (with no exception)
+                if consumed_by and not verified and not exception_mode:
+                    issues.append(
+                        {
+                            "code": "dataset_consumed_but_unverified",
+                            "severity": "error",
+                            "entity_id": entity_id,
+                            "file_path": str(md),
+                            "message": f"consumed by {consumed_by} but access.verified is false and no exception is set",
+                        }
+                    )
+
+                # Stale review (verified + last_reviewed > 365 days ago)
+                last_reviewed = access.get("last_reviewed", "")
+                if verified and last_reviewed:
+                    from datetime import date
+
+                    try:
+                        reviewed = date.fromisoformat(last_reviewed)
+                        if (date.today() - reviewed).days > 365:
+                            issues.append(
+                                {
+                                    "code": "dataset_stale_review",
+                                    "severity": "warning",
+                                    "entity_id": entity_id,
+                                    "file_path": str(md),
+                                    "message": f"last_reviewed {last_reviewed} is older than 12 months",
+                                }
+                            )
+                    except ValueError:
+                        pass
+
+                # Missing source_url on verified entity
+                if verified and not access.get("source_url"):
+                    issues.append(
+                        {
+                            "code": "dataset_missing_source_url",
+                            "severity": "warning",
+                            "entity_id": entity_id,
+                            "file_path": str(md),
+                            "message": "access.verified is true but source_url is empty",
+                        }
+                    )
+
+            # Derived workflow-run checks (invariant #9)
+            if origin == "derived":
+                derivation = fm.get("derivation") or {}
+                wf_run_id = str(derivation.get("workflow_run", ""))
+                if wf_run_id:
+                    run_fm = workflow_runs.get(wf_run_id)
+                    if run_fm is None:
                         issues.append(
                             {
-                                "code": "dataset_derived_asymmetric_edge",
+                                "code": "dataset_derived_missing_workflow_run",
                                 "severity": "error",
                                 "entity_id": entity_id,
                                 "file_path": str(md),
-                                "message": f"workflow-run {wf_run_id} does not list {entity_id} in produces:",
+                                "message": f"derivation.workflow_run {wf_run_id} does not resolve to a workflow-run entity",
                             }
                         )
+                    else:
+                        produces = list(run_fm.get("produces") or [])
+                        if entity_id not in produces:
+                            issues.append(
+                                {
+                                    "code": "dataset_derived_asymmetric_edge",
+                                    "severity": "error",
+                                    "entity_id": entity_id,
+                                    "file_path": str(md),
+                                    "message": f"workflow-run {wf_run_id} does not list {entity_id} in produces:",
+                                }
+                            )
+
+                # Task 6.5: transitive input chain (cycle-safe)
+                for inp in list(derivation.get("inputs") or []):
+                    ok, msg = _passes_gate(str(inp), datasets_by_id, in_progress=frozenset({entity_id}), memo=gate_memo)
+                    if not ok:
+                        issues.append(
+                            {
+                                "code": "dataset_derived_input_chain_broken",
+                                "severity": "error",
+                                "entity_id": entity_id,
+                                "file_path": str(md),
+                                "message": f"input chain broken: {msg}",
+                            }
+                        )
+                        break  # one error per entity is enough
 
     return issues
 

@@ -533,3 +533,55 @@ def test_derived_symmetric_edge_no_flag(tmp_path: Path) -> None:
     assert not any(
         i["code"] in {"dataset_derived_missing_workflow_run", "dataset_derived_asymmetric_edge"} for i in issues
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 6.5: dataset_derived_input_chain_broken (cycle-safe transitive walk)
+# ---------------------------------------------------------------------------
+
+
+def test_derived_input_chain_unverified_external_flagged(tmp_path: Path) -> None:
+    _write_dataset(tmp_path, "u_ext", origin="external", body='access: {level: "public", verified: false}')
+    _write_workflow_run(tmp_path, "w-r3", produces=["dataset:d4"], inputs=["dataset:u_ext"])
+    _write_dataset(tmp_path, "d4", origin="derived", body=_derived_dataset_body("workflow-run:w-r3", ["dataset:u_ext"]))
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_derived_input_chain_broken" for i in issues)
+
+
+def test_derived_cycle_detected(tmp_path: Path) -> None:
+    _write_workflow_run(tmp_path, "w-r4", produces=["dataset:d5"], inputs=["dataset:d6"])
+    _write_workflow_run(tmp_path, "w-r5", produces=["dataset:d6"], inputs=["dataset:d5"])
+    _write_dataset(tmp_path, "d5", origin="derived", body=_derived_dataset_body("workflow-run:w-r4", ["dataset:d6"]))
+    _write_dataset(tmp_path, "d6", origin="derived", body=_derived_dataset_body("workflow-run:w-r5", ["dataset:d5"]))
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_derived_input_chain_broken" for i in issues)
+
+
+def test_derived_shared_upstream_not_false_cycle(tmp_path: Path) -> None:
+    """Two derived datasets share the same upstream — must NOT be reported as a cycle."""
+    _write_dataset(
+        tmp_path,
+        "shared_up",
+        origin="external",
+        body='access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}',
+    )
+    _write_workflow_run(tmp_path, "w-r-a", produces=["dataset:branch_a"], inputs=["dataset:shared_up"])
+    _write_workflow_run(tmp_path, "w-r-b", produces=["dataset:branch_b"], inputs=["dataset:shared_up"])
+    _write_dataset(
+        tmp_path, "branch_a", origin="derived", body=_derived_dataset_body("workflow-run:w-r-a", ["dataset:shared_up"])
+    )
+    _write_dataset(
+        tmp_path, "branch_b", origin="derived", body=_derived_dataset_body("workflow-run:w-r-b", ["dataset:shared_up"])
+    )
+    _write_workflow_run(
+        tmp_path, "w-r-merge", produces=["dataset:merged"], inputs=["dataset:branch_a", "dataset:branch_b"]
+    )
+    _write_dataset(
+        tmp_path,
+        "merged",
+        origin="derived",
+        body=_derived_dataset_body("workflow-run:w-r-merge", ["dataset:branch_a", "dataset:branch_b"]),
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    chain_issues = [i for i in issues if i["code"] == "dataset_derived_input_chain_broken"]
+    assert chain_issues == [], f"shared upstream wrongly flagged as cycle: {chain_issues}"
