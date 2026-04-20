@@ -13,6 +13,15 @@ from science_tool.dag.schema import (
     RefEntry,
     SchemaError,
 )
+from science_tool.dag.staleness import (
+    CandidateTask,
+    DriftedEdge,
+    StalenessReport,
+    UnderReviewedEdge,
+    UnpropagatedTask,
+    UnresolvedRef,
+    check_staleness,
+)
 
 __all__ = [
     "DagPaths",
@@ -30,4 +39,11 @@ __all__ = [
     "PosteriorBlock",
     "RefEntry",
     "SchemaError",
+    "CandidateTask",
+    "DriftedEdge",
+    "StalenessReport",
+    "UnderReviewedEdge",
+    "UnpropagatedTask",
+    "UnresolvedRef",
+    "check_staleness",
 ]
