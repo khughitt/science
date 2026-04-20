@@ -93,10 +93,6 @@ class PosteriorBlock(BaseModel):
         return self
 
 
-# Sentinel used to detect when `identification` was omitted vs. explicitly set.
-_IDENTIFICATION_MISSING = object()
-
-
 class EdgeRecord(BaseModel):
     """One edge in a DAG edges YAML file."""
 
