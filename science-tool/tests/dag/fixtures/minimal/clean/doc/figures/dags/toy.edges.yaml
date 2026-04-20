@@ -1,0 +1,9 @@
+dag: toy
+source_dot: toy.dot
+edges:
+  - id: 1
+    source: a
+    target: b
+    edge_status: structural
+    identification: structural
+    description: toy structural edge
