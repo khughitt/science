@@ -488,3 +488,48 @@ def test_external_verified_no_source_url_flagged(tmp_path: Path) -> None:
     )
     issues = check_dataset_anomalies(tmp_path)
     assert any(i["code"] == "dataset_missing_source_url" for i in issues)
+
+
+def _write_workflow_run(p: Path, slug: str, *, produces: list[str], inputs: list[str]) -> None:
+    f = p / "doc" / "workflow-runs" / f"{slug}.md"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(
+        f'---\nid: "workflow-run:{slug}"\ntype: "workflow-run"\ntitle: "{slug}"\n'
+        f'workflow: "workflow:wf"\nproduces: {produces}\ninputs: {inputs}\n---\n',
+        encoding="utf-8",
+    )
+
+
+def _derived_dataset_body(workflow_run: str, inputs: list[str]) -> str:
+    inp = "[" + ", ".join(f'"{i}"' for i in inputs) + "]"
+    return (
+        "derivation:\n"
+        '  workflow: "workflow:wf"\n'
+        f'  workflow_run: "{workflow_run}"\n'
+        '  git_commit: "a"\n'
+        '  config_snapshot: "c"\n'
+        '  produced_at: "2026-04-19T00:00:00Z"\n'
+        f"  inputs: {inp}"
+    )
+
+
+def test_derived_missing_workflow_run_flagged(tmp_path: Path) -> None:
+    _write_dataset(tmp_path, "d1", origin="derived", body=_derived_dataset_body("workflow-run:does-not-exist", []))
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_derived_missing_workflow_run" for i in issues)
+
+
+def test_derived_asymmetric_edge_flagged(tmp_path: Path) -> None:
+    _write_workflow_run(tmp_path, "w-r1", produces=[], inputs=[])  # missing dataset:d2 in produces
+    _write_dataset(tmp_path, "d2", origin="derived", body=_derived_dataset_body("workflow-run:w-r1", []))
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_derived_asymmetric_edge" for i in issues)
+
+
+def test_derived_symmetric_edge_no_flag(tmp_path: Path) -> None:
+    _write_workflow_run(tmp_path, "w-r2", produces=["dataset:d3"], inputs=[])
+    _write_dataset(tmp_path, "d3", origin="derived", body=_derived_dataset_body("workflow-run:w-r2", []))
+    issues = check_dataset_anomalies(tmp_path)
+    assert not any(
+        i["code"] in {"dataset_derived_missing_workflow_run", "dataset_derived_asymmetric_edge"} for i in issues
+    )
