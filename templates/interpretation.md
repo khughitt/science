@@ -15,6 +15,34 @@ prior_interpretations: []  # optional: interpretation IDs this document extends 
 
 # Interpretation: {{Short Title}}
 
+## Verdict
+
+<!--
+One line. Lead with a polarity token, then a short clause.
+
+Tokens (with respect to the predicted direction, NOT project valence):
+  [+]  positive — supports the prediction / hypothesis arm under test
+  [-]  negative — refutes or contradicts the prediction
+  [~]  null / mixed / bimodal — no clear directional signal, or different
+       directions in different sub-strata
+  [?]  inconclusive — protocol failure, data gap, or insufficient power to
+       discriminate
+
+Examples:
+  **Verdict:** [+] Cooperrider strong-form supported (acquirer LEN+ rate >80%, p<0.01)
+  **Verdict:** [-] Cooperrider strong-form refuted (rate 25% vs predicted ≥80%, p=0.47)
+  **Verdict:** [~] Bimodal — 2/16 basins robust, 14/16 collapse under 50% perturbation
+  **Verdict:** [?] Inconclusive — pre-reg PPC failed across all student-t variants
+
+The polarity is with respect to the *predicted* direction. A `[-]` verdict
+that closes a long-open question is a positive epistemic event for the
+project — do not read polarity as project valence.
+
+Rationale: see `discussion:2026-04-19-verdict-polarity-display` (mm30) — plain-
+text tokens are robust across renderers (GitHub, email, terminal), accessible
+to colorblind readers, and grep-able for cross-doc verdict surveys.
+-->
+
 ## Findings Summary
 
 <!--
