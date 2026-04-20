@@ -1,0 +1,113 @@
+// H2 Subtype architecture — Molecular lineage + secondary events → distinct architectures
+// Source of truth: doc/inquiries/h2-subtype-architecture.md
+// Target: hypothesis:h2-cytogenetic-distinct-entities (C1-C7)
+digraph h2_subtype_architecture {
+  rankdir=TB;
+  labelloc="t";
+  label=<<b>H2 Subtype architecture</b><br/><font point-size="11">Primary lineage + secondary events → divergent mechanisms, shared endpoint (inquiry:h2-subtype-architecture)</font>>;
+  fontsize=14;
+  node [shape=box, style="rounded,filled", fillcolor="#f0f0f0", fontsize=10];
+  edge [fontsize=9];
+
+  subgraph cluster_upstream {
+    label="Upstream / Exogenous";
+    style=dashed; color="#999999";
+    coo [label="Cell of origin\n/ precursor state", fillcolor="#ffe0b2"];
+    evo [label="Evolutionary state\n/ secondary-hit\nburden", fillcolor="#ffe0b2"];
+    non1q_drv [label="Non-1q driver(s)", fillcolor="#ffcdd2", style="rounded,filled,dashed"];
+    stage [label="Disease stage\n(MGUS/SMM/\nMM/RRMM)", fillcolor="#ffe0b2"];
+  }
+
+  subgraph cluster_lineage {
+    label="Primary lineage";
+    style=dashed; color="#1565c0";
+    lineage [label="Primary molecular\nlineage\n(HD, t(4;14),\nt(11;14), t(14;16))", fillcolor="#bbdefb", penwidth=2];
+    baseline [label="Baseline subtype\narchitecture", fillcolor="#bbdefb"];
+  }
+
+  subgraph cluster_secondary {
+    label="Secondary events";
+    style=dashed; color="#e65100";
+    gain1q [label="gain(1q)", fillcolor="#ffe0b2"];
+    del17p [label="del(17p)", fillcolor="#ffe0b2"];
+    gain8q [label="gain(8q)", fillcolor="#ffe0b2"];
+    muts [label="Mutation\nlandscape\n(KRAS, NRAS,\nTP53)", fillcolor="#ffe0b2"];
+  }
+
+  subgraph cluster_mechanism {
+    label="Architecture generation";
+    style=dashed; color="#2e7d32";
+    dosage [label="1q gene\ndosage", fillcolor="#c8e6c9"];
+    epi [label="Epigenetic\narchitecture\n(3-way Polycomb)", fillcolor="#c8e6c9"];
+    prolif [label="Proliferation\n(latent state;\nscore is proxy)", fillcolor="#c8e6c9", penwidth=2];
+    arch_1q [label="1q-associated\narchitecture\n(G2M, PHF19,\nIFN silencing)", fillcolor="#c8e6c9"];
+    arch_non1q [label="Alternative\nnon-1q architecture\n(E2F, ribosome)", fillcolor="#c8e6c9"];
+  }
+
+  subgraph cluster_outcomes {
+    label="Outcomes";
+    style=dashed; color="#6a1b9a";
+    survival [label="Overall\nsurvival", fillcolor="#e1bee7", penwidth=2];
+    drug [label="Drug\nresponse", fillcolor="#e1bee7"];
+    clinical [label="Clinical\nphenotype", fillcolor="#e1bee7"];
+    burden [label="Tumor\nburden", fillcolor="#e1bee7"];
+    treatment [label="Baseline\ntreatment", fillcolor="#e1bee7"];
+  }
+
+  // Lineage determination
+  coo -> lineage;
+  lineage -> baseline;
+
+  // Lineage → secondary event propensity
+  lineage -> gain1q [style=dashed, label="propensity"];
+  lineage -> del17p [style=dashed, label="propensity"];
+
+  // Evolutionary state → secondary events
+  evo -> gain1q;
+  evo -> del17p;
+  evo -> gain8q;
+  evo -> muts;
+  evo -> burden;
+
+  // Architecture generation
+  gain1q -> dosage;
+  dosage -> arch_1q;
+  gain1q -> epi [label="PHF19/PRC2\ntargeted"];
+  lineage -> epi [label="NSD2 global\nor neutral"];
+  epi -> arch_1q;
+  epi -> arch_non1q;
+  baseline -> arch_1q;
+  baseline -> arch_non1q;
+  non1q_drv -> arch_non1q [style=dashed, label="positive\ncause"];
+  gain8q -> arch_non1q [style=dashed, label="expression\nnot dosage"];
+
+  // Proliferation as first-class latent state (t153)
+  arch_1q -> prolif [label="G2M/E2F\nprogram"];
+  arch_non1q -> prolif [label="E2F/ribosome\nprogram"];
+  prolif -> survival [label="fast cycling\n→ worse OS"];
+  prolif -> burden;
+
+  // Disease stage confounder
+  stage -> burden [label="accumulation"];
+  stage -> treatment [label="intensity"];
+  stage -> muts [label="late hits"];
+  stage -> survival [label="time\nin disease"];
+  stage -> arch_1q [style=dashed, label="progression\nupregulates"];
+  stage -> arch_non1q [style=dashed, label="progression\nupregulates"];
+
+  // Outcomes
+  arch_1q -> survival;
+  arch_non1q -> survival;
+  arch_1q -> drug;
+  arch_non1q -> drug;
+  arch_1q -> clinical;
+  arch_non1q -> clinical;
+  lineage -> drug [label="direct\n(e.g. BCL2/\nvenetoclax)", style=bold];
+  del17p -> survival;
+  muts -> survival;
+  burden -> survival;
+  burden -> treatment;
+  burden -> clinical;
+  treatment -> survival [label="mediator"];
+  treatment -> drug;
+}

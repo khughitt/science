@@ -1,0 +1,823 @@
+dag: h1-prognosis
+source_dot: doc/figures/dags/h1-prognosis.dot
+edges:
+- id: 1
+  source: gain1q
+  target: pbx1
+  source_label: gain(1q) status
+  target_label: PBX1/RFX5 axis
+  original_label: dosage
+  edge_style: solid
+  relation: "dosage \u2192 transcription"
+  edge_status: supported
+  identification: observational
+  description: gain(1q) amplifies PBX1 and RFX5, which sit on 1q23 and are gene-dose sensitive. This is
+    the upstream gene-dosage step in the Walker 2024 feedforward loop; the effect is real at the DNA level
+    but only part of PHF19 variance is mediated through PBX1/RFX5 (MM30 t082 shows ~7% of PHF19 variance
+    explained by gain(1q)).
+  data_support:
+  - task: t082
+    description: "PHF19 residualization on gain(1q) \u2014 only 7% of PHF19 variance is explained by gain(1q)\
+      \ status in MMRF, bounding how much of the dosage\u2192PBX1\u2192PHF19 path is doing the work."
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker2024
+    description: "scMultiomics in 49 MM patients (325,025 cells) demonstrates that 1q gain amplifies PBX1/RFX5\
+      \ (both on 1q23) and that these TFs in turn regulate PHF19 \u2014 the canonical PBX1 feedforward\
+      \ loop motif."
+- id: 2
+  source: pbx1
+  target: phf19
+  source_label: PBX1/RFX5 axis
+  target_label: PHF19 expression
+  original_label: transcription
+  edge_style: solid
+  relation: "TF \u2192 target"
+  edge_status: tentative
+  identification: observational
+  description: PBX1/RFX5 are proposed to transcriptionally drive PHF19 (which sits on 9q, not 1q), closing
+    the feedforward loop from gain(1q) to PHF19. Support is primarily Walker 2024's regulatory inference;
+    in MM30 bulk RNA the step has not been tested as a dedicated Bayesian edge and the step is almost
+    certainly not the only input to PHF19 in gain(1q)-negative patients.
+  data_support:
+  - task: t082
+    description: "93.8% of PHF19's survival effect and a majority of its variance is retained after gain(1q)\
+      \ adjustment \u2014 implying regulators beyond the gain(1q)\u2192PBX1 axis drive PHF19 in 1q- patients."
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker2024
+    description: PBX1 identified as a candidate TF regulator of PHF19 by scATAC-seq + SCENIC-style regulon
+      analysis in the RRPC subpopulation, connecting 1q dosage to PHF19 overexpression.
+- id: 3
+  source: other_reg
+  target: phf19
+  source_label: Other PHF19 regulators
+  target_label: PHF19 expression
+  original_label: '?'
+  edge_style: dashed
+  relation: unknown regulators
+  edge_status: unknown
+  identification: observational
+  description: 'A substantial portion of PHF19 expression is not explained by gain(1q) dosage (t082: 93%
+    of survival coefficient retained in gain(1q)-negative patients; only 7% of variance explained by gain(1q)).
+    One or more additional regulators must exist, but their identity has not been established. Candidates
+    include enhancer activation, additional TFs (E2F1, EZH2 coregulation), and epigenetic feedback.'
+  data_support:
+  - task: t082
+    description: 93.8% coefficient retention after gain(1q) adjustment; PHF19 remains significant in gain(1q)-
+      alone (HR=1.35, p=3.9e-06, n=430); only 7% of PHF19 variance explained by gain(1q).
+  - task: t091
+    description: 5/5 cross-dataset replication of PHF19 survival effect (GSE19784, GSE24080, GSE57317,
+      GSE9782, MMRF) across three platforms establishes that the PHF19 signal is not carried solely by
+      gain(1q)-annotated datasets.
+  lit_support: []
+- id: 4
+  source: phf19
+  target: prc2
+  source_label: PHF19 expression
+  target_label: PRC2 retargeting (latent)
+  original_label: Tudor domain recruitment
+  edge_style: solid
+  relation: complex recruitment
+  edge_status: supported
+  identification: interventional
+  description: PHF19 is a PRC2.1 accessory subunit whose Tudor domain reads H3K36me3 at actively transcribed
+    genes and recruits PRC2 to invade novel loci, establishing broad H3K27me3 domains. The mechanism is
+    biochemically established and reproduces in MM1S cells.
+  data_support:
+  - task: t124
+    description: "Re-analysis of Ren 2019 PHF19-KD RNA-seq (GSE136410, MM1S cells) shows IFN pathway genes\
+      \ derepressed on PHF19 knockdown (MW p=6.4e-9, d=0.49) and E2F targets repressed (p=8.3e-89) \u2014\
+      \ both reversed by PHF19 rescue. Direct MM-specific evidence that PHF19 loss collapses the PRC2\
+      \ retargeting program."
+  - task: t116
+    description: "Proxy cross-reference against ES-cell PRC2 consensus targets \u2014 PHF19 is selectively\
+      \ NOT associated with constitutive PRC2 targets (p=0.55), consistent with retargeting to novel loci\
+      \ rather than amplifying canonical targets."
+  lit_support:
+  - doi: null
+    author_year: PHF19-comprehensive
+    description: "Mechanism review collating Ballar\xE9 2012 / Brien 2012 Tudor\u2013H3K36me3 biochemistry,\
+      \ Ren 2019 broad H3K27me3 domains in MM, and PRC2.1 complex stoichiometry placing PHF19 as the PRC2\
+      \ specificity factor in MM."
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker2024
+    description: scATAC-seq in the RRPC subset links high PHF19 to altered chromatin accessibility and
+      tumour-suppressor silencing, consistent with PRC2 retargeting.
+  - doi: 10.1038/s41586-024-07328-w
+    author_year: Parreno2024
+    description: "Cross-system mechanistic support. In Drosophila larval eye imaginal discs, transient
+      (24 h) depletion of the PRC1 subunit Polyhomeotic is sufficient to induce an irreversible cancer
+      fate at 100% penetrance \u2014 even after PH protein and genome-wide H3K27me3 are fully restored.
+      Establishes that Polycomb perturbation is causally consequential for cell fate and that the
+      perturbation need not be permanent to produce permanent change. Indirect for MM (fly PRC1 not
+      mammalian PRC2), but the PRC1/PRC2 cooperation and the cited PRC2-inhibition literature in
+      mammalian cells make it a well-motivated cross-system anchor for the idea that the PRC2-retargeting
+      step in edge 4 has causal, not merely correlative, weight."
+- id: 5
+  source: prc2
+  target: ifn
+  source_label: PRC2 retargeting (latent)
+  target_label: IFN-JAK-STAT silencing
+  original_label: "H3K27me3 at new loci (IFN arm: 4 interventional anchors \u00D7 2 cell lines)"
+  edge_style: solid
+  relation: repressive mark deposition
+  edge_status: supported
+  identification: interventional
+  description: "PHF19-directed PRC2 deposits H3K27me3 at IFN-JAK-STAT loci, silencing ISGs (GBP2, RSAD2,\
+    \ IFI44L, GBP4). **As of 2026-04-19, the IFN arm has 4 interventional anchors across 2 MM cell\
+    \ lines and 3 distinct perturbation modalities:** Ren 2019 PHF19-KD shRNA (MM1S), Ishiguro 2021\
+    \ GSK126 catalytic EZH2 inhibition (MM1S + RPMI-8226, t197), Yu 2023 MS177 EZH2 PROTAC-degrader\
+    \ (MM1S, t205), and Ismail 2022 EZH2+G9a dual inhibition (MM; derepresses ISGs + ERV). Unlike\
+    \ edge 6 (E2F arm), the IFN arm engages under BOTH catalytic inhibition AND PRC2-complex loss\
+    \ \u2014 the pathway is perturbation-mechanism-robust. Original claim confirmed by mirror-image\
+    \ test in MM30 (t110) and direct experimental derepression with reversal on rescue (t124)."
+  data_support:
+  - task: t124
+    description: "Ren 2019 PHF19-KD cross-reference \u2014 IFN-alpha (MW p=3.4e-8, d=0.72) and IFN-gamma\
+      \ (p=8.2e-7, d=0.43) shift upward on PHF19 KD in MM1S; reversed on PHF19 rescue (p=3.0e-10). OXPHOS\
+      \ and mTORC1 negative controls hold."
+  - task: t110
+    description: "Mirror-image Polycomb test in MMRF (n=659) \u2014 IFN-gamma d=-0.42 and IFN-alpha d=-0.45\
+      \ in gain(1q)+ vs neither; PHF19 silences IFN signaling rather than amplifying constitutive PRC2\
+      \ targets."
+  - task: t197
+    description: "Independent EZH2-inhibitor replication (Ishiguro 2021 GSE155135). GSK126 in two MM lines\
+      \ derepresses HALLMARK IFN-alpha and IFN-gamma signatures (RPMI-8226: NES_alpha=+2.83 padj=3.7e-15,\
+      \ NES_gamma=+2.84 padj=1.8e-21; MM.1S: NES_alpha=+2.54 padj=3.2e-11, NES_gamma=+2.34 padj=3.2e-11).\
+      \ Ren-2019-derived IFN-up gene set: NES=+2.19/+2.13 padj=8.4e-5/3.2e-5. The IFN arm of edge 5 now\
+      \ has 3 interventional anchors across 2 perturbations (Ren 2019 PHF19-KD shRNA + Ishiguro 2021\
+      \ GSK126) in 2 MM lines (MM1S, RPMI-8226). Identification axis NOT upgraded (overall t197 verdict\
+      \ Weakly_replicated 1/2 because the E2F leg of the conjunctive rubric failed in MM.1S)."
+  - task: t205
+    description: "Third interventional anchor \u2014 MS177 EZH2 PROTAC-degrader in MM.1S (Yu 2023
+      GSE214668, n=8, 0.5 \u00b5M \u00d7 24h). HALLMARK_INTERFERON_ALPHA_RESPONSE NES=+1.96 padj=6.9e-06;
+      HALLMARK_INTERFERON_GAMMA_RESPONSE NES=+2.07 padj=3.0e-09. Ren2019_IFN_up NES=+1.71 padj=0.0087.
+      Specificity controls: MS177N1 (inactive variant) sub-verdict Neither; C24 (catalytic-only parent)
+      sub-verdict Neither. IFN arm now has 4 interventional anchors across 3 perturbations (Ren 2019
+      shRNA + Ishiguro 2021 GSK126 catalytic + Yu 2023 MS177 degrader) in 2 MM lines (MM1S, RPMI-8226).
+      Within-series C24 null adds: catalytic inhibition alone does not drive IFN reactivation at
+      0.5 \u00b5M/24h dosing \u2014 the IFN arm, like the E2F arm, requires PRC2-complex loss to engage
+      (though at higher GSK126 doses t197 achieved engagement in MM.1S anyway)."
+  lit_support:
+  - doi: null
+    author_year: PHF19-comprehensive
+    description: "Reviews Ren 2019 Blood finding that PHF19 depletion in MM derepresses IFN-JAK-STAT genes;\
+      \ provides the mechanistic chain (Tudor \u2192 H3K27me3 \u2192 IFN silencing) at the level of chromatin\
+      \ biochemistry."
+  - doi: 10.1038/s41420-020-00400-0
+    author_year: Ishiguro2021
+    description: "EZH2 inhibition (GSK126) in MM.1S and RPMI-8226 reactivates IFN signalling \u2014 paper's\
+      \ own primary finding, independently confirmed by t197 reanalysis at NES > 2 in both lines."
+  - doi: 10.3390/biomedicines10112767
+    author_year: Ismail2022
+    description: "MM-specific epigenetics review that independently names EZH2 + G9a (H3K9me2) dual
+      inhibition as producing derepression of IFN-stimulated genes in MM cells \u2014 a distinct
+      interventional axis (EZH2 + H3K9me2 combined) from the shRNA (Ren 2019) and single-agent GSK126
+      (Ishiguro 2021 / t197) anchors, reaching the same functional endpoint. Serves as the 4th
+      independent IFN-arm anchor and extends the IFN-arm evidence beyond EZH2-only perturbations to the
+      broader repressive-chromatin circuitry. Does NOT mention PHF19, so it anchors the PRC2 \u2192 IFN
+      step rather than the PHF19 \u2192 PRC2 step."
+- id: 6
+  source: prc2
+  target: ccis
+  source_label: PRC2 retargeting (latent)
+  target_label: Cell-cycle inhibitor silencing
+  original_label: "broad domains (E2F arm: perturbation-mechanism-dependent \u2014 PRC2-complex loss required)"
+  edge_style: solid
+  relation: repressive mark deposition
+  edge_status: supported
+  identification: interventional
+  caveats:
+  - "Perturbation-mechanism-dependent: PRC2-complex loss (Ren 2019 PHF19-KD shRNA in MM.1S; Yu 2023\
+    \ MS177 EZH2 PROTAC-degrader in MM.1S) drives full E2F/G2M repression (|NES|=3.00, padj=1.5e-32\
+    \ in t205); catalytic-only EZH2 inhibition (Ishiguro 2021 GSK126 in MM.1S; Yu 2023 C24 parent\
+    \ compound in MM.1S) does NOT engage the E2F arm at 0.5 \u00B5M / 24h dosing (E2F NES \u2248\
+    \ \u22121.1, padj > 0.3). GSK126 in RPMI-8226 does engage the E2F arm (NES=\u22121.47, padj=0.008),\
+    \ so cell-line context also matters. The E2F arm of the PRC2 mechanism is therefore NOT\
+    \ symmetric with the IFN arm (edge 5) \u2014 IFN has 4 interventional anchors across 2 cell\
+    \ lines and engages under catalytic inhibition; E2F has 2 complex-loss anchors in MM.1S plus\
+    \ 1 catalytic anchor in RPMI-8226, and fails under catalytic-only perturbation in MM.1S."
+  description: "The same PHF19-directed PRC2 machinery silences cell-cycle inhibitors at new loci via\
+    \ broad H3K27me3 domains. Supported by the symmetric finding that E2F target / cell-cycle output\
+    \ genes are massively repressed on PHF19 knockdown and re-induced on rescue in MM1S. **However,\
+    \ as of 2026-04-19 this edge is empirically asymmetric with edge 5 (IFN arm):** PRC2-complex\
+    \ loss drives the E2F signature, but catalytic EZH2 inhibition alone does not in MM.1S\
+    \ (t197 partial, t205 degrader rescue via catalytic-vs-scaffold distinction). This is consistent\
+    \ with the Parreno 2024 mechanism in which Polycomb-controlled states, once flipped, can be\
+    \ locked by TF occupancy at newly-accessible chromatin independent of H3K27me3 maintenance.\
+    \ Biomarker-vs-viability-driver reading: PHF19/PRC2 is required to ESTABLISH the E2F-silencing\
+    \ state; maintenance may rely on other scaffolding (hence catalytic-only rescue is incomplete)."
+  data_support:
+  - task: t124
+    description: "Ren 2019 PHF19-KD in MM1S \u2014 E2F targets shift DOWN on PHF19 KD (MW p=8.3e-89, d=-1.83),\
+      \ reversed on PHF19 rescue (p=2.1e-83). PHF19 loss arrests the cell cycle, consistent with PRC2\
+      \ normally silencing cell-cycle brakes."
+  - task: t197
+    description: "Independent EZH2-inhibitor replication (Ishiguro 2021 GSE155135) \u2014 PARTIAL. GSK126\
+      \ represses HALLMARK_E2F_TARGETS in RPMI-8226 (NES=-1.47 padj=0.0075; Ren2019_E2F_down NES=-1.49\
+      \ padj=0.0075) but NOT in MM.1S (NES=-1.09 padj=0.32; G2M NES=-0.82 padj=0.91), even though MM.1S\
+      \ is the cell line where Ren 2019 found d=-1.83. EZH2 catalytic inhibition does not recapitulate\
+      \ the magnitude of PHF19-KD on the E2F arm. Cross-line Spearman \u03C1 on moderated-t = 0.235\
+      \ \u2014 cell lines respond very differently at the gene level. Edge 6 identification not upgraded;\
+      \ E2F arm now flagged as more context-dependent than the IFN arm of edge 5."
+  - task: t205
+    description: "Second interventional anchor for the MM.1S E2F arm \u2014 MS177 EZH2 PROTAC-degrader
+      in MM.1S (Yu 2023 GSE214668, n=8, 0.5 \u00b5M \u00d7 24h). HALLMARK_E2F_TARGETS NES=\u22123.00
+      padj=1.5e-32; HALLMARK_G2M_CHECKPOINT NES=\u22122.55 padj=1.9e-17; Ren2019_E2F_down NES=\u22123.11
+      padj=4.7e-36. Magnitude matches or exceeds Ren 2019 d=\u22121.83. **Within-series
+      catalytic-vs-scaffold adjudication:** C24 (parent compound without degrader moiety, catalytic-only
+      EZH2 inhibitor) sub-verdict Neither (E2F NES=\u22121.09 padj=0.31); MS177N1 (inactive variant)
+      sub-verdict Neither (E2F NES=\u22121.10 padj=0.31). At equivalent dose and time in the same
+      cell line, degradation drives the full signature while catalytic inhibition drives nothing
+      measurable \u2014 supports the t197-proposed catalytic-vs-scaffold mechanism distinction.
+      E2F arm now has 2 independent PRC2-complex-loss anchors in MM.1S (Ren 2019 PHF19-KD shRNA +
+      Yu 2023 MS177 degrader) and 1 RPMI-8226 anchor under catalytic inhibition (Ishiguro 2021
+      GSK126). Edge 6 identification upgraded: observational \u2192 interventional-replicated.
+      UPR diagnostic (pre-reg \u00a78): HALLMARK_UPR NES=+1.45 padj=0.02 (below |NES|>2 strong-flag
+      threshold); DDIT3 logFC=+3.4 per-gene is notable but pathway-level UPR is ~2x weaker than E2F
+      repression (NES=\u22123.0), so the E2F signal is not parsimoniously a UPR/stress consequence."
+  lit_support:
+  - doi: null
+    author_year: PHF19-comprehensive
+    description: "Ren 2019 Blood review \u2014 PHF19 depletion derepresses cell-cycle inhibitors (CDKN1A/1B/2A\
+      \ family) in myeloma; broad H3K27me3 domain biology."
+  - doi: 10.1038/s41586-024-07328-w
+    author_year: Parreno2024
+    description: "Cross-system mechanistic support for the PRC2 \u2192 cell-cycle-inhibitor silencing
+      logic. In Drosophila, transient PRC1 (Polyhomeotic) loss derepresses a set of ~30 irreversible
+      direct PcG target genes; JAK-STAT pathway TFs (STAT92E, ZFH1) lock the derepressed loci open even
+      after H3K27me3 is re-established, producing a one-way ratchet. MM relevance is indirect (PRC1 in
+      fly, not PRC2 in mammal), but the principle \u2014 that Polycomb-controlled gene states, once
+      flipped, can become self-sustaining through TF recruitment at newly-accessible chromatin \u2014
+      motivates why silencing at cell-cycle-inhibitor loci can be stable even under downstream
+      perturbations. Consistent with the t197 observation that the E2F arm is more context-dependent
+      than the IFN arm: cell-cycle inhibitor silencing may be stably locked by TF occupancy independent
+      of PRC2 maintenance, explaining why EZH2 catalytic inhibition does not always reopen the E2F
+      program."
+- id: 7
+  source: gain1q
+  target: e2f1
+  source_label: gain(1q) status
+  target_label: E2F1 expression
+  original_label: via 1q-dosed regulators
+  edge_style: solid
+  relation: "dosage \u2192 proliferation"
+  edge_status: supported
+  identification: observational
+  description: "gain(1q) elevates E2F1 mRNA indirectly via 1q-dosed cell-cycle regulators (and via increased\
+    \ proliferation state). Confirmed as a Bayesian edge with high posterior support. The path is largely\
+    \ proliferation-mediated (t163 treats proliferation as mediator, not confounder, for gain1q\u2192\
+    E2F1)."
+  data_support:
+  - task: t129
+    description: "Bayesian edge gain(1q)\u2192proliferation fitted as part of the t163 bundle \u2014 1q+\
+      \ patients have elevated proliferation score with HDI excluding zero, the pathway through which\
+      \ gain(1q) elevates E2F1."
+  - task: t163
+    description: "Proliferation-adjusted TF edges audit explicitly treats proliferation as the mediator\
+      \ between gain(1q) and E2F1/PHF19/EZH2, not as a confounder; consistent with the dosage\u2192proliferation\u2192\
+      E2F1 mechanism."
+  lit_support: []
+  posterior:
+    beta: 0.211
+    hdi_low: 0.028
+    hdi_high: 0.377
+    prob_sign: 0.982
+    fit_task: t136
+    datasets: 5
+    model: hierarchical-linear
+    notes: "Same fit as h1-h2-bridge edge 6 \u2014 gain(1q) \u2192 E2F1 partial path."
+- id: 8
+  source: e2f1
+  target: phf19
+  source_label: E2F1 expression
+  target_label: PHF19 expression
+  original_label: candidate TF (Johnson 2024; motif-level per 2026-04-14 verification, see doc/papers/Johnson2024.md)
+  edge_style: solid
+  relation: "TF \u2192 target (coregulated)"
+  edge_status: tentative
+  identification: observational
+  description: "E2F1 is reported to bind the PHF19 promoter in MM1S (Johnson/Walker 2024). At the bulk\
+    \ mRNA level, MM30 finds a strong unadjusted Bayesian edge (\u03B2=+0.32, P(>0)>0.99) but the edge\
+    \ collapses to null after proliferation adjustment (\u03B2=+0.11, HDI [-0.17,+0.40], 66% attenuation).\
+    \ The direct TF\u2192target biochemistry is real, but cross-sectional mRNA cannot cleanly separate\
+    \ it from shared cell-cycle state. Per-cell scRNA replication (t172) recovers the edge (\u03B2=+0.18,\
+    \ P=0.988)."
+  data_support:
+  - task: t135
+    description: "Bayesian edge E2F1\u2192PHF19 across 5 pilot datasets (n=1884) \u2014 \u03B2=+0.320,\
+      \ HDI excludes zero, directionally consistent across all 5 datasets. Population-level TF\u2192target\
+      \ coregulation at mRNA."
+  - task: t163
+    description: "Proliferation-adjusted refit \u2014 \u03B2 collapses to +0.109 [-0.17, +0.40] (NULL);\
+      \ the raw mRNA edge is largely cell-cycle coregulation, not a clean direct transcriptional effect."
+  - task: t172
+    description: "Per-cell replication in Boiarsky 2022 (17 malignant patients, 18,292 cells, NB likelihood)\
+      \ \u2014 E2F1\u2192PHF19 \u03B2=+0.18 [+0.04, +0.31], P(\u03B2>0)=0.988 => Replicated per pre-reg\
+      \ \xA78 rubric."
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker2024
+    description: scMultiomics in RRPC subset identifies E2F1 among TFs with predicted binding at the PHF19
+      locus; DNA-level direct binding not invalidated by the mRNA-coregulation attenuation in t163.
+  posterior:
+    beta: 0.32
+    hdi_low: 0.013
+    hdi_high: 0.592
+    prob_sign: 0.977
+    fit_task: t135
+    datasets: 5
+    model: hierarchical-linear
+    variants:
+    - beta: 0.175
+      hdi_low: 0.037
+      hdi_high: 0.312
+      prob_sign: 0.988
+      fit_task: t172
+      datasets: 1
+      model: nb-glmm-per-cell
+      notes: Per-cell replication (Boiarsky 2022).
+- id: 9
+  source: e2f1
+  target: ezh2
+  source_label: E2F1 expression
+  target_label: EZH2 expression
+  original_label: Bracken 2003
+  edge_style: solid
+  relation: "TF \u2192 target (coregulated)"
+  edge_status: tentative
+  identification: observational
+  description: "Bracken 2003 established E2F1 binding at the EZH2 promoter in cycling cells. In MM30,\
+    \ E2F1\u2192EZH2 replicates strongly unadjusted (\u03B2=+0.374, P(>0)=0.998) but collapses after proliferation\
+    \ adjustment (\u03B2=+0.116, HDI [-0.10,+0.36], ~69% attenuation). Read as proliferation-coregulation\
+    \ at the mRNA level; the DNA-level TF binding is not invalidated."
+  data_support:
+  - task: t154
+    description: "Bayesian sub-graph completion of Beguelin 2017 loop \u2014 E2F1\u2192EZH2 \u03B2=+0.374\
+      \ [+0.152, +0.558], all 5 datasets direction-consistent (CONFIRMED unadjusted)."
+  - task: t163
+    description: "Proliferation-adjusted refit \u2014 \u03B2=+0.116 [-0.10, +0.36] (NULL). The raw coregulation\
+      \ is largely cell-cycle-state-driven."
+  lit_support:
+  - doi: null
+    author_year: PHF19-comprehensive
+    description: Cites Bracken 2003 EMBO J for E2F1 induction of EZH2 at the EZH2 promoter, the canonical
+      transcriptional-induction claim the MM30 Bayesian edge tests.
+  posterior:
+    fit_task: t154
+    notes: "E2F1 \u2192 EZH2 sub-graph edge completing the Beguelin 2017 cell-cycle \u2192 PRC2 loop feeding\
+      \ PHF19. Listed as registered but \u03B2 not extracted in the available fit registry \u2014 see\
+      \ t154 writeup."
+- id: 10
+  source: ezh2
+  target: phf19
+  source_label: EZH2 expression
+  target_label: PHF19 expression
+  original_label: PRC2 partner t159
+  edge_style: solid
+  relation: complex-partner coregulation
+  edge_status: supported
+  identification: observational
+  description: "EZH2 and PHF19 are direct PRC2.1 complex partners whose mRNA expression is tightly coupled.\
+    \ The only cell-cycle-axis edge that survives proliferation adjustment with HDI still excluding zero\
+    \ \u2014 consistent with stoichiometric complex-membership biology above and beyond shared cell-cycle\
+    \ state. Replicates at per-cell scRNA resolution."
+  data_support:
+  - task: t159
+    description: "Bayesian edge EZH2\u2192PHF19 \u2014 population \u03B2=+0.582 [+0.399, +0.765], P(>0)=0.9995,\
+      \ \u03C3_\u03B2=0.187 (tightest of any TF edge), all 5 datasets HDIs exclude zero and agree in sign.\
+      \ CONFIRMED."
+  - task: t163
+    description: "Proliferation-adjusted refit \u2014 \u03B2=+0.296 [+0.136, +0.490], P(>0)=0.9925. ~49%\
+      \ attenuation but the edge SURVIVES, uniquely among the cell-cycle sub-graph."
+  - task: t172
+    description: "Per-cell Boiarsky replication \u2014 \u03B2=+0.34 [+0.25, +0.43], P(\u03B2>0)=1.000\
+      \ unadjusted; prolif-adjusted weak-support P=0.914. Replicated at single-cell resolution."
+  lit_support:
+  - doi: null
+    author_year: PHF19-comprehensive
+    description: "Reviews Ballar\xE9 2012 / Brien 2012 / Beguelin 2016 on EZH2-PHF19 physical complex\
+      \ membership in PRC2.1, the mechanism underwriting the tightness of the mRNA coupling."
+  posterior:
+    beta: 0.582
+    fit_task: t159
+    datasets: 5
+    model: hierarchical-linear
+    variants:
+    - beta: 0.296
+      fit_task: t163
+      adjusted_for:
+      - proliferation
+      notes: "49% attenuation under proliferation adjustment \u2014 still HDI>0."
+    - beta: 0.336
+      hdi_low: 0.248
+      hdi_high: 0.426
+      prob_sign: 1.0
+      fit_task: t172
+      datasets: 1
+      model: nb-glmm-per-cell
+      notes: Per-cell total effect (Boiarsky).
+    - beta: 0.06
+      prob_sign: 0.914
+      fit_task: t172
+      adjusted_for:
+      - proliferation
+      notes: "Per-cell proliferation-adjusted direct \u2014 Weak-support."
+- id: 11
+  source: ifn
+  target: immune
+  source_label: IFN-JAK-STAT silencing
+  target_label: Immune evasion (latent)
+  original_label: reduced IFN signal
+  edge_style: solid
+  relation: "signaling \u2192 phenotype"
+  edge_status: tentative
+  identification: observational
+  description: "Reduced IFN-JAK-STAT signaling is proposed to enable immune evasion (diminished antigen\
+    \ presentation, reduced ISG-mediated tumour surveillance). The link from IFN silencing to an immune-evasion\
+    \ phenotype is biologically canonical but has not been directly measured in MM30 \u2014 deconvolution\
+    \ of the tumour immune microenvironment would be required to test."
+  data_support:
+  - task: t110
+    description: "PHF19 mediation analysis shows ~77% retention of PHF19 survival effect after proliferation\
+      \ control \u2014 consistent with a non-proliferative (candidate: immune evasion) component, but\
+      \ the immune-evasion node itself is not directly observed."
+  lit_support: []
+- id: 12
+  source: ccis
+  target: cell_state
+  source_label: Cell-cycle inhibitor silencing
+  target_label: Cell-cycle state (latent)
+  original_label: checkpoint release
+  edge_style: solid
+  relation: checkpoint release
+  edge_status: supported
+  identification: interventional
+  description: "Silencing of cell-cycle inhibitors (CDKN1A/1B/2A family) releases checkpoints, accelerating\
+    \ cell-cycle progression. PHF19-KD in MM1S directly demonstrates the reverse \u2014 cell-cycle arrest\
+    \ when these inhibitors are derepressed."
+  data_support:
+  - task: t124
+    description: "Ren 2019 PHF19-KD in MM1S \u2014 E2F targets collapse (p=8.3e-89, d=-1.83) on PHF19\
+      \ loss, consistent with loss of CCIS silencing re-engaging the checkpoint. Reversed on rescue (p=2.1e-83)."
+  lit_support:
+  - doi: null
+    author_year: PHF19-comprehensive
+    description: "Ren 2019 Blood \u2014 PHF19 depletion derepresses cell-cycle inhibitors, leading to\
+      \ G1 arrest and reduced proliferation in MM cells."
+- id: 13
+  source: gain1q
+  target: other_1q
+  source_label: gain(1q) status
+  target_label: Other 1q drivers (CKS1B, MCL1)
+  original_label: dosage
+  edge_style: solid
+  relation: dosage
+  edge_status: structural
+  identification: structural
+  description: "CKS1B and MCL1 sit on 1q21 and are amplified by gain(1q) via gene dosage. This is a near-definitional\
+    \ DNA-copy \u2192 mRNA relation for genes on the amplified segment; the edge is retained as structural\
+    \ rather than requiring independent MM30 validation."
+  data_support: []
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker2024
+    description: 1q amplification profile across 325,025 cells includes canonical 1q21 dosage-driven drivers
+      (CKS1B, MCL1) co-amplified with PBX1/RFX5.
+- id: 14
+  source: other_1q
+  target: survival
+  source_label: Other 1q drivers (CKS1B, MCL1)
+  target_label: Overall survival
+  original_label: ''
+  edge_style: solid
+  relation: prognostic drivers
+  edge_status: tentative
+  identification: observational
+  description: CKS1B (proliferation adapter) and MCL1 (anti-apoptotic) are established prognostic drivers
+    in MM and contribute a PHF19-independent survival path from gain(1q). MM30 has not run a dedicated
+    isolation of these contributions vs PHF19; this is a literature-anchored but not individually partitioned
+    edge in MM30.
+  data_support:
+  - task: t082
+    description: "gain(1q) \xD7 PHF19 interaction (p=0.003; HR=1.86 in 1q+ vs 1.35 in 1q-) \u2014 gain(1q)\
+      \ carries survival risk on top of PHF19, compatible with additional 1q-resident drivers."
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker2024
+    description: Confirms gain(1q) RRPC subset as the high-risk compartment in MM, with survival impact
+      beyond any single 1q-resident gene.
+- id: 15
+  source: other_lesions
+  target: prc2
+  source_label: Other high-risk lesions t(4;14)/NSD2, del(17p)/TP53
+  target_label: PRC2 retargeting (latent)
+  original_label: NSD2 also modifies chromatin
+  edge_style: dashed
+  relation: confounding chromatin modifier
+  edge_status: unknown
+  identification: observational
+  description: "t(4;14) NSD2 overexpression spreads H3K36me2 genome-wide, which antagonizes PRC2 and could\
+    \ redistribute PRC2 to different loci for a different reason than PHF19-mediated retargeting. Plausible\
+    \ confounder but not formally tested in MM30; would require stratifying the PHF19\u2192PRC2 analysis\
+    \ by t(4;14) status."
+  data_support:
+  - task: t112
+    description: Task to test PHF19 survival effect stratified by t(4;14) status is registered but still
+      open; the confounder edge is currently untested in MM30.
+  lit_support:
+  - doi: null
+    author_year: PHF19-comprehensive
+    description: "NSD2-driven H3K36me2 expansion antagonizes PRC2 by competing for its genomic territory\
+      \ \u2014 reviewed mechanism that motivates the confounder arrow."
+- id: 16
+  source: other_lesions
+  target: survival
+  source_label: Other high-risk lesions t(4;14)/NSD2, del(17p)/TP53
+  target_label: Overall survival
+  original_label: ''
+  edge_style: solid
+  relation: high-risk cytogenetics
+  edge_status: supported
+  identification: longitudinal
+  description: t(4;14) and del(17p) are well-established independent high-risk cytogenetic markers in
+    MM. In MM30 expression-derived virtual FISH and composite instability scoring recover this survival
+    association.
+  data_support:
+  - task: t055
+    description: Longitudinal virtual-FISH analysis in MMRF (87 paired baseline/relapse) quantifies del(17p)
+      and translocation dynamics; del(17p) net-gain at relapse (12 acquirers) reinforces its independent
+      prognostic role.
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker2024
+    description: RRPC subpopulation enriched for TP53 mutations / del(17p) confirms independent contribution
+      of high-risk lesions to RRMM biology.
+- id: 17
+  source: stage
+  target: cell_state
+  source_label: Disease stage (MGUS/SMM/ MM/RRMM)
+  target_label: Cell-cycle state (latent)
+  original_label: "progression\u2192 faster cycling"
+  edge_style: solid
+  relation: "progression \u2192 proliferation"
+  edge_status: supported
+  identification: observational
+  description: "Later disease stages exhibit faster cell-cycle progression. Bayesian meta-analysis across\
+    \ 4 continuum datasets confirms SMM\u2192MM proliferation increase; MGUS\u2192SMM is weak transcriptomically\
+    \ (epigenomic commitment precedes transcription)."
+  data_support:
+  - task: t166
+    description: "Bayesian edge stage_smm_mm\u2192proliferation_score \u03B2=+0.747 [0.000, +1.594] (n=5\
+      \ datasets) CONFIRMED at SMM\u2192MM. H\u2192MGUS and MGUS\u2192SMM cell-cycle silent (5/5 near\
+      \ zero), consistent with the \"capacity \u2192 commitment \u2192 activation\" progression model."
+  lit_support: []
+  posterior:
+    fit_task: t055
+    datasets: 1
+    model: paired-wilcoxon
+    notes: "Longitudinal identification via within-patient gain(1q) acquisition at relapse (n=13 acquirers,\
+      \ Wilcoxon p=0.020 for PHF19 rise; p=0.003 for chr1q arm score) \u2014 no standardized \u03B2, but\
+      \ directional shift is significant."
+- id: 18
+  source: stage
+  target: burden
+  source_label: Disease stage (MGUS/SMM/ MM/RRMM)
+  target_label: Tumor burden (latent)
+  original_label: accumulation
+  edge_style: solid
+  relation: accumulation
+  edge_status: structural
+  identification: structural
+  description: "Disease stage is clinically defined in part by tumour-cell accumulation (MGUS <10% PC,\
+    \ SMM 10-60% PC, MM clinical criteria include PC burden). The stage\u2192burden edge is near-definitional\
+    \ at the level of how stages are assigned."
+  data_support: []
+  lit_support: []
+- id: 19
+  source: stage
+  target: treatment
+  source_label: Disease stage (MGUS/SMM/ MM/RRMM)
+  target_label: Baseline treatment
+  original_label: intensity
+  edge_style: solid
+  relation: "stage \u2192 treatment choice"
+  edge_status: structural
+  identification: structural
+  description: Treatment intensity and regimen choice are, by clinical practice, a function of disease
+    stage (MGUS/SMM are typically observed; MM receives induction; RRMM receives later-line regimens).
+    Definitional at the clinical-practice level.
+  data_support: []
+  lit_support: []
+- id: 20
+  source: stage
+  target: phf19
+  source_label: Disease stage (MGUS/SMM/ MM/RRMM)
+  target_label: PHF19 expression
+  original_label: t055 acquisition
+  edge_style: solid
+  relation: "progression \u2192 epigenetic driver"
+  edge_status: supported
+  identification: longitudinal
+  description: "PHF19 increases at SMM\u2192MM both cross-sectionally (continuum-dataset meta-analysis)\
+    \ and within-patient longitudinally (MMRF paired baseline/relapse, gain(1q) acquirers). This closes\
+    \ the stage-confounder arrow that t153 flagged for the PHF19\u2192survival estimand."
+  data_support:
+  - task: t166
+    description: "Bayesian meta-analysis across 4 continuum datasets \u2014 stage_smm_mm\u2192phf19 \u03B2\
+      =+0.524 [+0.032, +1.097] CONFIRMED. MGUS\u2192SMM null (consistent with epigenomic-before-transcriptomic\
+      \ commitment)."
+  - task: t055
+    description: "Longitudinal virtual-FISH in 87 paired MMRF patients \u2014 within 13 gain(1q) acquirers\
+      \ PHF19 rises at relapse (Wilcoxon p=0.020; chr1q arm score p=0.003), supporting gain(1q)\u2192\
+      PHF19 causation and stage\u2192PHF19 at the individual-patient level."
+  lit_support: []
+  posterior:
+    beta: 0.524
+    hdi_low: 0.032
+    hdi_high: 1.097
+    prob_sign: 0.97
+    fit_task: t166
+    datasets: 4
+    model: hierarchical-binary-continuous
+    notes: "stage_smm_mm \u2192 phf19 transition edge \u2014 matches pre-registered 'strong +' prediction;\
+      \ H\u2192MGUS and MGUS\u2192SMM are null (5/5)."
+- id: 21
+  source: stage
+  target: survival
+  source_label: Disease stage (MGUS/SMM/ MM/RRMM)
+  target_label: Overall survival
+  original_label: time in disease
+  edge_style: solid
+  relation: "stage \u2192 prognosis"
+  edge_status: supported
+  identification: observational
+  description: "Later disease stages have worse prognosis (RRMM > MM > SMM > MGUS). Stage-stratified PHF19\u2192\
+    survival refit shows the stage backdoor for the PHF19 estimand is not load-bearing after gain(1q)\
+    \ adjustment, but stage itself is independently prognostic."
+  data_support:
+  - task: t164
+    description: "Stage-stratified phf19\u2192survival refit \u2014 NDMM stratum \u03B2=+0.462 [+0.107,\
+      \ +0.827] (HR 1.59/SD) and RRMM stratum \u03B2=+0.357 [-0.054, +0.711]; both strata independently\
+      \ associate higher expression with worse survival, within prognostically-distinct stage groups."
+  lit_support: []
+  posterior:
+    fit_task: t163
+    notes: Proliferation score is the observed aggregate proxy for the latent cell-cycle state; treated
+      as mediator in t163/t165 decompositions, not as a separately-fit edge.
+- id: 22
+  source: cell_state
+  target: prolif
+  source_label: Cell-cycle state (latent)
+  target_label: Proliferation score (proxy)
+  original_label: proxy aggregate
+  edge_style: solid
+  relation: proxy
+  edge_status: structural
+  identification: structural
+  description: "Proliferation score is an operational aggregate (mean z-scored expression of MKI67/CCNB1/TOP2A/AURKB/CDK1/PCNA/BIRC5\
+    \ or HALLMARK E2F/G2M) intended as a computable proxy for latent cell-cycle state. Definitional measurement\
+    \ edge \u2014 the score IS the observable for cell_state in MM30."
+  data_support:
+  - task: t163
+    description: 7-marker proliferation panel (MKI67, CCNB1, TOP2A, AURKB, CDK1, PCNA, BIRC5) used as
+      the covariate in proliferation-adjusted refits, operationalising cell_state as an observable in
+      the causal framework.
+  lit_support: []
+- id: 23
+  source: cell_state
+  target: burden
+  source_label: Cell-cycle state (latent)
+  target_label: Tumor burden (latent)
+  original_label: tumor growth
+  edge_style: solid
+  relation: "growth \u2192 accumulation"
+  edge_status: structural
+  identification: structural
+  description: Faster cell-cycle state produces more tumour cells per unit time, feeding burden. Near-definitional
+    at the population-dynamics level; no dedicated MM30 test is required to justify the arrow.
+  data_support: []
+  lit_support: []
+- id: 24
+  source: burden
+  target: iss
+  source_label: Tumor burden (latent)
+  target_label: ISS stage (observed)
+  original_label: proxy
+  edge_style: solid
+  relation: proxy
+  edge_status: structural
+  identification: structural
+  description: "ISS stage is clinically defined using B2M and albumin as surrogates for tumour burden.\
+    \ The burden\u2192ISS edge is definitional at the level of how ISS is constructed; no MM30-internal\
+    \ test is load-bearing here."
+  data_support: []
+  lit_support: []
+- id: 25
+  source: burden
+  target: treatment
+  source_label: Tumor burden (latent)
+  target_label: Baseline treatment
+  original_label: severity guides Rx
+  edge_style: solid
+  relation: "severity \u2192 therapy"
+  edge_status: structural
+  identification: structural
+  description: Clinical practice selects treatment intensity/regimen based on severity (burden + stage
+    + high-risk features). Definitional at the level of how treatment is prescribed rather than a testable
+    causal claim.
+  data_support: []
+  lit_support: []
+- id: 26
+  source: burden
+  target: survival
+  source_label: Tumor burden (latent)
+  target_label: Overall survival
+  original_label: ''
+  edge_style: solid
+  relation: "burden \u2192 mortality"
+  edge_status: supported
+  identification: observational
+  description: Higher tumour burden associates with worse survival in MM (clinically operationalised through
+    ISS). Supported indirectly in MM30 via ISS-stratified survival and via the strong prognostic value
+    of proliferation scores (which approximate burden generation rate).
+  data_support:
+  - task: t102
+    description: "Confirms gain(1q) adds significant predictive value beyond ISS (LRT p=5.3e-05; C-index\
+      \ 0.632\u21920.658) \u2014 demonstrates ISS (burden proxy) is itself substantially prognostic before\
+      \ stratification even considers gain(1q)."
+  lit_support: []
+- id: 27
+  source: treatment
+  target: survival
+  source_label: Baseline treatment
+  target_label: Overall survival
+  original_label: mediator
+  edge_style: solid
+  relation: mediator
+  edge_status: structural
+  identification: structural
+  description: "Treatment is a causal mediator between tumour biology and survival \u2014 improved outcomes\
+    \ are the direct goal of therapy. Per the t153 audit, treatment is on the mediator path, NOT the confounder\
+    \ path, for any gene\u2192survival estimand, so one does NOT adjust for treatment when estimating\
+    \ PHF19\u2192survival."
+  data_support:
+  - task: t153
+    description: "Confounder audit explicitly classifies treatment as mediator (not confounder) for gene\u2192\
+      survival estimands; adjusting for treatment would block a mediator and bias the total effect."
+  lit_support: []
+- id: 28
+  source: prolif
+  target: survival
+  source_label: Proliferation score (proxy)
+  target_label: Overall survival
+  original_label: prognostic state, observed
+  edge_style: solid
+  relation: prognostic state
+  edge_status: supported
+  identification: observational
+  description: "Proliferation is the dominant SumZ signal in MM30 and a well-established prognostic marker.\
+    \ The direct prolif\u2192survival Bayesian edge is borderline null after gain(1q) adjustment (\u03B2\
+    =+0.335 [-0.04, +0.67]) because gain(1q) absorbs much of the proliferation-related hazard; in unadjusted\
+    \ and univariate contexts proliferation is a strong survival predictor."
+  data_support:
+  - task: t165
+    description: "Direct prolif\u2192survival Bayesian edge \u03B2=+0.335 [-0.04, +0.67], borderline NULL\
+      \ after gain(1q) adjustment \u2014 gain(1q) coefficient absorbs most of the proliferation-related\
+      \ hazard."
+  - task: t110
+    description: "PHF19 mediation \u2014 adding E2F+G2M proliferation covariate attenuates PHF19 coefficient\
+      \ by 23% (0.569\u21920.438), confirming proliferation carries substantial prognostic information."
+  lit_support: []
+  posterior:
+    beta: 0.192
+    fit_task: t165
+    datasets: 5
+    model: weibull-ph-hierarchical
+    notes: "Indirect effect \u03B2_IE \u2248 +0.19 (42% of PHF19\u2192OS total); pooled via product-of-coefficients\
+      \ mediation decomposition."
+- id: 29
+  source: immune
+  target: survival
+  source_label: Immune evasion (latent)
+  target_label: Overall survival
+  original_label: ''
+  edge_style: solid
+  relation: immune escape
+  edge_status: tentative
+  identification: observational
+  description: "Immune evasion is a candidate mediator for the non-proliferative component of PHF19\u2192\
+    survival (t165: 42% of PHF19\u2192survival mediated by proliferation, 58% direct). The IFN-silencing\u2192\
+    immune-evasion\u2192survival arc is mechanistically plausible but the immune-evasion node is latent;\
+    \ direct measurement would require TME deconvolution."
+  data_support:
+  - task: t165
+    description: "Mediation decomposition of PHF19\u2192survival \u2014 \u03B2_DE=+0.265 [+0.100, +0.446]\
+      \ (CONFIRMED direct effect, ~58% of total); the non-proliferative direct channel is consistent with\
+      \ immune evasion but not uniquely identified."
+  - task: t110
+    description: "Adding IFN-gamma to the Cox model of PHF19\u2192survival does NOT attenuate PHF19 (104%\
+      \ retention); bulk IFN-gamma score is the wrong covariate \u2014 the immune-evasion phenotype likely\
+      \ sits downstream of IFN silencing, not at the bulk transcript level."
+  lit_support: []

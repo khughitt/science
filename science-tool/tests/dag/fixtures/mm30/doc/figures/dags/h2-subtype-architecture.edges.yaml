@@ -1,0 +1,872 @@
+dag: h2-subtype-architecture
+source_dot: doc/figures/dags/h2-subtype-architecture.dot
+edges:
+- id: 1
+  source: coo
+  target: lineage
+  source_label: Cell of origin / precursor state
+  target_label: Primary molecular lineage (HD, t(4;14), t(11;14), t(14;16))
+  original_label: ''
+  edge_style: solid
+  relation: determination
+  edge_status: structural
+  identification: structural
+  description: Germinal-center B-cell AID activity during class-switch recombination is the mechanistic
+    source of IgH translocations (t(4;14), t(11;14), t(14;16)), while hyperdiploidy arises from mitotic
+    mis-segregation in the precursor plasma-cell lineage. The edge is near-definitional and not directly
+    measurable in MM30 (COO state is latent), so we record it as structural.
+  data_support: []
+  lit_support: []
+- id: 2
+  source: lineage
+  target: baseline
+  source_label: Primary molecular lineage (HD, t(4;14), t(11;14), t(14;16))
+  target_label: Baseline subtype architecture
+  original_label: ''
+  edge_style: solid
+  relation: determination
+  edge_status: supported
+  identification: observational
+  description: Primary founding events establish a baseline transcriptomic subtype that is partially independent
+    of later CNAs. Samur 2023 and Skerget 2024 both resolve expression-defined subtypes that co-vary strongly
+    with primary lineage (HD, MAF, MMSET/NSD2, CCND1) even when secondary events differ.
+  data_support:
+  - task: t099
+    description: Samur 2024 subtype transition matrix extraction (planned). Documents that expression
+      subtypes are partly lineage-driven with cross-subtype transitions at relapse (~25%).
+  lit_support:
+  - doi: 10.1182/blood.2022017145
+    author_year: Samur 2023
+    description: Single-cell MM profiling review; lineage-linked expression subtypes.
+  - doi: 10.1038/s41588-024-01853-0
+    author_year: Skerget 2024
+    description: CoMMpass molecular profiling; refined expression subtypes that align with primary lineage
+      at diagnosis.
+- id: 3
+  source: lineage
+  target: gain1q
+  source_label: Primary molecular lineage (HD, t(4;14), t(11;14), t(14;16))
+  target_label: gain(1q)
+  original_label: propensity
+  edge_style: dashed
+  relation: propensity
+  edge_status: tentative
+  identification: observational
+  description: Lineage alters the probability of acquiring gain(1q); t(4;14) and t(14;16) carry substantially
+    higher 1q-gain frequencies than t(11;14). The edge is dashed because propensity is a co-occurrence
+    frequency rather than a tested causal arrow, and in MM30 we rely on virtual FISH (not WGS) to quantify
+    it.
+  data_support:
+  - task: t069
+    description: 'Virtual FISH validation: cross-classifier co-occurrence tables confirm lineage-dependent
+      1q-gain frequency differences consistent with Walker 2024.'
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker 2024
+    description: 1q amplification enriches in high-risk lineages (t(4;14), t(14;16)) and defines a PHF19-expressing
+      RRPC subpopulation.
+- id: 4
+  source: lineage
+  target: del17p
+  source_label: Primary molecular lineage (HD, t(4;14), t(11;14), t(14;16))
+  target_label: del(17p)
+  original_label: propensity
+  edge_style: dashed
+  relation: propensity
+  edge_status: tentative
+  identification: observational
+  description: del(17p) propensity varies by primary lineage, with higher co-occurrence in t(4;14)/t(14;16)
+    than in HD. Virtual-FISH del(17p) has the lowest classifier AUROC (0.82) in MM30, so propensity estimates
+    carry noticeable measurement error.
+  data_support:
+  - task: t069
+    description: Virtual FISH classifier AUROC 0.82 for del(17p); used for cross-dataset co-occurrence
+      with lineage labels.
+  lit_support:
+  - doi: 10.1038/s41588-024-01853-0
+    author_year: Skerget 2024
+    description: CoMMpass profiling documents del(17p) frequencies stratified by founding translocation
+      / HD lineage.
+- id: 5
+  source: evo
+  target: gain1q
+  source_label: Evolutionary state / secondary-hit burden
+  target_label: gain(1q)
+  original_label: ''
+  edge_style: solid
+  relation: accumulation
+  edge_status: tentative
+  identification: longitudinal
+  description: More evolved tumors accumulate secondary CNAs including gain(1q); Skerget 2024 CoMMpass
+    longitudinal data show gain(1q) enrichment at relapse, and the t055 MMRF longitudinal analysis documented
+    13 patients acquiring gain(1q) between baseline and relapse (26.5% of initially-negative patients).
+  data_support:
+  - task: t055
+    description: 87 paired MMRF baseline/relapse patients; 13 acquired gain(1q) at relapse with within-patient
+      PHF19 increase (Wilcoxon p=0.020).
+  lit_support:
+  - doi: 10.1038/s41588-024-01853-0
+    author_year: Skerget 2024
+    description: Longitudinal CoMMpass profiling shows gain(1q) enrichment at relapse, consistent with
+      acquisition during disease evolution.
+- id: 6
+  source: evo
+  target: del17p
+  source_label: Evolutionary state / secondary-hit burden
+  target_label: del(17p)
+  original_label: ''
+  edge_style: solid
+  relation: accumulation
+  edge_status: tentative
+  identification: longitudinal
+  description: del(17p) is preferentially a late/subclonal event; MMRF paired baseline/relapse analysis
+    (t055) observed a net gain of 12 patients acquiring del(17p) at relapse, consistent with evolutionary
+    accumulation.
+  data_support:
+  - task: t055
+    description: 12 patients acquired del(17p) at relapse; net gain across 87 paired MMRF patients.
+  lit_support:
+  - doi: 10.1038/s41588-024-01853-0
+    author_year: Skerget 2024
+    description: CoMMpass reports del(17p) accumulation through progression/relapse.
+- id: 7
+  source: evo
+  target: gain8q
+  source_label: Evolutionary state / secondary-hit burden
+  target_label: gain(8q)
+  original_label: ''
+  edge_style: solid
+  relation: accumulation
+  edge_status: unknown
+  identification: none
+  description: gain(8q) is hypothesised to be a secondary event accumulating with evolutionary burden,
+    but in MM30 its detection is an expression-threshold proxy (median log2>0.2) rather than a validated
+    CNA call, and longitudinal MMRF data has not yet been analysed for gain(8q) acquisition. Treat as
+    a working hypothesis.
+  data_support: []
+  lit_support: []
+- id: 8
+  source: evo
+  target: muts
+  source_label: Evolutionary state / secondary-hit burden
+  target_label: Mutation landscape (KRAS, NRAS, TP53)
+  original_label: ''
+  edge_style: solid
+  relation: accumulation
+  edge_status: tentative
+  identification: observational
+  description: "Somatic SNVs accumulate with tumor evolution and tend to be enriched at relapse. In MM30\
+    \ this is supported indirectly: the t105 MMRF interaction model finds real but modest mutation-by-expression\
+    \ effects (53 KRAS-interacting genes at BH<0.1), and t106 shows low rho between random equal-sized\
+    \ splits \u2014 most stratified divergence is a sample-size artifact rather than a clean evolutionary\
+    \ signal."
+  data_support:
+  - task: t105
+    description: MMRF mutation-by-expression interaction model; 53 KRAS-interacting genes at BH<0.1.
+  - task: t106
+    description: Permutation calibration of stratified ranking rho; random splits produce comparable rho.
+  lit_support: []
+- id: 9
+  source: evo
+  target: burden
+  source_label: Evolutionary state / secondary-hit burden
+  target_label: Tumor burden
+  original_label: ''
+  edge_style: solid
+  relation: accumulation
+  edge_status: structural
+  identification: structural
+  description: More evolved tumors tend to have higher plasma-cell burden at diagnosis, but 'evolutionary
+    state' is latent in MM30 and burden is proxied by ISS. The edge is recorded as structural/near-definitional
+    and is not separately testable without time-indexed clonal data.
+  data_support: []
+  lit_support: []
+- id: 10
+  source: gain1q
+  target: dosage
+  source_label: gain(1q)
+  target_label: 1q gene dosage
+  original_label: ''
+  edge_style: solid
+  relation: dosage
+  edge_status: structural
+  identification: structural
+  description: Copy-number gain on 1q mechanically increases the per-cell DNA dose of 1q genes, which
+    propagates to higher bulk expression for dosage-sensitive 1q loci (PHF19, MCL1, CKS1B). This is a
+    near-definitional biological effect; t082 verifies the expression-level consequence in MMRF.
+  data_support:
+  - task: t082
+    description: 'PHF19 residualization on gain(1q) status: 7% of PHF19 variance explained by gain(1q),
+      consistent with a dosage effect plus large non-dosage variance.'
+  lit_support: []
+- id: 11
+  source: dosage
+  target: arch_1q
+  source_label: 1q gene dosage
+  target_label: 1q-associated architecture (G2M, PHF19, IFN silencing)
+  original_label: ''
+  edge_style: solid
+  relation: transcriptional
+  edge_status: supported
+  identification: observational
+  description: 'Elevated 1q dosage (via PHF19, MCL1, CKS1B, ILF2 and other 1q genes) drives the gain(1q)+
+    architecture: G2M/mitotic-spindle activation, PHF19-mediated PRC2 silencing of IFN loci, and proliferation
+    enrichment. t081 shows G2M/E2F/MITOTIC_ SPINDLE enrichment in gain(1q)+ unique genes; t082 formalises
+    the PHF19 dosage link.'
+  data_support:
+  - task: t081
+    description: gain(1q)+ unique genes enriched for G2M_CHECKPOINT (FDR<0.001, OR=5.6), E2F_TARGETS (FDR<0.001,
+      OR=9.9), MITOTIC_SPINDLE (FDR=0.009).
+  - task: t082
+    description: PHF19 residualization on gain(1q); dosage-consistent increase in PHF19 in 1q+ patients.
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker 2024
+    description: 1q amplification drives a PHF19-high proliferative RRPC subpopulation associated with
+      relapse.
+- id: 12
+  source: gain1q
+  target: epi
+  source_label: gain(1q)
+  target_label: Epigenetic architecture (3-way Polycomb)
+  original_label: PHF19/PRC2 targeted
+  edge_style: solid
+  relation: epigenetic
+  edge_status: supported
+  identification: interventional
+  description: "gain(1q)+ cells show targeted PHF19/PRC2 invasion at IFN and cell-cycle inhibitor loci\
+    \ rather than global H3K27me3 redistribution. t091 replicated PHF19-high \u2192 IFN/JAK-STAT silencing\
+    \ across bulk datasets, and MM-specific PHF19-KD RNA-seq (Ren 2019, GSE136410) shows IFN-gene derepression\
+    \ on PHF19 knockdown with ES-PRC2 consensus targets unaffected (MM-specific retargeting)."
+  data_support:
+  - task: t091
+    description: 'PHF19 cross-dataset replication: IFN-gamma d=-0.42 (p=2.2e-6) and IFN-alpha d=-0.45
+      (p=3.0e-7) silencing in gain(1q)+ vs neither.'
+  - accession: GSE136410
+    description: Ren 2019 PHF19-KD RNA-seq in MM1S cells; IFN genes derepressed on KD, rescued on re-expression.
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker 2024
+    description: 1q-amplified high-risk cells with PHF19-driven Polycomb program.
+- id: 13
+  source: lineage
+  target: epi
+  source_label: Primary molecular lineage (HD, t(4;14), t(11;14), t(14;16))
+  target_label: Epigenetic architecture (3-way Polycomb)
+  original_label: NSD2 global or neutral
+  edge_style: solid
+  relation: epigenetic
+  edge_status: supported
+  identification: observational
+  description: "Primary lineage shapes the epigenetic architecture qualitatively: t(4;14)/NSD2 drives\
+    \ global H3K36me2\u2192PRC2 redistribution (constitutive PRC2 targets derepressed); t(11;14) is Polycomb-neutral;\
+    \ gain(1q) produces targeted invasion. The three-way dissociation is the central epigenetic finding\
+    \ in the H2 DAG."
+  data_support:
+  - task: t091
+    description: Replicated PHF19/PRC2 silencing pattern specific to gain(1q)+, not seen in Polycomb-neutral
+      subtypes.
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker 2024
+    description: Lineage-resolved scATAC/scRNA-seq showing distinct Polycomb configurations across MM
+      subtypes.
+- id: 14
+  source: epi
+  target: arch_1q
+  source_label: Epigenetic architecture (3-way Polycomb)
+  target_label: 1q-associated architecture (G2M, PHF19, IFN silencing)
+  original_label: ''
+  edge_style: solid
+  relation: mechanism
+  edge_status: supported
+  identification: observational
+  description: "The gain(1q)-specific Polycomb configuration (PHF19 \u2192 PRC2 invasion of IFN loci plus\
+    \ repression of CDK inhibitors) is the proximal cause of the gain(1q)+ architecture's cell-cycle release\
+    \ and IFN silencing pattern."
+  data_support:
+  - task: t091
+    description: IFN and cell-cycle inhibitor silencing track PHF19-high status within gain(1q)+ samples
+      across datasets.
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker 2024
+    description: PHF19-high RRPC cells with the gain(1q) Polycomb configuration and proliferative gene
+      program.
+- id: 15
+  source: epi
+  target: arch_non1q
+  source_label: Epigenetic architecture (3-way Polycomb)
+  target_label: Alternative non-1q architecture (E2F, ribosome)
+  original_label: ''
+  edge_style: solid
+  relation: mechanism
+  edge_status: tentative
+  identification: observational
+  description: Non-1q Polycomb configurations (NSD2-global in t(4;14); neutral in t(11;14)) are hypothesised
+    to permit an alternative E2F / ribosome-biogenesis program unconstrained by the 1q-gain PRC2 invasion.
+    The mechanism is plausible but the driver of the non-1q E2F/ribosome activation has not been directly
+    identified (see edge 18 non1q_drv unknown).
+  data_support:
+  - task: t114
+    description: 13 genuinely stratum-specific gain(1q)- genes form a ribosome/translation program (RPF2,
+      POLR1A, FASTKD2).
+  lit_support: []
+- id: 16
+  source: baseline
+  target: arch_1q
+  source_label: Baseline subtype architecture
+  target_label: 1q-associated architecture (G2M, PHF19, IFN silencing)
+  original_label: ''
+  edge_style: solid
+  relation: baseline
+  edge_status: tentative
+  identification: observational
+  description: The lineage-baseline expression state provides the scaffold on which gain(1q) layers its
+    additional architecture; different founding subtypes show proliferation/PHF19 at different baseline
+    levels. Supported structurally by Samur 2023 / Skerget 2024 lineage-linked subtypes rather than by
+    a direct MM30 test.
+  data_support: []
+  lit_support:
+  - doi: 10.1182/blood.2022017145
+    author_year: Samur 2023
+    description: Lineage-linked baseline expression programs in MM.
+  - doi: 10.1038/s41588-024-01853-0
+    author_year: Skerget 2024
+    description: Expression subtypes co-vary with primary lineage.
+- id: 17
+  source: baseline
+  target: arch_non1q
+  source_label: Baseline subtype architecture
+  target_label: Alternative non-1q architecture (E2F, ribosome)
+  original_label: ''
+  edge_style: solid
+  relation: baseline
+  edge_status: tentative
+  identification: observational
+  description: In gain(1q)- patients, the baseline subtype architecture (lineage-driven) is the dominant
+    contributor to transcriptome state; the E2F/ribosome program is layered on top. t115 HD-stratification
+    replicates this pattern (HD+/- show the architecture split) and t114 isolates a stratum-specific ribosome
+    program.
+  data_support:
+  - task: t115
+    description: 'HD stratification: HD+ CTA/chrXp program vs HD- hypoxia/metabolism program; architecture
+      split replicates on primary lineage.'
+  - task: t114
+    description: 13 stratum-specific gain(1q)- genes; ribosome biogenesis/translation program.
+  lit_support: []
+- id: 18
+  source: non1q_drv
+  target: arch_non1q
+  source_label: Non-1q driver(s)
+  target_label: Alternative non-1q architecture (E2F, ribosome)
+  original_label: positive cause
+  edge_style: dashed
+  relation: driver
+  edge_status: tentative
+  identification: observational
+  description: "A positive cause of the gain(1q)- E2F/ribosome program must exist (the absence of 1q is\
+    \ not a cause). Two partial candidates are now anchored: (a) NAT10 (m1A-acetyltransferase)\
+    \ shows gain(1q)\u2212-preferential ranking in MM30 (SumZ 841 g1q\u2212 vs 3352 g1q+, t221);\
+    \ follow-up t224 tests whether NAT10 explains variance in the 13 stratum-specific\
+    \ gain(1q)\u2212 genes from t114. (b) YTHDF2 (m6A reader) shows the symmetric pattern\
+    \ in gain(1q)+/HD\u2212 (gain(1q)+ rank 1,009; HD\u2212 rank 869; survival-OS SumZ rank\
+    \ 1,092), consistent with m6A-driven proliferation amplification in the proliferation-\
+    dominant 1q+ subtype. Plasmablast\u2194mature-PC composition axis is also implicated\
+    \ (t174 per-cell replicates; t204 bulk channel closed `non_adjudicating`). MAP2K2 was\
+    \ tested and found non-KRAS-interacting in MMRF (t221); the Hua 2022 MAP2K2-KRAS axis\
+    \ does not replicate. H2's biggest explanatory gap is narrowed but not closed: NAT10\
+    \ and YTHDF2 are orthogonal stratum-specific mechanisms, not a single non-proliferative\
+    \ convergence program."
+  data_support:
+  - task: t094
+    description: "OIP5-E2F1 correlation in MMRF: identical coupling in gain(1q)+/-, so the E2F1 circuit\
+      \ is not differentially wired \u2014 the driver is upstream of E2F1."
+  - task: t221
+    description: "MM30 rank lookup of Batch F literature candidates. NAT10 gain(1q)\u2212-preferential\
+      \ (SumZ 841 vs 3352); YTHDF2 gain(1q)+/HD\u2212-preferential (1,009 / 869) with survival-\
+      OS rank 1,092; MAP2K2 KRAS-interaction null (BH-p=0.403). NAT10 + YTHDF2 are orthogonal\
+      \ stratum-specific candidates."
+  lit_support:
+  - doi: null
+    author_year: Wei2022
+    description: "NAT10 m1A-acetyltransferase mechanism in MM \u2014 acetylates CEP170 mRNA enhancing\
+      \ translation and centrosome amplification. The MM30 t221 lookup confirms NAT10 stratum-\
+      specificity in gain(1q)\u2212 patients but CEP170 did NOT show the predicted coupled\
+      \ pattern (gain(1q)+ rank 1,749 vs gain(1q)\u2212 3,903); the NAT10+CEP170 coupled-\
+      mechanism co-hypothesis is dropped. NAT10 stands alone as a stratum-specific candidate."
+  - doi: null
+    author_year: Hua2022
+    description: "YTHDF2/STAT5A/MAP2K2/p-ERK m6A axis in MM. MAP2K2 did NOT replicate in\
+      \ t221's MMRF KRAS-interaction model (BH-p=0.403, nominal p=0.070); YTHDF2 did replicate\
+      \ at the bulk-meta level as gain(1q)+-preferential with survival-OS support (SumZ rank\
+      \ 1,092). The YTHDF2-MAP2K2 mechanistic chain is not supported by MM30; YTHDF2 may\
+      \ operate through a different downstream effector in the myeloma context."
+- id: 19
+  source: gain8q
+  target: arch_non1q
+  source_label: gain(8q)
+  target_label: Alternative non-1q architecture (E2F, ribosome)
+  original_label: expression not dosage
+  edge_style: dashed
+  relation: expression
+  edge_status: tentative
+  identification: observational
+  description: "gain(8q) is MORE frequent in gain(1q)+ (13.9% vs 6.1%, Fisher p=0.001; t069) \u2014 the\
+    \ opposite of what simple 8q dosage would predict. The original arm-level chr8q enrichment (FDR=0.001\
+    \ in t081) did not survive threshold-sensitivity (0/8 thresholds in t092); the link to the non-1q\
+    \ architecture is now read as an expression/regulatory effect rather than dosage, and is the weakest\
+    \ H2 claim."
+  data_support:
+  - task: t069
+    description: gain(8q) frequency 13.9% in gain(1q)+ vs 6.1% in gain(1q)-; Fisher p=0.001.
+  - task: t081
+    description: Arm-level chr8q enrichment in gain(1q)- unique genes (FDR=0.001).
+  - task: t092
+    description: 'Threshold sensitivity: chr8q set-overlap enrichment NOT robust (0/8 thresholds).'
+  lit_support: []
+- id: 20
+  source: arch_1q
+  target: prolif
+  source_label: 1q-associated architecture (G2M, PHF19, IFN silencing)
+  target_label: Proliferation (latent state; score is proxy)
+  original_label: G2M/E2F program
+  edge_style: solid
+  relation: program
+  edge_status: supported
+  identification: observational
+  description: The gain(1q)+ architecture (G2M, E2F, MITOTIC_SPINDLE, PHF19) is mechanistically a fast-cycling
+    program. t113 shows identical Cox covariate structure across 1q+ and 1q- (r=0.93), with proliferation
+    the convergent endpoint; t118 quantifies 81.5% proliferation mediation of the PHF19 program in 1q+.
+  data_support:
+  - task: t113
+    description: 'Stratum-specific Cox covariate comparison: r=0.93 between gain(1q)+/- survival coefficients;
+      proliferation the shared endpoint.'
+  - task: t118
+    description: Ribosome/PHF19 program 81.5% proliferation-mediated in gain(1q)+.
+  lit_support: []
+- id: 21
+  source: arch_non1q
+  target: prolif
+  source_label: Alternative non-1q architecture (E2F, ribosome)
+  target_label: Proliferation (latent state; score is proxy)
+  original_label: E2F/ribosome program
+  edge_style: solid
+  relation: program
+  edge_status: supported
+  identification: observational
+  description: "The gain(1q)- architecture (E2F, ribosome biogenesis/translation) also drives proliferation\
+    \ but through a different upstream program (protein synthesis capacity, RPF2/POLR1A/FASTKD2). t118\
+    \ shows only 12.8% proliferation mediation of the ribosome program in 1q- (vs 81.5% in 1q+) \u2014\
+    \ the program contributes to proliferation but is not reducible to it."
+  data_support:
+  - task: t114
+    description: 13 genuinely stratum-specific gain(1q)- genes; ribosome biogenesis program.
+  - task: t118
+    description: Ribosome program 12.8% proliferation-mediated in gain(1q)- vs 81.5% in 1q+.
+  - task: t125
+    description: 'Null model retraction: mediation-% asymmetry is driven by baseline Cox- proliferation
+      correlation differences rather than a clean causal split.'
+  lit_support: []
+- id: 22
+  source: prolif
+  target: survival
+  source_label: Proliferation (latent state; score is proxy)
+  target_label: Overall survival
+  original_label: "fast cycling \u2192 worse OS"
+  edge_style: solid
+  relation: outcome
+  edge_status: supported
+  identification: observational
+  description: Proliferation is the dominant survival-linked axis in MM30 (E2F/G2M/MYC targets top the
+    SumZ ranking; ~52% of top-200). t113 shows proliferation as the convergent endpoint of both cytogenetic
+    strata; it is the canonical MM survival driver in the literature.
+  data_support:
+  - task: t113
+    description: Proliferation is the shared covariate driving survival in both gain(1q)+/-.
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker 2024
+    description: Proliferative PHF19-high subpopulation associated with relapsed/refractory disease and
+      worse outcome.
+- id: 23
+  source: prolif
+  target: burden
+  source_label: Proliferation (latent state; score is proxy)
+  target_label: Tumor burden
+  original_label: ''
+  edge_style: solid
+  relation: mechanism
+  edge_status: structural
+  identification: structural
+  description: "Faster cell-cycle turnover mechanically increases plasma-cell mass over time. Burden in\
+    \ MM30 is proxied by ISS, which is a composite of burden and organ damage; the edge is structural\
+    \ rather than directly measured as 'proliferation rate \u2192 PC burden'."
+  data_support: []
+  lit_support: []
+- id: 24
+  source: stage
+  target: burden
+  source_label: Disease stage (MGUS/SMM/ MM/RRMM)
+  target_label: Tumor burden
+  original_label: accumulation
+  edge_style: solid
+  relation: accumulation
+  edge_status: structural
+  identification: structural
+  description: "Disease-stage progression (MGUS \u2192 SMM \u2192 MM \u2192 RRMM) is definitionally associated\
+    \ with increasing tumor burden \u2014 burden is part of the clinical staging criteria (IMWG: \u2265\
+    10% PCs defines MM, CRAB features define symptomatic disease)."
+  data_support: []
+  lit_support: []
+- id: 25
+  source: stage
+  target: treatment
+  source_label: Disease stage (MGUS/SMM/ MM/RRMM)
+  target_label: Baseline treatment
+  original_label: intensity
+  edge_style: solid
+  relation: indication
+  edge_status: structural
+  identification: structural
+  description: 'Treatment intensity is stage-indicated: MGUS/SMM are observed, symptomatic MM and RRMM
+    receive induction / relapsed-disease regimens. This is a near- definitional clinical-guideline edge.'
+  data_support: []
+  lit_support: []
+- id: 26
+  source: stage
+  target: muts
+  source_label: Disease stage (MGUS/SMM/ MM/RRMM)
+  target_label: Mutation landscape (KRAS, NRAS, TP53)
+  original_label: late hits
+  edge_style: solid
+  relation: accumulation
+  edge_status: tentative
+  identification: observational
+  description: "Late-stage tumors have more accumulated somatic mutations; TP53 hits are particularly\
+    \ enriched at relapse. In MM30 this is indirect \u2014 t105 finds meaningful interaction signal primarily\
+    \ in MMRF (majority NDMM), and the stage \u2192 muts backdoor is flagged in the t153 confounder audit."
+  data_support:
+  - task: t105
+    description: "Mutation \xD7 expression interaction; stage \u2192 mutation backdoor noted in downstream\
+      \ interpretation."
+  - task: t153
+    description: "Confounder-node audit: stage \u2192 muts is an open backdoor for mutation \u2192 survival\
+      \ claims."
+  lit_support:
+  - doi: 10.1038/s41588-024-01853-0
+    author_year: Skerget 2024
+    description: CoMMpass longitudinal mutation accumulation through progression.
+- id: 27
+  source: stage
+  target: survival
+  source_label: Disease stage (MGUS/SMM/ MM/RRMM)
+  target_label: Overall survival
+  original_label: time in disease
+  edge_style: solid
+  relation: outcome
+  edge_status: structural
+  identification: structural
+  description: "Disease stage is a dominant clinical survival predictor; ISS and R-ISS are built from\
+    \ stage-correlated variables. The edge is clinically near- definitional (time-in-disease + staging\
+    \ severity \u2192 OS)."
+  data_support:
+  - task: t102
+    description: gain(1q) adds predictive value beyond ISS (LRT p=5.3e-5), confirming stage is a strong
+      but non-exhaustive survival signal.
+  lit_support: []
+- id: 28
+  source: stage
+  target: arch_1q
+  source_label: Disease stage (MGUS/SMM/ MM/RRMM)
+  target_label: 1q-associated architecture (G2M, PHF19, IFN silencing)
+  original_label: progression upregulates
+  edge_style: dashed
+  relation: progression
+  edge_status: tentative
+  identification: longitudinal
+  description: "Progression-stage data show PHF19 / proliferation programs rising from MGUS through MM\
+    \ to RRMM. t055 documents PHF19 increase within patients acquiring gain(1q) at relapse; t153 confounder\
+    \ audit recognises this as a backdoor for architecture \u2192 survival claims and recommends NDMM-only\
+    \ refits."
+  data_support:
+  - task: t055
+    description: 87 paired MMRF patients; PHF19 rises within patients between baseline and relapse in
+      gain(1q) acquirers (Wilcoxon p=0.020).
+  - task: t153
+    description: "stage \u2192 arch_1q identified as an open backdoor in the H2 DAG audit."
+  lit_support: []
+- id: 29
+  source: stage
+  target: arch_non1q
+  source_label: Disease stage (MGUS/SMM/ MM/RRMM)
+  target_label: Alternative non-1q architecture (E2F, ribosome)
+  original_label: progression upregulates
+  edge_style: dashed
+  relation: progression
+  edge_status: tentative
+  identification: observational
+  description: "Global transcriptional up-regulation across stage transitions (73-86% of genes up, peaking\
+    \ at H\u2192MGUS) implies stage contributes to the ribosome/E2F program on the 1q- side as well. The\
+    \ effect has not been formally separated from proliferation / composition drift (t153 confounder list;\
+    \ t174 PC-continuum follow-up planned)."
+  data_support:
+  - task: t153
+    description: "stage \u2192 arch_non1q flagged as an open backdoor in the H2 DAG audit."
+  lit_support: []
+- id: 30
+  source: arch_1q
+  target: survival
+  source_label: 1q-associated architecture (G2M, PHF19, IFN silencing)
+  target_label: Overall survival
+  original_label: ''
+  edge_style: solid
+  relation: outcome
+  edge_status: supported
+  identification: observational
+  description: "The gain(1q)+ architecture tracks worse OS directly: PHF19 HR\u22481.86 in 1q+ (stratum-specific),\
+    \ and t102 shows gain(1q) adds predictive value beyond ISS (HR=1.66, LRT p=5.3e-5, C-index 0.632\u2192\
+    0.658)."
+  data_support:
+  - task: t082
+    description: PHF19 residualization; survival association retained after 1q adjustment.
+  - task: t091
+    description: PHF19 cross-dataset replication on survival.
+  - task: t102
+    description: ISS vs ISS+gain(1q) Cox; gain(1q) adds predictive value beyond ISS.
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker 2024
+    description: PHF19-high 1q-amplified cells associated with relapsed/refractory disease and worse outcome.
+- id: 31
+  source: arch_non1q
+  target: survival
+  source_label: Alternative non-1q architecture (E2F, ribosome)
+  target_label: Overall survival
+  original_label: ''
+  edge_style: solid
+  relation: outcome
+  edge_status: supported
+  identification: observational
+  description: "The gain(1q)- architecture is separately survival-relevant \u2014 the gain(1q)- ranking\
+    \ contains unique survival-associated genes (NT5C, RPF2, CCNB1IP1) with extreme rank drops in the\
+    \ opposite stratum, and t113 confirms shared proliferation endpoint (r=0.93) reached through the ribosome\
+    \ program."
+  data_support:
+  - task: t081
+    description: gain(1q)- unique survival-associated genes (E2F/ribosome program).
+  - task: t113
+    description: Shared covariate architecture; proliferation convergence in 1q-.
+  - task: t114
+    description: 13 genuinely stratum-specific gain(1q)- genes with survival relevance.
+  lit_support: []
+- id: 32
+  source: arch_1q
+  target: drug
+  source_label: 1q-associated architecture (G2M, PHF19, IFN silencing)
+  target_label: Drug response
+  original_label: ''
+  edge_style: solid
+  relation: response
+  edge_status: tentative
+  identification: observational
+  description: "Proliferation-enriched gain(1q)+ tumors have differential drug-response profiles (e.g.\
+    \ enhanced bortezomib/lenalidomide sensitivity at the cohort level) but the stratum-specific pattern\
+    \ has not been fully dissected in MM30. Evidence is indirect \u2014 Walker 2024 ties PHF19-high 1q-amp\
+    \ cells to relapsed/refractory clinical phenotype."
+  data_support: []
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker 2024
+    description: PHF19-high 1q-amp RRPC cells associated with relapsed/refractory disease.
+- id: 33
+  source: arch_non1q
+  target: drug
+  source_label: Alternative non-1q architecture (E2F, ribosome)
+  target_label: Drug response
+  original_label: ''
+  edge_style: solid
+  relation: response
+  edge_status: unknown
+  identification: none
+  description: A stratum-specific drug-response profile for the gain(1q)- E2F/ribosome program is conjectured
+    (ribosome-biogenesis dependence would predict vulnerability to translation-targeting agents) but has
+    not been tested in MM30 or external GDSC/MMRF drug data.
+  data_support: []
+  lit_support: []
+- id: 34
+  source: arch_1q
+  target: clinical
+  source_label: 1q-associated architecture (G2M, PHF19, IFN silencing)
+  target_label: Clinical phenotype
+  original_label: ''
+  edge_style: solid
+  relation: phenotype
+  edge_status: tentative
+  identification: observational
+  description: 'The gain(1q)+ architecture maps to a distinct clinical trajectory (shorter survival at
+    equivalent ISS; t102) but not to a distinct lab phenotype: t100 shows albumin/Hb/B2M differences disappear
+    after ISS stratification and CRAB features never differ. 1q+/- patients ''behave differently'' without
+    ''looking different'' on standard labs.'
+  data_support:
+  - task: t100
+    description: MMRF clinical variables by gain(1q) stratum; differences disappear after ISS stratification.
+  - task: t102
+    description: gain(1q) adds significant survival value beyond ISS (HR=1.66, LRT p=5.3e-5).
+  lit_support: []
+- id: 35
+  source: arch_non1q
+  target: clinical
+  source_label: Alternative non-1q architecture (E2F, ribosome)
+  target_label: Clinical phenotype
+  original_label: ''
+  edge_style: solid
+  relation: phenotype
+  edge_status: unknown
+  identification: observational
+  description: A stratum-specific clinical phenotype for gain(1q)- is plausible but not tested beyond
+    the t100 symmetric lab comparison; no distinct lab signature has been identified and symptom/burden
+    phenotype data are not yet available (t098 matched-dataset search is queued).
+  data_support:
+  - task: t100
+    description: No distinct lab phenotype at equivalent ISS for either gain(1q) stratum.
+  - task: t098
+    description: Literature search for matched molecular + symptom datasets (planned).
+  lit_support: []
+- id: 36
+  source: lineage
+  target: drug
+  source_label: Primary molecular lineage (HD, t(4;14), t(11;14), t(14;16))
+  target_label: Drug response
+  original_label: direct (e.g. BCL2/ venetoclax)
+  edge_style: bold
+  relation: direct
+  edge_status: tentative
+  identification: observational
+  description: "Primary lineage directly shapes drug response in well-known cases: t(11;14) \u2192 BCL2-dependence\
+    \ \u2192 venetoclax sensitivity, and HD \u2192 lenalidomide sensitivity (IRMMa group reports). MM30\
+    \ does not carry lineage-stratified drug-response data at present, so the edge is supported externally\
+    \ (literature) but not re-tested internally \u2014 status tentative until external references are\
+    \ linked."
+  data_support: []
+  lit_support:
+  - doi: 10.1038/s41588-024-01853-0
+    author_year: Skerget 2024
+    description: CoMMpass subtypes show lineage-linked treatment-response heterogeneity.
+- id: 37
+  source: del17p
+  target: survival
+  source_label: del(17p)
+  target_label: Overall survival
+  original_label: ''
+  edge_style: solid
+  relation: outcome
+  edge_status: supported
+  identification: observational
+  description: del(17p) is the best-established adverse MM cytogenetic marker (R-ISS 'high- risk' criterion).
+    In MM30 the virtual-FISH classifier for del(17p) is the weakest (AUROC 0.82) but t069 recovers the
+    expected survival association at cohort scale.
+  data_support:
+  - task: t069
+    description: Virtual-FISH del(17p); expected survival association replicated.
+  lit_support:
+  - doi: 10.1038/s41588-024-01853-0
+    author_year: Skerget 2024
+    description: del(17p) as adverse CoMMpass survival marker; accumulates through progression.
+- id: 38
+  source: muts
+  target: survival
+  source_label: Mutation landscape (KRAS, NRAS, TP53)
+  target_label: Overall survival
+  original_label: ''
+  edge_style: solid
+  relation: outcome
+  edge_status: tentative
+  identification: observational
+  description: 'Mutation landscape contributes to survival, but in MM30 the direct effect is modest: t105
+    finds 53 KRAS-interacting genes at BH<0.1 (~1% of tested) and t106 shows much of stratified-ranking
+    divergence is a sample-size artifact. The edge is real but small relative to cytogenetics and stage.'
+  data_support:
+  - task: t105
+    description: "Mutation \xD7 expression interaction; 53 KRAS-interacting genes at BH<0.1."
+  - task: t106
+    description: Permutation calibration; random equal-size splits produce comparable rho.
+  - task: t085
+    description: 91% independence between mutation- and cytogenetic-sensitive gene lists.
+  lit_support: []
+- id: 39
+  source: burden
+  target: survival
+  source_label: Tumor burden
+  target_label: Overall survival
+  original_label: ''
+  edge_style: solid
+  relation: outcome
+  edge_status: structural
+  identification: structural
+  description: Tumor burden (proxied by ISS / M-protein / PC%) is a direct survival driver and is baked
+    into clinical staging. The edge is near-definitional; MM30 treats ISS as a burden proxy throughout.
+  data_support:
+  - task: t102
+    description: ISS + gain(1q) Cox; ISS dominates the survival signal.
+  lit_support: []
+- id: 40
+  source: burden
+  target: treatment
+  source_label: Tumor burden
+  target_label: Baseline treatment
+  original_label: ''
+  edge_style: solid
+  relation: indication
+  edge_status: structural
+  identification: structural
+  description: Higher burden / symptomatic disease triggers treatment initiation and higher- intensity
+    regimens. Clinical-guideline edge; not separately tested in MM30.
+  data_support: []
+  lit_support: []
+- id: 41
+  source: burden
+  target: clinical
+  source_label: Tumor burden
+  target_label: Clinical phenotype
+  original_label: ''
+  edge_style: solid
+  relation: phenotype
+  edge_status: structural
+  identification: structural
+  description: Tumor burden produces the CRAB phenotype (hyperCalcaemia, Renal failure, Anaemia, Bone
+    disease) and drives M-protein levels. Definitional clinical relationship; MM30's t100 analysis assumes
+    this structure when comparing strata at fixed ISS.
+  data_support:
+  - task: t100
+    description: ISS stratification of labs is predicated on ISS being a burden proxy.
+  lit_support: []
+- id: 42
+  source: treatment
+  target: survival
+  source_label: Baseline treatment
+  target_label: Overall survival
+  original_label: mediator
+  edge_style: solid
+  relation: mediator
+  edge_status: structural
+  identification: structural
+  description: "Treatment is a mediator on the stage/burden \u2192 survival path: more intensive regimens\
+    \ extend OS in appropriately selected patients. MM30's treatment analyses are flagged as exploratory\
+    \ (D2 decision) so this edge is recorded structurally rather than as a tested effect."
+  data_support: []
+  lit_support: []
+- id: 43
+  source: treatment
+  target: drug
+  source_label: Baseline treatment
+  target_label: Drug response
+  original_label: ''
+  edge_style: solid
+  relation: determination
+  edge_status: structural
+  identification: structural
+  description: Baseline treatment determines the drug-response outcome being measured (response is defined
+    per regimen). This is a measurement/definition edge rather than a biological claim.
+  data_support: []
+  lit_support: []

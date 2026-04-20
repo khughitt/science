@@ -1,0 +1,64 @@
+// H1 ↔ H2 bridge — Updated 2026-04-19 after t204 terminal verdict.
+//
+// 2026-04-18 (t204): Observational route for the cell-state composition channel CLOSED.
+// Three converging adjuster frames (t174 tumor PC-maturity, t214 healthy-donor PC-maturity,
+// t204 non-PC multitype + 10-stratum subtype) all return no_additional_absorption. The
+// composition-link edges (state→ribosome, state→E2F1) are marked [✗] eliminated and kept
+// for provenance; they no longer carry live mechanistic claims. Surviving discriminators
+// are interventional (t205 MS177 PROTAC primary; t199 L1000 secondary; t200 target-trial
+// emulation tertiary).
+//
+// 2026-04-17 (t203): Boiarsky per-cell bridge reading (t172 Q3 collapse) did NOT replicate
+// in Ledergor. The per-cell "Replicated" labels on e2f1→phf19 and ezh2→phf19 are
+// downgraded to "Boiarsky-specific; awaiting third cohort."
+//
+// Prior reframe (2026-04-13, t172): bulk ribosome→E2F1 β=−0.27, but per-cell β≈0 within
+// cell-cycle phase → composition-driven, not within-cell molecular edge.
+//
+// Edge labels show posterior β and P(β>0) from Bayesian fits.
+digraph h1_h2_bridge {
+  rankdir=LR;
+  labelloc="t";
+  label=<<b>H1 ↔ H2 bridge — as-of 2026-04-19 (post t204)</b><br/><font point-size="11">edge_status: supported (solid green), tentative (solid blue), eliminated (dotted grey, [✗]). Composition channel closed under observational adjusters; surviving discriminators are interventional.</font>>;
+  fontsize=14;
+  node [shape=box, style="rounded,filled", fillcolor="#f0f0f0", fontsize=11];
+  edge [fontsize=9, penwidth=1.6];
+
+  // Nodes
+  subgraph cluster_composition {
+    label="Cell-state composition (between-sample)";
+    style=dashed; color="#999999";
+    state [label="Cell-state composition\n(plasmablast ↔ mature PC;\ncycling fraction)", fillcolor="#ffe0b2"];
+  }
+
+  rib  [label="Ribosome program\n(mean RPL/RPS)", fillcolor="#f0f0f0"];
+  e2f  [label="E2F1", fillcolor="#f0f0f0"];
+  ezh  [label="EZH2", fillcolor="#f0f0f0"];
+  phf  [label="PHF19", fillcolor="#bbdefb", penwidth=2];
+  g1q  [label="gain(1q)", fillcolor="#ffe0b2"];
+  os   [label="Overall survival", fillcolor="#c8e6c9", penwidth=2];
+
+  // Composition-driven — ELIMINATED under observational adjusters (t204 terminal verdict,
+  // 2026-04-18; decision D8). Retained for provenance; surviving discriminators are interventional
+  // (t205 MS177 primary, t199 L1000 secondary, t200 target-trial tertiary).
+  state -> rib [style=dotted, color="#9e9e9e",
+                label="✗ composition link\neliminated by t204\n(non_adjudicating_\nunder_observational_adjusters)"];
+  state -> e2f [style=dotted, color="#9e9e9e",
+                label="✗ composition link\neliminated by t204"];
+
+  // Per-cell (Boiarsky only; t203 Ledergor did not replicate the broader per-cell reading)
+  e2f -> phf [color="#2e7d32",
+              label="β=+0.18, P=0.988\nper-cell (Boiarsky)\nLedergor: not replicated (t203)"];
+  ezh -> phf [color="#2e7d32",
+              label="β=+0.34, P=1.000\nper-cell (Boiarsky)\nprolif-adj Weak-support P=0.914"];
+
+  // Bulk stratum-level (solid blue)
+  g1q -> phf [color="#1565c0",
+              label="β=+0.40 direct\n(~17% via E2F1)\nbulk 5 datasets"];
+  g1q -> e2f [color="#1565c0", style=dotted,
+              label="partial path"];
+
+  // Downstream to survival (H1 core, supported)
+  phf -> os [color="#2e7d32", penwidth=2,
+             label="HR≈2.7\n(5/5 datasets)"];
+}

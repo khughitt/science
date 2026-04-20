@@ -1,0 +1,124 @@
+// H1 Prognosis — PHF19-mediated epigenetic silencing and MM survival
+// Source of truth: doc/inquiries/h1-prognosis.md
+// Target: hypothesis:h1-epigenetic-commitment (C2, C3)
+// Estimand: PHF19 expression -> overall survival (total and direct effects)
+digraph h1_prognosis {
+  rankdir=TB;
+  labelloc="t";
+  label=<<b>H1 Prognosis</b><br/><font point-size="11">PHF19-mediated epigenetic silencing → MM survival (inquiry:h1-prognosis)</font><br/><font point-size="9" color="#555"><i>auto-styled from edges.yaml — color=edge_status, width=|β|, style=HDI-crosses-zero-dashed, [I]=interventional, [L]=longitudinal</i></font>>;
+  fontsize=14;
+  node [shape=box, style="rounded,filled", fillcolor="#f0f0f0", fontsize=10];
+  edge [fontsize=9];
+
+  subgraph cluster_exogenous {
+    label="Exogenous (BoundaryIn)";
+    style=dashed; color="#999999";
+    gain1q [label="gain(1q)\nstatus", fillcolor="#ffe0b2"];
+    other_reg [label="Other PHF19\nregulators", fillcolor="#ffcdd2", style="rounded,filled,dashed"];
+    other_lesions [label="Other high-risk\nlesions\nt(4;14)/NSD2,\ndel(17p)/TP53", fillcolor="#ffe0b2"];
+    stage [label="Disease stage\n(MGUS/SMM/\nMM/RRMM)", fillcolor="#ffe0b2"];
+  }
+
+  subgraph cluster_phf19_chain {
+    label="PHF19 epigenetic chain";
+    style=dashed; color="#1565c0";
+    pbx1 [label="PBX1/RFX5\naxis", fillcolor="#bbdefb"];
+    e2f1 [label="E2F1\nexpression", fillcolor="#bbdefb"];
+    phf19 [label="PHF19\nexpression", fillcolor="#bbdefb", penwidth=2];
+    ezh2 [label="EZH2\nexpression", fillcolor="#bbdefb"];
+    prc2 [label="PRC2\nretargeting\n(latent)", fillcolor="#bbdefb"];
+    ifn [label="IFN-JAK-STAT\nsilencing", fillcolor="#bbdefb"];
+    ccis [label="Cell-cycle\ninhibitor\nsilencing", fillcolor="#bbdefb"];
+  }
+
+  subgraph cluster_downstream {
+    label="Downstream effects / cell state";
+    style=dashed; color="#2e7d32";
+    immune [label="Immune\nevasion\n(latent)", fillcolor="#e8f5e9"];
+    cell_state [label="Cell-cycle\nstate (latent)", fillcolor="#e8f5e9", style="rounded,filled,dashed"];
+    prolif [label="Proliferation\nscore (proxy)", fillcolor="#c8e6c9", penwidth=2];
+  }
+
+  subgraph cluster_burden {
+    label="Tumor burden / staging / therapy";
+    style=dashed; color="#6a1b9a";
+    burden [label="Tumor burden\n(latent)", fillcolor="#e1bee7"];
+    iss [label="ISS stage\n(observed)", fillcolor="#c8e6c9"];
+    treatment [label="Baseline\ntreatment", fillcolor="#c8e6c9"];
+  }
+
+  other_1q [label="Other 1q\ndrivers\n(CKS1B, MCL1)", fillcolor="#ffe0b2"];
+  survival [label="Overall\nsurvival", fillcolor="#c8e6c9", penwidth=2];
+
+  // PHF19 chain
+  gain1q -> pbx1 [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[1] dosage", fontsize=10, fontcolor="#2e7d32"];
+  pbx1 -> phf19 [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal, label="[2] transcription", fontsize=10, fontcolor="#1565c0"];
+  other_reg -> phf19 [color="#c62828", penwidth=1.2, style="dashed", arrowhead=normal, label="[3] ?", fontsize=10, fontcolor="#c62828"];
+  phf19 -> prc2 [color="#2e7d32:#ffffff:#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[4] Tudor domain recruitment\n[I]", fontsize=10, fontcolor="#2e7d32"];
+  // IFN arm: 4 interventional anchors × 2 cell lines × 3 modalities (Ren 2019 shRNA +
+  // Ishiguro 2021 GSK126 + Yu 2023 MS177 + Ismail 2022 EZH2+G9a). Perturbation-mechanism-robust.
+  prc2 -> ifn [color="#2e7d32:#ffffff:#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[5] H3K27me3 at new loci (IFN arm: 4 interventional anchors × 2 cell lines)\n[I]", fontsize=10, fontcolor="#2e7d32"];
+  // E2F arm: perturbation-mechanism-dependent. PRC2-complex loss (shRNA, MS177 degrader) engages;
+  // catalytic-only inhibition (GSK126, C24 parent) fails in MM.1S. Context also cell-line-dependent.
+  prc2 -> ccis [color="#2e7d32:#ffffff:#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[6] broad domains (E2F arm: perturbation-mechanism-dependent — PRC2-complex loss required)\n[I]", fontsize=10, fontcolor="#2e7d32"];
+
+  // Cell-cycle sub-circuit (Beguelin 2017; Bayesian edges t135, t154, t159)
+  gain1q -> e2f1 [color="#2e7d32", penwidth=2.4, style="solid", arrowhead=normal, label="[7] via 1q-dosed regulators\nβ=+0.21", fontsize=10, fontcolor="#2e7d32"];
+  e2f1 -> phf19 [color="#1565c0", penwidth=2.9, style="solid", arrowhead=normal, label="[8] candidate TF (Johnson 2024; motif-level per 2026-04-14 verification, see doc/papers/Johnson2024.md)\nβ=+0.32", fontsize=10, fontcolor="#1565c0"];
+  e2f1 -> ezh2 [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal, label="[9] Bracken 2003", fontsize=10, fontcolor="#1565c0"];
+  ezh2 -> phf19 [color="#2e7d32", penwidth=3.9, style="solid", arrowhead=normal, label="[10] PRC2 partner t159\nβ=+0.58", fontsize=10, fontcolor="#2e7d32"];
+
+  // Downstream
+  ifn -> immune [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal, label="[11] reduced IFN signal", fontsize=10, fontcolor="#1565c0"];
+  ccis -> cell_state [color="#2e7d32:#ffffff:#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[12] checkpoint release\n[I]", fontsize=10, fontcolor="#2e7d32"];
+
+  // Non-PHF19 gain(1q) path
+  gain1q -> other_1q [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[13] dosage", fontsize=10, fontcolor="#757575"];
+  other_1q -> survival [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal, label="[14]", fontsize=10, fontcolor="#1565c0"];
+
+  // Confounders
+  other_lesions -> prc2 [color="#c62828", penwidth=1.2, style="dashed", arrowhead=normal, label="[15] NSD2 also modifies chromatin", fontsize=10, fontcolor="#c62828"];
+  other_lesions -> survival [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=vee, label="[16]\n[L]", fontsize=10, fontcolor="#2e7d32"];
+
+  // Disease stage: upstream confounder
+  stage -> cell_state [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[17] progression→ faster cycling", fontsize=10, fontcolor="#2e7d32"];
+  stage -> burden [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[18] accumulation", fontsize=10, fontcolor="#757575"];
+  stage -> treatment [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[19] intensity", fontsize=10, fontcolor="#757575"];
+  stage -> phf19 [color="#2e7d32", penwidth=3.7, style="solid", arrowhead=vee, label="[20] t055 acquisition\nβ=+0.52 · [L]", fontsize=10, fontcolor="#2e7d32"];
+  stage -> survival [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[21] time in disease", fontsize=10, fontcolor="#2e7d32"];
+
+  // Cell-cycle state proxy
+  cell_state -> prolif [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[22] proxy aggregate", fontsize=10, fontcolor="#757575"];
+
+  // Tumor burden structure
+  cell_state -> burden [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[23] tumor growth", fontsize=10, fontcolor="#757575"];
+  burden -> iss [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[24] proxy", fontsize=10, fontcolor="#757575"];
+  burden -> treatment [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[25] severity guides Rx", fontsize=10, fontcolor="#757575"];
+  burden -> survival [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[26]", fontsize=10, fontcolor="#2e7d32"];
+  treatment -> survival [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[27] mediator", fontsize=10, fontcolor="#757575"];
+  prolif -> survival [color="#2e7d32", penwidth=2.4, style="solid", arrowhead=normal, label="[28] prognostic state, observed\nβ=+0.19", fontsize=10, fontcolor="#2e7d32"];
+
+  // Terminal effects on survival
+  immune -> survival [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal, label="[29]", fontsize=10, fontcolor="#1565c0"];
+
+  // --- Auto-legend (two-axis: edge_status + identification) ---
+  subgraph cluster_autolegend {
+    label=<<b>Legend</b> (auto-styled)  —  color/width = edge_status; double-line = interventional; vee arrow = longitudinal>;
+    fontsize=10; color="#999"; style="rounded"; margin=12;
+    node [shape=plaintext, fontsize=9];
+    lg_supp_a [label="supported"]; lg_supp_b [label=""];
+    lg_tent_a [label="tentative"]; lg_tent_b [label=""];
+    lg_struct_a [label="structural"]; lg_struct_b [label=""];
+    lg_unk_a [label="unknown"]; lg_unk_b [label=""];
+    lg_elim_a [label="[✗] eliminated"]; lg_elim_b [label=""];
+    lg_int_a [label="[I] interventional"]; lg_int_b [label=""];
+    lg_long_a [label="[L] longitudinal"]; lg_long_b [label=""];
+    lg_supp_a -> lg_supp_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal];
+    lg_tent_a -> lg_tent_b [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal];
+    lg_struct_a -> lg_struct_b [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal];
+    lg_unk_a -> lg_unk_b [color="#c62828", penwidth=1.2, style="dashed", arrowhead=normal];
+    lg_elim_a -> lg_elim_b [color="#9e9e9e", penwidth=1.0, style="dotted", arrowhead=normal];
+    lg_int_a -> lg_int_b [color="#2e7d32:#ffffff:#2e7d32", penwidth=2.5, style="solid", arrowhead=normal];
+    lg_long_a -> lg_long_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=vee];
+  }
+}

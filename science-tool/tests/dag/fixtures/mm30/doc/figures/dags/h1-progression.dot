@@ -1,0 +1,27 @@
+// H1 Progression — Temporal narrative / organizing model for the MM epigenetic arc
+// Source of truth: doc/inquiries/h1-progression.md
+// Target: hypothesis:h1-epigenetic-commitment (C1, C4)
+// Reframed 2026-04-14 (t192): this is a temporal narrative / organizing model, not a
+// causally identified DAG. MM30 data cannot identify the within-patient trajectory;
+// it illustrates a plausible one using cross-sectional patient cohorts.
+digraph h1_progression {
+  rankdir=TB;
+  labelloc="t";
+  label=<<b>H1 Progression arc (temporal narrative / organizing model)</b><br/><font point-size="11">Capacity → commitment → activation — illustrated by cross-sectional MM30, not causally identified</font><br/><font point-size="10" color="#b71c1c"><i>Not a causally identified DAG — see doc/inquiries/h1-progression.md</i></font>>;
+  fontsize=14;
+  node [shape=box, style="rounded,filled", fillcolor="#f0f0f0", fontsize=11];
+
+  latent [label="Latent evolutionary\nstate", fillcolor="#ffe0b2"];
+  stage [label="Disease stage\n(observed)", fillcolor="#c8e6c9"];
+  mechanism [label="Upregulation\nmechanism", fillcolor="#ffcdd2", style="rounded,filled,dashed"];
+  upregulation [label="Global transcriptional\nupregulation\n(H→MGUS)", fillcolor="#c8e6c9"];
+  chromatin [label="Chromatin\naccessibility\n(MGUS→SMM)", fillcolor="#bbdefb"];
+  proliferation [label="Proliferation program\nactivation\n(SMM→MM)", fillcolor="#c8e6c9"];
+
+  latent -> stage [label="observes"];
+  latent -> mechanism [label="enables"];
+  latent -> chromatin [label="drives"];
+  mechanism -> upregulation [label="causes", style=dashed];
+  upregulation -> chromatin [label="may feed\ninto", style=dashed];
+  chromatin -> proliferation [label="enables\nplatform"];
+}

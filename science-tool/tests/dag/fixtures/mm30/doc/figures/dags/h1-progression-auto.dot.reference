@@ -1,0 +1,48 @@
+// H1 Progression — Temporal narrative / organizing model for the MM epigenetic arc
+// Source of truth: doc/inquiries/h1-progression.md
+// Target: hypothesis:h1-epigenetic-commitment (C1, C4)
+// Reframed 2026-04-14 (t192): this is a temporal narrative / organizing model, not a
+// causally identified DAG. MM30 data cannot identify the within-patient trajectory;
+// it illustrates a plausible one using cross-sectional patient cohorts.
+digraph h1_progression {
+  rankdir=TB;
+  labelloc="t";
+  label=<<b>H1 Progression arc (temporal narrative / organizing model)</b><br/><font point-size="11">Capacity → commitment → activation — illustrated by cross-sectional MM30, not causally identified</font><br/><font point-size="10" color="#b71c1c"><i>Not a causally identified DAG — see doc/inquiries/h1-progression.md</i></font><br/><font point-size="9" color="#555"><i>auto-styled from edges.yaml — color=edge_status, width=|β|, style=HDI-crosses-zero-dashed, [I]=interventional, [L]=longitudinal</i></font>>;
+  fontsize=14;
+  node [shape=box, style="rounded,filled", fillcolor="#f0f0f0", fontsize=11];
+
+  latent [label="Latent evolutionary\nstate", fillcolor="#ffe0b2"];
+  stage [label="Disease stage\n(observed)", fillcolor="#c8e6c9"];
+  mechanism [label="Upregulation\nmechanism", fillcolor="#ffcdd2", style="rounded,filled,dashed"];
+  upregulation [label="Global transcriptional\nupregulation\n(H→MGUS)", fillcolor="#c8e6c9"];
+  chromatin [label="Chromatin\naccessibility\n(MGUS→SMM)", fillcolor="#bbdefb"];
+  proliferation [label="Proliferation program\nactivation\n(SMM→MM)", fillcolor="#c8e6c9"];
+
+  latent -> stage [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[1] observes", fontsize=10, fontcolor="#757575"];
+  latent -> mechanism [color="#c62828", penwidth=1.2, style="dashed", arrowhead=normal, label="[2] enables", fontsize=10, fontcolor="#c62828"];
+  latent -> chromatin [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal, label="[3] drives", fontsize=10, fontcolor="#1565c0"];
+  mechanism -> upregulation [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal, label="[4] causes", fontsize=10, fontcolor="#1565c0"];
+  upregulation -> chromatin [color="#c62828", penwidth=1.2, style="dashed", arrowhead=normal, label="[5] may feed into", fontsize=10, fontcolor="#c62828"];
+  chromatin -> proliferation [color="#1565c0:#ffffff:#1565c0", penwidth=4.5, style="dashed", arrowhead=normal, label="[6] enables platform\nβ=+0.75 · [I]", fontsize=10, fontcolor="#1565c0"];
+
+  // --- Auto-legend (two-axis: edge_status + identification) ---
+  subgraph cluster_autolegend {
+    label=<<b>Legend</b> (auto-styled)  —  color/width = edge_status; double-line = interventional; vee arrow = longitudinal>;
+    fontsize=10; color="#999"; style="rounded"; margin=12;
+    node [shape=plaintext, fontsize=9];
+    lg_supp_a [label="supported"]; lg_supp_b [label=""];
+    lg_tent_a [label="tentative"]; lg_tent_b [label=""];
+    lg_struct_a [label="structural"]; lg_struct_b [label=""];
+    lg_unk_a [label="unknown"]; lg_unk_b [label=""];
+    lg_elim_a [label="[✗] eliminated"]; lg_elim_b [label=""];
+    lg_int_a [label="[I] interventional"]; lg_int_b [label=""];
+    lg_long_a [label="[L] longitudinal"]; lg_long_b [label=""];
+    lg_supp_a -> lg_supp_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal];
+    lg_tent_a -> lg_tent_b [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal];
+    lg_struct_a -> lg_struct_b [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal];
+    lg_unk_a -> lg_unk_b [color="#c62828", penwidth=1.2, style="dashed", arrowhead=normal];
+    lg_elim_a -> lg_elim_b [color="#9e9e9e", penwidth=1.0, style="dotted", arrowhead=normal];
+    lg_int_a -> lg_int_b [color="#2e7d32:#ffffff:#2e7d32", penwidth=2.5, style="solid", arrowhead=normal];
+    lg_long_a -> lg_long_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=vee];
+  }
+}

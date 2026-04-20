@@ -1,0 +1,103 @@
+// H1 Prognosis — PHF19-mediated epigenetic silencing and MM survival
+// Source of truth: doc/inquiries/h1-prognosis.md
+// Target: hypothesis:h1-epigenetic-commitment (C2, C3)
+// Estimand: PHF19 expression -> overall survival (total and direct effects)
+digraph h1_prognosis {
+  rankdir=TB;
+  labelloc="t";
+  label=<<b>H1 Prognosis</b><br/><font point-size="11">PHF19-mediated epigenetic silencing → MM survival (inquiry:h1-prognosis)</font>>;
+  fontsize=14;
+  node [shape=box, style="rounded,filled", fillcolor="#f0f0f0", fontsize=10];
+  edge [fontsize=9];
+
+  subgraph cluster_exogenous {
+    label="Exogenous (BoundaryIn)";
+    style=dashed; color="#999999";
+    gain1q [label="gain(1q)\nstatus", fillcolor="#ffe0b2"];
+    other_reg [label="Other PHF19\nregulators", fillcolor="#ffcdd2", style="rounded,filled,dashed"];
+    other_lesions [label="Other high-risk\nlesions\nt(4;14)/NSD2,\ndel(17p)/TP53", fillcolor="#ffe0b2"];
+    stage [label="Disease stage\n(MGUS/SMM/\nMM/RRMM)", fillcolor="#ffe0b2"];
+  }
+
+  subgraph cluster_phf19_chain {
+    label="PHF19 epigenetic chain";
+    style=dashed; color="#1565c0";
+    pbx1 [label="PBX1/RFX5\naxis", fillcolor="#bbdefb"];
+    e2f1 [label="E2F1\nexpression", fillcolor="#bbdefb"];
+    phf19 [label="PHF19\nexpression", fillcolor="#bbdefb", penwidth=2];
+    ezh2 [label="EZH2\nexpression", fillcolor="#bbdefb"];
+    prc2 [label="PRC2\nretargeting\n(latent)", fillcolor="#bbdefb"];
+    ifn [label="IFN-JAK-STAT\nsilencing", fillcolor="#bbdefb"];
+    ccis [label="Cell-cycle\ninhibitor\nsilencing", fillcolor="#bbdefb"];
+  }
+
+  subgraph cluster_downstream {
+    label="Downstream effects / cell state";
+    style=dashed; color="#2e7d32";
+    immune [label="Immune\nevasion\n(latent)", fillcolor="#e8f5e9"];
+    cell_state [label="Cell-cycle\nstate (latent)", fillcolor="#e8f5e9", style="rounded,filled,dashed"];
+    prolif [label="Proliferation\nscore (proxy)", fillcolor="#c8e6c9", penwidth=2];
+  }
+
+  subgraph cluster_burden {
+    label="Tumor burden / staging / therapy";
+    style=dashed; color="#6a1b9a";
+    burden [label="Tumor burden\n(latent)", fillcolor="#e1bee7"];
+    iss [label="ISS stage\n(observed)", fillcolor="#c8e6c9"];
+    treatment [label="Baseline\ntreatment", fillcolor="#c8e6c9"];
+  }
+
+  other_1q [label="Other 1q\ndrivers\n(CKS1B, MCL1)", fillcolor="#ffe0b2"];
+  survival [label="Overall\nsurvival", fillcolor="#c8e6c9", penwidth=2];
+
+  // PHF19 chain
+  gain1q -> pbx1 [label="dosage"];
+  pbx1 -> phf19 [label="transcription"];
+  other_reg -> phf19 [label="?", style=dashed];
+  phf19 -> prc2 [label="Tudor domain\nrecruitment"];
+  // IFN arm: 4 interventional anchors × 2 cell lines × 3 modalities (Ren 2019 shRNA +
+  // Ishiguro 2021 GSK126 + Yu 2023 MS177 + Ismail 2022 EZH2+G9a). Perturbation-mechanism-robust.
+  prc2 -> ifn [label="H3K27me3 at new loci\nIFN arm: 4 anchors, robust"];
+  // E2F arm: perturbation-mechanism-dependent. PRC2-complex loss (shRNA, MS177 degrader) engages;
+  // catalytic-only inhibition (GSK126, C24 parent) fails in MM.1S. Context also cell-line-dependent.
+  prc2 -> ccis [label="broad domains\nE2F arm: PRC2-complex\nloss required"];
+
+  // Cell-cycle sub-circuit (Beguelin 2017; Bayesian edges t135, t154, t159)
+  gain1q -> e2f1 [label="via 1q-dosed\nregulators"];
+  e2f1 -> phf19 [label="candidate TF\n(Johnson 2024; motif-level)"];
+  e2f1 -> ezh2 [label="Bracken 2003"];
+  ezh2 -> phf19 [label="PRC2 partner\nt159"];
+
+  // Downstream
+  ifn -> immune [label="reduced\nIFN signal"];
+  ccis -> cell_state [label="checkpoint\nrelease"];
+
+  // Non-PHF19 gain(1q) path
+  gain1q -> other_1q [label="dosage"];
+  other_1q -> survival;
+
+  // Confounders
+  other_lesions -> prc2 [label="NSD2 also\nmodifies chromatin", style=dashed];
+  other_lesions -> survival;
+
+  // Disease stage: upstream confounder
+  stage -> cell_state [label="progression→\nfaster cycling"];
+  stage -> burden [label="accumulation"];
+  stage -> treatment [label="intensity"];
+  stage -> phf19 [label="t055\nacquisition"];
+  stage -> survival [label="time\nin disease"];
+
+  // Cell-cycle state proxy
+  cell_state -> prolif [label="proxy\naggregate"];
+
+  // Tumor burden structure
+  cell_state -> burden [label="tumor\ngrowth"];
+  burden -> iss [label="proxy"];
+  burden -> treatment [label="severity\nguides Rx"];
+  burden -> survival;
+  treatment -> survival [label="mediator"];
+  prolif -> survival [label="prognostic\nstate, observed"];
+
+  // Terminal effects on survival
+  immune -> survival;
+}

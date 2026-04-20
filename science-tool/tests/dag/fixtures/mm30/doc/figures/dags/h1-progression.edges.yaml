@@ -1,0 +1,172 @@
+dag: h1-progression
+source_dot: doc/figures/dags/h1-progression.dot
+edges:
+- id: 1
+  source: latent
+  target: stage
+  source_label: Latent evolutionary state
+  target_label: Disease stage (observed)
+  original_label: observes
+  edge_style: solid
+  relation: proxy
+  edge_status: structural
+  identification: structural
+  description: Observed disease stage (healthy/MGUS/SMM/MM/RRMM) is a coarse, clinically operationalized
+    proxy for the underlying latent evolutionary state. The stage node is what MM30 actually measures;
+    the latent node is never directly observed, so this edge is a definitional/measurement link rather
+    than a testable causal claim.
+  data_support:
+  - task: t166
+    description: "Bayesian meta-analysis across 4 continuum datasets treats disease stage as the observed\
+      \ covariate used to index transitions (H\u2192MGUS, MGUS\u2192SMM, SMM\u2192MM), demonstrating stage\
+      \ is used operationally as the proxy for progression."
+  lit_support: []
+- id: 2
+  source: latent
+  target: mechanism
+  source_label: Latent evolutionary state
+  target_label: Upregulation mechanism
+  original_label: enables
+  edge_style: solid
+  relation: enables
+  edge_status: unknown
+  identification: observational
+  description: "The latent evolutionary state is posited to enable some mechanism that produces the global\
+    \ H\u2192MGUS upregulation bias, but the mechanism itself is unidentified. MYC amplification has been\
+    \ ruled out as the primary driver; ribosomal/snoRNA expansion and chromatin opening cascades remain\
+    \ live candidates."
+  data_support:
+  - task: t084
+    description: "MYC is NOT a significant DEG at H\u2192MGUS (rank #4804, FDR=0.62); MYC amplifier hypothesis\
+      \ ruled out as the primary upregulation mechanism. Near-zero H\u2192MGUS \u2229 SMM\u2192MM DEG\
+      \ overlap (~2%) argues for an early, stage-specific process."
+  - task: t086
+    description: "Boiarsky NMF cross-reference shows H\u2192MGUS upregulation is non-specific \u2014 not\
+      \ dominated by any single NMF program; plasma-cell maturation signature enriched (FDR=0.011), consistent\
+      \ with a broad mechanism rather than a focused one."
+  lit_support: []
+- id: 3
+  source: latent
+  target: chromatin
+  source_label: Latent evolutionary state
+  target_label: "Chromatin accessibility (MGUS\u2192SMM)"
+  original_label: drives
+  edge_style: solid
+  relation: drives
+  edge_status: tentative
+  identification: observational
+  description: "The latent state is proposed to drive the massive MGUS\u2192SMM chromatin-opening event\
+    \ (Kurowska 2024 ATAC-seq; ~12,166 opening regions with only ~21 transcriptomic DEGs in MM30). Supporting\
+    \ single-cell ATAC evidence in MM (Walker 2024) links 1q gain and PHF19 to altered chromatin accessibility.\
+    \ Edge is tentative because Kurowska data is a single cohort and MM30 itself has no ATAC data."
+  data_support:
+  - task: t166
+    description: "MGUS\u2192SMM is cell-cycle/transcription silent across 5 pre-registered targets (null/weakly-negative\
+      \ posteriors), consistent with a transition dominated by chromatin rather than transcription."
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker 2024
+    description: "Joint scRNA+scATAC of 325,025 CD138+ cells across 49 MM patients shows chromatin-accessibility\
+      \ changes in an RRPC subpopulation marked by 1q amplification and high PHF19 \u2014 single-cell\
+      \ evidence that the latent high-risk state is associated with altered chromatin accessibility."
+  posterior:
+    fit_task: t166
+    datasets: 4
+    model: hierarchical-binary-continuous
+    notes: "No direct \u03B2 for latent\u2192chromatin; the t166 null-cell-cycle predictions at H\u2192\
+      MGUS and MGUS\u2192SMM (5/5 null) are consistent with chromatin-first ordering but do not fit the\
+      \ edge directly."
+- id: 4
+  source: mechanism
+  target: upregulation
+  source_label: Upregulation mechanism
+  target_label: "Global transcriptional upregulation (H\u2192MGUS)"
+  original_label: causes
+  edge_style: dashed
+  relation: causes
+  edge_status: tentative
+  identification: observational
+  description: "The (unidentified) upregulation mechanism is posited to produce the observed global H\u2192\
+    MGUS upregulation bias (73\u201386% of genes positive SumZ; peaks at 86% at H\u2192MGUS). Dashed because\
+    \ the mechanism node is itself unknown; however, the upregulation phenomenon is robust and is not\
+    \ a simple normalization artifact."
+  data_support:
+  - task: t084
+    description: "MM30 shows 73\u201386% of genes with positive SumZ at every transition, peaking at H\u2192\
+      MGUS; 34 snoRNAs, 55 ribosomal proteins, 13 mitochondrial genes enriched in H\u2192MGUS DEGs \u2014\
+      \ biosynthetic machinery signature."
+  - task: t117
+    description: "Boiarsky scRNA-seq per-cell test \u2014 MGUS neoplastic cells produce 55% more UMI and\
+      \ detect 46% more genes per cell than healthy PCs (p<1e-21); within-biopsy neoplastic-vs-normal\
+      \ comparison (p=2.1e-11) rules out batch as the source. Normalization-artifact explanation substantially\
+      \ excluded."
+  - task: t086
+    description: "NMF cross-reference \u2014 upregulation is broad rather than dominated by any single\
+      \ program; W16 (normal PC) shows modest downward bias (FDR=0.035) consistent with partial PC-identity\
+      \ erosion but not the dominant signal."
+  lit_support:
+  - doi: 10.1038/s41467-022-33944-z
+    author_year: Boiarsky 2022
+    description: Single-cell characterization of MM and precursor conditions; source dataset (GSE193531)
+      for the per-cell normalization-artifact test and NMF cross-reference that constrain the mechanism
+      node.
+- id: 5
+  source: upregulation
+  target: chromatin
+  source_label: "Global transcriptional upregulation (H\u2192MGUS)"
+  target_label: "Chromatin accessibility (MGUS\u2192SMM)"
+  original_label: may feed into
+  edge_style: dashed
+  relation: may feed
+  edge_status: unknown
+  identification: none
+  description: "Whether the H\u2192MGUS global upregulation feeds forward into MGUS\u2192SMM chromatin\
+    \ opening is unresolved. Active transcription can open chromatin (plausible forward direction), but\
+    \ the reverse (chromatin opening enables broad transcription) is equally consistent with the data;\
+    \ identification would require matched longitudinal ATAC+RNA, which MM30 does not have."
+  data_support: []
+  lit_support: []
+- id: 6
+  source: chromatin
+  target: proliferation
+  source_label: "Chromatin accessibility (MGUS\u2192SMM)"
+  target_label: "Proliferation program activation (SMM\u2192MM)"
+  original_label: enables platform
+  edge_style: solid
+  relation: temporal
+  edge_status: tentative
+  identification: interventional
+  description: "MGUS\u2192SMM chromatin opening is proposed to establish an epigenomic platform on which\
+    \ proliferation programs (E2F/G2M targets including CKS2, NUSAP1, TYMS) activate at SMM\u2192MM. Supported\
+    \ by temporal ordering (chromatin first, transcription later) and within-patient PHF19/proliferation\
+    \ rise at SMM\u2192MM; remains correlational without matched ATAC+RNA longitudinal data."
+  data_support:
+  - task: t166
+    description: "Bayesian meta-analysis shows proliferation_score rises sharply at SMM\u2192MM (\u03B2\
+      =+0.747 [0.000, +1.594], n=5) and PHF19 rises at SMM\u2192MM (\u03B2=+0.524 [+0.032, +1.097], n=4),\
+      \ while H\u2192MGUS is cell-cycle silent (5/5 null) \u2014 direct evidence for the \"activation-at-SMM\u2192\
+      MM-on-pre-established-platform\" temporal model."
+  - task: t055
+    description: "MMRF longitudinal paired baseline/relapse analysis \u2014 within 13 patients who acquire\
+      \ gain(1q), PHF19 rises (Wilcoxon p=0.020) and chr1q arm score rises (p=0.003), supporting causal\
+      \ progression along the chromatin\u2192proliferation arc."
+  - task: t124
+    description: "Ren 2019 PHF19-KD RNA-seq cross-reference in MM1S cells \u2014 PHF19 knockdown represses\
+      \ E2F targets (MW p=8.3e-89, d=-1.83) and rescue reverses the effect (p=2.1e-83), mechanistically\
+      \ linking the chromatin/PRC2 layer to the proliferation program."
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker 2024
+    description: "scATAC+scRNA multiome evidence that chromatin accessibility changes in high-PHF19 /\
+      \ 1q-amp RRPCs coincide with downstream cell-cycle regulation, supporting a chromatin-platform \u2192\
+      \ proliferation-activation sequence at single-cell resolution."
+  posterior:
+    beta: 0.747
+    hdi_low: 0.0
+    hdi_high: 1.594
+    prob_sign: 0.975
+    fit_task: t166
+    datasets: 5
+    model: hierarchical-binary-continuous
+    notes: "Proliferation_score rise at SMM\u2192MM transition \u2014 \u03B2=+0.747 [0.000, +1.594]. Also\
+      \ supported longitudinally by t055 (PHF19 rise within gain(1q) acquirers, Wilcoxon p=0.020)."

@@ -1,0 +1,363 @@
+dag: h1-h2-bridge
+source_dot: doc/figures/dags/h1-h2-bridge.dot
+edges:
+- id: 1
+  source: state
+  target: rib
+  source_label: "Cell-state composition (plasmablast \u2194 mature PC; cycling fraction)"
+  target_label: Ribosome program (mean RPL/RPS)
+  original_label: "composition link (bulk \u03B2=\u22120.27, P=0.994; per-cell within-phase \u03B2\u2248\
+    0)"
+  edge_style: dotted
+  relation: composition link (observationally eliminated)
+  edge_status: eliminated
+  eliminated_by:
+  - task: t204
+    description: "Terminal verdict non_adjudicating_under_observational_adjusters (2026-04-18). Three\
+      \ converging adjuster frames spanning two sub-axes \u2014 t174 tumor-derived PC-maturity (\u03B2=\u22120.295),\
+      \ t214 healthy-donor PC-maturity (\u03B2=\u22120.278), and t204 Stage A non-PC multitype +\
+      \ 10-stratum subtype (\u03B2=\u22120.243) \u2014 all return no_additional_absorption. The\
+      \ observational route for this composition channel is closed; surviving discriminators are\
+      \ interventional (t205 MS177 primary, t199 L1000 secondary, t200 target-trial tertiary)."
+  - task: t203
+    description: "Ledergor replication does NOT reproduce the Boiarsky sign-flip. Both Ledergor\
+      \ malignant (\u03B2_pc_mature=+0.498) and Ledergor healthy (\u03B2=+0.288) give strongly positive\
+      \ \u03B2 with non-overlapping narrow HDIs, same sign. Per-cell composition-driven-bridge reading\
+      \ is Boiarsky-specific, not general."
+  identification: observational
+  description: "[ELIMINATED under observational adjusters per t204 terminal verdict 2026-04-18 and\
+    \ decision D8.] Original hypothesis: cell-state composition (PC differentiation position plus\
+    \ cycling fraction) drives between-sample ribosome program mean. The bulk anti-coupling with E2F1\
+    \ (\u03B2=\u22120.274, P=0.989 unadjusted; \u03B2=\u22120.266 non-PC-adjusted; \u03B2=\u22120.190\
+    \ proliferation-adjusted, P=0.985) persists after non-PC and proliferation adjustment. Three\
+    \ converging adjuster frames (PC-maturity tumor-derived, healthy-reference, and non-PC multitype)\
+    \ all fail to absorb the effect, and 10-stratum subtype fits yield zero full_absorption candidates.\
+    \ The observational route is closed; per-cell Boiarsky-only replication (t172 Q3) did not generalize\
+    \ to Ledergor (t203). Edge retained for provenance; no live mechanistic claim."
+  data_support:
+  - task: t140
+    description: "Bulk 5-dataset hierarchical fit (MMRF + GSE24080 + GSE19784 + GSE9782 + GSE57317; n=1,884);\
+      \ ribosome\u2192E2F1 \u03B2=\u22120.273 [\u22120.468, \u22120.092], P(\u03B2<0)=0.994; anchor for\
+      \ composition-link interpretation."
+  - task: t152
+    description: "CLR/ALR compositional-normalized re-run of t140 ribosome\u2192E2F1; \u03B2=\u22120.402\
+      \ (same sign, stronger magnitude under compositional normalization)."
+  - task: t172
+    description: "Bulk composition-adjusted refit (ribosome_e2f1_composition_adjusted.py): non-PC fraction\
+      \ absorbs ~3% of \u03B2; proliferation_score absorbs ~31% (residual \u03B2=\u22120.19, P=0.985)\
+      \ \u2014 the composition channel is broader than cycling alone."
+  lit_support:
+  - doi: 10.1038/s41467-022-33944-z
+    author_year: Boiarsky 2022
+    description: "Single-cell atlas of MGUS/SMM/MM plasma cells \u2014 provides the PC heterogeneity context\
+      \ in which a PC-continuum composition channel is biologically plausible."
+  - doi: 10.1038/s41591-018-0269-2
+    author_year: Ledergor 2018
+    description: Single-cell dissection of plasma cell heterogeneity across MGUS/SMM/MM; candidate replication
+      cohort (t173) for the composition-channel decomposition.
+  posterior:
+    beta: -0.273
+    hdi_low: -0.468
+    hdi_high: -0.092
+    prob_sign: 0.994
+    fit_task: t140
+    datasets: 5
+    model: hierarchical-linear
+    variants:
+    - beta: -0.402
+      fit_task: t152
+      notes: CLR-normalized same direction
+    - beta: -0.266
+      fit_task: t172
+      notes: non-PC-adjusted bulk refit
+    - beta: -0.19
+      prob_sign: 0.985
+      fit_task: t172
+      adjusted_for:
+      - proliferation
+      notes: proliferation-adjusted bulk; ~31% attenuation
+- id: 2
+  source: state
+  target: e2f
+  source_label: "Cell-state composition (plasmablast \u2194 mature PC; cycling fraction)"
+  target_label: E2F1
+  original_label: composition link
+  edge_style: dotted
+  relation: composition link (observationally eliminated)
+  edge_status: eliminated
+  eliminated_by:
+  - task: t204
+    description: "Co-eliminated with edge 1 under the same terminal verdict\
+      \ (non_adjudicating_under_observational_adjusters, 2026-04-18, decision D8). The complementary\
+      \ arm of the bridge: if state\u2192ribosome is closed observationally, state\u2192E2F1 as a\
+      \ composition link is as well. Surviving adjudicators are interventional."
+  - task: t203
+    description: "Ledergor cohort per-cell replication did not reproduce the Boiarsky within-phase\
+      \ collapse under PC-maturity+phase adjustment; bridge reading fails generalization."
+  identification: observational
+  description: "[ELIMINATED under observational adjusters per t204 terminal verdict 2026-04-18 and\
+    \ decision D8.] Original hypothesis: cell-state composition drives between-sample E2F1 mean \u2014\
+    \ tumors enriched in cycling / plasmablast-like cells are E2F1-high, while tumors dominated by\
+    \ mature post-mitotic PCs are E2F1-low. Complementary arm to state\u2192ribosome (edge 1). The\
+    \ per-cell within-phase \u03B2 (rib\u2192E2F1)\u22480 signature (G1 P=0.580; S+G2M P=0.587; t172)\
+    \ survives only in Boiarsky and does not replicate in Ledergor (t203). Edge retained for\
+    \ provenance; no live mechanistic claim."
+  data_support:
+  - task: t172
+    description: "Per-cell within-phase null: stratifying by Tirosh cell-cycle phase collapses ribosome\u2192\
+      E2F1 \u03B2 to \u22480 in both G1 and S+G2M, while unstratified per-cell \u03B2=\u22120.114 (P=0.745)\
+      \ \u2014 diagnostic of composition-driven bulk signal."
+  lit_support:
+  - doi: 10.1038/s41467-022-33944-z
+    author_year: Boiarsky 2022
+    description: Pilot scRNA-seq cohort (17 malignant patients, 18,292 cells) in which the phase-stratification
+      decomposition was performed.
+  posterior:
+    beta: -0.114
+    prob_sign: 0.745
+    fit_task: t172
+    datasets: 1
+    model: nb-glmm-per-cell
+    notes: "Per-cell unstratified \u03B2; within-phase stratification collapses to \u03B2\u22480 (G1 P=0.580,\
+      \ S+G2M P=0.587) \u2014 diagnostic of composition-driven bulk signal."
+- id: 3
+  source: e2f
+  target: phf
+  source_label: E2F1
+  target_label: PHF19
+  original_label: "\u03B2=+0.18, P=0.988 per-cell (Boiarsky); not yet replicated across cohorts"
+  edge_style: solid
+  relation: within-cell
+  edge_status: supported
+  identification: observational
+  description: "E2F1-driven transcriptional activation of PHF19 replicates at single-cell resolution\
+    \ in the Boiarsky cohort. Per-cell total effect \u03B2=+0.175 [+0.037, +0.312], P(\u03B2>0)=0.988\
+    \ (t172 Boiarsky NB fits) \u2014 a bona fide within-cell intra-axis H1 edge. Consistent with bulk\
+    \ t135 (\u03B2=+0.32, 5 datasets) and prior ChIP / MM correlation evidence. **Caveat (2026-04-17,\
+    \ t203):** the broader per-cell composition-driven bridge reading that Boiarsky supports does\
+    \ NOT generalize to Ledergor, so claims of \"replicated per-cell\" should be read as Boiarsky-specific\
+    \ pending a third scRNA cohort. The bulk-level e2f1\u2192phf19 edge (t135, 5 datasets) remains\
+    \ the strongest independent anchor."
+  data_support:
+  - task: t135
+    description: "Bulk Bayesian edge E2F1\u2192PHF19 (5-dataset hierarchical fit); \u03B2=+0.320 [+0.013,\
+      \ +0.592], P(>0)=0.977."
+  - task: t172
+    description: "Per-cell replication in Boiarsky 2022 (17 patients \xD7 18,292 cells, NB likelihood\
+      \ on raw UMI counts); total effect \u03B2=+0.175, P(\u03B2>0)=0.988 \u2192 Replicated per pre-reg\
+      \ \xA78 rubric."
+  - task: t154
+    description: "CDK2\u2192E2F1 and E2F1\u2192EZH2 sub-graph edges (completes Beguelin 2017 cell-cycle\
+      \ \u2192 PRC2 loop that feeds PHF19)."
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker 2024
+    description: "1q-amplified PHF19-expressing high-risk cells in RRMM; anchors the E2F1/cell-cycle \u2192\
+      \ PHF19 axis in primary MM scATAC/scRNA multiomics."
+  posterior:
+    beta: 0.175
+    hdi_low: 0.037
+    hdi_high: 0.312
+    prob_sign: 0.988
+    fit_task: t172
+    datasets: 1
+    model: nb-glmm-per-cell
+    variants:
+    - beta: 0.32
+      hdi_low: 0.013
+      hdi_high: 0.592
+      prob_sign: 0.977
+      fit_task: t135
+      datasets: 5
+      model: hierarchical-linear
+      notes: Bulk 5-dataset anchor for the same edge.
+- id: 4
+  source: ezh
+  target: phf
+  source_label: EZH2
+  target_label: PHF19
+  original_label: "\u03B2=+0.34, P=1.000 per-cell (Boiarsky); prolif-adj Weak-support P=0.914"
+  edge_style: solid
+  relation: within-cell
+  edge_status: supported
+  identification: observational
+  description: "PRC2-complex partner coupling: EZH2 and PHF19 are core/accessory members of PRC2.1, so\
+    \ expression coregulation is expected. Per-cell total effect \u03B2=+0.336 [+0.248, +0.426], P(\u03B2\
+    >0)=1.000 (t172 Boiarsky); proliferation-adjusted direct effect attenuates to \u03B2=+0.060, P(\u03B2\
+    >0)=0.914 \u2192 Weak-support, mirroring the bulk t163 finding that much of the axis coregulation\
+    \ flows through shared cell-cycle state. **Caveat (2026-04-17, t203):** the broader Boiarsky\
+    \ per-cell composition-driven-bridge reading does not replicate in Ledergor; the within-cell\
+    \ EZH2\u2192PHF19 edge specifically has not been re-tested cross-cohort. The strongest independent\
+    \ anchor is the bulk t159 5-dataset edge (\u03B2=+0.582) with t163 proliferation-adjusted\
+    \ residual (\u03B2=+0.296)."
+  data_support:
+  - task: t159
+    description: "Bulk Bayesian edge EZH2\u2192PHF19 \u2014 completes the gain(1q)\u2192E2F1\u2192EZH2\u2192\
+      PHF19 chain at bulk; strongest surviving direct PRC2-partner edge."
+  - task: t163
+    description: "Proliferation-adjusted bulk refit: EZH2\u2192PHF19 is the ONLY TF cell-cycle edge surviving\
+      \ proliferation adjustment (\u03B2=+0.582\u2192+0.296, 49% attenuation, HDI excludes zero) \u2014\
+      \ the per-cell Weak-support verdict matches this."
+  - task: t172
+    description: Per-cell Boiarsky NB fits; total effect Replicated (P=1.000), prolif-adj direct effect
+      Weak-support (P=0.914).
+  lit_support:
+  - author_year: PHF19 comprehensive review 2025
+    description: "MM30 internal comprehensive PHF19 literature synthesis; PHF19 is a PRC2.1 accessory\
+      \ subunit (Polycomb-like 3) that physically partners with EZH2/SUZ12 \u2014 expression-level coregulation\
+      \ is the expected signature of PRC2.1 complex biology."
+  posterior:
+    beta: 0.336
+    hdi_low: 0.248
+    hdi_high: 0.426
+    prob_sign: 1.0
+    fit_task: t172
+    datasets: 1
+    model: nb-glmm-per-cell
+    variants:
+    - beta: 0.06
+      prob_sign: 0.914
+      fit_task: t172
+      adjusted_for:
+      - proliferation
+      notes: "Proliferation-adjusted direct effect \u2014 Weak-support per pre-reg rubric; mirrors bulk\
+        \ t163 attenuation."
+    - beta: 0.582
+      fit_task: t159
+      datasets: 5
+      model: hierarchical-linear
+      notes: Bulk total effect; 49% attenuation under proliferation adjustment (t163).
+- id: 5
+  source: g1q
+  target: phf
+  source_label: gain(1q)
+  target_label: PHF19
+  original_label: "\u03B2=+0.40 direct (~17% via E2F1) bulk 5 datasets"
+  edge_style: solid
+  relation: bulk stratum
+  edge_status: supported
+  identification: observational
+  description: "gain(1q) \u2192 PHF19 is the anchoring H2\u2192H1 hand-off. Bulk Bayesian edge \u03B2\
+    =+0.400 [+0.234, +0.535], P(\u03B2>0)=1.000 across 5 datasets (t120); product- of-coefficients mediation\
+    \ through E2F1 accounts for ~17% of the total effect, leaving the majority as direct dosage/epigenetic\
+    \ entry. Not yet tested at per-cell (t172 malignant-only cohort has no gain(1q)- arm)."
+  data_support:
+  - task: t135
+    description: "Bulk Bayesian edge gain(1q)\u2192PHF19 (registered alongside t135 edge suite); \u03B2\
+      =+0.400 [+0.234, +0.535], P(>0)=1.000, 5 datasets, evidence_level=well-supported."
+  - task: t165
+    description: "Mediation decomposition of PHF19\u2192OS; gain(1q)\u2192PHF19\u2192OS chain anchored\
+      \ at \u03B2=+0.400 \xB7 \u03B2=+0.457 accounts for the bulk of gain(1q)'s hazard contribution."
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker 2024
+    description: "scATAC/scRNA multiomics in RRMM shows 1q-amplified PHF19-high cells as the high-risk\
+      \ compartment \u2014 primary single-cell evidence that gain(1q) status and PHF19 expression co-localize\
+      \ at the cell population level."
+  posterior:
+    beta: 0.4
+    hdi_low: 0.234
+    hdi_high: 0.535
+    prob_sign: 1.0
+    fit_task: t135
+    datasets: 5
+    model: hierarchical-linear
+    notes: Mediation-through-E2F1 accounts for ~17% of total; remainder is direct dosage/epigenetic entry.
+      Not yet tested per-cell (t172 cohort has no gain(1q)- arm).
+- id: 6
+  source: g1q
+  target: e2f
+  source_label: gain(1q)
+  target_label: E2F1
+  original_label: partial path
+  edge_style: dotted
+  relation: partial path
+  edge_status: tentative
+  identification: observational
+  description: "gain(1q) \u2192 E2F1 is the partial-mediation leg of gain(1q)\u2192PHF19. Bulk Bayesian\
+    \ edge \u03B2=+0.211 [+0.028, +0.377], P(\u03B2>0)=0.982 (t136, 5 datasets, direction-consistent);\
+    \ product-of-coefficients with the e2f1\u2192phf19 edge yields ~17% of the gain(1q)\u2192PHF19 total\
+    \ effect flowing through E2F1. Real but modest; the remainder is direct dosage / EZH2-PRC2 partner\
+    \ coupling."
+  data_support:
+  - task: t136
+    description: "Bulk Bayesian edge gain(1q)\u2192E2F1 (binary\u2192continuous); \u03B2=+0.211 [+0.028,\
+      \ +0.377], P(>0)=0.982, 5 datasets direction-consistent; composability with e2f1\u2192phf19 confirmed;\
+      \ ~17% mediation fraction."
+  - task: t141
+    description: "Stratum-specific check (gain(1q)+ vs \u2212): ribosome\u2192E2F1 edge holds in both\
+      \ strata, supporting a \"universal axis\" reading in which gain(1q) shifts the distribution along\
+      \ a shared E2F1 axis rather than defining a distinct causal architecture."
+  lit_support: []
+  posterior:
+    beta: 0.211
+    hdi_low: 0.028
+    hdi_high: 0.377
+    prob_sign: 0.982
+    fit_task: t136
+    datasets: 5
+    model: hierarchical-linear
+    notes: "Partial-mediation leg of gain(1q)\u2192PHF19; ~17% of total via E2F1."
+- id: 7
+  source: phf
+  target: os
+  source_label: PHF19
+  target_label: Overall survival
+  original_label: "HR\u22482.7 (5/5 datasets)"
+  edge_style: solid
+  relation: bulk stratum
+  edge_status: supported
+  identification: observational
+  description: "PHF19 expression \u2192 overall survival: pooled HR\u22482.72 per log2 unit across GSE24080\
+    \ (HR=3.79), GSE57317 (HR=2.72), GSE9782 (HR=2.73), and MMRF (HR=2.77); all p<0.05, 100% direction-consistent.\
+    \ Bayesian Weibull hierarchical edge \u03B2=+0.457 total; direct effect \u03B2=+0.265 [+0.100, +0.446]\
+    \ after proliferation+gain(1q) adjustment (t165) \u2014 58% of the survival effect is direct (not\
+    \ mediated by proliferation). Consistent across NDMM-only and RRMM-only strata (t164)."
+  data_support:
+  - task: t135
+    description: "Bulk Bayesian Weibull PH edge PHF19\u2192OS (registered in t120 edge suite); total effect\
+      \ \u03B2=+0.457, evidence_level=well-supported."
+  - task: t164
+    description: "Stage-stratified PHF19\u2192OS fit; NDMM \u03B2=+0.462 [+0.107, +0.827], RRMM \u03B2\
+      =+0.357 [\u22120.054, +0.711] \u2014 direction-consistent across stages, confirming stage backdoor\
+      \ not load-bearing."
+  - task: t165
+    description: "Mediation decomposition; direct effect \u03B2_DE=+0.265 [+0.100, +0.446], indirect via\
+      \ proliferation \u03B2_IE\u2248+0.19; 58% direct retention, 42% proliferation-mediated."
+  lit_support:
+  - doi: 10.1038/s41467-024-48327-9
+    author_year: Walker 2024
+    description: "1q-amplified PHF19-expressing cells identified as the high-risk compartment in RRMM\
+      \ \u2014 primary single-cell evidence linking PHF19 expression to adverse clinical outcome."
+  - author_year: PHF19 comprehensive review 2025
+    description: "DREAM Challenge 2020 identified PHF19 as the strongest single-gene predictor of MM progression;\
+      \ establishes the literature anchor for the PHF19\u2192OS arrow independent of MM30."
+  posterior:
+    beta: 0.457
+    prob_sign: 1.0
+    fit_task: t135
+    datasets: 5
+    model: weibull-ph-hierarchical
+    hr: 2.72
+    hr_range:
+    - 2.72
+    - 3.79
+    variants:
+    - beta: 0.265
+      hdi_low: 0.1
+      hdi_high: 0.446
+      fit_task: t165
+      adjusted_for:
+      - proliferation
+      - gain1q
+      notes: "Direct effect \u2014 58% of total PHF19\u2192OS retained after proliferation+gain(1q) adjustment."
+    - beta: 0.462
+      hdi_low: 0.107
+      hdi_high: 0.827
+      fit_task: t164
+      notes: NDMM-stratified fit.
+    - beta: 0.357
+      hdi_low: -0.054
+      hdi_high: 0.711
+      fit_task: t164
+      notes: RRMM-stratified fit.
