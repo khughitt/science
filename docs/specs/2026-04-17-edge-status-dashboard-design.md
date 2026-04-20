@@ -3,6 +3,14 @@
 **Status:** proposed
 **Created:** 2026-04-17
 **Source:** feedback fb-2026-04-13-008 (mm30)
+**Amended:** 2026-04-19 — adds `eliminated` as a fifth enum value per
+`docs/specs/2026-04-19-dag-rendering-and-audit-pipeline-design.md`. Graph-layer
+storage for `eliminated` (the `sci:eliminatedBy` predicate) and for the sibling
+`identification` axis introduced by the 2026-04-19 spec is **deferred to Phase 2
+`sync-dag`**. Until then, `--edge-status-distribution` and `--edge-status-trend`
+may show 0 for `eliminated` on projects that haven't yet run `sync-dag`; the YAML
+layer is authoritative during that window (see `science-tool dag render` /
+`science-tool dag staleness` for YAML-backed equivalents).
 
 ## Problem
 
@@ -23,7 +31,7 @@ as a convention, other projects get the dashboard for free.
 
 ## Status enum
 
-Adopt the four-value enum verbatim:
+Adopt the five-value enum verbatim (four original + `eliminated` added 2026-04-19):
 
 | Status | Meaning |
 |---|---|
@@ -31,6 +39,7 @@ Adopt the four-value enum verbatim:
 | `tentative` | Backed only by weak / single-source / preliminary evidence. |
 | `structural` | Asserted on theoretical or domain grounds; no empirical backing claimed. |
 | `unknown` | Edge present in the model but its evidential status has not been classified. |
+| `eliminated` | Hypothesised mechanism retracted or ruled out by subsequent evidence. Retained for provenance (not deleted); rendered visually distinct (e.g. dotted grey + `[✗]` marker). The optional `eliminated_by` field lists the closing task / interpretation / discussion IDs. Added 2026-04-19 via `2026-04-19-dag-rendering-and-audit-pipeline-design.md`; graph-layer predicate `sci:eliminatedBy` deferred to Phase 2 `sync-dag`. |
 
 Default for newly-added edges is `unknown` — the explicit declaration of
 "we have not classified this yet" is the point.
@@ -59,11 +68,16 @@ Counts and percentages by status, across all edges in the graph:
 ```
 Edge Status Distribution
   supported   : 28 (33%)
-  tentative   : 28 (33%)
+  tentative   : 27 (32%)
   structural  : 21 (25%)
-  unknown     :  8 (10%)
+  unknown     :  7 ( 8%)
+  eliminated  :  2 ( 2%)
   TOTAL       : 85
 ```
+
+(Post-2026-04-19 mm30 distribution: two bridge edges moved from `tentative` to
+`eliminated` under the t204 terminal verdict, one edge_status was reclassified
+during curation; the remainder are stable.)
 
 ### `--edge-status-trend`
 
