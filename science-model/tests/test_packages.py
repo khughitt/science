@@ -8,16 +8,23 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from science_model.packages.cells import (
+    CodeReferenceCell,
+    DataTableCell,
+    FigureCell,
+    NarrativeCell,
+    ProvenanceCell,
+    VegaLiteCell,
+    parse_cells,
+)
 from science_model.packages.schema import (
     CodeExcerpt,
-    FigureRef,
-    Provenance,
     ProvenanceInput,
-    ResearchExtension,
     ResearchPackageDescriptor,
     ResourceSchema,
     VegaLiteSpec,
 )
+from science_model.packages.validation import ValidationResult, check_freshness, validate_package
 
 
 def _valid_provenance() -> dict:
@@ -88,14 +95,20 @@ class TestResearchPackageDescriptor:
 
     def test_code_excerpt_lines_tuple(self) -> None:
         exc = CodeExcerpt(
-            name="test", path="excerpts/test.ts", source="scripts/test.ts",
-            lines=(10, 50), github_permalink="",
+            name="test",
+            path="excerpts/test.ts",
+            source="scripts/test.ts",
+            lines=(10, 50),
+            github_permalink="",
         )
         assert exc.lines == (10, 50)
 
     def test_github_permalink_defaults_empty(self) -> None:
         exc = CodeExcerpt(
-            name="test", path="excerpts/test.ts", source="scripts/test.ts", lines=(1, 10),
+            name="test",
+            path="excerpts/test.ts",
+            source="scripts/test.ts",
+            lines=(1, 10),
         )
         assert exc.github_permalink == ""
 
@@ -106,18 +119,6 @@ class TestResearchPackageDescriptor:
     def test_provenance_input(self) -> None:
         inp = ProvenanceInput(path="src/foo.ts", sha256="abc123")
         assert inp.sha256 == "abc123"
-
-
-from science_model.packages.cells import (
-    Cell,
-    CodeReferenceCell,
-    DataTableCell,
-    FigureCell,
-    NarrativeCell,
-    ProvenanceCell,
-    VegaLiteCell,
-    parse_cells,
-)
 
 
 class TestCellSchema:
@@ -165,9 +166,6 @@ class TestCellSchema:
     def test_parse_cells_rejects_unknown_type(self) -> None:
         with pytest.raises(ValueError, match="Unknown cell type"):
             parse_cells([{"type": "unknown"}])
-
-
-from science_model.packages.validation import ValidationResult, check_freshness, validate_package
 
 
 class TestValidatePackage:
@@ -246,6 +244,7 @@ class TestValidatePackage:
 class TestCheckFreshness:
     def test_fresh_inputs(self, tmp_path: Path) -> None:
         import hashlib
+
         pkg_dir = tmp_path / "pkg"
         pkg_dir.mkdir()
         project_root = tmp_path / "project"

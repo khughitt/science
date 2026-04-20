@@ -132,10 +132,12 @@ def test_scan_project_logs_warning_on_non_utf8_file(tmp_path: Path, caplog) -> N
 def test_apply_rewrites_writes_files(tmp_path: Path) -> None:
     # Copy fixture into tmp_path so the test doesn't mutate the real fixture.
     import shutil
+
     shutil.copytree(FIXTURE, tmp_path / "legacy_project")
     project = tmp_path / "legacy_project"
 
     from science_tool.refs_migrate import apply_rewrites
+
     rewrites = scan_project(project)
     apply_rewrites(rewrites)
 
@@ -149,11 +151,13 @@ def test_apply_rewrites_writes_files(tmp_path: Path) -> None:
 
 def test_apply_rewrites_preserves_other_files(tmp_path: Path) -> None:
     import shutil
+
     shutil.copytree(FIXTURE, tmp_path / "legacy_project")
     project = tmp_path / "legacy_project"
     science_yaml_before = (project / "science.yaml").read_text()
 
     from science_tool.refs_migrate import apply_rewrites
+
     apply_rewrites(scan_project(project))
 
     assert (project / "science.yaml").read_text() == science_yaml_before
@@ -161,6 +165,7 @@ def test_apply_rewrites_preserves_other_files(tmp_path: Path) -> None:
 
 def test_render_diff_emits_unified_diff() -> None:
     from science_tool.refs_migrate import FileRewrite, render_diff
+
     rewrite = FileRewrite(
         path=Path("doc/x.md"),
         original_text="id: article:X\n",
@@ -176,6 +181,7 @@ def test_render_diff_emits_unified_diff() -> None:
 
 def test_render_diff_respects_line_cap() -> None:
     from science_tool.refs_migrate import FileRewrite, render_diff
+
     many = [
         FileRewrite(
             path=Path(f"doc/x{i}.md"),

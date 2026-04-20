@@ -73,9 +73,7 @@ def test_resolver_raises_on_invalid_explicit_aspects(tmp_path) -> None:
 
     (tmp_path / "specs" / "hypotheses").mkdir(parents=True)
     (tmp_path / "doc" / "questions").mkdir(parents=True)
-    (tmp_path / "science.yaml").write_text(
-        "name: broken\nprofile: research\naspects: [hypothesis-testing]\n"
-    )
+    (tmp_path / "science.yaml").write_text("name: broken\nprofile: research\naspects: [hypothesis-testing]\n")
     (tmp_path / "doc" / "questions" / "q01.md").write_text(
         '---\nid: "question:q01"\naspects: ["not-a-real-aspect"]\n---\nBroken.\n'
     )

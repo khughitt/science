@@ -73,9 +73,7 @@ def _load_topics(project_root: Path) -> dict[str, dict]:
             if not eid:
                 continue
             if eid in topics:
-                raise ValueError(
-                    f"Duplicate topic id {eid!r}: {origins[eid]} vs {md}"
-                )
+                raise ValueError(f"Duplicate topic id {eid!r}: {origins[eid]} vs {md}")
             topics[eid] = fm
             origins[eid] = md
     return topics
@@ -102,10 +100,7 @@ def _load_papers(project_root: Path) -> dict[str, dict]:
                 continue
             canonical = canonical_paper_id(raw_id)
             if canonical in papers:
-                raise ValueError(
-                    f"Duplicate paper id {canonical!r} (via {raw_id}): "
-                    f"{origins[canonical]} vs {md}"
-                )
+                raise ValueError(f"Duplicate paper id {canonical!r} (via {raw_id}): {origins[canonical]} vs {md}")
             papers[canonical] = fm
             origins[canonical] = md
     return papers
@@ -159,7 +154,7 @@ def _compute_coverage(
             )
             continue
         if ref.startswith("cite:"):
-            bibkey = ref[len("cite:"):]
+            bibkey = ref[len("cite:") :]
             if bibkey:
                 covering_bibkeys.add(bibkey)
         else:

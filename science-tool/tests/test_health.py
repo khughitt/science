@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from science_tool.graph.health import check_dataset_anomalies
+
 
 def _write_layered_claim_project(tmp_path: Path) -> Path:
     (tmp_path / "science.yaml").write_text("name: test\n")
@@ -269,9 +271,7 @@ class TestHealthCLI:
         )
 
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["health", "--project-root", str(tmp_path), "--format", "json"]
-        )
+        result = runner.invoke(main, ["health", "--project-root", str(tmp_path), "--format", "json"])
 
         assert result.exit_code == 0, result.output
         report = json.loads(result.output)
@@ -311,13 +311,7 @@ def test_health_flags_legacy_task_type_field(tmp_path) -> None:
     project_root = Path(tmp_path)
     (project_root / "tasks").mkdir()
     (project_root / "tasks" / "active.md").write_text(
-        "## [t001] Legacy\n"
-        "- type: research\n"
-        "- priority: P2\n"
-        "- status: proposed\n"
-        "- created: 2026-04-01\n"
-        "\n"
-        "Body.\n"
+        "## [t001] Legacy\n- type: research\n- priority: P2\n- status: proposed\n- created: 2026-04-01\n\nBody.\n"
     )
     findings = collect_legacy_task_type(project_root)
     assert len(findings) == 1
@@ -332,9 +326,7 @@ def test_health_flags_invalid_entity_aspects(tmp_path) -> None:
 
     project_root = Path(tmp_path)
     (project_root / "doc" / "questions").mkdir(parents=True)
-    (project_root / "science.yaml").write_text(
-        "name: demo\nprofile: research\naspects: [hypothesis-testing]\n"
-    )
+    (project_root / "science.yaml").write_text("name: demo\nprofile: research\naspects: [hypothesis-testing]\n")
     (project_root / "doc" / "questions" / "q01.md").write_text(
         '---\nid: "question:q01"\naspects: ["not-declared"]\n---\nBroken.\n'
     )
@@ -371,18 +363,10 @@ def test_build_health_report_includes_aspect_findings(tmp_path) -> None:
     project_root = Path(tmp_path)
     (project_root / "tasks").mkdir()
     (project_root / "tasks" / "active.md").write_text(
-        "## [t001] Legacy task\n"
-        "- type: dev\n"
-        "- priority: P2\n"
-        "- status: proposed\n"
-        "- created: 2026-04-01\n"
-        "\n"
-        "Body.\n"
+        "## [t001] Legacy task\n- type: dev\n- priority: P2\n- status: proposed\n- created: 2026-04-01\n\nBody.\n"
     )
     (project_root / "doc" / "questions").mkdir(parents=True)
-    (project_root / "science.yaml").write_text(
-        "name: demo\nprofile: research\naspects: [hypothesis-testing]\n"
-    )
+    (project_root / "science.yaml").write_text("name: demo\nprofile: research\naspects: [hypothesis-testing]\n")
     (project_root / "doc" / "questions" / "q01.md").write_text(
         '---\nid: "question:q01"\naspects: ["not-declared"]\n---\nBroken.\n'
     )
@@ -411,3 +395,382 @@ def test_build_health_report_includes_legacy_structured_literature_findings(tmp_
     report = build_health_report(project_root)
     assert "legacy_structured_literature_prefixes" in report
     assert len(report["legacy_structured_literature_prefixes"]) == 1
+
+
+def test_dataset_anomaly_codes_registered() -> None:
+    from science_tool.graph.health import DATASET_ANOMALY_CODES
+
+    expected = {
+        "dataset_consumed_but_unverified",
+        "dataset_stale_review",
+        "dataset_missing_source_url",
+        "dataset_cached_field_drift",
+        "dataset_invariant_violation",
+        "dataset_derived_missing_workflow_run",
+        "dataset_derived_asymmetric_edge",
+        "dataset_derived_input_chain_broken",
+        "dataset_origin_block_mismatch",
+        "dataset_verified_but_unstageable",
+        "dataset_research_package_asymmetric",
+        "data_package_unmigrated",
+    }
+    assert expected.issubset(set(DATASET_ANOMALY_CODES))
+
+
+def _write_dataset(p: Path, slug: str, *, origin: str, body: str) -> Path:
+    f = p / "doc" / "datasets" / f"{slug}.md"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(
+        f'---\nid: "dataset:{slug}"\ntype: "dataset"\ntitle: "{slug}"\norigin: "{origin}"\n{body}\n---\n',
+        encoding="utf-8",
+    )
+    return f
+
+
+def test_external_with_derivation_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "x",
+        origin="external",
+        body=(
+            'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19"}\n'
+            'derivation: {workflow: "workflow:w", workflow_run: "workflow-run:w-r1", git_commit: "a", config_snapshot: "c", produced_at: "t", inputs: []}'
+        ),
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    codes = {i["code"] for i in issues}
+    assert "dataset_origin_block_mismatch" in codes
+
+
+def test_derived_with_access_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "y",
+        origin="derived",
+        body=(
+            'derivation: {workflow: "workflow:w", workflow_run: "workflow-run:w-r1", git_commit: "a", config_snapshot: "c", produced_at: "t", inputs: []}\n'
+            'access: {level: "public", verified: true}'
+        ),
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    codes = {i["code"] for i in issues}
+    assert "dataset_origin_block_mismatch" in codes
+
+
+def test_external_consumed_unverified_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "u",
+        origin="external",
+        body='access: {level: "public", verified: false}\nconsumed_by: ["plan:p1"]',
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_consumed_but_unverified" for i in issues)
+
+
+def test_external_stale_review_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "s",
+        origin="external",
+        body='access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2024-01-01", source_url: "https://x"}',
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_stale_review" for i in issues)
+
+
+def test_external_verified_no_source_url_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "n",
+        origin="external",
+        body='access: {level: "public", verified: true, verification_method: "credential-confirmed", last_reviewed: "2026-04-19"}',
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_missing_source_url" for i in issues)
+
+
+def _write_workflow_run(p: Path, slug: str, *, produces: list[str], inputs: list[str]) -> None:
+    f = p / "doc" / "workflow-runs" / f"{slug}.md"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(
+        f'---\nid: "workflow-run:{slug}"\ntype: "workflow-run"\ntitle: "{slug}"\n'
+        f'workflow: "workflow:wf"\nproduces: {produces}\ninputs: {inputs}\n---\n',
+        encoding="utf-8",
+    )
+
+
+def _derived_dataset_body(workflow_run: str, inputs: list[str]) -> str:
+    inp = "[" + ", ".join(f'"{i}"' for i in inputs) + "]"
+    return (
+        "derivation:\n"
+        '  workflow: "workflow:wf"\n'
+        f'  workflow_run: "{workflow_run}"\n'
+        '  git_commit: "a"\n'
+        '  config_snapshot: "c"\n'
+        '  produced_at: "2026-04-19T00:00:00Z"\n'
+        f"  inputs: {inp}"
+    )
+
+
+def test_derived_missing_workflow_run_flagged(tmp_path: Path) -> None:
+    _write_dataset(tmp_path, "d1", origin="derived", body=_derived_dataset_body("workflow-run:does-not-exist", []))
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_derived_missing_workflow_run" for i in issues)
+
+
+def test_derived_asymmetric_edge_flagged(tmp_path: Path) -> None:
+    _write_workflow_run(tmp_path, "w-r1", produces=[], inputs=[])  # missing dataset:d2 in produces
+    _write_dataset(tmp_path, "d2", origin="derived", body=_derived_dataset_body("workflow-run:w-r1", []))
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_derived_asymmetric_edge" for i in issues)
+
+
+def test_derived_symmetric_edge_no_flag(tmp_path: Path) -> None:
+    _write_workflow_run(tmp_path, "w-r2", produces=["dataset:d3"], inputs=[])
+    _write_dataset(tmp_path, "d3", origin="derived", body=_derived_dataset_body("workflow-run:w-r2", []))
+    issues = check_dataset_anomalies(tmp_path)
+    assert not any(
+        i["code"] in {"dataset_derived_missing_workflow_run", "dataset_derived_asymmetric_edge"} for i in issues
+    )
+
+
+# ---------------------------------------------------------------------------
+# Task 6.5: dataset_derived_input_chain_broken (cycle-safe transitive walk)
+# ---------------------------------------------------------------------------
+
+
+def test_derived_input_chain_unverified_external_flagged(tmp_path: Path) -> None:
+    _write_dataset(tmp_path, "u_ext", origin="external", body='access: {level: "public", verified: false}')
+    _write_workflow_run(tmp_path, "w-r3", produces=["dataset:d4"], inputs=["dataset:u_ext"])
+    _write_dataset(tmp_path, "d4", origin="derived", body=_derived_dataset_body("workflow-run:w-r3", ["dataset:u_ext"]))
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_derived_input_chain_broken" for i in issues)
+
+
+def test_derived_cycle_detected(tmp_path: Path) -> None:
+    _write_workflow_run(tmp_path, "w-r4", produces=["dataset:d5"], inputs=["dataset:d6"])
+    _write_workflow_run(tmp_path, "w-r5", produces=["dataset:d6"], inputs=["dataset:d5"])
+    _write_dataset(tmp_path, "d5", origin="derived", body=_derived_dataset_body("workflow-run:w-r4", ["dataset:d6"]))
+    _write_dataset(tmp_path, "d6", origin="derived", body=_derived_dataset_body("workflow-run:w-r5", ["dataset:d5"]))
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_derived_input_chain_broken" for i in issues)
+
+
+def test_derived_shared_upstream_not_false_cycle(tmp_path: Path) -> None:
+    """Two derived datasets share the same upstream — must NOT be reported as a cycle."""
+    _write_dataset(
+        tmp_path,
+        "shared_up",
+        origin="external",
+        body='access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}',
+    )
+    _write_workflow_run(tmp_path, "w-r-a", produces=["dataset:branch_a"], inputs=["dataset:shared_up"])
+    _write_workflow_run(tmp_path, "w-r-b", produces=["dataset:branch_b"], inputs=["dataset:shared_up"])
+    _write_dataset(
+        tmp_path, "branch_a", origin="derived", body=_derived_dataset_body("workflow-run:w-r-a", ["dataset:shared_up"])
+    )
+    _write_dataset(
+        tmp_path, "branch_b", origin="derived", body=_derived_dataset_body("workflow-run:w-r-b", ["dataset:shared_up"])
+    )
+    _write_workflow_run(
+        tmp_path, "w-r-merge", produces=["dataset:merged"], inputs=["dataset:branch_a", "dataset:branch_b"]
+    )
+    _write_dataset(
+        tmp_path,
+        "merged",
+        origin="derived",
+        body=_derived_dataset_body("workflow-run:w-r-merge", ["dataset:branch_a", "dataset:branch_b"]),
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    chain_issues = [i for i in issues if i["code"] == "dataset_derived_input_chain_broken"]
+    assert chain_issues == [], f"shared upstream wrongly flagged as cycle: {chain_issues}"
+
+
+# ---------------------------------------------------------------------------
+# Task 6.6: dataset_verified_but_unstageable
+# ---------------------------------------------------------------------------
+
+
+def test_verified_no_datapackage_no_localpath_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "us",
+        origin="external",
+        body='access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}',
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_verified_but_unstageable" for i in issues)
+
+
+def test_verified_with_local_path_no_flag(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path,
+        "ls",
+        origin="external",
+        body='local_path: "data/ls/file.csv"\n'
+        'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}',
+    )
+    (tmp_path / "data" / "ls").mkdir(parents=True)
+    (tmp_path / "data" / "ls" / "file.csv").write_text("col\n", encoding="utf-8")
+    issues = check_dataset_anomalies(tmp_path)
+    assert not any(i["code"] == "dataset_verified_but_unstageable" for i in issues)
+
+
+# ---------------------------------------------------------------------------
+# Task 6.7: dataset_research_package_asymmetric (#11)
+# ---------------------------------------------------------------------------
+
+
+def _write_research_package(p: Path, slug: str, *, displays: list[str]) -> None:
+    f = p / "research" / "packages" / "lens" / slug / "research-package.md"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(
+        f'---\nid: "research-package:{slug}"\ntype: "research-package"\ntitle: "{slug}"\ndisplays: {displays}\n---\n',
+        encoding="utf-8",
+    )
+
+
+def test_rp_displays_dataset_missing_consumed_by_flagged(tmp_path: Path) -> None:
+    _write_research_package(tmp_path, "rp1", displays=["dataset:dr1"])
+    _write_workflow_run(tmp_path, "w-r6", produces=["dataset:dr1"], inputs=[])
+    _write_dataset(tmp_path, "dr1", origin="derived", body=_derived_dataset_body("workflow-run:w-r6", []))
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_research_package_asymmetric" for i in issues)
+
+
+def test_dataset_consumed_by_rp_missing_displays_flagged(tmp_path: Path) -> None:
+    _write_research_package(tmp_path, "rp2", displays=[])
+    _write_workflow_run(tmp_path, "w-r7", produces=["dataset:dr2"], inputs=[])
+    body = _derived_dataset_body("workflow-run:w-r7", []) + '\nconsumed_by: ["research-package:rp2"]'
+    _write_dataset(tmp_path, "dr2", origin="derived", body=body)
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_research_package_asymmetric" for i in issues)
+
+
+# ---------------------------------------------------------------------------
+# Task 6.8: data_package_unmigrated (strict mode)
+# ---------------------------------------------------------------------------
+
+
+def test_data_package_without_superseded_status_flagged(tmp_path: Path) -> None:
+    f = tmp_path / "doc" / "data-packages" / "old.md"
+    f.parent.mkdir(parents=True)
+    f.write_text(
+        '---\nid: "data-package:old"\ntype: "data-package"\ntitle: "Legacy"\nstatus: "active"\n---\n',
+        encoding="utf-8",
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "data_package_unmigrated" for i in issues)
+
+
+def test_superseded_data_package_no_flag(tmp_path: Path) -> None:
+    f = tmp_path / "doc" / "data-packages" / "migrated.md"
+    f.parent.mkdir(parents=True)
+    f.write_text(
+        '---\nid: "data-package:migrated"\ntype: "data-package"\ntitle: "Migrated"\n'
+        'status: "superseded"\nsuperseded_by: "research-package:migrated"\n---\n',
+        encoding="utf-8",
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert not any(i["code"] == "data_package_unmigrated" for i in issues)
+
+
+# ---------------------------------------------------------------------------
+# Task 6.9: dataset_invariant_violation (umbrella + lineage)
+# ---------------------------------------------------------------------------
+
+
+def test_umbrella_in_consumed_by_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path, "umb", origin="external", body='access: {level: "mixed", verified: false}\nsiblings: ["dataset:c1"]'
+    )
+    _write_dataset(
+        tmp_path,
+        "c1",
+        origin="external",
+        body='access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}\n'
+        'parent_dataset: "dataset:umb"\nconsumed_by: ["plan:p"]',
+    )
+    _write_dataset(
+        tmp_path,
+        "wrong",
+        origin="external",
+        body='access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://y"}\n'
+        "consumed_by: []",
+    )
+    f = tmp_path / "doc" / "datasets" / "consumer.md"
+    f.write_text(
+        '---\nid: "dataset:consumer"\ntype: "dataset"\ntitle: "Consumer"\norigin: "external"\n'
+        'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://z"}\n'
+        'consumed_by: ["dataset:umb"]\n---\n',
+        encoding="utf-8",
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_invariant_violation" and "umbrella" in i["message"].lower() for i in issues)
+
+
+def test_lineage_drift_flagged(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path, "p1", origin="external", body='access: {level: "public", verified: false}\nsiblings: ["dataset:c2"]'
+    )
+    _write_dataset(
+        tmp_path, "c2", origin="external", body='access: {level: "public", verified: false}\nparent_dataset: ""'
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    assert any(i["code"] == "dataset_invariant_violation" and "lineage" in i["message"].lower() for i in issues)
+
+
+# ---------------------------------------------------------------------------
+# Task 6.10: dataset_cached_field_drift
+# ---------------------------------------------------------------------------
+
+
+def test_cached_field_drift_flagged(tmp_path: Path) -> None:
+    import yaml
+
+    _write_dataset(
+        tmp_path,
+        "drift",
+        origin="external",
+        body='license: "CC-BY-4.0"\n'
+        'ontology_terms: ["UBERON:0001"]\n'
+        'datapackage: "data/drift/datapackage.yaml"\n'
+        'access: {level: "public", verified: true, verification_method: "retrieved", last_reviewed: "2026-04-19", source_url: "https://x"}',
+    )
+    rt = tmp_path / "data" / "drift" / "datapackage.yaml"
+    rt.parent.mkdir(parents=True)
+    rt.write_text(
+        yaml.safe_dump(
+            {
+                "profiles": ["science-pkg-runtime-1.0"],
+                "name": "drift",
+                "license": "CC0-1.0",  # drift!
+                "ontology_terms": ["UBERON:0002"],  # drift!
+                "resources": [{"name": "x", "path": "x.csv", "format": "csv"}],
+            }
+        )
+    )
+    # Also seed the resource file so unstageable doesn't fire
+    (tmp_path / "data" / "drift" / "x.csv").write_text("col\n")
+    issues = check_dataset_anomalies(tmp_path)
+    drift_msgs = [i["message"] for i in issues if i["code"] == "dataset_cached_field_drift"]
+    assert any("license" in m for m in drift_msgs)
+    assert any("ontology_terms" in m for m in drift_msgs)
+
+
+# ---------------------------------------------------------------------------
+# Task 6.11: dataset anomalies exposed via build_health_report
+# ---------------------------------------------------------------------------
+
+
+def test_health_cli_includes_dataset_section(tmp_path: Path) -> None:
+    _write_dataset(
+        tmp_path, "u", origin="external", body='access: {level: "public", verified: false}\nconsumed_by: ["plan:p"]'
+    )
+    from science_tool.graph.health import build_health_report
+
+    result = build_health_report(tmp_path)
+    assert "dataset_anomalies" in result
+    codes = {i["code"] for i in result["dataset_anomalies"]}
+    assert "dataset_consumed_but_unverified" in codes

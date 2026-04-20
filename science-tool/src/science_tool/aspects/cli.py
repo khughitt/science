@@ -43,14 +43,10 @@ def migrate_cmd(project_root: Path, apply_flag: bool) -> None:
         return
 
     for rewrite in plan.task_rewrites:
-        click.echo(
-            f"[{rewrite.task_id}] in {rewrite.source_path.name}: "
-            f"-> aspects: {rewrite.new_aspects}"
-        )
+        click.echo(f"[{rewrite.task_id}] in {rewrite.source_path.name}: -> aspects: {rewrite.new_aspects}")
     for conflict in plan.conflicts:
         click.echo(
-            f"[{conflict.task_id}] in {conflict.source_path.name}: "
-            f"CONFLICT — {conflict.reason}",
+            f"[{conflict.task_id}] in {conflict.source_path.name}: CONFLICT — {conflict.reason}",
             err=True,
         )
 

@@ -46,11 +46,16 @@ class TestResearchPackageInit:
         result = runner.invoke(
             main,
             [
-                "research-package", "init",
-                "--name", "test-pkg",
-                "--title", "Test",
-                "--workflow", str(workflow_dir),
-                "--output", str(output),
+                "research-package",
+                "init",
+                "--name",
+                "test-pkg",
+                "--title",
+                "Test",
+                "--workflow",
+                str(workflow_dir),
+                "--output",
+                str(output),
             ],
         )
         assert result.exit_code == 0, result.output
@@ -79,8 +84,13 @@ class TestResearchPackageValidate:
                 "vegalite_specs": [],
                 "code_excerpts": [],
                 "provenance": {
-                    "workflow": "w", "config": "c", "last_run": "2026-01-01",
-                    "git_commit": "abc", "repository": "", "inputs": [], "scripts": [],
+                    "workflow": "w",
+                    "config": "c",
+                    "last_run": "2026-01-01",
+                    "git_commit": "abc",
+                    "repository": "",
+                    "inputs": [],
+                    "scripts": [],
                 },
             },
         }
@@ -100,17 +110,32 @@ class TestResearchPackageValidate:
     def test_validate_invalid_package(self, runner: CliRunner, tmp_path: Path) -> None:
         pkg_dir = tmp_path / "pkg"
         pkg_dir.mkdir()
-        (pkg_dir / "datapackage.json").write_text(json.dumps({
-            "name": "bad", "title": "Bad", "profile": "science-research-package",
-            "version": "1.0.0", "resources": [{"name": "missing", "path": "data/missing.csv"}],
-            "research": {
-                "cells": "cells.json", "figures": [], "vegalite_specs": [],
-                "code_excerpts": [], "provenance": {
-                    "workflow": "w", "config": "c", "last_run": "t",
-                    "git_commit": "x", "repository": "", "inputs": [], "scripts": [],
-                },
-            },
-        }))
+        (pkg_dir / "datapackage.json").write_text(
+            json.dumps(
+                {
+                    "name": "bad",
+                    "title": "Bad",
+                    "profile": "science-research-package",
+                    "version": "1.0.0",
+                    "resources": [{"name": "missing", "path": "data/missing.csv"}],
+                    "research": {
+                        "cells": "cells.json",
+                        "figures": [],
+                        "vegalite_specs": [],
+                        "code_excerpts": [],
+                        "provenance": {
+                            "workflow": "w",
+                            "config": "c",
+                            "last_run": "t",
+                            "git_commit": "x",
+                            "repository": "",
+                            "inputs": [],
+                            "scripts": [],
+                        },
+                    },
+                }
+            )
+        )
         (pkg_dir / "cells.json").write_text("[]")
         result = runner.invoke(main, ["research-package", "validate", str(pkg_dir)])
         assert result.exit_code == 1

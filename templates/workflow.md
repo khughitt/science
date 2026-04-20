@@ -4,6 +4,15 @@ type: "workflow"
 title: "<Workflow Name>"
 status: "active"
 method: "<method-slug>"
+# Logical outputs declared by this workflow. Used by `science-tool dataset register-run`
+# to emit one derived `dataset:<slug>` entity per output, plus a per-output runtime
+# datapackage.yaml at results/<wf>/<run>/<output-slug>/datapackage.yaml.
+outputs: []
+# Each entry:
+#   - slug: "<output-slug>"
+#     title: "<Output title>"
+#     resource_names: ["<frictionless-resource-name>", ...]
+#     ontology_terms: []
 created: "<YYYY-MM-DD>"
 updated: "<YYYY-MM-DD>"
 ---

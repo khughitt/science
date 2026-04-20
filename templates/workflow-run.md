@@ -4,6 +4,12 @@ type: "workflow-run"
 title: "<Run Description>"
 status: "complete"
 workflow: "<workflow-slug>"
+# Symmetric edges (populated by `science-tool dataset register-run`).
+# `produces:` is the inverse of dataset.derivation.workflow_run (state invariant #9).
+# `inputs:` enumerates upstream datasets the run consumed; symmetric with each
+# upstream dataset's consumed_by listing this workflow-run.
+produces: []                       # ["dataset:<slug>", ...]
+inputs: []                         # ["dataset:<slug>", ...]
 created: "<YYYY-MM-DD>"
 updated: "<YYYY-MM-DD>"
 ---

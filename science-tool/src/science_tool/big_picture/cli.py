@@ -96,9 +96,7 @@ def knowledge_gaps_cmd(project_root: Path, limit: int | None) -> None:
     research_filter = {a for a in project_aspects if a != SOFTWARE_ASPECT}
     if research_filter:
         included = {
-            qid
-            for qid, out in resolved.items()
-            if matches_aspect_filter(out.resolved_aspects, research_filter)
+            qid for qid, out in resolved.items() if matches_aspect_filter(out.resolved_aspects, research_filter)
         }
     else:
         # No non-software project aspects declared → include everything.

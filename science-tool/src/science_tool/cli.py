@@ -371,16 +371,10 @@ def graph_migrate_addresses(apply: bool, graph_path: Path) -> None:
 
     stats = migrate_addresses_direction(graph_path, apply=apply)
     if stats["flipped"] == 0:
-        click.echo(
-            f"No anti-canonical sci:addresses triples found "
-            f"({stats['already_canonical']} already canonical)."
-        )
+        click.echo(f"No anti-canonical sci:addresses triples found ({stats['already_canonical']} already canonical).")
         return
     verb = "Flipped" if apply else "Would flip"
-    click.echo(
-        f"{verb} {stats['flipped']} sci:addresses triple(s) "
-        f"({stats['already_canonical']} already canonical)."
-    )
+    click.echo(f"{verb} {stats['flipped']} sci:addresses triple(s) ({stats['already_canonical']} already canonical).")
     if not apply:
         click.echo("Re-run with --apply to write changes.")
 
@@ -2288,6 +2282,7 @@ def health_command(project_root: Path, output_format: str) -> None:
         + len(report["legacy_structured_literature_prefixes"])
         + layered_claim_issue_count
         + coverage_gaps
+        + len(report.get("dataset_anomalies") or [])
     )
     if total_issues == 0:
         click.echo("Project is clean — no issues found.")
@@ -2305,9 +2300,7 @@ def health_command(project_root: Path, output_format: str) -> None:
             srcs = ", ".join(row["sources"][:3])
             if len(row["sources"]) > 3:
                 srcs += f", … (+{len(row['sources']) - 3})"
-            table.add_row(
-                row["target"], str(row["mention_count"]), row["looks_like"], srcs
-            )
+            table.add_row(row["target"], str(row["mention_count"]), row["looks_like"], srcs)
         console.print(table)
 
     if report["lingering_tags_lines"]:
@@ -2329,10 +2322,7 @@ def health_command(project_root: Path, output_format: str) -> None:
                 f"(cosmetic only — migrate-tags will strip them).[/dim]"
             )
 
-        console.print(
-            "\n[bold]Next:[/bold] run "
-            "[cyan]science-tool graph migrate-tags --apply[/cyan] to migrate these."
-        )
+        console.print("\n[bold]Next:[/bold] run [cyan]science-tool graph migrate-tags --apply[/cyan] to migrate these.")
 
     if report["legacy_structured_literature_prefixes"]:
         table = Table(
@@ -2353,7 +2343,10 @@ def health_command(project_root: Path, output_format: str) -> None:
     adoption_table.add_column("Fraction", justify="right")
     for label, metric in (
         ("Propositions with authored claim_layer", layered_claims["proposition_claim_layer_coverage"]),
-        ("Causal-leaning propositions with authored identification_strength", layered_claims["causal_leaning_identification_coverage"]),
+        (
+            "Causal-leaning propositions with authored identification_strength",
+            layered_claims["causal_leaning_identification_coverage"],
+        ),
     ):
         adoption_table.add_row(
             label,
@@ -2388,6 +2381,22 @@ def health_command(project_root: Path, output_format: str) -> None:
             rival_table.add_row(row["proposition"], row["packet_id"])
         console.print(rival_table)
 
+    dataset_anomalies = report.get("dataset_anomalies") or []
+    if dataset_anomalies:
+        ds_table = Table(title=f"Dataset Anomalies ({len(dataset_anomalies)})")
+        ds_table.add_column("Code", style="bold")
+        ds_table.add_column("Severity")
+        ds_table.add_column("Entity")
+        ds_table.add_column("Message")
+        for row in dataset_anomalies:
+            ds_table.add_row(
+                row.get("code", ""),
+                row.get("severity", ""),
+                row.get("entity_id", ""),
+                row.get("message", ""),
+            )
+        console.print(ds_table)
+
 
 @main.command("paper-fetch")
 @click.option("--doi", default=None, help="DOI (bare, doi: prefix, or doi.org URL)")
@@ -2421,9 +2430,7 @@ def paper_fetch_cmd(
 
     resolved_email = email or _os.environ.get("SCIENCE_CONTACT_EMAIL")
     if not resolved_email:
-        raise click.ClickException(
-            "Contact email is required. Pass --email or set $SCIENCE_CONTACT_EMAIL."
-        )
+        raise click.ClickException("Contact email is required. Pass --email or set $SCIENCE_CONTACT_EMAIL.")
     cfg_kwargs: dict[str, Any] = {"email": resolved_email}
     if cache_dir is not None:
         cfg_kwargs["cache_dir"] = cache_dir
@@ -2772,6 +2779,219 @@ def feedback_report(status: str | None, project: str | None) -> None:
     fb_dir = _get_feedback_dir()
     report = render_report(fb_dir, status=status, project=project)
     click.echo(report)
+
+
+# ── dataset (entity lifecycle) ──────────────────────────────────────────────
+
+
+def _project_root_from_env() -> Path:
+    """Return project root from SCIENCE_PROJECT_ROOT env var or cwd."""
+    import os
+
+    env = os.environ.get("SCIENCE_PROJECT_ROOT")
+    return Path(env).resolve() if env else Path.cwd()
+
+
+@main.group("dataset")
+def dataset_group() -> None:
+    """Dataset entity lifecycle commands (list, register-run, reconcile)."""
+
+
+@dataset_group.command("list")
+@click.option(
+    "--origin",
+    default=None,
+    type=click.Choice(["external", "derived"]),
+    help="Filter by origin (external or derived)",
+)
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
+)
+def dataset_list(origin: str | None, project_root: Path | None) -> None:
+    """List dataset entities in the project."""
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    ds_dir = root / "doc" / "datasets"
+    if not ds_dir.is_dir():
+        click.echo("No doc/datasets directory found.")
+        return
+    from science_model.frontmatter import parse_frontmatter
+
+    for md in sorted(ds_dir.glob("*.md")):
+        result = parse_frontmatter(md)
+        if result is None:
+            continue
+        fm, _ = result
+        ds_origin = fm.get("origin", "")
+        if origin is not None and ds_origin != origin:
+            continue
+        ds_id = fm.get("id", md.stem)
+        title = fm.get("title", "")
+        click.echo(f"{ds_id}  {title}")
+
+
+@dataset_group.command("register-run")
+@click.argument("workflow_run_id")
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
+)
+def dataset_register_run(workflow_run_id: str, project_root: Path | None) -> None:
+    """Register derived datasets for a completed workflow run.
+
+    Writes per-output datapackage.yaml files, creates derived dataset entities,
+    and updates symmetric edges (produces/consumed_by).
+    """
+    from science_tool.datasets_register import (
+        write_derived_dataset_entities,
+        write_per_output_datapackages,
+        write_symmetric_edges,
+    )
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    try:
+        dp_paths = write_per_output_datapackages(root, workflow_run_id)
+    except (FileNotFoundError, ValueError) as exc:
+        click.echo(str(exc), err=True)
+        raise click.exceptions.Exit(1)
+    for p in dp_paths:
+        click.echo(f"wrote {p}")
+
+    try:
+        entities = write_derived_dataset_entities(root, workflow_run_id)
+    except (FileNotFoundError, ValueError) as exc:
+        click.echo(str(exc), err=True)
+        raise click.exceptions.Exit(1)
+    for path, ds_id in entities:
+        click.echo(f"entity {ds_id} -> {path}")
+
+    dataset_ids = [ds_id for _, ds_id in entities]
+    write_symmetric_edges(root, workflow_run_id, dataset_ids)
+    click.echo(f"register-run complete: {len(dp_paths)} outputs, {len(entities)} entities")
+
+
+@dataset_group.command("reconcile")
+@click.argument("slug")
+@click.option(
+    "--project-root",
+    default=None,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+    help="Project root (defaults to SCIENCE_PROJECT_ROOT env var or cwd)",
+)
+def dataset_reconcile(slug: str, project_root: Path | None) -> None:
+    """Check cached-field drift between dataset entity and its runtime datapackage.yaml."""
+    import yaml as _yaml
+
+    from science_model.frontmatter import parse_frontmatter
+
+    root = project_root.resolve() if project_root else _project_root_from_env()
+    md = root / "doc" / "datasets" / f"{slug}.md"
+    if not md.exists():
+        click.echo(f"no such dataset entity: {md}", err=True)
+        raise click.exceptions.Exit(2)
+    result = parse_frontmatter(md)
+    fm = result[0] if result else {}
+    dp_rel = fm.get("datapackage", "")
+    if not dp_rel:
+        click.echo("no datapackage: pointer; nothing to reconcile", err=True)
+        raise click.exceptions.Exit(0)
+    rt_path = root / dp_rel
+    if not rt_path.exists():
+        click.echo(f"runtime datapackage missing: {rt_path}", err=True)
+        raise click.exceptions.Exit(1)
+    rt = _yaml.safe_load(rt_path.read_text(encoding="utf-8"))
+    drifts = []
+    for field in ("license", "update_cadence"):
+        e_v = fm.get(field, "")
+        r_v = rt.get(field, "")
+        if e_v and r_v and e_v != r_v:
+            drifts.append(f"{field}: entity={e_v!r} runtime={r_v!r}")
+    e_ot = sorted(fm.get("ontology_terms") or [])
+    r_ot = sorted(rt.get("ontology_terms") or [])
+    if e_ot and r_ot and e_ot != r_ot:
+        drifts.append(f"ontology_terms: entity={e_ot} runtime={r_ot}")
+    if drifts:
+        for d in drifts:
+            click.echo(d)
+        raise click.exceptions.Exit(1)
+    click.echo("in sync")
+
+
+# ── data-package (legacy migration) ────────────────────────────────────────
+
+
+@main.group(name="data-package")
+def data_package_group() -> None:
+    """Legacy data-package commands."""
+
+
+@data_package_group.command(name="migrate")
+@click.argument("slug", required=False)
+@click.option("--all", "all_", is_flag=True, default=False, help="Migrate every unmigrated data-package.")
+@click.option("--dry-run", is_flag=True, default=False, help="Preview without writing.")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+)
+def data_package_migrate_cmd(slug: str | None, all_: bool, dry_run: bool, project_root: Path | None) -> None:
+    """Split legacy data-package(s) into derived dataset(s) + research-package."""
+    from science_tool.datapackage_migrate import list_unmigrated, migrate_data_package
+
+    proj = project_root or _project_root_from_env()
+    if all_ and slug:
+        raise click.UsageError("provide either <slug> or --all, not both")
+    if not all_ and not slug:
+        raise click.UsageError("provide a <slug> or pass --all")
+    if all_:
+        slugs: list[str] = list_unmigrated(proj)
+    else:
+        assert slug is not None  # narrowed by UsageError above
+        slugs = [slug]
+    for s in slugs:
+        try:
+            plan = migrate_data_package(proj, s, dry_run=dry_run)
+        except (FileNotFoundError, ValueError) as exc:
+            click.echo(f"{s}: {exc}", err=True)
+            raise click.exceptions.Exit(2) from exc
+        prefix = "[dry-run] would write" if dry_run else "wrote"
+        for p in plan.dataset_paths:
+            click.echo(f"{prefix} {p.relative_to(proj)}")
+        if plan.research_package_path is not None:
+            click.echo(f"{prefix} {plan.research_package_path.relative_to(proj)}")
+        if not dry_run:
+            click.echo(f"superseded data-package:{s} -> research-package:{s}")
+
+
+@data_package_group.command(name="list")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+)
+def data_package_list_cmd(project_root: Path | None) -> None:
+    """List legacy data-package entities (highlighting unmigrated ones)."""
+    from science_model.frontmatter import parse_frontmatter
+
+    proj = project_root or _project_root_from_env()
+    dp_dir = proj / "doc" / "data-packages"
+    if not dp_dir.exists():
+        click.echo("no doc/data-packages/ directory")
+        return
+    for md in sorted(dp_dir.rglob("*.md")):
+        result = parse_frontmatter(md)
+        if not result:
+            continue
+        fm, _ = result
+        if fm.get("type") != "data-package":
+            continue
+        status = fm.get("status", "?")
+        marker = " (UNMIGRATED)" if status != "superseded" else ""
+        click.echo(f"{fm.get('id', md.stem)}\t{status}{marker}")
 
 
 if __name__ == "__main__":

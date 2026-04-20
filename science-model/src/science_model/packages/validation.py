@@ -145,8 +145,6 @@ def check_freshness(package_dir: Path, project_root: Path) -> ValidationResult:
             continue
         current_hash = hashlib.sha256(input_path.read_bytes()).hexdigest()
         if current_hash != inp.sha256:
-            result.warnings.append(
-                f'Input "{inp.path}" has changed since last workflow run (stale package)'
-            )
+            result.warnings.append(f'Input "{inp.path}" has changed since last workflow run (stale package)')
 
     return result

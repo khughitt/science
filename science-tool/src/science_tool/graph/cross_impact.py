@@ -132,10 +132,7 @@ def _build_cross_impact_row(
         for uri in indexes["finding_interpretations"].get(finding_uri, set())
     )
     discussions = sorted(shorten_uri(str(uri)) for uri in indexes["proposition_discussions"].get(dependent_uri, set()))
-    questions = sorted(
-        shorten_uri(str(uri))
-        for uri in _questions_for_proposition(dependent_uri, hypotheses, indexes)
-    )
+    questions = sorted(shorten_uri(str(uri)) for uri in _questions_for_proposition(dependent_uri, hypotheses, indexes))
     row_scope_rank, scope_reason = _classify_scope(
         provenance=provenance,
         proposition_uri=dependent_uri,
@@ -173,25 +170,41 @@ def _build_cross_impact_indexes(knowledge, provenance) -> dict[str, dict[URIRef,
     for finder_uri, _, prop_uri in knowledge.triples((None, SCI_NS.contains, None)):
         if not isinstance(finder_uri, URIRef) or not isinstance(prop_uri, URIRef):
             continue
-        if (finder_uri, RDF.type, SCI_NS.Finding) in knowledge and (prop_uri, RDF.type, SCI_NS.Proposition) in knowledge:
+        if (finder_uri, RDF.type, SCI_NS.Finding) in knowledge and (
+            prop_uri,
+            RDF.type,
+            SCI_NS.Proposition,
+        ) in knowledge:
             proposition_findings[prop_uri].add(finder_uri)
 
     for interp_uri, _, finding_uri in knowledge.triples((None, SCI_NS.contains, None)):
         if not isinstance(interp_uri, URIRef) or not isinstance(finding_uri, URIRef):
             continue
-        if (interp_uri, RDF.type, SCI_NS.Interpretation) in knowledge and (finding_uri, RDF.type, SCI_NS.Finding) in knowledge:
+        if (interp_uri, RDF.type, SCI_NS.Interpretation) in knowledge and (
+            finding_uri,
+            RDF.type,
+            SCI_NS.Finding,
+        ) in knowledge:
             finding_interpretations[finding_uri].add(interp_uri)
 
     for disc_uri, _, prop_uri in knowledge.triples((None, SCI_NS.contains, None)):
         if not isinstance(disc_uri, URIRef) or not isinstance(prop_uri, URIRef):
             continue
-        if (disc_uri, RDF.type, SCI_NS.Discussion) in knowledge and (prop_uri, RDF.type, SCI_NS.Proposition) in knowledge:
+        if (disc_uri, RDF.type, SCI_NS.Discussion) in knowledge and (
+            prop_uri,
+            RDF.type,
+            SCI_NS.Proposition,
+        ) in knowledge:
             proposition_discussions[prop_uri].add(disc_uri)
 
     for question_uri, _, prop_uri in knowledge.triples((None, SCI_NS.addresses, None)):
         if not isinstance(question_uri, URIRef) or not isinstance(prop_uri, URIRef):
             continue
-        if (question_uri, RDF.type, SCI_NS.Question) in knowledge and (prop_uri, RDF.type, SCI_NS.Proposition) in knowledge:
+        if (question_uri, RDF.type, SCI_NS.Question) in knowledge and (
+            prop_uri,
+            RDF.type,
+            SCI_NS.Proposition,
+        ) in knowledge:
             proposition_questions[prop_uri].add(question_uri)
 
     for question_uri in knowledge.subjects(RDF.type, SCI_NS.Question):

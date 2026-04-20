@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ResourceSchema(BaseModel):
@@ -81,3 +81,59 @@ class ResearchPackageDescriptor(BaseModel):
     version: str
     resources: list[ResourceSchema]
     research: ResearchExtension
+
+
+class AccessException(BaseModel):
+    """Structured Branch-B decision for an unverified-but-consumable external dataset."""
+
+    mode: Literal["", "scope-reduced", "expanded-to-acquire", "substituted"] = ""
+    decision_date: str = ""
+    followup_task: str = ""
+    superseded_by_dataset: str = ""
+    rationale: str = ""
+
+
+class AccessBlock(BaseModel):
+    """External dataset access verification gate state."""
+
+    level: Literal["public", "registration", "controlled", "commercial", "mixed"]
+    verified: bool
+    verification_method: Literal["", "retrieved", "credential-confirmed"] = ""
+    last_reviewed: str = ""
+    verified_by: str = ""
+    source_url: str = ""
+    credentials_required: str = ""
+    exception: AccessException = Field(default_factory=AccessException)
+
+
+class DerivationBlock(BaseModel):
+    """Derived dataset provenance pointing at the producing workflow-run."""
+
+    workflow: str
+    workflow_run: str
+    git_commit: str
+    config_snapshot: str
+    produced_at: str
+    inputs: list[str] = Field(default_factory=list)
+
+    @field_validator("workflow")
+    @classmethod
+    def _wf_id(cls, v: str) -> str:
+        if not v.startswith("workflow:"):
+            raise ValueError("workflow must be a workflow:<slug> entity reference")
+        return v
+
+    @field_validator("workflow_run")
+    @classmethod
+    def _wfrun_id(cls, v: str) -> str:
+        if not v.startswith("workflow-run:"):
+            raise ValueError("workflow_run must be a workflow-run:<slug> entity reference")
+        return v
+
+    @field_validator("inputs")
+    @classmethod
+    def _input_ids(cls, v: list[str]) -> list[str]:
+        for item in v:
+            if not item.startswith("dataset:"):
+                raise ValueError(f"inputs must be dataset:<slug> entity references; got {item!r}")
+        return v

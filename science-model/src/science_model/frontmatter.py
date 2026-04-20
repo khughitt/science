@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from typing import Literal, cast
 
 import yaml
 
 from science_model.entities import Entity, EntityType
+from science_model.packages.schema import AccessBlock, AccessException, DerivationBlock
 from science_model.sync import SyncSource
 
 
@@ -37,11 +39,16 @@ def _coerce_date(val: str | date | None) -> date | None:
         return None
     if isinstance(val, date):
         return val
-    text = str(val)
+    text = str(val).strip()
+    if not text:
+        return None
     # Strip time component if present (e.g. "2026-04-08T20:00")
     if "T" in text:
         text = text.split("T", 1)[0]
-    return date.fromisoformat(text)
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
 
 
 def _parse_sync_source(raw: dict | None) -> SyncSource | None:
@@ -122,6 +129,51 @@ def _infer_type_from_path(path: Path) -> str | None:
     return _DIR_TO_TYPE.get(path.parent.name)
 
 
+_AccessLevel = Literal["public", "registration", "controlled", "commercial", "mixed"]
+
+
+def _coerce_access(fm: dict) -> AccessBlock | None:
+    """Build AccessBlock from frontmatter, supporting legacy flat `access: <level>` shorthand."""
+    raw = fm.get("access")
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        # Legacy: flat scalar -> AccessBlock with level only, verified=False.
+        return AccessBlock(level=cast(_AccessLevel, raw), verified=False)
+    if isinstance(raw, dict):
+        ex_raw = raw.get("exception") or {}
+        return AccessBlock(
+            level=cast(_AccessLevel, raw.get("level", "public")),
+            verified=bool(raw.get("verified", False)),
+            verification_method=raw.get("verification_method", ""),
+            last_reviewed=raw.get("last_reviewed", ""),
+            verified_by=raw.get("verified_by", ""),
+            source_url=raw.get("source_url", ""),
+            credentials_required=raw.get("credentials_required", ""),
+            exception=AccessException(**ex_raw) if ex_raw else AccessException(),
+        )
+    return None
+
+
+def _coerce_derivation(fm: dict) -> DerivationBlock | None:
+    raw = fm.get("derivation")
+    if not isinstance(raw, dict):
+        return None
+    workflow = raw.get("workflow", "")
+    workflow_run = raw.get("workflow_run", "")
+    # DerivationBlock validators require non-empty, prefixed values for workflow and workflow_run.
+    if not workflow or not workflow_run:
+        return None
+    return DerivationBlock(
+        workflow=workflow,
+        workflow_run=workflow_run,
+        git_commit=raw.get("git_commit", ""),
+        config_snapshot=raw.get("config_snapshot", ""),
+        produced_at=raw.get("produced_at", ""),
+        inputs=list(raw.get("inputs") or []),
+    )
+
+
 def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
     """Parse a markdown file into an Entity. Returns None on parse failure."""
     result = parse_frontmatter(path)
@@ -167,4 +219,14 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         confidence=_coerce_confidence(fm.get("confidence")),
         datasets=fm.get("datasets"),
         sync_source=_parse_sync_source(fm.get("sync_source")),
+        # Dataset entity unification (rev 2.2):
+        origin=(fm.get("origin") or ("external" if fm["type"] == "dataset" else None)),
+        access=_coerce_access(fm),
+        derivation=_coerce_derivation(fm),
+        accessions=list(fm.get("accessions") or fm.get("datasets") or []),
+        datapackage=fm.get("datapackage", ""),
+        local_path=fm.get("local_path", ""),
+        consumed_by=list(fm.get("consumed_by") or []),
+        parent_dataset=fm.get("parent_dataset", ""),
+        siblings=list(fm.get("siblings") or []),
     )

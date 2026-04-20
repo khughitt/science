@@ -76,9 +76,7 @@ class TestTasksAdd:
 
     def test_add_rejects_unknown_type_flag(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
-            result = runner.invoke(
-                main, ["tasks", "add", "No type", "--type", "research", "--priority", "P1"]
-            )
+            result = runner.invoke(main, ["tasks", "add", "No type", "--type", "research", "--priority", "P1"])
             assert result.exit_code != 0
 
 
@@ -159,13 +157,9 @@ class TestTasksEdit:
         with runner.isolated_filesystem():
             from pathlib import Path as _Path
 
-            _Path("science.yaml").write_text(
-                "name: demo\nprofile: research\naspects: [hypothesis-testing]\n"
-            )
+            _Path("science.yaml").write_text("name: demo\nprofile: research\naspects: [hypothesis-testing]\n")
             runner.invoke(main, ["tasks", "add", "To edit", "--priority", "P1"])
-            result = runner.invoke(
-                main, ["tasks", "edit", "t001", "--aspects", "hypothesis-testing"]
-            )
+            result = runner.invoke(main, ["tasks", "edit", "t001", "--aspects", "hypothesis-testing"])
             assert result.exit_code == 0, result.output
 
     def test_edit_related(self, runner: CliRunner) -> None:
@@ -202,8 +196,7 @@ class TestTasksList:
             from pathlib import Path
 
             Path("science.yaml").write_text(
-                "name: demo\nprofile: research\n"
-                "aspects: [hypothesis-testing, software-development]\n"
+                "name: demo\nprofile: research\naspects: [hypothesis-testing, software-development]\n"
             )
             tasks_dir = Path("tasks")
             tasks_dir.mkdir()
@@ -219,9 +212,7 @@ class TestTasksList:
                 "- aspects: [hypothesis-testing]\n"
                 "- created: 2026-03-02\n\nRes.\n"
             )
-            result = runner.invoke(
-                main, ["tasks", "list", "--aspect", "software-development"]
-            )
+            result = runner.invoke(main, ["tasks", "list", "--aspect", "software-development"])
             assert result.exit_code == 0, result.output
             assert "Dev task" in result.output
             assert "Research task" not in result.output
@@ -334,12 +325,8 @@ class TestTasksGroups:
 
     def test_list_by_related(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
-            runner.invoke(
-                main, ["tasks", "add", "T1", "--priority", "P1", "--related", "topic:alpha"]
-            )
-            runner.invoke(
-                main, ["tasks", "add", "T2", "--priority", "P2", "--related", "topic:beta"]
-            )
+            runner.invoke(main, ["tasks", "add", "T1", "--priority", "P1", "--related", "topic:alpha"])
+            runner.invoke(main, ["tasks", "add", "T2", "--priority", "P2", "--related", "topic:beta"])
             result = runner.invoke(main, ["tasks", "list", "--related", "alpha"])
             assert result.exit_code == 0
             assert "T1" in result.output
@@ -347,12 +334,8 @@ class TestTasksGroups:
 
     def test_list_by_group(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
-            runner.invoke(
-                main, ["tasks", "add", "T1", "--priority", "P1", "--group", "lens"]
-            )
-            runner.invoke(
-                main, ["tasks", "add", "T2", "--priority", "P2", "--group", "formula"]
-            )
+            runner.invoke(main, ["tasks", "add", "T1", "--priority", "P1", "--group", "lens"])
+            runner.invoke(main, ["tasks", "add", "T2", "--priority", "P2", "--group", "formula"])
             result = runner.invoke(main, ["tasks", "list", "--group", "lens"])
             assert result.exit_code == 0
             assert "T1" in result.output
@@ -387,9 +370,7 @@ def test_tasks_add_accepts_aspects_flag(tmp_path, monkeypatch):
     from science_tool.cli import main
 
     (tmp_path / "tasks").mkdir()
-    (tmp_path / "science.yaml").write_text(
-        "name: demo\nprofile: research\naspects: [hypothesis-testing]\n"
-    )
+    (tmp_path / "science.yaml").write_text("name: demo\nprofile: research\naspects: [hypothesis-testing]\n")
     monkeypatch.chdir(tmp_path)
 
     runner = CliRunner()
@@ -416,15 +397,11 @@ def test_tasks_add_without_type_or_aspects(tmp_path, monkeypatch):
     from science_tool.cli import main
 
     (tmp_path / "tasks").mkdir()
-    (tmp_path / "science.yaml").write_text(
-        "name: demo\nprofile: research\naspects: [hypothesis-testing]\n"
-    )
+    (tmp_path / "science.yaml").write_text("name: demo\nprofile: research\naspects: [hypothesis-testing]\n")
     monkeypatch.chdir(tmp_path)
 
     runner = CliRunner()
-    result = runner.invoke(
-        main, ["tasks", "add", "Demo", "--priority", "P2"]
-    )
+    result = runner.invoke(main, ["tasks", "add", "Demo", "--priority", "P2"])
     assert result.exit_code == 0, result.output
     body = (tmp_path / "tasks" / "active.md").read_text()
     assert "aspects" not in body
@@ -438,16 +415,10 @@ def test_tasks_edit_updates_aspects(tmp_path, monkeypatch):
 
     (tmp_path / "tasks").mkdir()
     (tmp_path / "science.yaml").write_text(
-        "name: demo\nprofile: research\n"
-        "aspects: [hypothesis-testing, software-development]\n"
+        "name: demo\nprofile: research\naspects: [hypothesis-testing, software-development]\n"
     )
     (tmp_path / "tasks" / "active.md").write_text(
-        "## [t001] Demo\n"
-        "- priority: P1\n"
-        "- status: proposed\n"
-        "- created: 2026-04-19\n"
-        "\n"
-        "Body.\n"
+        "## [t001] Demo\n- priority: P1\n- status: proposed\n- created: 2026-04-19\n\nBody.\n"
     )
     monkeypatch.chdir(tmp_path)
 
@@ -474,8 +445,7 @@ def test_tasks_list_filter_by_aspect(tmp_path, monkeypatch):
 
     (tmp_path / "tasks").mkdir()
     (tmp_path / "science.yaml").write_text(
-        "name: demo\nprofile: research\n"
-        "aspects: [hypothesis-testing, software-development]\n"
+        "name: demo\nprofile: research\naspects: [hypothesis-testing, software-development]\n"
     )
     (tmp_path / "tasks" / "active.md").write_text(
         "## [t001] Research task\n"

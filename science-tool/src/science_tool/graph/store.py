@@ -415,6 +415,8 @@ def _entity_kind_from_uri(uri: URIRef) -> str | None:
     suffix = raw[len(str(PROJECT_NS)) :]
     head = suffix.split("/", 1)[0]
     return head if head in PROJECT_ENTITY_PREFIXES else None
+
+
 STRUCTURED_PROPOSITION_PREDICATES: frozenset[URIRef] = frozenset(
     {
         SCI_NS.relatedTo,
@@ -2706,7 +2708,11 @@ PREDICATE_REGISTRY: list[dict[str, str]] = [
         "description": "Explicit current lifecycle status for a proposition-backed claim",
         "layer": "graph/provenance",
     },
-    {"predicate": "sci:claimLayer", "description": "Authored claim layer for a proposition", "layer": "graph/provenance"},
+    {
+        "predicate": "sci:claimLayer",
+        "description": "Authored claim layer for a proposition",
+        "layer": "graph/provenance",
+    },
     {
         "predicate": "sci:identificationStrength",
         "description": "Normalized causal leverage or identification strength",

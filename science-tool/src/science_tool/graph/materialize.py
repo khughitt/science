@@ -37,9 +37,34 @@ from science_tool.graph.store import (
 )
 
 
-def materialize_graph(project_root: Path) -> Path:
-    """Build `knowledge/graph.trig` deterministically from project sources."""
+def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
+    """Build `knowledge/graph.trig` deterministically from project sources.
+
+    When `strict=True` (the default), raises RuntimeError if any legacy
+    data-package entities have not yet been migrated via
+    `science-tool data-package migrate`.
+    """
     project_root = project_root.resolve()
+
+    if strict:
+        from science_model.frontmatter import parse_frontmatter
+
+        unmigrated: list[str] = []
+        dp_dir = project_root / "doc" / "data-packages"
+        if dp_dir.exists():
+            for md in dp_dir.rglob("*.md"):
+                result = parse_frontmatter(md)
+                fm = result[0] if result else {}
+                if fm.get("type") == "data-package" and fm.get("status") != "superseded":
+                    unmigrated.append(str(fm.get("id", md.stem)))
+        if unmigrated:
+            slugs = ", ".join(sorted(unmigrated))
+            raise RuntimeError(
+                f"unmigrated data-package entities: {slugs}. "
+                f"Run `science-tool data-package migrate <slug>` to split each into "
+                f"derived dataset(s) + research-package."
+            )
+
     sources = load_project_sources(project_root)
     rows, has_failures = audit_project_sources(sources)
     if has_failures:
@@ -183,9 +208,7 @@ def _add_relations(
         if is_metadata_reference(raw_target):
             continue
         if is_external_reference(raw_target, known_prefixes=ext_prefixes):
-            _link_same_as_external(
-                entity_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs
-            )
+            _link_same_as_external(entity_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)
             continue
         # Internal alias: another project entity asserts equivalence with this one.
         canonical_target = normalize_alias(raw_target, alias_map)

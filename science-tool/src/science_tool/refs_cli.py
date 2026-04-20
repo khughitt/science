@@ -99,7 +99,10 @@ def check(root_path: Path, output_format: str, strict: bool) -> None:
 @click.option("--force", is_flag=True, help="Bypass the clean-git check when applying.")
 @click.option("--verbose", is_flag=True, help="Show the full diff without line cap.")
 def migrate_paper(
-    project_root: Path, apply: bool, force: bool, verbose: bool  # noqa: A002
+    project_root: Path,
+    apply: bool,
+    force: bool,
+    verbose: bool,  # noqa: A002
 ) -> None:
     """Migrate legacy ``article:`` entity IDs to canonical ``paper:``."""
     rewrites = scan_project(project_root)
@@ -117,8 +120,7 @@ def migrate_paper(
 
     if not force and not check_git_clean(project_root):
         raise click.ClickException(
-            "Working tree is not clean. Commit or stash changes first, "
-            "or re-run with --force to bypass."
+            "Working tree is not clean. Commit or stash changes first, or re-run with --force to bypass."
         )
 
     apply_rewrites(rewrites)

@@ -79,12 +79,8 @@ def resolve_questions(project_root: Path) -> dict[str, ResolverOutput]:
             resolved = resolve_entity_aspects(None, project_aspects)
         else:
             if not isinstance(raw_aspects, list):
-                raise AspectValidationError(
-                    f"{qid}: 'aspects' must be a list, got {type(raw_aspects).__name__}"
-                )
-            validated = validate_entity_aspects(
-                [str(a) for a in raw_aspects], project_aspects
-            )
+                raise AspectValidationError(f"{qid}: 'aspects' must be a list, got {type(raw_aspects).__name__}")
+            validated = validate_entity_aspects([str(a) for a in raw_aspects], project_aspects)
             resolved = resolve_entity_aspects(validated, project_aspects)
 
         finalized = _finalize(matches)

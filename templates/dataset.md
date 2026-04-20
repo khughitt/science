@@ -1,17 +1,53 @@
 ---
-id: "dataset:<accession-or-slug>"
+id: "dataset:<slug>"
 type: "dataset"
-title: "<Dataset Name>"
+title: "<Dataset Name — artefact-level specific>"
 status: "active"
-tier: "evaluate-next"              # use-now | evaluate-next | track
-access: "public"                   # public | controlled | mixed
-license: ""                        # SPDX identifier (e.g., CC-BY-4.0) or "unknown"
-formats: []                        # e.g., ["tsv", "h5ad", "parquet"]
-size_estimate: ""                  # e.g., "12 GB", "~500 MB", "unknown"
-update_cadence: ""                 # e.g., "static", "quarterly", "rolling"
-ontology_terms: []                 # CURIEs: UBERON:*, CL:*, MONDO:*, DOID:*, GO:*, etc.
-datasets:                          # one or more accessions (see Multi-accession below)
-  - "<accession>"
+profiles: ["science-pkg-entity-1.0"]
+origin: "external"                # external | derived
+tier: "evaluate-next"             # use-now | evaluate-next | track
+license: ""                       # SPDX identifier or "unknown"
+update_cadence: ""                # static | rolling | monthly | ...
+ontology_terms: []                # CURIEs
+
+# Pointer to the runtime datapackage.yaml (entity surface does NOT carry resources[])
+datapackage: ""
+local_path: ""                    # external single-file escape hatch (mutually exclusive with datapackage)
+
+# External-only — REMOVE if origin: derived
+accessions: []                    # external accession IDs (renamed from `datasets:`)
+access:
+  level: "public"                 # public | registration | controlled | commercial | mixed
+  verified: false
+  verification_method: ""         # "" | retrieved | credential-confirmed
+  last_reviewed: ""               # YYYY-MM-DD
+  verified_by: ""
+  source_url: ""
+  credentials_required: ""
+  exception:
+    mode: ""                      # "" | scope-reduced | expanded-to-acquire | substituted
+    decision_date: ""
+    followup_task: ""
+    superseded_by_dataset: ""
+    rationale: ""
+
+# Derived-only — UNCOMMENT and populate when origin: derived; REMOVE access: above
+# derivation:
+#   workflow: "workflow:<slug>"
+#   workflow_run: "workflow-run:<slug>"
+#   git_commit: ""
+#   config_snapshot: ""
+#   produced_at: ""
+#   inputs:
+#     - "dataset:<upstream-slug>"
+
+# Lineage
+parent_dataset: ""
+siblings: []
+
+# Backlinks (written by plan-pipeline Step 4.5 / register-run)
+consumed_by: []
+
 source_refs: []
 related: []
 created: "<YYYY-MM-DD>"
@@ -24,18 +60,14 @@ updated: "<YYYY-MM-DD>"
 
 <What the dataset contains and why it is relevant.>
 
-## Access and Scope
+## Access verification log
 
-- Accessions:
-- Source URL:
-- Organism/population:
-- Modality:
-- Sample size:
+<!-- Append-only chronological log; one entry per verification event. -->
+<!-- Format: - YYYY-MM-DD (agent-or-user): brief note. -->
 
-## Thoughts
+## Granularity at this access level
 
-- <strength>
-- <limitation or bias>
+<!-- For granular siblings: state explicitly what THIS entity covers vs what sibling entities cover. -->
 
 ## Connections to Project
 
@@ -48,57 +80,3 @@ updated: "<YYYY-MM-DD>"
 - Topic notes:
 - Method notes:
 - Article notes:
-
-<!--
-Frontmatter field notes:
-
-- `tier`: reading/use priority.
-  - `use-now`    — download and integrate immediately
-  - `evaluate-next` — promising, inspect before committing
-  - `track`      — potentially useful, defer
-
-- `access`: `public` (open), `controlled` (dbGaP / EGA / application required),
-  `mixed` (some resources public, some controlled).
-
-- `license`: prefer SPDX identifiers (https://spdx.org/licenses/).
-  Examples: `CC-BY-4.0`, `CC0-1.0`, `ODbL-1.0`, `custom`, `unknown`.
-
-- `formats`: lower-case file extensions or format slugs.
-  Examples: `tsv`, `csv`, `parquet`, `h5ad`, `mtx`, `bam`, `vcf`, `loom`, `nii`.
-
-- `size_estimate`: include unit. Use `"unknown"` rather than leaving blank.
-
-- `update_cadence`: one of
-  `static` | `rolling` | `monthly` | `quarterly` | `annual` | `versioned-releases`.
-
-- `ontology_terms`: use canonical CURIEs. Examples:
-  - Anatomy: `UBERON:0002048` (lung)
-  - Cell type: `CL:0000127` (astrocyte)
-  - Disease: `MONDO:0005148` (type-2 diabetes) or `DOID:9352`
-  - Tissue/assay: `EFO:0003021` (RNA-seq)
-  Avoid free-text labels here; use a structured registry term.
-
-- `datasets`: the list accepts multiple accessions for resources that span
-  several deposits (e.g., primary + mirror, atlas + component studies, CPTAC
-  studies spanning PDC + cBioPortal). See "Multi-accession resources" below.
-
-## Multi-accession resources
-
-Some high-value resources are split across multiple accessions (primary host +
-mirror, parent atlas + component studies, etc.). Three acceptable patterns:
-
-1. **One record, multi-accession list (preferred for tight siblings).**
-   Use this when all accessions describe the same underlying data. List every
-   accession in `datasets:` and in the `## Access and Scope` section.
-
-2. **Parent + child records (preferred for atlases).**
-   Create one overview record for the atlas and one per component study. Use
-   the `related:` list to link children to the parent. Tier the parent as
-   `evaluate-next` and tier children based on individual value.
-
-3. **One record per accession (last resort).**
-   Use only when the accessions are independently meaningful and share little
-   context. Cross-link via `related:`.
-
-Default to pattern 1 when in doubt.
--->

@@ -1,5 +1,7 @@
 # Research Provenance
 
+> Note: See `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` for the v2.2 unified dataset model: `data-package` → `research-package` rename, dataset entities now carry `origin: external | derived` discriminator.
+
 Research packages bundle analysis results, narrative context, and execution provenance into a standardized format. Any science project can produce and validate these packages.
 
 ## When to Use
@@ -73,13 +75,14 @@ rule build_package:
 
 ## Knowledge Graph Integration
 
-New entity types in core profile:
-- `data-package` (with `type: result`): produced by a `workflow-run`, contains analysis results
-- `data-package` (with `type: downstream`): grounded by a source `data-package`, represents downstream consumers
+New entity types in core profile (note: `data-package` was renamed `research-package` after rev 2.2 split):
+- `dataset` (with `origin: derived`): produced by a `workflow-run`, contains analysis results (data half)
+- `research-package` (now `research-package` after rev 2.2 split): narrative + cell bundle, produced by a `workflow-run`
+- `dataset` (with `origin: external`): externally sourced data, may be referenced as input
 
 Relations:
-- `produced_by` (sci:producedBy): data-package → workflow-run
-- `grounded_by` (sci:groundedBy): downstream data-package → source data-package
+- `produced_by` (sci:producedBy): research-package → workflow-run
+- `grounded_by` (sci:groundedBy): downstream dataset → source dataset
 
 ## Provenance Model
 

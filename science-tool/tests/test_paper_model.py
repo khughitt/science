@@ -1,11 +1,9 @@
 from pathlib import Path
 
 import pytest
-from rdflib import SKOS
 from rdflib.namespace import RDF
 
 from science_tool.graph.store import (
-    SCHEMA_NS,
     SCI_NS,
     PROJECT_NS,
     _graph_uri,

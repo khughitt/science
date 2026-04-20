@@ -185,9 +185,7 @@ def group_for_triage(
         groups[entry.target]["total_recurrence"] += entry.recurrence
 
     # Sort groups by total recurrence descending
-    return dict(
-        sorted(groups.items(), key=lambda item: -item[1]["total_recurrence"])
-    )
+    return dict(sorted(groups.items(), key=lambda item: -item[1]["total_recurrence"]))
 
 
 def render_report(

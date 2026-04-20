@@ -82,9 +82,7 @@ def _read(path: str) -> str:
         ),
         (
             "commands/next-steps.md",
-            (
-                "${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md",
-            ),
+            ("${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md",),
         ),
         (
             "commands/pre-register.md",
@@ -126,9 +124,7 @@ def _read(path: str) -> str:
         ),
         (
             "commands/status.md",
-            (
-                "${CLAUDE_PLUGIN_ROOT}/docs/proposition-and-evidence-model.md",
-            ),
+            ("${CLAUDE_PLUGIN_ROOT}/docs/proposition-and-evidence-model.md",),
         ),
     ],
 )
@@ -230,9 +226,15 @@ def test_project_bootstrap_docs_cover_science_tool_install_contract(
             ),
         ),
         ("commands/next-steps.md", ("Follow `references/command-preamble.md`",)),
-        ("commands/pre-register.md", ("Follow `references/command-preamble.md`", "Read `templates/pre-registration.md`")),
+        (
+            "commands/pre-register.md",
+            ("Follow `references/command-preamble.md`", "Read `templates/pre-registration.md`"),
+        ),
         ("commands/research-papers.md", ("Follow `references/command-preamble.md`", "Read `templates/paper.md`")),
-        ("commands/research-topic.md", ("Follow `references/command-preamble.md`", "Read `templates/background-topic.md`")),
+        (
+            "commands/research-topic.md",
+            ("Follow `references/command-preamble.md`", "Read `templates/background-topic.md`"),
+        ),
         (
             "commands/search-literature.md",
             (

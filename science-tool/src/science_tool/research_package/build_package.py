@@ -23,9 +23,7 @@ def _sha256_file(path: Path) -> str:
 
 def _git_commit() -> str:
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
-        )
+        result = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True)
         return result.stdout.strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
         return ""
@@ -59,17 +57,14 @@ def _read_workflow_config(config_path: Path) -> dict:
     if cells_match:
         result["cells_file"] = cells_match.group(1).strip()
 
-    excerpts_match = re.search(
-        r"^code_excerpts:\s*\n((?:\s+- .+\n?|\s+\w+:.+\n?)+)", text, re.MULTILINE
-    )
+    excerpts_match = re.search(r"^code_excerpts:\s*\n((?:\s+- .+\n?|\s+\w+:.+\n?)+)", text, re.MULTILINE)
     if excerpts_match:
         excerpt_blocks = re.findall(
             r"- name:\s*(.+)\n\s+source:\s*(.+)\n\s+lines:\s*\[(\d+),\s*(\d+)\]",
             excerpts_match.group(1),
         )
         result["code_excerpts"] = [
-            {"name": n.strip(), "source": s.strip(), "lines": [int(a), int(b)]}
-            for n, s, a, b in excerpt_blocks
+            {"name": n.strip(), "source": s.strip(), "lines": [int(a), int(b)]} for n, s, a, b in excerpt_blocks
         ]
 
     return result
@@ -109,16 +104,20 @@ def build_research_package(
             dest = figures_dir / fig_file.name
             shutil.copy2(fig_file, dest)
             if fig_file.suffix == ".png":
-                figures.append({
-                    "name": fig_file.stem,
-                    "path": f"figures/{fig_file.name}",
-                    "caption": fig_file.stem.replace("-", " ").replace("_", " "),
-                })
+                figures.append(
+                    {
+                        "name": fig_file.stem,
+                        "path": f"figures/{fig_file.name}",
+                        "caption": fig_file.stem.replace("-", " ").replace("_", " "),
+                    }
+                )
             elif fig_file.name.endswith(".vl.json"):
-                vegalite_specs.append({
-                    "name": fig_file.stem.removesuffix(".vl"),
-                    "path": f"figures/{fig_file.name}",
-                })
+                vegalite_specs.append(
+                    {
+                        "name": fig_file.stem.removesuffix(".vl"),
+                        "path": f"figures/{fig_file.name}",
+                    }
+                )
 
     # Copy prose
     prose_src = Path(config.get("prose_dir", "prose"))
@@ -144,13 +143,15 @@ def build_research_package(
         if repository and commit:
             permalink = f"{repository}/blob/{commit}/{exc_config['source']}#L{start}-L{end}"
 
-        code_excerpts.append({
-            "name": exc_config.get("name", src_path.stem),
-            "path": f"excerpts/{src_path.name}",
-            "source": exc_config["source"],
-            "lines": exc_config["lines"],
-            "github_permalink": permalink,
-        })
+        code_excerpts.append(
+            {
+                "name": exc_config.get("name", src_path.stem),
+                "path": f"excerpts/{src_path.name}",
+                "source": exc_config["source"],
+                "lines": exc_config["lines"],
+                "github_permalink": permalink,
+            }
+        )
 
     # Copy cells.json
     cells_src = Path(config.get("cells_file", "cells.json"))

@@ -339,8 +339,12 @@ def test_cross_impact_missing_node_fails(runner: CliRunner, graph_path: Path) ->
 def test_cross_impact_json_output_is_deterministic(runner: CliRunner, graph_path: Path) -> None:
     _build_cross_hypothesis_graph(runner, graph_path)
 
-    first = runner.invoke(main, ["graph", "cross-impact", "proposition/root", "--format", "json", "--path", str(graph_path)])
-    second = runner.invoke(main, ["graph", "cross-impact", "proposition/root", "--format", "json", "--path", str(graph_path)])
+    first = runner.invoke(
+        main, ["graph", "cross-impact", "proposition/root", "--format", "json", "--path", str(graph_path)]
+    )
+    second = runner.invoke(
+        main, ["graph", "cross-impact", "proposition/root", "--format", "json", "--path", str(graph_path)]
+    )
 
     assert first.exit_code == 0, first.output
     assert second.exit_code == 0, second.output

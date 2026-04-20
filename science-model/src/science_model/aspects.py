@@ -5,6 +5,7 @@ science.yaml. This module is the single source of truth for that vocabulary
 and for the resolution/filter rules; commands consume it rather than
 reimplementing aspect logic.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -68,23 +69,17 @@ def validate_entity_aspects(
     ``project_aspects`` ordering for stable diffs.
     """
     if not entity_aspects:
-        raise AspectValidationError(
-            "Entity aspects list is empty; use absent field to inherit."
-        )
+        raise AspectValidationError("Entity aspects list is empty; use absent field to inherit.")
     seen: set[str] = set()
     for aspect in entity_aspects:
         if aspect in seen:
             raise AspectValidationError(f"duplicate aspect: {aspect!r}")
         seen.add(aspect)
         if aspect not in KNOWN_ASPECTS:
-            raise AspectValidationError(
-                f"{aspect!r} is not in the aspect vocabulary "
-                f"({sorted(KNOWN_ASPECTS)})."
-            )
+            raise AspectValidationError(f"{aspect!r} is not in the aspect vocabulary ({sorted(KNOWN_ASPECTS)}).")
         if aspect not in project_aspects:
             raise AspectValidationError(
-                f"{aspect!r} is not declared in project aspects "
-                f"({project_aspects}); add it to science.yaml first."
+                f"{aspect!r} is not declared in project aspects ({project_aspects}); add it to science.yaml first."
             )
     return [a for a in project_aspects if a in seen]
 
@@ -101,7 +96,5 @@ def load_project_aspects(project_root: Path) -> list[str]:
     data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
     aspects = data.get("aspects") or []
     if not isinstance(aspects, list):
-        raise TypeError(
-            f"science.yaml 'aspects' must be a list, got {type(aspects).__name__}"
-        )
+        raise TypeError(f"science.yaml 'aspects' must be a list, got {type(aspects).__name__}")
     return [str(a) for a in aspects]

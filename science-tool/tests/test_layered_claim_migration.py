@@ -378,7 +378,9 @@ def test_export_graph_payload_includes_layered_claim_metadata_for_claim_backed_e
     )
 
     payload = export_graph_payload(graph_path, overlays=["evidence"])
-    edge_id = next(edge.id for edge in payload.edges if edge.claim_ids == ["http://example.org/project/proposition/drug_claim"])
+    edge_id = next(
+        edge.id for edge in payload.edges if edge.claim_ids == ["http://example.org/project/proposition/drug_claim"]
+    )
     claim = payload.overlays.evidence["edges"][edge_id]["claims"][0]
 
     assert claim["claim_layer"] == "mechanistic_narrative"
