@@ -18,6 +18,16 @@ from science_tool.dag.validate import (
 FIXTURE_MINIMAL = Path(__file__).parent / "fixtures" / "minimal"
 
 
+@pytest.fixture
+def _schema_cache_isolation() -> None:
+    """Clear the _load_schema cache after the test so monkeypatched _SCHEMA_PATH
+    doesn't leak stale schema bytes into subsequent tests."""
+    yield
+    import science_tool.dag.validate as v
+
+    v._load_schema.cache_clear()
+
+
 def test_validation_report_ok_on_clean_fixture() -> None:
     paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
     report = validate_project(paths)
@@ -143,7 +153,9 @@ def test_jsonschema_conformance_runs_on_mm30_fixture() -> None:
     assert jsonschema_findings == []
 
 
-def test_jsonschema_conformance_catches_drift(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_jsonschema_conformance_catches_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _schema_cache_isolation
+) -> None:
     # Point the schema loader at a bogus schema that rejects everything, then
     # ensure at least one finding with rule=jsonschema_conformance appears.
     bogus = tmp_path / "bogus.schema.json"
