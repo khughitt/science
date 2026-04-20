@@ -1,0 +1,21 @@
+dag: toy
+source_dot: toy.dot
+edges:
+  - id: 1
+    source: a
+    target: b
+    edge_status: structural
+    identification: structural
+    description: a->b
+  - id: 2
+    source: b
+    target: c
+    edge_status: structural
+    identification: structural
+    description: b->c
+  - id: 3
+    source: c
+    target: a
+    edge_status: structural
+    identification: structural
+    description: c->a

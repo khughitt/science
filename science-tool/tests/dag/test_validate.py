@@ -106,3 +106,19 @@ def test_clean_fixture_has_no_topology_findings() -> None:
         "topology_node_mismatch",
     }
     assert not topology_rules.intersection(f.rule for f in report.findings)
+
+
+def test_acyclicity_flags_cycle() -> None:
+    paths = load_dag_paths(FIXTURE_MINIMAL / "cyclic")
+    report = validate_project(paths)
+    acyclicity_findings = [f for f in report.findings if f.rule == "acyclicity"]
+    assert len(acyclicity_findings) == 1
+    msg = acyclicity_findings[0].message
+    # The cycle path must mention all three nodes.
+    assert "a" in msg and "b" in msg and "c" in msg
+
+
+def test_acyclicity_passes_on_clean() -> None:
+    paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
+    report = validate_project(paths)
+    assert not any(f.rule == "acyclicity" for f in report.findings)

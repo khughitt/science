@@ -1,0 +1,5 @@
+digraph toy {
+  a -> b;
+  b -> c;
+  c -> a;
+}

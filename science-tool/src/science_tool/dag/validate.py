@@ -222,24 +222,15 @@ def _parse_dot_topology(dot_path: Path) -> tuple[frozenset[str], frozenset[tuple
     return frozenset(nodes), frozenset(edges)
 
 
-def _check_topology(model: EdgesYamlFile, dot_path: Path, yaml_path: Path) -> list[ValidationFinding]:
-    """Cross-check YAML edges against .dot topology."""
+def _check_topology_parsed(
+    model: EdgesYamlFile,
+    dot_nodes: frozenset[str],
+    dot_edges: frozenset[tuple[str, str]],
+    dot_path: Path,
+    yaml_path: Path,
+) -> list[ValidationFinding]:
+    """Cross-check YAML edges against pre-parsed .dot topology."""
     findings: list[ValidationFinding] = []
-
-    if not dot_path.exists():
-        findings.append(
-            ValidationFinding(
-                dag=model.dag,
-                edge_id=None,
-                rule="source_dot_missing",
-                severity="error",
-                message=f"source .dot file not found: {dot_path}",
-                location=yaml_path.name,
-            )
-        )
-        return findings
-
-    dot_nodes, dot_edges = _parse_dot_topology(dot_path)
     yaml_edges: set[tuple[str, str]] = {(e.source, e.target) for e in model.edges}
 
     # YAML edges whose source/target is absent from .dot nodes.
@@ -292,6 +283,68 @@ def _check_topology(model: EdgesYamlFile, dot_path: Path, yaml_path: Path) -> li
     return findings
 
 
+def _find_cycle(edges: frozenset[tuple[str, str]]) -> list[str] | None:
+    """Return the node path of a cycle if one exists, else None."""
+    graph: dict[str, list[str]] = {}
+    for src, tgt in edges:
+        graph.setdefault(src, []).append(tgt)
+        graph.setdefault(tgt, [])
+
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color: dict[str, int] = {n: WHITE for n in graph}
+
+    def dfs(start: str) -> list[str] | None:
+        stack: list[tuple[str, int]] = [(start, 0)]
+        while stack:
+            node, child_idx = stack[-1]
+            if child_idx == 0:
+                color[node] = GRAY
+            children = graph.get(node, [])
+            if child_idx >= len(children):
+                color[node] = BLACK
+                stack.pop()
+                continue
+            stack[-1] = (node, child_idx + 1)
+            nxt = children[child_idx]
+            if color[nxt] == GRAY:
+                # Reconstruct cycle: all nodes on the current DFS stack are
+                # GRAY (on the active path); nxt is the entry point of the
+                # cycle.  Collect frames from the first occurrence of nxt
+                # onwards, then append nxt to close the cycle.
+                path: list[str] = [frame for frame, _ in stack]
+                idx = next(i for i, (frame, _) in enumerate(stack) if frame == nxt)
+                return path[idx:] + [nxt]
+            if color[nxt] == WHITE:
+                stack.append((nxt, 0))
+        return None
+
+    for node in sorted(graph):
+        if color[node] == WHITE:
+            cycle = dfs(node)
+            if cycle is not None:
+                return cycle
+    return None
+
+
+def _check_acyclicity(
+    model: EdgesYamlFile, dot_edges: frozenset[tuple[str, str]], yaml_path: Path
+) -> list[ValidationFinding]:
+    cycle = _find_cycle(dot_edges)
+    if cycle is None:
+        return []
+    path_str = " -> ".join(cycle)
+    return [
+        ValidationFinding(
+            dag=model.dag,
+            edge_id=None,
+            rule="acyclicity",
+            severity="error",
+            message=f"cycle detected in .dot topology: {path_str}",
+            location=yaml_path.name,
+        )
+    ]
+
+
 def validate_project(
     paths: DagPaths,
     *,
@@ -338,6 +391,21 @@ def validate_project(
             dot_path = candidate if candidate.exists() else yaml_path.parent / model.source_dot
         else:
             dot_path = yaml_path.parent / f"{model.dag}.dot"
-        findings.extend(_check_topology(model, dot_path, yaml_path))
+
+        if dot_path.exists():
+            dot_nodes, dot_edges = _parse_dot_topology(dot_path)
+            findings.extend(_check_topology_parsed(model, dot_nodes, dot_edges, dot_path, yaml_path))
+            findings.extend(_check_acyclicity(model, dot_edges, yaml_path))
+        else:
+            findings.append(
+                ValidationFinding(
+                    dag=model.dag,
+                    edge_id=None,
+                    rule="source_dot_missing",
+                    severity="error",
+                    message=f"source .dot file not found: {dot_path}",
+                    location=yaml_path.name,
+                )
+            )
 
     return ValidationReport(today=today, strict=strict, findings=tuple(findings))
