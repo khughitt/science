@@ -16,7 +16,8 @@ from science_tool.verdict.tokens import Token, parse_body_verdict
 
 
 _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n(.*)\Z", re.DOTALL)
-_BODY_VERDICT_MARKER_RE = re.compile(r"\*\*Verdict:\*\*[^\S\r\n]*(\[[^\]\r\n]+\])?")
+_BODY_VERDICT_LINE_RE = re.compile(r"\*\*Verdict:\*\*([^\r\n]*)")
+_BODY_VERDICT_LINE_PARTS_RE = re.compile(r"[^\S\r\n]*(\[[^\]\r\n]+\])(.*)\Z")
 
 
 class NoVerdictBlockError(ValueError):
@@ -91,19 +92,22 @@ def _split_frontmatter(path: Path, content: str) -> tuple[str, str]:
 
 
 def _raise_for_malformed_body_verdict(path: Path, body: str) -> None:
-    match = _BODY_VERDICT_MARKER_RE.search(body)
+    match = _BODY_VERDICT_LINE_RE.search(body)
     if match is None:
         return
 
-    raw_token = match.group(1)
-    if raw_token is not None:
-        Token.from_str(raw_token)
-        return
-    raise ValueError(f"{path}: malformed body verdict")
+    parts_match = _BODY_VERDICT_LINE_PARTS_RE.match(match.group(1))
+    if parts_match is None:
+        raise ValueError(f"{path}: malformed body verdict")
+
+    Token.from_str(parts_match.group(1))
+    clause = parts_match.group(2)
+    if not clause or not clause[0].isspace() or not clause.strip():
+        raise ValueError(f"{path}: malformed body verdict")
 
 
 def _hydrate_verdict(path: Path, raw: Mapping[str, Any]) -> VerdictBlock:
-    composite = Token.from_str(_required_str(path, raw, "composite", "verdict block"))
+    composite = _token_from_str(path, "composite", _required_str(path, raw, "composite", "verdict block"))
     rule = _required_str(path, raw, "rule", "verdict block")
     claims = _hydrate_claims(path, raw.get("claims", []))
     return VerdictBlock(
@@ -128,7 +132,7 @@ def _hydrate_claim(path: Path, raw: Any) -> Claim:
     if not isinstance(raw, Mapping):
         raise ValueError(f"{path}: Malformed verdict block: each claim must be a mapping")
     claim_id = _required_str(path, raw, "id", "claim")
-    polarity = Token.from_str(_required_str(path, raw, "polarity", "claim"))
+    polarity = _token_from_str(path, "claim polarity", _required_str(path, raw, "polarity", "claim"))
     return Claim(
         id=claim_id,
         polarity=polarity,
@@ -153,11 +157,20 @@ def _hydrate_contexts(path: Path, raw_contexts: Any) -> list[Context]:
         contexts.append(
             Context(
                 context=_required_str(path, raw_context, "context", "context"),
-                polarity=Token.from_str(_required_str(path, raw_context, "polarity", "context")),
+                polarity=_token_from_str(
+                    path, "context polarity", _required_str(path, raw_context, "polarity", "context")
+                ),
                 strength=_optional_str(path, raw_context, "strength", "context"),
             )
         )
     return contexts
+
+
+def _token_from_str(path: Path, field_name: str, value: str) -> Token:
+    try:
+        return Token.from_str(value)
+    except ValueError as exc:
+        raise ValueError(f"{path}: Malformed verdict block: {field_name}: {exc}") from exc
 
 
 def _required_str(path: Path, raw: Mapping[str, Any], field_name: str, block_name: str) -> str:

@@ -202,6 +202,32 @@ verdict:
         parse_file(path)
 
 
+def test_first_body_verdict_missing_clause_raises_before_later_valid_verdict(tmp_path: Path) -> None:
+    path = tmp_path / "first-body-verdict-missing-clause.md"
+    path.write_text(
+        """---
+id: "interpretation:first-body-missing-clause"
+verdict:
+  composite: "[+]"
+  rule: "and"
+  claims:
+    - id: "c1"
+      polarity: "[+]"
+---
+
+## Verdict
+
+**Verdict:** [+]
+
+**Verdict:** [-] later
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="malformed body verdict"):
+        parse_file(path)
+
+
 def test_unknown_rule_raises_value_error(tmp_path: Path) -> None:
     path = tmp_path / "unknown-rule.md"
     path.write_text(
