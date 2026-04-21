@@ -4,13 +4,13 @@ verdict:
   composite: "[~]"
   rule: "bimodal"
   claims:
-    - id: "h4#attractor-1-robustness"
-      polarity: "[+]"
     - id: "h4#attractor-2-robustness"
       polarity: "[+]"
-    - id: "h4#attractor-3-robustness"
+    - id: "h4#attractor-12-robustness"
+      polarity: "[+]"
+    - id: "h4#attractor-8-robustness"
       polarity: "[-]"
-    - id: "h4#attractor-4-robustness"
+    - id: "h4#attractor-9-robustness"
       polarity: "[-]"
 ---
 

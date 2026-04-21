@@ -6,7 +6,7 @@ verdict:
   closure_terminal: "non_adjudicating_under_observational_adjusters"
   claims:
     - id: "t204#v140_6-multitype-non-pc-absorption"
-      polarity: "[⌀]"
+      polarity: "[-]"
 ---
 
 **Verdict:** [⌀] Non-adjudicating under observational adjusters.

@@ -1,41 +1,41 @@
 version: 1
 project: "fixture"
-schema: "science-tool.verdict.claim-registry.v1"
+schema: "science-spec:2026-04-19-verdict-tokens-and-atomic-decomposition-design#v1.1"
 created: "2026-04-21"
 conventions:
   separator: "#"
   id_pattern: "^(h[1-4]|t[0-9]+)#[A-Za-z0-9_-]+$"
   synonym_resolution: "first-match-wins"
-entries:
+claims:
   - id: "h1#edge5-ifn-arm"
-    source: "fixture"
-    definition: "IFN arm replicates under the fixture adjudication."
+    source: "hypothesis:h1"
+    definition: "IFN arm of the edge-5 PRC2 mechanism."
     predicted_direction: "[+]"
     synonyms:
       - "h1-edge6-ifn-arm"
     cited_in:
       - "interpretation:fixture-and"
   - id: "h1#edge5-ifn-arm-gamma"
-    source: "fixture"
-    definition: "IFN gamma arm replicates under the fixture adjudication."
+    source: "hypothesis:h1"
+    definition: "IFN-gamma sub-arm."
     predicted_direction: "[+]"
     cited_in:
       - "interpretation:fixture-and"
   - id: "t163#edge-cdk2-e2f1-survives-prolif-adj"
-    source: "fixture"
-    definition: "CDK2 -> E2F1 mechanism edge under proliferation adjustment."
+    source: "task:t163"
+    definition: "Does CDK2->E2F1 survive proliferation adjustment?"
     predicted_direction: "[+]"
     cited_in:
       - "interpretation:fixture-majority-disagrees"
   - id: "t163#edge-ezh2-phf19-survives-prolif-adj"
-    source: "fixture"
-    definition: "EZH2 -> PHF19 mechanism edge survives proliferation adjustment."
+    source: "task:t163"
+    definition: "Does EZH2->PHF19 survive proliferation adjustment? (load-bearing edge)"
     predicted_direction: "[+]"
     cited_in:
       - "interpretation:fixture-majority-disagrees"
   - id: "h4#attractor-2-robustness"
-    source: "fixture"
-    definition: "Attractor basin 2 remains robust in the bimodal fixture."
+    source: "hypothesis:h4"
+    definition: "Is attractor #2 robust under perturbation?"
     predicted_direction: "[+]"
     cited_in:
       - "interpretation:fixture-bimodal"
