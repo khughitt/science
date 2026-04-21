@@ -43,8 +43,6 @@ def load_registry(path: Path | str) -> IndexedClaimRegistry:
         raise ValueError("Malformed claim registry: top-level mapping is required")
 
     raw_claims = data.get("claims", [])
-    if raw_claims is None:
-        raw_claims = []
     if not isinstance(raw_claims, list):
         raise ValueError("Malformed claim registry: claims must be a list")
 
@@ -71,10 +69,11 @@ def _hydrate_entry(raw: dict[str, Any]) -> ClaimRegistryEntry:
     if not isinstance(raw, Mapping):
         raise ValueError("Malformed claim registry: each claim entry must be a mapping")
     claim_id = _required_str(raw, "id")
+    source = _required_str(raw, "source")
     predicted_direction = _required_str(raw, "predicted_direction")
     return ClaimRegistryEntry(
         id=claim_id,
-        source=str(raw.get("source", "")),
+        source=source,
         definition=str(raw.get("definition", "")),
         predicted_direction=Token.from_str(predicted_direction),
         synonyms=_string_list(raw, "synonyms"),

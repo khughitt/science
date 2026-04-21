@@ -66,7 +66,22 @@ claims: h1#edge5-ifn-arm
         load_registry(path)
 
 
-@pytest.mark.parametrize("field", ["id", "predicted_direction"])
+@pytest.mark.parametrize("content", ["claims:\n", "claims: null\n"])
+def test_load_registry_rejects_null_claims(tmp_path: Path, content: str) -> None:
+    path = _write_registry(
+        tmp_path,
+        f"""
+version: 1
+project: fixture
+{content}
+""",
+    )
+
+    with pytest.raises(ValueError, match="Malformed claim registry.*claims.*list"):
+        load_registry(path)
+
+
+@pytest.mark.parametrize("field", ["id", "source", "predicted_direction"])
 def test_load_registry_rejects_missing_required_entry_field(tmp_path: Path, field: str) -> None:
     claim = {
         "id": "h1#edge5-ifn-arm",
@@ -88,6 +103,24 @@ claims:
     )
 
     with pytest.raises(ValueError, match=f"Malformed claim registry.*{field}.*required"):
+        load_registry(path)
+
+
+def test_load_registry_rejects_non_string_source(tmp_path: Path) -> None:
+    path = _write_registry(
+        tmp_path,
+        """
+version: 1
+project: fixture
+claims:
+  - id: h1#edge5-ifn-arm
+    source: 12
+    definition: IFN arm of the edge-5 PRC2 mechanism.
+    predicted_direction: "[+]"
+""",
+    )
+
+    with pytest.raises(ValueError, match="Malformed claim registry.*source.*required"):
         load_registry(path)
 
 
