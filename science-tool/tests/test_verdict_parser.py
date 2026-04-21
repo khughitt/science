@@ -176,6 +176,32 @@ verdict:
         parse_file(path)
 
 
+def test_invalid_first_body_verdict_token_raises_before_later_valid_verdict(tmp_path: Path) -> None:
+    path = tmp_path / "invalid-first-body-token.md"
+    path.write_text(
+        """---
+id: "interpretation:invalid-first-body-token"
+verdict:
+  composite: "[+]"
+  rule: "and"
+  claims:
+    - id: "c1"
+      polarity: "[+]"
+---
+
+## Verdict
+
+**Verdict:** [x] bad
+
+**Verdict:** [+] later
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Unknown verdict token"):
+        parse_file(path)
+
+
 def test_unknown_rule_raises_value_error(tmp_path: Path) -> None:
     path = tmp_path / "unknown-rule.md"
     path.write_text(
@@ -216,6 +242,38 @@ def test_registry_resolution_reports_unresolved_claim_ids() -> None:
 
     assert result.unresolved_claim_ids == ["hunknown#not-in-registry"]
     assert any("unresolved" in warning.lower() for warning in result.validation_warnings)
+
+
+def test_registry_resolution_reports_one_warning_per_unresolved_claim(tmp_path: Path) -> None:
+    path = tmp_path / "two-unresolved-claims.md"
+    path.write_text(
+        """---
+id: "interpretation:two-unresolved"
+verdict:
+  composite: "[+]"
+  rule: "and"
+  claims:
+    - id: "hunknown#first"
+      polarity: "[+]"
+    - id: "hunknown#second"
+      polarity: "[+]"
+---
+
+## Verdict
+
+**Verdict:** [+] body
+""",
+        encoding="utf-8",
+    )
+    registry = load_registry(REGISTRY_PATH)
+
+    result = parse_file(path, registry=registry)
+    unresolved_warnings = [warning for warning in result.validation_warnings if "unresolved" in warning.lower()]
+
+    assert result.unresolved_claim_ids == ["hunknown#first", "hunknown#second"]
+    assert len(unresolved_warnings) == 2
+    assert any("hunknown#first" in warning for warning in unresolved_warnings)
+    assert any("hunknown#second" in warning for warning in unresolved_warnings)
 
 
 def test_without_registry_unresolved_fixture_keeps_unresolved_claim_ids_empty() -> None:

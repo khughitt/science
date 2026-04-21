@@ -41,13 +41,13 @@ def parse_file(path: Path | str, *, registry: IndexedClaimRegistry | None = None
     if not isinstance(raw_verdict, Mapping):
         raise ValueError(f"{file_path}: verdict block must be a mapping")
 
-    verdict = _hydrate_verdict(raw_verdict)
+    verdict = _hydrate_verdict(file_path, raw_verdict)
     interpretation_id = str(meta.get("id") or f"unknown:{file_path.stem}")
 
     warnings: list[str] = []
+    _raise_for_malformed_body_verdict(file_path, body)
     body_verdict = parse_body_verdict(body)
     if body_verdict is None:
-        _raise_for_malformed_body_verdict(file_path, body)
         composite_token = verdict.composite
         composite_clause = ""
         warnings.append(f"{file_path}: missing body verdict; using frontmatter composite")
@@ -62,9 +62,7 @@ def parse_file(path: Path | str, *, registry: IndexedClaimRegistry | None = None
     unresolved_claim_ids: list[str] = []
     if registry is not None:
         unresolved_claim_ids = [claim.id for claim in verdict.claims if registry.resolve(claim.id) is None]
-        if unresolved_claim_ids:
-            unresolved = ", ".join(unresolved_claim_ids)
-            warnings.append(f"{file_path}: unresolved claim IDs: {unresolved}")
+        warnings.extend(f"{file_path}: unresolved claim ID: {claim_id}" for claim_id in unresolved_claim_ids)
 
     rule_derived_composite = aggregate_composite(verdict.rule, verdict.claims)
     disagrees = rule_disagrees_with_body(rule_derived_composite, composite_token)
@@ -100,93 +98,94 @@ def _raise_for_malformed_body_verdict(path: Path, body: str) -> None:
     raw_token = match.group(1)
     if raw_token is not None:
         Token.from_str(raw_token)
+        return
     raise ValueError(f"{path}: malformed body verdict")
 
 
-def _hydrate_verdict(raw: Mapping[str, Any]) -> VerdictBlock:
-    composite = Token.from_str(_required_str(raw, "composite", "verdict block"))
-    rule = _required_str(raw, "rule", "verdict block")
-    claims = _hydrate_claims(raw.get("claims", []))
+def _hydrate_verdict(path: Path, raw: Mapping[str, Any]) -> VerdictBlock:
+    composite = Token.from_str(_required_str(path, raw, "composite", "verdict block"))
+    rule = _required_str(path, raw, "rule", "verdict block")
+    claims = _hydrate_claims(path, raw.get("claims", []))
     return VerdictBlock(
         composite=composite,
         rule=rule,
         claims=claims,
-        closure_terminal=_optional_str(raw, "closure_terminal", "verdict block"),
-        reframing_target=_optional_str(raw, "reframing_target", "verdict block"),
-        reframing_reason=_optional_str(raw, "reframing_reason", "verdict block"),
+        closure_terminal=_optional_str(path, raw, "closure_terminal", "verdict block"),
+        reframing_target=_optional_str(path, raw, "reframing_target", "verdict block"),
+        reframing_reason=_optional_str(path, raw, "reframing_reason", "verdict block"),
     )
 
 
-def _hydrate_claims(raw_claims: Any) -> list[Claim]:
+def _hydrate_claims(path: Path, raw_claims: Any) -> list[Claim]:
     if raw_claims is None:
         return []
     if not isinstance(raw_claims, list):
-        raise ValueError("Malformed verdict block: claims must be a list")
-    return [_hydrate_claim(raw_claim) for raw_claim in raw_claims]
+        raise ValueError(f"{path}: Malformed verdict block: claims must be a list")
+    return [_hydrate_claim(path, raw_claim) for raw_claim in raw_claims]
 
 
-def _hydrate_claim(raw: Any) -> Claim:
+def _hydrate_claim(path: Path, raw: Any) -> Claim:
     if not isinstance(raw, Mapping):
-        raise ValueError("Malformed verdict block: each claim must be a mapping")
-    claim_id = _required_str(raw, "id", "claim")
-    polarity = Token.from_str(_required_str(raw, "polarity", "claim"))
+        raise ValueError(f"{path}: Malformed verdict block: each claim must be a mapping")
+    claim_id = _required_str(path, raw, "id", "claim")
+    polarity = Token.from_str(_required_str(path, raw, "polarity", "claim"))
     return Claim(
         id=claim_id,
         polarity=polarity,
-        strength=_optional_str(raw, "strength", "claim"),
-        weight=_optional_float(raw, "weight", 1.0),
-        evidence_summary=_optional_str(raw, "evidence_summary", "claim") or "",
-        contexts=_hydrate_contexts(raw.get("contexts", [])),
-        members=_string_list(raw.get("members", []), "members", "claim"),
+        strength=_optional_str(path, raw, "strength", "claim"),
+        weight=_optional_float(path, raw, "weight", 1.0),
+        evidence_summary=_optional_str(path, raw, "evidence_summary", "claim") or "",
+        contexts=_hydrate_contexts(path, raw.get("contexts", [])),
+        members=_string_list(path, raw.get("members", []), "members", "claim"),
     )
 
 
-def _hydrate_contexts(raw_contexts: Any) -> list[Context]:
+def _hydrate_contexts(path: Path, raw_contexts: Any) -> list[Context]:
     if raw_contexts is None:
         return []
     if not isinstance(raw_contexts, list):
-        raise ValueError("Malformed verdict block: contexts must be a list")
+        raise ValueError(f"{path}: Malformed verdict block: contexts must be a list")
 
     contexts: list[Context] = []
     for raw_context in raw_contexts:
         if not isinstance(raw_context, Mapping):
-            raise ValueError("Malformed verdict block: each context must be a mapping")
+            raise ValueError(f"{path}: Malformed verdict block: each context must be a mapping")
         contexts.append(
             Context(
-                context=_required_str(raw_context, "context", "context"),
-                polarity=Token.from_str(_required_str(raw_context, "polarity", "context")),
-                strength=_optional_str(raw_context, "strength", "context"),
+                context=_required_str(path, raw_context, "context", "context"),
+                polarity=Token.from_str(_required_str(path, raw_context, "polarity", "context")),
+                strength=_optional_str(path, raw_context, "strength", "context"),
             )
         )
     return contexts
 
 
-def _required_str(raw: Mapping[str, Any], field_name: str, block_name: str) -> str:
+def _required_str(path: Path, raw: Mapping[str, Any], field_name: str, block_name: str) -> str:
     value = raw.get(field_name)
     if not isinstance(value, str):
-        raise ValueError(f"Malformed verdict block: {block_name} {field_name!r} is required")
+        raise ValueError(f"{path}: Malformed verdict block: {block_name} {field_name!r} is required")
     return value
 
 
-def _optional_str(raw: Mapping[str, Any], field_name: str, block_name: str) -> str | None:
+def _optional_str(path: Path, raw: Mapping[str, Any], field_name: str, block_name: str) -> str | None:
     value = raw.get(field_name)
     if value is None:
         return None
     if not isinstance(value, str):
-        raise ValueError(f"Malformed verdict block: {block_name} {field_name!r} must be a string")
+        raise ValueError(f"{path}: Malformed verdict block: {block_name} {field_name!r} must be a string")
     return value
 
 
-def _optional_float(raw: Mapping[str, Any], field_name: str, default: float) -> float:
+def _optional_float(path: Path, raw: Mapping[str, Any], field_name: str, default: float) -> float:
     value = raw.get(field_name, default)
     if isinstance(value, bool) or not isinstance(value, int | float):
-        raise ValueError(f"Malformed verdict block: claim {field_name!r} must be numeric")
+        raise ValueError(f"{path}: Malformed verdict block: claim {field_name!r} must be numeric")
     return float(value)
 
 
-def _string_list(value: Any, field_name: str, block_name: str) -> list[str]:
+def _string_list(path: Path, value: Any, field_name: str, block_name: str) -> list[str]:
     if value is None:
         return []
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise ValueError(f"Malformed verdict block: {block_name} {field_name!r} must be a list of strings")
+        raise ValueError(f"{path}: Malformed verdict block: {block_name} {field_name!r} must be a list of strings")
     return value
