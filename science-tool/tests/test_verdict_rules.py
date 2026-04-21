@@ -90,6 +90,55 @@ def test_or_rule_empty_claims_yields_mixed() -> None:
     assert aggregate_composite("or", []) == Token.MIXED
 
 
+def test_weighted_majority_strictly_greater_than_half_yields_that_polarity() -> None:
+    claims = [
+        _claim("c1", Token.NEGATIVE, 1),
+        _claim("c2", Token.NEGATIVE, 1),
+        _claim("c3", Token.NEGATIVE, 1),
+        _claim("c4", Token.POSITIVE, 4),
+    ]
+    assert aggregate_composite("weighted-majority", claims) == Token.POSITIVE
+
+
+def test_weighted_majority_exact_half_weight_yields_mixed() -> None:
+    claims = [
+        _claim("c1", Token.NEGATIVE, 1),
+        _claim("c2", Token.NEGATIVE, 1),
+        _claim("c3", Token.NEGATIVE, 1),
+        _claim("c4", Token.POSITIVE, 3),
+    ]
+    assert aggregate_composite("weighted-majority", claims) == Token.MIXED
+
+
+def test_weighted_majority_falls_back_to_mixed_when_no_50pct() -> None:
+    claims = [_claim("c1", Token.POSITIVE, 1), _claim("c2", Token.NEGATIVE, 1)]
+    assert aggregate_composite("weighted-majority", claims) == Token.MIXED
+
+
+def test_weighted_majority_zero_total_weight_yields_mixed() -> None:
+    claims = [_claim("c1", Token.POSITIVE, 0), _claim("c2", Token.NEGATIVE, 0)]
+    assert aggregate_composite("weighted-majority", claims) == Token.MIXED
+
+
+def test_weighted_majority_empty_claims_yields_mixed() -> None:
+    assert aggregate_composite("weighted-majority", []) == Token.MIXED
+
+
+def test_bimodal_always_yields_mixed() -> None:
+    claims = [_claim("c1", Token.POSITIVE), _claim("c2", Token.NEGATIVE)]
+    assert aggregate_composite("bimodal", claims) == Token.MIXED
+
+
+def test_non_adjudicating_always_yields_non_adjudicating() -> None:
+    claims = [_claim("c1", Token.POSITIVE), _claim("c2", Token.NEGATIVE)]
+    assert aggregate_composite("non-adjudicating", claims) == Token.NON_ADJUDICATING
+
+
+def test_reframed_always_yields_mixed() -> None:
+    claims = [_claim("c1", Token.POSITIVE), _claim("c2", Token.NEGATIVE)]
+    assert aggregate_composite("reframed", claims) == Token.MIXED
+
+
 def test_rule_disagrees_with_body_false_when_matching() -> None:
     assert rule_disagrees_with_body(Token.POSITIVE, Token.POSITIVE) is False
 

@@ -18,6 +18,14 @@ def aggregate_composite(rule: str, claims: list[Claim]) -> Token:
         return _aggregate_or(counts, len(claims))
     if rule == "majority":
         return _aggregate_majority(counts, len(claims))
+    if rule == "weighted-majority":
+        return _rule_weighted_majority(claims)
+    if rule == "bimodal":
+        return Token.MIXED
+    if rule == "non-adjudicating":
+        return Token.NON_ADJUDICATING
+    if rule == "reframed":
+        return Token.MIXED
     raise ValueError(f"Unknown aggregation rule: {rule!r}")
 
 
@@ -52,5 +60,21 @@ def _aggregate_majority(counts: Counter[Token], claim_count: int) -> Token:
     if counts[Token.POSITIVE] / claim_count > 0.5:
         return Token.POSITIVE
     if counts[Token.NEGATIVE] / claim_count > 0.5:
+        return Token.NEGATIVE
+    return Token.MIXED
+
+
+def _rule_weighted_majority(claims: list[Claim]) -> Token:
+    total_weight = sum(claim.weight for claim in claims)
+    if total_weight <= 0:
+        return Token.MIXED
+
+    weights: dict[Token, float] = {}
+    for claim in claims:
+        weights[claim.polarity] = weights.get(claim.polarity, 0.0) + claim.weight
+
+    if weights.get(Token.POSITIVE, 0.0) / total_weight > 0.5:
+        return Token.POSITIVE
+    if weights.get(Token.NEGATIVE, 0.0) / total_weight > 0.5:
         return Token.NEGATIVE
     return Token.MIXED
