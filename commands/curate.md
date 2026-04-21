@@ -142,7 +142,7 @@ Be concrete. Name the friction, where it appeared, and the smallest improvement 
 ## After Writing
 
 1. Save the ledger to `doc/meta/curation/curation-sweep-YYYY-MM-DD.md` unless `--no-write` is set.
-2. If `--dry-run` is set, do not mutate source files; only print the intended ledger and action summary.
+2. If `--dry-run` is set, do not mutate source artifacts; the ledger may still be written or updated unless `--no-write` is also set.
 3. If the sweep produced safe obvious fixes, ask before applying them unless `--apply-obvious` was explicitly given.
 4. If `--commit` is set, commit the written files after verification.
 
@@ -156,4 +156,3 @@ Be concrete. Name the friction, where it appeared, and the smallest improvement 
 | `/science:health` | Supplies structural health signals during inventory. |
 | `/science:update-graph` | Applies graph/materialization repairs after curation changes source metadata. |
 | `/science:dag-audit` | Handles detailed DAG drift; `/science:curate` can surface candidates and defer to DAG audit. |
-
