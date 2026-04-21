@@ -7,7 +7,6 @@ inherited from Entity when they're kind-gated).
 
 from __future__ import annotations
 
-from datetime import date
 
 import pytest
 

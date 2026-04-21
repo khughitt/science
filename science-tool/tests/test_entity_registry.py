@@ -6,7 +6,6 @@ import pytest
 
 from science_model.entities import (
     DatasetEntity,
-    Entity,
     ProjectEntity,
     TaskEntity,
 )
