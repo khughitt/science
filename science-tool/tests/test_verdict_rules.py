@@ -34,6 +34,11 @@ def test_or_rule_all_negative_yields_negative() -> None:
     assert aggregate_composite("or", claims) == Token.NEGATIVE
 
 
+def test_or_rule_no_positive_and_not_all_negative_yields_mixed() -> None:
+    claims = [_claim("c1", Token.NEGATIVE), _claim("c2", Token.MIXED)]
+    assert aggregate_composite("or", claims) == Token.MIXED
+
+
 def test_majority_rule_strict_three_quarters_positive_yields_positive() -> None:
     claims = [
         _claim("c1", Token.POSITIVE),
@@ -42,6 +47,16 @@ def test_majority_rule_strict_three_quarters_positive_yields_positive() -> None:
         _claim("c4", Token.NEGATIVE),
     ]
     assert aggregate_composite("majority", claims) == Token.POSITIVE
+
+
+def test_majority_rule_strict_three_quarters_negative_yields_negative() -> None:
+    claims = [
+        _claim("c1", Token.NEGATIVE),
+        _claim("c2", Token.NEGATIVE),
+        _claim("c3", Token.NEGATIVE),
+        _claim("c4", Token.POSITIVE),
+    ]
+    assert aggregate_composite("majority", claims) == Token.NEGATIVE
 
 
 def test_majority_rule_exact_half_is_not_majority() -> None:
