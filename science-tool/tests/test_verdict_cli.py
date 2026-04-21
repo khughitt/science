@@ -4,6 +4,7 @@ import json
 import shutil
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from science_tool.verdict.cli import verdict_group
@@ -84,6 +85,18 @@ def test_rollup_all_json_emits_single_group_with_tally() -> None:
         "interpretation:fixture-weighted-majority",
     ]
     assert "interpretation_ids" not in payload["groups"]["all"]
+
+
+def test_rollup_defaults_root_to_current_working_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    shutil.copy(FIXTURE_DIR / "doc_and.md", tmp_path / "doc_and.md")
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(verdict_group, ["rollup", "--scope", "all", "--output", "json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["n_documents"] == 1
+    assert payload["groups"]["all"]["documents"] == ["interpretation:fixture-and"]
 
 
 def test_rollup_claim_without_registry_errors() -> None:

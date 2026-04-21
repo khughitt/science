@@ -58,7 +58,8 @@ def parse_cmd(file: Path, registry_path: Path | None) -> None:
 @click.option(
     "--root",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
-    required=True,
+    default=Path.cwd,
+    show_default=True,
     help="Directory containing verdict interpretation markdown files.",
 )
 @click.option(
