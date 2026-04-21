@@ -99,6 +99,15 @@ def test_rollup_defaults_root_to_current_working_directory(tmp_path: Path, monke
     assert payload["groups"]["all"]["documents"] == ["interpretation:fixture-and"]
 
 
+def test_rollup_help_shows_clean_root_default() -> None:
+    result = CliRunner().invoke(verdict_group, ["rollup", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "current working directory" in result.output
+    assert "bound method" not in result.output
+    assert "PathBase.cwd" not in result.output
+
+
 def test_rollup_claim_without_registry_errors() -> None:
     result = CliRunner().invoke(
         verdict_group,
@@ -131,6 +140,23 @@ def test_rollup_claim_with_registry_json_groups_by_claim() -> None:
     assert payload["groups"]["h1#edge5-ifn-arm"]["n"] == 1
     assert payload["groups"]["h1#edge5-ifn-arm"]["documents"] == ["interpretation:fixture-and"]
     assert "interpretation_ids" not in payload["groups"]["h1#edge5-ifn-arm"]
+
+
+def test_rollup_claim_auto_discovers_registry_under_root_specs(tmp_path: Path) -> None:
+    specs_dir = tmp_path / "specs"
+    specs_dir.mkdir()
+    shutil.copy(FIXTURE_DIR / "doc_and.md", tmp_path / "doc_and.md")
+    shutil.copy(REGISTRY_PATH, specs_dir / "claim-registry.yaml")
+
+    result = CliRunner().invoke(
+        verdict_group,
+        ["rollup", "--scope", "claim", "--root", str(tmp_path), "--output", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["scope"] == "claim"
+    assert payload["groups"]["h1#edge5-ifn-arm"]["documents"] == ["interpretation:fixture-and"]
 
 
 def test_rollup_by_claim_alias_matches_scope_claim() -> None:

@@ -59,7 +59,7 @@ def parse_cmd(file: Path, registry_path: Path | None) -> None:
     "--root",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     default=Path.cwd,
-    show_default=True,
+    show_default="current working directory",
     help="Directory containing verdict interpretation markdown files.",
 )
 @click.option(
