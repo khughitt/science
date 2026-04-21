@@ -108,6 +108,13 @@ def test_rollup_help_shows_clean_root_default() -> None:
     assert "PathBase.cwd" not in result.output
 
 
+def test_rollup_help_describes_strict_validation_warnings() -> None:
+    result = CliRunner().invoke(verdict_group, ["rollup", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "validation warnings" in result.output
+
+
 def test_rollup_claim_without_registry_errors() -> None:
     result = CliRunner().invoke(
         verdict_group,

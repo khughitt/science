@@ -79,7 +79,7 @@ def parse_cmd(file: Path, registry_path: Path | None) -> None:
 @click.option(
     "--strict",
     is_flag=True,
-    help="Treat unresolved claim IDs as errors.",
+    help="Treat unresolved claim IDs and validation warnings as errors.",
 )
 def rollup_cmd(
     scope: str | None,
