@@ -1,8 +1,8 @@
 # Verdict Tokens and Atomic Claim Decomposition
 
-**Status:** rev 1.1 — incorporates 6 schema gaps surfaced in mm30 t243 dogfood
+**Status:** rev 1.2 — MVP parser + rollup landed; v1.1 gaps incorporated; confidence column marked advisory
 **Created:** 2026-04-19
-**Revised:** 2026-04-21 (v1.1)
+**Revised:** 2026-04-21 (v1.2)
 **Source:** mm30 `discussion:2026-04-19-verdict-polarity-display` + cross-project backfill (~207 docs across 6 projects on 2026-04-19); v1.1 driven by `discussion:2026-04-19-t243-atomic-decomposition-dogfood`
 **Related specs:** `2026-04-17-edge-status-dashboard-design.md`, `2026-04-17-inquiry-edge-posterior-annotations-design.md`, `2026-04-18-project-big-picture-design.md`
 
@@ -16,6 +16,11 @@
   - **Gap 4:** add `members:` claim subfield for grouping similar atomic sub-claims (relevant to `bimodal` rule with many homogeneous atoms)
   - **Gap 5:** strengthen claim-id registry from "advisory" to **required-but-permissive** (must exist; if it does, IDs must resolve; bootstrap helper command)
   - **Gap 6:** add a non-binding `strength:` calibration table to reduce per-author drift
+- **v1.2 (2026-04-21):** MVP implementation lands in `science-tool` (plan: `docs/plans/2026-04-21-verdict-parse-rollup-mvp.md`). Four touch-ups from dogfooding + implementation experience:
+  - Reference the **mm30 `specs/claim-registry.yaml`** (37 canonical claims across 4 anchor types: hypothesis, DAG-edge, task, article) as the first concrete registry implementation.
+  - Mark the confidence column in backfill audit TSVs as **advisory-only**, per mm30 t246 finding: overall inter-LLM agreement on backfill labels is 97.2%, but per-tier calibration is uninformative at realistic sample sizes; the per-claim `strength` field (v1.1) carries the same semantic at the right resolution.
+  - Bump acceptance criterion 6 from "6 reference docs" to "9" (mm30 added t099, t240, t258 under the new schema on 2026-04-21).
+  - **Clarify tie semantics for `majority` and `weighted-majority`:** `majority` uses strict `> 50%` of all claims for `[+]` or `[-]`; exact ties return `[~]`. `weighted-majority` uses strict `> 50%` of adjudicating weight, where adjudicating weight is `[+] + [-]` only. `[?]`, `[~]`, and `[⌀]` claims do not dilute positive-vs-negative contests, but if there is exactly one adjudicating polarity plus unresolved/non-adjudicating weight, the composite remains `[~]`. Exact positive/negative weighted ties return `[~]`. This is the implemented behavior after mm30 t099/t240 dogfood: t099 derives `[+]`, while t240 derives `[~]`.
 
 ## Problem
 
@@ -165,8 +170,8 @@ Defines how `composite` derives from `claims`:
 |---|---|---|---|---|
 | `and` | all claims `[+]` | any claim `[-]` | otherwise | Conjunctive — every sub-claim must hold for the verdict to hold. |
 | `or` | any claim `[+]` | all claims `[-]` | otherwise | Disjunctive — one sub-claim suffices. |
-| `majority` | ≥50% claims `[+]` | ≥50% claims `[-]` | otherwise | Voting — n-of-m thresholds. |
-| `weighted-majority` | weighted-`[+]` ≥ 50% of total weight | weighted-`[-]` ≥ 50% of total weight | otherwise | Voting with per-claim `weight:` (default 1.0). Use when one or two atomic claims are load-bearing relative to the rest (v1.1 addition; addresses gap 3). |
+| `majority` | `> 50%` of all claims are `[+]` | `> 50%` of all claims are `[-]` | otherwise (including exact 50/50 ties) | Voting — n-of-m thresholds. **Strict majority required** (v1.2 clarification); ties return `[~]`. |
+| `weighted-majority` | weighted-`[+]` strictly `> 50%` of adjudicating weight | weighted-`[-]` strictly `> 50%` of adjudicating weight | otherwise (including exact positive/negative weighted ties, or exactly one adjudicating polarity plus unresolved/non-adjudicating weight) | Voting with per-claim `weight:` (default 1.0). Adjudicating weight is `[+] + [-]` only; `[?]`, `[~]`, and `[⌀]` claims do not dilute positive-vs-negative contests. Use when one or two atomic claims are load-bearing relative to the rest (v1.1 addition; addresses gap 3). **Strict majority required** (v1.2 clarification); ties return `[~]`. |
 | `bimodal` | n/a | n/a | always `[~]` | The result IS the distribution shape; no aggregation. Use `members:` subfield (v1.1) to group homogeneous sub-atoms when a per-atom listing is unwieldy. |
 | `non-adjudicating` | n/a | n/a | n/a; composite = `[⌀]` | The rollup is deliberately closed; sub-claims may exist but do not aggregate to a directional answer. **v1.1:** name the closure with the optional `closure_terminal:` subfield (e.g., `non_adjudicating_under_observational_adjusters`); free-form, project-local, captured for documentation/tooling but not enum-validated. |
 | `reframed` | n/a | n/a | n/a; composite = `[~]` | Original measurement is wrong; new measurement gives different answer. **v1.1:** identify the reframed prior with `reframing_target:` (interpretation-ref) and `reframing_reason:` (string) subfields; required when `rule == "reframed"` so a `science-tool verdict reframed-trail` query can surface the lineage of revised measurements. |
@@ -189,8 +194,9 @@ The dogfood example: mm30 t163 has 4 claims (3× `[-]`, 1× `[+]` for the
 load-bearing `EZH2 → PHF19` edge that survives proliferation adjustment).
 Mechanical `majority` gives `[-]`; the body verdict is `[~]` because the
 1 surviving edge is the most consequential finding. Either reformulate
-as `weighted-majority` with `weight: 2.0` on the surviving claim, or
-keep `majority` with the warning firing as the documentation mechanism.
+as `weighted-majority` with `weight: 3.0` on the surviving claim to
+produce an exact weighted tie (`[~]`), or keep `majority` with the
+warning firing as the documentation mechanism.
 
 ### Claim-id registry (v1.1: required-but-permissive)
 
@@ -229,6 +235,20 @@ This makes the registry **inferred-then-curated** rather than
 hand-built-from-scratch. The dogfood found 3 naming styles in 6 docs;
 in larger corpora the bootstrap will surface the drift explicitly so
 the project owner can choose canonical names before re-using them.
+
+### First concrete implementation
+
+The mm30 project hosts the first real project-local claim registry
+at `specs/claim-registry.yaml` (bootstrapped 2026-04-21, 37
+canonical claims across 4 anchor types: hypothesis, DAG-edge, task,
+article). The registry includes explicit `synonyms:` entries that
+unify three naming styles surfaced in the t243 dogfood (e.g.
+`h1-edge6-ifn-arm` in t197 resolves to canonical
+`h1-prognosis#edge5-ifn-arm` -- catching a real edge-numbering drift
+between the interpretation-authored claim ID and the DAG's
+authoritative edge list). Projects adopting the convention can copy
+the mm30 registry's `conventions:` block (separator `#`, anchor
+types, id_pattern regex) as a starting template.
 
 **Tooling contract:**
 
@@ -295,6 +315,16 @@ science-tool verdict backfill --project <path>
 This commodifies the manual process the 2026-04-19 backfill executed
 (8 subagent dispatches across 6 projects). Future projects adopting the
 convention can run one command instead.
+
+**Note on the confidence column** (added v1.2): the backfill audit TSVs
+produced by this subcommand have historically included a per-row
+`confidence` column (subagent self-report, 0.7-0.95). The mm30 t246
+calibration backtest (2026-04-21) found that column uninformative at
+realistic sample sizes: overall inter-LLM agreement on backfill labels
+was 97.2% across a 36-doc stratified sample, with no observable
+per-tier separation. Treat the column as **advisory-only**; the
+per-claim `strength` field (v1.1) carries the same semantic at a better
+resolution once atomic decomposition is authored.
 
 ## Integration with existing specs
 
@@ -471,23 +501,23 @@ These were considered and rejected during the originating discussion:
 
 - [x] `[⌀]` token added to the global template with example. *(done 2026-04-19, science commit 765c3d2)*
 - [x] `verdict:` frontmatter schema documented in template. *(done 2026-04-19)*
-- [ ] `science-tool verdict parse` validates a sample interpretation
-  end-to-end.
-- [ ] `science-tool verdict rollup` produces a per-hypothesis verdict
-  distribution table on mm30 + natural-systems.
+- [x] `science-tool verdict parse` validates a sample interpretation
+  end-to-end. *(done 2026-04-21 via MVP plan)*
+- [x] `science-tool verdict rollup` produces a per-hypothesis verdict
+  distribution table on mm30. *(done 2026-04-21 via MVP plan -- MVP per-claim rollup scope)*
 - [ ] `science-tool verdict conflicts` runs cleanly on mm30 (the project
   with the most cross-doc adjudication, hence the most likely to
   surface real conflicts). *(hand-emulated on mm30 2026-04-19 per `discussion:2026-04-19-verdict-conflict-coverage-scan` — surfaced 3 actionable findings + 2 spec feedback items)*
 - [ ] `science:big-picture` consumes the rollup output (replaces or
   supplements its current prose-summary path).
-- [x] mm30 has 6 reference docs authored under the new schema (decomposed `claims:` block) as dogfooding examples. *(done 2026-04-21 per `mm30/discussion:2026-04-19-t243-atomic-decomposition-dogfood`)*
+- [x] mm30 has 9 reference docs authored under the new schema (decomposed `claims:` block) as dogfooding examples -- the original 6 (t197, t204, t163, t221, t234, CLR) plus t099, t240, t258 added 2026-04-21 during the MVP-plan authorship loop.
 - [ ] natural-systems-guide has at least one reference doc authored under the new schema.
 - [x] mm30 has 3 previously-`[~]` docs retokenized to `[⌀]` per the new vocabulary, with audit-trail comment explaining the change. *(done 2026-04-19, mm30 commit 14a94a2: t174, t202, t204 final)*
 
 **v1.1 additions:**
 
-- [ ] `science-tool verdict parse` correctly emits `rule_disagrees_with_body: true` on the t163 reference doc (the one validation case from the dogfood).
-- [ ] `science-tool verdict registry-init --scan doc/interpretations/` bootstraps a stub `specs/claim-registry.yaml` from existing `verdict.claims:` blocks. Validate on mm30 (currently 6 docs with `verdict:` blocks).
+- [x] `science-tool verdict parse` correctly emits `rule_disagrees_with_body: true` on the t163 reference doc (the one validation case from the dogfood). *(done 2026-04-21)*
+- [ ] `science-tool verdict registry-init --scan doc/interpretations/` bootstraps a stub `specs/claim-registry.yaml` from existing `verdict.claims:` blocks. Validate on mm30 (currently 9 docs with `verdict:` blocks).
 - [ ] `science-tool verdict rollup --by-claim` runs cleanly on mm30 once the claim registry is curated; produces per-claim aggregated polarity rows.
 - [ ] `science-tool verdict reframed-trail <interpretation-id>` resolves the chain of `reframing_target:` links (validate on mm30 CLR doc → t149).
 - [ ] `closure_terminal:` field is parsed (free-form string; no enum) and surfaced in `verdict parse` output.
