@@ -1,5 +1,9 @@
 ---
 id: "interpretation:fixture-reframed"
+type: "interpretation"
+title: "Fixture: reframed prior finding"
+status: "active"
+created: "2026-04-21"
 verdict:
   composite: "[~]"
   rule: "reframed"
@@ -8,6 +12,10 @@ verdict:
   claims:
     - id: "t149#myc-max-uniform-negative-falsification"
       polarity: "[-]"
+      strength: "strong"
+      evidence_summary: "retracted under CLR"
 ---
+
+## Verdict
 
 **Verdict:** [~] Prior finding reframed; original signal was compositional.
