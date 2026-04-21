@@ -90,14 +90,15 @@ def _default_profile_for_kind(
     active_kinds: frozenset[str] | None,
     ontology_catalogs: list | None,
 ) -> str:
-    """Default profile resolution: kinds in core profile → 'core'; everything else → local."""
-    # Core kinds live in CORE_PROFILE; other kinds default to the project's local profile.
-    # This mirrors the existing _default_profile_for_kind in graph/sources.py.
+    """Default profile resolution: core kinds → 'core'; ontology kinds → catalog.ontology; else local."""
     from science_model.profiles import CORE_PROFILE
 
     core_kind_names = frozenset(k.name for k in CORE_PROFILE.entity_kinds)
     if kind in core_kind_names:
         return "core"
+    for catalog in ontology_catalogs or []:
+        if any(et.name == kind for et in catalog.entity_types):
+            return catalog.ontology
     return local_profile
 
 
