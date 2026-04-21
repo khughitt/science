@@ -1,0 +1,41 @@
+version: 1
+project: "fixture"
+schema: "science-tool.verdict.claim-registry.v1"
+created: "2026-04-21"
+conventions:
+  separator: "#"
+  id_pattern: "^(h[1-4]|t[0-9]+)#[A-Za-z0-9_-]+$"
+  synonym_resolution: "first-match-wins"
+entries:
+  - id: "h1#edge5-ifn-arm"
+    source: "fixture"
+    definition: "IFN arm replicates under the fixture adjudication."
+    predicted_direction: "[+]"
+    synonyms:
+      - "h1-edge6-ifn-arm"
+    cited_in:
+      - "interpretation:fixture-and"
+  - id: "h1#edge5-ifn-arm-gamma"
+    source: "fixture"
+    definition: "IFN gamma arm replicates under the fixture adjudication."
+    predicted_direction: "[+]"
+    cited_in:
+      - "interpretation:fixture-and"
+  - id: "t163#edge-cdk2-e2f1-survives-prolif-adj"
+    source: "fixture"
+    definition: "CDK2 -> E2F1 mechanism edge under proliferation adjustment."
+    predicted_direction: "[+]"
+    cited_in:
+      - "interpretation:fixture-majority-disagrees"
+  - id: "t163#edge-ezh2-phf19-survives-prolif-adj"
+    source: "fixture"
+    definition: "EZH2 -> PHF19 mechanism edge survives proliferation adjustment."
+    predicted_direction: "[+]"
+    cited_in:
+      - "interpretation:fixture-majority-disagrees"
+  - id: "h4#attractor-2-robustness"
+    source: "fixture"
+    definition: "Attractor basin 2 remains robust in the bimodal fixture."
+    predicted_direction: "[+]"
+    cited_in:
+      - "interpretation:fixture-bimodal"
