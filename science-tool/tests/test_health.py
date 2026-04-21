@@ -759,6 +759,32 @@ def test_cached_field_drift_flagged(tmp_path: Path) -> None:
     assert any("ontology_terms" in m for m in drift_msgs)
 
 
+def test_cached_field_drift_skips_datapackage_directory_entities(tmp_path: Path) -> None:
+    """Promoted datasets (provider=datapackage-directory) have no two surfaces to drift between."""
+    import yaml
+
+    dp_dir = tmp_path / "data" / "myset"
+    dp_dir.mkdir(parents=True)
+    (dp_dir / "datapackage.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "profiles": ["science-pkg-runtime-1.0", "science-pkg-entity-1.0"],
+                "name": "myset",
+                "id": "dataset:myset",
+                "type": "dataset",
+                "title": "My promoted set",
+                "license": "CC-BY-4.0",
+                "ontology_terms": ["UBERON:0001"],
+                "resources": [{"name": "r", "path": "r.csv"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    issues = check_dataset_anomalies(tmp_path)
+    drift_issues = [i for i in issues if i["code"] == "dataset_cached_field_drift"]
+    assert drift_issues == [], f"unexpected drift on promoted dataset: {drift_issues}"
+
+
 # ---------------------------------------------------------------------------
 # Task 6.11: dataset anomalies exposed via build_health_report
 # ---------------------------------------------------------------------------
