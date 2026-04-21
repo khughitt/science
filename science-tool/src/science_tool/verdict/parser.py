@@ -16,6 +16,7 @@ from science_tool.verdict.tokens import Token, parse_body_verdict
 
 
 _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n(.*)\Z", re.DOTALL)
+_BODY_VERDICT_MARKER_RE = re.compile(r"\*\*Verdict:\*\*[^\S\r\n]*(\[[^\]\r\n]+\])?")
 
 
 class NoVerdictBlockError(ValueError):
@@ -46,6 +47,7 @@ def parse_file(path: Path | str, *, registry: IndexedClaimRegistry | None = None
     warnings: list[str] = []
     body_verdict = parse_body_verdict(body)
     if body_verdict is None:
+        _raise_for_malformed_body_verdict(file_path, body)
         composite_token = verdict.composite
         composite_clause = ""
         warnings.append(f"{file_path}: missing body verdict; using frontmatter composite")
@@ -88,6 +90,17 @@ def _split_frontmatter(path: Path, content: str) -> tuple[str, str]:
     if match is None:
         raise ValueError(f"{path}: missing frontmatter")
     return match.group(1), match.group(2)
+
+
+def _raise_for_malformed_body_verdict(path: Path, body: str) -> None:
+    match = _BODY_VERDICT_MARKER_RE.search(body)
+    if match is None:
+        return
+
+    raw_token = match.group(1)
+    if raw_token is not None:
+        Token.from_str(raw_token)
+    raise ValueError(f"{path}: malformed body verdict")
 
 
 def _hydrate_verdict(raw: Mapping[str, Any]) -> VerdictBlock:

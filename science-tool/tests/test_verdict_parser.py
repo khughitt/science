@@ -125,6 +125,57 @@ verdict:
         parse_file(path)
 
 
+def test_missing_body_verdict_uses_frontmatter_composite_with_warning(tmp_path: Path) -> None:
+    path = tmp_path / "missing-body-verdict.md"
+    path.write_text(
+        """---
+id: "interpretation:missing-body-verdict"
+verdict:
+  composite: "[+]"
+  rule: "and"
+  claims:
+    - id: "c1"
+      polarity: "[+]"
+---
+
+## Findings
+
+Body prose without a verdict marker.
+""",
+        encoding="utf-8",
+    )
+
+    result = parse_file(path)
+
+    assert result.composite_token == Token.POSITIVE
+    assert result.composite_clause == ""
+    assert any("missing body verdict" in warning.lower() for warning in result.validation_warnings)
+
+
+def test_invalid_body_verdict_token_raises_value_error(tmp_path: Path) -> None:
+    path = tmp_path / "invalid-body-verdict-token.md"
+    path.write_text(
+        """---
+id: "interpretation:invalid-body-token"
+verdict:
+  composite: "[+]"
+  rule: "and"
+  claims:
+    - id: "c1"
+      polarity: "[+]"
+---
+
+## Verdict
+
+**Verdict:** [x] bad
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Unknown verdict token"):
+        parse_file(path)
+
+
 def test_unknown_rule_raises_value_error(tmp_path: Path) -> None:
     path = tmp_path / "unknown-rule.md"
     path.write_text(
