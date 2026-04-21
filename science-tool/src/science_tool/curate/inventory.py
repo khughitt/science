@@ -19,6 +19,28 @@ _RECENT_DAYS = 7
 _LONG_IDLE_DAYS = 30
 _RELATED_CLASSES = {"hypothesis", "interpretation", "paper", "question"}
 _SOURCE_REF_CLASSES = {"interpretation", "paper"}
+_DOC_KIND_BY_DIR = {
+    "discussions": "discussion",
+    "interpretations": "interpretation",
+    "questions": "question",
+    "hypotheses": "hypothesis",
+    "topics": "topic",
+    "concepts": "concept",
+    "observations": "observation",
+    "inquiries": "inquiry",
+    "propositions": "proposition",
+    "plans": "plan",
+    "models": "model",
+    "reports": "report",
+    "stories": "story",
+    "experiments": "experiment",
+    "methods": "method",
+    "datasets": "dataset",
+    "workflows": "workflow",
+    "findings": "finding",
+    "papers": "paper",
+    "articles": "article",
+}
 
 
 class InventoryArtifact(BaseModel):
@@ -166,17 +188,25 @@ def _record_tasks(project_root: Path, path: Path, today: date) -> list[Inventory
 
 
 def _record_knowledge_source(project_root: Path, path: Path, today: date) -> InventoryArtifact | None:
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    if not isinstance(data, dict) or not data.get("id"):
-        return None
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
     rel_path = path.relative_to(project_root)
+    if isinstance(data, dict):
+        related_count = _count_entries(data.get("related"))
+        source_refs_count = _count_entries(data.get("source_refs"))
+        root_id = str(data["id"]) if data.get("id") else None
+        title = str(data["title"]) if data.get("title") else None
+    else:
+        related_count = 0
+        source_refs_count = 0
+        root_id = None
+        title = None
     return InventoryArtifact(
         path=str(rel_path),
         artifact_class="knowledge_source",
-        id=str(data["id"]),
-        title=str(data["title"]) if data.get("title") else None,
-        related_count=_count_entries(data.get("related")),
-        source_refs_count=_count_entries(data.get("source_refs")),
+        id=root_id,
+        title=title,
+        related_count=related_count,
+        source_refs_count=source_refs_count,
         modified_days_ago=_modified_days_ago(path, today),
     )
 
@@ -210,10 +240,7 @@ def _markdown_artifact_class(path: Path) -> str | None:
     if len(parts) >= 3 and parts[0] == "specs" and parts[1] == "hypotheses":
         return "hypothesis"
     if len(parts) >= 3 and parts[0] == "doc":
-        directory = parts[1]
-        return {
-            "questions": "question",
-            "papers": "paper",
-            "interpretations": "interpretation",
-        }.get(directory)
+        return _DOC_KIND_BY_DIR.get(parts[1])
+    if len(parts) == 2 and parts[0] == "specs":
+        return "spec"
     return None

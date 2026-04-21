@@ -67,6 +67,41 @@ def curated_project(tmp_path: Path) -> Path:
         "Interpretation body.\n",
     )
     _write(
+        project_root / "doc/topics/topic-a.md",
+        "---\n"
+        "id: topic:topic-a\n"
+        "title: Topic A\n"
+        "related:\n"
+        "  - question:q1\n"
+        "source_refs:\n"
+        "  - cite:topic-a\n"
+        "---\n"
+        "Topic body.\n",
+    )
+    _write(
+        project_root / "doc/discussions/d1.md",
+        "---\n"
+        "id: discussion:d1\n"
+        "title: Discussion One\n"
+        "related:\n"
+        "  - question:q1\n"
+        "source_refs:\n"
+        "  - cite:discussion-one\n"
+        "---\n"
+        "Discussion body.\n",
+    )
+    _write(
+        project_root / "knowledge/sources/local/entities.yaml",
+        "title: Local entities\n"
+        "related:\n"
+        "  - question:q1\n"
+        "source_refs:\n"
+        "  - cite:local-entities\n"
+        "entities:\n"
+        "  - id: hypothesis:h1\n"
+        "    title: Hypothesis One\n",
+    )
+    _write(
         project_root / "tasks/active.md",
         "## [t001] Active task\n"
         "- type: research\n"
@@ -95,6 +130,9 @@ def curated_project(tmp_path: Path) -> Path:
     _set_mtime(project_root / "doc/questions/q1.md", today)
     _set_mtime(project_root / "doc/papers/p1.md", today - timedelta(days=2))
     _set_mtime(project_root / "doc/interpretations/i1.md", today - timedelta(days=45))
+    _set_mtime(project_root / "doc/topics/topic-a.md", today - timedelta(days=4))
+    _set_mtime(project_root / "doc/discussions/d1.md", today - timedelta(days=6))
+    _set_mtime(project_root / "knowledge/sources/local/entities.yaml", today - timedelta(days=60))
     _set_mtime(project_root / "tasks/active.md", today - timedelta(days=1))
     _set_mtime(project_root / "tasks/done/2026-04-01.md", today - timedelta(days=90))
 
@@ -106,17 +144,23 @@ def test_collect_inventory_tracks_counts_and_candidate_signals(curated_project: 
 
     assert inventory.project_root == str(curated_project)
     assert inventory.artifact_counts == {
+        "discussion": 1,
         "hypothesis": 1,
         "interpretation": 1,
+        "knowledge_source": 1,
         "paper": 1,
         "question": 1,
+        "topic": 1,
         "task": 2,
     }
 
     assert [artifact.path for artifact in inventory.artifacts] == [
+        "doc/discussions/d1.md",
         "doc/interpretations/i1.md",
         "doc/papers/p1.md",
         "doc/questions/q1.md",
+        "doc/topics/topic-a.md",
+        "knowledge/sources/local/entities.yaml",
         "specs/hypotheses/h1.md",
         "tasks/active.md#t001",
         "tasks/done/2026-04-01.md#t002",
@@ -129,10 +173,20 @@ def test_collect_inventory_tracks_counts_and_candidate_signals(curated_project: 
         "doc/questions/q1.md",
         "tasks/active.md#t001",
         "doc/papers/p1.md",
+        "doc/topics/topic-a.md",
+        "doc/discussions/d1.md",
     ]
     assert inventory.candidate_signals.long_idle == [
         "doc/interpretations/i1.md",
+        "knowledge/sources/local/entities.yaml",
         "tasks/done/2026-04-01.md#t002",
     ]
 
-    assert [artifact.modified_days_ago for artifact in inventory.artifacts] == [45, 2, 0, 9, 1, 90]
+    assert [artifact.modified_days_ago for artifact in inventory.artifacts] == [6, 45, 2, 0, 4, 60, 9, 1, 90]
+
+    knowledge_source = next(artifact for artifact in inventory.artifacts if artifact.path == "knowledge/sources/local/entities.yaml")
+    assert knowledge_source.artifact_class == "knowledge_source"
+    assert knowledge_source.id is None
+    assert knowledge_source.title == "Local entities"
+    assert knowledge_source.related_count == 1
+    assert knowledge_source.source_refs_count == 1
