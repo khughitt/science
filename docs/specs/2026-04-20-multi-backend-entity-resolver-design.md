@@ -1,1089 +1,823 @@
-# Multi-Backend Entity Resolver
+# Unified Entity Model and Storage Adapter Design
 
 **Date:** 2026-04-20
-**Status:** Draft (rev 1.1 — design-review revisions)
-**Revision history:**
-- rev 1 — initial design (provider abstraction, three v1 providers, single-layer interface, hard-error collisions).
-- rev 1.1 (this rev) — design-review fixes: `EntityDiscoveryContext` carries shared loading state; `SourceEntity` and shared types lifted to neutral `source_types.py` (no import cycle); global collision check in `load_project_sources` covers both resolver output and specialized parsers; `provider` field is required-with-explicit-values (no defaulting); aggregate inputs validate through dedicated `EntityRecord` schema with shared normalizer; entity-profile datapackage with invalid schema raises `EntityDatapackageInvalidError` (silent-skip only for non-entity datapackages); regression snapshot uses a projection that excludes new fields. Plus: `SourceEntity.description` field added (mirrors `Entity.content`); each provider sources prose from its native location.
-**Builds on:** `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` (rev 2.2). The forward-reference there now resolves here.
-**Supersedes:** `docs/specs/2026-04-19-multi-backend-entity-resolver-handoff.md` (the stub captured during dataset-lifecycle handoff; this spec replaces it).
-**Forward (Spec Z):** caching, indexing, in-memory store shape, edge representation. Not in this spec; a follow-on with a handoff note at the end.
+**Status:** Draft (replacement spec)
+**Replaces:** `docs/specs/2026-04-20-multi-backend-entity-resolver-design.md` rev 1.1
+**Builds on:** `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` rev 2.2
+**Forward:** implementation plan and migration sequencing to follow in a separate planning doc
 
 ## Motivation
 
-The framework already has multiple entity loaders. They evolved organically and live side-by-side in `science-tool/src/science_tool/graph/sources.py`'s `load_project_sources`:
+The current entity-loading architecture in `science` has a deeper problem than "too many loaders."
+It has multiple modeling centers:
 
-- `_load_markdown_entities` — walks `doc/`, `specs/`, `research/packages/` for `*.md` with YAML frontmatter
-- `_load_structured_entities` — reads `entities.yaml` (one file lists papers, concepts, etc.)
-- `_load_task_entities` — parses tasks from a custom markdown DSL
-- `_load_model_sources` — reads model definitions
-- `_load_parameter_sources` — reads parameter sources
+- `Entity` in `science_model.entities`
+- task-specific models
+- source-contract models for models / parameters
+- storage-shaped records in markdown frontmatter, `entities.yaml`, task files, and datapackages
 
-This is multi-backend storage in disguise. The pattern works, but the ad-hoc structure has three concrete pain points:
+This has led to two kinds of complexity:
 
-1. **Adding a new storage convention requires a sixth named loader, not a clean extension.** The dataset-entity-lifecycle spec (rev 2.2) introduced datasets that logically want to live as `data/<slug>/datapackage.yaml` — the runtime datapackage IS the entity, with no markdown sidecar. Adding this requires either a new `_load_datapackage_directory_entities` function or wedging the logic into the existing markdown loader. Neither is clean.
-2. **Aggregate-storage is hardcoded to one file** (`entities.yaml`). The mm30 project has ~200 rare topics whose health-check warnings are blocked because each lacks a thin markdown file. Creating 200 stub `.md` files is overhead for no analytical value. Putting them in one `topics.json` is the natural fit, but the existing aggregate loader can't be pointed at arbitrary aggregate files.
-3. **Type-driven specialized parsers** (tasks, models, parameters) are conflated with format-driven generic loaders (markdown, structured-entities). The first kind has legitimate reasons to be one-off (custom DSLs, custom semantics); the second kind should be a clean abstraction.
+1. **Storage complexity**
+- entities can be stored in several unrelated ways
+- adding a new storage convention requires new loader logic
+- generic functionality has to understand too many persistence details
 
-The dataset-entity-lifecycle spec made one small concession to the right design — a "per-entity-type discovery rule" hardcoded into the markdown loader's roots list — and explicitly deferred the broader cleanup to this spec.
+2. **Model complexity**
+- there is not one clear canonical model family for authored things in Science
+- specialized cases are modeled as separate schemas rather than typed extensions of a shared base
+- loader code is forced to smooth over schema differences after the fact
 
-## Goal
+This spec replaces the provider-first framing with a model-first framing.
 
-Extract the format-driven loaders into a single `EntityProvider` abstraction and an `EntityResolver` coordinator. Add the missing `DatapackageDirectoryProvider` for promoted datasets. Generalize the existing aggregate loader so single-type aggregate files (`topics.json`) work alongside the existing multi-type `entities.yaml`. Specialized parsers (tasks/models/parameters) stay outside the resolver — they're not providers.
+The core idea is simple:
 
-The result: zero per-project config required. Each provider knows where to look on disk and what signals "this is an entity"; all providers run on every load; results merge by `canonical_id`; collisions are hard errors. Adding a new storage convention later means writing one new `EntityProvider` subclass; no changes to call sites.
+- Science should have **one canonical entity model family**
+- specialized entity types should extend that family
+- storage formats should be adapters over that family
+- project-specific entity kinds should be extensible without becoming permanent core types
+
+## Problem Statement
+
+There are three distinct goals:
+
+1. Provide a common API / shape for first-class authored things in Science.
+2. Reduce the number of storage conventions to a smaller, simpler set.
+3. Abstract the logic for reading and writing entities so storage concerns are isolated.
+
+The goal is **not** to flatten all entity types into one giant generic record.
+Tasks, datasets, workflow runs, research packages, and future project-specific types can remain specialized.
+
+The goal is to give them:
+
+- a common core contract when they need to be handled generically
+- type-specific schemas when they need stronger rules or richer semantics
 
 ## Design Principles
 
-- **Format-driven backends only.** A "provider" handles a generic file format that multiple entity types can share. Type-driven specialized parsers (custom DSL per entity type) stay outside the abstraction. Conflating the two would water down the interface or require carve-outs.
-- **No per-entity-type configuration.** Providers don't care about entity types. Each provider auto-discovers what it can read; the resolver merges all outputs. mm30 doesn't declare "topics use the aggregate provider" — it just creates `doc/topics/topics.json`, and the AggregateProvider finds it.
-- **No per-project configuration in v1.** All providers always run. Optional opt-out via `science.yaml` is a future addition if false positives appear.
-- **Auto-discovery is filesystem-convention-driven.** Each provider has its own scan roots and recognition heuristics. Where ambiguity exists (a directory could hold either entity files or non-entity files), the provider uses an explicit signal: the `DatapackageDirectoryProvider` only emits entities for datapackages whose `profiles:` includes `"science-pkg-entity-1.0"`.
-- **ID collisions are hard errors.** If two providers both claim to produce the same `canonical_id`, that's a project-state error (mid-migration mistake or legitimately ambiguous file). Halt with both source paths in the message; let the user resolve. Never silently pick a winner.
-- **Mid-migration mixed mode is supported.** During a migration (e.g., promoting datasets from markdown to datapackage-directory), some entities live in the old provider and some in the new. Both providers find their respective entities; resolver merges them. Only collisions (same ID in both) error.
-- **Behavior preservation is the refactor's success criterion.** Every existing project must produce byte-identical `load_project_sources` output before and after the refactor (excluding any new providers' outputs the project chooses to add). A snapshot regression test is the acceptance gate.
-- **Cache-friendly interface, but no cache in v1.** The provider interface (`discover() -> list[SourceEntity]`) is shape-compatible with a future memoizing wrapper. Caching, indexing, and in-memory store shape are deferred to Spec Z.
-- **Specialized parsers stay in `load_project_sources`'s direct callsites.** They're not providers and don't pretend to be. The resolver replaces only the format-driven loaders.
-
-## Scope
-
-### In scope (v1)
-
-- New module `science-tool/src/science_tool/graph/source_types.py` housing shared types: `SourceEntity`, `SourceRelation`, `KnowledgeProfiles`, `EntityIdCollisionError`, `EntityDatapackageInvalidError`. Lifted out of `graph/sources.py` so `entity_providers/` can import them without creating an import cycle.
-- New module `science-tool/src/science_tool/graph/entity_providers/` containing:
-  - `EntityProvider` abstract base class + `EntityDiscoveryContext` dataclass (`base.py`)
-  - `EntityRecord` Pydantic schema for normalized aggregate input + shared `_normalize_record(...)` helper (`base.py` or `record.py`)
-  - `MarkdownProvider` (refactor of `_load_markdown_entities`)
-  - `DatapackageDirectoryProvider` (NEW — promotes datasets to live as `data/<slug>/datapackage.yaml`)
-  - `AggregateProvider` (refactor of `_load_structured_entities`, generalized to support single-type aggregate files like `doc/topics/topics.json`)
-  - `EntityResolver` coordinator (`resolver.py`)
-  - `default_providers()` factory returning the v1 provider list
-- `load_project_sources` in `graph/sources.py` builds an `EntityDiscoveryContext`, switches from direct loader calls to `EntityResolver(default_providers()).discover(ctx)` for the format-driven path, and runs a **final global collision check** across BOTH resolver output and specialized-parser output (so a task or model with the same `canonical_id` as a markdown entity is caught).
-- Specialized parsers (`parse_tasks`, `_load_model_sources`, `_load_parameter_sources`) keep their existing direct callsites in `load_project_sources` — UNCHANGED in shape, but each is updated to set its `SourceEntity.provider` value explicitly (`task` / `model` / `parameter`).
-- `SourceEntity` gains two new required fields:
-  - **`provider: str`** — explicit, no default. Six valid values in v1: `markdown`, `aggregate`, `datapackage-directory`, `task`, `model`, `parameter`. Every loader sets it. Downstream consumers can branch on origin (specifically: the `dataset_cached_field_drift` health check skips entities with `provider == "datapackage-directory"`).
-  - **`description: str = ""`** — entity prose body. Mirrors `Entity.content` from `science_model.entities`. Sourced per-provider: MarkdownProvider from the post-frontmatter body, DatapackageDirectoryProvider from the datapackage's top-level Frictionless `description:` field, AggregateProvider from each entry's optional `description:` field, `parse_tasks` from `task.description`. Models/parameters leave it empty (no current source).
-- All three format-driven providers funnel their raw records through a shared `_normalize_record(record: EntityRecord, ctx: EntityDiscoveryContext, provider_name: str) -> SourceEntity` helper that applies paper-ID canonicalization, alias derivation, profile defaulting, and kind validation. Single source of truth for normalization, regardless of which provider extracted the record.
-- DatapackageDirectoryProvider raises `EntityDatapackageInvalidError` (with file path + field-level message) when a datapackage with `science-pkg-entity-1.0` in its `profiles:` has invalid YAML or is missing required fields. Datapackages without that profile remain silently ignored (existing behavior for the non-entity case).
-- Snapshot-based regression test: a "kitchen-sink" fixture project containing one of each existing entity type. The snapshot uses a **projected dict** that excludes `provider` and `description` (the new fields) until those fields are intentionally rolled out (later steps in the implementation plan). The projection makes "behavior-preserving refactor" defensible across the early commits; new-field assertions live in separate tests.
-- Per-provider unit tests, resolver tests, integration tests for the new capabilities (single-type aggregate, datapackage-directory promotion, prose roundtrip per provider).
-
-### Out of scope (v1)
-
-- **Caching, indexing, in-memory store** — Spec Z, with a handoff stub planted at the end of this spec.
-- **`science.yaml` provider opt-out** (`entity_providers: { disabled: [...] }`). Documented as follow-on; no concrete demand yet.
-- **Migration commands** — `science-tool dataset promote <slug>` (markdown dataset → datapackage-directory entity), `science-tool entities aggregate <type>` (collect markdown entities into a single-type aggregate file). Manual migration is straightforward; helpers can be added if usage patterns warrant.
-- **Specialized-parser refactor.** Tasks, models, parameters keep their existing structure. Their bespoke formats don't fit a generic provider interface and there's no demand for a unification.
-- **Plugin discovery** (e.g., entry-points-based provider registration). v1's `default_providers()` is a hardcoded list. Pluggable registration can come later if a project ever needs a project-specific provider.
-- **Cross-project shared providers.** Each project runs its own provider list against its own filesystem. No federated entity discovery.
-- **Filesystem watching / live reload.** Discovery is on-demand (per `science-tool` invocation). Spec Z may add this.
+- **One model family.** There must be one canonical entity model family in Science. No parallel core schemas for authored entities.
+- **Model first, storage second.** Decide what an entity is before deciding how it is stored.
+- **Specialize only when rules differ.** A specialized entity type is warranted when it adds real invariants or lifecycle semantics, not just a handful of optional fields.
+- **Storage adapters are not ontology.** Markdown, aggregate files, datapackages, and task files are persistence formats, not the definition of the entity model.
+- **Core types are few.** Science core should own only genuinely cross-project typed entities.
+- **Project types are extensible.** A project must be able to define new entity variants without introducing a new parallel data model.
+- **Generic tooling targets the base contract.** Graph loading, entity resolution, aliasing, linking, and generic listing should rely on the shared base entity interface.
+- **Type-specific tooling targets typed entities.** Dataset gates, task workflows, and similar logic should operate on the appropriate typed entity schema.
 
 ## Architecture Overview
 
-Two distinct kinds of entity-loading code, made explicit:
+The design has four layers:
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│  load_project_sources(project_root) → ProjectSources                 │
-└──────────────────────────────────────────────────────────────────────┘
-            │                                 │
-            ▼                                 ▼
-┌──────────────────────────┐    ┌────────────────────────────────────┐
-│  Generic providers       │    │  Specialized parsers (UNCHANGED)   │
-│  (format-driven,         │    │  (type-driven, custom DSL)         │
-│   handle many types)     │    │                                    │
-│                          │    │  - parse_tasks (markdown DSL)       │
-│  - MarkdownProvider      │    │  - _load_model_sources              │
-│  - DatapackageDirectory  │    │  - _load_parameter_sources          │
-│      Provider (NEW)      │    │                                    │
-│  - AggregateProvider     │    │  Stay direct callsites — they       │
-│                          │    │  don't fit a generic interface.    │
-│  Run via EntityResolver  │    │                                    │
-└──────────────────────────┘    └────────────────────────────────────┘
-            │                                 │
-            └─────────┬───────────────────────┘
-                      ▼
-         ┌─────────────────────────────┐
-         │  Combined entity list       │
-         │  Dedup by canonical_id      │
-         │  Collisions = hard error    │
-         └─────────────────────────────┘
-```
+1. **Canonical entity layer**
+- Shared base contract used by generic tooling.
 
-**Three providers in v1:**
+2. **Entity subfamily layer**
+- Shared semantic sub-bases for project-facing and domain-facing entities.
 
-1. **`MarkdownProvider`** (refactor of existing `_load_markdown_entities`). Walks `doc/**/*.md`, `specs/**/*.md`, `research/packages/**/research-package.md`. Treats files with YAML frontmatter as entities; type from frontmatter `type:` (or filename inference for legacy entries). All entity types currently using markdown continue to work unchanged.
+3. **Typed entity layer**
+- Science-owned specialized entity types such as `TaskEntity` and `DatasetEntity`.
 
-2. **`DatapackageDirectoryProvider`** (NEW). Walks for `**/datapackage.yaml` files under `data/`, `results/`. **Filters strictly:** only files whose `profiles:` includes `"science-pkg-entity-1.0"` are emitted as entities — without this, every staged data package would become a phantom entity. Promoted datasets live here; no markdown sidecar required.
+4. **Project extension layer**
+- Project-defined entity variants that extend the same base model family.
 
-3. **`AggregateProvider`** (refactor of existing `_load_structured_entities`, generalized). Two file conventions, both supported:
-   - **Multi-type aggregate** — `entities.yaml` (existing convention; one file lists papers, concepts, etc., each entry has `kind:` field). Backward-compatible.
-   - **Single-type aggregate** — `<dir>/<plural>/<plural>.{json,yaml}` (e.g., `doc/topics/topics.json`). Each list entry becomes one entity; type inferred from the filename (singular form of the parent directory's plural name).
+5. **Storage adapter layer**
+- Adapters that read and write entities from markdown, aggregate files, datapackages, and other supported formats.
 
-**`EntityResolver`** is a tiny coordinator (~50 lines) that holds the list of providers, calls `discover()` on each, concatenates results, and checks for ID collisions. No magic, no per-type dispatch.
+The critical separation is:
 
-**Cache-friendly, but no cache in v1.** `EntityProvider.discover()` returns full `SourceEntity` lists. A future cache layer (Spec Z) can wrap providers transparently — memoize by directory mtime, watch the filesystem, or rebuild on init — without changing the provider interface itself. v1 inherits today's "rescan every command" baseline; that pain is pre-existing.
+- entity schemas define validity and semantics
+- storage adapters define persistence and discovery
 
-## Interfaces and Data Shapes
+## Canonical Base Model
 
-### Shared types in `graph/source_types.py`
+### `Entity`
 
-To eliminate the import cycle between `graph/sources.py` and the new `entity_providers/` package, the shared types move to a neutral module:
+`Entity` becomes the canonical base model for first-class authored things in Science.
 
-```python
-# science-tool/src/science_tool/graph/source_types.py
-"""Shared types consumed by both the legacy graph/sources.py and the new entity_providers package."""
+It should remain intentionally small and stable. It exists to support generic behavior across many entity kinds, especially:
 
-from pydantic import BaseModel, Field
+- graph materialization
+- identity resolution
+- aliasing
+- linking
+- generic listing / search
+- provenance and source attribution
+- storage-independent loading
 
-# (existing definitions, lifted from graph/sources.py without behavior change)
-class SourceEntity(BaseModel):
-    canonical_id: str
-    kind: str
-    title: str
-    profile: str
-    source_path: str
-    provider: str                       # NEW — required, explicit
-    description: str = ""               # NEW — entity prose body
-    # ... all existing fields unchanged ...
+### Base fields
 
+The exact field list can evolve, but the base contract should include only cross-cutting fields such as:
 
-class SourceRelation(BaseModel):
-    # ... existing definition lifted unchanged ...
+- `id`
+- `canonical_id`
+- `kind`
+- `title`
+- `status`
+- `profile`
+- `aliases`
+- `same_as`
+- `related`
+- `source_refs`
+- `ontology_terms`
+- `description` or canonical prose body
+- source-location / provenance metadata
 
+Existing fields like `content_preview` may remain as derived or compatibility fields during migration, but they should not drive the architecture.
 
-class KnowledgeProfiles(BaseModel):
-    # ... existing definition lifted unchanged ...
+### What does not belong in base `Entity`
 
+Type-specific workflow or provenance rules do not belong in the base model. Examples:
 
-class EntityIdCollisionError(ValueError):
-    """Raised when two providers (or a provider + a specialized parser) produce the same canonical_id."""
+- dataset origin / access / derivation blocks
+- task blocking semantics
+- workflow-run production semantics
+- research-package display composition rules
 
-    def __init__(self, canonical_id: str, sources: list[tuple[str, str]]) -> None:
-        self.canonical_id = canonical_id
-        self.sources = sources  # list of (provider_name, source_path)
-        msg = f"entity {canonical_id!r} produced by multiple sources:\n"
-        for provider, path in sources:
-            msg += f"  - {provider}: {path}\n"
-        msg += "Resolve by removing one source, or migrate to a single backend."
-        super().__init__(msg)
+Those belong in typed entity schemas.
 
+## Entity Subfamilies
 
-class EntityDatapackageInvalidError(ValueError):
-    """Raised when a datapackage with science-pkg-entity-1.0 profile has invalid schema."""
+The canonical `Entity` base is intentionally minimal. Most semantic structure should begin one level below it.
 
-    def __init__(self, datapackage_path: str, message: str) -> None:
-        self.datapackage_path = datapackage_path
-        super().__init__(f"{datapackage_path}: invalid entity-profile datapackage — {message}")
-```
+Science should distinguish two important subfamilies:
 
-`graph/sources.py` re-exports these for back-compat with any current consumers (`from science_tool.graph.sources import SourceEntity` continues to work).
+- `ProjectEntity`
+- `DomainEntity`
 
-### `EntityDiscoveryContext` and `EntityProvider`
+These are not separate model systems. They are semantic sub-bases inside one model family.
 
-```python
-# science-tool/src/science_tool/graph/entity_providers/base.py
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from pathlib import Path
+### `ProjectEntity`
 
-from science_model.ontologies.schema import OntologyCatalog
-from science_tool.graph.source_types import SourceEntity
+`ProjectEntity` represents entities about the conduct of a science project.
 
+Examples:
 
-@dataclass(frozen=True)
-class EntityDiscoveryContext:
-    """Shared loading state passed to every EntityProvider.
+- task
+- hypothesis
+- question
+- dataset
+- workflow-run
+- research-package
+- plan
 
-    Carries everything the existing loaders depend on (local_profile, active_kinds,
-    ontology_catalogs) so providers can compute profiles, validate kinds, and apply
-    catalog-aware behavior without needing to be reconstructed per-project.
-    """
+These entities are usually:
 
-    project_root: Path
-    project_slug: str
-    local_profile: str
-    active_kinds: frozenset[str] | None = None
-    ontology_catalogs: list[OntologyCatalog] | None = None
+- authored inside a project workspace
+- lifecycle-driven
+- operational or epistemic in purpose
+- tied to project-local provenance and source locations
 
+Likely fields or assumptions that often belong here:
 
-class EntityProvider(ABC):
-    """Discovers entities from a particular storage convention.
+- project-local status or maturity
+- authored prose / notes
+- source-path metadata
+- project profile / namespace metadata where applicable
 
-    Each provider is self-contained: knows where to look, knows how to read what
-    it finds, returns ready-to-use SourceEntity objects with provider field set.
-    Stateless across calls (a future cache layer wraps providers).
-    """
+### `DomainEntity`
 
-    name: str  # short human-readable identifier matching SourceEntity.provider
+`DomainEntity` represents entities about the external domain being studied.
 
-    @abstractmethod
-    def discover(self, ctx: EntityDiscoveryContext) -> list[SourceEntity]:
-        """Walk the filesystem under ctx.project_root and return all entities found."""
-```
+Examples:
 
-Three concrete implementations:
-- `markdown.py` — `MarkdownProvider` (`name = "markdown"`)
-- `datapackage_directory.py` — `DatapackageDirectoryProvider` (`name = "datapackage-directory"`)
-- `aggregate.py` — `AggregateProvider` (`name = "aggregate"`)
+- biological entities
+- diseases
+- pathways
+- phenotypes
+- chemicals
+- environmental exposures
 
-Each is one focused file (target <200 lines).
+These entities are usually:
 
-### `EntityRecord` schema and shared `_normalize_record` helper
+- grounded in external authorities or ontologies
+- less tied to project-local workflow state
+- more concerned with canonicalization, synonyms, and ontology alignment
 
-The format-driven providers extract raw records in three different shapes (markdown frontmatter dict, datapackage YAML dict, aggregate-list-entry dict). They funnel ALL records through one normalization helper so paper-ID canonicalization, alias derivation, profile defaulting, and kind validation stay consistent.
+Likely fields or assumptions that often belong here:
 
-```python
-# science-tool/src/science_tool/graph/entity_providers/record.py
-from typing import Any
-from pydantic import BaseModel, Field
+- external identifiers
+- authority / ontology grounding metadata
+- synonym sets
+- grounding confidence or provenance
 
+### Why formalize the split
 
-class EntityRecord(BaseModel):
-    """Normalized input record produced by a provider's extraction step.
+This distinction helps keep two graphs legible:
 
-    Shared across all format-driven providers so the downstream normalize step
-    (paper-ID canonicalization, alias derivation, profile defaulting, kind
-    validation) can be a single function with one input shape.
-    """
+1. the **project graph**
+- the operational / epistemic structure of the research process
 
-    canonical_id: str
-    kind: str
-    title: str
-    description: str = ""               # entity prose body, optional
-    source_path: str                    # filesystem path (relative to project root) where this came from
-    profile: str | None = None          # provider may leave None to let normalizer default
-    domain: str | None = None
-    related: list[str] = Field(default_factory=list)
-    source_refs: list[str] = Field(default_factory=list)
-    ontology_terms: list[str] = Field(default_factory=list)
-    aliases: list[str] = Field(default_factory=list)
-    same_as: list[str] = Field(default_factory=list)
-    blocked_by: list[str] = Field(default_factory=list)
-    status: str | None = None
-    confidence: float | None = None
-    # Extension hatch for provider-specific fields (e.g., reasoning metadata).
-    extra: dict[str, Any] = Field(default_factory=dict)
+2. the **domain graph**
+- the modeled subject matter the research is trying to understand
 
+These graphs interact constantly, but they are not the same thing. Formalizing the distinction helps prevent project-operational fields from leaking into domain entities, and vice versa.
 
-def _normalize_record(
-    record: EntityRecord,
-    ctx: EntityDiscoveryContext,
-    provider_name: str,
-) -> SourceEntity:
-    """Apply shared normalization rules and produce a SourceEntity.
+## Typed Entity Model
 
-    Single source of truth for:
-    - Paper-ID canonicalization (kind == "paper" → canonical_paper_id(canonical_id))
-    - Profile defaulting (uses ctx.local_profile + ctx.active_kinds + ctx.ontology_catalogs)
-    - Alias derivation (_derive_aliases)
-    - Reasoning-metadata wiring (when record.extra carries the relevant fields)
-    - provider field set to provider_name (passed in by the caller)
-    """
-    # ... extracts existing logic from _load_markdown_entities + _load_structured_entities ...
-```
+Specialized entity types extend `Entity` when they carry real additional invariants or lifecycle semantics.
 
-### `EntityResolver` — coordinator
+An **invariant** here means a rule that must always be true for an instance of that type to be valid.
 
-```python
-# science-tool/src/science_tool/graph/entity_providers/resolver.py
-from science_tool.graph.entity_providers.base import EntityDiscoveryContext, EntityProvider
-from science_tool.graph.source_types import EntityIdCollisionError, SourceEntity
+Examples:
 
+- if a dataset has `origin == "external"`, it must satisfy one set of provenance requirements
+- if a dataset has `origin == "derived"`, it must satisfy a different set
+- a task may impose stricter rules around dependency references or state transitions
 
-class EntityResolver:
-    """Runs a list of providers and merges their outputs."""
+Extra optional fields alone are not enough reason to create a subtype.
 
-    def __init__(self, providers: list[EntityProvider]) -> None:
-        self._providers = providers
+In practice, typed entities will usually extend either `ProjectEntity` or `DomainEntity`, not `Entity` directly.
 
-    def discover(self, ctx: EntityDiscoveryContext) -> list[SourceEntity]:
-        seen: dict[str, list[tuple[str, str]]] = {}
-        all_entities: list[SourceEntity] = []
-        for provider in self._providers:
-            for entity in provider.discover(ctx):
-                seen.setdefault(entity.canonical_id, []).append(
-                    (provider.name, entity.source_path)
-                )
-                all_entities.append(entity)
-        collisions = {cid: srcs for cid, srcs in seen.items() if len(srcs) > 1}
-        if collisions:
-            cid, sources = next(iter(collisions.items()))
-            raise EntityIdCollisionError(cid, sources)
-        return all_entities
-```
+### Core Science typed entities
 
-Resolver only catches collisions among its own providers. The **global collision check** lives in `load_project_sources` (next section) and covers BOTH resolver output and specialized-parser output.
+The initial core typed entities should be:
 
-### `default_providers()` factory
+- `TaskEntity`
+- `DatasetEntity`
+- `WorkflowRunEntity`
+- `ResearchPackageEntity`
 
-Module-level function in `resolver.py`:
+These are concepts Science already appears to own across projects and tool behavior.
+
+### `TaskEntity`
+
+`TaskEntity` is a core Science typed entity and should extend `ProjectEntity`.
+
+It extends `Entity` with task-specific fields and validations, for example:
+
+- task namespace / task identifier handling
+- dependency fields such as `blocked_by`
+- task-specific state semantics
+- any structural rules currently implied by the task DSL
+
+Tasks should no longer be treated as a separate modeling center. They are a specialized entity type in the same model family.
+
+### `DatasetEntity`
+
+`DatasetEntity` is a core Science typed entity and should extend `ProjectEntity`.
+
+It extends `Entity` with dataset-specific provenance and lifecycle fields, such as:
+
+- `origin`
+- `access`
+- `derivation`
+- `accessions`
+- `datapackage`
+- `local_path`
+- `consumed_by`
+- `parent_dataset`
+- `siblings`
+
+Dataset-specific invariants remain on this type, not on generic `Entity`.
+
+### `WorkflowRunEntity`
+
+`WorkflowRunEntity` is a core Science typed entity because Science already treats workflow-run provenance as a first-class concept in dataset logic and graph materialization. It should extend `ProjectEntity`.
+
+This type should own workflow-run-specific semantics rather than leaving them as loose frontmatter conventions.
+
+### `ResearchPackageEntity`
+
+`ResearchPackageEntity` is a core Science typed entity because package composition and dataset-display relationships are already treated as cross-project semantics in Science tooling. It should extend `ProjectEntity`.
+
+Science does not need to ship built-in `DomainEntity` subtypes immediately. The domain side can be introduced incrementally through project extensions unless and until true cross-project domain primitives emerge.
+
+## Model Registry and Kind Resolution
+
+The load-bearing mechanism in this design is a registry that resolves `kind -> schema`.
+
+This must be explicit.
+
+### Registry responsibilities
+
+The model registry is responsible for:
+
+- registering built-in core schemas
+- registering project extension schemas
+- resolving a raw record's `kind` to the correct schema
+- preventing conflicting registrations
+
+### Registration rules
+
+For v1, registration should be explicit Python registration during project load.
+
+A minimal conceptual API is enough:
 
 ```python
-def default_providers() -> list[EntityProvider]:
-    """The set of providers active in every project. No config required."""
-    from .markdown import MarkdownProvider
-    from .datapackage_directory import DatapackageDirectoryProvider
-    from .aggregate import AggregateProvider
-    return [
-        MarkdownProvider(),
-        DatapackageDirectoryProvider(),
-        AggregateProvider(),
-    ]
+registry.register_core_kind("task", TaskEntity)
+registry.register_core_kind("dataset", DatasetEntity)
+registry.register_extension_kind("natural-system:model", NaturalSystemModelEntity)
 ```
 
-Function (not constant) supports dependency injection from tests without monkey-patching.
+The exact API names can differ, but the behavior should be:
 
-### Integration into `load_project_sources` — with global collision check
+- core kinds are registered by Science
+- extension kinds are registered by the project
+- duplicate registrations are hard errors
+- extension code may not shadow a core kind
+
+If a project wants stricter validation for a core type such as `dataset`, it should do so through hooks or additional project-level checks, not by replacing the core schema for the same kind in v1.
+
+### Resolution flow
+
+The resolution flow should look like this:
 
 ```python
-# science-tool/src/science_tool/graph/sources.py
-from science_tool.graph.entity_providers.base import EntityDiscoveryContext
-from science_tool.graph.entity_providers.resolver import EntityResolver, default_providers
-from science_tool.graph.source_types import EntityIdCollisionError
-
-
-def load_project_sources(project_root: Path) -> ProjectSources:
-    # ... existing config/profile/catalog loading unchanged ...
-
-    ctx = EntityDiscoveryContext(
-        project_root=project_root,
-        project_slug=project_root.name,
-        local_profile=local_profile,
-        active_kinds=active_kinds,
-        ontology_catalogs=ontology_catalogs,
-    )
-
-    entities: list[SourceEntity] = []
-
-    # Format-driven providers via the resolver (catches intra-resolver collisions).
-    resolver = EntityResolver(default_providers())
-    entities.extend(resolver.discover(ctx))
-
-    # Specialized parsers (UNCHANGED shape; each now sets provider explicitly).
-    entities.extend(_load_task_entities(project_root, paths.tasks_dir, ...))
-    model_entities, model_relations = _load_model_sources(project_root, ...)
-    parameter_entities, parameter_relations = _load_parameter_sources(project_root, ...)
-    entities.extend(model_entities)
-    entities.extend(parameter_entities)
-
-    # Final global collision check across resolver + specialized parsers.
-    # Catches the case where (e.g.) a task and a markdown entity share canonical_id.
-    seen: dict[str, list[tuple[str, str]]] = {}
-    for e in entities:
-        seen.setdefault(e.canonical_id, []).append((e.provider, e.source_path))
-    collisions = {cid: srcs for cid, srcs in seen.items() if len(srcs) > 1}
-    if collisions:
-        cid, sources = next(iter(collisions.items()))
-        raise EntityIdCollisionError(cid, sources)
-
-    # ... existing relations/bindings loading unchanged ...
+for source_ref in adapter.discover(project_root):
+    raw_record = adapter.load_raw(source_ref)
+    kind = raw_record["kind"]
+    schema = registry.resolve(kind)
+    entity = schema.model_validate(raw_record)
+    identity_table.add(entity.canonical_id, source_ref)
+    entities.append(entity)
 ```
 
-### Data shapes (summary of additions)
+Key points:
 
-The existing `SourceEntity` Pydantic model gains two required fields:
-- `provider: str` (no default — every loader must set it explicitly)
-- `description: str = ""` (default empty; populated by providers that have a prose source)
+- dispatch is on the record's declared `kind`
+- adapters do not choose the final schema
+- the registry does
+- validation happens at construction time through the resolved schema
 
-`EntityRecord` is new (shared input shape for the format-driven providers' normalizer).
+This preserves the existing Science preference for early, schema-level validation rather than delayed post-load cleanup.
 
-`EntityDatapackageInvalidError` is new (raised by DatapackageDirectoryProvider on invalid entity datapackages).
+## Project Extension Mechanism
 
-No other entity-level data types are introduced.
+Science core should not hardcode every historical or project-local entity kind.
 
-### `EntityResolver` and `EntityIdCollisionError`
+Instead, projects should be able to define their own typed entity variants by extending the same base model family.
 
-Same package, `resolver.py`:
+### Extension goals
+
+A project-defined extension should be able to:
+
+- declare a new `kind`
+- extend `Entity` with additional fields
+- attach type-specific validation or normalization logic
+- participate in generic graph loading and resolution
+- optionally register storage serialization rules
+
+### Registration mechanism
+
+For v1, the extension mechanism should be explicit and local:
+
+- project code provides one or more extension schema classes
+- project startup registers them with the model registry
+- graph loading uses the already-built registry
+
+This should not rely on plugin entry points in v1.
+
+Entry-point discovery or plugin packaging can come later if it becomes necessary.
+
+### What Science core must know
+
+Science core should know only enough to:
+
+- recognize the kind
+- instantiate the registered schema
+- validate it
+- expose it through generic entity tooling
+
+Science core should not need to special-case the extension in the core architecture.
+
+### Conflict policy
+
+The conflict policy should be strict:
+
+- no duplicate registration for the same `kind`
+- no extension may shadow a core kind
+- conflicting extension registrations are hard errors
+
+This avoids ambiguous schema dispatch.
+
+### Implication for current `model` / `parameter`
+
+Current `model` and `parameter` records should not be treated as permanent core architectural concepts unless there is a clear cross-project case for them.
+
+This spec makes the following v1 decision:
+
+- `model` and `parameter` are **not** core Science typed entities
+
+If they still matter for one or a small number of projects, they should be expressed as extension-defined entity kinds or as project-local source records that materialize into entities through the same model family.
+
+This removes the need for permanent hardcoded exceptions in core `science`.
+
+## Storage Model
+
+Storage is a separate concern from modeling.
+
+Science should converge on a small number of storage patterns:
+
+1. **Single-entity storage**
+- one authored entity per file
+- typically markdown or another human-authored format
+
+2. **Multi-entity storage**
+- many entities in one file
+- typically JSON or YAML for thin records
+
+3. **Datapackage-backed storage**
+- a datapackage file also serves as the authored representation of an entity, usually for datasets
+
+Other storage conventions should be added only when they provide real value.
+
+## Storage Adapters
+
+Storage adapters are responsible for reading and writing entities from a persistence format.
+
+They are not the place to define entity semantics.
+
+### Responsibilities
+
+A storage adapter may:
+
+- discover files
+- parse storage-specific syntax
+- load records into the canonical entity model family
+- serialize entity instances back to storage
+- provide source-location metadata
+
+It may not redefine what counts as a valid dataset, task, or workflow run. That belongs to typed entity schemas.
+
+### Adapter contract
+
+The old provider abstraction is replaced by a narrower storage-adapter contract.
+
+A minimal v1 interface should look conceptually like:
 
 ```python
-class EntityIdCollisionError(ValueError):
-    """Raised when two providers produce the same canonical_id."""
+class SourceRef(BaseModel):
+    adapter_name: str
+    path: str
+    line: int | None = None
 
-    def __init__(self, canonical_id: str, sources: list[tuple[str, str]]) -> None:
-        self.canonical_id = canonical_id
-        self.sources = sources  # list of (provider_name, source_path)
-        msg = f"entity {canonical_id!r} produced by multiple providers:\n"
-        for provider, path in sources:
-            msg += f"  - {provider}: {path}\n"
-        msg += "Resolve by removing one source, or migrate to a single backend."
-        super().__init__(msg)
 
+class StorageAdapter(Protocol):
+    name: str
 
-class EntityResolver:
-    """Runs a list of providers and merges their outputs."""
-
-    def __init__(self, providers: list[EntityProvider]) -> None:
-        self._providers = providers
-
-    def discover(self, project_root: Path) -> list[SourceEntity]:
-        seen: dict[str, list[tuple[str, str]]] = {}
-        all_entities: list[SourceEntity] = []
-        for provider in self._providers:
-            for entity in provider.discover(project_root):
-                seen.setdefault(entity.canonical_id, []).append(
-                    (provider.name, entity.source_path)
-                )
-                all_entities.append(entity)
-        collisions = {cid: srcs for cid, srcs in seen.items() if len(srcs) > 1}
-        if collisions:
-            cid, sources = next(iter(collisions.items()))
-            raise EntityIdCollisionError(cid, sources)
-        return all_entities
-```
-
-### `default_providers()` factory
-
-Module-level function in `resolver.py`:
-
-```python
-def default_providers() -> list[EntityProvider]:
-    """The set of providers active in every project. No config required."""
-    from .markdown import MarkdownProvider
-    from .datapackage_directory import DatapackageDirectoryProvider
-    from .aggregate import AggregateProvider
-    return [
-        MarkdownProvider(),
-        DatapackageDirectoryProvider(),
-        AggregateProvider(),
-    ]
-```
-
-Keeping it as a function (not a constant) lets tests inject custom provider lists via dependency injection without monkey-patching.
-
-### Integration into `load_project_sources`
-
-In `science-tool/src/science_tool/graph/sources.py`, the existing call sites for `_load_markdown_entities` and `_load_structured_entities` get replaced with one resolver call:
-
-```python
-# BEFORE:
-entities.extend(_load_markdown_entities(project_root, [paths.doc_dir, paths.specs_dir, project_root / "research" / "packages"], ...))
-entities.extend(_load_structured_entities(project_root, ...))
-
-# AFTER:
-resolver = EntityResolver(default_providers())
-entities.extend(resolver.discover(project_root))
-```
-
-Specialized parsers remain direct callsites — same as today:
-
-```python
-entities.extend(_load_task_entities(project_root, paths.tasks_dir, ...))
-model_entities, model_relations = _load_model_sources(project_root, ...)
-parameter_entities, parameter_relations = _load_parameter_sources(project_root, ...)
-entities.extend(model_entities)
-entities.extend(parameter_entities)
-```
-
-### `SourceEntity.provider` and `SourceEntity.description` fields
-
-Both fields are added to the `SourceEntity` Pydantic model in `graph/source_types.py`:
-
-```python
-class SourceEntity(BaseModel):
-    # ... existing fields ...
-    provider: str                       # NEW — required, no default
-    description: str = ""               # NEW — entity prose body
-```
-
-The `provider` field is **required** with **no default** — every loader (format-driven providers AND specialized parsers) must set it explicitly. Six legal values in v1: `markdown` / `aggregate` / `datapackage-directory` / `task` / `model` / `parameter`. This avoids the wrong-by-default trap (defaulting non-markdown entities to `"markdown"` is a lie).
-
-The `description` field defaults to empty and is populated per-provider from each provider's natural prose source. See the per-provider details in the next section.
-
-## Provider Implementations
-
-All three providers follow the same shape: extract raw records from disk → call shared `_normalize_record` to produce `SourceEntity`. The provider's job is extraction; normalization is shared.
-
-### `MarkdownProvider`
-
-Refactor of existing `_load_markdown_entities`. Behavior preserved via the shared normalizer.
-
-```python
-class MarkdownProvider(EntityProvider):
-    name = "markdown"
-
-    def __init__(self, scan_roots: list[str] | None = None) -> None:
-        self._scan_roots = scan_roots or ["doc", "specs", "research/packages"]
-
-    def discover(self, ctx: EntityDiscoveryContext) -> list[SourceEntity]:
-        entities: list[SourceEntity] = []
-        for rel in self._scan_roots:
-            root = ctx.project_root / rel
-            if not root.is_dir():
-                continue
-            for path in sorted(root.rglob("*.md")):
-                entity = parse_entity_file(path, project_slug=ctx.project_slug)
-                if entity is None:
-                    continue
-                record = self._extract_record(path, entity, ctx)
-                source_entity = _normalize_record(record, ctx, provider_name=self.name)
-                entities.append(source_entity)
-        return entities
-
-    def _extract_record(self, path: Path, entity, ctx: EntityDiscoveryContext) -> EntityRecord:
-        # Build EntityRecord from the parsed Entity.
-        # description = entity.content (full markdown body after frontmatter).
-        # extra carries reasoning-metadata, aspects, etc., for the normalizer to lift.
-        rel_path = str(path.relative_to(ctx.project_root))
-        return EntityRecord(
-            canonical_id=entity.canonical_id,
-            kind=entity.type.value,
-            title=entity.title,
-            description=entity.content,
-            source_path=rel_path,
-            domain=entity.domain,
-            related=entity.related,
-            source_refs=entity.source_refs,
-            ontology_terms=entity.ontology_terms,
-            aliases=entity.aliases,
-            same_as=entity.same_as,
-            status=entity.status,
-            confidence=entity.confidence,
-            extra={
-                # Reasoning metadata + per-entity-type fields — picked up by normalizer.
-                "claim_layer": entity.claim_layer,
-                # ... etc.
-            },
-        )
-```
-
-The `_normalize_record` helper sets `provider="markdown"`, applies paper-ID canonicalization (which kicks in only when `kind == "paper"`), wires aliases via `_derive_aliases`, defaults the profile via `_default_profile_for_kind`. Behavior matches existing `_load_markdown_entities` line-for-line.
-
-### `DatapackageDirectoryProvider`
-
-NEW. Scans for entity-flavored datapackages. **Hard-errors on malformed entity-profile datapackages.**
-
-```python
-class DatapackageDirectoryProvider(EntityProvider):
-    name = "datapackage-directory"
-
-    def __init__(self, scan_roots: list[str] | None = None) -> None:
-        self._scan_roots = scan_roots or ["data", "results"]
-
-    def discover(self, ctx: EntityDiscoveryContext) -> list[SourceEntity]:
-        entities: list[SourceEntity] = []
-        for rel in self._scan_roots:
-            root = ctx.project_root / rel
-            if not root.is_dir():
-                continue
-            for dp_path in sorted(root.rglob("datapackage.yaml")):
-                rel_path = str(dp_path.relative_to(ctx.project_root))
-                # Read with hard-error catch only for entity-profile cases.
-                try:
-                    with dp_path.open() as f:
-                        dp = yaml.safe_load(f) or {}
-                except yaml.YAMLError as exc:
-                    # Malformed YAML — but we don't yet know if it's an entity datapackage.
-                    # Conservative: only error when we can confirm the entity profile.
-                    # Without parseable YAML, skip silently (could be a non-entity datapackage).
-                    continue
-                profiles = dp.get("profiles") or []
-                if "science-pkg-entity-1.0" not in profiles:
-                    continue  # non-entity datapackage; ignore quietly
-                # From here, this IS an entity datapackage. Any failure raises.
-                self._validate_required_fields(rel_path, dp)
-                record = self._extract_record(rel_path, dp)
-                entities.append(_normalize_record(record, ctx, provider_name=self.name))
-        return entities
-
-    def _validate_required_fields(self, source_path: str, dp: dict) -> None:
-        """Hard-error when a science-pkg-entity-1.0 datapackage is missing required fields."""
-        for field in ("id", "type", "title"):
-            if not dp.get(field):
-                raise EntityDatapackageInvalidError(
-                    source_path,
-                    f"missing required entity field {field!r} (science-pkg-entity-1.0 profile present)",
-                )
-
-    def _extract_record(self, source_path: str, dp: dict) -> EntityRecord:
-        return EntityRecord(
-            canonical_id=str(dp["id"]),
-            kind=str(dp["type"]),
-            title=str(dp["title"]),
-            description=str(dp.get("description", "")),  # Frictionless top-level description
-            source_path=source_path,
-            ontology_terms=list(dp.get("ontology_terms") or []),
-            related=list(dp.get("related") or []),
-            source_refs=list(dp.get("source_refs") or []),
-            status=dp.get("status"),
-            extra={
-                # Pass through dataset-specific fields the normalizer / consumers may use.
-                "origin": dp.get("origin"),
-                "tier": dp.get("tier"),
-                "access": dp.get("access"),
-                "derivation": dp.get("derivation"),
-                "datapackage_path": source_path,
-            },
-        )
-```
-
-**Failure-mode contract** (per review fix #5):
-- Non-entity datapackage (no `science-pkg-entity-1.0` in profiles, or unparseable YAML before profile check): ignore quietly.
-- Entity-profile datapackage with valid YAML but missing required fields (`id`/`type`/`title`): raise `EntityDatapackageInvalidError` with file path and the missing field name.
-
-The Frictionless top-level `description:` field is the standard prose home; reading it for `EntityRecord.description` is a Frictionless-aligned default.
-
-**Migration enabler** (Path 4 below): when a user wants to promote a markdown dataset entity to live as the datapackage, they:
-1. Move the markdown frontmatter fields into the datapackage YAML's top-level keys (id, type, title, description, status, origin, tier, ontology_terms, access:, etc.).
-2. Add `"science-pkg-entity-1.0"` to the datapackage's `profiles:` list.
-3. Delete the `doc/datasets/<slug>.md` file.
-
-The Frictionless `description:` field naturally absorbs the markdown body. DatapackageDirectoryProvider now finds it; MarkdownProvider doesn't. No collision.
-
-### `AggregateProvider`
-
-Refactor of existing `_load_structured_entities`, generalized to two file conventions. Both routes funnel through `EntityRecord` + `_normalize_record`.
-
-```python
-class AggregateProvider(EntityProvider):
-    name = "aggregate"
-
-    def discover(self, ctx: EntityDiscoveryContext) -> list[SourceEntity]:
-        entities: list[SourceEntity] = []
-        # Convention 1: multi-type aggregate (existing entities.yaml)
-        entities.extend(self._load_multi_type_aggregate(ctx))
-        # Convention 2: single-type aggregate (doc/<plural>/<plural>.{json,yaml})
-        entities.extend(self._load_single_type_aggregates(ctx))
-        return entities
-
-    def _load_multi_type_aggregate(self, ctx: EntityDiscoveryContext) -> list[SourceEntity]:
-        entities_path = local_profile_sources_dir(ctx.project_root, local_profile=ctx.local_profile) / "entities.yaml"
-        if not entities_path.is_file():
-            return []
-        data = yaml.safe_load(entities_path.read_text(encoding="utf-8")) or {}
-        items = data.get("entities") or []
-        if not isinstance(items, list):
-            return []
-        rel_path = str(entities_path.relative_to(ctx.project_root))
-        results: list[SourceEntity] = []
-        for raw in items:
-            if not isinstance(raw, dict):
-                continue
-            record = self._record_from_dict(raw, kind=raw.get("kind"), source_path=rel_path)
-            if record is None:
-                continue
-            results.append(_normalize_record(record, ctx, provider_name=self.name))
-        return results
-
-    def _load_single_type_aggregates(self, ctx: EntityDiscoveryContext) -> list[SourceEntity]:
-        from science_model.frontmatter import _DIR_TO_TYPE
-        results: list[SourceEntity] = []
-        for plural, singular in _DIR_TO_TYPE.items():
-            for ext in ("json", "yaml"):
-                f = ctx.project_root / "doc" / plural / f"{plural}.{ext}"
-                if not f.is_file():
-                    continue
-                rel_path = str(f.relative_to(ctx.project_root))
-                items = self._load_list(f)  # JSON list or YAML list
-                for raw in items:
-                    if not isinstance(raw, dict):
-                        continue
-                    # Type defaults to <singular> from filename (e.g., topics.json → "topic").
-                    record = self._record_from_dict(raw, kind=singular, source_path=rel_path)
-                    if record is None:
-                        continue
-                    results.append(_normalize_record(record, ctx, provider_name=self.name))
-        return results
-
-    def _record_from_dict(self, raw: dict, *, kind: str | None, source_path: str) -> EntityRecord | None:
-        """Build EntityRecord from an aggregate-entry dict. Validates via Pydantic."""
-        try:
-            return EntityRecord(
-                canonical_id=str(raw.get("canonical_id") or raw.get("id") or ""),
-                kind=str(raw.get("kind") or kind or ""),
-                title=str(raw.get("title") or ""),
-                description=str(raw.get("description") or ""),
-                source_path=source_path,
-                profile=raw.get("profile"),
-                domain=raw.get("domain"),
-                status=raw.get("status"),
-                related=list(raw.get("related") or []),
-                source_refs=list(raw.get("source_refs") or []),
-                ontology_terms=list(raw.get("ontology_terms") or []),
-                aliases=list(raw.get("aliases") or []),
-                same_as=list(raw.get("same_as") or []),
-                extra={k: v for k, v in raw.items() if k not in EntityRecord.model_fields},
-            )
-        except ValidationError:
-            return None  # Skip malformed entries; surfaced separately via health check
-```
-
-**Single-type aggregate format** (mm30's `doc/topics/topics.json`):
-
-```json
-[
-  {
-    "id": "topic:rare-condition-X",
-    "title": "Rare Condition X",
-    "description": "Optional markdown prose describing this topic.",
-    "ontology_terms": ["MONDO:..."],
-    "status": "active"
-  },
-  {
-    "id": "topic:rare-condition-Y",
-    "title": "Rare Condition Y"
-  }
-]
-```
-
-YAML equivalent supported. Each entry is a dict; required: `id`, `title`. Optional: anything `EntityRecord` accepts (including the new `description:` field). Type defaults to the singular form of the parent directory name; can be overridden by `kind:` in the entry.
-
-**Filename convention is intentional:** `doc/<plural>/<plural>.json` — the file lives *inside* the canonical entity directory, sharing namespace with any `<plural>/<slug>.md` markdown entries. A project can mix per-entity markdown files AND an aggregate file in the same directory; both providers find their entries; ID collisions across them are still errors.
-
-### Specialized parsers — explicit provider strings
-
-The unchanged-in-shape specialized parsers each set `SourceEntity.provider` explicitly. Snippets (only the new line shown):
-
-```python
-# parse_tasks-using path in _load_task_entities:
-SourceEntity(..., provider="task", description=task.description, ...)
-
-# _load_model_sources:
-SourceEntity(..., provider="model", description="", ...)
-
-# _load_parameter_sources:
-SourceEntity(..., provider="parameter", description="", ...)
-```
-
-This is the cleanup from review fix #3 — every loader is responsible for a correct `provider` value; no defaulting that could silently mislabel non-markdown entities.
-
-For tasks specifically: `description` now also receives `task.description` (currently only `content_preview` does). This makes task prose available to the same downstream consumers that may use `description` on other entity types.
-
-The profile filter is the only thing that distinguishes "this is an entity" from "this is just a Frictionless data package describing some files." Without it, every staged dataset's runtime datapackage would become a phantom entity.
-
-**Migration enabler:** when a user wants to promote a markdown dataset entity to live as the datapackage, they:
-1. Move `doc/datasets/<slug>.md`'s frontmatter fields into the existing `data/<slug>/datapackage.yaml` under top-level keys.
-2. Add `"science-pkg-entity-1.0"` to the datapackage's `profiles:` list.
-3. Delete the `doc/datasets/<slug>.md` file.
-
-DatapackageDirectoryProvider now finds it; MarkdownProvider doesn't. No collision. A future `science-tool dataset promote <slug>` command can automate this (follow-on, not v1 scope).
-
-### `AggregateProvider`
-
-Refactor of existing `_load_structured_entities`, generalized to two file conventions:
-
-```python
-class AggregateProvider(EntityProvider):
-    name = "aggregate"
-
-    def discover(self, project_root: Path) -> list[SourceEntity]:
-        entities: list[SourceEntity] = []
-        # Convention 1: multi-type aggregate (existing entities.yaml)
-        entities.extend(self._load_multi_type_aggregate(project_root))
-        # Convention 2: single-type aggregate (doc/<plural>/<plural>.{json,yaml})
-        entities.extend(self._load_single_type_aggregates(project_root))
-        return entities
-
-    def _load_multi_type_aggregate(self, project_root: Path) -> list[SourceEntity]:
-        # Carries forward the existing _load_structured_entities logic.
-        # Reads entities.yaml from local_profile_sources_dir.
+    def discover(self, project_root: Path) -> list[SourceRef]:
         ...
 
-    def _load_single_type_aggregates(self, project_root: Path) -> list[SourceEntity]:
-        # Walks doc/<plural>/<plural>.{json,yaml} where <plural> matches a known
-        # entity type's plural directory name (uses _DIR_TO_TYPE from
-        # science_model.frontmatter, inverted: "topics" → "topic", etc.)
-        from science_model.frontmatter import _DIR_TO_TYPE
-        plural_to_type = {plural: singular for plural, singular in _DIR_TO_TYPE.items()}
-        for plural, singular in plural_to_type.items():
-            for ext in ("json", "yaml"):
-                f = project_root / "doc" / plural / f"{plural}.{ext}"
-                if not f.is_file():
-                    continue
-                # Each entry: a dict with at minimum {id, title}.
-                # Type defaulted to <singular>.
-                ...
+    def load_raw(self, ref: SourceRef) -> dict[str, Any]:
+        ...
+
+    def dump(self, entity: Entity) -> str | dict[str, Any]:
+        ...
 ```
 
-**Single-type aggregate format** (mm30's `doc/topics/topics.json`):
+Notes:
 
-```json
-[
-  {
-    "id": "topic:rare-condition-X",
-    "title": "Rare Condition X",
-    "ontology_terms": ["MONDO:..."],
-    "status": "active"
-  },
-  {
-    "id": "topic:rare-condition-Y",
-    "title": "Rare Condition Y"
-  }
-]
-```
+- `discover()` owns file discovery and storage-specific conventions
+- `load_raw()` returns a raw record in a registry-dispatchable shape, including `kind`
+- `dump()` is optional in early migration if write support is deferred for an adapter
+- `SourceRef` carries source-location metadata used in error messages and collision reporting
 
-YAML equivalent supported. Each entry is a thin dict; required: `id`, `title`. Optional: anything `SourceEntity` accepts. Type defaults to the singular form of the parent directory name.
+The exact names can differ, but the design should preserve these responsibilities.
 
-**Filename convention is intentional:** `doc/<plural>/<plural>.json` — the file lives *inside* the canonical entity directory, sharing namespace with any `<plural>/<slug>.md` markdown entries. A project can mix per-entity markdown files AND an aggregate file in the same directory; both providers find their entries; ID collisions across them are still errors.
+### Discovery semantics
 
-## Migration and Integration
+Discovery semantics should be adapter-defined by default.
 
-Three migration paths, each independently opt-in and incremental.
+Each adapter should declare:
 
-### Path 1: Existing markdown loaders → `MarkdownProvider`
+- its discovery roots relative to `project_root`
+- the file naming or glob conventions it recognizes
+- any format-specific recognition rules
 
-Behavior-preserving refactor. The existing `_load_markdown_entities` function in `graph/sources.py` becomes the body of `MarkdownProvider.discover()`. Same scan roots, same per-file logic, same `SourceEntity` output (with `provider="markdown"` added).
+In v1:
 
-**Migration:** internal-only. No project changes. All existing markdown entities continue to load identically.
+- roots are defined by the adapter
+- roots may become project-configurable later
+- all discovery resolves relative to the active project root
 
-**Verification:** the snapshot regression test (described below) MUST stay green across this commit.
+This restores the lost discovery semantics without reintroducing a provider-heavy abstraction.
 
-### Path 2: Existing `entities.yaml` → `AggregateProvider` (multi-type aggregate)
+### Initial adapter families
 
-Behavior-preserving refactor. The existing `_load_structured_entities` becomes `AggregateProvider._load_multi_type_aggregate()`. Existing `entities.yaml` files in `local_profile_sources_dir(project_root)` continue to load identically (with `provider="aggregate"`).
+The initial design should support adapters for:
 
-**Migration:** internal-only. No project changes.
+- single-entity markdown files
+- multi-entity JSON / YAML files
+- datapackage-backed dataset entities
 
-### Path 3: New entity files via `AggregateProvider` (single-type aggregate) — mm30's case
+Task storage may continue to use a task-specific file adapter during migration, but that adapter should load `TaskEntity` instances, not a separate task model family.
 
-The new capability. Projects with many of one entity type can put them in a single file:
+### Task adapter plan
 
-**Before:** mm30 has ~200 thin markdown files at `doc/topics/<slug>.md`, each with minimal frontmatter.
+The task DSL remains supported in v1 as a storage adapter, not as a separate model system.
 
-**After (opt-in):**
-1. Create `doc/topics/topics.json` (or `topics.yaml`) listing the entries.
-2. Delete the corresponding `doc/topics/<slug>.md` files for entities now in the aggregate.
-3. Run `science-tool create-graph`. AggregateProvider finds all 200 in the JSON; MarkdownProvider finds zero (the .md files are gone). No collision.
+That means:
 
-Mixed mode is fine: some topics can stay as markdown (e.g., topics with rich prose narrative), others move to the aggregate (thin metadata only). The two providers find both; no collision because IDs differ.
+- the task parser continues to parse the existing DSL
+- the adapter converts parsed task records into `TaskEntity` raw records
+- registry resolution and schema validation then produce `TaskEntity` instances
 
-**No migration command in v1.** Manual move-and-delete is straightforward and one-time; a `science-tool entities aggregate <type>` helper is documented as follow-on.
+The DSL is therefore a persistence detail. A future migration to a more standard single-entity storage format remains possible, but is not required by this spec.
 
-### Path 4: Markdown dataset entities → `DatapackageDirectoryProvider` — promotes datasets
+## Read / Write Architecture
 
-This is the dataset-entity-lifecycle spec's "datapackage IS the entity" promotion that was deferred to Spec Y.
+The old "resolver over unrelated loaders" design should be replaced by a simpler read / write architecture:
 
-**Before:** dataset entity at `doc/datasets/<slug>.md` (markdown frontmatter) plus runtime `data/<slug>/datapackage.yaml` (resource manifest). Two surfaces, drift-warned by `dataset reconcile`.
+- storage adapters discover and parse records
+- a model registry resolves the target entity schema
+- records are validated into `Entity` or a typed subclass
+- generic tooling consumes the base contract
+- specialized tooling consumes typed entity instances where needed
 
-**After (opt-in):**
-1. Move the entity-surface fields from the markdown frontmatter into the runtime datapackage's top-level YAML (id, type, title, status, origin, tier, ontology_terms, access:, etc.).
-2. Add `"science-pkg-entity-1.0"` to the datapackage's `profiles:` list (alongside `"science-pkg-runtime-1.0"`).
-3. Delete `doc/datasets/<slug>.md`.
+This gives Science a single conceptual flow:
 
-DatapackageDirectoryProvider picks it up; MarkdownProvider stops seeing it; no sidecar.
+`storage format -> storage adapter -> entity schema -> validated entity instance`
 
-**Drift impact:** `dataset reconcile` becomes a no-op for promoted datasets — there's only one surface now. Reconcile keeps working for datasets still in markdown.
+not:
 
-**Health impact:** the existing `dataset_cached_field_drift` anomaly skips entities whose `provider == "datapackage-directory"` (no two surfaces to drift between). One small change to the existing health check from dataset-entity-lifecycle Phase 6.
+`format-specific loader -> ad hoc source type -> normalization bridge -> pseudo-common shape`
 
-**No migration command in v1.** Manual is reasonable for the small number of datasets per project. A `science-tool dataset promote <slug>` follow-on is documented but not built.
+### Collision mechanism
 
-### Path 5: Specialized parsers — minimal touch only
+Identity collisions across adapters remain hard errors, and the mechanism should be explicit.
 
-`parse_tasks`, `_load_model_sources`, `_load_parameter_sources` stay as direct callsites in `load_project_sources`. No wrapper, no `EntityProvider` inheritance. They're not providers; they're end-to-end specialized.
+During load, Science maintains a global identity table keyed by canonical entity identity.
 
-The minimal touch each receives:
-- Set `SourceEntity.provider` explicitly to one of `task` / `model` / `parameter` (per review fix #3).
-- For `parse_tasks`: also populate `SourceEntity.description` from `task.description` so task prose flows through the same field as other entity types' prose.
-- Models/parameters: leave `description` empty (no current source); when a future YAML format adds a `description:` per record, populate then.
-
-These are the only changes to the specialized-parser code paths.
-
-### Implementation sequencing
-
-The implementation plan will land in this order:
-
-1. Lift `SourceEntity`, `SourceRelation`, `KnowledgeProfiles` into new `graph/source_types.py` (re-exported from `graph/sources.py` for back-compat). Add `EntityIdCollisionError` and `EntityDatapackageInvalidError` to the same module. No behavior change.
-2. Add the snapshot regression test fixture + checked-in snapshot using a **projected dict that excludes the new `provider` and `description` fields**. Canary for subsequent commits.
-3. Add the `entity_providers/` package skeleton: `EntityDiscoveryContext`, `EntityProvider` ABC, `EntityRecord`, `_normalize_record` helper, `EntityResolver`, `default_providers()`. No integration yet.
-4. Refactor `MarkdownProvider` (Path 1) — invisible behavior under the projection; snapshot stays green.
-5. Refactor `AggregateProvider` for multi-type (Path 2) — invisible behavior; snapshot stays green.
-6. Switch `load_project_sources` to use the resolver + add the global collision check across resolver + specialized parsers.
-7. Add `provider: str` field to `SourceEntity` (required, no default) AND update every loader (markdown, aggregate, tasks, models, parameters) to set it explicitly. Snapshot projection still excludes the field; a new test asserts each loader produces the correct `provider` value.
-8. Add `description: str = ""` field to `SourceEntity`. Wire MarkdownProvider (from `entity.content`), AggregateProvider (from `EntityRecord.description`), task parser (from `task.description`). Snapshot projection still excludes the field; a new test asserts roundtrip per loader.
-9. Add `AggregateProvider`'s single-type convention (Path 3) — new capability, mm30 can opt in.
-10. Add `DatapackageDirectoryProvider` (Path 4) — new capability, dataset promotion possible. Includes hard-error contract via `EntityDatapackageInvalidError`.
-11. Update `dataset_cached_field_drift` health check to skip `provider == "datapackage-directory"` entities.
-12. Tests + docs.
-
-Each step ships as one or two commits; the codebase stays green at every commit; existing projects see no behavior change until they explicitly adopt new conventions.
-
-### Optional opt-out lever (not in v1)
-
-For the rare case where a provider misbehaves on a project (false positives, unwanted scanning), a `science.yaml` opt-out:
-
-```yaml
-entity_providers:
-  disabled: [datapackage-directory]
-```
-
-is a small add. Documented in Follow-on Work; not built v1 because no concrete need exists.
-
-## Testing
-
-### Per-provider unit tests
-
-Each provider's behavior tested in isolation with a `tmp_path` fixture seeding a small synthetic project.
-
-`science-tool/tests/test_entity_providers/test_markdown_provider.py`:
-- Discovers entities under each scan root (doc/, specs/, research/packages/).
-- Skips files without YAML frontmatter.
-- Falls back to filename-based type inference when frontmatter omits `type:`.
-- Returns empty list when no markdown files exist.
-- Custom `scan_roots=` constructor param honored.
-
-`science-tool/tests/test_entity_providers/test_datapackage_directory_provider.py`:
-- Discovers `datapackage.yaml` files under `data/` and `results/`.
-- **Filters out** datapackages whose `profiles:` doesn't include `"science-pkg-entity-1.0"` (the critical false-positive guard).
-- Returns the entity with correct `canonical_id` from the datapackage's `id:` field.
-- Handles missing/malformed YAML gracefully (skip, don't crash).
-- Custom `scan_roots=` honored.
-
-`science-tool/tests/test_entity_providers/test_aggregate_provider.py`:
-- Multi-type aggregate: existing `entities.yaml` test fixtures continue to work (regression).
-- Single-type aggregate: `doc/topics/topics.json` with multiple entries produces multiple `SourceEntity` objects with `kind: "topic"`.
-- Single-type aggregate: `.yaml` produces same result as `.json`.
-- Type inference: filename-based (singular form of parent directory's plural).
-- Multi-type AND single-type files coexisting in the same project both get loaded.
-
-### Resolver tests
-
-`science-tool/tests/test_entity_providers/test_resolver.py`:
-- Empty provider list → empty entity list.
-- Single provider → its output passes through unchanged.
-- Multiple providers → outputs concatenated.
-- ID collision across two providers → raises `EntityIdCollisionError` with both source paths in the message.
-- ID collision within a single provider's output → raises (provider returned dups; same error type).
-- `default_providers()` returns the three v1 implementations in stable order.
-
-### Behavior-preservation regression tests
-
-The most important tests in this spec — they prove the refactor doesn't change observable behavior for any existing project.
-
-`science-tool/tests/test_load_project_sources_regression.py`:
-- Fixture: a "kitchen-sink" mini-project with one of each existing entity type (one markdown dataset, one markdown hypothesis, one entities.yaml entry, one task, one model, etc.) under `tests/fixtures/spec_y_kitchen_sink/`.
-- Test: call `load_project_sources(fixture_root)` → project the result through `_project_for_snapshot()` (a helper that drops the new `provider` and `description` fields) → assert it equals a checked-in snapshot.
-- **Why a projection** (per review fix #6): the new `provider` and `description` fields are added in steps 7-8 of the implementation sequencing. Before they exist, the snapshot has the projected shape (no new fields). After they exist, the snapshot still has the projected shape — so the regression test stays byte-identical across every commit. Separate per-step tests assert the new fields appear with correct values when their commit lands.
-- The fixture and snapshot are committed in step 2 of the implementation plan (before the package skeleton lands).
-- After EACH commit in steps 3-12, this test must continue to pass with the same snapshot.
-
-This is the canary that catches "the refactor changed something subtly." The projection lets the snapshot survive intentional additions cleanly.
+Conceptually:
 
 ```python
-def _project_for_snapshot(entities: list[SourceEntity]) -> list[dict]:
-    """Drop new fields the spec adds incrementally; the snapshot stays stable."""
-    excluded = {"provider", "description"}
-    return [
-        {k: v for k, v in e.model_dump().items() if k not in excluded}
-        for e in entities
-    ]
+identity_table: dict[str, SourceRef] = {}
+
+for entity, ref in loaded_entities:
+    existing = identity_table.get(entity.canonical_id)
+    if existing is not None:
+        raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
+    identity_table[entity.canonical_id] = ref
 ```
 
-### New-field assertion tests
+This check happens after schema validation and applies across all adapters, not just within one adapter.
 
-Separate from the regression snapshot, each new field gets dedicated assertions when its commit lands:
+## Source Location and Error Reporting
 
-`science-tool/tests/test_entity_providers/test_provider_field.py` (introduced in step 7):
-- After loading the kitchen-sink fixture, every `SourceEntity` has `provider` set to one of the six legal values.
-- markdown entities → `"markdown"`; entities.yaml entries → `"aggregate"`; tasks → `"task"`; models → `"model"`; parameters → `"parameter"`.
-- (Datapackage-directory entities don't appear in the kitchen-sink yet; covered in step-10 integration test.)
+Source-location metadata must survive the architectural rewrite.
 
-`science-tool/tests/test_entity_providers/test_description_field.py` (introduced in step 8):
-- Markdown entity with body → `description` matches the body content.
-- entities.yaml entry without `description:` → `description == ""`.
-- entities.yaml entry with `description:` → `description` matches the given prose.
-- Single-type aggregate entry with `description:` → roundtrip works.
-- Datapackage-directory entity with top-level `description:` → roundtrip works.
-- Task with prose after the bullets → `description` matches `task.description`.
+Science needs usable error messages for:
 
-### Tests for the global collision check
+- validation failures
+- collision reporting
+- malformed authored records
 
-`science-tool/tests/test_load_project_sources_global_collision.py`:
-- Markdown entity `dataset:x` + entities.yaml entry `dataset:x` → resolver-level `EntityIdCollisionError`.
-- Markdown entity `task:t01` + a task with `id: t01` (canonical_id `task:t01`) → global-level `EntityIdCollisionError` raised by the new check in `load_project_sources` (after both resolver and specialized parsers have run).
-- No collision case → no error.
+At minimum, source-location metadata should include:
 
-### Tests for hard-error datapackage failures
+- adapter name
+- file path
+- optional line number where available
 
-`science-tool/tests/test_entity_providers/test_datapackage_directory_hard_errors.py`:
-- Datapackage with `science-pkg-entity-1.0` profile and missing `id:` → raises `EntityDatapackageInvalidError` with file path and `'id'` in the message.
-- Same for missing `type:` / `title:`.
-- Datapackage WITHOUT the entity profile and missing those fields → no error (silently ignored as a non-entity datapackage).
-- Malformed YAML on a non-entity datapackage → silently ignored (we can't determine if it was an entity datapackage; conservative behavior).
+This metadata may travel as a dedicated `SourceRef`, as provenance metadata attached to the entity instance, or both.
 
-### Integration tests for new capabilities
+The important requirement is architectural, not cosmetic:
 
-`science-tool/tests/test_aggregate_single_type_e2e.py`:
-- Project has a `doc/topics/topics.json` with 5 entries.
-- `load_project_sources(project_root)` returns 5 topic entities.
-- `science-tool create-graph` produces a graph with those 5 nodes.
+- the load pipeline must preserve enough location information to produce actionable error messages
 
-`science-tool/tests/test_datapackage_directory_e2e.py`:
-- Project has a dataset entity stored as `data/myset/datapackage.yaml` with `profiles: [science-pkg-runtime-1.0, science-pkg-entity-1.0]`.
-- No `doc/datasets/myset.md` exists.
-- `load_project_sources` returns the dataset entity with `canonical_id == "dataset:myset"`.
-- The existing `dataset_cached_field_drift` health check does NOT fire for this entity.
-- The existing dataset gate-check tests (from dataset-entity-lifecycle Phase 6/7) still pass — derived dataset behavior unchanged.
+## Identity and Generic Behavior
 
-### Migration scenario tests
+Generic entity behavior should operate on the canonical base contract.
 
-`science-tool/tests/test_provider_migration.py`:
-- Mid-migration mixed mode: 3 datasets in markdown, 2 datasets as datapackage-directory. Both providers find their respective entities. No collision. Resolver returns all 5.
-- Bad-migration collision: dataset entity exists in BOTH `doc/datasets/x.md` AND `data/x/datapackage.yaml` (with the entity profile). Resolver raises `EntityIdCollisionError`, message names both source paths.
-- Recovery: delete the markdown file, rerun, succeeds.
+This includes:
 
-### Test fixtures
+- canonical ID resolution
+- alias registration
+- cross-entity linking
+- generic graph node materialization
+- generic entity search and listing
 
-`science-tool/tests/fixtures/spec_y_kitchen_sink/` — the regression baseline project (one of each existing entity type, snapshot of expected output).
+This is the main reason to insist on one model family.
 
-`science-tool/tests/fixtures/aggregate_single_type/` — minimal project with a `doc/topics/topics.json` for the single-type aggregate tests.
+A tool should not need to care whether the entity came from:
 
-`science-tool/tests/fixtures/datapackage_entity/` — minimal project with a promoted dataset entity at `data/myset/datapackage.yaml`.
+- a markdown file
+- an aggregate JSON file
+- a datapackage
+- a task file
 
-### Tests that don't change
+It should care only about the validated entity instance and its typed kind when type-specific behavior is needed.
 
-The dataset-entity-lifecycle test suites (40 in `test_health.py`, 11 in `test_dataset_register_run.py`, etc.) keep working unchanged. Spec Y's refactor is invisible to them.
+## Relationships and Graph Materialization
 
-The science-model test suites (188 tests) are completely unaffected — Spec Y is a science-tool change.
+This spec does not redesign the graph store, but it does need one clear statement about relationships.
+
+In v1:
+
+- authored entity records may carry relationship-bearing fields
+- some of those are generic base references, such as `related`, `same_as`, `source_refs`, and `ontology_terms`
+- others are typed references, such as `blocked_by`, `consumed_by`, `siblings`, or package display lists
+
+These fields remain part of entity schemas where they are authored as part of the entity record.
+
+Graph materialization may still normalize them into graph edges in downstream code.
+
+This spec does **not** decide:
+
+- the final in-memory edge store
+- a new query API
+- a reworked RDF materialization layer
+
+Those remain follow-on concerns.
+
+## Datapackage-backed Entities
+
+Datapackage-backed storage remains a supported pattern, especially for datasets.
+
+This spec preserves the important separation introduced in rev 2.2:
+
+- the authored dataset entity may be represented by the datapackage
+- the datapackage may still contain runtime-only structures that are not fields on `DatasetEntity`
+
+In particular, runtime package details such as `resources[]` remain runtime datapackage concerns unless and until they are explicitly promoted into the entity schema.
+
+So the adapter boundary is:
+
+- adapter reads the datapackage file
+- adapter extracts the subset that maps to `DatasetEntity`
+- runtime-only package detail remains in the datapackage layer rather than bloating the entity schema
+
+## Migration of Existing Concepts
+
+### Markdown-backed authored entities
+
+Existing markdown-authored entities should migrate into the unified entity model directly.
+
+This is mostly a storage-adapter concern, not a modeling change.
+
+### Tasks
+
+Tasks should migrate from a separate task model into `TaskEntity`.
+
+The task file format may remain temporarily, but it becomes a persistence format for `TaskEntity`, not a separate data model.
+
+### Datasets
+
+Dataset entities should migrate into `DatasetEntity`.
+
+The markdown-sidecar versus datapackage-backed distinction becomes a storage question only.
+
+The "promoted dataset" idea still makes sense, but it should be framed as:
+
+- one `DatasetEntity`
+- multiple supported storage adapters
+
+not as a separate category of entity source.
+
+### Models and parameters
+
+Current model / parameter source contracts should be re-evaluated.
+
+Decision in this spec:
+
+- they are **not** core Science typed entities
+- they should be removed from the core architecture
+- if needed, they should be handled through the project extension mechanism
+
+## Collision and Validation Policy
+
+Identity collisions remain hard errors.
+
+If two storage adapters produce distinct authored sources for the same canonical entity identity, that is a project-state error and should fail early.
+
+Validation should happen at instance construction time through the resolved schema:
+
+- base `Entity` validation for shared rules
+- typed entity validation for type-specific invariants
+- extension validation for project-defined kinds
+
+This preserves the current Science bias toward early validation rather than permissive loading plus cleanup.
+
+This avoids encoding validity rules inside storage-adapter code.
+
+## Compatibility with Rev 2.2 Commitments
+
+This spec is an architectural replacement, not a rollback of rev 2.2 commitments.
+
+The following remain in force unless explicitly superseded in a later implementation plan:
+
+- dataset-specific invariants remain enforced
+- recursion-safe gate logic remains required
+- comment-preserving edits remain a write-path expectation where already committed
+- existing migration and reconcile workflows are not implicitly removed by this spec
+
+What changes here is the architectural framing:
+
+- those behaviors should be implemented against the unified entity model family
+- they should not require parallel model systems to exist
+
+## Worked Examples
+
+### Example 1: markdown-authored hypothesis
+
+1. markdown adapter discovers `doc/hypotheses/foo.md`
+2. adapter parses frontmatter + body into a raw record with `kind = "hypothesis"`
+3. registry resolves `"hypothesis"` to the registered schema
+4. schema validates into a `ProjectEntity`-family instance
+5. entity is added to the identity table and generic graph-loading pipeline
+
+### Example 2: aggregate JSON topics file
+
+1. aggregate adapter discovers `doc/topics/topics.json`
+2. adapter loads one entry and produces a raw record with `kind = "topic"`
+3. registry resolves `"topic"` to the registered schema
+4. schema validates into the correct entity type
+5. each validated entity is collision-checked globally
+
+### Example 3: datapackage-backed dataset
+
+1. datapackage adapter discovers `data/myset/datapackage.yaml`
+2. adapter extracts dataset-authored fields from the datapackage into a raw record with `kind = "dataset"`
+3. registry resolves `"dataset"` to `DatasetEntity`
+4. `DatasetEntity` validates dataset-specific invariants at construction time
+5. runtime-only package fields such as `resources[]` remain in the datapackage layer
+
+## Scope
+
+### In scope
+
+- define `Entity` as the canonical base model
+- define `ProjectEntity` and `DomainEntity` as semantic sub-bases
+- define the initial set of Science-owned typed entities
+- define a project extension mechanism
+- define a model registry and `kind -> schema` resolution flow
+- define the storage-adapter concept around the unified model family
+- define a minimal storage-adapter contract
+- reduce supported storage patterns to a smaller, explicit set
+- establish migration direction for tasks and datasets
+- remove `model` / `parameter` from the core architecture in v1
+
+### Out of scope
+
+- the exact implementation plan and commit sequencing
+- caching and indexing
+- plugin packaging details
+- full CLI migration tooling
+- final decisions on every possible built-in typed entity beyond the initial core set
+
+### Non-goals
+
+- redesigning the graph store
+- redesigning RDF materialization
+- defining a new query API
+- solving caching, watching, or index persistence
+- flattening project and domain entities into one undifferentiated record shape
+
+## Testing Strategy
+
+Testing should follow the architecture.
+
+### Model tests
+
+First, test the model family:
+
+- base `Entity` validation
+- `TaskEntity` invariants
+- `DatasetEntity` invariants
+- `WorkflowRunEntity` invariants
+- `ResearchPackageEntity` invariants
+- extension registration behavior
+
+### Adapter tests
+
+Then test storage adapters:
+
+- markdown single-entity read / write
+- aggregate JSON / YAML read / write
+- datapackage-backed dataset read / write
+- task file adapter roundtrip into `TaskEntity`
+
+### Migration and regression tests
+
+Finally, test migration behavior:
+
+- existing projects still load into the unified entity model family
+- mixed storage modes work where explicitly supported
+- identity collisions fail early
+- generic graph-loading behavior stays stable
+
+Regression fixtures and golden snapshots remain valuable and should be preserved in the follow-on implementation plan, especially where they protect against behavior drift during migration.
 
 ## Resolved Decisions
 
-- **Format-driven providers only.** Specialized parsers (tasks, models, parameters) stay outside the resolver. They don't fit a generic interface.
-- **No per-entity-type configuration.** Providers don't care about types; resolver just merges all outputs.
-- **No per-project configuration in v1.** All providers always run. Opt-out is a future addition.
-- **Auto-discovery is filesystem-convention-driven.** Each provider knows its scan roots and recognition heuristics. Datapackages need an explicit profile signal to be recognized as entities.
-- **`EntityProvider` single-layer interface (`α`).** `discover() -> list[SourceEntity]` returns full entities. The two-layer split (extraction → construction) is rejected for v1 because the three providers have genuinely different input formats; a shared builder would need branching anyway.
-- **Cache-friendly but uncached.** v1 inherits the existing "rescan every command" baseline. Spec Z addresses caching, indexing, and store shape.
-- **`EntityResolver` is a thin coordinator** (~50 lines). No magic, no per-type dispatch, no plugin registration. Constructor takes a list of providers; `discover()` calls each and merges.
-- **ID collisions are hard errors** (`EntityIdCollisionError`). Raised on first collision found. Message includes both source paths and a recovery hint. Never silently pick a winner.
-- **`default_providers()` is a function, not a constant** — supports test injection without monkey-patching.
-- **AggregateProvider's single-type convention is `doc/<plural>/<plural>.{json,yaml}`** — file inside the per-type directory, sharing namespace with markdown entries. Type inference reuses `_DIR_TO_TYPE` from `science_model/frontmatter.py`.
-- **Provider scan roots are constructor parameters** with sensible defaults — supports test injection and future per-project knobs without redesign.
-- **Behavior preservation is the refactor's success criterion.** A snapshot regression test on a kitchen-sink fixture must stay green across every commit in the implementation plan.
-- **No migration commands in v1.** `dataset promote`, `entities aggregate` are documented as follow-on work; manual migration is the documented v1 path.
-- **No symlinks, no fallback ordering.** Each entity has exactly one source path. If two providers find the same ID, that's an error to fix, not a runtime decision to absorb.
-- **`EntityDiscoveryContext` carries shared loading state.** Providers receive `project_root`, `project_slug`, `local_profile`, `active_kinds`, `ontology_catalogs` via this dataclass. Avoids globals, avoids per-provider re-derivation, makes test injection clean.
-- **Shared types live in `graph/source_types.py`** (lifted from `graph/sources.py`). `entity_providers/` and `sources.py` both import from `source_types`; no import cycle. `sources.py` re-exports for back-compat.
-- **Global collision check in `load_project_sources`.** Resolver catches collisions among its own providers (with provider names in error messages — best UX). A second pass in `load_project_sources` catches collisions across ALL entities (resolver output + specialized parsers). Same `EntityIdCollisionError` exception.
-- **`provider` field is required and explicit on every loader.** No default value, no implicit `"markdown"` for non-markdown entities. Six v1 values: `markdown` / `aggregate` / `datapackage-directory` / `task` / `model` / `parameter`. Format-driven providers are named after the file format they handle; specialized parsers are named after the entity type they produce (since each handles exactly one).
-- **`EntityRecord` schema + shared `_normalize_record` helper** for format-driven providers. Each provider extracts records in its native format; all records pass through the same normalizer (paper-ID canonicalization, alias derivation, profile defaulting, kind validation). Single source of truth for normalization.
-- **Hard-error contract for entity-profile datapackages.** A datapackage with `science-pkg-entity-1.0` in its `profiles:` MUST have valid YAML and required entity fields (`id`, `type`, `title`). Missing fields → `EntityDatapackageInvalidError` with file path and field name. Non-entity datapackages remain silently ignored.
-- **`SourceEntity.description` field** mirrors the prose-body capability that `Entity.content` already provides. Each provider sources prose from its native location: markdown body (MarkdownProvider), Frictionless top-level `description:` (DatapackageDirectoryProvider), per-entry `description:` (AggregateProvider), `task.description` (parse_tasks). Models/parameters leave it empty for now; future YAML format additions can populate it without breaking changes.
-- **Snapshot regression test uses a projection.** The snapshot drops `provider` and `description` (the new fields rolled out in steps 7-8 of the implementation plan), so the regression assertion stays byte-identical across every commit. New-field assertions live in separate tests that land alongside the field additions.
-
-### Resolved open questions (from the design review)
-
-- **"Should entities.yaml and single-type aggregates share one normalized source-record schema?"** Yes — both feed `EntityRecord` and pass through `_normalize_record`. The aggregate input format is a SCHEMA (`EntityRecord` Pydantic model), not "anything SourceEntity accepts."
-- **"Is `provider` storage backend or parser origin?"** It's the parser/provider that produced the entity — covers both format-driven providers (`markdown` / `aggregate` / `datapackage-directory`) and specialized parsers (`task` / `model` / `parameter`). Naming logic: format-driven providers are named after the format they handle; specialized parsers are named after the entity type they produce.
+- Science should have one canonical entity model family.
+- `Entity` is the base contract for generic behavior.
+- `ProjectEntity` and `DomainEntity` are semantic sub-bases inside the same model family.
+- Specialized entity types extend `Entity` when they add real invariants or lifecycle semantics.
+- `TaskEntity` is a core Science typed entity.
+- `DatasetEntity`, `WorkflowRunEntity`, and `ResearchPackageEntity` are the initial additional core typed entities.
+- Project-specific types should extend the same model family rather than creating parallel core schemas.
+- `kind -> schema` dispatch is handled by an explicit model registry.
+- storage adapters discover files and produce raw records; the registry resolves final schemas.
+- collisions are detected through a global identity table across all adapters.
+- Storage adapters are persistence concerns only.
+- Supported storage patterns should converge on a small set: single-entity, multi-entity, and datapackage-backed.
+- Current `model` / `parameter` concepts are not core typed entities in v1.
 
 ## Follow-on Work
 
-- **`science-tool dataset promote <slug>` CLI.** Automates the markdown-dataset-to-datapackage-directory promotion: reads the markdown entity, writes its fields into the existing runtime datapackage, adds the entity profile, deletes the markdown sidecar. Idempotent.
-- **`science-tool entities aggregate <type>` CLI.** Collects markdown entities of the named type into a single-type aggregate file (`doc/<plural>/<plural>.json`), then deletes the source markdown files. Useful for projects that accumulate many thin entities of one type and decide to consolidate.
-- **`science.yaml` provider opt-out.** Per-project disabling of providers. Trigger: a project where a provider produces false positives (e.g., a `data/` tree full of non-entity datapackages that get picked up by the profile check). Defer until observed.
-- **Per-project provider configuration knobs.** Beyond opt-out: custom scan roots, per-provider parameters. Defer until needed.
-- **Plugin registration.** Entry-points-based provider discovery so projects can ship project-specific `EntityProvider` subclasses without modifying framework code. Defer until a project actually needs a custom provider.
-- **Cross-project shared providers / federated entity discovery.** A provider that surfaces entities from a sibling project's filesystem. Non-trivial; out of scope for v1 and Spec Z.
-- **Spec Z — caching, indexing, in-memory store, edge representation.** The stub handoff note below captures the design space.
-
-## Spec Z preview (handoff)
-
-When Spec Y ships, the next architectural concern is performance and structure of the in-memory entity graph. Spec Z addresses:
-
-- **Caching.** When to (re)scan: app init, daily, on-update, fs-watcher-driven, mtime-based invalidation. The `EntityProvider` interface is intentionally cache-friendly — a future memoizing wrapper can sit between providers and the resolver without changing provider code.
-- **Index shape.** In-memory representation: KV `entity_id → SourceEntity` for fast lookup; separate edge representation. Loaded once per `science-tool` invocation today; could be persisted between invocations.
-- **Graph store.** The codebase already uses `rdflib` for materialized graphs in `science-tool/src/science_tool/graph/`. Spec Z consolidates the in-memory cache + the RDF graph: which lives where, who owns updates, how they synchronize.
-- **Lazy loading.** The cache holds metadata; full content (e.g., a dataset's per-resource manifest) fetched on-demand for large entities.
-- **Cache-bypass flag.** A `science-tool` command-line flag (`--rescan` or similar) for explicit cache invalidation.
-
-This handoff intentionally leaves the design space open. Brainstorm Spec Z with real performance data once Spec Y ships and the new providers are in active use.
+- write the implementation plan for migrating current code to this architecture
+- decide which current `Entity` fields remain base fields versus become typed fields or derived fields
+- define the exact supported single-entity and multi-entity file formats
+- define write-path behavior and migration tooling
+- decide whether core domain-side built-in entity types are warranted in a later phase
+- revisit caching only after the model boundary is clean
