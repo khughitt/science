@@ -1,0 +1,6 @@
+entities:
+  - canonical_id: "paper:doe2024"
+    kind: "paper"
+    title: "Doe et al. 2024"
+    profile: "local"
+    source_path: "knowledge/sources/local/entities.yaml"
