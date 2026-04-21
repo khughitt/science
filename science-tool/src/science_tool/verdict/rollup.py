@@ -54,7 +54,7 @@ def _has_verdict_key(md_path: Path) -> bool:
 
 def group_by(
     results: Iterator[ParseResult] | list[ParseResult],
-    scope: Scope,
+    scope: Scope = "all",
     *,
     registry: IndexedClaimRegistry | None = None,
 ) -> dict[str, list[ParseResult]]:
