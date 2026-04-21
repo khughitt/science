@@ -5,6 +5,8 @@ from pathlib import Path
 
 import click
 
+from science_tool.curate.inventory import collect_inventory
+
 
 @click.group("curate")
 def curate_group() -> None:
@@ -16,5 +18,6 @@ def curate_group() -> None:
 @click.option("--format", "output_format", type=click.Choice(["json"]), default="json", show_default=True)
 def inventory_cmd(project_root: Path, output_format: str) -> None:
     """Print a deterministic project corpus inventory."""
-    payload = {"project_root": str(project_root), "artifact_counts": {}}
+    inventory = collect_inventory(project_root)
+    payload = inventory.model_dump(mode="json")
     click.echo(json.dumps(payload, indent=2, sort_keys=True))
