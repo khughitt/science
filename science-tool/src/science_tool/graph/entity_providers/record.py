@@ -211,5 +211,5 @@ def _normalize_record(
         ontology_terms=record.ontology_terms,
         same_as=record.same_as,
         aliases=_derive_aliases(canonical_id, record.kind, record.aliases),
-        **reasoning_kwargs,
+        **reasoning_kwargs,  # type: ignore[arg-type]
     )

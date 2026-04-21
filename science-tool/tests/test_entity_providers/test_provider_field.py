@@ -84,9 +84,9 @@ def test_parameter_source_specialized_parser_sets_parameter(tmp_path: Path) -> N
     assert es[0].provider == "parameter"
 
 
-def test_provider_field_is_required(tmp_path: Path) -> None:
+def test_provider_field_is_required() -> None:
     """SourceEntity construction without provider is a Pydantic error."""
     from science_tool.graph.source_types import SourceEntity
 
     with pytest.raises(Exception):  # pydantic.ValidationError
-        SourceEntity(canonical_id="x:1", kind="x", title="x", profile="local", source_path="x.md")
+        SourceEntity(canonical_id="x:1", kind="x", title="x", profile="local", source_path="x.md")  # type: ignore[call-arg]
