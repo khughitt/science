@@ -71,6 +71,13 @@ def test_parse_result_surfaces_closure_terminal_and_reframing_fields() -> None:
         rule_derived_composite=Token.NON_ADJUDICATING,
         rule_disagrees_with_body=False,
         closure_terminal="non_adjudicating_under_observational_adjusters",
+        reframing_target="interpretation:t149-original-finding",
+        reframing_reason="raw-TPM correlations were compositional",
     )
     assert result.closure_terminal == "non_adjudicating_under_observational_adjusters"
-    assert result.reframing_target is None
+    assert result.reframing_target == "interpretation:t149-original-finding"
+    assert result.reframing_reason == "raw-TPM correlations were compositional"
+    d = asdict(result)
+    assert d["closure_terminal"] == "non_adjudicating_under_observational_adjusters"
+    assert d["reframing_target"] == "interpretation:t149-original-finding"
+    assert d["reframing_reason"] == "raw-TPM correlations were compositional"
