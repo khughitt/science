@@ -331,10 +331,15 @@ def _enrich_raw(
         raw["type"] = kind
 
     # Paper canonicalization on the entity's own id + reference lists.
+    # Apply unconditionally: canonical_paper_id is a no-op for non-article/paper
+    # prefixes, and the migration-window spec treats `article:<X>` as a legacy
+    # alias of `paper:<X>` regardless of the source file's declared `kind`.
+    # The previous `kind == "paper"` gate meant legacy files with `type: article`
+    # were loaded as `article:<X>` while mentions in other files were canonicalized
+    # to `paper:<X>`, producing spurious "unresolved reference" audit rows.
     canonical_id = raw.get("canonical_id") or raw.get("id")
-    if kind == "paper" and isinstance(canonical_id, str) and canonical_id:
+    if isinstance(canonical_id, str) and canonical_id:
         canonical_id = canonical_paper_id(canonical_id)
-    if isinstance(canonical_id, str):
         raw["canonical_id"] = canonical_id
         raw.setdefault("id", canonical_id)
     for ref_field in ("related", "source_refs", "same_as", "blocked_by"):
