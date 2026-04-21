@@ -15,9 +15,7 @@ from science_model.reasoning import (
     ClaimLayer,
     EvidenceRole,
     IdentificationStrength,
-    MeasurementModel,
     ProxyDirectness,
-    RivalModelPacket,
     SupportScope,
 )
 from science_model.ontologies import load_catalogs_for_names
@@ -27,6 +25,13 @@ from science_model.profiles.schema import ProfileManifest
 from science_model.source_contracts import AuthoredTargetedRelation, BindingSource, ModelSource, ParameterSource
 
 from science_tool.big_picture.literature_prefix import canonical_paper_id
+from science_tool.graph.source_types import (
+    EntityDatapackageInvalidError,  # noqa: F401
+    EntityIdCollisionError,  # noqa: F401
+    KnowledgeProfiles,
+    SourceEntity,
+    SourceRelation,
+)
 from science_tool.paths import resolve_paths
 from science_tool.tasks import parse_tasks
 
@@ -74,50 +79,6 @@ class AliasCollisionError(ValueError):
         self.first_canonical_id = first_canonical_id
         self.second_canonical_id = second_canonical_id
         super().__init__(f"Alias '{alias}' maps to both {first_canonical_id} and {second_canonical_id}")
-
-
-class SourceEntity(BaseModel):
-    """A canonical entity collected from project source files."""
-
-    canonical_id: str
-    kind: str
-    title: str
-    profile: str
-    source_path: str
-    domain: str | None = None
-    confidence: float | None = None
-    status: str | None = None
-    content_preview: str = ""
-    related: list[str] = Field(default_factory=list)
-    blocked_by: list[str] = Field(default_factory=list)
-    source_refs: list[str] = Field(default_factory=list)
-    ontology_terms: list[str] = Field(default_factory=list)
-    same_as: list[str] = Field(default_factory=list)
-    aliases: list[str] = Field(default_factory=list)
-    claim_layer: ClaimLayer | None = None
-    identification_strength: IdentificationStrength | None = None
-    proxy_directness: ProxyDirectness | None = None
-    supports_scope: SupportScope | None = None
-    independence_group: str | None = None
-    evidence_role: EvidenceRole | None = None
-    measurement_model: MeasurementModel | None = None
-    rival_model_packet: RivalModelPacket | None = None
-
-
-class KnowledgeProfiles(BaseModel):
-    """Selected knowledge profiles for a project."""
-
-    local: str = "local"
-
-
-class SourceRelation(BaseModel):
-    """An authored relation collected from structured source files."""
-
-    subject: str
-    predicate: str
-    object: str
-    graph_layer: str = "graph/knowledge"
-    source_path: str
 
 
 class ProjectSources(BaseModel):
