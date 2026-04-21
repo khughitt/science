@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from science_tool.graph.entity_providers.base import EntityDiscoveryContext
 from science_tool.graph.entity_providers.record import EntityRecord, _normalize_record

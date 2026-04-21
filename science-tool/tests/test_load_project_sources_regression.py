@@ -5,6 +5,7 @@ fields (added in steps 7-8 of the multi-backend-entity-resolver plan). This lets
 the regression assertion stay byte-identical across every commit in the plan,
 even when those fields are intentionally added.
 """
+
 from __future__ import annotations
 
 import json

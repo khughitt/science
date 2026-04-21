@@ -1,4 +1,5 @@
 """End-to-end migration scenarios: mixed-mode coexistence, collision detection, recovery."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -25,17 +26,23 @@ def test_mid_migration_mixed_mode(tmp_path: Path) -> None:
     for slug in ("ds-dp-1", "ds-dp-2"):
         dp_dir = tmp_path / "data" / slug
         dp_dir.mkdir(parents=True)
-        (dp_dir / "datapackage.yaml").write_text(yaml.safe_dump({
-            "profiles": ["science-pkg-entity-1.0"],
-            "name": slug,
-            "id": f"dataset:{slug}",
-            "type": "dataset",
-            "title": slug,
-            "origin": "external",
-            "access": {"level": "public", "verified": False},
-            "resources": [{"name": "r", "path": "r.csv"}],
-        }), encoding="utf-8")
+        (dp_dir / "datapackage.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "profiles": ["science-pkg-entity-1.0"],
+                    "name": slug,
+                    "id": f"dataset:{slug}",
+                    "type": "dataset",
+                    "title": slug,
+                    "origin": "external",
+                    "access": {"level": "public", "verified": False},
+                    "resources": [{"name": "r", "path": "r.csv"}],
+                }
+            ),
+            encoding="utf-8",
+        )
     from science_tool.graph.sources import load_project_sources
+
     sources = load_project_sources(tmp_path)
     ids = {e.canonical_id for e in sources.entities}
     assert "dataset:ds-md-1" in ids
@@ -56,17 +63,23 @@ def test_bad_migration_collision_then_recovery(tmp_path: Path) -> None:
     )
     dp_dir = tmp_path / "data" / "x"
     dp_dir.mkdir(parents=True)
-    (dp_dir / "datapackage.yaml").write_text(yaml.safe_dump({
-        "profiles": ["science-pkg-entity-1.0"],
-        "name": "x",
-        "id": "dataset:x",
-        "type": "dataset",
-        "title": "X dp",
-        "origin": "external",
-        "access": {"level": "public", "verified": False},
-        "resources": [{"name": "r", "path": "r.csv"}],
-    }), encoding="utf-8")
+    (dp_dir / "datapackage.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "profiles": ["science-pkg-entity-1.0"],
+                "name": "x",
+                "id": "dataset:x",
+                "type": "dataset",
+                "title": "X dp",
+                "origin": "external",
+                "access": {"level": "public", "verified": False},
+                "resources": [{"name": "r", "path": "r.csv"}],
+            }
+        ),
+        encoding="utf-8",
+    )
     from science_tool.graph.sources import load_project_sources
+
     with pytest.raises(EntityIdCollisionError) as exc_info:
         load_project_sources(tmp_path)
     msg = str(exc_info.value)
