@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -38,7 +39,16 @@ class IndexedClaimRegistry:
 def load_registry(path: Path | str) -> IndexedClaimRegistry:
     """Load a project-local claim registry YAML and index it for resolution."""
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
-    entries = [_hydrate_entry(raw) for raw in data.get("claims", []) or []]
+    if not isinstance(data, Mapping):
+        raise ValueError("Malformed claim registry: top-level mapping is required")
+
+    raw_claims = data.get("claims", [])
+    if raw_claims is None:
+        raw_claims = []
+    if not isinstance(raw_claims, list):
+        raise ValueError("Malformed claim registry: claims must be a list")
+
+    entries = [_hydrate_entry(raw) for raw in raw_claims]
     registry = ClaimRegistry(
         version=int(data.get("version", 1)),
         project=str(data.get("project", "")),
@@ -46,7 +56,11 @@ def load_registry(path: Path | str) -> IndexedClaimRegistry:
         conventions=data.get("conventions", {}) or {},
     )
     index: dict[str, str] = {}
+    canonical_ids: set[str] = set()
     for entry in entries:
+        if entry.id in canonical_ids:
+            raise ValueError(f"Malformed claim registry: duplicate canonical ID {entry.id!r}")
+        canonical_ids.add(entry.id)
         index[entry.id] = entry.id
         for syn in entry.synonyms:
             index.setdefault(syn, entry.id)
@@ -54,15 +68,35 @@ def load_registry(path: Path | str) -> IndexedClaimRegistry:
 
 
 def _hydrate_entry(raw: dict[str, Any]) -> ClaimRegistryEntry:
+    if not isinstance(raw, Mapping):
+        raise ValueError("Malformed claim registry: each claim entry must be a mapping")
+    claim_id = _required_str(raw, "id")
+    predicted_direction = _required_str(raw, "predicted_direction")
     return ClaimRegistryEntry(
-        id=str(raw["id"]),
+        id=claim_id,
         source=str(raw.get("source", "")),
         definition=str(raw.get("definition", "")),
-        predicted_direction=Token.from_str(raw.get("predicted_direction", "[+]")),
-        synonyms=list(raw.get("synonyms", []) or []),
-        members=list(raw.get("members", []) or []),
-        cited_in=list(raw.get("cited_in", []) or []),
+        predicted_direction=Token.from_str(predicted_direction),
+        synonyms=_string_list(raw, "synonyms"),
+        members=_string_list(raw, "members"),
+        cited_in=_string_list(raw, "cited_in"),
     )
+
+
+def _required_str(raw: Mapping[str, Any], field_name: str) -> str:
+    value = raw.get(field_name)
+    if not isinstance(value, str):
+        raise ValueError(f"Malformed claim registry: claim entry {field_name!r} is required")
+    return value
+
+
+def _string_list(raw: Mapping[str, Any], field_name: str) -> list[str]:
+    value = raw.get(field_name, [])
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"Malformed claim registry: claim entry {field_name!r} must be a list of strings")
+    return value
 
 
 def has_registry(
