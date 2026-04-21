@@ -44,8 +44,15 @@ def test_drift_flags_edge_with_newer_related_task(tmp_path: Path) -> None:
     _build_minimal_project(
         tmp_path,
         slug="h1-prognosis",
-        edges=[{"id": 1, "source": "a", "target": "b", "description": "x",
-                "data_support": [{"task": "t001", "description": "old"}]}],
+        edges=[
+            {
+                "id": 1,
+                "source": "a",
+                "target": "b",
+                "description": "x",
+                "data_support": [{"task": "t001", "description": "old"}],
+            }
+        ],
         tasks=[
             ("t001", date(2026, 1, 1), []),
             ("t100", date(2026, 4, 15), ["hypothesis:h1-epigenetic-commitment"]),
@@ -63,11 +70,18 @@ def test_drift_immune_to_calendar_age(tmp_path: Path) -> None:
     _build_minimal_project(
         tmp_path,
         slug="h1-prognosis",
-        edges=[{"id": 1, "source": "a", "target": "b", "description": "x",
-                "data_support": [{"task": "t001", "description": "old"}]}],
+        edges=[
+            {
+                "id": 1,
+                "source": "a",
+                "target": "b",
+                "description": "x",
+                "data_support": [{"task": "t001", "description": "old"}],
+            }
+        ],
         tasks=[
             ("t001", date(2026, 1, 1), []),
-            ("t200", date(2026, 5, 1), ["topic:unrelated"]),   # not an h1-related task
+            ("t200", date(2026, 5, 1), ["topic:unrelated"]),  # not an h1-related task
         ],
     )
     report = check_staleness(_paths_for(tmp_path), today=date(2026, 7, 1))
@@ -80,9 +94,16 @@ def test_drift_respects_last_reviewed_reset(tmp_path: Path) -> None:
     _build_minimal_project(
         tmp_path,
         slug="h1-prognosis",
-        edges=[{"id": 1, "source": "a", "target": "b", "description": "x",
+        edges=[
+            {
+                "id": 1,
+                "source": "a",
+                "target": "b",
+                "description": "x",
                 "last_reviewed": "2026-04-01",
-                "data_support": [{"task": "t001", "description": "old"}]}],
+                "data_support": [{"task": "t001", "description": "old"}],
+            }
+        ],
         tasks=[
             ("t001", date(2026, 1, 1), []),
             ("t100", date(2026, 3, 15), ["hypothesis:h1-epigenetic-commitment"]),
@@ -98,8 +119,15 @@ def test_drift_matches_via_source_or_target_node(tmp_path: Path) -> None:
     _build_minimal_project(
         tmp_path,
         slug="custom-dag",
-        edges=[{"id": 1, "source": "prc2", "target": "ifn", "description": "x",
-                "data_support": [{"task": "t001", "description": "old"}]}],
+        edges=[
+            {
+                "id": 1,
+                "source": "prc2",
+                "target": "ifn",
+                "description": "x",
+                "data_support": [{"task": "t001", "description": "old"}],
+            }
+        ],
         tasks=[
             ("t001", date(2026, 1, 1), []),
             ("t050", date(2026, 3, 15), ["node:prc2"]),
@@ -114,14 +142,24 @@ def test_eliminated_edges_are_frozen(tmp_path: Path) -> None:
     _build_minimal_project(
         tmp_path,
         slug="h1-h2-bridge",
-        edges=[{"id": 1, "source": "a", "target": "b", "description": "x",
+        edges=[
+            {
+                "id": 1,
+                "source": "a",
+                "target": "b",
+                "description": "x",
                 "edge_status": "eliminated",
                 "eliminated_by": [{"task": "t001", "description": "closed"}],
-                "data_support": [{"task": "t001", "description": "old"}]}],
+                "data_support": [{"task": "t001", "description": "old"}],
+            }
+        ],
         tasks=[
             ("t001", date(2026, 4, 18), []),
-            ("t100", date(2026, 4, 19), ["hypothesis:h1-epigenetic-commitment",
-                                          "hypothesis:h2-cytogenetic-distinct-entities"]),
+            (
+                "t100",
+                date(2026, 4, 19),
+                ["hypothesis:h1-epigenetic-commitment", "hypothesis:h2-cytogenetic-distinct-entities"],
+            ),
         ],
     )
     report = check_staleness(_paths_for(tmp_path), today=date(2026, 4, 20))
@@ -146,8 +184,15 @@ def test_unresolved_ref_reported(tmp_path: Path) -> None:
     _build_minimal_project(
         tmp_path,
         slug="h1-prognosis",
-        edges=[{"id": 1, "source": "a", "target": "b", "description": "x",
-                "data_support": [{"task": "t99999", "description": "nonexistent"}]}],
+        edges=[
+            {
+                "id": 1,
+                "source": "a",
+                "target": "b",
+                "description": "x",
+                "data_support": [{"task": "t99999", "description": "nonexistent"}],
+            }
+        ],
         tasks=[],
     )
     report = check_staleness(_paths_for(tmp_path), today=date(2026, 4, 20))
@@ -157,24 +202,39 @@ def test_unresolved_ref_reported(tmp_path: Path) -> None:
 
 def test_to_json_schema_stable(tmp_path: Path) -> None:
     _build_minimal_project(
-        tmp_path, slug="h1-prognosis",
+        tmp_path,
+        slug="h1-prognosis",
         edges=[{"id": 1, "source": "a", "target": "b", "description": "x"}],
         tasks=[],
     )
     report = check_staleness(_paths_for(tmp_path), today=date(2026, 4, 20))
     as_dict = report.to_json()
     keys = set(as_dict.keys())
-    assert {"today", "recent_days", "drifted_edges", "under_reviewed_edges",
-            "unresolved_refs", "unpropagated_tasks"} <= keys
+    assert {
+        "today",
+        "recent_days",
+        "drifted_edges",
+        "under_reviewed_edges",
+        "unresolved_refs",
+        "unpropagated_tasks",
+    } <= keys
     # Round-trip through json.dumps — must not raise.
     json.dumps(as_dict)
 
 
 def test_has_findings_false_on_clean_project(tmp_path: Path) -> None:
     _build_minimal_project(
-        tmp_path, slug="h1-prognosis",
-        edges=[{"id": 1, "source": "a", "target": "b", "description": "x",
-                "data_support": [{"task": "t001", "description": "ok"}]}],
+        tmp_path,
+        slug="h1-prognosis",
+        edges=[
+            {
+                "id": 1,
+                "source": "a",
+                "target": "b",
+                "description": "x",
+                "data_support": [{"task": "t001", "description": "ok"}],
+            }
+        ],
         tasks=[("t001", date(2026, 4, 18), [])],
     )
     report = check_staleness(_paths_for(tmp_path), today=date(2026, 4, 20))
@@ -195,10 +255,8 @@ def _build_minimal_project(
     dag_dir = root / "doc/figures/dags"
     dag_dir.mkdir(parents=True)
     # Minimal .dot file (only topology is used; not parsed by staleness)
-    (dag_dir / f"{slug}.dot").write_text(f"digraph {slug.replace('-', '_')} " "{}\n")
-    (dag_dir / f"{slug}.edges.yaml").write_text(
-        yaml.safe_dump({"dag": slug, "edges": edges}, sort_keys=False)
-    )
+    (dag_dir / f"{slug}.dot").write_text(f"digraph {slug.replace('-', '_')} {{}}\n")
+    (dag_dir / f"{slug}.edges.yaml").write_text(yaml.safe_dump({"dag": slug, "edges": edges}, sort_keys=False))
     tasks_dir = root / "tasks"
     tasks_dir.mkdir()
     # Everything goes to done/2026-04.md with completion dates

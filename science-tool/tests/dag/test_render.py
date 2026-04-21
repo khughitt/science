@@ -50,7 +50,7 @@ def test_render_one_structural_invariants(render_workspace: Path) -> None:
     dot = (render_workspace / "h1-progression-auto.dot").read_text()
     edges = yaml.safe_load(yaml_path.read_text())["edges"]
     for edge in edges:
-        assert f'[{edge["id"]}]' in dot, f"edge id [{edge['id']}] missing from rendered .dot"
+        assert f"[{edge['id']}]" in dot, f"edge id [{edge['id']}] missing from rendered .dot"
 
 
 def test_render_discovers_slugs_when_whitelist_absent(render_workspace: Path) -> None:

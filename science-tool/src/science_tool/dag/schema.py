@@ -66,8 +66,7 @@ class RefEntry(BaseModel):
         found = [k for k, v in extra.items() if k in REF_KINDS and v is not None]
         if len(found) != 1:
             raise SchemaError(
-                f"ref entry must have exactly one non-null kind tag from "
-                f"{sorted(REF_KINDS)}; got {found!r}"
+                f"ref entry must have exactly one non-null kind tag from {sorted(REF_KINDS)}; got {found!r}"
             )
         return self
 
@@ -156,13 +155,10 @@ class EdgeRecord(BaseModel):
         is_eliminated = self.edge_status == EdgeStatus.eliminated
         has_provenance = bool(self.eliminated_by)
         if is_eliminated and not has_provenance:
-            raise SchemaError(
-                "edge_status=eliminated requires a non-empty eliminated_by provenance list"
-            )
+            raise SchemaError("edge_status=eliminated requires a non-empty eliminated_by provenance list")
         if not is_eliminated and self.eliminated_by:
             raise SchemaError(
-                "eliminated_by is only valid when edge_status=eliminated; "
-                f"got edge_status={self.edge_status.value!r}"
+                f"eliminated_by is only valid when edge_status=eliminated; got edge_status={self.edge_status.value!r}"
             )
         return self
 
@@ -182,8 +178,6 @@ class EdgesYamlFile(BaseModel):
         for e in self.edges:
             key = (e.source, e.target)
             if key in seen:
-                raise SchemaError(
-                    f"duplicate edge (source={e.source!r}, target={e.target!r}) in DAG {self.dag!r}"
-                )
+                raise SchemaError(f"duplicate edge (source={e.source!r}, target={e.target!r}) in DAG {self.dag!r}")
             seen.add(key)
         return self

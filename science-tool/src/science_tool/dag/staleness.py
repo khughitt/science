@@ -321,7 +321,7 @@ def _task_matches_edge(
             return True
         # Also match inquiry: refs that match the DAG slug or hypothesis ids
         if r.startswith("inquiry:"):
-            inquiry_id = r[len("inquiry:"):]
+            inquiry_id = r[len("inquiry:") :]
             for hyp in edge_hypotheses:
                 if inquiry_id in hyp or hyp.endswith(inquiry_id):
                     return True
@@ -443,10 +443,7 @@ def check_staleness(
     if paths.dags is not None:
         slugs = list(paths.dags)
     else:
-        slugs = sorted(
-            p.stem.replace(".edges", "")
-            for p in paths.dag_dir.glob("*.edges.yaml")
-        )
+        slugs = sorted(p.stem.replace(".edges", "") for p in paths.dag_dir.glob("*.edges.yaml"))
 
     # ---- Per-edge audit ---------------------------------------------------
     all_cited_ids: set[str] = set()
@@ -528,9 +525,7 @@ def check_staleness(
                         target=target,
                         last_cited_date=last_cited_date,
                         last_reviewed=last_reviewed,
-                        candidate_drift_tasks=tuple(
-                            sorted(candidates, key=lambda c: c.completed)
-                        ),
+                        candidate_drift_tasks=tuple(sorted(candidates, key=lambda c: c.completed)),
                     )
                 )
 
@@ -564,8 +559,7 @@ def check_staleness(
             continue
         related: list[str] = task.get("related") or []
         if any(
-            r.startswith("hypothesis:") or r.startswith("inquiry:") or r.startswith("proposition:")
-            for r in related
+            r.startswith("hypothesis:") or r.startswith("inquiry:") or r.startswith("proposition:") for r in related
         ):
             unpropagated.append(
                 UnpropagatedTask(

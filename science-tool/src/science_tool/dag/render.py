@@ -49,21 +49,22 @@ from science_tool.dag.paths import DagPaths
 log = logging.getLogger(__name__)
 
 STATUS_STYLES = {
-    "supported":  {"color": "#2e7d32", "penwidth": 2.5, "style": "solid"},
-    "tentative":  {"color": "#1565c0", "penwidth": 1.6, "style": "solid"},
+    "supported": {"color": "#2e7d32", "penwidth": 2.5, "style": "solid"},
+    "tentative": {"color": "#1565c0", "penwidth": 1.6, "style": "solid"},
     "structural": {"color": "#757575", "penwidth": 1.0, "style": "solid"},
-    "unknown":    {"color": "#c62828", "penwidth": 1.2, "style": "dashed"},
+    "unknown": {"color": "#c62828", "penwidth": 1.2, "style": "dashed"},
     "eliminated": {"color": "#9e9e9e", "penwidth": 1.0, "style": "dotted"},
 }
 
 IDENT_MARKERS = {
     "interventional": "[I]",
-    "longitudinal":   "[L]",
-    "observational":  "",
-    "structural":     "",
-    "none":           "",
-    "":               "",
+    "longitudinal": "[L]",
+    "observational": "",
+    "structural": "",
+    "none": "",
+    "": "",
 }
+
 
 # Identification-axis modifiers — applied on TOP of the edge_status color/width.
 # Intent: identification strength is visually legible at a glance, not buried
@@ -82,10 +83,11 @@ def identification_arrowhead(ident: str) -> str:
         return "vee"
     return "normal"
 
+
 # Edge regex copied from _number_edges.py
 EDGE_RE = re.compile(
-    r'^(?P<indent>\s*)(?P<src>[A-Za-z_][A-Za-z0-9_]*)\s*->\s*'
-    r'(?P<tgt>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\[(?P<attrs>[^\]]*)\])?\s*;?\s*$'
+    r"^(?P<indent>\s*)(?P<src>[A-Za-z_][A-Za-z0-9_]*)\s*->\s*"
+    r"(?P<tgt>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\[(?P<attrs>[^\]]*)\])?\s*;?\s*$"
 )
 
 
@@ -207,16 +209,16 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
     banner_inserted = False
     for line in lines:
         # Replace graph-level label with an auto-styling banner.
-        if not banner_inserted and re.match(r'\s*label=<', line):
-            m = re.match(r'(\s*)(label=<.+?>);?\s*$', line)
+        if not banner_inserted and re.match(r"\s*label=<", line):
+            m = re.match(r"(\s*)(label=<.+?>);?\s*$", line)
             if m:
                 indent = m.group(1)
                 original = m.group(2)
                 auto_banner = (
                     '<br/><font point-size="9" color="#555"><i>'
-                    'auto-styled from edges.yaml — color=edge_status, width=|β|, '
-                    'style=HDI-crosses-zero-dashed, [I]=interventional, [L]=longitudinal'
-                    '</i></font>'
+                    "auto-styled from edges.yaml — color=edge_status, width=|β|, "
+                    "style=HDI-crosses-zero-dashed, [I]=interventional, [L]=longitudinal"
+                    "</i></font>"
                 )
                 # Inject the banner right before the closing `>`.
                 new_label = re.sub(r">\s*$", auto_banner + ">", original)
@@ -236,7 +238,7 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
             )
             attrs = style_for_edge(edge)
             attr_str = ", ".join(f"{k}={v}" for k, v in attrs.items())
-            out.append(f'{em.group("indent")}{edge["source"]} -> {edge["target"]} [{attr_str}];')
+            out.append(f"{em.group('indent')}{edge['source']} -> {edge['target']} [{attr_str}];")
             continue
 
         out.append(line)
@@ -247,9 +249,9 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
         "",
         "  // --- Auto-legend (two-axis: edge_status + identification) ---",
         "  subgraph cluster_autolegend {",
-        '    label=<<b>Legend</b> (auto-styled)  —  color/width = edge_status; double-line = interventional; vee arrow = longitudinal>;',
+        "    label=<<b>Legend</b> (auto-styled)  —  color/width = edge_status; double-line = interventional; vee arrow = longitudinal>;",
         '    fontsize=10; color="#999"; style="rounded"; margin=12;',
-        '    node [shape=plaintext, fontsize=9];',
+        "    node [shape=plaintext, fontsize=9];",
         '    lg_supp_a [label="supported"]; lg_supp_b [label=""];',
         '    lg_tent_a [label="tentative"]; lg_tent_b [label=""];',
         '    lg_struct_a [label="structural"]; lg_struct_b [label=""];',

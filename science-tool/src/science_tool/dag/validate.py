@@ -421,8 +421,7 @@ def _check_identification_explicit(
                     rule="identification_missing",
                     severity="strict_error",
                     message=(
-                        f"edge {edge.id} ({edge.source} -> {edge.target}) "
-                        "is missing explicit 'identification:' key"
+                        f"edge {edge.id} ({edge.source} -> {edge.target}) is missing explicit 'identification:' key"
                     ),
                     location=yaml_path.name,
                 )
@@ -447,10 +446,7 @@ def _check_description_nonempty(
                             edge_id=edge.id,
                             rule="description_nonempty",
                             severity="strict_error",
-                            message=(
-                                f"edge {edge.id}.{ref_list_name}[] has an entry "
-                                f"with empty description"
-                            ),
+                            message=(f"edge {edge.id}.{ref_list_name}[] has an entry with empty description"),
                             location=yaml_path.name,
                         )
                     )
@@ -512,10 +508,7 @@ def _check_cross_dag_node_consistency(
                 edge_id=None,
                 rule="cross_dag_node_consistency",
                 severity="strict_error",
-                message=(
-                    f"node name appears with inconsistent case across DAGs: "
-                    f"{variants_sorted}"
-                ),
+                message=(f"node name appears with inconsistent case across DAGs: {variants_sorted}"),
                 location=None,
             )
         )

@@ -25,9 +25,7 @@ from science_tool.dag.paths import DagPaths
 from science_tool.dag.render import EDGE_RE, _discover_slugs, _flatten_multiline_attrs
 
 # Match a node definition:  name [label="...", fillcolor="...", ...];
-_NODE_RE = re.compile(
-    r'^\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\[(?P<attrs>[^\]]*)\]\s*;?\s*$'
-)
+_NODE_RE = re.compile(r"^\s*(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\[(?P<attrs>[^\]]*)\]\s*;?\s*$")
 _LABEL_RE = re.compile(r'label\s*=\s*"([^"]*)"')
 _STYLE_RE = re.compile(r'style\s*=\s*(?:"([^"]*)"|([A-Za-z]+))')
 
@@ -90,9 +88,7 @@ def _parse_dag(dot_path: Path) -> _ParsedDag:
             if sm:
                 style = sm.group(1) or sm.group(2) or "solid"
             edge_id += 1
-            parsed.edges.append(
-                _Edge(id=edge_id, src=src, tgt=tgt, label=label, style=style)
-            )
+            parsed.edges.append(_Edge(id=edge_id, src=src, tgt=tgt, label=label, style=style))
 
     # Resolve src/tgt human labels.
     for e in parsed.edges:
@@ -130,19 +126,15 @@ def _emit_numbered_dot(dot_path: Path, parsed: _ParsedDag, out_path: Path) -> No
                 continue
             src = em.group("src")
             tgt = em.group("tgt")
-            assert src == edge.src and tgt == edge.tgt, (
-                f"edge mismatch: {src}->{tgt} vs {edge.src}->{edge.tgt}"
-            )
+            assert src == edge.src and tgt == edge.tgt, f"edge mismatch: {src}->{tgt} vs {edge.src}->{edge.tgt}"
             attrs = em.group("attrs") or ""
             tag = f"[{edge.id}]"
             if "label=" in attrs:
-                new_attrs = _LABEL_RE.sub(
-                    lambda m: f'label="{tag} {m.group(1)}"', attrs, count=1
-                )
+                new_attrs = _LABEL_RE.sub(lambda m: f'label="{tag} {m.group(1)}"', attrs, count=1)
             else:
                 add = f'label="{tag}"'
                 new_attrs = add if not attrs.strip() else f"{attrs.strip()}, {add}"
-            out_lines.append(f'{em.group("indent")}{src} -> {tgt} [{new_attrs}];')
+            out_lines.append(f"{em.group('indent')}{src} -> {tgt} [{new_attrs}];")
         else:
             out_lines.append(line)
     out_path.write_text("\n".join(out_lines) + "\n")
