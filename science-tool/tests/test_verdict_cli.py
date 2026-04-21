@@ -142,6 +142,30 @@ def test_rollup_claim_with_registry_json_groups_by_claim() -> None:
     assert "interpretation_ids" not in payload["groups"]["h1#edge5-ifn-arm"]
 
 
+def test_rollup_claim_tally_uses_claim_polarity_not_document_composite() -> None:
+    result = CliRunner().invoke(
+        verdict_group,
+        [
+            "rollup",
+            "--scope",
+            "claim",
+            "--root",
+            str(FIXTURE_DIR),
+            "--registry",
+            str(REGISTRY_PATH),
+            "--output",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    group = payload["groups"]["t204#v140_6-multitype-non-pc-absorption"]
+    assert group["documents"] == ["interpretation:fixture-non-adjudicating"]
+    assert group["tally"]["[-]"] == 1
+    assert group["tally"]["[⌀]"] == 0
+
+
 def test_rollup_claim_auto_discovers_registry_under_root_specs(tmp_path: Path) -> None:
     specs_dir = tmp_path / "specs"
     specs_dir.mkdir()
@@ -224,6 +248,44 @@ def test_rollup_strict_exits_nonzero_on_unresolved_claim(tmp_path: Path) -> None
 
     assert result.exit_code != 0
     assert "unresolved" in result.stderr.lower()
+
+
+def test_rollup_strict_exits_nonzero_on_validation_warning(tmp_path: Path) -> None:
+    path = tmp_path / "missing-body-verdict.md"
+    path.write_text(
+        """---
+id: "interpretation:missing-body-verdict"
+verdict:
+  composite: "[+]"
+  rule: "and"
+  claims:
+    - id: "h1#edge5-ifn-arm"
+      polarity: "[+]"
+---
+
+## Verdict
+
+This file intentionally has no body verdict clause.
+""",
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        verdict_group,
+        [
+            "rollup",
+            "--root",
+            str(tmp_path),
+            "--registry",
+            str(REGISTRY_PATH),
+            "--output",
+            "json",
+            "--strict",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "missing body verdict" in result.stderr.lower()
 
 
 def test_rollup_non_strict_unresolved_warns_to_stderr_and_keeps_stdout_json(tmp_path: Path) -> None:

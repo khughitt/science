@@ -185,3 +185,49 @@ claims:
 
     with pytest.raises(ValueError, match="Malformed claim registry.*duplicate canonical ID.*h1#edge5-ifn-arm"):
         load_registry(path)
+
+
+def test_load_registry_rejects_duplicate_synonym(tmp_path: Path) -> None:
+    path = _write_registry(
+        tmp_path,
+        """
+version: 1
+project: fixture
+claims:
+  - id: h1#a
+    source: hypothesis:h1
+    predicted_direction: "[+]"
+    synonyms:
+      - shared-alias
+  - id: h1#b
+    source: hypothesis:h1
+    predicted_direction: "[-]"
+    synonyms:
+      - shared-alias
+""",
+    )
+
+    with pytest.raises(ValueError, match="Malformed claim registry.*duplicate synonym.*shared-alias"):
+        load_registry(path)
+
+
+def test_load_registry_rejects_synonym_that_collides_with_canonical_id(tmp_path: Path) -> None:
+    path = _write_registry(
+        tmp_path,
+        """
+version: 1
+project: fixture
+claims:
+  - id: h1#a
+    source: hypothesis:h1
+    predicted_direction: "[+]"
+    synonyms:
+      - h1#b
+  - id: h1#b
+    source: hypothesis:h1
+    predicted_direction: "[-]"
+""",
+    )
+
+    with pytest.raises(ValueError, match="Malformed claim registry.*synonym.*h1#b.*canonical ID"):
+        load_registry(path)

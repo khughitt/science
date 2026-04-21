@@ -72,7 +72,7 @@ def group_by(
     for result in result_list:
         seen: set[str] = set()
         for claim in result.claims:
-            canonical_id = registry.resolve(claim.id) or claim.id
+            canonical_id = _canonical_claim_id(claim.id, registry)
             if canonical_id in seen:
                 continue
             seen.add(canonical_id)
@@ -83,3 +83,27 @@ def group_by(
 def tally_polarities(results: Iterable[ParseResult]) -> dict[Token, int]:
     """Count parse results by composite verdict token."""
     return dict(Counter(result.composite_token for result in results))
+
+
+def tally_claim_polarities(
+    results: Iterable[ParseResult],
+    claim_id: str,
+    *,
+    registry: IndexedClaimRegistry,
+) -> dict[Token, int]:
+    """Count claim-level polarity tokens for one canonical claim group."""
+    tally: Counter[Token] = Counter()
+    for result in results:
+        seen: set[str] = set()
+        for claim in result.claims:
+            canonical_id = _canonical_claim_id(claim.id, registry)
+            if canonical_id in seen:
+                continue
+            seen.add(canonical_id)
+            if canonical_id == claim_id:
+                tally[claim.polarity] += 1
+    return dict(tally)
+
+
+def _canonical_claim_id(claim_id: str, registry: IndexedClaimRegistry) -> str:
+    return registry.resolve(claim_id) or claim_id

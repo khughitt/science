@@ -219,6 +219,9 @@ aggregate.
 - Maps claim IDs (e.g. `h2#18-edge-6-IFN-arm`) to: (a) the source
   proposition or hypothesis, (b) the predicted direction, (c) any
   synonyms for legacy IDs, (d) optional notes / definition.
+- Synonyms are aliases, not precedence rules: duplicate synonyms and
+  synonym/canonical-ID collisions are invalid registry entries because
+  they make claim-scope rollups ambiguous.
 - The registry MUST exist for `science-tool verdict rollup --by-claim`
   to run. Without it, the subcommand fails loudly with a pointer to
   `science-tool verdict registry-init`. Future claim-scoped conflict

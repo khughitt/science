@@ -15,7 +15,7 @@ from rich.table import Table
 from science_tool.verdict.models import ParseResult
 from science_tool.verdict.parser import parse_file
 from science_tool.verdict.registry import IndexedClaimRegistry, load_registry
-from science_tool.verdict.rollup import Scope, group_by, tally_polarities, walk_interpretations
+from science_tool.verdict.rollup import Scope, group_by, tally_claim_polarities, tally_polarities, walk_interpretations
 from science_tool.verdict.tokens import Token
 
 
@@ -101,7 +101,7 @@ def rollup_cmd(
     _handle_warnings(warnings, unresolved_claim_ids, strict=strict)
 
     groups = group_by(results, scope=resolved_scope, registry=registry)
-    payload = _rollup_payload(resolved_scope, results, groups)
+    payload = _rollup_payload(resolved_scope, results, groups, registry=registry)
     if output_format == "json":
         _emit_json(payload)
         return
@@ -170,6 +170,8 @@ def _resolve_scope(scope: str | None, by_claim: bool) -> Scope:
 def _handle_warnings(warnings: list[str], unresolved_claim_ids: list[str], *, strict: bool) -> None:
     if strict and unresolved_claim_ids:
         raise click.ClickException(f"Unresolved claim IDs: {', '.join(unresolved_claim_ids)}")
+    if strict and warnings:
+        raise click.ClickException("; ".join(warnings))
 
     for warning in warnings:
         click.echo(f"Warning: {warning}", err=True)
@@ -187,19 +189,39 @@ def _unresolved_claim_ids(results: list[ParseResult]) -> list[str]:
     return unresolved
 
 
-def _rollup_payload(scope: Scope, results: list[ParseResult], groups: dict[str, list[ParseResult]]) -> dict[str, Any]:
+def _rollup_payload(
+    scope: Scope,
+    results: list[ParseResult],
+    groups: dict[str, list[ParseResult]],
+    *,
+    registry: IndexedClaimRegistry | None,
+) -> dict[str, Any]:
     return {
         "scope": scope,
         "n_documents": len(results),
         "groups": {
             group_id: {
-                "n": len(results),
-                "tally": _token_tally(tally_polarities(results)),
-                "documents": [result.interpretation_id for result in results],
+                "n": len(group_results),
+                "tally": _token_tally(_group_tally(scope, group_id, group_results, registry=registry)),
+                "documents": [result.interpretation_id for result in group_results],
             }
-            for group_id, results in groups.items()
+            for group_id, group_results in groups.items()
         },
     }
+
+
+def _group_tally(
+    scope: Scope,
+    group_id: str,
+    results: list[ParseResult],
+    *,
+    registry: IndexedClaimRegistry | None,
+) -> dict[Token, int]:
+    if scope == "claim":
+        if registry is None:
+            raise click.ClickException("Claim-scope rollup requires a claim registry")
+        return tally_claim_polarities(results, group_id, registry=registry)
+    return tally_polarities(results)
 
 
 def _token_tally(tally: dict[Token, int]) -> dict[str, int]:

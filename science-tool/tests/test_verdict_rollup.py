@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from science_tool.verdict.registry import load_registry
-from science_tool.verdict.rollup import group_by, tally_polarities, walk_interpretations
+from science_tool.verdict.rollup import group_by, tally_claim_polarities, tally_polarities, walk_interpretations
 from science_tool.verdict.tokens import Token
 
 
@@ -202,3 +202,17 @@ def test_tally_polarities_counts_composites() -> None:
     assert tally.get(Token.MIXED, 0) == 3
     assert tally.get(Token.NON_ADJUDICATING, 0) == 1
     assert tally.get(Token.NEGATIVE, 0) == 0
+
+
+def test_tally_claim_polarities_counts_claim_tokens_not_document_composites() -> None:
+    registry = load_registry(REGISTRY_PATH)
+    results = list(walk_interpretations(FIXTURE_DIR, registry=registry))
+
+    tally = tally_claim_polarities(
+        results,
+        "t204#v140_6-multitype-non-pc-absorption",
+        registry=registry,
+    )
+
+    assert tally.get(Token.NEGATIVE, 0) == 1
+    assert tally.get(Token.NON_ADJUDICATING, 0) == 0

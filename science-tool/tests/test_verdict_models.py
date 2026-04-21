@@ -6,6 +6,8 @@ from science_tool.verdict.models import (
     ParseResult,
     VerdictBlock,
 )
+from science_tool.verdict.parser import parse_file
+from science_tool.verdict.rules import aggregate_composite
 from science_tool.verdict.tokens import Token
 
 
@@ -81,3 +83,12 @@ def test_parse_result_surfaces_closure_terminal_and_reframing_fields() -> None:
     assert d["closure_terminal"] == "non_adjudicating_under_observational_adjusters"
     assert d["reframing_target"] == "interpretation:t149-original-finding"
     assert d["reframing_reason"] == "raw-TPM correlations were compositional"
+
+
+def test_package_reexports_plan_public_api() -> None:
+    import science_tool.verdict as verdict
+
+    assert verdict.Claim is Claim
+    assert verdict.VerdictBlock is VerdictBlock
+    assert verdict.parse_file is parse_file
+    assert verdict.aggregate_composite is aggregate_composite

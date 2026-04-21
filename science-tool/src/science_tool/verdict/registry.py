@@ -53,15 +53,22 @@ def load_registry(path: Path | str) -> IndexedClaimRegistry:
         entries=entries,
         conventions=data.get("conventions", {}) or {},
     )
-    index: dict[str, str] = {}
     canonical_ids: set[str] = set()
     for entry in entries:
         if entry.id in canonical_ids:
             raise ValueError(f"Malformed claim registry: duplicate canonical ID {entry.id!r}")
         canonical_ids.add(entry.id)
-        index[entry.id] = entry.id
+
+    index: dict[str, str] = {entry.id: entry.id for entry in entries}
+    synonym_ids: set[str] = set()
+    for entry in entries:
         for syn in entry.synonyms:
-            index.setdefault(syn, entry.id)
+            if syn in canonical_ids:
+                raise ValueError(f"Malformed claim registry: synonym {syn!r} collides with canonical ID")
+            if syn in synonym_ids:
+                raise ValueError(f"Malformed claim registry: duplicate synonym {syn!r}")
+            synonym_ids.add(syn)
+            index[syn] = entry.id
     return IndexedClaimRegistry(registry=registry, _index=index)
 
 

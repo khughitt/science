@@ -5,7 +5,7 @@ created: "2026-04-21"
 conventions:
   separator: "#"
   id_pattern: "^(h[1-4]|t[0-9]+)#[A-Za-z0-9_-]+$"
-  synonym_resolution: "first-match-wins"
+  synonym_resolution: "unique-required"
 claims:
   - id: "h1#edge5-ifn-arm"
     source: "hypothesis:h1"
