@@ -88,7 +88,6 @@ def test_collision_within_one_provider_raises() -> None:
         resolver.discover(_ctx())
 
 
-@pytest.mark.xfail(reason="MarkdownProvider/DatapackageDirectoryProvider/AggregateProvider added in later tasks")
 def test_default_providers_returns_three_v1_implementations() -> None:
     providers = default_providers()
     names = [p.name for p in providers]
