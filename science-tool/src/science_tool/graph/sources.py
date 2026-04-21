@@ -270,11 +270,25 @@ def build_alias_map(entities: list[Entity], manual_aliases: dict[str, str] | Non
 
 
 def is_external_reference(raw: str, *, known_prefixes: frozenset[str] | None = None) -> bool:
-    """Return True when a reference points outside the project graph."""
+    """Return True when a reference points outside the project graph.
+
+    Treated as external:
+    - URLs (http(s)://...)
+    - Filesystem paths (absolute `/...`, relative `./...` / `../...`, or any
+      value containing `/` with no `:` prefix). Projects commonly cite
+      data artifacts and result files from `source_refs:` — these should
+      not be audited against the entity alias map.
+    - Values with a declared external prefix (go:, mesh:, doi:, ...).
+    """
     if raw.startswith(("http://", "https://")):
         return True
+    if raw.startswith(("/", "./", "../")):
+        return True
     if ":" not in raw:
-        return False
+        # No colon → either a filesystem path-ish token or a bare slug.
+        # Treat anything containing a `/` as a path (external); bare
+        # slugs still fail the audit so typos don't get silently hidden.
+        return "/" in raw
     prefix, _ = raw.split(":", 1)
     check_set = known_prefixes if known_prefixes is not None else _EXTERNAL_PREFIXES
     return prefix.lower() in check_set
