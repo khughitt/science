@@ -23,6 +23,11 @@ from science_tool.dag.staleness import (
     UnresolvedRef,
     check_staleness,
 )
+from science_tool.dag.validate import (
+    ValidationFinding,
+    ValidationReport,
+    validate_project,
+)
 
 __all__ = [
     "AuditReport",
@@ -50,4 +55,7 @@ __all__ = [
     "UnpropagatedTask",
     "UnresolvedRef",
     "check_staleness",
+    "ValidationFinding",
+    "ValidationReport",
+    "validate_project",
 ]

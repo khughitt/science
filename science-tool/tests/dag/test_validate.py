@@ -200,9 +200,7 @@ def test_strict_flags_orphan_dot_node() -> None:
     strict = validate_project(paths, strict=True)
     rules = {f.rule for f in strict.findings if f.severity == "strict_error"}
     assert "dot_nodes_unused" in rules
-    msg = next(
-        f.message for f in strict.findings if f.rule == "dot_nodes_unused"
-    )
+    msg = next(f.message for f in strict.findings if f.rule == "dot_nodes_unused")
     assert "orphan" in msg
 
 
@@ -227,3 +225,17 @@ def test_non_strict_does_not_emit_strict_errors_as_blocking() -> None:
     # Emitting strict_errors in non-strict output is allowed but not required;
     # we only assert that non-strict exits OK.
     _ = all_rules  # suppress "unused variable" warning
+
+
+def test_mm30_fixture_validates_non_strict() -> None:
+    paths = load_dag_paths(Path(__file__).parent / "fixtures" / "mm30")
+    report = validate_project(paths)
+    assert report.ok, "\n".join(str(f) for f in report.findings)
+
+
+def test_mm30_fixture_validates_strict() -> None:
+    # Per Phase 1, every mm30 fixture edge has explicit identification:.
+    paths = load_dag_paths(Path(__file__).parent / "fixtures" / "mm30")
+    report = validate_project(paths, strict=True)
+    blocking = [f for f in report.findings if report._blocks(f)]
+    assert not blocking, "\n".join(str(f) for f in blocking)
