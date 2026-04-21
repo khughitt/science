@@ -54,6 +54,13 @@ def test_parse_majority_disagreement_emits_body_and_derived_tokens() -> None:
     assert payload["rule_disagrees_with_body"] is True
 
 
+def test_parse_help_does_not_expose_strict() -> None:
+    result = CliRunner().invoke(verdict_group, ["parse", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "--strict" not in result.output
+
+
 def test_rollup_all_json_emits_single_group_with_tally() -> None:
     result = CliRunner().invoke(
         verdict_group,
@@ -63,10 +70,20 @@ def test_rollup_all_json_emits_single_group_with_tally() -> None:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     assert payload["scope"] == "all"
+    assert payload["n_documents"] == 6
     assert payload["groups"]["all"]["n"] == 6
     assert payload["groups"]["all"]["tally"]["[+]"] == 2
     assert payload["groups"]["all"]["tally"]["[~]"] == 3
     assert payload["groups"]["all"]["tally"]["[⌀]"] == 1
+    assert payload["groups"]["all"]["documents"] == [
+        "interpretation:fixture-and",
+        "interpretation:fixture-bimodal",
+        "interpretation:fixture-majority-disagrees",
+        "interpretation:fixture-non-adjudicating",
+        "interpretation:fixture-reframed",
+        "interpretation:fixture-weighted-majority",
+    ]
+    assert "interpretation_ids" not in payload["groups"]["all"]
 
 
 def test_rollup_claim_without_registry_errors() -> None:
@@ -99,6 +116,8 @@ def test_rollup_claim_with_registry_json_groups_by_claim() -> None:
     payload = json.loads(result.stdout)
     assert payload["scope"] == "claim"
     assert payload["groups"]["h1#edge5-ifn-arm"]["n"] == 1
+    assert payload["groups"]["h1#edge5-ifn-arm"]["documents"] == ["interpretation:fixture-and"]
+    assert "interpretation_ids" not in payload["groups"]["h1#edge5-ifn-arm"]
 
 
 def test_rollup_by_claim_alias_matches_scope_claim() -> None:
@@ -179,4 +198,5 @@ def test_rollup_non_strict_unresolved_warns_to_stderr_and_keeps_stdout_json(tmp_
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     assert payload["groups"]["all"]["n"] == 1
+    assert payload["groups"]["all"]["documents"] == ["interpretation:fixture-unresolved"]
     assert "unresolved" in result.stderr.lower()

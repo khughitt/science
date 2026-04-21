@@ -35,16 +35,11 @@ def verdict_group() -> None:
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     help="Path to a claim registry YAML file.",
 )
-@click.option(
-    "--strict",
-    is_flag=True,
-    help="Treat unresolved claim IDs as errors.",
-)
-def parse_cmd(file: Path, registry_path: Path | None, strict: bool) -> None:
+def parse_cmd(file: Path, registry_path: Path | None) -> None:
     """Emit JSON for one parsed verdict interpretation."""
     registry = _load_registry_for_parse(file, registry_path)
     result = _parse_single_file(file, registry=registry)
-    _handle_warnings(result.validation_warnings, result.unresolved_claim_ids, strict=strict)
+    _handle_warnings(result.validation_warnings, result.unresolved_claim_ids, strict=False)
     _emit_json(_normalize(result))
 
 
@@ -105,7 +100,7 @@ def rollup_cmd(
     _handle_warnings(warnings, unresolved_claim_ids, strict=strict)
 
     groups = group_by(results, scope=resolved_scope, registry=registry)
-    payload = _rollup_payload(resolved_scope, groups)
+    payload = _rollup_payload(resolved_scope, results, groups)
     if output_format == "json":
         _emit_json(payload)
         return
@@ -191,14 +186,15 @@ def _unresolved_claim_ids(results: list[ParseResult]) -> list[str]:
     return unresolved
 
 
-def _rollup_payload(scope: Scope, groups: dict[str, list[ParseResult]]) -> dict[str, Any]:
+def _rollup_payload(scope: Scope, results: list[ParseResult], groups: dict[str, list[ParseResult]]) -> dict[str, Any]:
     return {
         "scope": scope,
+        "n_documents": len(results),
         "groups": {
             group_id: {
                 "n": len(results),
                 "tally": _token_tally(tally_polarities(results)),
-                "interpretation_ids": [result.interpretation_id for result in results],
+                "documents": [result.interpretation_id for result in results],
             }
             for group_id, results in groups.items()
         },
