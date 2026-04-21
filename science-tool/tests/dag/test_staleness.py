@@ -6,16 +6,11 @@ import json
 from datetime import date
 from pathlib import Path
 
-import pytest
 import yaml
 
 from science_tool.dag.paths import DagPaths
 from science_tool.dag.staleness import (
-    CandidateTask,
-    DriftedEdge,
     StalenessReport,
-    UnpropagatedTask,
-    UnresolvedRef,
     check_staleness,
 )
 
@@ -265,8 +260,8 @@ def _build_minimal_project(
     lines = []
     for tid, completed, related in tasks:
         lines.append(f"## [{tid}] Test task {tid}")
-        lines.append(f"- priority: P2")
-        lines.append(f"- status: done")
+        lines.append("- priority: P2")
+        lines.append("- status: done")
         lines.append(f"- completed: {completed.isoformat()}")
         if related:
             lines.append(f"- related: [{', '.join(related)}]")

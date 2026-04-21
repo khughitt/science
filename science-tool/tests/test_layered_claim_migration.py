@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from typing import Mapping, Sequence, cast
 
 import pytest
 from rdflib import Dataset, Literal, Namespace
 from rdflib.namespace import PROV, RDF
 from pydantic import ValidationError
 
+from science_model.entities import ProjectEntity
 from science_model.reasoning import (
     ClaimLayer,
     EvidenceRole,
@@ -22,6 +24,7 @@ from science_tool.graph.migrate import build_layered_claim_migration_report
 from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.store import (
+    EvidenceClaimBundle,
     INITIAL_GRAPH_TEMPLATE,
     SCI_NS,
     add_concept,
@@ -33,7 +36,18 @@ from science_tool.graph.store import (
 PROJECT_NS = Namespace("http://example.org/project/")
 
 
-def _write_scan_project(root: Path, propositions: list[dict[str, object]]) -> Path:
+class LayeredEvidenceClaimBundle(EvidenceClaimBundle):
+    claim_layer: str
+    identification_strength: str
+    proxy_directness: str
+    supports_scope: str
+    independence_group: str
+    evidence_role: str
+    measurement_model: dict[str, object]
+    rival_model_packet: dict[str, object]
+
+
+def _write_scan_project(root: Path, propositions: Sequence[Mapping[str, object]]) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     (root / "science.yaml").write_text(
         "\n".join(
@@ -226,21 +240,25 @@ def test_model_and_parameter_source_loading_ignores_layered_claim_metadata_from_
     for entity in sources.entities:
         if entity.canonical_id not in {"model:demo", "canonical_parameter:demo"}:
             continue
-        assert entity.claim_layer is None
-        assert entity.identification_strength is None
-        assert entity.proxy_directness is None
-        assert entity.supports_scope is None
-        assert entity.independence_group is None
-        assert entity.evidence_role is None
-        assert entity.measurement_model is None
-        assert entity.rival_model_packet is None
+        project_entity = cast(ProjectEntity, entity)
+        assert project_entity.claim_layer is None
+        assert project_entity.identification_strength is None
+        assert project_entity.proxy_directness is None
+        assert project_entity.supports_scope is None
+        assert project_entity.independence_group is None
+        assert project_entity.evidence_role is None
+        assert project_entity.measurement_model is None
+        assert project_entity.rival_model_packet is None
 
 
 def test_load_project_sources_preserves_layered_claim_metadata_from_frontmatter(tmp_path: Path) -> None:
     project = _write_project(tmp_path / "project", with_layered_metadata=True)
 
     sources = load_project_sources(project)
-    entity = next(entity for entity in sources.entities if entity.canonical_id == "proposition:p01-layered")
+    entity = cast(
+        ProjectEntity,
+        next(entity for entity in sources.entities if entity.canonical_id == "proposition:p01-layered"),
+    )
 
     assert entity.claim_layer == ClaimLayer.CAUSAL_EFFECT
     assert entity.identification_strength == IdentificationStrength.INTERVENTIONAL
@@ -362,7 +380,12 @@ def test_export_graph_payload_includes_layered_claim_metadata_for_claim_backed_e
     edge_id = next(
         edge.id for edge in payload.edges if edge.claim_ids == ["http://example.org/project/proposition/drug_claim"]
     )
-    claim = payload.overlays.evidence["edges"][edge_id]["claims"][0]
+    evidence_edges = cast(dict[str, object], payload.overlays.evidence["edges"])
+    edge_overlay = cast(dict[str, object], evidence_edges[edge_id])
+    claims = cast(list[object], edge_overlay["claims"])
+    claim = cast(LayeredEvidenceClaimBundle, claims[0])
+    measurement_model = claim["measurement_model"]
+    rival_model_packet = claim["rival_model_packet"]
 
     assert claim["claim_layer"] == "mechanistic_narrative"
     assert claim["identification_strength"] == "interventional"
@@ -370,8 +393,8 @@ def test_export_graph_payload_includes_layered_claim_metadata_for_claim_backed_e
     assert claim["supports_scope"] == "cross_hypothesis"
     assert claim["independence_group"] == "batch-2"
     assert claim["evidence_role"] == "model_criticism"
-    assert claim["measurement_model"]["observed_entity"] == "observation:obs-2"
-    assert claim["rival_model_packet"]["packet_id"] == "packet:drug-vs-null"
+    assert measurement_model["observed_entity"] == "observation:obs-2"
+    assert rival_model_packet["packet_id"] == "packet:drug-vs-null"
 
 
 @pytest.mark.parametrize(
@@ -389,13 +412,22 @@ def test_add_proposition_validates_raw_reasoning_metadata_dicts(
     graph_path = _write_graph()
 
     with pytest.raises(ValidationError):
-        add_proposition(
-            graph_path,
-            text="Raw dict validation should reject incomplete metadata",
-            source="paper:layered-claims",
-            proposition_id="raw-dict-validation",
-            **{field_name: payload},
-        )
+        if field_name == "measurement_model":
+            add_proposition(
+                graph_path,
+                text="Raw dict validation should reject incomplete metadata",
+                source="paper:layered-claims",
+                proposition_id="raw-dict-validation",
+                measurement_model=payload,
+            )
+        else:
+            add_proposition(
+                graph_path,
+                text="Raw dict validation should reject incomplete metadata",
+                source="paper:layered-claims",
+                proposition_id="raw-dict-validation",
+                rival_model_packet=payload,
+            )
 
 
 def test_materialize_graph_without_layered_claim_metadata_keeps_legacy_shape(tmp_path: Path) -> None:

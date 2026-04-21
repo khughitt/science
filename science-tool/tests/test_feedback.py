@@ -97,11 +97,35 @@ def test_next_feedback_id_different_date(tmp_path: Path):
     assert result == "fb-2026-03-25-001"
 
 
-def _make_entry(feedback_dir: Path, id: str, **kwargs) -> FeedbackEntry:
+def _make_entry(
+    feedback_dir: Path,
+    id: str,
+    *,
+    created: str | None = None,
+    project: str = "",
+    target: str = "command:test",
+    category: str = "suggestion",
+    status: str = "open",
+    summary: str = "Test",
+    detail: str | None = None,
+    resolution: str | None = None,
+    recurrence: int = 1,
+    related: list[str] | None = None,
+) -> FeedbackEntry:
     """Helper to create and save an entry with defaults."""
-    defaults = {"target": "command:test", "summary": "Test", "status": "open"}
-    defaults.update(kwargs)
-    entry = FeedbackEntry(id=id, **defaults)
+    entry = FeedbackEntry(
+        id=id,
+        created=created or "2026-03-25",
+        project=project,
+        target=target,
+        category=category,
+        status=status,
+        summary=summary,
+        detail=detail,
+        resolution=resolution,
+        recurrence=recurrence,
+        related=related or [],
+    )
     save_entry(feedback_dir, entry)
     return entry
 

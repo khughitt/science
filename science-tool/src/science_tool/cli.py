@@ -27,6 +27,7 @@ from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
     GRAPH_LAYERS,
     PropositionEvidenceLine,
+    PropositionInteractionTerm,
     add_article,
     add_assumption,
     add_concept,
@@ -137,11 +138,11 @@ def _parse_evidence_lines(entries: tuple[str, ...]) -> list[dict[str, object]] |
     return evidence_lines
 
 
-def _parse_interaction_terms(entries: tuple[str, ...]) -> list[dict[str, str]] | None:
+def _parse_interaction_terms(entries: tuple[str, ...]) -> list[PropositionInteractionTerm] | None:
     if not entries:
         return None
 
-    interaction_terms: list[dict[str, str]] = []
+    interaction_terms: list[PropositionInteractionTerm] = []
     for entry in entries:
         try:
             parsed = json.loads(entry)
@@ -155,7 +156,7 @@ def _parse_interaction_terms(entries: tuple[str, ...]) -> list[dict[str, str]] |
             raise click.ClickException("Interaction term JSON must include a non-empty 'modifier' string")
         if not isinstance(effect, str) or not effect.strip():
             raise click.ClickException("Interaction term JSON must include a non-empty 'effect' string")
-        interaction_term: dict[str, str] = {
+        interaction_term: PropositionInteractionTerm = {
             "modifier": modifier,
             "effect": effect,
         }
@@ -1109,7 +1110,7 @@ def add_proposition_cmd(
         replication_scope=replication_scope,
         claim_status=claim_status,
         pre_registration_refs=list(pre_registration_refs) if pre_registration_refs else None,
-        interaction_terms=cast(list[dict[str, str]] | None, interaction_terms),
+        interaction_terms=interaction_terms,
         bridge_between_refs=list(bridge_between_refs) if bridge_between_refs else None,
     )
     click.echo(f"Added proposition: {uri}")

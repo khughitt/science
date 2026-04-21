@@ -9,6 +9,11 @@ from typing import NotRequired, TypedDict, cast
 from rdflib import URIRef
 
 from science_tool.graph.store import (
+    FalsificationRecord,
+    PropositionEvidenceLine,
+    PropositionInteractionTerm,
+    PropositionPhase1Metadata,
+    PropositionEvidenceSemantics,
     SCHEMA_NS,
     SCI_NS,
     SCIC_NS,
@@ -36,19 +41,27 @@ class ClaimBundle(TypedDict):
     sources: list[str]
     support_count: int
     dispute_count: int
+    claim_layer: NotRequired[str]
+    supports_scope: NotRequired[str]
     compositional_status: NotRequired[str]
     compositional_method: NotRequired[str]
     compositional_note: NotRequired[str]
     platform_pattern: NotRequired[str]
     dataset_effects: NotRequired[dict[str, float]]
-    evidence_lines: NotRequired[list[dict[str, object]]]
-    falsifications: NotRequired[list[dict[str, str]]]
+    evidence_lines: NotRequired[list[PropositionEvidenceLine]]
+    measurement_model: NotRequired[dict[str, object]]
+    rival_model_packet: NotRequired[dict[str, object]]
+    falsifications: NotRequired[list[FalsificationRecord]]
     statistical_support: NotRequired[str]
     mechanistic_support: NotRequired[str]
     replication_scope: NotRequired[str]
     claim_status: NotRequired[str]
+    identification_strength: NotRequired[str]
+    proxy_directness: NotRequired[str]
+    independence_group: NotRequired[str]
+    evidence_role: NotRequired[str]
     pre_registrations: NotRequired[list[str]]
-    interaction_terms: NotRequired[list[dict[str, str]]]
+    interaction_terms: NotRequired[list[PropositionInteractionTerm]]
     bridge_between: NotRequired[list[str]]
 
 
@@ -157,8 +170,14 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[CausalEdg
                         "support_count": cast(int, evidence["support_count"]),
                         "dispute_count": cast(int, evidence["dispute_count"]),
                     }
-                    claim_bundle.update(_load_proposition_phase1_metadata(provenance_graph, claim_uri))
-                    claim_bundle.update(_load_proposition_evidence_semantics(provenance_graph, claim_uri))
+                    _apply_phase1_metadata_to_claim_bundle(
+                        claim_bundle,
+                        _load_proposition_phase1_metadata(provenance_graph, claim_uri),
+                    )
+                    _apply_evidence_semantics_to_claim_bundle(
+                        claim_bundle,
+                        _load_proposition_evidence_semantics(provenance_graph, claim_uri),
+                    )
                     pre_registrations = _load_proposition_pre_registrations(provenance_graph, claim_uri)
                     if pre_registrations:
                         claim_bundle["pre_registrations"] = pre_registrations
@@ -174,6 +193,54 @@ def _get_causal_edges_for_inquiry(graph_path: Path, slug: str) -> list[CausalEdg
                     edge["claims"].append(claim_bundle)
 
     return list(edge_map.values())
+
+
+def _apply_phase1_metadata_to_claim_bundle(
+    bundle: ClaimBundle,
+    metadata: PropositionPhase1Metadata,
+) -> None:
+    if "claim_layer" in metadata:
+        bundle["claim_layer"] = metadata["claim_layer"]
+    if "supports_scope" in metadata:
+        bundle["supports_scope"] = metadata["supports_scope"]
+    if "compositional_status" in metadata:
+        bundle["compositional_status"] = metadata["compositional_status"]
+    if "compositional_method" in metadata:
+        bundle["compositional_method"] = metadata["compositional_method"]
+    if "compositional_note" in metadata:
+        bundle["compositional_note"] = metadata["compositional_note"]
+    if "platform_pattern" in metadata:
+        bundle["platform_pattern"] = metadata["platform_pattern"]
+    if "dataset_effects" in metadata:
+        bundle["dataset_effects"] = metadata["dataset_effects"]
+    if "evidence_lines" in metadata:
+        bundle["evidence_lines"] = metadata["evidence_lines"]
+    if "measurement_model" in metadata:
+        bundle["measurement_model"] = metadata["measurement_model"]
+    if "rival_model_packet" in metadata:
+        bundle["rival_model_packet"] = metadata["rival_model_packet"]
+
+
+def _apply_evidence_semantics_to_claim_bundle(
+    bundle: ClaimBundle,
+    semantics: PropositionEvidenceSemantics,
+) -> None:
+    if "statistical_support" in semantics:
+        bundle["statistical_support"] = semantics["statistical_support"]
+    if "mechanistic_support" in semantics:
+        bundle["mechanistic_support"] = semantics["mechanistic_support"]
+    if "replication_scope" in semantics:
+        bundle["replication_scope"] = semantics["replication_scope"]
+    if "claim_status" in semantics:
+        bundle["claim_status"] = semantics["claim_status"]
+    if "identification_strength" in semantics:
+        bundle["identification_strength"] = semantics["identification_strength"]
+    if "proxy_directness" in semantics:
+        bundle["proxy_directness"] = semantics["proxy_directness"]
+    if "independence_group" in semantics:
+        bundle["independence_group"] = semantics["independence_group"]
+    if "evidence_role" in semantics:
+        bundle["evidence_role"] = semantics["evidence_role"]
 
 
 def export_pgmpy_script(graph_path: Path, slug: str) -> str:

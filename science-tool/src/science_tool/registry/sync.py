@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from pathlib import Path
 
@@ -48,7 +49,7 @@ def collect_all_project_sources(
 
 def align_registry(
     existing: RegistryIndex,
-    project_sources: dict[str, list[Entity]],
+    project_sources: Mapping[str, Sequence[Entity]],
 ) -> RegistryIndex:
     """Phase 2: Align entities across projects into the registry.
 

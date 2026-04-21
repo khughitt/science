@@ -62,13 +62,17 @@ def resolve_paths(project_root: Path) -> ProjectPaths:
     """Resolve canonical paths from the project's declared profile."""
 
     profile = _resolve_profile(project_root)
-    resolved: dict[str, Path | ProjectProfile] = {
-        "root": project_root,
-        "profile": profile,
-        "code_dir": project_root / _CODE_DIR_BY_PROFILE[profile],
-    }
-
-    for key, default in _COMMON_DEFAULTS.items():
-        resolved[key] = project_root / default
-
-    return ProjectPaths(**resolved)
+    return ProjectPaths(
+        root=project_root,
+        profile=profile,
+        doc_dir=project_root / _COMMON_DEFAULTS["doc_dir"],
+        code_dir=project_root / _CODE_DIR_BY_PROFILE[profile],
+        data_dir=project_root / _COMMON_DEFAULTS["data_dir"],
+        models_dir=project_root / _COMMON_DEFAULTS["models_dir"],
+        specs_dir=project_root / _COMMON_DEFAULTS["specs_dir"],
+        papers_dir=project_root / _COMMON_DEFAULTS["papers_dir"],
+        knowledge_dir=project_root / _COMMON_DEFAULTS["knowledge_dir"],
+        tasks_dir=project_root / _COMMON_DEFAULTS["tasks_dir"],
+        templates_dir=project_root / _COMMON_DEFAULTS["templates_dir"],
+        prompts_dir=project_root / _COMMON_DEFAULTS["prompts_dir"],
+    )

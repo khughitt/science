@@ -19,7 +19,7 @@ class _EntityLike(Protocol):
     ontology_terms: list[str]
 
     @property
-    def type(self) -> object: ...  # has `.value: str`
+    def type(self) -> object: ...
 
 
 @dataclass(frozen=True)
@@ -96,6 +96,14 @@ def _count_kind_matches(entities: Sequence[_EntityLike], catalog: OntologyCatalo
     catalog_type_names = {et.name for et in catalog.entity_types}
     count = 0
     for entity in entities:
-        if entity.type.value in catalog_type_names:
+        type_value = _type_value(entity.type)
+        if type_value in catalog_type_names:
             count += 1
     return count
+
+
+def _type_value(value: object) -> str | None:
+    maybe_value = getattr(value, "value", None)
+    if isinstance(maybe_value, str):
+        return maybe_value
+    return None

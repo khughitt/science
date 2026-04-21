@@ -1,6 +1,7 @@
 """Tests for shared graph export payload types."""
 
 from pathlib import Path
+from typing import TypedDict, cast
 
 import pytest
 from pydantic import ValidationError
@@ -31,6 +32,35 @@ from science_tool.graph.store import (
 from rdflib import URIRef
 from rdflib import Literal
 from rdflib.namespace import PROV, RDF, SKOS
+
+
+class CausalEdgeOverlay(TypedDict):
+    kind: str
+
+
+class CausalInquiryOverlay(TypedDict):
+    treatment: str | None
+    outcome: str | None
+    boundary_roles: dict[str, str]
+    edges: dict[str, CausalEdgeOverlay]
+
+
+class CausalOverlays(TypedDict):
+    inquiries: dict[str, CausalInquiryOverlay]
+
+
+class EvidenceClaimOverlay(TypedDict):
+    bridge_between: list[str]
+    statistical_support: str
+    pre_registrations: list[str]
+
+
+class EvidenceEdgeOverlay(TypedDict):
+    claims: list[EvidenceClaimOverlay]
+
+
+class EvidenceOverlays(TypedDict):
+    edges: dict[str, EvidenceEdgeOverlay]
 
 
 @pytest.fixture
@@ -304,7 +334,7 @@ def test_export_graph_payload_excludes_unmaterialized_default_layers(tmp_path: P
 def test_export_graph_payload_includes_causal_overlay_for_inquiry(graph_path: Path) -> None:
     payload = export_graph_payload(graph_path, overlays=["causal"])
 
-    causal_overlay = payload.overlays.causal
+    causal_overlay = cast(CausalOverlays, payload.overlays.causal)
     inquiry = causal_overlay["inquiries"]["inquiry/test_dag"]
     edge_id = build_graph_export_edge_id(
         subject="http://example.org/project/concept/drug",
@@ -333,7 +363,7 @@ def test_export_graph_payload_includes_confounds_edges_in_causal_overlay(graph_p
     )
 
     payload = export_graph_payload(graph_path, overlays=["causal"])
-    inquiry = payload.overlays.causal["inquiries"]["inquiry/test_dag"]
+    inquiry = cast(CausalOverlays, payload.overlays.causal)["inquiries"]["inquiry/test_dag"]
     edge_id = build_graph_export_edge_id(
         subject="http://example.org/project/concept/modifier",
         predicate="http://example.org/science/vocab/causal/confounds",
@@ -356,7 +386,7 @@ def test_export_graph_payload_warns_for_missing_causal_referent(graph_path: Path
 def test_export_graph_payload_excludes_missing_boundary_roles_from_causal_overlay(graph_path: Path) -> None:
     payload = export_graph_payload(graph_path, overlays=["causal"])
 
-    inquiry = payload.overlays.causal["inquiries"]["inquiry/dangling_dag"]
+    inquiry = cast(CausalOverlays, payload.overlays.causal)["inquiries"]["inquiry/dangling_dag"]
 
     assert "http://example.org/project/concept/unexported_boundary" not in inquiry["boundary_roles"]
 
@@ -364,7 +394,7 @@ def test_export_graph_payload_excludes_missing_boundary_roles_from_causal_overla
 def test_export_graph_payload_includes_evidence_overlay_for_claim_backed_edge(graph_path: Path) -> None:
     payload = export_graph_payload(graph_path, overlays=["evidence"])
     edge_id = next(edge.id for edge in payload.edges if edge.predicate.endswith("/causes"))
-    edge_evidence = payload.overlays.evidence["edges"][edge_id]
+    edge_evidence = cast(EvidenceOverlays, payload.overlays.evidence)["edges"][edge_id]
 
     assert edge_evidence["claims"][0]["bridge_between"] == ["hypothesis/h1", "hypothesis/h2"]
     assert edge_evidence["claims"][0]["statistical_support"] == "replicated"

@@ -30,7 +30,7 @@ from __future__ import annotations
 import logging
 import re
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 

@@ -1,15 +1,10 @@
 """Tests for causal inquiry type system."""
 
+import importlib.util
 from pathlib import Path
+from typing import TypedDict, cast
 
 import pytest
-
-try:
-    import pgmpy  # noqa: F401
-
-    HAS_PGMPY = True
-except ImportError:
-    HAS_PGMPY = False
 
 from science_tool.causal.export_chirho import export_chirho_script
 from science_tool.causal.export_pgmpy import export_pgmpy_script
@@ -29,6 +24,9 @@ from science_tool.graph.store import (
     set_treatment_outcome,
     validate_inquiry,
 )
+from science_tool.graph.store import FalsificationRecord, PropositionInteractionTerm, PropositionEvidenceLine
+
+HAS_PGMPY = importlib.util.find_spec("pgmpy") is not None
 
 
 @pytest.fixture
@@ -38,6 +36,31 @@ def graph_path(tmp_path: Path) -> Path:
     gp.parent.mkdir(parents=True)
     gp.write_text(INITIAL_GRAPH_TEMPLATE, encoding="utf-8")
     return gp
+
+
+class EnrichedClaimBundle(TypedDict):
+    compositional_status: str
+    compositional_method: str
+    platform_pattern: str
+    dataset_effects: dict[str, float]
+    evidence_lines: list[PropositionEvidenceLine]
+    statistical_support: str
+    mechanistic_support: str
+    replication_scope: str
+    claim_status: str
+    pre_registrations: list[str]
+    interaction_terms: list[PropositionInteractionTerm]
+    bridge_between: list[str]
+    falsifications: list[FalsificationRecord]
+
+
+class FalsificationView(TypedDict):
+    predicted: str
+    decision: str
+
+
+def _claim_bundle(claim: object) -> EnrichedClaimBundle:
+    return cast(EnrichedClaimBundle, claim)
 
 
 class TestInquiryType:
@@ -633,7 +656,7 @@ class TestEdgeProvenance:
 
         edges = _get_causal_edges_for_inquiry(graph_path, "meta-dag")
         edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
-        claim = edge["claims"][0]
+        claim = _claim_bundle(edge["claims"][0])
 
         assert claim["compositional_status"] == "clr_attenuated"
         assert claim["compositional_method"] == "CLR"
@@ -678,7 +701,7 @@ class TestEdgeProvenance:
 
         edges = _get_causal_edges_for_inquiry(graph_path, "semantics-dag")
         edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
-        claim = edge["claims"][0]
+        claim = _claim_bundle(edge["claims"][0])
 
         assert claim["statistical_support"] == "replicated"
         assert claim["mechanistic_support"] == "direct"
@@ -721,7 +744,7 @@ class TestEdgeProvenance:
 
         edges = _get_causal_edges_for_inquiry(graph_path, "prereg-dag")
         edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
-        claim = edge["claims"][0]
+        claim = _claim_bundle(edge["claims"][0])
 
         assert sorted(claim["pre_registrations"]) == [
             "pre-registration/edge-mtor-ribosome",
@@ -768,7 +791,7 @@ class TestEdgeProvenance:
 
         edges = _get_causal_edges_for_inquiry(graph_path, "interaction-dag")
         edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
-        claim = edge["claims"][0]
+        claim = _claim_bundle(edge["claims"][0])
 
         assert len(claim["interaction_terms"]) == 1
         interaction_term = claim["interaction_terms"][0]
@@ -809,7 +832,7 @@ class TestEdgeProvenance:
 
         edges = _get_causal_edges_for_inquiry(graph_path, "bridge-dag")
         edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
-        claim = edge["claims"][0]
+        claim = _claim_bundle(edge["claims"][0])
 
         assert claim["bridge_between"] == ["hypothesis/h1", "hypothesis/h2"]
 
@@ -1045,10 +1068,10 @@ class TestEdgeProvenance:
 
         edges = _get_causal_edges_for_inquiry(graph_path, "fals-dag")
         edge = next(e for e in edges if "drug" in e["subject"] and "recovery" in e["object"])
-        claim = edge["claims"][0]
+        claim = _claim_bundle(edge["claims"][0])
 
         assert len(claim["falsifications"]) == 1
-        falsification = claim["falsifications"][0]
+        falsification = cast(FalsificationView, claim["falsifications"][0])
         assert falsification["predicted"] == "Drug treatment improves recovery time"
         assert falsification["decision"] == "Reject mechanistic interpretation"
 

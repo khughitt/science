@@ -7,6 +7,7 @@
 #     "rdflib>=7",
 # ]
 # ///
+# pyright: reportMissingImports=false, reportUnusedExpression=false
 
 import marimo
 

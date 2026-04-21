@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import click
@@ -15,7 +16,7 @@ def emit_query_rows(
     output_format: str,
     title: str,
     columns: list[tuple[str, str]],
-    rows: list[dict[str, Any]],
+    rows: Sequence[Mapping[str, Any]],
 ) -> None:
     if output_format == "json":
         click.echo(json.dumps({"format": "json", "rows": rows}, indent=2))

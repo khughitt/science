@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import importlib
 from pathlib import Path
 from typing import Any
 
@@ -96,12 +97,13 @@ def _pagerank_select(triples: Any, budget: int) -> set[str]:
 def _load_pykeen_dataset(dataset_name: str) -> Any:
     """Load a PyKEEN dataset by name. Returns a TriplesFactory."""
     try:
-        from pykeen.datasets import get_dataset
+        pykeen_datasets = importlib.import_module("pykeen.datasets")
     except ImportError as exc:
         raise ImportError(
             "pykeen is required for KG distillation. Install with: uv add --optional distill pykeen"
         ) from exc
 
+    get_dataset = getattr(pykeen_datasets, "get_dataset")
     dataset = get_dataset(dataset=dataset_name)
     return dataset.training
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import importlib.resources
 import json
 import re
@@ -144,10 +145,10 @@ class PropositionEvidenceSemantics(TypedDict, total=False):
     evidence_role: str
 
 
-class PropositionInteractionTerm(TypedDict, total=False):
+class PropositionInteractionTerm(TypedDict):
     modifier: str
     effect: str
-    note: str
+    note: NotRequired[str]
 
 
 class FalsificationRecord(TypedDict, total=False):
@@ -202,6 +203,7 @@ class InquirySummaryData(TypedDict):
     uri: URIRef
     inquiry: str
     label: str
+    text: str
     inquiry_type: str
     status: str
     claim_count: int
@@ -225,6 +227,14 @@ class ProjectSummaryData(TypedDict):
     single_source_claim_count: int
     no_empirical_claim_count: int
     priority_score: float
+
+
+class EvidenceSignalSummary(TypedDict):
+    support_count: int
+    dispute_count: int
+    support_sources: set[str]
+    dispute_sources: set[str]
+    source_count: int
 
 
 VALID_INQUIRY_TYPES: tuple[str, ...] = ("general", "causal")
@@ -1566,8 +1576,8 @@ def export_graph_payload(graph_path: Path, overlays: list[str] | None = None) ->
             except ValueError as exc:
                 raise click.ClickException(f"Invalid confidence value for {shorten_uri(str(claim_uri))}") from exc
 
-        bundle.update(_load_proposition_phase1_metadata(provenance, claim_uri))
-        bundle.update(_load_proposition_evidence_semantics(provenance, claim_uri))
+        _apply_phase1_metadata_to_bundle(bundle, _load_proposition_phase1_metadata(provenance, claim_uri))
+        _apply_evidence_semantics_to_bundle(bundle, _load_proposition_evidence_semantics(provenance, claim_uri))
 
         pre_registrations = _load_proposition_pre_registrations(provenance, claim_uri)
         if pre_registrations:
@@ -2198,6 +2208,8 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
     boundary_in: set[URIRef] = set()
     boundary_out: set[URIRef] = set()
     for s, _p, o in inquiry_graph.triples((None, SCI_NS.boundaryRole, None)):
+        if not isinstance(s, URIRef):
+            continue
         if o == SCI_NS.BoundaryIn:
             boundary_in.add(s)
         elif o == SCI_NS.BoundaryOut:
@@ -2208,7 +2220,7 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
     adjacency: dict[URIRef, list[URIRef]] = {}
     all_flow_nodes: set[URIRef] = set()
     for s, p, o in inquiry_graph:
-        if p in flow_predicates:
+        if p in flow_predicates and isinstance(s, URIRef) and isinstance(o, URIRef):
             adjacency.setdefault(s, []).append(o)
             all_flow_nodes.add(s)
             all_flow_nodes.add(o)
@@ -2457,11 +2469,13 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
 
             _pgmpy_available = True
             try:
-                try:
-                    from pgmpy.models import DiscreteBayesianNetwork as _BN
-                except ImportError:
-                    from pgmpy.models import BayesianNetwork as _BN
-                from pgmpy.inference import CausalInference
+                pgmpy_models = importlib.import_module("pgmpy.models")
+                bn_cls = getattr(pgmpy_models, "DiscreteBayesianNetwork", None)
+                if bn_cls is None:
+                    bn_cls = getattr(pgmpy_models, "BayesianNetwork")
+                _BN = bn_cls
+                causal_inference_module = importlib.import_module("pgmpy.inference")
+                CausalInference = getattr(causal_inference_module, "CausalInference")
             except ImportError:
                 _pgmpy_available = False
 
@@ -3381,7 +3395,7 @@ def _evidence_targets_for_uri(knowledge, target_uri: URIRef) -> list[URIRef]:
     return [target_uri, *_linked_claims_for_hypothesis(knowledge, target_uri)]
 
 
-def _collect_evidence_signals(knowledge, provenance, target_uri: URIRef) -> dict[str, object]:
+def _collect_evidence_signals(knowledge, provenance, target_uri: URIRef) -> EvidenceSignalSummary:
     support_sources: set[str] = set()
     dispute_sources: set[str] = set()
     support_items: set[str] = set()
@@ -3417,6 +3431,54 @@ def _collect_evidence_signals(knowledge, provenance, target_uri: URIRef) -> dict
         "dispute_sources": dispute_sources,
         "source_count": unique_source_count,
     }
+
+
+def _apply_phase1_metadata_to_bundle(
+    bundle: EvidenceClaimBundle,
+    metadata: PropositionPhase1Metadata,
+) -> None:
+    if "compositional_status" in metadata:
+        bundle["compositional_status"] = metadata["compositional_status"]
+    if "compositional_method" in metadata:
+        bundle["compositional_method"] = metadata["compositional_method"]
+    if "compositional_note" in metadata:
+        bundle["compositional_note"] = metadata["compositional_note"]
+    if "platform_pattern" in metadata:
+        bundle["platform_pattern"] = metadata["platform_pattern"]
+    if "dataset_effects" in metadata:
+        bundle["dataset_effects"] = metadata["dataset_effects"]
+    if "evidence_lines" in metadata:
+        bundle["evidence_lines"] = metadata["evidence_lines"]
+    if "claim_layer" in metadata:
+        bundle["claim_layer"] = metadata["claim_layer"]
+    if "supports_scope" in metadata:
+        bundle["supports_scope"] = metadata["supports_scope"]
+    if "measurement_model" in metadata:
+        bundle["measurement_model"] = metadata["measurement_model"]
+    if "rival_model_packet" in metadata:
+        bundle["rival_model_packet"] = metadata["rival_model_packet"]
+
+
+def _apply_evidence_semantics_to_bundle(
+    bundle: EvidenceClaimBundle,
+    semantics: PropositionEvidenceSemantics,
+) -> None:
+    if "statistical_support" in semantics:
+        bundle["statistical_support"] = semantics["statistical_support"]
+    if "mechanistic_support" in semantics:
+        bundle["mechanistic_support"] = semantics["mechanistic_support"]
+    if "replication_scope" in semantics:
+        bundle["replication_scope"] = semantics["replication_scope"]
+    if "claim_status" in semantics:
+        bundle["claim_status"] = semantics["claim_status"]
+    if "identification_strength" in semantics:
+        bundle["identification_strength"] = semantics["identification_strength"]
+    if "proxy_directness" in semantics:
+        bundle["proxy_directness"] = semantics["proxy_directness"]
+    if "independence_group" in semantics:
+        bundle["independence_group"] = semantics["independence_group"]
+    if "evidence_role" in semantics:
+        bundle["evidence_role"] = semantics["evidence_role"]
 
 
 def _evidence_type_strings(provenance, primary_uri: URIRef, fallback_uri: URIRef | None = None) -> set[str]:
