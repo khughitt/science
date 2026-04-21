@@ -100,6 +100,24 @@ def test_weighted_majority_strictly_greater_than_half_yields_that_polarity() -> 
     assert aggregate_composite("weighted-majority", claims) == Token.POSITIVE
 
 
+def test_weighted_majority_ignores_inconclusive_weight_for_positive_winner() -> None:
+    claims = [
+        _claim("c1", Token.POSITIVE, 2.0),
+        _claim("c2", Token.NEGATIVE, 1.5),
+        _claim("c3", Token.INCONCLUSIVE, 0.5),
+    ]
+    assert aggregate_composite("weighted-majority", claims) == Token.POSITIVE
+
+
+def test_weighted_majority_negative_adjudicating_weight_wins() -> None:
+    claims = [
+        _claim("c1", Token.POSITIVE, 1.5),
+        _claim("c2", Token.NEGATIVE, 2.0),
+        _claim("c3", Token.MIXED, 10.0),
+    ]
+    assert aggregate_composite("weighted-majority", claims) == Token.NEGATIVE
+
+
 def test_weighted_majority_exact_half_weight_yields_mixed() -> None:
     claims = [
         _claim("c1", Token.NEGATIVE, 1),
@@ -117,6 +135,15 @@ def test_weighted_majority_falls_back_to_mixed_when_no_50pct() -> None:
 
 def test_weighted_majority_zero_total_weight_yields_mixed() -> None:
     claims = [_claim("c1", Token.POSITIVE, 0), _claim("c2", Token.NEGATIVE, 0)]
+    assert aggregate_composite("weighted-majority", claims) == Token.MIXED
+
+
+def test_weighted_majority_no_adjudicating_weight_yields_mixed() -> None:
+    claims = [
+        _claim("c1", Token.INCONCLUSIVE, 2.0),
+        _claim("c2", Token.MIXED, 1.5),
+        _claim("c3", Token.NON_ADJUDICATING, 3.0),
+    ]
     assert aggregate_composite("weighted-majority", claims) == Token.MIXED
 
 

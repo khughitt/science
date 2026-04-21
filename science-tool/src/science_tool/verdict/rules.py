@@ -65,16 +65,18 @@ def _aggregate_majority(counts: Counter[Token], claim_count: int) -> Token:
 
 
 def _rule_weighted_majority(claims: list[Claim]) -> Token:
-    total_weight = sum(claim.weight for claim in claims)
-    if total_weight <= 0:
-        return Token.MIXED
-
     weights: dict[Token, float] = {}
     for claim in claims:
         weights[claim.polarity] = weights.get(claim.polarity, 0.0) + claim.weight
 
-    if weights.get(Token.POSITIVE, 0.0) / total_weight > 0.5:
+    positive_weight = weights.get(Token.POSITIVE, 0.0)
+    negative_weight = weights.get(Token.NEGATIVE, 0.0)
+    adjudicating_weight = positive_weight + negative_weight
+    if adjudicating_weight <= 0:
+        return Token.MIXED
+
+    if positive_weight / adjudicating_weight > 0.5:
         return Token.POSITIVE
-    if weights.get(Token.NEGATIVE, 0.0) / total_weight > 0.5:
+    if negative_weight / adjudicating_weight > 0.5:
         return Token.NEGATIVE
     return Token.MIXED
