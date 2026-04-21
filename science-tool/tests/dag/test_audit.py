@@ -21,11 +21,16 @@ def _build_project(tmp_path: Path, *, with_drift: bool = False) -> DagPaths:
     dag_dir.mkdir(parents=True)
     # DOT must include the a -> b edge so topology validation passes.
     (dag_dir / "h1-prognosis.dot").write_text("digraph h1_prognosis {\n  a -> b;\n}\n")
-    edges = [{
-        "id": 1, "source": "a", "target": "b", "description": "x",
-        "identification": "none",
-        "data_support": [{"task": "t001", "description": "old"}],
-    }]
+    edges = [
+        {
+            "id": 1,
+            "source": "a",
+            "target": "b",
+            "description": "x",
+            "identification": "none",
+            "data_support": [{"task": "t001", "description": "old"}],
+        }
+    ]
     (dag_dir / "h1-prognosis.edges.yaml").write_text(
         yaml.safe_dump({"dag": "h1-prognosis", "edges": edges}, sort_keys=False)
     )
@@ -34,12 +39,16 @@ def _build_project(tmp_path: Path, *, with_drift: bool = False) -> DagPaths:
     (tasks_dir / "active.md").write_text("")
     done_dir = tasks_dir / "done"
     done_dir.mkdir()
-    blocks = ["## [t001] base task", "- priority: P2", "- status: done",
-              "- completed: 2026-01-01", ""]
+    blocks = ["## [t001] base task", "- priority: P2", "- status: done", "- completed: 2026-01-01", ""]
     if with_drift:
-        blocks += ["## [t100] newer related task", "- priority: P2", "- status: done",
-                   "- completed: 2026-04-15",
-                   "- related: [hypothesis:h1-epigenetic-commitment]", ""]
+        blocks += [
+            "## [t100] newer related task",
+            "- priority: P2",
+            "- status: done",
+            "- completed: 2026-04-15",
+            "- related: [hypothesis:h1-epigenetic-commitment]",
+            "",
+        ]
     (done_dir / "2026-04.md").write_text("\n".join(blocks))
     return DagPaths(dag_dir=dag_dir, tasks_dir=tasks_dir, dags=None)
 
@@ -66,6 +75,7 @@ def test_audit_fix_opens_review_task_for_drift(tmp_path: Path, monkeypatch: pyte
     paths = _build_project(tmp_path, with_drift=True)
     calls: list[dict] = []
     from science_tool.dag import audit as audit_mod
+
     monkeypatch.setattr(audit_mod, "_open_review_task", lambda **kw: calls.append(kw))
 
     report = run_audit(paths, today=date(2026, 4, 20), fix=True)
@@ -80,8 +90,7 @@ def test_audit_fix_records_unpropagated_to_log(tmp_path: Path) -> None:
     # Also add an unpropagated orphan not cited anywhere:
     done_md = tmp_path / "tasks/done/2026-04.md"
     done_md.write_text(
-        done_md.read_text() +
-        "\n## [t999] orphan task\n- priority: P2\n- status: done\n"
+        done_md.read_text() + "\n## [t999] orphan task\n- priority: P2\n- status: done\n"
         "- completed: 2026-04-15\n- related: [hypothesis:h1-epigenetic-commitment]\n"
     )
 
@@ -137,6 +146,7 @@ def test_audit_includes_validation_section() -> None:
 
 def test_audit_json_has_top_level_today_and_strict() -> None:
     import re
+
     paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
     report = run_audit(paths)
     js = report.to_json()

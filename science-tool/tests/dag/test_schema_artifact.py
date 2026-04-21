@@ -7,13 +7,7 @@ from pathlib import Path
 
 from science_tool.dag.schema import EdgesYamlFile
 
-SCHEMA_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "src"
-    / "science_tool"
-    / "dag"
-    / "edges.schema.json"
-)
+SCHEMA_PATH = Path(__file__).resolve().parents[2] / "src" / "science_tool" / "dag" / "edges.schema.json"
 
 
 def _canonical(obj: object) -> str:
@@ -36,6 +30,5 @@ def test_committed_schema_canonical_formatted() -> None:
     text = SCHEMA_PATH.read_text(encoding="utf-8")
     emitted = EdgesYamlFile.model_json_schema()
     assert text == _canonical(emitted), (
-        "Committed schema is not in canonical form. "
-        f"Regenerate: `science-tool dag schema --output {SCHEMA_PATH}`"
+        f"Committed schema is not in canonical form. Regenerate: `science-tool dag schema --output {SCHEMA_PATH}`"
     )

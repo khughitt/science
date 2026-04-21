@@ -118,9 +118,7 @@ def _validate_dag_refs(slug: str, *, allow_doi_null: bool = True) -> tuple[int, 
             validate_ref_entry(entry, FIXTURE_ROOT)
             ok += 1
         except RefResolutionError as exc:
-            failures.append(
-                f"Edge {loc.edge_id} {loc.support_type}: {exc}"
-            )
+            failures.append(f"Edge {loc.edge_id} {loc.support_type}: {exc}")
     return ok, failures
 
 
