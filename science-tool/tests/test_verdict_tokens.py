@@ -40,8 +40,8 @@ def test_parse_body_verdict_returns_none_when_missing() -> None:
 
 
 def test_parse_body_verdict_does_not_consume_next_section_when_clause_missing() -> None:
-    md = "**Verdict:** [+]\n\n## Summary\nbody"
-    assert parse_body_verdict(md) is None
+    assert parse_body_verdict("**Verdict:** [+]\n\n## Summary\nbody") is None
+    assert parse_body_verdict("**Verdict:** [+]   \n\n## Summary\nbody") is None
 
 
 def test_parse_body_verdict_takes_first_match() -> None:

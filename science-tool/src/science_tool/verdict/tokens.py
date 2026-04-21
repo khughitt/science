@@ -27,7 +27,7 @@ class Token(str, Enum):
 
 
 _BODY_VERDICT_RE = re.compile(
-    r"\*\*Verdict:\*\*[^\S\r\n]*(\[[+\-~?⌀]\])[^\S\r\n]+(.+?)(?=\n\n|\n<!--|\Z)",
+    r"\*\*Verdict:\*\*[^\S\r\n]*(\[[+\-~?⌀]\])[^\S\r\n]+(\S.*?)(?=\n\n|\n<!--|\Z)",
     re.DOTALL,
 )
 
