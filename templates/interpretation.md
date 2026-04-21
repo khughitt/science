@@ -24,7 +24,13 @@ Tokens (with respect to the predicted direction, NOT project valence):
   [+]  positive — supports the prediction / hypothesis arm under test
   [-]  negative — refutes or contradicts the prediction
   [~]  null / mixed / bimodal — no clear directional signal, or different
-       directions in different sub-strata
+       directions in different sub-strata (multi-finding panel, per-context
+       divergence, within-result bimodality)
+  [⌀]  non-adjudicating terminal — the design *was* able to discriminate at
+       the test layer but the rollup is deliberately closed without resolving
+       polarity (e.g. `non_adjudicating_under_observational_adjusters`).
+       Distinct from [?] (a design failure) and from [~] (which has structured
+       directional content).
   [?]  inconclusive — protocol failure, data gap, or insufficient power to
        discriminate
 
@@ -32,6 +38,7 @@ Examples:
   **Verdict:** [+] Cooperrider strong-form supported (acquirer LEN+ rate >80%, p<0.01)
   **Verdict:** [-] Cooperrider strong-form refuted (rate 25% vs predicted ≥80%, p=0.47)
   **Verdict:** [~] Bimodal — 2/16 basins robust, 14/16 collapse under 50% perturbation
+  **Verdict:** [⌀] Terminal `non_adjudicating_under_observational_adjusters`; observational route closed, handed to interventional evidence
   **Verdict:** [?] Inconclusive — pre-reg PPC failed across all student-t variants
 
 The polarity is with respect to the *predicted* direction. A `[-]` verdict
