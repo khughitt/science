@@ -2,35 +2,66 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import yaml
 from pydantic import BaseModel, Field
+from science_model.entities import Entity
 from science_model.ontologies import load_catalogs_for_names
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.profiles import CORE_PROFILE, load_shared_profile
 from science_model.profiles.schema import ProfileManifest
+from science_model.reasoning import (
+    ClaimLayer,
+    EvidenceRole,
+    IdentificationStrength,
+    ProxyDirectness,
+    SupportScope,
+)
 from science_model.source_contracts import AuthoredTargetedRelation, BindingSource, ModelSource, ParameterSource
+from science_model.source_ref import SourceRef
 
 from science_tool.big_picture.literature_prefix import canonical_paper_id
-from science_tool.graph.entity_providers.base import EntityDiscoveryContext
-from science_tool.graph.entity_providers.resolver import EntityResolver, default_providers
-from science_tool.graph.source_types import (
-    EntityDatapackageInvalidError,  # noqa: F401
-    EntityIdCollisionError,  # noqa: F401
-    KnowledgeProfiles,
-    SourceEntity,
-    SourceRelation,
-)
+from science_tool.graph.entity_registry import EntityRegistry
+from science_tool.graph.errors import EntityIdentityCollisionError
+from science_tool.graph.storage_adapters.aggregate import AggregateAdapter
+from science_tool.graph.storage_adapters.base import StorageAdapter
+from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
+from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
+from science_tool.graph.storage_adapters.task import TaskAdapter
 from science_tool.paths import resolve_paths
-from science_tool.tasks import parse_tasks
 
 _SHORT_ID_RE = re.compile(r"^(?P<token>[a-z]\d+)(?:[-_].*)?$", re.IGNORECASE)
 _EXTERNAL_PREFIXES = frozenset({"go", "mesh", "doid", "hp", "so", "ncbitaxon", "ncbigene", "ensembl"})
 _CORE_KINDS = frozenset(kind.name for kind in CORE_PROFILE.entity_kinds)
 _SourceRecordT = TypeVar("_SourceRecordT", bound=BaseModel)
+
+_ENUM_FIELDS: dict[str, type] = {
+    "claim_layer": ClaimLayer,
+    "identification_strength": IdentificationStrength,
+    "proxy_directness": ProxyDirectness,
+    "supports_scope": SupportScope,
+    "evidence_role": EvidenceRole,
+}
+
+
+class KnowledgeProfiles(BaseModel):
+    """Selected knowledge profiles for a project."""
+
+    local: str = "local"
+
+
+class SourceRelation(BaseModel):
+    """An authored relation collected from structured source files."""
+
+    subject: str
+    predicate: str
+    object: str
+    graph_layer: str = "graph/knowledge"
+    source_path: str
 
 
 def known_kinds(
@@ -68,10 +99,12 @@ class AliasCollisionError(ValueError):
 class ProjectSources(BaseModel):
     """Structured source bundle used to materialize a project graph."""
 
+    model_config = {"arbitrary_types_allowed": True}
+
     project_name: str
     project_root: str
     profiles: KnowledgeProfiles
-    entities: list[SourceEntity]
+    entities: list[Entity]
     relations: list[SourceRelation] = Field(default_factory=list)
     bindings: list[BindingSource] = Field(default_factory=list)
     manual_aliases: dict[str, str] = Field(default_factory=dict)
@@ -82,17 +115,16 @@ SourceBinding = BindingSource
 
 
 def load_project_sources(project_root: Path) -> ProjectSources:
-    """Load typed project entities from markdown docs and task files."""
+    """Load all project entities through the unified registry + adapters flow."""
     project_root = project_root.resolve()
     config = _read_project_config(project_root)
-    paths = resolve_paths(project_root)
     profiles = KnowledgeProfiles.model_validate(config["knowledge_profiles"])
+    local_profile = profiles.local
 
-    # Load declared ontology catalogs
     declared_ontologies: list[str] = list(config.get("ontologies") or [])  # type: ignore[union-attr]
     ontology_catalogs = load_catalogs_for_names(declared_ontologies) if declared_ontologies else []
 
-    # Always try to load shared profile (no longer gated on curated list)
+    # Always try to load shared profile.
     extra_profiles: list[ProfileManifest] = []
     shared = load_shared_profile()
     if shared is not None:
@@ -100,47 +132,91 @@ def load_project_sources(project_root: Path) -> ProjectSources:
 
     active_kinds = known_kinds(extra_profiles=extra_profiles, ontology_catalogs=ontology_catalogs)
 
-    entities: list[SourceEntity] = []
-    local_profile = profiles.local
+    registry = EntityRegistry.with_core_types()
+    adapters: list[StorageAdapter] = [
+        MarkdownAdapter(),
+        AggregateAdapter(local_profile=local_profile),
+        DatapackageAdapter(),
+        TaskAdapter(),
+    ]
 
-    ctx = EntityDiscoveryContext(
-        project_root=project_root,
-        project_slug=project_root.name,
+    project_slug = project_root.name
+    identity_table: dict[str, SourceRef] = {}
+    entities: list[Entity] = []
+
+    # cwd for relative-path resolution in adapters. The StorageAdapter.load_raw()
+    # contract resolves ref.path against cwd; we chdir into project_root rather
+    # than broaden the Protocol. Restored in the finally block.
+    prev_cwd = os.getcwd()
+    os.chdir(project_root)
+    try:
+        for adapter in adapters:
+            for ref in adapter.discover(project_root):
+                raw = adapter.load_raw(ref)
+                kind = raw.get("kind")
+                if not isinstance(kind, str) or not kind:
+                    # Adapter returned a record with no kind (e.g. frontmatter-less
+                    # markdown). Skip rather than fail — mirrors the legacy behavior
+                    # where parse_entity_file returned None.
+                    continue
+                _enrich_raw(
+                    raw,
+                    kind=kind,
+                    project_slug=project_slug,
+                    local_profile=local_profile,
+                    active_kinds=active_kinds,
+                    ontology_catalogs=ontology_catalogs,
+                )
+                schema = registry.resolve(kind)
+                entity = schema.model_validate(raw)
+                existing = identity_table.get(entity.canonical_id)
+                if existing is not None:
+                    raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
+                identity_table[entity.canonical_id] = ref
+                entities.append(entity)
+    finally:
+        os.chdir(prev_cwd)
+
+    # Legacy model/parameter loaders from knowledge/sources/<local>/{models,parameters}.yaml.
+    # Produce ProjectEntity records through the registry so they join the same pipeline.
+    paths = resolve_paths(project_root)
+    del paths  # unused; kept to document intent
+    for entity, ref in _load_legacy_records(
+        project_root,
+        registry=registry,
         local_profile=local_profile,
+        project_slug=project_slug,
         active_kinds=active_kinds,
         ontology_catalogs=ontology_catalogs,
-    )
-    resolver = EntityResolver(default_providers())
-    entities.extend(resolver.discover(ctx))
+    ):
+        existing = identity_table.get(entity.canonical_id)
+        if existing is not None:
+            raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
+        identity_table[entity.canonical_id] = ref
+        entities.append(entity)
 
-    entities.extend(
-        _load_task_entities(
+    entities.sort(key=lambda e: e.canonical_id)
+
+    relations = _load_structured_relations(project_root, local_profile=local_profile)
+    # Legacy model/parameter relations come from the nested authored-relations block.
+    relations.extend(
+        _legacy_nested_relations(
             project_root,
-            paths.tasks_dir,
             local_profile=local_profile,
-            active_kinds=active_kinds,
-            ontology_catalogs=ontology_catalogs,
+            file_name="models.yaml",
+            root_key="models",
+            model=ModelSource,
         )
     )
-
-    model_entities, model_relations = _load_model_sources(project_root, local_profile=local_profile)
-    parameter_entities, parameter_relations = _load_parameter_sources(project_root, local_profile=local_profile)
-    entities.extend(model_entities)
-    entities.extend(parameter_entities)
-
-    # Final global collision check across resolver + specialized parsers.
-    seen: dict[str, list[tuple[str, str]]] = {}
-    for e in entities:
-        seen.setdefault(e.canonical_id, []).append((e.provider, e.source_path))
-    collisions = {cid: srcs for cid, srcs in seen.items() if len(srcs) > 1}
-    if collisions:
-        cid, sources = next(iter(collisions.items()))
-        raise EntityIdCollisionError(cid, sources)
-
-    entities.sort(key=lambda entity: entity.canonical_id)
-    relations = _load_structured_relations(project_root, local_profile=local_profile)
-    relations.extend(model_relations)
-    relations.extend(parameter_relations)
+    relations.extend(
+        _legacy_nested_relations(
+            project_root,
+            local_profile=local_profile,
+            file_name="parameters.yaml",
+            root_key="parameters",
+            model=ParameterSource,
+        )
+    )
     relations.sort(key=lambda relation: (relation.graph_layer, relation.subject, relation.predicate, relation.object))
     bindings = _load_binding_sources(project_root, local_profile=local_profile)
     bindings.sort(key=lambda binding: (binding.model, binding.parameter, binding.source_path))
@@ -157,7 +233,7 @@ def load_project_sources(project_root: Path) -> ProjectSources:
     )
 
 
-def build_alias_map(entities: list[SourceEntity], manual_aliases: dict[str, str] | None = None) -> dict[str, str]:
+def build_alias_map(entities: list[Entity], manual_aliases: dict[str, str] | None = None) -> dict[str, str]:
     """Build a best-effort alias map for canonical entity resolution."""
     alias_map: dict[str, str] = {}
     for entity in entities:
@@ -192,107 +268,221 @@ def is_metadata_reference(raw: str) -> bool:
     return raw.startswith("meta:")
 
 
-def _load_task_entities(
-    project_root: Path,
-    tasks_dir: Path,
+def _enrich_raw(
+    raw: dict[str, Any],
     *,
+    kind: str,
+    project_slug: str,
     local_profile: str,
-    active_kinds: frozenset[str] | None = None,
-    ontology_catalogs: list[OntologyCatalog] | None = None,
-) -> list[SourceEntity]:
-    entities: list[SourceEntity] = []
-    for path in _task_paths(tasks_dir):
-        rel_path = path.relative_to(project_root).as_posix()
-        for task in parse_tasks(path):
-            canonical_id = f"task:{task.id.lower()}"
-            entities.append(
-                SourceEntity(
-                    canonical_id=canonical_id,
-                    kind="task",
-                    title=task.title,
-                    profile=_default_profile_for_kind(
-                        "task",
-                        local_profile=local_profile,
-                        active_kinds=active_kinds,
-                        ontology_catalogs=ontology_catalogs,
-                    ),
-                    source_path=rel_path,
-                    provider="task",
-                    description=task.description,
-                    status=task.status,
-                    content_preview=task.description,
-                    related=task.related,
-                    blocked_by=task.blocked_by,
-                    aliases=_derive_aliases(canonical_id, [task.id, task.id.upper()]),
-                )
-            )
-    return entities
+    active_kinds: frozenset[str],
+    ontology_catalogs: list[OntologyCatalog],
+) -> None:
+    """Centralized normalization layer between adapter output and Entity validation.
+
+    Mutates `raw` in place. Fills Entity defaults + legacy normalization:
+    - `project`, `ontology_terms`, `related`, `source_refs`, `content_preview`
+    - Paper-ID canonicalization (when kind == "paper" and on refs)
+    - Profile defaulting (core/ontology/local)
+    - Alias derivation for hypothesis/question/task
+    - Normalize `type` from `kind` (since Entity needs an EntityType enum)
+    - Description → content_preview fallback (legacy aggregate rows)
+    - Drop invalid enum values for reasoning fields (soft warn via stderr)
+    """
+    raw.setdefault("project", project_slug)
+    raw.setdefault("ontology_terms", [])
+    raw.setdefault("related", [])
+    raw.setdefault("source_refs", [])
+    raw.setdefault("same_as", [])
+    raw.setdefault("aliases", [])
+    raw.setdefault("file_path", "")
+    raw.setdefault("content", "")
+    # content_preview fallback: prefer explicit, then description, then first 200 chars of content.
+    if not raw.get("content_preview"):
+        desc = raw.get("description")
+        if isinstance(desc, str) and desc:
+            raw["content_preview"] = desc
+        else:
+            content = raw.get("content") or ""
+            raw["content_preview"] = content[:200] if isinstance(content, str) else ""
+
+    # Entity requires a `type` field (EntityType). Derive from kind.
+    if "type" not in raw:
+        raw["type"] = kind
+
+    # Paper canonicalization on the entity's own id + reference lists.
+    canonical_id = raw.get("canonical_id") or raw.get("id")
+    if kind == "paper" and isinstance(canonical_id, str) and canonical_id:
+        canonical_id = canonical_paper_id(canonical_id)
+    if isinstance(canonical_id, str):
+        raw["canonical_id"] = canonical_id
+        raw.setdefault("id", canonical_id)
+    for ref_field in ("related", "source_refs", "same_as", "blocked_by"):
+        vals = raw.get(ref_field)
+        if isinstance(vals, list):
+            raw[ref_field] = [canonical_paper_id(str(v)) for v in vals]
+
+    # Profile defaulting.
+    profile = raw.get("profile")
+    if not isinstance(profile, str) or not profile:
+        raw["profile"] = _default_profile_for_kind(
+            kind,
+            local_profile=local_profile,
+            active_kinds=active_kinds,
+            ontology_catalogs=ontology_catalogs,
+        )
+
+    # Alias derivation (mix in file-stem-based tokens for hypothesis/question/task
+    # files named `<token>-<rest>.md`; mirrors the legacy MarkdownProvider behavior).
+    if isinstance(canonical_id, str):
+        explicit = raw.get("aliases") or []
+        if not isinstance(explicit, list):
+            explicit = []
+        explicit_list = [str(a) for a in explicit]
+        fp = raw.get("file_path")
+        path_aliases: list[str] = []
+        if isinstance(fp, str) and fp and kind in {"hypothesis", "question", "task"}:
+            stem = Path(fp).stem
+            m = _SHORT_ID_RE.match(stem)
+            if m is None:
+                head = stem.split("-", 1)[0]
+                m = _SHORT_ID_RE.match(head)
+            if m is not None:
+                token = m.group("token")
+                path_aliases = [
+                    f"{kind}:{token.lower()}",
+                    f"{kind}:{token.upper()}",
+                    token.lower(),
+                    token.upper(),
+                ]
+        raw["aliases"] = _derive_aliases(canonical_id, kind, [*explicit_list, *path_aliases])
+
+    # Drop invalid enum values silently (matches legacy load_reasoning_metadata behavior).
+    for field, enum_type in _ENUM_FIELDS.items():
+        value = raw.get(field)
+        if isinstance(value, str):
+            try:
+                enum_type(value)
+            except ValueError:
+                raw.pop(field, None)
 
 
-def _load_model_sources(project_root: Path, *, local_profile: str) -> tuple[list[SourceEntity], list[SourceRelation]]:
-    records = _load_typed_records(
+def _load_legacy_records(
+    project_root: Path,
+    *,
+    registry: EntityRegistry,
+    local_profile: str,
+    project_slug: str,
+    active_kinds: frozenset[str],
+    ontology_catalogs: list[OntologyCatalog],
+) -> list[tuple[Entity, SourceRef]]:
+    """Load model + parameter records from knowledge/sources/<local>/{models,parameters}.yaml."""
+    out: list[tuple[Entity, SourceRef]] = []
+
+    model_records = _load_typed_records(
         project_root,
         local_profile=local_profile,
         file_name="models.yaml",
         root_key="models",
         model=ModelSource,
     )
-
-    entities: list[SourceEntity] = []
-    relations: list[SourceRelation] = []
-    for record in records:
-        entities.append(
-            SourceEntity(
-                canonical_id=record.canonical_id,
-                kind="model",
-                title=record.title,
-                profile=record.profile,
-                source_path=record.source_path,
-                provider="model",
-                domain=record.domain,
-                related=record.related,
-                source_refs=record.source_refs,
-                aliases=_derive_aliases(record.canonical_id, record.aliases),
-            )
+    for record in model_records:
+        raw: dict[str, Any] = {
+            "id": record.canonical_id,
+            "canonical_id": record.canonical_id,
+            "kind": "model",
+            "type": "model",
+            "title": record.title,
+            "profile": record.profile,
+            "file_path": record.source_path,
+            "domain": record.domain,
+            "related": list(record.related),
+            "source_refs": list(record.source_refs),
+            "aliases": list(record.aliases),
+        }
+        _enrich_raw(
+            raw,
+            kind="model",
+            project_slug=project_slug,
+            local_profile=local_profile,
+            active_kinds=active_kinds,
+            ontology_catalogs=ontology_catalogs,
         )
-        relations.extend(_nested_relations(record.canonical_id, record.relations, source_path=record.source_path))
+        schema = registry.resolve("model")
+        entity = schema.model_validate(raw)
+        out.append((entity, SourceRef(adapter_name="legacy-model", path=record.source_path)))
 
-    return entities, relations
-
-
-def _load_parameter_sources(
-    project_root: Path, *, local_profile: str
-) -> tuple[list[SourceEntity], list[SourceRelation]]:
-    records = _load_typed_records(
+    parameter_records = _load_typed_records(
         project_root,
         local_profile=local_profile,
         file_name="parameters.yaml",
         root_key="parameters",
         model=ParameterSource,
     )
+    for record in parameter_records:
+        raw = {
+            "id": record.canonical_id,
+            "canonical_id": record.canonical_id,
+            "kind": "canonical_parameter",
+            "type": "canonical_parameter",
+            "title": record.title,
+            "profile": record.profile,
+            "file_path": record.source_path,
+            "domain": record.domain,
+            "content_preview": _parameter_preview(record),
+            "related": list(record.related),
+            "source_refs": list(record.source_refs),
+            "ontology_terms": list(record.ontology_terms),
+            "aliases": list(record.aliases),
+        }
+        # canonical_parameter is not a registered kind; register on-the-fly.
+        # The spec routes unknown project kinds through ProjectEntity, but the
+        # registry requires explicit registration.
+        from science_model.entities import ProjectEntity
 
-    entities: list[SourceEntity] = []
-    relations: list[SourceRelation] = []
-    for record in records:
-        entities.append(
-            SourceEntity(
-                canonical_id=record.canonical_id,
-                kind="canonical_parameter",
-                title=record.title,
-                profile=record.profile,
-                source_path=record.source_path,
-                provider="parameter",
-                domain=record.domain,
-                content_preview=_parameter_preview(record),
-                related=record.related,
-                source_refs=record.source_refs,
-                ontology_terms=record.ontology_terms,
-                aliases=_derive_aliases(record.canonical_id, record.aliases),
-            )
+        try:
+            schema: type[Entity] = registry.resolve("canonical_parameter")
+        except Exception:  # noqa: BLE001
+            registry.register_extension_kind("canonical_parameter", ProjectEntity)
+            schema = registry.resolve("canonical_parameter")
+
+        _enrich_raw(
+            raw,
+            kind="canonical_parameter",
+            project_slug=project_slug,
+            local_profile=local_profile,
+            active_kinds=active_kinds,
+            ontology_catalogs=ontology_catalogs,
         )
-        relations.extend(_nested_relations(record.canonical_id, record.relations, source_path=record.source_path))
+        entity = schema.model_validate(raw)
+        out.append((entity, SourceRef(adapter_name="legacy-parameter", path=record.source_path)))
 
-    return entities, relations
+    return out
+
+
+def _legacy_nested_relations(
+    project_root: Path,
+    *,
+    local_profile: str,
+    file_name: str,
+    root_key: str,
+    model: type[_SourceRecordT],
+) -> list[SourceRelation]:
+    records = _load_typed_records(
+        project_root,
+        local_profile=local_profile,
+        file_name=file_name,
+        root_key=root_key,
+        model=model,
+    )
+    out: list[SourceRelation] = []
+    for record in records:
+        cid = getattr(record, "canonical_id", None)
+        rels = getattr(record, "relations", None)
+        src_path = getattr(record, "source_path", None)
+        if not cid or not isinstance(rels, list) or not src_path:
+            continue
+        out.extend(_nested_relations(cid, rels, source_path=src_path))
+    return out
 
 
 def _load_binding_sources(project_root: Path, *, local_profile: str) -> list[BindingSource]:
@@ -303,18 +493,6 @@ def _load_binding_sources(project_root: Path, *, local_profile: str) -> list[Bin
         root_key="bindings",
         model=BindingSource,
     )
-
-
-def _task_paths(tasks_dir: Path) -> list[Path]:
-    paths: list[Path] = []
-    active_path = tasks_dir / "active.md"
-    if active_path.is_file():
-        paths.append(active_path)
-
-    done_dir = tasks_dir / "done"
-    if done_dir.is_dir():
-        paths.extend(sorted(done_dir.glob("*.md")))
-    return paths
 
 
 def _load_structured_relations(project_root: Path, *, local_profile: str) -> list[SourceRelation]:
@@ -392,6 +570,13 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     if not isinstance(knowledge_profiles, dict):
         knowledge_profiles = {}
 
+    # Legacy science.yaml uses `profiles: {local: local}` instead of `knowledge_profiles`.
+    # Prefer knowledge_profiles; fall back to profiles if present.
+    if not knowledge_profiles:
+        fallback = data.get("profiles") or {}
+        if isinstance(fallback, dict):
+            knowledge_profiles = fallback
+
     raw_ontologies = data.get("ontologies") or []
     if not isinstance(raw_ontologies, list):
         raw_ontologies = []
@@ -451,7 +636,7 @@ def _parameter_preview(record: ParameterSource) -> str:
     return " | ".join(token for token in tokens if token)
 
 
-def _derive_aliases(canonical_id: str, explicit_aliases: list[str]) -> list[str]:
+def _derive_aliases(canonical_id: str, kind: str, explicit_aliases: list[str]) -> list[str]:
     aliases: list[str] = []
     seen: set[str] = set()
 
@@ -465,10 +650,13 @@ def _derive_aliases(canonical_id: str, explicit_aliases: list[str]) -> list[str]
     for alias in explicit_aliases:
         add(alias)
 
-    kind, slug = canonical_id.split(":", 1)
     if kind not in {"hypothesis", "question", "task"}:
         return aliases
 
+    if ":" in canonical_id:
+        slug = canonical_id.split(":", 1)[1]
+    else:
+        slug = canonical_id
     match = _SHORT_ID_RE.match(slug)
     if match is None:
         head = slug.split("-", 1)[0]

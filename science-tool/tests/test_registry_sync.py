@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from science_tool.graph.sources import SourceEntity
+from science_model.entities import EntityType, ProjectEntity
+
 from science_tool.registry.index import RegistryIndex
 from science_tool.registry.sync import SyncReport, align_registry, collect_all_project_sources, run_sync
 
@@ -45,16 +46,25 @@ def _source_entity(
     title: str,
     aliases: list[str] | None = None,
     ontology_terms: list[str] | None = None,
-) -> SourceEntity:
-    return SourceEntity(
+) -> ProjectEntity:
+    # Domain-specific kinds (e.g. "gene") are not in EntityType — route them to UNKNOWN.
+    try:
+        etype = EntityType(kind)
+    except ValueError:
+        etype = EntityType.UNKNOWN
+    return ProjectEntity(
+        id=canonical_id,
         canonical_id=canonical_id,
-        kind=kind,
+        type=etype,
         title=title,
+        project="test",
         profile="core",
-        source_path=f"doc/{canonical_id.replace(':', '-')}.md",
-        provider="markdown",
+        file_path=f"doc/{canonical_id.replace(':', '-')}.md",
         aliases=aliases or [],
         ontology_terms=ontology_terms or [],
+        related=[],
+        source_refs=[],
+        content_preview="",
     )
 
 

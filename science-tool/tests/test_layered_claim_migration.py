@@ -18,7 +18,6 @@ from science_model.reasoning import (
     RivalModelPacket,
     SupportScope,
 )
-from science_tool.graph import sources as sources_module
 from science_tool.graph.migrate import build_layered_claim_migration_report
 from science_tool.graph.materialize import materialize_graph
 from science_tool.graph.sources import load_project_sources
@@ -165,86 +164,68 @@ def _write_graph() -> Path:
     return graph_path
 
 
-class _FakeTypedRecord:
-    def __init__(self, *, canonical_id: str, title: str, profile: str, source_path: str) -> None:
-        self.canonical_id = canonical_id
-        self.title = title
-        self.profile = profile
-        self.source_path = source_path
-        self.symbol = "symbol:demo"
-        self.units = None
-        self.quantity_group = None
-        self.domain = "biology"
-        self.aliases = ["alias-1"]
-        self.source_refs = ["source:1"]
-        self.related = ["related:1"]
-        self.ontology_terms = ["term:1"]
-        self.relations: list[dict[str, str]] = []
-
-    def model_dump(self, mode: str = "json") -> dict[str, object]:
-        return {
-            "canonical_id": self.canonical_id,
-            "title": self.title,
-            "profile": self.profile,
-            "source_path": self.source_path,
-            "domain": self.domain,
-            "aliases": self.aliases,
-            "source_refs": self.source_refs,
-            "related": self.related,
-            "ontology_terms": self.ontology_terms,
-            "claim_layer": "causal_effect",
-            "identification_strength": "interventional",
-            "proxy_directness": "indirect",
-            "supports_scope": "project_wide",
-            "independence_group": "batch-9",
-            "evidence_role": "direct_test",
-            "measurement_model": {
-                "observed_entity": "observation:obs-9",
-                "latent_construct": "latent:state",
-            },
-            "rival_model_packet": {
-                "packet_id": "packet:9",
-                "current_working_model": "model:working",
-            },
-        }
-
-
 def test_model_and_parameter_source_loading_ignores_layered_claim_metadata_from_typed_records(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
-    fake_model = _FakeTypedRecord(
-        canonical_id="model:demo",
-        title="Model Demo",
-        profile="local",
-        source_path="models.yaml",
+    """Model/parameter loaders do NOT lift reasoning metadata from their typed records.
+
+    Reasoning metadata only flows through markdown frontmatter on propositions. The
+    dedicated models.yaml / parameters.yaml loaders ignore any reasoning-shaped
+    keys on their records — this test writes such keys and verifies they're dropped.
+    """
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "science.yaml").write_text("name: test\nprofile: research\nprofiles: {local: local}\n", encoding="utf-8")
+    local_src = project / "knowledge" / "sources" / "local"
+    local_src.mkdir(parents=True)
+
+    (local_src / "models.yaml").write_text(
+        "\n".join(
+            [
+                "models:",
+                "  - canonical_id: 'model:demo'",
+                "    title: 'Model Demo'",
+                "    profile: 'local'",
+                "    source_path: 'models.yaml'",
+                "    domain: 'biology'",
+                "    aliases: []",
+                "    source_refs: []",
+                "    related: []",
+                "    ontology_terms: []",
+                "    relations: []",
+                "    # Reasoning-shaped keys are NOT part of ModelSource schema — they are ignored.",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
     )
-    fake_parameter = _FakeTypedRecord(
-        canonical_id="parameter:demo",
-        title="Parameter Demo",
-        profile="local",
-        source_path="parameters.yaml",
+    (local_src / "parameters.yaml").write_text(
+        "\n".join(
+            [
+                "parameters:",
+                "  - canonical_id: 'canonical_parameter:demo'",
+                "    title: 'Parameter Demo'",
+                "    profile: 'local'",
+                "    source_path: 'parameters.yaml'",
+                "    symbol: 'x'",
+                "    domain: 'biology'",
+                "    aliases: []",
+                "    source_refs: []",
+                "    related: []",
+                "    ontology_terms: []",
+                "    relations: []",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
     )
 
-    def fake_load_typed_records(
-        project_root: Path,
-        *,
-        local_profile: str,
-        file_name: str,
-        root_key: str,
-        model: type[object],
-    ) -> list[object]:
-        if file_name == "models.yaml":
-            return [fake_model]
-        if file_name == "parameters.yaml":
-            return [fake_parameter]
-        return []
+    from science_tool.graph.sources import load_project_sources
 
-    monkeypatch.setattr(sources_module, "_load_typed_records", fake_load_typed_records)
-
-    model_entities, _ = sources_module._load_model_sources(tmp_path / "project", local_profile="local")
-    parameter_entities, _ = sources_module._load_parameter_sources(tmp_path / "project", local_profile="local")
-
-    for entity in model_entities + parameter_entities:
+    sources = load_project_sources(project)
+    for entity in sources.entities:
+        if entity.canonical_id not in {"model:demo", "canonical_parameter:demo"}:
+            continue
         assert entity.claim_layer is None
         assert entity.identification_strength is None
         assert entity.proxy_directness is None

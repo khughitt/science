@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from science_model.entities import Entity
 from science_model.ontologies import load_catalog, load_registry
 from science_model.ontologies.schema import OntologyCatalog
-
-from science_tool.graph.sources import SourceEntity
 
 
 @dataclass(frozen=True)
@@ -20,7 +19,7 @@ class OntologySuggestion:
 
 
 def suggest_ontologies(
-    entities: list[SourceEntity],
+    entities: list[Entity],
     declared_ontologies: list[str],
 ) -> list[OntologySuggestion]:
     """Scan entities for signals that suggest undeclared ontologies.
@@ -59,7 +58,7 @@ def suggest_ontologies(
     return suggestions
 
 
-def _count_prefix_matches(entities: list[SourceEntity], catalog: OntologyCatalog) -> int:
+def _count_prefix_matches(entities: list[Entity], catalog: OntologyCatalog) -> int:
     """Count entities whose ontology_terms contain CURIEs matching the catalog's curie_prefixes."""
     catalog_prefixes: set[str] = set()
     for et in catalog.entity_types:
@@ -79,11 +78,11 @@ def _count_prefix_matches(entities: list[SourceEntity], catalog: OntologyCatalog
     return count
 
 
-def _count_kind_matches(entities: list[SourceEntity], catalog: OntologyCatalog) -> int:
+def _count_kind_matches(entities: list[Entity], catalog: OntologyCatalog) -> int:
     """Count entities whose kind matches an entity type in the catalog."""
     catalog_type_names = {et.name for et in catalog.entity_types}
     count = 0
     for entity in entities:
-        if entity.kind in catalog_type_names:
+        if entity.type.value in catalog_type_names:
             count += 1
     return count

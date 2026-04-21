@@ -1,9 +1,15 @@
 """Snapshot-based regression test for load_project_sources.
 
-The snapshot uses a projection that excludes the new `provider` and `description`
-fields (added in steps 7-8 of the multi-backend-entity-resolver plan). This lets
-the regression assertion stay byte-identical across every commit in the plan,
-even when those fields are intentionally added.
+Post-cutover: entities are typed Entity/ProjectEntity subclasses. The snapshot
+serializes them with `mode='json'` so date/enum values survive round-tripping.
+
+The projection excludes fields that were on the old Spec Y SourceEntity but do
+not exist on the unified Entity family (`provider`, `description`). It also
+excludes a handful of Entity-only fields that only matter for typed subclass
+invariants (`accessions`, `consumed_by`, `local_path`, `siblings`, `derivation`,
+`access`, `datapackage`, `parent_dataset`, `datasets`, `maturity`, `rival_model_packet_ref`,
+`created`, `updated`, `pre_registered`, `pre_registered_date`, `sync_source`) so
+the snapshot stays focused on the load-path fields this regression cares about.
 """
 
 from __future__ import annotations
@@ -18,14 +24,40 @@ FIXTURE = Path(__file__).parent / "fixtures" / "spec_y_kitchen_sink"
 SNAPSHOT = Path(__file__).parent / "fixtures" / "spec_y_kitchen_sink" / "snapshot.json"
 
 
+_EXCLUDED_FIELDS = frozenset(
+    {
+        # Spec Y fields removed from Entity hierarchy:
+        "provider",
+        "description",
+        # Entity fields not relevant to this regression:
+        "accessions",
+        "consumed_by",
+        "local_path",
+        "siblings",
+        "derivation",
+        "access",
+        "datapackage",
+        "parent_dataset",
+        "datasets",
+        "maturity",
+        "rival_model_packet_ref",
+        "created",
+        "updated",
+        "pre_registered",
+        "pre_registered_date",
+        "sync_source",
+        "id",  # duplicate of canonical_id after normalization
+        "content",  # full body; content_preview is what we snapshot
+    }
+)
+
+
 def _project_for_snapshot(entities: list) -> list[dict]:
-    """Drop fields the spec adds incrementally; the snapshot stays stable across commits."""
-    excluded = {"provider", "description"}
+    """Project to a stable subset of fields. mode='json' is required for dates/enums."""
     projected: list[dict] = []
     for e in entities:
-        d = e.model_dump()
-        projected.append({k: v for k, v in d.items() if k not in excluded})
-    # Sort by canonical_id for deterministic ordering.
+        d = e.model_dump(mode="json")
+        projected.append({k: v for k, v in d.items() if k not in _EXCLUDED_FIELDS})
     projected.sort(key=lambda d: d.get("canonical_id", ""))
     return projected
 

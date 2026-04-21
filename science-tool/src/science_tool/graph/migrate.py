@@ -9,13 +9,13 @@ from typing import TypedDict
 
 import yaml
 from science_model import normalize_alias
+from science_model.entities import Entity
 from science_model.frontmatter import parse_frontmatter
 
 from science_tool.graph.sources import (
     AliasCollisionError,
     ProjectSources,
     SourceBinding,
-    SourceEntity,
     SourceRelation,
     build_alias_map,
     is_external_reference,
@@ -163,7 +163,7 @@ def build_layered_claim_migration_report(project_root: Path) -> LayeredClaimMigr
 
     rows: list[LayeredClaimMigrationRow] = []
     for entity in sources.entities:
-        if entity.kind != "proposition":
+        if entity.type.value != "proposition":
             continue
         rows.append(_build_layered_claim_row(project_root, entity))
 
@@ -290,7 +290,7 @@ def migration_report_path(project_root: Path) -> Path:
     return paths.knowledge_dir / "reports" / "kg-migration-audit.json"
 
 
-def _audit_entity(entity: SourceEntity, alias_map: dict[str, str]) -> list[AuditRow]:
+def _audit_entity(entity: Entity, alias_map: dict[str, str]) -> list[AuditRow]:
     rows: list[AuditRow] = []
     for target in entity.related:
         rows.extend(_audit_reference(entity, "related", target, alias_map))
@@ -301,7 +301,7 @@ def _audit_entity(entity: SourceEntity, alias_map: dict[str, str]) -> list[Audit
     return rows
 
 
-def _build_layered_claim_row(project_root: Path, entity: SourceEntity) -> LayeredClaimMigrationRow:
+def _build_layered_claim_row(project_root: Path, entity: Entity) -> LayeredClaimMigrationRow:
     text = _read_entity_body(project_root, entity)
     inferred_claim_layer = _infer_claim_layer(text)
     inferred_identification_strength = _infer_identification_strength(text)
@@ -333,7 +333,7 @@ def _build_layered_claim_row(project_root: Path, entity: SourceEntity) -> Layere
 
     return {
         "proposition": entity.canonical_id,
-        "source_path": entity.source_path,
+        "source_path": entity.file_path,
         "authored_claim_layer": authored_claim_layer,
         "authored_identification_strength": authored_identification_strength,
         "inferred_claim_layer": None if authored_claim_layer is not None else inferred_claim_layer,
@@ -345,8 +345,8 @@ def _build_layered_claim_row(project_root: Path, entity: SourceEntity) -> Layere
     }
 
 
-def _read_entity_body(project_root: Path, entity: SourceEntity) -> str:
-    source_path = project_root / entity.source_path
+def _read_entity_body(project_root: Path, entity: Entity) -> str:
+    source_path = project_root / entity.file_path
     frontmatter = parse_frontmatter(source_path) if source_path.is_file() else None
     if frontmatter is not None:
         _, body = frontmatter
@@ -371,15 +371,15 @@ def _infer_identification_strength(text: str) -> str | None:
     return None
 
 
-def _is_proxy_mediated(entity: SourceEntity, text: str) -> bool:
+def _is_proxy_mediated(entity: Entity, text: str) -> bool:
     return str(entity.proxy_directness) in {"indirect", "derived"} or bool(_PROXY_RE.search(text))
 
 
-def _is_mechanistic(entity: SourceEntity, text: str) -> bool:
+def _is_mechanistic(entity: Entity, text: str) -> bool:
     return str(entity.claim_layer) == "mechanistic_narrative" or bool(_MECHANISTIC_RE.search(text))
 
 
-def _has_lower_layer_support(entity: SourceEntity) -> bool:
+def _has_lower_layer_support(entity: Entity) -> bool:
     support_prefixes = ("proposition:", "observation:", "finding:")
     return any(target.startswith(support_prefixes) for target in [*entity.related, *entity.source_refs])
 
@@ -475,7 +475,7 @@ def _audit_relation_endpoint(
 
 
 def _audit_reference(
-    entity: SourceEntity,
+    entity: Entity,
     field_name: str,
     raw_target: str,
     alias_map: dict[str, str],
@@ -494,7 +494,7 @@ def _audit_reference(
                 "source": entity.canonical_id,
                 "field": field_name,
                 "target": raw_target,
-                "details": f"{entity.source_path} references an unknown canonical entity",
+                "details": f"{entity.file_path} references an unknown canonical entity",
             }
         ]
 

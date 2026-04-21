@@ -10,9 +10,11 @@ from pydantic import BaseModel, Field, model_validator
 from science_model.packages.schema import AccessBlock, DerivationBlock
 from science_model.reasoning import (
     ClaimLayer,
+    EvidenceRole,
     IdentificationStrength,
     MeasurementModel,
     ProxyDirectness,
+    RivalModelPacket,
     SupportScope,
 )
 from science_model.sync import SyncSource
@@ -50,6 +52,9 @@ class EntityType(StrEnum):
     SEARCH = "search"
     REPORT = "report"
     VALIDATION_REPORT = "validation-report"
+    TASK = "task"
+    SPEC = "spec"
+    CANONICAL_PARAMETER = "canonical_parameter"
     UNKNOWN = "unknown"
 
 
@@ -151,7 +156,16 @@ class ProjectEntity(Entity):
     the move off Entity is a post-plan cleanup.
     """
 
-    pass
+    # Project-scoped operational fields. `blocked_by` tracks cross-entity
+    # blocking relationships (task blocked by another task, hypothesis blocked
+    # by missing dataset, etc.); previously lived on SourceEntity.
+    blocked_by: list[str] = Field(default_factory=list)
+    # Reasoning-metadata fields carried on propositions and project-scoped
+    # entities. `rival_model_packet` is the full packet model (as opposed
+    # to `rival_model_packet_ref: str | None` on Entity which records a
+    # reference only). `evidence_role` was previously on SourceEntity.
+    evidence_role: EvidenceRole | None = None
+    rival_model_packet: RivalModelPacket | None = None
 
 
 class DomainEntity(Entity):
