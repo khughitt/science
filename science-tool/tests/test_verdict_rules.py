@@ -109,6 +109,32 @@ def test_weighted_majority_ignores_inconclusive_weight_for_positive_winner() -> 
     assert aggregate_composite("weighted-majority", claims) == Token.POSITIVE
 
 
+def test_weighted_majority_positive_lone_polarity_with_unresolved_weight_yields_mixed() -> None:
+    claims = [
+        _claim("c1", Token.POSITIVE, 2.0),
+        _claim("c2", Token.INCONCLUSIVE, 1.5),
+        _claim("c3", Token.INCONCLUSIVE, 0.5),
+    ]
+    assert aggregate_composite("weighted-majority", claims) == Token.MIXED
+
+
+def test_weighted_majority_negative_lone_polarity_with_unresolved_weight_yields_mixed() -> None:
+    claims = [
+        _claim("c1", Token.NEGATIVE, 2.0),
+        _claim("c2", Token.INCONCLUSIVE, 1.5),
+        _claim("c3", Token.MIXED, 0.5),
+    ]
+    assert aggregate_composite("weighted-majority", claims) == Token.MIXED
+
+
+def test_weighted_majority_all_positive_weight_yields_positive() -> None:
+    claims = [
+        _claim("c1", Token.POSITIVE, 2.0),
+        _claim("c2", Token.POSITIVE, 1.5),
+    ]
+    assert aggregate_composite("weighted-majority", claims) == Token.POSITIVE
+
+
 def test_weighted_majority_negative_adjudicating_weight_wins() -> None:
     claims = [
         _claim("c1", Token.POSITIVE, 1.5),
