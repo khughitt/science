@@ -1,9 +1,21 @@
 # Verdict Tokens and Atomic Claim Decomposition
 
-**Status:** proposed
+**Status:** rev 1.1 — incorporates 6 schema gaps surfaced in mm30 t243 dogfood
 **Created:** 2026-04-19
-**Source:** mm30 `discussion:2026-04-19-verdict-polarity-display` + cross-project backfill (~207 docs across 6 projects on 2026-04-19)
+**Revised:** 2026-04-21 (v1.1)
+**Source:** mm30 `discussion:2026-04-19-verdict-polarity-display` + cross-project backfill (~207 docs across 6 projects on 2026-04-19); v1.1 driven by `discussion:2026-04-19-t243-atomic-decomposition-dogfood`
 **Related specs:** `2026-04-17-edge-status-dashboard-design.md`, `2026-04-17-inquiry-edge-posterior-annotations-design.md`, `2026-04-18-project-big-picture-design.md`
+
+## Revision history
+
+- **v1.0 (2026-04-19):** initial design surfaced from mm30 cross-project backfill
+- **v1.1 (2026-04-21):** dogfood-driven revisions from `discussion:2026-04-19-t243-atomic-decomposition-dogfood` (6 schema gaps; 5/6 dogfooded mm30 docs validated cleanly, 1/6 surfaced a real `rule_disagrees_with_body` case)
+  - **Gap 1:** add `closure_terminal:` subfield to `non-adjudicating` rule
+  - **Gap 2:** add `reframing_target:` + `reframing_reason:` subfields to `reframed` rule
+  - **Gap 3:** add `weighted-majority` rule for the minority-but-load-bearing pattern; document `rule_disagrees_with_body` as an authoritative warning (body wins, rule label flags the mismatch)
+  - **Gap 4:** add `members:` claim subfield for grouping similar atomic sub-claims (relevant to `bimodal` rule with many homogeneous atoms)
+  - **Gap 5:** strengthen claim-id registry from "advisory" to **required-but-permissive** (must exist; if it does, IDs must resolve; bootstrap helper command)
+  - **Gap 6:** add a non-binding `strength:` calibration table to reduce per-author drift
 
 ## Problem
 
@@ -86,11 +98,16 @@ Extend the interpretation frontmatter with an optional `verdict` block:
 ```yaml
 verdict:
   composite: "[~]"           # the headline token
-  rule: "and | or | majority | bimodal | non-adjudicating | reframed"
+  rule: "and | or | majority | weighted-majority | bimodal | non-adjudicating | reframed"
+  # rule-specific optional subfields (see Aggregation Rules below):
+  closure_terminal: "non_adjudicating_under_observational_adjusters"   # only when rule == "non-adjudicating"
+  reframing_target: "interpretation:t149-original-finding"              # only when rule == "reframed"
+  reframing_reason: "raw-TPM correlations were ~50% compositional artifact"  # only when rule == "reframed"
   claims:
     - id: "h2#18-edge-6-IFN-arm"        # stable claim ID; resolves via project registry
       polarity: "[+]"
-      strength: "strong"                 # strong | moderate | weak — same vocab as evidence-fragment
+      strength: "strong"                 # strong | moderate | weak — see calibration table below
+      weight: 1.0                        # optional; only used by `weighted-majority` rule (default 1.0)
       evidence_summary: "NES=+2.83 RPMI-8226, +2.54 MM.1S, padj < 1e-15 both"
       contexts:                          # optional: per-stratum evidence
         - context: "RPMI-8226"
@@ -99,6 +116,11 @@ verdict:
         - context: "MM.1S"
           polarity: "[+]"
           strength: "strong"
+      members:                           # optional: group multiple atomic sub-claims with identical polarity/strength
+        - "h2#18-edge-6-IFN-arm-RPMI-8226-IFNa"
+        - "h2#18-edge-6-IFN-arm-RPMI-8226-IFNg"
+        - "h2#18-edge-6-IFN-arm-MM.1S-IFNa"
+        - "h2#18-edge-6-IFN-arm-MM.1S-IFNg"
     - id: "h2#18-edge-6-E2F-arm"
       polarity: "[~]"
       strength: "moderate"
@@ -117,6 +139,24 @@ All fields are optional inside the block; the *minimum* contract is
 `claims` (list of atomic claims) or `rule = "non-adjudicating"` (no
 sub-claims required if the verdict is a closure).
 
+### `strength` calibration table (non-binding; v1.1 addition)
+
+Per gap 6 from the t243 dogfood, drift was observed across authors on
+what `strong` vs `moderate` vs `weak` actually means. The vocabulary
+is inherited from the evidence-fragment schema; this table provides
+a non-binding calibration to reduce per-author drift:
+
+| Strength | Statistical signal | Effect-size signal | Replication signal |
+|---|---|---|---|
+| **strong** | HDI excludes 0 with `P(sign)≥0.99`, OR `padj < 1e-3` with confirmatory framing | `|effect|` ≥ ~1 SD on the relevant scale (e.g. NES ≥ 2.0, β ≥ 0.5) | ≥2 independent contexts agree |
+| **moderate** | HDI excludes 0 with `P(sign)∈[0.95, 0.99)`, OR `padj < 0.05` with non-trivial effect | `|effect|` in (0.3, 1.0) SD | 1 context only, or 2 contexts with one weak |
+| **weak** | HDI crosses 0, OR mechanically significant but explanation-equivocal, OR `padj > 0.05` with sub-threshold framing | `|effect|` < 0.3 SD | single-context, or single-rep |
+
+The table is advisory; project authors may deviate with a one-line
+note in `evidence_summary` if their domain warrants different
+thresholds. Tooling treats `strength` as opaque (no calibration
+enforcement).
+
 ### Aggregation rules (`rule` field)
 
 Defines how `composite` derives from `claims`:
@@ -126,30 +166,79 @@ Defines how `composite` derives from `claims`:
 | `and` | all claims `[+]` | any claim `[-]` | otherwise | Conjunctive — every sub-claim must hold for the verdict to hold. |
 | `or` | any claim `[+]` | all claims `[-]` | otherwise | Disjunctive — one sub-claim suffices. |
 | `majority` | ≥50% claims `[+]` | ≥50% claims `[-]` | otherwise | Voting — n-of-m thresholds. |
-| `bimodal` | n/a | n/a | always `[~]` | The result IS the distribution shape; no aggregation. |
-| `non-adjudicating` | n/a | n/a | n/a; composite = `[⌀]` | The rollup is deliberately closed; sub-claims may exist but do not aggregate to a directional answer. |
-| `reframed` | n/a | n/a | n/a; composite = `[~]` | Original measurement is wrong; new measurement gives different answer. Composite token reflects the reframing, not directional aggregation. |
+| `weighted-majority` | weighted-`[+]` ≥ 50% of total weight | weighted-`[-]` ≥ 50% of total weight | otherwise | Voting with per-claim `weight:` (default 1.0). Use when one or two atomic claims are load-bearing relative to the rest (v1.1 addition; addresses gap 3). |
+| `bimodal` | n/a | n/a | always `[~]` | The result IS the distribution shape; no aggregation. Use `members:` subfield (v1.1) to group homogeneous sub-atoms when a per-atom listing is unwieldy. |
+| `non-adjudicating` | n/a | n/a | n/a; composite = `[⌀]` | The rollup is deliberately closed; sub-claims may exist but do not aggregate to a directional answer. **v1.1:** name the closure with the optional `closure_terminal:` subfield (e.g., `non_adjudicating_under_observational_adjusters`); free-form, project-local, captured for documentation/tooling but not enum-validated. |
+| `reframed` | n/a | n/a | n/a; composite = `[~]` | Original measurement is wrong; new measurement gives different answer. **v1.1:** identify the reframed prior with `reframing_target:` (interpretation-ref) and `reframing_reason:` (string) subfields; required when `rule == "reframed"` so a `science-tool verdict reframed-trail` query can surface the lineage of revised measurements. |
 
-Tooling MAY warn if the body's `## Verdict` token disagrees with the
-rule-derived composite (catches drift between hand-written verdict line
-and structured claims).
+Tooling MUST validate the body's `## Verdict` token against the
+rule-derived composite. When they disagree:
 
-### Claim-id registry
+- The body composite is **authoritative** (the human-curated verdict line
+  is the canonical state).
+- The rule label flags the disagreement via a `rule_disagrees_with_body`
+  field on `science-tool verdict parse` output.
+- The disagreement is informational, not blocking — projects may
+  intentionally use a `majority` rule with a body composite of `[~]` when
+  one minority claim is load-bearing, AND the disagreement signals to
+  reviewers that the rule choice should be reconsidered (often
+  `weighted-majority` is the better fit; sometimes the body verdict is
+  genuinely the human-judgement override that the rule cannot capture).
 
-Stable claim IDs are required for cross-doc rollup. Two registries:
+The dogfood example: mm30 t163 has 4 claims (3× `[-]`, 1× `[+]` for the
+load-bearing `EZH2 → PHF19` edge that survives proliferation adjustment).
+Mechanical `majority` gives `[-]`; the body verdict is `[~]` because the
+1 surviving edge is the most consequential finding. Either reformulate
+as `weighted-majority` with `weight: 2.0` on the surviving claim, or
+keep `majority` with the warning firing as the documentation mechanism.
 
-- **Project-local registry** at `<project>/specs/claim-registry.yaml` (or
-  similar — name TBD via implementation discussion). Maps claim IDs
-  (e.g. `h2#18-edge-6-IFN-arm`) to (a) the source proposition or
-  hypothesis, (b) the predicted direction, (c) any synonyms for legacy
-  IDs.
-- **Implicit fallback**: if the registry is missing, claim IDs are
-  treated as opaque strings; rollup queries can still match exact IDs
-  but cannot resolve aliases or detect typos.
+### Claim-id registry (v1.1: required-but-permissive)
 
-The registry is a project-curated artifact, not auto-generated. The
-tooling validates referential integrity (every claim ID in interpretation
-frontmatter resolves to a registry entry; warn on orphans).
+Stable claim IDs are **required for cross-doc rollup**. The t243 dogfood
+revealed three different naming styles emerging within just 6 docs
+without a registry; without canonical IDs, atomic-claim rollups produce
+false negatives because the same claim named differently doesn't
+aggregate.
+
+**v1.1 contract (changed from v1.0 "advisory"):**
+
+- **Project-local registry at `<project>/specs/claim-registry.yaml`**
+  (name canonical; tooling looks here first).
+- Maps claim IDs (e.g. `h2#18-edge-6-IFN-arm`) to: (a) the source
+  proposition or hypothesis, (b) the predicted direction, (c) any
+  synonyms for legacy IDs, (d) optional notes / definition.
+- The registry MUST exist for `science-tool verdict rollup --by-claim`
+  and `science-tool verdict conflicts --by-claim` to run. Without it,
+  these subcommands fail loudly with a pointer to
+  `science-tool verdict registry-init`.
+- For projects that haven't bootstrapped a registry, basket-level
+  rollup (`science-tool verdict rollup` without `--by-claim`) still
+  works — it doesn't depend on canonical claim IDs.
+
+**Bootstrap helper:**
+
+```
+science-tool verdict registry-init --scan doc/interpretations/
+    Walks all interpretations with `verdict.claims:` blocks, collects
+    all distinct claim IDs, and writes a stub registry.yaml with
+    "definition: TBD" placeholders. Project owner curates the
+    placeholders into real definitions + canonicalizes synonyms.
+```
+
+This makes the registry **inferred-then-curated** rather than
+hand-built-from-scratch. The dogfood found 3 naming styles in 6 docs;
+in larger corpora the bootstrap will surface the drift explicitly so
+the project owner can choose canonical names before re-using them.
+
+**Tooling contract:**
+
+- `science-tool verdict parse <file>` warns (not errors) on first
+  unresolved claim ID per file. Allows authors to introduce new IDs
+  during writing and curate the registry after.
+- `science-tool verdict rollup --by-claim` errors if registry is
+  missing; succeeds if registry exists and all referenced IDs
+  resolve; warns and proceeds with opaque-string fallback if
+  individual IDs don't resolve (so a partial registry is still useful).
 
 ### Claim-id naming convention
 
@@ -378,20 +467,29 @@ These were considered and rejected during the originating discussion:
 
 ## Acceptance criteria
 
-- [ ] `[⌀]` token added to the global template with example.
-- [ ] `verdict:` frontmatter schema documented in template.
+**v1.0 (original):**
+
+- [x] `[⌀]` token added to the global template with example. *(done 2026-04-19, science commit 765c3d2)*
+- [x] `verdict:` frontmatter schema documented in template. *(done 2026-04-19)*
 - [ ] `science-tool verdict parse` validates a sample interpretation
   end-to-end.
 - [ ] `science-tool verdict rollup` produces a per-hypothesis verdict
   distribution table on mm30 + natural-systems.
 - [ ] `science-tool verdict conflicts` runs cleanly on mm30 (the project
   with the most cross-doc adjudication, hence the most likely to
-  surface real conflicts).
+  surface real conflicts). *(hand-emulated on mm30 2026-04-19 per `discussion:2026-04-19-verdict-conflict-coverage-scan` — surfaced 3 actionable findings + 2 spec feedback items)*
 - [ ] `science:big-picture` consumes the rollup output (replaces or
   supplements its current prose-summary path).
-- [ ] mm30 + natural-systems each have at least one reference doc
-  authored under the new schema (decomposed `claims:` block) as
-  dogfooding examples.
-- [ ] mm30 + natural-systems each have at least one previously-`[~]`
-  doc retokenized to `[⌀]` per the new vocabulary, with audit-trail
-  comment explaining the change.
+- [x] mm30 has 6 reference docs authored under the new schema (decomposed `claims:` block) as dogfooding examples. *(done 2026-04-21 per `mm30/discussion:2026-04-19-t243-atomic-decomposition-dogfood`)*
+- [ ] natural-systems-guide has at least one reference doc authored under the new schema.
+- [x] mm30 has 3 previously-`[~]` docs retokenized to `[⌀]` per the new vocabulary, with audit-trail comment explaining the change. *(done 2026-04-19, mm30 commit 14a94a2: t174, t202, t204 final)*
+
+**v1.1 additions:**
+
+- [ ] `science-tool verdict parse` correctly emits `rule_disagrees_with_body: true` on the t163 reference doc (the one validation case from the dogfood).
+- [ ] `science-tool verdict registry-init --scan doc/interpretations/` bootstraps a stub `specs/claim-registry.yaml` from existing `verdict.claims:` blocks. Validate on mm30 (currently 6 docs with `verdict:` blocks).
+- [ ] `science-tool verdict rollup --by-claim` runs cleanly on mm30 once the claim registry is curated; produces per-claim aggregated polarity rows.
+- [ ] `science-tool verdict reframed-trail <interpretation-id>` resolves the chain of `reframing_target:` links (validate on mm30 CLR doc → t149).
+- [ ] `closure_terminal:` field is parsed (free-form string; no enum) and surfaced in `verdict parse` output.
+- [ ] `weighted-majority` rule's mechanical aggregation matches expectation when per-claim `weight:` values vary.
+- [ ] `members:` claim subfield resolves to the listed member-claim IDs and aggregates their per-member polarity (when those members are themselves registered claims).
