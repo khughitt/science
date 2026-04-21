@@ -166,3 +166,47 @@ class DomainEntity(Entity):
     """
 
     pass
+
+
+class TaskEntity(ProjectEntity):
+    """Task — typed entity for research tasks.
+
+    Inherits all Entity/ProjectEntity fields. Task-specific invariants (if any)
+    live here as @model_validator methods. In the initial implementation, no
+    task-specific invariants are enforced beyond what ProjectEntity provides.
+
+    Note: science_model.tasks.Task remains a parse-layer helper for the task DSL.
+    The TaskAdapter (Task 9) converts parsed Task records into TaskEntity raw
+    records for registry-based validation.
+    """
+
+    pass
+
+
+class DatasetEntity(ProjectEntity):
+    """Dataset — typed entity with rev 2.2 invariants (origin/access/derivation).
+
+    Invariant #7 (origin=external → access required) and #8 (origin=derived →
+    derivation required) are enforced on this class via the inherited
+    _enforce_origin_block_invariants validator declared on base Entity.
+    The validator is kind-gated (fires only when type == DATASET), so it
+    already applies correctly to DatasetEntity instances.
+    """
+
+    pass
+
+
+class WorkflowRunEntity(ProjectEntity):
+    """Workflow run — placeholder typed entity.
+
+    Workflow-run-specific semantics (production metadata, provenance refs) can
+    be added as @model_validator methods here as they're formalized.
+    """
+
+    pass
+
+
+class ResearchPackageEntity(ProjectEntity):
+    """Research package — placeholder typed entity for package composition."""
+
+    pass
