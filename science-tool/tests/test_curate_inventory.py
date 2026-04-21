@@ -28,21 +28,11 @@ def curated_project(tmp_path: Path) -> Path:
     )
     _write(
         project_root / "specs/hypotheses/h1.md",
-        "---\n"
-        "id: hypothesis:h1\n"
-        "title: Hypothesis One\n"
-        "related:\n"
-        "  - question:q1\n"
-        "---\n"
-        "Hypothesis body.\n",
+        "---\nid: hypothesis:h1\ntitle: Hypothesis One\nrelated:\n  - question:q1\n---\nHypothesis body.\n",
     )
     _write(
         project_root / "doc/questions/q1.md",
-        "---\n"
-        "id: question:q1\n"
-        "title: Question One\n"
-        "---\n"
-        "Question body.\n",
+        "---\nid: question:q1\ntitle: Question One\n---\nQuestion body.\n",
     )
     _write(
         project_root / "doc/papers/p1.md",
@@ -58,13 +48,7 @@ def curated_project(tmp_path: Path) -> Path:
     )
     _write(
         project_root / "doc/interpretations/i1.md",
-        "---\n"
-        "id: interpretation:i1\n"
-        "title: Interpretation One\n"
-        "related:\n"
-        "  - question:q1\n"
-        "---\n"
-        "Interpretation body.\n",
+        "---\nid: interpretation:i1\ntitle: Interpretation One\nrelated:\n  - question:q1\n---\nInterpretation body.\n",
     )
     _write(
         project_root / "doc/topics/topic-a.md",
@@ -184,7 +168,9 @@ def test_collect_inventory_tracks_counts_and_candidate_signals(curated_project: 
 
     assert [artifact.modified_days_ago for artifact in inventory.artifacts] == [6, 45, 2, 0, 4, 60, 9, 1, 90]
 
-    knowledge_source = next(artifact for artifact in inventory.artifacts if artifact.path == "knowledge/sources/local/entities.yaml")
+    knowledge_source = next(
+        artifact for artifact in inventory.artifacts if artifact.path == "knowledge/sources/local/entities.yaml"
+    )
     assert knowledge_source.artifact_class == "knowledge_source"
     assert knowledge_source.id is None
     assert knowledge_source.title == "Local entities"
