@@ -218,6 +218,7 @@ def _load_task_entities(
                     ),
                     source_path=rel_path,
                     provider="task",
+                    description=task.description,
                     status=task.status,
                     content_preview=task.description,
                     related=task.related,

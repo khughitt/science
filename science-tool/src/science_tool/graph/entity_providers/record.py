@@ -201,6 +201,7 @@ def _normalize_record(
         profile=profile,
         source_path=record.source_path,
         provider=provider_name,
+        description=record.description,
         domain=record.domain,
         confidence=record.confidence,
         status=record.status,

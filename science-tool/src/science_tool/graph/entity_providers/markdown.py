@@ -100,6 +100,7 @@ class MarkdownProvider(EntityProvider):
             kind=entity.type.value,
             title=entity.title,
             source_path=entity.file_path,
+            description=entity.content or "",
             profile=raw_profile,  # None → normalizer applies _default_profile_for_kind
             domain=entity.domain,
             related=list(entity.related or []),

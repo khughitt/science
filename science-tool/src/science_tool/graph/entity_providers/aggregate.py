@@ -153,6 +153,7 @@ class AggregateProvider(EntityProvider):
             kind=kind,
             title=title,
             source_path=source_path,
+            description=str(raw.get("description") or ""),
             profile=profile,
             domain=raw.get("domain") if isinstance(raw.get("domain"), str) else None,
             confidence=_coerce_optional_float(raw.get("confidence")),
