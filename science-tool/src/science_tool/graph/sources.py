@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from pathlib import Path
 from typing import Any, TypeVar
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from science_model.entities import Entity, ProjectEntity
 from science_model.ontologies import load_catalogs_for_names
 from science_model.ontologies.schema import OntologyCatalog
@@ -25,7 +26,7 @@ from science_model.source_contracts import AuthoredTargetedRelation, BindingSour
 from science_model.source_ref import SourceRef
 
 from science_tool.big_picture.literature_prefix import canonical_paper_id
-from science_tool.graph.entity_registry import EntityRegistry
+from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.errors import EntityIdentityCollisionError
 from science_tool.graph.storage_adapters.aggregate import AggregateAdapter
 from science_tool.graph.storage_adapters.base import StorageAdapter
@@ -33,6 +34,8 @@ from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
 from science_tool.graph.storage_adapters.task import TaskAdapter
 from science_tool.paths import resolve_paths
+
+logger = logging.getLogger(__name__)
 
 _SHORT_ID_RE = re.compile(r"^(?P<token>[a-z]\d+)(?:[-_].*)?$", re.IGNORECASE)
 _EXTERNAL_PREFIXES = frozenset({"go", "mesh", "doid", "hp", "so", "ncbitaxon", "ncbigene", "ensembl"})
@@ -167,8 +170,26 @@ def load_project_sources(project_root: Path) -> ProjectSources:
                     active_kinds=active_kinds,
                     ontology_catalogs=ontology_catalogs,
                 )
-                schema = registry.resolve(kind)
-                entity = schema.model_validate(raw)
+                try:
+                    schema = registry.resolve(kind)
+                except EntityKindNotRegisteredError:
+                    logger.warning(
+                        "skipping %s: unknown entity kind %r (not registered in core or active profiles)",
+                        ref.path,
+                        kind,
+                    )
+                    continue
+                try:
+                    entity = schema.model_validate(raw)
+                except ValidationError as exc:
+                    missing = _format_missing_fields(exc)
+                    logger.warning(
+                        "skipping %s: schema validation failed for kind %r (%s)",
+                        ref.path,
+                        kind,
+                        missing,
+                    )
+                    continue
                 existing = identity_table.get(entity.canonical_id)
                 if existing is not None:
                     raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
@@ -698,3 +719,13 @@ def local_profile_sources_dir(project_root: Path, *, local_profile: str) -> Path
 
 def _default_local_source_path(local_profile: str, file_name: str) -> str:
     return f"knowledge/sources/{local_profile}/{file_name}"
+
+
+def _format_missing_fields(exc: ValidationError) -> str:
+    """Compact summary of pydantic validation errors for logging."""
+    parts: list[str] = []
+    for err in exc.errors():
+        loc = ".".join(str(p) for p in err.get("loc", ()))
+        msg = err.get("msg", "invalid")
+        parts.append(f"{loc}: {msg}" if loc else msg)
+    return "; ".join(parts) if parts else str(exc)
