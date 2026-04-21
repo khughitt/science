@@ -216,7 +216,7 @@ Be concrete. Name the friction, where it appeared, and the smallest improvement 
 ## After Writing
 
 1. Save the ledger to `doc/meta/curation/curation-sweep-YYYY-MM-DD.md` unless `--no-write` is set.
-2. If `--dry-run` is set, do not mutate source files; only print the intended ledger and action summary.
+2. If `--dry-run` is set, do not mutate source files; the ledger may still be written unless `--no-write` is set, and the output should summarize the intended ledger and action plan.
 3. If the sweep produced safe obvious fixes, ask before applying them unless `--apply-obvious` was explicitly given.
 4. If `--commit` is set, commit the written files after verification.
 
