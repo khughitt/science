@@ -7,23 +7,50 @@ family that parses interpretation docs' `verdict:` frontmatter
 blocks, validates rule-derived composites against body tokens,
 resolves claim IDs through the project-local registry, and
 aggregates verdicts across an entire project — enough to run
-`science-tool verdict rollup --by-claim` on the mm30 corpus as the
-acceptance harness.
+`science-tool verdict rollup --scope claim` (also spelled
+`--by-claim`) on the mm30 corpus as the acceptance harness.
 
 **Architecture:** New `src/science_tool/verdict/` sub-package with a
 small stack: `tokens.py` (5-token enum + body-verdict extractor),
 `models.py` (dataclasses for `VerdictBlock`, `Claim`, `Context`,
-`ClaimRegistry`), `parser.py` (markdown + YAML frontmatter
-extraction, dataclass hydration, validation), `rules.py`
-(aggregation rules: `and` / `or` / `majority` / `weighted-majority`
-/ `bimodal` / `non-adjudicating` / `reframed`, plus a
-`rule_disagrees_with_body` detector), `registry.py` (load
-`<project>/specs/claim-registry.yaml`, build canonical ID + synonym
-maps, resolve IDs), `rollup.py` (walk interpretation directories,
-aggregate by `hypothesis` / `question` / `edge` / `claim` /
-`all`), `cli.py` (click `verdict_group` with `parse` and `rollup`
+`ClaimRegistry`, `ParseResult`), `parser.py` (markdown + YAML
+frontmatter extraction, dataclass hydration, validation,
+registry-aware claim-ID resolution, `NoVerdictBlockError` for
+docs with no verdict block vs vanilla `ValueError` for malformed
+content), `rules.py` (aggregation rules: `and` / `or` / `majority`
+/ `weighted-majority` / `bimodal` / `non-adjudicating` /
+`reframed`, plus a `rule_disagrees_with_body` detector),
+`registry.py` (load `<project>/specs/claim-registry.yaml`, build
+canonical ID + synonym maps, resolve IDs), `rollup.py` (walk
+interpretation directories, aggregate by `claim` or `all`),
+`cli.py` (click `verdict_group` with `parse` and `rollup`
 subcommands). Wired into top-level `main` via
 `main.add_command(verdict_group)`.
+
+**MVP contract (what ships vs what does not):**
+
+- **In MVP.** `verdict parse` on a single file with optional
+  `--registry` for claim-ID resolution; `verdict rollup` with
+  scopes `all` and `claim` (and a `--by-claim` alias); all 7
+  aggregation rules; `rule_disagrees_with_body` detection; advisory
+  warnings on unresolved claim IDs; a `--strict` mode for `rollup`
+  that fails loudly on unresolved IDs instead of warning; top-level
+  `closure_terminal` / `reframing_target` / `reframing_reason`
+  surfacing on `ParseResult`.
+- **Deferred.** Grouping by `hypothesis` / `question` / `edge` (all
+  three require a cross-doc citation graph; see "What this MVP
+  leaves out" items §1–§3 for pickup plans). `registry-init`,
+  `reframed-trail` (multi-step chain walk), `backfill`, `big-picture`
+  integration, `members:` cross-claim aggregation, and natural-
+  systems-guide dogfood are all explicitly deferred (see §4–§9).
+
+**Tie semantics (pre-committed for both `majority` and
+`weighted-majority`).** A polarity wins iff its (possibly weighted)
+share is **strictly greater than 0.5** of the total. Exact 50/50
+splits return `[~]`. This diverges from a literal reading of the
+spec's "≥50%" table row (which is undefined at exactly 50%). The
+MVP pre-commits to strict-majority semantics; Task 12's spec v1.2
+touch-ups clarify the tie rule explicitly.
 
 **Tech Stack:** Python ≥ 3.11, click ≥ 8.1 (not typer), pyyaml ≥ 6,
 jsonschema ≥ 4 (already project deps), stdlib `dataclasses`,
@@ -38,12 +65,21 @@ decomposition docs + 37-claim `specs/claim-registry.yaml`):
   "Implementation contract for the parser" section, and emits
   `rule_disagrees_with_body: true` on exactly one doc: t163
   (`2026-04-12-t163-prolif-adjusted-tf-edges.md`).
-- `science-tool verdict rollup --scope hypothesis` on mm30 prints a
-  per-hypothesis polarity-distribution table matching the
-  hand-emulated t245 conflict/coverage scan results.
-- `science-tool verdict rollup --by-claim` on mm30 (with the
-  registry present) aggregates evidence from multiple citing
-  interpretations under each canonical claim ID.
+- `science-tool verdict parse <file> --registry <mm30-registry>`
+  reports zero unresolved claim IDs for every mm30 atomic-
+  decomposition doc (the registry covers the 37 canonical IDs + all
+  recorded synonyms).
+- `science-tool verdict rollup --scope all` on mm30 produces a
+  token-distribution tally that sums to the count of verdict-bearing
+  interpretations walked.
+- `science-tool verdict rollup --scope claim` (equivalently
+  `--by-claim`) on mm30 (with the registry auto-discovered at
+  `mm30/specs/claim-registry.yaml`) aggregates evidence from
+  multiple citing interpretations under each canonical claim ID.
+- `science-tool verdict rollup --scope claim --strict` on mm30
+  exits with status 0 (every claim ID resolves). An intentionally
+  broken fixture in the test suite verifies that `--strict` exits
+  non-zero on unresolved IDs.
 - All unit tests pass under `uv run pytest -q`.
 
 ---
@@ -74,7 +110,9 @@ decomposition docs + 37-claim `specs/claim-registry.yaml`):
 | `tests/fixtures/verdict/doc_bimodal.md` | Fixture: `bimodal` rule with 4 atomic claims. |
 | `tests/fixtures/verdict/doc_non_adjudicating.md` | Fixture: `non-adjudicating` rule + `closure_terminal`. |
 | `tests/fixtures/verdict/doc_reframed.md` | Fixture: `reframed` rule + `reframing_target` + `reframing_reason`. |
-| `tests/fixtures/verdict/doc_weighted_majority.md` | Fixture: `weighted-majority` rule with explicit weights. |
+| `tests/fixtures/verdict/doc_weighted_majority.md` | Fixture: `weighted-majority` rule with explicit weights (strict-majority configuration: 4/7 positive share). |
+| `tests/fixtures/verdict/extras/doc_malformed_yaml.md` | Fixture: intentionally-malformed `verdict:` block (missing `composite:`) for error-propagation tests. Under `extras/` so the flat walk of FIXTURE_DIR doesn't include it. |
+| `tests/fixtures/verdict/extras/doc_unresolved_claim.md` | Fixture: claim ID absent from registry, for advisory-warning + `--strict` tests. Under `extras/` for the same reason. |
 | `tests/fixtures/verdict/claim-registry.yaml` | Fixture project's claim registry (5 canonical IDs + synonyms). |
 
 ### Modified files
@@ -424,6 +462,7 @@ class ParseResult:
     reframing_target: str | None = None
     reframing_reason: str | None = None
     claims: list[Claim] = field(default_factory=list)
+    unresolved_claim_ids: list[str] = field(default_factory=list)
     validation_warnings: list[str] = field(default_factory=list)
 ```
 
@@ -489,14 +528,27 @@ def test_or_rule_all_negative_yields_negative() -> None:
     assert aggregate_composite("or", claims) == Token.NEGATIVE
 
 
-def test_majority_rule_half_positive_yields_positive() -> None:
+def test_majority_rule_strict_three_quarters_positive_yields_positive() -> None:
+    claims = [
+        _claim("c1", Token.POSITIVE),
+        _claim("c2", Token.POSITIVE),
+        _claim("c3", Token.POSITIVE),
+        _claim("c4", Token.NEGATIVE),
+    ]
+    # 3/4 = 0.75 > 0.5 → POSITIVE.
+    assert aggregate_composite("majority", claims) == Token.POSITIVE
+
+
+def test_majority_rule_exact_half_is_not_majority() -> None:
     claims = [
         _claim("c1", Token.POSITIVE),
         _claim("c2", Token.POSITIVE),
         _claim("c3", Token.NEGATIVE),
         _claim("c4", Token.MIXED),
     ]
-    assert aggregate_composite("majority", claims) == Token.POSITIVE
+    # 2/4 = 0.5 is NOT strictly greater than 0.5 → MIXED. Tie semantics
+    # are documented in the plan header and the spec v1.2 touch-up.
+    assert aggregate_composite("majority", claims) == Token.MIXED
 
 
 def test_majority_rule_no_majority_yields_mixed() -> None:
@@ -506,6 +558,20 @@ def test_majority_rule_no_majority_yields_mixed() -> None:
         _claim("c3", Token.MIXED),
     ]
     assert aggregate_composite("majority", claims) == Token.MIXED
+
+
+def test_majority_rule_empty_claims_yields_mixed() -> None:
+    assert aggregate_composite("majority", []) == Token.MIXED
+
+
+def test_and_rule_empty_claims_yields_mixed() -> None:
+    # No claims → not all-positive, no negative present → MIXED.
+    assert aggregate_composite("and", []) == Token.MIXED
+
+
+def test_or_rule_empty_claims_yields_mixed() -> None:
+    # No claims → no positive, not all-negative → MIXED.
+    assert aggregate_composite("or", []) == Token.MIXED
 
 
 def test_rule_disagrees_with_body_false_when_matching() -> None:
@@ -574,13 +640,17 @@ def _rule_or(claims: list[Claim]) -> Token:
 
 
 def _rule_majority(claims: list[Claim]) -> Token:
-    """≥50% of claims share a polarity → that polarity; else [~]."""
+    """Strictly > 50% of claims share a polarity → that polarity; else [~].
+
+    Ties (including exactly 50/50) return MIXED. See plan header
+    "Tie semantics" for the pre-committed rationale.
+    """
     counts = Counter(c.polarity for c in claims)
     total = len(claims)
     if total == 0:
         return Token.MIXED
     for polarity in (Token.POSITIVE, Token.NEGATIVE):
-        if counts[polarity] / total >= 0.5:
+        if counts[polarity] / total > 0.5:
             return polarity
     return Token.MIXED
 
@@ -593,7 +663,7 @@ def rule_disagrees_with_body(rule_composite: Token, body_composite: Token) -> bo
 - [ ] **Step 3.4: Run tests to verify they pass**
 
 Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_rules.py -v`
-Expected: 10 passed.
+Expected: 14 passed.
 
 - [ ] **Step 3.5: Commit**
 
@@ -616,15 +686,32 @@ git commit -m "feat(verdict): and/or/majority aggregation rules + disagreement d
 Append to `tests/test_verdict_rules.py`:
 
 ```python
-def test_weighted_majority_tips_to_minority_with_high_weight() -> None:
-    # t163-style: 3 negatives weight 1.0 each, 1 positive weight 3.0 → positive wins.
+def test_weighted_majority_strictly_greater_than_half_yields_that_polarity() -> None:
+    # 3 negatives @ weight 1.0 + 1 positive @ weight 4.0 = total 7.
+    # Positive share = 4/7 ≈ 0.571 > 0.5 → POSITIVE.
+    claims = [
+        _claim("n1", Token.NEGATIVE, w=1.0),
+        _claim("n2", Token.NEGATIVE, w=1.0),
+        _claim("n3", Token.NEGATIVE, w=1.0),
+        _claim("p1", Token.POSITIVE, w=4.0),
+    ]
+    assert aggregate_composite("weighted-majority", claims) == Token.POSITIVE
+
+
+def test_weighted_majority_exact_half_weight_yields_mixed() -> None:
+    # 3 negatives @ weight 1.0 + 1 positive @ weight 3.0 = total 6.
+    # Positive share = 3/6 = 0.5 is NOT strictly greater than 0.5 → MIXED.
+    # This is precisely the t163 worked example under the v1.2 tie rule:
+    # a weight-3 on the load-bearing edge produces a tie, not a
+    # [+] override, so rule_derived_composite=[~] matches body=[~]
+    # and rule_disagrees_with_body is False.
     claims = [
         _claim("n1", Token.NEGATIVE, w=1.0),
         _claim("n2", Token.NEGATIVE, w=1.0),
         _claim("n3", Token.NEGATIVE, w=1.0),
         _claim("p1", Token.POSITIVE, w=3.0),
     ]
-    assert aggregate_composite("weighted-majority", claims) == Token.POSITIVE
+    assert aggregate_composite("weighted-majority", claims) == Token.MIXED
 
 
 def test_weighted_majority_falls_back_to_mixed_when_no_50pct() -> None:
@@ -632,7 +719,17 @@ def test_weighted_majority_falls_back_to_mixed_when_no_50pct() -> None:
         _claim("p1", Token.POSITIVE, w=1.0),
         _claim("n1", Token.NEGATIVE, w=1.0),
     ]
+    # 1/2 = 0.5 → not strictly greater → MIXED.
     assert aggregate_composite("weighted-majority", claims) == Token.MIXED
+
+
+def test_weighted_majority_zero_total_weight_yields_mixed() -> None:
+    claims = [_claim("p1", Token.POSITIVE, w=0.0), _claim("n1", Token.NEGATIVE, w=0.0)]
+    assert aggregate_composite("weighted-majority", claims) == Token.MIXED
+
+
+def test_weighted_majority_empty_claims_yields_mixed() -> None:
+    assert aggregate_composite("weighted-majority", []) == Token.MIXED
 
 
 def test_bimodal_always_yields_mixed() -> None:
@@ -658,7 +755,7 @@ def test_reframed_always_yields_mixed() -> None:
 - [ ] **Step 4.2: Run tests to verify the new cases fail**
 
 Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_rules.py -v`
-Expected: 5 new failures with `ValueError: Unknown aggregation rule`.
+Expected: 8 new failures with `ValueError: Unknown aggregation rule`.
 
 - [ ] **Step 4.3: Extend the rules module**
 
@@ -691,15 +788,19 @@ Add to the end of the same file:
 
 ```python
 def _rule_weighted_majority(claims: list[Claim]) -> Token:
-    """≥50% of total weight shares a polarity → that polarity; else [~]."""
+    """Strictly > 50% of total weight shares a polarity → that polarity; else [~].
+
+    Zero total weight (empty claims list, or all claims at weight=0)
+    returns MIXED. Tie semantics match `_rule_majority`.
+    """
     total_weight = sum(c.weight for c in claims)
-    if total_weight == 0:
+    if total_weight <= 0:
         return Token.MIXED
     weight_by_polarity: dict[Token, float] = {}
     for c in claims:
         weight_by_polarity[c.polarity] = weight_by_polarity.get(c.polarity, 0.0) + c.weight
     for polarity in (Token.POSITIVE, Token.NEGATIVE):
-        if weight_by_polarity.get(polarity, 0.0) / total_weight >= 0.5:
+        if weight_by_polarity.get(polarity, 0.0) / total_weight > 0.5:
             return polarity
     return Token.MIXED
 ```
@@ -707,7 +808,7 @@ def _rule_weighted_majority(claims: list[Claim]) -> Token:
 - [ ] **Step 4.4: Run all rule tests**
 
 Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_rules.py -v`
-Expected: 15 passed.
+Expected: 22 passed (14 from Task 3 + 8 new from Task 4).
 
 - [ ] **Step 4.5: Commit**
 
@@ -916,13 +1017,13 @@ verdict:
     - id: "p1"
       polarity: "[+]"
       strength: "strong"
-      weight: 3.0
-      evidence_summary: "load-bearing p1"
+      weight: 4.0
+      evidence_summary: "load-bearing p1 — weight=4 yields 4/7≈0.571>0.5, a genuine strict majority"
 ---
 
 ## Verdict
 
-**Verdict:** [+] One load-bearing positive outweighs three weak negatives.
+**Verdict:** [+] One load-bearing positive outweighs three weak negatives (4/7 strict majority under v1.2 tie rule).
 ```
 
 - [ ] **Step 5.7: Create `tests/fixtures/verdict/claim-registry.yaml`**
@@ -971,21 +1072,98 @@ claims:
       - "interpretation:fixture-bimodal"
 ```
 
-- [ ] **Step 5.8: Commit**
+- [ ] **Step 5.8: Create `extras/doc_malformed_yaml.md` (error-propagation fixture)**
+
+This fixture has an intentionally malformed `verdict:` block (missing
+`composite:` required key). `parse_file` must raise vanilla
+`ValueError`; when this file is walked, `walk_interpretations` must
+propagate the error. To keep the happy-path walk clean,
+**the malformed fixture lives in `tests/fixtures/verdict/extras/`**
+(a subdir) — the MVP's walk is flat (non-recursive) so it won't
+pick up `extras/` by default.
+
+Path: `tests/fixtures/verdict/extras/doc_malformed_yaml.md`
+
+```markdown
+---
+id: "interpretation:fixture-malformed"
+type: "interpretation"
+title: "Fixture: intentionally-malformed verdict block"
+status: "active"
+created: "2026-04-21"
+verdict:
+  rule: "and"
+  claims:
+    - id: "c1"
+      polarity: "[+]"
+---
+
+## Verdict
+
+**Verdict:** [+] body says positive, but frontmatter is missing `composite:`.
+```
+
+- [ ] **Step 5.9: Create `extras/doc_unresolved_claim.md` (registry-miss fixture)**
+
+This fixture cites a claim ID that is NOT present in
+`tests/fixtures/verdict/claim-registry.yaml` as either canonical or
+synonym. Also lives under `extras/` so walks of the happy-path
+FIXTURE_DIR don't include it — the parse tests (Task 6) and the
+`--strict` test (Task 9) open it directly by path.
+
+Path: `tests/fixtures/verdict/extras/doc_unresolved_claim.md`
+
+```markdown
+---
+id: "interpretation:fixture-unresolved"
+type: "interpretation"
+title: "Fixture: claim ID missing from registry (advisory warning case)"
+status: "active"
+created: "2026-04-21"
+verdict:
+  composite: "[+]"
+  rule: "and"
+  claims:
+    - id: "hunknown#not-in-registry"
+      polarity: "[+]"
+      strength: "strong"
+      evidence_summary: "this id is intentionally absent from the fixture registry"
+---
+
+## Verdict
+
+**Verdict:** [+] Body agrees; parser should warn that the claim ID doesn't resolve.
+```
+
+- [ ] **Step 5.10: Commit**
 
 ```bash
 cd ~/d/science/science-tool
 git add tests/fixtures/verdict/
-git commit -m "test(verdict): add 6 fixture markdown docs + minimal claim registry"
+git commit -m "test(verdict): add 6 happy-path fixtures + 2 extras + minimal claim registry"
 ```
 
 ---
 
-## Task 6: Parser — YAML frontmatter + verdict-block hydration
+## Task 6: Parser — frontmatter + verdict-block hydration + registry-aware resolution
 
 **Files:**
 - Create: `src/science_tool/verdict/parser.py`
 - Test: `tests/test_verdict_parser.py`
+
+Key behaviors this task lands:
+
+- `parse_file(path)` — hydrate a `ParseResult` from a markdown file's
+  frontmatter + body.
+- `parse_file(path, registry=...)` — when a `ClaimRegistry` is
+  supplied (or auto-discovered), populate `ParseResult.unresolved_claim_ids`
+  with the list of claim IDs that do not resolve, and add one
+  advisory line per unresolved ID to `validation_warnings`.
+- `NoVerdictBlockError(ValueError)` — narrow exception raised when
+  a doc has frontmatter but no `verdict:` key. `walk_interpretations`
+  in Task 8 will catch ONLY this subclass, so malformed content
+  (bad YAML, missing required keys, unknown tokens, unknown rules)
+  propagates out of the walk as a hard failure.
 
 - [ ] **Step 6.1: Write failing parser tests**
 
@@ -996,7 +1174,8 @@ from pathlib import Path
 
 import pytest
 
-from science_tool.verdict.parser import parse_file
+from science_tool.verdict.parser import NoVerdictBlockError, parse_file
+from science_tool.verdict.registry import load_registry
 from science_tool.verdict.tokens import Token
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "verdict"
@@ -1014,6 +1193,8 @@ def test_parse_and_rule_fixture() -> None:
 
 
 def test_parse_majority_disagrees_fixture_sets_flag() -> None:
+    # doc_majority_disagrees.md: 3× [-] + 1× [+] under `majority` rule.
+    # 3/4 = 0.75 > 0.5 → rule-derived = [-]; body = [~] → disagrees.
     result = parse_file(FIXTURE_DIR / "doc_majority_disagrees.md")
     assert result.composite_token == Token.MIXED
     assert result.rule_derived_composite == Token.NEGATIVE
@@ -1045,7 +1226,9 @@ def test_parse_reframed_fixture_captures_target_and_reason() -> None:
     assert "compositional" in result.reframing_reason
 
 
-def test_parse_weighted_majority_fixture() -> None:
+def test_parse_weighted_majority_fixture_uses_strict_majority() -> None:
+    # doc_weighted_majority.md: 3× [-] @ w=1 + 1× [+] @ w=4 = 4/7 ≈ 0.571.
+    # Strict > 0.5 → POSITIVE. Body = [+]. Disagrees = False.
     result = parse_file(FIXTURE_DIR / "doc_weighted_majority.md")
     assert result.rule == "weighted-majority"
     assert result.rule_derived_composite == Token.POSITIVE
@@ -1059,13 +1242,68 @@ def test_parse_missing_frontmatter_raises(tmp_path: Path) -> None:
         parse_file(p)
 
 
-def test_parse_missing_verdict_block_raises(tmp_path: Path) -> None:
+def test_parse_missing_verdict_block_raises_no_verdict_block_error(tmp_path: Path) -> None:
     p = tmp_path / "no_verdict_block.md"
     p.write_text(
         "---\ntitle: \"no verdict block\"\nid: \"interpretation:fake\"\n---\n\n## Verdict\n\n**Verdict:** [+] body only\n"
     )
-    with pytest.raises(ValueError, match="no 'verdict:' block"):
+    with pytest.raises(NoVerdictBlockError, match="no 'verdict:' block"):
         parse_file(p)
+
+
+def test_parse_missing_verdict_block_error_is_value_error_subclass() -> None:
+    # Sanity check — callers catching ValueError still catch it,
+    # but walk_interpretations can catch the narrow subclass only.
+    assert issubclass(NoVerdictBlockError, ValueError)
+
+
+def test_parse_malformed_yaml_propagates_hard_error() -> None:
+    # extras/doc_malformed_yaml.md has a verdict: block missing
+    # `composite:`. This is a MALFORMED doc, not a missing-block doc
+    # — parse_file must raise a vanilla ValueError (not
+    # NoVerdictBlockError).
+    with pytest.raises(ValueError) as excinfo:
+        parse_file(FIXTURE_DIR / "extras" / "doc_malformed_yaml.md")
+    # Must NOT be the narrow subclass; must be the generic ValueError.
+    assert not isinstance(excinfo.value, NoVerdictBlockError)
+
+
+def test_parse_unknown_token_raises(tmp_path: Path) -> None:
+    p = tmp_path / "unknown_token.md"
+    p.write_text(
+        "---\nid: \"interpretation:x\"\nverdict:\n  composite: \"[Q]\"\n  rule: \"and\"\n---\n\n**Verdict:** [+] body\n"
+    )
+    with pytest.raises(ValueError, match="Unknown verdict token"):
+        parse_file(p)
+
+
+def test_parse_unknown_rule_raises(tmp_path: Path) -> None:
+    p = tmp_path / "unknown_rule.md"
+    p.write_text(
+        "---\nid: \"interpretation:x\"\nverdict:\n  composite: \"[+]\"\n  rule: \"wat\"\n---\n\n**Verdict:** [+] body\n"
+    )
+    with pytest.raises(ValueError, match="Unknown aggregation rule"):
+        parse_file(p)
+
+
+def test_parse_with_registry_reports_zero_unresolved_on_happy_fixture() -> None:
+    registry = load_registry(FIXTURE_DIR / "claim-registry.yaml")
+    result = parse_file(FIXTURE_DIR / "doc_and.md", registry=registry)
+    assert result.unresolved_claim_ids == []
+    assert not any("unresolved" in w for w in result.validation_warnings)
+
+
+def test_parse_with_registry_flags_unresolved_claim() -> None:
+    registry = load_registry(FIXTURE_DIR / "claim-registry.yaml")
+    result = parse_file(FIXTURE_DIR / "extras" / "doc_unresolved_claim.md", registry=registry)
+    assert result.unresolved_claim_ids == ["hunknown#not-in-registry"]
+    assert any("unresolved" in w for w in result.validation_warnings)
+
+
+def test_parse_without_registry_leaves_unresolved_empty() -> None:
+    # No registry supplied: parser must NOT attempt resolution.
+    result = parse_file(FIXTURE_DIR / "extras" / "doc_unresolved_claim.md")
+    assert result.unresolved_claim_ids == []
 ```
 
 - [ ] **Step 6.2: Run tests to verify they fail**
@@ -1084,7 +1322,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -1092,23 +1330,50 @@ from science_tool.verdict.models import Claim, Context, ParseResult, VerdictBloc
 from science_tool.verdict.rules import aggregate_composite, rule_disagrees_with_body
 from science_tool.verdict.tokens import Token, parse_body_verdict
 
+if TYPE_CHECKING:
+    from science_tool.verdict.registry import IndexedClaimRegistry
+
 _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n(.*)\Z", re.DOTALL)
 
 
-def parse_file(path: Path | str) -> ParseResult:
+class NoVerdictBlockError(ValueError):
+    """Raised when a doc has frontmatter but no `verdict:` key.
+
+    Narrow enough that `walk_interpretations` can catch it
+    specifically while still letting malformed-YAML / unknown-token /
+    unknown-rule / missing-required-key errors propagate as hard
+    failures.
+    """
+
+
+def parse_file(
+    path: Path | str,
+    *,
+    registry: "IndexedClaimRegistry | None" = None,
+) -> ParseResult:
     """Parse a markdown file with a frontmatter `verdict:` block.
 
-    Raises ValueError if the file is missing frontmatter or a
-    verdict block. Verdicts with unknown rules raise from the
-    downstream `aggregate_composite` call.
+    Error contract:
+    - Missing frontmatter → vanilla `ValueError`.
+    - Frontmatter present but no `verdict:` key → `NoVerdictBlockError`
+      (a `ValueError` subclass callers may catch specifically).
+    - Missing required keys (`composite`, `rule`), unknown tokens,
+      unknown rules, malformed YAML → vanilla `ValueError` (NOT
+      `NoVerdictBlockError`).
+
+    When `registry` is supplied, `unresolved_claim_ids` is populated
+    with every claim ID that the registry can't resolve, and a
+    single advisory warning line names the count.
     """
     raw = Path(path).read_text(encoding="utf-8")
     fm, body = _split_frontmatter(raw, path)
     meta = yaml.safe_load(fm) or {}
     verdict_yaml = meta.get("verdict")
     if verdict_yaml is None:
-        raise ValueError(f"{path}: frontmatter has no 'verdict:' block")
-    verdict = _hydrate_verdict(verdict_yaml)
+        raise NoVerdictBlockError(f"{path}: frontmatter has no 'verdict:' block")
+    if not isinstance(verdict_yaml, dict):
+        raise ValueError(f"{path}: 'verdict:' must be a mapping, got {type(verdict_yaml).__name__}")
+    verdict = _hydrate_verdict(verdict_yaml, path)
     interp_id = meta.get("id", f"unknown:{Path(path).stem}")
 
     body_verdict = parse_body_verdict(body)
@@ -1121,9 +1386,19 @@ def parse_file(path: Path | str) -> ParseResult:
         warnings.append("rule=reframed but reframing_target is missing")
     if verdict.rule == "non-adjudicating" and not verdict.closure_terminal:
         warnings.append("rule=non-adjudicating but closure_terminal is missing")
-
     if body_verdict is None:
         warnings.append("body has no `**Verdict:** [X]` line; using frontmatter composite as fallback")
+
+    unresolved: list[str] = []
+    if registry is not None:
+        for claim in verdict.claims:
+            if registry.resolve(claim.id) is None:
+                unresolved.append(claim.id)
+        if unresolved:
+            warnings.append(
+                f"{len(unresolved)} claim id(s) unresolved by registry: "
+                + ", ".join(unresolved)
+            )
 
     derived = aggregate_composite(verdict.rule, verdict.claims)
     return ParseResult(
@@ -1137,6 +1412,7 @@ def parse_file(path: Path | str) -> ParseResult:
         reframing_target=verdict.reframing_target,
         reframing_reason=verdict.reframing_reason,
         claims=verdict.claims,
+        unresolved_claim_ids=unresolved,
         validation_warnings=warnings,
     )
 
@@ -1148,11 +1424,15 @@ def _split_frontmatter(raw: str, path: Path | str) -> tuple[str, str]:
     return match.group(1), match.group(2)
 
 
-def _hydrate_verdict(data: dict[str, Any]) -> VerdictBlock:
+def _hydrate_verdict(data: dict[str, Any], path: Path | str) -> VerdictBlock:
+    if "composite" not in data:
+        raise ValueError(f"{path}: verdict block missing required key 'composite'")
+    if "rule" not in data:
+        raise ValueError(f"{path}: verdict block missing required key 'rule'")
     composite = Token.from_str(data["composite"])
     rule = str(data["rule"])
     claims_yaml = data.get("claims", []) or []
-    claims = [_hydrate_claim(c) for c in claims_yaml]
+    claims = [_hydrate_claim(c, path) for c in claims_yaml]
     return VerdictBlock(
         composite=composite,
         rule=rule,
@@ -1163,7 +1443,9 @@ def _hydrate_verdict(data: dict[str, Any]) -> VerdictBlock:
     )
 
 
-def _hydrate_claim(data: dict[str, Any]) -> Claim:
+def _hydrate_claim(data: dict[str, Any], path: Path | str) -> Claim:
+    if "id" not in data or "polarity" not in data:
+        raise ValueError(f"{path}: claim entry missing required key 'id' or 'polarity': {data!r}")
     contexts = [
         Context(
             context=str(ctx["context"]),
@@ -1186,14 +1468,14 @@ def _hydrate_claim(data: dict[str, Any]) -> Claim:
 - [ ] **Step 6.4: Run tests to verify they pass**
 
 Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_parser.py -v`
-Expected: 8 passed.
+Expected: 14 passed.
 
 - [ ] **Step 6.5: Commit**
 
 ```bash
 cd ~/d/science/science-tool
 git add src/science_tool/verdict/parser.py tests/test_verdict_parser.py
-git commit -m "feat(verdict): parse_file — frontmatter + verdict-block hydration + disagreement detection"
+git commit -m "feat(verdict): parse_file — hydration + disagreement + registry resolution + narrow error subclass"
 ```
 
 ---
@@ -1383,12 +1665,43 @@ from science_tool.verdict.tokens import Token
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "verdict"
 
 
-def test_walk_finds_all_verdict_bearing_fixtures() -> None:
+import pytest
+
+
+def test_walk_finds_all_happy_path_fixtures() -> None:
     results = list(walk_interpretations(FIXTURE_DIR))
-    # 6 fixture .md files all have verdict: blocks.
+    # 6 happy-path fixtures at FIXTURE_DIR's top level:
+    # doc_and, doc_bimodal, doc_majority_disagrees, doc_non_adjudicating,
+    # doc_reframed, doc_weighted_majority.
+    # extras/ (malformed + unresolved) is NOT walked — the MVP's walk
+    # is flat (non-recursive).
     assert len(results) == 6
     ids = {r.interpretation_id for r in results}
     assert "interpretation:fixture-and" in ids
+
+
+def test_walk_is_flat_not_recursive() -> None:
+    """walk(FIXTURE_DIR) must NOT descend into subdirs like extras/."""
+    results = list(walk_interpretations(FIXTURE_DIR))
+    ids = {r.interpretation_id for r in results}
+    # extras/doc_unresolved_claim.md has interpretation_id fixture-unresolved
+    # — it must not appear in a flat walk of FIXTURE_DIR.
+    assert "interpretation:fixture-unresolved" not in ids
+    assert "interpretation:fixture-malformed" not in ids
+
+
+def test_walk_propagates_malformed_errors_from_extras() -> None:
+    """Walking the extras/ subdir must propagate the malformed error."""
+    with pytest.raises(ValueError):
+        list(walk_interpretations(FIXTURE_DIR / "extras"))
+
+
+def test_walk_skips_no_verdict_block_docs(tmp_path: Path) -> None:
+    """Docs with frontmatter but no `verdict:` key are silently skipped
+    (this is the ONLY skip case; everything else propagates)."""
+    p = tmp_path / "no_block.md"
+    p.write_text("---\nid: \"x\"\ntitle: \"x\"\n---\n\nprose\n")
+    assert list(walk_interpretations(tmp_path)) == []
 
 
 def test_group_by_all_returns_single_bucket() -> None:
@@ -1407,11 +1720,18 @@ def test_group_by_claim_requires_registry() -> None:
     assert len(groups["h1#edge5-ifn-arm"]) == 1
 
 
+def test_group_by_claim_raises_when_registry_missing() -> None:
+    results = list(walk_interpretations(FIXTURE_DIR))
+    with pytest.raises(ValueError, match="registry"):
+        group_by(results, scope="claim", registry=None)
+
+
 def test_tally_polarities_counts_composites() -> None:
     results = list(walk_interpretations(FIXTURE_DIR))
     tally = tally_polarities(results)
-    # Fixtures: doc_and [+], doc_bimodal [~], doc_majority_disagrees [~],
-    # doc_non_adjudicating [⌀], doc_reframed [~], doc_weighted_majority [+].
+    # Fixtures (6 happy-path): doc_and [+], doc_bimodal [~],
+    # doc_majority_disagrees [~], doc_non_adjudicating [⌀],
+    # doc_reframed [~], doc_weighted_majority [+].
     # So [+]=2, [~]=3, [⌀]=1.
     assert tally[Token.POSITIVE] == 2
     assert tally[Token.MIXED] == 3
@@ -1438,30 +1758,71 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Literal
 
+import yaml
+
 from science_tool.verdict.models import ParseResult
-from science_tool.verdict.parser import parse_file
+from science_tool.verdict.parser import NoVerdictBlockError, parse_file
 from science_tool.verdict.registry import IndexedClaimRegistry
 from science_tool.verdict.tokens import Token
 
 Scope = Literal["all", "claim"]
 
 
-def walk_interpretations(directory: Path | str) -> Iterator[ParseResult]:
-    """Parse every `.md` under `directory` that has a `verdict:` block.
+def walk_interpretations(
+    directory: Path | str,
+    *,
+    registry: IndexedClaimRegistry | None = None,
+) -> Iterator[ParseResult]:
+    """Parse every top-level `.md` in `directory` that has a `verdict:` block.
 
-    Silently skips files that have no frontmatter or no `verdict:`
-    block. Errors from malformed `verdict:` blocks propagate.
+    Glob is **flat** (non-recursive): subdirectories are NOT walked.
+    Projects with nested interpretation dirs should call
+    walk_interpretations once per dir (or use a future walk-tree
+    helper; out of scope for MVP).
+
+    Skip policy (narrow): files with no frontmatter, or frontmatter
+    present but no `verdict:` key, are silently skipped (the
+    `NoVerdictBlockError` path). Every other error — malformed YAML,
+    missing required keys, unknown tokens, unknown rules — propagates
+    out of the walk as a hard failure. This is by design: malformed
+    verdict blocks are project-state bugs and should fail the rollup,
+    not be silently dropped.
     """
-    for md_path in sorted(Path(directory).glob("**/*.md")):
-        raw = md_path.read_text(encoding="utf-8")
-        if "verdict:" not in raw:
+    for md_path in sorted(Path(directory).glob("*.md")):
+        if not _has_verdict_key(md_path):
             continue
         try:
-            result = parse_file(md_path)
-        except ValueError:
-            # Missing frontmatter or missing verdict: block → skip.
+            result = parse_file(md_path, registry=registry)
+        except NoVerdictBlockError:
+            # Structural check missed it (e.g. non-dict 'verdict:'
+            # value landed here) — skip, same as the structural miss.
             continue
         yield result
+
+
+def _has_verdict_key(md_path: Path) -> bool:
+    """Structural frontmatter check: does the doc declare a `verdict:` key?
+
+    Reads only the frontmatter block (between the first `---\\n` pair)
+    and parses it as YAML. Returns True iff the parsed mapping
+    contains a `verdict` key. Substring matching on the raw bytes
+    ('verdict:' in raw) is fragile — it would false-positive on
+    prose mentions of the word. This parses structurally.
+    """
+    text = md_path.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        return False
+    end = text.find("\n---\n", 4)
+    if end == -1:
+        return False
+    try:
+        fm = yaml.safe_load(text[4:end])
+    except yaml.YAMLError:
+        # Malformed frontmatter YAML at the structural level —
+        # propagate via the parser downstream; don't pre-filter it
+        # here. Return True so the caller parses it and raises.
+        return True
+    return isinstance(fm, dict) and "verdict" in fm
 
 
 def group_by(
@@ -1472,7 +1833,11 @@ def group_by(
     """Group parse results by scope.
 
     scope='all' returns a single bucket keyed 'all'.
-    scope='claim' requires registry; groups by canonical claim ID.
+    scope='claim' requires a ClaimRegistry; groups by canonical claim ID
+    (synonym-resolved). Claim IDs that do not resolve in the registry
+    are included under their as-written ID (the caller decides whether
+    to treat that as advisory or a hard failure — see `--strict` on
+    the rollup CLI).
     """
     results = list(results)
     if scope == "all":
@@ -1502,7 +1867,7 @@ def tally_polarities(results: Iterable[ParseResult]) -> dict[Token, int]:
 - [ ] **Step 8.4: Run tests to verify they pass**
 
 Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_rollup.py -v`
-Expected: 4 passed.
+Expected: 8 passed.
 
 - [ ] **Step 8.5: Commit**
 
@@ -1519,6 +1884,21 @@ git commit -m "feat(verdict): rollup engine — walk, group-by all/claim, polari
 **Files:**
 - Create: `src/science_tool/verdict/cli.py`
 - Test: `tests/test_verdict_cli.py`
+
+Key behaviors this task lands:
+
+- `verdict parse <file>` with optional `--registry <path>` (also
+  auto-discovered at `<file>/../../../specs/claim-registry.yaml` or
+  `<file>/../specs/claim-registry.yaml`).
+- `verdict rollup --scope [all|claim]` with the convenience alias
+  `--by-claim` (implies `--scope claim`; errors if passed with a
+  conflicting explicit `--scope`).
+- `verdict rollup --strict` — by default, unresolved claim IDs
+  surface as advisory warnings in `stderr` and the exit code stays
+  0. Under `--strict`, the command exits non-zero on any unresolved
+  ID.
+- Registry auto-discovery at `<root>/specs/claim-registry.yaml` for
+  `rollup`.
 
 - [ ] **Step 9.1: Write failing CLI tests**
 
@@ -1547,6 +1927,23 @@ def test_verdict_parse_emits_expected_json() -> None:
     assert payload["composite_token"] == "[+]"
     assert payload["rule_derived_composite"] == "[+]"
     assert payload["rule_disagrees_with_body"] is False
+    assert payload["unresolved_claim_ids"] == []
+
+
+def test_verdict_parse_with_registry_populates_unresolved() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        verdict_group,
+        [
+            "parse",
+            str(FIXTURE_DIR / "extras" / "doc_unresolved_claim.md"),
+            "--registry",
+            str(FIXTURE_DIR / "claim-registry.yaml"),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["unresolved_claim_ids"] == ["hunknown#not-in-registry"]
 
 
 def test_verdict_parse_flags_disagreement_for_t163_like_fixture() -> None:
@@ -1571,7 +1968,7 @@ def test_verdict_rollup_all_prints_tally() -> None:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["scope"] == "all"
-    # 6 fixture docs; 2 [+], 3 [~], 1 [⌀].
+    # 6 fixture docs at the top level of FIXTURE_DIR; 2 [+], 3 [~], 1 [⌀].
     assert payload["groups"]["all"]["n"] == 6
     assert payload["groups"]["all"]["tally"]["[+]"] == 2
     assert payload["groups"]["all"]["tally"]["[~]"] == 3
@@ -1580,13 +1977,14 @@ def test_verdict_rollup_all_prints_tally() -> None:
 
 def test_verdict_rollup_by_claim_requires_registry() -> None:
     runner = CliRunner()
-    # No --registry given; expect a clear error referring to registry-init.
+    # No --registry given and no <root>/specs/claim-registry.yaml;
+    # expect a clear error referring to registry / registry-init.
     result = runner.invoke(
         verdict_group,
-        ["rollup", "--scope", "claim", "--root", str(FIXTURE_DIR)],
+        ["rollup", "--scope", "claim", "--root", str(FIXTURE_DIR.parent)],
     )
     assert result.exit_code != 0
-    assert "registry-init" in result.output or "registry" in result.output
+    assert "registry" in result.output.lower()
 
 
 def test_verdict_rollup_by_claim_groups_per_canonical_id() -> None:
@@ -1610,6 +2008,93 @@ def test_verdict_rollup_by_claim_groups_per_canonical_id() -> None:
     assert payload["scope"] == "claim"
     assert "h1#edge5-ifn-arm" in payload["groups"]
     assert payload["groups"]["h1#edge5-ifn-arm"]["n"] == 1
+
+
+def test_verdict_rollup_by_claim_alias_equivalent_to_scope_claim() -> None:
+    """`--by-claim` is a convenience alias that implies `--scope claim`."""
+    runner = CliRunner()
+    result = runner.invoke(
+        verdict_group,
+        [
+            "rollup",
+            "--by-claim",
+            "--root",
+            str(FIXTURE_DIR),
+            "--registry",
+            str(FIXTURE_DIR / "claim-registry.yaml"),
+            "--output",
+            "json",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["scope"] == "claim"
+    assert "h1#edge5-ifn-arm" in payload["groups"]
+
+
+def test_verdict_rollup_by_claim_conflicts_with_scope_all() -> None:
+    """Explicit `--scope all` + `--by-claim` should error (user confusion guard)."""
+    runner = CliRunner()
+    result = runner.invoke(
+        verdict_group,
+        [
+            "rollup",
+            "--scope",
+            "all",
+            "--by-claim",
+            "--root",
+            str(FIXTURE_DIR),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "conflict" in result.output.lower() or "--by-claim" in result.output
+
+
+def test_verdict_rollup_strict_exits_nonzero_on_unresolved(tmp_path: Path) -> None:
+    """--strict turns unresolved-ID advisory into a hard failure."""
+    # Put the unresolved-claim fixture alone into a tmp_path and run --strict.
+    src = FIXTURE_DIR / "extras" / "doc_unresolved_claim.md"
+    (tmp_path / "doc_unresolved_claim.md").write_text(src.read_text())
+    runner = CliRunner()
+    result = runner.invoke(
+        verdict_group,
+        [
+            "rollup",
+            "--scope",
+            "claim",
+            "--strict",
+            "--root",
+            str(tmp_path),
+            "--registry",
+            str(FIXTURE_DIR / "claim-registry.yaml"),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "unresolved" in result.output.lower() or "hunknown" in result.output
+
+
+def test_verdict_rollup_without_strict_emits_advisory_warning(tmp_path: Path) -> None:
+    """Default mode: unresolved IDs produce stderr warnings but exit 0."""
+    src = FIXTURE_DIR / "extras" / "doc_unresolved_claim.md"
+    (tmp_path / "doc_unresolved_claim.md").write_text(src.read_text())
+    runner = CliRunner(mix_stderr=False)
+    result = runner.invoke(
+        verdict_group,
+        [
+            "rollup",
+            "--scope",
+            "claim",
+            "--root",
+            str(tmp_path),
+            "--registry",
+            str(FIXTURE_DIR / "claim-registry.yaml"),
+            "--output",
+            "json",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    # stderr carries the warning; stdout is still clean JSON.
+    assert "unresolved" in (result.stderr or "").lower()
 ```
 
 - [ ] **Step 9.2: Run tests to verify they fail**
@@ -1636,7 +2121,7 @@ from rich.console import Console
 from rich.table import Table
 
 from science_tool.verdict.parser import parse_file
-from science_tool.verdict.registry import has_registry, load_registry
+from science_tool.verdict.registry import IndexedClaimRegistry, load_registry
 from science_tool.verdict.rollup import group_by, tally_polarities, walk_interpretations
 from science_tool.verdict.tokens import Token
 
@@ -1651,19 +2136,64 @@ def verdict_group() -> None:
     "file",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
-def parse_cmd(file: Path) -> None:
+@click.option(
+    "--registry",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help=(
+        "Optional path to a claim-registry.yaml. If given, unresolved "
+        "claim IDs surface in the output's `unresolved_claim_ids` list. "
+        "If omitted, parse looks for an ancestor `specs/claim-registry.yaml` "
+        "(walking up from the file's directory up to 3 levels); if none "
+        "is found, resolution is skipped."
+    ),
+)
+def parse_cmd(file: Path, registry: Path | None) -> None:
     """Parse ONE interpretation file and print JSON per the spec contract."""
-    result = parse_file(file)
+    registry_obj = _resolve_registry_for_parse(file, registry)
+    result = parse_file(file, registry=registry_obj)
     click.echo(json.dumps(_serialize_parse_result(result), indent=2, ensure_ascii=False))
+
+
+def _resolve_registry_for_parse(
+    file: Path,
+    explicit_registry: Path | None,
+) -> IndexedClaimRegistry | None:
+    """Resolve a registry for `parse_cmd` — explicit > auto-discovered > none.
+
+    Auto-discovery: walk up from the file's parent directory,
+    looking for a sibling `specs/claim-registry.yaml`, up to 3 levels.
+    """
+    if explicit_registry is not None:
+        return load_registry(explicit_registry)
+    current = file.parent
+    for _ in range(3):
+        candidate = current / "specs" / "claim-registry.yaml"
+        if candidate.is_file():
+            return load_registry(candidate)
+        if current.parent == current:
+            break
+        current = current.parent
+    return None
 
 
 @verdict_group.command("rollup")
 @click.option(
     "--scope",
     type=click.Choice(["all", "claim"]),
-    default="all",
-    show_default=True,
-    help="Aggregation scope. 'claim' requires --registry.",
+    default=None,
+    show_default=False,
+    help=(
+        "Aggregation scope. 'claim' requires --registry (or an "
+        "auto-discovered one at <root>/specs/claim-registry.yaml). "
+        "Defaults to 'all' unless --by-claim is given."
+    ),
+)
+@click.option(
+    "--by-claim",
+    is_flag=True,
+    default=False,
+    help="Convenience alias: implies --scope claim. Errors if combined with --scope=all.",
 )
 @click.option(
     "--root",
@@ -1676,7 +2206,10 @@ def parse_cmd(file: Path) -> None:
     "--registry",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     default=None,
-    help="Path to a claim-registry.yaml (required for --scope=claim).",
+    help=(
+        "Path to a claim-registry.yaml. If omitted and scope=claim, "
+        "auto-discovered at <root>/specs/claim-registry.yaml."
+    ),
 )
 @click.option(
     "--output",
@@ -1685,31 +2218,63 @@ def parse_cmd(file: Path) -> None:
     show_default=True,
     help="Output format.",
 )
+@click.option(
+    "--strict",
+    is_flag=True,
+    default=False,
+    help=(
+        "Fail (exit non-zero) if any claim ID doesn't resolve in the "
+        "registry. Default is advisory: emit stderr warnings and exit 0."
+    ),
+)
 def rollup_cmd(
-    scope: str,
+    scope: str | None,
+    by_claim: bool,
     root: Path,
     registry: Path | None,
     output: str,
+    strict: bool,
 ) -> None:
     """Aggregate verdicts across the project at the requested scope."""
-    results = list(walk_interpretations(root))
+    if by_claim and scope == "all":
+        raise click.ClickException("--by-claim conflicts with --scope=all; drop one.")
+    if scope is None:
+        scope = "claim" if by_claim else "all"
 
-    registry_obj = None
+    registry_obj: IndexedClaimRegistry | None = None
     if scope == "claim":
         if registry is None:
-            # Try auto-discover at <root>/specs/claim-registry.yaml
             default_path = root / "specs" / "claim-registry.yaml"
             if default_path.exists():
                 registry_obj = load_registry(default_path)
             else:
                 raise click.ClickException(
-                    "scope=claim requires a claim registry. Provide --registry, or run "
+                    "scope=claim requires a claim registry. Provide --registry, "
+                    "place a registry at <root>/specs/claim-registry.yaml, or run "
                     "`science-tool verdict registry-init` to bootstrap one."
                 )
         else:
             registry_obj = load_registry(registry)
 
-    groups = group_by(results, scope=scope, registry=registry_obj)  # type: ignore[arg-type]
+    results = list(walk_interpretations(root, registry=registry_obj))
+
+    # Surface unresolved-ID advisory warnings (or fail in --strict).
+    unresolved_total: list[tuple[str, list[str]]] = []
+    for r in results:
+        if r.unresolved_claim_ids:
+            unresolved_total.append((r.interpretation_id, r.unresolved_claim_ids))
+    if unresolved_total:
+        for interp_id, ids in unresolved_total:
+            click.echo(
+                f"warning: {interp_id} has {len(ids)} unresolved claim id(s): {', '.join(ids)}",
+                err=True,
+            )
+        if strict:
+            raise click.ClickException(
+                f"--strict: {len(unresolved_total)} document(s) had unresolved claim ids."
+            )
+
+    groups = group_by(results, scope=scope, registry=registry_obj)
     payload: dict[str, Any] = {"scope": scope, "n_documents": len(results), "groups": {}}
     for key, docs in groups.items():
         tally = tally_polarities(docs)
@@ -1758,14 +2323,14 @@ def _serialize_parse_result(result: object) -> dict[str, Any]:
 - [ ] **Step 9.4: Run tests to verify they pass**
 
 Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_cli.py -v`
-Expected: 5 passed.
+Expected: 10 passed.
 
 - [ ] **Step 9.5: Commit**
 
 ```bash
 cd ~/d/science/science-tool
 git add src/science_tool/verdict/cli.py tests/test_verdict_cli.py
-git commit -m "feat(verdict): CLI — parse, rollup (all + claim scopes), JSON + table output"
+git commit -m "feat(verdict): CLI — parse (with registry), rollup (scope+by-claim+strict)"
 ```
 
 ---
@@ -1901,7 +2466,49 @@ t240#phf19-log2fc-correlates-with-pi-change
 ...
 ```
 
-- [ ] **Step 11.3: Run `rollup --scope all` with table output as visual sanity-check**
+- [ ] **Step 11.3: Confirm the `--by-claim` alias produces identical output to `--scope claim`**
+
+Run:
+
+```bash
+cd ~/d/science/science-tool
+uv run science-tool verdict rollup \
+  --by-claim \
+  --root /mnt/ssd/Dropbox/r/mm30/doc/interpretations \
+  --registry /mnt/ssd/Dropbox/r/mm30/specs/claim-registry.yaml \
+  --output json > /tmp/rollup_by_claim.json
+
+uv run science-tool verdict rollup \
+  --scope claim \
+  --root /mnt/ssd/Dropbox/r/mm30/doc/interpretations \
+  --registry /mnt/ssd/Dropbox/r/mm30/specs/claim-registry.yaml \
+  --output json > /tmp/rollup_scope_claim.json
+
+diff /tmp/rollup_by_claim.json /tmp/rollup_scope_claim.json
+```
+
+Expected: `diff` produces no output (the two JSON payloads are identical).
+
+- [ ] **Step 11.4: Run `rollup --scope claim --strict` on mm30 to confirm zero unresolved IDs**
+
+Run:
+
+```bash
+cd ~/d/science/science-tool
+uv run science-tool verdict rollup \
+  --scope claim \
+  --strict \
+  --root /mnt/ssd/Dropbox/r/mm30/doc/interpretations \
+  --registry /mnt/ssd/Dropbox/r/mm30/specs/claim-registry.yaml \
+  --output json >/dev/null
+echo "exit=$?"
+```
+
+Expected: `exit=0` (every claim ID in mm30's 9 atomic-decomposition
+docs resolves via the 37-claim registry, directly or through a
+`synonyms:` entry).
+
+- [ ] **Step 11.5: Run `rollup --scope all` with table output as visual sanity-check**
 
 Run:
 
@@ -1915,21 +2522,25 @@ uv run science-tool verdict rollup \
 
 Expected: rich table showing per-token tally across the 9 atomic-decomposition docs.
 
-- [ ] **Step 11.4: Commit the dogfood-pass receipt**
+- [ ] **Step 11.6: Commit the dogfood-pass receipt**
 
-Create or append to a short receipt file `tests/dogfood_mm30_receipt.md` documenting what was run + expected output:
+Create a short receipt file `tests/dogfood_mm30_receipt.md` documenting what was run + expected output. This receipt is explicitly the gate for Task 12 — Task 12 flips spec acceptance-criteria checkboxes based ON this receipt, not based on aspirational language.
 
 ```markdown
 # mm30 dogfood receipt — 2026-04-21
 
-`science-tool verdict parse` + `verdict rollup --by-claim` pass the
+`science-tool verdict parse` + `verdict rollup` pass the
 acceptance harness on the mm30 corpus:
 
-- 9/9 docs parse cleanly.
-- Exactly 1 `rule_disagrees_with_body: true` case, on t163.
+- 9/9 atomic-decomposition docs parse cleanly (Step 11.1).
+- Exactly 1 `rule_disagrees_with_body: true` case, on t163 (Step 11.1).
 - `rollup --by-claim` groups citations under canonical IDs (37-claim
   registry); every doc's claim IDs resolve either directly or via
-  synonyms.
+  synonyms (Step 11.4, `--strict` exit=0).
+- `--by-claim` and `--scope claim` produce byte-identical JSON
+  payloads (Step 11.3 diff).
+- `rollup --scope all` tally matches per-doc composite tokens
+  (Step 11.5).
 
 See commit for reproduction commands.
 ```
@@ -1939,15 +2550,38 @@ Commit:
 ```bash
 cd ~/d/science/science-tool
 git add tests/dogfood_mm30_receipt.md
-git commit -m "test(verdict): mm30 dogfood pass — 9/9 parse, t163 lone disagreement, by-claim rollup works"
+git commit -m "test(verdict): mm30 dogfood pass — 9/9 parse, t163 lone disagreement, strict clean"
 ```
 
 ---
 
 ## Task 12: Update the design spec (v1.2 touch-ups)
 
+**Precondition: Task 11's dogfood receipt must exist and assert all
+five acceptance checks pass.** Task 12 flips spec acceptance-criteria
+checkboxes on the basis of that receipt, not aspirationally. If any
+receipt assertion is unmet, stop here and fix the implementation
+before proceeding.
+
 **Files:**
 - Modify: `docs/specs/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md`
+
+- [ ] **Step 12.0: Verify the Task 11 receipt is present and complete**
+
+Run:
+
+```bash
+test -f ~/d/science/science-tool/tests/dogfood_mm30_receipt.md && \
+  grep -q "9/9 atomic-decomposition docs parse cleanly" \
+    ~/d/science/science-tool/tests/dogfood_mm30_receipt.md && \
+  grep -q "rule_disagrees_with_body.*t163" \
+    ~/d/science/science-tool/tests/dogfood_mm30_receipt.md && \
+  echo "OK: Task 11 receipt present; proceeding with Task 12"
+```
+
+Expected: `OK: Task 11 receipt present; proceeding with Task 12`.
+If the echo is absent, the receipt is missing or incomplete — stop
+and finish Task 11 first.
 
 - [ ] **Step 12.1: Bump the revision history and acceptance criteria**
 
@@ -1956,7 +2590,7 @@ Open `docs/specs/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md`. 
 ```markdown
 - **v1.2 (2026-04-21):** MVP implementation lands in `science-tool`
   (plan: `docs/plans/2026-04-21-verdict-parse-rollup-mvp.md`).
-  Three touch-ups from dogfooding experience:
+  Four touch-ups from dogfooding + implementation experience:
   - Reference the **mm30 `specs/claim-registry.yaml`** (37 canonical
     claims across 4 anchor types: hypothesis, DAG-edge, task,
     article) as the first concrete registry implementation.
@@ -1968,6 +2602,14 @@ Open `docs/specs/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md`. 
     resolution.
   - Bump acceptance criterion 6 from "6 reference docs" to "9"
     (mm30 added t099, t240, t258 under the new schema on 2026-04-21).
+  - **Clarify tie semantics for `majority` and `weighted-majority`:**
+    a polarity wins iff its (possibly weighted) share is STRICTLY
+    greater than 0.5 of the total. Exact 50/50 splits return `[~]`.
+    The v1.1 table's "≥50%" phrasing was ambiguous at exactly 50%
+    (both polarities could claim majority); strict `> 0.5` is the
+    implemented behavior and makes v1.1's t163 worked example (weight
+    3.0 on the load-bearing positive, yielding a tie → `[~]` matching
+    the body) come out self-consistent.
 ```
 
 Find the "Status" line at the top of the doc and change:
@@ -2052,23 +2694,48 @@ the same semantic at a better resolution once atomic decomposition
 is authored.
 ```
 
-- [ ] **Step 12.5: Commit**
+- [ ] **Step 12.5: Patch the aggregation-rules table with explicit tie semantics**
+
+Find the "Aggregation rules (`rule` field)" table in the spec. Update the `majority` and `weighted-majority` rows to use strict inequality:
+
+Replace:
+
+```markdown
+| `majority` | ≥50% claims `[+]` | ≥50% claims `[-]` | otherwise | Voting — n-of-m thresholds. |
+| `weighted-majority` | weighted-`[+]` ≥ 50% of total weight | weighted-`[-]` ≥ 50% of total weight | otherwise | Voting with per-claim `weight:` (default 1.0). Use when one or two atomic claims are load-bearing relative to the rest (v1.1 addition; addresses gap 3). |
+```
+
+with:
+
+```markdown
+| `majority` | `> 50%` claims `[+]` | `> 50%` claims `[-]` | otherwise (including exact 50/50 ties) | Voting — n-of-m thresholds. **Strict majority required** (v1.2 clarification); ties return `[~]`. |
+| `weighted-majority` | weighted-`[+]` strictly `> 50%` of total weight | weighted-`[-]` strictly `> 50%` of total weight | otherwise (including exact 50/50 weighted ties) | Voting with per-claim `weight:` (default 1.0). Use when one or two atomic claims are load-bearing relative to the rest (v1.1 addition; addresses gap 3). **Strict majority required** (v1.2 clarification); ties return `[~]`. |
+```
+
+- [ ] **Step 12.6: Commit**
 
 ```bash
 cd ~/d/science
 git add docs/specs/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md
-git commit -m "docs(verdict-spec): v1.2 touch-ups — mm30 registry reference, confidence advisory, 9 dogfood docs"
+git commit -m "docs(verdict-spec): v1.2 touch-ups — mm30 registry, confidence advisory, tie semantics, 9 dogfood docs"
 ```
 
 ---
 
 ## What this MVP leaves out — pickup context for follow-on plans
 
-The MVP ships `verdict parse` + `verdict rollup` (scope: all, claim) +
-the rule-aggregation machinery + the claim-registry read path. Seven
-spec-defined capabilities are NOT in this plan; each is sized and
-described below so a follow-on plan can pick up without losing
-context.
+The MVP ships `verdict parse` + `verdict rollup` (scopes `all` and
+`claim`, plus the `--by-claim` alias and `--strict` mode) + the
+rule-aggregation machinery (all 7 rules) + the claim-registry read
+path + registry-aware parse warnings. Ten spec-defined capabilities
+are NOT in this plan; each is sized and described below so a
+follow-on plan can pick up without losing context.
+
+Broader context: all three **scope types** the v1.0 spec originally
+anticipated — `hypothesis` / `question` / `edge` — depend on a
+cross-document citation graph the MVP deliberately doesn't build.
+That graph is the main blocker for items §1-§3 below; once it
+exists, those three subcommands are small.
 
 ### 1. `verdict conflicts` — cross-doc polarity conflict scan
 
