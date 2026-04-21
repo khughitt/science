@@ -106,8 +106,8 @@ verdict:
   rule: "and | or | majority | weighted-majority | bimodal | non-adjudicating | reframed"
   # rule-specific optional subfields (see Aggregation Rules below):
   closure_terminal: "non_adjudicating_under_observational_adjusters"   # only when rule == "non-adjudicating"
-  reframing_target: "interpretation:t149-original-finding"              # only when rule == "reframed"
-  reframing_reason: "raw-TPM correlations were ~50% compositional artifact"  # only when rule == "reframed"
+  reframing_target: "interpretation:t149-original-finding"              # expected when rule == "reframed"; parser warning if missing
+  reframing_reason: "raw-TPM correlations were ~50% compositional artifact"  # expected when rule == "reframed"; surfaced if present
   claims:
     - id: "h2#18-edge-6-IFN-arm"        # stable claim ID; resolves via project registry
       polarity: "[+]"
@@ -144,7 +144,11 @@ present the implemented parser requires `composite` and `rule`. Each
 listed claim requires `id` and `polarity`; `strength`, `weight`,
 `evidence_summary`, `contexts`, and `members` are optional. A
 `non-adjudicating` verdict may have no sub-claims when the verdict is a
-closure; other adjudicating rules are expected to carry `claims`.
+closure; other adjudicating rules are expected to carry `claims`. For
+`rule == "reframed"`, authors should provide `reframing_target` and
+`reframing_reason` so the measurement lineage is auditable; the parser
+surfaces these fields when present and emits validation warnings, not
+schema errors, when expected reframing metadata is missing.
 
 ### `strength` calibration table (non-binding; v1.1 addition)
 
@@ -176,7 +180,7 @@ Defines how `composite` derives from `claims`:
 | `weighted-majority` | weighted-`[+]` strictly `> 50%` of adjudicating weight | weighted-`[-]` strictly `> 50%` of adjudicating weight | otherwise (including exact positive/negative weighted ties, or exactly one adjudicating polarity plus unresolved/non-adjudicating weight) | Voting with per-claim `weight:` (default 1.0). Adjudicating weight is `[+] + [-]` only; `[?]`, `[~]`, and `[⌀]` claims do not dilute positive-vs-negative contests. Use when one or two atomic claims are load-bearing relative to the rest (v1.1 addition; addresses gap 3). **Strict majority required** (v1.2 clarification); ties return `[~]`. |
 | `bimodal` | n/a | n/a | always `[~]` | The result IS the distribution shape; no aggregation. Use `members:` subfield (v1.1) to group homogeneous sub-atoms when a per-atom listing is unwieldy. |
 | `non-adjudicating` | n/a | n/a | n/a; composite = `[⌀]` | The rollup is deliberately closed; sub-claims may exist but do not aggregate to a directional answer. **v1.1:** name the closure with the optional `closure_terminal:` subfield (e.g., `non_adjudicating_under_observational_adjusters`); free-form, project-local, captured for documentation/tooling but not enum-validated. |
-| `reframed` | n/a | n/a | n/a; composite = `[~]` | Original measurement is wrong; new measurement gives different answer. **v1.1:** identify the reframed prior with `reframing_target:` (interpretation-ref) and `reframing_reason:` (string) subfields; required when `rule == "reframed"` so a `science-tool verdict reframed-trail` query can surface the lineage of revised measurements. |
+| `reframed` | n/a | n/a | n/a; composite = `[~]` | Original measurement is wrong; new measurement gives different answer. **v1.1:** authored docs should identify the reframed prior with `reframing_target:` (interpretation-ref) and `reframing_reason:` (string) subfields so future lineage tooling can surface revised measurements. The parser surfaces these fields when present; missing expected metadata produces validation warnings, not parser schema errors. |
 
 Tooling MUST validate the body's `## Verdict` token against the
 rule-derived composite. When they disagree:
@@ -325,21 +329,34 @@ science-tool verdict coverage
 science-tool verdict watchlist
     Lists [-] verdicts that are the only refutation in their question's
     evidence basket -- vulnerable to flipping with one new study.
-```
 
-### Backfill helper
+science-tool verdict registry-init --scan doc/interpretations/
+    Bootstraps a stub `specs/claim-registry.yaml` from existing
+    `verdict.claims:` blocks for owner curation.
 
-```
+science-tool verdict reframed-trail <interpretation-id>
+    Resolves `reframing_target:` chains across revised measurements.
+
+members: aggregation/resolution
+    Expands `members:` claim subfields into registered member-claim
+    IDs and aggregates per-member polarity when those members are
+    themselves registered claims.
+
 science-tool verdict backfill --project <path>
     Same logic as the 2026-04-19 cross-project backfill: reads
     interpretation docs without `## Verdict` blocks, dispatches an LLM
     classifier with the rubric, writes audit TSV, leaves edits as a
     diff for human review.
+
+science:big-picture / science:status verdict integration
+    Consumes parser and rollup output so project-level summaries can
+    include structured verdict distributions.
 ```
 
-This commodifies the manual process the 2026-04-19 backfill executed
-(8 subagent dispatches across 6 projects). Future projects adopting the
-convention can run one command instead.
+These items were explicitly deferred from the MVP. The `backfill`
+subcommand would commodify the manual process the 2026-04-19 backfill
+executed (8 subagent dispatches across 6 projects), but it is not part
+of the implemented MVP surface.
 
 **Note on the confidence column** (added v1.2): the backfill audit TSVs
 produced by this subcommand have historically included a per-row
@@ -372,7 +389,7 @@ overlapping their scope:
   cbioportal). Per-project audit TSVs preserved.
 - Token distribution: ~49% `[+]`, ~16% `[-]`, ~28% `[~]`, ~7% `[?]`.
 
-**Migration steps in this spec's scope:**
+**Migration state and follow-on steps:**
 
 1. Add the `verdict:` frontmatter block as an OPTIONAL field (no
    project breaks if it's omitted; existing 207 docs continue to work).
