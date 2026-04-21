@@ -42,7 +42,6 @@ def test_entity_record_with_description() -> None:
     assert r.description == "Some prose about t1."
 
 
-@pytest.mark.xfail(reason="SourceEntity.provider added in Task 4.1; placeholder until then")
 def test_normalize_record_produces_source_entity_with_provider_set() -> None:
     record = EntityRecord(
         canonical_id="hypothesis:h01",

@@ -9,6 +9,7 @@ def _entity(*, kind: str = "hypothesis", ontology_terms: list[str] | None = None
         title="Test entity",
         profile="core",
         source_path="test.md",
+        provider="markdown",
         ontology_terms=ontology_terms or [],
     )
 

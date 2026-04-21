@@ -131,9 +131,7 @@ def load_project_sources(project_root: Path) -> ProjectSources:
     # Final global collision check across resolver + specialized parsers.
     seen: dict[str, list[tuple[str, str]]] = {}
     for e in entities:
-        # provider field doesn't exist yet (added in Task 4.1) — fall back to "unknown"
-        provider_name = getattr(e, "provider", "unknown")
-        seen.setdefault(e.canonical_id, []).append((provider_name, e.source_path))
+        seen.setdefault(e.canonical_id, []).append((e.provider, e.source_path))
     collisions = {cid: srcs for cid, srcs in seen.items() if len(srcs) > 1}
     if collisions:
         cid, sources = next(iter(collisions.items()))
@@ -219,6 +217,7 @@ def _load_task_entities(
                         ontology_catalogs=ontology_catalogs,
                     ),
                     source_path=rel_path,
+                    provider="task",
                     status=task.status,
                     content_preview=task.description,
                     related=task.related,
@@ -248,6 +247,7 @@ def _load_model_sources(project_root: Path, *, local_profile: str) -> tuple[list
                 title=record.title,
                 profile=record.profile,
                 source_path=record.source_path,
+                provider="model",
                 domain=record.domain,
                 related=record.related,
                 source_refs=record.source_refs,
@@ -280,6 +280,7 @@ def _load_parameter_sources(
                 title=record.title,
                 profile=record.profile,
                 source_path=record.source_path,
+                provider="parameter",
                 domain=record.domain,
                 content_preview=_parameter_preview(record),
                 related=record.related,
@@ -510,5 +511,3 @@ def local_profile_sources_dir(project_root: Path, *, local_profile: str) -> Path
 
 def _default_local_source_path(local_profile: str, file_name: str) -> str:
     return f"knowledge/sources/{local_profile}/{file_name}"
-
-

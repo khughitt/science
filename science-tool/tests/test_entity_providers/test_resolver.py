@@ -26,6 +26,7 @@ def _entity(canonical_id: str, source_path: str) -> SourceEntity:
         title=canonical_id,
         profile="local",
         source_path=source_path,
+        provider="markdown",
     )
 
 

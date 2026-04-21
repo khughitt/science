@@ -28,6 +28,7 @@ class SourceEntity(BaseModel):
     title: str
     profile: str
     source_path: str
+    provider: str
     domain: str | None = None
     confidence: float | None = None
     status: str | None = None

@@ -52,6 +52,7 @@ def _source_entity(
         title=title,
         profile="core",
         source_path=f"doc/{canonical_id.replace(':', '-')}.md",
+        provider="markdown",
         aliases=aliases or [],
         ontology_terms=ontology_terms or [],
     )

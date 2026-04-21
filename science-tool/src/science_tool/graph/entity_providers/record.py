@@ -200,6 +200,7 @@ def _normalize_record(
         title=record.title,
         profile=profile,
         source_path=record.source_path,
+        provider=provider_name,
         domain=record.domain,
         confidence=record.confidence,
         status=record.status,
@@ -209,6 +210,5 @@ def _normalize_record(
         ontology_terms=record.ontology_terms,
         same_as=record.same_as,
         aliases=_derive_aliases(canonical_id, record.kind, record.aliases),
-        # provider + description come from the record/provider context — added in steps 7-8.
         **reasoning_kwargs,
     )
