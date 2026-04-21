@@ -17,6 +17,7 @@ Behavioral fidelity notes vs _load_structured_entities in sources.py:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import yaml
@@ -96,7 +97,7 @@ class AggregateProvider(EntityProvider):
     def discover(self, ctx: EntityDiscoveryContext) -> list[SourceEntity]:
         entities: list[SourceEntity] = []
         entities.extend(self._load_multi_type_aggregate(ctx))
-        # Convention 2: single-type aggregate added in Task 5.1
+        entities.extend(self._load_single_type_aggregates(ctx))
         return entities
 
     def _load_multi_type_aggregate(self, ctx: EntityDiscoveryContext) -> list[SourceEntity]:
@@ -188,6 +189,76 @@ class AggregateProvider(EntityProvider):
             entity = entity.model_copy(update=updates)
 
         return entity
+
+    def _load_single_type_aggregates(self, ctx: EntityDiscoveryContext) -> list[SourceEntity]:
+        from science_model.frontmatter import _DIR_TO_TYPE
+
+        results: list[SourceEntity] = []
+        for plural, singular in _DIR_TO_TYPE.items():
+            for ext in ("json", "yaml"):
+                f = ctx.project_root / "doc" / plural / f"{plural}.{ext}"
+                if not f.is_file():
+                    continue
+                items = self._load_list(f)
+                try:
+                    rel_path = str(f.relative_to(ctx.project_root))
+                except ValueError:
+                    rel_path = str(f)
+                for raw in items:
+                    if not isinstance(raw, dict):
+                        continue
+                    record = self._record_from_dict(raw, kind=singular, source_path=rel_path)
+                    if record is None:
+                        continue
+                    results.append(_normalize_record(record, ctx, provider_name=self.name))
+        return results
+
+    def _load_list(self, path: Path) -> list:
+        """Read a list from a JSON or YAML file. Returns empty list on read failure."""
+        try:
+            text = path.read_text(encoding="utf-8")
+            if path.suffix == ".json":
+                data = json.loads(text)
+            else:
+                data = yaml.safe_load(text)
+            return data if isinstance(data, list) else []
+        except (json.JSONDecodeError, yaml.YAMLError, OSError):
+            return []
+
+    def _record_from_dict(self, raw: dict, *, kind: str, source_path: str) -> EntityRecord | None:
+        """Build an EntityRecord from a single-type aggregate entry dict.
+
+        The `kind` parameter is the inferred type (from the filename); `raw` entries do not
+        need a `kind:` field. The canonical_id is read from `id` or `canonical_id`.
+        Returns None if required fields are missing.
+        """
+        canonical_id = raw.get("id") or raw.get("canonical_id")
+        title = raw.get("title")
+        if not isinstance(canonical_id, str) or not canonical_id:
+            return None
+        if not isinstance(title, str) or not title:
+            return None
+
+        aliases_raw = raw.get("aliases") or []
+        aliases = [str(a) for a in aliases_raw] if isinstance(aliases_raw, list) else []
+
+        return EntityRecord(
+            canonical_id=canonical_id,
+            kind=kind,
+            title=title,
+            source_path=source_path,
+            description=str(raw.get("description") or ""),
+            profile=str(raw.get("profile")) if raw.get("profile") is not None else None,
+            domain=raw.get("domain") if isinstance(raw.get("domain"), str) else None,
+            confidence=_coerce_optional_float(raw.get("confidence")),
+            status=str(raw.get("status")) if raw.get("status") is not None else None,
+            related=_canonicalize_literature_refs(_coerce_string_list(raw.get("related"))),
+            blocked_by=_canonicalize_literature_refs(_coerce_string_list(raw.get("blocked_by"))),
+            source_refs=_canonicalize_literature_refs(_coerce_string_list(raw.get("source_refs"))),
+            ontology_terms=_coerce_string_list(raw.get("ontology_terms")),
+            same_as=_canonicalize_literature_refs(_coerce_string_list(raw.get("same_as"))),
+            aliases=aliases,
+        )
 
 
 def _coerce_optional_float(value: object) -> float | None:
