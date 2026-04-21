@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Literal
 import re
@@ -19,6 +19,7 @@ from science_tool.verdict.tokens import Token
 Scope = Literal["all", "claim"]
 
 _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
+_VERDICT_KEY_RE = re.compile(r"^verdict\s*:", re.MULTILINE)
 
 
 def walk_interpretations(
@@ -41,7 +42,7 @@ def _has_verdict_key(md_path: Path) -> bool:
     content = md_path.read_text(encoding="utf-8")
     match = _FRONTMATTER_RE.match(content)
     if match is None:
-        return False
+        return content.startswith("---\n") and _VERDICT_KEY_RE.search(content) is not None
 
     try:
         frontmatter = yaml.safe_load(match.group(1)) or {}
@@ -53,7 +54,7 @@ def _has_verdict_key(md_path: Path) -> bool:
 
 
 def group_by(
-    results: Iterator[ParseResult] | list[ParseResult],
+    results: Iterable[ParseResult],
     scope: Scope = "all",
     *,
     registry: IndexedClaimRegistry | None = None,
@@ -79,6 +80,6 @@ def group_by(
     return grouped
 
 
-def tally_polarities(results: Iterator[ParseResult] | list[ParseResult]) -> dict[Token, int]:
+def tally_polarities(results: Iterable[ParseResult]) -> dict[Token, int]:
     """Count parse results by composite verdict token."""
-    return Counter(result.composite_token for result in results)
+    return dict(Counter(result.composite_token for result in results))

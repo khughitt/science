@@ -80,6 +80,24 @@ verdict: [
         list(walk_interpretations(tmp_path))
 
 
+def test_walk_interpretations_propagates_unterminated_verdict_frontmatter(tmp_path: Path) -> None:
+    path = tmp_path / "unterminated-frontmatter.md"
+    path.write_text(
+        """---
+id: x
+verdict:
+  composite: "[+]"
+  rule: "and"
+
+**Verdict:** [+] bad
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError):
+        list(walk_interpretations(tmp_path))
+
+
 def test_group_by_all_returns_single_bucket() -> None:
     results = list(walk_interpretations(FIXTURE_DIR))
 
@@ -180,7 +198,7 @@ def test_tally_polarities_counts_composites() -> None:
 
     tally = tally_polarities(results)
 
-    assert tally[Token.POSITIVE] == 2
-    assert tally[Token.MIXED] == 3
-    assert tally[Token.NON_ADJUDICATING] == 1
-    assert tally[Token.NEGATIVE] == 0
+    assert tally.get(Token.POSITIVE, 0) == 2
+    assert tally.get(Token.MIXED, 0) == 3
+    assert tally.get(Token.NON_ADJUDICATING, 0) == 1
+    assert tally.get(Token.NEGATIVE, 0) == 0
