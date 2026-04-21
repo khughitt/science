@@ -3,21 +3,11 @@
 from __future__ import annotations
 
 import re
-import sys
-from enum import StrEnum
 from pathlib import Path
 from typing import TypeVar
 
 import yaml
 from pydantic import BaseModel, Field
-from science_model.frontmatter import parse_entity_file, parse_frontmatter
-from science_model.reasoning import (
-    ClaimLayer,
-    EvidenceRole,
-    IdentificationStrength,
-    ProxyDirectness,
-    SupportScope,
-)
 from science_model.ontologies import load_catalogs_for_names
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.profiles import CORE_PROFILE, load_shared_profile
@@ -25,6 +15,8 @@ from science_model.profiles.schema import ProfileManifest
 from science_model.source_contracts import AuthoredTargetedRelation, BindingSource, ModelSource, ParameterSource
 
 from science_tool.big_picture.literature_prefix import canonical_paper_id
+from science_tool.graph.entity_providers.base import EntityDiscoveryContext
+from science_tool.graph.entity_providers.resolver import EntityResolver, default_providers
 from science_tool.graph.source_types import (
     EntityDatapackageInvalidError,  # noqa: F401
     EntityIdCollisionError,  # noqa: F401
@@ -34,14 +26,6 @@ from science_tool.graph.source_types import (
 )
 from science_tool.paths import resolve_paths
 from science_tool.tasks import parse_tasks
-
-_ENUM_FIELDS: dict[str, type[StrEnum]] = {
-    "claim_layer": ClaimLayer,
-    "identification_strength": IdentificationStrength,
-    "proxy_directness": ProxyDirectness,
-    "supports_scope": SupportScope,
-    "evidence_role": EvidenceRole,
-}
 
 _SHORT_ID_RE = re.compile(r"^(?P<token>[a-z]\d+)(?:[-_].*)?$", re.IGNORECASE)
 _EXTERNAL_PREFIXES = frozenset({"go", "mesh", "doid", "hp", "so", "ncbitaxon", "ncbigene", "ensembl"})
@@ -118,15 +102,17 @@ def load_project_sources(project_root: Path) -> ProjectSources:
 
     entities: list[SourceEntity] = []
     local_profile = profiles.local
-    entities.extend(
-        _load_markdown_entities(
-            project_root,
-            [paths.doc_dir, paths.specs_dir, project_root / "research" / "packages"],
-            local_profile=local_profile,
-            active_kinds=active_kinds,
-            ontology_catalogs=ontology_catalogs,
-        )
+
+    ctx = EntityDiscoveryContext(
+        project_root=project_root,
+        project_slug=project_root.name,
+        local_profile=local_profile,
+        active_kinds=active_kinds,
+        ontology_catalogs=ontology_catalogs,
     )
+    resolver = EntityResolver(default_providers())
+    entities.extend(resolver.discover(ctx))
+
     entities.extend(
         _load_task_entities(
             project_root,
@@ -136,18 +122,23 @@ def load_project_sources(project_root: Path) -> ProjectSources:
             ontology_catalogs=ontology_catalogs,
         )
     )
-    entities.extend(
-        _load_structured_entities(
-            project_root,
-            local_profile=local_profile,
-            active_kinds=active_kinds,
-            ontology_catalogs=ontology_catalogs,
-        )
-    )
+
     model_entities, model_relations = _load_model_sources(project_root, local_profile=local_profile)
     parameter_entities, parameter_relations = _load_parameter_sources(project_root, local_profile=local_profile)
     entities.extend(model_entities)
     entities.extend(parameter_entities)
+
+    # Final global collision check across resolver + specialized parsers.
+    seen: dict[str, list[tuple[str, str]]] = {}
+    for e in entities:
+        # provider field doesn't exist yet (added in Task 4.1) — fall back to "unknown"
+        provider_name = getattr(e, "provider", "unknown")
+        seen.setdefault(e.canonical_id, []).append((provider_name, e.source_path))
+    collisions = {cid: srcs for cid, srcs in seen.items() if len(srcs) > 1}
+    if collisions:
+        cid, sources = next(iter(collisions.items()))
+        raise EntityIdCollisionError(cid, sources)
+
     entities.sort(key=lambda entity: entity.canonical_id)
     relations = _load_structured_relations(project_root, local_profile=local_profile)
     relations.extend(model_relations)
@@ -203,67 +194,6 @@ def is_metadata_reference(raw: str) -> bool:
     return raw.startswith("meta:")
 
 
-def _load_markdown_entities(
-    project_root: Path,
-    roots: list[Path],
-    *,
-    local_profile: str,
-    active_kinds: frozenset[str] | None = None,
-    ontology_catalogs: list[OntologyCatalog] | None = None,
-) -> list[SourceEntity]:
-    entities: list[SourceEntity] = []
-    for root in roots:
-        if not root.is_dir():
-            continue
-        for path in sorted(root.rglob("*.md")):
-            entity = parse_entity_file(path, project_slug=project_root.name)
-            if entity is None:
-                continue
-
-            frontmatter = parse_frontmatter(path)
-            raw_aliases: list[str] = []
-            raw_profile = _default_profile_for_kind(
-                entity.type.value,
-                local_profile=local_profile,
-                active_kinds=active_kinds,
-                ontology_catalogs=ontology_catalogs,
-            )
-            if frontmatter is not None:
-                fm, _ = frontmatter
-                aliases = fm.get("aliases") or []
-                if isinstance(aliases, list):
-                    raw_aliases = [str(alias) for alias in aliases]
-                profile = fm.get("profile")
-                if isinstance(profile, str) and profile.strip():
-                    raw_profile = profile
-
-            entities.append(
-                SourceEntity(
-                    canonical_id=entity.canonical_id,
-                    kind=entity.type.value,
-                    title=entity.title,
-                    profile=raw_profile,
-                    source_path=entity.file_path,
-                    domain=entity.domain,
-                    status=entity.status,
-                    content_preview=entity.content_preview,
-                    related=entity.related,
-                    source_refs=entity.source_refs,
-                    ontology_terms=entity.ontology_terms,
-                    same_as=entity.same_as,
-                    aliases=_derive_aliases(
-                        entity.canonical_id,
-                        [*raw_aliases, *_aliases_from_source_path(entity.type.value, entity.file_path)],
-                    ),
-                    **_load_reasoning_metadata(
-                        frontmatter[0] if frontmatter is not None else None,
-                        source_path=path,
-                    ),
-                )
-            )
-    return entities
-
-
 def _load_task_entities(
     project_root: Path,
     tasks_dir: Path,
@@ -296,69 +226,6 @@ def _load_task_entities(
                     aliases=_derive_aliases(canonical_id, [task.id, task.id.upper()]),
                 )
             )
-    return entities
-
-
-def _load_structured_entities(
-    project_root: Path,
-    *,
-    local_profile: str,
-    active_kinds: frozenset[str] | None = None,
-    ontology_catalogs: list[OntologyCatalog] | None = None,
-) -> list[SourceEntity]:
-    entities_path = local_profile_sources_dir(project_root, local_profile=local_profile) / "entities.yaml"
-    if not entities_path.is_file():
-        return []
-
-    data = yaml.safe_load(entities_path.read_text(encoding="utf-8")) or {}
-    items = data.get("entities") or []
-    if not isinstance(items, list):
-        return []
-
-    entities: list[SourceEntity] = []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        canonical_id = item.get("canonical_id")
-        kind = item.get("kind")
-        title = item.get("title")
-        if not isinstance(canonical_id, str) or not canonical_id:
-            continue
-        if not isinstance(kind, str) or not kind:
-            continue
-        if not isinstance(title, str) or not title:
-            continue
-
-        if kind == "paper":
-            canonical_id = canonical_paper_id(canonical_id)
-
-        aliases_raw = item.get("aliases") or []
-        aliases = [str(alias) for alias in aliases_raw] if isinstance(aliases_raw, list) else []
-
-        entities.append(
-            SourceEntity(
-                canonical_id=canonical_id,
-                kind=kind,
-                title=title,
-                profile=str(item.get("profile") or local_profile),
-                source_path=str(item.get("source_path") or _default_local_source_path(local_profile, "entities.yaml")),
-                domain=_coerce_optional_string(item.get("domain")),
-                confidence=_coerce_optional_float(item.get("confidence")),
-                status=str(item.get("status")) if item.get("status") is not None else None,
-                content_preview=str(item.get("content_preview") or ""),
-                related=_canonicalize_literature_refs(_coerce_string_list(item.get("related"))),
-                blocked_by=_canonicalize_literature_refs(_coerce_string_list(item.get("blocked_by"))),
-                source_refs=_canonicalize_literature_refs(_coerce_string_list(item.get("source_refs"))),
-                ontology_terms=_coerce_string_list(item.get("ontology_terms")),
-                same_as=_canonicalize_literature_refs(_coerce_string_list(item.get("same_as"))),
-                aliases=_derive_aliases(canonical_id, aliases),
-                **_load_reasoning_metadata(
-                    item,
-                    source_path=Path(str(item.get("source_path"))) if item.get("source_path") else None,
-                ),
-            )
-        )
-
     return entities
 
 
@@ -488,44 +355,6 @@ def _load_structured_relations(project_root: Path, *, local_profile: str) -> lis
     return relations
 
 
-def _load_reasoning_metadata(
-    raw: dict[str, object] | None,
-    *,
-    source_path: Path | None = None,
-) -> dict[str, object]:
-    if not isinstance(raw, dict):
-        return {}
-
-    metadata: dict[str, object] = {}
-    for field in (
-        "claim_layer",
-        "identification_strength",
-        "proxy_directness",
-        "supports_scope",
-        "independence_group",
-        "evidence_role",
-        "measurement_model",
-        "rival_model_packet",
-    ):
-        value = raw.get(field)
-        if value is None:
-            continue
-        enum_type = _ENUM_FIELDS.get(field)
-        if enum_type is not None and isinstance(value, str):
-            try:
-                enum_type(value)
-            except ValueError:
-                allowed = ", ".join(member.value for member in enum_type)
-                where = f" in {source_path}" if source_path is not None else ""
-                print(
-                    f"warning: unknown {field} value {value!r}{where}; dropping field. Allowed values: {allowed}",
-                    file=sys.stderr,
-                )
-                continue
-        metadata[field] = value
-    return metadata
-
-
 def _load_typed_records(
     project_root: Path,
     *,
@@ -589,31 +418,6 @@ def _load_manual_aliases(project_root: Path, *, local_profile: str) -> dict[str,
         if isinstance(alias, str) and isinstance(canonical_id, str):
             result[alias] = canonical_id
     return result
-
-
-def _coerce_string_list(value: object) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [str(item) for item in value]
-
-
-def _canonicalize_literature_refs(values: list[str]) -> list[str]:
-    return [canonical_paper_id(value) for value in values]
-
-
-def _coerce_optional_string(value: object) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value
-    return None
-
-
-def _coerce_optional_float(value: object) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _nested_relations(
@@ -708,22 +512,3 @@ def _default_local_source_path(local_profile: str, file_name: str) -> str:
     return f"knowledge/sources/{local_profile}/{file_name}"
 
 
-def _aliases_from_source_path(kind: str, source_path: str) -> list[str]:
-    if kind not in {"hypothesis", "question", "task"}:
-        return []
-
-    stem = Path(source_path).stem
-    match = _SHORT_ID_RE.match(stem)
-    if match is None:
-        head = stem.split("-", 1)[0]
-        match = _SHORT_ID_RE.match(head)
-    if match is None:
-        return []
-
-    token = match.group("token")
-    return [
-        f"{kind}:{token.lower()}",
-        f"{kind}:{token.upper()}",
-        token.lower(),
-        token.upper(),
-    ]

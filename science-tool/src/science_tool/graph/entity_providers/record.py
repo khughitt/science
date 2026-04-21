@@ -9,13 +9,77 @@ defaulting, and kind validation in ONE place rather than duplicated per provider
 from __future__ import annotations
 
 import re
+import sys
+from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
+from science_model.reasoning import (
+    ClaimLayer,
+    EvidenceRole,
+    IdentificationStrength,
+    ProxyDirectness,
+    SupportScope,
+)
 
 from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.graph.entity_providers.base import EntityDiscoveryContext
 from science_tool.graph.source_types import SourceEntity
+
+_ENUM_FIELDS: dict[str, type[StrEnum]] = {
+    "claim_layer": ClaimLayer,
+    "identification_strength": IdentificationStrength,
+    "proxy_directness": ProxyDirectness,
+    "supports_scope": SupportScope,
+    "evidence_role": EvidenceRole,
+}
+
+_REASONING_FIELDS = (
+    "claim_layer",
+    "identification_strength",
+    "proxy_directness",
+    "supports_scope",
+    "independence_group",
+    "evidence_role",
+    "measurement_model",
+    "rival_model_packet",
+)
+
+
+def load_reasoning_metadata(
+    raw: dict[str, object] | None,
+    *,
+    source_path: Path | None = None,
+) -> dict[str, object]:
+    """Extract and validate reasoning metadata fields from a raw frontmatter dict.
+
+    Returns a dict of validated field→value pairs ready for use as **kwargs to
+    SourceEntity. Unknown enum values are dropped with a stderr warning.
+    """
+    if not isinstance(raw, dict):
+        return {}
+
+    metadata: dict[str, object] = {}
+    for field in _REASONING_FIELDS:
+        value = raw.get(field)
+        if value is None:
+            continue
+        enum_type = _ENUM_FIELDS.get(field)
+        if enum_type is not None and isinstance(value, str):
+            try:
+                enum_type(value)
+            except ValueError:
+                allowed = ", ".join(member.value for member in enum_type)
+                where = f" in {source_path}" if source_path is not None else ""
+                print(
+                    f"warning: unknown {field} value {value!r}{where}; dropping field. Allowed values: {allowed}",
+                    file=sys.stderr,
+                )
+                continue
+        metadata[field] = value
+    return metadata
+
 
 _SHORT_ID_RE = re.compile(r"^(?P<token>[a-z]\d+)(?:[-_].*)?$", re.IGNORECASE)
 
@@ -127,6 +191,9 @@ def _normalize_record(
         ontology_catalogs=ctx.ontology_catalogs,
     )
 
+    # Lift reasoning metadata from extra (provider sets these via load_reasoning_metadata).
+    reasoning_kwargs: dict[str, object] = {k: v for k, v in record.extra.items() if k in _REASONING_FIELDS}
+
     return SourceEntity(
         canonical_id=canonical_id,
         kind=record.kind,
@@ -143,4 +210,5 @@ def _normalize_record(
         same_as=record.same_as,
         aliases=_derive_aliases(canonical_id, record.kind, record.aliases),
         # provider + description come from the record/provider context — added in steps 7-8.
+        **reasoning_kwargs,
     )

@@ -37,12 +37,10 @@ def default_providers() -> list[EntityProvider]:
     Function (not constant) so tests can construct ad-hoc providers without
     monkey-patching, and so the import order doesn't force eager construction.
     """
-    from science_tool.graph.entity_providers.markdown import MarkdownProvider
-    from science_tool.graph.entity_providers.datapackage_directory import DatapackageDirectoryProvider
     from science_tool.graph.entity_providers.aggregate import AggregateProvider
+    from science_tool.graph.entity_providers.markdown import MarkdownProvider
 
     return [
         MarkdownProvider(),
-        DatapackageDirectoryProvider(),
         AggregateProvider(),
     ]

@@ -4,13 +4,6 @@ Walks the configured scan roots for *.md files; uses parse_entity_file to
 extract Entity; lifts each into an EntityRecord and runs _normalize_record.
 Behavior matches existing _load_markdown_entities (verified by the snapshot
 regression test).
-
-Known gaps vs _load_markdown_entities (to be addressed in later tasks):
-- Reasoning metadata fields (claim_layer, identification_strength, etc.) are not
-  extracted. _load_markdown_entities reads them via _load_reasoning_metadata.
-  In the kitchen-sink snapshot these are all null, so byte-identical behavior
-  is preserved for Task 3.1 wiring. Wire in Task 7+ when reasoning metadata
-  becomes load-bearing.
 """
 
 from __future__ import annotations
@@ -21,7 +14,7 @@ from pathlib import Path
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
 
 from science_tool.graph.entity_providers.base import EntityDiscoveryContext, EntityProvider
-from science_tool.graph.entity_providers.record import EntityRecord, _normalize_record
+from science_tool.graph.entity_providers.record import EntityRecord, _normalize_record, load_reasoning_metadata
 from science_tool.graph.source_types import SourceEntity
 
 _SHORT_ID_RE = re.compile(r"^(?P<token>[a-z]\d+)(?:[-_].*)?$", re.IGNORECASE)
@@ -84,10 +77,12 @@ class MarkdownProvider(EntityProvider):
         """Build EntityRecord from the parsed Entity. Mirrors what _load_markdown_entities did inline."""
         raw_aliases: list[str] = []
         raw_profile: str | None = None
+        fm_dict: dict[str, object] | None = None
 
         fm_result = parse_frontmatter(path)
         if fm_result is not None:
             fm, _ = fm_result
+            fm_dict = fm
             aliases = fm.get("aliases") or []
             if isinstance(aliases, list):
                 raw_aliases = [str(a) for a in aliases]
@@ -114,5 +109,5 @@ class MarkdownProvider(EntityProvider):
             same_as=list(entity.same_as or []),
             status=entity.status,
             confidence=entity.confidence,
-            extra={},  # reasoning metadata wired in step 7+; stays empty for now
+            extra=load_reasoning_metadata(fm_dict, source_path=path),
         )
