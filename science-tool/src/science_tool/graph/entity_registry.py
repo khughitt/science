@@ -106,6 +106,6 @@ class EntityRegistry:
         raise EntityKindNotRegisteredError(f"no schema registered for kind {kind!r}")
 
     @staticmethod
-    def _require_entity_subclass(cls: object) -> None:
-        if not (isinstance(cls, type) and issubclass(cls, Entity)):
-            raise TypeError(f"registered class must subclass Entity, got {cls!r}")
+    def _require_entity_subclass(candidate: object) -> None:
+        if not (isinstance(candidate, type) and issubclass(candidate, Entity)):
+            raise TypeError(f"registered class must subclass Entity, got {candidate!r}")

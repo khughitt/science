@@ -294,7 +294,8 @@ def _audit_entity(entity: Entity, alias_map: dict[str, str]) -> list[AuditRow]:
     rows: list[AuditRow] = []
     for target in entity.related:
         rows.extend(_audit_reference(entity, "related", target, alias_map))
-    for target in entity.blocked_by:
+    # `blocked_by` lives on ProjectEntity; defensive getattr for bare Entity instances.
+    for target in getattr(entity, "blocked_by", []) or []:
         rows.extend(_audit_reference(entity, "blocked_by", target, alias_map))
     for target in entity.source_refs:
         rows.extend(_audit_reference(entity, "source_refs", target, alias_map))

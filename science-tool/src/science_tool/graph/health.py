@@ -223,7 +223,8 @@ def build_health_report(project_root: Path) -> HealthReport:
     ]
     rival_model_gaps: list[RivalModelGap] = []
     for entity in proposition_entities:
-        packet = entity.rival_model_packet
+        # `rival_model_packet` lives on ProjectEntity; defensive getattr for bare Entity instances.
+        packet = getattr(entity, "rival_model_packet", None)
         if packet is None or packet.discriminating_predictions:
             continue
         rival_model_gaps.append(

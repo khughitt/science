@@ -3,10 +3,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol, Sequence
 
-from science_model.entities import Entity
 from science_model.ontologies import load_catalog, load_registry
 from science_model.ontologies.schema import OntologyCatalog
+
+
+class _EntityLike(Protocol):
+    """Duck-typed view of the entity fields suggest_ontologies reads.
+
+    Kept narrow so tests can pass lightweight stand-ins; production passes
+    real Entity / ProjectEntity instances which satisfy this structurally.
+    """
+
+    ontology_terms: list[str]
+
+    @property
+    def type(self) -> object: ...  # has `.value: str`
 
 
 @dataclass(frozen=True)
@@ -19,7 +32,7 @@ class OntologySuggestion:
 
 
 def suggest_ontologies(
-    entities: list[Entity],
+    entities: Sequence[_EntityLike],
     declared_ontologies: list[str],
 ) -> list[OntologySuggestion]:
     """Scan entities for signals that suggest undeclared ontologies.
@@ -58,7 +71,7 @@ def suggest_ontologies(
     return suggestions
 
 
-def _count_prefix_matches(entities: list[Entity], catalog: OntologyCatalog) -> int:
+def _count_prefix_matches(entities: Sequence[_EntityLike], catalog: OntologyCatalog) -> int:
     """Count entities whose ontology_terms contain CURIEs matching the catalog's curie_prefixes."""
     catalog_prefixes: set[str] = set()
     for et in catalog.entity_types:
@@ -78,7 +91,7 @@ def _count_prefix_matches(entities: list[Entity], catalog: OntologyCatalog) -> i
     return count
 
 
-def _count_kind_matches(entities: list[Entity], catalog: OntologyCatalog) -> int:
+def _count_kind_matches(entities: Sequence[_EntityLike], catalog: OntologyCatalog) -> int:
     """Count entities whose kind matches an entity type in the catalog."""
     catalog_type_names = {et.name for et in catalog.entity_types}
     count = 0

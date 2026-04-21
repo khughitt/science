@@ -9,7 +9,7 @@ from typing import Any, TypeVar
 
 import yaml
 from pydantic import BaseModel, Field
-from science_model.entities import Entity
+from science_model.entities import Entity, ProjectEntity
 from science_model.ontologies import load_catalogs_for_names
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.profiles import CORE_PROFILE, load_shared_profile
@@ -437,8 +437,6 @@ def _load_legacy_records(
         # canonical_parameter is not a registered kind; register on-the-fly.
         # The spec routes unknown project kinds through ProjectEntity, but the
         # registry requires explicit registration.
-        from science_model.entities import ProjectEntity
-
         try:
             schema: type[Entity] = registry.resolve("canonical_parameter")
         except Exception:  # noqa: BLE001

@@ -194,7 +194,8 @@ def _add_relations(
         )
         knowledge.add((entity_uri, predicate, target_uri))
 
-    for raw_target in sorted(entity.blocked_by):
+    # `blocked_by` lives on ProjectEntity; defensive getattr for bare Entity instances.
+    for raw_target in sorted(getattr(entity, "blocked_by", []) or []):
         if is_metadata_reference(raw_target):
             continue
         canonical_target = normalize_alias(raw_target, alias_map)
@@ -351,12 +352,14 @@ def _add_reasoning_metadata(*, uri: URIRef, provenance, entity: Entity) -> None:
                 Literal(_model_to_json(entity.measurement_model)),
             )
         )
-    if entity.rival_model_packet is not None:
+    # `rival_model_packet` lives on ProjectEntity; defensive getattr for bare Entity instances.
+    rival_packet = getattr(entity, "rival_model_packet", None)
+    if rival_packet is not None:
         provenance.add(
             (
                 uri,
                 SCI_NS.rivalModelPacket,
-                Literal(_model_to_json(entity.rival_model_packet)),
+                Literal(_model_to_json(rival_packet)),
             )
         )
 
