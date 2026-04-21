@@ -821,3 +821,33 @@ Regression fixtures and golden snapshots remain valuable and should be preserved
 - define write-path behavior and migration tooling
 - decide whether core domain-side built-in entity types are warranted in a later phase
 - revisit caching only after the model boundary is clean
+
+## Deferred from the 2026-04-20 unified-entity-model implementation
+
+The plan at `docs/specs/plans/2026-04-20-unified-entity-model.md` landed
+the architectural cutover (merge `78a5339` on `main`, 2026-04-20). Two
+spec-aligned tasks were intentionally scoped out of that implementation and
+remain as follow-ups:
+
+1. **Full `model` / `parameter` demotion to the extension path.** The current
+   code routes these through a `_load_legacy_records()` helper in
+   `science-tool/src/science_tool/graph/sources.py`, which still registers
+   them against `ProjectEntity`. Per spec §Implication for current model /
+   parameter, they should not be core kinds at all — projects that want them
+   should register via `EntityRegistry.register_extension_kind()`. This is a
+   breaking change for projects currently using those kinds and needs a
+   deprecation story before it lands.
+
+2. **Field-location migration off base `Entity`.** During implementation,
+   dataset-specific fields (`origin`, `access`, `derivation`, `accessions`,
+   `datapackage`, `local_path`, `consumed_by`, `parent_dataset`, `siblings`),
+   reasoning fields (`claim_layer`, `identification_strength`, …), and other
+   project-scoped fields (`project`, `maturity`, `confidence`, `pre_registered*`,
+   etc.) were kept on base `Entity` to avoid breaking hundreds of existing
+   callers. Per spec §What does not belong in base Entity, these belong on
+   `DatasetEntity`, `ProjectEntity`, and typed subclasses respectively. Two
+   call sites were patched with defensive `getattr()` for fields that only
+   exist on `ProjectEntity` (`blocked_by`, `rival_model_packet`) — those can
+   be tightened once the full field migration lands. Approach: add
+   `model_config = {"extra": "forbid"}` on `Entity` as the last step so the
+   compiler catches any remaining stray field access.
