@@ -72,6 +72,8 @@ class AuditReport:
 
     def to_json(self) -> dict:  # type: ignore[type-arg]
         return {
+            "today": self.validation.today.isoformat(),
+            "strict": self.validation.strict,
             "validation": self.validation.to_json(),
             "staleness": self.staleness.to_json(),
             "mutations": [m.to_json() for m in self.mutations],

@@ -135,6 +135,18 @@ def test_audit_includes_validation_section() -> None:
     assert js["validation"]["ok"] is True
 
 
+def test_audit_json_has_top_level_today_and_strict() -> None:
+    import re
+    paths = load_dag_paths(FIXTURE_MINIMAL / "clean")
+    report = run_audit(paths)
+    js = report.to_json()
+    assert "today" in js
+    assert "strict" in js
+    assert js["strict"] is False
+    # today should be an ISO date string
+    assert re.match(r"^\d{4}-\d{2}-\d{2}$", js["today"])
+
+
 def test_audit_exit_code_reflects_validation_failure() -> None:
     paths = load_dag_paths(FIXTURE_MINIMAL / "cyclic")
     report = run_audit(paths)

@@ -530,9 +530,11 @@ def validate_project(
 ) -> ValidationReport:
     """Validate every DAG YAML under ``paths.dag_dir``.
 
-    Always-on checks (block exit 0): shape + refs.
-    Subsequent tasks will add: posterior sanity, topology, acyclicity,
-    jsonschema conformance. Strict-only checks come last.
+    Runs all always-on checks (shape, refs, jsonschema conformance, posterior
+    sanity, topology, acyclicity) and — regardless of the ``strict`` flag —
+    emits strict-only findings (identification_missing, description_nonempty,
+    dot_nodes_unused, cross_dag_node_consistency). The ``strict`` flag only
+    gates whether ``report.ok`` considers strict findings blocking.
     """
     if today is None:
         today = date.today()
