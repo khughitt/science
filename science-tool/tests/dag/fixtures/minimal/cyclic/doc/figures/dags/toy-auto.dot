@@ -1,0 +1,26 @@
+digraph toy {
+  a -> b [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[1]", fontsize=10, fontcolor="#757575"];
+  b -> c [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[2]", fontsize=10, fontcolor="#757575"];
+  c -> a [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[3]", fontsize=10, fontcolor="#757575"];
+
+  // --- Auto-legend (two-axis: edge_status + identification) ---
+  subgraph cluster_autolegend {
+    label=<<b>Legend</b> (auto-styled)  —  color/width = edge_status; double-line = interventional; vee arrow = longitudinal>;
+    fontsize=10; color="#999"; style="rounded"; margin=12;
+    node [shape=plaintext, fontsize=9];
+    lg_supp_a [label="supported"]; lg_supp_b [label=""];
+    lg_tent_a [label="tentative"]; lg_tent_b [label=""];
+    lg_struct_a [label="structural"]; lg_struct_b [label=""];
+    lg_unk_a [label="unknown"]; lg_unk_b [label=""];
+    lg_elim_a [label="[✗] eliminated"]; lg_elim_b [label=""];
+    lg_int_a [label="[I] interventional"]; lg_int_b [label=""];
+    lg_long_a [label="[L] longitudinal"]; lg_long_b [label=""];
+    lg_supp_a -> lg_supp_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal];
+    lg_tent_a -> lg_tent_b [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal];
+    lg_struct_a -> lg_struct_b [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal];
+    lg_unk_a -> lg_unk_b [color="#c62828", penwidth=1.2, style="dashed", arrowhead=normal];
+    lg_elim_a -> lg_elim_b [color="#9e9e9e", penwidth=1.0, style="dotted", arrowhead=normal];
+    lg_int_a -> lg_int_b [color="#2e7d32:#ffffff:#2e7d32", penwidth=2.5, style="solid", arrowhead=normal];
+    lg_long_a -> lg_long_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=vee];
+  }
+}

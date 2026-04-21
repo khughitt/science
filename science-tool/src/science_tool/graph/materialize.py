@@ -10,13 +10,13 @@ from urllib.parse import quote
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
 from science_model import normalize_alias
+from science_model.entities import Entity
 from science_model.reasoning import MeasurementModel, RivalModelPacket
 from science_model.ontologies.schema import OntologyCatalog
 
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.sources import (
     SourceBinding,
-    SourceEntity,
     SourceRelation,
     _EXTERNAL_PREFIXES,
     build_alias_map,
@@ -141,9 +141,9 @@ def materialization_audit(project_root: Path) -> tuple[list[dict[str, str]], boo
     return audit_rows, has_failures
 
 
-def _add_entity(*, entity: SourceEntity, knowledge, provenance) -> None:
+def _add_entity(*, entity: Entity, knowledge, provenance) -> None:
     uri = _entity_uri(entity.canonical_id)
-    knowledge.add((uri, RDF.type, SCI_NS[_kind_class_name(entity.kind)]))
+    knowledge.add((uri, RDF.type, SCI_NS[_kind_class_name(entity.type.value)]))
     knowledge.add((uri, SCHEMA_NS.identifier, Literal(entity.canonical_id)))
     knowledge.add((uri, SKOS.prefLabel, Literal(entity.title)))
     knowledge.add((uri, SCI_NS.profile, Literal(entity.profile)))
@@ -152,19 +152,19 @@ def _add_entity(*, entity: SourceEntity, knowledge, provenance) -> None:
     if entity.status:
         knowledge.add((uri, SCI_NS.projectStatus, Literal(entity.status)))
 
-    source_uri = _source_uri(entity.source_path)
+    source_uri = _source_uri(entity.file_path)
     provenance.add((uri, PROV.wasDerivedFrom, source_uri))
     if entity.confidence is not None:
         provenance.add((uri, SCI_NS.confidence, Literal(str(entity.confidence), datatype=XSD.decimal)))
     _add_reasoning_metadata(uri=uri, provenance=provenance, entity=entity)
     provenance.add((source_uri, RDF.type, PROV.Entity))
-    provenance.add((source_uri, SCHEMA_NS.identifier, Literal(entity.source_path)))
+    provenance.add((source_uri, SCHEMA_NS.identifier, Literal(entity.file_path)))
 
 
 def _add_relations(
-    entity: SourceEntity,
+    entity: Entity,
     *,
-    entity_index: dict[str, SourceEntity],
+    entity_index: dict[str, Entity],
     alias_map: dict[str, str],
     knowledge,
     bridge,
@@ -188,7 +188,9 @@ def _add_relations(
 
         target_uri = _entity_uri(target.canonical_id)
         predicate = (
-            SCI_NS.tests if entity.kind == "task" and target.kind in {"hypothesis", "question"} else SKOS.related
+            SCI_NS.tests
+            if entity.type.value == "task" and target.type.value in {"hypothesis", "question"}
+            else SKOS.related
         )
         knowledge.add((entity_uri, predicate, target_uri))
 
@@ -263,7 +265,7 @@ def _add_authored_relation(
     relation: SourceRelation,
     *,
     dataset: Dataset,
-    entity_index: dict[str, SourceEntity],
+    entity_index: dict[str, Entity],
     alias_map: dict[str, str],
     bridge,
     ontology_catalogs: list[OntologyCatalog],
@@ -287,7 +289,7 @@ def _add_binding(
     *,
     knowledge,
     provenance,
-    entity_index: dict[str, SourceEntity],
+    entity_index: dict[str, Entity],
     alias_map: dict[str, str],
 ) -> None:
     model_uri = _canonical_entity_uri(binding.model, entity_index=entity_index, alias_map=alias_map)
@@ -327,7 +329,7 @@ def _add_binding(
         )
 
 
-def _add_reasoning_metadata(*, uri: URIRef, provenance, entity: SourceEntity) -> None:
+def _add_reasoning_metadata(*, uri: URIRef, provenance, entity: Entity) -> None:
     scalar_predicates = {
         "claim_layer": SCI_NS.claimLayer,
         "identification_strength": SCI_NS.identificationStrength,
@@ -366,7 +368,7 @@ def _model_to_json(value: MeasurementModel | RivalModelPacket) -> str:
 def _canonical_entity_uri(
     raw_value: str,
     *,
-    entity_index: dict[str, SourceEntity],
+    entity_index: dict[str, Entity],
     alias_map: dict[str, str],
 ) -> URIRef:
     canonical_id = normalize_alias(raw_value, alias_map)
@@ -430,7 +432,7 @@ def _source_uri(source_path: str) -> URIRef:
 def _binding_reference_uri(
     raw_target: str,
     *,
-    entity_index: dict[str, SourceEntity],
+    entity_index: dict[str, Entity],
     alias_map: dict[str, str],
 ) -> URIRef:
     if is_external_reference(raw_target):

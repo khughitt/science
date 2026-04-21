@@ -1,4 +1,15 @@
-"""Typed canonical source contracts for structured KG authoring."""
+"""Source-contract models (ModelSource, ParameterSource, BindingSource).
+
+Per the unified-entity-model spec (docs/specs/2026-04-20-multi-backend-entity-resolver-design.md
+§Implication for current model / parameter): these are NOT core Science
+typed entities in the unified model family. They remain here as
+extension-layer helpers for the legacy model/parameter load path in
+science_tool.graph.sources._load_legacy_records. Projects that want
+first-class model/parameter entities should register custom subclasses of
+ProjectEntity via EntityRegistry.register_extension_kind.
+
+Original docstring (preserved):
+Typed canonical source contracts for structured KG authoring."""
 
 from __future__ import annotations
 

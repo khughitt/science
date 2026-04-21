@@ -1,15 +1,26 @@
-from science_tool.graph.sources import SourceEntity
+from dataclasses import dataclass, field
+from types import SimpleNamespace
+
 from science_tool.graph.suggest import suggest_ontologies
 
 
-def _entity(*, kind: str = "hypothesis", ontology_terms: list[str] | None = None) -> SourceEntity:
-    return SourceEntity(
-        canonical_id=f"{kind}:test",
-        kind=kind,
-        title="Test entity",
-        profile="core",
-        source_path="test.md",
-        provider="markdown",
+@dataclass
+class _Ent:
+    """Minimal Entity-shaped stand-in for suggest_ontologies tests.
+
+    The real EntityType enum does not carry domain-specific kinds (gene, star,
+    mass, ...); the ontology-suggestion logic only reads `.type.value` and
+    `.ontology_terms`, so this stand-in is sufficient. Using a dataclass keeps
+    the tests immune to future Entity field additions.
+    """
+
+    ontology_terms: list[str] = field(default_factory=list)
+    type: SimpleNamespace = field(default_factory=lambda: SimpleNamespace(value="hypothesis"))
+
+
+def _entity(*, kind: str = "hypothesis", ontology_terms: list[str] | None = None) -> _Ent:
+    return _Ent(
+        type=SimpleNamespace(value=kind),
         ontology_terms=ontology_terms or [],
     )
 

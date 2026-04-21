@@ -7,8 +7,9 @@ from datetime import date, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, Field
+from science_model.entities import Entity
 
-from science_tool.graph.sources import ProjectSources, SourceEntity, load_project_sources
+from science_tool.graph.sources import ProjectSources, load_project_sources
 from science_tool.registry.index import (
     RegistryEntity,
     RegistryEntitySource,
@@ -47,11 +48,11 @@ def collect_all_project_sources(
 
 def align_registry(
     existing: RegistryIndex,
-    project_sources: dict[str, list[SourceEntity]],
+    project_sources: dict[str, list[Entity]],
 ) -> RegistryIndex:
     """Phase 2: Align entities across projects into the registry.
 
-    project_sources maps project_name -> list of SourceEntity.
+    project_sources maps project_name -> list of Entity.
     Registry keys are namespaced as ``project_name::canonical_id`` to prevent
     false deduplication of sequential IDs across unrelated projects.
     """
@@ -73,7 +74,7 @@ def align_registry(
             else:
                 entity_map[registry_id] = RegistryEntity(
                     canonical_id=registry_id,
-                    kind=src.kind,
+                    kind=src.type.value,
                     title=src.title,
                     profile=src.profile,
                     aliases=list(src.aliases),
@@ -141,7 +142,7 @@ def run_sync(
     existing_index = load_registry_index(registry_dir)
     old_count = len(existing_index.entities)
 
-    project_entity_map: dict[str, list[SourceEntity]] = {}
+    project_entity_map: dict[str, list[Entity]] = {}
     for sources in all_sources:
         project_entity_map[sources.project_name] = sources.entities
 

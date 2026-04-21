@@ -656,10 +656,10 @@ def test_graph_build_fails_cleanly_on_unresolved_references(tmp_path: Path) -> N
 
 
 def test_source_entity_has_no_tags_field():
-    """After unification, SourceEntity should not have a tags field."""
-    from science_tool.graph.sources import SourceEntity
+    """After unification, Entity should not have a tags field."""
+    from science_model.entities import Entity
 
-    assert "tags" not in SourceEntity.model_fields
+    assert "tags" not in Entity.model_fields
 
 
 def test_known_kinds_includes_shared() -> None:
