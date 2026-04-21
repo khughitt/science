@@ -44,13 +44,15 @@ Result:
 - `scope=claim`
 - `n_documents=9`
 - `n_groups=37`
+- Tallies are per-claim polarity tokens, not per-document composite
+  tokens.
 - Canonical groups checked:
-  - `h2#strict-block-diagonal-transition-null`
+  - `h2#strict-block-diagonal-transition-null`: `[-]=1`
   - `h4#c3-funnel-cross-cytogenetic-convergence-to-pr`
-  - `t099#full-transition-matrix-single-patient-precision`
-  - `t240#clonal-change-n-phf19-autonomous-ratchet`
-  - `t240#phf19-log2fc-correlates-with-pi-change`
-  - `t240#phf19-monotone-up-across-paired-cohort`
+  - `t099#full-transition-matrix-single-patient-precision`: `[?]=1`
+  - `t240#clonal-change-n-phf19-autonomous-ratchet`: `[?]=1`
+  - `t240#phf19-log2fc-correlates-with-pi-change`: `[+]=1`
+  - `t240#phf19-monotone-up-across-paired-cohort`: `[?]=1`
 
 ## Alias validation
 
@@ -65,7 +67,7 @@ cmp /tmp/mm30_scope_claim.json /tmp/mm30_by_claim.json
 Result:
 
 - `cmp exit=0`
-- `sha256=9ce54a6232a23e532bbd6aa5c71bffee113489a66166287af650352d37a5eb60`
+- `sha256=48be93b60881e5e82752ef73a3b671fb95a27caff810ae74266b696a20ee61dd`
 - `bytes=10556`
 
 ## Strict validation
