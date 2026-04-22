@@ -65,12 +65,21 @@ class EntityUpdate(BaseModel):
     related: list[str] | None = None
 
 
+_CORE_KIND_TO_TYPE: dict[str, EntityType] = {entity_type.value: entity_type for entity_type in EntityType}
+
+
+def core_entity_type_for_kind(kind: str) -> EntityType | None:
+    """Return the core EntityType projection for a kind, if one exists."""
+    return _CORE_KIND_TO_TYPE.get(kind)
+
+
 class Entity(BaseModel):
     """A research entity parsed from frontmatter or the knowledge graph."""
 
     id: str
     canonical_id: str = ""
-    type: EntityType
+    kind: str
+    type: EntityType | None = None
     title: str
     status: str | None = None
     project: str
@@ -115,6 +124,13 @@ class Entity(BaseModel):
     def _fill_derived_defaults(self) -> "Entity":
         if not self.canonical_id:
             self.canonical_id = self.id
+        return self
+
+    @model_validator(mode="after")
+    def _validate_kind_type_consistency(self) -> "Entity":
+        expected = core_entity_type_for_kind(self.kind)
+        if self.type != expected:
+            raise ValueError("kind/type mismatch")
         return self
 
     @model_validator(mode="after")
