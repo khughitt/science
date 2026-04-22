@@ -207,3 +207,31 @@ def test_parse_entity_file_preserves_legacy_unknown_type(tmp_path: Path) -> None
     assert entity is not None
     assert entity.kind == "unknown"
     assert entity.type == EntityType.UNKNOWN
+
+
+def test_parse_entity_file_infers_mechanism_from_parent_directory(tmp_path: Path) -> None:
+    mechanisms_dir = tmp_path / "doc" / "mechanisms"
+    mechanisms_dir.mkdir(parents=True)
+    md = mechanisms_dir / "test-mechanism.md"
+    md.write_text(
+        "---\n"
+        'id: "mechanism:test-mechanism"\n'
+        "type: mechanism\n"
+        'title: "Test mechanism"\n'
+        "participants:\n"
+        '  - "protein:PHF19"\n'
+        '  - "concept:prc2-complex"\n'
+        "propositions:\n"
+        '  - "proposition:ifn-silencing"\n'
+        'summary: "PHF19-PRC2 dampens IFN signaling."\n'
+        "---\n"
+        "Mechanism body.\n",
+        encoding="utf-8",
+    )
+    entity = parse_entity_file(md, project_slug="demo")
+    assert entity is not None
+    assert entity.kind == "mechanism"
+    assert entity.type == EntityType.MECHANISM
+    assert entity.id == "mechanism:test-mechanism"
+    assert entity.file_path == "doc/mechanisms/test-mechanism.md"
+    assert entity.participants == ["protein:PHF19", "concept:prc2-complex"]

@@ -7,6 +7,7 @@ import pytest
 from science_model.entities import (
     DatasetEntity,
     DomainEntity,
+    MechanismEntity,
     ProjectEntity,
     TaskEntity,
 )
@@ -33,6 +34,11 @@ def test_generic_kinds_default_to_project_entity() -> None:
     assert registry.resolve("concept") is ProjectEntity
     assert registry.resolve("hypothesis") is ProjectEntity
     assert registry.resolve("topic") is ProjectEntity
+
+
+def test_mechanism_kind_resolves_to_typed_entity() -> None:
+    registry = EntityRegistry.with_core_types()
+    assert registry.resolve("mechanism") is MechanismEntity
 
 
 def test_unknown_kind_raises() -> None:

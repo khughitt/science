@@ -309,6 +309,54 @@ def test_materialize_graph_uses_kind_for_domain_rdf_class(tmp_path: Path) -> Non
     assert (gene_uri, SKOS.related, question_uri) in knowledge
 
 
+def test_materialize_graph_emits_mechanism_participants_and_propositions(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    local_sources = project / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
+        "\n".join(
+            [
+                "entities:",
+                "  - canonical_id: concept:translation",
+                "    kind: concept",
+                "    title: Translation",
+                "  - canonical_id: concept:cell-state",
+                "    kind: concept",
+                "    title: Cell state",
+                "  - canonical_id: proposition:anti-coupling",
+                "    kind: proposition",
+                "    title: Translation and cell state move in opposite directions",
+                "  - canonical_id: mechanism:anti-coupling-axis",
+                "    kind: mechanism",
+                "    title: Anti-coupling axis",
+                "    summary: Translation and cell-state programs move in opposite directions.",
+                "    participants: [concept:translation, concept:cell-state]",
+                "    propositions: [proposition:anti-coupling]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    trig_path = materialize_graph(project)
+
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    mechanism_uri = PROJECT_NS["mechanism/anti-coupling-axis"]
+    translation_uri = PROJECT_NS["concept/translation"]
+    cell_state_uri = PROJECT_NS["concept/cell-state"]
+    proposition_uri = PROJECT_NS["proposition/anti-coupling"]
+
+    assert (mechanism_uri, RDF.type, SCI.Mechanism) in knowledge
+    assert (mechanism_uri, SCHEMA.description, Literal("Translation and cell-state programs move in opposite directions.")) in knowledge
+    assert (mechanism_uri, SCI.hasParticipant, translation_uri) in knowledge
+    assert (mechanism_uri, SCI.hasParticipant, cell_state_uri) in knowledge
+    assert (mechanism_uri, SCI.hasProposition, proposition_uri) in knowledge
+
+
 def test_materialize_graph_uses_kind_for_task_edge_special_case(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)

@@ -1,7 +1,8 @@
 from datetime import date
 import pytest
+from pydantic import ValidationError
 
-from science_model.entities import Entity, EntityType, core_entity_type_for_kind
+from science_model.entities import Entity, EntityType, MechanismEntity, core_entity_type_for_kind
 
 
 def test_entity_round_trip():
@@ -185,3 +186,44 @@ def test_entity_rejects_mismatched_kind_and_type() -> None:
             content_preview="",
             file_path="doc/phf19.md",
         )
+
+
+VALID_MECHANISM_RAW = {
+    "id": "mechanism:phf19-prc2-ifn-immunotherapy",
+    "canonical_id": "mechanism:phf19-prc2-ifn-immunotherapy",
+    "kind": "mechanism",
+    "type": EntityType.MECHANISM,
+    "title": "PHF19 / PRC2 / IFN / immunotherapy",
+    "project": "mm30",
+    "ontology_terms": [],
+    "related": [],
+    "source_refs": [],
+    "content_preview": "Mechanistic summary.",
+    "file_path": "doc/mechanisms/phf19-prc2-ifn-immunotherapy.md",
+    "participants": ["protein:PHF19", "concept:prc2-complex"],
+    "propositions": ["proposition:ifn-silencing"],
+    "summary": "PHF19-PRC2 dampens IFN signaling relevant to immunotherapy.",
+}
+
+
+def test_mechanism_entity_requires_participants_and_propositions() -> None:
+    entity = MechanismEntity.model_validate(VALID_MECHANISM_RAW)
+    assert entity.kind == "mechanism"
+    assert entity.type == EntityType.MECHANISM
+    assert entity.participants == ["protein:PHF19", "concept:prc2-complex"]
+    assert entity.propositions == ["proposition:ifn-silencing"]
+
+
+def test_mechanism_entity_rejects_single_participant() -> None:
+    with pytest.raises(ValidationError, match="at least two participants"):
+        MechanismEntity.model_validate({**VALID_MECHANISM_RAW, "participants": ["concept:only-one"]})
+
+
+def test_mechanism_entity_rejects_missing_propositions() -> None:
+    with pytest.raises(ValidationError, match="at least one proposition"):
+        MechanismEntity.model_validate({**VALID_MECHANISM_RAW, "propositions": []})
+
+
+def test_mechanism_entity_rejects_empty_summary() -> None:
+    with pytest.raises(ValidationError, match="non-empty summary"):
+        MechanismEntity.model_validate({**VALID_MECHANISM_RAW, "summary": "  "})
