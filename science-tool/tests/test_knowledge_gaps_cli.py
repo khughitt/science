@@ -22,6 +22,12 @@ def test_knowledge_gaps_cli_emits_json() -> None:
     assert "topic:t02-thin" in ids
 
 
+def test_knowledge_gaps_help_mentions_legacy_topic_coverage() -> None:
+    result = CliRunner().invoke(big_picture_group, ["knowledge-gaps", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "legacy topic-coverage gaps" in result.output
+
+
 def test_knowledge_gaps_cli_respects_limit() -> None:
     result = CliRunner().invoke(
         big_picture_group,

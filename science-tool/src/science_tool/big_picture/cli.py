@@ -83,10 +83,11 @@ def validate_cmd(project_root: Path) -> None:
     help="Cap the JSON list to the top N entries (default: no limit).",
 )
 def knowledge_gaps_cmd(project_root: Path, limit: int | None) -> None:
-    """Emit topic-level knowledge gaps as JSON.
+    """Emit legacy topic-coverage gaps as JSON.
 
     Applies the same research-only aspect filter used by big-picture synthesis
-    (excluding pure software-only questions) before computing demand.
+    (excluding pure software-only questions) before computing demand over
+    existing authored topic docs.
     """
     resolved = resolve_questions(project_root)
     try:

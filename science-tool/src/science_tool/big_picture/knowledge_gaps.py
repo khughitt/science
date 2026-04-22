@@ -1,7 +1,9 @@
-"""Knowledge-gap computation for `/science:big-picture` synthesis.
+"""Legacy topic-coverage gap computation for `/science:big-picture` synthesis.
 
-Identifies topics where the project's question demand exceeds its reading
-coverage. See docs/specs/2026-04-19-knowledge-gaps-design.md.
+This module computes coverage gaps over explicitly authored legacy topic docs
+(`doc/topics/`, `doc/background/topics/`). It does not imply that unresolved
+semantic refs should be migrated into new `topic` entities.
+See docs/specs/2026-04-19-knowledge-gaps-design.md.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ _logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class TopicGap:
-    """A topic where reading lags investigation.
+    """A legacy topic doc where reading lags investigation.
 
     Attributes
     ----------
@@ -57,7 +59,7 @@ class TopicGap:
 
 
 def _load_topics(project_root: Path) -> dict[str, dict]:
-    """Return ``{topic_id: frontmatter_dict}`` for every topic in the project.
+    """Return ``{topic_id: frontmatter_dict}`` for every legacy topic doc in the project.
 
     Raises ``ValueError`` if two topic files share an entity ID.
     """
@@ -220,13 +222,15 @@ def compute_topic_gaps(
     resolved_questions: dict[str, ResolverOutput],
     included_question_ids: set[str],
 ) -> list[TopicGap]:
-    """Return all topics with demand > 0 and coverage < demand.
+    """Return all legacy topic docs with demand > 0 and coverage < demand.
 
     Sorted by ``gap_score`` descending; ties broken by ``topic_id`` ascending.
 
     The caller (typically the Opus orchestrator) is responsible for computing
     ``included_question_ids`` via the big-picture aspect filter before
-    invoking this function. See the knowledge-gaps spec §Aspect Integration.
+    invoking this function. This remains a legacy topic-coverage surface over
+    existing topic docs rather than a general semantic gap model.
+    See the knowledge-gaps spec §Aspect Integration.
     """
     topics = _load_topics(project_root)
     papers = _load_papers(project_root)

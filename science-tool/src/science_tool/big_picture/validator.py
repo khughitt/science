@@ -21,7 +21,8 @@ IssueKind = Literal[
     "orphan_count_mismatch",
 ]
 
-# Matches "interpretation:<id>", "task:<id>", "question:<id>", "hypothesis:<id>", "topic:<id>".
+# Matches references that can still appear in generated synthesis text,
+# including legacy `topic:` IDs used by the topic-coverage surfaces.
 REFERENCE_PATTERN = re.compile(r"\b(interpretation|task|question|hypothesis|topic):([a-zA-Z0-9_\-.]+)\b")
 
 
@@ -74,6 +75,8 @@ def _collect_project_ids(project_root: Path) -> set[str]:
         "specs/hypotheses",
         "doc/questions",
         "doc/interpretations",
+        # Legacy topic coverage still needs to validate topic IDs that appear
+        # in generated synthesis output.
         "doc/topics",
         "doc/background/topics",
         "tasks",
