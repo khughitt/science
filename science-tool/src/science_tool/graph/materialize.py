@@ -9,17 +9,16 @@ from urllib.parse import quote
 
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
-from science_model import normalize_alias
 from science_model.entities import Entity
-from science_model.reasoning import MeasurementModel, RivalModelPacket
 from science_model.ontologies.schema import OntologyCatalog
+from science_model.reasoning import MeasurementModel, RivalModelPacket
 
 from science_tool.graph.migrate import audit_project_sources
+from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
     SourceBinding,
     SourceRelation,
     _EXTERNAL_PREFIXES,
-    build_alias_map,
     external_prefixes,
     is_external_reference,
     is_metadata_reference,
@@ -79,7 +78,7 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
     dataset.graph(PROJECT_NS["graph/causal"])
     dataset.graph(PROJECT_NS["graph/datasets"])
 
-    alias_map = build_alias_map(sources.entities, manual_aliases=sources.manual_aliases)
+    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
     entity_index = {entity.canonical_id: entity for entity in sources.entities}
     ext_prefixes = _EXTERNAL_PREFIXES | external_prefixes(sources.ontology_catalogs)
 
@@ -90,7 +89,7 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
         _add_relations(
             entity,
             entity_index=entity_index,
-            alias_map=alias_map,
+            resolver=resolver,
             knowledge=knowledge,
             bridge=bridge,
             provenance=provenance,
@@ -103,7 +102,7 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
             relation,
             dataset=dataset,
             entity_index=entity_index,
-            alias_map=alias_map,
+            resolver=resolver,
             bridge=bridge,
             ontology_catalogs=sources.ontology_catalogs,
             ext_prefixes=ext_prefixes,
@@ -115,7 +114,7 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
             knowledge=knowledge,
             provenance=provenance,
             entity_index=entity_index,
-            alias_map=alias_map,
+            resolver=resolver,
         )
 
     trig_path = project_root / DEFAULT_GRAPH_PATH
@@ -165,7 +164,7 @@ def _add_relations(
     entity: Entity,
     *,
     entity_index: dict[str, Entity],
-    alias_map: dict[str, str],
+    resolver: ReferenceResolver,
     knowledge,
     bridge,
     provenance,
@@ -181,8 +180,11 @@ def _add_relations(
         if is_metadata_reference(raw_target):
             continue
 
-        canonical_target = normalize_alias(raw_target, alias_map)
-        target = entity_index.get(canonical_target)
+        resolution = resolver.resolve(raw_target, allow_cross_kind_fallback=True, allow_tag=True)
+        if resolution.status != "resolved":
+            continue
+        assert resolution.canonical_id is not None
+        target = entity_index.get(resolution.canonical_id)
         if target is None:
             continue
 
@@ -198,8 +200,11 @@ def _add_relations(
     for raw_target in sorted(getattr(entity, "blocked_by", []) or []):
         if is_metadata_reference(raw_target):
             continue
-        canonical_target = normalize_alias(raw_target, alias_map)
-        target = entity_index.get(canonical_target)
+        resolution = resolver.resolve(raw_target)
+        if resolution.status != "resolved":
+            continue
+        assert resolution.canonical_id is not None
+        target = entity_index.get(resolution.canonical_id)
         if target is None:
             continue
         knowledge.add((entity_uri, SCI_NS.blockedBy, _entity_uri(target.canonical_id)))
@@ -214,8 +219,11 @@ def _add_relations(
             _link_same_as_external(entity_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)
             continue
         # Internal alias: another project entity asserts equivalence with this one.
-        canonical_target = normalize_alias(raw_target, alias_map)
-        target = entity_index.get(canonical_target)
+        resolution = resolver.resolve(raw_target)
+        if resolution.status != "resolved":
+            continue
+        assert resolution.canonical_id is not None
+        target = entity_index.get(resolution.canonical_id)
         if target is None:
             continue
         knowledge.add((entity_uri, SKOS.exactMatch, _entity_uri(target.canonical_id)))
@@ -226,8 +234,11 @@ def _add_relations(
             continue
         if is_metadata_reference(raw_target):
             continue
-        canonical_target = normalize_alias(raw_target, alias_map)
-        target = entity_index.get(canonical_target)
+        resolution = resolver.resolve(raw_target, allow_cross_kind_fallback=True)
+        if resolution.status != "resolved":
+            continue
+        assert resolution.canonical_id is not None
+        target = entity_index.get(resolution.canonical_id)
         if target is None:
             continue
         provenance.add((entity_uri, PROV.wasDerivedFrom, _entity_uri(target.canonical_id)))
@@ -267,20 +278,20 @@ def _add_authored_relation(
     *,
     dataset: Dataset,
     entity_index: dict[str, Entity],
-    alias_map: dict[str, str],
+    resolver: ReferenceResolver,
     bridge,
     ontology_catalogs: list[OntologyCatalog],
     ext_prefixes: frozenset[str],
 ) -> None:
     graph = dataset.graph(_graph_uri(relation.graph_layer))
-    subject_uri = _canonical_entity_uri(relation.subject, entity_index=entity_index, alias_map=alias_map)
+    subject_uri = _canonical_entity_uri(relation.subject, entity_index=entity_index, resolver=resolver)
     predicate_uri = _resolve_relation_term(relation.predicate)
 
     if is_external_reference(relation.object, known_prefixes=ext_prefixes):
         object_uri = _external_uri(relation.object)
         _register_external_term(object_uri, relation.object, bridge=bridge, ontology_catalogs=ontology_catalogs)
     else:
-        object_uri = _canonical_entity_uri(relation.object, entity_index=entity_index, alias_map=alias_map)
+        object_uri = _canonical_entity_uri(relation.object, entity_index=entity_index, resolver=resolver)
 
     graph.add((subject_uri, predicate_uri, object_uri))
 
@@ -291,10 +302,10 @@ def _add_binding(
     knowledge,
     provenance,
     entity_index: dict[str, Entity],
-    alias_map: dict[str, str],
+    resolver: ReferenceResolver,
 ) -> None:
-    model_uri = _canonical_entity_uri(binding.model, entity_index=entity_index, alias_map=alias_map)
-    parameter_uri = _canonical_entity_uri(binding.parameter, entity_index=entity_index, alias_map=alias_map)
+    model_uri = _canonical_entity_uri(binding.model, entity_index=entity_index, resolver=resolver)
+    parameter_uri = _canonical_entity_uri(binding.parameter, entity_index=entity_index, resolver=resolver)
     knowledge.add((model_uri, SCI_NS.hasParameter, parameter_uri))
 
     binding_uri = _binding_uri(binding)
@@ -325,7 +336,7 @@ def _add_binding(
             (
                 binding_uri,
                 PROV.wasDerivedFrom,
-                _binding_reference_uri(target, entity_index=entity_index, alias_map=alias_map),
+                _binding_reference_uri(target, entity_index=entity_index, resolver=resolver),
             )
         )
 
@@ -373,10 +384,10 @@ def _canonical_entity_uri(
     raw_value: str,
     *,
     entity_index: dict[str, Entity],
-    alias_map: dict[str, str],
+    resolver: ReferenceResolver,
 ) -> URIRef:
-    canonical_id = normalize_alias(raw_value, alias_map)
-    entity = entity_index.get(canonical_id)
+    resolution = resolver.resolve(raw_value)
+    entity = entity_index.get(resolution.canonical_id or "")
     if entity is None:
         raise ValueError(f"Unknown canonical entity: {raw_value}")
     return _entity_uri(entity.canonical_id)
@@ -437,11 +448,11 @@ def _binding_reference_uri(
     raw_target: str,
     *,
     entity_index: dict[str, Entity],
-    alias_map: dict[str, str],
+    resolver: ReferenceResolver,
 ) -> URIRef:
     if is_external_reference(raw_target):
         return _external_uri(raw_target)
-    return _canonical_entity_uri(raw_target, entity_index=entity_index, alias_map=alias_map)
+    return _canonical_entity_uri(raw_target, entity_index=entity_index, resolver=resolver)
 
 
 def _kind_class_name(kind: str) -> str:

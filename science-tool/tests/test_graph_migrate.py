@@ -42,6 +42,64 @@ def test_audit_project_graph_reports_unresolved_related_refs(tmp_path: Path) -> 
     assert report["has_failures"] is True
 
 
+def test_audit_project_graph_allows_tag_refs_in_related(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    (root / "tasks").mkdir(parents=True)
+    (root / "tasks" / "active.md").write_text(
+        "\n".join(
+            [
+                "## [t001] Draft analysis",
+                "- type: research",
+                "- priority: P1",
+                "- status: active",
+                "- related: [tag:draft]",
+                "- created: 2026-04-21",
+                "",
+                "Track a draft task.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    report = audit_project_graph(root)
+
+    assert report["has_failures"] is False
+    assert report["rows"] == []
+
+
+def test_audit_project_graph_rejects_tag_refs_in_same_as(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    (root / "doc" / "topics").mkdir(parents=True)
+    (root / "doc" / "topics" / "evaluation.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "topic:evaluation"',
+                'type: "topic"',
+                'title: "Evaluation"',
+                "related: []",
+                "source_refs: []",
+                'same_as: ["tag:draft"]',
+                "---",
+                "",
+                "Evaluation topic body.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    report = audit_project_graph(root)
+
+    assert report["has_failures"] is True
+    assert any(row["field"] == "same_as" and row["target"] == "tag:draft" for row in report["rows"])
+
+
 def test_migrate_project_ids_rewrites_short_refs() -> None:
     mapping = {"H01": "hypothesis:h01-demo", "Q16": "question:16-demo"}
 
@@ -153,6 +211,106 @@ def test_audit_project_graph_loads_local_entities_and_manual_aliases(tmp_path: P
 
     assert report["unresolved_reference_count"] == 0
     assert report["has_failures"] is False
+
+
+def test_audit_project_graph_resolves_cross_kind_slug_reference(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    (root / "tasks").mkdir(parents=True)
+    (root / "tasks" / "active.md").write_text(
+        "\n".join(
+            [
+                "## [t001] Explore treatment response",
+                "- type: research",
+                "- priority: P1",
+                "- status: active",
+                "- related: [topic:treatment-response]",
+                "- created: 2026-03-12",
+                "",
+                "Do it.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    local_sources = root / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "entities": [
+                    {
+                        "canonical_id": "concept:treatment-response",
+                        "kind": "concept",
+                        "title": "Treatment response",
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    report = audit_project_graph(root)
+
+    assert report["unresolved_reference_count"] == 0
+    assert report["has_failures"] is False
+
+
+def test_audit_project_graph_reports_ambiguous_cross_kind_slug_reference(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "science.yaml").write_text("name: demo\n", encoding="utf-8")
+    (root / "tasks").mkdir(parents=True)
+    (root / "tasks" / "active.md").write_text(
+        "\n".join(
+            [
+                "## [t001] Explore treatment response",
+                "- type: research",
+                "- priority: P1",
+                "- status: active",
+                "- related: [topic:treatment-response]",
+                "- created: 2026-03-12",
+                "",
+                "Do it.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    local_sources = root / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "entities": [
+                    {
+                        "canonical_id": "concept:treatment-response",
+                        "kind": "concept",
+                        "title": "Treatment response concept",
+                    },
+                    {
+                        "canonical_id": "method:treatment-response",
+                        "kind": "method",
+                        "title": "Treatment response method",
+                    },
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    report = audit_project_graph(root)
+
+    assert report["has_failures"] is True
+    assert any(
+        row["check"] == "ambiguous_cross_kind_reference"
+        and row["field"] == "related"
+        and row["target"] == "topic:treatment-response"
+        for row in report["rows"]
+    )
 
 
 def test_audit_project_graph_uses_configured_local_profile_directory(tmp_path: Path) -> None:

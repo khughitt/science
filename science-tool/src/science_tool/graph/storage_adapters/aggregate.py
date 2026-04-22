@@ -30,6 +30,11 @@ _DIR_TO_KIND = {
     "models": "model",
 }
 
+_MULTI_TYPE_FILES = {
+    "entities.yaml": "entities",
+    "terms.yaml": "terms",
+}
+
 
 class AggregateAdapter(StorageAdapter):
     """Multi-entity (entities.yaml) + single-type aggregate (doc/<plural>/<plural>.{json,yaml})."""
@@ -46,25 +51,27 @@ class AggregateAdapter(StorageAdapter):
         return refs
 
     def _discover_multi_type(self, project_root: Path) -> list[SourceRef]:
-        path = project_root / "knowledge" / "sources" / self._local_profile / "entities.yaml"
-        if not path.is_file():
-            return []
-        try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except yaml.YAMLError:
-            return []
-        items = data.get("entities") or []
-        if not isinstance(items, list):
-            return []
-        try:
-            rel = str(path.relative_to(project_root))
-        except ValueError:
-            rel = str(path)
         refs: list[SourceRef] = []
-        for idx, raw in enumerate(items):
-            if not isinstance(raw, dict):
+        base = project_root / "knowledge" / "sources" / self._local_profile
+        for file_name, root_key in _MULTI_TYPE_FILES.items():
+            path = base / file_name
+            if not path.is_file():
                 continue
-            refs.append(SourceRef(adapter_name=self.name, path=rel, line=idx))
+            try:
+                data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            except yaml.YAMLError:
+                continue
+            items = data.get(root_key) or []
+            if not isinstance(items, list):
+                continue
+            try:
+                rel = str(path.relative_to(project_root))
+            except ValueError:
+                rel = str(path)
+            for idx, raw in enumerate(items):
+                if not isinstance(raw, dict):
+                    continue
+                refs.append(SourceRef(adapter_name=self.name, path=rel, line=idx))
         return refs
 
     def _discover_single_type(self, project_root: Path) -> list[SourceRef]:
@@ -91,11 +98,12 @@ class AggregateAdapter(StorageAdapter):
         path = Path(ref.path)
         if not path.is_absolute():
             path = Path.cwd() / path
-        if path.name == "entities.yaml":
+        if path.name in _MULTI_TYPE_FILES:
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-            items = data.get("entities") or []
+            items = data.get(_MULTI_TYPE_FILES[path.name]) or []
             raw = dict(items[ref.line])
-            # Kind from entry itself.
+            if path.name == "terms.yaml":
+                raw = self._normalize_term_row(raw)
         else:
             # Single-type: kind from directory name.
             plural = path.parent.name
@@ -109,6 +117,15 @@ class AggregateAdapter(StorageAdapter):
         # Preserve file_path so downstream code has it.
         raw.setdefault("file_path", ref.path)
         return raw
+
+    def _normalize_term_row(self, raw: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(raw)
+        canonical_id = normalized.get("canonical_id") or normalized.get("id")
+        if isinstance(canonical_id, str) and canonical_id and "kind" not in normalized and ":" in canonical_id:
+            normalized["kind"] = canonical_id.split(":", 1)[0]
+        normalized.pop("content", None)
+        normalized.pop("body", None)
+        return normalized
 
     def _read_list(self, path: Path) -> list[Any]:
         try:

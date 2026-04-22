@@ -102,6 +102,40 @@ def test_all_entities_inherit_from_entity(tmp_path: Path) -> None:
     assert all(isinstance(e, Entity) for e in sources.entities)
 
 
+def test_load_project_sources_reads_lightweight_terms_yaml(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    local_sources = tmp_path / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "terms.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "terms": [
+                    {
+                        "id": "concept:treatment-response",
+                        "title": "Treatment response",
+                        "description": "Lightweight local concept",
+                        "content": "ignored body payload",
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(tmp_path)
+    by_id = {entity.canonical_id: entity for entity in sources.entities}
+    entity = by_id["concept:treatment-response"]
+
+    assert isinstance(entity, ProjectEntity)
+    assert entity.kind == "concept"
+    assert entity.type == EntityType.CONCEPT
+    assert entity.title == "Treatment response"
+    assert entity.content_preview == "Lightweight local concept"
+    assert entity.content == ""
+    assert entity.file_path == "knowledge/sources/local/terms.yaml"
+
+
 def test_load_normalizes_legacy_parameter_kind(tmp_path: Path) -> None:
     _seed(tmp_path)
     (tmp_path / "doc" / "parameters").mkdir(parents=True)

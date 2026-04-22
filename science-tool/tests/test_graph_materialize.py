@@ -204,6 +204,34 @@ def test_materialize_graph_writes_bridge_layer_for_external_terms(tmp_path: Path
     assert (question_uri, PROV.wasDerivedFrom, hypothesis_uri) in provenance
 
 
+def test_materialize_graph_allows_tag_refs_in_related_without_emitting_edges(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    hypothesis_path = project / "specs" / "hypotheses" / "h01-demo.md"
+    hypothesis_path.write_text(
+        hypothesis_path.read_text(encoding="utf-8").replace(
+            'related: ["question:q01-demo", "GO:0008150"]',
+            'related: ["question:q01-demo", "tag:draft"]',
+        ),
+        encoding="utf-8",
+    )
+
+    trig_path = materialize_graph(project)
+
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    bridge = dataset.graph(PROJECT_NS["graph/bridge"])
+
+    hypothesis_uri = PROJECT_NS["hypothesis/h01-demo"]
+    question_uri = PROJECT_NS["question/q01-demo"]
+    tag_uri = PROJECT_NS["external/tag/draft"]
+
+    assert (hypothesis_uri, SKOS.related, question_uri) in knowledge
+    assert (hypothesis_uri, SCI.about, tag_uri) not in bridge
+    assert (tag_uri, RDF.type, SCI.ExternalTerm) not in bridge
+
+
 def test_materialize_graph_uses_configured_local_profile_sources(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
@@ -343,6 +371,83 @@ def test_materialize_graph_materializes_structured_entity_confidence_in_provenan
 
     assert (hypothesis_uri, SCI.domain, Literal("structural-biology")) in knowledge
     assert (hypothesis_uri, SCI.confidence, Literal("0.7", datatype=XSD.decimal)) in provenance
+
+
+def test_materialize_graph_resolves_cross_kind_slug_reference(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    local_sources = project / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
+        "\n".join(
+            [
+                "entities:",
+                "  - canonical_id: concept:treatment-response",
+                "    kind: concept",
+                "    title: Treatment response",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    hypothesis_path = project / "specs" / "hypotheses" / "h01-demo.md"
+    hypothesis_path.write_text(
+        hypothesis_path.read_text(encoding="utf-8").replace(
+            'related: ["question:q01-demo", "GO:0008150"]',
+            'related: ["topic:treatment-response"]',
+        ),
+        encoding="utf-8",
+    )
+
+    trig_path = materialize_graph(project)
+
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    hypothesis_uri = PROJECT_NS["hypothesis/h01-demo"]
+    concept_uri = PROJECT_NS["concept/treatment-response"]
+
+    assert (hypothesis_uri, SKOS.related, concept_uri) in knowledge
+
+
+def test_materialize_graph_loads_lightweight_terms_yaml(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    local_sources = project / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "terms.yaml").write_text(
+        "\n".join(
+            [
+                "terms:",
+                "  - id: concept:treatment-response",
+                "    title: Treatment response",
+                "    description: Lightweight local concept",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    hypothesis_path = project / "specs" / "hypotheses" / "h01-demo.md"
+    hypothesis_path.write_text(
+        hypothesis_path.read_text(encoding="utf-8").replace(
+            'related: ["question:q01-demo", "GO:0008150"]',
+            'related: ["concept:treatment-response"]',
+        ),
+        encoding="utf-8",
+    )
+
+    trig_path = materialize_graph(project)
+
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    hypothesis_uri = PROJECT_NS["hypothesis/h01-demo"]
+    concept_uri = PROJECT_NS["concept/treatment-response"]
+
+    assert (concept_uri, RDF.type, SCI.Concept) in knowledge
+    assert (hypothesis_uri, SKOS.related, concept_uri) in knowledge
 
 
 def test_materialize_graph_applies_structured_relations_with_internal_targets(tmp_path: Path) -> None:

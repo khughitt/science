@@ -8,16 +8,16 @@ from pathlib import Path
 from typing import TypedDict
 
 import yaml
-from science_model import normalize_alias
 from science_model.entities import Entity
 from science_model.frontmatter import parse_frontmatter
 
+from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
     AliasCollisionError,
     ProjectSources,
     SourceBinding,
     SourceRelation,
-    build_alias_map,
+    external_prefixes,
     is_external_reference,
     is_metadata_reference,
     load_project_sources,
@@ -106,7 +106,7 @@ _MECHANISTIC_RE = re.compile(
 def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool]:
     """Validate that structured project sources resolve canonically."""
     try:
-        alias_map = build_alias_map(sources.entities, manual_aliases=sources.manual_aliases)
+        resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
     except AliasCollisionError as exc:
         return (
             [
@@ -122,13 +122,14 @@ def audit_project_sources(sources: ProjectSources) -> tuple[list[AuditRow], bool
             True,
         )
     rows: list[AuditRow] = []
+    ext_prefixes = external_prefixes(sources.ontology_catalogs)
 
     for entity in sources.entities:
-        rows.extend(_audit_entity(entity, alias_map))
+        rows.extend(_audit_entity(entity, resolver, ext_prefixes=ext_prefixes))
     for relation in sources.relations:
-        rows.extend(_audit_relation(relation, alias_map))
+        rows.extend(_audit_relation(relation, resolver, ext_prefixes=ext_prefixes))
     for binding in sources.bindings:
-        rows.extend(_audit_binding(binding, alias_map))
+        rows.extend(_audit_binding(binding, resolver, ext_prefixes=ext_prefixes))
 
     rows.sort(key=lambda row: (row["source"], row["target"]))
     has_failures = any(row["status"] == "fail" for row in rows)
@@ -140,7 +141,7 @@ def audit_project_graph(project_root: Path) -> AuditProjectReport:
     sources = load_project_sources(project_root)
     rows, has_failures = audit_project_sources(sources)
     try:
-        alias_map = build_alias_map(sources.entities, manual_aliases=sources.manual_aliases)
+        alias_map = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases).alias_map
     except AliasCollisionError:
         alias_map = sources.manual_aliases.copy()
 
@@ -290,15 +291,41 @@ def migration_report_path(project_root: Path) -> Path:
     return paths.knowledge_dir / "reports" / "kg-migration-audit.json"
 
 
-def _audit_entity(entity: Entity, alias_map: dict[str, str]) -> list[AuditRow]:
+def _audit_entity(
+    entity: Entity,
+    resolver: ReferenceResolver,
+    *,
+    ext_prefixes: frozenset[str],
+) -> list[AuditRow]:
     rows: list[AuditRow] = []
     for target in entity.related:
-        rows.extend(_audit_reference(entity, "related", target, alias_map))
+        rows.extend(
+            _audit_reference(
+                entity,
+                "related",
+                target,
+                resolver,
+                ext_prefixes=ext_prefixes,
+                allow_cross_kind_fallback=True,
+                allow_tag=True,
+            )
+        )
     # `blocked_by` lives on ProjectEntity; defensive getattr for bare Entity instances.
     for target in getattr(entity, "blocked_by", []) or []:
-        rows.extend(_audit_reference(entity, "blocked_by", target, alias_map))
+        rows.extend(_audit_reference(entity, "blocked_by", target, resolver, ext_prefixes=ext_prefixes))
     for target in entity.source_refs:
-        rows.extend(_audit_reference(entity, "source_refs", target, alias_map))
+        rows.extend(
+            _audit_reference(
+                entity,
+                "source_refs",
+                target,
+                resolver,
+                ext_prefixes=ext_prefixes,
+                allow_cross_kind_fallback=True,
+            )
+        )
+    for target in entity.same_as:
+        rows.extend(_audit_reference(entity, "same_as", target, resolver, ext_prefixes=ext_prefixes))
     return rows
 
 
@@ -396,19 +423,38 @@ def _dedupe_preserve_order(items: list[str]) -> list[str]:
     return result
 
 
-def _audit_relation(relation: SourceRelation, alias_map: dict[str, str]) -> list[AuditRow]:
+def _audit_relation(
+    relation: SourceRelation,
+    resolver: ReferenceResolver,
+    *,
+    ext_prefixes: frozenset[str],
+) -> list[AuditRow]:
     rows: list[AuditRow] = []
-    rows.extend(_audit_relation_endpoint(relation, "subject", relation.subject, alias_map))
-    rows.extend(_audit_relation_endpoint(relation, "object", relation.object, alias_map))
+    rows.extend(_audit_relation_endpoint(relation, "subject", relation.subject, resolver, ext_prefixes=ext_prefixes))
+    rows.extend(_audit_relation_endpoint(relation, "object", relation.object, resolver, ext_prefixes=ext_prefixes))
     return rows
 
 
-def _audit_binding(binding: SourceBinding, alias_map: dict[str, str]) -> list[AuditRow]:
+def _audit_binding(
+    binding: SourceBinding,
+    resolver: ReferenceResolver,
+    *,
+    ext_prefixes: frozenset[str],
+) -> list[AuditRow]:
     rows: list[AuditRow] = []
-    rows.extend(_audit_binding_endpoint(binding, "model", binding.model, alias_map))
-    rows.extend(_audit_binding_endpoint(binding, "parameter", binding.parameter, alias_map))
+    rows.extend(_audit_binding_endpoint(binding, "model", binding.model, resolver, ext_prefixes=ext_prefixes))
+    rows.extend(_audit_binding_endpoint(binding, "parameter", binding.parameter, resolver, ext_prefixes=ext_prefixes))
     for target in binding.source_refs:
-        rows.extend(_audit_binding_endpoint(binding, "source_refs", target, alias_map, allow_external=True))
+        rows.extend(
+            _audit_binding_endpoint(
+                binding,
+                "source_refs",
+                target,
+                resolver,
+                ext_prefixes=ext_prefixes,
+                allow_external=True,
+            )
+        )
     return rows
 
 
@@ -416,15 +462,16 @@ def _audit_binding_endpoint(
     binding: SourceBinding,
     field_name: str,
     raw_target: str,
-    alias_map: dict[str, str],
+    resolver: ReferenceResolver,
     *,
+    ext_prefixes: frozenset[str],
     allow_external: bool = False,
 ) -> list[AuditRow]:
-    if allow_external and is_external_reference(raw_target):
+    if allow_external and is_external_reference(raw_target, known_prefixes=ext_prefixes):
         return []
 
-    resolved = normalize_alias(raw_target, alias_map)
-    if resolved == raw_target and raw_target not in alias_map:
+    resolution = resolver.resolve(raw_target)
+    if resolution.status != "resolved":
         return [
             {
                 "check": "unresolved_reference",
@@ -443,11 +490,13 @@ def _audit_relation_endpoint(
     relation: SourceRelation,
     field_name: str,
     raw_target: str,
-    alias_map: dict[str, str],
+    resolver: ReferenceResolver,
+    *,
+    ext_prefixes: frozenset[str],
 ) -> list[AuditRow]:
-    if field_name == "object" and is_external_reference(raw_target):
+    if field_name == "object" and is_external_reference(raw_target, known_prefixes=ext_prefixes):
         return []
-    if field_name == "subject" and is_external_reference(raw_target):
+    if field_name == "subject" and is_external_reference(raw_target, known_prefixes=ext_prefixes):
         return [
             {
                 "check": "unresolved_reference",
@@ -456,11 +505,11 @@ def _audit_relation_endpoint(
                 "field": field_name,
                 "target": raw_target,
                 "details": f"{relation.source_path} uses an external term as a relation subject",
-            }
+                }
         ]
 
-    resolved = normalize_alias(raw_target, alias_map)
-    if resolved == raw_target and raw_target not in alias_map:
+    resolution = resolver.resolve(raw_target)
+    if resolution.status != "resolved":
         return [
             {
                 "check": "unresolved_reference",
@@ -479,15 +528,39 @@ def _audit_reference(
     entity: Entity,
     field_name: str,
     raw_target: str,
-    alias_map: dict[str, str],
+    resolver: ReferenceResolver,
+    *,
+    ext_prefixes: frozenset[str],
+    allow_cross_kind_fallback: bool = False,
+    allow_tag: bool = False,
 ) -> list[AuditRow]:
-    if is_external_reference(raw_target):
+    if is_external_reference(raw_target, known_prefixes=ext_prefixes):
         return []
     if is_metadata_reference(raw_target):
         return []
 
-    resolved = normalize_alias(raw_target, alias_map)
-    if resolved == raw_target and raw_target not in alias_map:
+    resolution = resolver.resolve(
+        raw_target,
+        allow_cross_kind_fallback=allow_cross_kind_fallback,
+        allow_tag=allow_tag,
+    )
+    if resolution.status in {"resolved", "tag"}:
+        return []
+    if resolution.status == "ambiguous":
+        return [
+            {
+                "check": "ambiguous_cross_kind_reference",
+                "status": "fail",
+                "source": entity.canonical_id,
+                "field": field_name,
+                "target": raw_target,
+                "details": (
+                    f"{entity.file_path} resolves to multiple canonical identities: "
+                    + ", ".join(resolution.candidates)
+                ),
+            }
+        ]
+    if resolution.status == "unresolved":
         return [
             {
                 "check": "unresolved_reference",
