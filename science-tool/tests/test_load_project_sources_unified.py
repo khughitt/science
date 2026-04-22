@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from science_model.entities import DatasetEntity, DomainEntity, Entity, EntityType, ProjectEntity, TaskEntity
+from science_model.entities import DatasetEntity, DomainEntity, Entity, EntityType, MechanismEntity, ProjectEntity, TaskEntity
 from science_model.profiles.schema import EntityKind, ProfileManifest
 
 from science_tool.graph.entity_registry import EntityKindShadowError
@@ -134,6 +134,53 @@ def test_load_project_sources_reads_lightweight_terms_yaml(tmp_path: Path) -> No
     assert entity.content_preview == "Lightweight local concept"
     assert entity.content == ""
     assert entity.file_path == "knowledge/sources/local/terms.yaml"
+
+
+def test_load_project_sources_returns_typed_mechanism_entity(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    local_sources = tmp_path / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "entities": [
+                    {
+                        "id": "concept:translation",
+                        "kind": "concept",
+                        "title": "Translation",
+                    },
+                    {
+                        "id": "concept:cell-state",
+                        "kind": "concept",
+                        "title": "Cell state",
+                    },
+                    {
+                        "id": "proposition:anti-coupling",
+                        "kind": "proposition",
+                        "title": "Translation and cell-state programs move in opposite directions",
+                    },
+                    {
+                        "id": "mechanism:anti-coupling-axis",
+                        "kind": "mechanism",
+                        "title": "Anti-coupling axis",
+                        "participants": ["concept:translation", "concept:cell-state"],
+                        "propositions": ["proposition:anti-coupling"],
+                        "summary": "Translation and cell-state programs move in opposite directions.",
+                    },
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(tmp_path)
+    by_id = {entity.canonical_id: entity for entity in sources.entities}
+    mechanism = by_id["mechanism:anti-coupling-axis"]
+
+    assert isinstance(mechanism, MechanismEntity)
+    assert mechanism.participants == ["concept:translation", "concept:cell-state"]
+    assert mechanism.propositions == ["proposition:anti-coupling"]
 
 
 def test_load_normalizes_legacy_parameter_kind(tmp_path: Path) -> None:

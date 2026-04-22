@@ -10,6 +10,7 @@ from __future__ import annotations
 from science_model.entities import (
     DatasetEntity,
     Entity,
+    MechanismEntity,
     ProjectEntity,
     ResearchPackageEntity,
     TaskEntity,
@@ -47,6 +48,7 @@ class EntityRegistry:
         r.register_core_kind("dataset", DatasetEntity)
         r.register_core_kind("workflow-run", WorkflowRunEntity)
         r.register_core_kind("research-package", ResearchPackageEntity)
+        r.register_core_kind("mechanism", MechanismEntity)
         # Generic project kinds that have no typed invariants yet → route to ProjectEntity.
         # Spec §Implication for current model/parameter says these are NOT core typed
         # entities, but we still route them through ProjectEntity during this migration

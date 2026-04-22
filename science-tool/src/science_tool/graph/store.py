@@ -381,6 +381,10 @@ CURIE_PREFIXES: dict[str, Namespace] = {
     "cito": CITO_NS,
     "dcterms": DCTERMS_NS,
 }
+# Graph-store helpers only recognize actively authored project entity prefixes.
+# Legacy `topic:` refs are still handled by the unified loaders/materializer,
+# but are intentionally omitted here so direct graph-store authoring does not
+# continue expanding topic usage.
 PROJECT_ENTITY_PREFIXES: set[str] = {
     "proposition",
     "observation",
@@ -394,6 +398,7 @@ PROJECT_ENTITY_PREFIXES: set[str] = {
     "finding",
     "interpretation",
     "story",
+    "mechanism",
     "paper",
     "article",
     "falsification",

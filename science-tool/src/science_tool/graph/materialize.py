@@ -145,6 +145,9 @@ def _add_entity(*, entity: Entity, knowledge, provenance) -> None:
     knowledge.add((uri, RDF.type, SCI_NS[_kind_class_name(entity.kind)]))
     knowledge.add((uri, SCHEMA_NS.identifier, Literal(entity.canonical_id)))
     knowledge.add((uri, SKOS.prefLabel, Literal(entity.title)))
+    summary = getattr(entity, "summary", "")
+    if isinstance(summary, str) and summary.strip():
+        knowledge.add((uri, SCHEMA_NS.description, Literal(summary)))
     knowledge.add((uri, SCI_NS.profile, Literal(entity.profile)))
     if entity.domain:
         knowledge.add((uri, SCI_NS.domain, Literal(entity.domain)))
@@ -172,6 +175,30 @@ def _add_relations(
     ext_prefixes: frozenset[str],
 ) -> None:
     entity_uri = _entity_uri(entity.canonical_id)
+
+    for raw_target in sorted(getattr(entity, "participants", []) or []):
+        if is_metadata_reference(raw_target):
+            continue
+        resolution = resolver.resolve(raw_target)
+        if resolution.status != "resolved":
+            continue
+        assert resolution.canonical_id is not None
+        target = entity_index.get(resolution.canonical_id)
+        if target is None:
+            continue
+        knowledge.add((entity_uri, SCI_NS.hasParticipant, _entity_uri(target.canonical_id)))
+
+    for raw_target in sorted(getattr(entity, "propositions", []) or []):
+        if is_metadata_reference(raw_target):
+            continue
+        resolution = resolver.resolve(raw_target)
+        if resolution.status != "resolved":
+            continue
+        assert resolution.canonical_id is not None
+        target = entity_index.get(resolution.canonical_id)
+        if target is None:
+            continue
+        knowledge.add((entity_uri, SCI_NS.hasProposition, _entity_uri(target.canonical_id)))
 
     for raw_target in sorted(entity.related):
         if is_external_reference(raw_target, known_prefixes=ext_prefixes):
