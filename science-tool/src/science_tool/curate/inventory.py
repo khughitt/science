@@ -42,6 +42,10 @@ _DOC_KIND_BY_DIR = {
     "articles": "article",
 }
 
+# `topic` remains in inventory so curate can report legacy topic artifacts that
+# still exist in projects. This is an inventory surface, not a recommendation
+# that unresolved semantic refs should be migrated into more `topic` entities.
+
 
 class InventoryArtifact(BaseModel):
     path: str

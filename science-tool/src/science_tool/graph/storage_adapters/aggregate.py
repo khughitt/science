@@ -16,6 +16,9 @@ from science_tool.graph.storage_adapters.base import StorageAdapter
 # Mapping: directory plural → singular kind. Used by single-type aggregate files
 # (doc/<plural>/<plural>.{json,yaml}). Mirrors science_model.frontmatter._DIR_TO_TYPE.
 _DIR_TO_KIND = {
+    # Keep `topics` for compatibility with legacy topic aggregates already
+    # present in projects. New semantic authoring should prefer typed entities
+    # (`concept`, domain kinds, `mechanism`, etc.) over minting more topics.
     "topics": "topic",
     "datasets": "dataset",
     "hypotheses": "hypothesis",
