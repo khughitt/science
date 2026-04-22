@@ -1,6 +1,7 @@
 [
   {
     "canonical_id": "dataset:ds01",
+    "kind": "dataset",
     "type": "dataset",
     "title": "Test dataset",
     "status": "active",
@@ -28,6 +29,7 @@
   },
   {
     "canonical_id": "hypothesis:h01",
+    "kind": "hypothesis",
     "type": "hypothesis",
     "title": "Test hypothesis",
     "status": "active",
@@ -59,6 +61,7 @@
   },
   {
     "canonical_id": "paper:doe2024",
+    "kind": "paper",
     "type": "paper",
     "title": "Doe et al. 2024",
     "status": null,
@@ -86,6 +89,7 @@
   },
   {
     "canonical_id": "spec:research-question",
+    "kind": "spec",
     "type": "spec",
     "title": "Research question spec",
     "status": "active",
@@ -113,6 +117,7 @@
   },
   {
     "canonical_id": "task:t001",
+    "kind": "task",
     "type": "task",
     "title": "Test task",
     "status": "active",
