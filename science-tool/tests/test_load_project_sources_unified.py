@@ -98,3 +98,17 @@ def test_all_entities_inherit_from_entity(tmp_path: Path) -> None:
     )
     sources = load_project_sources(tmp_path)
     assert all(isinstance(e, Entity) for e in sources.entities)
+
+
+def test_load_normalizes_legacy_parameter_kind(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    (tmp_path / "doc" / "parameters").mkdir(parents=True)
+    (tmp_path / "doc" / "parameters" / "p1.md").write_text(
+        '---\nid: "parameter:kcat"\ntype: "parameter"\ntitle: "kcat"\n---\n',
+        encoding="utf-8",
+    )
+    sources = load_project_sources(tmp_path)
+    by_id = {e.canonical_id: e for e in sources.entities}
+    assert "parameter:kcat" in by_id
+    assert by_id["parameter:kcat"].kind == "canonical_parameter"
+    assert isinstance(by_id["parameter:kcat"], ProjectEntity)

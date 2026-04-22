@@ -13,13 +13,13 @@ LOCAL_PROFILE = ProfileManifest(
             description="Project-local scientific model.",
         ),
         EntityKind(
-            name="canonical-parameter",
+            name="canonical_parameter",
             canonical_prefix="parameter",
             layer="layer/local",
             description="Project-local canonical model parameter.",
         ),
         EntityKind(
-            name="parameter-binding",
+            name="parameter_binding",
             canonical_prefix="binding",
             layer="layer/local",
             description="Provenance node that binds a model to a canonical parameter.",
