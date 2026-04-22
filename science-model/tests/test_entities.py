@@ -1,10 +1,13 @@
 from datetime import date
-from science_model.entities import Entity, EntityType
+import pytest
+
+from science_model.entities import Entity, EntityType, core_entity_type_for_kind
 
 
 def test_entity_round_trip():
     e = Entity(
         id="hypothesis:h01-foo",
+        kind="hypothesis",
         type=EntityType.HYPOTHESIS,
         title="Test hypothesis",
         status="proposed",
@@ -17,6 +20,7 @@ def test_entity_round_trip():
         content_preview="A test hypothesis about...",
         file_path="specs/hypotheses/h01-foo.md",
     )
+    assert e.kind == "hypothesis"
     assert e.type == EntityType.HYPOTHESIS
     assert e.id == "hypothesis:h01-foo"
     d = e.model_dump()
@@ -28,6 +32,7 @@ def test_entity_round_trip():
 def test_entity_optional_fields_default_none():
     e = Entity(
         id="concept:foo",
+        kind="concept",
         type=EntityType.CONCEPT,
         title="Foo",
         project="p",
@@ -63,6 +68,7 @@ def test_workflow_run_entity_round_trip():
     """A workflow-run entity can be created and round-tripped."""
     e = Entity(
         id="workflow-run:a001-protein-sp-tmr",
+        kind="workflow-run",
         type=EntityType.WORKFLOW_RUN,
         title="Protein SP/TMR feature evaluation",
         status="complete",
@@ -113,6 +119,7 @@ def test_removed_types_absent():
 def test_pre_registered_fields():
     e = Entity(
         id="proposition:p01",
+        kind="proposition",
         type=EntityType.PROPOSITION,
         title="Test",
         project="p",
@@ -131,6 +138,7 @@ def test_pre_registered_fields():
 def test_pre_registered_defaults_false():
     e = Entity(
         id="proposition:p02",
+        kind="proposition",
         type=EntityType.PROPOSITION,
         title="Test",
         project="p",
@@ -156,3 +164,24 @@ def test_new_types_accessible_from_package():
 def test_entity_has_no_tags_field():
     """After unification, Entity should not have a tags field in its schema."""
     assert "tags" not in Entity.model_fields
+
+
+def test_core_entity_type_for_kind_returns_none_for_domain_kind() -> None:
+    assert core_entity_type_for_kind("gene") is None
+
+
+def test_entity_rejects_mismatched_kind_and_type() -> None:
+    with pytest.raises(ValueError, match="kind/type"):
+        Entity(
+            id="gene:phf19",
+            canonical_id="gene:phf19",
+            kind="gene",
+            type=EntityType.TASK,
+            title="PHF19",
+            project="demo",
+            ontology_terms=[],
+            related=[],
+            source_refs=[],
+            content_preview="",
+            file_path="doc/phf19.md",
+        )

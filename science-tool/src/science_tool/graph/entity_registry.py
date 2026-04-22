@@ -34,6 +34,8 @@ class EntityRegistry:
 
     def __init__(self) -> None:
         self._core: dict[str, type[Entity]] = {}
+        self._profile: dict[str, type[Entity]] = {}
+        self._catalog: dict[str, type[Entity]] = {}
         self._extensions: dict[str, type[Entity]] = {}
 
     @classmethod
@@ -77,8 +79,6 @@ class EntityRegistry:
             "report",
             "validation-report",
             "unknown",
-            "model",
-            "parameter",
             "spec",
         ):
             r.register_core_kind(kind, ProjectEntity)
@@ -86,14 +86,34 @@ class EntityRegistry:
 
     def register_core_kind(self, kind: str, cls: type[Entity]) -> None:
         self._require_entity_subclass(cls)
-        if kind in self._core or kind in self._extensions:
+        if kind in self._core or kind in self._profile or kind in self._catalog or kind in self._extensions:
             raise EntityKindAlreadyRegisteredError(f"kind {kind!r} already registered")
         self._core[kind] = cls
 
-    def register_extension_kind(self, kind: str, cls: type[Entity]) -> None:
+    def register_profile_kind(self, kind: str, cls: type[Entity], *, owner: str) -> None:
         self._require_entity_subclass(cls)
         if kind in self._core:
-            raise EntityKindShadowError(f"extension kind {kind!r} shadows a core kind; use a project-specific prefix")
+            raise EntityKindShadowError(f"profile kind {kind!r} shadows a core kind from {owner}")
+        if kind in self._profile or kind in self._catalog or kind in self._extensions:
+            raise EntityKindAlreadyRegisteredError(f"profile kind {kind!r} already registered")
+        self._profile[kind] = cls
+
+    def register_catalog_kind(self, kind: str, cls: type[Entity], *, owner: str) -> None:
+        self._require_entity_subclass(cls)
+        if kind in self._core:
+            return
+        if kind in self._profile:
+            raise EntityKindShadowError(f"catalog kind {kind!r} shadows an existing kind from {owner}")
+        if kind in self._catalog or kind in self._extensions:
+            raise EntityKindAlreadyRegisteredError(f"catalog kind {kind!r} already registered")
+        self._catalog[kind] = cls
+
+    def register_extension_kind(self, kind: str, cls: type[Entity]) -> None:
+        self._require_entity_subclass(cls)
+        if kind in self._core or kind in self._profile or kind in self._catalog:
+            raise EntityKindShadowError(
+                f"extension kind {kind!r} shadows a registered kind; use a project-specific prefix"
+            )
         if kind in self._extensions:
             raise EntityKindAlreadyRegisteredError(f"extension kind {kind!r} already registered")
         self._extensions[kind] = cls
@@ -101,6 +121,10 @@ class EntityRegistry:
     def resolve(self, kind: str) -> type[Entity]:
         if kind in self._core:
             return self._core[kind]
+        if kind in self._profile:
+            return self._profile[kind]
+        if kind in self._catalog:
+            return self._catalog[kind]
         if kind in self._extensions:
             return self._extensions[kind]
         raise EntityKindNotRegisteredError(f"no schema registered for kind {kind!r}")

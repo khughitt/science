@@ -6,6 +6,7 @@ import pytest
 
 from science_model.entities import (
     DatasetEntity,
+    DomainEntity,
     ProjectEntity,
     TaskEntity,
 )
@@ -66,6 +67,25 @@ def test_extension_cannot_shadow_core() -> None:
     registry = EntityRegistry.with_core_types()
     with pytest.raises(EntityKindShadowError, match="dataset"):
         registry.register_extension_kind("dataset", BogusDataset)
+
+
+def test_profile_kind_registration_resolves() -> None:
+    registry = EntityRegistry.with_core_types()
+    registry.register_profile_kind("model", ProjectEntity, owner="local")
+    assert registry.resolve("model") is ProjectEntity
+
+
+def test_declared_catalog_kind_resolves_to_domain_entity() -> None:
+    registry = EntityRegistry.with_core_types()
+    registry.register_catalog_kind("gene", DomainEntity, owner="biology")
+    assert registry.resolve("gene") is DomainEntity
+
+
+def test_extension_cannot_shadow_catalog_kind() -> None:
+    registry = EntityRegistry.with_core_types()
+    registry.register_catalog_kind("gene", DomainEntity, owner="biology")
+    with pytest.raises(EntityKindShadowError, match="gene"):
+        registry.register_extension_kind("gene", ProjectEntity)
 
 
 def test_resolve_round_trip_extension() -> None:

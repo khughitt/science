@@ -10,10 +10,10 @@ from typing import Any, TypeVar
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError
-from science_model.entities import Entity, ProjectEntity
+from science_model.entities import Entity, EntityType, ProjectEntity, DomainEntity, core_entity_type_for_kind
 from science_model.ontologies import load_catalogs_for_names
 from science_model.ontologies.schema import OntologyCatalog
-from science_model.profiles import CORE_PROFILE, load_shared_profile
+from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE, load_shared_profile
 from science_model.profiles.schema import ProfileManifest
 from science_model.reasoning import (
     ClaimLayer,
@@ -127,15 +127,21 @@ def load_project_sources(project_root: Path) -> ProjectSources:
     declared_ontologies: list[str] = list(config.get("ontologies") or [])  # type: ignore[union-attr]
     ontology_catalogs = load_catalogs_for_names(declared_ontologies) if declared_ontologies else []
 
-    # Always try to load shared profile.
-    extra_profiles: list[ProfileManifest] = []
+    profile_manifests: list[ProfileManifest] = [LOCAL_PROFILE]
     shared = load_shared_profile()
     if shared is not None:
-        extra_profiles.append(shared)
+        profile_manifests.append(shared)
 
-    active_kinds = known_kinds(extra_profiles=extra_profiles, ontology_catalogs=ontology_catalogs)
+    active_kinds = known_kinds(extra_profiles=profile_manifests, ontology_catalogs=ontology_catalogs)
 
     registry = EntityRegistry.with_core_types()
+    for profile in profile_manifests:
+        for entity_kind in profile.entity_kinds:
+            registry.register_profile_kind(entity_kind.name, ProjectEntity, owner=profile.name)
+    for catalog in ontology_catalogs:
+        for entity_type in catalog.entity_types:
+            registry.register_catalog_kind(entity_type.name, DomainEntity, owner=catalog.ontology)
+
     adapters: list[StorageAdapter] = [
         MarkdownAdapter(),
         AggregateAdapter(local_profile=local_profile),
@@ -156,12 +162,14 @@ def load_project_sources(project_root: Path) -> ProjectSources:
         for adapter in adapters:
             for ref in adapter.discover(project_root):
                 raw = adapter.load_raw(ref)
-                kind = raw.get("kind")
-                if not isinstance(kind, str) or not kind:
+                raw_kind = raw.get("kind")
+                if not isinstance(raw_kind, str) or not raw_kind:
                     # Adapter returned a record with no kind (e.g. frontmatter-less
                     # markdown). Skip rather than fail — mirrors the legacy behavior
                     # where parse_entity_file returned None.
                     continue
+                kind = _normalize_kind(raw_kind)
+                raw["kind"] = kind
                 _enrich_raw(
                     raw,
                     kind=kind,
@@ -319,7 +327,7 @@ def _enrich_raw(
     - Paper-ID canonicalization (when kind == "paper" and on refs)
     - Profile defaulting (core/ontology/local)
     - Alias derivation for hypothesis/question/task
-    - Normalize `type` from `kind` (since Entity needs an EntityType enum)
+    - Normalize `kind` and optional core-only `type` projection
     - Description → content_preview fallback (legacy aggregate rows)
     - Drop invalid enum values for reasoning fields (soft warn via stderr)
     """
@@ -331,6 +339,8 @@ def _enrich_raw(
     raw.setdefault("aliases", [])
     raw.setdefault("file_path", "")
     raw.setdefault("content", "")
+    raw["kind"] = _normalize_kind(kind)
+    kind = raw["kind"]
     # content_preview fallback: prefer explicit, then description, then first 200 chars of content.
     if not raw.get("content_preview"):
         desc = raw.get("description")
@@ -340,9 +350,7 @@ def _enrich_raw(
             content = raw.get("content") or ""
             raw["content_preview"] = content[:200] if isinstance(content, str) else ""
 
-    # Entity requires a `type` field (EntityType). Derive from kind.
-    if "type" not in raw:
-        raw["type"] = kind
+    raw["type"] = _project_type_value(kind, raw.get("type"))
 
     # Paper canonicalization on the entity's own id + reference lists.
     # Apply unconditionally: canonical_paper_id is a no-op for non-article/paper
@@ -672,6 +680,27 @@ def _parameter_preview(record: ParameterSource) -> str:
     if record.quantity_group:
         tokens.append(record.quantity_group)
     return " | ".join(token for token in tokens if token)
+
+
+def _normalize_kind(kind: str) -> str:
+    cleaned = kind.strip()
+    if cleaned in {"parameter", "canonical-parameter"}:
+        return EntityType.CANONICAL_PARAMETER.value
+    if cleaned == "parameter-binding":
+        return "parameter_binding"
+    return cleaned
+
+
+def _project_type_value(kind: str, raw_type: object) -> str | None:
+    normalized_kind = _normalize_kind(kind)
+    if isinstance(raw_type, EntityType):
+        return raw_type.value
+    if isinstance(raw_type, str):
+        normalized_type = _normalize_kind(raw_type)
+        if normalized_type == EntityType.UNKNOWN.value:
+            return EntityType.UNKNOWN.value
+    projected = core_entity_type_for_kind(normalized_kind)
+    return projected.value if projected is not None else None
 
 
 def _derive_aliases(canonical_id: str, kind: str, explicit_aliases: list[str]) -> list[str]:

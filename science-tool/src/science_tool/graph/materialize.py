@@ -143,7 +143,7 @@ def materialization_audit(project_root: Path) -> tuple[list[dict[str, str]], boo
 
 def _add_entity(*, entity: Entity, knowledge, provenance) -> None:
     uri = _entity_uri(entity.canonical_id)
-    knowledge.add((uri, RDF.type, SCI_NS[_kind_class_name(entity.type.value)]))
+    knowledge.add((uri, RDF.type, SCI_NS[_kind_class_name(entity.kind)]))
     knowledge.add((uri, SCHEMA_NS.identifier, Literal(entity.canonical_id)))
     knowledge.add((uri, SKOS.prefLabel, Literal(entity.title)))
     knowledge.add((uri, SCI_NS.profile, Literal(entity.profile)))
@@ -189,7 +189,7 @@ def _add_relations(
         target_uri = _entity_uri(target.canonical_id)
         predicate = (
             SCI_NS.tests
-            if entity.type.value == "task" and target.type.value in {"hypothesis", "question"}
+            if entity.kind == "task" and target.kind in {"hypothesis", "question"}
             else SKOS.related
         )
         knowledge.add((entity_uri, predicate, target_uri))
@@ -340,16 +340,17 @@ def _add_reasoning_metadata(*, uri: URIRef, provenance, entity: Entity) -> None:
         "evidence_role": SCI_NS.evidenceRole,
     }
     for field, predicate in scalar_predicates.items():
-        value = getattr(entity, field)
+        value = getattr(entity, field, None)
         if value is not None:
             provenance.add((uri, predicate, Literal(str(value))))
 
-    if entity.measurement_model is not None:
+    measurement_model = getattr(entity, "measurement_model", None)
+    if measurement_model is not None:
         provenance.add(
             (
                 uri,
                 SCI_NS.measurementModel,
-                Literal(_model_to_json(entity.measurement_model)),
+                Literal(_model_to_json(measurement_model)),
             )
         )
     # `rival_model_packet` lives on ProjectEntity; defensive getattr for bare Entity instances.

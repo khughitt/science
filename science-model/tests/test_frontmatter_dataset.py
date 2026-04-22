@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from science_model.entities import EntityType
 from science_model.frontmatter import parse_entity_file
 
 
@@ -130,6 +131,6 @@ def test_research_package_entity_parses(tmp_path: Path) -> None:
     )
     e = parse_entity_file(p, project_slug="testproj")
     assert e is not None
-    assert e.type.value == "research-package"
+    assert e.type == EntityType.RESEARCH_PACKAGE
     assert e.origin is None
     assert e.access is None

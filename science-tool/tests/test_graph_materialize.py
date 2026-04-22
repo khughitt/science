@@ -249,6 +249,69 @@ def test_materialize_graph_uses_configured_local_profile_sources(tmp_path: Path)
     assert (topic_uri, SKOS.related, question_uri) in knowledge
 
 
+def test_materialize_graph_uses_kind_for_domain_rdf_class(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    local_sources = project / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
+        "\n".join(
+            [
+                "entities:",
+                "  - canonical_id: gene:phf19",
+                "    kind: gene",
+                "    title: PHF19",
+                "    related: [question:q01-demo]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    trig_path = materialize_graph(project)
+
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    gene_uri = PROJECT_NS["gene/phf19"]
+    question_uri = PROJECT_NS["question/q01-demo"]
+
+    assert (gene_uri, RDF.type, SCI.Gene) in knowledge
+    assert (gene_uri, SKOS.related, question_uri) in knowledge
+
+
+def test_materialize_graph_uses_kind_for_task_edge_special_case(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    local_sources = project / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
+        "\n".join(
+            [
+                "entities:",
+                "  - canonical_id: task:t100",
+                "    kind: task",
+                "    title: Follow-up task",
+                "    related: [hypothesis:h01-demo]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    trig_path = materialize_graph(project)
+
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    task_uri = PROJECT_NS["task/t100"]
+    hypothesis_uri = PROJECT_NS["hypothesis/h01-demo"]
+
+    assert (task_uri, SCI.tests, hypothesis_uri) in knowledge
+
+
 def test_materialize_graph_materializes_structured_entity_confidence_in_provenance(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)

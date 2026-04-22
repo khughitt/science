@@ -26,6 +26,7 @@ def _minimal(kind: EntityType, id_: str) -> dict:
     return {
         "id": id_,
         "canonical_id": id_,
+        "kind": kind.value,
         "type": kind,
         "title": id_,
         "project": "demo",
@@ -38,7 +39,7 @@ def _minimal(kind: EntityType, id_: str) -> dict:
 
 
 def test_task_entity_extends_project_entity() -> None:
-    t = TaskEntity(**_minimal(EntityType.UNKNOWN, "task:t01"))
+    t = TaskEntity(**_minimal(EntityType.TASK, "task:t01"))
     assert isinstance(t, ProjectEntity)
     assert isinstance(t, Entity)
 
@@ -81,3 +82,21 @@ def test_typed_entities_do_not_cross_inherit() -> None:
     """TaskEntity and DatasetEntity should be independent siblings under ProjectEntity."""
     assert not issubclass(TaskEntity, DatasetEntity)
     assert not issubclass(DatasetEntity, TaskEntity)
+
+
+def test_generic_entity_with_kind_dataset_does_not_own_dataset_invariants() -> None:
+    entity = Entity(
+        id="dataset:ds01",
+        canonical_id="dataset:ds01",
+        kind="dataset",
+        type=EntityType.DATASET,
+        title="DS1",
+        project="demo",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path="doc/datasets/ds01.md",
+        origin="external",
+    )
+    assert entity.origin == "external"

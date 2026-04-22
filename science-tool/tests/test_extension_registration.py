@@ -59,7 +59,8 @@ def test_extension_entity_validates_through_registered_schema() -> None:
         {
             "id": "natural-system:model:example",
             "canonical_id": "natural-system:model:example",
-            "type": "unknown",
+            "kind": "natural-system:model",
+            "type": None,
             "title": "Example model",
             "project": "demo",
             "ontology_terms": [],

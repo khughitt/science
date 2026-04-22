@@ -8,7 +8,7 @@ from typing import Literal, cast
 
 import yaml
 
-from science_model.entities import Entity, EntityType
+from science_model.entities import Entity, EntityType, core_entity_type_for_kind
 from science_model.packages.schema import AccessBlock, AccessException, DerivationBlock
 from science_model.sync import SyncSource
 
@@ -77,29 +77,31 @@ def _coerce_confidence(val: object) -> float | None:
         return None
 
 
-def _resolve_type(raw: str) -> EntityType:
-    try:
-        return EntityType(raw)
-    except ValueError:
+def _normalize_kind(raw: str) -> str:
+    kind = raw.strip()
+    if kind == "parameter":
+        return EntityType.CANONICAL_PARAMETER.value
+    return kind
+
+
+def _project_type_for_kind(kind: str, *, legacy_type_input: bool) -> EntityType | None:
+    if legacy_type_input and kind == EntityType.UNKNOWN.value:
         return EntityType.UNKNOWN
+    return core_entity_type_for_kind(kind)
 
 
-def _infer_type_from_id(entity_id: str) -> str | None:
-    """Infer entity type from the id prefix (e.g. 'hypothesis:h01' → 'hypothesis')."""
+def _infer_kind_from_id(entity_id: str) -> str | None:
+    """Infer entity kind from the id prefix (e.g. 'hypothesis:h01' → 'hypothesis')."""
     if ":" not in entity_id:
         return None
     prefix = entity_id.split(":", 1)[0]
-    try:
-        EntityType(prefix)
-        return prefix
-    except ValueError:
-        return None
+    return _normalize_kind(prefix)
 
 
-# Maps canonical entity-bearing directory names (plural) to their singular entity type.
-# Used as a fallback when frontmatter omits both `type:` and `id:`. Keep aligned with
-# convention: `doc/<plural>/` files are entities of `<singular>` type, plus root `specs/`.
-_DIR_TO_TYPE: dict[str, str] = {
+# Maps canonical entity-bearing directory names (plural) to their singular entity kind.
+# Used as a fallback when frontmatter omits both `kind:`/`type:` and `id:`. Keep aligned with
+# convention: `doc/<plural>/` files are entities of `<singular>` kind, plus root `specs/`.
+_DIR_TO_KIND: dict[str, str] = {
     "interpretations": "interpretation",
     "discussions": "discussion",
     "questions": "question",
@@ -124,9 +126,9 @@ _DIR_TO_TYPE: dict[str, str] = {
 }
 
 
-def _infer_type_from_path(path: Path) -> str | None:
-    """Infer entity type from the immediate parent directory (e.g. 'interpretations/' → 'interpretation')."""
-    return _DIR_TO_TYPE.get(path.parent.name)
+def _infer_kind_from_path(path: Path) -> str | None:
+    """Infer entity kind from the immediate parent directory (e.g. 'interpretations/' → 'interpretation')."""
+    return _DIR_TO_KIND.get(path.parent.name)
 
 
 _AccessLevel = Literal["public", "registration", "controlled", "commercial", "mixed"]
@@ -181,16 +183,24 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         return None
 
     fm, body = result
-    if not fm.get("type"):
-        # Infer type from id prefix, then fall back to parent directory convention.
+    raw_kind = fm.get("kind")
+    raw_type = fm.get("type")
+    legacy_type_input = raw_kind is None and isinstance(raw_type, str)
+
+    kind = _normalize_kind(str(raw_kind)) if raw_kind else None
+    if kind is None and isinstance(raw_type, str):
+        kind = _normalize_kind(raw_type)
+    if kind is None:
         entity_id = fm.get("id", "")
-        inferred = _infer_type_from_id(entity_id) if entity_id else None
+        inferred = _infer_kind_from_id(entity_id) if entity_id else None
         if not inferred:
-            inferred = _infer_type_from_path(path)
+            inferred = _infer_kind_from_path(path)
         if inferred:
-            fm["type"] = inferred
+            kind = inferred
         else:
             return None
+
+    entity_type = _project_type_for_kind(kind, legacy_type_input=legacy_type_input)
 
     rel_path = str(path)
     # Try to make relative to project root
@@ -200,8 +210,9 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
             break
 
     return Entity(
-        id=fm.get("id", f"{fm['type']}:{path.stem}"),
-        type=_resolve_type(fm["type"]),
+        id=fm.get("id", f"{kind}:{path.stem}"),
+        kind=kind,
+        type=entity_type,
         title=fm.get("title", path.stem),
         status=fm.get("status"),
         project=project_slug,
@@ -220,7 +231,7 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         datasets=fm.get("datasets"),
         sync_source=_parse_sync_source(fm.get("sync_source")),
         # Dataset entity unification (rev 2.2):
-        origin=(fm.get("origin") or ("external" if fm["type"] == "dataset" else None)),
+        origin=(fm.get("origin") or ("external" if kind == EntityType.DATASET.value else None)),
         access=_coerce_access(fm),
         derivation=_coerce_derivation(fm),
         accessions=list(fm.get("accessions") or fm.get("datasets") or []),

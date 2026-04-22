@@ -163,7 +163,7 @@ def build_layered_claim_migration_report(project_root: Path) -> LayeredClaimMigr
 
     rows: list[LayeredClaimMigrationRow] = []
     for entity in sources.entities:
-        if entity.type.value != "proposition":
+        if entity.kind != "proposition":
             continue
         rows.append(_build_layered_claim_row(project_root, entity))
 

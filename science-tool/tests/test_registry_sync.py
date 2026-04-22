@@ -47,14 +47,14 @@ def _source_entity(
     aliases: list[str] | None = None,
     ontology_terms: list[str] | None = None,
 ) -> ProjectEntity:
-    # Domain-specific kinds (e.g. "gene") are not in EntityType — route them to UNKNOWN.
     try:
         etype = EntityType(kind)
     except ValueError:
-        etype = EntityType.UNKNOWN
+        etype = None
     return ProjectEntity(
         id=canonical_id,
         canonical_id=canonical_id,
+        kind=kind,
         type=etype,
         title=title,
         project="test",
@@ -66,6 +66,13 @@ def _source_entity(
         source_refs=[],
         content_preview="",
     )
+
+
+def test_align_registry_preserves_domain_kind_string() -> None:
+    existing = RegistryIndex()
+    result = align_registry(existing, {"proj-a": [_source_entity("gene:tp53", "gene", "TP53")]})
+    entry = next(e for e in result.entities if "gene:tp53" in e.canonical_id)
+    assert entry.kind == "gene"
 
 
 def test_collect_skips_missing_paths(tmp_path: Path) -> None:
@@ -83,6 +90,23 @@ def test_collect_loads_project(tmp_path: Path) -> None:
     assert len(results) == 1
     assert results[0].project_name == "proj-a"
     assert any(e.canonical_id == "question:q1" for e in results[0].entities)
+
+
+def test_collect_loads_declared_gene_kind_without_unknown_projection(tmp_path: Path) -> None:
+    proj = tmp_path / "proj-a"
+    _write_project(proj, "proj-a")
+    (proj / "science.yaml").write_text(
+        "name: proj-a\nknowledge_profiles:\n  local: local\nontologies: [biology]\n",
+        encoding="utf-8",
+    )
+    _write_entity_md(proj, "tp53.md", "gene:tp53", "gene", "TP53")
+
+    results = collect_all_project_sources(project_paths=[proj])
+
+    assert len(results) == 1
+    gene = next(entity for entity in results[0].entities if entity.canonical_id == "gene:tp53")
+    assert gene.kind == "gene"
+    assert gene.type is None
 
 
 def test_align_deduplicates_within_project() -> None:

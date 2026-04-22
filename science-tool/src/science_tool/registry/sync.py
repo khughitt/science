@@ -75,7 +75,7 @@ def align_registry(
             else:
                 entity_map[registry_id] = RegistryEntity(
                     canonical_id=registry_id,
-                    kind=src.type.value,
+                    kind=src.kind,
                     title=src.title,
                     profile=src.profile,
                     aliases=list(src.aliases),

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from science_model.entities import EntityType
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
 
 
@@ -53,7 +54,8 @@ Body text here.
     entity = parse_entity_file(md, project_slug="my-project")
     assert entity is not None
     assert entity.id == "question:q01-test"
-    assert entity.type.value == "question"
+    assert entity.kind == "question"
+    assert entity.type == EntityType.QUESTION
     assert entity.project == "my-project"
     assert entity.content_preview == "Body text here."
 
@@ -72,7 +74,8 @@ Body text.
 """)
     entity = parse_entity_file(md, project_slug="test-project")
     assert entity is not None
-    assert entity.type.value == "hypothesis"
+    assert entity.kind == "hypothesis"
+    assert entity.type == EntityType.HYPOTHESIS
     assert entity.id == "hypothesis:h01-test"
 
 
@@ -105,7 +108,8 @@ Body text.
 """)
     entity = parse_entity_file(md, project_slug="test-project")
     assert entity is not None
-    assert entity.type.value == "interpretation"
+    assert entity.kind == "interpretation"
+    assert entity.type == EntityType.INTERPRETATION
     assert entity.id == "interpretation:2026-04-11-foo-bar"
 
 
@@ -140,7 +144,8 @@ Body.
 """)
     entity = parse_entity_file(md, project_slug="test-project")
     assert entity is not None
-    assert entity.type.value == "discussion"
+    assert entity.kind == "discussion"
+    assert entity.type == EntityType.DISCUSSION
     assert entity.id == "discussion:custom-id"
 
 
@@ -185,3 +190,20 @@ def test_parse_entity_file_with_sync_source(tmp_path: Path):
     assert entity.sync_source is not None
     assert entity.sync_source.project == "aging-clocks"
     assert entity.sync_source.entity_id == "question:q4-tp53"
+
+
+def test_parse_entity_file_preserves_legacy_unknown_type(tmp_path: Path) -> None:
+    md = tmp_path / "legacy-unknown.md"
+    md.write_text(
+        "---\n"
+        'id: "unknown:legacy-record"\n'
+        "type: unknown\n"
+        'title: "Legacy unknown"\n'
+        "---\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+    entity = parse_entity_file(md, project_slug="demo")
+    assert entity is not None
+    assert entity.kind == "unknown"
+    assert entity.type == EntityType.UNKNOWN
