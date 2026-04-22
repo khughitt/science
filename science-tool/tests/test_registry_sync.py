@@ -47,14 +47,14 @@ def _source_entity(
     aliases: list[str] | None = None,
     ontology_terms: list[str] | None = None,
 ) -> ProjectEntity:
-    # Domain-specific kinds (e.g. "gene") are not in EntityType — route them to UNKNOWN.
     try:
         etype = EntityType(kind)
     except ValueError:
-        etype = EntityType.UNKNOWN
+        etype = None
     return ProjectEntity(
         id=canonical_id,
         canonical_id=canonical_id,
+        kind=kind,
         type=etype,
         title=title,
         project="test",
@@ -66,6 +66,13 @@ def _source_entity(
         source_refs=[],
         content_preview="",
     )
+
+
+def test_align_registry_preserves_domain_kind_string() -> None:
+    existing = RegistryIndex()
+    result = align_registry(existing, {"proj-a": [_source_entity("gene:tp53", "gene", "TP53")]})
+    entry = next(e for e in result.entities if "gene:tp53" in e.canonical_id)
+    assert entry.kind == "gene"
 
 
 def test_collect_skips_missing_paths(tmp_path: Path) -> None:
