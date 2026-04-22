@@ -93,12 +93,12 @@ Parse the JSON output. Fields:
 Group `unresolved_refs` by `looks_like` heuristic:
 - **looks_like=task**: refs like `topic:t143`, `topic:t146` — likely mis-prefixed task IDs
 - **looks_like=hypothesis**: refs like `topic:h01` — likely mis-prefixed hypothesis IDs
-- **looks_like=semantic-triage**: refs like `topic:genomics`, `topic:phase3b` — these need semantic reclassification, not default topic stubs
+- **looks_like=topic**: refs like `topic:genomics`, `topic:phase3b` — could be real topics or operational markers
 - **looks_like=unknown**: anything else
 
-For the `semantic-triage` cluster, sub-cluster by user judgment hint:
+For the `topic` cluster, sub-cluster by user judgment hint:
 - Date-shaped values (`pivot-2026-03-18`): likely operational markers
-- Pure short words (`genomics`, `protein`): likely domain entities, methods, or concepts
+- Pure short words (`genomics`, `protein`): likely real topics
 - State-like (`blocked`, `phase3b`, `cycle1`): likely operational
 
 ### 3. Present findings
@@ -110,7 +110,7 @@ Health Report for <project>
 ================================
 Unresolved References (N total):
   - 5 look like task IDs (would be better as task: refs)
-  - 12 need semantic triage (domain entity / method / concept / mechanism candidate)
+  - 12 look like real topics (need entity stubs)
   - 8 look like operational markers (consider meta: prefix)
 
 Lingering tags: lines: M files
@@ -135,8 +135,8 @@ For each cluster, propose ONE action covering the whole cluster, not per-ref dec
 **Task-id cluster:**
 > "5 refs look like task IDs being mis-prefixed: topic:t143, topic:t146, topic:t147, topic:t149, topic:t150. Rewrite all as task: refs?"
 
-**Semantic triage cluster:**
-> "12 refs need semantic reclassification: topic:genomics, topic:protein, topic:embeddings, ... Triage these into domain entities, methods, concepts, mechanism candidates, or meta: refs?"
+**Real topics cluster:**
+> "12 refs look like domain topics: topic:genomics, topic:protein, topic:embeddings, ... Create stub topic entity files for these in doc/topics/?"
 
 **Operational markers cluster:**
 > "8 refs look like operational markers (phase, cycle, milestone): topic:phase3b, topic:cycle1, ... Rewrite as meta: refs (preserved as metadata, excluded from KG)?"
@@ -148,9 +148,9 @@ For each cluster, propose ONE action covering the whole cluster, not per-ref dec
 
 For each cluster the user approves, use the appropriate CLI to apply:
 - Rewriting refs: edit frontmatter or task markdown directly (find files via the `sources` field of each ref)
-- Reclassifying semantic refs: rewrite to domain/entity refs, `method:`, `concept:`, `mechanism:`, or `meta:` as appropriate
+- Creating topic stubs: write minimal entity files matching the existing template structure
 - Migrating tags: `science-tool graph migrate-tags --apply` (default meta:)
-- Migrating tags as topics: `science-tool graph migrate-tags --apply --as-topic` only for audited legacy projects
+- Migrating tags as topics: `science-tool graph migrate-tags --apply --as-topic`
 
 ### 6. Verify
 

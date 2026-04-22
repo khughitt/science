@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# Bootstrap a uv-based project on a RunPod instance.
+#
+# Copy this file into your project and replace the project-specific functions
+# before relying on it for real setup.
+set -euo pipefail
+
+PROJECT_DIR="${PROJECT_DIR:?Set PROJECT_DIR=/workspace/<project-name>}"
+HF_TOKEN="${HF_TOKEN:?Set HF_TOKEN for gated model downloads}"
+UV_PYTHON_VERSION="${UV_PYTHON_VERSION:-3.12}"
+MIN_FREE_GB="${MIN_FREE_GB:-25}"
+
+die() {
+    echo "ERROR: $*" >&2
+    exit 1
+}
+
+patch_pyproject_for_remote() {
+    # Optional hook:
+    # replace this with project-specific edits when local editable sources
+    # exist on your workstation but not on the pod.
+    :
+}
+
+project_prepare_runtime() {
+    die "Replace project_prepare_runtime() with your project's model download and smoke-test logic."
+}
+
+echo "=== Preflight ==="
+
+if ! command -v nvidia-smi >/dev/null 2>&1; then
+    die "nvidia-smi not found; this does not look like a GPU pod"
+fi
+
+GPU_NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)"
+[[ -z "$GPU_NAME" ]] && die "No GPU detected by nvidia-smi"
+
+AVAILABLE_GB="$(df --output=avail /workspace 2>/dev/null | tail -1 | awk '{printf "%.0f", $1/1024/1024}')"
+if [[ -n "$AVAILABLE_GB" && "$AVAILABLE_GB" -lt "$MIN_FREE_GB" ]]; then
+    die "Only ${AVAILABLE_GB} GB free on /workspace; need at least ${MIN_FREE_GB} GB"
+fi
+
+echo "GPU:  $GPU_NAME"
+echo "Disk: ${AVAILABLE_GB:-?} GB free on /workspace"
+
+cd "$PROJECT_DIR"
+
+export HF_HOME="/workspace/.cache/huggingface"
+export UV_CACHE_DIR="/workspace/.cache/uv"
+export TORCH_HOME="/workspace/.cache/torch"
+mkdir -p "$HF_HOME" "$UV_CACHE_DIR" "$TORCH_HOME"
+
+SYNC_MARKER=".venv/.setup-sync-done"
+TORCH_MARKER=".venv/.setup-torch-done"
+
+echo ""
+echo "=== Install uv ==="
+if ! command -v uv >/dev/null 2>&1; then
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+fi
+export PATH="$HOME/.local/bin:$PATH"
+echo "uv version: $(uv --version)"
+
+echo ""
+echo "=== Sync project dependencies ==="
+uv python install "$UV_PYTHON_VERSION"
+
+if [[ -f "$SYNC_MARKER" ]]; then
+    echo "Sync marker present at $SYNC_MARKER; skipping uv sync."
+else
+    patch_pyproject_for_remote
+    uv sync --python "$UV_PYTHON_VERSION" --no-dev
+    mkdir -p .venv
+    touch "$SYNC_MARKER"
+fi
+
+echo "Python: $(uv run --no-sync python --version)"
+
+echo ""
+echo "=== Ensure a GPU-compatible PyTorch build ==="
+if echo "$GPU_NAME" | grep -qiE "blackwell|b100|b200|gb200|rtx.*pro.*6000"; then
+    TORCH_SPEC="torch==2.8.0+cu128"
+    CUDA_WHEEL="cu128"
+else
+    TORCH_SPEC="torch==2.5.1+cu124"
+    CUDA_WHEEL="cu124"
+fi
+
+if [[ -f "$TORCH_MARKER" && "$(cat "$TORCH_MARKER" 2>/dev/null)" == "$TORCH_SPEC" ]]; then
+    echo "Torch marker matches $TORCH_SPEC; skipping reinstall."
+else
+    echo "Installing $TORCH_SPEC from $CUDA_WHEEL..."
+    uv pip install --python .venv/bin/python --reinstall \
+        "$TORCH_SPEC" \
+        --index-url "https://download.pytorch.org/whl/$CUDA_WHEEL"
+    echo "$TORCH_SPEC" > "$TORCH_MARKER"
+fi
+
+export UV_NO_SYNC=1
+uv run --no-sync python -c "import torch; assert torch.cuda.is_available(); print(torch.__version__, torch.version.cuda)"
+
+echo ""
+echo "=== Project-specific runtime preparation ==="
+project_prepare_runtime
+
+echo ""
+echo "=== Setup complete ==="
+echo "Run your customized run.sh next."

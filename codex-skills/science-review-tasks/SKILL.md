@@ -126,14 +126,13 @@ Look for:
 ### 6. Thematic grouping
 
 If tasks lack `group` labels, suggest groupings based on shared themes. Common patterns:
-- Tasks sharing the same `related` entities (especially repeated semantic refs)
+- Tasks sharing the same `related` entities (especially topic references)
 - Tasks that form a dependency chain
 - Tasks addressing the same system component or research question
 
-For open questions, suggest semantic connections via `related` (e.g.,
-`concept:protein-folding`, `method:causal-inference`, or a domain entity)
-when they share themes with existing hypotheses, tasks, or other questions.
-Questions should be linkable to the same entity graph used for tasks.
+For open questions, suggest topic connections via `related` (e.g., `topic:protein-folding`)
+when they share themes with existing hypotheses, tasks, or other questions. Questions
+should be linkable to the same entity graph used for tasks.
 
 ### 7. Present findings
 
@@ -177,7 +176,7 @@ uv run science-tool tasks edit <id> --priority=<new>
 uv run science-tool tasks edit <id> --group=<group>
 
 # Related entity links (replaces old --tags flag)
-uv run science-tool tasks edit <id> --related=concept:protein-folding --related=method:causal-inference
+uv run science-tool tasks edit <id> --related=topic:foo --related=topic:bar
 
 # New tasks
 uv run science-tool tasks add "<title>" --type=<type> --priority=<priority> [--group=<group>] [--related=<ref>...]
