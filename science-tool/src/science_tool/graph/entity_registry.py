@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from science_model.entities import (
     DatasetEntity,
-    DomainEntity,
     Entity,
     ProjectEntity,
     ResearchPackageEntity,

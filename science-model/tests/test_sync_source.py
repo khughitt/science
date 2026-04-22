@@ -14,10 +14,10 @@ def test_sync_source_round_trip():
 def test_entity_with_sync_source():
     e = Entity(
         id="question:q-tp53-methylation",
+        kind="question",
         type=EntityType.QUESTION,
         title="TP53 methylation question",
         project="protein-folding",
-        tags=["sync-propagated"],
         ontology_terms=[],
         related=["gene:tp53"],
         source_refs=[],
@@ -39,10 +39,10 @@ def test_entity_with_sync_source():
 def test_entity_without_sync_source_defaults_none():
     e = Entity(
         id="question:q1",
+        kind="question",
         type=EntityType.QUESTION,
         title="Local question",
         project="p",
-        tags=[],
         ontology_terms=[],
         related=[],
         source_refs=[],

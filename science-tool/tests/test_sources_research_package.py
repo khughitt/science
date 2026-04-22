@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from science_model.entities import EntityType
+
 
 def _seed_two_entity_types(root: Path) -> None:
     (root / "science.yaml").write_text("project: test\n", encoding="utf-8")
@@ -62,7 +64,7 @@ def test_materialize_includes_research_package_in_graph(tmp_path: Path) -> None:
     sources = load_project_sources(tmp_path)
     rps = [e for e in sources.entities if e.canonical_id == "research-package:rp1"]
     assert len(rps) == 1
-    assert rps[0].type.value == "research-package"
+    assert rps[0].type == EntityType.RESEARCH_PACKAGE
 
 
 def test_sync_iterates_research_packages(tmp_path: Path) -> None:
@@ -71,5 +73,5 @@ def test_sync_iterates_research_packages(tmp_path: Path) -> None:
     from science_tool.graph.sources import load_project_sources
 
     sources = load_project_sources(tmp_path)
-    rp_kinds = [e.type.value for e in sources.entities if e.canonical_id == "research-package:rp1"]
+    rp_kinds = [e.kind for e in sources.entities if e.canonical_id == "research-package:rp1"]
     assert rp_kinds == ["research-package"]

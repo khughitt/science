@@ -55,7 +55,7 @@ Body text here.
     assert entity is not None
     assert entity.id == "question:q01-test"
     assert entity.kind == "question"
-    assert entity.type.value == "question"
+    assert entity.type == EntityType.QUESTION
     assert entity.project == "my-project"
     assert entity.content_preview == "Body text here."
 
@@ -75,7 +75,7 @@ Body text.
     entity = parse_entity_file(md, project_slug="test-project")
     assert entity is not None
     assert entity.kind == "hypothesis"
-    assert entity.type.value == "hypothesis"
+    assert entity.type == EntityType.HYPOTHESIS
     assert entity.id == "hypothesis:h01-test"
 
 
@@ -109,7 +109,7 @@ Body text.
     entity = parse_entity_file(md, project_slug="test-project")
     assert entity is not None
     assert entity.kind == "interpretation"
-    assert entity.type.value == "interpretation"
+    assert entity.type == EntityType.INTERPRETATION
     assert entity.id == "interpretation:2026-04-11-foo-bar"
 
 
@@ -145,7 +145,7 @@ Body.
     entity = parse_entity_file(md, project_slug="test-project")
     assert entity is not None
     assert entity.kind == "discussion"
-    assert entity.type.value == "discussion"
+    assert entity.type == EntityType.DISCUSSION
     assert entity.id == "discussion:custom-id"
 
 

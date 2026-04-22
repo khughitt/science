@@ -211,7 +211,7 @@ def build_health_report(project_root: Path) -> HealthReport:
     """Aggregate all health checks for a project."""
     project_root = project_root.resolve()
     sources = load_project_sources(project_root)
-    proposition_entities = [entity for entity in sources.entities if entity.type.value == "proposition"]
+    proposition_entities = [entity for entity in sources.entities if entity.kind == "proposition"]
     migration_report = build_layered_claim_migration_report(project_root)
     causal_leaning_rows = [
         row

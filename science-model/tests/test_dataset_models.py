@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from science_model.entities import Entity, EntityType
+from science_model.entities import DatasetEntity, Entity, EntityType
 from science_model.packages.schema import AccessBlock, AccessException, DerivationBlock
 
 
@@ -97,6 +97,7 @@ def test_data_package_entity_type_still_parses() -> None:
 def _entity_kwargs() -> dict:
     return dict(
         id="dataset:x",
+        kind="dataset",
         type=EntityType.DATASET,
         title="X",
         project="testproj",
@@ -167,53 +168,42 @@ def test_entity_derived_origin_with_derivation_block() -> None:
 
 def test_entity_invariant_external_with_derivation_rejects() -> None:
     """origin: external ⟹ derivation must be None (#7)."""
-    import pytest
-
     with pytest.raises(ValueError, match="derivation"):
-        Entity(**_entity_kwargs(), origin="external", access=_ext_access(), derivation=_der_block())
+        DatasetEntity(**_entity_kwargs(), origin="external", access=_ext_access(), derivation=_der_block())
 
 
 def test_entity_invariant_derived_with_access_rejects() -> None:
     """origin: derived ⟹ access must be None (#8)."""
-    import pytest
-
     with pytest.raises(ValueError, match="access"):
-        Entity(**_entity_kwargs(), origin="derived", derivation=_der_block(), access=_ext_access())
+        DatasetEntity(**_entity_kwargs(), origin="derived", derivation=_der_block(), access=_ext_access())
 
 
 def test_entity_invariant_derived_with_accessions_rejects() -> None:
-    import pytest
-
     with pytest.raises(ValueError, match="accessions"):
-        Entity(**_entity_kwargs(), origin="derived", derivation=_der_block(), accessions=["E1"])
+        DatasetEntity(**_entity_kwargs(), origin="derived", derivation=_der_block(), accessions=["E1"])
 
 
 def test_entity_invariant_derived_with_local_path_rejects() -> None:
-    import pytest
-
     with pytest.raises(ValueError, match="local_path"):
-        Entity(**_entity_kwargs(), origin="derived", derivation=_der_block(), local_path="data/x.csv")
+        DatasetEntity(**_entity_kwargs(), origin="derived", derivation=_der_block(), local_path="data/x.csv")
 
 
 def test_entity_invariant_external_missing_access_rejects() -> None:
     """A dataset entity with origin: external must carry access:."""
-    import pytest
-
     with pytest.raises(ValueError, match="access"):
-        Entity(**_entity_kwargs(), origin="external", access=None)
+        DatasetEntity(**_entity_kwargs(), origin="external", access=None)
 
 
 def test_entity_invariant_derived_missing_derivation_rejects() -> None:
-    import pytest
-
     with pytest.raises(ValueError, match="derivation"):
-        Entity(**_entity_kwargs(), origin="derived", derivation=None)
+        DatasetEntity(**_entity_kwargs(), origin="derived", derivation=None)
 
 
 def test_entity_invariant_does_not_apply_to_non_dataset_types() -> None:
     """The origin/access/derivation invariant applies only to type=dataset."""
     e = Entity(
         id="hypothesis:h1",
+        kind="hypothesis",
         type=EntityType.HYPOTHESIS,
         title="H1",
         project="p",

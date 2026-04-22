@@ -129,6 +129,7 @@ def test_entity_round_trips_reasoning_metadata_fields() -> None:
     )
     entity = Entity(
         id="proposition:p01",
+        kind="proposition",
         type=EntityType.PROPOSITION,
         title="Test proposition",
         project="p",
