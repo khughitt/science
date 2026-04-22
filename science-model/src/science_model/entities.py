@@ -133,30 +133,6 @@ class Entity(BaseModel):
             raise ValueError("kind/type mismatch")
         return self
 
-    @model_validator(mode="after")
-    def _enforce_origin_block_invariants(self) -> "Entity":
-        """Invariants #7/#8: origin ⟺ which top-level block applies (datasets only)."""
-        if self.type != EntityType.DATASET or self.origin is None:
-            return self
-        if self.origin == "external":
-            if self.access is None:
-                raise ValueError(f"{self.id}: origin=external requires an access block (invariant #7)")
-            if self.derivation is not None:
-                raise ValueError(f"{self.id}: origin=external must not carry a derivation block (invariant #7)")
-        elif self.origin == "derived":
-            if self.derivation is None:
-                raise ValueError(f"{self.id}: origin=derived requires a derivation block (invariant #8)")
-            if self.access is not None:
-                raise ValueError(f"{self.id}: origin=derived must not carry an access block (invariant #8)")
-            if self.accessions:
-                raise ValueError(f"{self.id}: origin=derived must not carry accessions (invariant #8)")
-            if self.local_path:
-                raise ValueError(f"{self.id}: origin=derived must not carry local_path (invariant #8)")
-        else:
-            raise ValueError(f"{self.id}: origin must be 'external' or 'derived', got {self.origin!r}")
-        return self
-
-
 class ProjectEntity(Entity):
     """Entity about the conduct of a science project (tasks, hypotheses, datasets...).
 
@@ -217,13 +193,31 @@ class DatasetEntity(ProjectEntity):
     """Dataset — typed entity with rev 2.2 invariants (origin/access/derivation).
 
     Invariant #7 (origin=external → access required) and #8 (origin=derived →
-    derivation required) are enforced on this class via the inherited
-    _enforce_origin_block_invariants validator declared on base Entity.
-    The validator is kind-gated (fires only when type == DATASET), so it
-    already applies correctly to DatasetEntity instances.
+    derivation required) are enforced on this typed subclass.
     """
 
-    pass
+    @model_validator(mode="after")
+    def _enforce_dataset_invariants(self) -> "DatasetEntity":
+        """Invariants #7/#8: origin ⟺ which top-level block applies."""
+        if self.origin is None:
+            return self
+        if self.origin == "external":
+            if self.access is None:
+                raise ValueError(f"{self.id}: origin=external requires an access block (invariant #7)")
+            if self.derivation is not None:
+                raise ValueError(f"{self.id}: origin=external must not carry a derivation block (invariant #7)")
+        elif self.origin == "derived":
+            if self.derivation is None:
+                raise ValueError(f"{self.id}: origin=derived requires a derivation block (invariant #8)")
+            if self.access is not None:
+                raise ValueError(f"{self.id}: origin=derived must not carry an access block (invariant #8)")
+            if self.accessions:
+                raise ValueError(f"{self.id}: origin=derived must not carry accessions (invariant #8)")
+            if self.local_path:
+                raise ValueError(f"{self.id}: origin=derived must not carry local_path (invariant #8)")
+        else:
+            raise ValueError(f"{self.id}: origin must be 'external' or 'derived', got {self.origin!r}")
+        return self
 
 
 class WorkflowRunEntity(ProjectEntity):
