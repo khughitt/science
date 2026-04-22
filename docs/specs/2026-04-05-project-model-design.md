@@ -195,6 +195,39 @@ Relations:
 - `synthesizes(story → interpretation)` — story draws from these interpretations
 - `organized_by(story → question|hypothesis)` — what the story is about
 
+#### `mechanism`
+
+A named explanatory structure linking multiple semantic participants and one or
+more explicit propositions.
+
+`mechanism` is not a narrative synthesis container and not a fallback tag for
+"something multi-word." It exists for cases where the graph needs a stable
+semantic object for an explanatory bundle that can be discussed, refined, or
+superseded as a unit.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | yes | Stable identifier |
+| `title` | string | yes | Descriptive title |
+| `summary` | string | yes | Brief explanatory summary |
+| `participants` | list[ref] | yes | Semantic participants in the mechanism |
+| `propositions` | list[ref] | yes | Proposition(s) defining the mechanism's claims |
+| `status` | string | authored | Reuses the generic entity-level status field |
+| `prose` | string | no | Optional human-readable elaboration |
+
+V1 participant scope is intentionally strict:
+
+- ontology/catalog-backed domain entities; and
+- project `concept` entities.
+
+Participants should not be compositional entities such as `story`,
+`interpretation`, `hypothesis`, `question`, `task`, or `paper`.
+
+Relations:
+- `has_participant(mechanism → domain entity|concept)` — semantic participants
+- `has_proposition(mechanism → proposition)` — proposition(s) defining the
+  mechanism's explanatory claims
+
 #### `paper`
 
 An ordered composition of stories, structured for communication.
@@ -388,7 +421,7 @@ All relations in the Project Model:
 | `model` | Unchanged | Research models (causal, mechanistic); connects variables to propositions |
 | `inquiry` | Unchanged | Named subgraph container for investigation; continues to organize questions → hypotheses → propositions |
 | `experiment` | Unchanged | Bounded investigation design |
-| All others | Unchanged | task, workflow, workflow_run, workflow_step, data_package, dataset, method, variable, assumption, transformation, topic, concept |
+| All others | Unchanged | task, workflow, workflow_run, workflow_step, data_package, dataset, method, variable, assumption, transformation, concept |
 
 ### Migration approach
 

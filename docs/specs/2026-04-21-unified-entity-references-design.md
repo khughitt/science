@@ -26,8 +26,9 @@ category error, not a hygiene problem:
    entity file.
 2. `topic:bayesian` is used as shorthand for the Bayesian method family —
    which would naturally be `method:bayesian`.
-3. `topic:phf19-prc2-ifn-immunotherapy` is a genuine cross-theme research
-   synthesis document — the legitimate `topic` use case.
+3. `topic:phf19-prc2-ifn-immunotherapy` is a named explanatory bundle that
+   should not be flattened to a bag of refs, but also should not remain a
+   semantically weak `topic` label.
 4. `topic:mutations`, `topic:subtypes`, `topic:progression` are single-word
    concept labels — ad-hoc tags standing in for concepts that don't have
    local files.
@@ -48,9 +49,8 @@ storage. Four small implementation gaps keep devs from using the vision.
 
 - Let authors reference domain things (genes, diseases, methods, concepts)
   without creating project-local files for each one.
-- Narrow the `topic` kind to its substantive use — cross-cutting research
-  synthesis documents — and provide cleaner alternatives for the other
-  three patterns.
+- Deprecate `topic` as the semantic fallback and provide cleaner alternatives
+  for all four patterns.
 - Preserve the fail-fast posture on true typos and structurally missing
   entities; don't silently swallow them.
 - Keep the changes small, independently shippable, and backward-compatible
@@ -99,8 +99,8 @@ unified-reference semantics:
 
 Plus a fifth, scope-level change:
 
-5. **Narrow the `topic` kind** and document when to use which of
-   `topic` / `concept` / domain-entity / `method`.
+5. **Deprecate `topic` as the semantic fallback** and document when to use
+   `mechanism` / `story` / `concept` / domain-entity / `method`.
 
 Each is spec'd below.
 
@@ -110,7 +110,7 @@ Before the detailed changes, the taxonomy this spec commits to:
 
 | Layer | Owner | Example kinds | Storage convention |
 |---|---|---|---|
-| **Science core — ProjectEntity** | Science framework | task, hypothesis, question, proposition, observation, interpretation, story, paper, topic, finding, plan, discussion, report, inquiry, spec | markdown + aggregate YAML |
+| **Science core — ProjectEntity** | Science framework | task, hypothesis, question, proposition, observation, interpretation, story, paper, mechanism, finding, plan, discussion, report, inquiry, spec | markdown + aggregate YAML |
 | **Science core — cross-domain analytical** | Science framework | method, concept, variable, model | markdown + aggregate YAML |
 | **Domain catalogs — DomainEntity** | Ontology catalog (biology, chemistry, physics, ...) | gene, protein, disease, pathway, phenotypic_feature, biological_process, anatomical_entity, chemical_entity | catalog-declared; lightweight local extension via markdown or aggregate YAML |
 | **Project extensions** | Individual project | project-specific concepts (e.g. `cytogenetic-event` in MM30) | project-registered extension kind |
@@ -129,7 +129,7 @@ Applied to concrete mm30 references:
 | `topic:survival` | `method:survival-analysis` from science core | Cross-domain statistical method |
 | `topic:bayesian` | `method:bayesian-inference` from science core | Cross-domain methodology |
 | `topic:treatment-response` | `concept:treatment-response` from project `terms.yaml` | Not clearly a domain entity; project-local concept |
-| `topic:phf19-prc2-ifn-immunotherapy` | `topic:phf19-prc2-ifn-immunotherapy` unchanged | Genuine cross-theme research synthesis |
+| `topic:phf19-prc2-ifn-immunotherapy` | `mechanism:phf19-prc2-ifn-immunotherapy` | Named explanatory bundle with explicit participants and propositions |
 
 This taxonomy is the scaffolding the rest of the spec hangs off of.
 
@@ -511,7 +511,7 @@ unstructured labels.
 - Implementation should use field-sensitive handling, not simply add `tag`
   to the global external-prefix set.
 
-## 5. Narrowing the `topic` kind
+## 5. Deprecating `topic` as the semantic fallback
 
 ### Current conflation
 
@@ -522,36 +522,23 @@ In practice, `topic:` files span four distinct patterns:
 2. **Methodology primers** (`topic:bayesian`) — really `method:`.
 3. **Single-word concept labels or domain shorthands** (`topic:chromatin`)
    — really `concept:` or a catalog-defined domain kind.
-4. **Cross-cutting research-theme synthesis documents**
-   (`topic:phf19-prc2-ifn-immunotherapy`) — the legitimate `topic` case.
+4. **Named explanatory multi-entity bundles**
+   (`topic:phf19-prc2-ifn-immunotherapy`) — better represented as
+   `mechanism`.
 
-### Proposed narrowing
+### Proposed direction
 
-`topic` is a `ProjectEntity` kind reserved for **substantive prose
-synthesis documents about a research theme that spans multiple concepts,
-is not organized around a specific question or hypothesis, and is not
-tied to a specific analysis session**.
+`topic` should not be the default semantic sink for new work.
 
-Concretely, a document is a `topic` if and only if:
+Instead:
 
-- It has narrative prose body, not just a title + 1-line description.
-- Its subject is a cross-cutting theme, not a single entity. **If the
-  subject is a single thing covered by a declared ontology catalog
-  (per change 2), use the catalog-contributed kind instead of `topic`**:
-  a gene is `gene:`, a disease is `disease:`, and other single-subject
-  cases should use the catalog's own vocabulary. `topic` is not the
-  fallback for "a thing I want to write about"; it's specifically for
-  *theme-level synthesis*.
-- It isn't organized around a specific question or hypothesis (those are
-  `story` entities per the project model).
-- It isn't the output of a specific analysis session (that's
-  `interpretation`).
-
-The "prefer catalog kinds over `topic` or `concept`" rule gives authors
-a clear decision procedure: **check the declared ontologies first,
-use a domain kind if one fits, fall back to `concept`/`method` only for
-genuinely cross-domain or not-yet-cataloged subjects, use `topic` only
-for theme-level synthesis documents.**
+- use ontology/catalog-backed domain kinds for single things;
+- use `method` for analytical procedures;
+- use `concept` for lightweight project-local abstract labels;
+- use `hypothesis`, `interpretation`, and `story` for the existing
+  compositional reasoning/narrative cases; and
+- use `mechanism` for named explanatory bundles that need graph identity as
+  a unit.
 
 Everything else goes to the appropriate existing kind:
 
@@ -562,27 +549,41 @@ Everything else goes to the appropriate existing kind:
 | `topic:survival` | `method:survival-analysis` | science core | `doc/methods/survival-analysis.md` or `terms.yaml` entry |
 | `topic:bayesian` | `method:bayesian-inference` | science core | `doc/methods/bayesian-inference.md` or `terms.yaml` entry |
 | `topic:mutations` (bare label, no clear catalog home) | `concept:mutations` | science core | `terms.yaml` entry |
-| `topic:phf19-prc2-ifn-immunotherapy` (multi-concept synthesis) | `topic:phf19-prc2-ifn-immunotherapy` | project-local | `doc/topics/phf19-prc2-ifn-immunotherapy.md` (unchanged) |
+| `topic:phf19-prc2-ifn-immunotherapy` (named explanatory bundle) | `mechanism:phf19-prc2-ifn-immunotherapy` | science core | `doc/mechanisms/phf19-prc2-ifn-immunotherapy.md` or aggregate storage |
 
-### Why keep `topic` at all
+### `mechanism` boundaries
 
-A literature review or cross-cutting synthesis like
-`epigenetic-attractors-convergence-canalization` genuinely doesn't fit
-the other compositional kinds. It's:
+A `mechanism` is not:
 
-- Not a `story` (no single question or hypothesis it's organized around).
-- Not an `interpretation` (not tied to a specific analysis session).
-- Not a `report` (`report` in the project model is analysis output, not
-  narrative synthesis).
-- Not a `method` (no methodology described).
-- Not a `concept` (multi-concept, prose-bodied).
+- a prose convenience title;
+- a bag of arbitrary project entities;
+- a substitute for a missing ontology term; or
+- a second name for `topic`.
 
-`topic` fills a real niche: **standalone research-theme synthesis**.
+V1 should keep `mechanism` strict:
+
+- participants should be limited to ontology/catalog-backed domain entities
+  plus project `concept` entities;
+- compositional entities such as `story`, `interpretation`, `hypothesis`,
+  `question`, `task`, and `paper` should not be mechanism participants;
+- propositions remain the explicit claim substrate;
+- direct support/dispute/grounding edges targeting `mechanism` are out of
+  scope for v1.
+
+### What happens to `topic`
+
+Existing topic docs may continue to exist as prose artifacts during migration,
+and topic-aware tooling may continue to support them as legacy inputs.
+
+But `topic` is no longer the recommended semantic destination for new
+authoring. It should be treated as migration debt unless a later spec defines
+a narrower durable role for it that is distinct from `mechanism`, `story`,
+`concept`, and domain/catalog kinds.
 
 ### Migration guidance (per-project)
 
-The narrowing is **documentation / convention** only. No enforcement at
-the tool level; projects migrate at their own pace. Suggested order:
+The deprecation is **documentation + tooling-guidance** first. Projects
+migrate at their own pace. Suggested order:
 
 1. Identify existing `topic:` files that carry ontology `same_as:`
    mappings — migrate those to `gene:` / `protein:` / `disease:` kinds
@@ -592,7 +593,9 @@ the tool level; projects migrate at their own pace. Suggested order:
    to `method:`.
 3. Identify single-word bare labels — either promote to `concept:` (in
    `terms.yaml`) or rewrite call-sites to use an existing domain entity.
-4. Leave the genuine research-theme synthesis documents as `topic:`.
+4. Reclassify named explanatory bundles to `mechanism:`.
+5. Keep any remaining prose-heavy topic docs as legacy migration inputs
+   rather than as the preferred semantic target.
 
 No deadline; projects that haven't migrated still work thanks to
 change (1) (cross-kind slug resolution).
@@ -612,9 +615,9 @@ The five changes work together:
 - Resolved.
 - Dev writes `related: ["tag:draft"]` on a work-in-progress plan. Change
   4 treats it as a legal classification token in `related:`; audit skips.
-- Over time, the project converges on `gene:`, `concept:`, `method:`, and
-  narrow-scope `topic:` via change 5. Existing `topic:X` references keep
-  working throughout.
+- Over time, the project converges on `gene:`, `concept:`, `method:`,
+  `mechanism:`, and other typed entities via change 5. Existing `topic:X`
+  references keep working throughout the migration period.
 
 ## Implementation order
 
@@ -626,8 +629,8 @@ Recommended shipping order (smallest → largest, independently useful):
    introduces a slug index plus per-reference ambiguity reporting.
 3. **Change 3** — `terms.yaml` convention. Small code + doc change:
    adapter discovery, top-level-key handling, and tests.
-4. **Change 5** — `topic` narrowing. Pure documentation (spec + writing
-   guidance). No tool changes.
+4. **Change 5** — `topic` deprecation guidance + `mechanism` semantics.
+   Documentation first, with tooling follow-on work.
 5. **Prerequisite follow-on** — open-ended kind support at load time.
 6. **Change 2A** — catalogs contribute kinds.
 7. **Change 2B** — catalogs contribute resolvable instances.
@@ -665,7 +668,8 @@ No breaking changes for existing projects. Each change is additive:
 - Change 4 only legalizes `tag:*` in scoped fields; projects using `tag:`
   as a real entity kind still need a migration because this spec reserves
   the prefix for non-entity labels.
-- Change 5 is documentation only.
+- Change 5 begins as documentation/guidance and is expected to drive
+  follow-on tooling changes.
 
 Projects that have already authored entity files continue to work. The
 changes *add* ways to reference things without authoring; they don't
@@ -685,10 +689,9 @@ remove any existing pathway.
   technically redundant with `entities.yaml` but semantically distinct.
 - `tag:` is a field-scoped classification token; tags and entities are
   explicitly distinct concepts.
-- `topic:` is retained as a project kind, narrowly defined to mean
-  cross-cutting research-theme synthesis. Single-entity subjects
-  belong in the catalog-contributed domain kind (`gene`, `disease`,
-  or another catalog-defined domain kind), not in `topic`.
+- `topic:` should not be the semantic fallback for new authoring.
+  Single-entity subjects belong in domain kinds, lightweight abstract labels
+  belong in `concept`, and named explanatory bundles belong in `mechanism`.
 
 ## Open questions
 
@@ -718,8 +721,8 @@ remove any existing pathway.
   operationalizes the "core types are few; domain types come from
   catalogs" principle with a concrete kind-contribution mechanism.
 - **2026-04-05 project-model**: this spec refines the conventions for
-  which kind to use (`topic` vs. `concept` vs. `method` vs. domain
-  entity) and makes the ProjectEntity / DomainEntity boundary
+  which kind to use (`mechanism` vs. `story` vs. `concept` vs. `method`
+  vs. domain entity) and makes the ProjectEntity / DomainEntity boundary
   observable at reference time.
 - **2026-03-01 knowledge-graph-design**: this spec operationalizes the
   "`sci:Concept + biolink:Gene`" vision by making Biolink-backed
