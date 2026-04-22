@@ -302,6 +302,46 @@ def test_audit_project_graph_reports_unresolved_binding_refs(tmp_path: Path) -> 
     )
 
 
+def test_audit_project_graph_accepts_declared_gene_entities(tmp_path: Path) -> None:
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "science.yaml").write_text("name: demo\nontologies: [biology]\n", encoding="utf-8")
+    (root / "doc" / "genes").mkdir(parents=True)
+    (root / "doc" / "genes" / "tp53.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "gene:tp53"',
+                'type: "gene"',
+                'title: "TP53"',
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (root / "specs" / "hypotheses").mkdir(parents=True)
+    (root / "specs" / "hypotheses" / "h01-demo.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "hypothesis:h01-demo"',
+                'type: "hypothesis"',
+                'title: "Demo hypothesis"',
+                'related: ["gene:tp53"]',
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    report = audit_project_graph(root)
+
+    assert report["unresolved_reference_count"] == 0
+    assert report["has_failures"] is False
+
+
 def test_write_local_sources_preserves_existing_curation_and_deduplicates(tmp_path: Path) -> None:
     root = tmp_path / "project"
     local_sources = root / "knowledge" / "sources" / "local"

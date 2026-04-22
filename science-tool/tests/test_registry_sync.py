@@ -92,6 +92,23 @@ def test_collect_loads_project(tmp_path: Path) -> None:
     assert any(e.canonical_id == "question:q1" for e in results[0].entities)
 
 
+def test_collect_loads_declared_gene_kind_without_unknown_projection(tmp_path: Path) -> None:
+    proj = tmp_path / "proj-a"
+    _write_project(proj, "proj-a")
+    (proj / "science.yaml").write_text(
+        "name: proj-a\nknowledge_profiles:\n  local: local\nontologies: [biology]\n",
+        encoding="utf-8",
+    )
+    _write_entity_md(proj, "tp53.md", "gene:tp53", "gene", "TP53")
+
+    results = collect_all_project_sources(project_paths=[proj])
+
+    assert len(results) == 1
+    gene = next(entity for entity in results[0].entities if entity.canonical_id == "gene:tp53")
+    assert gene.kind == "gene"
+    assert gene.type is None
+
+
 def test_align_deduplicates_within_project() -> None:
     """Same entity loaded twice from same project is deduplicated."""
     existing = RegistryIndex()

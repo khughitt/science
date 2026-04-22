@@ -101,7 +101,9 @@ class EntityRegistry:
 
     def register_catalog_kind(self, kind: str, cls: type[Entity], *, owner: str) -> None:
         self._require_entity_subclass(cls)
-        if kind in self._core or kind in self._profile:
+        if kind in self._core:
+            return
+        if kind in self._profile:
             raise EntityKindShadowError(f"catalog kind {kind!r} shadows an existing kind from {owner}")
         if kind in self._catalog or kind in self._extensions:
             raise EntityKindAlreadyRegisteredError(f"catalog kind {kind!r} already registered")
