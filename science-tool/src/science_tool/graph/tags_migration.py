@@ -7,8 +7,9 @@ frontmatter or task markdown are silently dropped on parse (the `health` command
 flags them).
 
 Default conversion is `meta:<tag>` (intentional metadata, no KG materialization).
-Pass `as_topic=True` (or `--as-topic` on the CLI) for projects where every tag
-value has been verified as a real domain topic — that switches to `topic:<tag>`.
+Pass `as_topic=True` (or `--as-topic` on the CLI) only for legacy migrations
+where the existing tags have already been audited and should intentionally
+remain `topic:<tag>` refs.
 
 Preserves YAML formatting by rewriting only the `tags:` and `related:` lines.
 Task files (tasks/active.md, tasks/done/*.md) are migrated with the same
@@ -91,7 +92,8 @@ def _tag_to_ref(tag: str, as_topic: bool = False) -> str:
     """Convert a bare tag value to a typed ref.
 
     Default is `meta:<tag>` — safe metadata that won't pollute the KG.
-    Pass as_topic=True for projects where all tags are verified domain topics.
+    Pass as_topic=True only for legacy migrations where tags should remain
+    `topic:` refs after explicit audit.
     """
     if ":" in tag:
         return tag  # Already typed

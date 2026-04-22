@@ -39,7 +39,7 @@ class UnresolvedRef(TypedDict):
     target: str
     mention_count: int
     sources: list[str]
-    looks_like: str  # "topic" | "task" | "hypothesis" | "unknown"
+    looks_like: str  # "semantic-triage" | "task" | "hypothesis" | "question" | "unknown"
 
 
 # Heuristic patterns for classifying mis-prefixed `topic:` refs.
@@ -59,7 +59,7 @@ def _classify(target: str) -> str:
     if _QUESTION_ID_RE.match(target):
         return "question"
     if target.startswith("topic:"):
-        return "topic"
+        return "semantic-triage"
     return "unknown"
 
 

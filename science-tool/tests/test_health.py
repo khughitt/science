@@ -133,7 +133,7 @@ class TestCollectUnresolvedRefs:
         by_target = {row["target"]: row["looks_like"] for row in unresolved}
         assert by_target["topic:q05-foo"] == "question"
         assert by_target["topic:h99-bar"] == "hypothesis"
-        assert by_target["topic:genomics"] == "topic"
+        assert by_target["topic:genomics"] == "semantic-triage"
 
 
 class TestCollectLingeringTags:

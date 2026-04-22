@@ -398,14 +398,14 @@ def graph_migrate_addresses(apply: bool, graph_path: Path) -> None:
     "--as-topic",
     is_flag=True,
     default=False,
-    help="Convert bare tags to topic: refs instead of the default meta: refs.",
+    help="Legacy mode: convert bare tags to topic: refs instead of the default meta: refs.",
 )
 def graph_migrate_tags(project_root: Path, apply: bool, as_topic: bool) -> None:
     """Rewrite legacy `tags:` frontmatter into `related:` refs in-place.
 
     Default: bare tag values become `meta:<tag>` (intentional metadata,
-    no KG pollution). Pass --as-topic for projects where all tags are
-    verified domain topics.
+    no KG pollution). Pass --as-topic only for legacy migrations where
+    the tags have already been audited and should remain `topic:` refs.
 
     Entity frontmatter: `tags: [genomics]` → adds `meta:genomics` to `related`, removes `tags:` line.
     Task markdown: same idea for `- tags: [foo]` in tasks/active.md and tasks/done/*.md.
@@ -2301,7 +2301,7 @@ def health_command(project_root: Path, output_format: str) -> None:
         table = Table(title=f"Unresolved references ({len(report['unresolved_refs'])})")
         table.add_column("Target", style="bold")
         table.add_column("Mentions", justify="right")
-        table.add_column("Looks like")
+        table.add_column("Suggested triage")
         table.add_column("Sources (first 3)")
         for row in report["unresolved_refs"]:
             srcs = ", ".join(row["sources"][:3])
