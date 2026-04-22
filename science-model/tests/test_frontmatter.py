@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from science_model.entities import EntityType
+from science_model.entities import EntityType, MechanismEntity
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
 
 
@@ -231,6 +231,7 @@ def test_parse_entity_file_infers_mechanism_from_parent_directory(tmp_path: Path
     )
     entity = parse_entity_file(md, project_slug="demo")
     assert entity is not None
+    assert isinstance(entity, MechanismEntity)
     assert entity.kind == "mechanism"
     assert entity.type == EntityType.MECHANISM
     assert entity.id == "mechanism:test-mechanism"
