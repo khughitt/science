@@ -34,6 +34,7 @@ For brevity, the examples below write just `science-tool <command>` — **always
 - **SHOULD** include AnnotatedParam metadata for all pipeline parameters
 - **SHOULD** reference tool-specific skills where applicable
 - **SHOULD** suggest a pilot/phased approach for complex pipelines
+- **SHOULD** suggest the RunPod pipeline skill as an option when the planned workflow appears GPU-intensive; keep this advisory and let the user decide whether to use it
 - **SHOULD** keep plans tool-agnostic by default — reference tool-specific skills. However, when the user explicitly requests a specific orchestration tool (Snakemake, Nextflow, Make, etc.), include a tool-specific section with the workflow definition while keeping the rest of the plan tool-agnostic.
 
 ## Input Modes
@@ -79,6 +80,25 @@ Walk the inquiry subgraph and identify:
 - What format should the output be in?
 - How is it validated?
 - What does "success" look like?
+
+### Step 2a: Consider rented GPU execution when the workload looks GPU-intensive
+
+Before continuing, check whether the planned workflow appears likely to need substantial GPU execution. Common signals include:
+
+- explicit GPU / CUDA / remote pod / RunPod mentions
+- large embedding generation or model inference workloads
+- model training or fine-tuning steps
+- dependency or runtime requirements that clearly imply GPU hardware
+
+If those signals are present, tell the user that Science has a RunPod skill at `skills/pipelines/runpod.md` for rented GPU pod workflows, and ask whether they want to consider that path before finalizing the plan.
+
+If the user says yes:
+
+- read `skills/pipelines/runpod.md`
+- reference `templates/runpod/push_to_runpod.sh`, `templates/runpod/setup.sh`, and `templates/runpod/run.sh` where relevant
+- incorporate that guidance into the planning discussion or plan document
+
+If the user says no, continue with the normal planning flow.
 
 ### Step 2b: Data-access gate (both modes)
 
@@ -218,6 +238,7 @@ science-tool graph stamp-revision
 ## Important Notes
 
 - **Plans are tool-agnostic by default.** Reference tool-specific skills rather than embedding their conventions. Exception: when the user explicitly requests a specific tool, include a dedicated tool-specific section.
+- **RunPod is advisory, not automatic.** For GPU-intensive workflows, suggest the RunPod skill and let the user choose whether to incorporate it.
 - **Pilot first.** For complex pipelines, suggest a pilot phase with reduced scope.
 - **Validation criteria are mandatory.** Every transformation must have a way to verify it worked.
 - **The inquiry is the source of truth.** The plan document is a rendering of the inquiry's computational layer.
