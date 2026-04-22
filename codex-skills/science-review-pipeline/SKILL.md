@@ -136,12 +136,42 @@ For each `sci:Assumption` and `scic:causes` edge:
 
 #### Dimension 3: Data Availability
 
-For each `BoundaryIn` node:
-- Is the data source specified?
-- Is the data actually accessible?
-- Is the format specified?
+For each input data source (every `BoundaryIn` node or data-acquisition step
+in the plan):
 
-**Scoring:** PASS (all accessible), WARN (some unspecified), FAIL (inaccessible sources)
+- Does it resolve to a `dataset:<slug>` entity?
+- Per origin (verification gate):
+  - `external`: `access.verified: true` OR `access.exception.mode != ""`.
+    `access.source_url` populated when verified.
+    `access.last_reviewed` within the last 12 months.
+  - `derived`: `derivation.workflow_run` exists; symmetric `produces:` edge present;
+    `derivation.inputs` transitively pass.
+- Runtime stageability (separate gate, runs in addition to verification):
+  - At least one of `entity.datapackage` or `entity.local_path` is populated AND
+    the referenced runtime file exists on disk.
+- `consumed_by` includes `plan:<this-plan-file-stem>`.
+- All eleven state invariants hold (see the spec at
+  `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md`).
+
+**Scoring:**
+
+- **PASS** — all sources resolve; verification gate satisfied per origin; runtime
+  stageability satisfied; backlink present; freshness OK; invariants hold.
+- **WARN** — stale `last_reviewed` (> 12 months); missing canonical `plan:<stem>`
+  backlink; cached-field drift between entity and runtime
+  (`ontology_terms`/`license`/`update_cadence` only); lineage drift.
+- **FAIL** — any of:
+  - A source does not resolve to a dataset entity.
+  - External `access.verified: false` with `access.exception.mode: ""`.
+  - External `access.verified: true` but `verification_method: ""` or no
+    `last_reviewed`.
+  - Derived missing `workflow_run` entity, asymmetric `produces:` edge, or broken
+    transitive input chain.
+  - Runtime stageability fails: neither `datapackage` nor `local_path` populated,
+    OR the referenced runtime file does not exist on disk.
+  - A plan references an umbrella entity (non-empty `siblings:`).
+  - Origin/block-exclusion violation (#7 or #8).
+  - research-package symmetry violation (#11).
 
 #### Dimension 4: Identifiability
 

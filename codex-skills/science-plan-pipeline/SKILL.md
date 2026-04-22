@@ -143,6 +143,42 @@ Walk the inquiry subgraph and identify:
 - How is it validated?
 - What does "success" look like?
 
+### Step 2b: Data-access gate (both modes)
+
+For each input data source identified in Step 2:
+
+1. Resolve to a `dataset:<slug>` entity. If no entity exists:
+   - For external sources: invoke `science-find-datasets`. Do not proceed
+     with a URL alone.
+   - For derived sources: HALT with "no dataset entity found for `dataset:<slug>`;
+     ensure the producing workflow has an `outputs:` block and run
+     `science-tool dataset register-run <run-slug>`."
+2. Check the gate per origin:
+   - `origin: external`:
+     - PASS if `access.verified: true`.
+     - PASS if `access.verified: false` AND `access.exception.mode != ""`.
+     - HALT otherwise with Branch A/B options:
+       - **Branch A** — verifiable under current credentials → run verification
+         (manual or future `science-tool dataset verify`), then re-run this step.
+       - **Branch B** — requires credentials the project does not hold.
+         Three sub-options:
+         (a) **scope-reduce**: defer to a follow-up task; populate
+             `access.exception` with `mode: "scope-reduced"`, `decision_date`,
+             `followup_task`.
+         (b) **expand**: add credential acquisition to the current task; populate
+             `access.exception` with `mode: "expanded-to-acquire"`, `decision_date`.
+         (c) **substitute**: pick an alternative dataset; populate
+             `access.exception` with `mode: "substituted"`,
+             `superseded_by_dataset: "dataset:<alternative>"`.
+       After writing the structured exception + a prose log entry, re-run the gate.
+   - `origin: derived`:
+     - Check `derivation.workflow_run` resolves to a `workflow-run` entity. HALT if not.
+     - Check that the workflow-run's `produces:` includes this dataset's ID. HALT if asymmetric.
+     - Recursively check each ID in `derivation.inputs` passes the gate. HALT with the
+       broken-link path if any input transitively fails. Cycle detection: maintain a
+       visited-set; HALT on revisit.
+3. Do NOT mutate `consumed_by` here. Backlink write is Step 4.5.
+
 ### Step 3: Add computational nodes to the inquiry (Inquiry mode only)
 
 Skip this step in Task mode — the plan document captures the same information.
@@ -208,6 +244,21 @@ Include these sections when applicable:
 - **Reusable Infrastructure:** If any task produces infrastructure (tools, indices, data pipelines) with value beyond this specific analysis, flag it with `reusable: true` and briefly describe the broader applicability.
 
 Each task should reference the inquiry node it implements and include TDD steps.
+
+### Step 4.5: Register plan with consumed datasets (both modes)
+
+The plan file now exists at a known path. Compute `plan:<plan-file-stem>` from the
+filename (strip directory and `.md` extension).
+
+For each dataset entity referenced in Step 2b, append `plan:<plan-file-stem>` to
+`consumed_by`, deduplicated against existing entries. Also append any secondary
+backlinks the planner has in scope (`task:<id>` if a task is being tracked;
+`workflow:<slug>` if a new workflow is being registered). Do not rewrite existing
+entries.
+
+Append a short log entry to each dataset entity's verification log:
+
+> "<YYYY-MM-DD> (<agent>): consumed by plan:<plan-file-stem>"
 
 ### Step 5: Update inquiry status and finalize (Inquiry mode only)
 

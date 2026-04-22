@@ -1,6 +1,6 @@
 ---
 name: science-curate
-description: "Run an agent-led project memory curation sweep. Use when the user says curate, curation sweep, forgotten insights, missed connections, drift, cleanup research memory, or explicitly references `science-curate` or `/science:curate`."
+description: "Agent-led project memory curation sweep. Surfaces forgotten insights, missed links, drift, duplication, safe fixes, and pending decisions across a Science project. Also use when the user explicitly asks for `science-curate` or references `/science:curate`."
 ---
 
 # Project Curation Sweep
@@ -67,20 +67,15 @@ Before executing any research command:
    fall back to:
    `uv run --with <science-plugin-root>/science-tool science-tool <command>`
 
-Run an agent-led curation pass across the project corpus. The CLI helpers are
-evidence-gathering tools; the agent performs semantic judgement and decides what,
-if anything, should change.
+Run an agent-led curation pass across the project corpus. The CLI helpers are evidence-gathering tools; the agent performs semantic judgement and decides what, if anything, should change.
 
-Use `$ARGUMENTS` as optional scope filters, for example: `all`, `links`, `drift`,
-`forgotten-insights`, `tasks`, `dag`, `topics`, `papers`, `--since 2026-04-01`,
-or `--apply-obvious`.
+Use the user input as optional scope filters, for example: `all`, `links`, `drift`, `forgotten-insights`, `tasks`, `dag`, `topics`, `papers`, `--since 2026-04-01`, or `--apply-obvious`.
 
-See the design spec at `docs/specs/2026-04-21-project-curation-design.md` for
-full semantics.
+See the design spec at `docs/specs/2026-04-21-project-curation-design.md` for full semantics.
 
 ## Flags
 
-Parse `$ARGUMENTS` for:
+Parse the user input for:
 
 - `--dry-run` - do not write source edits; write the curation ledger unless `--no-write` is also set.
 - `--no-write` - print the ledger preview only. Do not create or update `doc/meta/curation/`.
@@ -121,11 +116,9 @@ The inventory helper should return compact facts only:
 
 ## Phase 2: Candidate triage
 
-Group findings into curation themes and choose a bounded reading set. Read targeted
-source artifacts, not the entire corpus.
+Group findings into curation themes and choose a bounded reading set. Read targeted source artifacts, not the entire corpus.
 
-Prefer source documents over generated summaries when deciding whether a metadata
-edit is warranted.
+Prefer source documents over generated summaries when deciding whether a metadata edit is warranted.
 
 Useful targets include:
 
@@ -152,9 +145,7 @@ Safety rules:
 - Medium-confidence proposals are recorded, not auto-applied.
 - Low-confidence research judgement is never auto-applied.
 
-Keep fixes narrow. Do not introduce compatibility layers, placeholders, or broad
-rewrites. Preserve the artifact's existing role unless the change is explicitly
-metadata cleanup.
+Keep fixes narrow. Do not introduce compatibility layers, placeholders, or broad rewrites. Preserve the artifact's existing role unless the change is explicitly metadata cleanup.
 
 ## Phase 4: Ledger write
 
@@ -186,10 +177,9 @@ Suggested body:
 - **Actioned Fixes** - exact files changed, with rationale.
 - **Pending Decisions** - items that need user judgement.
 - **Suggested Follow-Ups** - tasks, commands, or synthesis updates to queue next.
-- **Self-Reflection** - improvements noticed for `/science:curate`, the skill, prompts, inventory helpers, graph surfaces, entity metadata, or conventions.
+- **Self-Reflection** - improvements noticed for `science-curate`, the skill, prompts, inventory helpers, graph surfaces, entity metadata, or conventions.
 
-If a same-day ledger already exists, append a timestamped update section rather
-than overwriting prior observations.
+If a same-day ledger already exists, append a timestamped update section rather than overwriting prior observations.
 
 ## Phase 5: Verification
 
@@ -202,21 +192,20 @@ uv run --frozen pyright
 uv run science-tool graph audit --project-root . --format json
 ```
 
-If the run is docs-only and no Python files changed, note that format/type checks
-were skipped. If metadata links changed, still run the graph/source audit.
+If the run is docs-only and no Python files changed, note that format/type checks were skipped. If metadata links changed, still run the graph/source audit.
 
 ## Phase 6: Self-reflection
 
 At the end of the sweep, answer this prompt in the ledger's **Self-Reflection** section:
 
-> What did this curation sweep make harder than it should have been? Note any improvements to `/science:curate`, the `science-curate` skill, agent prompts, inventory helpers, graph surfaces, entity metadata, or project conventions that would make future curation more accurate, less noisy, or easier to verify.
+> What did this curation sweep make harder than it should have been? Note any improvements to `science-curate`, the `science-curate` skill, agent prompts, inventory helpers, graph surfaces, entity metadata, or project conventions that would make future curation more accurate, less noisy, or easier to verify.
 
 Be concrete. Name the friction, where it appeared, and the smallest improvement that would help next time.
 
 ## After Writing
 
 1. Save the ledger to `doc/meta/curation/curation-sweep-YYYY-MM-DD.md` unless `--no-write` is set.
-2. If `--dry-run` is set, do not mutate source files; the ledger may still be written unless `--no-write` is set, and the output should summarize the intended ledger and action plan.
+2. If `--dry-run` is set, do not mutate source artifacts; the ledger may still be written or updated unless `--no-write` is also set.
 3. If the sweep produced safe obvious fixes, ask before applying them unless `--apply-obvious` was explicitly given.
 4. If `--commit` is set, commit the written files after verification.
 
@@ -224,9 +213,9 @@ Be concrete. Name the friction, where it appeared, and the smallest improvement 
 
 | Command | Relationship |
 |---|---|
-| `/science:big-picture` | Uses curated project memory as input to synthesis; `/science:curate` repairs the memory layer. |
-| `/science:next-steps` | Consumes curation findings as one input to future priorities. |
-| `/science:review-tasks` | Overlaps on stale tasks, but `/science:curate` is broader and semantic. |
-| `/science:health` | Supplies structural health signals during inventory. |
-| `/science:update-graph` | Applies graph/materialization repairs after curation changes source metadata. |
-| `/science:dag-audit` | Handles detailed DAG drift; `/science:curate` can surface candidates and defer to DAG audit. |
+| `science-big-picture` | Uses curated project memory as input to synthesis; `science-curate` repairs the memory layer. |
+| `science-next-steps` | Consumes curation findings as one input to future priorities. |
+| `science-review-tasks` | Overlaps on stale tasks, but `science-curate` is broader and semantic. |
+| `science-health` | Supplies structural health signals during inventory. |
+| `science-update-graph` | Applies graph/materialization repairs after curation changes source metadata. |
+| `science-dag-audit` | Handles detailed DAG drift; `science-curate` can surface candidates and defer to DAG audit. |
