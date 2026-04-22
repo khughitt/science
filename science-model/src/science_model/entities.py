@@ -48,6 +48,7 @@ class EntityType(StrEnum):
     RESEARCH_PACKAGE = "research-package"
     FINDING = "finding"
     STORY = "story"
+    MECHANISM = "mechanism"
     PAPER = "paper"
     SEARCH = "search"
     REPORT = "report"
@@ -71,6 +72,58 @@ _CORE_KIND_TO_TYPE: dict[str, EntityType] = {entity_type.value: entity_type for 
 def core_entity_type_for_kind(kind: str) -> EntityType | None:
     """Return the core EntityType projection for a kind, if one exists."""
     return _CORE_KIND_TO_TYPE.get(kind)
+
+
+_DISALLOWED_MECHANISM_PARTICIPANT_KINDS = frozenset(
+    {
+        EntityType.HYPOTHESIS.value,
+        EntityType.QUESTION.value,
+        EntityType.PROPOSITION.value,
+        EntityType.OBSERVATION.value,
+        EntityType.INQUIRY.value,
+        EntityType.TOPIC.value,
+        EntityType.INTERPRETATION.value,
+        EntityType.DISCUSSION.value,
+        EntityType.MODEL.value,
+        EntityType.PLAN.value,
+        EntityType.ASSUMPTION.value,
+        EntityType.TRANSFORMATION.value,
+        EntityType.VARIABLE.value,
+        EntityType.DATASET.value,
+        EntityType.METHOD.value,
+        EntityType.EXPERIMENT.value,
+        EntityType.ARTICLE.value,
+        EntityType.WORKFLOW.value,
+        EntityType.WORKFLOW_RUN.value,
+        EntityType.WORKFLOW_STEP.value,
+        EntityType.DATA_PACKAGE.value,
+        EntityType.RESEARCH_PACKAGE.value,
+        EntityType.FINDING.value,
+        EntityType.STORY.value,
+        EntityType.MECHANISM.value,
+        EntityType.PAPER.value,
+        EntityType.SEARCH.value,
+        EntityType.REPORT.value,
+        EntityType.VALIDATION_REPORT.value,
+        EntityType.TASK.value,
+        EntityType.SPEC.value,
+        EntityType.CANONICAL_PARAMETER.value,
+        EntityType.UNKNOWN.value,
+    }
+)
+
+
+def _is_valid_mechanism_participant(ref: str) -> bool:
+    if ":" not in ref:
+        return False
+    kind = ref.split(":", 1)[0].strip()
+    if not kind:
+        return False
+    if kind == EntityType.CONCEPT.value:
+        return True
+    if kind in _DISALLOWED_MECHANISM_PARTICIPANT_KINDS:
+        return False
+    return core_entity_type_for_kind(kind) is None
 
 
 class Entity(BaseModel):
@@ -133,6 +186,7 @@ class Entity(BaseModel):
             raise ValueError("kind/type mismatch")
         return self
 
+
 class ProjectEntity(Entity):
     """Entity about the conduct of a science project (tasks, hypotheses, datasets...).
 
@@ -172,6 +226,26 @@ class DomainEntity(Entity):
     """
 
     pass
+
+
+class MechanismEntity(ProjectEntity):
+    """Structured explanatory bundle with explicit participants and propositions."""
+
+    participants: list[str] = Field(default_factory=list)
+    propositions: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+    @model_validator(mode="after")
+    def _validate_mechanism_shape(self) -> "MechanismEntity":
+        if len(self.participants) < 2:
+            raise ValueError("mechanism requires at least two participants")
+        if any(not _is_valid_mechanism_participant(ref) for ref in self.participants):
+            raise ValueError("mechanism participants must be domain/catalog entities or concept entities")
+        if not self.propositions:
+            raise ValueError("mechanism requires at least one proposition")
+        if not self.summary.strip():
+            raise ValueError("mechanism requires a non-empty summary")
+        return self
 
 
 class TaskEntity(ProjectEntity):

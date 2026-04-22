@@ -8,7 +8,7 @@ from typing import Literal, cast
 
 import yaml
 
-from science_model.entities import Entity, EntityType, core_entity_type_for_kind
+from science_model.entities import Entity, EntityType, MechanismEntity, core_entity_type_for_kind
 from science_model.packages.schema import AccessBlock, AccessException, DerivationBlock
 from science_model.sync import SyncSource
 
@@ -115,6 +115,7 @@ _DIR_TO_KIND: dict[str, str] = {
     "models": "model",
     "reports": "report",
     "stories": "story",
+    "mechanisms": "mechanism",
     "experiments": "experiment",
     "methods": "method",
     "datasets": "dataset",
@@ -209,35 +210,42 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
             rel_path = str(path.relative_to(parent))
             break
 
-    return Entity(
-        id=fm.get("id", f"{kind}:{path.stem}"),
-        kind=kind,
-        type=entity_type,
-        title=fm.get("title", path.stem),
-        status=fm.get("status"),
-        project=project_slug,
-        domain=None,  # computed later by domain assignment
-        ontology_terms=fm.get("ontology_terms") or [],
-        created=_coerce_date(fm.get("created")),
-        updated=_coerce_date(fm.get("updated")),
-        related=fm.get("related") or [],
-        same_as=fm.get("same_as") or [],
-        source_refs=fm.get("source_refs") or [],
-        content_preview=body[:200] if body else "",
-        content=body or "",
-        file_path=rel_path,
-        maturity=fm.get("maturity"),
-        confidence=_coerce_confidence(fm.get("confidence")),
-        datasets=fm.get("datasets"),
-        sync_source=_parse_sync_source(fm.get("sync_source")),
-        # Dataset entity unification (rev 2.2):
-        origin=(fm.get("origin") or ("external" if kind == EntityType.DATASET.value else None)),
-        access=_coerce_access(fm),
-        derivation=_coerce_derivation(fm),
-        accessions=list(fm.get("accessions") or fm.get("datasets") or []),
-        datapackage=fm.get("datapackage", ""),
-        local_path=fm.get("local_path", ""),
-        consumed_by=list(fm.get("consumed_by") or []),
-        parent_dataset=fm.get("parent_dataset", ""),
-        siblings=list(fm.get("siblings") or []),
-    )
+    entity_kwargs = {
+        "id": fm.get("id", f"{kind}:{path.stem}"),
+        "kind": kind,
+        "type": entity_type,
+        "title": fm.get("title", path.stem),
+        "status": fm.get("status"),
+        "project": project_slug,
+        "domain": None,
+        "ontology_terms": fm.get("ontology_terms") or [],
+        "created": _coerce_date(fm.get("created")),
+        "updated": _coerce_date(fm.get("updated")),
+        "related": fm.get("related") or [],
+        "same_as": fm.get("same_as") or [],
+        "source_refs": fm.get("source_refs") or [],
+        "content_preview": body[:200] if body else "",
+        "content": body or "",
+        "file_path": rel_path,
+        "maturity": fm.get("maturity"),
+        "confidence": _coerce_confidence(fm.get("confidence")),
+        "datasets": fm.get("datasets"),
+        "sync_source": _parse_sync_source(fm.get("sync_source")),
+        "origin": (fm.get("origin") or ("external" if kind == EntityType.DATASET.value else None)),
+        "access": _coerce_access(fm),
+        "derivation": _coerce_derivation(fm),
+        "accessions": list(fm.get("accessions") or fm.get("datasets") or []),
+        "datapackage": fm.get("datapackage", ""),
+        "local_path": fm.get("local_path", ""),
+        "consumed_by": list(fm.get("consumed_by") or []),
+        "parent_dataset": fm.get("parent_dataset", ""),
+        "siblings": list(fm.get("siblings") or []),
+    }
+    if kind == EntityType.MECHANISM.value:
+        return MechanismEntity(
+            **entity_kwargs,
+            participants=list(fm.get("participants") or []),
+            propositions=list(fm.get("propositions") or []),
+            summary=str(fm.get("summary") or ""),
+        )
+    return Entity(**entity_kwargs)

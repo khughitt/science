@@ -210,6 +210,7 @@ def test_parse_entity_file_preserves_legacy_unknown_type(tmp_path: Path) -> None
 
 
 def test_parse_entity_file_infers_mechanism_from_parent_directory(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text("name: demo\n", encoding="utf-8")
     mechanisms_dir = tmp_path / "doc" / "mechanisms"
     mechanisms_dir.mkdir(parents=True)
     md = mechanisms_dir / "test-mechanism.md"

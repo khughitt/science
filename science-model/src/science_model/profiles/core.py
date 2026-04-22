@@ -56,6 +56,12 @@ CORE_PROFILE = ProfileManifest(
             description="Coherent narrative arc synthesizing interpretations around a question or hypothesis.",
         ),
         EntityKind(
+            name="mechanism",
+            canonical_prefix="mechanism",
+            layer="layer/core",
+            description="Named explanatory structure linking multiple typed entities and propositions.",
+        ),
+        EntityKind(
             name="paper",
             canonical_prefix="paper",
             layer="layer/core",
@@ -202,6 +208,22 @@ CORE_PROFILE = ProfileManifest(
             target_kinds=["question", "hypothesis"],
             layer="layer/core",
             description="A story is organized around a question or hypothesis.",
+        ),
+        RelationKind(
+            name="has_participant",
+            predicate="sci:hasParticipant",
+            source_kinds=["mechanism"],
+            target_kinds=[],
+            layer="layer/core",
+            description="A mechanism points to its semantic participants.",
+        ),
+        RelationKind(
+            name="has_proposition",
+            predicate="sci:hasProposition",
+            source_kinds=["mechanism"],
+            target_kinds=["proposition"],
+            layer="layer/core",
+            description="A mechanism points to the propositions defining its claims.",
         ),
         RelationKind(
             name="comprises",
