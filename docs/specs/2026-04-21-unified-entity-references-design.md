@@ -67,20 +67,35 @@ storage. Four small implementation gaps keep devs from using the vision.
 - Defining the full initial set of core `DomainEntity` subtypes. That
   belongs in the 2026-04-20 follow-on.
 
+## Preconditions
+
+This spec intentionally sits on top of the current unified-loader work,
+but one prerequisite needs to be explicit:
+
+- **Open-ended kind support at load time.** Today loader normalization
+  copies `kind` into the closed `Entity.type` enum. Domain kinds like
+  `gene`, `protein`, `disease`, `pathway`, or `phenotypic_feature`
+  therefore cannot yet be instantiated as first-class entities even if the
+  registry knows about them. Any implementation of catalog-contributed
+  kinds or instances depends on a small model-layer follow-on that
+  decouples load-time `kind` resolution from the closed core enum.
+
+Changes 1, 3, 4, and 5 can ship before that prerequisite. Change 2
+depends on it.
+
 ## Design overview
 
 Four independent changes, each useful on its own, which together deliver
 unified-reference semantics:
 
-1. **Cross-kind slug resolution** in the alias map.
-2. **Ontology catalogs contribute both entity kinds and entity
-   instances** — they extend the kind registry with
-   domain-specific `DomainEntity` subclasses and materialize their
-   canonical terms as lightweight entities at project load time.
+1. **Cross-kind slug fallback** at reference-resolution time, after
+   exact-match alias resolution fails.
+2. **Ontology catalogs contribute domain kinds first, and optionally
+   resolvable entity instances in a second phase**.
 3. **A documented lightweight `terms.yaml` convention** for concepts not
    worth a full file.
-4. **`tag:` as a recognized external prefix** for free-form labels that
-   deliberately aren't entity references.
+4. **`tag:` as a field-scoped classification token** for free-form labels
+   that deliberately aren't entity references.
 
 Plus a fifth, scope-level change:
 
@@ -97,7 +112,7 @@ Before the detailed changes, the taxonomy this spec commits to:
 |---|---|---|---|
 | **Science core — ProjectEntity** | Science framework | task, hypothesis, question, proposition, observation, interpretation, story, paper, topic, finding, plan, discussion, report, inquiry, spec | markdown + aggregate YAML |
 | **Science core — cross-domain analytical** | Science framework | method, concept, variable, model | markdown + aggregate YAML |
-| **Domain catalogs — DomainEntity** | Ontology catalog (biology, chemistry, physics, ...) | gene, protein, biomolecule, disease, phenotype, pathway, cell-type, chemical-entity, reaction | catalog-declared; lightweight local override via markdown or `terms.yaml` |
+| **Domain catalogs — DomainEntity** | Ontology catalog (biology, chemistry, physics, ...) | gene, protein, disease, pathway, phenotypic_feature, biological_process, anatomical_entity, chemical_entity | catalog-declared; lightweight local extension via markdown or aggregate YAML |
 | **Project extensions** | Individual project | project-specific concepts (e.g. `cytogenetic-event` in MM30) | project-registered extension kind |
 
 The 2026-04-20 unified-entity-model spec's "core types are few" principle
@@ -110,7 +125,7 @@ Applied to concrete mm30 references:
 | Reference (current) | Kind + source (target) | Rationale |
 |---|---|---|
 | `topic:PHF19` | `gene:PHF19` from biology catalog | HGNC-grounded gene |
-| `topic:chromatin` | `biomolecule:chromatin` from biology catalog | Macromolecular complex; Biolink models it |
+| `topic:chromatin` | a biology catalog term such as `cellular_component:chromatin` | Should resolve to a declared biology kind, not remain a synthetic `topic` |
 | `topic:survival` | `method:survival-analysis` from science core | Cross-domain statistical method |
 | `topic:bayesian` | `method:bayesian-inference` from science core | Cross-domain methodology |
 | `topic:treatment-response` | `concept:treatment-response` from project `terms.yaml` | Not clearly a domain entity; project-local concept |
@@ -118,7 +133,22 @@ Applied to concrete mm30 references:
 
 This taxonomy is the scaffolding the rest of the spec hangs off of.
 
-## 1. Cross-kind slug resolution
+## Resolution algorithm
+
+This spec standardizes the intended reference-resolution order:
+
+1. Exact canonical-id match.
+2. Explicit alias / manual alias match.
+3. Canonicalization through any already-declared identity merge
+   (`same_as`, once normalized into the alias map / entity index).
+4. Scoped cross-kind fallback on the slug portion of `kind:slug`,
+   only in places where shorthand entity references are allowed.
+5. Otherwise unresolved.
+
+The crucial constraint is that cross-kind fallback is a **lookup-time
+fallback**, not a replacement for canonical ids or explicit aliases.
+
+## 1. Cross-kind slug fallback
 
 ### Current behavior
 
@@ -135,71 +165,86 @@ fails, regardless of whether `gene:PHF19` exists.
 
 ### Proposed behavior
 
-At alias-map construction time, also register the **bare slug** of each
-`canonical_id` (the portion after the first `:`) as an alias — **subject
-to an ambiguity check across all kinds**.
+Keep `build_alias_map()` exact and explicit. Add a second resolution step
+used by the audit / materialization paths:
 
-- If the slug `PHF19` appears on exactly one entity (say `gene:PHF19`), register
-  `PHF19 → gene:PHF19` and also register `*:PHF19 → gene:PHF19` via a
-  wildcard-prefix lookup path used by the audit.
-- If the slug appears on multiple entities (e.g. both `gene:PHF19` and
-  `topic:PHF19`), raise an `AmbiguousSlugError` at load time, listing all
-  colliders. The author resolves by picking a canonical entity and adding
-  `same_as: [gene:PHF19]` on the `topic:PHF19` side (or vice versa), or
-  retiring one.
+- Parse `kind:slug`.
+- Attempt exact-match alias resolution first, exactly as today.
+- If exact resolution fails, consult a **slug index** keyed by the portion
+  after the first `:`.
+- If the slug maps to exactly one canonical entity identity, resolve to it.
+- If the slug maps to multiple identities, report an
+  `ambiguous_cross_kind_reference` failure on that specific authored
+  reference.
+- If the slug maps to multiple canonical ids that have already been
+  collapsed into one identity via `same_as`, treat them as one target, not
+  as an ambiguity.
+
+This is intentionally narrower than "register every bare slug as a global
+alias". The fallback only runs when an authored `kind:slug` reference has
+already failed exact resolution.
+
+### Scope of fallback
+
+Cross-kind fallback is meant to smooth legacy shorthand like
+`topic:PHF19`, not to become the primary naming mode for the whole system.
+The initial scope should therefore be:
+
+- enabled for entity reference fields such as `related`
+- optional for migration tooling that rewrites old shorthand to canonical ids
+- disabled for `same_as`, authored relation subjects/objects, and binding
+  endpoints unless a later spec explicitly broadens it
 
 ### Why this is safe
 
-- The ambiguity check preserves fail-fast on real conflicts — devs see the
-  collision at load time, not as silent misbehavior downstream.
-- Wildcard resolution is only *soft* fallback. Direct `kind:slug` matches
-  are still preferred. Cross-kind fallback is a last-resort reconciliation,
-  not the primary resolution path.
-- Existing `same_as:` entity links remain authoritative. If a user declares
-  `topic:PHF19 same_as gene:PHF19`, both canonical ids resolve to the same
-  entity, and the ambiguity check collapses naturally.
+- Direct `kind:slug` matches are still preferred.
+- Ambiguity is surfaced where it happens: on the offending authored
+  reference, not as a project-wide loader failure.
+- Existing identity links remain authoritative. If a user declares
+  `topic:PHF19 same_as gene:PHF19`, the fallback sees one merged identity,
+  not two competing ones.
 
 ### Implementation shape
 
 ```python
-# science_tool/graph/sources.py
+def resolve_entity_reference(
+    raw: str,
+    *,
+    alias_map: dict[str, str],
+    slug_index: dict[str, set[str]],
+    allow_cross_kind_fallback: bool,
+) -> ResolutionResult:
+    resolved = normalize_alias(raw, alias_map)
+    if resolved != raw or raw in alias_map:
+        return ResolutionResult.ok(resolved)
 
-class AmbiguousSlugError(ValueError):
-    """Raised when a bare slug maps to multiple canonical entities."""
+    if not allow_cross_kind_fallback or ":" not in raw:
+        return ResolutionResult.unresolved(raw)
 
-def build_alias_map(entities, manual_aliases=None) -> dict[str, str]:
-    ...  # existing canonical + lower + explicit-alias registration
+    _kind, slug = raw.split(":", 1)
+    ids = slug_index.get(slug) or slug_index.get(slug.lower()) or set()
+    canonical_identities = collapse_same_as_identities(ids)
 
-    # New: bare-slug fallback with ambiguity check
-    slug_to_ids: dict[str, set[str]] = defaultdict(set)
-    for entity in entities:
-        if ":" in entity.canonical_id:
-            slug = entity.canonical_id.split(":", 1)[1]
-            slug_to_ids[slug].add(entity.canonical_id)
-            slug_to_ids[slug.lower()].add(entity.canonical_id)
-
-    for slug, ids in slug_to_ids.items():
-        if len(ids) == 1:
-            _register_alias(alias_map, slug, next(iter(ids)))
-        else:
-            raise AmbiguousSlugError(
-                f"Slug {slug!r} maps to multiple canonical entities: "
-                f"{sorted(ids)}. Resolve by merging via `same_as:` or by "
-                f"renaming one of them."
-            )
-    return alias_map
+    if len(canonical_identities) == 1:
+        return ResolutionResult.ok(next(iter(canonical_identities)))
+    if len(canonical_identities) > 1:
+        return ResolutionResult.ambiguous(raw, sorted(canonical_identities))
+    return ResolutionResult.unresolved(raw)
 ```
 
-The audit path (`audit_project_sources`) uses the alias map unchanged;
-it benefits automatically.
+The audit and materialization paths need a small integration change:
+they can no longer rely on `normalize_alias()` alone for shorthand
+resolution.
 
 ### Scope / edge cases
 
-- Aliases-of-aliases (`same_as`): if A and B declare each other as
-  `same_as`, the alias map should follow the link transitively. This
-  reuses existing machinery.
+- Homonyms across kinds are expected once catalogs contribute more real
+  entities. They should produce per-reference ambiguity failures, not
+  global load failure.
+- `same_as` must collapse identities before ambiguity is evaluated.
 - Case-insensitive collisions (e.g. `gene:PHF19` vs `concept:phf19`):
-  flagged by the ambiguity check. Author picks one.
+  still produce ambiguity when the authored shorthand does not resolve
+  exactly.
 
 ## 2. Ontology catalogs contribute kinds and instances
 
@@ -217,31 +262,46 @@ clearly external nor clearly local.
 
 ### Proposed behavior
 
-Ontology catalogs become the canonical source for domain-specific entity
-kinds and instances. For each declared catalog, at project load time:
+Ontology catalogs become the canonical source for domain-specific kind
+vocabularies, and may later become the source of resolvable domain
+instances too. Split the work into two phases:
 
-1. **Register the catalog's entity kinds** with the `EntityRegistry`.
-   Each kind routes to a `DomainEntity` subclass declared by the catalog
-   (or to a generic `DomainEntity` if the catalog provides no custom
-   subclass). Kind names follow the catalog's vocabulary — biology
-   contributes `gene`, `protein`, `biomolecule`, `disease`, `phenotype`,
-   `pathway`, `cell-type`, `biological-process`, etc.
+### Phase 2A: catalogs contribute kinds
 
-2. **Materialize the catalog's canonical terms as entity instances.**
-   Each term becomes a lightweight `DomainEntity` record:
-   - carries the catalog-declared canonical id (e.g. `gene:PHF19`,
-     `disease:MONDO:0016419`)
-   - carries ontology type (`biolink:Gene`, `biolink:Disease`)
-   - carries synonyms / cross-references as aliases / `same_as` links
-   - inherits from the kind-specific `DomainEntity` subclass
+For each declared catalog:
 
-3. **Participate in the alias map** alongside project-local entities,
-   including through the cross-kind slug fallback (change 1).
+1. Register the catalog's kind names with the `EntityRegistry`.
+2. Route those kinds to a generic `DomainEntity` first, unless and until a
+   catalog-specific subtype contract is introduced.
+3. Use the catalog's own vocabulary exactly as published. For the current
+   biology catalog, examples include `gene`, `protein`, `disease`,
+   `pathway`, `phenotypic_feature`, `biological_process`,
+   `anatomical_entity`, and `chemical_entity`.
 
-References like `gene:PHF19` resolve directly against the catalog entry.
-References like `topic:PHF19` resolve via cross-kind slug fallback to the
-same catalog-contributed entity. The liminal "external prefix, not
-resolvable" state goes away.
+This phase depends on the precondition above: load-time support for
+open-ended kinds.
+
+### Phase 2B: catalogs contribute resolvable instances
+
+In a follow-on step, a catalog may also provide resolvable entity
+instances through a declared provider contract:
+
+- vendored snapshots
+- generated aggregate rows
+- registry-backed providers with project-local caching
+
+Each contributed instance should materialize as a lightweight
+`DomainEntity` record that carries:
+
+- a canonical id such as `gene:PHF19` or `disease:MONDO:0016419`
+- the catalog term type (for example `biolink:Gene`)
+- aliases / synonyms / external cross-references
+- enough provenance to distinguish catalog-provided data from local
+  authored extensions
+
+Once Phase 2B exists, references like `gene:PHF19` can resolve directly
+against the catalog-provided entity, and legacy shorthand like
+`topic:PHF19` can resolve through change 1.
 
 ### Why catalogs must contribute *kinds* and not just instances
 
@@ -254,7 +314,7 @@ its entities. Moving kind registration into the catalog:
 - Keeps Science core small and domain-agnostic.
 - Makes kind availability explicit in `science.yaml`
   (`ontologies: [biology]` means `gene` is a valid kind;
-  `ontologies: [chemistry]` means `chemical-entity` is).
+  `ontologies: [chemistry]` means `chemical_entity` is).
 - Lets catalogs enforce per-kind invariants (e.g. `gene` entities must
   carry at least one of HGNC/NCBIGene/Ensembl identifiers) without
   leaking biology-specific rules into Science core.
@@ -268,66 +328,54 @@ commits to the shape of the contract. Conceptually:
 
 ```yaml
 # Illustrative — a biology catalog contribution
-catalog: biology
+ontology: biology
 version: "1.0"
-kinds:
-  - name: gene
-    base: DomainEntity
-    required_fields: [id, title, ontology_terms]
-    required_identifier_prefixes: [HGNC, NCBIGene, Ensembl]
-  - name: biomolecule
-    base: DomainEntity
-    required_fields: [id, title]
-  - name: disease
-    base: DomainEntity
-    required_fields: [id, title, ontology_terms]
-    required_identifier_prefixes: [MONDO, DOID]
-  - name: phenotype
-    base: DomainEntity
-    required_fields: [id, title, ontology_terms]
-    required_identifier_prefixes: [HP]
-  - name: pathway
-    base: DomainEntity
-    required_fields: [id, title]
-  - name: cell-type
-    base: DomainEntity
-    required_fields: [id, title, ontology_terms]
-    required_identifier_prefixes: [CL]
-  # ...
-entities:
-  # Either inline:
-  - id: "gene:PHF19"
-    title: "PHF19"
-    ontology_terms: ["HGNC:30074", "NCBIGene:26147", "Ensembl:ENSG00000119403"]
-  # Or lazy-loaded from an external registry via a declared source.
+entity_types:
+  - id: "biolink:Gene"
+    name: gene
+    description: "..."
+    curie_prefixes: [HGNC, NCBIGene, ENSEMBL]
+  - id: "biolink:Disease"
+    name: disease
+    description: "..."
+    curie_prefixes: [MONDO, DOID]
+instance_provider:
+  kind: snapshot   # or generated/provider in a follow-on spec
+  path: "biology/entities/gene.yaml"
 ```
 
-Catalogs may distribute:
-- **pre-curated, vendored snapshots** for common use cases (the most
-  directly useful starting point)
-- **live-queryable registry adapters** for projects that want richer
-  coverage (a follow-on)
+This spec does **not** require the current catalog schema to grow all of
+that immediately. It only establishes the architectural split:
 
-This spec decides that catalogs contribute kinds + instances. It does
-not decide the catalog distribution format, snapshot-vs-live policy,
-caching, or refresh semantics — those belong in a catalog-authoring
-follow-on spec.
+- catalog files own domain kind vocabulary
+- a later provider contract may own resolvable domain instances
+
+Snapshot-vs-live policy, caching, refresh semantics, and instance-provider
+format belong in the catalog-authoring follow-on spec.
 
 ### Interaction with project-local overrides
 
-A project may author a local record for a catalog-contributed entity
-— e.g. `doc/topics/PHF19.md` with MM-specific narrative about the
-gene. Policy:
+A project may author a local record that extends a catalog-contributed
+entity — for example a project-local markdown page about `gene:PHF19`.
+To make that possible, the loader needs an explicit tiered merge step.
 
-- **Same `canonical_id`:** project local wins on field-level conflicts.
-  Local `title`, `description`, `related` override catalog values.
-  `same_as`, `aliases`, `ontology_terms` are unioned rather than replaced.
+Policy:
+
+- **Tier order:** catalog-provided base entity first, then project-local
+  authored overlays, then manual aliases.
+- **Same `canonical_id` across tiers:** legal only for
+  catalog-vs-project-local extension. Duplicate canonical ids within the
+  same source tier remain hard errors.
+- **Merge rule:** project-local prose fields and authored graph links win on
+  scalar conflicts. `same_as`, `aliases`, and `ontology_terms` are unioned.
+  Provenance should preserve both the catalog source and the local source.
 - **Different `canonical_id` but intended same entity:** author
-  declares `same_as: [gene:PHF19]` on the local record. Existing
-  `same_as` machinery handles the merge.
+  declares `same_as: [gene:PHF19]` on the local record. Identity collapse
+  happens after load, not by pretending the ids were identical.
 - **Kind disagreement** (e.g. project authored `topic:PHF19`, catalog
-  contributes `gene:PHF19`): ambiguity check per change 1 fires,
-  author resolves via `same_as` or by retiring the local record.
+  contributes `gene:PHF19`): exact ids stay distinct; change 1 may resolve
+  authored shorthand to one side or surface ambiguity on the specific
+  reference until the project migrates.
 
 ### Scope / open questions (for follow-up implementation)
 
@@ -336,6 +384,9 @@ gene. Policy:
   spec.
 - **Catalog caching / refresh policy** — how does a project opt
   into updates, when does the cache invalidate. Follow-on.
+- **Exact model-layer change for open-ended kinds** — whether `Entity.type`
+  becomes open, split from `kind`, or is replaced for load-time entities.
+  This spec depends on that choice but does not make it.
 - **Which entity kinds does `biology` contribute in v1?** — out
   of scope here; this spec establishes the contract, not the
   initial contents.
@@ -355,8 +406,9 @@ entirely.
 
 ### Proposed convention
 
-Introduce `knowledge/sources/local/terms.yaml` by convention. Loaded by
-the same aggregate adapter. Documented as:
+Introduce `knowledge/sources/<local_profile>/terms.yaml` by convention.
+Loaded by the aggregate adapter as a second multi-entity source file with
+an explicit `terms:` top-level key. Documented as:
 
 ```yaml
 # knowledge/sources/local/terms.yaml
@@ -381,11 +433,21 @@ not supported; that's the signal to promote to a markdown file.
 
 ### Adapter behavior
 
-The `AggregateAdapter` treats `terms.yaml` the same as `entities.yaml`:
-each entry becomes a raw record dispatched through the kind registry.
-The `id` prefix determines the kind (`concept`, `method`, `gene`, ...).
-If the kind is unregistered, the existing warn-and-skip path (2026-04-21)
-handles it cleanly.
+The `AggregateAdapter` should treat `terms.yaml` as a first-class sibling
+to `entities.yaml`, not as an undocumented special case:
+
+- discovery checks for both `entities.yaml` and `terms.yaml`
+- `entities.yaml` keeps its existing `entities:` top-level key
+- `terms.yaml` uses a `terms:` top-level key
+- each `terms.yaml` row is normalized into the same raw-record shape as an
+  `entities.yaml` row before registry dispatch
+- `kind` is derived from `id.split(":", 1)[0]` when not explicitly present
+- `description`, if present, feeds `content_preview`
+- `content` / body-style fields are ignored or rejected so the file stays
+  intentionally lightweight
+
+If the derived kind is unregistered, the existing warn-and-skip path
+still handles it cleanly.
 
 ### Promotion path
 
@@ -394,6 +456,10 @@ title and a few aliases), author promotes it to a markdown file in the
 appropriate directory (`doc/concepts/`, `doc/methods/`, etc.) and removes
 the entry from `terms.yaml`. The `id` stays stable — references don't
 break.
+
+Promotion is a move, not a duplication. During the transition, the same
+`canonical_id` should not live in both `terms.yaml` and markdown unless a
+later merge-capable loader explicitly allows that source combination.
 
 ### Why a second aggregate file
 
@@ -406,21 +472,28 @@ a clean home for the lightweight case.
 Projects that don't need the distinction can keep everything in
 `entities.yaml`. `terms.yaml` is opt-in.
 
-## 4. `tag:` as a recognized external prefix
+## 4. `tag:` as a field-scoped classification token
 
 ### Current state
 
-`_EXTERNAL_PREFIXES` in `science_tool.graph.sources` includes ontology
-namespaces (`go`, `mesh`, `doid`, `hp`, `so`, `ncbitaxon`, `ncbigene`,
-`ensembl`). References with these prefixes bypass audit.
+`is_external_reference()` is used broadly across entity refs, relations,
+bindings, and `same_as`. A blanket prefix-level exemption therefore affects
+more than just `related:`.
 
 ### Proposed change
 
-Add `tag` to `_EXTERNAL_PREFIXES`. References like `tag:draft`,
-`tag:experimental`, `tag:wip` are recognized as free-form labels and
-bypass audit. Projects that want structured queryable classification
-still use `concept:*` or ontology-backed terms; `tag:*` is explicitly
-reserved for unstructured labels.
+Recognize `tag:*` as a special classification token **only in fields where
+free-form labels make sense**. Initial policy:
+
+- allowed in entity `related:` lists as a non-entity classification marker
+- not allowed in `same_as`
+- not allowed in authored relation subjects or objects
+- not allowed in binding endpoints
+- not treated as a general-purpose external identifier namespace
+
+Projects that want structured, queryable classification still use
+`concept:*` or ontology-backed terms. `tag:*` is explicitly reserved for
+unstructured labels.
 
 ### Why add it
 
@@ -434,11 +507,9 @@ reserved for unstructured labels.
 ### Scope
 
 - `tag:` is not a registered kind; there's no such thing as a `tag` entity.
-  It's purely a reference-time convention.
-- Existing `tags: [...]` string lists in frontmatter are unaffected;
-  they're a separate concept (free-form classification within a document's
-  own frontmatter). This change only touches the reference-in-related-list
-  pattern.
+- Existing `tags: [...]` string lists in frontmatter are unaffected.
+- Implementation should use field-sensitive handling, not simply add `tag`
+  to the global external-prefix set.
 
 ## 5. Narrowing the `topic` kind
 
@@ -449,7 +520,8 @@ In practice, `topic:` files span four distinct patterns:
 1. **Domain entities with ontology backing** (`topic:PHF19` with
    `same_as: [HGNC:30074]`) — really `gene:` / `protein:` / `disease:`.
 2. **Methodology primers** (`topic:bayesian`) — really `method:`.
-3. **Single-word concept labels** (`topic:chromatin`) — really `concept:`.
+3. **Single-word concept labels or domain shorthands** (`topic:chromatin`)
+   — really `concept:` or a catalog-defined domain kind.
 4. **Cross-cutting research-theme synthesis documents**
    (`topic:phf19-prc2-ifn-immunotherapy`) — the legitimate `topic` case.
 
@@ -466,9 +538,10 @@ Concretely, a document is a `topic` if and only if:
 - Its subject is a cross-cutting theme, not a single entity. **If the
   subject is a single thing covered by a declared ontology catalog
   (per change 2), use the catalog-contributed kind instead of `topic`**:
-  a gene is `gene:`, a biomolecule is `biomolecule:`, a disease is
-  `disease:`, etc. `topic` is not the fallback for "a thing I want to
-  write about"; it's specifically for *theme-level synthesis*.
+  a gene is `gene:`, a disease is `disease:`, and other single-subject
+  cases should use the catalog's own vocabulary. `topic` is not the
+  fallback for "a thing I want to write about"; it's specifically for
+  *theme-level synthesis*.
 - It isn't organized around a specific question or hypothesis (those are
   `story` entities per the project model).
 - It isn't the output of a specific analysis session (that's
@@ -485,7 +558,7 @@ Everything else goes to the appropriate existing kind:
 | Current pattern | Proposed kind | Source | Storage |
 |---|---|---|---|
 | `topic:PHF19` with HGNC id | `gene:PHF19` | biology catalog | catalog-contributed lightweight entity + optional `doc/genes/PHF19.md` for project-specific extension |
-| `topic:chromatin` | `biomolecule:chromatin` | biology catalog (Biolink models it as a macromolecular complex) | catalog-contributed + optional local extension |
+| `topic:chromatin` | a biology catalog kind | biology catalog | catalog-contributed term or local concept, depending on the chosen catalog vocabulary |
 | `topic:survival` | `method:survival-analysis` | science core | `doc/methods/survival-analysis.md` or `terms.yaml` entry |
 | `topic:bayesian` | `method:bayesian-inference` | science core | `doc/methods/bayesian-inference.md` or `terms.yaml` entry |
 | `topic:mutations` (bare label, no clear catalog home) | `concept:mutations` | science core | `terms.yaml` entry |
@@ -529,15 +602,16 @@ change (1) (cross-kind slug resolution).
 The five changes work together:
 
 - Dev writes `related: ["topic:PHF19"]`.
-- Alias map has `gene:PHF19` (contributed by biology ontology catalog
-  per change 2), and `PHF19` as a slug alias per change 1.
+- Exact alias lookup fails.
+- Cross-kind fallback consults the slug index and finds exactly one
+  canonical entity identity, `gene:PHF19`.
 - Reference resolves to `gene:PHF19`. No audit warning.
 - Dev writes `related: ["topic:treatment-response"]`. No matching slug.
 - Audit surfaces unresolved. Dev adds one line to `terms.yaml`
   (`{id: "concept:treatment-response", title: "..."}`) per change 3.
 - Resolved.
 - Dev writes `related: ["tag:draft"]` on a work-in-progress plan. Change
-  4 treats it as external; audit skips.
+  4 treats it as a legal classification token in `related:`; audit skips.
 - Over time, the project converges on `gene:`, `concept:`, `method:`, and
   narrow-scope `topic:` via change 5. Existing `topic:X` references keep
   working throughout.
@@ -546,23 +620,21 @@ The five changes work together:
 
 Recommended shipping order (smallest → largest, independently useful):
 
-1. **Change 4** — `tag:` prefix addition. ~5 lines in `sources.py`.
-2. **Change 1** — Cross-kind slug resolution. ~30 lines; adds one error
-   class + tests for ambiguity cases.
-3. **Change 3** — `terms.yaml` convention. Mostly documentation +
-   template + one loader assertion (accept terms.yaml alongside
-   entities.yaml). ~10 lines of code; more doc work.
-4. **Change 5** — `topic` narrowing. Pure documentation (spec + CLAUDE.md
-   + `science:writing` skill updates). No tool changes.
-5. **Change 2** — Ontology catalogs contribute kinds + instances.
-   Largest; requires a companion catalog-authoring spec for the catalog
-   format and sourcing policy, then kind-registration integration with
-   `load_project_sources` and initial `biology` catalog content.
-   Ships last.
+1. **Change 4** — field-scoped `tag:` handling. Small code change, but not
+   just a prefix-list edit because behavior must vary by field.
+2. **Change 1** — cross-kind fallback at lookup time. Moderate change:
+   introduces a slug index plus per-reference ambiguity reporting.
+3. **Change 3** — `terms.yaml` convention. Small code + doc change:
+   adapter discovery, top-level-key handling, and tests.
+4. **Change 5** — `topic` narrowing. Pure documentation (spec + writing
+   guidance). No tool changes.
+5. **Prerequisite follow-on** — open-ended kind support at load time.
+6. **Change 2A** — catalogs contribute kinds.
+7. **Change 2B** — catalogs contribute resolvable instances.
 
-Changes 1, 3, and 4 are a ~half-day of work each. Change 5 is pure
-documentation. Change 2 is a multi-week design-and-implement including
-the catalog-authoring follow-on.
+Changes 1, 3, and 4 are still small-to-medium. Change 5 is pure
+documentation. The prerequisite + change 2A/2B sequence is the multi-week
+part.
 
 ## Testing strategy
 
@@ -570,12 +642,16 @@ Each change gets its own test module under
 `science-tool/tests/graph/references/`:
 
 - `test_cross_kind_slug_resolution.py` — bare slug lookup, ambiguity
-  detection, `same_as` transitivity.
-- `test_ontology_catalog_entities.py` — catalog contributions appear in
-  alias map; `same_as` to local entities merges correctly.
-- `test_terms_yaml_adapter.py` — minimum-field entries load; promotion
+  detection, `same_as` identity collapse.
+- `test_ontology_catalog_kinds.py` — catalog-declared kinds register
+  correctly once open-ended kinds are supported.
+- `test_ontology_catalog_entities.py` — instance-provider contributions
+  appear in the entity index; local overlay merge works as specified.
+- `test_terms_yaml_adapter.py` — minimum-field entries load; top-level
+  `terms:` key is honored; promotion
   path (same id moves from terms.yaml → markdown) leaves refs stable.
-- `test_tag_prefix_external.py` — `tag:X` refs bypass audit.
+- `test_tag_reference_policy.py` — `tag:X` is accepted in `related:` and
+  rejected in `same_as`, relation endpoints, and bindings.
 - Existing regression fixtures (mm30 golden-snapshot equivalents)
   continue to pass unchanged for projects that haven't migrated.
 
@@ -584,12 +660,11 @@ Each change gets its own test module under
 No breaking changes for existing projects. Each change is additive:
 
 - Change 1 only adds fallback behavior after exact-match lookup fails.
-- Change 2 only adds entities; never removes local ones.
+- Change 2A adds kinds; 2B adds entities and an explicit merge phase.
 - Change 3 only adds a recognized filename; nothing breaks if it's absent.
-- Change 4 only adds a prefix; existing `tag:*` refs (if any) that were
-  failing the audit start passing — projects using `tag:` as a real entity
-  kind break, but that's an intended migration step with a clear fix
-  (rename to any other prefix).
+- Change 4 only legalizes `tag:*` in scoped fields; projects using `tag:`
+  as a real entity kind still need a migration because this spec reserves
+  the prefix for non-entity labels.
 - Change 5 is documentation only.
 
 Projects that have already authored entity files continue to work. The
@@ -598,45 +673,42 @@ remove any existing pathway.
 
 ## Resolved decisions
 
-- Cross-kind slug fallback happens at alias-map construction time, with
-  ambiguity as a hard error.
-- Ontology catalogs contribute **both entity kinds and entity
-  instances** — they register `DomainEntity` subclasses with the kind
-  registry and materialize canonical terms as lightweight entities in
-  the alias map.
+- Cross-kind shorthand resolution is a lookup-time fallback after exact
+  alias resolution, with ambiguity reported on the specific reference.
+- Ontology catalogs contribute domain kinds first; resolvable instances
+  come in a second phase behind an explicit provider contract.
 - Science core owns only cross-domain kinds (ProjectEntity core plus
   `method`, `concept`, `variable`, `model`). Domain-specific kinds
-  (`gene`, `protein`, `biomolecule`, `disease`, etc.) come from
+  (`gene`, `protein`, `disease`, etc.) come from
   ontology catalogs, not from Science core.
 - `terms.yaml` is a documented convention for lightweight concepts;
   technically redundant with `entities.yaml` but semantically distinct.
-- `tag:` is a recognized external prefix; tags and entities are
+- `tag:` is a field-scoped classification token; tags and entities are
   explicitly distinct concepts.
 - `topic:` is retained as a project kind, narrowly defined to mean
   cross-cutting research-theme synthesis. Single-entity subjects
-  belong in the catalog-contributed domain kind (`gene`, `biomolecule`,
-  ...), not in `topic`.
+  belong in the catalog-contributed domain kind (`gene`, `disease`,
+  or another catalog-defined domain kind), not in `topic`.
 
 ## Open questions
 
 - **Catalog authoring format**: where do ontology catalogs come from,
-  what format do they use to declare kinds and entities, and how are
+  what format do they use to declare kinds and instance providers, and how are
   snapshots distributed / versioned / refreshed? Resolved in principle
   (catalogs own both kinds and instances), deferred in detail to a
   catalog-authoring follow-on spec.
-- **Bare-slug ambiguity UX**: the hard-error is the right default, but
-  should there be a project-level opt-out for projects that deliberately
-  want multi-kind slugs without explicit `same_as` declarations?
-  Deferred until demand is demonstrated.
+- **Bare-slug ambiguity UX**: should ambiguous shorthand remain a hard
+  audit failure, or become a warning plus canonicalization suggestion in
+  some migration modes? Deferred until demand is demonstrated.
 - **Catalog-kind vs. project-kind shadowing**: can a project register
   an extension kind named `gene` when the biology catalog also
   contributes `gene`? Recommend: hard error (matches the existing
   `EntityKindShadowError` for core-kind shadowing). Projects override
   individual entities via `same_as`, not by redefining kinds.
 - **Which kinds does the v1 `biology` catalog contribute?** Out of
-  scope here; a concrete candidate list (gene, protein, biomolecule,
-  disease, phenotype, pathway, cell-type, biological-process,
-  molecular-activity, anatomical-entity) belongs in the catalog
+  scope here; a concrete candidate list (gene, protein, disease,
+  phenotypic_feature, pathway, biological_process, anatomical_entity,
+  chemical_entity, ...) belongs in the catalog
   follow-on.
 
 ## Relationship to other specs
