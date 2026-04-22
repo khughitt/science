@@ -41,6 +41,7 @@ from science_tool.graph.store import (
     add_inquiry_edge,
     add_inquiry_node,
     add_interpretation,
+    add_mechanism,
     add_observation,
     add_paper_entity,
     add_proposition,
@@ -1388,6 +1389,30 @@ def add_story_cmd(
     """Add a story — a narrative arc around a question or hypothesis."""
     uri = add_story(graph_path, title, summary, about, list(interpretations), status, story_id)
     click.echo(f"Added story: {uri}")
+
+
+@graph_add.command("mechanism")
+@click.argument("title")
+@click.option("--summary", required=True, help="Brief explanatory summary")
+@click.option("--participant", "participants", multiple=True, required=True, help="Participant ref(s)")
+@click.option("--proposition", "propositions", multiple=True, required=True, help="Mechanism proposition ref(s)")
+@click.option("--status", default="draft", help="Mechanism status")
+@click.option("--id", "mechanism_id", default=None, help="Custom mechanism ID slug")
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def add_mechanism_cmd(
+    title: str,
+    summary: str,
+    participants: tuple[str, ...],
+    propositions: tuple[str, ...],
+    status: str,
+    mechanism_id: str | None,
+    graph_path: Path,
+) -> None:
+    """Add a mechanism over existing typed entities and proposition refs."""
+    uri = add_mechanism(graph_path, title, summary, list(participants), list(propositions), status, mechanism_id)
+    click.echo(f"Added mechanism: {uri}")
 
 
 @graph_add.command("paper")

@@ -937,6 +937,71 @@ def add_falsification(
     return falsification_uri
 
 
+def add_mechanism(
+    graph_path: Path,
+    title: str,
+    summary: str,
+    participants: list[str],
+    propositions: list[str],
+    status: str = "draft",
+    mechanism_id: str | None = None,
+) -> URIRef:
+    """Add a mechanism as a strict explanatory structure over existing entities."""
+    if len(participants) < 2:
+        raise click.ClickException("Mechanism requires at least two participants")
+    if not propositions:
+        raise click.ClickException("Mechanism requires at least one proposition")
+    if not summary.strip():
+        raise click.ClickException("Mechanism requires a non-empty summary")
+    if not status.strip():
+        raise click.ClickException("Mechanism status must be non-empty")
+
+    dataset = _load_dataset(graph_path)
+    knowledge = dataset.graph(_graph_uri("graph/knowledge"))
+
+    participant_uris: list[URIRef] = []
+    for participant_ref in participants:
+        participant_uri = _resolve_term(participant_ref)
+        if not any(True for _ in knowledge.triples((participant_uri, RDF.type, None))):
+            raise click.ClickException(f"Mechanism participant '{participant_ref}' must resolve to an existing entity")
+        participant_kind = _entity_kind_from_uri(participant_uri)
+        if participant_kind is not None and participant_kind != "concept":
+            raise click.ClickException(
+                f"Mechanism participants must be concept or domain entities, got '{participant_ref}'"
+            )
+        participant_uris.append(participant_uri)
+
+    proposition_uris: list[URIRef] = []
+    for proposition_ref in propositions:
+        proposition_uri = _resolve_term(proposition_ref)
+        if (proposition_uri, RDF.type, SCI_NS.Proposition) not in knowledge:
+            raise click.ClickException(
+                f"Mechanism proposition '{proposition_ref}' must resolve to a proposition entity"
+            )
+        proposition_uris.append(proposition_uri)
+
+    if mechanism_id is not None:
+        token = _slug(mechanism_id)
+        if not token:
+            raise click.ClickException("Mechanism ID must contain at least one alphanumeric character")
+    else:
+        token = hashlib.sha1(f"{title}".encode("utf-8")).hexdigest()[:12]
+
+    mechanism_uri = URIRef(PROJECT_NS[f"mechanism/{token}"])
+    knowledge.add((mechanism_uri, RDF.type, SCI_NS.Mechanism))
+    knowledge.add((mechanism_uri, SKOS.prefLabel, Literal(title)))
+    knowledge.add((mechanism_uri, SCHEMA_NS.description, Literal(summary)))
+    knowledge.add((mechanism_uri, SCI_NS.projectStatus, Literal(status)))
+
+    for participant_uri in participant_uris:
+        knowledge.add((mechanism_uri, SCI_NS.hasParticipant, participant_uri))
+    for proposition_uri in proposition_uris:
+        knowledge.add((mechanism_uri, SCI_NS.hasProposition, proposition_uri))
+
+    _save_dataset(dataset, graph_path)
+    return mechanism_uri
+
+
 def add_story(
     graph_path: Path,
     title: str,

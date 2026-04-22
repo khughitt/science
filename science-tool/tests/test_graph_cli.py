@@ -288,6 +288,109 @@ def test_graph_add_concept_writes_expected_triples() -> None:
         assert (concept_uri, SCHEMA.identifier, None) in knowledge
 
 
+def test_graph_add_mechanism_writes_expected_triples() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert runner.invoke(main, ["graph", "add", "concept", "PHF19"]).exit_code == 0
+        assert runner.invoke(main, ["graph", "add", "concept", "PRC2 complex"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "proposition",
+                    "PHF19-PRC2 dampens IFN signaling",
+                    "--source",
+                    "paper:doi_10_1000_ifn",
+                    "--id",
+                    "ifn_silencing",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        add = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "mechanism",
+                "PHF19 / PRC2 / IFN",
+                "--summary",
+                "PHF19-PRC2 dampens IFN signaling.",
+                "--participant",
+                "concept:phf19",
+                "--participant",
+                "concept:prc2_complex",
+                "--proposition",
+                "proposition:ifn_silencing",
+                "--id",
+                "phf19-prc2-ifn",
+            ],
+        )
+        assert add.exit_code == 0
+        assert "Added mechanism:" in add.output
+
+        dataset = Dataset()
+        dataset.parse(source="knowledge/graph.trig", format="trig")
+        knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+        mechanism_uri = PROJECT_NS["mechanism/phf19_prc2_ifn"]
+
+        assert (mechanism_uri, RDF.type, SCI.Mechanism) in knowledge
+        assert (mechanism_uri, SKOS.prefLabel, Literal("PHF19 / PRC2 / IFN")) in knowledge
+        assert (mechanism_uri, SCHEMA.description, Literal("PHF19-PRC2 dampens IFN signaling.")) in knowledge
+        assert (mechanism_uri, SCI.hasParticipant, PROJECT_NS["concept/phf19"]) in knowledge
+        assert (mechanism_uri, SCI.hasParticipant, PROJECT_NS["concept/prc2_complex"]) in knowledge
+        assert (mechanism_uri, SCI.hasProposition, PROJECT_NS["proposition/ifn_silencing"]) in knowledge
+        assert (mechanism_uri, SCI.projectStatus, Literal("draft")) in knowledge
+
+
+def test_graph_add_mechanism_requires_two_participants() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+        assert runner.invoke(main, ["graph", "add", "concept", "PHF19"]).exit_code == 0
+        assert (
+            runner.invoke(
+                main,
+                [
+                    "graph",
+                    "add",
+                    "proposition",
+                    "PHF19-PRC2 dampens IFN signaling",
+                    "--source",
+                    "paper:doi_10_1000_ifn",
+                    "--id",
+                    "ifn_silencing",
+                ],
+            ).exit_code
+            == 0
+        )
+
+        add = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "mechanism",
+                "PHF19 / PRC2 / IFN",
+                "--summary",
+                "PHF19-PRC2 dampens IFN signaling.",
+                "--participant",
+                "concept:phf19",
+                "--proposition",
+                "proposition:ifn_silencing",
+            ],
+        )
+
+        assert add.exit_code != 0
+        assert "at least two participants" in add.output.lower()
+
+
 def test_graph_add_paper_claim_hypothesis_records_provenance() -> None:
     runner = CliRunner()
 

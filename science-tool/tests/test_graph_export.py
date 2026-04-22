@@ -20,6 +20,7 @@ from science_tool.graph.store import (
     add_inquiry,
     add_inquiry_node,
     add_hypothesis,
+    add_mechanism,
     add_proposition,
     export_graph_payload,
     _graph_uri,
@@ -231,6 +232,25 @@ def test_export_graph_payload_includes_base_nodes_edges_layers(graph_path: Path)
     assert "http://example.org/project/concept/drug" in inquiry_scope.node_ids
     assert edge.id in inquiry_scope.edge_ids
     assert edge.id in project_scope.edge_ids
+
+
+def test_export_graph_payload_includes_mechanism_nodes(graph_path: Path) -> None:
+    add_mechanism(
+        graph_path,
+        "PHF19 / PRC2 / IFN",
+        "PHF19-PRC2 dampens IFN signaling.",
+        ["concept:drug", "concept:recovery"],
+        ["proposition:drug_causes_recovery_evidence"],
+        mechanism_id="phf19-prc2-ifn",
+    )
+
+    payload = export_graph_payload(graph_path)
+    mechanism_node = next(node for node in payload.nodes if node.id.endswith("/mechanism/phf19_prc2_ifn"))
+
+    assert mechanism_node.label == "PHF19 / PRC2 / IFN"
+    assert mechanism_node.type is not None
+    assert "sci:Mechanism" in mechanism_node.type
+    assert mechanism_node.status == "draft"
 
 
 def test_export_graph_payload_inquiry_scopes_only_reference_exported_nodes(graph_path: Path) -> None:
