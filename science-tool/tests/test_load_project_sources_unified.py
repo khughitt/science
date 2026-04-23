@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from science_model.entities import DatasetEntity, DomainEntity, Entity, EntityType, MechanismEntity, ProjectEntity, TaskEntity
+from science_model.identity import EntityScope, ExternalId
 from science_model.profiles.schema import EntityKind, ProfileManifest
 
 from science_tool.graph.entity_registry import EntityKindShadowError
@@ -181,6 +182,128 @@ def test_load_project_sources_returns_typed_mechanism_entity(tmp_path: Path) -> 
     assert isinstance(mechanism, MechanismEntity)
     assert mechanism.participants == ["concept:translation", "concept:cell-state"]
     assert mechanism.propositions == ["proposition:anti-coupling"]
+
+
+def test_load_project_sources_preserves_markdown_identity_fields(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text(
+        "name: unified\nprofile: research\nprofiles: {local: local}\nontologies: [biology]\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "doc" / "genes").mkdir(parents=True)
+    (tmp_path / "doc" / "genes" / "EZH2.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "gene:EZH2"',
+                'kind: "gene"',
+                'title: "EZH2"',
+                "primary_external_id:",
+                '  source: "HGNC"',
+                '  id: "3527"',
+                '  curie: "HGNC:3527"',
+                '  provenance: "manual"',
+                "xrefs:",
+                '  - source: "NCBIGene"',
+                '    id: "2146"',
+                '    curie: "NCBIGene:2146"',
+                '    provenance: "manual"',
+                'scope: "shared"',
+                'deprecated_ids: ["gene:ENX1"]',
+                'replaced_by: "gene:EZH2-v2"',
+                'taxon: "NCBITaxon:9606"',
+                "---",
+                "",
+                "EZH2 body.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(tmp_path)
+    entity = next(e for e in sources.entities if e.canonical_id == "gene:EZH2")
+
+    assert isinstance(entity, DomainEntity)
+    assert entity.primary_external_id == ExternalId(
+        source="HGNC",
+        id="3527",
+        curie="HGNC:3527",
+        provenance="manual",
+    )
+    assert entity.xrefs == [
+        ExternalId(
+            source="NCBIGene",
+            id="2146",
+            curie="NCBIGene:2146",
+            provenance="manual",
+        )
+    ]
+    assert entity.scope == EntityScope.SHARED
+    assert entity.deprecated_ids == ["gene:ENX1"]
+    assert entity.replaced_by == "gene:EZH2-v2"
+    assert entity.taxon == "NCBITaxon:9606"
+
+
+def test_load_project_sources_preserves_aggregate_identity_fields(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    local_sources = tmp_path / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "entities": [
+                    {
+                        "canonical_id": "concept:chromatin",
+                        "kind": "concept",
+                        "title": "Chromatin",
+                        "primary_external_id": {
+                            "source": "GO",
+                            "id": "0000785",
+                            "curie": "GO:0000785",
+                            "provenance": "manual",
+                        },
+                        "xrefs": [
+                            {
+                                "source": "MeSH",
+                                "id": "D002478",
+                                "curie": "MeSH:D002478",
+                                "provenance": "manual",
+                            }
+                        ],
+                        "scope": "shared",
+                        "deprecated_ids": ["concept:chromatin-state"],
+                        "replaced_by": "concept:chromatin-remodeling-context",
+                        "taxon": "NCBITaxon:9606",
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(tmp_path)
+    entity = next(e for e in sources.entities if e.canonical_id == "concept:chromatin")
+
+    assert isinstance(entity, ProjectEntity)
+    assert entity.primary_external_id == ExternalId(
+        source="GO",
+        id="0000785",
+        curie="GO:0000785",
+        provenance="manual",
+    )
+    assert entity.xrefs == [
+        ExternalId(
+            source="MeSH",
+            id="D002478",
+            curie="MeSH:D002478",
+            provenance="manual",
+        )
+    ]
+    assert entity.scope == EntityScope.SHARED
+    assert entity.deprecated_ids == ["concept:chromatin-state"]
+    assert entity.replaced_by == "concept:chromatin-remodeling-context"
+    assert entity.taxon == "NCBITaxon:9606"
 
 
 def test_load_normalizes_legacy_parameter_kind(tmp_path: Path) -> None:
