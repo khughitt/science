@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field
 
+from science_model.identity import EntityScope, ExternalId
 from science_tool.registry.config import get_science_config_dir
 
 
@@ -34,8 +35,12 @@ class RegistryEntity(BaseModel):
     kind: str
     title: str
     profile: str
+    scope: EntityScope = EntityScope.PROJECT
+    primary_external_id: ExternalId | None = None
     aliases: list[str] = Field(default_factory=list)
     ontology_terms: list[str] = Field(default_factory=list)
+    deprecated_ids: list[str] = Field(default_factory=list)
+    taxon: str | None = None
     source_projects: list[RegistryEntitySource] = Field(default_factory=list)
 
 

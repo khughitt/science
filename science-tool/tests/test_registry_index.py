@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from science_model.identity import EntityScope, ExternalId
 from science_tool.registry.index import (
     RegistryEntity,
     RegistryEntitySource,
@@ -26,6 +27,30 @@ def test_registry_entity_round_trip():
     )
     d = entity.model_dump()
     assert RegistryEntity.model_validate(d) == entity
+
+
+def test_registry_entity_round_trips_identity_metadata() -> None:
+    entity = RegistryEntity(
+        canonical_id="gene:EZH2",
+        kind="gene",
+        title="EZH2",
+        profile="biology",
+        scope=EntityScope.SHARED,
+        primary_external_id=ExternalId(
+            source="HGNC",
+            id="3527",
+            curie="HGNC:3527",
+            provenance="manual",
+        ),
+        deprecated_ids=["gene:ENX1"],
+        taxon="NCBITaxon:9606",
+    )
+
+    assert entity.scope == EntityScope.SHARED
+    assert entity.primary_external_id is not None
+    assert entity.primary_external_id.curie == "HGNC:3527"
+    assert entity.deprecated_ids == ["gene:ENX1"]
+    assert entity.taxon == "NCBITaxon:9606"
 
 
 def test_registry_index_round_trip(tmp_path):

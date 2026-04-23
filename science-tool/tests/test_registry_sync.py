@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
+from science_model.identity import EntityScope, ExternalId
 from science_model.entities import EntityType, ProjectEntity
 
-from science_tool.registry.index import RegistryIndex
+from science_tool.registry.index import RegistryEntity, RegistryEntitySource, RegistryIndex, load_registry_index, save_registry_index
 from science_tool.registry.sync import SyncReport, align_registry, collect_all_project_sources, run_sync
 
 
@@ -27,17 +29,44 @@ def _write_entity_md(
     related: list[str] | None = None,
     ontology_terms: list[str] | None = None,
     aliases: list[str] | None = None,
+    scope: str | None = None,
+    primary_external_id: ExternalId | None = None,
+    deprecated_ids: list[str] | None = None,
+    taxon: str | None = None,
 ) -> None:
     doc_dir = project_root / "doc"
     doc_dir.mkdir(parents=True, exist_ok=True)
     rel = related or []
     ont = ontology_terms or []
     als = aliases or []
-    (doc_dir / filename).write_text(
-        f'---\nid: "{entity_id}"\ntype: {entity_type}\ntitle: "{title}"\n'
-        f"related: {rel}\nontology_terms: {ont}\naliases: {als}\n---\nBody.\n",
-        encoding="utf-8",
-    )
+    dep = deprecated_ids or []
+    lines = [
+        "---",
+        f'id: "{entity_id}"',
+        f"type: {entity_type}",
+        f'title: "{title}"',
+    ]
+    if scope is not None:
+        lines.append(f"scope: {scope}")
+    if primary_external_id is not None:
+        lines.extend(
+            [
+                "primary_external_id:",
+                f'  source: "{primary_external_id.source}"',
+                f'  id: "{primary_external_id.id}"',
+                f'  curie: "{primary_external_id.curie}"',
+                f'  provenance: "{primary_external_id.provenance}"',
+            ]
+        )
+    lines.append(f"related: {rel}")
+    lines.append(f"ontology_terms: {ont}")
+    lines.append(f"aliases: {als}")
+    if dep:
+        lines.append(f"deprecated_ids: {dep}")
+    if taxon is not None:
+        lines.append(f"taxon: {taxon}")
+    lines.extend(["---", "Body."])
+    (doc_dir / filename).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _source_entity(
@@ -46,6 +75,10 @@ def _source_entity(
     title: str,
     aliases: list[str] | None = None,
     ontology_terms: list[str] | None = None,
+    scope: str = "project",
+    primary_external_id: ExternalId | None = None,
+    deprecated_ids: list[str] | None = None,
+    taxon: str | None = None,
 ) -> ProjectEntity:
     try:
         etype = EntityType(kind)
@@ -64,6 +97,10 @@ def _source_entity(
         ontology_terms=ontology_terms or [],
         related=[],
         source_refs=[],
+        scope=EntityScope(scope),
+        primary_external_id=primary_external_id,
+        deprecated_ids=deprecated_ids or [],
+        taxon=taxon,
         content_preview="",
     )
 
@@ -140,6 +177,150 @@ def test_align_does_not_merge_same_id_different_projects() -> None:
         assert len(entry.source_projects) == 1
     project_names = {entry.source_projects[0].project for entry in t001_entries}
     assert project_names == {"proj-a", "proj-b"}
+
+
+def test_run_sync_warns_on_primary_external_id_collision(tmp_path: Path) -> None:
+    proj_a = tmp_path / "proj-a"
+    proj_b = tmp_path / "proj-b"
+    _write_project(proj_a, "proj-a")
+    _write_project(proj_b, "proj-b")
+    shared_id = ExternalId(source="HGNC", id="7157", curie="HGNC:7157", provenance="manual")
+    _write_entity_md(
+        proj_a,
+        "tp53.md",
+        "question:tp53",
+        "question",
+        "TP53",
+        primary_external_id=shared_id,
+        scope="shared",
+    )
+    _write_entity_md(
+        proj_b,
+        "p53.md",
+        "question:p53",
+        "question",
+        "P53",
+        primary_external_id=shared_id,
+        scope="shared",
+    )
+
+    report = run_sync(
+        project_paths=[proj_a, proj_b],
+        state_path=tmp_path / "sync_state.yaml",
+        registry_dir=tmp_path / "registry",
+        dry_run=True,
+    )
+
+    assert any("primary_external_id collision" in warning for warning in report.drift_warnings)
+
+
+def test_run_sync_does_not_warn_on_compatible_shared_collision(tmp_path: Path) -> None:
+    proj_a = tmp_path / "proj-a"
+    proj_b = tmp_path / "proj-b"
+    _write_project(proj_a, "proj-a")
+    _write_project(proj_b, "proj-b")
+    shared_id = ExternalId(source="HGNC", id="7157", curie="HGNC:7157", provenance="manual")
+    _write_entity_md(
+        proj_a,
+        "tp53.md",
+        "question:tp53",
+        "question",
+        "TP53",
+        primary_external_id=shared_id,
+        scope="shared",
+        taxon="NCBITaxon:9606",
+    )
+    _write_entity_md(
+        proj_b,
+        "tp53.md",
+        "question:tp53",
+        "question",
+        "TP53",
+        primary_external_id=shared_id,
+        scope="shared",
+        taxon="NCBITaxon:9606",
+    )
+
+    report = run_sync(
+        project_paths=[proj_a, proj_b],
+        state_path=tmp_path / "sync_state.yaml",
+        registry_dir=tmp_path / "registry",
+        dry_run=True,
+    )
+
+    assert not any("canonical_id collision" in warning for warning in report.drift_warnings)
+
+
+def test_run_sync_warns_on_canonical_id_collision(tmp_path: Path) -> None:
+    proj_a = tmp_path / "proj-a"
+    proj_b = tmp_path / "proj-b"
+    _write_project(proj_a, "proj-a")
+    _write_project(proj_b, "proj-b")
+    _write_entity_md(proj_a, "tp53.md", "question:tp53", "question", "TP53", scope="project")
+    _write_entity_md(proj_b, "tp53.md", "question:tp53", "question", "TP53", scope="project")
+
+    report = run_sync(
+        project_paths=[proj_a, proj_b],
+        state_path=tmp_path / "sync_state.yaml",
+        registry_dir=tmp_path / "registry",
+        dry_run=True,
+    )
+
+    assert any("canonical_id collision" in warning for warning in report.drift_warnings)
+
+
+def test_run_sync_updates_stale_registry_identity_metadata(tmp_path: Path) -> None:
+    proj_a = tmp_path / "proj-a"
+    registry_dir = tmp_path / "registry"
+    _write_project(proj_a, "proj-a")
+    corrected_id = ExternalId(source="HGNC", id="3527", curie="HGNC:3527", provenance="manual")
+    _write_entity_md(
+        proj_a,
+        "ezh2.md",
+        "question:ezh2",
+        "question",
+        "EZH2",
+        primary_external_id=corrected_id,
+        scope="shared",
+        taxon="NCBITaxon:9606",
+    )
+    stale_index = RegistryIndex(
+        entities=[
+            RegistryEntity(
+                canonical_id="proj-a::question:ezh2",
+                kind="question",
+                title="EZH2",
+                profile="core",
+                scope=EntityScope.PROJECT,
+                primary_external_id=ExternalId(
+                    source="HGNC",
+                    id="9999",
+                    curie="HGNC:9999",
+                    provenance="manual",
+                ),
+                taxon=None,
+                source_projects=[
+                    RegistryEntitySource(project="proj-a", first_seen=date(2026, 4, 1)),
+                ],
+            ),
+        ],
+    )
+    save_registry_index(stale_index, registry_dir)
+
+    report = run_sync(
+        project_paths=[proj_a],
+        state_path=tmp_path / "sync_state.yaml",
+        registry_dir=registry_dir,
+        dry_run=False,
+    )
+
+    assert report.entities_total == 1
+    loaded = load_registry_index(registry_dir)
+    entry = next(entity for entity in loaded.entities if entity.canonical_id == "proj-a::question:ezh2")
+    assert entry.scope == EntityScope.SHARED
+    assert entry.primary_external_id is not None
+    assert entry.primary_external_id.curie == "HGNC:3527"
+    assert entry.taxon == "NCBITaxon:9606"
 
 
 def test_full_sync_two_projects(tmp_path: Path) -> None:
