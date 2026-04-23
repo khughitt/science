@@ -249,8 +249,8 @@ def test_parse_entity_file_preserves_versioned_accession_identity(tmp_path: Path
         'title: "TP53"\n'
         "primary_external_id:\n"
         '  source: "ENSEMBL"\n'
-        '  id: "ENST00000381578"\n'
-        '  curie: "ENSEMBL:ENST00000381578"\n'
+        '  id: "ENST00000381578.7"\n'
+        '  curie: "ENSEMBL:ENST00000381578.7"\n'
         '  version: "7"\n'
         '  provenance: "manual"\n'
         "---\n"
