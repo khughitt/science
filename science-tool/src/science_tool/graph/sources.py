@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, ValidationError
 from science_model.entities import Entity, EntityType, ProjectEntity, DomainEntity, core_entity_type_for_kind
 from science_model.ontologies import load_catalogs_for_names
 from science_model.ontologies.schema import OntologyCatalog
-from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE, load_shared_profile
+from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE, load_profile_manifest, load_shared_profile
 from science_model.profiles.schema import ProfileManifest
 from science_model.reasoning import (
     ClaimLayer,
@@ -126,13 +126,19 @@ def load_project_sources(project_root: Path) -> ProjectSources:
 
     declared_ontologies: list[str] = list(config.get("ontologies") or [])  # type: ignore[union-attr]
     ontology_catalogs = load_catalogs_for_names(declared_ontologies) if declared_ontologies else []
+    local_profile_manifest = load_profile_manifest(
+        local_profile_sources_dir(project_root, local_profile=local_profile) / "manifest.yaml"
+    )
 
     profile_manifests: list[ProfileManifest] = [LOCAL_PROFILE]
     shared = load_shared_profile()
     if shared is not None:
         profile_manifests.append(shared)
+    active_profiles = profile_manifests.copy()
+    if local_profile_manifest is not None:
+        active_profiles.append(local_profile_manifest)
 
-    active_kinds = known_kinds(extra_profiles=profile_manifests, ontology_catalogs=ontology_catalogs)
+    active_kinds = known_kinds(extra_profiles=active_profiles, ontology_catalogs=ontology_catalogs)
 
     registry = EntityRegistry.with_core_types()
     for profile in profile_manifests:
@@ -141,6 +147,9 @@ def load_project_sources(project_root: Path) -> ProjectSources:
     for catalog in ontology_catalogs:
         for entity_type in catalog.entity_types:
             registry.register_catalog_kind(entity_type.name, DomainEntity, owner=catalog.ontology)
+    if local_profile_manifest is not None:
+        for entity_kind in local_profile_manifest.entity_kinds:
+            registry.register_extension_kind(entity_kind.name, ProjectEntity)
 
     adapters: list[StorageAdapter] = [
         MarkdownAdapter(),

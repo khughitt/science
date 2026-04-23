@@ -1,6 +1,6 @@
 import yaml
 
-from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE, load_shared_profile
+from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE, load_profile_manifest, load_shared_profile
 
 
 def test_core_profile_contains_task_and_hypothesis() -> None:
@@ -73,6 +73,34 @@ def test_load_shared_profile_from_yaml(tmp_path: object) -> None:
     assert profile.strictness == "curated"
     assert len(profile.entity_kinds) == 1
     assert profile.entity_kinds[0].name == "protein-complex"
+
+
+def test_load_profile_manifest_from_yaml(tmp_path: object) -> None:
+    from pathlib import Path
+
+    assert isinstance(tmp_path, Path)
+    manifest = {
+        "name": "cbioportal-local",
+        "imports": ["core"],
+        "strictness": "typed-extension",
+        "entity_kinds": [
+            {
+                "name": "meta",
+                "canonical_prefix": "meta",
+                "layer": "layer/local",
+                "description": "Project-local meta document kind.",
+            },
+        ],
+        "relation_kinds": [],
+    }
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+    profile = load_profile_manifest(manifest_path)
+    assert profile is not None
+    assert profile.name == "cbioportal-local"
+    assert profile.strictness == "typed-extension"
+    assert len(profile.entity_kinds) == 1
+    assert profile.entity_kinds[0].name == "meta"
 
 
 def test_core_profile_has_data_package_kind() -> None:
@@ -179,4 +207,12 @@ def test_load_shared_profile_missing(tmp_path: object) -> None:
 
     assert isinstance(tmp_path, Path)
     profile = load_shared_profile(tmp_path / "missing.yaml")
+    assert profile is None
+
+
+def test_load_profile_manifest_missing(tmp_path: object) -> None:
+    from pathlib import Path
+
+    assert isinstance(tmp_path, Path)
+    profile = load_profile_manifest(tmp_path / "missing.yaml")
     assert profile is None

@@ -275,3 +275,77 @@ def test_load_project_sources_raises_when_catalog_collides_with_profile_kind(
 
     with pytest.raises(EntityKindShadowError, match="gene"):
         load_project_sources(tmp_path)
+
+
+def test_load_project_sources_reads_repo_local_profile_manifest(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text(
+        "name: unified\nprofile: research\nknowledge_profiles:\n  local: cbioportal\n",
+        encoding="utf-8",
+    )
+    local_sources = tmp_path / "knowledge" / "sources" / "cbioportal"
+    local_sources.mkdir(parents=True)
+    (local_sources / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "cbioportal-local",
+                "imports": ["core"],
+                "strictness": "typed-extension",
+                "entity_kinds": [
+                    {
+                        "name": "meta",
+                        "canonical_prefix": "meta",
+                        "layer": "layer/local",
+                        "description": "Project-local meta document kind.",
+                    }
+                ],
+                "relation_kinds": [],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "doc" / "meta").mkdir(parents=True)
+    (tmp_path / "doc" / "meta" / "next-steps.md").write_text(
+        '---\nid: "meta:next-steps"\ntype: "meta"\ntitle: "Next steps"\n---\n',
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(tmp_path)
+    by_id = {entity.canonical_id: entity for entity in sources.entities}
+
+    assert isinstance(by_id["meta:next-steps"], ProjectEntity)
+    assert by_id["meta:next-steps"].kind == "meta"
+    assert by_id["meta:next-steps"].type is None
+    assert by_id["meta:next-steps"].profile == "cbioportal"
+
+
+def test_load_project_sources_raises_when_repo_local_manifest_shadows_catalog_kind(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text(
+        "name: unified\nprofile: research\nknowledge_profiles:\n  local: cbioportal\nontologies: [biology]\n",
+        encoding="utf-8",
+    )
+    local_sources = tmp_path / "knowledge" / "sources" / "cbioportal"
+    local_sources.mkdir(parents=True)
+    (local_sources / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "cbioportal-local",
+                "imports": ["core"],
+                "strictness": "typed-extension",
+                "entity_kinds": [
+                    {
+                        "name": "gene",
+                        "canonical_prefix": "gene",
+                        "layer": "layer/local",
+                        "description": "Incorrect project-local shadow of a catalog kind.",
+                    }
+                ],
+                "relation_kinds": [],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(EntityKindShadowError, match="gene"):
+        load_project_sources(tmp_path)
