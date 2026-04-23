@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from science_model.entities import EntityType, MechanismEntity
 from science_model.identity import EntityScope, ExternalId
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
@@ -263,6 +265,63 @@ def test_parse_entity_file_preserves_versioned_accession_identity(tmp_path: Path
     assert entity.primary_external_id.id == "ENST00000381578"
     assert entity.primary_external_id.version == "7"
     assert entity.primary_external_id.curie == "ENSEMBL:ENST00000381578"
+
+
+def test_parse_entity_file_rejects_invalid_scope(tmp_path: Path) -> None:
+    md = tmp_path / "doc" / "genes" / "EZH2.md"
+    md.parent.mkdir(parents=True)
+    md.write_text(
+        "---\n"
+        'id: "gene:EZH2"\n'
+        'kind: "gene"\n'
+        'title: "EZH2"\n'
+        'scope: "private"\n'
+        "---\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="invalid scope"):
+        parse_entity_file(md, project_slug="demo")
+
+
+def test_parse_entity_file_rejects_malformed_primary_external_id(tmp_path: Path) -> None:
+    md = tmp_path / "doc" / "genes" / "EZH2.md"
+    md.parent.mkdir(parents=True)
+    md.write_text(
+        "---\n"
+        'id: "gene:EZH2"\n'
+        'kind: "gene"\n'
+        'title: "EZH2"\n'
+        "primary_external_id:\n"
+        '  source: "HGNC"\n'
+        '  id: "3527"\n'
+        '  curie: "HGNC:3527"\n'
+        "---\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="primary_external_id requires provenance"):
+        parse_entity_file(md, project_slug="demo")
+
+
+def test_parse_entity_file_rejects_malformed_xrefs(tmp_path: Path) -> None:
+    md = tmp_path / "doc" / "genes" / "EZH2.md"
+    md.parent.mkdir(parents=True)
+    md.write_text(
+        "---\n"
+        'id: "gene:EZH2"\n'
+        'kind: "gene"\n'
+        'title: "EZH2"\n'
+        "xrefs:\n"
+        '  - source: "NCBIGene"\n'
+        '    id: "2146"\n'
+        '    curie: "NCBIGene:2146"\n'
+        "---\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="xrefs\\[0\\] requires provenance"):
+        parse_entity_file(md, project_slug="demo")
 
 
 def test_parse_entity_file_preserves_legacy_unknown_type(tmp_path: Path) -> None:

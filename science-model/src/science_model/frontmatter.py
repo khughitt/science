@@ -83,9 +83,14 @@ def _coerce_scope(val: object) -> EntityScope:
         return val
     if isinstance(val, str):
         normalized = val.strip()
+        if normalized == EntityScope.PROJECT.value:
+            return EntityScope.PROJECT
         if normalized == EntityScope.SHARED.value:
             return EntityScope.SHARED
-    return EntityScope.PROJECT
+        raise ValueError(f"invalid scope {normalized!r}; expected 'project' or 'shared'")
+    if val is None:
+        return EntityScope.PROJECT
+    raise ValueError(f"invalid scope {val!r}; expected a string or EntityScope")
 
 
 def _strip_version_suffix(identifier: str) -> tuple[str, str | None]:
@@ -97,13 +102,13 @@ def _strip_version_suffix(identifier: str) -> tuple[str, str | None]:
     return head, tail
 
 
-def _coerce_external_id(raw: object) -> ExternalId | None:
+def _coerce_external_id(raw: object, *, field_name: str) -> ExternalId | None:
     if raw is None:
         return None
     if isinstance(raw, ExternalId):
         return raw
     if not isinstance(raw, dict):
-        return None
+        raise ValueError(f"{field_name} must be a mapping")
 
     source = raw.get("source")
     identifier = raw.get("id")
@@ -111,13 +116,13 @@ def _coerce_external_id(raw: object) -> ExternalId | None:
     provenance = raw.get("provenance")
     version = raw.get("version")
     if not isinstance(source, str) or not source.strip():
-        return None
+        raise ValueError(f"{field_name} requires source")
     if not isinstance(identifier, str) or not identifier.strip():
-        return None
+        raise ValueError(f"{field_name} requires id")
     if not isinstance(curie, str) or not curie.strip():
-        return None
+        raise ValueError(f"{field_name} requires curie")
     if not isinstance(provenance, str) or not provenance.strip():
-        return None
+        raise ValueError(f"{field_name} requires provenance")
 
     clean_id, inferred_version = _strip_version_suffix(identifier.strip())
     clean_curie = curie.strip()
@@ -146,12 +151,14 @@ def _coerce_external_id(raw: object) -> ExternalId | None:
     )
 
 
-def _coerce_external_ids(raw: object) -> list[ExternalId]:
+def _coerce_external_ids(raw: object, *, field_name: str) -> list[ExternalId]:
     if not isinstance(raw, list):
-        return []
+        if raw is None:
+            return []
+        raise ValueError(f"{field_name} must be a list")
     result: list[ExternalId] = []
-    for item in raw:
-        ext = _coerce_external_id(item)
+    for index, item in enumerate(raw):
+        ext = _coerce_external_id(item, field_name=f"{field_name}[{index}]")
         if ext is not None:
             result.append(ext)
     return result
@@ -311,8 +318,8 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         "confidence": _coerce_confidence(fm.get("confidence")),
         "datasets": fm.get("datasets"),
         "sync_source": _parse_sync_source(fm.get("sync_source")),
-        "primary_external_id": _coerce_external_id(fm.get("primary_external_id")),
-        "xrefs": _coerce_external_ids(fm.get("xrefs")),
+        "primary_external_id": _coerce_external_id(fm.get("primary_external_id"), field_name="primary_external_id"),
+        "xrefs": _coerce_external_ids(fm.get("xrefs"), field_name="xrefs"),
         "scope": _coerce_scope(fm.get("scope")),
         "provisional": bool(fm.get("provisional", False)),
         "review_after": _coerce_date(fm.get("review_after")),
