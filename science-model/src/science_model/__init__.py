@@ -4,6 +4,7 @@ from science_model.activity import ActivityItem
 from science_model.config import ConfigUpdate, DashboardConfig, LodWeights
 from science_model.entities import Entity, EntityType, EntityUpdate, MechanismEntity
 from science_model.graph import GraphData, GraphEdge, GraphNode, GraphSummary
+from science_model.identity import EntityScope, ExternalId
 from science_model.ids import CanonicalId, normalize_alias
 from science_model.ontologies.schema import OntologyCatalog, OntologyPredicate, OntologyRegistryEntry, OntologyTermType
 from science_model.projects import Project, ProjectDetail
@@ -44,6 +45,7 @@ __all__ = [
     "EvidenceIndependence",
     "EvidenceLineMetadata",
     "EvidenceRole",
+    "EntityScope",
     "EntityUpdate",
     "Filters",
     "GraphData",
@@ -69,6 +71,7 @@ __all__ = [
     "SearchResult",
     "SupportScope",
     "SyncSource",
+    "ExternalId",
     "Task",
     "TaskCreate",
     "TaskStatus",

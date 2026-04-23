@@ -7,6 +7,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
 
+from science_model.identity import EntityScope, ExternalId
 from science_model.packages.schema import AccessBlock, DerivationBlock
 from science_model.reasoning import (
     ClaimLayer,
@@ -152,6 +153,14 @@ class Entity(BaseModel):
     confidence: float | None = None
     datasets: list[str] | None = None
     aliases: list[str] = Field(default_factory=list)
+    primary_external_id: ExternalId | None = None
+    xrefs: list[ExternalId] = Field(default_factory=list)
+    scope: EntityScope = EntityScope.PROJECT
+    provisional: bool = False
+    review_after: date | None = None
+    deprecated_ids: list[str] = Field(default_factory=list)
+    replaced_by: str | None = None
+    taxon: str | None = None
     pre_registered: bool = False
     pre_registered_date: date | None = None
     sync_source: SyncSource | None = None
@@ -184,6 +193,16 @@ class Entity(BaseModel):
         expected = core_entity_type_for_kind(self.kind)
         if self.type != expected:
             raise ValueError("kind/type mismatch")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_identity_fields(self) -> "Entity":
+        if self.canonical_id in self.deprecated_ids:
+            raise ValueError("deprecated_ids must not include the entity canonical_id")
+        if self.replaced_by is not None and self.replaced_by == self.canonical_id:
+            raise ValueError("replaced_by must not equal the entity canonical_id")
+        if len({xref.curie for xref in self.xrefs}) != len(self.xrefs):
+            raise ValueError("xrefs must not contain duplicate external ids")
         return self
 
 

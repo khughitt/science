@@ -1,8 +1,10 @@
 from datetime import date
+
 import pytest
 from pydantic import ValidationError
 
 from science_model.entities import Entity, EntityType, MechanismEntity, core_entity_type_for_kind
+from science_model.identity import EntityScope, ExternalId
 
 
 def test_entity_round_trip():
@@ -50,6 +52,76 @@ def test_entity_optional_fields_default_none():
     assert e.datasets is None
     assert e.created is None
     assert e.updated is None
+
+
+def test_entity_accepts_identity_fields() -> None:
+    e = Entity(
+        id="gene:EZH2",
+        canonical_id="gene:EZH2",
+        kind="gene",
+        type=None,
+        title="EZH2",
+        project="p",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path="doc/genes/EZH2.md",
+        primary_external_id=ExternalId(
+            source="HGNC",
+            id="3527",
+            curie="HGNC:3527",
+            provenance="manual",
+        ),
+        xrefs=[
+            ExternalId(
+                source="NCBIGene",
+                id="2146",
+                curie="NCBIGene:2146",
+                provenance="manual",
+            )
+        ],
+        scope=EntityScope.SHARED,
+        provisional=True,
+        review_after=date(2026, 5, 1),
+        deprecated_ids=["gene:ENX1"],
+        replaced_by="gene:EZH2-v2",
+        taxon="NCBITaxon:9606",
+    )
+    assert e.scope == EntityScope.SHARED
+    assert e.primary_external_id is not None
+    assert e.primary_external_id.curie == "HGNC:3527"
+    assert e.xrefs[0].curie == "NCBIGene:2146"
+
+
+def test_entity_rejects_self_deprecated_id() -> None:
+    with pytest.raises(ValidationError, match="deprecated"):
+        Entity(
+            id="concept:chromatin",
+            canonical_id="concept:chromatin",
+            kind="concept",
+            type=EntityType.CONCEPT,
+            title="Chromatin",
+            project="p",
+            ontology_terms=[],
+            related=[],
+            source_refs=[],
+            content_preview="",
+            file_path="doc/concepts/chromatin.md",
+            deprecated_ids=["concept:chromatin"],
+        )
+
+
+def test_versioned_external_id_keeps_version_metadata() -> None:
+    identity = ExternalId(
+        source="ENSEMBL",
+        id="ENST00000381578",
+        curie="ENSEMBL:ENST00000381578",
+        version="7",
+        provenance="manual",
+    )
+    assert identity.id == "ENST00000381578"
+    assert identity.version == "7"
 
 
 def test_workflow_entity_types_exist():
