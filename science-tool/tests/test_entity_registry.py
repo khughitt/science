@@ -87,6 +87,14 @@ def test_declared_catalog_kind_resolves_to_domain_entity() -> None:
     assert registry.resolve("gene") is DomainEntity
 
 
+def test_duplicate_catalog_kind_registration_is_allowed_when_schema_matches() -> None:
+    registry = EntityRegistry.with_core_types()
+    registry.register_catalog_kind("electric_field", DomainEntity, owner="physics")
+    registry.register_catalog_kind("electric_field", DomainEntity, owner="units")
+
+    assert registry.resolve("electric_field") is DomainEntity
+
+
 def test_extension_cannot_shadow_catalog_kind() -> None:
     registry = EntityRegistry.with_core_types()
     registry.register_catalog_kind("gene", DomainEntity, owner="biology")

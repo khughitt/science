@@ -400,6 +400,36 @@ def test_load_project_sources_raises_when_catalog_collides_with_profile_kind(
         load_project_sources(tmp_path)
 
 
+def test_load_project_sources_allows_duplicate_kind_names_across_catalogs(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text(
+        "name: unified\nprofile: research\nprofiles: {local: local}\nontologies: [physics, units]\n",
+        encoding="utf-8",
+    )
+    local_sources = tmp_path / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "entities.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "entities": [
+                    {
+                        "canonical_id": "electric_field:test-field",
+                        "kind": "electric_field",
+                        "title": "Test field",
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(tmp_path)
+    entity = next(e for e in sources.entities if e.canonical_id == "electric_field:test-field")
+
+    assert isinstance(entity, DomainEntity)
+    assert entity.kind == "electric_field"
+
+
 def test_load_project_sources_reads_repo_local_profile_manifest(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text(
         "name: unified\nprofile: research\nknowledge_profiles:\n  local: cbioportal\n",

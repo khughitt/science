@@ -106,7 +106,11 @@ class EntityRegistry:
             return
         if kind in self._profile:
             raise EntityKindShadowError(f"catalog kind {kind!r} shadows an existing kind from {owner}")
-        if kind in self._catalog or kind in self._extensions:
+        if kind in self._catalog:
+            if self._catalog[kind] is cls:
+                return
+            raise EntityKindAlreadyRegisteredError(f"catalog kind {kind!r} already registered")
+        if kind in self._extensions:
             raise EntityKindAlreadyRegisteredError(f"catalog kind {kind!r} already registered")
         self._catalog[kind] = cls
 
