@@ -8,6 +8,158 @@ from pathlib import Path
 from science_tool.graph.health import check_dataset_anomalies
 
 
+def _write_identity_policy_project(tmp_path: Path) -> Path:
+    (tmp_path / "science.yaml").write_text(
+        "name: test\nprofile: research\nprofiles: {local: local}\nontologies: [biology]\n",
+        encoding="utf-8",
+    )
+    genes_dir = tmp_path / "doc" / "genes"
+    genes_dir.mkdir(parents=True)
+    (genes_dir / "ezh2.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "gene:EZH2"',
+                'kind: "gene"',
+                'title: "EZH2"',
+                "---",
+                "",
+                "Missing identity metadata.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (genes_dir / "atp5b.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "gene:ATP5B"',
+                'kind: "gene"',
+                'title: "ATP5B"',
+                "primary_external_id:",
+                '  source: "HGNC"',
+                '  id: "830"',
+                '  curie: "HGNC:830"',
+                '  provenance: "manual"',
+                "---",
+                "",
+                "ATP5B body.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (genes_dir / "atp5f1b.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "gene:ATP5F1B"',
+                'kind: "gene"',
+                'title: "ATP5F1B"',
+                "primary_external_id:",
+                '  source: "HGNC"',
+                '  id: "830"',
+                '  curie: "HGNC:830"',
+                '  provenance: "manual"',
+                "---",
+                "",
+                "ATP5F1B body.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (genes_dir / "rbl1.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "gene:RBL1"',
+                'kind: "gene"',
+                'title: "RBL1"',
+                "primary_external_id:",
+                '  source: "HGNC"',
+                '  id: "988"',
+                '  curie: "HGNC:988"',
+                '  provenance: "manual"',
+                "---",
+                "",
+                "RBL1 body.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (genes_dir / "old-rbl1.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "gene:OLD-RBL1"',
+                'kind: "gene"',
+                'title: "Old RBL1"',
+                "deprecated_ids:",
+                '  - "gene:RBL1"',
+                "---",
+                "",
+                "Deprecated gene body.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    concepts_dir = tmp_path / "doc" / "concepts"
+    concepts_dir.mkdir(parents=True)
+    (concepts_dir / "high-rate.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "concept:HighProliferationRate"',
+                'kind: "concept"',
+                'title: "High proliferation rate"',
+                "---",
+                "",
+                "Invalid local id casing.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    relations_dir = tmp_path / "knowledge" / "sources" / "local"
+    relations_dir.mkdir(parents=True)
+    (relations_dir / "relations.yaml").write_text(
+        "\n".join(
+            [
+                "relations:",
+                "  - subject: EZH2",
+                "    predicate: interacts_with",
+                "    object: PRC2",
+                '    graph_layer: "graph/knowledge"',
+                '    source_path: "knowledge/sources/local/relations.yaml"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "doc" / "questions").mkdir(parents=True)
+    (tmp_path / "doc" / "questions" / "q01.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "question:q01"',
+                'type: "question"',
+                'title: "Question"',
+                'related: ["gene:RBL1"]',
+                'source_refs: ["gene:RBL1"]',
+                "---",
+                "",
+                "Question body.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return tmp_path
+
+
 def _write_layered_claim_project(tmp_path: Path) -> Path:
     (tmp_path / "science.yaml").write_text("name: test\n")
     propositions_dir = tmp_path / "specs" / "propositions"
@@ -214,6 +366,22 @@ class TestBuildHealthReport:
         assert report["lingering_tags_lines"] == []
         assert report["layered_claims"]["migration_issues"] == []
 
+    def test_includes_identity_policy_section(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        project = _write_identity_policy_project(tmp_path)
+
+        report = build_health_report(project)
+
+        assert "identity_policy" in report
+        codes = {row["check"] for row in report["identity_policy"]}
+        assert "missing_primary_external_id" in codes
+        assert "primary_external_id_collision" in codes
+        assert "missing_taxon" in codes
+        assert "deprecated_id_inbound_ref" in codes
+        assert "relation_endpoint_disambiguation" in codes
+        assert "invalid_local_id_syntax" in codes
+
     def test_layered_claim_report_surfaces_adoption_gaps_and_rival_model_issues(self, tmp_path: Path) -> None:
         from science_tool.graph.health import build_health_report
 
@@ -301,6 +469,32 @@ class TestHealthCLI:
 
         assert result.exit_code == 0
         assert "no issues" in result.output.lower() or "clean" in result.output.lower()
+
+    def test_table_output_includes_identity_policy_section(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+
+        project = _write_identity_policy_project(tmp_path)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["health", "--project-root", str(project)])
+
+        assert result.exit_code == 0, result.output
+        assert "Identity Policy" in result.output
+
+    def test_json_output_includes_identity_policy_section(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+
+        project = _write_identity_policy_project(tmp_path)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["health", "--project-root", str(project), "--format", "json"])
+
+        assert result.exit_code == 0, result.output
+        report = json.loads(result.output)
+        assert "identity_policy" in report
+        assert any(row["check"] == "missing_primary_external_id" for row in report["identity_policy"])
 
 
 def test_health_flags_legacy_task_type_field(tmp_path) -> None:

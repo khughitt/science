@@ -2311,6 +2311,7 @@ def health_command(project_root: Path, output_format: str) -> None:
     total_issues = (
         len(report["unresolved_refs"])
         + len(report["lingering_tags_lines"])
+        + len(report["identity_policy"])
         + len(report["legacy_structured_literature_prefixes"])
         + layered_claim_issue_count
         + coverage_gaps
@@ -2355,6 +2356,16 @@ def health_command(project_root: Path, output_format: str) -> None:
             )
 
         console.print("\n[bold]Next:[/bold] run [cyan]science-tool graph migrate-tags --apply[/cyan] to migrate these.")
+
+    if report["identity_policy"]:
+        table = Table(title=f"Identity Policy ({len(report['identity_policy'])})")
+        table.add_column("Check", style="bold")
+        table.add_column("Entity")
+        table.add_column("File")
+        table.add_column("Message")
+        for row in report["identity_policy"]:
+            table.add_row(row["check"], row["entity_id"], row["source_file"], row["message"])
+        console.print(table)
 
     if report["legacy_structured_literature_prefixes"]:
         table = Table(

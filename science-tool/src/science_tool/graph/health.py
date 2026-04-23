@@ -14,6 +14,7 @@ from typing import TypedDict
 
 import yaml as _yaml
 
+from science_model.frontmatter import parse_frontmatter
 from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.graph.migrate import audit_project_sources, build_layered_claim_migration_report
 from science_tool.graph.sources import load_project_sources
@@ -174,6 +175,7 @@ def collect_lingering_tags(project_root: Path) -> list[LingeringTagsRecord]:
 class HealthReport(TypedDict):
     unresolved_refs: list[UnresolvedRef]
     lingering_tags_lines: list[LingeringTagsRecord]
+    identity_policy: list["IdentityPolicyFinding"]
     layered_claims: "LayeredClaimHealthReport"
     legacy_task_type: list["LegacyTaskTypeFinding"]
     invalid_entity_aspects: list["InvalidEntityAspectsFinding"]
@@ -211,6 +213,7 @@ def build_health_report(project_root: Path) -> HealthReport:
     """Aggregate all health checks for a project."""
     project_root = project_root.resolve()
     sources = load_project_sources(project_root)
+    identity_policy_findings = collect_identity_policy_findings(project_root)
     proposition_entities = [entity for entity in sources.entities if entity.kind == "proposition"]
     migration_report = build_layered_claim_migration_report(project_root)
     causal_leaning_rows = [
@@ -249,6 +252,7 @@ def build_health_report(project_root: Path) -> HealthReport:
     return {
         "unresolved_refs": collect_unresolved_refs(project_root),
         "lingering_tags_lines": collect_lingering_tags(project_root),
+        "identity_policy": identity_policy_findings,
         "layered_claims": {
             "proposition_claim_layer_coverage": _coverage_metric(
                 numerator=sum(1 for entity in proposition_entities if entity.claim_layer is not None),
@@ -319,7 +323,236 @@ class LegacyStructuredLiteraturePrefixFinding(TypedDict):
     legacy_ref: str
 
 
+class IdentityPolicyFinding(TypedDict):
+    check: str
+    entity_id: str
+    source_file: str
+    message: str
+
+
 _LEGACY_ARTICLE_REF_RE = re.compile(r"\barticle:[A-Za-z0-9_.-]+\b")
+_LOCAL_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_IDENTITY_REQUIRED_KINDS = frozenset(
+    {
+        "gene",
+        "protein",
+        "disease",
+        "drug",
+        "chemical",
+        "cell_type",
+        "phenotype",
+        "anatomy",
+        "pathway",
+        "process",
+        "function",
+    }
+)
+_TAXON_REQUIRED_KINDS = frozenset({"gene", "protein"})
+_IDENTITY_REFERENCE_FIELDS = ("related", "source_refs", "same_as", "blocked_by", "consumed_by")
+_ENTITY_DIR_TO_KIND: dict[str, str] = {
+    "genes": "gene",
+    "gene": "gene",
+    "concepts": "concept",
+    "concept": "concept",
+    "methods": "method",
+    "method": "method",
+    "mechanisms": "mechanism",
+    "mechanism": "mechanism",
+    "diseases": "disease",
+    "disease": "disease",
+    "proteins": "protein",
+    "protein": "protein",
+}
+
+
+def _normalize_kind(raw: str) -> str:
+    kind = raw.strip()
+    if kind == "parameter":
+        return "canonical_parameter"
+    return kind
+
+
+def _infer_identity_kind(frontmatter: dict[str, object], path: Path) -> str | None:
+    raw_kind = frontmatter.get("kind")
+    if isinstance(raw_kind, str) and raw_kind.strip():
+        return _normalize_kind(raw_kind)
+    raw_type = frontmatter.get("type")
+    if isinstance(raw_type, str) and raw_type.strip():
+        return _normalize_kind(raw_type)
+    raw_id = frontmatter.get("id")
+    if isinstance(raw_id, str) and ":" in raw_id:
+        prefix = raw_id.split(":", 1)[0].strip()
+        if prefix:
+            return _normalize_kind(prefix)
+    return _ENTITY_DIR_TO_KIND.get(path.parent.name)
+
+
+def _coerce_external_curie(raw: object) -> str | None:
+    if isinstance(raw, str):
+        text = raw.strip()
+        return text or None
+    if isinstance(raw, dict):
+        curie = raw.get("curie")
+        if isinstance(curie, str) and curie.strip():
+            return curie.strip()
+        source = raw.get("source")
+        identifier = raw.get("id")
+        if isinstance(source, str) and isinstance(identifier, str) and source.strip() and identifier.strip():
+            return f"{source.strip()}:{identifier.strip()}"
+    return None
+
+
+def _coerce_external_id_list(raw: object) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    curies: list[str] = []
+    for item in raw:
+        curie = _coerce_external_curie(item)
+        if curie is not None:
+            curies.append(curie)
+    return curies
+
+
+def collect_identity_policy_findings(project_root: Path) -> list[IdentityPolicyFinding]:
+    """Return identity-policy issues surfaced from loaded entities and relations."""
+    findings: list[IdentityPolicyFinding] = []
+
+    primary_ids: dict[str, str] = {}
+    deprecated_to_canonical: dict[str, str] = {}
+    for scan_dir in ("doc", "specs"):
+        base = project_root / scan_dir
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob("*.md")):
+            result = parse_frontmatter(path)
+            if result is None:
+                continue
+            frontmatter, _ = result
+            kind = _infer_identity_kind(frontmatter, path)
+            if kind is None:
+                continue
+            canonical_id = str(frontmatter.get("id") or f"{kind}:{path.stem}")
+            _collect_entity_identity_findings(
+                canonical_id=canonical_id,
+                kind=kind,
+                frontmatter=frontmatter,
+                source_file=str(path.relative_to(project_root)),
+                findings=findings,
+                primary_ids=primary_ids,
+                deprecated_to_canonical=deprecated_to_canonical,
+            )
+
+    sources_dir = project_root / "knowledge" / "sources"
+    if sources_dir.is_dir():
+        for path in sorted(sources_dir.rglob("*.yaml")):
+            try:
+                raw = _yaml.safe_load(path.read_text(encoding="utf-8"))
+            except (OSError, _yaml.YAMLError):
+                continue
+            if not isinstance(raw, dict):
+                continue
+            relations = raw.get("relations")
+            if not isinstance(relations, list):
+                continue
+            for relation in relations:
+                if not isinstance(relation, dict):
+                    continue
+                relation_id = str(relation.get("source_path") or path.relative_to(project_root))
+                for role, ref in (("subject", relation.get("subject")), ("object", relation.get("object"))):
+                    if not isinstance(ref, str) or ":" in ref:
+                        continue
+                    findings.append(
+                        IdentityPolicyFinding(
+                            check="relation_endpoint_disambiguation",
+                            entity_id=f"{relation.get('subject', '')} {relation.get('predicate', '')} {relation.get('object', '')}".strip(),
+                            source_file=relation_id,
+                            message=f"{role} {ref!r} is missing a kind prefix",
+                        )
+                    )
+
+    findings.sort(key=lambda row: (row["check"], row["entity_id"], row["source_file"]))
+    return findings
+
+
+def _collect_entity_identity_findings(
+    *,
+    canonical_id: str,
+    kind: str,
+    frontmatter: dict[str, object],
+    source_file: str,
+    findings: list[IdentityPolicyFinding],
+    primary_ids: dict[str, str],
+    deprecated_to_canonical: dict[str, str],
+) -> None:
+    primary = _coerce_external_curie(frontmatter.get("primary_external_id"))
+    provisional = bool(frontmatter.get("provisional", False))
+    taxon = frontmatter.get("taxon")
+
+    if kind in _IDENTITY_REQUIRED_KINDS and primary is None and not provisional:
+        findings.append(
+            IdentityPolicyFinding(
+                check="missing_primary_external_id",
+                entity_id=canonical_id,
+                source_file=source_file,
+                message=f"{kind} entities should carry a primary external id",
+            )
+        )
+
+    if kind in _TAXON_REQUIRED_KINDS and not taxon and not provisional:
+        findings.append(
+            IdentityPolicyFinding(
+                check="missing_taxon",
+                entity_id=canonical_id,
+                source_file=source_file,
+                message=f"{kind} entities should carry taxon metadata",
+            )
+        )
+
+    if kind in {"concept", "method", "mechanism"}:
+        local_id = canonical_id.split(":", 1)[1] if ":" in canonical_id else canonical_id
+        if not _LOCAL_ID_RE.fullmatch(local_id):
+            findings.append(
+                IdentityPolicyFinding(
+                    check="invalid_local_id_syntax",
+                    entity_id=canonical_id,
+                    source_file=source_file,
+                    message="local ids must use lowercase kebab-case",
+                )
+            )
+
+    if primary is not None:
+        existing = primary_ids.get(primary)
+        if existing is not None and existing != canonical_id:
+            findings.append(
+                IdentityPolicyFinding(
+                    check="primary_external_id_collision",
+                    entity_id=canonical_id,
+                    source_file=source_file,
+                    message=f"{primary} is already claimed by {existing}",
+                )
+            )
+        else:
+            primary_ids[primary] = canonical_id
+
+    for deprecated_id in _coerce_external_id_list(frontmatter.get("deprecated_ids")):
+        deprecated_to_canonical[deprecated_id] = canonical_id
+
+    for field_name in _IDENTITY_REFERENCE_FIELDS:
+        refs = frontmatter.get(field_name)
+        if not isinstance(refs, list):
+            continue
+        for ref in _coerce_external_id_list(refs):
+            target = deprecated_to_canonical.get(ref)
+            if target is None:
+                continue
+            findings.append(
+                IdentityPolicyFinding(
+                    check="deprecated_id_inbound_ref",
+                    entity_id=canonical_id,
+                    source_file=source_file,
+                    message=f"{field_name} references deprecated id {ref} from {target}",
+                )
+            )
 
 
 def collect_invalid_entity_aspects(project_root: Path) -> list[InvalidEntityAspectsFinding]:
