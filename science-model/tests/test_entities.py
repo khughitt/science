@@ -112,6 +112,55 @@ def test_entity_rejects_self_deprecated_id() -> None:
         )
 
 
+def test_entity_rejects_duplicate_xrefs() -> None:
+    with pytest.raises(ValidationError, match="duplicate external ids"):
+        Entity(
+            id="gene:EZH2",
+            canonical_id="gene:EZH2",
+            kind="gene",
+            type=None,
+            title="EZH2",
+            project="p",
+            ontology_terms=[],
+            related=[],
+            source_refs=[],
+            content_preview="",
+            file_path="doc/genes/EZH2.md",
+            xrefs=[
+                ExternalId(
+                    source="NCBIGene",
+                    id="2146",
+                    curie="NCBIGene:2146",
+                    provenance="manual",
+                ),
+                ExternalId(
+                    source="NCBIGene",
+                    id="2146",
+                    curie="NCBIGene:2146",
+                    provenance="manual",
+                ),
+            ],
+        )
+
+
+def test_entity_rejects_replaced_by_self() -> None:
+    with pytest.raises(ValidationError, match="replaced_by"):
+        Entity(
+            id="concept:chromatin",
+            canonical_id="concept:chromatin",
+            kind="concept",
+            type=EntityType.CONCEPT,
+            title="Chromatin",
+            project="p",
+            ontology_terms=[],
+            related=[],
+            source_refs=[],
+            content_preview="",
+            file_path="doc/concepts/chromatin.md",
+            replaced_by="concept:chromatin",
+        )
+
+
 def test_versioned_external_id_keeps_version_metadata() -> None:
     identity = ExternalId(
         source="ENSEMBL",
