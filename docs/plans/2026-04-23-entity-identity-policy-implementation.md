@@ -688,3 +688,25 @@ git commit -m "docs: record entity identity implementation verification"
 - `science-tool health` reports identity-policy violations directly.
 - Cross-project sync warns on shared-id and primary-external-id collisions.
 - Curators get a concrete cookbook and skill guidance aligned with the same policy.
+
+## Execution Notes
+
+- Implemented in the `entity-identity-policy` worktree with the following task commits:
+  - `c495b40` `feat: add entity identity schema`
+  - `4a799b1` `test: add identity field regressions`
+  - `0c1fb13` `feat: parse entity identity frontmatter`
+  - `e5994bd` `test: normalize versioned accession frontmatter`
+  - `86f0222` `fix: harden identity frontmatter parsing`
+  - `e023ed1` `feat: preserve entity identity metadata during source loading`
+  - `32749ff` `feat: add entity identity health lints`
+  - `05935be` `fix: use loaded sources for identity health lints`
+  - `c9a7b49` `feat: refine registry identity collision warnings`
+  - `05cee59` `docs: publish entity creation cookbook and skill guidance`
+- Two planned behaviors needed explicit tightening during implementation:
+  - frontmatter hydration now rejects invalid `scope`, `primary_external_id`, and `xrefs` payloads instead of silently dropping malformed identity metadata
+  - health and relation-endpoint checks now run on fully loaded project sources so aggregate entity files and loaded relation surfaces are covered, not just markdown files or top-level `relations.yaml`
+- Registry drift warnings were narrowed so compatible shared reuse of the same bare `canonical_id` stays quiet; warnings now distinguish project-scoped collisions, incompatible shared metadata, and `primary_external_id` collisions.
+- No scope reductions were taken. The only deferred work remains what the plan already marked out of scope: broad legacy backfill, global synonym unification, and attribute/observation-model redesign.
+- Final verification on the completed branch:
+  - `science-model`: `uv run --frozen ruff check .`, `uv run --frozen pyright`, `uv run --frozen pytest` -> pass
+  - `science-tool`: `uv run --frozen ruff check .`, `uv run --frozen pyright`, `uv run --frozen pytest` -> pass
