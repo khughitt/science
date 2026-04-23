@@ -30,102 +30,57 @@ def _write_identity_policy_project(tmp_path: Path) -> Path:
         ),
         encoding="utf-8",
     )
-    (genes_dir / "atp5b.md").write_text(
-        "\n".join(
-            [
-                "---",
-                'id: "gene:ATP5B"',
-                'kind: "gene"',
-                'title: "ATP5B"',
-                "primary_external_id:",
-                '  source: "HGNC"',
-                '  id: "830"',
-                '  curie: "HGNC:830"',
-                '  provenance: "manual"',
-                "---",
-                "",
-                "ATP5B body.",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    (genes_dir / "atp5f1b.md").write_text(
-        "\n".join(
-            [
-                "---",
-                'id: "gene:ATP5F1B"',
-                'kind: "gene"',
-                'title: "ATP5F1B"',
-                "primary_external_id:",
-                '  source: "HGNC"',
-                '  id: "830"',
-                '  curie: "HGNC:830"',
-                '  provenance: "manual"',
-                "---",
-                "",
-                "ATP5F1B body.",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    (genes_dir / "rbl1.md").write_text(
-        "\n".join(
-            [
-                "---",
-                'id: "gene:RBL1"',
-                'kind: "gene"',
-                'title: "RBL1"',
-                "primary_external_id:",
-                '  source: "HGNC"',
-                '  id: "988"',
-                '  curie: "HGNC:988"',
-                '  provenance: "manual"',
-                "---",
-                "",
-                "RBL1 body.",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    (genes_dir / "old-rbl1.md").write_text(
-        "\n".join(
-            [
-                "---",
-                'id: "gene:OLD-RBL1"',
-                'kind: "gene"',
-                'title: "Old RBL1"',
-                "deprecated_ids:",
-                '  - "gene:RBL1"',
-                "---",
-                "",
-                "Deprecated gene body.",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    concepts_dir = tmp_path / "doc" / "concepts"
-    concepts_dir.mkdir(parents=True)
-    (concepts_dir / "high-rate.md").write_text(
-        "\n".join(
-            [
-                "---",
-                'id: "concept:HighProliferationRate"',
-                'kind: "concept"',
-                'title: "High proliferation rate"',
-                "---",
-                "",
-                "Invalid local id casing.",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
     relations_dir = tmp_path / "knowledge" / "sources" / "local"
     relations_dir.mkdir(parents=True)
+    (relations_dir / "entities.yaml").write_text(
+        "\n".join(
+            [
+                "entities:",
+                "  - canonical_id: gene:ATP5B",
+                "    kind: gene",
+                "    title: ATP5B",
+                "    primary_external_id:",
+                "      source: HGNC",
+                "      id: '830'",
+                "      curie: HGNC:830",
+                "      provenance: manual",
+                "    taxon: NCBITaxon:9606",
+                "  - canonical_id: gene:ATP5F1B",
+                "    kind: gene",
+                "    title: ATP5F1B",
+                "    primary_external_id:",
+                "      source: HGNC",
+                "      id: '830'",
+                "      curie: HGNC:830",
+                "      provenance: manual",
+                "    taxon: NCBITaxon:9606",
+                "  - canonical_id: concept:aaa-consumer",
+                "    kind: concept",
+                "    title: Consumer",
+                "    related:",
+                "      - concept:zzz-old",
+                "  - canonical_id: concept:zzz-new",
+                "    kind: concept",
+                "    title: Replacement",
+                "    deprecated_ids:",
+                "      - concept:zzz-old",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (relations_dir / "terms.yaml").write_text(
+        "\n".join(
+            [
+                "terms:",
+                "  - id: concept:HighProliferationRate",
+                "    title: High proliferation rate",
+                "    description: Invalid local id casing.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
     (relations_dir / "relations.yaml").write_text(
         "\n".join(
             [
@@ -381,6 +336,21 @@ class TestBuildHealthReport:
         assert "deprecated_id_inbound_ref" in codes
         assert "relation_endpoint_disambiguation" in codes
         assert "invalid_local_id_syntax" in codes
+        assert any(
+            row["check"] == "invalid_local_id_syntax" and row["source_file"] == "knowledge/sources/local/terms.yaml"
+            for row in report["identity_policy"]
+        )
+
+    def test_deprecated_id_inbound_ref_is_order_independent(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        project = _write_identity_policy_project(tmp_path)
+
+        report = build_health_report(project)
+
+        rows = [row for row in report["identity_policy"] if row["check"] == "deprecated_id_inbound_ref"]
+        assert rows
+        assert any(row["entity_id"] == "concept:aaa-consumer" for row in rows)
 
     def test_layered_claim_report_surfaces_adoption_gaps_and_rival_model_issues(self, tmp_path: Path) -> None:
         from science_tool.graph.health import build_health_report

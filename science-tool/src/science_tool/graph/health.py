@@ -14,7 +14,7 @@ from typing import TypedDict
 
 import yaml as _yaml
 
-from science_model.frontmatter import parse_frontmatter
+from science_model.entities import Entity
 from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.graph.migrate import audit_project_sources, build_layered_claim_migration_report
 from science_tool.graph.sources import load_project_sources
@@ -349,45 +349,10 @@ _IDENTITY_REQUIRED_KINDS = frozenset(
 )
 _TAXON_REQUIRED_KINDS = frozenset({"gene", "protein"})
 _IDENTITY_REFERENCE_FIELDS = ("related", "source_refs", "same_as", "blocked_by", "consumed_by")
-_ENTITY_DIR_TO_KIND: dict[str, str] = {
-    "genes": "gene",
-    "gene": "gene",
-    "concepts": "concept",
-    "concept": "concept",
-    "methods": "method",
-    "method": "method",
-    "mechanisms": "mechanism",
-    "mechanism": "mechanism",
-    "diseases": "disease",
-    "disease": "disease",
-    "proteins": "protein",
-    "protein": "protein",
-}
-
-
-def _normalize_kind(raw: str) -> str:
-    kind = raw.strip()
-    if kind == "parameter":
-        return "canonical_parameter"
-    return kind
-
-
-def _infer_identity_kind(frontmatter: dict[str, object], path: Path) -> str | None:
-    raw_kind = frontmatter.get("kind")
-    if isinstance(raw_kind, str) and raw_kind.strip():
-        return _normalize_kind(raw_kind)
-    raw_type = frontmatter.get("type")
-    if isinstance(raw_type, str) and raw_type.strip():
-        return _normalize_kind(raw_type)
-    raw_id = frontmatter.get("id")
-    if isinstance(raw_id, str) and ":" in raw_id:
-        prefix = raw_id.split(":", 1)[0].strip()
-        if prefix:
-            return _normalize_kind(prefix)
-    return _ENTITY_DIR_TO_KIND.get(path.parent.name)
-
-
 def _coerce_external_curie(raw: object) -> str | None:
+    curie = getattr(raw, "curie", None)
+    if isinstance(curie, str) and curie.strip():
+        return curie.strip()
     if isinstance(raw, str):
         text = raw.strip()
         return text or None
@@ -402,73 +367,54 @@ def _coerce_external_curie(raw: object) -> str | None:
     return None
 
 
-def _coerce_external_id_list(raw: object) -> list[str]:
-    if not isinstance(raw, list):
-        return []
-    curies: list[str] = []
-    for item in raw:
-        curie = _coerce_external_curie(item)
-        if curie is not None:
-            curies.append(curie)
-    return curies
-
-
 def collect_identity_policy_findings(project_root: Path) -> list[IdentityPolicyFinding]:
     """Return identity-policy issues surfaced from loaded entities and relations."""
+    sources = load_project_sources(project_root.resolve())
     findings: list[IdentityPolicyFinding] = []
 
-    primary_ids: dict[str, str] = {}
+    primary_claims: dict[str, list[tuple[str, str]]] = defaultdict(list)
     deprecated_to_canonical: dict[str, str] = {}
-    for scan_dir in ("doc", "specs"):
-        base = project_root / scan_dir
-        if not base.is_dir():
+    for entity in sources.entities:
+        canonical_id = entity.canonical_id
+        source_file = entity.file_path
+        primary = _coerce_external_curie(getattr(entity, "primary_external_id", None))
+        if primary is not None:
+            primary_claims[primary].append((canonical_id, source_file))
+        for deprecated_id in [str(item) for item in getattr(entity, "deprecated_ids", []) if isinstance(item, str)]:
+            deprecated_to_canonical[deprecated_id] = canonical_id
+
+    for curie, claims in primary_claims.items():
+        if len(claims) < 2:
             continue
-        for path in sorted(base.rglob("*.md")):
-            result = parse_frontmatter(path)
-            if result is None:
-                continue
-            frontmatter, _ = result
-            kind = _infer_identity_kind(frontmatter, path)
-            if kind is None:
-                continue
-            canonical_id = str(frontmatter.get("id") or f"{kind}:{path.stem}")
-            _collect_entity_identity_findings(
-                canonical_id=canonical_id,
-                kind=kind,
-                frontmatter=frontmatter,
-                source_file=str(path.relative_to(project_root)),
-                findings=findings,
-                primary_ids=primary_ids,
-                deprecated_to_canonical=deprecated_to_canonical,
+        for canonical_id, source_file in sorted(claims, key=lambda row: row[0])[1:]:
+            findings.append(
+                IdentityPolicyFinding(
+                    check="primary_external_id_collision",
+                    entity_id=canonical_id,
+                    source_file=source_file,
+                    message=f"{curie} is already claimed by another entity",
+                )
             )
 
-    sources_dir = project_root / "knowledge" / "sources"
-    if sources_dir.is_dir():
-        for path in sorted(sources_dir.rglob("*.yaml")):
-            try:
-                raw = _yaml.safe_load(path.read_text(encoding="utf-8"))
-            except (OSError, _yaml.YAMLError):
-                continue
-            if not isinstance(raw, dict):
-                continue
-            relations = raw.get("relations")
-            if not isinstance(relations, list):
-                continue
-            for relation in relations:
-                if not isinstance(relation, dict):
-                    continue
-                relation_id = str(relation.get("source_path") or path.relative_to(project_root))
-                for role, ref in (("subject", relation.get("subject")), ("object", relation.get("object"))):
-                    if not isinstance(ref, str) or ":" in ref:
-                        continue
-                    findings.append(
-                        IdentityPolicyFinding(
-                            check="relation_endpoint_disambiguation",
-                            entity_id=f"{relation.get('subject', '')} {relation.get('predicate', '')} {relation.get('object', '')}".strip(),
-                            source_file=relation_id,
-                            message=f"{role} {ref!r} is missing a kind prefix",
-                        )
+    for entity in sources.entities:
+        _collect_entity_identity_findings(
+            entity=entity,
+            findings=findings,
+            deprecated_to_canonical=deprecated_to_canonical,
+        )
+
+    for relation in sources.relations:
+        relation_stub = f"{relation.subject} {relation.predicate} {relation.object}".strip()
+        for role, ref in (("subject", relation.subject), ("object", relation.object)):
+            if ":" not in ref:
+                findings.append(
+                    IdentityPolicyFinding(
+                        check="relation_endpoint_disambiguation",
+                        entity_id=relation_stub,
+                        source_file=relation.source_path,
+                        message=f"{role} {ref!r} is missing a kind prefix",
                     )
+                )
 
     findings.sort(key=lambda row: (row["check"], row["entity_id"], row["source_file"]))
     return findings
@@ -476,17 +422,16 @@ def collect_identity_policy_findings(project_root: Path) -> list[IdentityPolicyF
 
 def _collect_entity_identity_findings(
     *,
-    canonical_id: str,
-    kind: str,
-    frontmatter: dict[str, object],
-    source_file: str,
+    entity: Entity,
     findings: list[IdentityPolicyFinding],
-    primary_ids: dict[str, str],
     deprecated_to_canonical: dict[str, str],
 ) -> None:
-    primary = _coerce_external_curie(frontmatter.get("primary_external_id"))
-    provisional = bool(frontmatter.get("provisional", False))
-    taxon = frontmatter.get("taxon")
+    canonical_id = entity.canonical_id
+    source_file = entity.file_path
+    kind = entity.kind
+    primary = _coerce_external_curie(getattr(entity, "primary_external_id", None))
+    provisional = bool(getattr(entity, "provisional", False))
+    taxon = getattr(entity, "taxon", None)
 
     if kind in _IDENTITY_REQUIRED_KINDS and primary is None and not provisional:
         findings.append(
@@ -520,28 +465,14 @@ def _collect_entity_identity_findings(
                 )
             )
 
-    if primary is not None:
-        existing = primary_ids.get(primary)
-        if existing is not None and existing != canonical_id:
-            findings.append(
-                IdentityPolicyFinding(
-                    check="primary_external_id_collision",
-                    entity_id=canonical_id,
-                    source_file=source_file,
-                    message=f"{primary} is already claimed by {existing}",
-                )
-            )
-        else:
-            primary_ids[primary] = canonical_id
-
-    for deprecated_id in _coerce_external_id_list(frontmatter.get("deprecated_ids")):
+    for deprecated_id in [str(item) for item in getattr(entity, "deprecated_ids", []) if isinstance(item, str)]:
         deprecated_to_canonical[deprecated_id] = canonical_id
 
     for field_name in _IDENTITY_REFERENCE_FIELDS:
-        refs = frontmatter.get(field_name)
+        refs = getattr(entity, field_name, None)
         if not isinstance(refs, list):
             continue
-        for ref in _coerce_external_id_list(refs):
+        for ref in [str(item) for item in refs if isinstance(item, str)]:
             target = deprecated_to_canonical.get(ref)
             if target is None:
                 continue
