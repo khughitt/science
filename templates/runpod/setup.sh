@@ -9,6 +9,10 @@ PROJECT_DIR="${PROJECT_DIR:?Set PROJECT_DIR=/workspace/<project-name>}"
 HF_TOKEN="${HF_TOKEN:?Set HF_TOKEN for gated model downloads}"
 UV_PYTHON_VERSION="${UV_PYTHON_VERSION:-3.12}"
 MIN_FREE_GB="${MIN_FREE_GB:-25}"
+UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-120}"
+UV_CONCURRENT_DOWNLOADS="${UV_CONCURRENT_DOWNLOADS:-5}"
+SYNC_ATTEMPTS="${SYNC_ATTEMPTS:-3}"
+SETUP_MODE="${SETUP_MODE:-default}"
 
 die() {
     echo "ERROR: $*" >&2
@@ -42,12 +46,15 @@ fi
 
 echo "GPU:  $GPU_NAME"
 echo "Disk: ${AVAILABLE_GB:-?} GB free on /workspace"
+echo "Mode: $SETUP_MODE"
 
 cd "$PROJECT_DIR"
 
 export HF_HOME="/workspace/.cache/huggingface"
 export UV_CACHE_DIR="/workspace/.cache/uv"
 export TORCH_HOME="/workspace/.cache/torch"
+export UV_HTTP_TIMEOUT
+export UV_CONCURRENT_DOWNLOADS
 mkdir -p "$HF_HOME" "$UV_CACHE_DIR" "$TORCH_HOME"
 
 SYNC_MARKER=".venv/.setup-sync-done"
@@ -68,8 +75,30 @@ uv python install "$UV_PYTHON_VERSION"
 if [[ -f "$SYNC_MARKER" ]]; then
     echo "Sync marker present at $SYNC_MARKER; skipping uv sync."
 else
+    echo "uv HTTP timeout: ${UV_HTTP_TIMEOUT}s"
+    echo "uv concurrent downloads: ${UV_CONCURRENT_DOWNLOADS}"
+    echo "uv sync attempts: ${SYNC_ATTEMPTS}"
     patch_pyproject_for_remote
-    uv sync --python "$UV_PYTHON_VERSION" --no-dev
+
+    sync_succeeded=0
+    for ((attempt = 1; attempt <= SYNC_ATTEMPTS; attempt++)); do
+        echo "uv sync attempt ${attempt}/${SYNC_ATTEMPTS}..."
+        if uv sync --python "$UV_PYTHON_VERSION" --no-dev; then
+            sync_succeeded=1
+            break
+        fi
+
+        if (( attempt < SYNC_ATTEMPTS )); then
+            sleep_seconds=$((attempt * 10))
+            echo "uv sync failed; retrying in ${sleep_seconds}s..." >&2
+            sleep "$sleep_seconds"
+        fi
+    done
+
+    if (( sync_succeeded == 0 )); then
+        die "uv sync failed after ${SYNC_ATTEMPTS} attempts (UV_HTTP_TIMEOUT=${UV_HTTP_TIMEOUT}s, UV_CONCURRENT_DOWNLOADS=${UV_CONCURRENT_DOWNLOADS})"
+    fi
+
     mkdir -p .venv
     touch "$SYNC_MARKER"
 fi
@@ -101,6 +130,8 @@ uv run --no-sync python -c "import torch; assert torch.cuda.is_available(); prin
 
 echo ""
 echo "=== Project-specific runtime preparation ==="
+# Use SETUP_MODE or replace it with a project-specific variable such as
+# MODEL_TO_DOWNLOAD when one repository supports multiple remote workloads.
 project_prepare_runtime
 
 echo ""
