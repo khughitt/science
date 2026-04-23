@@ -9,6 +9,7 @@ from typing import Literal, cast
 import yaml
 
 from science_model.entities import Entity, EntityType, MechanismEntity, core_entity_type_for_kind
+from science_model.identity import EntityScope, ExternalId
 from science_model.packages.schema import AccessBlock, AccessException, DerivationBlock
 from science_model.sync import SyncSource
 
@@ -75,6 +76,85 @@ def _coerce_confidence(val: object) -> float | None:
         return float(str(val))
     except (ValueError, TypeError):
         return None
+
+
+def _coerce_scope(val: object) -> EntityScope:
+    if isinstance(val, EntityScope):
+        return val
+    if isinstance(val, str):
+        normalized = val.strip()
+        if normalized == EntityScope.SHARED.value:
+            return EntityScope.SHARED
+    return EntityScope.PROJECT
+
+
+def _strip_version_suffix(identifier: str) -> tuple[str, str | None]:
+    if "." not in identifier:
+        return identifier, None
+    head, tail = identifier.rsplit(".", 1)
+    if not tail.isdigit():
+        return identifier, None
+    return head, tail
+
+
+def _coerce_external_id(raw: object) -> ExternalId | None:
+    if raw is None:
+        return None
+    if isinstance(raw, ExternalId):
+        return raw
+    if not isinstance(raw, dict):
+        return None
+
+    source = raw.get("source")
+    identifier = raw.get("id")
+    curie = raw.get("curie")
+    provenance = raw.get("provenance")
+    version = raw.get("version")
+    if not isinstance(source, str) or not source.strip():
+        return None
+    if not isinstance(identifier, str) or not identifier.strip():
+        return None
+    if not isinstance(curie, str) or not curie.strip():
+        return None
+    if not isinstance(provenance, str) or not provenance.strip():
+        return None
+
+    clean_id, inferred_version = _strip_version_suffix(identifier.strip())
+    clean_curie = curie.strip()
+    if ":" in clean_curie:
+        prefix, local = clean_curie.split(":", 1)
+        clean_local, curie_version = _strip_version_suffix(local)
+        clean_curie = f"{prefix}:{clean_local}"
+        if inferred_version is None:
+            inferred_version = curie_version
+    elif inferred_version is not None:
+        clean_curie = f"{clean_curie}.{inferred_version}"
+
+    if version is None:
+        version = inferred_version
+    elif not isinstance(version, str):
+        version = str(version)
+    else:
+        version = version.strip() or None
+
+    return ExternalId(
+        source=source.strip(),
+        id=clean_id,
+        curie=clean_curie,
+        provenance=provenance.strip(),
+        version=version,
+    )
+
+
+def _coerce_external_ids(raw: object) -> list[ExternalId]:
+    if not isinstance(raw, list):
+        return []
+    result: list[ExternalId] = []
+    for item in raw:
+        ext = _coerce_external_id(item)
+        if ext is not None:
+            result.append(ext)
+    return result
 
 
 def _normalize_kind(raw: str) -> str:
@@ -231,6 +311,14 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         "confidence": _coerce_confidence(fm.get("confidence")),
         "datasets": fm.get("datasets"),
         "sync_source": _parse_sync_source(fm.get("sync_source")),
+        "primary_external_id": _coerce_external_id(fm.get("primary_external_id")),
+        "xrefs": _coerce_external_ids(fm.get("xrefs")),
+        "scope": _coerce_scope(fm.get("scope")),
+        "provisional": bool(fm.get("provisional", False)),
+        "review_after": _coerce_date(fm.get("review_after")),
+        "deprecated_ids": list(fm.get("deprecated_ids") or []),
+        "replaced_by": fm.get("replaced_by"),
+        "taxon": fm.get("taxon"),
         "origin": (fm.get("origin") or ("external" if kind == EntityType.DATASET.value else None)),
         "access": _coerce_access(fm),
         "derivation": _coerce_derivation(fm),

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from science_model.entities import EntityType
+from science_model.identity import EntityScope, ExternalId
 from science_model.frontmatter import parse_entity_file
 
 
@@ -134,3 +135,51 @@ def test_research_package_entity_parses(tmp_path: Path) -> None:
     assert e.type == EntityType.RESEARCH_PACKAGE
     assert e.origin is None
     assert e.access is None
+
+
+def test_dataset_frontmatter_preserves_identity_metadata(tmp_md) -> None:
+    p = tmp_md(
+        """
+        ---
+        id: "dataset:identity-demo"
+        type: "dataset"
+        title: "Identity Demo"
+        primary_external_id:
+          source: "GEO"
+          id: "GSE7039"
+          curie: "GEO:GSE7039"
+          provenance: "manual"
+        xrefs:
+          - source: "BioProject"
+            id: "PRJNA12345"
+            curie: "BioProject:PRJNA12345"
+            provenance: "manual"
+        scope: "shared"
+        deprecated_ids: ["dataset:old-demo"]
+        taxon: "NCBITaxon:9606"
+        origin: "external"
+        access: "public"
+        ---
+        Body.
+    """,
+        name="identity-demo.md",
+    )
+    e = parse_entity_file(p, project_slug="testproj")
+    assert e is not None
+    assert e.primary_external_id == ExternalId(
+        source="GEO",
+        id="GSE7039",
+        curie="GEO:GSE7039",
+        provenance="manual",
+    )
+    assert e.xrefs == [
+        ExternalId(
+            source="BioProject",
+            id="PRJNA12345",
+            curie="BioProject:PRJNA12345",
+            provenance="manual",
+        )
+    ]
+    assert e.scope == EntityScope.SHARED
+    assert e.deprecated_ids == ["dataset:old-demo"]
+    assert e.taxon == "NCBITaxon:9606"
