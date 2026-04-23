@@ -96,6 +96,8 @@ For brevity, the examples below write just `science-tool <command>`; always expa
 
 Before adding new entities, check the cross-project registry for existing definitions. Run `science-tool sync status` to see if the registry is populated. If it is, new entities added during graph creation will be checked against the registry during `graph build` to detect potential duplicates across projects. If a match is found, prefer reusing the existing canonical ID and aliases rather than creating a new entity.
 
+Before creating any new entity, read `docs/process/entity-creation-cookbook.md`. Check shared kinds first, then only add a local `concept:*` when no recommended shared kind fits and the term is stable enough to deserve entity status.
+
 ## Canonical Inputs
 
 Build the graph from these upstream sources:
@@ -134,7 +136,7 @@ For each project entity:
    - interpretations, discussions, pre-registrations, bias audits, methods, datasets, and similar entities in their typed `doc/` locations
 2. Keep task links in `tasks/*.md` `related:` / `blocked-by:` fields using canonical IDs.
 3. Put unresolved but legitimate project-local semantics in `knowledge/sources/<local-profile>/`:
-   - `entities.yaml` for local entities such as project topics or legacy questions not yet migrated into standalone docs
+   - `entities.yaml` for local entities that passed cookbook triage and genuinely need project-local identity
    - `mappings.yaml` for explicit aliases during migration
    - `relations.yaml` only when you need project-local relation declarations
 
@@ -162,7 +164,9 @@ Fix every unresolved reference in the canonical sources before building:
 - add missing frontmatter to existing docs
 - convert legacy short IDs to canonical IDs
 - add explicit aliases in `mappings.yaml` when a temporary migration bridge is still needed
-- add missing local-profile entities for legitimate project-local concepts
+- check shared kinds before creating local entities
+- use the cookbook before adding local `concept:*`
+- keep broad synthesis labels as prose-only notes when they do not name a stable semantic object
 
 ### Step 4: Materialize the graph
 

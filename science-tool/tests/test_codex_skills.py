@@ -7,6 +7,10 @@ from science_tool.codex_skills import command_to_skill_name, generate_codex_skil
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _read_skill(name: str) -> str:
+    return (ROOT / "codex-skills" / name / "SKILL.md").read_text(encoding="utf-8")
+
+
 def test_command_to_skill_name_uses_science_namespace() -> None:
     assert command_to_skill_name(Path("commands/status.md")) == "science-status"
     assert command_to_skill_name(Path("commands/research-topic.md")) == "science-research-topic"
@@ -47,3 +51,34 @@ def test_generate_codex_skills_emits_all_commands(tmp_path: Path) -> None:
     command_count = len(list((ROOT / "commands").glob("*.md")))
     assert len(generated) == command_count
     assert len(list(tmp_path.glob("science-*/SKILL.md"))) == command_count
+
+
+def test_science_health_mentions_identity_policy_triage() -> None:
+    text = _read_skill("science-health")
+
+    assert "docs/process/entity-creation-cookbook.md" in text
+    assert "external-id requirement" in text
+    assert "prose-only fallback" in text
+
+
+def test_create_graph_points_to_cookbook_for_new_entities() -> None:
+    text = _read_skill("science-create-graph")
+
+    assert "docs/process/entity-creation-cookbook.md" in text
+    assert "check shared kinds" in text
+    assert "local `concept:*`" in text
+
+
+def test_update_graph_mentions_fix_on_touch_for_legacy_entities() -> None:
+    text = _read_skill("science-update-graph")
+
+    assert "fix-on-touch" in text
+    assert "safe rename/xref addition" in text
+
+
+def test_sync_mentions_scope_and_collision_warnings() -> None:
+    text = _read_skill("science-sync")
+
+    assert "`scope: shared`" in text
+    assert "`scope: project`" in text
+    assert "primary_external_id collision" in text

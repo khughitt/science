@@ -295,3 +295,25 @@ def test_command_docs_remove_claim_centric_terminology(
     text = _read(path)
     for legacy in legacy_strings:
         assert legacy not in text
+
+
+def test_entity_creation_cookbook_covers_positive_and_negative_examples() -> None:
+    text = _read("docs/process/entity-creation-cookbook.md")
+
+    for expected in (
+        "gene",
+        "protein",
+        "family",
+        "complex",
+        "disease",
+        "drug",
+        "cell type",
+        "phenotype",
+        "pathway",
+        "histone mark",
+        "mechanism",
+        "prose-only note",
+        "what not to create",
+        "concept:high-proliferation-rate",
+    ):
+        assert expected in text

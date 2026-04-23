@@ -72,6 +72,10 @@ all registered science projects. The registry enables cross-project awareness (e
 querying which projects reference a given gene or concept) without copying content
 between projects.
 
+Identity-aware sync assumes each entity declares whether it is `scope: shared` or `scope: project`.
+- `scope: shared` means the bare canonical id and external identity are intended to align across projects.
+- `scope: project` means the entity is local even if another project uses the same bare canonical id.
+
 ## Setup
 
 1. Read `science.yaml` for the current project context.
@@ -103,12 +107,14 @@ After sync completes, present the report:
 
 ### Drift Warnings
 
-- Same entity with conflicting metadata across projects
+- `primary_external_id collision`: two internal ids claim the same authority id
+- `canonical_id collision`: a project-scoped local id is being reused across projects
+- incompatible shared metadata for the same bare canonical id across projects
 
 ## Follow-Up
 
 Suggest the user:
-1. Resolve any drift warnings by updating entity metadata
+1. Resolve any drift warnings by updating entity metadata, `scope`, or authority mappings
 2. Run `science-tool graph build` if entity metadata changed
 
 ## Rebuild
