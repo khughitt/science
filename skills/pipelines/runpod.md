@@ -77,8 +77,11 @@ Keep these patterns intact when customizing:
 - **Fail-fast preflight:** verify SSH target, GPU visibility, free disk, and required env vars before expensive setup
 - **Persistent caches:** keep HuggingFace, `uv`, and Torch caches under `/workspace/.cache`
 - **Idempotent setup:** marker files should skip expensive steps that already succeeded
+- **Track the full Torch package set:** record and compare the matched `torch` plus `torchvision` wheel pair, not just `torch`
 - **Explicit remote patching:** if local editable `uv` sources break pod resolution, patch them in a clearly isolated block
 - **Controlled dependency sync:** cap `uv` download fanout and add retries on flaky pod networks
+- **Install runtime-only tools explicitly:** if `uv sync --no-dev` omits workflow CLIs such as `snakemake`, install them in a dedicated hook instead of hoping they exist
+- **Early runtime smoke checks:** import `torch` and `torchvision`, assert CUDA, then run one small workload-specific smoke test before large downloads
 - **Separate setup from execution:** dependency bootstrap belongs in `setup.sh`; workload launch belongs in `run.sh`
 - **Standard pull phase:** make result retrieval explicit instead of relying on ad hoc `rsync` commands after the run
 
@@ -90,11 +93,21 @@ Some repos depend on local editable packages that only exist on the workstation.
 
 ### PyTorch wheel does not match the available GPU / CUDA stack
 
-The template includes a GPU-aware reinstall pattern. Treat it as a starting point, then pin the wheel selection your project actually needs.
+Pin a matched `torch` plus `torchvision` wheel pair and store that whole package set in the setup marker. Reinstalling only `torch` can leave the pod with operator mismatches such as `torchvision::nms does not exist`.
+
+### `uv sync --no-dev` succeeds but the workflow runner is missing
+
+This usually means the workload depends on a CLI that only lives in the dev group, such as `snakemake`. Install those tools in a dedicated `project_install_runtime_tools()` hook inside `setup.sh`, then verify them there.
 
 ### Setup succeeds but the real workload still is not runnable
 
-Add a project-specific smoke test to `setup.sh` and keep the real workload entrypoint in `run.sh`. Do not treat “dependency install completed” as a sufficient verification step.
+Add a project-specific smoke test to `setup.sh` and keep the real workload entrypoint in `run.sh`. Do not treat “dependency install completed” as a sufficient verification step. The shared template should already verify:
+
+- `torch` import
+- `torchvision` import
+- `torch.cuda.is_available()`
+
+Then add one workload-specific check such as a model import or workflow CLI `--version`.
 
 ### Rsync copies too much or too little
 
@@ -119,6 +132,8 @@ Before first real use, edit all of these:
 - `REMOTE_DIR` and repository include patterns in `push_to_runpod.sh`
 - the project-specific input and optional artifact sync functions in `push_to_runpod.sh`
 - `PROJECT_DIR`, timeout or retry defaults, and optional `patch_pyproject_for_remote` logic in `setup.sh`
+- the optional `project_install_runtime_tools()` hook in `setup.sh` if the pod needs workflow CLIs that are omitted from `uv sync --no-dev`
+- the optional `project_runtime_smoke_test()` hook in `setup.sh` if the workload needs an early import or CLI check
 - the project-specific runtime preparation function in `setup.sh`
 - the project-specific workload function in `run.sh`
 - the project-specific result sync function in `pull_results.sh`

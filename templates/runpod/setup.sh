@@ -26,6 +26,20 @@ patch_pyproject_for_remote() {
     :
 }
 
+project_install_runtime_tools() {
+    # Optional hook:
+    # install workflow CLIs that are intentionally omitted from `uv sync --no-dev`
+    # but are still required on the pod, for example snakemake.
+    :
+}
+
+project_runtime_smoke_test() {
+    # Optional hook:
+    # add mode-specific import or CLI checks here so runtime incompatibilities
+    # fail before large model downloads begin.
+    :
+}
+
 project_prepare_runtime() {
     die "Replace project_prepare_runtime() with your project's model download and smoke-test logic."
 }
@@ -58,7 +72,7 @@ export UV_CONCURRENT_DOWNLOADS
 mkdir -p "$HF_HOME" "$UV_CACHE_DIR" "$TORCH_HOME"
 
 SYNC_MARKER=".venv/.setup-sync-done"
-TORCH_MARKER=".venv/.setup-torch-done"
+TORCH_MARKER=".venv/.setup-torch-package-set-done"
 
 echo ""
 echo "=== Install uv ==="
@@ -109,24 +123,36 @@ echo ""
 echo "=== Ensure a GPU-compatible PyTorch build ==="
 if echo "$GPU_NAME" | grep -qiE "blackwell|b100|b200|gb200|rtx.*pro.*6000"; then
     TORCH_SPEC="torch==2.8.0+cu128"
+    TORCHVISION_SPEC="torchvision==0.23.0+cu128"
     CUDA_WHEEL="cu128"
 else
     TORCH_SPEC="torch==2.5.1+cu124"
+    TORCHVISION_SPEC="torchvision==0.20.1+cu124"
     CUDA_WHEEL="cu124"
 fi
+TORCH_PACKAGE_SET="${TORCH_SPEC} ${TORCHVISION_SPEC}"
 
-if [[ -f "$TORCH_MARKER" && "$(cat "$TORCH_MARKER" 2>/dev/null)" == "$TORCH_SPEC" ]]; then
-    echo "Torch marker matches $TORCH_SPEC; skipping reinstall."
+if [[ -f "$TORCH_MARKER" && "$(cat "$TORCH_MARKER" 2>/dev/null)" == "$TORCH_PACKAGE_SET" ]]; then
+    echo "Torch marker matches $TORCH_PACKAGE_SET; skipping reinstall."
 else
-    echo "Installing $TORCH_SPEC from $CUDA_WHEEL..."
+    echo "Installing $TORCH_PACKAGE_SET from $CUDA_WHEEL..."
     uv pip install --python .venv/bin/python --reinstall \
         "$TORCH_SPEC" \
+        "$TORCHVISION_SPEC" \
         --index-url "https://download.pytorch.org/whl/$CUDA_WHEEL"
-    echo "$TORCH_SPEC" > "$TORCH_MARKER"
+    echo "$TORCH_PACKAGE_SET" > "$TORCH_MARKER"
 fi
 
 export UV_NO_SYNC=1
-uv run --no-sync python -c "import torch; assert torch.cuda.is_available(); print(torch.__version__, torch.version.cuda)"
+
+echo ""
+echo "=== Install runtime-only tools ==="
+project_install_runtime_tools
+
+echo ""
+echo "=== Runtime smoke checks ==="
+uv run --no-sync python -c "import torch; import torchvision; assert torch.cuda.is_available(); print('torch', torch.__version__, 'cuda', torch.version.cuda); print('torchvision', torchvision.__version__)"
+project_runtime_smoke_test
 
 echo ""
 echo "=== Project-specific runtime preparation ==="
