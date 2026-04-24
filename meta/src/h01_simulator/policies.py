@@ -53,7 +53,26 @@ def constant_revisit_policy(config: PolicyConfig) -> Policy:
     return policy
 
 
+def thompson_policy(config: PolicyConfig) -> Policy:
+    """Sample one Beta draw per proposition; choose the argmax.
+
+    Exploration pressure comes from posterior width; an explicit warmup
+    round-robins to avoid degenerate draws under Beta(1, 1).
+    """
+
+    def policy(model: SignalModel, action_idx: int, rng: np.random.Generator) -> int:
+        n = len(model.alpha)
+        warmup_total = config.warmup_actions * n
+        if action_idx < warmup_total:
+            return action_idx % n
+        samples = rng.beta(model.alpha, model.beta)
+        return int(np.argmax(samples))
+
+    return policy
+
+
 POLICIES: dict[str, Callable[[PolicyConfig], Policy]] = {
     "hard_gate": hard_gate_policy,
     "constant_revisit": constant_revisit_policy,
+    "thompson": thompson_policy,
 }

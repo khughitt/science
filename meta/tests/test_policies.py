@@ -2,13 +2,11 @@ import numpy as np
 
 from h01_simulator.config import PolicyConfig, SimConfig
 from h01_simulator.model import Propositions, SignalModel
-from h01_simulator.policies import POLICIES, constant_revisit_policy, hard_gate_policy
+from h01_simulator.policies import POLICIES, constant_revisit_policy, hard_gate_policy, thompson_policy
 
 
 def _fresh_model(n: int = 4, seed: int = 0) -> SignalModel:
-    cfg = SimConfig(
-        n_propositions=n, budget=100, p_pos=0.8, p_neg=0.2, prior_true=0.5
-    )
+    cfg = SimConfig(n_propositions=n, budget=100, p_pos=0.8, p_neg=0.2, prior_true=0.5)
     props = Propositions(
         truth=np.zeros(n, dtype=np.int8),
         bias_mask=np.zeros(n, dtype=np.int8),
@@ -26,9 +24,7 @@ def test_hard_gate_warmup_is_round_robin():
 
 
 def test_hard_gate_excludes_below_threshold():
-    policy = hard_gate_policy(
-        PolicyConfig(kind="hard_gate", warmup_actions=1, gate_threshold=0.5)
-    )
+    policy = hard_gate_policy(PolicyConfig(kind="hard_gate", warmup_actions=1, gate_threshold=0.5))
     m = _fresh_model(n=3)
     for _ in range(10):
         m.observe(0, 0)  # prop 0 -> well below 0.5
@@ -41,9 +37,7 @@ def test_hard_gate_excludes_below_threshold():
 
 
 def test_hard_gate_falls_back_when_all_gated():
-    policy = hard_gate_policy(
-        PolicyConfig(kind="hard_gate", warmup_actions=1, gate_threshold=0.99)
-    )
+    policy = hard_gate_policy(PolicyConfig(kind="hard_gate", warmup_actions=1, gate_threshold=0.99))
     m = _fresh_model(n=3)
     rng = np.random.default_rng(0)
     pick = policy(m, 100, rng)
@@ -93,3 +87,24 @@ def test_constant_revisit_samples_gated_with_given_frequency():
 
 def test_constant_revisit_dispatch_registered():
     assert "constant_revisit" in POLICIES
+
+
+def test_thompson_warmup_is_round_robin():
+    policy = thompson_policy(PolicyConfig(kind="thompson", warmup_actions=1))
+    m = _fresh_model(n=3)
+    rng = np.random.default_rng(0)
+    picks = [policy(m, i, rng) for i in range(3)]
+    assert picks == [0, 1, 2]
+
+
+def test_thompson_output_is_a_valid_index():
+    policy = thompson_policy(PolicyConfig(kind="thompson", warmup_actions=1))
+    m = _fresh_model(n=5)
+    rng = np.random.default_rng(0)
+    for _ in range(100):
+        pick = policy(m, 1000, rng)
+        assert 0 <= pick < 5
+
+
+def test_thompson_dispatch_registered():
+    assert "thompson" in POLICIES
