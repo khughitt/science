@@ -1,9 +1,11 @@
 import math
+from typing import Any
 
 import numpy as np
 import pytest
 
-from h01_simulator.metrics import brier, recall
+from h01_simulator.config import SimConfig
+from h01_simulator.metrics import brier, recall, regret
 
 
 def test_recall_perfect():
@@ -63,3 +65,46 @@ def test_brier_known_value():
     post = np.array([0.7, 0.3])
     # (0.7-1)^2 + (0.3-0)^2 → mean 0.09
     assert brier(truth, post) == pytest.approx(0.09)
+
+
+def _sim(**overrides: Any) -> SimConfig:
+    base: dict[str, Any] = dict(n_propositions=3, budget=6, p_pos=0.8, p_neg=0.2, prior_true=0.5)
+    base.update(overrides)
+    return SimConfig(**base)
+
+
+def test_regret_oracle_allocation_is_zero():
+    cfg = _sim()
+    truth = np.array([1, 0, 0])
+    bias_offsets = np.zeros(3)
+    allocations = np.array([6, 0, 0])  # all budget on the best prop
+    assert regret(truth, bias_offsets, allocations, cfg) == pytest.approx(0.0)
+
+
+def test_regret_positive_when_budget_on_false_props():
+    cfg = _sim()
+    truth = np.array([1, 0, 0])
+    bias_offsets = np.zeros(3)
+    allocations = np.array([0, 3, 3])
+    # oracle: 6 * 0.8 = 4.8; policy: 3*0.2 + 3*0.2 = 1.2; regret = 3.6
+    assert regret(truth, bias_offsets, allocations, cfg) == pytest.approx(3.6)
+
+
+def test_regret_uses_per_proposition_offsets():
+    cfg = _sim()
+    truth = np.array([1, 1, 0])
+    # Proposition 1 is biased with offset -0.5 → effective p = 0.3
+    bias_offsets = np.array([0.0, -0.5, 0.0])
+    allocations = np.array([6, 0, 0])
+    # best effective p = 0.8 (prop 0); oracle = 4.8; policy = 4.8; regret = 0
+    assert regret(truth, bias_offsets, allocations, cfg) == pytest.approx(0.0)
+
+
+def test_regret_clips_effective_probability_to_unit_interval():
+    cfg = _sim(p_pos=0.9, p_neg=0.1)
+    truth = np.array([1, 1, 0])
+    # Offset of +0.5 would push p to 1.4; must clip to 1.0
+    bias_offsets = np.array([0.5, 0.0, 0.0])
+    allocations = np.array([6, 0, 0])
+    # best = 1.0; oracle = 6.0; policy = 6.0; regret = 0
+    assert regret(truth, bias_offsets, allocations, cfg) == pytest.approx(0.0)
