@@ -1,0 +1,54 @@
+import numpy as np
+
+from h01_simulator.config import PolicyConfig, SimConfig
+from h01_simulator.model import Propositions, SignalModel
+from h01_simulator.policies import POLICIES, hard_gate_policy
+
+
+def _fresh_model(n: int = 4, seed: int = 0) -> SignalModel:
+    cfg = SimConfig(
+        n_propositions=n, budget=100, p_pos=0.8, p_neg=0.2, prior_true=0.5
+    )
+    props = Propositions(
+        truth=np.zeros(n, dtype=np.int8),
+        bias_mask=np.zeros(n, dtype=np.int8),
+        bias_offsets=np.zeros(n, dtype=np.float64),
+    )
+    return SignalModel(props, cfg, np.random.default_rng(seed))
+
+
+def test_hard_gate_warmup_is_round_robin():
+    policy = hard_gate_policy(PolicyConfig(kind="hard_gate", warmup_actions=2))
+    m = _fresh_model(n=3)
+    rng = np.random.default_rng(0)
+    picks = [policy(m, i, rng) for i in range(6)]
+    assert picks == [0, 1, 2, 0, 1, 2]
+
+
+def test_hard_gate_excludes_below_threshold():
+    policy = hard_gate_policy(
+        PolicyConfig(kind="hard_gate", warmup_actions=1, gate_threshold=0.5)
+    )
+    m = _fresh_model(n=3)
+    for _ in range(10):
+        m.observe(0, 0)  # prop 0 -> well below 0.5
+    for _ in range(10):
+        m.observe(2, 1)  # prop 2 -> well above 0.5
+    rng = np.random.default_rng(0)
+    picks = [policy(m, 100, rng) for _ in range(400)]
+    assert 0 not in picks
+    assert set(picks) <= {1, 2}
+
+
+def test_hard_gate_falls_back_when_all_gated():
+    policy = hard_gate_policy(
+        PolicyConfig(kind="hard_gate", warmup_actions=1, gate_threshold=0.99)
+    )
+    m = _fresh_model(n=3)
+    rng = np.random.default_rng(0)
+    pick = policy(m, 100, rng)
+    assert pick in {0, 1, 2}
+
+
+def test_policies_dispatch_includes_hard_gate():
+    assert "hard_gate" in POLICIES
