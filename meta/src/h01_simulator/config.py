@@ -73,6 +73,12 @@ class PolicyConfig:
             raise ValueError(f"unknown policy kind: {self.kind}")
         if not 0.0 <= self.revisit_prob <= 1.0:
             raise ValueError(f"revisit_prob must be in [0, 1], got {self.revisit_prob}")
+        if self.warmup_actions <= 0:
+            raise ValueError(f"warmup_actions must be positive, got {self.warmup_actions}")
+        if not 0.0 < self.gate_threshold < 1.0:
+            raise ValueError(
+                f"gate_threshold must be in (0, 1), got {self.gate_threshold}"
+            )
 
 
 @dataclass

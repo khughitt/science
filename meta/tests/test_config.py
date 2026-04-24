@@ -68,6 +68,23 @@ def test_policy_config_kind_allowed():
         PolicyConfig(kind="ucb")  # type: ignore[arg-type]
 
 
+def test_policy_config_rejects_nonpositive_warmup():
+    with pytest.raises(ValueError):
+        PolicyConfig(kind="hard_gate", warmup_actions=0)
+    with pytest.raises(ValueError):
+        PolicyConfig(kind="hard_gate", warmup_actions=-1)
+
+
+def test_policy_config_rejects_degenerate_gate_threshold():
+    PolicyConfig(kind="hard_gate", gate_threshold=0.5)  # valid
+    with pytest.raises(ValueError):
+        PolicyConfig(kind="hard_gate", gate_threshold=0.0)
+    with pytest.raises(ValueError):
+        PolicyConfig(kind="hard_gate", gate_threshold=1.0)
+    with pytest.raises(ValueError):
+        PolicyConfig(kind="hard_gate", gate_threshold=1.5)
+
+
 def test_run_result_carries_arrays():
     sim = SimConfig(n_propositions=3, budget=10, p_pos=0.8, p_neg=0.2, prior_true=0.5)
     pol = PolicyConfig(kind="hard_gate")
