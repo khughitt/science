@@ -79,10 +79,11 @@ def _build_skill_text(
     rewritten_body = _replace_command_preamble_instructions(rewritten_body)
     rewritten_body = re.sub(r"^#\s+.+\n\n", "", rewritten_body)
 
+    escaped_description = description.replace('"', '\\"')
     header = [
         "---",
         f"name: {skill_name}",
-        f"description: {_build_skill_description(description, command_name, skill_name)}",
+        f'description: "{escaped_description}"',
         "---",
         "",
     ]
@@ -100,12 +101,6 @@ def _build_skill_text(
         "",
     ]
     return "\n".join(header + sections)
-
-
-def _build_skill_description(description: str, command_name: str, skill_name: str) -> str:
-    escaped = description.replace('"', '\\"')
-    trigger = f" Also use when the user explicitly asks for `{skill_name}` or references `/science:{command_name}`."
-    return f'"{escaped}{trigger}"'
 
 
 def _replace_command_preamble_instructions(text: str) -> str:

@@ -1,6 +1,6 @@
 ---
 name: science-create-project
-description: "Scaffold a new Science-managed project using one of the two supported profiles: `research` or `software`. Use when starting a brand-new project from scratch. Also use when the user explicitly asks for `science-create-project` or references `/science:create-project`."
+description: "Scaffold a new Science-managed project using one of the two supported profiles: `research` or `software`. Use when starting a brand-new project from scratch."
 ---
 
 # Create A New Science Project

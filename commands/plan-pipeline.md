@@ -1,5 +1,5 @@
 ---
-description: Generate a computational implementation plan from a specified inquiry. Translates the evidence-driven model into concrete pipeline steps with tools, configs, tests, and validation criteria. Use when the user wants to implement a model, build a pipeline, operationalize an inquiry, or make something computational. Also use when the user says "plan pipeline", "implement this", "build the pipeline", or "make this executable".
+description: Generate a computational implementation plan from an inquiry — pipeline steps, tools, configs, tests, and validation criteria. Use when the user wants to implement a model, build a pipeline, or make an inquiry executable.
 ---
 
 # Plan Pipeline from Inquiry

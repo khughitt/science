@@ -1,6 +1,6 @@
 ---
 name: science-dag-audit
-description: "Audit causal DAG freshness — runs drift detection read-only, surfaces stale edges + unpropagated tasks + broken refs, and applies fixes only on explicit user approval. Use on a 4-weekly cadence or after any major verdict interpretation lands. Also use when the user explicitly asks for `science-dag-audit` or references `/science:dag-audit`."
+description: "Audit causal DAG freshness — runs drift detection read-only, surfaces stale edges + unpropagated tasks + broken refs, and applies fixes only on explicit user approval. Use on a 4-weekly cadence or after any major verdict interpretation lands."
 ---
 
 # DAG Audit

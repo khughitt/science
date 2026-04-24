@@ -1,6 +1,6 @@
 ---
 name: science-discuss
-description: "Structured critical discussion for a hypothesis, question, topic, or approach. Supports optional double-blind mode to reduce anchoring bias. Also use when the user explicitly asks for `science-discuss` or references `/science:discuss`."
+description: "Structured critical discussion for a hypothesis, question, topic, or approach. Supports optional double-blind mode to reduce anchoring bias."
 ---
 
 # Discuss

@@ -1,6 +1,6 @@
 ---
 name: science-update-graph
-description: "Re-audit and re-materialize the knowledge graph after canonical source changes. Also use when the user explicitly asks for `science-update-graph` or references `/science:update-graph`."
+description: "Re-audit and re-materialize the knowledge graph after canonical source changes."
 ---
 
 # Update Knowledge Graph
@@ -87,8 +87,6 @@ For brevity, the examples below write just `science-tool <command>`; always expa
 
 When adding new entities as part of the update, the cross-project registry is consulted during `graph build` to detect potential duplicates across projects. If matches are found, prefer reusing existing canonical IDs and aliases from the registry.
 
-Read `docs/process/entity-creation-cookbook.md` before creating any new entity during an update.
-
 ## Workflow
 
 ### Step 1: Check whether canonical inputs changed
@@ -118,11 +116,6 @@ For each stale source:
 2. Update frontmatter IDs, `related`, `source_refs`, and task links to canonical IDs.
 3. Add or revise local-profile entities and alias mappings when the project introduces new local semantics.
 4. If a file was removed, decide whether the represented entity should also be removed or replaced by another canonical source. Do not silently orphan it.
-
-Apply a fix-on-touch policy for legacy entities discovered during the update:
-- fix-on-touch for a safe rename/xref addition
-- escalate for review if the change would require a split or merge
-- do not keep a legacy placeholder just because the graph still builds
 
 ### Step 4: Audit before rebuild
 

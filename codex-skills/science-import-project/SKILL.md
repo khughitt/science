@@ -1,6 +1,6 @@
 ---
 name: science-import-project
-description: "Migrate an existing repository into one of the two supported Science project profiles (`research` or `software`). Use when a pre-existing project wants to adopt Science and converge on the canonical layout. Also use when the user explicitly asks for `science-import-project` or references `/science:import-project`."
+description: "Migrate an existing repository into one of the two supported Science project profiles (`research` or `software`). Use when a pre-existing project wants to adopt Science and converge on the canonical layout."
 ---
 
 # Import An Existing Project Into Science

@@ -1,6 +1,6 @@
 ---
 name: science-search-literature
-description: "Search scientific literature using OpenAlex and PubMed, rank results by project relevance, and produce a prioritized reading queue. Also use when the user explicitly asks for `science-search-literature` or references `/science:search-literature`."
+description: "Search scientific literature using OpenAlex and PubMed, rank results by project relevance, and produce a prioritized reading queue."
 ---
 
 # Search Literature

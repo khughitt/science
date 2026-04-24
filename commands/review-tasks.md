@@ -1,5 +1,5 @@
 ---
-description: Review and reorganize the task backlog. Audit for stale tasks, verify statuses against codebase, adjust priorities, identify gaps, and group related work. Use when the user says "review tasks", "clean up backlog", "task audit", "reorganize tasks", or "what's stale".
+description: Audit and reorganize the task backlog — check stale tasks, verify statuses against the codebase, adjust priorities, identify gaps, group related work. Use when the user wants to clean up the backlog.
 ---
 
 # Review Tasks

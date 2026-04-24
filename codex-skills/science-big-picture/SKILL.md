@@ -1,6 +1,6 @@
 ---
 name: science-big-picture
-description: "Generate a multi-scale, hypothesis-organized synthesis report for the current project. Produces per-hypothesis files, an emergent-threads file, and a project-level rollup (synthesis.md). Use when the user says \"big picture\", \"full synthesis\", \"deep dive\", or wants a shareable project-state artifact. Also use when the user explicitly asks for `science-big-picture` or references `/science:big-picture`."
+description: "Generate a multi-scale, hypothesis-organized synthesis for the project — per-hypothesis files, an emergent-threads file, and a project-level rollup (synthesis.md). Use when the user wants a full synthesis or shareable project-state artifact."
 ---
 
 # Project Big Picture

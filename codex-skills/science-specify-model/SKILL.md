@@ -1,6 +1,6 @@
 ---
 name: science-specify-model
-description: "Formalize a research model with explicit claims, evidence provenance, and residual uncertainty. Use when the user wants to make a sketch rigorous, attach support/dispute to candidate relations, resolve unknowns, or formalize assumptions. Also use when the user explicitly asks for `science-specify-model` or references `/science:specify-model`."
+description: "Formalize a research model with explicit claims, evidence provenance, and residual uncertainty. Use when the user wants to make a sketch rigorous, attach support/dispute to candidate relations, resolve unknowns, or formalize assumptions."
 ---
 
 # Specify a Research Model

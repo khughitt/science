@@ -1,5 +1,5 @@
 ---
-description: Develop and refine a research hypothesis interactively. Use when the user wants to add a new hypothesis, formalize a conjecture, or organize a set of uncertain propositions around one research direction. Also use when the user says "I think", "what if", "could it be that", or proposes a potential mechanism or relationship.
+description: Develop and refine a research hypothesis interactively. Use when the user wants to add a hypothesis, formalize a conjecture, or organize uncertain propositions around one research direction.
 ---
 
 # Add a Hypothesis

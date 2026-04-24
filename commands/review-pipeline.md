@@ -1,5 +1,5 @@
 ---
-description: Critically review a pipeline plan against an evidence rubric. Checks evidence coverage, assumption validity, data availability, identifiability, reproducibility, validation criteria, and scope. Use when the user wants to review, audit, or check a pipeline before implementation. Also use when the user says "review pipeline", "check my plan", "audit assumptions", or "is this ready".
+description: Critically review a pipeline plan against an evidence rubric — coverage, assumptions, data availability, identifiability, reproducibility, validation, scope. Use when the user wants to review or audit a pipeline before implementation.
 ---
 
 # Review Pipeline

@@ -1,6 +1,6 @@
 ---
 name: science-curate
-description: "Agent-led project memory curation sweep. Surfaces forgotten insights, missed links, drift, duplication, safe fixes, and pending decisions across a Science project. Also use when the user explicitly asks for `science-curate` or references `/science:curate`."
+description: "Agent-led project memory curation sweep. Surfaces forgotten insights, missed links, drift, duplication, safe fixes, and pending decisions across a Science project."
 ---
 
 # Project Curation Sweep

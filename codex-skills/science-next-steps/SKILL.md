@@ -1,6 +1,6 @@
 ---
 name: science-next-steps
-description: "Synthesize recent progress, analyze coverage gaps, and suggest next actions. Use at session start, when the user says \"what should I work on\", \"next steps\", \"priorities\", \"what's next\", \"gaps\", or \"what am I missing\". Replaces the former research-gaps command. Also use when the user explicitly asks for `science-next-steps` or references `/science:next-steps`."
+description: "Synthesize recent progress, analyze coverage gaps, and suggest next actions. Use at session start, when the user says \"what should I work on\", \"next steps\", \"priorities\", \"what's next\", \"gaps\", or \"what am I missing\". Replaces the former research-gaps command."
 ---
 
 # Next Steps

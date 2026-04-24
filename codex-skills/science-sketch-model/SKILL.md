@@ -1,6 +1,6 @@
 ---
 name: science-sketch-model
-description: "Sketch a research model interactively. Captures variables, candidate relationships, data sources, and unknowns as an inquiry subgraph. Use when the user wants to explore what variables matter, how things connect, or how to approach a question computationally. Also use when the user says \"sketch\", \"what variables\", \"how would I model\", \"what affects what\", \"causal\", \"DAG\", \"confounders\", or \"treatment effect\". Also use when the user explicitly asks for `science-sketch-model` or references `/science:sketch-model`."
+description: "Sketch a research model interactively as an inquiry subgraph — variables, relationships, data sources, and unknowns. Use when exploring what variables matter, how they connect, or how to approach a causal question (DAG, confounders, treatment effect)."
 ---
 
 # Sketch a Research Model

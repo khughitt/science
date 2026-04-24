@@ -1,6 +1,6 @@
 ---
 name: science-compare-hypotheses
-description: "Head-to-head evaluation of competing explanations. Use when 2+ hypotheses exist for the same phenomenon and need structured comparison at the proposition level. Also use when the user explicitly asks for `science-compare-hypotheses` or references `/science:compare-hypotheses`."
+description: "Head-to-head evaluation of competing explanations. Use when 2+ hypotheses exist for the same phenomenon and need structured comparison at the proposition level."
 ---
 
 # Compare Hypotheses

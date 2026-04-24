@@ -1,6 +1,6 @@
 ---
 name: science-critique-approach
-description: "Critically review a causal DAG inquiry for missing confounders, identifiability issues, and structural problems. Use when the user wants to review a causal model, check for confounders, audit assumptions, or validate their causal reasoning. Also use when the user says \"critique\", \"review my DAG\", \"check confounders\", \"is this identifiable\", or \"what am I missing\". Also use when the user explicitly asks for `science-critique-approach` or references `/science:critique-approach`."
+description: "Critically review a causal DAG inquiry for missing confounders, identifiability issues, and structural problems. Use when the user wants to review a causal model, check confounders, or validate causal reasoning."
 ---
 
 # Critique a Causal Approach

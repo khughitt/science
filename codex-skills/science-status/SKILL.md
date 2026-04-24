@@ -1,6 +1,6 @@
 ---
 name: science-status
-description: "Show a curated project orientation — active hypotheses, open questions, uncertainty hotspots, recent activity, and next steps. Use at the start of a session or when the user says \"where are we\", \"what's the status\", or \"catch me up\". Also use when the user explicitly asks for `science-status` or references `/science:status`."
+description: "Show a curated project orientation — active hypotheses, open questions, uncertainty hotspots, recent activity, and next steps. Use at the start of a session or when the user says \"where are we\", \"what's the status\", or \"catch me up\"."
 ---
 
 # Project Status

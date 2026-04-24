@@ -1,6 +1,6 @@
 ---
 name: science-find-datasets
-description: "Discover and document candidate datasets for research or tool demos. Uses LLM knowledge + dataset repository search to find, rank, and document relevant public datasets. Also use when the user explicitly asks for `science-find-datasets` or references `/science:find-datasets`."
+description: "Discover and document candidate datasets for research or tool demos. Uses LLM knowledge + dataset repository search to find, rank, and document relevant public datasets."
 ---
 
 # Find Datasets

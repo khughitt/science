@@ -1,5 +1,5 @@
 ---
-description: Interpret analysis results and feed findings back into the research framework. Use when the user has pipeline output, notebook results, statistical summaries, or preliminary findings to evaluate against propositions and hypotheses and update project priorities.
+description: Interpret analysis results and feed findings back into the research framework. Use when the user has pipeline output or findings to evaluate against propositions/hypotheses and update project priorities.
 ---
 
 # Interpret Results

@@ -1,6 +1,6 @@
 ---
 name: science-research-topic
-description: "Research and summarize a scientific topic with project-context linking. Also use when the user explicitly asks for `science-research-topic` or references `/science:research-topic`."
+description: "Research and summarize a scientific topic with project-context linking."
 ---
 
 # Research a Topic

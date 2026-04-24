@@ -1,6 +1,6 @@
 ---
 name: science-research-papers
-description: "Research and summarize one or more scientific papers. Also use when the user explicitly asks for `science-research-papers` or references `/science:research-papers`."
+description: "Research and summarize one or more scientific papers."
 ---
 
 # Research Papers

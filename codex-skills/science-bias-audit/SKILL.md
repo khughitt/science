@@ -1,6 +1,6 @@
 ---
 name: science-bias-audit
-description: "Systematic check of cognitive and methodological biases against current project state. Use at any point, especially before interpret-results or when a project feels too settled. Also use when the user says \"check my biases\", \"what am I missing\", \"audit\", \"threats to validity\", \"blind spots\", or \"am I being fair\". Also use when the user explicitly asks for `science-bias-audit` or references `/science:bias-audit`."
+description: "Systematic check of cognitive and methodological biases against current project state — threats to validity and blind spots. Use any time, especially before interpret-results or when a project feels too settled."
 ---
 
 # Bias Audit

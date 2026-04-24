@@ -1,6 +1,6 @@
 ---
 name: science-pre-register
-description: "Formalize expectations before analysis to prevent post-hoc rationalization. Use after add-hypothesis or plan-pipeline, before running analysis. Also use when the user says \"what do I expect\", \"pre-register\", \"before I run this\", \"formalize expectations\", or \"what would change my mind\". Also use when the user explicitly asks for `science-pre-register` or references `/science:pre-register`."
+description: "Formalize expectations before analysis to prevent post-hoc rationalization. Use after add-hypothesis or plan-pipeline and before running analysis — to state expectations or what would change the user's mind."
 ---
 
 # Pre-register Expectations
