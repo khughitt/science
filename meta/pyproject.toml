@@ -32,6 +32,9 @@ packages = ["src/h01_simulator"]
 include = ["src", "tests"]
 pythonVersion = "3.11"
 reportMissingImports = "error"
+venvPath = "."
+venv = ".venv"
+extraPaths = ["src"]
 
 [tool.ruff]
 line-length = 120
