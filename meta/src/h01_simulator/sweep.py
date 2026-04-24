@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Iterator, cast
+from typing import Iterable, Iterator
 
 import numpy as np
 import polars as pl
@@ -64,7 +64,7 @@ def build_default_grid(seeds: int = 100, quick: bool = False) -> Iterator[tuple[
         n_props_values = [20, 100]
         prior_true_values = [0.3, 0.5]
 
-    bias_settings = [
+    bias_settings: list[tuple[BiasModel, float, float]] = [
         ("none", 0.0, 0.0),
         ("independent", 0.3, 0.3),
         ("shared", 0.3, 0.3),
@@ -99,7 +99,7 @@ def build_default_grid(seeds: int = 100, quick: bool = False) -> Iterator[tuple[
                                 p_pos=p_pos,
                                 p_neg=p_neg,
                                 prior_true=prior_true,
-                                bias_model=cast(BiasModel, bias_model),
+                                bias_model=bias_model,
                                 bias_fraction=bias_fraction,
                                 bias_sigma=bias_sigma,
                                 seed=seed,
@@ -117,6 +117,8 @@ def run_sweep(grid: Iterable[tuple[SimConfig, PolicyConfig]], out_path: Path) ->
             {
                 "policy": pol_cfg.kind,
                 "revisit_prob": pol_cfg.revisit_prob,
+                "warmup_actions": pol_cfg.warmup_actions,
+                "gate_threshold": pol_cfg.gate_threshold,
                 "n_props": sim_cfg.n_propositions,
                 "budget": sim_cfg.budget,
                 "p_pos": sim_cfg.p_pos,

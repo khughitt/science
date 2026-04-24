@@ -85,6 +85,8 @@ def test_run_sweep_writes_parquet_with_list_columns(tmp_path):
     expected_scalars = {
         "policy",
         "revisit_prob",
+        "warmup_actions",
+        "gate_threshold",
         "n_props",
         "budget",
         "p_pos",
