@@ -51,3 +51,50 @@ def generate_propositions(config: SimConfig, rng: np.random.Generator) -> Propos
             bias_offsets[idx] = delta
 
     return Propositions(truth=truth, bias_mask=bias_mask, bias_offsets=bias_offsets)
+
+
+class SignalModel:
+    """Beta-Bernoulli model over a set of propositions.
+
+    Per-proposition posterior parameters are initialised to
+    (config.prior_alpha, config.prior_beta). The effective signal
+    probability for proposition i is
+    ``clip(p_pos if truth[i] else p_neg) + bias_offsets[i], 0, 1)``.
+    """
+
+    def __init__(
+        self,
+        propositions: Propositions,
+        config: SimConfig,
+        rng: np.random.Generator,
+    ) -> None:
+        self.props = propositions
+        self.config = config
+        self.rng = rng
+        n = len(propositions.truth)
+        self.alpha = np.full(n, config.prior_alpha, dtype=np.float64)
+        self.beta = np.full(n, config.prior_beta, dtype=np.float64)
+
+    def _effective_p(self, i: int) -> float:
+        base = self.config.p_pos if self.props.truth[i] == 1 else self.config.p_neg
+        return float(np.clip(base + self.props.bias_offsets[i], 0.0, 1.0))
+
+    def sample_signal(self, i: int) -> int:
+        return int(self.rng.random() < self._effective_p(i))
+
+    def observe(self, i: int, signal: int) -> None:
+        if signal == 1:
+            self.alpha[i] += 1.0
+        else:
+            self.beta[i] += 1.0
+
+    def posterior_mean(self) -> np.ndarray:
+        return self.alpha / (self.alpha + self.beta)
+
+    def posterior_var(self) -> np.ndarray:
+        a = self.alpha
+        b = self.beta
+        return (a * b) / ((a + b) ** 2 * (a + b + 1.0))
+
+    def sample_thompson(self) -> np.ndarray:
+        return self.rng.beta(self.alpha, self.beta)

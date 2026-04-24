@@ -3,7 +3,7 @@ from typing import Any
 import numpy as np
 
 from h01_simulator.config import SimConfig
-from h01_simulator.model import Propositions, generate_propositions
+from h01_simulator.model import Propositions, SignalModel, generate_propositions
 
 
 def _cfg(**overrides: Any) -> SimConfig:
@@ -88,3 +88,73 @@ def test_bias_fraction_zero_means_no_bias_even_with_active_model():
     props = generate_propositions(cfg, np.random.default_rng(0))
     assert props.bias_mask.sum() == 0
     assert np.all(props.bias_offsets == 0.0)
+
+
+def _make_model(truth, bias_offsets, cfg_overrides=None):
+    overrides = dict(n_propositions=len(truth))
+    if cfg_overrides:
+        overrides.update(cfg_overrides)
+    cfg = _cfg(**overrides)
+    props = Propositions(
+        truth=np.asarray(truth, dtype=np.int8),
+        bias_mask=(np.asarray(bias_offsets) != 0.0).astype(np.int8),
+        bias_offsets=np.asarray(bias_offsets, dtype=np.float64),
+    )
+    return SignalModel(props, cfg, np.random.default_rng(0)), cfg, props
+
+
+def test_signal_model_initialises_with_configured_prior():
+    cfg = _cfg(n_propositions=4, prior_alpha=2.0, prior_beta=3.0)
+    props = generate_propositions(cfg, np.random.default_rng(0))
+    m = SignalModel(props, cfg, np.random.default_rng(0))
+    assert np.allclose(m.alpha, 2.0)
+    assert np.allclose(m.beta, 3.0)
+
+
+def test_signal_sample_frequency_matches_unbiased_rate():
+    m, _, _ = _make_model([1, 0], [0.0, 0.0], cfg_overrides=dict(p_pos=0.9, p_neg=0.1))
+    m.rng = np.random.default_rng(123)
+    freq_true = np.mean([m.sample_signal(0) for _ in range(4000)])
+    freq_false = np.mean([m.sample_signal(1) for _ in range(4000)])
+    assert 0.87 <= freq_true <= 0.93
+    assert 0.07 <= freq_false <= 0.13
+
+
+def test_signal_bias_offset_shifts_rate():
+    m, _, _ = _make_model(
+        [1], [-0.3], cfg_overrides=dict(p_pos=0.9, p_neg=0.1)
+    )
+    m.rng = np.random.default_rng(123)
+    freq = np.mean([m.sample_signal(0) for _ in range(4000)])
+    # effective p = clip(0.9 - 0.3, 0, 1) = 0.6
+    assert 0.57 <= freq <= 0.63
+
+
+def test_observe_updates_alpha_beta_relative_to_prior():
+    cfg = _cfg(n_propositions=3, prior_alpha=2.0, prior_beta=2.0)
+    props = generate_propositions(cfg, np.random.default_rng(0))
+    m = SignalModel(props, cfg, np.random.default_rng(0))
+    m.observe(0, 1)
+    m.observe(0, 1)
+    m.observe(1, 0)
+    assert m.alpha[0] == 4.0
+    assert m.beta[0] == 2.0
+    assert m.alpha[1] == 2.0
+    assert m.beta[1] == 3.0
+
+
+def test_posterior_mean_and_variance_match_beta_formula():
+    cfg = _cfg(n_propositions=5, prior_alpha=1.0, prior_beta=1.0)
+    props = generate_propositions(cfg, np.random.default_rng(0))
+    m = SignalModel(props, cfg, np.random.default_rng(0))
+    assert np.allclose(m.posterior_mean(), 0.5)
+    assert np.allclose(m.posterior_var(), 1.0 / 12.0)
+
+
+def test_sample_thompson_returns_valid_draws():
+    cfg = _cfg(n_propositions=4)
+    props = generate_propositions(cfg, np.random.default_rng(0))
+    m = SignalModel(props, cfg, np.random.default_rng(0))
+    samples = m.sample_thompson()
+    assert samples.shape == (4,)
+    assert np.all((samples >= 0.0) & (samples <= 1.0))
