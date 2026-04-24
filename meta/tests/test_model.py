@@ -122,9 +122,7 @@ def test_signal_sample_frequency_matches_unbiased_rate():
 
 
 def test_signal_bias_offset_shifts_rate():
-    m, _, _ = _make_model(
-        [1], [-0.3], cfg_overrides=dict(p_pos=0.9, p_neg=0.1)
-    )
+    m, _, _ = _make_model([1], [-0.3], cfg_overrides=dict(p_pos=0.9, p_neg=0.1))
     m.rng = np.random.default_rng(123)
     freq = np.mean([m.sample_signal(0) for _ in range(4000)])
     # effective p = clip(0.9 - 0.3, 0, 1) = 0.6
