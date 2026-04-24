@@ -52,3 +52,47 @@ def test_hard_gate_falls_back_when_all_gated():
 
 def test_policies_dispatch_includes_hard_gate():
     assert "hard_gate" in POLICIES
+
+
+from h01_simulator.policies import constant_revisit_policy
+
+
+def test_constant_revisit_zero_prob_matches_hard_gate():
+    cfg = PolicyConfig(
+        kind="constant_revisit",
+        warmup_actions=1,
+        gate_threshold=0.5,
+        revisit_prob=0.0,
+    )
+    policy = constant_revisit_policy(cfg)
+    m = _fresh_model(n=3)
+    for _ in range(10):
+        m.observe(0, 0)
+    for _ in range(10):
+        m.observe(2, 1)
+    rng = np.random.default_rng(0)
+    picks = [policy(m, 100, rng) for _ in range(400)]
+    assert 0 not in picks
+
+
+def test_constant_revisit_samples_gated_with_given_frequency():
+    cfg = PolicyConfig(
+        kind="constant_revisit",
+        warmup_actions=1,
+        gate_threshold=0.5,
+        revisit_prob=0.4,
+    )
+    policy = constant_revisit_policy(cfg)
+    m = _fresh_model(n=3)
+    for _ in range(10):
+        m.observe(0, 0)
+    for _ in range(10):
+        m.observe(2, 1)
+    rng = np.random.default_rng(0)
+    picks = np.array([policy(m, 100, rng) for _ in range(4000)])
+    gated_rate = (picks == 0).mean()
+    assert 0.35 <= gated_rate <= 0.45
+
+
+def test_constant_revisit_dispatch_registered():
+    assert "constant_revisit" in POLICIES
