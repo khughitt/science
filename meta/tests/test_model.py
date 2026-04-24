@@ -1,12 +1,13 @@
+from typing import Any
+
 import numpy as np
-import pytest
 
 from h01_simulator.config import SimConfig
 from h01_simulator.model import Propositions, generate_propositions
 
 
-def _cfg(**overrides) -> SimConfig:
-    base = dict(
+def _cfg(**overrides: Any) -> SimConfig:
+    base: dict[str, Any] = dict(
         n_propositions=100,
         budget=100,
         p_pos=0.8,
