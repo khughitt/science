@@ -1,6 +1,7 @@
 from typing import Any
 
 import numpy as np
+import pytest
 
 from h01_simulator.config import SimConfig
 from h01_simulator.model import Propositions, SignalModel, generate_propositions
@@ -158,3 +159,13 @@ def test_sample_thompson_returns_valid_draws():
     samples = m.sample_thompson()
     assert samples.shape == (4,)
     assert np.all((samples >= 0.0) & (samples <= 1.0))
+
+
+def test_observe_rejects_invalid_signal():
+    cfg = _cfg(n_propositions=2)
+    props = generate_propositions(cfg, np.random.default_rng(0))
+    m = SignalModel(props, cfg, np.random.default_rng(0))
+    with pytest.raises(ValueError):
+        m.observe(0, 2)
+    with pytest.raises(ValueError):
+        m.observe(0, -1)

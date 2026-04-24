@@ -59,7 +59,8 @@ class SignalModel:
     Per-proposition posterior parameters are initialised to
     (config.prior_alpha, config.prior_beta). The effective signal
     probability for proposition i is
-    ``clip(p_pos if truth[i] else p_neg) + bias_offsets[i], 0, 1)``.
+    ``clip(base + bias_offsets[i], 0, 1)`` where
+    ``base = p_pos if truth[i] else p_neg``.
     """
 
     def __init__(
@@ -85,8 +86,10 @@ class SignalModel:
     def observe(self, i: int, signal: int) -> None:
         if signal == 1:
             self.alpha[i] += 1.0
-        else:
+        elif signal == 0:
             self.beta[i] += 1.0
+        else:
+            raise ValueError(f"signal must be 0 or 1, got {signal}")
 
     def posterior_mean(self) -> np.ndarray:
         return self.alpha / (self.alpha + self.beta)
