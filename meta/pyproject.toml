@@ -1,8 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "science-meta-science-tools"
+name = "science-meta"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = []
+description = "Meta-project applying Science to itself; ships research instruments."
+dependencies = [
+    "click>=8.1",
+    "numpy>=1.26",
+    "polars>=0.20",
+    "marimo>=0.8",
+    "altair>=5.0",
+]
+
+[project.scripts]
+h01-sim = "h01_simulator.cli:main"
 
 [dependency-groups]
-dev = []
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "pyright>=1.1.380",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/h01_simulator"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.11"
+reportMissingImports = "error"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
