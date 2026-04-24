@@ -1,0 +1,18 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.mypy_cache/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Worktrees
+.worktrees/
+
+# OS
+.DS_Store
