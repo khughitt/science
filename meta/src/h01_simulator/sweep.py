@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator
 
@@ -143,3 +145,43 @@ def run_sweep(grid: Iterable[tuple[SimConfig, PolicyConfig]], out_path: Path) ->
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.write_parquet(out_path)
     return df
+
+
+@dataclass(frozen=True)
+class BenchmarkReport:
+    n_calibration_runs: int
+    elapsed_seconds_calibration: float
+    projected_full_grid_seconds: float
+    projected_full_grid_runs: int
+
+
+def benchmark_runtime(
+    n_calibration_runs: int = 200,
+    seeds_for_full_grid: int = 100,
+) -> BenchmarkReport:
+    """Time a slice of default-grid runs and extrapolate to the full grid.
+
+    Uses the first ``n_calibration_runs`` runs produced by
+    ``build_default_grid(seeds=1, quick=False)`` (always-same slice for
+    reproducibility) and extrapolates linearly to the full-seed grid size.
+    """
+    calibration = []
+    for sim_cfg, pol_cfg in build_default_grid(seeds=1, quick=False):
+        calibration.append((sim_cfg, pol_cfg))
+        if len(calibration) >= n_calibration_runs:
+            break
+
+    start = time.perf_counter()
+    for sim_cfg, pol_cfg in calibration:
+        run_single(sim_cfg, pol_cfg)
+    elapsed = time.perf_counter() - start
+
+    full_grid_runs = sum(1 for _ in build_default_grid(seeds=seeds_for_full_grid, quick=False))
+    projected = elapsed * (full_grid_runs / max(len(calibration), 1))
+
+    return BenchmarkReport(
+        n_calibration_runs=len(calibration),
+        elapsed_seconds_calibration=elapsed,
+        projected_full_grid_seconds=projected,
+        projected_full_grid_runs=full_grid_runs,
+    )

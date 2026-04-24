@@ -5,7 +5,7 @@ import polars as pl
 import pytest
 
 from h01_simulator.config import PolicyConfig, SimConfig
-from h01_simulator.sweep import build_default_grid, run_single, run_sweep
+from h01_simulator.sweep import benchmark_runtime, build_default_grid, run_single, run_sweep
 
 
 def _sim(**overrides: Any) -> SimConfig:
@@ -120,3 +120,11 @@ def test_run_sweep_output_round_trip(tmp_path):
     run_sweep(grid, out_path)
     loaded = pl.read_parquet(out_path)
     assert loaded.height > 0
+
+
+def test_benchmark_runtime_returns_extrapolation():
+    report = benchmark_runtime(n_calibration_runs=20, seeds_for_full_grid=5)
+    assert report.n_calibration_runs == 20
+    assert report.elapsed_seconds_calibration > 0.0
+    assert report.projected_full_grid_seconds > 0.0
+    assert report.projected_full_grid_seconds >= report.elapsed_seconds_calibration
