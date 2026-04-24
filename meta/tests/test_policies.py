@@ -2,7 +2,7 @@ import numpy as np
 
 from h01_simulator.config import PolicyConfig, SimConfig
 from h01_simulator.model import Propositions, SignalModel
-from h01_simulator.policies import POLICIES, hard_gate_policy
+from h01_simulator.policies import POLICIES, constant_revisit_policy, hard_gate_policy
 
 
 def _fresh_model(n: int = 4, seed: int = 0) -> SignalModel:
@@ -52,9 +52,6 @@ def test_hard_gate_falls_back_when_all_gated():
 
 def test_policies_dispatch_includes_hard_gate():
     assert "hard_gate" in POLICIES
-
-
-from h01_simulator.policies import constant_revisit_policy
 
 
 def test_constant_revisit_zero_prob_matches_hard_gate():
