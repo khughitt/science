@@ -66,7 +66,8 @@ than `code/`. This matches the real shape of the work.
   of work.
 
 **Implications:**
-- `meta/src/` exists as an empty placeholder to satisfy validation.
+- `meta/src/` initially held an empty placeholder; as of 2026-04-24 it holds
+  shipped packages (see D-004).
 - No `RESEARCH_PLAN.md`; strategic plan lives in `README.md`.
 - Aspects enabled: `software-development`, `causal-modeling`,
   `hypothesis-testing`.
@@ -125,3 +126,39 @@ down-weighted claims remaining recoverable rather than excluded.
   the UX cannot correct — at which point a constrained-representation
   interface layer may be warranted even if the internal representation stays
   continuous.
+
+---
+
+## D-004: `meta/` ships Python packages from `src/`
+
+- **Date:** 2026-04-24
+- **Status:** active
+- **Decision:** `meta/src/` hosts real, shipped Python packages that
+  implement the project's research instruments. The first is
+  `h01_simulator`, which tests
+  `hypothesis:h01-stochastic-revisiting`; others may follow. `meta/`'s
+  `pyproject.toml` is a full package manifest with runtime dependencies,
+  dev dependencies, and CLI entry points.
+
+**Why:**
+The project's hypotheses require computational instruments, not prose alone.
+Treating `src/` as a permanent placeholder (D-002 Implications as originally
+written) became stale the moment H01's simulator was specified. Shipping
+from `src/` is idiomatic for the software profile already chosen in D-002.
+
+**Alternatives considered and rejected:**
+- Put simulators at `meta/code/` — conflicts with the software-profile
+  validator, which warns on top-level `code/`.
+- Ship from a sibling repository — breaks the co-location argument from
+  D-001 and forces cross-repo imports for project-internal code.
+
+**Implications:**
+- Notebooks live at `meta/notebooks/` (top level), not `meta/code/notebooks/`.
+- `meta/AGENTS.md` reflects this as current convention.
+- `uv sync` from `meta/` is the expected setup step.
+
+**Revisit if:**
+- Shipped packages become substantial enough to warrant their own
+  repository (then split out, leaving `meta/` with research artifacts only).
+- A researcher-facing distribution channel (PyPI) is wanted — at which
+  point the single-manifest-per-package convention may need revisiting.

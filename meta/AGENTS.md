@@ -48,7 +48,11 @@ bash validate.sh --verbose
 
 ## Known issues / nuances
 
-- `meta/src/` is a placeholder to satisfy software-profile validation; the
-  project has no installable package of its own.
-- `meta/pyproject.toml` exists only so `uv` can manage project-local tooling
-  if needed — it does not ship code.
+- `meta/src/` holds project-shipped Python packages (starting with
+  `h01_simulator`, the H01 test instrument). See `core/decisions.md` D-004.
+- `meta/pyproject.toml` is a full package manifest: it declares the shipped
+  packages, registers CLI entry points (e.g. `h01-sim`), and carries runtime
+  plus dev dependencies. `uv sync` from `meta/` produces a working
+  environment.
+- Notebooks live at `meta/notebooks/` rather than `meta/code/notebooks/` —
+  the software profile warns on top-level `code/`.
