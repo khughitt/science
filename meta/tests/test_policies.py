@@ -97,13 +97,23 @@ def test_thompson_warmup_is_round_robin():
     assert picks == [0, 1, 2]
 
 
-def test_thompson_output_is_a_valid_index():
+def test_thompson_output_is_a_valid_index_and_tracks_posterior():
     policy = thompson_policy(PolicyConfig(kind="thompson", warmup_actions=1))
     m = _fresh_model(n=5)
     rng = np.random.default_rng(0)
+
+    # Sanity: all picks are valid indices before any observations.
     for _ in range(100):
         pick = policy(m, 1000, rng)
         assert 0 <= pick < 5
+
+    # Drive prop 2's posterior strongly positive.
+    for _ in range(40):
+        m.observe(2, 1)
+
+    # Over many draws, prop 2 should dominate (chance would be 1/5 = 0.2).
+    picks = np.array([policy(m, 1000, rng) for _ in range(2000)])
+    assert (picks == 2).mean() > 0.7
 
 
 def test_thompson_dispatch_registered():
