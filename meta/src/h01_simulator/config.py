@@ -49,8 +49,8 @@ class SimConfig:
                 raise ValueError(f"{name} must be in [0, 1], got {v}")
         if self.p_pos <= self.p_neg:
             raise ValueError(f"p_pos ({self.p_pos}) must exceed p_neg ({self.p_neg})")
-        if self.n_propositions <= 0 or self.budget <= 0:
-            raise ValueError("n_propositions and budget must be positive")
+        if self.n_propositions <= 0 or self.budget < 0:
+            raise ValueError("n_propositions must be positive and budget must be non-negative")
         if self.prior_alpha <= 0.0 or self.prior_beta <= 0.0:
             raise ValueError("prior_alpha and prior_beta must be positive")
         if self.bias_sigma < 0.0:
