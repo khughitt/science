@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pytest
 
-from h01_simulator.metrics import recall
+from h01_simulator.metrics import brier, recall
 
 
 def test_recall_perfect():
@@ -44,3 +44,22 @@ def test_recall_threshold_sweep_via_posteriors():
     at_03 = recall(truth, post, threshold=0.3)
     assert at_05 == 0.5
     assert at_03 == 1.0
+
+
+def test_brier_perfect_is_zero():
+    truth = np.array([1, 0, 1, 0])
+    post = np.array([1.0, 0.0, 1.0, 0.0])
+    assert brier(truth, post) == 0.0
+
+
+def test_brier_max_miscalibration():
+    truth = np.array([1, 0])
+    post = np.array([0.0, 1.0])
+    assert brier(truth, post) == 1.0
+
+
+def test_brier_known_value():
+    truth = np.array([1, 0])
+    post = np.array([0.7, 0.3])
+    # (0.7-1)^2 + (0.3-0)^2 → mean 0.09
+    assert brier(truth, post) == pytest.approx(0.09)
