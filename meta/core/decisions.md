@@ -75,3 +75,53 @@ than `code/`. This matches the real shape of the work.
 - We start running actual experiments or analyses from this project
   (would justify `data/`, `results/`, `models/`).
 - The empty `src/` becomes a friction point.
+
+---
+
+## D-003: Operational beliefs are continuous in (0, 1), never 0 or 100%
+
+- **Date:** 2026-04-24
+- **Status:** active
+- **Decision:** All tool-level beliefs about propositions and hypotheses are
+  represented as continuous probabilities strictly bounded away from 0 and 1.
+  Decisions that require a binary choice (act or not, publish or not) are
+  computed *from* those beliefs at the decision point; they do not collapse
+  the underlying representation.
+
+**Why:**
+Grounded in applied Bayesian practice
+(see `topic:bayesian-methods-continuous-belief`) and consistent with the
+replication-crisis literature's demonstration that findings drift, replicate
+at below-nominal rates, and accumulate both false and missed signals
+(see `topic:analytic-flexibility-and-replication`). A continuous
+representation lets the tool update smoothly on new evidence, combine
+heterogeneous lines of support, and avoid locking in early mistakes that
+hard-gating would enshrine. The principle is load-bearing for H01
+(`hypothesis:h01-stochastic-revisiting`), whose entire motivation depends on
+down-weighted claims remaining recoverable rather than excluded.
+
+**Alternatives considered and rejected:**
+- Hard gating with thresholds — simpler to reason about, but enshrines early
+  evidence and cannot recover from noisy warm-ups. Directly disputed by H01.
+- Threshold with hysteresis — a middle path, but still discards belief state
+  rather than representing it; loses the calibration property.
+
+**Implications:**
+- Calibration must be treated as a first-class, audited property, not assumed
+  from the framework (see *Calibration* in the Bayesian topic).
+- Priors must be specified defensibly — not arbitrary, but also not invisible
+  defaults. How priors are set for proposition-level claims is an open
+  design question worth tracking separately.
+- UX that surfaces probabilistic outputs must communicate them honestly,
+  resisting the shortcut of re-binarising for display.
+- Any hypothesis or feature that would force collapse of a belief to 0 or 1
+  (e.g. permanent retirement of a claim) must make the collapse explicit and
+  reversible.
+
+**Revisit if:**
+- Calibration proves unachievable at useful precision on any ground-truthable
+  subset, suggesting the framework is costing more than it delivers.
+- Researcher users consistently misinterpret probabilistic outputs in ways
+  the UX cannot correct — at which point a constrained-representation
+  interface layer may be warranted even if the internal representation stays
+  continuous.
