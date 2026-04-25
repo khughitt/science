@@ -1,0 +1,2148 @@
+{
+  "schema_version": "v0",
+  "generator": "scripts/audit_downstream_project_inventory.py",
+  "generated_at_utc": "2026-04-25T20:04:48Z",
+  "project": {
+    "root": "/mnt/ssd/Dropbox/protein-landscape",
+    "name": "protein-landscape"
+  },
+  "science_repo": {
+    "root": "/mnt/ssd/Dropbox/science",
+    "head": "a059f7d3dd46fb197df14339e6e9576bbb5615dd"
+  },
+  "audit_ignore_patterns": [],
+  "protected_data_dirs": [],
+  "git": {
+    "is_repo": true,
+    "head": "1c0e87597f970ea20d78f05f4367fcd057e2208d",
+    "status_porcelain": [
+      "?? doc/plans/2026-04-25-q63-step4-build-benchmark-features.md"
+    ],
+    "status_porcelain_summary": {
+      "??": 1
+    },
+    "last_commit": {
+      "sha": "1c0e87597f970ea20d78f05f4367fcd057e2208d",
+      "author_name": "Keith Hughitt",
+      "author_email": "keith.hughitt@gmail.com",
+      "authored": "2026-04-25T15:57:31-04:00",
+      "subject": "docs(q63): fix shell-expansion gaps in step 4 summary report"
+    },
+    "git_status": "ok"
+  },
+  "tracked_top_level_counts": {
+    ".github": 1,
+    ".gitignore": 1,
+    ".husky": 1,
+    ".pre-commit-config.yaml": 1,
+    "AGENTS.md": 1,
+    "CLAUDE.md": 1,
+    "RESEARCH_PLAN.md": 1,
+    "archive": 2,
+    "code": 2,
+    "data": 1,
+    "descriptors": 24,
+    "doc": 311,
+    "docs": 12,
+    "knowledge": 8,
+    "models": 1,
+    "papers": 1,
+    "pyproject.toml": 1,
+    "results": 9,
+    "runpod": 8,
+    "science.yaml": 1,
+    "specs": 6,
+    "src": 22,
+    "tasks": 2,
+    "tests": 50,
+    "uv.lock": 1,
+    "validate.sh": 1,
+    "viewer": 166,
+    "workflow": 114
+  },
+  "tracked_second_level_counts": {
+    "code": {
+      "scripts": 2
+    },
+    "doc": {
+      "background": 23,
+      "datasets": 5,
+      "discussions": 15,
+      "figures": 2,
+      "interpretations": 32,
+      "issues": 4,
+      "meta": 15,
+      "methods": 10,
+      "papers": 47,
+      "plans": 73,
+      "questions": 75,
+      "reports": 9,
+      "workflows": 1
+    },
+    "docs": {
+      "superpowers": 12
+    },
+    "knowledge": {
+      "<files>": 1,
+      "ontology": 2,
+      "reports": 1,
+      "sources": 4
+    },
+    "results": {
+      "archetypes": 7,
+      "bias": 2
+    },
+    "specs": {
+      "<files>": 2,
+      "hypotheses": 4
+    },
+    "src": {
+      "protein_landscape": 22
+    },
+    "tasks": {
+      "<files>": 1,
+      "done": 1
+    },
+    "workflow": {
+      "<files>": 3,
+      "rules": 13,
+      "scripts": 98
+    }
+  },
+  "present_untracked_dirs": [
+    {
+      "path": ".snakemake",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 11
+    },
+    {
+      "path": ".venv",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 10
+    },
+    {
+      "path": ".worktrees",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 0
+    },
+    {
+      "path": "data",
+      "exists": true,
+      "is_symlink": true,
+      "entry_count": 3
+    },
+    {
+      "path": "logs",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 19
+    },
+    {
+      "path": "models",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 1
+    },
+    {
+      "path": "results",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 11
+    }
+  ],
+  "gitignored_top_level_dirs": [
+    {
+      "name": ".claude",
+      "file_count": 1,
+      "total_size_bytes": 116,
+      "sample_paths": [
+        ".claude/scheduled_tasks.lock"
+      ]
+    }
+  ],
+  "symlinks": [
+    {
+      "path": "data",
+      "target": "/data/proj/protein-landscape"
+    }
+  ],
+  "science_yaml": {
+    "present": true,
+    "keys": [
+      "aspects",
+      "created",
+      "data_sources",
+      "knowledge_profiles",
+      "last_modified",
+      "layout_version",
+      "name",
+      "ontologies",
+      "profile",
+      "status",
+      "summary",
+      "tags"
+    ],
+    "profile": "research",
+    "aspects": [
+      "computational-analysis",
+      "software-development"
+    ],
+    "layout_version": 2,
+    "data_sources_shape": {
+      "present": true,
+      "count": 8,
+      "entry_kinds": {
+        "string": 8
+      }
+    },
+    "ontologies": [
+      "biology"
+    ],
+    "knowledge_profiles_keys": [
+      "local"
+    ]
+  },
+  "gitignore": {
+    "present": true,
+    "line_count": 41,
+    "non_blank_non_comment": 22,
+    "matched": {
+      "data": [
+        "!data/processed/entities/.gitkeep",
+        "data/processed/",
+        "data/processed/entities/*.parquet",
+        "data/raw/",
+        "models/*.h5",
+        "results/*.csv",
+        "results/*.parquet"
+      ],
+      "results": [
+        "results/",
+        "results/*.csv",
+        "results/*.parquet"
+      ],
+      "models": [
+        "models/*.bin",
+        "models/*.h5",
+        "models/*.pt"
+      ],
+      "logs": [
+        "logs"
+      ],
+      "worktrees": [
+        ".worktrees/"
+      ],
+      "python_caches": [
+        ".mypy_cache/",
+        ".ruff_cache/",
+        ".venv/",
+        "__pycache__/"
+      ]
+    }
+  },
+  "validate": {
+    "present": true,
+    "line_count": 931,
+    "header": "#!/usr/bin/env bash\n# validate.sh \u2014 Structural validation for Science research projects\n# Returns non-zero on failure. Used as backpressure in research loops.\n#\n# Usage: bash validate.sh [--verbose]\n\n# Note: intentionally NOT using set -e \u2014 we count errors and report at the end.\nset -uo pipefail\n\nexport UV_CACHE_DIR=\"${UV_CACHE_DIR:-/tmp/uv-cache}\"\n\nVERBOSE=\"${1:-}\"\nERRORS=0\nWARNINGS=0\n",
+    "sections": [
+      "Canonical path/profile resolution from science.yaml",
+      "1. Project manifest",
+      "2. Core structure",
+      "3. Research question",
+      "4. Template conformance for background docs",
+      "5. Hypothesis completeness",
+      "6. Citation integrity",
+      "7. Paper summary template conformance",
+      "8. Unverified/uncited markers",
+      "9. Research gap analysis conformance",
+      "10. RESEARCH_PLAN conventions",
+      "11. Discussion document conformance",
+      "12. Notes conformance",
+      "13. Knowledge graph checks",
+      "14. Inquiry validation",
+      "15. Task queue",
+      "16. Frontmatter cross-reference validation",
+      "17. Expensive pipeline artifacts",
+      "Summary"
+    ],
+    "sha256": "3f324b60b33a93e829a07449b06b3e11287cb17bed1a875b4593ae8a120a0850",
+    "canonical_path": "meta/validate.sh",
+    "canonical_sha256": "0a9878c8dd81acc9703dbd58e8ec236254eee8c5c000f341caff26f5a37a3c44",
+    "structural_diff": [
+      {
+        "kind": "added",
+        "section": "17. Expensive pipeline artifacts"
+      }
+    ],
+    "content_diff": [
+      {
+        "kind": "content_changed",
+        "section": "13. Knowledge graph checks",
+        "canonical_sha256": "2738ff63a0c7bd95629d63d96bb462572fc0842bfc65d2cb31a1e0a977caa3e6",
+        "local_sha256": "14d8f75e9105024bea86616f6a422318a6f52b835e0cf676b766ff1666dbbd25",
+        "canonical_lines": 85,
+        "local_lines": 98,
+        "changed_lines": 41
+      },
+      {
+        "kind": "content_changed",
+        "section": "14. Inquiry validation",
+        "canonical_sha256": "8d4f2ed902a98acd8966583bd675d1dda98a077c7a9f7ff65a4527db125f65a3",
+        "local_sha256": "57da20b0101529b0cf0fc5da93cecb068b921edd5999668fb3e90a2cdb4bf75e",
+        "canonical_lines": 47,
+        "local_lines": 49,
+        "changed_lines": 10
+      },
+      {
+        "kind": "content_changed",
+        "section": "15. Task queue",
+        "canonical_sha256": "77621569c7a71f204f04886a4c9d83c944e3aabb9b5a6333f51884a3a8ce25f2",
+        "local_sha256": "625b98314c0c880c9d1dec0c3cf88cbc75b131ddd074a7a161fd39ccd810ad26",
+        "canonical_lines": 36,
+        "local_lines": 47,
+        "changed_lines": 13
+      },
+      {
+        "kind": "content_changed",
+        "section": "16. Frontmatter cross-reference validation",
+        "canonical_sha256": "e05467aadf00a6bed60bcbf07f11da261cf477920d9fd092d509a513bf5cb4b9",
+        "local_sha256": "63ddf3426f9c71b6a01b922255f7c3eb98ed866b3bd2741a201d6d2b6fec14fe",
+        "canonical_lines": 138,
+        "local_lines": 140,
+        "changed_lines": 4
+      },
+      {
+        "kind": "content_changed",
+        "section": "17. Expensive pipeline artifacts",
+        "canonical_sha256": null,
+        "local_sha256": "6b22d90c3d1e21a485d07752ba8fd1f328e469e64ab2412a7f8d8d2a4f476547",
+        "canonical_lines": 0,
+        "local_lines": 18,
+        "changed_lines": 18
+      },
+      {
+        "kind": "content_changed",
+        "section": "2. Core structure",
+        "canonical_sha256": "d46d8f28a0d8f8b5661b70c86d9c7345de4de71b3b6917718c994b9126749285",
+        "local_sha256": "09a8f4355b33c52021411ee9dcbd7a1152bda482a164e03ac9dc624977d65dff",
+        "canonical_lines": 67,
+        "local_lines": 73,
+        "changed_lines": 10
+      },
+      {
+        "kind": "content_changed",
+        "section": "<preamble>",
+        "canonical_sha256": "76efb382cd18107bcdd05acf312a97b4f27e0a4d34bea42f803e60370e4407cc",
+        "local_sha256": "a87b3f67afebcd186ae005ca81809e4b86873f329074a967bbb13e6ef7be9d25",
+        "canonical_lines": 75,
+        "local_lines": 87,
+        "changed_lines": 38
+      }
+    ],
+    "content_diff_total_lines": 134
+  },
+  "datapackages": [],
+  "code_layout": {
+    "code": {
+      "tracked_files": 2,
+      "is_dir": true
+    },
+    "src": {
+      "tracked_files": 22,
+      "is_dir": true
+    },
+    "workflow": {
+      "tracked_files": 114,
+      "is_dir": true
+    },
+    "notebooks": {
+      "count": 0,
+      "paths": [],
+      "truncated": false
+    },
+    "tests": {
+      "count": 50,
+      "top_dirs": [
+        "tests"
+      ]
+    }
+  },
+  "markdown": {
+    "markdown_file_count": 333,
+    "scanned_count": 333,
+    "template_files_skipped": 0,
+    "files_by_top_dir": {
+      "<root>": 3,
+      "doc": 308,
+      "docs": 12,
+      "runpod": 1,
+      "specs": 6,
+      "src": 1,
+      "tasks": 2
+    },
+    "frontmatter_key_counts_by_dir": {
+      "doc": {
+        "access": 3,
+        "accessions": 3,
+        "artifacts": 21,
+        "consumed_by": 4,
+        "created": 231,
+        "data_files": 8,
+        "datapackage": 4,
+        "datasets": 130,
+        "date": 4,
+        "derivation": 1,
+        "emergent_threads_sha": 1,
+        "flags": 1,
+        "focus_ref": 15,
+        "focus_type": 15,
+        "generated_at": 5,
+        "hypothesis": 3,
+        "id": 238,
+        "input": 25,
+        "license": 4,
+        "local_path": 4,
+        "method": 1,
+        "mode": 41,
+        "ontology_terms": 135,
+        "origin": 4,
+        "orphan_ids": 1,
+        "orphan_interpretation_count": 1,
+        "orphan_question_count": 2,
+        "outputs": 1,
+        "papers": 4,
+        "parent_dataset": 4,
+        "phase": 3,
+        "prior_analyses": 7,
+        "prior_interpretations": 19,
+        "priority": 17,
+        "profiles": 4,
+        "provenance_coverage": 3,
+        "related": 227,
+        "resolved": 1,
+        "siblings": 4,
+        "source_commit": 5,
+        "source_refs": 174,
+        "status": 221,
+        "supersedes": 1,
+        "synthesized_from": 1,
+        "tags": 12,
+        "tier": 4,
+        "title": 235,
+        "type": 240,
+        "update_cadence": 4,
+        "updated": 183
+      },
+      "docs": {
+        "created": 3,
+        "date": 2,
+        "id": 3,
+        "related": 5,
+        "status": 5,
+        "supersedes": 3,
+        "tags": 3,
+        "title": 5,
+        "type": 3,
+        "updated": 3
+      },
+      "specs": {
+        "created": 6,
+        "id": 6,
+        "phase": 1,
+        "related": 6,
+        "rival_model_packet": 1,
+        "source_refs": 4,
+        "status": 6,
+        "title": 6,
+        "type": 6,
+        "updated": 6
+      }
+    },
+    "frontmatter_unparsed": [],
+    "frontmatter_parse_errors": [],
+    "observed_values": {
+      "aspects": {},
+      "ontologies": {},
+      "phase": {
+        "active": 3,
+        "candidate": 1
+      },
+      "profile": {},
+      "status": {
+        "active": 164,
+        "answered": 10,
+        "approved": 3,
+        "candidate": 1,
+        "complete": 24,
+        "disputed": 1,
+        "draft": 10,
+        "effectively-answered-at-2M": 1,
+        "in-progress": 4,
+        "open": 2,
+        "partially-addressed": 1,
+        "partially-answered": 6,
+        "proposed": 1,
+        "resolved": 1,
+        "under-investigation": 3
+      },
+      "type": {
+        "dataset": 4,
+        "discussion": 15,
+        "emergent-threads": 1,
+        "hypothesis": 4,
+        "interpretation": 32,
+        "meta": 7,
+        "method": 8,
+        "methods": 1,
+        "paper": 55,
+        "paper-synthesis": 4,
+        "plan": 19,
+        "question": 75,
+        "spec": 3,
+        "story": 4,
+        "synthesis": 3,
+        "synthesis-rollup": 1,
+        "task": 1,
+        "topic": 11,
+        "workflow": 1
+      }
+    },
+    "entity_id_prefix_counts": {
+      "dataset": 4,
+      "discussion": 15,
+      "hypothesis": 4,
+      "interpretation": 32,
+      "meta": 7,
+      "method": 8,
+      "methods": 1,
+      "paper": 55,
+      "plan": 15,
+      "pre-registration": 2,
+      "question": 75,
+      "report": 4,
+      "spec": 5,
+      "synthesis": 7,
+      "task": 1,
+      "topic": 11,
+      "workflow": 1
+    },
+    "entity_id_paths": {
+      "dataset:cdna-display-proteolysis-776k": [
+        "doc/datasets/cdna-display-proteolysis-776k.md"
+      ],
+      "dataset:deeploc2": [
+        "doc/datasets/deeploc2.md"
+      ],
+      "dataset:foldseek-reps-min100": [
+        "doc/datasets/foldseek-reps-min100.md"
+      ],
+      "dataset:meltome-atlas": [
+        "doc/datasets/meltome-atlas.md"
+      ],
+      "discussion:2026-04-07-coverage-bias": [
+        "doc/discussions/2026-04-07-coverage-bias-estimation.md"
+      ],
+      "discussion:2026-04-07-species-diversity": [
+        "doc/discussions/2026-04-07-species-diversity-strategy.md"
+      ],
+      "discussion:2026-04-09-embedding-phylogeny-vs-function": [
+        "doc/discussions/2026-04-09-embedding-phylogeny-vs-function.md"
+      ],
+      "discussion:2026-04-10-multiscale-vision-and-application": [
+        "doc/discussions/2026-04-10-multiscale-vision-and-application.md"
+      ],
+      "discussion:2026-04-10-multiscale-vision-part2": [
+        "doc/discussions/2026-04-10-multiscale-vision-part2.md"
+      ],
+      "discussion:2026-04-10-seq-feats-cross-project-alignment": [
+        "doc/discussions/2026-04-10-seq-feats-cross-project-alignment.md"
+      ],
+      "discussion:2026-04-11-next-lens-selection": [
+        "doc/discussions/2026-04-11-next-lens-selection.md"
+      ],
+      "discussion:2026-04-11-reverse-flow-pl-to-sf": [
+        "doc/discussions/2026-04-11-reverse-flow-protein-landscape-to-seq-feats.md"
+      ],
+      "discussion:2026-04-11-visual-representations": [
+        "doc/discussions/2026-04-11-visual-representations.md"
+      ],
+      "discussion:2026-04-13-t074-scope-clarification": [
+        "doc/discussions/2026-04-13-t074-scope-clarification.md"
+      ],
+      "discussion:2026-04-14-multiscale-archetype-brainstorm": [
+        "doc/discussions/2026-04-14-multiscale-archetype-brainstorm.md"
+      ],
+      "discussion:2026-04-14-what-do-the-four-manifolds-represent": [
+        "doc/discussions/2026-04-14-what-do-the-four-manifolds-represent.md"
+      ],
+      "discussion:2026-04-18-q09-q10-next-thread": [
+        "doc/discussions/2026-04-18-q09-q10-next-thread.md"
+      ],
+      "discussion:2026-04-19-modality-coverage-dynamics-organism-gaps": [
+        "doc/discussions/2026-04-19-modality-coverage-dynamics-organism-gaps.md"
+      ],
+      "discussion:2026-04-24-t143-heldout-taxa-benchmark": [
+        "doc/discussions/2026-04-24-t143-heldout-taxa-benchmark.md"
+      ],
+      "hypothesis:h01-multi-manifold-protein-universe": [
+        "specs/hypotheses/h01-multi-manifold-protein-universe.md"
+      ],
+      "hypothesis:h02-hierarchical-sparse-archetypes": [
+        "specs/hypotheses/h02-hierarchical-sparse-archetypes.md"
+      ],
+      "hypothesis:h03-data-driven-primacy": [
+        "specs/hypotheses/h03-data-driven-primacy.md"
+      ],
+      "hypothesis:h04-plm-interpretability-archetype-labeling": [
+        "specs/hypotheses/h04-plm-interpretability-archetype-labeling.md"
+      ],
+      "interpretation:2026-04-14-p1-actionable-followups": [
+        "doc/interpretations/2026-04-14-p1-actionable-followups.md"
+      ],
+      "interpretation:2026-04-18-esmc-pc1-negative-control": [
+        "doc/interpretations/2026-04-18-esmc-pc1-negative-control.md"
+      ],
+      "interpretation:2026-04-18-q09-raw-vs-residualized-control": [
+        "doc/interpretations/2026-04-18-q09-raw-vs-residualized-control.md"
+      ],
+      "interpretation:2026-04-18-q10-esmc-prostt5-k64-followup": [
+        "doc/interpretations/2026-04-18-q10-esmc-prostt5-k64-followup.md"
+      ],
+      "interpretation:2026-04-18-q10-scope-note": [
+        "doc/interpretations/2026-04-18-q10-scope-note.md"
+      ],
+      "interpretation:2026-04-21-cross-lens-cka-4x4": [
+        "doc/interpretations/2026-04-21-cross-lens-cka-4x4.md"
+      ],
+      "interpretation:2026-04-23-q23-platonic-scale-sweep": [
+        "doc/interpretations/2026-04-23-q23-platonic-scale-sweep.md"
+      ],
+      "interpretation:2026-04-23-q26-rns-learned-lens-pilot": [
+        "doc/interpretations/2026-04-23-q26-rns-learned-lens-pilot.md"
+      ],
+      "interpretation:2026-04-24-q56-domain-archetypes": [
+        "doc/interpretations/2026-04-24-q56-domain-archetypes.md"
+      ],
+      "interpretation:bias-dark-frontier": [
+        "doc/interpretations/2026-04-07-bias-dark-frontier.md"
+      ],
+      "interpretation:coverage-bias-checkpoint": [
+        "doc/interpretations/2026-04-07-coverage-bias-checkpoint.md"
+      ],
+      "interpretation:cross-modality-manifold-universality": [
+        "doc/interpretations/2026-04-11-cross-modality-manifold-universality.md"
+      ],
+      "interpretation:esmc-full-report-card": [
+        "doc/interpretations/2026-04-13-esmc-full-report-card.md"
+      ],
+      "interpretation:metabolic-full-report-card": [
+        "doc/interpretations/2026-04-14-metabolic-full-report-card.md"
+      ],
+      "interpretation:multimodal-pilot-manifold-comparison": [
+        "doc/interpretations/2026-04-10-multimodal-pilot-manifold-comparison.md"
+      ],
+      "interpretation:phase1-completion-roadmap": [
+        "doc/interpretations/2026-04-13-phase1-completion-roadmap.md"
+      ],
+      "interpretation:phase1-lens-comparison": [
+        "doc/interpretations/2026-04-11-phase1-lens-comparison.md"
+      ],
+      "interpretation:phase2-enrichment-multilens": [
+        "doc/interpretations/2026-04-07-phase2-enrichment-and-multi-lens.md"
+      ],
+      "interpretation:phase2-esm2": [
+        "doc/interpretations/2026-04-07-phase2-esm2-validation.md"
+      ],
+      "interpretation:phase4-esmc-validation": [
+        "doc/interpretations/2026-04-08-phase4-esmc-validation.md"
+      ],
+      "interpretation:phylogenetic-full": [
+        "doc/interpretations/2026-04-13-phylogenetic-full.md"
+      ],
+      "interpretation:phylogenetic-profiles-pilot": [
+        "doc/interpretations/2026-04-11-phylogenetic-profiles-pilot.md"
+      ],
+      "interpretation:prostt5-structural-full": [
+        "doc/interpretations/2026-04-13-prostt5-structural-full.md"
+      ],
+      "interpretation:prostt5-structural-pilot": [
+        "doc/interpretations/2026-04-12-prostt5-structural-pilot.md"
+      ],
+      "interpretation:q08-esmc-esm2-divergence-closure": [
+        "doc/interpretations/2026-04-13-q08-esmc-esm2-divergence-closure.md"
+      ],
+      "interpretation:q22-f53-eff-dim-curve": [
+        "doc/interpretations/2026-04-13-q22-f53-eff-dim-curve.md"
+      ],
+      "interpretation:t059a-residualized-archetypes": [
+        "doc/interpretations/2026-04-14-t059a-residualized-archetypes.md"
+      ],
+      "interpretation:t059cd-cross-lens-archetype-agreement": [
+        "doc/interpretations/2026-04-14-t059cd-cross-lens-archetype-agreement.md"
+      ],
+      "interpretation:t074-cross-lens-matrix-4x4": [
+        "doc/interpretations/2026-04-13-t074-cross-lens-matrix-4x4.md"
+      ],
+      "interpretation:t100-q22-closure": [
+        "doc/interpretations/2026-04-17-t100-q22-closure.md"
+      ],
+      "interpretation:t151-cross-lens-moran-i": [
+        "doc/interpretations/2026-04-24-t151-cross-lens-moran-i.md"
+      ],
+      "interpretation:t152-ted-domain-join": [
+        "doc/interpretations/2026-04-24-t152-ted-domain-join.md"
+      ],
+      "meta:next-steps-2026-04-13": [
+        "doc/meta/next-steps-2026-04-13.md"
+      ],
+      "meta:next-steps-2026-04-14": [
+        "doc/meta/next-steps-2026-04-14.md"
+      ],
+      "meta:next-steps-2026-04-16": [
+        "doc/meta/next-steps-2026-04-16.md"
+      ],
+      "meta:next-steps-2026-04-18": [
+        "doc/meta/next-steps-2026-04-18.md"
+      ],
+      "meta:next-steps-2026-04-19": [
+        "doc/meta/next-steps-2026-04-19.md"
+      ],
+      "meta:next-steps-2026-04-22": [
+        "doc/meta/next-steps-2026-04-22.md"
+      ],
+      "meta:next-steps-2026-04-24": [
+        "doc/meta/next-steps-2026-04-24.md"
+      ],
+      "method:coverage-denominators": [
+        "doc/methods/coverage-denominators-and-claims.md"
+      ],
+      "method:embedding-report-card": [
+        "doc/methods/embedding-report-card.md"
+      ],
+      "method:held-out-taxa-evaluation": [
+        "doc/methods/held-out-taxa-evaluation.md"
+      ],
+      "method:hierarchical-compression": [
+        "doc/methods/hierarchical-compression.md"
+      ],
+      "method:modality-census": [
+        "doc/methods/modality-census.md"
+      ],
+      "method:multi-view-integration": [
+        "doc/methods/multi-view-integration.md"
+      ],
+      "method:representation-strategies": [
+        "doc/methods/representation-strategies.md"
+      ],
+      "method:similarity-lenses": [
+        "doc/methods/similarity-lenses.md"
+      ],
+      "methods:cross-lens-metric-standardization": [
+        "doc/methods/cross-lens-metric-standardization.md"
+      ],
+      "paper:Adams2025": [
+        "doc/papers/Adams2025.md"
+      ],
+      "paper:Asim2025": [
+        "doc/papers/Asim2025.md"
+      ],
+      "paper:BarrioHernandez2023": [
+        "doc/background/papers/barriohernandez2023-foldseek-clustering.md",
+        "doc/papers/BarrioHernandez2023.md"
+      ],
+      "paper:Bhatnagar2025": [
+        "doc/papers/Bhatnagar2025.md"
+      ],
+      "paper:Bileschi2022": [
+        "doc/background/papers/bileschi2022-deep-learning-annotation.md"
+      ],
+      "paper:Bjerregaard2025": [
+        "doc/papers/Bjerregaard2025.md"
+      ],
+      "paper:Bordin2023": [
+        "doc/background/papers/bordin2023-alphafold-cath.md"
+      ],
+      "paper:Cui2025": [
+        "doc/papers/Cui2025.md"
+      ],
+      "paper:Cui2025b": [
+        "doc/papers/Cui2025b.md"
+      ],
+      "paper:Durairaj2023": [
+        "doc/background/papers/durairaj2023-new-families-folds.md",
+        "doc/papers/Durairaj2023.md"
+      ],
+      "paper:FernandezTorras2022": [
+        "doc/background/papers/fernandeztorras2022-molecular-descriptors.md"
+      ],
+      "paper:Galpern2026": [
+        "doc/papers/Galpern2026.md"
+      ],
+      "paper:Gaudet2017": [
+        "doc/papers/Gaudet2017.md"
+      ],
+      "paper:Heinzinger2025": [
+        "doc/papers/Heinzinger2025.md"
+      ],
+      "paper:Hess2025": [
+        "doc/papers/Hess2025.md"
+      ],
+      "paper:Huh2024": [
+        "doc/papers/Huh2024.md"
+      ],
+      "paper:Hunklinger2025": [
+        "doc/papers/Hunklinger2025.md"
+      ],
+      "paper:Hwang2024": [
+        "doc/papers/Hwang2024.md"
+      ],
+      "paper:Kulkarni2025": [
+        "doc/papers/Kulkarni2025.md"
+      ],
+      "paper:Lau2024": [
+        "doc/background/papers/lau2024-encyclopedia-of-domains.md",
+        "doc/papers/Lau2024.md"
+      ],
+      "paper:Littmann2021": [
+        "doc/background/papers/littmann2021-funfams-embeddings.md"
+      ],
+      "paper:Liu2024-geneverse": [
+        "doc/papers/Liu2024-geneverse.md"
+      ],
+      "paper:Lu2025": [
+        "doc/papers/Lu2025.md"
+      ],
+      "paper:Lytras2026": [
+        "doc/papers/Lytras2026.md"
+      ],
+      "paper:MartinezRedondo2025": [
+        "doc/papers/MartinezRedondo2025.md"
+      ],
+      "paper:Mateus2020": [
+        "doc/papers/Mateus2020.md"
+      ],
+      "paper:Mueller2020": [
+        "doc/background/papers/mueller2020-proteome-landscape.md"
+      ],
+      "paper:Nussinov2023": [
+        "doc/background/papers/nussinov2023-conformational-phenotypes.md"
+      ],
+      "paper:Outeiral2024": [
+        "doc/papers/Outeiral2024.md"
+      ],
+      "paper:Prabakaran2026": [
+        "doc/papers/Prabakaran2026.md"
+      ],
+      "paper:Sahakyan2025": [
+        "doc/background/papers/sahakyan2025-distant-similarity.md"
+      ],
+      "paper:Schmirler2024": [
+        "doc/papers/Schmirler2024.md"
+      ],
+      "paper:Shoval2012": [
+        "doc/papers/Shoval2012.md"
+      ],
+      "paper:Simon2025": [
+        "doc/papers/Simon2025.md"
+      ],
+      "paper:Su2025": [
+        "doc/papers/Su2025.md"
+      ],
+      "paper:Szczerbiak2025": [
+        "doc/papers/Szczerbiak2025.md"
+      ],
+      "paper:Tan2024": [
+        "doc/papers/Tan2024.md"
+      ],
+      "paper:Tsuboyama2023": [
+        "doc/papers/Tsuboyama2023.md"
+      ],
+      "paper:Ullanat2026": [
+        "doc/papers/Ullanat2026.md"
+      ],
+      "paper:VillegasGarcia2025": [
+        "doc/papers/VillegasGarcia2025.md"
+      ],
+      "paper:Wang2025": [
+        "doc/papers/Wang2025.md"
+      ],
+      "paper:Weissenow2025": [
+        "doc/papers/Weissenow2025.md"
+      ],
+      "paper:Williams2024": [
+        "doc/papers/Williams2024.md"
+      ],
+      "paper:Yang2025": [
+        "doc/papers/Yang2025.md"
+      ],
+      "paper:Yao2025": [
+        "doc/papers/Yao2025.md"
+      ],
+      "paper:Ye2024": [
+        "doc/papers/Ye2024.md"
+      ],
+      "paper:Yeo2025": [
+        "doc/background/papers/yeo2025-metagenomic-structures.md"
+      ],
+      "paper:Yue2023": [
+        "doc/background/papers/yue2023-protein-representation-review.md"
+      ],
+      "paper:Zhou2025": [
+        "doc/papers/Zhou2025.md"
+      ],
+      "paper:deBodt2025": [
+        "doc/papers/deBodt2025.md"
+      ],
+      "paper:vanEck2025": [
+        "doc/papers/vanEck2025.md"
+      ],
+      "paper:vanKempen2024": [
+        "doc/papers/vanKempen2024.md"
+      ],
+      "plan:2026-04-16-archetype-compact-overlay-design": [
+        "doc/plans/2026-04-16-archetype-compact-overlay-design.md"
+      ],
+      "plan:2026-04-16-compact-card-variant-design": [
+        "doc/plans/2026-04-16-compact-card-variant-design.md"
+      ],
+      "plan:2026-04-16-structure-preview-card-design": [
+        "doc/plans/2026-04-16-structure-preview-card-design.md"
+      ],
+      "plan:2026-04-16-t063-cluster-card-design-spec": [
+        "doc/plans/2026-04-16-t063-cluster-card-design-spec.md"
+      ],
+      "plan:2026-04-18-t121-q10-higher-k-check-design": [
+        "doc/plans/2026-04-18-t121-q10-higher-k-check-design.md"
+      ],
+      "plan:2026-04-25-t144-t145-heldout-taxa-benchmark-implementation-plan": [
+        "doc/plans/2026-04-25-t144-t145-heldout-taxa-benchmark-implementation-plan.md"
+      ],
+      "plan:cross-project-convergence": [
+        "doc/plans/2026-04-11-cross-project-convergence-plan.md"
+      ],
+      "plan:data-sources-overview": [
+        "doc/datasets/data-sources-overview.md"
+      ],
+      "plan:expanded-lens-pipeline": [
+        "doc/plans/2026-04-11-expanded-lens-pipeline-plan.md"
+      ],
+      "plan:expanded-lens-pipeline-v2": [
+        "doc/plans/2026-04-11-expanded-lens-pipeline-plan-v2.md"
+      ],
+      "plan:multi-modality-embeddings": [
+        "doc/plans/2026-04-10-multi-modality-embedding-pipelines.md"
+      ],
+      "plan:shared-data-model-convergence": [
+        "doc/plans/2026-04-10-shared-data-model-convergence.md"
+      ],
+      "plan:t099-string-metabolic-full": [
+        "doc/plans/2026-04-14-t099-string-metabolic-full-plan.md"
+      ],
+      "plan:t100-q22-closure": [
+        "doc/plans/2026-04-17-t100-q22-closure-plan.md"
+      ],
+      "plan:t109-t110-t111": [
+        "doc/plans/2026-04-14-t109-t110-t111-plan.md"
+      ],
+      "pre-registration:q63-heldout-taxa-benchmark": [
+        "doc/meta/pre-registration-q63-heldout-taxa-benchmark.md"
+      ],
+      "pre-registration:t098-phylogenetic-2m": [
+        "doc/meta/pre-registration-t098-phylogenetic-2m.md"
+      ],
+      "question:q01": [
+        "doc/questions/q01-hdbscan-biological-identity.md"
+      ],
+      "question:q02": [
+        "doc/questions/q02-low-plddt-region-identity.md"
+      ],
+      "question:q04": [
+        "doc/questions/q04-esm2-cath-disagreement.md"
+      ],
+      "question:q05": [
+        "doc/questions/q05-mega-cluster-split.md"
+      ],
+      "question:q06": [
+        "doc/questions/q06-dark-protein-novelty-type.md"
+      ],
+      "question:q07": [
+        "doc/questions/q07-dark-protein-rate-drivers.md"
+      ],
+      "question:q08": [
+        "doc/questions/q08-esmc-esm2-divergence.md"
+      ],
+      "question:q09": [
+        "doc/questions/q09-functional-territories-under-phylogeny.md"
+      ],
+      "question:q10": [
+        "doc/questions/q10-phylogeny-function-crossover-scale.md"
+      ],
+      "question:q11": [
+        "doc/questions/q11-modality-dependent-manifolds.md"
+      ],
+      "question:q12": [
+        "doc/questions/q12-biophysical-pc1-identity.md"
+      ],
+      "question:q13": [
+        "doc/questions/q13-visual-representation-vocabulary.md"
+      ],
+      "question:q14": [
+        "doc/questions/q14-phylogenetic-profile-taxonomic-signal.md"
+      ],
+      "question:q18": [
+        "doc/questions/q18-prostt5-pc1-identity.md"
+      ],
+      "question:q20": [
+        "doc/questions/q20-esmc-pc1-identity.md"
+      ],
+      "question:q21": [
+        "doc/questions/q21-phylogenetic-pc1-identity.md"
+      ],
+      "question:q22": [
+        "doc/questions/q22-f53-purity-scaling-vs-eff-dim.md"
+      ],
+      "question:q23-platonic-convergence-test": [
+        "doc/questions/q23-platonic-convergence-test.md"
+      ],
+      "question:q24-metric-standardization-cross-lens": [
+        "doc/questions/q24-metric-standardization-cross-lens.md"
+      ],
+      "question:q25-fold-switchers-as-cross-lens-outliers": [
+        "doc/questions/q25-fold-switchers-as-cross-lens-outliers.md"
+      ],
+      "question:q26-rns-embedding-uncertainty-stratification": [
+        "doc/questions/q26-rns-embedding-uncertainty-stratification.md"
+      ],
+      "question:q27-spatial-transcriptomics-lens": [
+        "doc/questions/q27-spatial-transcriptomics-lens.md"
+      ],
+      "question:q28-dynamics-lens-feasibility": [
+        "doc/questions/q28-dynamics-lens-feasibility.md"
+      ],
+      "question:q29-cheap-peer-benchmark-baselines": [
+        "doc/questions/q29-cheap-peer-benchmark-baselines.md"
+      ],
+      "question:q30-condensate-context-lens": [
+        "doc/questions/q30-condensate-context-lens.md"
+      ],
+      "question:q31-protrek-as-fifth-lens": [
+        "doc/questions/q31-protrek-as-fifth-lens.md"
+      ],
+      "question:q32-mint-interaction-lens-geometry": [
+        "doc/questions/q32-mint-interaction-lens-geometry.md"
+      ],
+      "question:q33-pareto-archetype-assumptions-protein-embeddings": [
+        "doc/questions/q33-pareto-archetype-assumptions-protein-embeddings.md"
+      ],
+      "question:q34-go-iea-bias-lm-phylogenetic-signal": [
+        "doc/questions/q34-go-iea-bias-lm-phylogenetic-signal.md"
+      ],
+      "question:q35-3di-fallback-states-disorder": [
+        "doc/questions/q35-3di-fallback-states-disorder.md"
+      ],
+      "question:q36-tpp-lens-orthogonality": [
+        "doc/questions/q36-tpp-lens-orthogonality.md"
+      ],
+      "question:q37-interplm-adoption-on-project-embeddings": [
+        "doc/questions/q37-interplm-adoption-on-project-embeddings.md"
+      ],
+      "question:q38-fantasia-go-transfer-onto-38k-map": [
+        "doc/questions/q38-fantasia-go-transfer-onto-38k-map.md"
+      ],
+      "question:q39-evotuned-family-embeddings-cluster-enrichment": [
+        "doc/questions/q39-evotuned-family-embeddings-cluster-enrichment.md"
+      ],
+      "question:q40-sae-steering-counterfactual-archetypes": [
+        "doc/questions/q40-sae-steering-counterfactual-archetypes.md"
+      ],
+      "question:q41-hub-feature-detection-plm-saes": [
+        "doc/questions/q41-hub-feature-detection-plm-saes.md"
+      ],
+      "question:q42-mid-layer-esm2-family-specificity-cluster-quality": [
+        "doc/questions/q42-mid-layer-esm2-family-specificity-cluster-quality.md"
+      ],
+      "question:q43-global-quality-metric-scale-sweep": [
+        "doc/questions/q43-global-quality-metric-scale-sweep.md"
+      ],
+      "question:q44-evolla-archetype-annotation": [
+        "doc/questions/q44-evolla-archetype-annotation.md"
+      ],
+      "question:q45-glm-operon-lens-feasibility": [
+        "doc/questions/q45-glm-operon-lens-feasibility.md"
+      ],
+      "question:q46-plmx-informed-subspace-archetype-labels": [
+        "doc/questions/q46-plmx-informed-subspace-archetype-labels.md"
+      ],
+      "question:q47-sae-features-for-archetype-labeling": [
+        "doc/questions/q47-sae-features-for-archetype-labeling.md"
+      ],
+      "question:q48-xai-method-biology-correlation-per-lens": [
+        "doc/questions/q48-xai-method-biology-correlation-per-lens.md"
+      ],
+      "question:q49-missing-modality-strategies-for-multi-lens-maps": [
+        "doc/questions/q49-missing-modality-strategies-for-multi-lens-maps.md"
+      ],
+      "question:q50-functional-locality-moran-i-adoption": [
+        "doc/questions/q50-functional-locality-moran-i-adoption.md"
+      ],
+      "question:q51-geometricus-pacmap-vs-prostt5-umap": [
+        "doc/questions/q51-geometricus-pacmap-vs-prostt5-umap.md"
+      ],
+      "question:q52-szczerbiak-atlas-as-cross-lens-benchmark": [
+        "doc/questions/q52-szczerbiak-atlas-as-cross-lens-benchmark.md"
+      ],
+      "question:q53-afdb90-community-cross-reference-for-archetype-cells": [
+        "doc/questions/q53-afdb90-community-cross-reference-for-archetype-cells.md"
+      ],
+      "question:q54-dark-protein-novelty-trifurcation-for-our-clusters": [
+        "doc/questions/q54-dark-protein-novelty-trifurcation-for-our-clusters.md"
+      ],
+      "question:q55-ted-domain-join-onto-38k-proteins": [
+        "doc/questions/q55-ted-domain-join-onto-38k-proteins.md"
+      ],
+      "question:q56-domain-scale-archetype-decomposition": [
+        "doc/questions/q56-domain-scale-archetype-decomposition.md"
+      ],
+      "question:q57-foldseek-cluster-on-38k": [
+        "doc/questions/q57-foldseek-cluster-on-38k.md"
+      ],
+      "question:q58-dark-cluster-novelty-labelling": [
+        "doc/questions/q58-dark-cluster-novelty-labelling.md"
+      ],
+      "question:q59-dark-energy-residue-lens-feasibility": [
+        "doc/questions/q59-dark-energy-residue-lens-feasibility.md"
+      ],
+      "question:q60-dark-energy-sae-correspondence": [
+        "doc/questions/q60-dark-energy-sae-correspondence.md"
+      ],
+      "question:q61-castpfold-bulk-access-api": [
+        "doc/questions/q61-castpfold-bulk-access-api.md"
+      ],
+      "question:q62-castpfold-pocket-lens-orthogonality": [
+        "doc/questions/q62-castpfold-pocket-lens-orthogonality.md"
+      ],
+      "question:q63-heldout-taxa-benchmark-discrimination": [
+        "doc/questions/q63-heldout-taxa-benchmark-discrimination.md"
+      ],
+      "question:q64-static-embedding-vs-finetuned-plm-for-archetype-map": [
+        "doc/questions/q64-static-embedding-vs-finetuned-plm-for-archetype-map.md"
+      ],
+      "question:q65-plm-scaling-laws-embedding-quality-vs-task-accuracy": [
+        "doc/questions/q65-plm-scaling-laws-embedding-quality-vs-task-accuracy.md"
+      ],
+      "question:q66-plm-vs-msa-dark-proteome-embedding-quality": [
+        "doc/questions/q66-plm-vs-msa-dark-proteome-embedding-quality.md"
+      ],
+      "question:q67-ses-adapter-structural-lens-embedding": [
+        "doc/questions/q67-ses-adapter-structural-lens-embedding.md"
+      ],
+      "question:q68-fine-tuned-plm-as-q63-oracle-ceiling": [
+        "doc/questions/q68-fine-tuned-plm-as-q63-oracle-ceiling.md"
+      ],
+      "question:q69-lora-finetuning-embedding-geometry": [
+        "doc/questions/q69-lora-finetuning-embedding-geometry.md"
+      ],
+      "question:q70-progen3-embedding-geometry-pc1-phylogeny": [
+        "doc/questions/q70-progen3-embedding-geometry-pc1-phylogeny.md"
+      ],
+      "question:q71-progen3-zeroshot-degradation-vs-representation-quality": [
+        "doc/questions/q71-progen3-zeroshot-degradation-vs-representation-quality.md"
+      ],
+      "question:q72-stability-lens-orthogonality": [
+        "doc/questions/q72-stability-lens-orthogonality.md"
+      ],
+      "question:q73-stability-evolution-divergence-archetype-signal": [
+        "doc/questions/q73-stability-evolution-divergence-archetype-signal.md"
+      ],
+      "question:q74-calm-codon-lens-orthogonality": [
+        "doc/questions/q74-calm-codon-lens-orthogonality.md"
+      ],
+      "question:q75-calm-meltome-signal-decomposition": [
+        "doc/questions/q75-calm-meltome-signal-decomposition.md"
+      ],
+      "question:q76-calm-species-signal-as-nuisance-or-feature": [
+        "doc/questions/q76-calm-species-signal-as-nuisance-or-feature.md"
+      ],
+      "question:q77-plm-taxonomy-architecture-selection-for-pipeline": [
+        "doc/questions/q77-plm-taxonomy-architecture-selection-for-pipeline.md"
+      ],
+      "question:q78-asim2025-benchmark-dataset-candidates": [
+        "doc/questions/q78-asim2025-benchmark-dataset-candidates.md"
+      ],
+      "question:q79-lora-rank-selection-for-plm-finetuning": [
+        "doc/questions/q79-lora-rank-selection-for-plm-finetuning.md"
+      ],
+      "question:q80-lora-vs-full-finetuning-for-esm2-task-heads": [
+        "doc/questions/q80-lora-vs-full-finetuning-for-esm2-task-heads.md"
+      ],
+      "report:2026-04-19-per-lens-phylum-coverage": [
+        "doc/reports/2026-04-19-per-lens-phylum-coverage.md"
+      ],
+      "report:bias-assessment": [
+        "doc/reports/2026-04-07-bias-assessment.md"
+      ],
+      "report:multi-lens-integration": [
+        "doc/reports/2026-04-08-multi-lens-integration.md"
+      ],
+      "report:phase2-summary": [
+        "doc/reports/2026-04-08-phase2-summary.md"
+      ],
+      "spec:2026-04-12-entity-pages-app-shell": [
+        "docs/superpowers/specs/2026-04-12-entity-pages-app-shell-design.md"
+      ],
+      "spec:2026-04-12-protein-landscape-data-model": [
+        "docs/superpowers/specs/2026-04-12-protein-landscape-data-model-design.md"
+      ],
+      "spec:2026-04-19-t123-per-lens-phylum-coverage": [
+        "docs/superpowers/specs/2026-04-19-t123-per-lens-phylum-coverage-design.md"
+      ],
+      "spec:research-question": [
+        "specs/research-question.md"
+      ],
+      "spec:scope-boundaries": [
+        "specs/scope-boundaries.md"
+      ],
+      "synthesis:2026-04-20-cross-lens-multimanifold": [
+        "doc/papers/synthesis-2026-04-20-cross-lens-multimanifold.md"
+      ],
+      "synthesis:2026-04-23-plm-interpretability-and-multi-lens-annotation": [
+        "doc/papers/synthesis-2026-04-23-plm-interpretability-and-multi-lens-annotation.md"
+      ],
+      "synthesis:2026-04-24-structural-universe-and-dark-energy": [
+        "doc/papers/synthesis-2026-04-24-structural-universe-and-dark-energy.md"
+      ],
+      "synthesis:2026-04-25-plm-soa-and-orthogonal-lenses": [
+        "doc/papers/synthesis-2026-04-25-plm-soa-and-orthogonal-lenses.md"
+      ],
+      "synthesis:h01-multi-manifold-protein-universe": [
+        "doc/reports/synthesis/h01-multi-manifold-protein-universe.md"
+      ],
+      "synthesis:h02-hierarchical-sparse-archetypes": [
+        "doc/reports/synthesis/h02-hierarchical-sparse-archetypes.md"
+      ],
+      "synthesis:h03-data-driven-primacy": [
+        "doc/reports/synthesis/h03-data-driven-primacy.md"
+      ],
+      "task:bias-audit-t098-pre-registration": [
+        "doc/meta/bias-audit-t098-pre-registration.md"
+      ],
+      "topic:domain-evolution-combinations": [
+        "doc/background/topics/domain-evolution-combinations.md"
+      ],
+      "topic:intrinsically-disordered-proteins": [
+        "doc/background/topics/intrinsically-disordered-proteins.md"
+      ],
+      "topic:multi-view-integration": [
+        "doc/background/topics/multi-view-integration.md"
+      ],
+      "topic:protein-representations-embeddings": [
+        "doc/background/topics/protein-representations-embeddings.md"
+      ],
+      "topic:protein-superfamilies-landmarks": [
+        "doc/background/topics/protein-superfamilies-landmarks.md"
+      ],
+      "topic:protein-universe-organization": [
+        "doc/background/topics/protein-universe-organization.md"
+      ],
+      "topic:sparse-latent-representations": [
+        "doc/background/topics/sparse-latent-representations.md"
+      ],
+      "topic:structural-clustering-domains": [
+        "doc/background/topics/structural-clustering-domains.md"
+      ],
+      "topic:structure-function-relationships": [
+        "doc/background/topics/structure-function-relationships.md"
+      ],
+      "topic:topological-categorical-methods": [
+        "doc/background/topics/topological-categorical-methods.md"
+      ],
+      "topic:visualization-tools": [
+        "doc/background/topics/visualization-tools.md"
+      ],
+      "workflow:heldout-taxa-benchmark": [
+        "doc/workflows/workflow-heldout-taxa-benchmark.md"
+      ]
+    },
+    "duplicate_entity_ids": {
+      "paper:BarrioHernandez2023": [
+        "doc/background/papers/barriohernandez2023-foldseek-clustering.md",
+        "doc/papers/BarrioHernandez2023.md"
+      ],
+      "paper:Durairaj2023": [
+        "doc/background/papers/durairaj2023-new-families-folds.md",
+        "doc/papers/Durairaj2023.md"
+      ],
+      "paper:Lau2024": [
+        "doc/background/papers/lau2024-encyclopedia-of-domains.md",
+        "doc/papers/Lau2024.md"
+      ]
+    },
+    "frontmatter_reference_field_paths": {
+      "consumed_by": [
+        "doc/datasets/deeploc2.md",
+        "doc/datasets/foldseek-reps-min100.md",
+        "doc/datasets/meltome-atlas.md"
+      ],
+      "datasets": [
+        "doc/background/papers/barriohernandez2023-foldseek-clustering.md",
+        "doc/background/papers/bileschi2022-deep-learning-annotation.md",
+        "doc/background/papers/bordin2023-alphafold-cath.md",
+        "doc/background/papers/durairaj2023-new-families-folds.md",
+        "doc/background/papers/lau2024-encyclopedia-of-domains.md",
+        "doc/background/papers/littmann2021-funfams-embeddings.md",
+        "doc/background/papers/mueller2020-proteome-landscape.md",
+        "doc/background/papers/yeo2025-metagenomic-structures.md",
+        "doc/background/topics/domain-evolution-combinations.md",
+        "doc/background/topics/intrinsically-disordered-proteins.md",
+        "doc/background/topics/protein-superfamilies-landmarks.md",
+        "doc/background/topics/structural-clustering-domains.md",
+        "doc/methods/held-out-taxa-evaluation.md",
+        "doc/papers/Adams2025.md",
+        "doc/papers/Asim2025.md",
+        "doc/papers/BarrioHernandez2023.md",
+        "doc/papers/Bhatnagar2025.md",
+        "doc/papers/Cui2025.md",
+        "doc/papers/Durairaj2023.md",
+        "doc/papers/Galpern2026.md",
+        "doc/papers/Hess2025.md",
+        "doc/papers/Hwang2024.md",
+        "doc/papers/Lau2024.md",
+        "doc/papers/Liu2024-geneverse.md",
+        "doc/papers/Lu2025.md",
+        "doc/papers/Lytras2026.md",
+        "doc/papers/MartinezRedondo2025.md",
+        "doc/papers/Outeiral2024.md",
+        "doc/papers/Prabakaran2026.md",
+        "doc/papers/Schmirler2024.md",
+        "doc/papers/Simon2025.md",
+        "doc/papers/Su2025.md",
+        "doc/papers/Szczerbiak2025.md",
+        "doc/papers/Tan2024.md",
+        "doc/papers/Tsuboyama2023.md",
+        "doc/papers/Ullanat2026.md",
+        "doc/papers/VillegasGarcia2025.md",
+        "doc/papers/Ye2024.md",
+        "doc/papers/Zhou2025.md",
+        "doc/papers/vanEck2025.md",
+        "doc/papers/vanKempen2024.md",
+        "doc/questions/q26-rns-embedding-uncertainty-stratification.md",
+        "doc/questions/q27-spatial-transcriptomics-lens.md",
+        "doc/questions/q28-dynamics-lens-feasibility.md",
+        "doc/questions/q29-cheap-peer-benchmark-baselines.md",
+        "doc/questions/q31-protrek-as-fifth-lens.md",
+        "doc/questions/q32-mint-interaction-lens-geometry.md",
+        "doc/questions/q37-interplm-adoption-on-project-embeddings.md",
+        "doc/questions/q38-fantasia-go-transfer-onto-38k-map.md",
+        "doc/questions/q39-evotuned-family-embeddings-cluster-enrichment.md",
+        "doc/questions/q40-sae-steering-counterfactual-archetypes.md",
+        "doc/questions/q42-mid-layer-esm2-family-specificity-cluster-quality.md",
+        "doc/questions/q44-evolla-archetype-annotation.md",
+        "doc/questions/q45-glm-operon-lens-feasibility.md",
+        "doc/questions/q46-plmx-informed-subspace-archetype-labels.md",
+        "doc/questions/q50-functional-locality-moran-i-adoption.md",
+        "doc/questions/q51-geometricus-pacmap-vs-prostt5-umap.md",
+        "doc/questions/q52-szczerbiak-atlas-as-cross-lens-benchmark.md",
+        "doc/questions/q53-afdb90-community-cross-reference-for-archetype-cells.md",
+        "doc/questions/q54-dark-protein-novelty-trifurcation-for-our-clusters.md",
+        "doc/questions/q55-ted-domain-join-onto-38k-proteins.md",
+        "doc/questions/q56-domain-scale-archetype-decomposition.md",
+        "doc/questions/q57-foldseek-cluster-on-38k.md",
+        "doc/questions/q58-dark-cluster-novelty-labelling.md",
+        "doc/questions/q59-dark-energy-residue-lens-feasibility.md",
+        "doc/questions/q60-dark-energy-sae-correspondence.md",
+        "doc/questions/q61-castpfold-bulk-access-api.md",
+        "doc/questions/q62-castpfold-pocket-lens-orthogonality.md",
+        "doc/questions/q63-heldout-taxa-benchmark-discrimination.md",
+        "doc/questions/q65-plm-scaling-laws-embedding-quality-vs-task-accuracy.md",
+        "doc/questions/q66-plm-vs-msa-dark-proteome-embedding-quality.md",
+        "doc/questions/q67-ses-adapter-structural-lens-embedding.md",
+        "doc/questions/q68-fine-tuned-plm-as-q63-oracle-ceiling.md",
+        "doc/questions/q70-progen3-embedding-geometry-pc1-phylogeny.md",
+        "doc/questions/q71-progen3-zeroshot-degradation-vs-representation-quality.md",
+        "doc/questions/q72-stability-lens-orthogonality.md",
+        "doc/questions/q73-stability-evolution-divergence-archetype-signal.md",
+        "doc/questions/q74-calm-codon-lens-orthogonality.md",
+        "doc/questions/q75-calm-meltome-signal-decomposition.md",
+        "doc/questions/q76-calm-species-signal-as-nuisance-or-feature.md",
+        "doc/questions/q77-plm-taxonomy-architecture-selection-for-pipeline.md",
+        "doc/questions/q78-asim2025-benchmark-dataset-candidates.md",
+        "doc/questions/q80-lora-vs-full-finetuning-for-esm2-task-heads.md"
+      ],
+      "local_path": [
+        "doc/datasets/deeploc2.md",
+        "doc/datasets/foldseek-reps-min100.md",
+        "doc/datasets/meltome-atlas.md"
+      ],
+      "related": [
+        "doc/background/papers/barriohernandez2023-foldseek-clustering.md",
+        "doc/background/papers/bileschi2022-deep-learning-annotation.md",
+        "doc/background/papers/bordin2023-alphafold-cath.md",
+        "doc/background/papers/durairaj2023-new-families-folds.md",
+        "doc/background/papers/fernandeztorras2022-molecular-descriptors.md",
+        "doc/background/papers/lau2024-encyclopedia-of-domains.md",
+        "doc/background/papers/littmann2021-funfams-embeddings.md",
+        "doc/background/papers/mueller2020-proteome-landscape.md",
+        "doc/background/papers/nussinov2023-conformational-phenotypes.md",
+        "doc/background/papers/sahakyan2025-distant-similarity.md",
+        "doc/background/papers/yeo2025-metagenomic-structures.md",
+        "doc/background/papers/yue2023-protein-representation-review.md",
+        "doc/background/topics/domain-evolution-combinations.md",
+        "doc/background/topics/intrinsically-disordered-proteins.md",
+        "doc/background/topics/multi-view-integration.md",
+        "doc/background/topics/protein-representations-embeddings.md",
+        "doc/background/topics/protein-superfamilies-landmarks.md",
+        "doc/background/topics/protein-universe-organization.md",
+        "doc/background/topics/sparse-latent-representations.md",
+        "doc/background/topics/structural-clustering-domains.md",
+        "doc/background/topics/structure-function-relationships.md",
+        "doc/background/topics/topological-categorical-methods.md",
+        "doc/background/topics/visualization-tools.md",
+        "doc/datasets/cdna-display-proteolysis-776k.md",
+        "doc/datasets/data-sources-overview.md",
+        "doc/datasets/deeploc2.md",
+        "doc/datasets/foldseek-reps-min100.md",
+        "doc/datasets/meltome-atlas.md",
+        "doc/discussions/2026-04-07-coverage-bias-estimation.md",
+        "doc/discussions/2026-04-07-species-diversity-strategy.md",
+        "doc/discussions/2026-04-09-embedding-phylogeny-vs-function.md",
+        "doc/discussions/2026-04-10-multiscale-vision-and-application.md",
+        "doc/discussions/2026-04-10-multiscale-vision-part2.md",
+        "doc/discussions/2026-04-10-seq-feats-cross-project-alignment.md",
+        "doc/discussions/2026-04-11-next-lens-selection.md",
+        "doc/discussions/2026-04-11-reverse-flow-protein-landscape-to-seq-feats.md",
+        "doc/discussions/2026-04-11-visual-representations.md",
+        "doc/discussions/2026-04-13-t074-scope-clarification.md",
+        "doc/discussions/2026-04-14-multiscale-archetype-brainstorm.md",
+        "doc/discussions/2026-04-14-what-do-the-four-manifolds-represent.md",
+        "doc/discussions/2026-04-18-q09-q10-next-thread.md",
+        "doc/discussions/2026-04-19-modality-coverage-dynamics-organism-gaps.md",
+        "doc/discussions/2026-04-24-t143-heldout-taxa-benchmark.md",
+        "doc/interpretations/2026-04-07-bias-dark-frontier.md",
+        "doc/interpretations/2026-04-07-coverage-bias-checkpoint.md",
+        "doc/interpretations/2026-04-07-phase2-enrichment-and-multi-lens.md",
+        "doc/interpretations/2026-04-07-phase2-esm2-validation.md",
+        "doc/interpretations/2026-04-08-phase4-esmc-validation.md",
+        "doc/interpretations/2026-04-10-multimodal-pilot-manifold-comparison.md",
+        "doc/interpretations/2026-04-11-cross-modality-manifold-universality.md",
+        "doc/interpretations/2026-04-11-phase1-lens-comparison.md",
+        "doc/interpretations/2026-04-11-phylogenetic-profiles-pilot.md",
+        "doc/interpretations/2026-04-12-prostt5-structural-pilot.md",
+        "doc/interpretations/2026-04-13-esmc-full-report-card.md",
+        "doc/interpretations/2026-04-13-phase1-completion-roadmap.md",
+        "doc/interpretations/2026-04-13-phylogenetic-full.md",
+        "doc/interpretations/2026-04-13-prostt5-structural-full.md",
+        "doc/interpretations/2026-04-13-q08-esmc-esm2-divergence-closure.md",
+        "doc/interpretations/2026-04-13-q22-f53-eff-dim-curve.md",
+        "doc/interpretations/2026-04-13-t074-cross-lens-matrix-4x4.md",
+        "doc/interpretations/2026-04-14-metabolic-full-report-card.md",
+        "doc/interpretations/2026-04-14-p1-actionable-followups.md",
+        "doc/interpretations/2026-04-14-t059a-residualized-archetypes.md",
+        "doc/interpretations/2026-04-14-t059cd-cross-lens-archetype-agreement.md",
+        "doc/interpretations/2026-04-17-t100-q22-closure.md",
+        "doc/interpretations/2026-04-18-esmc-pc1-negative-control.md",
+        "doc/interpretations/2026-04-18-q09-raw-vs-residualized-control.md",
+        "doc/interpretations/2026-04-18-q10-esmc-prostt5-k64-followup.md",
+        "doc/interpretations/2026-04-18-q10-scope-note.md",
+        "doc/interpretations/2026-04-21-cross-lens-cka-4x4.md",
+        "doc/interpretations/2026-04-23-q23-platonic-scale-sweep.md",
+        "doc/interpretations/2026-04-23-q26-rns-learned-lens-pilot.md",
+        "doc/interpretations/2026-04-24-q56-domain-archetypes.md",
+        "doc/interpretations/2026-04-24-t151-cross-lens-moran-i.md",
+        "doc/interpretations/2026-04-24-t152-ted-domain-join.md",
+        "doc/meta/bias-audit-t098-pre-registration.md",
+        "doc/meta/pre-registration-q63-heldout-taxa-benchmark.md",
+        "doc/meta/pre-registration-t098-phylogenetic-2m.md",
+        "doc/methods/coverage-denominators-and-claims.md",
+        "doc/methods/cross-lens-metric-standardization.md",
+        "doc/methods/embedding-report-card.md",
+        "doc/methods/held-out-taxa-evaluation.md",
+        "doc/methods/hierarchical-compression.md",
+        "doc/methods/modality-census.md",
+        "doc/methods/multi-view-integration.md",
+        "doc/methods/representation-strategies.md",
+        "doc/methods/similarity-lenses.md",
+        "doc/papers/Adams2025.md",
+        "doc/papers/Asim2025.md",
+        "doc/papers/BarrioHernandez2023.md",
+        "doc/papers/Bhatnagar2025.md",
+        "doc/papers/Bjerregaard2025.md",
+        "doc/papers/Cui2025.md",
+        "doc/papers/Cui2025b.md",
+        "doc/papers/Durairaj2023.md",
+        "doc/papers/Galpern2026.md",
+        "doc/papers/Gaudet2017.md",
+        "doc/papers/Heinzinger2025.md",
+        "doc/papers/Hess2025.md",
+        "doc/papers/Huh2024.md",
+        "doc/papers/Hunklinger2025.md",
+        "doc/papers/Hwang2024.md",
+        "doc/papers/Kulkarni2025.md",
+        "doc/papers/Lau2024.md",
+        "doc/papers/Liu2024-geneverse.md",
+        "doc/papers/Lu2025.md",
+        "doc/papers/Lytras2026.md",
+        "doc/papers/MartinezRedondo2025.md",
+        "doc/papers/Outeiral2024.md",
+        "doc/papers/Prabakaran2026.md",
+        "doc/papers/Schmirler2024.md",
+        "doc/papers/Shoval2012.md",
+        "doc/papers/Simon2025.md",
+        "doc/papers/Su2025.md",
+        "doc/papers/Szczerbiak2025.md",
+        "doc/papers/Tan2024.md",
+        "doc/papers/Tsuboyama2023.md",
+        "doc/papers/Ullanat2026.md",
+        "doc/papers/VillegasGarcia2025.md",
+        "doc/papers/Wang2025.md",
+        "doc/papers/Weissenow2025.md",
+        "doc/papers/Williams2024.md",
+        "doc/papers/Yang2025.md",
+        "doc/papers/Yao2025.md",
+        "doc/papers/Ye2024.md",
+        "doc/papers/Zhou2025.md",
+        "doc/papers/deBodt2025.md",
+        "doc/papers/synthesis-2026-04-20-cross-lens-multimanifold.md",
+        "doc/papers/synthesis-2026-04-23-plm-interpretability-and-multi-lens-annotation.md",
+        "doc/papers/synthesis-2026-04-24-structural-universe-and-dark-energy.md",
+        "doc/papers/synthesis-2026-04-25-plm-soa-and-orthogonal-lenses.md",
+        "doc/papers/vanEck2025.md",
+        "doc/papers/vanKempen2024.md",
+        "doc/plans/2026-04-10-multi-modality-embedding-pipelines.md",
+        "doc/plans/2026-04-10-shared-data-model-convergence.md",
+        "doc/plans/2026-04-11-cross-project-convergence-plan.md",
+        "doc/plans/2026-04-11-expanded-lens-pipeline-plan-v2.md",
+        "doc/plans/2026-04-11-expanded-lens-pipeline-plan.md",
+        "doc/plans/2026-04-14-t099-string-metabolic-full-plan.md",
+        "doc/plans/2026-04-14-t109-t110-t111-plan.md",
+        "doc/plans/2026-04-16-archetype-compact-overlay-design.md",
+        "doc/plans/2026-04-16-compact-card-variant-design.md",
+        "doc/plans/2026-04-16-structure-preview-card-design.md",
+        "doc/plans/2026-04-16-t063-cluster-card-design-spec.md",
+        "doc/plans/2026-04-17-t100-q22-closure-plan.md",
+        "doc/plans/2026-04-18-t121-q10-higher-k-check-design.md",
+        "doc/plans/2026-04-25-t144-t145-heldout-taxa-benchmark-implementation-plan.md",
+        "doc/questions/q01-hdbscan-biological-identity.md",
+        "doc/questions/q02-low-plddt-region-identity.md",
+        "doc/questions/q04-esm2-cath-disagreement.md",
+        "doc/questions/q05-mega-cluster-split.md",
+        "doc/questions/q06-dark-protein-novelty-type.md",
+        "doc/questions/q07-dark-protein-rate-drivers.md",
+        "doc/questions/q08-esmc-esm2-divergence.md",
+        "doc/questions/q09-functional-territories-under-phylogeny.md",
+        "doc/questions/q10-phylogeny-function-crossover-scale.md",
+        "doc/questions/q11-modality-dependent-manifolds.md",
+        "doc/questions/q12-biophysical-pc1-identity.md",
+        "doc/questions/q13-visual-representation-vocabulary.md",
+        "doc/questions/q14-phylogenetic-profile-taxonomic-signal.md",
+        "doc/questions/q18-prostt5-pc1-identity.md",
+        "doc/questions/q20-esmc-pc1-identity.md",
+        "doc/questions/q21-phylogenetic-pc1-identity.md",
+        "doc/questions/q22-f53-purity-scaling-vs-eff-dim.md",
+        "doc/questions/q23-platonic-convergence-test.md",
+        "doc/questions/q24-metric-standardization-cross-lens.md",
+        "doc/questions/q25-fold-switchers-as-cross-lens-outliers.md",
+        "doc/questions/q26-rns-embedding-uncertainty-stratification.md",
+        "doc/questions/q27-spatial-transcriptomics-lens.md",
+        "doc/questions/q28-dynamics-lens-feasibility.md",
+        "doc/questions/q29-cheap-peer-benchmark-baselines.md",
+        "doc/questions/q30-condensate-context-lens.md",
+        "doc/questions/q31-protrek-as-fifth-lens.md",
+        "doc/questions/q32-mint-interaction-lens-geometry.md",
+        "doc/questions/q33-pareto-archetype-assumptions-protein-embeddings.md",
+        "doc/questions/q34-go-iea-bias-lm-phylogenetic-signal.md",
+        "doc/questions/q35-3di-fallback-states-disorder.md",
+        "doc/questions/q36-tpp-lens-orthogonality.md",
+        "doc/questions/q37-interplm-adoption-on-project-embeddings.md",
+        "doc/questions/q38-fantasia-go-transfer-onto-38k-map.md",
+        "doc/questions/q39-evotuned-family-embeddings-cluster-enrichment.md",
+        "doc/questions/q40-sae-steering-counterfactual-archetypes.md",
+        "doc/questions/q41-hub-feature-detection-plm-saes.md",
+        "doc/questions/q42-mid-layer-esm2-family-specificity-cluster-quality.md",
+        "doc/questions/q43-global-quality-metric-scale-sweep.md",
+        "doc/questions/q44-evolla-archetype-annotation.md",
+        "doc/questions/q45-glm-operon-lens-feasibility.md",
+        "doc/questions/q46-plmx-informed-subspace-archetype-labels.md",
+        "doc/questions/q47-sae-features-for-archetype-labeling.md",
+        "doc/questions/q48-xai-method-biology-correlation-per-lens.md",
+        "doc/questions/q49-missing-modality-strategies-for-multi-lens-maps.md",
+        "doc/questions/q50-functional-locality-moran-i-adoption.md",
+        "doc/questions/q51-geometricus-pacmap-vs-prostt5-umap.md",
+        "doc/questions/q52-szczerbiak-atlas-as-cross-lens-benchmark.md",
+        "doc/questions/q53-afdb90-community-cross-reference-for-archetype-cells.md",
+        "doc/questions/q54-dark-protein-novelty-trifurcation-for-our-clusters.md",
+        "doc/questions/q55-ted-domain-join-onto-38k-proteins.md",
+        "doc/questions/q56-domain-scale-archetype-decomposition.md",
+        "doc/questions/q57-foldseek-cluster-on-38k.md",
+        "doc/questions/q58-dark-cluster-novelty-labelling.md",
+        "doc/questions/q59-dark-energy-residue-lens-feasibility.md",
+        "doc/questions/q60-dark-energy-sae-correspondence.md",
+        "doc/questions/q61-castpfold-bulk-access-api.md",
+        "doc/questions/q62-castpfold-pocket-lens-orthogonality.md",
+        "doc/questions/q63-heldout-taxa-benchmark-discrimination.md",
+        "doc/questions/q64-static-embedding-vs-finetuned-plm-for-archetype-map.md",
+        "doc/questions/q65-plm-scaling-laws-embedding-quality-vs-task-accuracy.md",
+        "doc/questions/q66-plm-vs-msa-dark-proteome-embedding-quality.md",
+        "doc/questions/q67-ses-adapter-structural-lens-embedding.md",
+        "doc/questions/q68-fine-tuned-plm-as-q63-oracle-ceiling.md",
+        "doc/questions/q69-lora-finetuning-embedding-geometry.md",
+        "doc/questions/q70-progen3-embedding-geometry-pc1-phylogeny.md",
+        "doc/questions/q71-progen3-zeroshot-degradation-vs-representation-quality.md",
+        "doc/questions/q72-stability-lens-orthogonality.md",
+        "doc/questions/q73-stability-evolution-divergence-archetype-signal.md",
+        "doc/questions/q74-calm-codon-lens-orthogonality.md",
+        "doc/questions/q75-calm-meltome-signal-decomposition.md",
+        "doc/questions/q76-calm-species-signal-as-nuisance-or-feature.md",
+        "doc/questions/q77-plm-taxonomy-architecture-selection-for-pipeline.md",
+        "doc/questions/q78-asim2025-benchmark-dataset-candidates.md",
+        "doc/questions/q79-lora-rank-selection-for-plm-finetuning.md",
+        "doc/questions/q80-lora-vs-full-finetuning-for-esm2-task-heads.md",
+        "doc/reports/2026-04-07-bias-assessment.md",
+        "doc/reports/2026-04-08-multi-lens-integration.md",
+        "doc/reports/2026-04-08-phase2-summary.md",
+        "doc/reports/2026-04-19-per-lens-phylum-coverage.md",
+        "docs/superpowers/specs/2026-04-12-entity-pages-app-shell-design.md",
+        "docs/superpowers/specs/2026-04-12-protein-landscape-data-model-design.md",
+        "docs/superpowers/specs/2026-04-19-t123-per-lens-phylum-coverage-design.md",
+        "docs/superpowers/specs/2026-04-20-t133-interpretation-artifacts-refactor-design.md",
+        "docs/superpowers/specs/2026-04-21-t135-linear-cka-standardization-design.md",
+        "specs/hypotheses/h01-multi-manifold-protein-universe.md",
+        "specs/hypotheses/h02-hierarchical-sparse-archetypes.md",
+        "specs/hypotheses/h03-data-driven-primacy.md",
+        "specs/hypotheses/h04-plm-interpretability-archetype-labeling.md",
+        "specs/research-question.md",
+        "specs/scope-boundaries.md"
+      ]
+    },
+    "long_form_files": [
+      {
+        "path": "doc/discussions/2026-04-10-multiscale-vision-and-application.md",
+        "lines": 426
+      },
+      {
+        "path": "doc/discussions/2026-04-11-visual-representations.md",
+        "lines": 565
+      },
+      {
+        "path": "doc/discussions/2026-04-14-multiscale-archetype-brainstorm.md",
+        "lines": 416
+      },
+      {
+        "path": "doc/discussions/2026-04-14-what-do-the-four-manifolds-represent.md",
+        "lines": 491
+      },
+      {
+        "path": "doc/discussions/2026-04-24-t143-heldout-taxa-benchmark.md",
+        "lines": 347
+      },
+      {
+        "path": "doc/interpretations/2026-04-11-phase1-lens-comparison.md",
+        "lines": 389
+      },
+      {
+        "path": "doc/interpretations/2026-04-11-phylogenetic-profiles-pilot.md",
+        "lines": 396
+      },
+      {
+        "path": "doc/interpretations/2026-04-12-prostt5-structural-pilot.md",
+        "lines": 357
+      },
+      {
+        "path": "doc/interpretations/2026-04-13-esmc-full-report-card.md",
+        "lines": 453
+      },
+      {
+        "path": "doc/interpretations/2026-04-13-phase1-completion-roadmap.md",
+        "lines": 322
+      },
+      {
+        "path": "doc/interpretations/2026-04-13-phylogenetic-full.md",
+        "lines": 517
+      },
+      {
+        "path": "doc/interpretations/2026-04-13-q22-f53-eff-dim-curve.md",
+        "lines": 318
+      },
+      {
+        "path": "doc/interpretations/2026-04-13-t074-cross-lens-matrix-4x4.md",
+        "lines": 486
+      },
+      {
+        "path": "doc/meta/next-steps-2026-04-18.md",
+        "lines": 333
+      },
+      {
+        "path": "doc/meta/pre-registration-q63-heldout-taxa-benchmark.md",
+        "lines": 843
+      },
+      {
+        "path": "doc/meta/pre-registration-t098-phylogenetic-2m.md",
+        "lines": 483
+      },
+      {
+        "path": "doc/papers/BarrioHernandez2023.md",
+        "lines": 394
+      },
+      {
+        "path": "doc/papers/Galpern2026.md",
+        "lines": 362
+      },
+      {
+        "path": "doc/papers/Hess2025.md",
+        "lines": 312
+      },
+      {
+        "path": "doc/papers/Lau2024.md",
+        "lines": 321
+      },
+      {
+        "path": "doc/papers/Lytras2026.md",
+        "lines": 303
+      },
+      {
+        "path": "doc/papers/Zhou2025.md",
+        "lines": 378
+      },
+      {
+        "path": "doc/papers/synthesis-2026-04-20-cross-lens-multimanifold.md",
+        "lines": 320
+      },
+      {
+        "path": "doc/papers/vanKempen2024.md",
+        "lines": 364
+      },
+      {
+        "path": "doc/plans/2026-04-02-protein-landscape-pipeline-plan.md",
+        "lines": 454
+      },
+      {
+        "path": "doc/plans/2026-04-07-coverage-bias-analysis-plan.md",
+        "lines": 429
+      },
+      {
+        "path": "doc/plans/2026-04-07-coverage-bias-synthesis-plan.md",
+        "lines": 302
+      },
+      {
+        "path": "doc/plans/2026-04-07-runpod-esmc-pipeline-plan.md",
+        "lines": 347
+      },
+      {
+        "path": "doc/plans/2026-04-10-multi-modality-embedding-pipelines.md",
+        "lines": 401
+      },
+      {
+        "path": "doc/plans/2026-04-11-expanded-lens-pipeline-plan-v2.md",
+        "lines": 307
+      },
+      {
+        "path": "doc/plans/2026-04-16-t063-cluster-card-design-spec.md",
+        "lines": 696
+      },
+      {
+        "path": "doc/plans/2026-04-17-t100-q22-closure-plan.md",
+        "lines": 1055
+      },
+      {
+        "path": "doc/plans/2026-04-18-home-route-entity-hub-design.md",
+        "lines": 348
+      },
+      {
+        "path": "doc/plans/2026-04-18-t086-domain-motif-materialization-implementation-plan.md",
+        "lines": 321
+      },
+      {
+        "path": "doc/plans/2026-04-19-atlas-performance-and-state-model-design.md",
+        "lines": 369
+      },
+      {
+        "path": "doc/plans/2026-04-19-atlas-representation-model-design.md",
+        "lines": 317
+      },
+      {
+        "path": "doc/plans/2026-04-19-atlas-semantics-foundation-implementation-plan.md",
+        "lines": 543
+      },
+      {
+        "path": "doc/plans/2026-04-22-multimodal-rns-pilot-runpod-pipeline-plan.md",
+        "lines": 346
+      },
+      {
+        "path": "doc/plans/2026-04-23-t138-platonic-mnn-sweep-implementation-plan.md",
+        "lines": 347
+      },
+      {
+        "path": "doc/plans/2026-04-24-t153-sae-archetype-labeling-pipeline-plan.md",
+        "lines": 738
+      },
+      {
+        "path": "doc/plans/2026-04-24-viewer-home-bootstrap-refactor-design.md",
+        "lines": 345
+      },
+      {
+        "path": "doc/plans/2026-04-24-viewer-home-bootstrap-refactor-implementation-plan.md",
+        "lines": 396
+      },
+      {
+        "path": "doc/plans/2026-04-25-t144-t145-heldout-taxa-benchmark-implementation-plan.md",
+        "lines": 748
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-11-protein-landscape-viewer.md",
+        "lines": 2881
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-12-entity-pages-app-shell.md",
+        "lines": 2040
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-12-protein-landscape-data-model.md",
+        "lines": 3421
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-19-t123-per-lens-phylum-coverage.md",
+        "lines": 1823
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-20-t133-interpretation-artifacts-refactor.md",
+        "lines": 1213
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-21-t135-linear-cka-standardization.md",
+        "lines": 1234
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-11-protein-landscape-viewer-design.md",
+        "lines": 568
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-12-protein-landscape-data-model-design.md",
+        "lines": 490
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-19-t123-per-lens-phylum-coverage-design.md",
+        "lines": 389
+      },
+      {
+        "path": "specs/hypotheses/h01-multi-manifold-protein-universe.md",
+        "lines": 391
+      },
+      {
+        "path": "tasks/active.md",
+        "lines": 1112
+      },
+      {
+        "path": "tasks/done/2026-04.md",
+        "lines": 878
+      }
+    ],
+    "embedded_metadata_candidates": [
+      {
+        "path": "doc/meta/pre-registration-q63-heldout-taxa-benchmark.md",
+        "lines": 843,
+        "candidate_starts": [
+          611
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-02-protein-landscape-pipeline-plan.md",
+        "lines": 454,
+        "candidate_starts": [
+          118,
+          277,
+          393
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-07-coverage-bias-analysis-plan.md",
+        "lines": 429,
+        "candidate_starts": [
+          55,
+          196,
+          259,
+          383,
+          416
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-07-coverage-bias-synthesis-plan.md",
+        "lines": 302,
+        "candidate_starts": [
+          57,
+          209,
+          264,
+          290
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-07-runpod-esmc-pipeline-plan.md",
+        "lines": 347,
+        "candidate_starts": [
+          75,
+          117,
+          180,
+          273,
+          314
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-10-multi-modality-embedding-pipelines.md",
+        "lines": 401,
+        "candidate_starts": [
+          125,
+          269,
+          357
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-10-shared-data-model-convergence.md",
+        "lines": 196,
+        "candidate_starts": [
+          73,
+          185
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-11-cross-project-convergence-plan.md",
+        "lines": 283,
+        "candidate_starts": [
+          132,
+          234,
+          271
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-11-expanded-lens-pipeline-plan-v2.md",
+        "lines": 307,
+        "candidate_starts": [
+          113,
+          221,
+          266
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-11-expanded-lens-pipeline-plan.md",
+        "lines": 298,
+        "candidate_starts": [
+          52,
+          186,
+          251,
+          287
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-11-phylogenetic-profiles-pipeline-plan.md",
+        "lines": 288,
+        "candidate_starts": [
+          67,
+          196,
+          261
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-11-prostt5-structural-pipeline-plan.md",
+        "lines": 254,
+        "candidate_starts": [
+          52,
+          158,
+          220
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-17-t100-q22-closure-plan.md",
+        "lines": 1055,
+        "candidate_starts": [
+          56,
+          183,
+          469,
+          843,
+          920,
+          921,
+          1036
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-22-multimodal-rns-pilot-runpod-pipeline-plan.md",
+        "lines": 346,
+        "candidate_starts": [
+          94,
+          127,
+          187,
+          261,
+          335
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-24-t153-sae-archetype-labeling-pipeline-plan.md",
+        "lines": 738,
+        "candidate_starts": [
+          129,
+          484,
+          653,
+          689,
+          725
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-25-t144-t145-heldout-taxa-benchmark-implementation-plan.md",
+        "lines": 748,
+        "candidate_starts": [
+          63,
+          164,
+          589,
+          645
+        ]
+      },
+      {
+        "path": "doc/questions/q20-esmc-pc1-identity.md",
+        "lines": 250,
+        "candidate_starts": [
+          128
+        ]
+      },
+      {
+        "path": "doc/questions/q21-phylogenetic-pc1-identity.md",
+        "lines": 246,
+        "candidate_starts": [
+          131
+        ]
+      },
+      {
+        "path": "doc/reports/synthesis/_emergent-threads.md",
+        "lines": 140,
+        "candidate_starts": [
+          62,
+          102
+        ]
+      },
+      {
+        "path": "doc/reports/synthesis/h01-multi-manifold-protein-universe.md",
+        "lines": 100,
+        "candidate_starts": [
+          63,
+          92
+        ]
+      },
+      {
+        "path": "doc/reports/synthesis/h03-data-driven-primacy.md",
+        "lines": 69,
+        "candidate_starts": [
+          62
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-11-protein-landscape-viewer.md",
+        "lines": 2881,
+        "candidate_starts": [
+          66,
+          731,
+          1269,
+          1695,
+          2126,
+          2348,
+          2672,
+          2829
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-12-entity-pages-app-shell.md",
+        "lines": 2040,
+        "candidate_starts": [
+          52,
+          332,
+          736,
+          1093,
+          1339,
+          1671,
+          1879,
+          2011
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-12-protein-landscape-data-model.md",
+        "lines": 3421,
+        "candidate_starts": [
+          76,
+          146,
+          196,
+          301,
+          345,
+          480,
+          491,
+          602,
+          619,
+          627,
+          635,
+          643,
+          650,
+          813,
+          960,
+          975,
+          980,
+          985,
+          990,
+          1000,
+          1139,
+          1318,
+          1526,
+          1741,
+          1950,
+          2111,
+          2246,
+          2544,
+          2834,
+          2927,
+          3147,
+          3402
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-19-t123-per-lens-phylum-coverage.md",
+        "lines": 1823,
+        "candidate_starts": [
+          297,
+          564,
+          992,
+          1205,
+          1305,
+          1316,
+          1603,
+          1723,
+          1793
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-20-t133-interpretation-artifacts-refactor.md",
+        "lines": 1213,
+        "candidate_starts": [
+          56,
+          204,
+          334,
+          537,
+          718,
+          918,
+          993,
+          1166
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-21-t135-linear-cka-standardization.md",
+        "lines": 1234,
+        "candidate_starts": [
+          77,
+          305,
+          813,
+          905,
+          906,
+          986,
+          999,
+          1013,
+          1108,
+          1200
+        ]
+      }
+    ]
+  }
+}

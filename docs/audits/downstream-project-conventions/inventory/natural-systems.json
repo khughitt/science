@@ -1,0 +1,4572 @@
+{
+  "schema_version": "v0",
+  "generator": "scripts/audit_downstream_project_inventory.py",
+  "generated_at_utc": "2026-04-25T20:04:40Z",
+  "project": {
+    "root": "/mnt/ssd/Dropbox/natural-systems",
+    "name": "natural-systems"
+  },
+  "science_repo": {
+    "root": "/mnt/ssd/Dropbox/science",
+    "head": "a059f7d3dd46fb197df14339e6e9576bbb5615dd"
+  },
+  "audit_ignore_patterns": [],
+  "protected_data_dirs": [],
+  "git": {
+    "is_repo": true,
+    "head": "1e473a4876786be067559ce87286d16a373cbf18",
+    "status_porcelain": [],
+    "status_porcelain_summary": {},
+    "last_commit": {
+      "sha": "1e473a4876786be067559ce87286d16a373cbf18",
+      "author_name": "Keith Hughitt",
+      "author_email": "keith.hughitt@gmail.com",
+      "authored": "2026-04-25T15:58:01-04:00",
+      "subject": "feat(h06): coarse-graining sample (5 edges) for t328 phase 1"
+    },
+    "git_status": "ok"
+  },
+  "tracked_top_level_counts": {
+    ".claude": 8,
+    ".github": 1,
+    ".gitignore": 1,
+    ".husky": 1,
+    ".scienceignore": 1,
+    "AGENTS.md": 1,
+    "CLAUDE.md": 1,
+    "README.md": 1,
+    "RESEARCH_PLAN.md": 1,
+    "commitlint.config.mjs": 1,
+    "content": 2049,
+    "doc": 576,
+    "docs": 44,
+    "index.html": 1,
+    "knowledge": 43,
+    "package-lock.json": 1,
+    "package.json": 1,
+    "papers": 1,
+    "pipeline": 68,
+    "playwright.config.ts": 1,
+    "public": 523,
+    "pyproject.toml": 1,
+    "research": 501,
+    "science.yaml": 1,
+    "scripts": 353,
+    "specs": 40,
+    "src": 1135,
+    "tasks": 3,
+    "tests": 2,
+    "tsconfig.json": 1,
+    "uv.lock": 1,
+    "validate.sh": 1,
+    "vite.config.ts": 1,
+    "vitest.config.ts": 1,
+    "workflows": 342
+  },
+  "tracked_second_level_counts": {
+    "doc": {
+      "background": 1,
+      "discussions": 51,
+      "figures": 3,
+      "guide-data-model-refresh": 2,
+      "guides": 3,
+      "inquiries": 2,
+      "interpretations": 67,
+      "meta": 21,
+      "meta-model-refinement": 2,
+      "papers": 14,
+      "plans": 197,
+      "project-organization-migration": 2,
+      "provenance-derivation-redesign": 2,
+      "questions": 94,
+      "refactors": 5,
+      "reports": 88,
+      "searches": 8,
+      "topics": 14
+    },
+    "docs": {
+      "plans": 8,
+      "superpowers": 36
+    },
+    "knowledge": {
+      "<files>": 2,
+      "health": 1,
+      "indexes": 1,
+      "layers": 3,
+      "reports": 5,
+      "scripts": 4,
+      "sources": 27
+    },
+    "scripts": {
+      "<files>": 90,
+      "__tests__": 16,
+      "arena-axis": 7,
+      "audit": 11,
+      "claim_extraction": 14,
+      "cli": 33,
+      "crossGraphIndex": 2,
+      "entity_audit": 4,
+      "formulation_breadth": 18,
+      "h03": 2,
+      "health": 105,
+      "lib": 29,
+      "migrate": 2,
+      "pilot": 6,
+      "pipeline": 2,
+      "pipelines": 12
+    },
+    "specs": {
+      "<files>": 32,
+      "hypotheses": 8
+    },
+    "src": {
+      "<files>": 5,
+      "__tests__": 3,
+      "behaviors": 4,
+      "book": 10,
+      "catalog": 7,
+      "chapters": 66,
+      "colors": 4,
+      "components": 7,
+      "context": 6,
+      "dimgroups": 4,
+      "entities": 39,
+      "focus": 6,
+      "formulas": 41,
+      "guide": 181,
+      "lenses": 58,
+      "lichen": 8,
+      "models": 335,
+      "natural": 160,
+      "parameters": 1,
+      "params": 1,
+      "plants": 8,
+      "primitives": 5,
+      "prose": 20,
+      "research": 14,
+      "search": 5,
+      "simulation": 101,
+      "structures": 4,
+      "symmetries": 4,
+      "test": 1,
+      "utils": 1,
+      "variables": 5,
+      "visual": 21
+    },
+    "tasks": {
+      "<files>": 1,
+      "done": 2
+    },
+    "workflows": {
+      "catalog-analysis": 2,
+      "claim-extraction": 76,
+      "common": 2,
+      "dimensionless-analysis": 34,
+      "domain-analysis": 82,
+      "math-form-analysis": 31,
+      "openalex-analysis": 10,
+      "primitive-analysis": 52,
+      "theme-validation": 53
+    }
+  },
+  "present_untracked_dirs": [
+    {
+      "path": ".venv",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 10
+    },
+    {
+      "path": ".worktrees",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 0
+    },
+    {
+      "path": "node_modules",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 405
+    }
+  ],
+  "gitignored_top_level_dirs": [
+    {
+      "name": ".cache",
+      "file_count": 839,
+      "total_size_bytes": 57758264,
+      "sample_paths": [
+        ".cache/formulation-breadth/0704.0707.tex",
+        ".cache/formulation-breadth/0704.0793.tex",
+        ".cache/formulation-breadth/0705.0863.tex",
+        ".cache/formulation-breadth/0705.1951.tex",
+        ".cache/formulation-breadth/0705.2940.tex"
+      ]
+    },
+    {
+      "name": "archive",
+      "file_count": 75,
+      "total_size_bytes": 5567795,
+      "sample_paths": [
+        "archive/2026-03-12-interactive-demo-roadmap.md",
+        "archive/2026-03-15-minimum-spanning-tree-design.md",
+        "archive/2026-03-15-minimum-spanning-tree.md",
+        "archive/category-theory-meta-model.md",
+        "archive/lawvere-metric-spaces.md"
+      ]
+    },
+    {
+      "name": "dist",
+      "file_count": 689,
+      "total_size_bytes": 25353055,
+      "sample_paths": [
+        "dist/index.html",
+        "dist/research/manifest.json",
+        "dist/research/solution-behavior/waves-solitons/cells.json",
+        "dist/research/theme/instability-bifurcation/cells.json",
+        "dist/research/theme/instability-bifurcation/datapackage.json"
+      ]
+    },
+    {
+      "name": "test-results",
+      "file_count": 1,
+      "total_size_bytes": 45,
+      "sample_paths": [
+        "test-results/.last-run.json"
+      ]
+    },
+    {
+      "name": "tmp",
+      "file_count": 1,
+      "total_size_bytes": 28479,
+      "sample_paths": [
+        "tmp/h05-phase-e-result.json"
+      ]
+    }
+  ],
+  "symlinks": [],
+  "science_yaml": {
+    "present": true,
+    "keys": [
+      "aspects",
+      "created",
+      "data_sources",
+      "knowledge_profiles",
+      "last_modified",
+      "layout_version",
+      "name",
+      "ontologies",
+      "profile",
+      "status",
+      "summary",
+      "tags"
+    ],
+    "profile": "software",
+    "aspects": [
+      "computational-analysis",
+      "hypothesis-testing",
+      "software-development"
+    ],
+    "layout_version": 2,
+    "data_sources_shape": {
+      "present": true,
+      "count": 0,
+      "entry_kinds": {}
+    },
+    "ontologies": [
+      "astronomy",
+      "biology",
+      "chemistry",
+      "earth",
+      "information",
+      "math",
+      "physics",
+      "units"
+    ],
+    "knowledge_profiles_keys": [
+      "curated",
+      "local"
+    ]
+  },
+  "gitignore": {
+    "present": true,
+    "line_count": 31,
+    "non_blank_non_comment": 27,
+    "matched": {
+      "data": [
+        "!src/chapters/generated/guide-data.json",
+        "pipeline/graph-analysis/data/"
+      ],
+      "results": [
+        "pipeline/graph-analysis/results/",
+        "test-results/"
+      ],
+      "worktrees": [
+        ".worktrees/"
+      ],
+      "node": [
+        "dist/",
+        "node_modules/",
+        "tsconfig.tsbuildinfo"
+      ],
+      "python_caches": [
+        ".venv"
+      ]
+    }
+  },
+  "validate": {
+    "present": true,
+    "line_count": 869,
+    "header": "#!/usr/bin/env bash\n# validate.sh \u2014 Structural validation for Science research projects\n# Returns non-zero on failure. Used as backpressure in research loops.\n#\n# Usage: bash validate.sh [--verbose]\n\n# Note: intentionally NOT using set -e \u2014 we count errors and report at the end.\nset -uo pipefail\n\nexport UV_CACHE_DIR=\"${UV_CACHE_DIR:-/tmp/uv-cache}\"\n\nVERBOSE=\"${1:-}\"\nERRORS=0\nWARNINGS=0\n",
+    "sections": [
+      "Canonical path/profile resolution from science.yaml",
+      "1. Project manifest",
+      "2. Core structure",
+      "3. Research question",
+      "4. Template conformance for background docs",
+      "5. Hypothesis completeness",
+      "6. Citation integrity",
+      "7. Paper summary template conformance",
+      "8. Unverified/uncited markers",
+      "9. Research gap analysis conformance",
+      "10. RESEARCH_PLAN conventions",
+      "11. Discussion document conformance",
+      "12. Notes conformance",
+      "13. Knowledge graph checks",
+      "14. Inquiry validation",
+      "15. Task queue",
+      "16. Frontmatter cross-reference validation",
+      "Summary"
+    ],
+    "sha256": "f96e5ce7189c37408b6661107ab01348f3893d3d47d7ec0cd96f304262667467",
+    "canonical_path": "meta/validate.sh",
+    "canonical_sha256": "0a9878c8dd81acc9703dbd58e8ec236254eee8c5c000f341caff26f5a37a3c44",
+    "structural_diff": [],
+    "content_diff": [
+      {
+        "kind": "content_changed",
+        "section": "1. Project manifest",
+        "canonical_sha256": "2ae6e97533c38cdf5e376b92b50ba54f3fcb8c428ac2db218348e261081af1d7",
+        "local_sha256": "4db64bdb5a75fe2217395074aa6b39ab1285b165792428fc4825cfaf0b442d91",
+        "canonical_lines": 55,
+        "local_lines": 60,
+        "changed_lines": 15
+      },
+      {
+        "kind": "content_changed",
+        "section": "13. Knowledge graph checks",
+        "canonical_sha256": "2738ff63a0c7bd95629d63d96bb462572fc0842bfc65d2cb31a1e0a977caa3e6",
+        "local_sha256": "95cf6841c5309e0590124253a4ea694d3ba10653b875af2e2bf69265c80f53b2",
+        "canonical_lines": 85,
+        "local_lines": 95,
+        "changed_lines": 22
+      },
+      {
+        "kind": "content_changed",
+        "section": "<preamble>",
+        "canonical_sha256": "76efb382cd18107bcdd05acf312a97b4f27e0a4d34bea42f803e60370e4407cc",
+        "local_sha256": "79c19bcaedb71ac5ea6f440785401f7d46d043d3dceb477df4500dfdbee9c69a",
+        "canonical_lines": 75,
+        "local_lines": 62,
+        "changed_lines": 13
+      },
+      {
+        "kind": "content_changed",
+        "section": "Canonical path/profile resolution from science.yaml",
+        "canonical_sha256": "7c39716a9d95f5f619f422f4a9cbcc566ddb20408106fbfe2a3a1a31b177f52c",
+        "local_sha256": "a1feb4b89f692f713b65d966afb8bd2231880f1bcc4afbc26de56f7ff5d29e27",
+        "canonical_lines": 49,
+        "local_lines": 49,
+        "changed_lines": 8
+      }
+    ],
+    "content_diff_total_lines": 58
+  },
+  "datapackages": [
+    "public/research/dimensionless-group/damkohler/datapackage.json",
+    "public/research/dimensionless-group/froude/datapackage.json",
+    "public/research/dimensionless-group/grashof/datapackage.json",
+    "public/research/dimensionless-group/mach/datapackage.json",
+    "public/research/dimensionless-group/peclet/datapackage.json",
+    "public/research/dimensionless-group/prandtl/datapackage.json",
+    "public/research/dimensionless-group/rayleigh/datapackage.json",
+    "public/research/dimensionless-group/reynolds/datapackage.json",
+    "public/research/dimensionless-group/strouhal/datapackage.json",
+    "public/research/dimensionless-group/weber/datapackage.json",
+    "public/research/domain/classical-and-celestial-mechanics/datapackage.json",
+    "public/research/domain/control-and-information-theory/datapackage.json",
+    "public/research/domain/dynamical-systems-and-chaos/datapackage.json",
+    "public/research/domain/electromagnetism-and-optics/datapackage.json",
+    "public/research/domain/fluid-dynamics/datapackage.json",
+    "public/research/domain/general-relativity-and-cosmology/datapackage.json",
+    "public/research/domain/geophysical-systems/datapackage.json",
+    "public/research/domain/growth-and-morphogenesis/datapackage.json",
+    "public/research/domain/lattice-models-and-phase-transitions/datapackage.json",
+    "public/research/domain/networks-and-discrete-systems/datapackage.json",
+    "public/research/domain/organismal-biophysics/datapackage.json",
+    "public/research/domain/pattern-formation/datapackage.json",
+    "public/research/domain/population-and-ecological-dynamics/datapackage.json",
+    "public/research/domain/quantum-systems/datapackage.json",
+    "public/research/domain/soft-matter-and-complex-fluids/datapackage.json",
+    "public/research/domain/solid-mechanics-and-elasticity/datapackage.json",
+    "public/research/domain/stochastic-processes/datapackage.json",
+    "public/research/domain/thermal-and-statistical-physics/datapackage.json",
+    "public/research/domain/waves-and-acoustics/datapackage.json",
+    "public/research/equation-type/algebraic/datapackage.json",
+    "public/research/equation-type/discrete/datapackage.json",
+    "public/research/equation-type/geometric/datapackage.json",
+    "public/research/equation-type/integral/datapackage.json",
+    "public/research/equation-type/map/datapackage.json",
+    "public/research/equation-type/ode/datapackage.json",
+    "public/research/equation-type/pde/datapackage.json",
+    "public/research/equation-type/stochastic/datapackage.json",
+    "public/research/equation-type/variational/datapackage.json",
+    "public/research/primitive/advection/datapackage.json",
+    "public/research/primitive/constraint/datapackage.json",
+    "public/research/primitive/coupling/datapackage.json",
+    "public/research/primitive/diffusion/datapackage.json",
+    "public/research/primitive/dispersion/datapackage.json",
+    "public/research/primitive/gradient-flow/datapackage.json",
+    "public/research/primitive/noise/datapackage.json",
+    "public/research/primitive/reaction/datapackage.json",
+    "public/research/primitive/self-advection/datapackage.json",
+    "public/research/primitive/source-sink/datapackage.json",
+    "public/research/primitive/wave/datapackage.json",
+    "public/research/solution-behavior/coarsening-aging/datapackage.json",
+    "public/research/solution-behavior/information-entropy/datapackage.json",
+    "public/research/solution-behavior/instability-bifurcation/datapackage.json",
+    "public/research/solution-behavior/nucleation-transitions/datapackage.json",
+    "public/research/solution-behavior/optimization-constraints/datapackage.json",
+    "public/research/solution-behavior/oscillation-synchronization/datapackage.json",
+    "public/research/solution-behavior/scale-invariance/datapackage.json",
+    "public/research/solution-behavior/symmetry-conservation/datapackage.json",
+    "public/research/solution-behavior/transport-diffusion/datapackage.json",
+    "public/research/solution-behavior/waves-solitons/datapackage.json",
+    "public/research/theme/instability-bifurcation/datapackage.json",
+    "research/packages/dimensionless-group/damkohler/datapackage.json",
+    "research/packages/dimensionless-group/froude/datapackage.json",
+    "research/packages/dimensionless-group/grashof/datapackage.json",
+    "research/packages/dimensionless-group/mach/datapackage.json",
+    "research/packages/dimensionless-group/peclet/datapackage.json",
+    "research/packages/dimensionless-group/prandtl/datapackage.json",
+    "research/packages/dimensionless-group/rayleigh/datapackage.json",
+    "research/packages/dimensionless-group/reynolds/datapackage.json",
+    "research/packages/dimensionless-group/strouhal/datapackage.json",
+    "research/packages/dimensionless-group/weber/datapackage.json",
+    "research/packages/domain/classical-and-celestial-mechanics/datapackage.json",
+    "research/packages/domain/control-and-information-theory/datapackage.json",
+    "research/packages/domain/dynamical-systems-and-chaos/datapackage.json",
+    "research/packages/domain/electromagnetism-and-optics/datapackage.json",
+    "research/packages/domain/fluid-dynamics/datapackage.json",
+    "research/packages/domain/general-relativity-and-cosmology/datapackage.json",
+    "research/packages/domain/geophysical-systems/datapackage.json",
+    "research/packages/domain/growth-and-morphogenesis/datapackage.json",
+    "research/packages/domain/lattice-models-and-phase-transitions/datapackage.json",
+    "research/packages/domain/networks-and-discrete-systems/datapackage.json",
+    "research/packages/domain/organismal-biophysics/datapackage.json",
+    "research/packages/domain/pattern-formation/datapackage.json",
+    "research/packages/domain/population-and-ecological-dynamics/datapackage.json",
+    "research/packages/domain/quantum-systems/datapackage.json",
+    "research/packages/domain/soft-matter-and-complex-fluids/datapackage.json",
+    "research/packages/domain/solid-mechanics-and-elasticity/datapackage.json",
+    "research/packages/domain/stochastic-processes/datapackage.json",
+    "research/packages/domain/thermal-and-statistical-physics/datapackage.json",
+    "research/packages/domain/waves-and-acoustics/datapackage.json",
+    "research/packages/equation-type/algebraic/datapackage.json",
+    "research/packages/equation-type/discrete/datapackage.json",
+    "research/packages/equation-type/geometric/datapackage.json",
+    "research/packages/equation-type/integral/datapackage.json",
+    "research/packages/equation-type/map/datapackage.json",
+    "research/packages/equation-type/ode/datapackage.json",
+    "research/packages/equation-type/pde/datapackage.json",
+    "research/packages/equation-type/stochastic/datapackage.json",
+    "research/packages/equation-type/variational/datapackage.json",
+    "research/packages/primitive/advection/datapackage.json",
+    "research/packages/primitive/constraint/datapackage.json",
+    "research/packages/primitive/coupling/datapackage.json",
+    "research/packages/primitive/diffusion/datapackage.json",
+    "research/packages/primitive/dispersion/datapackage.json",
+    "research/packages/primitive/gradient-flow/datapackage.json",
+    "research/packages/primitive/noise/datapackage.json",
+    "research/packages/primitive/reaction/datapackage.json",
+    "research/packages/primitive/self-advection/datapackage.json",
+    "research/packages/primitive/source-sink/datapackage.json",
+    "research/packages/primitive/wave/datapackage.json",
+    "research/packages/solution-behavior/coarsening-aging/datapackage.json",
+    "research/packages/solution-behavior/information-entropy/datapackage.json",
+    "research/packages/solution-behavior/instability-bifurcation/datapackage.json",
+    "research/packages/solution-behavior/nucleation-transitions/datapackage.json",
+    "research/packages/solution-behavior/optimization-constraints/datapackage.json",
+    "research/packages/solution-behavior/oscillation-synchronization/datapackage.json",
+    "research/packages/solution-behavior/scale-invariance/datapackage.json",
+    "research/packages/solution-behavior/symmetry-conservation/datapackage.json",
+    "research/packages/solution-behavior/transport-diffusion/datapackage.json",
+    "research/packages/solution-behavior/waves-solitons/datapackage.json",
+    "research/packages/theme/instability-bifurcation/datapackage.json"
+  ],
+  "code_layout": {
+    "scripts": {
+      "tracked_files": 353,
+      "is_dir": true
+    },
+    "src": {
+      "tracked_files": 1135,
+      "is_dir": true
+    },
+    "workflows": {
+      "tracked_files": 342,
+      "is_dir": true
+    },
+    "notebooks": {
+      "count": 0,
+      "paths": [],
+      "truncated": false
+    },
+    "tests": {
+      "count": 2,
+      "top_dirs": [
+        "tests"
+      ]
+    }
+  },
+  "markdown": {
+    "markdown_file_count": 1183,
+    "scanned_count": 1183,
+    "template_files_skipped": 0,
+    "files_by_top_dir": {
+      ".claude": 7,
+      "<root>": 4,
+      "content": 40,
+      "doc": 553,
+      "docs": 44,
+      "knowledge": 1,
+      "public": 161,
+      "research": 161,
+      "scripts": 5,
+      "specs": 39,
+      "src": 1,
+      "tasks": 3,
+      "workflows": 164
+    },
+    "frontmatter_key_counts_by_dir": {
+      "content": {
+        "entity": 38,
+        "sections": 38
+      },
+      "doc": {
+        "addresses": 5,
+        "arxiv": 1,
+        "aspects": 3,
+        "created": 285,
+        "datasets": 52,
+        "date": 49,
+        "emergent_threads_sha": 1,
+        "focus_ref": 49,
+        "focus_type": 49,
+        "generated_at": 6,
+        "hypothesis": 4,
+        "id": 344,
+        "input": 46,
+        "inquiry_type": 1,
+        "mode": 54,
+        "ontology_terms": 54,
+        "orphan_ids": 1,
+        "orphan_question_count": 1,
+        "overall": 1,
+        "parent": 5,
+        "prior": 1,
+        "prior_interpretations": 26,
+        "priority": 52,
+        "provenance_coverage": 4,
+        "question_type": 45,
+        "related": 326,
+        "related_questions": 3,
+        "related_reports": 2,
+        "related_specs": 3,
+        "retired_reason": 10,
+        "source": 1,
+        "source_commit": 6,
+        "source_refs": 139,
+        "status": 262,
+        "superseded_by": 3,
+        "synthesized_from": 1,
+        "tags": 62,
+        "target": 1,
+        "task": 2,
+        "task_ref": 1,
+        "title": 343,
+        "type": 335,
+        "updated": 176,
+        "workflow": 1
+      },
+      "scripts": {
+        "created": 5,
+        "id": 5,
+        "related": 5,
+        "source_refs": 5,
+        "type": 5
+      },
+      "specs": {
+        "canonical_models": 1,
+        "created": 11,
+        "date": 5,
+        "id": 17,
+        "phase": 1,
+        "priority": 7,
+        "promotion_criteria": 1,
+        "related": 11,
+        "related_interpretations": 5,
+        "related_questions": 5,
+        "related_reports": 1,
+        "related_specs": 5,
+        "related_tasks": 1,
+        "revision_history": 1,
+        "source_refs": 7,
+        "status": 17,
+        "title": 17,
+        "type": 17,
+        "updated": 11,
+        "version": 2
+      }
+    },
+    "frontmatter_unparsed": [],
+    "frontmatter_parse_errors": [],
+    "observed_values": {
+      "aspects": {
+        "computational-analysis": 3
+      },
+      "ontologies": {},
+      "phase": {
+        "candidate": 1
+      },
+      "profile": {},
+      "status": {
+        "active": 74,
+        "agreed": 1,
+        "answered": 6,
+        "approved": 1,
+        "closed": 1,
+        "complete": 76,
+        "completed": 1,
+        "conjecture": 4,
+        "current": 1,
+        "deferred": 1,
+        "design": 5,
+        "draft": 21,
+        "final": 1,
+        "generated": 1,
+        "in-progress": 5,
+        "open": 29,
+        "partially supported": 1,
+        "partially-answered": 13,
+        "partially-resolved": 1,
+        "proposed": 16,
+        "published": 2,
+        "resolved": 3,
+        "retired": 10,
+        "sketch": 1,
+        "superseded": 4
+      },
+      "type": {
+        "concept": 5,
+        "discussion": 51,
+        "hypothesis": 7,
+        "inquiry": 1,
+        "interpretation": 71,
+        "meta": 1,
+        "paper": 14,
+        "plan": 58,
+        "question": 94,
+        "report": 33,
+        "search": 6,
+        "spec": 10,
+        "synthesis": 4,
+        "topic": 1,
+        "validation-report": 1
+      }
+    },
+    "entity_id_prefix_counts": {
+      "concept": 5,
+      "discussion": 51,
+      "doc": 27,
+      "hypothesis": 7,
+      "inquiry": 1,
+      "interpretation": 71,
+      "meta": 5,
+      "paper": 14,
+      "plan": 58,
+      "question": 95,
+      "report": 8,
+      "search": 6,
+      "spec": 10,
+      "synthesis": 4,
+      "topic": 4
+    },
+    "entity_id_paths": {
+      "concept:combinatorics": [
+        "doc/topics/combinatorics.md"
+      ],
+      "concept:formulation-breadth": [
+        "doc/topics/formulation-breadth.md"
+      ],
+      "concept:information-theory": [
+        "doc/topics/information-theory.md"
+      ],
+      "concept:meta-model": [
+        "doc/topics/meta-model.md"
+      ],
+      "concept:temporal-structure": [
+        "doc/topics/temporal.md"
+      ],
+      "discussion:2026-03-09-four-independent-axes-framing": [
+        "doc/discussions/2026-03-09-four-independent-axes-framing.md"
+      ],
+      "discussion:2026-03-09-latent-structure-of-model-parameter-space": [
+        "doc/discussions/2026-03-09-latent-structure-of-model-parameter-space.md"
+      ],
+      "discussion:2026-03-09-q16-suffix-matching-false-positives": [
+        "doc/discussions/2026-03-09-q16-suffix-matching-false-positives.md"
+      ],
+      "discussion:2026-03-09-remaining-data-metadata-issues": [
+        "doc/discussions/2026-03-09-remaining-data-metadata-issues.md"
+      ],
+      "discussion:2026-03-10-diffusion-ratio-audit-and-priorities": [
+        "doc/discussions/2026-03-10-diffusion-ratio-audit-and-priorities.md"
+      ],
+      "discussion:2026-03-10-dimensionless-constituent-decomposition": [
+        "doc/discussions/2026-03-10-dimensionless-constituent-decomposition.md"
+      ],
+      "discussion:2026-03-11-lens-design-review": [
+        "doc/discussions/2026-03-11-lens-design-review.md"
+      ],
+      "discussion:2026-03-22-convergence-vs-perspectivalism": [
+        "doc/discussions/2026-03-22-convergence-vs-perspectivalism.md"
+      ],
+      "discussion:2026-03-22-cooccurrence-rarefaction-synthesis": [
+        "doc/discussions/2026-03-22-cooccurrence-rarefaction-synthesis.md"
+      ],
+      "discussion:2026-03-22-integrability-in-meta-model": [
+        "doc/discussions/2026-03-22-integrability-in-meta-model.md"
+      ],
+      "discussion:2026-03-22-meta-model-selection-bias": [
+        "doc/discussions/2026-03-22-meta-model-selection-bias.md"
+      ],
+      "discussion:2026-03-22-monotone-subclassification": [
+        "doc/discussions/2026-03-22-monotone-subclassification.md"
+      ],
+      "discussion:2026-03-22-topological-invariants-in-meta-model": [
+        "doc/discussions/2026-03-22-topological-invariants-in-meta-model.md"
+      ],
+      "discussion:2026-03-23-vocabulary-bias": [
+        "doc/discussions/2026-03-23-vocabulary-bias.md"
+      ],
+      "discussion:2026-03-29-complex-adaptive-systems-coverage": [
+        "doc/discussions/2026-03-29-complex-adaptive-systems-coverage.md"
+      ],
+      "discussion:2026-03-29-refining-research-derived-lenses": [
+        "doc/discussions/2026-03-29-refining-research-derived-lenses.md"
+      ],
+      "discussion:2026-03-30-why-four-themes-resist-formalization": [
+        "doc/discussions/2026-03-30-why-four-themes-resist-formalization.md"
+      ],
+      "discussion:2026-03-31-validation-epistemology": [
+        "doc/discussions/2026-03-31-validation-epistemology.md"
+      ],
+      "discussion:2026-04-01-ch20-formula-system-and-meta-model": [
+        "doc/discussions/2026-04-01-ch20-formula-system-and-meta-model.md"
+      ],
+      "discussion:2026-04-01-cole-hopf-morphism-analysis": [
+        "doc/discussions/2026-04-01-cole-hopf-morphism-analysis.md"
+      ],
+      "discussion:2026-04-01-low-coverage-chapters-meta-model-fit": [
+        "doc/discussions/2026-04-01-low-coverage-chapters-meta-model-fit.md"
+      ],
+      "discussion:2026-04-01-meta-structure-of-lenses": [
+        "doc/discussions/2026-04-01-meta-structure-of-lenses.md"
+      ],
+      "discussion:2026-04-01-polymorphic-transforms": [
+        "doc/discussions/2026-04-01-polymorphic-transforms.md"
+      ],
+      "discussion:2026-04-03-compositional-grammar-taxonomy": [
+        "doc/discussions/2026-04-03-compositional-grammar-taxonomy.md"
+      ],
+      "discussion:2026-04-03-lens-types-and-morphism-gap": [
+        "doc/discussions/2026-04-03-lens-types-and-morphism-gap.md"
+      ],
+      "discussion:2026-04-03-meta-model-architecture-review": [
+        "doc/discussions/2026-04-03-meta-model-architecture-review.md"
+      ],
+      "discussion:2026-04-04-data-model-driven-demos": [
+        "doc/discussions/2026-04-04-data-model-driven-demos.md"
+      ],
+      "discussion:2026-04-04-demo-architecture-data-model-alignment": [
+        "doc/discussions/2026-04-04-demo-architecture-data-model-alignment.md"
+      ],
+      "discussion:2026-04-04-discovery-topic-bias": [
+        "doc/discussions/2026-04-04-discovery-topic-bias.md"
+      ],
+      "discussion:2026-04-04-openalex-followup-directions": [
+        "doc/discussions/2026-04-04-openalex-followup-directions.md"
+      ],
+      "discussion:2026-04-08-claim-evidence-layer-population": [
+        "doc/discussions/2026-04-08-claim-evidence-layer-population.md"
+      ],
+      "discussion:2026-04-08-formula-resolution-precision": [
+        "doc/discussions/2026-04-08-formula-resolution-precision.md"
+      ],
+      "discussion:2026-04-08-hypothesis-evidence-assessment": [
+        "doc/discussions/2026-04-08-hypothesis-evidence-assessment.md"
+      ],
+      "discussion:2026-04-08-model-ontology-and-naming": [
+        "doc/discussions/2026-04-08-model-ontology-and-naming.md"
+      ],
+      "discussion:2026-04-08-single-source-fragility-audit": [
+        "doc/discussions/2026-04-08-single-source-fragility-audit.md"
+      ],
+      "discussion:2026-04-10-behavioral-invariance-circularity": [
+        "doc/discussions/2026-04-10-behavioral-invariance-circularity.md"
+      ],
+      "discussion:2026-04-11-bridge-model-phenomenon": [
+        "doc/discussions/2026-04-11-bridge-model-phenomenon.md"
+      ],
+      "discussion:2026-04-11-field-evolution-vs-structural-generative": [
+        "doc/discussions/2026-04-11-field-evolution-vs-structural-generative.md"
+      ],
+      "discussion:2026-04-11-lens-morphism-types-and-naming": [
+        "doc/discussions/2026-04-11-lens-morphism-types-and-naming.md"
+      ],
+      "discussion:2026-04-11-strategic-directions": [
+        "doc/discussions/2026-04-11-strategic-directions.md"
+      ],
+      "discussion:2026-04-11-vocabulary-gaps-and-catalog-bias": [
+        "doc/discussions/2026-04-11-vocabulary-gaps-and-catalog-bias.md"
+      ],
+      "discussion:2026-04-12-catalog-as-foundation": [
+        "doc/discussions/2026-04-12-catalog-as-foundation.md"
+      ],
+      "discussion:2026-04-13-model-data-alignment-and-catalog-coverage": [
+        "doc/discussions/2026-04-13-model-data-alignment-and-catalog-coverage.md"
+      ],
+      "discussion:2026-04-13-parameters-as-primitives": [
+        "doc/discussions/2026-04-13-parameters-as-primitives.md"
+      ],
+      "discussion:2026-04-13-parameters-review-and-next-steps": [
+        "doc/discussions/2026-04-13-parameters-review-and-next-steps.md"
+      ],
+      "discussion:2026-04-13-t227-primitive-and-model-metaclass-scope": [
+        "doc/discussions/2026-04-13-t227-primitive-and-model-metaclass-scope.md"
+      ],
+      "discussion:2026-04-17-unified-page-composition-model": [
+        "doc/discussions/2026-04-17-unified-page-composition-model.md"
+      ],
+      "discussion:2026-04-17-visual-representations-as-entity-attributes": [
+        "doc/discussions/2026-04-17-visual-representations-as-entity-attributes.md"
+      ],
+      "discussion:2026-04-22-morphisms-as-primitives": [
+        "doc/discussions/2026-04-22-morphisms-as-primitives.md"
+      ],
+      "discussion:2026-04-23-within-between-bridge-framing": [
+        "doc/discussions/2026-04-23-within-between-bridge-framing.md"
+      ],
+      "discussion:2026-04-25-multi-lens-parameter-compositions": [
+        "doc/discussions/2026-04-25-multi-lens-parameter-compositions.md"
+      ],
+      "doc:2026-04-22-degenerates-pilot-audit": [
+        "doc/reports/2026-04-22-degenerates-pilot-audit.md"
+      ],
+      "doc:2026-04-22-degenerates-pilot-calibration": [
+        "doc/reports/2026-04-22-degenerates-pilot-calibration.md"
+      ],
+      "doc:2026-04-22-extends-generator-pilot-audit": [
+        "doc/reports/2026-04-22-extends-generator-pilot-audit.md"
+      ],
+      "doc:2026-04-22-extends-generator-pilot-calibration": [
+        "doc/reports/2026-04-22-extends-generator-pilot-calibration.md"
+      ],
+      "doc:2026-04-22-provenance-derivation-rerun": [
+        "doc/reports/2026-04-22-provenance-derivation-rerun.md"
+      ],
+      "doc:2026-04-22-specializes-param-pilot-audit": [
+        "doc/reports/2026-04-22-specializes-param-pilot-audit.md"
+      ],
+      "doc:2026-04-22-specializes-param-pilot-calibration": [
+        "doc/reports/2026-04-22-specializes-param-pilot-calibration.md"
+      ],
+      "doc:2026-04-22-transforms-pilot-audit": [
+        "doc/reports/2026-04-22-transforms-pilot-audit.md"
+      ],
+      "doc:2026-04-22-transforms-pilot-calibration": [
+        "doc/reports/2026-04-22-transforms-pilot-calibration.md"
+      ],
+      "doc:2026-04-23-formula-artifact-producer-audit": [
+        "doc/reports/2026-04-23-formula-artifact-producer-audit.md"
+      ],
+      "doc:2026-04-23-formula-skeleton-motif-pipeline-contract": [
+        "doc/reports/2026-04-23-formula-skeleton-motif-pipeline-contract.md"
+      ],
+      "doc:2026-04-23-q93-composite-paths-and-squares": [
+        "doc/reports/2026-04-23-q93-composite-paths-and-squares.md"
+      ],
+      "doc:2026-04-23-q93-composite-paths-calibration": [
+        "doc/reports/2026-04-23-q93-composite-paths-calibration.md"
+      ],
+      "doc:2026-04-23-q93-h01-synthesis": [
+        "doc/reports/2026-04-23-q93-h01-synthesis.md"
+      ],
+      "doc:2026-04-23-q93-minimal-midpoint-object-formalization": [
+        "doc/reports/2026-04-23-q93-minimal-midpoint-object-formalization.md"
+      ],
+      "doc:2026-04-23-q93-object-layer-comparison": [
+        "doc/reports/2026-04-23-q93-object-layer-comparison.md"
+      ],
+      "doc:2026-04-23-q93-object-layer-comparison-calibration": [
+        "doc/reports/2026-04-23-q93-object-layer-comparison-calibration.md"
+      ],
+      "doc:2026-04-23-q93-second-midpoint-object-pilot": [
+        "doc/reports/2026-04-23-q93-second-midpoint-object-pilot.md"
+      ],
+      "doc:2026-04-23-q93-second-midpoint-object-pilot-calibration": [
+        "doc/reports/2026-04-23-q93-second-midpoint-object-pilot-calibration.md"
+      ],
+      "doc:2026-04-23-q93-span-out-of-basis-audit": [
+        "doc/reports/2026-04-23-q93-span-out-of-basis-audit.md"
+      ],
+      "doc:2026-04-23-q93-span-out-of-basis-calibration": [
+        "doc/reports/2026-04-23-q93-span-out-of-basis-calibration.md"
+      ],
+      "doc:2026-04-23-q93-typed-interface-midpoint-calibration": [
+        "doc/reports/2026-04-23-q93-typed-interface-midpoint-calibration.md"
+      ],
+      "doc:2026-04-23-q93-typed-interface-midpoint-pilot": [
+        "doc/reports/2026-04-23-q93-typed-interface-midpoint-pilot.md"
+      ],
+      "doc:2026-04-23-q94-split-vs-peer-audit": [
+        "doc/reports/2026-04-23-q94-split-vs-peer-audit.md"
+      ],
+      "doc:2026-04-24-formula-structure-pipeline-validation": [
+        "doc/reports/2026-04-24-formula-structure-pipeline-validation.md"
+      ],
+      "doc:2026-04-24-q93-generator-relations-library": [
+        "doc/reports/2026-04-24-q93-generator-relations-library.md"
+      ],
+      "doc:next-steps-2026-04-24": [
+        "doc/meta/next-steps-2026-04-24.md"
+      ],
+      "hypothesis:h01-double-categorical-model-relationships": [
+        "specs/hypotheses/h01-double-categorical-model-relationships.md"
+      ],
+      "hypothesis:h02-enriched-categorical-lenses": [
+        "specs/hypotheses/h02-enriched-categorical-lenses.md"
+      ],
+      "hypothesis:h03-higher-order-topology": [
+        "specs/hypotheses/h03-higher-order-topology.md"
+      ],
+      "hypothesis:h04-dynamical-invariant-validation": [
+        "specs/hypotheses/h04-dynamical-invariant-validation.md"
+      ],
+      "hypothesis:h05-parameter-namespace-normalization": [
+        "specs/hypotheses/h05-parameter-namespace-normalization.md"
+      ],
+      "hypothesis:h06-morphism-type-inventory-completeness": [
+        "specs/hypotheses/h06-morphism-type-inventory-completeness.md"
+      ],
+      "hypothesis:h07-empirical-fidelity-alignment": [
+        "specs/hypotheses/h07-empirical-fidelity-alignment.md"
+      ],
+      "inquiry:fidelity-causal-dag": [
+        "doc/inquiries/fidelity-causal-dag.md"
+      ],
+      "interpretation:2026-01-01-test-eval-section": [
+        "scripts/claim_extraction/__tests__/fixtures/eval_section_only.md"
+      ],
+      "interpretation:2026-01-01-test-heading": [
+        "scripts/claim_extraction/__tests__/fixtures/heading_format.md"
+      ],
+      "interpretation:2026-01-01-test-hypothesis": [
+        "scripts/claim_extraction/__tests__/fixtures/hypothesis_format.md"
+      ],
+      "interpretation:2026-01-01-test-inline": [
+        "scripts/claim_extraction/__tests__/fixtures/inline_format.md"
+      ],
+      "interpretation:2026-01-01-test-table": [
+        "scripts/claim_extraction/__tests__/fixtures/table_format.md"
+      ],
+      "interpretation:2026-03-09-cross-lens-disagreement": [
+        "doc/interpretations/2026-03-09-cross-lens-disagreement.md"
+      ],
+      "interpretation:2026-03-09-multi-lens-parameter-analysis": [
+        "doc/interpretations/2026-03-09-multi-lens-parameter-analysis.md"
+      ],
+      "interpretation:2026-03-09-t08-matching-engine-expansion": [
+        "doc/interpretations/2026-03-09-t08-matching-engine-expansion.md"
+      ],
+      "interpretation:2026-03-09-t17-correlation-jump-resolution": [
+        "doc/interpretations/2026-03-09-t17-correlation-jump-resolution.md"
+      ],
+      "interpretation:2026-03-09-unit-parsing-dimensional-expansion": [
+        "doc/interpretations/2026-03-09-unit-parsing-dimensional-expansion.md"
+      ],
+      "interpretation:2026-03-10-factor3-equation-structure": [
+        "doc/interpretations/2026-03-10-factor3-equation-structure.md"
+      ],
+      "interpretation:2026-03-10-knowledge-graph-phase1": [
+        "doc/interpretations/2026-03-10-knowledge-graph-phase1.md"
+      ],
+      "interpretation:2026-03-10-t30-t31-registry-corrections": [
+        "doc/interpretations/2026-03-10-t30-t31-registry-corrections.md"
+      ],
+      "interpretation:2026-03-10-t32-dimensionless-audit": [
+        "doc/interpretations/2026-03-10-t32-dimensionless-audit.md"
+      ],
+      "interpretation:2026-03-10-t33-t34-nmf-post-correction": [
+        "doc/interpretations/2026-03-10-t33-t34-nmf-post-correction.md"
+      ],
+      "interpretation:2026-03-10-umap-nmf-model-similarity": [
+        "doc/interpretations/2026-03-10-umap-nmf-model-similarity.md"
+      ],
+      "interpretation:2026-03-11-t35-t36-constituent-similarity": [
+        "doc/interpretations/2026-03-11-t35-t36-constituent-similarity.md"
+      ],
+      "interpretation:2026-03-11-t37-full-catalog-constituent-similarity": [
+        "doc/interpretations/2026-03-11-t37-full-catalog-constituent-similarity.md"
+      ],
+      "interpretation:2026-03-11-t38-constituent-expanded-nmf": [
+        "doc/interpretations/2026-03-11-t38-constituent-expanded-nmf.md"
+      ],
+      "interpretation:2026-03-22-behavioral-annotations-full-catalog": [
+        "doc/interpretations/2026-03-22-behavioral-annotations-full-catalog.md"
+      ],
+      "interpretation:2026-03-22-primitive-cooccurrence-gaps": [
+        "doc/interpretations/2026-03-22-primitive-cooccurrence-gaps.md"
+      ],
+      "interpretation:2026-03-22-t044-graph-analysis": [
+        "doc/interpretations/2026-03-22-t044-graph-analysis.md"
+      ],
+      "interpretation:2026-03-22-t050-convergence-validation": [
+        "doc/interpretations/2026-03-22-t050-convergence-validation.md"
+      ],
+      "interpretation:2026-03-22-t051-t052-t053-symmetry-and-dynamics-surveys": [
+        "doc/interpretations/2026-03-22-t051-t052-t053-symmetry-and-dynamics-surveys.md"
+      ],
+      "interpretation:2026-03-23-bias-assessment-combined": [
+        "doc/interpretations/2026-03-23-bias-assessment-combined.md"
+      ],
+      "interpretation:2026-03-23-vocabulary-and-ontology-comparison": [
+        "doc/interpretations/2026-03-23-vocabulary-and-ontology-comparison.md"
+      ],
+      "interpretation:2026-03-29-lens-refinement-and-temporal-gap": [
+        "doc/interpretations/2026-03-29-lens-refinement-and-temporal-gap.md"
+      ],
+      "interpretation:2026-03-29-literature-review-synthesis": [
+        "doc/interpretations/2026-03-29-literature-review-synthesis.md"
+      ],
+      "interpretation:2026-03-29-literature-synthesis-hypothesis-candidates": [
+        "doc/interpretations/2026-03-29-literature-synthesis-hypothesis-candidates.md"
+      ],
+      "interpretation:2026-03-29-literature-synthesis-round2": [
+        "doc/interpretations/2026-03-29-literature-synthesis-round2.md"
+      ],
+      "interpretation:2026-03-29-t055-dynamical-pilot": [
+        "doc/interpretations/2026-03-29-t055-dynamical-pilot.md"
+      ],
+      "interpretation:2026-03-29-t085-t086-empirical-tests": [
+        "doc/interpretations/2026-03-29-t085-t086-empirical-tests.md"
+      ],
+      "interpretation:2026-03-30-q54-level2-temporal-profile-validation": [
+        "doc/interpretations/2026-03-30-q54-level2-temporal-profile-validation.md"
+      ],
+      "interpretation:2026-03-30-t087-t088-structural-capability-validation": [
+        "doc/interpretations/2026-03-30-t087-t088-structural-capability-validation.md"
+      ],
+      "interpretation:2026-03-30-t092-per-theme-kappa": [
+        "doc/interpretations/2026-03-30-t092-per-theme-kappa.md"
+      ],
+      "interpretation:2026-03-30-t093-t094-formalizability-and-phasespace": [
+        "doc/interpretations/2026-03-30-t093-t094-formalizability-and-phasespace.md"
+      ],
+      "interpretation:2026-04-03-variational-annotation-prototype": [
+        "doc/interpretations/2026-04-03-variational-annotation-prototype.md"
+      ],
+      "interpretation:2026-04-04-composition-provenance-edges": [
+        "doc/interpretations/2026-04-04-composition-provenance-edges.md"
+      ],
+      "interpretation:2026-04-04-openalex-citation-proxy": [
+        "doc/interpretations/2026-04-04-openalex-citation-proxy.md"
+      ],
+      "interpretation:2026-04-09-formulation-breadth-phase1": [
+        "doc/interpretations/2026-04-09-formulation-breadth-phase1.md"
+      ],
+      "interpretation:2026-04-10-structural-claims-audit": [
+        "doc/interpretations/2026-04-10-structural-claims-audit.md"
+      ],
+      "interpretation:2026-04-11-enrichment-refinement-synthesis": [
+        "doc/interpretations/2026-04-11-enrichment-refinement-synthesis.md"
+      ],
+      "interpretation:2026-04-11-h03-h04-topology-dynamics-synthesis": [
+        "doc/interpretations/2026-04-11-h03-h04-topology-dynamics-synthesis.md"
+      ],
+      "interpretation:2026-04-11-h04-expanded-cohort-rerun": [
+        "doc/interpretations/2026-04-11-h04-expanded-cohort-rerun.md"
+      ],
+      "interpretation:2026-04-11-h1-cycle-generators": [
+        "doc/interpretations/2026-04-11-h1-cycle-generators.md"
+      ],
+      "interpretation:2026-04-11-lp-dimension-analysis": [
+        "doc/interpretations/2026-04-11-lp-dimension-analysis.md"
+      ],
+      "interpretation:2026-04-11-primitive-combinatorics": [
+        "doc/interpretations/2026-04-11-primitive-combinatorics-interpretation.md"
+      ],
+      "interpretation:2026-04-11-t132-cka-lens-clustering": [
+        "doc/interpretations/2026-04-11-t132-cka-lens-clustering.md"
+      ],
+      "interpretation:2026-04-11-t164-composition-law": [
+        "doc/interpretations/2026-04-11-t164-composition-law.md"
+      ],
+      "interpretation:2026-04-12-operator-arena-synthesis": [
+        "doc/interpretations/2026-04-12-operator-arena-synthesis.md"
+      ],
+      "interpretation:2026-04-12-q83-operator-arena-factorization": [
+        "doc/interpretations/2026-04-12-q83-operator-arena-factorization.md"
+      ],
+      "interpretation:2026-04-12-t214-metaclass-mediation": [
+        "doc/interpretations/2026-04-12-t214-metaclass-mediation.md"
+      ],
+      "interpretation:2026-04-12-within-continuous-pde-factorization-and-periodic-audit": [
+        "doc/interpretations/2026-04-12-within-continuous-pde-factorization-and-periodic-audit.md"
+      ],
+      "interpretation:2026-04-13-fidelity-stratification": [
+        "doc/interpretations/2026-04-13-fidelity-stratification.md"
+      ],
+      "interpretation:2026-04-13-parameter-derivation-dag": [
+        "doc/interpretations/2026-04-13-parameter-derivation-dag.md"
+      ],
+      "interpretation:2026-04-13-pilot-d1-damped-oscillator": [
+        "doc/interpretations/2026-04-13-pilot-d1-damped-oscillator.md"
+      ],
+      "interpretation:2026-04-13-pilot-d2-sir-real": [
+        "doc/interpretations/2026-04-13-pilot-d2-sir-real.md"
+      ],
+      "interpretation:2026-04-13-pilot-d2-sir-synthetic": [
+        "doc/interpretations/2026-04-13-pilot-d2-sir-synthetic.md"
+      ],
+      "interpretation:2026-04-13-pilot-d3-lotka-volterra": [
+        "doc/interpretations/2026-04-13-pilot-d3-lotka-volterra.md"
+      ],
+      "interpretation:2026-04-13-primitive-skeleton-bridge": [
+        "doc/interpretations/2026-04-13-primitive-skeleton-bridge.md"
+      ],
+      "interpretation:2026-04-13-skeleton-anonymization": [
+        "doc/interpretations/2026-04-13-skeleton-anonymization.md"
+      ],
+      "interpretation:2026-04-13-skeleton-matcher-tight": [
+        "doc/interpretations/2026-04-13-skeleton-matcher-tight.md"
+      ],
+      "interpretation:2026-04-13-t218-lens-cka-facet-update": [
+        "doc/interpretations/2026-04-13-t218-lens-cka-facet-update.md"
+      ],
+      "interpretation:2026-04-13-t218-operator-arena-facet-resynthesis": [
+        "doc/interpretations/2026-04-13-t218-operator-arena-facet-resynthesis.md"
+      ],
+      "interpretation:2026-04-13-t218a-primitive-collapse-audit": [
+        "doc/interpretations/2026-04-13-t218a-primitive-collapse-audit.md"
+      ],
+      "interpretation:2026-04-14-pilot-d2-sir-real-bayesian": [
+        "doc/interpretations/2026-04-14-pilot-d2-sir-real-bayesian.md"
+      ],
+      "interpretation:2026-04-19-t166-composite-limit-spotcheck": [
+        "doc/interpretations/2026-04-19-t166-composite-limit-spotcheck.md"
+      ],
+      "interpretation:2026-04-19-t209-model-composition-complex": [
+        "doc/interpretations/2026-04-19-t209-model-composition-complex.md"
+      ],
+      "interpretation:2026-04-24-q91-q93-q94-morphism-synthesis": [
+        "doc/interpretations/2026-04-24-q91-q93-q94-morphism-synthesis.md"
+      ],
+      "interpretation:2026-04-25-h05-phase-e-result": [
+        "doc/interpretations/2026-04-25-h05-phase-e-result.md"
+      ],
+      "interpretation:2026-04-25-parameter-derivation-dag-v2": [
+        "doc/interpretations/2026-04-25-parameter-derivation-dag-v2.md"
+      ],
+      "meta:evidence": [
+        "doc/topics/evidence-layer.md"
+      ],
+      "meta:knowledge-graph": [
+        "doc/topics/knowledge-graph.md"
+      ],
+      "meta:primitive-vocabulary": [
+        "doc/topics/primitives.md"
+      ],
+      "meta:schema": [
+        "doc/topics/schema.md"
+      ],
+      "meta:visualization": [
+        "doc/topics/demos.md"
+      ],
+      "paper:Brunton2022": [
+        "doc/papers/Brunton2022.md"
+      ],
+      "paper:Gilpin2025": [
+        "doc/papers/Gilpin2025.md"
+      ],
+      "paper:Hajij2023": [
+        "doc/papers/Hajij2023.md"
+      ],
+      "paper:Huh2024": [
+        "doc/papers/Huh2024.md"
+      ],
+      "paper:Legatiuk2021": [
+        "doc/papers/Legatiuk2021.md"
+      ],
+      "paper:Morris2024": [
+        "doc/papers/Morris2024.md"
+      ],
+      "paper:Myers2025": [
+        "doc/papers/Myers2025.md"
+      ],
+      "paper:Papillon2024": [
+        "doc/papers/Papillon2024.md"
+      ],
+      "paper:SchultzSpivakVasilakopoulou2020": [
+        "doc/papers/SchultzSpivakVasilakopoulou2020.md"
+      ],
+      "paper:categorical-composition-trio": [
+        "doc/papers/categorical-composition-trio-2023-2025.md"
+      ],
+      "paper:mathmoddb-review": [
+        "doc/papers/MathModDB-review.md"
+      ],
+      "paper:survey-attractor-topology": [
+        "doc/papers/survey-attractor-topology-methods.md"
+      ],
+      "paper:survey-lie-symmetry": [
+        "doc/papers/survey-lie-symmetry-classification.md"
+      ],
+      "paper:survey-ode-classification": [
+        "doc/papers/survey-ode-classification.md"
+      ],
+      "plan:2026-03-11-t37-full-catalog-constituent-similarity-pipeline": [
+        "doc/plans/2026-03-11-t37-full-catalog-constituent-similarity-pipeline.md"
+      ],
+      "plan:2026-03-11-t38-constituent-expanded-nmf-pipeline": [
+        "doc/plans/2026-03-11-t38-constituent-expanded-nmf-pipeline.md"
+      ],
+      "plan:2026-04-17-meta-system-vision": [
+        "doc/plans/2026-04-17-meta-system-vision.md"
+      ],
+      "plan:2026-04-17-session-a-authority-matrix": [
+        "doc/plans/2026-04-17-session-a-authority-matrix.md"
+      ],
+      "plan:2026-04-17-session-b-projection-contract": [
+        "doc/plans/2026-04-17-session-b-projection-contract.md"
+      ],
+      "plan:2026-04-17-session-c-graph-assignment": [
+        "doc/plans/2026-04-17-session-c-graph-assignment.md"
+      ],
+      "plan:2026-04-17-session-d-milestone-audits": [
+        "doc/plans/2026-04-17-session-d-milestone-audits.md"
+      ],
+      "plan:2026-04-18-chapters-as-composition-design": [
+        "doc/plans/2026-04-18-chapters-as-composition-design.md"
+      ],
+      "plan:2026-04-18-chapters-as-composition-implementation": [
+        "doc/plans/2026-04-18-chapters-as-composition-implementation.md"
+      ],
+      "plan:2026-04-18-guide-data-r1-contract": [
+        "doc/plans/2026-04-18-guide-data-r1-contract.md"
+      ],
+      "plan:2026-04-18-meta-model-hero-storyboard": [
+        "doc/plans/2026-04-18-meta-model-hero-storyboard.md"
+      ],
+      "plan:2026-04-18-phase-2-handoff": [
+        "doc/plans/2026-04-18-phase-2-handoff.md"
+      ],
+      "plan:2026-04-18-phase-3-morphism-and-hero-design": [
+        "doc/plans/2026-04-18-phase-3-morphism-and-hero-design.md"
+      ],
+      "plan:2026-04-18-visual-registry-foundation": [
+        "doc/plans/2026-04-18-visual-registry-foundation.md"
+      ],
+      "plan:2026-04-19-a2-chapter-editorial-pattern": [
+        "doc/plans/2026-04-19-a2-chapter-editorial-pattern.md"
+      ],
+      "plan:2026-04-19-a5-guide-unification": [
+        "doc/plans/2026-04-19-a5-guide-unification.md"
+      ],
+      "plan:2026-04-19-a5-surface-authority": [
+        "doc/plans/2026-04-19-a5-surface-authority.md"
+      ],
+      "plan:2026-04-19-remaining-work-and-phasing": [
+        "doc/plans/2026-04-19-remaining-work-and-phasing.md"
+      ],
+      "plan:2026-04-20-detail-page-parity-migration": [
+        "doc/plans/2026-04-20-detail-page-parity-migration.md"
+      ],
+      "plan:2026-04-20-foundation-hygiene": [
+        "doc/plans/2026-04-20-foundation-hygiene.md"
+      ],
+      "plan:2026-04-20-meta-system-gap-closure": [
+        "doc/plans/2026-04-20-meta-system-gap-closure.md"
+      ],
+      "plan:2026-04-20-primitive-pipeline-migration": [
+        "doc/plans/2026-04-20-primitive-pipeline-migration.md"
+      ],
+      "plan:2026-04-21-authoring-cli-add-commands": [
+        "doc/plans/2026-04-21-authoring-cli-add-commands.md"
+      ],
+      "plan:2026-04-22-authoring-skills": [
+        "doc/plans/2026-04-22-authoring-skills.md"
+      ],
+      "plan:2026-04-22-content-coverage-push-and-flat-field-deprecation": [
+        "doc/plans/2026-04-22-content-coverage-push-and-flat-field-deprecation.md"
+      ],
+      "plan:2026-04-22-cross-graph-overlay-ux": [
+        "doc/plans/2026-04-22-cross-graph-overlay-ux.md"
+      ],
+      "plan:2026-04-22-morphism-figure-catalog": [
+        "doc/plans/2026-04-22-morphism-figure-catalog.md"
+      ],
+      "plan:2026-04-22-provenance-derivation-redesign": [
+        "doc/plans/2026-04-22-provenance-derivation-redesign-plan.md"
+      ],
+      "plan:2026-04-22-provenance-schema-integration": [
+        "doc/plans/2026-04-22-provenance-schema-integration-plan.md"
+      ],
+      "plan:2026-04-22-q93-morphism-generators-foundation-follow-on": [
+        "doc/plans/2026-04-22-q93-morphism-generators-foundation-follow-on-plan.md"
+      ],
+      "plan:2026-04-22-q93-workstream-1-family-pilots-index": [
+        "doc/plans/2026-04-22-q93-workstream-1-family-pilots-index.md"
+      ],
+      "plan:2026-04-22-specializes-param-transforms-pilot": [
+        "doc/plans/2026-04-22-specializes-param-transforms-pilot-plan.md"
+      ],
+      "plan:2026-04-23-formula-route-entitypage-adapter": [
+        "doc/plans/2026-04-23-formula-route-entitypage-adapter.md"
+      ],
+      "plan:2026-04-23-formula-skeleton-motif-pipeline": [
+        "doc/plans/2026-04-23-formula-skeleton-motif-pipeline-plan.md"
+      ],
+      "plan:2026-04-23-model-route-entitypage-adapter": [
+        "doc/plans/2026-04-23-model-route-entitypage-adapter.md"
+      ],
+      "plan:2026-04-23-q93-composite-paths-and-commuting-squares": [
+        "doc/plans/2026-04-23-q93-composite-paths-and-commuting-squares-plan.md"
+      ],
+      "plan:2026-04-23-q93-minimal-midpoint-object-formalization": [
+        "doc/plans/2026-04-23-q93-minimal-midpoint-object-formalization-plan.md"
+      ],
+      "plan:2026-04-23-q93-object-layer-comparison": [
+        "doc/plans/2026-04-23-q93-object-layer-comparison-plan.md"
+      ],
+      "plan:2026-04-23-q93-second-midpoint-object-pilot": [
+        "doc/plans/2026-04-23-q93-second-midpoint-object-pilot-plan.md"
+      ],
+      "plan:2026-04-23-q93-span-out-of-basis-audit": [
+        "doc/plans/2026-04-23-q93-span-out-of-basis-audit-plan.md"
+      ],
+      "plan:2026-04-23-q93-typed-interface-midpoint-pilot": [
+        "doc/plans/2026-04-23-q93-typed-interface-midpoint-pilot-plan.md"
+      ],
+      "plan:2026-04-24-param-id-hyphen-migration": [
+        "doc/plans/2026-04-24-param-id-hyphen-migration.md"
+      ],
+      "plan:2026-04-24-param-route-entitypage-adapter": [
+        "doc/plans/2026-04-24-param-route-entitypage-adapter.md"
+      ],
+      "plan:2026-04-24-task6-catalog-wide-pair-generation": [
+        "doc/plans/2026-04-24-task6-catalog-wide-pair-generation-design.md"
+      ],
+      "plan:2026-04-24-task6-interpretation-rulebook": [
+        "doc/plans/2026-04-24-task6-interpretation-rulebook-design.md"
+      ],
+      "plan:2026-04-24-task7-pair-table-provenance-ledger": [
+        "doc/plans/2026-04-24-task7-pair-table-provenance-ledger-design.md"
+      ],
+      "plan:2026-04-25-h05-discriminating-test-handoff": [
+        "doc/plans/2026-04-25-h05-discriminating-test-handoff.md"
+      ],
+      "plan:2026-04-25-h05-phase-e-methodology": [
+        "doc/plans/2026-04-25-h05-phase-e-methodology.md"
+      ],
+      "plan:2026-04-25-h06-morphism-annotation": [
+        "doc/plans/2026-04-25-h06-morphism-annotation-design.md"
+      ],
+      "plan:next-steps-2026-04-12": [
+        "doc/meta/next-steps-2026-04-12.md"
+      ],
+      "plan:next-steps-2026-04-14": [
+        "doc/meta/next-steps-2026-04-14.md"
+      ],
+      "plan:next-steps-2026-04-20": [
+        "doc/meta/next-steps-2026-04-20.md"
+      ],
+      "plan:pre-registration-t214": [
+        "doc/meta/pre-registration-t214.md"
+      ],
+      "plan:recon-detail-page-parity-behavior": [
+        "doc/plans/recon/detail-page-parity-behavior.md"
+      ],
+      "plan:recon-detail-page-parity-dimgroup": [
+        "doc/plans/recon/detail-page-parity-dimgroup.md"
+      ],
+      "plan:recon-detail-page-parity-facet": [
+        "doc/plans/recon/detail-page-parity-facet.md"
+      ],
+      "plan:recon-detail-page-parity-symmetry": [
+        "doc/plans/recon/detail-page-parity-symmetry.md"
+      ],
+      "plan:recon-detail-page-parity-variable": [
+        "doc/plans/recon/detail-page-parity-variable.md"
+      ],
+      "question:q01-model-granularity": [
+        "doc/questions/q01-model-granularity.md"
+      ],
+      "question:q02-parameter-mediated-connections-as-morphisms": [
+        "doc/questions/q02-parameter-mediated-connections-as-morphisms.md"
+      ],
+      "question:q03-unappreciated-model-relationships": [
+        "doc/questions/q03-unappreciated-model-relationships.md"
+      ],
+      "question:q04-normalized-parameter-namespace": [
+        "doc/questions/q04-normalized-parameter-namespace.md"
+      ],
+      "question:q05-compositional-relationships-between-models": [
+        "doc/questions/q05-compositional-relationships-between-models.md"
+      ],
+      "question:q06-dimensional-class-predicts-equation-role": [
+        "doc/questions/q06-dimensional-class-predicts-equation-role.md"
+      ],
+      "question:q07-hidden-analogies-in-unmatched-parameters": [
+        "doc/questions/q07-hidden-analogies-in-unmatched-parameters.md"
+      ],
+      "question:q08-multi-lens-as-enriched-category": [
+        "doc/questions/q08-multi-lens-as-enriched-category.md"
+      ],
+      "question:q09-negative-dimensional-equation-role-correlation": [
+        "doc/questions/q09-negative-dimensional-equation-role-correlation.md"
+      ],
+      "question:q10-disagreement-pattern-templates": [
+        "doc/questions/q10-disagreement-pattern-templates.md"
+      ],
+      "question:q11-equation-role-quantity-group-correlation-jump": [
+        "doc/questions/q11-equation-role-quantity-group-correlation-jump.md"
+      ],
+      "question:q12-pattern-a-dimensionless-saturation": [
+        "doc/questions/q12-pattern-a-dimensionless-saturation.md"
+      ],
+      "question:q13-dimensional-independence-vs-coverage-artifact": [
+        "doc/questions/q13-dimensional-independence-vs-coverage-artifact.md"
+      ],
+      "question:q14-data-quality-lens-design": [
+        "doc/questions/q14-data-quality-lens-design.md"
+      ],
+      "question:q15-topological-structure-of-model-parameter-space": [
+        "doc/questions/q15-topological-structure-of-model-parameter-space.md"
+      ],
+      "question:q16-suffix-matching-false-positives": [
+        "doc/questions/q16-suffix-matching-false-positives.md"
+      ],
+      "question:q17-automated-match-confidence-threshold": [
+        "doc/questions/q17-automated-match-confidence-threshold.md"
+      ],
+      "question:q18-relatedto-edge-quality": [
+        "doc/questions/q18-relatedto-edge-quality.md"
+      ],
+      "question:q19-factor3-shared-physics-or-naming": [
+        "doc/questions/q19-factor3-shared-physics-or-naming.md"
+      ],
+      "question:q20-nmf-k-selection": [
+        "doc/questions/q20-nmf-k-selection.md"
+      ],
+      "question:q21-diffusion-ratio-conflation": [
+        "doc/questions/q21-diffusion-ratio-conflation.md"
+      ],
+      "question:q22-dimensionless-matching-problem": [
+        "doc/questions/q22-dimensionless-matching-problem.md"
+      ],
+      "question:q23-constituent-decomposition-of-dimensionless-params": [
+        "doc/questions/q23-constituent-decomposition-of-dimensionless-params.md"
+      ],
+      "question:q24-generic-length-time-canonicals": [
+        "doc/questions/q24-generic-length-time-canonicals.md"
+      ],
+      "question:q25-optimal-k-post-correction": [
+        "doc/questions/q25-optimal-k-post-correction.md"
+      ],
+      "question:q26-constituent-bridging-at-scale": [
+        "doc/questions/q26-constituent-bridging-at-scale.md"
+      ],
+      "question:q27-constituent-bridging-in-knowledge-graph": [
+        "doc/questions/q27-constituent-bridging-in-knowledge-graph.md"
+      ],
+      "question:q28-kinematic-viscosity-nmf-dominance": [
+        "doc/questions/q28-kinematic-viscosity-nmf-dominance.md"
+      ],
+      "question:q29-idf-expanded-as-default-mode": [
+        "doc/questions/q29-idf-expanded-as-default-mode.md"
+      ],
+      "question:q30-assumption-set-layer": [
+        "doc/questions/q30-assumption-set-layer.md"
+      ],
+      "question:q31-parameterized-functors-for-limits": [
+        "doc/questions/q31-parameterized-functors-for-limits.md"
+      ],
+      "question:q32-meta-model-convergence-validation": [
+        "doc/questions/q32-meta-model-convergence-validation.md"
+      ],
+      "question:q33-symmetry-profile-model-similarity": [
+        "doc/questions/q33-symmetry-profile-model-similarity.md"
+      ],
+      "question:q34-attractor-topology-model-classification": [
+        "doc/questions/q34-attractor-topology-model-classification.md"
+      ],
+      "question:q35-reaction-primitive-granularity": [
+        "doc/questions/q35-reaction-primitive-granularity.md"
+      ],
+      "question:q36-topological-transitions-as-morphisms": [
+        "doc/questions/q36-topological-transitions-as-morphisms.md"
+      ],
+      "question:q37-integrability-as-similarity-dimension": [
+        "doc/questions/q37-integrability-as-similarity-dimension.md"
+      ],
+      "question:q38-meta-model-selection-bias": [
+        "doc/questions/q38-meta-model-selection-bias.md"
+      ],
+      "question:q39-geometric-construction-coverage": [
+        "doc/questions/q39-geometric-construction-coverage.md"
+      ],
+      "question:q40-dispersion-primitive-isolation": [
+        "doc/questions/q40-dispersion-primitive-isolation.md"
+      ],
+      "question:q41-minimal-expansion-for-saturation": [
+        "doc/questions/q41-minimal-expansion-for-saturation.md"
+      ],
+      "question:q42-vocabulary-bias": [
+        "doc/questions/q42-vocabulary-bias.md"
+      ],
+      "question:q43-parameter-lens-value-for-discrete-models": [
+        "doc/questions/q43-parameter-lens-value-for-discrete-models.md"
+      ],
+      "question:q44-parameter-sharing-span-vs-morphism": [
+        "doc/questions/q44-parameter-sharing-span-vs-morphism.md"
+      ],
+      "question:q45-categorical-formalism-selection": [
+        "doc/questions/q45-categorical-formalism-selection.md"
+      ],
+      "question:q46-higher-order-betti-numbers": [
+        "doc/questions/q46-higher-order-betti-numbers.md"
+      ],
+      "question:q47-energy-lens-independence": [
+        "doc/questions/q47-energy-lens-independence.md"
+      ],
+      "question:q48-composite-limit-generation": [
+        "doc/questions/q48-composite-limit-generation.md"
+      ],
+      "question:q49-enriched-composition-law": [
+        "doc/questions/q49-enriched-composition-law.md"
+      ],
+      "question:q50-t055-enriched-similarity-rescue": [
+        "doc/questions/q50-t055-enriched-similarity-rescue.md"
+      ],
+      "question:q51-reaction-primitive-splitting": [
+        "doc/questions/q51-reaction-primitive-splitting.md"
+      ],
+      "question:q52-behavioral-regime-derivability": [
+        "doc/questions/q52-behavioral-regime-derivability.md"
+      ],
+      "question:q53-morphism-type-lens-viability": [
+        "doc/questions/q53-morphism-type-lens-viability.md"
+      ],
+      "question:q54-temporal-structure-in-meta-model": [
+        "doc/questions/q54-temporal-structure-in-meta-model.md"
+      ],
+      "question:q55-phase-space-geometry-as-lens": [
+        "doc/questions/q55-phase-space-geometry-as-lens.md"
+      ],
+      "question:q56-formalizability-spectrum": [
+        "doc/questions/q56-formalizability-spectrum.md"
+      ],
+      "question:q57-methods-vs-systems-ontology": [
+        "doc/questions/q57-methods-vs-systems-ontology.md"
+      ],
+      "question:q58-lens-type-clustering": [
+        "doc/questions/q58-lens-type-clustering.md"
+      ],
+      "question:q59-cole-hopf-as-morphism-type": [
+        "doc/questions/q59-cole-hopf-as-morphism-type.md"
+      ],
+      "question:q60-polymorphic-transforms": [
+        "doc/questions/q60-polymorphic-transforms.md"
+      ],
+      "question:q61-variational-as-annotation": [
+        "doc/questions/q61-variational-as-annotation.md",
+        "doc/topics/variational-unity.md"
+      ],
+      "question:q62-model-fidelity-validation-tiers": [
+        "doc/questions/q62-model-fidelity-validation-tiers.md"
+      ],
+      "question:q63-partial-lens-design": [
+        "doc/questions/q63-partial-lens-design.md"
+      ],
+      "question:q64-composition-provenance-edges": [
+        "doc/questions/q64-composition-provenance-edges.md"
+      ],
+      "question:q65-beta-predicts-lens-difficulty": [
+        "doc/questions/q65-beta-predicts-lens-difficulty.md"
+      ],
+      "question:q66-beta-validity-threshold": [
+        "doc/questions/q66-beta-validity-threshold.md"
+      ],
+      "question:q67-beta-vs-research-attention": [
+        "doc/questions/q67-beta-vs-research-attention.md"
+      ],
+      "question:q68-behavioral-invariance-to-beta": [
+        "doc/questions/q68-behavioral-invariance-to-beta.md"
+      ],
+      "question:q69-annotation-provenance-and-independence": [
+        "doc/questions/q69-annotation-provenance-and-independence.md"
+      ],
+      "question:q70-surviving-h1-cycle-generators": [
+        "doc/questions/q70-surviving-h1-cycle-generators.md"
+      ],
+      "question:q71-composition-hypergraph-topology": [
+        "doc/questions/q71-composition-hypergraph-topology.md"
+      ],
+      "question:q72-equilibrating-model-invariants": [
+        "doc/questions/q72-equilibrating-model-invariants.md"
+      ],
+      "question:q73-temporal-profile-derivability": [
+        "doc/questions/q73-temporal-profile-derivability.md"
+      ],
+      "question:q74-tractability-as-novel-lens": [
+        "doc/questions/q74-tractability-as-novel-lens.md"
+      ],
+      "question:q75-local-enrichment-profiles": [
+        "doc/questions/q75-local-enrichment-profiles.md"
+      ],
+      "question:q76-bridge-model-index": [
+        "doc/questions/q76-bridge-model-index.md"
+      ],
+      "question:q77-lens-quasi-isometry-classes": [
+        "doc/questions/q77-lens-quasi-isometry-classes.md"
+      ],
+      "question:q78-missing-intermediate-compositions": [
+        "doc/questions/q78-missing-intermediate-compositions.md"
+      ],
+      "question:q79-mi-similarity-composition-law": [
+        "doc/questions/q79-mi-similarity-composition-law.md"
+      ],
+      "question:q80-nerve-vr-cycle-correspondence": [
+        "doc/questions/q80-nerve-vr-cycle-correspondence.md"
+      ],
+      "question:q81-temporal-topology-as-classification-axis": [
+        "doc/questions/q81-temporal-topology-as-classification-axis.md"
+      ],
+      "question:q82-coarse-graining-morphism-coverage": [
+        "doc/questions/q82-coarse-graining-morphism-coverage.md"
+      ],
+      "question:q83-operator-arena-factorization": [
+        "doc/questions/q83-operator-arena-factorization.md"
+      ],
+      "question:q84-morphism-taxonomy-design": [
+        "doc/questions/q84-morphism-taxonomy-design.md"
+      ],
+      "question:q85-structured-primitive-coordinates": [
+        "doc/questions/q85-structured-primitive-coordinates.md"
+      ],
+      "question:q86-within-fiber-factorization-generality": [
+        "doc/questions/q86-within-fiber-factorization-generality.md"
+      ],
+      "question:q87-fiber-gluing-maps": [
+        "doc/questions/q87-fiber-gluing-maps.md"
+      ],
+      "question:q88-periodic-arena-refinement": [
+        "doc/questions/q88-periodic-arena-refinement.md"
+      ],
+      "question:q89-structured-coordinate-residual-absorption": [
+        "doc/questions/q89-structured-coordinate-residual-absorption.md"
+      ],
+      "question:q90-lawform-as-explicit-axis": [
+        "doc/questions/q90-lawform-as-explicit-axis.md"
+      ],
+      "question:q91-skeleton-interpretation-split": [
+        "doc/questions/q91-skeleton-interpretation-split.md"
+      ],
+      "question:q92-natural-parameter-generating-set": [
+        "doc/questions/q92-natural-parameter-generating-set.md"
+      ],
+      "question:q93-morphism-generators-as-foundation": [
+        "doc/questions/q93-morphism-generators-as-foundation.md"
+      ],
+      "question:q94-split-vs-peer-relations": [
+        "doc/questions/q94-split-vs-peer-relations.md"
+      ],
+      "report:2026-04-04-openalex-gap-crossref": [
+        "doc/reports/openalex-gap-crossref.md"
+      ],
+      "report:2026-04-12-catalog-artifact-reconciliation": [
+        "doc/reports/catalog-artifact-reconciliation.md"
+      ],
+      "report:2026-04-23-unresolved-ref-review": [
+        "doc/meta/entity-health/unresolved-ref-review-2026-04-23.md"
+      ],
+      "report:2026-04-25-orphan-question-sweep": [
+        "doc/reports/2026-04-25-orphan-question-sweep.md"
+      ],
+      "report:data-fitting-pilot-review": [
+        "doc/inquiries/data-fitting-pilot-review.md"
+      ],
+      "report:emergent-threads": [
+        "doc/reports/synthesis/_emergent-threads.md"
+      ],
+      "report:project-synthesis": [
+        "doc/reports/synthesis.md"
+      ],
+      "report:v1-solution-behavior-derivation": [
+        "doc/reports/v1-solution-behavior-derivation.md"
+      ],
+      "search:enriched-categories-compositional-modeling": [
+        "doc/searches/2026-03-29-enriched-categories-compositional-modeling.md"
+      ],
+      "search:lie-symmetry-rd-classification": [
+        "doc/searches/2026-03-29-lie-symmetry-rd-classification.md"
+      ],
+      "search:ontology-completeness-bias": [
+        "doc/searches/2026-03-29-ontology-completeness-bias.md"
+      ],
+      "search:process-algebra-agent-primitives": [
+        "doc/searches/2026-03-29-process-algebra-agent-primitives.md"
+      ],
+      "search:structural-realism-model-pluralism": [
+        "doc/searches/2026-03-29-structural-realism-model-pluralism.md"
+      ],
+      "search:tda-dynamical-systems-comparison": [
+        "doc/searches/2026-03-29-tda-dynamical-systems-comparison.md"
+      ],
+      "spec:2026-04-12-catalog-health-design": [
+        "specs/2026-04-12-catalog-health-design.md"
+      ],
+      "spec:2026-04-12-metaclass-taxonomy-reform-design": [
+        "specs/2026-04-12-metaclass-taxonomy-reform-design.md"
+      ],
+      "spec:2026-04-13-data-fitting-pilot-design": [
+        "specs/2026-04-13-data-fitting-pilot-design.md"
+      ],
+      "spec:2026-04-13-phenomenon-coverage-audit-scope": [
+        "specs/2026-04-13-phenomenon-coverage-audit-scope.md"
+      ],
+      "spec:2026-04-22-extends-generator-pilot-design": [
+        "specs/2026-04-22-extends-generator-pilot-design.md"
+      ],
+      "spec:2026-04-22-morphism-generator-families-design": [
+        "specs/2026-04-22-morphism-generator-families-design.md"
+      ],
+      "spec:2026-04-22-morphism-generator-family-mapping": [
+        "specs/2026-04-22-morphism-generator-family-mapping.md"
+      ],
+      "spec:2026-04-22-provenance-derivation-redesign-design": [
+        "specs/2026-04-22-provenance-derivation-redesign-design.md"
+      ],
+      "spec:catalog-canonical-core": [
+        "specs/catalog-canonical-core.md"
+      ],
+      "spec:scope-boundaries": [
+        "specs/scope-boundaries.md"
+      ],
+      "synthesis:h01-double-categorical-model-relationships": [
+        "doc/reports/synthesis/double-categorical-model-relationships.md"
+      ],
+      "synthesis:h02-enriched-categorical-lenses": [
+        "doc/reports/synthesis/enriched-categorical-lenses.md"
+      ],
+      "synthesis:h03-higher-order-topology": [
+        "doc/reports/synthesis/higher-order-topology.md"
+      ],
+      "synthesis:h04-dynamical-invariant-validation": [
+        "doc/reports/synthesis/dynamical-invariant-validation.md"
+      ],
+      "topic:enrichment": [
+        "doc/topics/enrichment.md"
+      ],
+      "topic:hypothesis": [
+        "doc/topics/hypothesis.md"
+      ],
+      "topic:model-classification-and-inter-model-relationships": [
+        "doc/background/topics/model-classification-and-inter-model-relationships.md"
+      ],
+      "topic:validation": [
+        "doc/topics/validation.md"
+      ]
+    },
+    "duplicate_entity_ids": {
+      "question:q61-variational-as-annotation": [
+        "doc/questions/q61-variational-as-annotation.md",
+        "doc/topics/variational-unity.md"
+      ]
+    },
+    "frontmatter_reference_field_paths": {
+      "related": [
+        "doc/background/topics/model-classification-and-inter-model-relationships.md",
+        "doc/discussions/2026-03-09-four-independent-axes-framing.md",
+        "doc/discussions/2026-03-09-latent-structure-of-model-parameter-space.md",
+        "doc/discussions/2026-03-09-q16-suffix-matching-false-positives.md",
+        "doc/discussions/2026-03-09-remaining-data-metadata-issues.md",
+        "doc/discussions/2026-03-10-diffusion-ratio-audit-and-priorities.md",
+        "doc/discussions/2026-03-10-dimensionless-constituent-decomposition.md",
+        "doc/discussions/2026-03-11-lens-design-review.md",
+        "doc/discussions/2026-03-22-convergence-vs-perspectivalism.md",
+        "doc/discussions/2026-03-22-cooccurrence-rarefaction-synthesis.md",
+        "doc/discussions/2026-03-22-integrability-in-meta-model.md",
+        "doc/discussions/2026-03-22-meta-model-selection-bias.md",
+        "doc/discussions/2026-03-22-monotone-subclassification.md",
+        "doc/discussions/2026-03-22-topological-invariants-in-meta-model.md",
+        "doc/discussions/2026-03-23-vocabulary-bias.md",
+        "doc/discussions/2026-03-29-complex-adaptive-systems-coverage.md",
+        "doc/discussions/2026-03-29-refining-research-derived-lenses.md",
+        "doc/discussions/2026-03-30-why-four-themes-resist-formalization.md",
+        "doc/discussions/2026-03-31-validation-epistemology.md",
+        "doc/discussions/2026-04-01-cole-hopf-morphism-analysis.md",
+        "doc/discussions/2026-04-01-low-coverage-chapters-meta-model-fit.md",
+        "doc/discussions/2026-04-01-meta-structure-of-lenses.md",
+        "doc/discussions/2026-04-01-polymorphic-transforms.md",
+        "doc/discussions/2026-04-03-compositional-grammar-taxonomy.md",
+        "doc/discussions/2026-04-03-lens-types-and-morphism-gap.md",
+        "doc/discussions/2026-04-03-meta-model-architecture-review.md",
+        "doc/discussions/2026-04-04-data-model-driven-demos.md",
+        "doc/discussions/2026-04-04-discovery-topic-bias.md",
+        "doc/discussions/2026-04-04-openalex-followup-directions.md",
+        "doc/discussions/2026-04-08-claim-evidence-layer-population.md",
+        "doc/discussions/2026-04-08-formula-resolution-precision.md",
+        "doc/discussions/2026-04-08-hypothesis-evidence-assessment.md",
+        "doc/discussions/2026-04-08-model-ontology-and-naming.md",
+        "doc/discussions/2026-04-08-single-source-fragility-audit.md",
+        "doc/discussions/2026-04-10-behavioral-invariance-circularity.md",
+        "doc/discussions/2026-04-11-bridge-model-phenomenon.md",
+        "doc/discussions/2026-04-11-field-evolution-vs-structural-generative.md",
+        "doc/discussions/2026-04-11-lens-morphism-types-and-naming.md",
+        "doc/discussions/2026-04-11-strategic-directions.md",
+        "doc/discussions/2026-04-11-vocabulary-gaps-and-catalog-bias.md",
+        "doc/discussions/2026-04-12-catalog-as-foundation.md",
+        "doc/discussions/2026-04-13-model-data-alignment-and-catalog-coverage.md",
+        "doc/discussions/2026-04-13-parameters-as-primitives.md",
+        "doc/discussions/2026-04-13-parameters-review-and-next-steps.md",
+        "doc/discussions/2026-04-13-t227-primitive-and-model-metaclass-scope.md",
+        "doc/discussions/2026-04-17-unified-page-composition-model.md",
+        "doc/discussions/2026-04-17-visual-representations-as-entity-attributes.md",
+        "doc/discussions/2026-04-22-morphisms-as-primitives.md",
+        "doc/discussions/2026-04-23-within-between-bridge-framing.md",
+        "doc/discussions/2026-04-25-multi-lens-parameter-compositions.md",
+        "doc/inquiries/data-fitting-pilot-review.md",
+        "doc/inquiries/fidelity-causal-dag.md",
+        "doc/interpretations/2026-03-09-cross-lens-disagreement.md",
+        "doc/interpretations/2026-03-09-multi-lens-parameter-analysis.md",
+        "doc/interpretations/2026-03-09-t08-matching-engine-expansion.md",
+        "doc/interpretations/2026-03-09-t17-correlation-jump-resolution.md",
+        "doc/interpretations/2026-03-09-unit-parsing-dimensional-expansion.md",
+        "doc/interpretations/2026-03-10-factor3-equation-structure.md",
+        "doc/interpretations/2026-03-10-knowledge-graph-phase1.md",
+        "doc/interpretations/2026-03-10-t30-t31-registry-corrections.md",
+        "doc/interpretations/2026-03-10-t32-dimensionless-audit.md",
+        "doc/interpretations/2026-03-10-t33-t34-nmf-post-correction.md",
+        "doc/interpretations/2026-03-10-umap-nmf-model-similarity.md",
+        "doc/interpretations/2026-03-11-t35-t36-constituent-similarity.md",
+        "doc/interpretations/2026-03-11-t37-full-catalog-constituent-similarity.md",
+        "doc/interpretations/2026-03-11-t38-constituent-expanded-nmf.md",
+        "doc/interpretations/2026-03-22-behavioral-annotations-full-catalog.md",
+        "doc/interpretations/2026-03-22-primitive-cooccurrence-gaps.md",
+        "doc/interpretations/2026-03-22-t044-graph-analysis.md",
+        "doc/interpretations/2026-03-22-t050-convergence-validation.md",
+        "doc/interpretations/2026-03-22-t051-t052-t053-symmetry-and-dynamics-surveys.md",
+        "doc/interpretations/2026-03-23-bias-assessment-combined.md",
+        "doc/interpretations/2026-03-23-vocabulary-and-ontology-comparison.md",
+        "doc/interpretations/2026-03-29-lens-refinement-and-temporal-gap.md",
+        "doc/interpretations/2026-03-29-literature-review-synthesis.md",
+        "doc/interpretations/2026-03-29-literature-synthesis-hypothesis-candidates.md",
+        "doc/interpretations/2026-03-29-literature-synthesis-round2.md",
+        "doc/interpretations/2026-03-29-t055-dynamical-pilot.md",
+        "doc/interpretations/2026-03-29-t085-t086-empirical-tests.md",
+        "doc/interpretations/2026-03-30-q54-level2-temporal-profile-validation.md",
+        "doc/interpretations/2026-03-30-t087-t088-structural-capability-validation.md",
+        "doc/interpretations/2026-03-30-t092-per-theme-kappa.md",
+        "doc/interpretations/2026-03-30-t093-t094-formalizability-and-phasespace.md",
+        "doc/interpretations/2026-04-03-variational-annotation-prototype.md",
+        "doc/interpretations/2026-04-04-composition-provenance-edges.md",
+        "doc/interpretations/2026-04-04-openalex-citation-proxy.md",
+        "doc/interpretations/2026-04-09-formulation-breadth-phase1.md",
+        "doc/interpretations/2026-04-10-structural-claims-audit.md",
+        "doc/interpretations/2026-04-11-enrichment-refinement-synthesis.md",
+        "doc/interpretations/2026-04-11-h03-h04-topology-dynamics-synthesis.md",
+        "doc/interpretations/2026-04-11-h04-expanded-cohort-rerun.md",
+        "doc/interpretations/2026-04-11-h1-cycle-generators.md",
+        "doc/interpretations/2026-04-11-lp-dimension-analysis.md",
+        "doc/interpretations/2026-04-11-primitive-combinatorics-interpretation.md",
+        "doc/interpretations/2026-04-11-t132-cka-lens-clustering.md",
+        "doc/interpretations/2026-04-11-t164-composition-law.md",
+        "doc/interpretations/2026-04-12-operator-arena-synthesis.md",
+        "doc/interpretations/2026-04-12-q83-operator-arena-factorization.md",
+        "doc/interpretations/2026-04-12-t214-metaclass-mediation.md",
+        "doc/interpretations/2026-04-12-within-continuous-pde-factorization-and-periodic-audit.md",
+        "doc/interpretations/2026-04-13-fidelity-stratification.md",
+        "doc/interpretations/2026-04-13-parameter-derivation-dag.md",
+        "doc/interpretations/2026-04-13-pilot-d1-damped-oscillator.md",
+        "doc/interpretations/2026-04-13-pilot-d2-sir-real.md",
+        "doc/interpretations/2026-04-13-pilot-d2-sir-synthetic.md",
+        "doc/interpretations/2026-04-13-pilot-d3-lotka-volterra.md",
+        "doc/interpretations/2026-04-13-primitive-skeleton-bridge.md",
+        "doc/interpretations/2026-04-13-skeleton-anonymization.md",
+        "doc/interpretations/2026-04-13-skeleton-matcher-tight.md",
+        "doc/interpretations/2026-04-13-t218-lens-cka-facet-update.md",
+        "doc/interpretations/2026-04-13-t218-operator-arena-facet-resynthesis.md",
+        "doc/interpretations/2026-04-13-t218a-primitive-collapse-audit.md",
+        "doc/interpretations/2026-04-14-pilot-d2-sir-real-bayesian.md",
+        "doc/interpretations/2026-04-19-t166-composite-limit-spotcheck.md",
+        "doc/interpretations/2026-04-19-t209-model-composition-complex.md",
+        "doc/interpretations/2026-04-24-q91-q93-q94-morphism-synthesis.md",
+        "doc/interpretations/2026-04-25-h05-phase-e-result.md",
+        "doc/interpretations/2026-04-25-parameter-derivation-dag-v2.md",
+        "doc/meta/next-steps-2026-04-14.md",
+        "doc/meta/next-steps-2026-04-20.md",
+        "doc/meta/next-steps-2026-04-24.md",
+        "doc/meta/pre-registration-q54-temporal-profile.md",
+        "doc/meta/pre-registration-t085-t086.md",
+        "doc/meta/pre-registration-t092.md",
+        "doc/meta/pre-registration-t214.md",
+        "doc/papers/Brunton2022.md",
+        "doc/papers/Gilpin2025.md",
+        "doc/papers/Hajij2023.md",
+        "doc/papers/Huh2024.md",
+        "doc/papers/Legatiuk2021.md",
+        "doc/papers/MathModDB-review.md",
+        "doc/papers/Morris2024.md",
+        "doc/papers/Myers2025.md",
+        "doc/papers/Papillon2024.md",
+        "doc/papers/SchultzSpivakVasilakopoulou2020.md",
+        "doc/papers/categorical-composition-trio-2023-2025.md",
+        "doc/papers/survey-attractor-topology-methods.md",
+        "doc/papers/survey-lie-symmetry-classification.md",
+        "doc/papers/survey-ode-classification.md",
+        "doc/plans/2026-03-11-t37-full-catalog-constituent-similarity-pipeline.md",
+        "doc/plans/2026-03-11-t38-constituent-expanded-nmf-pipeline.md",
+        "doc/plans/2026-04-17-meta-system-vision.md",
+        "doc/plans/2026-04-17-session-a-authority-matrix.md",
+        "doc/plans/2026-04-17-session-b-projection-contract.md",
+        "doc/plans/2026-04-17-session-c-graph-assignment.md",
+        "doc/plans/2026-04-17-session-d-milestone-audits.md",
+        "doc/plans/2026-04-18-chapters-as-composition-design.md",
+        "doc/plans/2026-04-18-guide-data-r1-contract.md",
+        "doc/plans/2026-04-18-meta-model-hero-storyboard.md",
+        "doc/plans/2026-04-18-phase-2-handoff.md",
+        "doc/plans/2026-04-18-phase-3-morphism-and-hero-design.md",
+        "doc/plans/2026-04-18-visual-registry-foundation.md",
+        "doc/plans/2026-04-19-a2-chapter-editorial-pattern.md",
+        "doc/plans/2026-04-19-a5-guide-unification.md",
+        "doc/plans/2026-04-19-a5-surface-authority.md",
+        "doc/plans/2026-04-19-remaining-work-and-phasing.md",
+        "doc/plans/2026-04-20-detail-page-parity-migration.md",
+        "doc/plans/2026-04-20-meta-system-gap-closure.md",
+        "doc/plans/2026-04-20-primitive-pipeline-migration.md",
+        "doc/plans/2026-04-21-authoring-cli-add-commands.md",
+        "doc/plans/2026-04-22-authoring-skills.md",
+        "doc/plans/2026-04-22-content-coverage-push-and-flat-field-deprecation.md",
+        "doc/plans/2026-04-22-cross-graph-overlay-ux.md",
+        "doc/plans/2026-04-22-morphism-figure-catalog.md",
+        "doc/plans/2026-04-22-provenance-derivation-redesign-plan.md",
+        "doc/plans/2026-04-22-provenance-schema-integration-plan.md",
+        "doc/plans/2026-04-22-q93-morphism-generators-foundation-follow-on-plan.md",
+        "doc/plans/2026-04-22-q93-workstream-1-family-pilots-index.md",
+        "doc/plans/2026-04-22-specializes-param-transforms-pilot-plan.md",
+        "doc/plans/2026-04-23-formula-route-entitypage-adapter.md",
+        "doc/plans/2026-04-23-formula-skeleton-motif-pipeline-plan.md",
+        "doc/plans/2026-04-23-model-route-entitypage-adapter.md",
+        "doc/plans/2026-04-23-q93-composite-paths-and-commuting-squares-plan.md",
+        "doc/plans/2026-04-23-q93-minimal-midpoint-object-formalization-plan.md",
+        "doc/plans/2026-04-23-q93-object-layer-comparison-plan.md",
+        "doc/plans/2026-04-23-q93-second-midpoint-object-pilot-plan.md",
+        "doc/plans/2026-04-23-q93-span-out-of-basis-audit-plan.md",
+        "doc/plans/2026-04-23-q93-typed-interface-midpoint-pilot-plan.md",
+        "doc/plans/2026-04-24-param-id-hyphen-migration.md",
+        "doc/plans/2026-04-24-param-route-entitypage-adapter.md",
+        "doc/plans/2026-04-24-task6-catalog-wide-pair-generation-design.md",
+        "doc/plans/2026-04-24-task6-interpretation-rulebook-design.md",
+        "doc/plans/2026-04-24-task7-pair-table-provenance-ledger-design.md",
+        "doc/plans/2026-04-25-h05-discriminating-test-handoff.md",
+        "doc/plans/2026-04-25-h05-phase-e-methodology.md",
+        "doc/plans/2026-04-25-h06-morphism-annotation-design.md",
+        "doc/questions/q01-model-granularity.md",
+        "doc/questions/q02-parameter-mediated-connections-as-morphisms.md",
+        "doc/questions/q03-unappreciated-model-relationships.md",
+        "doc/questions/q04-normalized-parameter-namespace.md",
+        "doc/questions/q05-compositional-relationships-between-models.md",
+        "doc/questions/q06-dimensional-class-predicts-equation-role.md",
+        "doc/questions/q07-hidden-analogies-in-unmatched-parameters.md",
+        "doc/questions/q08-multi-lens-as-enriched-category.md",
+        "doc/questions/q09-negative-dimensional-equation-role-correlation.md",
+        "doc/questions/q10-disagreement-pattern-templates.md",
+        "doc/questions/q11-equation-role-quantity-group-correlation-jump.md",
+        "doc/questions/q12-pattern-a-dimensionless-saturation.md",
+        "doc/questions/q13-dimensional-independence-vs-coverage-artifact.md",
+        "doc/questions/q14-data-quality-lens-design.md",
+        "doc/questions/q15-topological-structure-of-model-parameter-space.md",
+        "doc/questions/q16-suffix-matching-false-positives.md",
+        "doc/questions/q17-automated-match-confidence-threshold.md",
+        "doc/questions/q18-relatedto-edge-quality.md",
+        "doc/questions/q19-factor3-shared-physics-or-naming.md",
+        "doc/questions/q20-nmf-k-selection.md",
+        "doc/questions/q21-diffusion-ratio-conflation.md",
+        "doc/questions/q22-dimensionless-matching-problem.md",
+        "doc/questions/q23-constituent-decomposition-of-dimensionless-params.md",
+        "doc/questions/q24-generic-length-time-canonicals.md",
+        "doc/questions/q25-optimal-k-post-correction.md",
+        "doc/questions/q26-constituent-bridging-at-scale.md",
+        "doc/questions/q27-constituent-bridging-in-knowledge-graph.md",
+        "doc/questions/q28-kinematic-viscosity-nmf-dominance.md",
+        "doc/questions/q29-idf-expanded-as-default-mode.md",
+        "doc/questions/q30-assumption-set-layer.md",
+        "doc/questions/q31-parameterized-functors-for-limits.md",
+        "doc/questions/q32-meta-model-convergence-validation.md",
+        "doc/questions/q33-symmetry-profile-model-similarity.md",
+        "doc/questions/q34-attractor-topology-model-classification.md",
+        "doc/questions/q35-reaction-primitive-granularity.md",
+        "doc/questions/q36-topological-transitions-as-morphisms.md",
+        "doc/questions/q37-integrability-as-similarity-dimension.md",
+        "doc/questions/q38-meta-model-selection-bias.md",
+        "doc/questions/q39-geometric-construction-coverage.md",
+        "doc/questions/q40-dispersion-primitive-isolation.md",
+        "doc/questions/q41-minimal-expansion-for-saturation.md",
+        "doc/questions/q42-vocabulary-bias.md",
+        "doc/questions/q43-parameter-lens-value-for-discrete-models.md",
+        "doc/questions/q44-parameter-sharing-span-vs-morphism.md",
+        "doc/questions/q45-categorical-formalism-selection.md",
+        "doc/questions/q46-higher-order-betti-numbers.md",
+        "doc/questions/q47-energy-lens-independence.md",
+        "doc/questions/q48-composite-limit-generation.md",
+        "doc/questions/q49-enriched-composition-law.md",
+        "doc/questions/q50-t055-enriched-similarity-rescue.md",
+        "doc/questions/q51-reaction-primitive-splitting.md",
+        "doc/questions/q52-behavioral-regime-derivability.md",
+        "doc/questions/q53-morphism-type-lens-viability.md",
+        "doc/questions/q54-temporal-structure-in-meta-model.md",
+        "doc/questions/q55-phase-space-geometry-as-lens.md",
+        "doc/questions/q56-formalizability-spectrum.md",
+        "doc/questions/q57-methods-vs-systems-ontology.md",
+        "doc/questions/q58-lens-type-clustering.md",
+        "doc/questions/q59-cole-hopf-as-morphism-type.md",
+        "doc/questions/q60-polymorphic-transforms.md",
+        "doc/questions/q61-variational-as-annotation.md",
+        "doc/questions/q62-model-fidelity-validation-tiers.md",
+        "doc/questions/q63-partial-lens-design.md",
+        "doc/questions/q64-composition-provenance-edges.md",
+        "doc/questions/q65-beta-predicts-lens-difficulty.md",
+        "doc/questions/q66-beta-validity-threshold.md",
+        "doc/questions/q67-beta-vs-research-attention.md",
+        "doc/questions/q68-behavioral-invariance-to-beta.md",
+        "doc/questions/q69-annotation-provenance-and-independence.md",
+        "doc/questions/q70-surviving-h1-cycle-generators.md",
+        "doc/questions/q71-composition-hypergraph-topology.md",
+        "doc/questions/q72-equilibrating-model-invariants.md",
+        "doc/questions/q73-temporal-profile-derivability.md",
+        "doc/questions/q74-tractability-as-novel-lens.md",
+        "doc/questions/q75-local-enrichment-profiles.md",
+        "doc/questions/q76-bridge-model-index.md",
+        "doc/questions/q77-lens-quasi-isometry-classes.md",
+        "doc/questions/q78-missing-intermediate-compositions.md",
+        "doc/questions/q79-mi-similarity-composition-law.md",
+        "doc/questions/q80-nerve-vr-cycle-correspondence.md",
+        "doc/questions/q81-temporal-topology-as-classification-axis.md",
+        "doc/questions/q82-coarse-graining-morphism-coverage.md",
+        "doc/questions/q83-operator-arena-factorization.md",
+        "doc/questions/q84-morphism-taxonomy-design.md",
+        "doc/questions/q85-structured-primitive-coordinates.md",
+        "doc/questions/q86-within-fiber-factorization-generality.md",
+        "doc/questions/q87-fiber-gluing-maps.md",
+        "doc/questions/q88-periodic-arena-refinement.md",
+        "doc/questions/q89-structured-coordinate-residual-absorption.md",
+        "doc/questions/q90-lawform-as-explicit-axis.md",
+        "doc/questions/q91-skeleton-interpretation-split.md",
+        "doc/questions/q92-natural-parameter-generating-set.md",
+        "doc/questions/q93-morphism-generators-as-foundation.md",
+        "doc/questions/q94-split-vs-peer-relations.md",
+        "doc/reports/2026-04-22-degenerates-pilot-audit.md",
+        "doc/reports/2026-04-22-degenerates-pilot-calibration.md",
+        "doc/reports/2026-04-22-specializes-param-pilot-audit.md",
+        "doc/reports/2026-04-22-transforms-pilot-audit.md",
+        "doc/reports/2026-04-22-transforms-pilot-calibration.md",
+        "doc/reports/2026-04-23-formula-artifact-producer-audit.md",
+        "doc/reports/2026-04-23-formula-skeleton-motif-pipeline-contract.md",
+        "doc/reports/2026-04-23-q93-composite-paths-and-squares.md",
+        "doc/reports/2026-04-23-q93-composite-paths-calibration.md",
+        "doc/reports/2026-04-23-q93-h01-synthesis.md",
+        "doc/reports/2026-04-23-q93-minimal-midpoint-object-formalization.md",
+        "doc/reports/2026-04-23-q93-object-layer-comparison-calibration.md",
+        "doc/reports/2026-04-23-q93-object-layer-comparison.md",
+        "doc/reports/2026-04-23-q93-second-midpoint-object-pilot-calibration.md",
+        "doc/reports/2026-04-23-q93-second-midpoint-object-pilot.md",
+        "doc/reports/2026-04-23-q93-span-out-of-basis-audit.md",
+        "doc/reports/2026-04-23-q93-span-out-of-basis-calibration.md",
+        "doc/reports/2026-04-23-q93-typed-interface-midpoint-calibration.md",
+        "doc/reports/2026-04-23-q93-typed-interface-midpoint-pilot.md",
+        "doc/reports/2026-04-23-q94-split-vs-peer-audit.md",
+        "doc/reports/2026-04-24-q93-generator-relations-library.md",
+        "doc/reports/2026-04-25-orphan-question-sweep.md",
+        "doc/reports/catalog-artifact-reconciliation.md",
+        "doc/reports/openalex-gap-crossref.md",
+        "doc/searches/2026-03-29-enriched-categories-compositional-modeling.md",
+        "doc/searches/2026-03-29-lie-symmetry-rd-classification.md",
+        "doc/searches/2026-03-29-ontology-completeness-bias.md",
+        "doc/searches/2026-03-29-process-algebra-agent-primitives.md",
+        "doc/searches/2026-03-29-structural-realism-model-pluralism.md",
+        "doc/searches/2026-03-29-tda-dynamical-systems-comparison.md",
+        "doc/topics/combinatorics.md",
+        "doc/topics/demos.md",
+        "doc/topics/enrichment.md",
+        "doc/topics/evidence-layer.md",
+        "doc/topics/formulation-breadth.md",
+        "doc/topics/hypothesis.md",
+        "doc/topics/information-theory.md",
+        "doc/topics/knowledge-graph.md",
+        "doc/topics/meta-model.md",
+        "doc/topics/primitives.md",
+        "doc/topics/schema.md",
+        "doc/topics/temporal.md",
+        "doc/topics/validation.md",
+        "doc/topics/variational-unity.md",
+        "scripts/claim_extraction/__tests__/fixtures/eval_section_only.md",
+        "scripts/claim_extraction/__tests__/fixtures/heading_format.md",
+        "scripts/claim_extraction/__tests__/fixtures/hypothesis_format.md",
+        "scripts/claim_extraction/__tests__/fixtures/inline_format.md",
+        "scripts/claim_extraction/__tests__/fixtures/table_format.md",
+        "specs/2026-04-12-catalog-health-design.md",
+        "specs/2026-04-13-data-fitting-pilot-design.md",
+        "specs/2026-04-13-phenomenon-coverage-audit-scope.md",
+        "specs/catalog-canonical-core.md",
+        "specs/hypotheses/h01-double-categorical-model-relationships.md",
+        "specs/hypotheses/h02-enriched-categorical-lenses.md",
+        "specs/hypotheses/h03-higher-order-topology.md",
+        "specs/hypotheses/h04-dynamical-invariant-validation.md",
+        "specs/hypotheses/h05-parameter-namespace-normalization.md",
+        "specs/hypotheses/h06-morphism-type-inventory-completeness.md",
+        "specs/hypotheses/h07-empirical-fidelity-alignment.md"
+      ],
+      "source": [
+        "doc/papers/MathModDB-review.md"
+      ]
+    },
+    "long_form_files": [
+      {
+        "path": "content/prose/chapter/01-fluid-dynamics.md",
+        "lines": 1946
+      },
+      {
+        "path": "content/prose/chapter/02-solid-mechanics-elasticity.md",
+        "lines": 1394
+      },
+      {
+        "path": "content/prose/chapter/03-waves-acoustics.md",
+        "lines": 1289
+      },
+      {
+        "path": "content/prose/chapter/04-thermal-statistical-physics.md",
+        "lines": 1215
+      },
+      {
+        "path": "content/prose/chapter/05-classical-celestial-mechanics.md",
+        "lines": 920
+      },
+      {
+        "path": "content/prose/chapter/06-electromagnetism-optics.md",
+        "lines": 1476
+      },
+      {
+        "path": "content/prose/chapter/07-dynamical-systems-chaos.md",
+        "lines": 1139
+      },
+      {
+        "path": "content/prose/chapter/08-stochastic-processes.md",
+        "lines": 1183
+      },
+      {
+        "path": "content/prose/chapter/09-pattern-formation.md",
+        "lines": 1247
+      },
+      {
+        "path": "content/prose/chapter/10-growth-morphogenesis.md",
+        "lines": 1944
+      },
+      {
+        "path": "content/prose/chapter/11-networks-graphs.md",
+        "lines": 1192
+      },
+      {
+        "path": "content/prose/chapter/12-population-ecology.md",
+        "lines": 1440
+      },
+      {
+        "path": "content/prose/chapter/13-organismal-biophysics.md",
+        "lines": 1082
+      },
+      {
+        "path": "content/prose/chapter/14-soft-matter.md",
+        "lines": 1761
+      },
+      {
+        "path": "content/prose/chapter/15-geophysical-systems.md",
+        "lines": 2443
+      },
+      {
+        "path": "content/prose/chapter/16-quantum-systems.md",
+        "lines": 618
+      },
+      {
+        "path": "content/prose/chapter/17-lattice-models.md",
+        "lines": 998
+      },
+      {
+        "path": "content/prose/chapter/19-general-relativity-cosmology.md",
+        "lines": 1064
+      },
+      {
+        "path": "content/prose/chapter/20-control-information-theory.md",
+        "lines": 804
+      },
+      {
+        "path": "content/prose/chapter/bg-04-meta-model.md",
+        "lines": 403
+      },
+      {
+        "path": "content/prose/chapter/c-numerical-methods.md",
+        "lines": 575
+      },
+      {
+        "path": "content/prose/chapter/d-computer-graphics-applications.md",
+        "lines": 2314
+      },
+      {
+        "path": "content/prose/chapter/e-astrophysical-phenomena.md",
+        "lines": 387
+      },
+      {
+        "path": "content/prose/chapter/ref-notation.md",
+        "lines": 420
+      },
+      {
+        "path": "content/prose/chapter/ref-references.md",
+        "lines": 439
+      },
+      {
+        "path": "content/prose/chapter/section-intros.md",
+        "lines": 2012
+      },
+      {
+        "path": "doc/discussions/2026-03-22-convergence-vs-perspectivalism.md",
+        "lines": 316
+      },
+      {
+        "path": "doc/discussions/2026-03-29-refining-research-derived-lenses.md",
+        "lines": 417
+      },
+      {
+        "path": "doc/discussions/2026-04-04-demo-architecture-data-model-alignment.md",
+        "lines": 397
+      },
+      {
+        "path": "doc/discussions/2026-04-13-model-data-alignment-and-catalog-coverage.md",
+        "lines": 413
+      },
+      {
+        "path": "doc/discussions/2026-04-13-parameters-as-primitives.md",
+        "lines": 432
+      },
+      {
+        "path": "doc/discussions/2026-04-13-parameters-review-and-next-steps.md",
+        "lines": 399
+      },
+      {
+        "path": "doc/discussions/2026-04-25-multi-lens-parameter-compositions.md",
+        "lines": 374
+      },
+      {
+        "path": "doc/inquiries/data-fitting-pilot-review.md",
+        "lines": 319
+      },
+      {
+        "path": "doc/interpretations/2026-03-22-t051-t052-t053-symmetry-and-dynamics-surveys.md",
+        "lines": 327
+      },
+      {
+        "path": "doc/interpretations/2026-03-29-lens-refinement-and-temporal-gap.md",
+        "lines": 304
+      },
+      {
+        "path": "doc/interpretations/2026-04-11-h03-h04-topology-dynamics-synthesis.md",
+        "lines": 319
+      },
+      {
+        "path": "doc/interpretations/2026-04-13-parameter-derivation-dag.md",
+        "lines": 491
+      },
+      {
+        "path": "doc/interpretations/2026-04-25-parameter-derivation-dag-v2.md",
+        "lines": 753
+      },
+      {
+        "path": "doc/meta/next-steps-2026-04-14.md",
+        "lines": 447
+      },
+      {
+        "path": "doc/meta/next-steps-2026-04-20.md",
+        "lines": 473
+      },
+      {
+        "path": "doc/meta/next-steps-2026-04-24.md",
+        "lines": 441
+      },
+      {
+        "path": "doc/meta/skill-feedback.md",
+        "lines": 438
+      },
+      {
+        "path": "doc/papers/Brunton2022.md",
+        "lines": 562
+      },
+      {
+        "path": "doc/papers/categorical-composition-trio-2023-2025.md",
+        "lines": 330
+      },
+      {
+        "path": "doc/papers/survey-attractor-topology-methods.md",
+        "lines": 595
+      },
+      {
+        "path": "doc/papers/survey-lie-symmetry-classification.md",
+        "lines": 529
+      },
+      {
+        "path": "doc/plans/2026-03-07-guide-structural-refinements.md",
+        "lines": 1086
+      },
+      {
+        "path": "doc/plans/2026-03-07-model-metadata.md",
+        "lines": 969
+      },
+      {
+        "path": "doc/plans/2026-03-08-parameter-ontology-design.md",
+        "lines": 437
+      },
+      {
+        "path": "doc/plans/2026-03-08-parameter-registry-implementation.md",
+        "lines": 1650
+      },
+      {
+        "path": "doc/plans/2026-03-09-cross-lens-disagreement-implementation.md",
+        "lines": 363
+      },
+      {
+        "path": "doc/plans/2026-03-09-disagreement-patterns-implementation.md",
+        "lines": 406
+      },
+      {
+        "path": "doc/plans/2026-03-09-multi-lens-parameter-model-implementation.md",
+        "lines": 664
+      },
+      {
+        "path": "doc/plans/2026-03-09-parameter-curation-implementation.md",
+        "lines": 716
+      },
+      {
+        "path": "doc/plans/2026-03-09-unmatched-dimensional-classification-implementation.md",
+        "lines": 1242
+      },
+      {
+        "path": "doc/plans/2026-03-10-constituent-decomposition.md",
+        "lines": 872
+      },
+      {
+        "path": "doc/plans/2026-03-10-knowledge-graph-implementation.md",
+        "lines": 770
+      },
+      {
+        "path": "doc/plans/2026-03-10-umap-nmf-implementation.md",
+        "lines": 570
+      },
+      {
+        "path": "doc/plans/2026-03-12-fractal-ifs-ballistic-deposition-implementation.md",
+        "lines": 304
+      },
+      {
+        "path": "doc/plans/2026-03-12-interactive-demo-roadmap.md",
+        "lines": 1248
+      },
+      {
+        "path": "doc/plans/2026-03-13-kg-migration-plan.md",
+        "lines": 567
+      },
+      {
+        "path": "doc/plans/2026-03-16-limit-relations-ui.md",
+        "lines": 649
+      },
+      {
+        "path": "doc/plans/2026-03-16-meta-model-phase1-prototype.md",
+        "lines": 1413
+      },
+      {
+        "path": "doc/plans/2026-03-17-composition-graph-view.md",
+        "lines": 550
+      },
+      {
+        "path": "doc/plans/2026-03-19-model-page-layout-plan.md",
+        "lines": 996
+      },
+      {
+        "path": "doc/plans/2026-03-19-unified-catalog-plan.md",
+        "lines": 496
+      },
+      {
+        "path": "doc/plans/2026-03-22-composition-flow-diagram-design.md",
+        "lines": 302
+      },
+      {
+        "path": "doc/plans/2026-03-22-composition-viz-plan.md",
+        "lines": 1000
+      },
+      {
+        "path": "doc/plans/2026-03-22-graph-analysis-pipeline-plan.md",
+        "lines": 373
+      },
+      {
+        "path": "doc/plans/2026-03-22-guide-chapter-routing-plan.md",
+        "lines": 1107
+      },
+      {
+        "path": "doc/plans/2026-03-22-guide-toc-drawer-plan.md",
+        "lines": 491
+      },
+      {
+        "path": "doc/plans/2026-03-22-interactive-guide-design.md",
+        "lines": 660
+      },
+      {
+        "path": "doc/plans/2026-03-22-interactive-guide-phase1.md",
+        "lines": 2049
+      },
+      {
+        "path": "doc/plans/2026-03-22-interactive-guide-phase2.md",
+        "lines": 1233
+      },
+      {
+        "path": "doc/plans/2026-03-22-interactive-guide-phase3.md",
+        "lines": 909
+      },
+      {
+        "path": "doc/plans/2026-03-22-interactive-guide-phase4.md",
+        "lines": 1008
+      },
+      {
+        "path": "doc/plans/2026-03-23-composition-explorer-phase2a-plan.md",
+        "lines": 1348
+      },
+      {
+        "path": "doc/plans/2026-03-25-unified-lens-registry-design.md",
+        "lines": 479
+      },
+      {
+        "path": "doc/plans/2026-03-25-unified-lens-registry-plan.md",
+        "lines": 2137
+      },
+      {
+        "path": "doc/plans/2026-03-26-inline-figure-designs.md",
+        "lines": 397
+      },
+      {
+        "path": "doc/plans/2026-03-28-book-structure-plan-a.md",
+        "lines": 1035
+      },
+      {
+        "path": "doc/plans/2026-03-28-book-structure-plan-b.md",
+        "lines": 697
+      },
+      {
+        "path": "doc/plans/2026-03-28-composition-diagrams-plan.md",
+        "lines": 459
+      },
+      {
+        "path": "doc/plans/2026-03-28-entity-enrichment-wave2-plan.md",
+        "lines": 477
+      },
+      {
+        "path": "doc/plans/2026-03-28-entity-model-wave1-plan.md",
+        "lines": 2515
+      },
+      {
+        "path": "doc/plans/2026-03-28-science-ontology-wave1-plan.md",
+        "lines": 1357
+      },
+      {
+        "path": "doc/plans/2026-03-28-science-ontology-wave2-plan.md",
+        "lines": 528
+      },
+      {
+        "path": "doc/plans/2026-03-30-q54-domain-signatures-pipeline-plan.md",
+        "lines": 496
+      },
+      {
+        "path": "doc/plans/2026-03-31-lens-validation-pipeline-plan.md",
+        "lines": 405
+      },
+      {
+        "path": "doc/plans/2026-04-04-data-model-cli-design.md",
+        "lines": 924
+      },
+      {
+        "path": "doc/plans/2026-04-04-data-model-cli-plan.md",
+        "lines": 2589
+      },
+      {
+        "path": "doc/plans/2026-04-04-field-viewport-2d-design.md",
+        "lines": 468
+      },
+      {
+        "path": "doc/plans/2026-04-04-field-viewport-2d-plan.md",
+        "lines": 1150
+      },
+      {
+        "path": "doc/plans/2026-04-04-lens-mode-demo-design.md",
+        "lines": 521
+      },
+      {
+        "path": "doc/plans/2026-04-04-lens-mode-demo-plan.md",
+        "lines": 1699
+      },
+      {
+        "path": "doc/plans/2026-04-04-openalex-citation-proxy-pipeline.md",
+        "lines": 320
+      },
+      {
+        "path": "doc/plans/2026-04-05-health-report-plan.md",
+        "lines": 2833
+      },
+      {
+        "path": "doc/plans/2026-04-05-health-scoring-plan.md",
+        "lines": 1236
+      },
+      {
+        "path": "doc/plans/2026-04-07-composable-primitive-visualization-design.md",
+        "lines": 1138
+      },
+      {
+        "path": "doc/plans/2026-04-07-composable-primitive-visualization-plan.md",
+        "lines": 1949
+      },
+      {
+        "path": "doc/plans/2026-04-08-claim-evidence-population-design.md",
+        "lines": 354
+      },
+      {
+        "path": "doc/plans/2026-04-08-claim-evidence-population-plan.md",
+        "lines": 1568
+      },
+      {
+        "path": "doc/plans/2026-04-11-enrichment-refinement-investigation.md",
+        "lines": 804
+      },
+      {
+        "path": "doc/plans/2026-04-11-health-prose-integration-plan.md",
+        "lines": 378
+      },
+      {
+        "path": "doc/plans/2026-04-11-multiscale-prose-system-design.md",
+        "lines": 367
+      },
+      {
+        "path": "doc/plans/2026-04-11-multiscale-prose-system-implementation.md",
+        "lines": 772
+      },
+      {
+        "path": "doc/plans/2026-04-17-meta-system-vision.md",
+        "lines": 473
+      },
+      {
+        "path": "doc/plans/2026-04-17-session-a-authority-matrix.md",
+        "lines": 333
+      },
+      {
+        "path": "doc/plans/2026-04-17-session-b-projection-contract.md",
+        "lines": 323
+      },
+      {
+        "path": "doc/plans/2026-04-17-session-c-graph-assignment.md",
+        "lines": 305
+      },
+      {
+        "path": "doc/plans/2026-04-17-session-d-milestone-audits.md",
+        "lines": 477
+      },
+      {
+        "path": "doc/plans/2026-04-18-chapters-as-composition-design.md",
+        "lines": 690
+      },
+      {
+        "path": "doc/plans/2026-04-18-chapters-as-composition-implementation.md",
+        "lines": 3066
+      },
+      {
+        "path": "doc/plans/2026-04-18-phase-3-morphism-and-hero-design.md",
+        "lines": 523
+      },
+      {
+        "path": "doc/plans/2026-04-18-phase-3-morphism-and-hero-implementation.md",
+        "lines": 2238
+      },
+      {
+        "path": "doc/plans/2026-04-18-visual-registry-foundation.md",
+        "lines": 1998
+      },
+      {
+        "path": "doc/plans/2026-04-19-remaining-work-and-phasing.md",
+        "lines": 361
+      },
+      {
+        "path": "doc/plans/2026-04-20-detail-page-parity-migration-plan.md",
+        "lines": 1437
+      },
+      {
+        "path": "doc/plans/2026-04-20-detail-page-parity-migration.md",
+        "lines": 615
+      },
+      {
+        "path": "doc/plans/2026-04-20-foundation-hygiene.md",
+        "lines": 1816
+      },
+      {
+        "path": "doc/plans/2026-04-20-meta-system-gap-closure.md",
+        "lines": 799
+      },
+      {
+        "path": "doc/plans/2026-04-20-primitive-pipeline-migration.md",
+        "lines": 351
+      },
+      {
+        "path": "doc/plans/2026-04-21-authoring-cli-add-commands-plan.md",
+        "lines": 2279
+      },
+      {
+        "path": "doc/plans/2026-04-21-authoring-cli-add-commands.md",
+        "lines": 636
+      },
+      {
+        "path": "doc/plans/2026-04-22-content-coverage-push-and-flat-field-deprecation-plan.md",
+        "lines": 529
+      },
+      {
+        "path": "doc/plans/2026-04-22-cross-graph-overlay-ux-plan.md",
+        "lines": 325
+      },
+      {
+        "path": "doc/plans/2026-04-22-cross-graph-overlay-ux.md",
+        "lines": 304
+      },
+      {
+        "path": "doc/plans/2026-04-22-morphism-figure-catalog-plan.md",
+        "lines": 315
+      },
+      {
+        "path": "doc/plans/2026-04-22-provenance-derivation-redesign-plan.md",
+        "lines": 652
+      },
+      {
+        "path": "doc/plans/2026-04-22-q93-morphism-generators-foundation-follow-on-plan.md",
+        "lines": 337
+      },
+      {
+        "path": "doc/plans/2026-04-22-q93-workstream-1-family-pilots-index.md",
+        "lines": 303
+      },
+      {
+        "path": "doc/plans/2026-04-23-formula-route-entitypage-adapter-plan.md",
+        "lines": 533
+      },
+      {
+        "path": "doc/plans/2026-04-23-formula-skeleton-motif-pipeline-plan.md",
+        "lines": 796
+      },
+      {
+        "path": "doc/plans/2026-04-23-model-route-entitypage-adapter-plan.md",
+        "lines": 307
+      },
+      {
+        "path": "doc/plans/2026-04-23-q93-composite-paths-and-commuting-squares-plan.md",
+        "lines": 327
+      },
+      {
+        "path": "doc/plans/2026-04-23-q93-minimal-midpoint-object-formalization-plan.md",
+        "lines": 362
+      },
+      {
+        "path": "doc/plans/2026-04-23-q93-object-layer-comparison-plan.md",
+        "lines": 353
+      },
+      {
+        "path": "doc/plans/2026-04-23-q93-second-midpoint-object-pilot-plan.md",
+        "lines": 357
+      },
+      {
+        "path": "doc/plans/2026-04-23-q93-span-out-of-basis-audit-plan.md",
+        "lines": 417
+      },
+      {
+        "path": "doc/plans/2026-04-23-q93-typed-interface-midpoint-pilot-plan.md",
+        "lines": 357
+      },
+      {
+        "path": "doc/plans/2026-04-24-param-route-entitypage-adapter-plan.md",
+        "lines": 775
+      },
+      {
+        "path": "doc/plans/2026-04-24-param-route-entitypage-adapter.md",
+        "lines": 406
+      },
+      {
+        "path": "doc/plans/2026-04-25-h05-discriminating-test-handoff.md",
+        "lines": 410
+      },
+      {
+        "path": "doc/plans/2026-04-25-h05-phase-e-methodology.md",
+        "lines": 614
+      },
+      {
+        "path": "doc/plans/meta-model-specification.md",
+        "lines": 1064
+      },
+      {
+        "path": "doc/plans/recon/detail-page-parity-dimgroup.md",
+        "lines": 462
+      },
+      {
+        "path": "doc/reports/2026-04-23-formula-skeleton-motif-pipeline-contract.md",
+        "lines": 354
+      },
+      {
+        "path": "doc/reports/dysts-comparison-report.md",
+        "lines": 317
+      },
+      {
+        "path": "doc/reports/full-catalog-constituent-similarity-report.md",
+        "lines": 358
+      },
+      {
+        "path": "doc/reports/h03-persistent-homology-report.md",
+        "lines": 341
+      },
+      {
+        "path": "doc/reports/parameter-coverage.md",
+        "lines": 515
+      },
+      {
+        "path": "doc/reports/parameter-overlap-report.md",
+        "lines": 855
+      },
+      {
+        "path": "doc/reports/parameter-quality-audit.md",
+        "lines": 593
+      },
+      {
+        "path": "doc/reports/per-theme-kappa-report.md",
+        "lines": 460
+      },
+      {
+        "path": "doc/reports/structural-capability-validation-report.md",
+        "lines": 309
+      },
+      {
+        "path": "doc/reports/symmetry-cluster-analysis.md",
+        "lines": 864
+      },
+      {
+        "path": "doc/reports/v1-solution-behavior-derivation.md",
+        "lines": 718
+      },
+      {
+        "path": "doc/reports/v2-equation-type-derivation.md",
+        "lines": 485
+      },
+      {
+        "path": "docs/plans/2026-04-14-fidelity-schema-split.md",
+        "lines": 971
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-08-formulation-breadth-pipeline.md",
+        "lines": 1942
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-09-focus-context-plan-b.md",
+        "lines": 1192
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-09-meta-model-lens-union.md",
+        "lines": 1579
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-10-meta-model-illustrations.md",
+        "lines": 2013
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-10-port-types-plan-c.md",
+        "lines": 1076
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-10-provenance-circularity-checker.md",
+        "lines": 735
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-10-provenance-vocabulary-upstream.md",
+        "lines": 367
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-10-robust-claim-extraction.md",
+        "lines": 977
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-10-structural-claims-audit.md",
+        "lines": 1042
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-11-h03-persistent-homology.md",
+        "lines": 665
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-11-h04-dynamical-comparison.md",
+        "lines": 1170
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-12-catalog-health.md",
+        "lines": 2232
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-12-pr1-guide-modeltype-mis-codings.md",
+        "lines": 311
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-12-pr2-kind-inline-phase-a.md",
+        "lines": 1077
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-12-pr4-remaining-consumer-migration.md",
+        "lines": 2258
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-13-pr3a-facet-population.md",
+        "lines": 1422
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-13-pr3b-empirical-consumer-migration.md",
+        "lines": 717
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-13-pr5-metaclass-retirement.md",
+        "lines": 1107
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-13-t218-facet-reanalysis.md",
+        "lines": 1425
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-25-h06-morphism-annotation-plan.md",
+        "lines": 1684
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-08-formulation-breadth-design.md",
+        "lines": 596
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-09-meta-model-lens-focus-design.md",
+        "lines": 1115
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-10-meta-model-illustrations-design.md",
+        "lines": 563
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-10-provenance-circularity-checker-design.md",
+        "lines": 355
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-10-robust-claim-extraction-design.md",
+        "lines": 308
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-11-h04-observable-dynamical-comparison-design.md",
+        "lines": 302
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-15-meta-model-refinement-design.md",
+        "lines": 393
+      },
+      {
+        "path": "specs/2026-03-16-meta-model-design.md",
+        "lines": 667
+      },
+      {
+        "path": "specs/2026-03-29-inline-figures-design.md",
+        "lines": 512
+      },
+      {
+        "path": "specs/2026-03-30-formula-system-design.md",
+        "lines": 640
+      },
+      {
+        "path": "specs/2026-03-30-research-provenance-design.md",
+        "lines": 477
+      },
+      {
+        "path": "specs/2026-03-31-composition-dag-design.md",
+        "lines": 484
+      },
+      {
+        "path": "specs/2026-03-31-formula-interaction-v2-design.md",
+        "lines": 488
+      },
+      {
+        "path": "specs/2026-03-31-lens-taxonomy-redesign.md",
+        "lines": 468
+      },
+      {
+        "path": "specs/2026-04-12-catalog-health-design.md",
+        "lines": 440
+      },
+      {
+        "path": "specs/2026-04-12-metaclass-taxonomy-reform-design.md",
+        "lines": 423
+      },
+      {
+        "path": "specs/2026-04-22-extends-generator-pilot-design.md",
+        "lines": 537
+      },
+      {
+        "path": "specs/2026-04-22-morphism-generator-families-design.md",
+        "lines": 482
+      },
+      {
+        "path": "specs/2026-04-22-provenance-derivation-redesign-design.md",
+        "lines": 670
+      },
+      {
+        "path": "specs/catalog-canonical-core.md",
+        "lines": 370
+      },
+      {
+        "path": "specs/hypotheses/h05-parameter-namespace-normalization.md",
+        "lines": 379
+      },
+      {
+        "path": "specs/hypotheses/h06-morphism-type-inventory-completeness.md",
+        "lines": 304
+      },
+      {
+        "path": "tasks/active.md",
+        "lines": 2570
+      },
+      {
+        "path": "tasks/done/2026-04.md",
+        "lines": 849
+      }
+    ],
+    "embedded_metadata_candidates": [
+      {
+        "path": "content/prose/chapter/01-fluid-dynamics.md",
+        "lines": 1946,
+        "candidate_starts": [
+          156,
+          347,
+          550,
+          749,
+          939,
+          1115,
+          1353,
+          1565,
+          1756,
+          1917
+        ]
+      },
+      {
+        "path": "content/prose/chapter/02-solid-mechanics-elasticity.md",
+        "lines": 1394,
+        "candidate_starts": [
+          158,
+          353,
+          559,
+          769,
+          977,
+          1180,
+          1364
+        ]
+      },
+      {
+        "path": "content/prose/chapter/03-waves-acoustics.md",
+        "lines": 1289,
+        "candidate_starts": [
+          151,
+          324,
+          513,
+          668,
+          858,
+          1063,
+          1259
+        ]
+      },
+      {
+        "path": "content/prose/chapter/04-thermal-statistical-physics.md",
+        "lines": 1215,
+        "candidate_starts": [
+          148,
+          338,
+          526,
+          721,
+          908,
+          1089,
+          1213
+        ]
+      },
+      {
+        "path": "content/prose/chapter/05-classical-celestial-mechanics.md",
+        "lines": 920,
+        "candidate_starts": [
+          144,
+          337,
+          516,
+          703,
+          892
+        ]
+      },
+      {
+        "path": "content/prose/chapter/06-electromagnetism-optics.md",
+        "lines": 1476,
+        "candidate_starts": [
+          152,
+          332,
+          516,
+          695,
+          873,
+          1065,
+          1249,
+          1441
+        ]
+      },
+      {
+        "path": "content/prose/chapter/07-dynamical-systems-chaos.md",
+        "lines": 1139,
+        "candidate_starts": [
+          138,
+          299,
+          457,
+          617,
+          775,
+          955,
+          1122
+        ]
+      },
+      {
+        "path": "content/prose/chapter/08-stochastic-processes.md",
+        "lines": 1183,
+        "candidate_starts": [
+          139,
+          323,
+          499,
+          684,
+          868,
+          1067,
+          1181
+        ]
+      },
+      {
+        "path": "content/prose/chapter/09-pattern-formation.md",
+        "lines": 1247,
+        "candidate_starts": [
+          144,
+          318,
+          492,
+          680,
+          851,
+          1041,
+          1231
+        ]
+      },
+      {
+        "path": "content/prose/chapter/10-growth-morphogenesis.md",
+        "lines": 1944,
+        "candidate_starts": [
+          161,
+          357,
+          545,
+          725,
+          902,
+          1098,
+          1338,
+          1615,
+          1906
+        ]
+      },
+      {
+        "path": "content/prose/chapter/11-networks-graphs.md",
+        "lines": 1192,
+        "candidate_starts": [
+          145,
+          324,
+          493,
+          660,
+          836,
+          999,
+          1162
+        ]
+      },
+      {
+        "path": "content/prose/chapter/12-population-ecology.md",
+        "lines": 1440,
+        "candidate_starts": [
+          133,
+          319,
+          506,
+          676,
+          858,
+          1034,
+          1225,
+          1406
+        ]
+      },
+      {
+        "path": "content/prose/chapter/13-organismal-biophysics.md",
+        "lines": 1082,
+        "candidate_starts": [
+          135,
+          320,
+          504,
+          693,
+          882,
+          1080
+        ]
+      },
+      {
+        "path": "content/prose/chapter/14-soft-matter.md",
+        "lines": 1761,
+        "candidate_starts": [
+          147,
+          350,
+          550,
+          826,
+          1030,
+          1227,
+          1442,
+          1629,
+          1759
+        ]
+      },
+      {
+        "path": "content/prose/chapter/15-geophysical-systems.md",
+        "lines": 2443,
+        "candidate_starts": [
+          162,
+          361,
+          547,
+          733,
+          926,
+          1106,
+          1296,
+          1485,
+          1838,
+          2034,
+          2207,
+          2400
+        ]
+      },
+      {
+        "path": "content/prose/chapter/16-quantum-systems.md",
+        "lines": 618,
+        "candidate_starts": [
+          122,
+          311,
+          497,
+          616
+        ]
+      },
+      {
+        "path": "content/prose/chapter/17-lattice-models.md",
+        "lines": 998,
+        "candidate_starts": [
+          149,
+          345,
+          548,
+          750,
+          958
+        ]
+      },
+      {
+        "path": "content/prose/chapter/18-plant-ecology-physiology.md",
+        "lines": 145,
+        "candidate_starts": [
+          128
+        ]
+      },
+      {
+        "path": "content/prose/chapter/19-general-relativity-cosmology.md",
+        "lines": 1064,
+        "candidate_starts": [
+          144,
+          330,
+          536,
+          728,
+          931,
+          1062
+        ]
+      },
+      {
+        "path": "content/prose/chapter/20-control-information-theory.md",
+        "lines": 804,
+        "candidate_starts": [
+          119,
+          310,
+          481,
+          652,
+          771
+        ]
+      },
+      {
+        "path": "content/prose/chapter/c-numerical-methods.md",
+        "lines": 575,
+        "candidate_starts": [
+          68,
+          284,
+          373,
+          468,
+          540
+        ]
+      },
+      {
+        "path": "content/prose/chapter/d-computer-graphics-applications.md",
+        "lines": 2314,
+        "candidate_starts": [
+          75,
+          504,
+          841,
+          1638,
+          2129,
+          2276,
+          2312
+        ]
+      },
+      {
+        "path": "content/prose/chapter/e-astrophysical-phenomena.md",
+        "lines": 387,
+        "candidate_starts": [
+          138,
+          356,
+          385
+        ]
+      },
+      {
+        "path": "content/prose/chapter/ref-notation.md",
+        "lines": 420,
+        "candidate_starts": [
+          74,
+          128,
+          267,
+          313,
+          365,
+          420
+        ]
+      },
+      {
+        "path": "content/prose/chapter/ref-references.md",
+        "lines": 439,
+        "candidate_starts": [
+          159,
+          346,
+          439
+        ]
+      },
+      {
+        "path": "doc/discussions/2026-04-03-lens-types-and-morphism-gap.md",
+        "lines": 226,
+        "candidate_starts": [
+          171
+        ]
+      },
+      {
+        "path": "doc/discussions/2026-04-04-demo-architecture-data-model-alignment.md",
+        "lines": 397,
+        "candidate_starts": [
+          68,
+          174,
+          244,
+          336
+        ]
+      },
+      {
+        "path": "doc/discussions/2026-04-13-parameters-as-primitives.md",
+        "lines": 432,
+        "candidate_starts": [
+          132,
+          212,
+          332
+        ]
+      },
+      {
+        "path": "doc/interpretations/2026-04-25-parameter-derivation-dag-v2.md",
+        "lines": 753,
+        "candidate_starts": [
+          274,
+          554,
+          614
+        ]
+      },
+      {
+        "path": "doc/meta/pre-registration-t085-t086.md",
+        "lines": 175,
+        "candidate_starts": [
+          72,
+          119,
+          150
+        ]
+      },
+      {
+        "path": "doc/meta/pre-registration-t092.md",
+        "lines": 155,
+        "candidate_starts": [
+          62,
+          117
+        ]
+      },
+      {
+        "path": "doc/papers/categorical-composition-trio-2023-2025.md",
+        "lines": 330,
+        "candidate_starts": [
+          93,
+          241
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-07-guide-structural-refinements.md",
+        "lines": 1086,
+        "candidate_starts": [
+          70,
+          136,
+          201,
+          266,
+          331,
+          425,
+          527,
+          653,
+          732,
+          823,
+          916,
+          996,
+          1061
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-07-model-metadata.md",
+        "lines": 969,
+        "candidate_starts": [
+          75,
+          404,
+          706,
+          904
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-08-parameter-ontology-design.md",
+        "lines": 437,
+        "candidate_starts": [
+          77,
+          227,
+          401
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-08-parameter-registry-implementation.md",
+        "lines": 1650,
+        "candidate_starts": [
+          327,
+          1145,
+          1477,
+          1586,
+          1639
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-09-cross-lens-disagreement-implementation.md",
+        "lines": 363,
+        "candidate_starts": [
+          138,
+          332
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-09-disagreement-patterns-implementation.md",
+        "lines": 406,
+        "candidate_starts": [
+          107,
+          384
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-09-multi-lens-parameter-model-implementation.md",
+        "lines": 664,
+        "candidate_starts": [
+          71,
+          366,
+          649
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-09-parameter-curation-implementation.md",
+        "lines": 716,
+        "candidate_starts": [
+          284,
+          620,
+          703
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-09-parameter-overlap-analysis-implementation.md",
+        "lines": 284,
+        "candidate_starts": [
+          54,
+          167,
+          244
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-09-unmatched-dimensional-classification-implementation.md",
+        "lines": 1242,
+        "candidate_starts": [
+          369,
+          998,
+          1204
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-10-constituent-decomposition.md",
+        "lines": 872,
+        "candidate_starts": [
+          158,
+          854
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-10-knowledge-graph-implementation.md",
+        "lines": 770,
+        "candidate_starts": [
+          62,
+          347,
+          634,
+          716
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-10-umap-nmf-implementation.md",
+        "lines": 570,
+        "candidate_starts": [
+          157,
+          377
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-11-t37-full-catalog-constituent-similarity-pipeline.md",
+        "lines": 247,
+        "candidate_starts": [
+          67,
+          123,
+          173
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-11-t38-constituent-expanded-nmf-pipeline.md",
+        "lines": 186,
+        "candidate_starts": [
+          58,
+          111,
+          152
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-12-fractal-ifs-ballistic-deposition-implementation.md",
+        "lines": 304,
+        "candidate_starts": [
+          79,
+          204
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-12-interactive-demo-roadmap.md",
+        "lines": 1248,
+        "candidate_starts": [
+          141,
+          324,
+          1219
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-12-vogel-phyllotaxis-implementation.md",
+        "lines": 211,
+        "candidate_starts": [
+          80,
+          179
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-13-kg-migration-plan.md",
+        "lines": 567,
+        "candidate_starts": [
+          58,
+          208
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-16-limit-relations-ui.md",
+        "lines": 649,
+        "candidate_starts": [
+          304,
+          457,
+          619
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-16-meta-model-phase1-prototype.md",
+        "lines": 1413,
+        "candidate_starts": [
+          459,
+          913,
+          1184,
+          1400
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-16-meta-model-phase2-full-annotation.md",
+        "lines": 230,
+        "candidate_starts": [
+          90,
+          220
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-17-composition-graph-view.md",
+        "lines": 550,
+        "candidate_starts": [
+          334,
+          519
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-19-model-page-layout-plan.md",
+        "lines": 996,
+        "candidate_starts": [
+          56,
+          342,
+          965
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-19-unified-catalog-plan.md",
+        "lines": 496,
+        "candidate_starts": [
+          87,
+          229,
+          320,
+          427
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-22-composition-viz-plan.md",
+        "lines": 1000,
+        "candidate_starts": [
+          182,
+          503,
+          730,
+          911
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-22-graph-analysis-pipeline-plan.md",
+        "lines": 373,
+        "candidate_starts": [
+          71,
+          135,
+          209,
+          258,
+          362
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-22-guide-chapter-routing-plan.md",
+        "lines": 1107,
+        "candidate_starts": [
+          66,
+          563,
+          923
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-22-guide-toc-drawer-plan.md",
+        "lines": 491,
+        "candidate_starts": [
+          69,
+          329,
+          462
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-22-interactive-guide-phase1.md",
+        "lines": 2049,
+        "candidate_starts": [
+          91,
+          437,
+          954,
+          1362,
+          1669,
+          2033
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-22-interactive-guide-phase2.md",
+        "lines": 1233,
+        "candidate_starts": [
+          339,
+          487,
+          560,
+          622,
+          833,
+          1180
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-22-interactive-guide-phase3.md",
+        "lines": 909,
+        "candidate_starts": [
+          52,
+          165,
+          491,
+          675,
+          860
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-22-interactive-guide-phase4.md",
+        "lines": 1008,
+        "candidate_starts": [
+          274,
+          690,
+          833,
+          957
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-22-intro-chapter-gap-analysis.md",
+        "lines": 282,
+        "candidate_starts": [
+          80,
+          172
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-23-composition-explorer-phase2a-plan.md",
+        "lines": 1348,
+        "candidate_starts": [
+          129,
+          583,
+          908,
+          1239
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-25-unified-lens-registry-plan.md",
+        "lines": 2137,
+        "candidate_starts": [
+          64,
+          464,
+          799,
+          1101,
+          1259,
+          1714,
+          1853,
+          1971,
+          2059
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-26-inline-figure-designs.md",
+        "lines": 397,
+        "candidate_starts": [
+          61,
+          139,
+          207,
+          275,
+          348
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-26-lens-prose-authoring-plan.md",
+        "lines": 182,
+        "candidate_starts": [
+          65,
+          98
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-28-book-structure-plan-a.md",
+        "lines": 1035,
+        "candidate_starts": [
+          332,
+          636,
+          935,
+          1026
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-28-book-structure-plan-b.md",
+        "lines": 697,
+        "candidate_starts": [
+          240,
+          611
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-28-composition-diagrams-plan.md",
+        "lines": 459,
+        "candidate_starts": [
+          59,
+          298
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-28-entity-enrichment-wave2-plan.md",
+        "lines": 477,
+        "candidate_starts": [
+          180,
+          329,
+          449
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-28-entity-model-wave1-plan.md",
+        "lines": 2515,
+        "candidate_starts": [
+          366,
+          1763,
+          2138,
+          2418
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-28-meta-model-chapter-evaluation-criteria.md",
+        "lines": 129,
+        "candidate_starts": [
+          74,
+          121
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-28-meta-model-chapter-improvements.md",
+        "lines": 156,
+        "candidate_starts": [
+          53,
+          93,
+          132
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-28-science-ontology-wave1-plan.md",
+        "lines": 1357,
+        "candidate_starts": [
+          70,
+          138,
+          163,
+          318,
+          742,
+          825,
+          1322
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-28-science-ontology-wave2-plan.md",
+        "lines": 528,
+        "candidate_starts": [
+          144,
+          340,
+          505
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-30-q54-domain-signatures-pipeline-plan.md",
+        "lines": 496,
+        "candidate_starts": [
+          109,
+          367,
+          437,
+          471
+        ]
+      },
+      {
+        "path": "doc/plans/2026-03-31-lens-validation-pipeline-plan.md",
+        "lines": 405,
+        "candidate_starts": [
+          160,
+          273,
+          401
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-04-data-model-cli-design.md",
+        "lines": 924,
+        "candidate_starts": [
+          647
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-04-data-model-cli-plan.md",
+        "lines": 2589,
+        "candidate_starts": [
+          107,
+          540,
+          988,
+          1752,
+          2381,
+          2544
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-04-field-viewport-2d-plan.md",
+        "lines": 1150,
+        "candidate_starts": [
+          161,
+          895
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-04-lens-mode-demo-design.md",
+        "lines": 521,
+        "candidate_starts": [
+          152
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-04-lens-mode-demo-plan.md",
+        "lines": 1699,
+        "candidate_starts": [
+          181,
+          381,
+          883,
+          1236,
+          1425,
+          1564
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-04-openalex-citation-proxy-pipeline.md",
+        "lines": 320,
+        "candidate_starts": [
+          66,
+          79,
+          84,
+          133,
+          202,
+          279,
+          309
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-05-health-report-plan.md",
+        "lines": 2833,
+        "candidate_starts": [
+          231,
+          572,
+          900,
+          1246,
+          1678,
+          1904,
+          1961,
+          2196,
+          2511,
+          2671,
+          2811
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-05-health-scoring-plan.md",
+        "lines": 1236,
+        "candidate_starts": [
+          104,
+          533,
+          798,
+          1140
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-07-composable-primitive-visualization-design.md",
+        "lines": 1138,
+        "candidate_starts": [
+          155,
+          390,
+          649,
+          776,
+          925,
+          1038,
+          1122
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-07-composable-primitive-visualization-plan.md",
+        "lines": 1949,
+        "candidate_starts": [
+          138,
+          393,
+          631,
+          768,
+          1083,
+          1397,
+          1781,
+          1859,
+          1904
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-08-claim-evidence-population-design.md",
+        "lines": 354,
+        "candidate_starts": [
+          68,
+          223
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-08-claim-evidence-population-plan.md",
+        "lines": 1568,
+        "candidate_starts": [
+          204,
+          230,
+          262,
+          894,
+          1105,
+          1117,
+          1290,
+          1560
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-11-enrichment-refinement-investigation.md",
+        "lines": 804,
+        "candidate_starts": [
+          214,
+          682,
+          713
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-17-meta-system-vision.md",
+        "lines": 473,
+        "candidate_starts": [
+          182,
+          251,
+          403
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-17-session-a-authority-matrix.md",
+        "lines": 333,
+        "candidate_starts": [
+          77,
+          125,
+          183,
+          235,
+          289
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-17-session-b-projection-contract.md",
+        "lines": 323,
+        "candidate_starts": [
+          75,
+          244,
+          273
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-17-session-c-graph-assignment.md",
+        "lines": 305,
+        "candidate_starts": [
+          202
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-17-session-d-milestone-audits.md",
+        "lines": 477,
+        "candidate_starts": [
+          61,
+          203,
+          335,
+          437
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-18-chapters-as-composition-design.md",
+        "lines": 690,
+        "candidate_starts": [
+          211
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-18-chapters-as-composition-implementation.md",
+        "lines": 3066,
+        "candidate_starts": [
+          111,
+          1674,
+          2406,
+          2556,
+          2863
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-18-phase-3-morphism-and-hero-implementation.md",
+        "lines": 2238,
+        "candidate_starts": [
+          58,
+          836,
+          1408,
+          1781,
+          1782,
+          2209
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-18-visual-registry-foundation.md",
+        "lines": 1998,
+        "candidate_starts": [
+          91,
+          328,
+          701,
+          1038,
+          1065,
+          1084,
+          1103,
+          1122,
+          1141,
+          1232,
+          1352,
+          1374,
+          1387,
+          1395,
+          1408,
+          1493,
+          1936
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-19-a5-surface-authority.md",
+        "lines": 221,
+        "candidate_starts": [
+          58,
+          101,
+          137,
+          172
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-19-remaining-work-and-phasing.md",
+        "lines": 361,
+        "candidate_starts": [
+          127,
+          334
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-20-detail-page-parity-migration-plan.md",
+        "lines": 1437,
+        "candidate_starts": [
+          63,
+          95,
+          428,
+          622,
+          781,
+          828,
+          1105,
+          1204,
+          1240,
+          1287,
+          1364
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-20-detail-page-parity-migration.md",
+        "lines": 615,
+        "candidate_starts": [
+          503
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-20-foundation-hygiene.md",
+        "lines": 1816,
+        "candidate_starts": [
+          51,
+          85,
+          452,
+          768,
+          1021,
+          1368
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-21-authoring-cli-add-commands-plan.md",
+        "lines": 2279,
+        "candidate_starts": [
+          62,
+          182,
+          323,
+          847,
+          1119,
+          1464,
+          2021,
+          2180
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-21-authoring-cli-add-commands.md",
+        "lines": 636,
+        "candidate_starts": [
+          383
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-23-formula-skeleton-motif-pipeline-plan.md",
+        "lines": 796,
+        "candidate_starts": [
+          79,
+          165,
+          313,
+          393,
+          462,
+          554,
+          644,
+          722,
+          778
+        ]
+      },
+      {
+        "path": "doc/plans/meta-model-specification.md",
+        "lines": 1064,
+        "candidate_starts": [
+          130,
+          460,
+          602,
+          740,
+          890,
+          1007,
+          1062
+        ]
+      },
+      {
+        "path": "doc/plans/recon/detail-page-parity-dimgroup.md",
+        "lines": 462,
+        "candidate_starts": [
+          248
+        ]
+      },
+      {
+        "path": "doc/plans/recon/detail-page-parity-symmetry.md",
+        "lines": 232,
+        "candidate_starts": [
+          212
+        ]
+      },
+      {
+        "path": "doc/reports/synthesis.md",
+        "lines": 86,
+        "candidate_starts": [
+          54,
+          82
+        ]
+      },
+      {
+        "path": "doc/reports/synthesis/_emergent-threads.md",
+        "lines": 230,
+        "candidate_starts": [
+          100,
+          196
+        ]
+      },
+      {
+        "path": "doc/reports/synthesis/double-categorical-model-relationships.md",
+        "lines": 102,
+        "candidate_starts": [
+          80
+        ]
+      },
+      {
+        "path": "docs/plans/2026-04-14-fidelity-schema-split.md",
+        "lines": 971,
+        "candidate_starts": [
+          359,
+          681,
+          841,
+          949
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-08-formulation-breadth-pipeline.md",
+        "lines": 1942,
+        "candidate_starts": [
+          63,
+          369,
+          452,
+          709,
+          1086,
+          1684,
+          1798,
+          1922
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-09-focus-context-plan-b.md",
+        "lines": 1192,
+        "candidate_starts": [
+          155,
+          562,
+          905,
+          1019,
+          1149
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-09-meta-model-lens-union.md",
+        "lines": 1579,
+        "candidate_starts": [
+          164,
+          317,
+          576,
+          906,
+          1480
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-10-meta-model-illustrations.md",
+        "lines": 2013,
+        "candidate_starts": [
+          57,
+          439,
+          806,
+          1053,
+          1176,
+          1500,
+          1809,
+          1895,
+          1976
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-10-port-types-plan-c.md",
+        "lines": 1076,
+        "candidate_starts": [
+          355,
+          571,
+          786,
+          931,
+          1059
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-10-provenance-circularity-checker.md",
+        "lines": 735,
+        "candidate_starts": [
+          277,
+          719
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-10-provenance-vocabulary-upstream.md",
+        "lines": 367,
+        "candidate_starts": [
+          193
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-10-robust-claim-extraction.md",
+        "lines": 977,
+        "candidate_starts": [
+          134,
+          311,
+          427,
+          452,
+          850
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-10-structural-claims-audit.md",
+        "lines": 1042,
+        "candidate_starts": [
+          532,
+          997
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-11-h03-persistent-homology.md",
+        "lines": 665,
+        "candidate_starts": [
+          105
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-11-h04-dynamical-comparison.md",
+        "lines": 1170,
+        "candidate_starts": [
+          611
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-12-catalog-health.md",
+        "lines": 2232,
+        "candidate_starts": [
+          246,
+          663,
+          1741,
+          2183
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-12-pr1-guide-modeltype-mis-codings.md",
+        "lines": 311,
+        "candidate_starts": [
+          93,
+          155,
+          238
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-12-pr2-kind-inline-phase-a.md",
+        "lines": 1077,
+        "candidate_starts": [
+          59,
+          327,
+          445,
+          696,
+          808,
+          937,
+          1060
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-12-pr4-remaining-consumer-migration.md",
+        "lines": 2258,
+        "candidate_starts": [
+          91,
+          968,
+          1349,
+          1914,
+          2175
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-13-pr3a-facet-population.md",
+        "lines": 1422,
+        "candidate_starts": [
+          57,
+          323,
+          793,
+          1087,
+          1365
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-13-pr3b-empirical-consumer-migration.md",
+        "lines": 717,
+        "candidate_starts": [
+          54,
+          233,
+          546,
+          699
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-13-pr5-metaclass-retirement.md",
+        "lines": 1107,
+        "candidate_starts": [
+          80,
+          290,
+          511,
+          653,
+          922,
+          1088
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-13-t218-facet-reanalysis.md",
+        "lines": 1425,
+        "candidate_starts": [
+          55,
+          185,
+          194,
+          198,
+          489,
+          965,
+          1396
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-25-h06-morphism-annotation-plan.md",
+        "lines": 1684,
+        "candidate_starts": [
+          141,
+          363,
+          603,
+          891,
+          1185,
+          1246,
+          1333,
+          1420,
+          1456,
+          1467,
+          1598,
+          1677
+        ]
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-09-category-theory-illustrations-audit.md",
+        "lines": 195,
+        "candidate_starts": [
+          135,
+          173
+        ]
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-09-focus-context-plan-b-audit.md",
+        "lines": 206,
+        "candidate_starts": [
+          149,
+          195
+        ]
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-09-meta-model-lens-focus-design.md",
+        "lines": 1115,
+        "candidate_starts": [
+          91,
+          1034
+        ]
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-09-port-types-docs-plan-c-audit.md",
+        "lines": 208,
+        "candidate_starts": [
+          164,
+          202
+        ]
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-09-port-types-docs-plan-c.md",
+        "lines": 234,
+        "candidate_starts": [
+          107,
+          214
+        ]
+      },
+      {
+        "path": "specs/2026-03-16-limit-relations-ui-design.md",
+        "lines": 204,
+        "candidate_starts": [
+          106
+        ]
+      },
+      {
+        "path": "specs/2026-03-16-meta-model-design.md",
+        "lines": 667,
+        "candidate_starts": [
+          85,
+          288,
+          503,
+          642
+        ]
+      },
+      {
+        "path": "specs/2026-03-29-independent-variables-and-structural-capabilities-design.md",
+        "lines": 293,
+        "candidate_starts": [
+          95,
+          200
+        ]
+      },
+      {
+        "path": "specs/2026-03-29-inline-figures-design.md",
+        "lines": 512,
+        "candidate_starts": [
+          63,
+          130,
+          185,
+          245,
+          315,
+          381,
+          444
+        ]
+      },
+      {
+        "path": "specs/2026-03-30-formula-system-design.md",
+        "lines": 640,
+        "candidate_starts": [
+          215,
+          384,
+          511,
+          593
+        ]
+      },
+      {
+        "path": "specs/2026-03-30-research-provenance-design.md",
+        "lines": 477,
+        "candidate_starts": [
+          52,
+          287,
+          417
+        ]
+      },
+      {
+        "path": "specs/2026-03-31-composition-dag-design.md",
+        "lines": 484,
+        "candidate_starts": [
+          178,
+          301,
+          390,
+          466
+        ]
+      },
+      {
+        "path": "specs/2026-03-31-formula-interaction-v2-design.md",
+        "lines": 488,
+        "candidate_starts": [
+          73,
+          223,
+          320,
+          385,
+          433
+        ]
+      },
+      {
+        "path": "specs/2026-03-31-formula-promote-design.md",
+        "lines": 225,
+        "candidate_starts": [
+          124,
+          203
+        ]
+      },
+      {
+        "path": "specs/2026-03-31-lens-taxonomy-redesign.md",
+        "lines": 468,
+        "candidate_starts": [
+          53,
+          257,
+          395
+        ]
+      },
+      {
+        "path": "specs/2026-04-12-catalog-health-design.md",
+        "lines": 440,
+        "candidate_starts": [
+          148,
+          149
+        ]
+      }
+    ]
+  }
+}

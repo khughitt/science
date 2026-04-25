@@ -1,0 +1,3852 @@
+{
+  "schema_version": "v0",
+  "generator": "scripts/audit_downstream_project_inventory.py",
+  "generated_at_utc": "2026-04-25T20:04:47Z",
+  "project": {
+    "root": "/mnt/ssd/Dropbox/r/mm30",
+    "name": "mm30"
+  },
+  "science_repo": {
+    "root": "/mnt/ssd/Dropbox/science",
+    "head": "a059f7d3dd46fb197df14339e6e9576bbb5615dd"
+  },
+  "audit_ignore_patterns": [],
+  "protected_data_dirs": [],
+  "git": {
+    "is_repo": true,
+    "head": "21e7a96b8963e7725c0b20c697a0c833b28f0144",
+    "status_porcelain": [],
+    "status_porcelain_summary": {},
+    "last_commit": {
+      "sha": "21e7a96b8963e7725c0b20c697a0c833b28f0144",
+      "author_name": "Keith Hughitt",
+      "author_email": "keith.hughitt@gmail.com",
+      "authored": "2026-04-25T13:22:07-04:00",
+      "subject": "chore: curation"
+    },
+    "git_status": "ok"
+  },
+  "tracked_top_level_counts": {
+    ".dockerignore": 1,
+    ".gitignore": 1,
+    ".husky": 2,
+    ".python-version": 1,
+    "AGENTS.md": 1,
+    "CLAUDE.md": 1,
+    "Dockerfile": 1,
+    "README.md": 1,
+    "commitlint.config.mjs": 1,
+    "config": 8,
+    "core": 2,
+    "data": 1592,
+    "doc": 592,
+    "docker": 1,
+    "docs": 14,
+    "knowledge": 8,
+    "metadata": 30,
+    "models": 1,
+    "package-lock.json": 1,
+    "package.json": 1,
+    "papers": 2,
+    "pyproject.toml": 1,
+    "science.yaml": 1,
+    "scripts": 569,
+    "snakemake": 4,
+    "specs": 23,
+    "tasks": 3,
+    "templates": 2,
+    "tests": 34,
+    "uv.lock": 1,
+    "validate.sh": 1,
+    "workflows": 29
+  },
+  "tracked_second_level_counts": {
+    "data": {
+      "<files>": 1,
+      "annotables": 2,
+      "cell-cycle-score": 2,
+      "derived": 1,
+      "dgidb": 2,
+      "external": 1535,
+      "mutations": 4,
+      "reference": 1,
+      "reference_gene_sets": 13,
+      "signatures": 24,
+      "supp": 7
+    },
+    "doc": {
+      "audits": 1,
+      "background": 6,
+      "datasets": 15,
+      "discussions": 56,
+      "figures": 40,
+      "genes": 45,
+      "guides": 3,
+      "handoffs": 8,
+      "inquiries": 12,
+      "interpretations": 94,
+      "mechanisms": 2,
+      "meta": 30,
+      "methods": 5,
+      "papers": 86,
+      "plans": 36,
+      "pre-registrations": 16,
+      "questions": 46,
+      "reorg": 4,
+      "reports": 21,
+      "searches": 11,
+      "specs": 8,
+      "topics": 47
+    },
+    "docs": {
+      "superpowers": 14
+    },
+    "knowledge": {
+      "<files>": 2,
+      "reports": 1,
+      "sources": 5
+    },
+    "scripts": {
+      "<files>": 1,
+      "causal": 87,
+      "cytogenetics": 3,
+      "external": 20,
+      "figures": 1,
+      "hypotheses": 231,
+      "progression": 1,
+      "sensitivity": 1,
+      "shared": 5,
+      "signatures": 10,
+      "stages": 209
+    },
+    "specs": {
+      "<files>": 3,
+      "hypotheses": 5,
+      "propositions": 15
+    },
+    "tasks": {
+      "<files>": 2,
+      "done": 1
+    },
+    "workflows": {
+      "<files>": 1,
+      "external": 7,
+      "hypotheses": 7,
+      "stages": 14
+    }
+  },
+  "present_untracked_dirs": [
+    {
+      "path": ".snakemake",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 11
+    },
+    {
+      "path": ".venv",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 8
+    },
+    {
+      "path": ".worktrees",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 0
+    },
+    {
+      "path": "data",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 12
+    },
+    {
+      "path": "logs",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 17
+    },
+    {
+      "path": "models",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 1
+    },
+    {
+      "path": "node_modules",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 70
+    }
+  ],
+  "gitignored_top_level_dirs": [
+    {
+      "name": ".claude",
+      "file_count": 1,
+      "total_size_bytes": 115,
+      "sample_paths": [
+        ".claude/scheduled_tasks.lock"
+      ]
+    },
+    {
+      "name": "archive",
+      "file_count": 745,
+      "total_size_bytes": 511223953,
+      "sample_paths": [
+        "archive/2026-04-17-large-scale-biological-datasets-landscape.md",
+        "archive/compare_fassoc_results.py",
+        "archive/compare_fgsea_results.py",
+        "archive/compare_meta_results.py",
+        "archive/curation-sweep-2026-04-22.main-untracked.md"
+      ]
+    },
+    {
+      "name": "inc",
+      "file_count": 272,
+      "total_size_bytes": 12166581170,
+      "sample_paths": [
+        "inc/to-review/README.md",
+        "inc/to-review/surv-curve-eda/mm30-survival-curve-shape-eda.html",
+        "inc/to-review/treatment-subset/README.Rmd",
+        "inc/to-review/treatment-subset/README.html",
+        "inc/to-review/treatment-subset/README.pdf"
+      ]
+    },
+    {
+      "name": "science-tool",
+      "file_count": 0,
+      "total_size_bytes": 0,
+      "sample_paths": []
+    }
+  ],
+  "symlinks": [],
+  "science_yaml": {
+    "present": true,
+    "keys": [
+      "aspects",
+      "created",
+      "dag",
+      "data_sources",
+      "knowledge_profiles",
+      "last_modified",
+      "layout_version",
+      "name",
+      "ontologies",
+      "profile",
+      "status",
+      "summary",
+      "tags"
+    ],
+    "profile": "research",
+    "aspects": [
+      "causal-modeling",
+      "computational-analysis",
+      "hypothesis-testing",
+      "software-development"
+    ],
+    "layout_version": 2,
+    "data_sources_shape": {
+      "present": true,
+      "count": 14,
+      "entry_kinds": {
+        "object": 14
+      },
+      "object_key_counts": {
+        "description": 14,
+        "name": 14,
+        "status": 9,
+        "type": 14
+      },
+      "type_value_counts": {
+        "mixed": 2,
+        "protected": 1,
+        "public": 11
+      }
+    },
+    "ontologies": [
+      "biology",
+      "chemistry"
+    ],
+    "knowledge_profiles_keys": [
+      "local"
+    ]
+  },
+  "gitignore": {
+    "present": true,
+    "line_count": 19,
+    "non_blank_non_comment": 19,
+    "matched": {
+      "data": [
+        "data/external/*/*/raw/",
+        "data/external/*/raw/",
+        "data/external/oetjen_2018/*/celltype_contingency.tsv",
+        "data/external/oetjen_2018/*/datapackage.json",
+        "data/sc_references/",
+        "data/supp/clean"
+      ],
+      "logs": [
+        "logs/"
+      ],
+      "worktrees": [
+        ".worktrees/"
+      ],
+      "python_caches": [
+        ".venv/",
+        "__pycache__/"
+      ]
+    }
+  },
+  "validate": {
+    "present": true,
+    "line_count": 864,
+    "header": "#!/usr/bin/env bash\n# validate.sh \u2014 Structural validation for Science research projects\n# Returns non-zero on failure. Used as backpressure in research loops.\n#\n# Usage: bash validate.sh [--verbose]\n\n# Note: intentionally NOT using set -e \u2014 we count errors and report at the end.\nset -uo pipefail\n\nexport UV_CACHE_DIR=\"${UV_CACHE_DIR:-/tmp/uv-cache}\"\n\nVERBOSE=\"${1:-}\"\nERRORS=0\nWARNINGS=0\n",
+    "sections": [
+      "Canonical path/profile resolution from science.yaml",
+      "1. Project manifest",
+      "2. Core structure",
+      "3. Research question",
+      "4. Template conformance for background docs",
+      "5. Hypothesis completeness",
+      "6. Citation integrity",
+      "7. Paper summary template conformance",
+      "8. Unverified/uncited markers",
+      "9. Research gap analysis conformance",
+      "10. RESEARCH_PLAN conventions",
+      "11. Discussion document conformance",
+      "12. Notes conformance",
+      "13. Knowledge graph checks",
+      "14. Inquiry validation",
+      "15. Task queue",
+      "16. Frontmatter cross-reference validation",
+      "Summary"
+    ],
+    "sha256": "3aa68c564677e9718a1a8ce1d1d19e94d948ab93e198d01f1f6ee618ee5cb174",
+    "canonical_path": "meta/validate.sh",
+    "canonical_sha256": "0a9878c8dd81acc9703dbd58e8ec236254eee8c5c000f341caff26f5a37a3c44",
+    "structural_diff": [],
+    "content_diff": [
+      {
+        "kind": "content_changed",
+        "section": "13. Knowledge graph checks",
+        "canonical_sha256": "2738ff63a0c7bd95629d63d96bb462572fc0842bfc65d2cb31a1e0a977caa3e6",
+        "local_sha256": "95cf6841c5309e0590124253a4ea694d3ba10653b875af2e2bf69265c80f53b2",
+        "canonical_lines": 85,
+        "local_lines": 95,
+        "changed_lines": 22
+      },
+      {
+        "kind": "content_changed",
+        "section": "<preamble>",
+        "canonical_sha256": "76efb382cd18107bcdd05acf312a97b4f27e0a4d34bea42f803e60370e4407cc",
+        "local_sha256": "79c19bcaedb71ac5ea6f440785401f7d46d043d3dceb477df4500dfdbee9c69a",
+        "canonical_lines": 75,
+        "local_lines": 62,
+        "changed_lines": 13
+      }
+    ],
+    "content_diff_total_lines": 35
+  },
+  "datapackages": [
+    "data/derived/pc_maturity_healthy_reference_t214/datapackage.json",
+    "data/external/ccle_proteomics/2020-01/datapackage.json",
+    "data/external/opentargets/25.03/datapackage.json"
+  ],
+  "code_layout": {
+    "scripts": {
+      "tracked_files": 569,
+      "is_dir": true
+    },
+    "workflows": {
+      "tracked_files": 29,
+      "is_dir": true
+    },
+    "notebooks": {
+      "count": 0,
+      "paths": [],
+      "truncated": false
+    },
+    "tests": {
+      "count": 66,
+      "top_dirs": [
+        "scripts",
+        "tests"
+      ]
+    }
+  },
+  "markdown": {
+    "markdown_file_count": 599,
+    "scanned_count": 599,
+    "template_files_skipped": 2,
+    "files_by_top_dir": {
+      "<root>": 3,
+      "core": 2,
+      "data": 7,
+      "doc": 545,
+      "docs": 14,
+      "scripts": 1,
+      "snakemake": 1,
+      "specs": 21,
+      "tasks": 2,
+      "templates": 2,
+      "tests": 1
+    },
+    "frontmatter_key_counts_by_dir": {
+      "doc": {
+        "Source": 1,
+        "applied_changes": 3,
+        "arbitration_flags": 2,
+        "aspects": 1,
+        "audience": 1,
+        "author": 1,
+        "authors": 49,
+        "boiarsky_verdict": 1,
+        "chr": 45,
+        "claims_addressed": 2,
+        "closed": 1,
+        "committed": 16,
+        "created": 336,
+        "datasets": 102,
+        "date": 17,
+        "doi": 49,
+        "drafted": 1,
+        "emergent_threads_sha": 1,
+        "focus_ref": 47,
+        "focus_type": 49,
+        "full_name": 45,
+        "generated_at": 14,
+        "hypothesis": 8,
+        "id": 385,
+        "input": 74,
+        "inquiry_target": 1,
+        "ledergor_verdict": 1,
+        "locus": 45,
+        "measurement_model": 12,
+        "mode": 65,
+        "oetjen_healthy_verdict": 1,
+        "ontologies": 14,
+        "ontology_terms": 77,
+        "orphan_ids": 1,
+        "orphan_question_count": 1,
+        "overall": 2,
+        "papers": 2,
+        "participants": 2,
+        "pending_decisions": 3,
+        "phase": 5,
+        "plan": 4,
+        "plan_review": 1,
+        "pmcid": 4,
+        "pmid": 48,
+        "pre-reg": 1,
+        "pre_registration": 3,
+        "prior": 6,
+        "prior_interpretations": 44,
+        "prior_verdict_under_devO_buggy_rubric": 1,
+        "priority": 34,
+        "propositions": 2,
+        "provenance_coverage": 5,
+        "proxy_directness": 20,
+        "related": 352,
+        "report_kind": 11,
+        "resolved": 6,
+        "reviewed": 1,
+        "reviewer_role": 1,
+        "revision_history": 2,
+        "same_as": 3,
+        "scope": 9,
+        "script": 1,
+        "since": 3,
+        "source": 49,
+        "source_commit": 14,
+        "source_refs": 123,
+        "source_reports": 1,
+        "spec": 4,
+        "status": 249,
+        "summary": 2,
+        "symbol": 45,
+        "synthesized_from": 5,
+        "tags": 99,
+        "task": 13,
+        "tasks": 2,
+        "title": 392,
+        "type": 362,
+        "updated": 196,
+        "venue": 49,
+        "verdict": 11,
+        "verdict_composite": 1,
+        "verdict_token": 2,
+        "workflow_run": 2,
+        "year": 49
+      },
+      "specs": {
+        "claim_layer": 15,
+        "confidence_label": 5,
+        "confidence_mechanistic_label": 1,
+        "created": 21,
+        "id": 21,
+        "identification": 3,
+        "identification_strength": 15,
+        "independence_group": 15,
+        "measurement_model": 12,
+        "proxy_directness": 12,
+        "related": 20,
+        "rival_model_packet": 1,
+        "source_refs": 15,
+        "status": 21,
+        "supports_scope": 15,
+        "tags": 4,
+        "title": 21,
+        "type": 20,
+        "updated": 21
+      }
+    },
+    "frontmatter_unparsed": [],
+    "frontmatter_parse_errors": [],
+    "observed_values": {
+      "aspects": {
+        "causal-modeling": 1,
+        "hypothesis-testing": 1
+      },
+      "ontologies": {
+        "biology": 14,
+        "chemistry": 3
+      },
+      "phase": {
+        "active": 5
+      },
+      "profile": {},
+      "status": {
+        "active": 146,
+        "closed": 3,
+        "committed": 16,
+        "complete": 29,
+        "completed": 4,
+        "draft": 15,
+        "draft-v1": 1,
+        "draft-v2": 1,
+        "executed": 1,
+        "fully-characterized": 1,
+        "in-progress": 11,
+        "non_adjudicating_under_bulk_meta_only": 1,
+        "open": 18,
+        "partial": 1,
+        "partially-addressed": 4,
+        "paywalled": 1,
+        "pre-conjecture": 2,
+        "resolved": 9,
+        "substantially-addressed": 3,
+        "supported": 2,
+        "weakened": 1
+      },
+      "type": {
+        "dataset": 14,
+        "discussion": 49,
+        "hypothesis": 5,
+        "inquiry": 7,
+        "interpretation": 90,
+        "mechanism": 2,
+        "method": 4,
+        "paper": 84,
+        "plan": 19,
+        "proposition": 15,
+        "question": 39,
+        "report": 20,
+        "search": 5,
+        "spec": 2,
+        "topic": 27
+      }
+    },
+    "entity_id_prefix_counts": {
+      "dataset": 14,
+      "discussion": 56,
+      "guide": 1,
+      "hypothesis": 5,
+      "inquiry": 8,
+      "interpretation": 94,
+      "mechanism": 2,
+      "method": 3,
+      "paper": 84,
+      "plan": 1,
+      "pre-registration": 16,
+      "proposition": 15,
+      "question": 46,
+      "report": 18,
+      "review": 1,
+      "rq": 1,
+      "search": 5,
+      "spec": 2,
+      "synthesis": 2,
+      "task": 2,
+      "topic": 30
+    },
+    "entity_id_paths": {
+      "dataset:DepMap": [
+        "doc/datasets/data-depmap.md"
+      ],
+      "dataset:ENCODE": [
+        "doc/datasets/data-encode.md"
+      ],
+      "dataset:GDSC": [
+        "doc/datasets/data-gdsc.md"
+      ],
+      "dataset:GSE117156": [
+        "doc/datasets/data-ledergor-2018-mm-scrna.md"
+      ],
+      "dataset:GSE120221": [
+        "doc/datasets/data-oetjen-2018-bone-marrow-atlas.md"
+      ],
+      "dataset:GSE161801": [
+        "doc/datasets/data-tirier-2021-mm-rrmm-scrna.md"
+      ],
+      "dataset:GSE7039": [
+        "doc/datasets/data-gse7039.md"
+      ],
+      "dataset:blueprint-epigenome": [
+        "doc/datasets/data-blueprint-epigenome.md"
+      ],
+      "dataset:ccle-proteomics-nusinow-2020": [
+        "doc/datasets/data-ccle-proteomics.md"
+      ],
+      "dataset:cptac-pan-cancer": [
+        "doc/datasets/data-cptac-pan-cancer-proteomics.md"
+      ],
+      "dataset:lincs-l1000": [
+        "doc/datasets/data-lincs-l1000.md"
+      ],
+      "dataset:mmrf": [
+        "doc/datasets/data-mmrf.md"
+      ],
+      "dataset:opentargets-platform": [
+        "doc/datasets/data-opentargets-platform.md"
+      ],
+      "dataset:replogle-perturb-seq-atlas": [
+        "doc/datasets/data-perturb-seq-atlas-replogle.md"
+      ],
+      "discussion:2026-03-31-metafor-divergence": [
+        "doc/discussions/2026-03-31-metafor-divergence.md"
+      ],
+      "discussion:2026-03-31-proliferation-signal": [
+        "doc/discussions/2026-03-31-proliferation-signal.md"
+      ],
+      "discussion:2026-03-31-treatment-response-heterogeneity": [
+        "doc/discussions/2026-03-31-treatment-response-heterogeneity.md"
+      ],
+      "discussion:2026-04-01-dataset-qa-implications": [
+        "doc/discussions/2026-04-01-dataset-qa-implications.md"
+      ],
+      "discussion:2026-04-01-fassoc-confounder-audit": [
+        "doc/discussions/2026-04-01-fassoc-confounder-audit.md"
+      ],
+      "discussion:2026-04-01-final-gaps-assessment": [
+        "doc/discussions/2026-04-01-final-gaps-assessment.md"
+      ],
+      "discussion:2026-04-01-gse9782-sentinel": [
+        "doc/discussions/2026-04-01-gse9782-sentinel-investigation.md"
+      ],
+      "discussion:2026-04-01-multi-omics-opportunities": [
+        "doc/discussions/2026-04-01-multi-omics-opportunities.md"
+      ],
+      "discussion:2026-04-01-research-gaps": [
+        "doc/discussions/2026-04-01-research-gaps.md"
+      ],
+      "discussion:2026-04-01-sc-bulk-integration": [
+        "doc/discussions/2026-04-01-sc-bulk-integration.md"
+      ],
+      "discussion:2026-04-02-classifier-refinement": [
+        "doc/discussions/2026-04-02-classifier-refinement.md"
+      ],
+      "discussion:2026-04-02-cytogenetic-metadata-integration": [
+        "doc/discussions/2026-04-02-cytogenetic-metadata-integration.md"
+      ],
+      "discussion:2026-04-02-fassoc-univariate-design": [
+        "doc/discussions/2026-04-02-fassoc-univariate-design.md"
+      ],
+      "discussion:2026-04-02-purity-stratification-methodology": [
+        "doc/discussions/2026-04-02-purity-stratification-methodology.md"
+      ],
+      "discussion:2026-04-02-virtual-fish-performance-validation": [
+        "doc/discussions/2026-04-02-virtual-fish-performance-validation.md"
+      ],
+      "discussion:2026-04-03-cell-cycle-score-unification": [
+        "doc/discussions/2026-04-03-cell-cycle-score-unification.md"
+      ],
+      "discussion:2026-04-04-disease-stage-progression": [
+        "doc/discussions/2026-04-04-disease-stage-progression.md"
+      ],
+      "discussion:2026-04-04-mmrf-weighting-strategy": [
+        "doc/discussions/2026-04-04-mmrf-weighting-strategy.md"
+      ],
+      "discussion:2026-04-04-multi-omics-data-strategy": [
+        "doc/discussions/2026-04-04-multi-omics-data-strategy.md"
+      ],
+      "discussion:2026-04-04-t28-strategy": [
+        "doc/discussions/2026-04-04-t28-strategy.md"
+      ],
+      "discussion:2026-04-06-response-definition-audit": [
+        "doc/discussions/2026-04-06-response-definition-audit.md"
+      ],
+      "discussion:2026-04-06-treatment-data-subdivision": [
+        "doc/discussions/2026-04-06-treatment-data-subdivision.md"
+      ],
+      "discussion:2026-04-07-hypothesis-prioritization": [
+        "doc/discussions/2026-04-07-hypothesis-prioritization.md"
+      ],
+      "discussion:2026-04-07-upstream-mechanisms-followup": [
+        "doc/discussions/2026-04-07-upstream-mechanisms-followup.md"
+      ],
+      "discussion:2026-04-07-upstream-of-cytogenetic-events": [
+        "doc/discussions/2026-04-07-upstream-of-cytogenetic-events.md"
+      ],
+      "discussion:2026-04-08-kras-tp53-convergence-genes": [
+        "doc/discussions/2026-04-08-kras-tp53-convergence-genes.md"
+      ],
+      "discussion:2026-04-08-mm-phenotypic-subgroups": [
+        "doc/discussions/2026-04-08-mm-phenotypic-subgroups.md"
+      ],
+      "discussion:2026-04-08-mutation-cytogenetic-overlap": [
+        "doc/discussions/2026-04-08-mutation-cytogenetic-overlap.md"
+      ],
+      "discussion:2026-04-08-phenotypic-subgroups-synthesis": [
+        "doc/discussions/2026-04-08-phenotypic-subgroups-synthesis.md"
+      ],
+      "discussion:2026-04-11-bayesian-causal-dag-approach": [
+        "doc/discussions/2026-04-11-bayesian-causal-dag-approach.md"
+      ],
+      "discussion:2026-04-11-evidence-chain-weak-points": [
+        "doc/discussions/2026-04-11-evidence-chain-weak-points.md"
+      ],
+      "discussion:2026-04-11-h1-dag-implications": [
+        "doc/discussions/2026-04-11-h1-dag-implications.md"
+      ],
+      "discussion:2026-04-11-h2-dag-implications": [
+        "doc/discussions/2026-04-11-h2-dag-implications.md"
+      ],
+      "discussion:2026-04-11-h2-reframing-synthesis": [
+        "doc/discussions/2026-04-11-h2-reframing-synthesis.md"
+      ],
+      "discussion:2026-04-11-h2-upgrade-decision": [
+        "doc/discussions/2026-04-11-h2-upgrade-decision.md"
+      ],
+      "discussion:2026-04-11-mediation-asymmetry-general": [
+        "doc/discussions/2026-04-11-mediation-asymmetry-general.md"
+      ],
+      "discussion:2026-04-11-non-1q-driver-reframing": [
+        "doc/discussions/2026-04-11-non-1q-driver-reframing.md"
+      ],
+      "discussion:2026-04-12-approach-reconsideration-post-t163": [
+        "doc/discussions/2026-04-12-approach-reconsideration-post-t163.md"
+      ],
+      "discussion:2026-04-12-causal-graph-strategic-review": [
+        "doc/discussions/2026-04-12-causal-graph-strategic-review.md"
+      ],
+      "discussion:2026-04-13-h1-causal-evidence-audit": [
+        "doc/discussions/2026-04-13-h1-causal-evidence-audit.md"
+      ],
+      "discussion:2026-04-13-ribosome-e2f1-percell-ambiguous": [
+        "doc/discussions/2026-04-13-ribosome-e2f1-percell-ambiguous.md"
+      ],
+      "discussion:2026-04-13-t174-pc-continuum-dag-critique": [
+        "doc/discussions/2026-04-13-t174-pc-continuum-dag-critique.md"
+      ],
+      "discussion:2026-04-13-t174-pc-continuum-design-critique": [
+        "doc/discussions/2026-04-13-t174-pc-continuum-design-critique.md"
+      ],
+      "discussion:2026-04-14-h1-post-t190-gaps-and-next-moves": [
+        "doc/discussions/2026-04-14-h1-post-t190-gaps-and-next-moves.md"
+      ],
+      "discussion:2026-04-14-t202-rubric-adversarial-review": [
+        "doc/discussions/2026-04-14-t202-rubric-adversarial-review.md"
+      ],
+      "discussion:2026-04-17-external-dataset-priors-for-mm30": [
+        "doc/datasets/2026-04-17-external-dataset-priors-for-mm30.md"
+      ],
+      "discussion:2026-04-19-dag-iteration-and-refinement": [
+        "doc/discussions/2026-04-19-dag-iteration-and-refinement.md"
+      ],
+      "discussion:2026-04-19-h5-disposition": [
+        "doc/discussions/2026-04-19-h5-disposition.md"
+      ],
+      "discussion:2026-04-19-next-session-action-plan": [
+        "doc/discussions/2026-04-19-next-session-action-plan.md"
+      ],
+      "discussion:2026-04-19-t243-atomic-decomposition-dogfood": [
+        "doc/discussions/2026-04-19-t243-atomic-decomposition-dogfood.md"
+      ],
+      "discussion:2026-04-19-verdict-conflict-coverage-scan": [
+        "doc/discussions/2026-04-19-verdict-conflict-coverage-scan.md"
+      ],
+      "discussion:2026-04-19-verdict-polarity-display": [
+        "doc/discussions/2026-04-19-verdict-polarity-display.md"
+      ],
+      "discussion:2026-04-21-t246-verdict-confidence-calibration": [
+        "doc/discussions/2026-04-21-t246-verdict-confidence-calibration.md"
+      ],
+      "discussion:2026-04-23-h4-attractor-level-scope": [
+        "doc/discussions/2026-04-23-h4-attractor-level-scope.md"
+      ],
+      "discussion:2026-04-24-t277-within-basin-variance-pipeline-plan-review": [
+        "doc/inquiries/t277-within-basin-variance-pipeline-plan-review.md"
+      ],
+      "discussion:comparison-h1-h2-h3": [
+        "doc/discussions/comparison-h1-h2-h3.md"
+      ],
+      "guide:scrna-seq": [
+        "doc/guides/modalities/scrna-seq.md"
+      ],
+      "hypothesis:h1-epigenetic-commitment": [
+        "specs/hypotheses/h1-epigenetic-commitment.md"
+      ],
+      "hypothesis:h2-cytogenetic-distinct-entities": [
+        "specs/hypotheses/h2-cytogenetic-distinct-entities.md"
+      ],
+      "hypothesis:h3-mutation-reshaping": [
+        "specs/hypotheses/h3-mutation-reshaping.md"
+      ],
+      "hypothesis:h4-attractor-convergence": [
+        "specs/hypotheses/h4-attractor-convergence.md"
+      ],
+      "hypothesis:h6-positive-selection-mm-progression": [
+        "specs/hypotheses/h6-positive-selection-mm-progression.md"
+      ],
+      "inquiry:h1-prognosis": [
+        "doc/inquiries/h1-prognosis.md"
+      ],
+      "inquiry:h1-progression": [
+        "doc/inquiries/h1-progression.md"
+      ],
+      "inquiry:h2-subtype-architecture": [
+        "doc/inquiries/h2-subtype-architecture.md"
+      ],
+      "inquiry:h4-attractor-convergence": [
+        "doc/inquiries/h4-attractor-convergence.md"
+      ],
+      "inquiry:h4-attractor-convergence-critique": [
+        "doc/inquiries/h4-attractor-convergence-critique.md"
+      ],
+      "inquiry:t204-review": [
+        "doc/inquiries/t204-review.md"
+      ],
+      "inquiry:t214-review": [
+        "doc/inquiries/t214-review.md"
+      ],
+      "inquiry:t217-t219-review": [
+        "doc/inquiries/t217-t219-review.md"
+      ],
+      "interpretation:2026-03-31-decomposition": [
+        "doc/interpretations/2026-03-31-decomposition-results.md"
+      ],
+      "interpretation:2026-03-31-standardized-metafor": [
+        "doc/interpretations/2026-03-31-standardized-metafor.md"
+      ],
+      "interpretation:2026-03-31-treatment-consistency": [
+        "doc/interpretations/2026-03-31-treatment-consistency.md"
+      ],
+      "interpretation:2026-04-01-decomposition-consolidated": [
+        "doc/interpretations/2026-04-01-decomposition-consolidated.md"
+      ],
+      "interpretation:2026-04-01-integration-t22-t32": [
+        "doc/interpretations/2026-04-01-integration-t22-t32.md"
+      ],
+      "interpretation:2026-04-02-cytogenetic-inference": [
+        "doc/interpretations/2026-04-02-cytogenetic-inference-results.md"
+      ],
+      "interpretation:2026-04-02-sensitivity-analysis": [
+        "doc/interpretations/2026-04-02-sensitivity-analysis.md"
+      ],
+      "interpretation:2026-04-02-stratified-meta-analysis": [
+        "doc/interpretations/2026-04-02-stratified-meta-analysis.md"
+      ],
+      "interpretation:2026-04-03-centrosome-enrichment": [
+        "doc/interpretations/2026-04-03-centrosome-enrichment.md"
+      ],
+      "interpretation:2026-04-03-cytogenetic-full-arc": [
+        "doc/interpretations/2026-04-03-cytogenetic-full-arc.md"
+      ],
+      "interpretation:2026-04-03-loo-stability": [
+        "doc/interpretations/2026-04-03-loo-stability.md"
+      ],
+      "interpretation:2026-04-03-robustness-synthesis": [
+        "doc/interpretations/2026-04-03-robustness-synthesis.md"
+      ],
+      "interpretation:2026-04-03-t12-t20-synthesis": [
+        "doc/interpretations/2026-04-03-t12-t20-synthesis.md"
+      ],
+      "interpretation:2026-04-04-immune-covariate-sensitivity": [
+        "doc/interpretations/2026-04-04-immune-covariate-sensitivity.md"
+      ],
+      "interpretation:2026-04-04-mmrf-loo-weight": [
+        "doc/interpretations/2026-04-04-mmrf-loo-weight.md"
+      ],
+      "interpretation:2026-04-04-mmrf-mutation-integration": [
+        "doc/interpretations/2026-04-04-mmrf-mutation-integration.md"
+      ],
+      "interpretation:2026-04-04-progression-pipeline-results": [
+        "doc/interpretations/2026-04-04-progression-pipeline-results.md"
+      ],
+      "interpretation:2026-04-06-gdsc-drug-sensitivity": [
+        "doc/interpretations/2026-04-06-gdsc-drug-sensitivity.md"
+      ],
+      "interpretation:2026-04-06-nup-divergence-selinexor-search": [
+        "doc/interpretations/2026-04-06-nup-divergence-selinexor-search.md"
+      ],
+      "interpretation:2026-04-06-response-definition-audit": [
+        "doc/interpretations/2026-04-06-response-definition-audit.md"
+      ],
+      "interpretation:2026-04-07-all-minus-treatment-comparison": [
+        "doc/interpretations/2026-04-07-all-minus-treatment-comparison.md"
+      ],
+      "interpretation:2026-04-07-h-mgus-enrichment": [
+        "doc/interpretations/2026-04-07-h-mgus-enrichment.md"
+      ],
+      "interpretation:2026-04-08-clinical-by-gain1q-stratum": [
+        "doc/interpretations/2026-04-08-clinical-by-gain1q-stratum.md"
+      ],
+      "interpretation:2026-04-08-gain1q-stratification-phf19": [
+        "doc/interpretations/2026-04-08-gain1q-stratification-phf19.md"
+      ],
+      "interpretation:2026-04-08-iss-gain1q-cox": [
+        "doc/interpretations/2026-04-08-iss-gain1q-cox.md"
+      ],
+      "interpretation:2026-04-08-session-synthesis": [
+        "doc/interpretations/2026-04-08-session-synthesis.md"
+      ],
+      "interpretation:2026-04-08-t084-global-upregulation-mechanism": [
+        "doc/interpretations/2026-04-08-t084-global-upregulation-mechanism.md"
+      ],
+      "interpretation:2026-04-08-t085-t091-mutation-overlap-phf19-replication": [
+        "doc/interpretations/2026-04-08-t085-t091-mutation-overlap-phf19-replication.md"
+      ],
+      "interpretation:2026-04-08-t092-threshold-sensitivity": [
+        "doc/interpretations/2026-04-08-t092-threshold-sensitivity.md"
+      ],
+      "interpretation:2026-04-08-virtual-fish-validation": [
+        "doc/interpretations/2026-04-08-virtual-fish-validation.md"
+      ],
+      "interpretation:2026-04-09-mutation-integration-t104-t106": [
+        "doc/interpretations/2026-04-09-mutation-integration-t104-t106.md"
+      ],
+      "interpretation:2026-04-10-ifn-suppression-cross-dataset": [
+        "doc/interpretations/2026-04-10-ifn-suppression-cross-dataset.md"
+      ],
+      "interpretation:2026-04-10-longitudinal-convergence-funnel": [
+        "doc/interpretations/2026-04-10-longitudinal-convergence-funnel.md"
+      ],
+      "interpretation:2026-04-10-mirror-image-polycomb": [
+        "doc/interpretations/2026-04-10-mirror-image-polycomb-test.md"
+      ],
+      "interpretation:2026-04-10-translocation-polycomb-dissociation": [
+        "doc/interpretations/2026-04-10-translocation-subtype-polycomb-dissociation.md"
+      ],
+      "interpretation:2026-04-11-bayesian-causal-dag-pilot": [
+        "doc/interpretations/2026-04-11-bayesian-causal-dag-pilot.md"
+      ],
+      "interpretation:2026-04-11-hd-stratification-characterization": [
+        "doc/interpretations/2026-04-11-hd-stratification-characterization.md"
+      ],
+      "interpretation:2026-04-11-mediation-null-model-result": [
+        "doc/interpretations/2026-04-11-mediation-null-model-result.md"
+      ],
+      "interpretation:2026-04-11-session-synthesis-h2-upgrade": [
+        "doc/interpretations/2026-04-11-session-synthesis-h2-upgrade.md"
+      ],
+      "interpretation:2026-04-12-beguelin-subgraph": [
+        "doc/interpretations/2026-04-12-beguelin-subgraph.md"
+      ],
+      "interpretation:2026-04-12-clr-compositional-check": [
+        "doc/interpretations/2026-04-12-clr-compositional-check.md"
+      ],
+      "interpretation:2026-04-12-e2f1-phf19-bayesian-edge": [
+        "doc/interpretations/2026-04-12-e2f1-phf19-bayesian-edge.md"
+      ],
+      "interpretation:2026-04-12-e2f1-regulator-screen": [
+        "doc/interpretations/2026-04-12-e2f1-regulator-screen.md"
+      ],
+      "interpretation:2026-04-12-ezh2-phf19-bayesian-edge": [
+        "doc/interpretations/2026-04-12-ezh2-phf19-bayesian-edge.md"
+      ],
+      "interpretation:2026-04-12-gain1q-prolif-axis-mediation": [
+        "doc/interpretations/2026-04-12-gain1q-prolif-axis-mediation.md"
+      ],
+      "interpretation:2026-04-12-h1-dag-edges-completion": [
+        "doc/interpretations/2026-04-12-h1-dag-edges-completion.md"
+      ],
+      "interpretation:2026-04-12-mtor-ribosome-bayesian-edge": [
+        "doc/interpretations/2026-04-12-mtor-ribosome-bayesian-edge.md"
+      ],
+      "interpretation:2026-04-12-phf19-regulator-screen": [
+        "doc/interpretations/2026-04-12-phf19-regulator-screen.md"
+      ],
+      "interpretation:2026-04-12-phf19-regulator-screen-refined": [
+        "doc/interpretations/2026-04-12-phf19-regulator-screen-refined.md"
+      ],
+      "interpretation:2026-04-12-ribosome-e2f1-bayesian-edge": [
+        "doc/interpretations/2026-04-12-ribosome-e2f1-bayesian-edge.md"
+      ],
+      "interpretation:2026-04-12-ribosome-e2f1-stratified": [
+        "doc/interpretations/2026-04-12-ribosome-e2f1-stratified.md"
+      ],
+      "interpretation:2026-04-12-ribosome-regulator-screen": [
+        "doc/interpretations/2026-04-12-ribosome-regulator-screen.md"
+      ],
+      "interpretation:2026-04-12-ribosome-regulator-screen-clr": [
+        "doc/interpretations/2026-04-12-ribosome-regulator-screen-clr.md"
+      ],
+      "interpretation:2026-04-12-ribosome-state-axis-probe": [
+        "doc/interpretations/2026-04-12-ribosome-state-axis-probe.md"
+      ],
+      "interpretation:2026-04-12-t153-confounder-nodes": [
+        "doc/interpretations/2026-04-12-t153-confounder-nodes.md"
+      ],
+      "interpretation:2026-04-12-t163-prolif-adjusted-tf-edges": [
+        "doc/interpretations/2026-04-12-t163-prolif-adjusted-tf-edges.md"
+      ],
+      "interpretation:2026-04-12-t164-stage-stratified-phf19-survival": [
+        "doc/interpretations/2026-04-12-t164-stage-stratified-phf19-survival.md"
+      ],
+      "interpretation:2026-04-12-t165-phf19-survival-prolif-mediation": [
+        "doc/interpretations/2026-04-12-t165-phf19-survival-prolif-mediation.md"
+      ],
+      "interpretation:2026-04-12-t166-stage-transition-edges": [
+        "doc/interpretations/2026-04-12-t166-stage-transition-edges.md"
+      ],
+      "interpretation:2026-04-13-t172-ribosome-e2f1-composition-driven": [
+        "doc/interpretations/2026-04-13-t172-ribosome-e2f1-composition-driven.md"
+      ],
+      "interpretation:2026-04-13-t174-pc-continuum": [
+        "doc/interpretations/2026-04-13-t174-pc-continuum.md"
+      ],
+      "interpretation:2026-04-14-t190-depmap-crispr-sweep": [
+        "doc/interpretations/2026-04-14-t190-depmap-crispr-sweep.md"
+      ],
+      "interpretation:2026-04-14-t191-prc2-perturbation-dataset-inventory": [
+        "doc/interpretations/2026-04-14-t191-prc2-perturbation-dataset-inventory.md"
+      ],
+      "interpretation:2026-04-14-t197-gse155135-ezh2i-replication": [
+        "doc/interpretations/2026-04-14-t197-gse155135-ezh2i-replication.md"
+      ],
+      "interpretation:2026-04-15-t202-null-audit": [
+        "doc/interpretations/2026-04-15-t202-null-audit.md"
+      ],
+      "interpretation:2026-04-17-lineage-stratified-ranking-architecture": [
+        "doc/interpretations/2026-04-17-lineage-stratified-ranking-architecture.md"
+      ],
+      "interpretation:2026-04-17-t203-ledergor-replication": [
+        "doc/interpretations/2026-04-17-t203-ledergor-replication.md"
+      ],
+      "interpretation:2026-04-17-t206-opentargets-ingestion": [
+        "doc/interpretations/2026-04-17-t206-opentargets-ingestion.md"
+      ],
+      "interpretation:2026-04-17-t213-mm30-opentargets-annotation": [
+        "doc/interpretations/2026-04-17-t213-mm30-opentargets-annotation.md"
+      ],
+      "interpretation:2026-04-18-t204-bulk-composition-beyond-pc-maturity-verdict": [
+        "doc/interpretations/2026-04-18-t204-bulk-composition-beyond-pc-maturity-verdict.md"
+      ],
+      "interpretation:2026-04-18-t204-pilot-deconvolution-audit": [
+        "doc/interpretations/2026-04-18-t204-pilot-deconvolution-audit.md"
+      ],
+      "interpretation:2026-04-18-t204-preflight-circularity-audit": [
+        "doc/interpretations/2026-04-18-t204-preflight-circularity-audit.md"
+      ],
+      "interpretation:2026-04-18-t204-v140-6-multitype-verdict": [
+        "doc/interpretations/2026-04-18-t204-v140-6-multitype-verdict.md"
+      ],
+      "interpretation:2026-04-18-t214-healthy-pc-maturation-verdict": [
+        "doc/interpretations/2026-04-18-t214-healthy-pc-maturation-verdict.md"
+      ],
+      "interpretation:2026-04-19-h1-edge6-mechanism-refinement": [
+        "doc/interpretations/2026-04-19-h1-edge6-mechanism-refinement.md"
+      ],
+      "interpretation:2026-04-19-t199-lincs-l1000-screen": [
+        "doc/interpretations/2026-04-19-t199-lincs-l1000-screen.md"
+      ],
+      "interpretation:2026-04-19-t205-gse214668-ms177-replication": [
+        "doc/interpretations/2026-04-19-t205-gse214668-ms177-replication.md"
+      ],
+      "interpretation:2026-04-19-t217-mmrf-dnds-stratified": [
+        "doc/interpretations/2026-04-19-t217-mmrf-dnds-stratified.md"
+      ],
+      "interpretation:2026-04-19-t219-mm30-hopfield-basins": [
+        "doc/interpretations/2026-04-19-t219-mm30-hopfield-basins.md"
+      ],
+      "interpretation:2026-04-19-t221-literature-gene-lookups": [
+        "doc/interpretations/2026-04-19-t221-literature-gene-lookups.md"
+      ],
+      "interpretation:2026-04-19-t223-del17p-len-stratification": [
+        "doc/interpretations/2026-04-19-t223-del17p-len-stratification.md"
+      ],
+      "interpretation:2026-04-19-t234-hopfield-hamming-robustness": [
+        "doc/interpretations/2026-04-19-t234-hopfield-hamming-robustness.md"
+      ],
+      "interpretation:2026-04-21-t099-skerget-transition-matrix": [
+        "doc/interpretations/2026-04-21-t099-skerget-transition-matrix.md"
+      ],
+      "interpretation:2026-04-21-t240-misund-phf19-trajectory": [
+        "doc/interpretations/2026-04-21-t240-misund-phf19-trajectory.md"
+      ],
+      "interpretation:2026-04-21-t258-phf19-pathway-specificity": [
+        "doc/interpretations/2026-04-21-t258-phf19-pathway-specificity.md"
+      ],
+      "interpretation:2026-04-23-t263-pcdp-proxy-correlation": [
+        "doc/interpretations/2026-04-23-t263-pcdp-proxy-correlation.md"
+      ],
+      "interpretation:2026-04-23-t294-hd-mediation-4way-decomposition": [
+        "doc/interpretations/2026-04-23-t294-hd-mediation-4way-decomposition.md"
+      ],
+      "interpretation:2026-04-23-t294b-pooled-4way-int-ref-falsified": [
+        "doc/interpretations/2026-04-23-t294b-pooled-4way-int-ref-falsified.md"
+      ],
+      "interpretation:2026-04-23-t294c-phf19-three-way-gain1q": [
+        "doc/interpretations/2026-04-23-t294c-phf19-three-way-gain1q.md"
+      ],
+      "interpretation:2026-04-23-t294d-ezh2-three-way-gain1q": [
+        "doc/interpretations/2026-04-23-t294d-ezh2-three-way-gain1q.md"
+      ],
+      "interpretation:2026-04-23-t294ef-suz12-eed-three-way-gain1q": [
+        "doc/interpretations/2026-04-23-t294ef-suz12-eed-three-way-gain1q.md"
+      ],
+      "interpretation:2026-04-24-t277-within-basin-variance": [
+        "doc/interpretations/2026-04-24-t277-within-basin-variance.md"
+      ],
+      "interpretation:2026-04-24-t278-dwell-time-cox": [
+        "doc/interpretations/2026-04-24-t278-dwell-time-cox.md"
+      ],
+      "interpretation:2026-04-25-t280-sc-pr-unimodality": [
+        "doc/interpretations/2026-04-25-t280-sc-pr-unimodality.md"
+      ],
+      "mechanism:phf19-prc2-ifn-immunotherapy": [
+        "doc/mechanisms/phf19-prc2-ifn-immunotherapy.md"
+      ],
+      "mechanism:proliferation-translation-cell-state-axis": [
+        "doc/mechanisms/proliferation-translation-cell-state-axis.md"
+      ],
+      "method:causal-model": [
+        "doc/methods/causal-model.md"
+      ],
+      "method:external-data-ingestion-pattern": [
+        "doc/methods/external-data-ingestion-pattern.md"
+      ],
+      "method:hopfield-basin-reconstruction": [
+        "doc/methods/hopfield-basin-reconstruction.md"
+      ],
+      "paper:Amodeo2025": [
+        "doc/papers/Amodeo2025.md"
+      ],
+      "paper:Beguelin2017": [
+        "doc/papers/Beguelin2017.md"
+      ],
+      "paper:Bernstein2024": [
+        "doc/papers/Bernstein2024.md"
+      ],
+      "paper:Boiarsky2022": [
+        "doc/papers/Boiarsky2022.md"
+      ],
+      "paper:Bracken2003": [
+        "doc/papers/Bracken2003.md"
+      ],
+      "paper:Brown2023": [
+        "doc/papers/Brown2023.md"
+      ],
+      "paper:Chen2023": [
+        "doc/papers/Chen2023.md"
+      ],
+      "paper:Cleynen2024": [
+        "doc/papers/Cleynen2024.md"
+      ],
+      "paper:Cooperrider2025": [
+        "doc/papers/Cooperrider2025.md"
+      ],
+      "paper:DaVia2022": [
+        "doc/papers/DaVia2022.md"
+      ],
+      "paper:DaVia2024": [
+        "doc/papers/DaVia2024.md"
+      ],
+      "paper:Dang2023": [
+        "doc/papers/Dang2023.md"
+      ],
+      "paper:DeJong2021": [
+        "doc/papers/DeJong2021.md"
+      ],
+      "paper:DeMatos2023": [
+        "doc/papers/DeMatos2023.md"
+      ],
+      "paper:Diamond2021": [
+        "doc/papers/Diamond2021.md"
+      ],
+      "paper:Dinicola2011": [
+        "doc/papers/Dinicola2011.md"
+      ],
+      "paper:Dubois2022": [
+        "doc/papers/Dubois2022.md"
+      ],
+      "paper:Fan2018": [
+        "doc/papers/Fan2018.md"
+      ],
+      "paper:Frede2021": [
+        "doc/papers/Frede2021.md"
+      ],
+      "paper:Gao2026": [
+        "doc/papers/Gao2026.md"
+      ],
+      "paper:Grunt2025": [
+        "doc/papers/Grunt2025.md"
+      ],
+      "paper:Henry2025": [
+        "doc/papers/Henry2025.md"
+      ],
+      "paper:Hua2022": [
+        "doc/papers/Hua2022.md"
+      ],
+      "paper:Huang2013": [
+        "doc/papers/Huang2013.md"
+      ],
+      "paper:Ismail2022": [
+        "doc/papers/Ismail2022.md"
+      ],
+      "paper:Jang2019": [
+        "doc/papers/Jang2019.md"
+      ],
+      "paper:John2023": [
+        "doc/papers/John2023.md"
+      ],
+      "paper:Johnson2024": [
+        "doc/papers/Johnson2024.md"
+      ],
+      "paper:Jung2022": [
+        "doc/papers/Jung2022.md"
+      ],
+      "paper:Kulinski2023": [
+        "doc/papers/Kulinski2023.md"
+      ],
+      "paper:Kurowska2024": [
+        "doc/papers/Kurowska2024.md"
+      ],
+      "paper:Landau2020": [
+        "doc/papers/Landau2020.md"
+      ],
+      "paper:Laplane2024": [
+        "doc/papers/Laplane2024.md"
+      ],
+      "paper:Ledergor2018": [
+        "doc/papers/Ledergor2018.md"
+      ],
+      "paper:Lin2012": [
+        "doc/papers/Lin2012.md"
+      ],
+      "paper:Liu2021": [
+        "doc/papers/Liu2021.md"
+      ],
+      "paper:Liu2024": [
+        "doc/papers/Liu2024.md"
+      ],
+      "paper:Lotfollahi2019": [
+        "doc/papers/Lotfollahi2019.md"
+      ],
+      "paper:Lotfollahi2023": [
+        "doc/papers/Lotfollahi2023.md"
+      ],
+      "paper:Lyne2021": [
+        "doc/papers/Lyne2021.md"
+      ],
+      "paper:Martincorena2017": [
+        "doc/papers/Martincorena2017.md"
+      ],
+      "paper:Masuda2022": [
+        "doc/papers/Masuda2022.md"
+      ],
+      "paper:Misund2022": [
+        "doc/papers/Misund2022.md"
+      ],
+      "paper:Mitchell2022": [
+        "doc/papers/Mitchell2022.md"
+      ],
+      "paper:Mouhieddine2023": [
+        "doc/papers/Mouhieddine2023.md"
+      ],
+      "paper:Nie2012": [
+        "doc/papers/Nie2012.md"
+      ],
+      "paper:Ordonez2020": [
+        "doc/papers/Ordonez2020.md"
+      ],
+      "paper:Ota2025": [
+        "doc/papers/Ota2025.md"
+      ],
+      "paper:PHF19-comprehensive": [
+        "doc/papers/PHF19-comprehensive.md"
+      ],
+      "paper:Parreno2024": [
+        "doc/papers/Parreno2024.md"
+      ],
+      "paper:Pawlyn2017": [
+        "doc/papers/Pawlyn2017.md"
+      ],
+      "paper:Persi2025": [
+        "doc/papers/Persi2025.md"
+      ],
+      "paper:Pilcher2023": [
+        "doc/papers/Pilcher2023.md"
+      ],
+      "paper:Qiu2020": [
+        "doc/papers/Qiu2020.md"
+      ],
+      "paper:Rasche2022": [
+        "doc/papers/Rasche2022.md"
+      ],
+      "paper:Ren2019": [
+        "doc/papers/Ren2019.md"
+      ],
+      "paper:Rood2024": [
+        "doc/papers/Rood2024.md"
+      ],
+      "paper:Roohani2024": [
+        "doc/papers/Roohani2024.md"
+      ],
+      "paper:Ryu2020": [
+        "doc/papers/Ryu2020.md"
+      ],
+      "paper:SalomonPerzynski2022": [
+        "doc/papers/SalomonPerzynski2022.md"
+      ],
+      "paper:Scopetti2026": [
+        "doc/papers/Scopetti2026.md"
+      ],
+      "paper:Shah2024": [
+        "doc/papers/Shah2024.md"
+      ],
+      "paper:TaherianFard2017": [
+        "doc/papers/TaherianFard2017.md"
+      ],
+      "paper:TellierNutt2019": [
+        "doc/papers/TellierNutt2019.md"
+      ],
+      "paper:Terragna2018": [
+        "doc/papers/Terragna2018.md"
+      ],
+      "paper:Tirier2021": [
+        "doc/papers/Tirier2021.md"
+      ],
+      "paper:VanderWeele2017": [
+        "doc/papers/VanderWeele2017.md"
+      ],
+      "paper:Walch2026": [
+        "doc/papers/Walch2026.md"
+      ],
+      "paper:Walker2024": [
+        "doc/papers/Walker2024.md"
+      ],
+      "paper:Wei2022": [
+        "doc/papers/Wei2022.md"
+      ],
+      "paper:Wong2025": [
+        "doc/papers/Wong2025.md"
+      ],
+      "paper:Yao2023": [
+        "doc/papers/Yao2023.md"
+      ],
+      "paper:Zhao2023_snoRNA": [
+        "doc/papers/Zhao2023_snoRNA.md"
+      ],
+      "paper:cohen2021": [
+        "doc/papers/cohen2021.md"
+      ],
+      "paper:dutta2022": [
+        "doc/papers/dutta2022.md"
+      ],
+      "paper:li2024": [
+        "doc/papers/li2024.md"
+      ],
+      "paper:li2025": [
+        "doc/papers/li2025.md"
+      ],
+      "paper:maura2023": [
+        "doc/papers/maura2023.md"
+      ],
+      "paper:moreno-rueda2025": [
+        "doc/papers/moreno-rueda2025.md"
+      ],
+      "paper:pilcher2026": [
+        "doc/papers/pilcher2026.md"
+      ],
+      "paper:samur2023": [
+        "doc/papers/samur2023.md"
+      ],
+      "paper:skerget2024": [
+        "doc/papers/skerget2024.md"
+      ],
+      "paper:xiang2025": [
+        "doc/papers/xiang2025.md"
+      ],
+      "paper:zhang2025": [
+        "doc/papers/zhang2025.md"
+      ],
+      "plan:2026-04-17-v8.1-version-branch-analysis": [
+        "doc/plans/2026-04-17-v8.1-version-branch-analysis.md"
+      ],
+      "pre-registration:2026-04-12-t172-scrna-per-cell-validation": [
+        "doc/pre-registrations/2026-04-12-t172-scrna-per-cell-validation.md"
+      ],
+      "pre-registration:2026-04-13-t174-pc-continuum-validation": [
+        "doc/pre-registrations/2026-04-13-t174-pc-continuum-validation.md"
+      ],
+      "pre-registration:2026-04-14-t190-depmap-crispr-sweep": [
+        "doc/pre-registrations/2026-04-14-t190-depmap-crispr-sweep.md"
+      ],
+      "pre-registration:2026-04-14-t197-gse155135-ezh2i-replication": [
+        "doc/pre-registrations/2026-04-14-t197-gse155135-ezh2i-replication.md"
+      ],
+      "pre-registration:2026-04-14-t202-multi-signature-null-audit": [
+        "doc/pre-registrations/2026-04-14-t202-multi-signature-null-audit.md"
+      ],
+      "pre-registration:2026-04-16-t203-ledergor-replication": [
+        "doc/pre-registrations/2026-04-16-t203-ledergor-replication.md"
+      ],
+      "pre-registration:2026-04-18-t204-bulk-composition-beyond-pc-maturity": [
+        "doc/pre-registrations/2026-04-18-t204-bulk-composition-beyond-pc-maturity.md"
+      ],
+      "pre-registration:2026-04-18-t214-healthy-pc-maturation-signature": [
+        "doc/pre-registrations/2026-04-18-t214-healthy-pc-maturation-signature.md"
+      ],
+      "pre-registration:2026-04-19-t199-lincs-l1000-screen": [
+        "doc/pre-registrations/2026-04-19-t199-lincs-l1000-screen.md"
+      ],
+      "pre-registration:2026-04-19-t205-gse214668-ms177-ezh2-degrader-replication": [
+        "doc/pre-registrations/2026-04-19-t205-gse214668-ms177-ezh2-degrader-replication.md"
+      ],
+      "pre-registration:2026-04-19-t217-mmrf-dnds-stratified": [
+        "doc/pre-registrations/2026-04-19-t217-mmrf-dnds-stratified.md"
+      ],
+      "pre-registration:2026-04-19-t219-mm30-hopfield-basins": [
+        "doc/pre-registrations/2026-04-19-t219-mm30-hopfield-basins.md"
+      ],
+      "pre-registration:2026-04-23-t263-pcdp-proxy-correlation": [
+        "doc/pre-registrations/2026-04-23-t263-pcdp-proxy-correlation.md"
+      ],
+      "pre-registration:2026-04-24-t277-within-basin-variance": [
+        "doc/pre-registrations/2026-04-24-t277-within-basin-variance.md"
+      ],
+      "pre-registration:2026-04-24-t278-dwell-time-cox": [
+        "doc/pre-registrations/2026-04-24-t278-dwell-time-cox.md"
+      ],
+      "pre-registration:2026-04-24-t280-bulk-vs-sc-pr-unimodality": [
+        "doc/pre-registrations/2026-04-24-t280-bulk-vs-sc-pr-unimodality.md"
+      ],
+      "proposition:p01-h1-stage-decoupling": [
+        "specs/propositions/p01-h1-stage-decoupling.md"
+      ],
+      "proposition:p02-h1-phf19-prognostic-independence": [
+        "specs/propositions/p02-h1-phf19-prognostic-independence.md"
+      ],
+      "proposition:p03-h1-phf19-prc2-ifn-mechanism": [
+        "specs/propositions/p03-h1-phf19-prc2-ifn-mechanism.md"
+      ],
+      "proposition:p04-h2-stratified-ranking-divergence": [
+        "specs/propositions/p04-h2-stratified-ranking-divergence.md"
+      ],
+      "proposition:p05-h2-convergent-endpoints-divergent-mechanisms": [
+        "specs/propositions/p05-h2-convergent-endpoints-divergent-mechanisms.md"
+      ],
+      "proposition:p06-h2-gain1q-longitudinal-architecture": [
+        "specs/propositions/p06-h2-gain1q-longitudinal-architecture.md"
+      ],
+      "proposition:p07-h1-h2-cell-state-bridge": [
+        "specs/propositions/p07-h1-h2-cell-state-bridge.md"
+      ],
+      "proposition:p08-t174-per-cell-collapse": [
+        "specs/propositions/p08-t174-per-cell-collapse.md"
+      ],
+      "proposition:p09-t174-bulk-pc-maturity-limit": [
+        "specs/propositions/p09-t174-bulk-pc-maturity-limit.md"
+      ],
+      "proposition:p10-t202-expression-matching-load-bearing": [
+        "specs/propositions/p10-t202-expression-matching-load-bearing.md"
+      ],
+      "proposition:p11-t174-t202-rival-model-state": [
+        "specs/propositions/p11-t174-t202-rival-model-state.md"
+      ],
+      "proposition:p12-t174-t202-verdict-invariant": [
+        "specs/propositions/p12-t174-t202-verdict-invariant.md"
+      ],
+      "proposition:p13-h2-lineage-conditioned-ranking-architecture": [
+        "specs/propositions/p13-h2-lineage-conditioned-ranking-architecture.md"
+      ],
+      "proposition:p14-h4-ratcheting-biophysical": [
+        "specs/propositions/p14-h4-ratcheting-biophysical.md"
+      ],
+      "proposition:p15-h4-attractor-escape-theory": [
+        "specs/propositions/p15-h4-attractor-escape-theory.md"
+      ],
+      "question:aging-epigenetic-erosion-mgus": [
+        "doc/questions/aging-epigenetic-erosion-mgus.md"
+      ],
+      "question:attractor-causal-level": [
+        "doc/questions/attractor-causal-level.md"
+      ],
+      "question:attractor-landscape-reconstruction-feasibility": [
+        "doc/questions/attractor-landscape-reconstruction-feasibility.md"
+      ],
+      "question:centrosome-signature-enrichment": [
+        "doc/questions/centrosome-signature-enrichment.md"
+      ],
+      "question:cfchip-commitment-detection": [
+        "doc/questions/cfchip-commitment-detection.md"
+      ],
+      "question:chip-tme-indirect-facilitation": [
+        "doc/questions/chip-tme-indirect-facilitation.md"
+      ],
+      "question:continuous-disease-model": [
+        "doc/questions/continuous-disease-model.md"
+      ],
+      "question:cx5461-sensitivity-by-1q-status": [
+        "doc/questions/cx5461-sensitivity-by-1q-status.md"
+      ],
+      "question:cytogenetic-inference-from-expression": [
+        "doc/questions/cytogenetic-inference-from-expression.md"
+      ],
+      "question:del17p-acquisition-under-len-maintenance": [
+        "doc/questions/del17p-acquisition-under-len-maintenance.md"
+      ],
+      "question:disease-stage-transition-signatures": [
+        "doc/questions/disease-stage-transition-signatures.md"
+      ],
+      "question:dynamic-cytogenetic-risk-reassessment": [
+        "doc/questions/dynamic-cytogenetic-risk-reassessment.md"
+      ],
+      "question:effect-size-vs-pvalue-aggregation": [
+        "doc/questions/effect-size-vs-pvalue-aggregation.md"
+      ],
+      "question:epigenetic-ratcheting-in-mm": [
+        "doc/questions/epigenetic-ratcheting-in-mm.md"
+      ],
+      "question:event-ordering-from-expression": [
+        "doc/questions/event-ordering-from-expression.md"
+      ],
+      "question:formal-mediation-t121-t125-retrofit": [
+        "doc/questions/formal-mediation-t121-t125-retrofit.md"
+      ],
+      "question:global-transcriptional-upregulation": [
+        "doc/questions/global-transcriptional-upregulation.md"
+      ],
+      "question:hyperdiploidy-mechanism": [
+        "doc/questions/hyperdiploidy-mechanism.md"
+      ],
+      "question:icp-environment-heterogeneity-observational": [
+        "doc/questions/icp-environment-heterogeneity-observational.md"
+      ],
+      "question:ido1-tryptophan-kynurenine-immune-evasion": [
+        "doc/questions/ido1-tryptophan-kynurenine-immune-evasion.md"
+      ],
+      "question:igh-translocation-3d-mechanism-classes": [
+        "doc/questions/igh-translocation-3d-mechanism-classes.md"
+      ],
+      "question:mechanism-vs-pathway-claim-levels": [
+        "doc/questions/mechanism-vs-pathway-claim-levels.md"
+      ],
+      "question:nek2-treatment-response": [
+        "doc/questions/nek2-treatment-response.md"
+      ],
+      "question:neutral-drift-progression": [
+        "doc/questions/neutral-drift-progression.md"
+      ],
+      "question:non-1q-program-driver": [
+        "doc/questions/non-1q-program-driver.md"
+      ],
+      "question:nsd2-phf19-mirror-polycomb": [
+        "doc/questions/nsd2-phf19-mirror-polycomb.md"
+      ],
+      "question:nucleoporin-signal": [
+        "doc/questions/nucleoporin-signal.md"
+      ],
+      "question:overlooked-phenotype-heterogeneity": [
+        "doc/questions/overlooked-phenotype-heterogeneity.md"
+      ],
+      "question:phenotypic-distinctness-of-molecular-subtypes": [
+        "doc/questions/phenotypic-distinctness-of-molecular-subtypes.md"
+      ],
+      "question:phf19-mediation-sequential-ignorability": [
+        "doc/questions/phf19-mediation-sequential-ignorability.md"
+      ],
+      "question:phf19-prc2-3d-genome-substrate": [
+        "doc/questions/phf19-prc2-3d-genome-substrate.md"
+      ],
+      "question:phf19-regulator-vs-program-survival-direction": [
+        "doc/questions/phf19-regulator-vs-program-survival-direction.md"
+      ],
+      "question:phf19-regulators-in-1q-negative": [
+        "doc/questions/phf19-regulators-in-1q-negative.md"
+      ],
+      "question:phf19-survival-mechanism-mediation": [
+        "doc/questions/phf19-survival-mechanism-mediation.md"
+      ],
+      "question:prc2-perturbation-class-and-mm-context-requirements": [
+        "doc/questions/prc2-perturbation-class-and-mm-context-requirements.md"
+      ],
+      "question:proliferation-dominance": [
+        "doc/questions/proliferation-dominance.md"
+      ],
+      "question:ribosome-axis-pc-continuum-vs-nucleolar-stress": [
+        "doc/questions/ribosome-axis-pc-continuum-vs-nucleolar-stress.md"
+      ],
+      "question:rna-velocity-feasibility-boiarsky": [
+        "doc/questions/rna-velocity-feasibility-boiarsky.md"
+      ],
+      "question:selection-vs-drift-progression": [
+        "doc/questions/selection-vs-drift-progression.md"
+      ],
+      "question:simpsons-paradox-purity": [
+        "doc/questions/simpsons-paradox-purity.md"
+      ],
+      "question:stratum-specific-biology": [
+        "doc/questions/stratum-specific-biology.md"
+      ],
+      "question:subtype-transition-directionality": [
+        "doc/questions/subtype-transition-directionality.md"
+      ],
+      "question:tme-coevolution-progression": [
+        "doc/questions/tme-coevolution-progression.md"
+      ],
+      "question:treatment-response-incoherence": [
+        "doc/questions/treatment-response-incoherence.md"
+      ],
+      "question:tte-ecog-frailty-gap": [
+        "doc/questions/tte-ecog-frailty-gap.md"
+      ],
+      "question:ythdf2-m6a-proliferation-axis": [
+        "doc/questions/ythdf2-m6a-proliferation-axis.md"
+      ],
+      "report:2026-04-15-t174-t202-cross-impact": [
+        "doc/reports/2026-04-15-t174-t202-cross-impact.md"
+      ],
+      "report:2026-04-16-scrna-replication-shortlist": [
+        "doc/reports/2026-04-16-scRNA-replication-shortlist.md"
+      ],
+      "report:2026-04-19-attractor-3dgenome-synthesis": [
+        "doc/reports/2026-04-19-attractor-3dgenome-synthesis.md"
+      ],
+      "report:2026-04-19-chip-mm-interaction-synthesis": [
+        "doc/reports/2026-04-19-chip-mm-interaction-synthesis.md"
+      ],
+      "report:2026-04-19-evolutionary-dynamics-synthesis": [
+        "doc/reports/2026-04-19-evolutionary-dynamics-synthesis.md"
+      ],
+      "report:2026-04-19-mm-mechanism-metabolism-synthesis": [
+        "doc/reports/2026-04-19-mm-mechanism-metabolism-synthesis.md"
+      ],
+      "report:curation-sweep-2026-04-21": [
+        "doc/meta/curation/curation-sweep-2026-04-21.md"
+      ],
+      "report:curation-sweep-2026-04-22": [
+        "doc/meta/curation/curation-sweep-2026-04-22.md"
+      ],
+      "report:curation-sweep-2026-04-23": [
+        "doc/meta/curation/curation-sweep-2026-04-23.md"
+      ],
+      "report:h2-convergent-divergent-mechanisms": [
+        "doc/reports/h2-convergent-divergent-mechanisms.md"
+      ],
+      "report:phf19-ifn-jakstat-polycomb-arc": [
+        "doc/reports/phf19-ifn-jakstat-polycomb-arc.md"
+      ],
+      "report:synthesis": [
+        "doc/reports/synthesis.md"
+      ],
+      "report:synthesis-emergent-threads": [
+        "doc/reports/synthesis/_emergent-threads.md"
+      ],
+      "report:synthesis-h1-epigenetic-commitment": [
+        "doc/reports/synthesis/h1-epigenetic-commitment.md"
+      ],
+      "report:synthesis-h2-cytogenetic-distinct-entities": [
+        "doc/reports/synthesis/h2-cytogenetic-distinct-entities.md"
+      ],
+      "report:synthesis-h3-mutation-reshaping": [
+        "doc/reports/synthesis/h3-mutation-reshaping.md"
+      ],
+      "report:synthesis-h4-attractor-convergence": [
+        "doc/reports/synthesis/h4-attractor-convergence.md"
+      ],
+      "report:synthesis-h6-positive-selection-mm-progression": [
+        "doc/reports/synthesis/h6-positive-selection-mm-progression.md"
+      ],
+      "review:t278-dwell-time-cox-pipeline-plan": [
+        "doc/inquiries/t278-dwell-time-cox-pipeline-plan-review.md"
+      ],
+      "rq:mm30-disease-gene-associations": [
+        "specs/research-question.md"
+      ],
+      "search:2026-04-01-bulk-sc-integration-methods": [
+        "doc/searches/2026-04-01-bulk-sc-integration-methods.md"
+      ],
+      "search:2026-04-01-existing-mm-meta-analyses": [
+        "doc/searches/2026-04-01-existing-mm-meta-analyses.md"
+      ],
+      "search:2026-04-01-meta-analysis-methods": [
+        "doc/searches/2026-04-01-meta-analysis-methods.md"
+      ],
+      "search:2026-04-01-mm-deconvolution": [
+        "doc/searches/2026-04-01-mm-deconvolution.md"
+      ],
+      "search:2026-04-01-mm-drug-response-expression": [
+        "doc/searches/2026-04-01-mm-drug-response-expression.md"
+      ],
+      "spec:2026-04-13-t174-pc-continuum-design": [
+        "doc/specs/2026-04-13-t174-pc-continuum-design.md"
+      ],
+      "spec:2026-04-16-t206-boiarsky-cache-audit-remediation": [
+        "doc/specs/2026-04-16-t206-boiarsky-cache-audit-remediation.md"
+      ],
+      "synthesis:2026-04-01-scrnaseq-mm-landscape": [
+        "doc/papers/synthesis-2026-04-01-scrnaseq-mm-landscape.md"
+      ],
+      "synthesis:2026-04-07-global-transcription-snorna-myc": [
+        "doc/papers/synthesis-2026-04-07-global-transcription-snorna-myc.md"
+      ],
+      "task:bias-audit-t202-pre-reg": [
+        "doc/meta/bias-audit-t202-pre-reg.md"
+      ],
+      "task:bias-audit-t214-pre-reg": [
+        "doc/meta/bias-audit-t214-pre-reg.md"
+      ],
+      "topic:PHF19": [
+        "doc/topics/PHF19.md"
+      ],
+      "topic:PRC2": [
+        "doc/topics/PRC2.md"
+      ],
+      "topic:aging-epigenetic-erosion-clonal-susceptibility": [
+        "doc/topics/aging-epigenetic-erosion-clonal-susceptibility.md"
+      ],
+      "topic:aid-germinal-center-mm-origins": [
+        "doc/topics/aid-germinal-center-mm-origins.md"
+      ],
+      "topic:bayesian": [
+        "doc/topics/bayesian.md"
+      ],
+      "topic:cancer-as-singular-evolutionary-disease": [
+        "doc/topics/cancer-as-singular-evolutionary-disease.md"
+      ],
+      "topic:causal-inference": [
+        "doc/topics/causal-inference.md"
+      ],
+      "topic:causal-inference-biology-foundations": [
+        "doc/topics/causal-inference-biology-foundations.md"
+      ],
+      "topic:centrosomes-cancer-multiple-myeloma": [
+        "doc/topics/centrosomes-cancer-multiple-myeloma.md"
+      ],
+      "topic:clinical-phenotype": [
+        "doc/topics/clinical-phenotype.md"
+      ],
+      "topic:cytogenetics": [
+        "doc/topics/cytogenetics.md"
+      ],
+      "topic:disease-stage-progression-methods": [
+        "doc/topics/disease-stage-progression-methods.md"
+      ],
+      "topic:epigenetic-chromatin-mm-progression": [
+        "doc/topics/epigenetic-chromatin-mm-progression.md"
+      ],
+      "topic:formal-causal-mediation": [
+        "doc/topics/formal-causal-mediation.md"
+      ],
+      "topic:gain-1q": [
+        "doc/topics/gain-1q.md"
+      ],
+      "topic:gain1q-neg-unique-genes": [
+        "doc/topics/gain1q-neg-unique-genes.md"
+      ],
+      "topic:hyperdiploidy": [
+        "doc/topics/hyperdiploidy.md"
+      ],
+      "topic:invariant-causal-prediction-biology": [
+        "doc/topics/invariant-causal-prediction-biology.md"
+      ],
+      "topic:meta-analysis": [
+        "doc/topics/meta-analysis.md"
+      ],
+      "topic:metafor-ranks16-30-literature-synthesis": [
+        "doc/topics/metafor-ranks16-30-literature-synthesis.md"
+      ],
+      "topic:metafor-ranks31-45-literature-synthesis": [
+        "doc/topics/metafor-ranks31-45-literature-synthesis.md"
+      ],
+      "topic:metafor-top15-literature-synthesis": [
+        "doc/topics/metafor-top15-literature-synthesis.md"
+      ],
+      "topic:multiple-myeloma": [
+        "doc/topics/multiple-myeloma.md"
+      ],
+      "topic:nk-boolean-attractor-formalism": [
+        "doc/topics/nk-boolean-attractor-formalism.md"
+      ],
+      "topic:phf19-regulation-chromatin": [
+        "doc/topics/phf19-regulation-chromatin.md"
+      ],
+      "topic:ribosomopathies-hematologic-malignancies": [
+        "doc/topics/ribosomopathies-hematologic-malignancies.md"
+      ],
+      "topic:selection-vs-drift-mm-progression": [
+        "doc/topics/selection-vs-drift-mm-progression.md"
+      ],
+      "topic:target-trial-emulation-oncology": [
+        "doc/topics/target-trial-emulation-oncology.md"
+      ],
+      "topic:treatment": [
+        "doc/topics/treatment.md"
+      ],
+      "topic:waddington-landscape-attractor-formalism": [
+        "doc/topics/waddington-landscape-attractor-formalism.md"
+      ]
+    },
+    "duplicate_entity_ids": {},
+    "frontmatter_reference_field_paths": {
+      "datasets": [
+        "doc/datasets/data-blueprint-epigenome.md",
+        "doc/datasets/data-ccle-proteomics.md",
+        "doc/datasets/data-cptac-pan-cancer-proteomics.md",
+        "doc/datasets/data-depmap.md",
+        "doc/datasets/data-encode.md",
+        "doc/datasets/data-gdsc.md",
+        "doc/datasets/data-gse7039.md",
+        "doc/datasets/data-ledergor-2018-mm-scrna.md",
+        "doc/datasets/data-lincs-l1000.md",
+        "doc/datasets/data-mmrf.md",
+        "doc/datasets/data-oetjen-2018-bone-marrow-atlas.md",
+        "doc/datasets/data-opentargets-platform.md",
+        "doc/datasets/data-perturb-seq-atlas-replogle.md",
+        "doc/datasets/data-tirier-2021-mm-rrmm-scrna.md",
+        "doc/papers/Bernstein2024.md",
+        "doc/papers/Boiarsky2022.md",
+        "doc/papers/Chen2023.md",
+        "doc/papers/Cooperrider2025.md",
+        "doc/papers/DaVia2022.md",
+        "doc/papers/DaVia2024.md",
+        "doc/papers/Dang2023.md",
+        "doc/papers/DeJong2021.md",
+        "doc/papers/DeMatos2023.md",
+        "doc/papers/Fan2018.md",
+        "doc/papers/Frede2021.md",
+        "doc/papers/Gao2026.md",
+        "doc/papers/Jang2019.md",
+        "doc/papers/John2023.md",
+        "doc/papers/Johnson2024.md",
+        "doc/papers/Jung2022.md",
+        "doc/papers/Kulinski2023.md",
+        "doc/papers/Kurowska2024.md",
+        "doc/papers/Landau2020.md",
+        "doc/papers/Ledergor2018.md",
+        "doc/papers/Liu2021.md",
+        "doc/papers/Liu2024.md",
+        "doc/papers/Lotfollahi2023.md",
+        "doc/papers/Martincorena2017.md",
+        "doc/papers/Masuda2022.md",
+        "doc/papers/Misund2022.md",
+        "doc/papers/Mouhieddine2023.md",
+        "doc/papers/Ota2025.md",
+        "doc/papers/Persi2025.md",
+        "doc/papers/Pilcher2023.md",
+        "doc/papers/Ren2019.md",
+        "doc/papers/Roohani2024.md",
+        "doc/papers/Ryu2020.md",
+        "doc/papers/TaherianFard2017.md",
+        "doc/papers/Tirier2021.md",
+        "doc/papers/Walch2026.md",
+        "doc/papers/Walker2024.md",
+        "doc/papers/Wei2022.md",
+        "doc/papers/Wong2025.md",
+        "doc/papers/Yao2023.md",
+        "doc/papers/cohen2021.md",
+        "doc/papers/maura2023.md",
+        "doc/papers/pilcher2026.md",
+        "doc/papers/skerget2024.md",
+        "doc/questions/phf19-prc2-3d-genome-substrate.md",
+        "doc/questions/phf19-regulator-vs-program-survival-direction.md",
+        "doc/questions/tte-ecog-frailty-gap.md",
+        "doc/topics/target-trial-emulation-oncology.md"
+      ],
+      "related": [
+        "doc/datasets/2026-04-17-external-dataset-priors-for-mm30.md",
+        "doc/datasets/data-blueprint-epigenome.md",
+        "doc/datasets/data-ccle-proteomics.md",
+        "doc/datasets/data-cptac-pan-cancer-proteomics.md",
+        "doc/datasets/data-depmap.md",
+        "doc/datasets/data-encode.md",
+        "doc/datasets/data-gdsc.md",
+        "doc/datasets/data-gse7039.md",
+        "doc/datasets/data-ledergor-2018-mm-scrna.md",
+        "doc/datasets/data-lincs-l1000.md",
+        "doc/datasets/data-mmrf.md",
+        "doc/datasets/data-oetjen-2018-bone-marrow-atlas.md",
+        "doc/datasets/data-opentargets-platform.md",
+        "doc/datasets/data-perturb-seq-atlas-replogle.md",
+        "doc/datasets/data-tirier-2021-mm-rrmm-scrna.md",
+        "doc/discussions/2026-03-31-metafor-divergence.md",
+        "doc/discussions/2026-03-31-proliferation-signal.md",
+        "doc/discussions/2026-03-31-treatment-response-heterogeneity.md",
+        "doc/discussions/2026-04-01-dataset-qa-implications.md",
+        "doc/discussions/2026-04-01-fassoc-confounder-audit.md",
+        "doc/discussions/2026-04-01-final-gaps-assessment.md",
+        "doc/discussions/2026-04-01-gse9782-sentinel-investigation.md",
+        "doc/discussions/2026-04-01-multi-omics-opportunities.md",
+        "doc/discussions/2026-04-01-research-gaps.md",
+        "doc/discussions/2026-04-01-sc-bulk-integration.md",
+        "doc/discussions/2026-04-02-classifier-refinement.md",
+        "doc/discussions/2026-04-02-cytogenetic-metadata-integration.md",
+        "doc/discussions/2026-04-02-fassoc-univariate-design.md",
+        "doc/discussions/2026-04-02-purity-stratification-methodology.md",
+        "doc/discussions/2026-04-02-virtual-fish-performance-validation.md",
+        "doc/discussions/2026-04-03-cell-cycle-score-unification.md",
+        "doc/discussions/2026-04-04-disease-stage-progression.md",
+        "doc/discussions/2026-04-04-mmrf-weighting-strategy.md",
+        "doc/discussions/2026-04-04-multi-omics-data-strategy.md",
+        "doc/discussions/2026-04-04-t28-strategy.md",
+        "doc/discussions/2026-04-06-response-definition-audit.md",
+        "doc/discussions/2026-04-06-treatment-data-subdivision.md",
+        "doc/discussions/2026-04-07-hypothesis-prioritization.md",
+        "doc/discussions/2026-04-07-upstream-mechanisms-followup.md",
+        "doc/discussions/2026-04-07-upstream-of-cytogenetic-events.md",
+        "doc/discussions/2026-04-08-kras-tp53-convergence-genes.md",
+        "doc/discussions/2026-04-08-mm-phenotypic-subgroups.md",
+        "doc/discussions/2026-04-08-mutation-cytogenetic-overlap.md",
+        "doc/discussions/2026-04-08-phenotypic-subgroups-synthesis.md",
+        "doc/discussions/2026-04-11-bayesian-causal-dag-approach.md",
+        "doc/discussions/2026-04-11-evidence-chain-weak-points.md",
+        "doc/discussions/2026-04-11-h1-dag-implications.md",
+        "doc/discussions/2026-04-11-h2-dag-implications.md",
+        "doc/discussions/2026-04-11-h2-reframing-synthesis.md",
+        "doc/discussions/2026-04-11-h2-upgrade-decision.md",
+        "doc/discussions/2026-04-11-mediation-asymmetry-general.md",
+        "doc/discussions/2026-04-11-non-1q-driver-reframing.md",
+        "doc/discussions/2026-04-12-approach-reconsideration-post-t163.md",
+        "doc/discussions/2026-04-12-causal-graph-strategic-review.md",
+        "doc/discussions/2026-04-13-h1-causal-evidence-audit.md",
+        "doc/discussions/2026-04-13-ribosome-e2f1-percell-ambiguous.md",
+        "doc/discussions/2026-04-13-t174-pc-continuum-dag-critique.md",
+        "doc/discussions/2026-04-13-t174-pc-continuum-design-critique.md",
+        "doc/discussions/2026-04-14-h1-post-t190-gaps-and-next-moves.md",
+        "doc/discussions/2026-04-14-t202-rubric-adversarial-review.md",
+        "doc/discussions/2026-04-19-dag-iteration-and-refinement.md",
+        "doc/discussions/2026-04-19-h5-disposition.md",
+        "doc/discussions/2026-04-19-next-session-action-plan.md",
+        "doc/discussions/2026-04-19-t243-atomic-decomposition-dogfood.md",
+        "doc/discussions/2026-04-19-verdict-conflict-coverage-scan.md",
+        "doc/discussions/2026-04-19-verdict-polarity-display.md",
+        "doc/discussions/2026-04-21-t246-verdict-confidence-calibration.md",
+        "doc/discussions/2026-04-23-h4-attractor-level-scope.md",
+        "doc/discussions/comparison-h1-h2-h3.md",
+        "doc/interpretations/2026-03-31-decomposition-results.md",
+        "doc/interpretations/2026-03-31-standardized-metafor.md",
+        "doc/interpretations/2026-03-31-treatment-consistency.md",
+        "doc/interpretations/2026-04-01-decomposition-consolidated.md",
+        "doc/interpretations/2026-04-01-integration-t22-t32.md",
+        "doc/interpretations/2026-04-02-cytogenetic-inference-results.md",
+        "doc/interpretations/2026-04-02-sensitivity-analysis.md",
+        "doc/interpretations/2026-04-02-stratified-meta-analysis.md",
+        "doc/interpretations/2026-04-03-centrosome-enrichment.md",
+        "doc/interpretations/2026-04-03-cytogenetic-full-arc.md",
+        "doc/interpretations/2026-04-03-loo-stability.md",
+        "doc/interpretations/2026-04-03-robustness-synthesis.md",
+        "doc/interpretations/2026-04-03-t12-t20-synthesis.md",
+        "doc/interpretations/2026-04-04-immune-covariate-sensitivity.md",
+        "doc/interpretations/2026-04-04-mmrf-loo-weight.md",
+        "doc/interpretations/2026-04-04-mmrf-mutation-integration.md",
+        "doc/interpretations/2026-04-04-progression-pipeline-results.md",
+        "doc/interpretations/2026-04-06-gdsc-drug-sensitivity.md",
+        "doc/interpretations/2026-04-06-nup-divergence-selinexor-search.md",
+        "doc/interpretations/2026-04-06-response-definition-audit.md",
+        "doc/interpretations/2026-04-07-all-minus-treatment-comparison.md",
+        "doc/interpretations/2026-04-07-h-mgus-enrichment.md",
+        "doc/interpretations/2026-04-08-clinical-by-gain1q-stratum.md",
+        "doc/interpretations/2026-04-08-gain1q-stratification-phf19.md",
+        "doc/interpretations/2026-04-08-iss-gain1q-cox.md",
+        "doc/interpretations/2026-04-08-session-synthesis.md",
+        "doc/interpretations/2026-04-08-t084-global-upregulation-mechanism.md",
+        "doc/interpretations/2026-04-08-t085-t091-mutation-overlap-phf19-replication.md",
+        "doc/interpretations/2026-04-08-t092-threshold-sensitivity.md",
+        "doc/interpretations/2026-04-08-virtual-fish-validation.md",
+        "doc/interpretations/2026-04-09-mutation-integration-t104-t106.md",
+        "doc/interpretations/2026-04-10-ifn-suppression-cross-dataset.md",
+        "doc/interpretations/2026-04-10-longitudinal-convergence-funnel.md",
+        "doc/interpretations/2026-04-10-mirror-image-polycomb-test.md",
+        "doc/interpretations/2026-04-10-translocation-subtype-polycomb-dissociation.md",
+        "doc/interpretations/2026-04-11-bayesian-causal-dag-pilot.md",
+        "doc/interpretations/2026-04-11-hd-stratification-characterization.md",
+        "doc/interpretations/2026-04-11-mediation-null-model-result.md",
+        "doc/interpretations/2026-04-11-session-synthesis-h2-upgrade.md",
+        "doc/interpretations/2026-04-12-beguelin-subgraph.md",
+        "doc/interpretations/2026-04-12-clr-compositional-check.md",
+        "doc/interpretations/2026-04-12-e2f1-phf19-bayesian-edge.md",
+        "doc/interpretations/2026-04-12-e2f1-regulator-screen.md",
+        "doc/interpretations/2026-04-12-ezh2-phf19-bayesian-edge.md",
+        "doc/interpretations/2026-04-12-gain1q-prolif-axis-mediation.md",
+        "doc/interpretations/2026-04-12-h1-dag-edges-completion.md",
+        "doc/interpretations/2026-04-12-mtor-ribosome-bayesian-edge.md",
+        "doc/interpretations/2026-04-12-phf19-regulator-screen-refined.md",
+        "doc/interpretations/2026-04-12-phf19-regulator-screen.md",
+        "doc/interpretations/2026-04-12-ribosome-e2f1-bayesian-edge.md",
+        "doc/interpretations/2026-04-12-ribosome-e2f1-stratified.md",
+        "doc/interpretations/2026-04-12-ribosome-regulator-screen-clr.md",
+        "doc/interpretations/2026-04-12-ribosome-regulator-screen.md",
+        "doc/interpretations/2026-04-12-ribosome-state-axis-probe.md",
+        "doc/interpretations/2026-04-12-t153-confounder-nodes.md",
+        "doc/interpretations/2026-04-12-t163-prolif-adjusted-tf-edges.md",
+        "doc/interpretations/2026-04-12-t164-stage-stratified-phf19-survival.md",
+        "doc/interpretations/2026-04-12-t165-phf19-survival-prolif-mediation.md",
+        "doc/interpretations/2026-04-12-t166-stage-transition-edges.md",
+        "doc/interpretations/2026-04-13-t172-ribosome-e2f1-composition-driven.md",
+        "doc/interpretations/2026-04-13-t174-pc-continuum.md",
+        "doc/interpretations/2026-04-14-t190-depmap-crispr-sweep.md",
+        "doc/interpretations/2026-04-14-t191-prc2-perturbation-dataset-inventory.md",
+        "doc/interpretations/2026-04-14-t197-gse155135-ezh2i-replication.md",
+        "doc/interpretations/2026-04-15-t202-null-audit.md",
+        "doc/interpretations/2026-04-17-lineage-stratified-ranking-architecture.md",
+        "doc/interpretations/2026-04-17-t203-ledergor-replication.md",
+        "doc/interpretations/2026-04-17-t206-opentargets-ingestion.md",
+        "doc/interpretations/2026-04-17-t213-mm30-opentargets-annotation.md",
+        "doc/interpretations/2026-04-18-t204-bulk-composition-beyond-pc-maturity-verdict.md",
+        "doc/interpretations/2026-04-18-t204-pilot-deconvolution-audit.md",
+        "doc/interpretations/2026-04-18-t204-preflight-circularity-audit.md",
+        "doc/interpretations/2026-04-18-t204-v140-6-multitype-verdict.md",
+        "doc/interpretations/2026-04-18-t214-healthy-pc-maturation-verdict.md",
+        "doc/interpretations/2026-04-19-h1-edge6-mechanism-refinement.md",
+        "doc/interpretations/2026-04-19-t199-lincs-l1000-screen.md",
+        "doc/interpretations/2026-04-19-t205-gse214668-ms177-replication.md",
+        "doc/interpretations/2026-04-19-t217-mmrf-dnds-stratified.md",
+        "doc/interpretations/2026-04-19-t219-mm30-hopfield-basins.md",
+        "doc/interpretations/2026-04-19-t221-literature-gene-lookups.md",
+        "doc/interpretations/2026-04-19-t223-del17p-len-stratification.md",
+        "doc/interpretations/2026-04-19-t234-hopfield-hamming-robustness.md",
+        "doc/interpretations/2026-04-21-t099-skerget-transition-matrix.md",
+        "doc/interpretations/2026-04-21-t240-misund-phf19-trajectory.md",
+        "doc/interpretations/2026-04-21-t258-phf19-pathway-specificity.md",
+        "doc/interpretations/2026-04-23-t263-pcdp-proxy-correlation.md",
+        "doc/interpretations/2026-04-23-t294-hd-mediation-4way-decomposition.md",
+        "doc/interpretations/2026-04-23-t294b-pooled-4way-int-ref-falsified.md",
+        "doc/interpretations/2026-04-23-t294c-phf19-three-way-gain1q.md",
+        "doc/interpretations/2026-04-23-t294d-ezh2-three-way-gain1q.md",
+        "doc/interpretations/2026-04-23-t294ef-suz12-eed-three-way-gain1q.md",
+        "doc/interpretations/2026-04-25-t280-sc-pr-unimodality.md",
+        "doc/mechanisms/phf19-prc2-ifn-immunotherapy.md",
+        "doc/mechanisms/proliferation-translation-cell-state-axis.md",
+        "doc/meta/bias-audit-t202-pre-reg.md",
+        "doc/meta/bias-audit-t204-pre-reg-sanity.md",
+        "doc/meta/bias-audit-t214-pre-reg.md",
+        "doc/meta/pre-registration-decomposition.md",
+        "doc/meta/pre-registration-h-mgus-enrichment.md",
+        "doc/meta/pre-registration-integration.md",
+        "doc/meta/pre-registration-t28-fraction-qc.md",
+        "doc/methods/causal-model.md",
+        "doc/methods/external-data-ingestion-pattern.md",
+        "doc/methods/hopfield-basin-reconstruction.md",
+        "doc/papers/Amodeo2025.md",
+        "doc/papers/Beguelin2017.md",
+        "doc/papers/Bernstein2024.md",
+        "doc/papers/Boiarsky2022.md",
+        "doc/papers/Bracken2003.md",
+        "doc/papers/Brown2023.md",
+        "doc/papers/Chen2023.md",
+        "doc/papers/Cleynen2024.md",
+        "doc/papers/Cooperrider2025.md",
+        "doc/papers/DaVia2022.md",
+        "doc/papers/DaVia2024.md",
+        "doc/papers/Dang2023.md",
+        "doc/papers/DeJong2021.md",
+        "doc/papers/DeMatos2023.md",
+        "doc/papers/Diamond2021.md",
+        "doc/papers/Dinicola2011.md",
+        "doc/papers/Dubois2022.md",
+        "doc/papers/Fan2018.md",
+        "doc/papers/Frede2021.md",
+        "doc/papers/Gao2026.md",
+        "doc/papers/Grunt2025.md",
+        "doc/papers/Henry2025.md",
+        "doc/papers/Hua2022.md",
+        "doc/papers/Huang2013.md",
+        "doc/papers/Ismail2022.md",
+        "doc/papers/Jang2019.md",
+        "doc/papers/John2023.md",
+        "doc/papers/Johnson2024.md",
+        "doc/papers/Jung2022.md",
+        "doc/papers/Kulinski2023.md",
+        "doc/papers/Kurowska2024.md",
+        "doc/papers/Landau2020.md",
+        "doc/papers/Laplane2024.md",
+        "doc/papers/Ledergor2018.md",
+        "doc/papers/Lin2012.md",
+        "doc/papers/Liu2021.md",
+        "doc/papers/Liu2024.md",
+        "doc/papers/Lotfollahi2019.md",
+        "doc/papers/Lotfollahi2023.md",
+        "doc/papers/Lyne2021.md",
+        "doc/papers/Martincorena2017.md",
+        "doc/papers/Masuda2022.md",
+        "doc/papers/Misund2022.md",
+        "doc/papers/Mitchell2022.md",
+        "doc/papers/Mouhieddine2023.md",
+        "doc/papers/Nie2012.md",
+        "doc/papers/Ordonez2020.md",
+        "doc/papers/Ota2025.md",
+        "doc/papers/PHF19-comprehensive.md",
+        "doc/papers/Parreno2024.md",
+        "doc/papers/Pawlyn2017.md",
+        "doc/papers/Persi2025.md",
+        "doc/papers/Pilcher2023.md",
+        "doc/papers/Qiu2020.md",
+        "doc/papers/Rasche2022.md",
+        "doc/papers/Ren2019.md",
+        "doc/papers/Rood2024.md",
+        "doc/papers/Roohani2024.md",
+        "doc/papers/Ryu2020.md",
+        "doc/papers/SalomonPerzynski2022.md",
+        "doc/papers/Scopetti2026.md",
+        "doc/papers/Shah2024.md",
+        "doc/papers/TaherianFard2017.md",
+        "doc/papers/TellierNutt2019.md",
+        "doc/papers/Terragna2018.md",
+        "doc/papers/Tirier2021.md",
+        "doc/papers/VanderWeele2017.md",
+        "doc/papers/Walch2026.md",
+        "doc/papers/Walker2024.md",
+        "doc/papers/Wei2022.md",
+        "doc/papers/Wong2025.md",
+        "doc/papers/Yao2023.md",
+        "doc/papers/Zhao2023_snoRNA.md",
+        "doc/papers/cohen2021.md",
+        "doc/papers/dutta2022.md",
+        "doc/papers/li2024.md",
+        "doc/papers/li2025.md",
+        "doc/papers/maura2023.md",
+        "doc/papers/moreno-rueda2025.md",
+        "doc/papers/pilcher2026.md",
+        "doc/papers/samur2023.md",
+        "doc/papers/skerget2024.md",
+        "doc/papers/synthesis-2026-04-01-scrnaseq-mm-landscape.md",
+        "doc/papers/synthesis-2026-04-07-global-transcription-snorna-myc.md",
+        "doc/papers/xiang2025.md",
+        "doc/papers/zhang2025.md",
+        "doc/plans/2026-04-17-v8.1-version-branch-analysis.md",
+        "doc/pre-registrations/2026-04-12-t172-scrna-per-cell-validation.md",
+        "doc/pre-registrations/2026-04-13-t174-pc-continuum-validation.md",
+        "doc/pre-registrations/2026-04-14-t190-depmap-crispr-sweep.md",
+        "doc/pre-registrations/2026-04-14-t197-gse155135-ezh2i-replication.md",
+        "doc/pre-registrations/2026-04-14-t202-multi-signature-null-audit.md",
+        "doc/pre-registrations/2026-04-16-t203-ledergor-replication.md",
+        "doc/pre-registrations/2026-04-18-t204-bulk-composition-beyond-pc-maturity.md",
+        "doc/pre-registrations/2026-04-18-t214-healthy-pc-maturation-signature.md",
+        "doc/pre-registrations/2026-04-19-t199-lincs-l1000-screen.md",
+        "doc/pre-registrations/2026-04-19-t205-gse214668-ms177-ezh2-degrader-replication.md",
+        "doc/pre-registrations/2026-04-19-t217-mmrf-dnds-stratified.md",
+        "doc/pre-registrations/2026-04-19-t219-mm30-hopfield-basins.md",
+        "doc/pre-registrations/2026-04-23-t263-pcdp-proxy-correlation.md",
+        "doc/pre-registrations/2026-04-24-t277-within-basin-variance.md",
+        "doc/pre-registrations/2026-04-24-t278-dwell-time-cox.md",
+        "doc/pre-registrations/2026-04-24-t280-bulk-vs-sc-pr-unimodality.md",
+        "doc/questions/aging-epigenetic-erosion-mgus.md",
+        "doc/questions/attractor-causal-level.md",
+        "doc/questions/attractor-landscape-reconstruction-feasibility.md",
+        "doc/questions/centrosome-signature-enrichment.md",
+        "doc/questions/cfchip-commitment-detection.md",
+        "doc/questions/chip-tme-indirect-facilitation.md",
+        "doc/questions/continuous-disease-model.md",
+        "doc/questions/cx5461-sensitivity-by-1q-status.md",
+        "doc/questions/cytogenetic-inference-from-expression.md",
+        "doc/questions/del17p-acquisition-under-len-maintenance.md",
+        "doc/questions/disease-stage-transition-signatures.md",
+        "doc/questions/dynamic-cytogenetic-risk-reassessment.md",
+        "doc/questions/effect-size-vs-pvalue-aggregation.md",
+        "doc/questions/epigenetic-ratcheting-in-mm.md",
+        "doc/questions/event-ordering-from-expression.md",
+        "doc/questions/formal-mediation-t121-t125-retrofit.md",
+        "doc/questions/global-transcriptional-upregulation.md",
+        "doc/questions/hyperdiploidy-mechanism.md",
+        "doc/questions/icp-environment-heterogeneity-observational.md",
+        "doc/questions/ido1-tryptophan-kynurenine-immune-evasion.md",
+        "doc/questions/igh-translocation-3d-mechanism-classes.md",
+        "doc/questions/mechanism-vs-pathway-claim-levels.md",
+        "doc/questions/nek2-treatment-response.md",
+        "doc/questions/neutral-drift-progression.md",
+        "doc/questions/non-1q-program-driver.md",
+        "doc/questions/nsd2-phf19-mirror-polycomb.md",
+        "doc/questions/nucleoporin-signal.md",
+        "doc/questions/overlooked-phenotype-heterogeneity.md",
+        "doc/questions/phenotypic-distinctness-of-molecular-subtypes.md",
+        "doc/questions/phf19-mediation-sequential-ignorability.md",
+        "doc/questions/phf19-prc2-3d-genome-substrate.md",
+        "doc/questions/phf19-regulator-vs-program-survival-direction.md",
+        "doc/questions/phf19-regulators-in-1q-negative.md",
+        "doc/questions/phf19-survival-mechanism-mediation.md",
+        "doc/questions/prc2-perturbation-class-and-mm-context-requirements.md",
+        "doc/questions/proliferation-dominance.md",
+        "doc/questions/ribosome-axis-pc-continuum-vs-nucleolar-stress.md",
+        "doc/questions/rna-velocity-feasibility-boiarsky.md",
+        "doc/questions/selection-vs-drift-progression.md",
+        "doc/questions/simpsons-paradox-purity.md",
+        "doc/questions/stratum-specific-biology.md",
+        "doc/questions/subtype-transition-directionality.md",
+        "doc/questions/tme-coevolution-progression.md",
+        "doc/questions/treatment-response-incoherence.md",
+        "doc/questions/tte-ecog-frailty-gap.md",
+        "doc/questions/ythdf2-m6a-proliferation-axis.md",
+        "doc/reports/2026-04-15-t174-t202-cross-impact.md",
+        "doc/reports/2026-04-16-scRNA-replication-shortlist.md",
+        "doc/reports/2026-04-19-attractor-3dgenome-synthesis.md",
+        "doc/reports/2026-04-19-chip-mm-interaction-synthesis.md",
+        "doc/reports/2026-04-19-evolutionary-dynamics-synthesis.md",
+        "doc/reports/2026-04-19-mm-mechanism-metabolism-synthesis.md",
+        "doc/reports/h2-convergent-divergent-mechanisms.md",
+        "doc/reports/phf19-ifn-jakstat-polycomb-arc.md",
+        "doc/searches/2026-04-01-bulk-sc-integration-methods.md",
+        "doc/specs/2026-04-13-t174-pc-continuum-design.md",
+        "doc/specs/2026-04-16-t206-boiarsky-cache-audit-remediation.md",
+        "doc/topics/aging-epigenetic-erosion-clonal-susceptibility.md",
+        "doc/topics/aid-germinal-center-mm-origins.md",
+        "doc/topics/cancer-as-singular-evolutionary-disease.md",
+        "doc/topics/causal-inference-biology-foundations.md",
+        "doc/topics/centrosomes-cancer-multiple-myeloma.md",
+        "doc/topics/disease-stage-progression-methods.md",
+        "doc/topics/epigenetic-chromatin-mm-progression.md",
+        "doc/topics/formal-causal-mediation.md",
+        "doc/topics/gain1q-neg-unique-genes.md",
+        "doc/topics/invariant-causal-prediction-biology.md",
+        "doc/topics/metafor-ranks16-30-literature-synthesis.md",
+        "doc/topics/metafor-ranks31-45-literature-synthesis.md",
+        "doc/topics/metafor-top15-literature-synthesis.md",
+        "doc/topics/nk-boolean-attractor-formalism.md",
+        "doc/topics/phf19-regulation-chromatin.md",
+        "doc/topics/ribosomopathies-hematologic-malignancies.md",
+        "doc/topics/selection-vs-drift-mm-progression.md",
+        "doc/topics/target-trial-emulation-oncology.md",
+        "doc/topics/waddington-landscape-attractor-formalism.md",
+        "specs/hypotheses/h1-epigenetic-commitment.md",
+        "specs/hypotheses/h2-cytogenetic-distinct-entities.md",
+        "specs/hypotheses/h3-mutation-reshaping.md",
+        "specs/hypotheses/h4-attractor-convergence.md",
+        "specs/hypotheses/h6-positive-selection-mm-progression.md",
+        "specs/propositions/p01-h1-stage-decoupling.md",
+        "specs/propositions/p02-h1-phf19-prognostic-independence.md",
+        "specs/propositions/p03-h1-phf19-prc2-ifn-mechanism.md",
+        "specs/propositions/p04-h2-stratified-ranking-divergence.md",
+        "specs/propositions/p05-h2-convergent-endpoints-divergent-mechanisms.md",
+        "specs/propositions/p06-h2-gain1q-longitudinal-architecture.md",
+        "specs/propositions/p07-h1-h2-cell-state-bridge.md",
+        "specs/propositions/p08-t174-per-cell-collapse.md",
+        "specs/propositions/p09-t174-bulk-pc-maturity-limit.md",
+        "specs/propositions/p10-t202-expression-matching-load-bearing.md",
+        "specs/propositions/p11-t174-t202-rival-model-state.md",
+        "specs/propositions/p12-t174-t202-verdict-invariant.md",
+        "specs/propositions/p13-h2-lineage-conditioned-ranking-architecture.md",
+        "specs/propositions/p14-h4-ratcheting-biophysical.md",
+        "specs/propositions/p15-h4-attractor-escape-theory.md"
+      ],
+      "source": [
+        "doc/papers/Beguelin2017.md",
+        "doc/papers/Bernstein2024.md",
+        "doc/papers/Boiarsky2022.md",
+        "doc/papers/Bracken2003.md",
+        "doc/papers/Chen2023.md",
+        "doc/papers/Cleynen2024.md",
+        "doc/papers/DaVia2024.md",
+        "doc/papers/Dang2023.md",
+        "doc/papers/DeJong2021.md",
+        "doc/papers/DeMatos2023.md",
+        "doc/papers/Diamond2021.md",
+        "doc/papers/Fan2018.md",
+        "doc/papers/Frede2021.md",
+        "doc/papers/Henry2025.md",
+        "doc/papers/Jang2019.md",
+        "doc/papers/John2023.md",
+        "doc/papers/Johnson2024.md",
+        "doc/papers/Jung2022.md",
+        "doc/papers/Kurowska2024.md",
+        "doc/papers/Landau2020.md",
+        "doc/papers/Ledergor2018.md",
+        "doc/papers/Lin2012.md",
+        "doc/papers/Liu2021.md",
+        "doc/papers/Liu2024.md",
+        "doc/papers/Masuda2022.md",
+        "doc/papers/Nie2012.md",
+        "doc/papers/Ordonez2020.md",
+        "doc/papers/PHF19-comprehensive.md",
+        "doc/papers/Pilcher2023.md",
+        "doc/papers/Qiu2020.md",
+        "doc/papers/Ren2019.md",
+        "doc/papers/Ryu2020.md",
+        "doc/papers/TellierNutt2019.md",
+        "doc/papers/Tirier2021.md",
+        "doc/papers/VanderWeele2017.md",
+        "doc/papers/Walker2024.md",
+        "doc/papers/Yao2023.md",
+        "doc/papers/Zhao2023_snoRNA.md",
+        "doc/papers/cohen2021.md",
+        "doc/papers/dutta2022.md",
+        "doc/papers/li2024.md",
+        "doc/papers/li2025.md",
+        "doc/papers/maura2023.md",
+        "doc/papers/moreno-rueda2025.md",
+        "doc/papers/pilcher2026.md",
+        "doc/papers/samur2023.md",
+        "doc/papers/skerget2024.md",
+        "doc/papers/xiang2025.md",
+        "doc/papers/zhang2025.md"
+      ]
+    },
+    "long_form_files": [
+      {
+        "path": "core/overview.md",
+        "lines": 569
+      },
+      {
+        "path": "doc/audits/2026-04-12-t172-scrna-causal-audit.md",
+        "lines": 647
+      },
+      {
+        "path": "doc/background/topics/mm-biomarkers-signatures.md",
+        "lines": 477
+      },
+      {
+        "path": "doc/background/topics/mm-disease-biology.md",
+        "lines": 342
+      },
+      {
+        "path": "doc/background/topics/mm-subtypes-heterogeneity.md",
+        "lines": 480
+      },
+      {
+        "path": "doc/datasets/2026-04-17-external-dataset-priors-for-mm30.md",
+        "lines": 310
+      },
+      {
+        "path": "doc/discussions/2026-04-04-disease-stage-progression.md",
+        "lines": 345
+      },
+      {
+        "path": "doc/discussions/2026-04-07-hypothesis-prioritization.md",
+        "lines": 308
+      },
+      {
+        "path": "doc/discussions/2026-04-07-upstream-mechanisms-followup.md",
+        "lines": 541
+      },
+      {
+        "path": "doc/discussions/2026-04-07-upstream-of-cytogenetic-events.md",
+        "lines": 349
+      },
+      {
+        "path": "doc/discussions/2026-04-12-causal-graph-strategic-review.md",
+        "lines": 362
+      },
+      {
+        "path": "doc/discussions/2026-04-13-h1-causal-evidence-audit.md",
+        "lines": 326
+      },
+      {
+        "path": "doc/discussions/2026-04-13-ribosome-e2f1-percell-ambiguous.md",
+        "lines": 338
+      },
+      {
+        "path": "doc/discussions/2026-04-13-t174-pc-continuum-design-critique.md",
+        "lines": 359
+      },
+      {
+        "path": "doc/discussions/2026-04-19-dag-iteration-and-refinement.md",
+        "lines": 489
+      },
+      {
+        "path": "doc/discussions/2026-04-19-verdict-conflict-coverage-scan.md",
+        "lines": 311
+      },
+      {
+        "path": "doc/discussions/2026-04-19-verdict-polarity-display.md",
+        "lines": 412
+      },
+      {
+        "path": "doc/figures/dags/README.md",
+        "lines": 352
+      },
+      {
+        "path": "doc/guides/modalities/bayesian-hierarchical.md",
+        "lines": 531
+      },
+      {
+        "path": "doc/guides/modalities/scrna-seq.md",
+        "lines": 434
+      },
+      {
+        "path": "doc/handoffs/2026-04-13-t174-session-handoff.md",
+        "lines": 362
+      },
+      {
+        "path": "doc/inquiries/h1-prognosis.md",
+        "lines": 354
+      },
+      {
+        "path": "doc/inquiries/h2-subtype-architecture.md",
+        "lines": 323
+      },
+      {
+        "path": "doc/inquiries/h4-attractor-convergence-critique.md",
+        "lines": 608
+      },
+      {
+        "path": "doc/inquiries/h4-attractor-convergence.md",
+        "lines": 1324
+      },
+      {
+        "path": "doc/inquiries/t278-dwell-time-cox-pipeline-plan-review.md",
+        "lines": 937
+      },
+      {
+        "path": "doc/inquiries/t280-sc-pr-unimodality-plan-review.md",
+        "lines": 347
+      },
+      {
+        "path": "doc/interpretations/2026-04-08-t085-t091-mutation-overlap-phf19-replication.md",
+        "lines": 326
+      },
+      {
+        "path": "doc/interpretations/2026-04-12-t153-confounder-nodes.md",
+        "lines": 302
+      },
+      {
+        "path": "doc/interpretations/2026-04-12-t166-stage-transition-edges.md",
+        "lines": 479
+      },
+      {
+        "path": "doc/interpretations/2026-04-13-t172-ribosome-e2f1-composition-driven.md",
+        "lines": 444
+      },
+      {
+        "path": "doc/interpretations/2026-04-13-t174-pc-continuum.md",
+        "lines": 414
+      },
+      {
+        "path": "doc/interpretations/2026-04-14-t197-gse155135-ezh2i-replication.md",
+        "lines": 303
+      },
+      {
+        "path": "doc/interpretations/2026-04-18-t204-bulk-composition-beyond-pc-maturity-verdict.md",
+        "lines": 406
+      },
+      {
+        "path": "doc/interpretations/2026-04-18-t214-healthy-pc-maturation-verdict.md",
+        "lines": 305
+      },
+      {
+        "path": "doc/interpretations/2026-04-21-t099-skerget-transition-matrix.md",
+        "lines": 355
+      },
+      {
+        "path": "doc/interpretations/2026-04-21-t240-misund-phf19-trajectory.md",
+        "lines": 301
+      },
+      {
+        "path": "doc/interpretations/2026-04-25-t280-sc-pr-unimodality.md",
+        "lines": 368
+      },
+      {
+        "path": "doc/mechanisms/phf19-prc2-ifn-immunotherapy.md",
+        "lines": 321
+      },
+      {
+        "path": "doc/mechanisms/proliferation-translation-cell-state-axis.md",
+        "lines": 798
+      },
+      {
+        "path": "doc/meta/2026-04-25-graph-data-cleanup.md",
+        "lines": 301
+      },
+      {
+        "path": "doc/meta/curation/curation-sweep-2026-04-23.md",
+        "lines": 347
+      },
+      {
+        "path": "doc/meta/next-steps-2026-04-24.md",
+        "lines": 387
+      },
+      {
+        "path": "doc/meta/pre-registration-integration.md",
+        "lines": 312
+      },
+      {
+        "path": "doc/papers/Gao2026.md",
+        "lines": 343
+      },
+      {
+        "path": "doc/papers/Kulinski2023.md",
+        "lines": 316
+      },
+      {
+        "path": "doc/papers/Lotfollahi2019.md",
+        "lines": 350
+      },
+      {
+        "path": "doc/papers/Lotfollahi2023.md",
+        "lines": 353
+      },
+      {
+        "path": "doc/papers/VanderWeele2017.md",
+        "lines": 415
+      },
+      {
+        "path": "doc/plans/2026-04-01-sc-bulk-integration-plan.md",
+        "lines": 598
+      },
+      {
+        "path": "doc/plans/2026-04-02-cytogenetic-inference-pipeline-plan.md",
+        "lines": 402
+      },
+      {
+        "path": "doc/plans/2026-04-02-cytogenetic-pipeline-integration.md",
+        "lines": 373
+      },
+      {
+        "path": "doc/plans/2026-04-04-project-reorganization-design.md",
+        "lines": 713
+      },
+      {
+        "path": "doc/plans/2026-04-04-project-reorganization-plan.md",
+        "lines": 1966
+      },
+      {
+        "path": "doc/plans/2026-04-09-mutation-integration-t104-t106.md",
+        "lines": 1317
+      },
+      {
+        "path": "doc/plans/2026-04-11-bayesian-causal-dag-plan.md",
+        "lines": 1559
+      },
+      {
+        "path": "doc/plans/2026-04-12-bioinformatics-audit-framework-phase0.md",
+        "lines": 861
+      },
+      {
+        "path": "doc/plans/2026-04-12-t128-h2-consolidated-report.md",
+        "lines": 922
+      },
+      {
+        "path": "doc/plans/2026-04-12-t166-stage-transition-edges.md",
+        "lines": 1846
+      },
+      {
+        "path": "doc/plans/2026-04-12-t172-scrna-per-cell-validation.md",
+        "lines": 2567
+      },
+      {
+        "path": "doc/plans/2026-04-13-t174-pc-continuum-implementation.md",
+        "lines": 725
+      },
+      {
+        "path": "doc/plans/2026-04-14-t202-implementation.md",
+        "lines": 2682
+      },
+      {
+        "path": "doc/plans/2026-04-16-t203-ledergor-replication-pipeline-plan.md",
+        "lines": 429
+      },
+      {
+        "path": "doc/plans/2026-04-16-t203-ledergor-snakemake-integration.md",
+        "lines": 431
+      },
+      {
+        "path": "doc/plans/2026-04-19-verdict-token-backfill.md",
+        "lines": 716
+      },
+      {
+        "path": "doc/plans/2026-04-22-topic-migration-implementation-plan.md",
+        "lines": 555
+      },
+      {
+        "path": "doc/plans/2026-04-24-t278-dwell-time-pipeline-plan.md",
+        "lines": 372
+      },
+      {
+        "path": "doc/pre-registrations/2026-04-13-t174-pc-continuum-validation.md",
+        "lines": 612
+      },
+      {
+        "path": "doc/pre-registrations/2026-04-14-t197-gse155135-ezh2i-replication.md",
+        "lines": 425
+      },
+      {
+        "path": "doc/pre-registrations/2026-04-14-t202-multi-signature-null-audit.md",
+        "lines": 632
+      },
+      {
+        "path": "doc/pre-registrations/2026-04-18-t204-bulk-composition-beyond-pc-maturity.md",
+        "lines": 883
+      },
+      {
+        "path": "doc/pre-registrations/2026-04-18-t214-healthy-pc-maturation-signature.md",
+        "lines": 1224
+      },
+      {
+        "path": "doc/pre-registrations/2026-04-19-t199-lincs-l1000-screen.md",
+        "lines": 496
+      },
+      {
+        "path": "doc/pre-registrations/2026-04-19-t205-gse214668-ms177-ezh2-degrader-replication.md",
+        "lines": 460
+      },
+      {
+        "path": "doc/pre-registrations/2026-04-24-t277-within-basin-variance.md",
+        "lines": 647
+      },
+      {
+        "path": "doc/pre-registrations/2026-04-24-t278-dwell-time-cox.md",
+        "lines": 1191
+      },
+      {
+        "path": "doc/pre-registrations/2026-04-24-t280-bulk-vs-sc-pr-unimodality.md",
+        "lines": 1542
+      },
+      {
+        "path": "doc/reorg/dependency_graph.md",
+        "lines": 345
+      },
+      {
+        "path": "doc/reports/h2-convergent-divergent-mechanisms.md",
+        "lines": 464
+      },
+      {
+        "path": "doc/reports/phf19-ifn-jakstat-polycomb-arc.md",
+        "lines": 438
+      },
+      {
+        "path": "doc/searches/2026-04-01-bulk-sc-integration-methods.md",
+        "lines": 346
+      },
+      {
+        "path": "doc/searches/2026-04-01-existing-mm-meta-analyses.md",
+        "lines": 386
+      },
+      {
+        "path": "doc/specs/2026-04-11-bayesian-causal-dag-design.md",
+        "lines": 594
+      },
+      {
+        "path": "doc/specs/2026-04-12-bioinformatics-audit-framework-design.md",
+        "lines": 447
+      },
+      {
+        "path": "doc/specs/2026-04-12-t128-h2-consolidated-report-design.md",
+        "lines": 354
+      },
+      {
+        "path": "doc/specs/2026-04-12-t172-scrna-per-cell-validation-design.md",
+        "lines": 526
+      },
+      {
+        "path": "doc/specs/2026-04-13-t174-pc-continuum-design.md",
+        "lines": 616
+      },
+      {
+        "path": "doc/topics/aging-epigenetic-erosion-clonal-susceptibility.md",
+        "lines": 689
+      },
+      {
+        "path": "doc/topics/aid-germinal-center-mm-origins.md",
+        "lines": 601
+      },
+      {
+        "path": "doc/topics/causal-inference-biology-foundations.md",
+        "lines": 721
+      },
+      {
+        "path": "doc/topics/centrosomes-cancer-multiple-myeloma.md",
+        "lines": 463
+      },
+      {
+        "path": "doc/topics/chromosomal-alterations-3d-genome-disease-continuum.md",
+        "lines": 466
+      },
+      {
+        "path": "doc/topics/disease-stage-progression-methods.md",
+        "lines": 470
+      },
+      {
+        "path": "doc/topics/e2f1-repressor-chromatin-crosstalk.md",
+        "lines": 655
+      },
+      {
+        "path": "doc/topics/epigenetic-attractors-convergence-canalization.md",
+        "lines": 1047
+      },
+      {
+        "path": "doc/topics/epigenetic-chromatin-mm-progression.md",
+        "lines": 537
+      },
+      {
+        "path": "doc/topics/formal-causal-mediation.md",
+        "lines": 635
+      },
+      {
+        "path": "doc/topics/invariant-causal-prediction-biology.md",
+        "lines": 665
+      },
+      {
+        "path": "doc/topics/mtor-inhibitor-trials-mm.md",
+        "lines": 448
+      },
+      {
+        "path": "doc/topics/phf19-regulation-chromatin.md",
+        "lines": 381
+      },
+      {
+        "path": "doc/topics/ribosomopathies-hematologic-malignancies.md",
+        "lines": 697
+      },
+      {
+        "path": "doc/topics/survival-meta-analysis-methodology.md",
+        "lines": 338
+      },
+      {
+        "path": "doc/topics/target-trial-emulation-oncology.md",
+        "lines": 652
+      },
+      {
+        "path": "doc/topics/waddington-landscape-attractor-formalism.md",
+        "lines": 886
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-02-sensitivity-pipeline.md",
+        "lines": 2417
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-03-dual-ranking-notebook.md",
+        "lines": 1360
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-04-progression-pipeline.md",
+        "lines": 1226
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-06-gdsc-drug-sensitivity.md",
+        "lines": 1038
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-08-hypothesis-pipeline-architecture.md",
+        "lines": 3189
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-09-publication-figures.md",
+        "lines": 1619
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-16-cytogenetic-subtype-program.md",
+        "lines": 768
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-02-sensitivity-pipeline-design.md",
+        "lines": 325
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-04-progression-pipeline-design.md",
+        "lines": 378
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-08-hypothesis-pipeline-architecture-design.md",
+        "lines": 672
+      },
+      {
+        "path": "specs/hypotheses/h1-epigenetic-commitment.md",
+        "lines": 313
+      },
+      {
+        "path": "specs/hypotheses/h2-cytogenetic-distinct-entities.md",
+        "lines": 359
+      },
+      {
+        "path": "specs/hypotheses/h4-attractor-convergence.md",
+        "lines": 310
+      },
+      {
+        "path": "specs/hypotheses/h6-positive-selection-mm-progression.md",
+        "lines": 346
+      },
+      {
+        "path": "tasks/active.md",
+        "lines": 2768
+      },
+      {
+        "path": "tasks/done/2026-04.md",
+        "lines": 2583
+      }
+    ],
+    "embedded_metadata_candidates": [
+      {
+        "path": "core/decisions.md",
+        "lines": 168,
+        "candidate_starts": [
+          59,
+          91,
+          122
+        ]
+      },
+      {
+        "path": "data/signatures/README.md",
+        "lines": 139,
+        "candidate_starts": [
+          79
+        ]
+      },
+      {
+        "path": "doc/discussions/2026-04-07-hypothesis-prioritization.md",
+        "lines": 308,
+        "candidate_starts": [
+          104,
+          177,
+          239
+        ]
+      },
+      {
+        "path": "doc/discussions/2026-04-07-upstream-mechanisms-followup.md",
+        "lines": 541,
+        "candidate_starts": [
+          78,
+          189,
+          280,
+          377,
+          499
+        ]
+      },
+      {
+        "path": "doc/discussions/2026-04-12-causal-graph-strategic-review.md",
+        "lines": 362,
+        "candidate_starts": [
+          66,
+          164,
+          212,
+          309
+        ]
+      },
+      {
+        "path": "doc/discussions/2026-04-14-t202-rubric-adversarial-review.md",
+        "lines": 256,
+        "candidate_starts": [
+          130
+        ]
+      },
+      {
+        "path": "doc/discussions/2026-04-19-dag-iteration-and-refinement.md",
+        "lines": 489,
+        "candidate_starts": [
+          68,
+          219,
+          316,
+          419,
+          452
+        ]
+      },
+      {
+        "path": "doc/discussions/2026-04-19-next-session-action-plan.md",
+        "lines": 290,
+        "candidate_starts": [
+          169
+        ]
+      },
+      {
+        "path": "doc/discussions/2026-04-23-h4-attractor-level-scope.md",
+        "lines": 248,
+        "candidate_starts": [
+          56,
+          231
+        ]
+      },
+      {
+        "path": "doc/discussions/comparison-h1-h2-h3.md",
+        "lines": 286,
+        "candidate_starts": [
+          68,
+          171,
+          233
+        ]
+      },
+      {
+        "path": "doc/guides/audit-process.md",
+        "lines": 243,
+        "candidate_starts": [
+          91,
+          182,
+          225
+        ]
+      },
+      {
+        "path": "doc/handoffs/2026-04-12-t172-session-handoff.md",
+        "lines": 232,
+        "candidate_starts": [
+          55,
+          76,
+          178
+        ]
+      },
+      {
+        "path": "doc/handoffs/2026-04-13-session-handoff.md",
+        "lines": 201,
+        "candidate_starts": [
+          86,
+          137,
+          188
+        ]
+      },
+      {
+        "path": "doc/handoffs/2026-04-13-t174-session-handoff.md",
+        "lines": 362,
+        "candidate_starts": [
+          134,
+          188,
+          270,
+          344
+        ]
+      },
+      {
+        "path": "doc/handoffs/2026-04-13-t174-task6-task7-continuation.md",
+        "lines": 218,
+        "candidate_starts": [
+          68,
+          119,
+          183
+        ]
+      },
+      {
+        "path": "doc/handoffs/2026-04-14-session-handoff.md",
+        "lines": 162,
+        "candidate_starts": [
+          109,
+          130
+        ]
+      },
+      {
+        "path": "doc/handoffs/2026-04-14-t174-completion.md",
+        "lines": 215,
+        "candidate_starts": [
+          62,
+          139,
+          168
+        ]
+      },
+      {
+        "path": "doc/handoffs/2026-04-15-t202-implementation-complete.md",
+        "lines": 237,
+        "candidate_starts": [
+          100,
+          164,
+          217
+        ]
+      },
+      {
+        "path": "doc/handoffs/2026-04-17-session-handoff.md",
+        "lines": 277,
+        "candidate_starts": [
+          152,
+          202,
+          229
+        ]
+      },
+      {
+        "path": "doc/inquiries/t204-review.md",
+        "lines": 161,
+        "candidate_starts": [
+          71,
+          91,
+          108,
+          122,
+          143
+        ]
+      },
+      {
+        "path": "doc/inquiries/t278-dwell-time-cox-pipeline-plan-review.md",
+        "lines": 937,
+        "candidate_starts": [
+          593
+        ]
+      },
+      {
+        "path": "doc/inquiries/t280-sc-pr-unimodality-plan-review-round2.md",
+        "lines": 189,
+        "candidate_starts": [
+          133,
+          172
+        ]
+      },
+      {
+        "path": "doc/inquiries/t280-sc-pr-unimodality-plan-review.md",
+        "lines": 347,
+        "candidate_starts": [
+          204,
+          306
+        ]
+      },
+      {
+        "path": "doc/interpretations/2026-04-03-centrosome-enrichment.md",
+        "lines": 223,
+        "candidate_starts": [
+          123,
+          190
+        ]
+      },
+      {
+        "path": "doc/interpretations/2026-04-21-t099-skerget-transition-matrix.md",
+        "lines": 355,
+        "candidate_starts": [
+          54
+        ]
+      },
+      {
+        "path": "doc/interpretations/2026-04-21-t240-misund-phf19-trajectory.md",
+        "lines": 301,
+        "candidate_starts": [
+          54
+        ]
+      },
+      {
+        "path": "doc/interpretations/2026-04-21-t258-phf19-pathway-specificity.md",
+        "lines": 250,
+        "candidate_starts": [
+          51
+        ]
+      },
+      {
+        "path": "doc/mechanisms/phf19-prc2-ifn-immunotherapy.md",
+        "lines": 321,
+        "candidate_starts": [
+          61,
+          120,
+          170,
+          247
+        ]
+      },
+      {
+        "path": "doc/mechanisms/proliferation-translation-cell-state-axis.md",
+        "lines": 798,
+        "candidate_starts": [
+          120,
+          250,
+          417,
+          616,
+          669
+        ]
+      },
+      {
+        "path": "doc/meta/2026-04-25-graph-data-cleanup.md",
+        "lines": 301,
+        "candidate_starts": [
+          64
+        ]
+      },
+      {
+        "path": "doc/meta/bias-audit-t204-pre-reg-sanity.md",
+        "lines": 237,
+        "candidate_starts": [
+          71,
+          106,
+          155,
+          192,
+          212
+        ]
+      },
+      {
+        "path": "doc/meta/hypothesis-question-map.md",
+        "lines": 229,
+        "candidate_starts": [
+          57,
+          109,
+          165
+        ]
+      },
+      {
+        "path": "doc/meta/next-steps-2026-04-11.md",
+        "lines": 300,
+        "candidate_starts": [
+          164
+        ]
+      },
+      {
+        "path": "doc/meta/next-steps-2026-04-19.md",
+        "lines": 291,
+        "candidate_starts": [
+          208
+        ]
+      },
+      {
+        "path": "doc/meta/next-steps-2026-04-24.md",
+        "lines": 387,
+        "candidate_starts": [
+          292
+        ]
+      },
+      {
+        "path": "doc/papers/VanderWeele2017.md",
+        "lines": 415,
+        "candidate_starts": [
+          159,
+          200,
+          239
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-01-sc-bulk-integration-plan.md",
+        "lines": 598,
+        "candidate_starts": [
+          65,
+          126,
+          219,
+          293,
+          393,
+          470,
+          544
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-02-cytogenetic-inference-pipeline-plan.md",
+        "lines": 402,
+        "candidate_starts": [
+          72,
+          137,
+          236,
+          309,
+          385
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-02-cytogenetic-pipeline-integration.md",
+        "lines": 373,
+        "candidate_starts": [
+          60,
+          124,
+          179,
+          218,
+          340
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-04-mmrf-mutation-integration-plan.md",
+        "lines": 275,
+        "candidate_starts": [
+          62,
+          177,
+          257
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-04-project-reorganization-plan.md",
+        "lines": 1966,
+        "candidate_starts": [
+          87,
+          621,
+          637,
+          1026,
+          1731,
+          1884
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-08-t081-t082-pipeline-plan.md",
+        "lines": 67,
+        "candidate_starts": [
+          63
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-09-mutation-integration-t104-t106.md",
+        "lines": 1317,
+        "candidate_starts": [
+          190,
+          893
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-11-bayesian-causal-dag-plan.md",
+        "lines": 1559,
+        "candidate_starts": [
+          52,
+          359,
+          818,
+          1512
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-11-h2-upgrade-path-plan.md",
+        "lines": 160,
+        "candidate_starts": [
+          98
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-11-hd-stratification-plan.md",
+        "lines": 201,
+        "candidate_starts": [
+          76,
+          156
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-12-bioinformatics-audit-framework-phase0.md",
+        "lines": 861,
+        "candidate_starts": [
+          158,
+          170,
+          208,
+          231,
+          404,
+          618,
+          747,
+          841
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-12-t128-h2-consolidated-report.md",
+        "lines": 922,
+        "candidate_starts": [
+          53,
+          191,
+          204,
+          216,
+          292,
+          409,
+          543,
+          736,
+          822
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-12-t166-stage-transition-edges.md",
+        "lines": 1846,
+        "candidate_starts": [
+          237,
+          447,
+          821,
+          1170,
+          1425,
+          1426,
+          1440,
+          1512,
+          1688,
+          1824
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-12-t172-scrna-per-cell-validation.md",
+        "lines": 2567,
+        "candidate_starts": [
+          66,
+          67,
+          218,
+          507,
+          514,
+          809,
+          1336,
+          1749,
+          2057,
+          2273,
+          2274,
+          2287,
+          2381
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-13-t174-pc-continuum-implementation.md",
+        "lines": 725,
+        "candidate_starts": [
+          56,
+          173,
+          281,
+          358,
+          458,
+          524,
+          609,
+          654,
+          713
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-14-t202-implementation.md",
+        "lines": 2682,
+        "candidate_starts": [
+          107,
+          298,
+          629,
+          860,
+          1153,
+          1630,
+          1912,
+          2189,
+          2506,
+          2663
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-15-science-methodology-migration.md",
+        "lines": 287,
+        "candidate_starts": [
+          53,
+          123,
+          197,
+          250
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-16-t203-ledergor-replication-pipeline-plan.md",
+        "lines": 429,
+        "candidate_starts": [
+          59,
+          131,
+          220,
+          296,
+          410
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-17-t208-oetjen-ingestion-plan.md",
+        "lines": 163,
+        "candidate_starts": [
+          69,
+          108,
+          141
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-18-t204-pipeline-plan.md",
+        "lines": 297,
+        "candidate_starts": [
+          55,
+          105,
+          142,
+          171,
+          208,
+          249,
+          283
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-18-t214-healthy-pc-maturation-pipeline-plan.md",
+        "lines": 260,
+        "candidate_starts": [
+          74,
+          115,
+          157,
+          199,
+          240,
+          254
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-19-t199-lincs-l1000-pipeline-plan.md",
+        "lines": 252,
+        "candidate_starts": [
+          51,
+          223
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-19-verdict-token-backfill.md",
+        "lines": 716,
+        "candidate_starts": [
+          70
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-24-t277-within-basin-variance-pipeline-plan.md",
+        "lines": 292,
+        "candidate_starts": [
+          55
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-24-t278-dwell-time-pipeline-plan.md",
+        "lines": 372,
+        "candidate_starts": [
+          319
+        ]
+      },
+      {
+        "path": "doc/pre-registrations/2026-04-18-t204-bulk-composition-beyond-pc-maturity.md",
+        "lines": 883,
+        "candidate_starts": [
+          62,
+          97,
+          185,
+          232,
+          293,
+          322,
+          350,
+          421
+        ]
+      },
+      {
+        "path": "doc/pre-registrations/2026-04-18-t214-healthy-pc-maturation-signature.md",
+        "lines": 1224,
+        "candidate_starts": [
+          544
+        ]
+      },
+      {
+        "path": "doc/pre-registrations/2026-04-24-t280-bulk-vs-sc-pr-unimodality.md",
+        "lines": 1542,
+        "candidate_starts": [
+          1540
+        ]
+      },
+      {
+        "path": "doc/reorg/dependency_graph.md",
+        "lines": 345,
+        "candidate_starts": [
+          328
+        ]
+      },
+      {
+        "path": "doc/reports/h2-convergent-divergent-mechanisms.md",
+        "lines": 464,
+        "candidate_starts": [
+          74,
+          180,
+          312
+        ]
+      },
+      {
+        "path": "doc/reports/phf19-ifn-jakstat-polycomb-arc.md",
+        "lines": 438,
+        "candidate_starts": [
+          85,
+          182,
+          278,
+          356
+        ]
+      },
+      {
+        "path": "doc/reports/synthesis/_emergent-threads.md",
+        "lines": 126,
+        "candidate_starts": [
+          59,
+          107
+        ]
+      },
+      {
+        "path": "doc/reports/synthesis/h1-epigenetic-commitment.md",
+        "lines": 118,
+        "candidate_starts": [
+          74
+        ]
+      },
+      {
+        "path": "doc/reports/synthesis/h2-cytogenetic-distinct-entities.md",
+        "lines": 86,
+        "candidate_starts": [
+          62
+        ]
+      },
+      {
+        "path": "doc/reports/synthesis/h3-mutation-reshaping.md",
+        "lines": 98,
+        "candidate_starts": [
+          56,
+          91
+        ]
+      },
+      {
+        "path": "doc/reports/synthesis/h4-attractor-convergence.md",
+        "lines": 198,
+        "candidate_starts": [
+          72,
+          136
+        ]
+      },
+      {
+        "path": "doc/specs/2026-04-09-mutation-integration-t104-t106-design.md",
+        "lines": 245,
+        "candidate_starts": [
+          78,
+          209
+        ]
+      },
+      {
+        "path": "doc/specs/2026-04-11-bayesian-causal-dag-design.md",
+        "lines": 594,
+        "candidate_starts": [
+          384
+        ]
+      },
+      {
+        "path": "doc/specs/2026-04-12-t128-h2-consolidated-report-design.md",
+        "lines": 354,
+        "candidate_starts": [
+          58,
+          59
+        ]
+      },
+      {
+        "path": "doc/specs/2026-04-13-t174-pc-continuum-design.md",
+        "lines": 616,
+        "candidate_starts": [
+          577
+        ]
+      },
+      {
+        "path": "doc/topics/aging-epigenetic-erosion-clonal-susceptibility.md",
+        "lines": 689,
+        "candidate_starts": [
+          94,
+          198,
+          304,
+          395,
+          497,
+          578
+        ]
+      },
+      {
+        "path": "doc/topics/aid-germinal-center-mm-origins.md",
+        "lines": 601,
+        "candidate_starts": [
+          55,
+          184,
+          298,
+          418,
+          512
+        ]
+      },
+      {
+        "path": "doc/topics/causal-inference-biology-foundations.md",
+        "lines": 721,
+        "candidate_starts": [
+          109,
+          201,
+          263,
+          329,
+          526,
+          659
+        ]
+      },
+      {
+        "path": "doc/topics/centrosomes-cancer-multiple-myeloma.md",
+        "lines": 463,
+        "candidate_starts": [
+          96,
+          222,
+          315,
+          374,
+          445
+        ]
+      },
+      {
+        "path": "doc/topics/chromosomal-alterations-3d-genome-disease-continuum.md",
+        "lines": 466,
+        "candidate_starts": [
+          87,
+          225,
+          368,
+          415
+        ]
+      },
+      {
+        "path": "doc/topics/disease-stage-progression-methods.md",
+        "lines": 470,
+        "candidate_starts": [
+          96,
+          111,
+          263,
+          362,
+          418
+        ]
+      },
+      {
+        "path": "doc/topics/e2f1-repressor-chromatin-crosstalk.md",
+        "lines": 655,
+        "candidate_starts": [
+          115,
+          308,
+          401,
+          508
+        ]
+      },
+      {
+        "path": "doc/topics/epigenetic-attractors-convergence-canalization.md",
+        "lines": 1047,
+        "candidate_starts": [
+          122,
+          264,
+          462,
+          617,
+          729,
+          858,
+          1005
+        ]
+      },
+      {
+        "path": "doc/topics/epigenetic-chromatin-mm-progression.md",
+        "lines": 537,
+        "candidate_starts": [
+          115,
+          243,
+          334,
+          416,
+          474
+        ]
+      },
+      {
+        "path": "doc/topics/formal-causal-mediation.md",
+        "lines": 635,
+        "candidate_starts": [
+          66,
+          159,
+          232,
+          302,
+          371,
+          399,
+          450,
+          485,
+          499,
+          561
+        ]
+      },
+      {
+        "path": "doc/topics/gain1q-neg-unique-genes.md",
+        "lines": 229,
+        "candidate_starts": [
+          68,
+          124,
+          163,
+          203
+        ]
+      },
+      {
+        "path": "doc/topics/invariant-causal-prediction-biology.md",
+        "lines": 665,
+        "candidate_starts": [
+          58,
+          270,
+          384,
+          567,
+          637
+        ]
+      },
+      {
+        "path": "doc/topics/metafor-ranks16-30-literature-synthesis.md",
+        "lines": 180,
+        "candidate_starts": [
+          114,
+          148
+        ]
+      },
+      {
+        "path": "doc/topics/metafor-ranks31-45-literature-synthesis.md",
+        "lines": 158,
+        "candidate_starts": [
+          122
+        ]
+      },
+      {
+        "path": "doc/topics/metafor-top15-literature-synthesis.md",
+        "lines": 263,
+        "candidate_starts": [
+          136,
+          185,
+          219
+        ]
+      },
+      {
+        "path": "doc/topics/mtor-inhibitor-trials-mm.md",
+        "lines": 448,
+        "candidate_starts": [
+          57,
+          215,
+          344,
+          390
+        ]
+      },
+      {
+        "path": "doc/topics/phf19-regulation-chromatin.md",
+        "lines": 381,
+        "candidate_starts": [
+          71,
+          190,
+          319
+        ]
+      },
+      {
+        "path": "doc/topics/ribosomopathies-hematologic-malignancies.md",
+        "lines": 697,
+        "candidate_starts": [
+          100,
+          221,
+          300,
+          385,
+          596
+        ]
+      },
+      {
+        "path": "doc/topics/selection-vs-drift-mm-progression.md",
+        "lines": 284,
+        "candidate_starts": [
+          61,
+          119,
+          158,
+          220,
+          267
+        ]
+      },
+      {
+        "path": "doc/topics/target-trial-emulation-oncology.md",
+        "lines": 652,
+        "candidate_starts": [
+          60,
+          277,
+          526,
+          617
+        ]
+      },
+      {
+        "path": "doc/topics/waddington-landscape-attractor-formalism.md",
+        "lines": 886,
+        "candidate_starts": [
+          217,
+          315,
+          534,
+          713,
+          825
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-02-sensitivity-pipeline.md",
+        "lines": 2417,
+        "candidate_starts": [
+          60,
+          71,
+          767,
+          1367,
+          1911,
+          2364
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-03-dual-ranking-notebook.md",
+        "lines": 1360,
+        "candidate_starts": [
+          70,
+          604,
+          910,
+          1253
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-04-progression-pipeline.md",
+        "lines": 1226,
+        "candidate_starts": [
+          65,
+          506,
+          1047
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-06-gdsc-drug-sensitivity.md",
+        "lines": 1038,
+        "candidate_starts": [
+          122,
+          404,
+          837
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-08-hypothesis-pipeline-architecture.md",
+        "lines": 3189,
+        "candidate_starts": [
+          63,
+          503,
+          982,
+          1382,
+          1403,
+          1786,
+          2048,
+          2189,
+          2449,
+          2795,
+          2884,
+          3133
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-09-publication-figures.md",
+        "lines": 1619,
+        "candidate_starts": [
+          94,
+          400,
+          727,
+          975,
+          1226,
+          1479
+        ]
+      },
+      {
+        "path": "docs/superpowers/plans/2026-04-16-cytogenetic-subtype-program.md",
+        "lines": 768,
+        "candidate_starts": [
+          66,
+          165,
+          279,
+          387,
+          498,
+          572,
+          641,
+          744
+        ]
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-02-sensitivity-pipeline-design.md",
+        "lines": 325,
+        "candidate_starts": [
+          184,
+          274,
+          313
+        ]
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-04-progression-pipeline-design.md",
+        "lines": 378,
+        "candidate_starts": [
+          67,
+          178,
+          302,
+          351
+        ]
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-08-hypothesis-pipeline-architecture-design.md",
+        "lines": 672,
+        "candidate_starts": [
+          112,
+          273,
+          396,
+          481,
+          507,
+          584,
+          652
+        ]
+      },
+      {
+        "path": "docs/superpowers/specs/2026-04-09-publication-figures-design.md",
+        "lines": 255,
+        "candidate_starts": [
+          89,
+          124,
+          153,
+          181,
+          219
+        ]
+      },
+      {
+        "path": "tasks/active.md",
+        "lines": 2768,
+        "candidate_starts": [
+          1236,
+          1449
+        ]
+      },
+      {
+        "path": "tasks/done/2026-04.md",
+        "lines": 2583,
+        "candidate_starts": [
+          504,
+          678
+        ]
+      }
+    ]
+  }
+}

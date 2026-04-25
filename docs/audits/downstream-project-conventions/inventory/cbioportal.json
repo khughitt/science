@@ -1,0 +1,1144 @@
+{
+  "schema_version": "v0",
+  "generator": "scripts/audit_downstream_project_inventory.py",
+  "generated_at_utc": "2026-04-25T20:04:48Z",
+  "project": {
+    "root": "/mnt/ssd/Dropbox/r/cbioportal",
+    "name": "cbioportal"
+  },
+  "science_repo": {
+    "root": "/mnt/ssd/Dropbox/science",
+    "head": "a059f7d3dd46fb197df14339e6e9576bbb5615dd"
+  },
+  "audit_ignore_patterns": [],
+  "protected_data_dirs": [],
+  "git": {
+    "is_repo": true,
+    "head": "d594e0e73ae22d5868b3f6a0dceca80f51e83198",
+    "status_porcelain": [
+      " M code/scripts/annotate_hypermutators.py",
+      " M code/scripts/combine_samples_tmb.py",
+      " M code/scripts/prepare_dndscv_input.py"
+    ],
+    "status_porcelain_summary": {
+      "M": 3
+    },
+    "last_commit": {
+      "sha": "d594e0e73ae22d5868b3f6a0dceca80f51e83198",
+      "author_name": "Keith Hughitt",
+      "author_email": "keith.hughitt@gmail.com",
+      "authored": "2026-04-25T15:51:37-04:00",
+      "subject": "docs(papers): cross-paper synthesis of 8 canalization papers"
+    },
+    "git_status": "ok"
+  },
+  "tracked_top_level_counts": {
+    ".gitignore": 1,
+    ".husky": 1,
+    ".python-version": 1,
+    "AGENTS.md": 1,
+    "CLAUDE.md": 1,
+    "README.md": 1,
+    "code": 140,
+    "commitlint.config.mjs": 1,
+    "data": 27,
+    "doc": 157,
+    "knowledge": 6,
+    "package-lock.json": 1,
+    "package.json": 1,
+    "papers": 1,
+    "pyproject.toml": 1,
+    "science.yaml": 1,
+    "specs": 1,
+    "tasks": 2,
+    "uv.lock": 1,
+    "validate.sh": 1
+  },
+  "tracked_second_level_counts": {
+    "code": {
+      "config": 8,
+      "envs": 3,
+      "notebooks": 6,
+      "scripts": 122,
+      "workflows": 1
+    },
+    "data": {
+      "<files>": 18,
+      "external": 2,
+      "panels": 7
+    },
+    "doc": {
+      "audits": 1,
+      "background": 65,
+      "datasets": 2,
+      "discussions": 3,
+      "guides": 7,
+      "interpretations": 8,
+      "meta": 11,
+      "papers": 20,
+      "plans": 15,
+      "questions": 12,
+      "searches": 12,
+      "topics": 1
+    },
+    "knowledge": {
+      "<files>": 1,
+      "reports": 1,
+      "sources": 4
+    },
+    "specs": {
+      "<files>": 1
+    },
+    "tasks": {
+      "<files>": 1,
+      "done": 1
+    }
+  },
+  "present_untracked_dirs": [
+    {
+      "path": ".snakemake",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 11
+    },
+    {
+      "path": ".venv",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 10
+    },
+    {
+      "path": ".worktrees",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 0
+    },
+    {
+      "path": "data",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 29
+    },
+    {
+      "path": "logs",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 0
+    },
+    {
+      "path": "models",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 0
+    },
+    {
+      "path": "node_modules",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 70
+    },
+    {
+      "path": "results",
+      "exists": true,
+      "is_symlink": false,
+      "entry_count": 8
+    }
+  ],
+  "gitignored_top_level_dirs": [
+    {
+      "name": ".claude",
+      "file_count": 1,
+      "total_size_bytes": 353,
+      "sample_paths": [
+        ".claude/settings.json"
+      ]
+    },
+    {
+      "name": "archive",
+      "file_count": 30,
+      "total_size_bytes": 60124397,
+      "sample_paths": [
+        "archive/.RData",
+        "archive/data_pkg_todo.md",
+        "archive/genie.rgz",
+        "archive/unused.py",
+        "archive/unused.snakemake"
+      ]
+    }
+  ],
+  "symlinks": [
+    {
+      "path": "science",
+      "target": "/mnt/ssd/Dropbox/science"
+    }
+  ],
+  "science_yaml": {
+    "present": true,
+    "keys": [
+      "aspects",
+      "created",
+      "data_sources",
+      "knowledge_profiles",
+      "last_modified",
+      "layout_version",
+      "name",
+      "ontologies",
+      "profile",
+      "research_question",
+      "scope",
+      "status",
+      "summary",
+      "tags"
+    ],
+    "profile": "research",
+    "aspects": [
+      "computational-analysis",
+      "software-development"
+    ],
+    "layout_version": 2,
+    "data_sources_shape": {
+      "present": true,
+      "count": 4,
+      "entry_kinds": {
+        "object": 4
+      },
+      "object_key_counts": {
+        "description": 4,
+        "name": 4,
+        "url": 4
+      }
+    },
+    "ontologies": [
+      "biology"
+    ],
+    "knowledge_profiles_keys": [
+      "local"
+    ]
+  },
+  "gitignore": {
+    "present": true,
+    "line_count": 36,
+    "non_blank_non_comment": 22,
+    "matched": {
+      "data": [
+        "data/41586_2021_3836_MOESM5_ESM.xlsx",
+        "data/Supp-RT-human-50kb-bins.xlsx",
+        "data/gene_replication_timing.feather",
+        "data/genie/",
+        "data/li2021_somatic_mutations.tsv",
+        "data/mc3.v0.2.8.PUBLIC.maf.gz",
+        "data/normal_tissue_burden.tsv",
+        "data/normal_tissue_spectra.tsv",
+        "data/replication_timing_constitutive_bins.feather"
+      ],
+      "results": [
+        "results/"
+      ],
+      "models": [
+        "models/"
+      ],
+      "worktrees": [
+        ".worktrees/"
+      ],
+      "python_caches": [
+        ".pytest_cache/",
+        ".ruff_cache/",
+        ".venv/",
+        "__pycache__/"
+      ],
+      "snakemake": [
+        ".snakemake/"
+      ]
+    }
+  },
+  "validate": {
+    "present": true,
+    "line_count": 867,
+    "header": "#!/usr/bin/env bash\n# validate.sh \u2014 Structural validation for Science research projects\n# Returns non-zero on failure. Used as backpressure in research loops.\n#\n# Usage: bash validate.sh [--verbose]\n\n# Note: intentionally NOT using set -e \u2014 we count errors and report at the end.\nset -uo pipefail\n\nexport UV_CACHE_DIR=\"${UV_CACHE_DIR:-/tmp/uv-cache}\"\n\n# Source .env for SCIENCE_TOOL_PATH and other project-local settings\nif [ -f \".env\" ]; then\n    set -a\n    # shellcheck disable=SC1091",
+    "sections": [
+      "Canonical path/profile resolution from science.yaml",
+      "1. Project manifest",
+      "2. Core structure",
+      "3. Research question",
+      "4. Template conformance for background docs",
+      "5. Hypothesis completeness",
+      "6. Citation integrity",
+      "7. Paper summary template conformance",
+      "8. Unverified/uncited markers",
+      "9. Research gap analysis conformance",
+      "10. RESEARCH_PLAN conventions",
+      "11. Discussion document conformance",
+      "12. Notes conformance",
+      "13. Knowledge graph checks",
+      "14. Inquiry validation",
+      "15. Task queue",
+      "16. Frontmatter cross-reference validation",
+      "Summary"
+    ],
+    "sha256": "0a9878c8dd81acc9703dbd58e8ec236254eee8c5c000f341caff26f5a37a3c44",
+    "canonical_path": "meta/validate.sh",
+    "canonical_sha256": "0a9878c8dd81acc9703dbd58e8ec236254eee8c5c000f341caff26f5a37a3c44",
+    "structural_diff": [],
+    "content_diff": [],
+    "content_diff_total_lines": 0
+  },
+  "datapackages": [],
+  "code_layout": {
+    "code": {
+      "tracked_files": 140,
+      "is_dir": true
+    },
+    "notebooks": {
+      "count": 0,
+      "paths": [],
+      "truncated": false
+    },
+    "tests": {
+      "count": 58,
+      "top_dirs": [
+        "code"
+      ]
+    }
+  },
+  "markdown": {
+    "markdown_file_count": 160,
+    "scanned_count": 160,
+    "template_files_skipped": 0,
+    "files_by_top_dir": {
+      "<root>": 3,
+      "data": 4,
+      "doc": 150,
+      "specs": 1,
+      "tasks": 2
+    },
+    "frontmatter_key_counts_by_dir": {
+      "doc": {
+        "applied_changes": 1,
+        "created": 133,
+        "datasets": 80,
+        "focus_ref": 3,
+        "focus_type": 3,
+        "generated_at": 1,
+        "id": 133,
+        "input": 6,
+        "mode": 10,
+        "ontology_terms": 96,
+        "overall": 1,
+        "pending_decisions": 1,
+        "plan": 1,
+        "prior_interpretations": 6,
+        "related": 117,
+        "revisit_condition": 1,
+        "scope": 1,
+        "since": 1,
+        "source_commit": 1,
+        "source_refs": 113,
+        "status": 132,
+        "sweep_scope": 1,
+        "tags": 8,
+        "title": 133,
+        "type": 133,
+        "updated": 132,
+        "verified": 1,
+        "verified_source": 1,
+        "workflow_run": 8
+      },
+      "specs": {
+        "created": 1,
+        "id": 1,
+        "status": 1,
+        "title": 1,
+        "type": 1,
+        "updated": 1
+      }
+    },
+    "frontmatter_unparsed": [],
+    "frontmatter_parse_errors": [],
+    "observed_values": {
+      "aspects": {},
+      "ontologies": {},
+      "phase": {},
+      "profile": {},
+      "status": {
+        "abstract-read": 2,
+        "active": 101,
+        "deferred": 1,
+        "draft": 1,
+        "in-progress": 3,
+        "proposed": 1,
+        "read": 21,
+        "summarized": 1,
+        "unread": 2
+      },
+      "type": {
+        "curation-sweep": 1,
+        "dataset": 1,
+        "discussion": 3,
+        "guide": 1,
+        "interpretation": 8,
+        "meta": 6,
+        "modality-guide": 1,
+        "paper": 67,
+        "plan": 4,
+        "pre-registration": 2,
+        "question": 12,
+        "review": 1,
+        "search": 6,
+        "spec": 1,
+        "synthesis": 2,
+        "task": 1,
+        "topic": 17
+      }
+    },
+    "entity_id_prefix_counts": {
+      "curation-sweep": 1,
+      "dataset": 1,
+      "discussion": 3,
+      "guide": 1,
+      "interpretation": 8,
+      "meta": 8,
+      "modality-guide": 1,
+      "paper": 67,
+      "plan": 4,
+      "question": 12,
+      "review": 1,
+      "search": 6,
+      "spec": 1,
+      "synthesis": 2,
+      "task": 1,
+      "topic": 17
+    },
+    "entity_id_paths": {
+      "curation-sweep:2026-04-22": [
+        "doc/meta/curation/curation-sweep-2026-04-22.md"
+      ],
+      "dataset:replication-timing-constitutive-regions": [
+        "doc/datasets/replication-timing-constitutive-regions.md"
+      ],
+      "discussion:2026-04-24-gene-length-bias-in-mutation-rankings-and-literature": [
+        "doc/discussions/2026-04-24-gene-length-bias-in-mutation-rankings-and-literature.md"
+      ],
+      "discussion:2026-04-24-mutation-ordering-and-path-dependency": [
+        "doc/discussions/2026-04-24-mutation-ordering-and-path-dependency.md"
+      ],
+      "discussion:2026-04-24-t124-q009-fork-decision": [
+        "doc/discussions/2026-04-24-t124-q009-fork-decision.md"
+      ],
+      "guide:cross-study-aggregation": [
+        "doc/guides/modalities/cross-study-aggregation.md"
+      ],
+      "interpretation:2026-04-17-poc-run": [
+        "doc/interpretations/2026-04-17-poc-run.md"
+      ],
+      "interpretation:2026-04-18-t070-poc-comparison": [
+        "doc/interpretations/2026-04-18-t070-poc-comparison.md"
+      ],
+      "interpretation:2026-04-19-t111-normal-tissue-spectra-pipeline": [
+        "doc/interpretations/2026-04-19-t111-normal-tissue-spectra-pipeline.md"
+      ],
+      "interpretation:2026-04-22-t110-sbs1-sbs5-brca-comparison": [
+        "doc/interpretations/2026-04-22-t110-sbs1-sbs5-brca-comparison.md"
+      ],
+      "interpretation:2026-04-22-t122-rt-brca-pilot": [
+        "doc/interpretations/2026-04-22-t122-rt-brca-pilot.md"
+      ],
+      "interpretation:2026-04-22-t123-rt-brca-sbs1-proxy-pilot": [
+        "doc/interpretations/2026-04-22-t123-rt-brca-sbs1-proxy-pilot.md"
+      ],
+      "interpretation:2026-04-24-t126-sbs1-lrr-bias-per-study": [
+        "doc/interpretations/2026-04-24-t126-sbs1-lrr-bias-per-study.md"
+      ],
+      "interpretation:2026-04-25-t052-stage-stratified-ar-esr1": [
+        "doc/interpretations/2026-04-25-t052-stage-stratified-ar-esr1.md"
+      ],
+      "meta:next-steps-2026-04-14": [
+        "doc/meta/next-steps-2026-04-14.md"
+      ],
+      "meta:next-steps-2026-04-17": [
+        "doc/meta/next-steps-2026-04-17.md"
+      ],
+      "meta:next-steps-2026-04-22": [
+        "doc/meta/next-steps-2026-04-22.md"
+      ],
+      "meta:next-steps-2026-04-24": [
+        "doc/meta/next-steps-2026-04-24.md"
+      ],
+      "meta:pipeline-roadmap-2026-04-13": [
+        "doc/meta/pipeline-roadmap-2026-04-13.md"
+      ],
+      "meta:pre-registration-t077-glmm-logit-pooling": [
+        "doc/meta/pre-registration-t077-glmm-logit-pooling.md"
+      ],
+      "meta:pre-registration-t126-sbs1-lrr-bias-test": [
+        "doc/meta/pre-registration-t126-sbs1-lrr-bias-test.md"
+      ],
+      "meta:search-literature-feedback-2026-04-13": [
+        "doc/meta/search-literature-feedback-2026-04-13.md"
+      ],
+      "modality-guide:panel-mutation-data": [
+        "doc/guides/modalities/panel-mutation-data.md"
+      ],
+      "paper:AACRGENIEConsortium2017": [
+        "doc/background/papers/AACRGENIEConsortium2017.md"
+      ],
+      "paper:Alexandrov2020": [
+        "doc/background/papers/Alexandrov2020.md"
+      ],
+      "paper:Babur2015": [
+        "doc/background/papers/Babur2015.md"
+      ],
+      "paper:Bailey2018": [
+        "doc/background/papers/Bailey2018.md"
+      ],
+      "paper:Bandlamudi2026": [
+        "doc/background/papers/Bandlamudi2026.md"
+      ],
+      "paper:Barendregt2013": [
+        "doc/background/papers/Barendregt2013.md"
+      ],
+      "paper:Bavisetty2025": [
+        "doc/papers/Bavisetty2025.md"
+      ],
+      "paper:Bolton2020": [
+        "doc/background/papers/Bolton2020.md"
+      ],
+      "paper:Canisius2016": [
+        "doc/background/papers/Canisius2016.md"
+      ],
+      "paper:Cerami2012": [
+        "doc/background/papers/Cerami2012.md"
+      ],
+      "paper:Chakravarty2017": [
+        "doc/background/papers/Chakravarty2017.md"
+      ],
+      "paper:ChakravartySolit2021": [
+        "doc/background/papers/ChakravartySolit2021.md"
+      ],
+      "paper:Chang2016": [
+        "doc/background/papers/Chang2016.md"
+      ],
+      "paper:Cheng2015": [
+        "doc/background/papers/Cheng2015.md"
+      ],
+      "paper:Ciriello2012": [
+        "doc/background/papers/Ciriello2012.md"
+      ],
+      "paper:Ciriello2013": [
+        "doc/background/papers/Ciriello2013.md"
+      ],
+      "paper:DerSimonian1986": [
+        "doc/background/papers/DerSimonian1986.md"
+      ],
+      "paper:Ellrott2018": [
+        "doc/background/papers/Ellrott2018.md"
+      ],
+      "paper:Gao2013": [
+        "doc/background/papers/Gao2013.md"
+      ],
+      "paper:Gao2017": [
+        "doc/background/papers/Gao2017.md"
+      ],
+      "paper:Gao2023": [
+        "doc/papers/Gao2023.md"
+      ],
+      "paper:Harlapur2026": [
+        "doc/papers/Harlapur2026.md"
+      ],
+      "paper:Higgins2002": [
+        "doc/background/papers/Higgins2002.md"
+      ],
+      "paper:Hoadley2018": [
+        "doc/background/papers/Hoadley2018.md"
+      ],
+      "paper:Imielinski2017": [
+        "doc/background/papers/Imielinski2017.md"
+      ],
+      "paper:IntHout2016": [
+        "doc/background/papers/IntHout2016.md"
+      ],
+      "paper:Jee2024": [
+        "doc/background/papers/Jee2024.md"
+      ],
+      "paper:Jung2025": [
+        "doc/papers/Jung2025.md"
+      ],
+      "paper:Kadelka2024": [
+        "doc/papers/Kadelka2024.md"
+      ],
+      "paper:Kadelka2026": [
+        "doc/papers/Kadelka2026.md"
+      ],
+      "paper:Kandoth2013": [
+        "doc/background/papers/Kandoth2013.md"
+      ],
+      "paper:Kim2015": [
+        "doc/background/papers/Kim2015.md"
+      ],
+      "paper:Kim2017": [
+        "doc/background/papers/Kim2017.md"
+      ],
+      "paper:Langan2018": [
+        "doc/background/papers/Langan2018.md"
+      ],
+      "paper:Lawrence2014": [
+        "doc/background/papers/Lawrence2014.md"
+      ],
+      "paper:LeeSix2018": [
+        "doc/papers/LeeSix2018.md"
+      ],
+      "paper:Leiserson2013": [
+        "doc/background/papers/Leiserson2013.md"
+      ],
+      "paper:Leiserson2015": [
+        "doc/background/papers/Leiserson2015.md"
+      ],
+      "paper:Leiserson2016": [
+        "doc/background/papers/Leiserson2016.md"
+      ],
+      "paper:Li2021": [
+        "doc/papers/Li2021.md"
+      ],
+      "paper:Lin2024": [
+        "doc/papers/Lin2024.md"
+      ],
+      "paper:LinXu2020": [
+        "doc/background/papers/LinXu2020.md"
+      ],
+      "paper:Lu2023": [
+        "doc/papers/Lu2023.md"
+      ],
+      "paper:Martincorena2017": [
+        "doc/background/papers/Martincorena2017.md"
+      ],
+      "paper:Martincorena2018": [
+        "doc/papers/Martincorena2018.md"
+      ],
+      "paper:MartinezJimenez2020": [
+        "doc/background/papers/MartinezJimenez2020.md"
+      ],
+      "paper:Mina2017": [
+        "doc/background/papers/Mina2017.md"
+      ],
+      "paper:Mina2020": [
+        "doc/background/papers/Mina2020.md"
+      ],
+      "paper:Nagpal2022": [
+        "doc/papers/Nagpal2022.md"
+      ],
+      "paper:Nguyen2022": [
+        "doc/background/papers/Nguyen2022.md"
+      ],
+      "paper:Nyaga2014": [
+        "doc/background/papers/Nyaga2014.md"
+      ],
+      "paper:PCAWG2020": [
+        "doc/background/papers/PCAWG2020.md"
+      ],
+      "paper:Poon2021": [
+        "doc/papers/Poon2021.md"
+      ],
+      "paper:Pugh2022": [
+        "doc/background/papers/Pugh2022.md"
+      ],
+      "paper:Rashid2025": [
+        "doc/papers/Rashid2025.md"
+      ],
+      "paper:SanchezVega2018": [
+        "doc/background/papers/SanchezVega2018.md"
+      ],
+      "paper:Smith2022": [
+        "doc/papers/Smith2022.md"
+      ],
+      "paper:Stijnen2010": [
+        "doc/background/papers/Stijnen2010.md"
+      ],
+      "paper:Suehnholz2024": [
+        "doc/background/papers/Suehnholz2024.md"
+      ],
+      "paper:Tate2019": [
+        "doc/background/papers/Tate2019.md"
+      ],
+      "paper:VanDeHaar2019": [
+        "doc/background/papers/VanDeHaar2019.md"
+      ],
+      "paper:Vandin2012": [
+        "doc/background/papers/Vandin2012.md"
+      ],
+      "paper:Viechtbauer2010": [
+        "doc/background/papers/Viechtbauer2010.md"
+      ],
+      "paper:Xu2025": [
+        "doc/papers/Xu2025.md"
+      ],
+      "paper:Yaacov2023": [
+        "doc/papers/Yaacov2023.md"
+      ],
+      "paper:Yoshida2026": [
+        "doc/papers/Yoshida2026.md"
+      ],
+      "paper:Zehir2017": [
+        "doc/background/papers/Zehir2017.md"
+      ],
+      "plan:2026-04-13-t081-hypermutator-annotation-pipeline-plan": [
+        "doc/plans/2026-04-13-t081-hypermutator-annotation-pipeline-plan.md"
+      ],
+      "plan:2026-04-22-t077-glmm-logit-plan": [
+        "doc/plans/2026-04-22-t077-glmm-logit-plan.md"
+      ],
+      "plan:2026-04-24-t052-cohort-stage-descriptor-design": [
+        "doc/plans/2026-04-24-t052-cohort-stage-descriptor-design.md"
+      ],
+      "plan:2026-04-25-t078-select-cooccurrence-implementation-plan": [
+        "doc/plans/2026-04-25-t078-select-cooccurrence-implementation-plan.md"
+      ],
+      "question:q001-normal-epithelial-clone-contamination-in-esophageal-studies": [
+        "doc/questions/q001-normal-epithelial-clone-contamination-in-esophageal-studies.md"
+      ],
+      "question:q002-normal-breast-cna-background-chr1q-chr16q": [
+        "doc/questions/q002-normal-breast-cna-background-chr1q-chr16q.md"
+      ],
+      "question:q003-replication-timing-as-gene-level-mutation-rate-confounder": [
+        "doc/questions/q003-replication-timing-as-gene-level-mutation-rate-confounder.md"
+      ],
+      "question:q004-mca-burden-in-esophageal-vs-other-study-tissues": [
+        "doc/questions/q004-mca-burden-in-esophageal-vs-other-study-tissues.md"
+      ],
+      "question:q005-gli1-normal-tissue-hotspot-inflation": [
+        "doc/questions/q005-gli1-normal-tissue-hotspot-inflation.md"
+      ],
+      "question:q006-ch-priority-gene-completeness": [
+        "doc/questions/q006-ch-priority-gene-completeness.md"
+      ],
+      "question:q007-cross-tissue-somatic-mutation-rate-variation-as-null-model": [
+        "doc/questions/q007-cross-tissue-somatic-mutation-rate-variation-as-null-model.md"
+      ],
+      "question:q008-signature-decomposition-tissue-background-subtraction": [
+        "doc/questions/q008-signature-decomposition-tissue-background-subtraction.md"
+      ],
+      "question:q009-sbs1-lrr-bias-as-normal-contamination-flag": [
+        "doc/questions/q009-sbs1-lrr-bias-as-normal-contamination-flag.md"
+      ],
+      "question:q010-cuplr-style-tof-classifier-for-suspect-normal-samples": [
+        "doc/questions/q010-cuplr-style-tof-classifier-for-suspect-normal-samples.md"
+      ],
+      "question:q011-gene-length-as-literature-attention-confounder": [
+        "doc/questions/q011-gene-length-as-literature-attention-confounder.md"
+      ],
+      "question:q012-mutation-ordering-cross-sectional-inference": [
+        "doc/questions/q012-mutation-ordering-cross-sectional-inference.md"
+      ],
+      "review:2026-04-25-t131-dndscv-three-way-comparison": [
+        "doc/plans/2026-04-24-t131-dndscv-three-way-comparison-design-review.md"
+      ],
+      "search:2026-04-13-cooccurrence-mutual-exclusivity-methods": [
+        "doc/searches/2026-04-13-cooccurrence-mutual-exclusivity-methods.md"
+      ],
+      "search:2026-04-13-cross-study-meta-analysis-stats": [
+        "doc/searches/2026-04-13-cross-study-meta-analysis-stats.md"
+      ],
+      "search:2026-04-13-foundational-cbioportal-literature": [
+        "doc/searches/2026-04-13-foundational-cbioportal-literature.md"
+      ],
+      "search:2026-04-14-asxl1-tet2-ch-disambiguation": [
+        "doc/searches/2026-04-14-asxl1-tet2-ch-disambiguation.md"
+      ],
+      "search:2026-04-14-pathway-level-pan-cancer-methods": [
+        "doc/searches/2026-04-14-pathway-level-pan-cancer-methods.md"
+      ],
+      "search:2026-04-14-tmb-hypermutator-followup": [
+        "doc/searches/2026-04-14-tmb-hypermutator-followup.md"
+      ],
+      "spec:research-question": [
+        "specs/research-question.md"
+      ],
+      "synthesis:2026-04-18-somatic-mutations-in-normal-tissue": [
+        "doc/papers/synthesis-2026-04-18-somatic-mutations-in-normal-tissue.md"
+      ],
+      "synthesis:2026-04-25-canalization-gene-regulatory-networks": [
+        "doc/papers/synthesis-2026-04-25-canalization-gene-regulatory-networks.md"
+      ],
+      "task:bias-audit-cross-study-aggregation-pipeline": [
+        "doc/meta/bias-audit-cross-study-aggregation-pipeline.md"
+      ],
+      "topic:cancer-driver-genes": [
+        "doc/background/topics/cancer-driver-genes.md"
+      ],
+      "topic:clonal-hematopoiesis-contamination": [
+        "doc/background/topics/clonal-hematopoiesis-contamination.md"
+      ],
+      "topic:co-occurrence-and-mutual-exclusivity": [
+        "doc/background/topics/co-occurrence-and-mutual-exclusivity.md"
+      ],
+      "topic:cohort-selection-bias-representativeness": [
+        "doc/background/topics/cohort-selection-bias-representativeness.md"
+      ],
+      "topic:cross-panel-normalization-methods": [
+        "doc/background/topics/cross-panel-normalization-methods.md"
+      ],
+      "topic:cross-study-harmonization": [
+        "doc/background/topics/cross-study-harmonization.md"
+      ],
+      "topic:cross-study-meta-analysis-cancer-genomics": [
+        "doc/background/topics/cross-study-meta-analysis-cancer-genomics.md"
+      ],
+      "topic:hotspot-based-driver-detection": [
+        "doc/background/topics/hotspot-based-driver-detection.md"
+      ],
+      "topic:multi-omics-cancer-analysis": [
+        "doc/background/topics/multi-omics-cancer-analysis.md"
+      ],
+      "topic:mutation-rate-normalization": [
+        "doc/background/topics/mutation-rate-normalization.md"
+      ],
+      "topic:mutational-signatures": [
+        "doc/background/topics/mutational-signatures.md"
+      ],
+      "topic:pan-cancer-interpretive-frames": [
+        "doc/background/topics/pan-cancer-interpretive-frames.md"
+      ],
+      "topic:pan-cancer-mutation-landscape": [
+        "doc/background/topics/pan-cancer-mutation-landscape.md"
+      ],
+      "topic:signature-decomposition-unmatched-normal": [
+        "doc/topics/signature-decomposition-unmatched-normal.md"
+      ],
+      "topic:targeted-panel-sequencing-bias": [
+        "doc/background/topics/targeted-panel-sequencing-bias.md"
+      ],
+      "topic:tumor-mutational-burden": [
+        "doc/background/topics/tumor-mutational-burden.md"
+      ],
+      "topic:variant-interpretation-oncokb-vus": [
+        "doc/background/topics/variant-interpretation-oncokb-vus.md"
+      ]
+    },
+    "duplicate_entity_ids": {},
+    "frontmatter_reference_field_paths": {
+      "datasets": [
+        "doc/background/papers/AACRGENIEConsortium2017.md",
+        "doc/background/papers/Alexandrov2020.md",
+        "doc/background/papers/Bailey2018.md",
+        "doc/background/papers/Bandlamudi2026.md",
+        "doc/background/papers/Canisius2016.md",
+        "doc/background/papers/Cerami2012.md",
+        "doc/background/papers/Chakravarty2017.md",
+        "doc/background/papers/Cheng2015.md",
+        "doc/background/papers/Ciriello2012.md",
+        "doc/background/papers/Ellrott2018.md",
+        "doc/background/papers/Gao2013.md",
+        "doc/background/papers/Hoadley2018.md",
+        "doc/background/papers/Imielinski2017.md",
+        "doc/background/papers/Jee2024.md",
+        "doc/background/papers/Kandoth2013.md",
+        "doc/background/papers/Kim2017.md",
+        "doc/background/papers/Leiserson2015.md",
+        "doc/background/papers/Mina2020.md",
+        "doc/background/papers/Nguyen2022.md",
+        "doc/background/papers/PCAWG2020.md",
+        "doc/background/papers/Pugh2022.md",
+        "doc/background/papers/SanchezVega2018.md",
+        "doc/background/papers/Suehnholz2024.md",
+        "doc/background/papers/Tate2019.md",
+        "doc/background/papers/Vandin2012.md",
+        "doc/background/papers/Zehir2017.md",
+        "doc/papers/Gao2023.md",
+        "doc/papers/Li2021.md",
+        "doc/papers/Xu2025.md",
+        "doc/papers/Yaacov2023.md",
+        "doc/questions/q003-replication-timing-as-gene-level-mutation-rate-confounder.md",
+        "doc/questions/q007-cross-tissue-somatic-mutation-rate-variation-as-null-model.md",
+        "doc/questions/q009-sbs1-lrr-bias-as-normal-contamination-flag.md",
+        "doc/questions/q010-cuplr-style-tof-classifier-for-suspect-normal-samples.md",
+        "doc/questions/q011-gene-length-as-literature-attention-confounder.md",
+        "doc/questions/q012-mutation-ordering-cross-sectional-inference.md",
+        "doc/topics/signature-decomposition-unmatched-normal.md"
+      ],
+      "related": [
+        "doc/background/papers/AACRGENIEConsortium2017.md",
+        "doc/background/papers/Alexandrov2020.md",
+        "doc/background/papers/Babur2015.md",
+        "doc/background/papers/Bailey2018.md",
+        "doc/background/papers/Bandlamudi2026.md",
+        "doc/background/papers/Barendregt2013.md",
+        "doc/background/papers/Bolton2020.md",
+        "doc/background/papers/Canisius2016.md",
+        "doc/background/papers/Cerami2012.md",
+        "doc/background/papers/Chakravarty2017.md",
+        "doc/background/papers/ChakravartySolit2021.md",
+        "doc/background/papers/Chang2016.md",
+        "doc/background/papers/Cheng2015.md",
+        "doc/background/papers/Ciriello2012.md",
+        "doc/background/papers/Ciriello2013.md",
+        "doc/background/papers/DerSimonian1986.md",
+        "doc/background/papers/Ellrott2018.md",
+        "doc/background/papers/Gao2013.md",
+        "doc/background/papers/Gao2017.md",
+        "doc/background/papers/Higgins2002.md",
+        "doc/background/papers/Hoadley2018.md",
+        "doc/background/papers/Imielinski2017.md",
+        "doc/background/papers/IntHout2016.md",
+        "doc/background/papers/Jee2024.md",
+        "doc/background/papers/Kandoth2013.md",
+        "doc/background/papers/Kim2015.md",
+        "doc/background/papers/Kim2017.md",
+        "doc/background/papers/Langan2018.md",
+        "doc/background/papers/Lawrence2014.md",
+        "doc/background/papers/Leiserson2013.md",
+        "doc/background/papers/Leiserson2015.md",
+        "doc/background/papers/Leiserson2016.md",
+        "doc/background/papers/LinXu2020.md",
+        "doc/background/papers/Martincorena2017.md",
+        "doc/background/papers/MartinezJimenez2020.md",
+        "doc/background/papers/Mina2017.md",
+        "doc/background/papers/Mina2020.md",
+        "doc/background/papers/Nguyen2022.md",
+        "doc/background/papers/Nyaga2014.md",
+        "doc/background/papers/PCAWG2020.md",
+        "doc/background/papers/Pugh2022.md",
+        "doc/background/papers/SanchezVega2018.md",
+        "doc/background/papers/Stijnen2010.md",
+        "doc/background/papers/Suehnholz2024.md",
+        "doc/background/papers/Tate2019.md",
+        "doc/background/papers/VanDeHaar2019.md",
+        "doc/background/papers/Vandin2012.md",
+        "doc/background/papers/Viechtbauer2010.md",
+        "doc/background/papers/Zehir2017.md",
+        "doc/background/topics/cancer-driver-genes.md",
+        "doc/background/topics/clonal-hematopoiesis-contamination.md",
+        "doc/background/topics/co-occurrence-and-mutual-exclusivity.md",
+        "doc/background/topics/cohort-selection-bias-representativeness.md",
+        "doc/background/topics/cross-panel-normalization-methods.md",
+        "doc/background/topics/cross-study-harmonization.md",
+        "doc/background/topics/cross-study-meta-analysis-cancer-genomics.md",
+        "doc/background/topics/hotspot-based-driver-detection.md",
+        "doc/background/topics/multi-omics-cancer-analysis.md",
+        "doc/background/topics/mutation-rate-normalization.md",
+        "doc/background/topics/mutational-signatures.md",
+        "doc/background/topics/pan-cancer-interpretive-frames.md",
+        "doc/background/topics/pan-cancer-mutation-landscape.md",
+        "doc/background/topics/targeted-panel-sequencing-bias.md",
+        "doc/background/topics/tumor-mutational-burden.md",
+        "doc/background/topics/variant-interpretation-oncokb-vus.md",
+        "doc/datasets/replication-timing-constitutive-regions.md",
+        "doc/discussions/2026-04-24-gene-length-bias-in-mutation-rankings-and-literature.md",
+        "doc/discussions/2026-04-24-mutation-ordering-and-path-dependency.md",
+        "doc/discussions/2026-04-24-t124-q009-fork-decision.md",
+        "doc/interpretations/2026-04-17-poc-run.md",
+        "doc/interpretations/2026-04-18-t070-poc-comparison.md",
+        "doc/interpretations/2026-04-19-t111-normal-tissue-spectra-pipeline.md",
+        "doc/interpretations/2026-04-22-t110-sbs1-sbs5-brca-comparison.md",
+        "doc/interpretations/2026-04-22-t122-rt-brca-pilot.md",
+        "doc/interpretations/2026-04-22-t123-rt-brca-sbs1-proxy-pilot.md",
+        "doc/interpretations/2026-04-24-t126-sbs1-lrr-bias-per-study.md",
+        "doc/interpretations/2026-04-25-t052-stage-stratified-ar-esr1.md",
+        "doc/meta/bias-audit-cross-study-aggregation-pipeline.md",
+        "doc/meta/pre-registration-t077-glmm-logit-pooling.md",
+        "doc/meta/pre-registration-t126-sbs1-lrr-bias-test.md",
+        "doc/papers/Gao2023.md",
+        "doc/papers/LeeSix2018.md",
+        "doc/papers/Li2021.md",
+        "doc/papers/Lin2024.md",
+        "doc/papers/Martincorena2018.md",
+        "doc/papers/Poon2021.md",
+        "doc/papers/Smith2022.md",
+        "doc/papers/Xu2025.md",
+        "doc/papers/Yaacov2023.md",
+        "doc/papers/Yoshida2026.md",
+        "doc/papers/synthesis-2026-04-18-somatic-mutations-in-normal-tissue.md",
+        "doc/papers/synthesis-2026-04-25-canalization-gene-regulatory-networks.md",
+        "doc/plans/2026-04-22-t077-glmm-logit-plan.md",
+        "doc/plans/2026-04-24-t052-cohort-stage-descriptor-design.md",
+        "doc/plans/2026-04-24-t131-dndscv-three-way-comparison-design-review.md",
+        "doc/plans/2026-04-25-t078-select-cooccurrence-implementation-plan.md",
+        "doc/questions/q001-normal-epithelial-clone-contamination-in-esophageal-studies.md",
+        "doc/questions/q002-normal-breast-cna-background-chr1q-chr16q.md",
+        "doc/questions/q003-replication-timing-as-gene-level-mutation-rate-confounder.md",
+        "doc/questions/q004-mca-burden-in-esophageal-vs-other-study-tissues.md",
+        "doc/questions/q005-gli1-normal-tissue-hotspot-inflation.md",
+        "doc/questions/q006-ch-priority-gene-completeness.md",
+        "doc/questions/q007-cross-tissue-somatic-mutation-rate-variation-as-null-model.md",
+        "doc/questions/q008-signature-decomposition-tissue-background-subtraction.md",
+        "doc/questions/q009-sbs1-lrr-bias-as-normal-contamination-flag.md",
+        "doc/questions/q010-cuplr-style-tof-classifier-for-suspect-normal-samples.md",
+        "doc/questions/q011-gene-length-as-literature-attention-confounder.md",
+        "doc/questions/q012-mutation-ordering-cross-sectional-inference.md",
+        "doc/topics/signature-decomposition-unmatched-normal.md"
+      ]
+    },
+    "long_form_files": [
+      {
+        "path": "doc/audits/2026-04-13-create-combined-gene-cancer-freq-table-audit.md",
+        "lines": 346
+      },
+      {
+        "path": "doc/background/topics/cross-panel-normalization-methods.md",
+        "lines": 323
+      },
+      {
+        "path": "doc/discussions/2026-04-24-gene-length-bias-in-mutation-rankings-and-literature.md",
+        "lines": 330
+      },
+      {
+        "path": "doc/meta/curation/curation-sweep-2026-04-22.md",
+        "lines": 343
+      },
+      {
+        "path": "doc/meta/pre-registration-t077-glmm-logit-pooling.md",
+        "lines": 365
+      },
+      {
+        "path": "doc/plans/2026-04-13-t081-hypermutator-annotation-pipeline-plan.md",
+        "lines": 633
+      },
+      {
+        "path": "doc/plans/2026-04-18-t070-msk-impact-panel-version-drift-implementation-plan.md",
+        "lines": 1510
+      },
+      {
+        "path": "doc/plans/2026-04-18-t111-normal-tissue-spectra-plan.md",
+        "lines": 2335
+      },
+      {
+        "path": "doc/plans/2026-04-24-t052-cohort-stage-descriptor-design.md",
+        "lines": 530
+      },
+      {
+        "path": "doc/plans/2026-04-24-t131-dndscv-three-way-comparison-design.md",
+        "lines": 583
+      },
+      {
+        "path": "doc/plans/2026-04-25-t052-cohort-stage-descriptor-plan.md",
+        "lines": 1773
+      },
+      {
+        "path": "doc/plans/2026-04-25-t078-select-cooccurrence-implementation-plan.md",
+        "lines": 4928
+      },
+      {
+        "path": "doc/topics/signature-decomposition-unmatched-normal.md",
+        "lines": 366
+      },
+      {
+        "path": "tasks/active.md",
+        "lines": 385
+      },
+      {
+        "path": "tasks/done/2026-04.md",
+        "lines": 1196
+      }
+    ],
+    "embedded_metadata_candidates": [
+      {
+        "path": "doc/discussions/2026-04-24-gene-length-bias-in-mutation-rankings-and-literature.md",
+        "lines": 330,
+        "candidate_starts": [
+          53
+        ]
+      },
+      {
+        "path": "doc/guides/audit-process.md",
+        "lines": 224,
+        "candidate_starts": [
+          54,
+          109,
+          188
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-13-t081-hypermutator-annotation-pipeline-plan.md",
+        "lines": 633,
+        "candidate_starts": [
+          76,
+          103,
+          169,
+          259,
+          315,
+          436,
+          528,
+          626
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-18-t070-msk-impact-panel-version-drift-implementation-plan.md",
+        "lines": 1510,
+        "candidate_starts": [
+          170,
+          433,
+          648,
+          1110,
+          1379
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-18-t111-normal-tissue-spectra-plan.md",
+        "lines": 2335,
+        "candidate_starts": [
+          78,
+          248,
+          557,
+          794,
+          999,
+          1304,
+          1679,
+          1997,
+          2275
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-25-t052-cohort-stage-descriptor-plan.md",
+        "lines": 1773,
+        "candidate_starts": [
+          75,
+          323,
+          609,
+          968,
+          1062,
+          1581,
+          1653,
+          1663,
+          1666
+        ]
+      },
+      {
+        "path": "doc/plans/2026-04-25-t078-select-cooccurrence-implementation-plan.md",
+        "lines": 4928,
+        "candidate_starts": [
+          96,
+          149,
+          412,
+          929,
+          1335,
+          1861,
+          2621,
+          3024,
+          3414,
+          3794,
+          4169,
+          4586,
+          4682
+        ]
+      },
+      {
+        "path": "doc/plans/t111-data-gate-record.md",
+        "lines": 121,
+        "candidate_starts": [
+          79,
+          107
+        ]
+      },
+      {
+        "path": "doc/topics/signature-decomposition-unmatched-normal.md",
+        "lines": 366,
+        "candidate_starts": [
+          53,
+          95,
+          166,
+          232,
+          260,
+          324,
+          352
+        ]
+      }
+    ]
+  }
+}
