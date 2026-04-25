@@ -492,6 +492,37 @@ for f in "$DOC_DIR/meta/bias-audit-"*.md; do
     done
 done
 
+# ─── 11a. Synthesis frontmatter conformance ───────────────────────
+# Gate on `type: synthesis` so legacy `type: report` synthesis files (mm30) and
+# project-local `type: emergent-threads` files (protein-landscape) stay silent.
+# The per-kind required-field warnings match the test-asserted strings below.
+for f in "$DOC_DIR/reports/synthesis"/*.md "$DOC_DIR/reports/synthesis.md"; do
+    [ -f "$f" ] || continue
+    parsed_type=$(sed -n "s/^type:[[:space:]]*['\"]\\{0,1\\}\\([^'\"]*\\)['\"]\\{0,1\\}[[:space:]]*$/\\1/p" "$f" | head -n 1 || true)
+    [ "$parsed_type" = "synthesis" ] || continue
+    parsed_kind=$(sed -n "s/^report_kind:[[:space:]]*['\"]\\{0,1\\}\\([^'\"]*\\)['\"]\\{0,1\\}[[:space:]]*$/\\1/p" "$f" | head -n 1 || true)
+    case "$parsed_kind" in
+        hypothesis-synthesis|synthesis-rollup|emergent-threads) ;;
+        "") warn "$f: missing report_kind" ;;
+        *)  warn "$f: invalid report_kind '$parsed_kind'" ;;
+    esac
+    grep -q "^source_commit:" "$f" || warn "$f: missing source_commit"
+    case "$parsed_kind" in
+        synthesis-rollup)
+            grep -q "^synthesized_from:" "$f" || warn "$f: missing synthesized_from"
+            ;;
+        hypothesis-synthesis)
+            grep -q "^hypothesis:" "$f" || warn "$f: missing hypothesis"
+            grep -q "^provenance_coverage:" "$f" || warn "$f: missing provenance_coverage"
+            ;;
+        emergent-threads)
+            grep -q "^orphan_question_count:" "$f" || warn "$f: missing orphan_question_count"
+            grep -q "^orphan_interpretation_count:" "$f" || warn "$f: missing orphan_interpretation_count"
+            grep -q "^orphan_ids:" "$f" || warn "$f: missing orphan_ids"
+            ;;
+    esac
+done
+
 # ─── 12. Notes conformance ─────────────────────────────────────────
 echo ""
 echo "Checking notes..."
