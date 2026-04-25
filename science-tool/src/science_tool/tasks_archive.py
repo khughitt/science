@@ -27,7 +27,10 @@ from science_tool.tasks import (
 __all__ = [
     "ArchiveEntry",
     "ArchivePlan",
+    "ArchiveResult",
     "ParseError",
+    "apply_archive",
+    "count_archivable",
     "plan_archive",
 ]
 
@@ -63,6 +66,15 @@ class ArchivePlan:
     entries: list[ArchiveEntry]
     parse_errors: list[ParseError]
     remaining: list[Task]
+
+
+@dataclass(frozen=True)
+class ArchiveResult:
+    """The outcome of applying an :class:`ArchivePlan`."""
+
+    moved: list[Task]
+    skipped_duplicates: list[str]
+    destinations_written: list[Path]
 
 
 # ---------------------------------------------------------------------------
@@ -178,3 +190,108 @@ def plan_archive(tasks_dir: Path, *, today: date | None = None) -> ArchivePlan:
     )
 
 
+# ---------------------------------------------------------------------------
+# Apply
+# ---------------------------------------------------------------------------
+
+
+def _read_destination(path: Path) -> tuple[str, list[Task]]:
+    """Read a destination file, returning (preamble, parsed-tasks).
+
+    Returns ("", []) when the file is missing. Reuses the planner's preamble
+    splitter so destination files preserve any header text byte-for-byte.
+    """
+    if not path.is_file():
+        return "", []
+    text = path.read_text()
+    if not text.strip():
+        return text, []
+    preamble, blocks = _split_preamble_and_blocks(text)
+    tasks = [_parse_task_block(block) for block in blocks]
+    return preamble, tasks
+
+
+def apply_archive(plan: ArchivePlan) -> ArchiveResult:
+    """Apply an :class:`ArchivePlan`: move terminal entries into `done/YYYY-MM.md`.
+
+    - Refuses to write if ``plan.parse_errors`` is non-empty (raises ``RuntimeError``).
+    - No-op (zero writes) when ``plan.entries`` is empty.
+    - Groups entries by destination, reads the existing destination preamble +
+      tasks, appends only entries whose ids are not already present, then writes.
+    - Rewrites ``active.md`` as ``plan.preamble + render_tasks(plan.remaining)``
+      (empty string when both are empty, matching ``_write_active``).
+    - Idempotent: re-running on the same state produces zero writes.
+    """
+    if plan.parse_errors:
+        msg = (
+            f"Refusing to apply: {len(plan.parse_errors)} parse error(s) in active.md "
+            f"(first: {plan.parse_errors[0].heading!r})"
+        )
+        raise RuntimeError(msg)
+
+    if not plan.entries:
+        return ArchiveResult(moved=[], skipped_duplicates=[], destinations_written=[])
+
+    # Group entries by destination, preserving plan order within each group.
+    by_destination: dict[Path, list[ArchiveEntry]] = {}
+    for entry in plan.entries:
+        by_destination.setdefault(entry.destination, []).append(entry)
+
+    moved: list[Task] = []
+    skipped: list[str] = []
+    destinations_written: list[Path] = []
+
+    for destination, entries in by_destination.items():
+        dest_preamble, existing_tasks = _read_destination(destination)
+        existing_ids = {t.id for t in existing_tasks}
+        appended: list[Task] = []
+        for entry in entries:
+            if entry.task.id in existing_ids:
+                skipped.append(entry.task.id)
+                continue
+            appended.append(entry.task)
+            moved.append(entry.task)
+            existing_ids.add(entry.task.id)
+
+        if not appended:
+            continue
+
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        new_tasks = existing_tasks + appended
+        destination.write_text(dest_preamble + render_tasks(new_tasks))
+        destinations_written.append(destination)
+
+    # Rewrite active.md regardless: every entry was either moved or recorded
+    # as a duplicate, and in both cases it must be removed from active.
+    active_path = plan.tasks_dir / "active.md"
+    plan.tasks_dir.mkdir(parents=True, exist_ok=True)
+    rendered_remaining = render_tasks(plan.remaining) if plan.remaining else ""
+    if plan.preamble or rendered_remaining:
+        active_path.write_text(plan.preamble + rendered_remaining)
+    else:
+        active_path.write_text("")
+
+    return ArchiveResult(
+        moved=moved,
+        skipped_duplicates=skipped,
+        destinations_written=destinations_written,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Counters (used by `science-tool health` without importing the writer path)
+# ---------------------------------------------------------------------------
+
+
+def count_archivable(tasks_dir: Path) -> dict[str, int]:
+    """Return archive-lag counts for ``tasks_dir`` without writing anything.
+
+    Used by ``science-tool health`` to surface drift without taking any
+    side-effects on disk.
+    """
+    plan = plan_archive(tasks_dir)
+    return {
+        "done_in_active": sum(1 for e in plan.entries if e.task.status == "done"),
+        "retired_in_active": sum(1 for e in plan.entries if e.task.status == "retired"),
+        "missing_completed": sum(1 for e in plan.entries if e.missing_completed),
+    }

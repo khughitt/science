@@ -5,10 +5,15 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 from science_tool.tasks_archive import (
     ArchiveEntry,
     ArchivePlan,
+    ArchiveResult,
     ParseError,
+    apply_archive,
+    count_archivable,
     plan_archive,
 )
 
@@ -163,6 +168,163 @@ class TestPlanner:
         assert "t099" in plan.parse_errors[0].heading
         assert len(plan.entries) == 1
         assert plan.entries[0].task.id == "t002"
+
+
+# ---------------------------------------------------------------------------
+# Apply tests
+# ---------------------------------------------------------------------------
+
+
+class TestApply:
+    def test_apply_no_entries_writes_nothing(self, tmp_path: Path) -> None:
+        _write(tmp_path / "active.md", PROPOSED_BLOCK)
+        active_mtime_before = (tmp_path / "active.md").stat().st_mtime_ns
+        plan = plan_archive(tmp_path, today=date(2026, 4, 25))
+        result = apply_archive(plan)
+        assert result.moved == []
+        assert result.destinations_written == []
+        # Active file untouched.
+        assert (tmp_path / "active.md").stat().st_mtime_ns == active_mtime_before
+        assert not (tmp_path / "done").exists()
+
+    def test_apply_writes_active_as_preamble_plus_remaining(self, tmp_path: Path) -> None:
+        preamble = "# Active Tasks\n\nNote.\n\n"
+        content = preamble + "\n".join([PROPOSED_BLOCK, DONE_MARCH])
+        _write(tmp_path / "active.md", content)
+        plan = plan_archive(tmp_path, today=date(2026, 4, 25))
+        apply_archive(plan)
+        rewritten = (tmp_path / "active.md").read_text()
+        assert rewritten.startswith(preamble)
+        assert "[t001]" in rewritten
+        assert "[t002]" not in rewritten
+
+    def test_apply_routes_by_completed_month(self, tmp_path: Path) -> None:
+        # March entry should land in 2026-03 even when today is in April.
+        _write(tmp_path / "active.md", DONE_MARCH)
+        plan = plan_archive(tmp_path, today=date(2026, 4, 25))
+        apply_archive(plan)
+        march = tmp_path / "done" / "2026-03.md"
+        april = tmp_path / "done" / "2026-04.md"
+        assert march.is_file()
+        assert not april.exists()
+        assert "[t002]" in march.read_text()
+
+    def test_apply_appends_after_existing_destination_entries(self, tmp_path: Path) -> None:
+        existing = """\
+## [t900] Pre-existing
+- priority: P1
+- status: done
+- created: 2026-03-01
+- completed: 2026-03-10
+
+Pre-existing description.
+"""
+        _write(tmp_path / "done" / "2026-03.md", existing)
+        _write(tmp_path / "active.md", DONE_MARCH)
+        plan = plan_archive(tmp_path, today=date(2026, 4, 25))
+        apply_archive(plan)
+        march = (tmp_path / "done" / "2026-03.md").read_text()
+        # Pre-existing must come first; appended entry follows.
+        assert march.index("[t900]") < march.index("[t002]")
+
+    def test_apply_preserves_destination_preamble(self, tmp_path: Path) -> None:
+        dest_preamble = "# Done March 2026\n\nClosed entries.\n\n"
+        existing = dest_preamble + """\
+## [t900] Pre-existing
+- priority: P1
+- status: done
+- created: 2026-03-01
+- completed: 2026-03-10
+
+Pre-existing description.
+"""
+        _write(tmp_path / "done" / "2026-03.md", existing)
+        _write(tmp_path / "active.md", DONE_MARCH)
+        plan = plan_archive(tmp_path, today=date(2026, 4, 25))
+        apply_archive(plan)
+        march = (tmp_path / "done" / "2026-03.md").read_text()
+        assert march.startswith(dest_preamble)
+        assert "[t900]" in march
+        assert "[t002]" in march
+
+    def test_apply_is_idempotent(self, tmp_path: Path) -> None:
+        content = "\n".join([DONE_MARCH, PROPOSED_BLOCK])
+        _write(tmp_path / "active.md", content)
+        apply_archive(plan_archive(tmp_path, today=date(2026, 4, 25)))
+        active_mtime = (tmp_path / "active.md").stat().st_mtime_ns
+        march_mtime = (tmp_path / "done" / "2026-03.md").stat().st_mtime_ns
+        # Second run: nothing left to archive, so no writes.
+        result = apply_archive(plan_archive(tmp_path, today=date(2026, 4, 25)))
+        assert result.moved == []
+        assert (tmp_path / "active.md").stat().st_mtime_ns == active_mtime
+        assert (tmp_path / "done" / "2026-03.md").stat().st_mtime_ns == march_mtime
+
+    def test_apply_skips_duplicate_id_in_destination(self, tmp_path: Path) -> None:
+        existing = """\
+## [t002] Already archived
+- priority: P1
+- status: done
+- created: 2026-03-01
+- completed: 2026-03-15
+
+Already there.
+"""
+        _write(tmp_path / "done" / "2026-03.md", existing)
+        existing_mtime = (tmp_path / "done" / "2026-03.md").stat().st_mtime_ns
+        _write(tmp_path / "active.md", DONE_MARCH)
+        plan = plan_archive(tmp_path, today=date(2026, 4, 25))
+        result = apply_archive(plan)
+        assert result.skipped_duplicates == ["t002"]
+        # Destination untouched.
+        assert (tmp_path / "done" / "2026-03.md").stat().st_mtime_ns == existing_mtime
+        # The duplicate must still be removed from active.
+        active = (tmp_path / "active.md").read_text()
+        assert "[t002]" not in active
+
+    def test_apply_raises_on_parse_errors(self, tmp_path: Path) -> None:
+        bad_block = "## [t099] Bad task\n- priority: P1\n- status: done\n\nBody.\n"
+        _write(tmp_path / "active.md", "\n".join([bad_block, DONE_MARCH]))
+        plan = plan_archive(tmp_path, today=date(2026, 4, 25))
+        active_mtime = (tmp_path / "active.md").stat().st_mtime_ns
+        with pytest.raises(RuntimeError):
+            apply_archive(plan)
+        # No writes on raise.
+        assert (tmp_path / "active.md").stat().st_mtime_ns == active_mtime
+        assert not (tmp_path / "done").exists()
+
+    def test_apply_empty_remaining_writes_empty_active(self, tmp_path: Path) -> None:
+        _write(tmp_path / "active.md", DONE_MARCH)
+        plan = plan_archive(tmp_path, today=date(2026, 4, 25))
+        apply_archive(plan)
+        assert (tmp_path / "active.md").read_text() == ""
+
+    def test_apply_returns_destinations_written(self, tmp_path: Path) -> None:
+        content = "\n".join([DONE_MARCH, RETIRED_APRIL])
+        _write(tmp_path / "active.md", content)
+        plan = plan_archive(tmp_path, today=date(2026, 4, 25))
+        result = apply_archive(plan)
+        dests = {p.name for p in result.destinations_written}
+        assert dests == {"2026-03.md", "2026-04.md"}
+        assert {t.id for t in result.moved} == {"t002", "t004"}
+
+
+# ---------------------------------------------------------------------------
+# count_archivable
+# ---------------------------------------------------------------------------
+
+
+class TestCountArchivable:
+    def test_counts_zero_for_missing_active(self, tmp_path: Path) -> None:
+        counts = count_archivable(tmp_path)
+        assert counts == {"done_in_active": 0, "retired_in_active": 0, "missing_completed": 0}
+
+    def test_counts_done_retired_and_missing(self, tmp_path: Path) -> None:
+        content = "\n".join([DONE_MARCH, DONE_NO_COMPLETED, RETIRED_APRIL, PROPOSED_BLOCK])
+        _write(tmp_path / "active.md", content)
+        counts = count_archivable(tmp_path)
+        assert counts["done_in_active"] == 2
+        assert counts["retired_in_active"] == 1
+        assert counts["missing_completed"] == 1
 
 
 def test_archive_dataclass_fields() -> None:

@@ -73,13 +73,13 @@ Do not modify: `science_tool/tasks.py` itself (the parser/renderer is reused unc
 
 **Files:** Modify `science-tool/src/science_tool/tasks_archive.py` and `science-tool/tests/test_tasks_archive.py`.
 
-- [ ] **Step 1: Failing apply tests** — `apply_archive(plan)` writes `active.md` as preamble + remaining; no disk writes if `plan.entries` is empty; archived tasks appended in plan-order with existing destination entries preserved first; **destination preamble preservation** (when `tasks/done/2026-03.md` already has its own preamble text above the first `## [tNNN]`, that preamble survives byte-for-byte after the apply); **prior-month routing precedence** (entry with `completed: 2026-03-15` routes to `tasks/done/2026-03.md` even when `today = 2026-04-25`; the entry's `completed:` always wins over `today`); idempotency (capture mtimes, second run leaves them unchanged); duplicate id in destination is skipped, destination file untouched, `duplicate_ids` returned; `parse_errors` non-empty → `RuntimeError`, no writes.
+- [x] **Step 1: Failing apply tests** — `apply_archive(plan)` writes `active.md` as preamble + remaining; no disk writes if `plan.entries` is empty; archived tasks appended in plan-order with existing destination entries preserved first; **destination preamble preservation** (when `tasks/done/2026-03.md` already has its own preamble text above the first `## [tNNN]`, that preamble survives byte-for-byte after the apply); **prior-month routing precedence** (entry with `completed: 2026-03-15` routes to `tasks/done/2026-03.md` even when `today = 2026-04-25`; the entry's `completed:` always wins over `today`); idempotency (capture mtimes, second run leaves them unchanged); duplicate id in destination is skipped, destination file untouched, `duplicate_ids` returned; `parse_errors` non-empty → `RuntimeError`, no writes.
 
-- [ ] **Step 2: Implement apply**:
+- [x] **Step 2: Implement apply**:
   - `@dataclass(frozen=True) ArchiveResult`: `moved: list[Task]`, `skipped_duplicates: list[str]`, `destinations_written: list[Path]`.
   - `apply_archive(plan)`: raise on `plan.parse_errors`; no-op on empty `plan.entries`; group by destination; for each dest read via `parse_tasks` (empty list if missing), build id-set, append non-duplicates, write via `render_tasks`; rewrite `active.md` as `plan.preamble + render_tasks(plan.remaining)` (empty string if both empty, matching `_write_active`); `mkdir(parents=True, exist_ok=True)` for `done/`.
 
-- [ ] **Step 3: Add `count_archivable`** (thin counter so `health.py` does not import the writer):
+- [x] **Step 3: Add `count_archivable`** (thin counter so `health.py` does not import the writer):
 
 ```python
 def count_archivable(tasks_dir: Path) -> dict[str, int]:
@@ -91,9 +91,9 @@ def count_archivable(tasks_dir: Path) -> dict[str, int]:
     }
 ```
 
-- [ ] **Step 4: Run** `cd science-tool && uv run --frozen pytest tests/test_tasks_archive.py -q` — expect pass.
+- [x] **Step 4: Run** `cd science-tool && uv run --frozen pytest tests/test_tasks_archive.py -q` — expect pass.
 
-- [ ] **Step 5: Commit** `feat(tasks-archive): idempotent apply with duplicate detection`.
+- [x] **Step 5: Commit** `feat(tasks-archive): idempotent apply with duplicate detection`.
 
 ---
 
