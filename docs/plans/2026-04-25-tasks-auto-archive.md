@@ -55,17 +55,17 @@ Do not modify: `science_tool/tasks.py` itself (the parser/renderer is reused unc
 
 **Files:** Create `science-tool/src/science_tool/tasks_archive.py`; create `science-tool/tests/test_tasks_archive.py`.
 
-- [ ] **Step 1: Write failing planner tests** covering: empty `active.md`; single `done` with `completed: 2026-03-15` routes to `tasks/done/2026-03.md`; single `retired` with `completed: 2026-04-02` routes to `tasks/done/2026-04.md`; `done` with no `completed:` routes to current-month with `missing_completed=True`; `deferred` stays in active; mixed file (`proposed`/`done`/`retired`/`blocked`) moves only terminal entries; preamble preservation (`# Active Tasks\n\nNote.\n\n` before first heading); malformed block records a `ParseError` and continues.
+- [x] **Step 1: Write failing planner tests** covering: empty `active.md`; single `done` with `completed: 2026-03-15` routes to `tasks/done/2026-03.md`; single `retired` with `completed: 2026-04-02` routes to `tasks/done/2026-04.md`; `done` with no `completed:` routes to current-month with `missing_completed=True`; `deferred` stays in active; mixed file (`proposed`/`done`/`retired`/`blocked`) moves only terminal entries; preamble preservation (`# Active Tasks\n\nNote.\n\n` before first heading); malformed block records a `ParseError` and continues.
 
-- [ ] **Step 2: Implement planner** in `tasks_archive.py`:
+- [x] **Step 2: Implement planner** in `tasks_archive.py`:
   - `@dataclass(frozen=True) ArchiveEntry`: `task: Task`, `destination: Path`, `missing_completed: bool`.
   - `@dataclass(frozen=True) ParseError`: `heading: str`, `message: str`.
   - `@dataclass(frozen=True) ArchivePlan`: `tasks_dir: Path`, `preamble: str`, `entries: list[ArchiveEntry]`, `parse_errors: list[ParseError]`, `remaining: list[Task]`.
   - `plan_archive(tasks_dir, *, today=None) -> ArchivePlan`: split preamble (text before first `## [`); walk task blocks using a forgiving variant of `_parse_task_block` (catch `ValueError`, record, continue); classify terminal vs. remaining; destination = `tasks_dir / "done" / f"{(task.completed or today).strftime('%Y-%m')}.md"`; `today = today or date.today()` for testability.
 
-- [ ] **Step 3: Run** `cd science-tool && uv run --frozen pytest tests/test_tasks_archive.py -q -k planner` — expect pass.
+- [x] **Step 3: Run** `cd science-tool && uv run --frozen pytest tests/test_tasks_archive.py -q -k planner` — expect pass.
 
-- [ ] **Step 4: Commit** `feat(tasks-archive): plan archivable terminal-state entries`.
+- [x] **Step 4: Commit** `feat(tasks-archive): plan archivable terminal-state entries`.
 
 ---
 
