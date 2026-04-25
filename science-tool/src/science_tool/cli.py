@@ -2130,9 +2130,7 @@ def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Pa
         return
 
     if plan.parse_errors:
-        raise click.ClickException(
-            f"Refusing to apply: {len(plan.parse_errors)} parse error(s) in active.md"
-        )
+        raise click.ClickException(f"Refusing to apply: {len(plan.parse_errors)} parse error(s) in active.md")
 
     result = apply_archive(plan)
     if output_format != "json":
@@ -2406,12 +2404,10 @@ def health_command(project_root: Path, output_format: str) -> None:
         if metric["denominator"] > 0 and metric["numerator"] < metric["denominator"]:
             coverage_gaps += 1
 
-    archive_lag = report.get("archive_lag") or {
-        "done_in_active": 0,
-        "retired_in_active": 0,
-        "missing_completed": 0,
-    }
-    archive_lag_total = sum(archive_lag.values())
+    archive_lag = report["archive_lag"]
+    archive_lag_total = (
+        archive_lag["done_in_active"] + archive_lag["retired_in_active"] + archive_lag["missing_completed"]
+    )
 
     total_issues = (
         len(report["unresolved_refs"])
@@ -2433,10 +2429,12 @@ def health_command(project_root: Path, output_format: str) -> None:
         lag_table = Table(title="Tasks Archive Lag")
         lag_table.add_column("Metric", style="bold")
         lag_table.add_column("Count", justify="right")
-        for key, value in archive_lag.items():
-            lag_table.add_row(key, str(value))
+        for key in ("done_in_active", "retired_in_active", "missing_completed"):
+            lag_table.add_row(key, str(archive_lag[key]))
         console.print(lag_table)
-        console.print("\n[bold]Next:[/bold] run [cyan]science-tool tasks archive[/cyan] to preview, then [cyan]--apply[/cyan].")
+        console.print(
+            "\n[bold]Next:[/bold] run [cyan]science-tool tasks archive[/cyan] to preview, then [cyan]--apply[/cyan]."
+        )
 
     if report["unresolved_refs"]:
         table = Table(title=f"Unresolved references ({len(report['unresolved_refs'])})")

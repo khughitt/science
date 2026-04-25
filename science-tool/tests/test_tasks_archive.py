@@ -11,7 +11,6 @@ import pytest
 from science_tool.tasks_archive import (
     ArchiveEntry,
     ArchivePlan,
-    ArchiveResult,
     ParseError,
     apply_archive,
     count_archivable,
@@ -230,7 +229,9 @@ Pre-existing description.
 
     def test_apply_preserves_destination_preamble(self, tmp_path: Path) -> None:
         dest_preamble = "# Done March 2026\n\nClosed entries.\n\n"
-        existing = dest_preamble + """\
+        existing = (
+            dest_preamble
+            + """\
 ## [t900] Pre-existing
 - priority: P1
 - status: done
@@ -239,6 +240,7 @@ Pre-existing description.
 
 Pre-existing description.
 """
+        )
         _write(tmp_path / "done" / "2026-03.md", existing)
         _write(tmp_path / "active.md", DONE_MARCH)
         plan = plan_archive(tmp_path, today=date(2026, 4, 25))

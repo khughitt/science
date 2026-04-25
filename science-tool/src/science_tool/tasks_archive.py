@@ -20,7 +20,6 @@ from science_tool.tasks import (
     Task,
     _HEADER_RE,
     _parse_task_block,
-    parse_tasks,
     render_tasks,
 )
 

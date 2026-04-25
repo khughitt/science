@@ -361,6 +361,8 @@ _IDENTITY_REQUIRED_KINDS = frozenset(
 )
 _TAXON_REQUIRED_KINDS = frozenset({"gene", "protein"})
 _IDENTITY_REFERENCE_FIELDS = ("related", "source_refs", "same_as", "blocked_by", "consumed_by")
+
+
 def _coerce_external_curie(raw: object) -> str | None:
     curie = getattr(raw, "curie", None)
     if isinstance(curie, str) and curie.strip():

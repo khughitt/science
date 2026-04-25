@@ -186,17 +186,17 @@ Add `"archive_lag": archive_lag,` to the returned dict. The planner returns zero
 
 **Files:** Verify only.
 
-- [ ] **Step 1: Focused tests** — `cd science-tool && uv run --frozen pytest tests/test_tasks_archive.py tests/test_health.py tests/test_tasks_cli.py tests/test_tasks.py -q` — expect pass.
+- [x] **Step 1: Focused tests** — `cd science-tool && uv run --frozen pytest tests/test_tasks_archive.py tests/test_health.py tests/test_tasks_cli.py tests/test_tasks.py -q` — expect pass.
 
-- [ ] **Step 2: Format and lint** — `uv run --frozen ruff format` + `ruff check` over `science-tool/src/science_tool` — expect no errors.
+- [x] **Step 2: Format and lint** — `uv run --frozen ruff format` + `ruff check` over `science-tool/src/science_tool` — expect no errors.
 
-- [ ] **Step 3: Type check** — `uv run --frozen pyright` — no new errors.
+- [x] **Step 3: Type check** — `uv run --frozen pyright` — no new errors.
 
-- [ ] **Step 4: Read-only smoke-test against downstream projects** — run `science-tool tasks archive --tasks-dir <project>/tasks --format json` against `natural-systems`, `mm30`, `protein-landscape`. Do **not** pass `--apply`. Expect dry-run plans of ~114, ~44, ~44 entries respectively (audit's 49% / ~30% / 44%) routed to monthly buckets matching `completed:` dates.
+- [x] **Step 4: Read-only smoke-test against downstream projects** — run `science-tool tasks archive --tasks-dir <project>/tasks --format json` against `natural-systems`, `mm30`, `protein-landscape`. Do **not** pass `--apply`. Expect dry-run plans of ~114, ~44, ~44 entries respectively (audit's 49% / ~30% / 44%) routed to monthly buckets matching `completed:` dates.
 
-- [ ] **Step 5: Smoke-test health surfacing** — `science-tool health --project-root /home/keith/d/r/natural-systems --format json | jq .archive_lag` shows non-zero `done_in_active`; the table view renders the "Next:" hint.
+- [x] **Step 5: Smoke-test health surfacing** — `science-tool health --project-root /home/keith/d/r/natural-systems --format json | jq .archive_lag` shows non-zero `done_in_active`; the table view renders the "Next:" hint.
 
-- [ ] **Step 6: Final commit if formatting changed** — `chore(tasks-archive): format archive implementation`. Skip if no diff.
+- [x] **Step 6: Final commit if formatting changed** — `chore(tasks-archive): format archive implementation`. Skip if no diff.
 
 ---
 
