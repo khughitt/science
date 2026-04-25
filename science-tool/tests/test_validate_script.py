@@ -507,3 +507,240 @@ def test_validate_warns_when_pre_registration_missing_spec(tmp_path: Path) -> No
     combined = result.stdout + result.stderr
     assert "spec" in combined.lower(), combined
     assert result.returncode == 0, combined  # warning, not error
+
+
+def _synthesis_body(fields: dict[str, object]) -> str:
+    """Compose a synthesis file from a frontmatter-fields dict.
+
+    Renders strings, ints, and lists. Lists with dict items emit YAML block
+    sequences (used for ``synthesized_from``). Plain string lists emit inline
+    flow style. Body is one line so the file parses without contributing
+    content-shape concerns.
+    """
+    lines: list[str] = ["---"]
+    for key, value in fields.items():
+        if isinstance(value, list):
+            if not value:
+                lines.append(f"{key}: []")
+                continue
+            lines.append(f"{key}:")
+            for item in value:
+                if isinstance(item, dict):
+                    first = True
+                    for sub_key, sub_value in item.items():
+                        prefix = "  - " if first else "    "
+                        if isinstance(sub_value, str):
+                            lines.append(f'{prefix}{sub_key}: "{sub_value}"')
+                        else:
+                            lines.append(f"{prefix}{sub_key}: {sub_value}")
+                        first = False
+                else:
+                    lines.append(f'  - "{item}"')
+        elif isinstance(value, int) and not isinstance(value, bool):
+            lines.append(f"{key}: {value}")
+        else:
+            lines.append(f'{key}: "{value}"')
+    lines.extend(["---", "", "# Synthesis", "", "Body.", ""])
+    return "\n".join(lines)
+
+
+def test_validate_accepts_synthesis_rollup_full(tmp_path: Path) -> None:
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "reports").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "doc" / "reports" / "synthesis.md").write_text(
+        _synthesis_body({
+            "id": "synthesis:rollup",
+            "type": "synthesis",
+            "report_kind": "synthesis-rollup",
+            "generated_at": "2026-04-25T00:00:00Z",
+            "source_commit": "0" * 40,
+            "synthesized_from": [
+                {
+                    "hypothesis": "hypothesis:h01-test",
+                    "file": "doc/reports/synthesis/h01-test.md",
+                    "sha": "1" * 40,
+                }
+            ],
+        }),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "missing synthesized_from" not in combined, combined
+    assert "missing report_kind" not in combined, combined
+    assert "invalid report_kind" not in combined, combined
+
+
+def test_validate_accepts_hypothesis_synthesis(tmp_path: Path) -> None:
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "reports" / "synthesis").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "doc" / "reports" / "synthesis" / "h01-test.md").write_text(
+        _synthesis_body({
+            "id": "synthesis:h01-test",
+            "type": "synthesis",
+            "report_kind": "hypothesis-synthesis",
+            "generated_at": "2026-04-25T00:00:00Z",
+            "source_commit": "0" * 40,
+            "hypothesis": "hypothesis:h01-test",
+            "provenance_coverage": "full",
+        }),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "missing synthesized_from" not in combined, combined
+    assert "missing hypothesis" not in combined, combined
+    assert "missing provenance_coverage" not in combined, combined
+
+
+def test_validate_accepts_emergent_threads(tmp_path: Path) -> None:
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "reports" / "synthesis").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "doc" / "reports" / "synthesis" / "_emergent-threads.md").write_text(
+        _synthesis_body({
+            "id": "synthesis:emergent-threads",
+            "type": "synthesis",
+            "report_kind": "emergent-threads",
+            "generated_at": "2026-04-25T00:00:00Z",
+            "source_commit": "0" * 40,
+            "orphan_question_count": 0,
+            "orphan_interpretation_count": 0,
+            "orphan_ids": [],
+        }),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "missing synthesized_from" not in combined, combined
+    assert "missing orphan_question_count" not in combined, combined
+    assert "missing orphan_interpretation_count" not in combined, combined
+    assert "missing orphan_ids" not in combined, combined
+
+
+def test_validate_warns_on_rollup_missing_synthesized_from(tmp_path: Path) -> None:
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "reports").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "doc" / "reports" / "synthesis.md").write_text(
+        _synthesis_body({
+            "id": "synthesis:rollup",
+            "type": "synthesis",
+            "report_kind": "synthesis-rollup",
+            "generated_at": "2026-04-25T00:00:00Z",
+            "source_commit": "0" * 40,
+        }),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "missing synthesized_from" in combined, combined
+
+
+def test_validate_warns_on_invalid_report_kind(tmp_path: Path) -> None:
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "reports" / "synthesis").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "doc" / "reports" / "synthesis" / "weird.md").write_text(
+        _synthesis_body({
+            "id": "synthesis:weird",
+            "type": "synthesis",
+            "report_kind": "rollup",  # invalid
+            "generated_at": "2026-04-25T00:00:00Z",
+            "source_commit": "0" * 40,
+        }),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "invalid report_kind" in combined, combined
+
+
+def test_validate_no_warn_on_per_hyp_without_synthesized_from(tmp_path: Path) -> None:
+    """Per-hypothesis files do NOT carry synthesized_from. Locked-in regression."""
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "reports" / "synthesis").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "doc" / "reports" / "synthesis" / "h01-test.md").write_text(
+        _synthesis_body({
+            "id": "synthesis:h01-test",
+            "type": "synthesis",
+            "report_kind": "hypothesis-synthesis",
+            "generated_at": "2026-04-25T00:00:00Z",
+            "source_commit": "0" * 40,
+            "hypothesis": "hypothesis:h01-test",
+            "provenance_coverage": "full",
+        }),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "missing synthesized_from" not in combined, combined
+
+
+def test_validate_silent_on_legacy_type_report(tmp_path: Path) -> None:
+    """Legacy mm30 shape (type: report + report_kind: ...) must not fire any
+    Plan-#4-introduced warning. The validator gates on type == synthesis."""
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "reports" / "synthesis").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "doc" / "reports" / "synthesis" / "h1-legacy.md").write_text(
+        _synthesis_body({
+            "id": "report:synthesis-h1-legacy",
+            "type": "report",
+            "report_kind": "hypothesis-synthesis",
+            "generated_at": "2026-04-25T00:00:00Z",
+        }),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "missing synthesized_from" not in combined, combined
+    assert "missing report_kind" not in combined, combined
+    assert "invalid report_kind" not in combined, combined
+    assert "missing hypothesis" not in combined, combined
+    assert "missing provenance_coverage" not in combined, combined
