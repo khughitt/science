@@ -36,7 +36,7 @@ def test_run_single_deterministic_given_seed():
     assert a.brier == b.brier
 
 
-@pytest.mark.parametrize("kind", ["hard_gate", "constant_revisit", "thompson"])
+@pytest.mark.parametrize("kind", ["hard_gate", "constant_revisit", "thompson", "ucb"])
 def test_run_single_dispatches_every_policy_kind(kind):
     r = run_single(
         _sim(),
@@ -252,3 +252,38 @@ def test_select_calibration_slice_rejects_non_positive_n():
         _select_calibration_slice(pairs, n_calibration_runs=0)
     with pytest.raises(ValueError, match="n_calibration_runs"):
         _select_calibration_slice(pairs, n_calibration_runs=-5)
+
+
+def test_build_default_grid_includes_optimistic_init_hard_gate():
+    """hard_gate appears with both Beta(1,1) and Beta(5,5) priors."""
+    grid = list(build_default_grid(seeds=1, quick=False))
+    hard_gate_priors = {(sim.prior_alpha, sim.prior_beta) for sim, pol in grid if pol.kind == "hard_gate"}
+    assert (1.0, 1.0) in hard_gate_priors, "hard_gate(1,1) missing"
+    assert (5.0, 5.0) in hard_gate_priors, "hard_gate(5,5) (optimistic-init) missing"
+
+
+def test_build_default_grid_default_priors_for_non_hard_gate_policies():
+    """Other policies use only Beta(1,1); optimistic-init is a hard_gate-specific comparison."""
+    grid = list(build_default_grid(seeds=1, quick=False))
+    for sim, pol in grid:
+        if pol.kind == "hard_gate":
+            continue
+        assert (sim.prior_alpha, sim.prior_beta) == (1.0, 1.0), (
+            f"non-hard_gate policy {pol.kind} got priors {(sim.prior_alpha, sim.prior_beta)}"
+        )
+
+
+def test_build_default_grid_expanded_revisit_rate_axis():
+    """constant_revisit should appear with r in {0.05, 0.1, 0.2, 0.3} (expanded from {0.1, 0.3})."""
+    grid = list(build_default_grid(seeds=1, quick=False))
+    revisit_probs = {pol.revisit_prob for _sim, pol in grid if pol.kind == "constant_revisit"}
+    assert revisit_probs == {0.05, 0.1, 0.2, 0.3}, (
+        f"expected expanded r-axis {{0.05, 0.1, 0.2, 0.3}}, got {revisit_probs}"
+    )
+
+
+def test_build_default_grid_includes_ucb():
+    """UCB appears as a default policy."""
+    grid = list(build_default_grid(seeds=1, quick=False))
+    kinds = {pol.kind for _sim, pol in grid}
+    assert "ucb" in kinds, f"ucb missing from default grid kinds: {kinds}"

@@ -59,11 +59,31 @@ def build_default_grid(seeds: int = 100, quick: bool = False) -> Iterator[tuple[
 
     ``quick=True`` shrinks every axis to 1-2 values for smoke-testing.
     """
+
+    # Each entry: (PolicyConfig, prior_alpha, prior_beta).
+    def _constant_revisit(revisit_prob: float) -> tuple[PolicyConfig, float, float]:
+        return (
+            PolicyConfig(
+                kind="constant_revisit",
+                warmup_actions=1,
+                gate_threshold=0.5,
+                revisit_prob=revisit_prob,
+            ),
+            1.0,
+            1.0,
+        )
+
     if quick:
         noise_pairs = [(0.9, 0.1), (0.6, 0.4)]
         budget_multiples: tuple[float, ...] = (2.0,)
         n_props_values: tuple[int, ...] = (20,)
         prior_true_values = [0.5]
+        policy_configurations: list[tuple[PolicyConfig, float, float]] = [
+            (PolicyConfig(kind="hard_gate", warmup_actions=1, gate_threshold=0.5), 1.0, 1.0),
+            _constant_revisit(0.10),  # representative of the constant_revisit family
+            (PolicyConfig(kind="thompson", warmup_actions=1), 1.0, 1.0),
+            (PolicyConfig(kind="ucb", warmup_actions=1, ucb_c=1.0), 1.0, 1.0),
+        ]
     else:
         noise_pairs = [
             (0.9, 0.1),
@@ -75,28 +95,25 @@ def build_default_grid(seeds: int = 100, quick: bool = False) -> Iterator[tuple[
         budget_multiples = DEFAULT_BUDGET_MULTIPLES
         n_props_values = DEFAULT_N_PROPS
         prior_true_values = [0.3, 0.5]
+        # Only hard_gate gets the Beta(5,5) optimistic-init variant — that disentangles
+        # "uncertainty in priors helps" from "stochastic revisit mechanism helps", which
+        # is the comparison of interest. Crossing the prior axis with every policy
+        # would 2x the grid for a comparison we don't need on Thompson/UCB.
+        policy_configurations = [
+            (PolicyConfig(kind="hard_gate", warmup_actions=1, gate_threshold=0.5), 1.0, 1.0),
+            (PolicyConfig(kind="hard_gate", warmup_actions=1, gate_threshold=0.5), 5.0, 5.0),
+            _constant_revisit(0.05),
+            _constant_revisit(0.10),
+            _constant_revisit(0.20),
+            _constant_revisit(0.30),
+            (PolicyConfig(kind="thompson", warmup_actions=1), 1.0, 1.0),
+            (PolicyConfig(kind="ucb", warmup_actions=1, ucb_c=1.0), 1.0, 1.0),
+        ]
 
     bias_settings: list[tuple[BiasModel, float, float]] = [
         ("none", 0.0, 0.0),
         ("independent", 0.3, 0.3),
         ("shared", 0.3, 0.3),
-    ]
-
-    policies = [
-        PolicyConfig(kind="hard_gate", warmup_actions=1, gate_threshold=0.5),
-        PolicyConfig(
-            kind="constant_revisit",
-            warmup_actions=1,
-            gate_threshold=0.5,
-            revisit_prob=0.1,
-        ),
-        PolicyConfig(
-            kind="constant_revisit",
-            warmup_actions=1,
-            gate_threshold=0.5,
-            revisit_prob=0.3,
-        ),
-        PolicyConfig(kind="thompson", warmup_actions=1),
     ]
 
     for p_pos, p_neg in noise_pairs:
@@ -106,21 +123,23 @@ def build_default_grid(seeds: int = 100, quick: bool = False) -> Iterator[tuple[
                 for prior_true in prior_true_values:
                     for bias_model, bias_fraction, bias_sigma in bias_settings:
                         for seed in range(seeds):
-                            sim = SimConfig(
-                                n_propositions=n,
-                                budget=budget,
-                                p_pos=p_pos,
-                                p_neg=p_neg,
-                                prior_true=prior_true,
-                                bias_model=bias_model,
-                                bias_fraction=bias_fraction,
-                                bias_sigma=bias_sigma,
-                                seed=seed,
-                            )
-                            for policy in policies:
+                            for policy, prior_alpha, prior_beta in policy_configurations:
                                 warmup_total = policy.warmup_actions * n
                                 if budget <= warmup_total:
                                     continue
+                                sim = SimConfig(
+                                    n_propositions=n,
+                                    budget=budget,
+                                    p_pos=p_pos,
+                                    p_neg=p_neg,
+                                    prior_true=prior_true,
+                                    prior_alpha=prior_alpha,
+                                    prior_beta=prior_beta,
+                                    bias_model=bias_model,
+                                    bias_fraction=bias_fraction,
+                                    bias_sigma=bias_sigma,
+                                    seed=seed,
+                                )
                                 yield sim, policy
 
 
