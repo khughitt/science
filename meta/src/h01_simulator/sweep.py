@@ -15,6 +15,9 @@ from .metrics import brier, recall, regret
 from .model import SignalModel, generate_propositions
 from .policies import POLICIES
 
+DEFAULT_BUDGET_MULTIPLES: tuple[float, ...] = (2.0, 8.0, 32.0)
+DEFAULT_N_PROPS: tuple[int, ...] = (20, 100)
+
 
 def run_single(sim_config: SimConfig, policy_config: PolicyConfig) -> RunResult:
     """Execute one simulation run."""
@@ -47,12 +50,18 @@ def run_single(sim_config: SimConfig, policy_config: PolicyConfig) -> RunResult:
 def build_default_grid(seeds: int = 100, quick: bool = False) -> Iterator[tuple[SimConfig, PolicyConfig]]:
     """Yield (SimConfig, PolicyConfig) pairs covering the H01 sweep grid.
 
+    Budget is expressed as a multiple of ``n_propositions`` (dimensionless) so
+    information-per-proposition is comparable across N. Cells with
+    ``budget <= warmup_actions * n_propositions`` are filtered, since they
+    leave no post-warmup actions and collapse every policy to the same
+    allocation.
+
     ``quick=True`` shrinks every axis to 1-2 values for smoke-testing.
     """
     if quick:
         noise_pairs = [(0.9, 0.1), (0.6, 0.4)]
-        budgets = [200]
-        n_props_values = [20]
+        budget_multiples: tuple[float, ...] = (2.0,)
+        n_props_values: tuple[int, ...] = (20,)
         prior_true_values = [0.5]
     else:
         noise_pairs = [
@@ -62,8 +71,8 @@ def build_default_grid(seeds: int = 100, quick: bool = False) -> Iterator[tuple[
             (0.6, 0.4),
             (0.55, 0.45),
         ]
-        budgets = [100, 400, 1600]
-        n_props_values = [20, 100]
+        budget_multiples = DEFAULT_BUDGET_MULTIPLES
+        n_props_values = DEFAULT_N_PROPS
         prior_true_values = [0.3, 0.5]
 
     bias_settings: list[tuple[BiasModel, float, float]] = [
@@ -90,8 +99,9 @@ def build_default_grid(seeds: int = 100, quick: bool = False) -> Iterator[tuple[
     ]
 
     for p_pos, p_neg in noise_pairs:
-        for budget in budgets:
+        for k in budget_multiples:
             for n in n_props_values:
+                budget = int(k * n)
                 for prior_true in prior_true_values:
                     for bias_model, bias_fraction, bias_sigma in bias_settings:
                         for seed in range(seeds):
@@ -107,6 +117,9 @@ def build_default_grid(seeds: int = 100, quick: bool = False) -> Iterator[tuple[
                                 seed=seed,
                             )
                             for policy in policies:
+                                warmup_total = policy.warmup_actions * n
+                                if budget <= warmup_total:
+                                    continue
                                 yield sim, policy
 
 
@@ -123,6 +136,7 @@ def run_sweep(grid: Iterable[tuple[SimConfig, PolicyConfig]], out_path: Path) ->
                 "gate_threshold": pol_cfg.gate_threshold,
                 "n_props": sim_cfg.n_propositions,
                 "budget": sim_cfg.budget,
+                "budget_multiple": sim_cfg.budget / sim_cfg.n_propositions,
                 "p_pos": sim_cfg.p_pos,
                 "p_neg": sim_cfg.p_neg,
                 "prior_true": sim_cfg.prior_true,

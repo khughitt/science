@@ -89,6 +89,7 @@ def test_run_sweep_writes_parquet_with_list_columns(tmp_path):
         "gate_threshold",
         "n_props",
         "budget",
+        "budget_multiple",
         "p_pos",
         "p_neg",
         "prior_true",
@@ -128,3 +129,64 @@ def test_benchmark_runtime_returns_extrapolation():
     assert report.elapsed_seconds_calibration > 0.0
     assert report.projected_full_grid_seconds > 0.0
     assert report.projected_full_grid_seconds >= report.elapsed_seconds_calibration
+
+
+def test_build_default_grid_scales_budget_with_n_propositions():
+    """Every yielded sim's budget is one of the configured multiples * N."""
+    from h01_simulator.sweep import DEFAULT_BUDGET_MULTIPLES, DEFAULT_N_PROPS
+
+    grid = list(build_default_grid(seeds=1, quick=False))
+    # Make the warmup_actions assumption explicit so this test can't silently
+    # mis-cover if the default policy list grows.
+    for _sim, policy in grid:
+        assert policy.warmup_actions == 1, (
+            f"test assumes all default policies use warmup_actions=1; got {policy.warmup_actions}"
+        )
+    for sim, _policy in grid:
+        expected = {int(k * sim.n_propositions) for k in DEFAULT_BUDGET_MULTIPLES}
+        assert sim.budget in expected, f"budget {sim.budget} not in {expected} for n={sim.n_propositions}"
+    # Every (N, multiple) combination should appear at least once when non-degenerate.
+    seen_pairs = {(sim.n_propositions, sim.budget) for sim, _ in grid}
+    for n in DEFAULT_N_PROPS:
+        for k in DEFAULT_BUDGET_MULTIPLES:
+            b = int(k * n)
+            warmup_total = n  # all default policies use warmup_actions=1
+            if b > warmup_total:
+                assert (n, b) in seen_pairs, f"missing ({n}, {b})"
+
+
+def test_build_default_grid_filters_degenerate_cells():
+    """No cell should have budget <= warmup_total (budget consumed entirely by warmup)."""
+    grid = list(build_default_grid(seeds=1, quick=False))
+    for sim, policy in grid:
+        warmup_total = policy.warmup_actions * sim.n_propositions
+        assert sim.budget > warmup_total, f"degenerate cell: budget={sim.budget}, warmup_total={warmup_total}"
+
+
+def test_build_default_grid_filter_actually_runs(monkeypatch):
+    """Directly exercise the degenerate-cell filter by injecting a multiple
+    that triggers it. With warmup_actions=1 at N=20, any multiple <= 1.0
+    yields budget <= warmup_total and must be filtered out."""
+    monkeypatch.setattr(
+        "h01_simulator.sweep.DEFAULT_BUDGET_MULTIPLES",
+        (0.5, 2.0),  # 0.5 triggers filter at every default N; 2.0 does not
+    )
+    grid = list(build_default_grid(seeds=1, quick=False))
+    # No yielded cell should have budget <= warmup_total — the filter must skip them.
+    for sim, policy in grid:
+        warmup_total = policy.warmup_actions * sim.n_propositions
+        assert sim.budget > warmup_total
+    # And concretely: no cell with budget = int(0.5 * N) should appear.
+    triggering_budgets = {int(0.5 * n) for n in (20, 100)}
+    seen_budgets = {sim.budget for sim, _ in grid}
+    assert triggering_budgets.isdisjoint(seen_budgets), (
+        f"filter failed: degenerate budgets {triggering_budgets & seen_budgets} were yielded"
+    )
+
+
+def test_run_sweep_records_budget_multiple(tmp_path):
+    grid = list(build_default_grid(seeds=1, quick=True))
+    df = run_sweep(grid, tmp_path / "sweep.parquet")
+    assert "budget_multiple" in df.columns
+    for row in df.iter_rows(named=True):
+        assert row["budget_multiple"] == pytest.approx(row["budget"] / row["n_props"])
