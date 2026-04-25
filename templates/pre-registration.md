@@ -1,6 +1,13 @@
 ---
-title: "Pre-registration: {{Short Title}}"
+id: "pre-registration:{{slug}}"
+type: "pre-registration"
+title: "{{Short Title}}"
+status: "committed"
+committed: "{{YYYY-MM-DD}}"
+spec: ""  # optional path to design/spec doc, e.g. doc/specs/2026-04-25-<slug>-design.md
+related: []  # hypothesis IDs, inquiry slugs, or task IDs this pre-reg covers
 created: "{{YYYY-MM-DD}}"
+updated: "{{YYYY-MM-DD}}"
 ---
 
 # Pre-registration: {{Short Title}}
