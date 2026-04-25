@@ -26,13 +26,15 @@ Resolve the three engine issues flagged in `meta/doc/plans/2026-04-24-h01-engine
 ## [t002] Run H01 sweep and publish interpretation
 - type: analysis
 - priority: P1
-- status: proposed
+- status: done
 - aspects: [hypothesis-testing, software-development]
 - related: [hypothesis:h01-stochastic-revisiting, question:01-bioinformatics-generalizability]
 - blocked_by: [t001b]
 - created: 2026-04-24
 
 Execute the engine from [t001] on the default grid and produce the deliverables `specs/h01-simulator.md` names as required: `results/h01-simulator/sweep-<date>.parquet` with full seed count; `notebooks/h01_simulator_results.py` populated with headline figures (recall-vs-noise per policy, reliability diagram, threshold-swept recall, `shared`-vs-`independent` bias comparison); `doc/interpretations/h01-simulator-<date>.md` tying sweep findings to each H01 proposition (P1-P5). Plan to be written after t001 closes, informed by observed engine behaviour.
+
+**COMPLETED 2026-04-24.** Sweep ran with engine extensions: UCB policy added, optimistic-init `hard_gate(Beta(5,5))` variant added as a parallel grid entry, `constant_revisit` r-axis expanded to {0.05, 0.1, 0.2, 0.3}. `RUNTIME_BUDGET_SECONDS` re-anchored to 3180s for the larger grid (measured projection: 2967s avg, 3115s max across 5 runs). Output: `meta/results/h01-simulator/sweep-2026-04-24.parquet` (144,000 rows, 23 MB). Notebook: `meta/notebooks/h01_simulator_results.py` with six figures (recall-vs-noise, brier-vs-noise, reliability diagram, threshold-swept recall, shared-vs-independent delta, r-curve). Interpretation: `meta/doc/interpretations/h01-simulator-2026-04-24.md` — H01 broadly confirmed (every exploration-based policy strictly beats hard-gating; gap widens monotonically with noise), with the load-bearing mechanism refined to "uncertainty-guided exploration" rather than "stochastic revisiting per se" (UCB's deterministic variant outperforms Thompson). P5 not testable at the chosen r-axis upper bound; future work to extend r > 0.3.
 
 ## [t003] Decide hierarchical task ID convention for science-tool
 - type: research
