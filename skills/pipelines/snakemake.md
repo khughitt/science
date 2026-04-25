@@ -99,7 +99,75 @@ parameters:
 - Processed data: `data/processed/`
 - Results: `results/` or `data/processed/`
 - Use `temp()` for large intermediate files that can be deleted
-- Use `protected()` for expensive-to-compute outputs
+- Use `protected()` for expensive-to-compute outputs (with the caveat below)
+
+### `protected()` does NOT prevent rerun-cleanup
+
+`protected()` only sets file mode 444 *after a successful write* and only blocks
+`--forceall`. It does **not** prevent snakemake's normal pre-rule cleanup, which
+removes existing output files at the moment snakemake decides to re-run a rule
+(for any reason: code/mtime/params change, fresh `out_dir` metadata, etc.). By
+the time the rule body runs, the files are already gone — script-level
+idempotency checks (`if Path(out).exists(): sys.exit(0)`) defend the wrong
+window.
+
+This is a real-world footgun for **network-fetch rules** (e.g., downloading
+public datasets from URLs) whose source endpoints can fail, rate-limit, or
+return 4xx errors. If the rule fails after cleanup but before re-acquiring
+the data, the original on-disk copy is gone and may be hard or impossible to
+recover.
+
+**Pattern to avoid**:
+
+```python
+rule download_study:
+    output:
+        protected("/data/raw/{id}/data_mutations.txt"),
+        protected("/data/raw/{id}/data_clinical_sample.txt"),
+    script:
+        "scripts/download_study.py"      # idempotency check inside is too late
+```
+
+A fresh `out_dir` for the workflow has no metadata for these outputs, so
+snakemake decides to re-run; cleanup removes the existing files; the
+download fails with HTTP 403; the original raw data is permanently lost.
+
+**Pattern to use**: emit a per-`out_dir` *marker file* under the workflow's
+own output tree. The marker is the only thing snakemake can clean up; the
+script populates `data_dir/` as a side effect, with an explicit "skip if
+already present" guard *inside the script*.
+
+```python
+rule stage_study_raw:
+    output:
+        out_dir / "metadata/raw_studies/{id}.staged"
+    script:
+        "scripts/stage_study_raw.py"
+
+# scripts/stage_study_raw.py
+study_dir = Path(data_dir) / wildcards.id
+required = ["data_mutations.txt", "data_clinical_sample.txt"]
+
+if all((study_dir / f).exists() for f in required):
+    Path(snakemake.output[0]).write_text(f"{wildcards.id}\n")
+    raise SystemExit(0)
+
+download_and_extract(study_id, data_dir)   # the actual fetch
+Path(snakemake.output[0]).write_text(f"{wildcards.id}\n")
+```
+
+Downstream rules consume the canonical raw paths from `data_dir/` directly
+(unchanged); they additionally take the marker as an input dependency so
+the staging rule runs first when needed. The marker is per-`out_dir`, so
+switching to a fresh `out_dir` causes a no-op rerun (the staging script
+short-circuits on existence) instead of a destructive re-download attempt.
+
+The same pattern applies to any rule whose output points outside the
+`out_dir` tree — shared filesystems, cloud-mounted volumes, vendor data
+directories. Keep snakemake-managed outputs strictly inside the workflow's
+own tree; if other tooling needs the data at a canonical location, treat
+that location as a side effect of the rule body, not as the declared
+output.
 
 ### Scripts vs shell
 - **Shell:** simple commands, tool invocations
