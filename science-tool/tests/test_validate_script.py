@@ -148,6 +148,41 @@ def _hypothesis_body(phase_line: str) -> str:
     return "\n".join(fm_lines)
 
 
+def _pre_registration_body(
+    *,
+    type_value: str,
+    id_value: str,
+    committed: str | None = None,
+    spec: str | None = None,
+) -> str:
+    """Compose a pre-registration file body with configurable type/id/committed/spec frontmatter."""
+    fm_lines = [
+        "---",
+        f'id: "{id_value}"',
+        f'type: "{type_value}"',
+        'title: "Test Pre-Reg"',
+        'status: "committed"',
+    ]
+    if committed is not None:
+        fm_lines.append(f'committed: "{committed}"')
+    if spec is not None:
+        fm_lines.append(f'spec: "{spec}"')
+    fm_lines.extend([
+        "related: []",
+        'created: "2026-04-25"',
+        'updated: "2026-04-25"',
+        "---",
+        "",
+        "# Pre-registration: Test",
+        "",
+        "## Hypotheses Under Test\n\nh01.\n",
+        "## Expected Outcomes\n\nSomething.\n",
+        "## Decision Criteria\n\nThreshold X.\n",
+        "## Null Result Plan\n\nFallback Y.\n",
+    ])
+    return "\n".join(fm_lines)
+
+
 def test_validate_accepts_research_profile_with_root_src_and_code(tmp_path: Path) -> None:
     _write_common_files(tmp_path, "research")
     _write_python3_stub(tmp_path / "bin")
@@ -365,3 +400,110 @@ def test_validate_warns_on_invalid_phase_with_inline_comment(tmp_path: Path) -> 
 
     combined = result.stdout + result.stderr
     assert "invalid phase" in combined.lower() and "tentative" in combined, combined
+
+
+def test_validate_accepts_canonical_pre_registration(tmp_path: Path) -> None:
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "meta" / "pre-registration-h01-test.md").write_text(
+        _pre_registration_body(
+            type_value="pre-registration",
+            id_value="pre-registration:h01-test",
+            committed="2026-04-25",
+            spec="doc/specs/2026-04-25-h01-test-design.md",
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "pre-registration" not in combined.lower() or "missing" not in combined.lower(), combined
+    assert "id prefix" not in combined.lower(), combined
+
+
+# NOTE: id-prefix conformance for type: pre-registration is intentionally NOT
+# tested here. Plan #7 Task 6's generic PREFIX_RULES table is the single
+# canonical home for that check; the corresponding test lives in Plan #7's
+# test set. Adding it here too would produce duplicate warnings once Plan #7
+# lands.
+
+
+def test_validate_does_not_warn_on_legacy_type_plan_pre_reg(tmp_path: Path) -> None:
+    """Legacy shape (type: plan + id: pre-registration:...) must not fire any of
+    the Plan-#2-introduced warnings (committed/spec) — those are gated on
+    type == pre-registration. (Plan #7 Task 6's id-prefix table will warn
+    separately on the type/id mismatch once it ships; that is out of scope
+    for this test.)"""
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "meta" / "pre-registration-h01-test.md").write_text(
+        _pre_registration_body(
+            type_value="plan",
+            id_value="pre-registration:h01-test",
+            committed=None,
+            spec=None,
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "should declare a 'committed:'" not in combined, combined
+    assert "should declare a 'spec:'" not in combined, combined
+
+
+def test_validate_warns_when_pre_registration_missing_committed(tmp_path: Path) -> None:
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "meta" / "pre-registration-h01-test.md").write_text(
+        _pre_registration_body(
+            type_value="pre-registration",
+            id_value="pre-registration:h01-test",
+            committed=None,  # missing
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "committed" in combined.lower(), combined
+    assert result.returncode == 0, combined  # warning, not error
+
+
+def test_validate_warns_when_pre_registration_missing_spec(tmp_path: Path) -> None:
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "meta" / "pre-registration-h01-test.md").write_text(
+        _pre_registration_body(
+            type_value="pre-registration",
+            id_value="pre-registration:h01-test",
+            committed="2026-04-25",
+            spec=None,  # missing
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "spec" in combined.lower(), combined
+    assert result.returncode == 0, combined  # warning, not error
