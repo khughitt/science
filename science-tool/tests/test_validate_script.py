@@ -744,3 +744,166 @@ def test_validate_silent_on_legacy_type_report(tmp_path: Path) -> None:
     assert "invalid report_kind" not in combined, combined
     assert "missing hypothesis" not in combined, combined
     assert "missing provenance_coverage" not in combined, combined
+
+
+def _next_steps_body(date: str, *, prior: str | None = None, prior_analyses: list[str] | None = None,
+                     prior_analyses_inline: str | None = None) -> str:
+    """Compose a minimal next-steps file body. The four section headings keep
+    the existing section-9 conformance check happy.
+    """
+    lines = [
+        "---",
+        f'id: "meta:next-steps-{date}"',
+        'type: "meta"',
+        f'title: "Next Steps — {date}"',
+        f'created: "{date}"',
+        f'updated: "{date}"',
+    ]
+    if prior is not None:
+        lines.append(f'prior: "{prior}"')
+    if prior_analyses_inline is not None:
+        lines.append(f'prior_analyses: {prior_analyses_inline}')
+    elif prior_analyses is not None:
+        lines.append("prior_analyses:")
+        for entry in prior_analyses:
+            lines.append(f'  - "{entry}"')
+    lines.extend([
+        "related: []",
+        "---",
+        "",
+        f"# Next Steps — {date}",
+        "",
+        "## Recent Progress\n\nProgress.\n",
+        "## Current State\n\nState.\n",
+        "## Coverage Gaps\n\nGaps.\n",
+        "## Recommended Next Actions\n\nActions.\n",
+    ])
+    return "\n".join(lines)
+
+
+def test_validate_resolves_prior_by_entity_id(tmp_path: Path) -> None:
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "meta" / "next-steps-2026-04-20.md").write_text(
+        _next_steps_body("2026-04-20"), encoding="utf-8",
+    )
+    (tmp_path / "doc" / "meta" / "next-steps-2026-04-25.md").write_text(
+        _next_steps_body("2026-04-25", prior="meta:next-steps-2026-04-20"),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "broken prior link" not in combined, combined
+
+
+def test_validate_resolves_prior_by_path(tmp_path: Path) -> None:
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "meta" / "next-steps-2026-04-20.md").write_text(
+        _next_steps_body("2026-04-20"), encoding="utf-8",
+    )
+    (tmp_path / "doc" / "meta" / "next-steps-2026-04-25.md").write_text(
+        _next_steps_body("2026-04-25", prior="doc/meta/next-steps-2026-04-20.md"),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "broken prior link" not in combined, combined
+
+
+def test_validate_warns_on_broken_prior_link(tmp_path: Path) -> None:
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "meta" / "next-steps-2026-04-25.md").write_text(
+        _next_steps_body("2026-04-25", prior="meta:next-steps-2025-01-01"),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "broken prior link" in combined, combined
+    assert "meta:next-steps-2025-01-01" in combined, combined
+
+
+def test_validate_silent_when_prior_absent(tmp_path: Path) -> None:
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "meta" / "next-steps-2026-04-25.md").write_text(
+        _next_steps_body("2026-04-25"), encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "broken prior link" not in combined, combined
+    assert result.returncode == 0, combined
+
+
+def test_validate_accepts_prior_analyses_variant_inline(tmp_path: Path) -> None:
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "meta" / "next-steps-2026-04-20.md").write_text(
+        _next_steps_body("2026-04-20"), encoding="utf-8",
+    )
+    (tmp_path / "doc" / "meta" / "next-steps-2026-04-25.md").write_text(
+        _next_steps_body(
+            "2026-04-25",
+            prior_analyses_inline="[meta:next-steps-2026-04-20]",
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "broken prior link" not in combined, combined
+
+
+def test_validate_accepts_prior_analyses_variant_block_list(tmp_path: Path) -> None:
+    """Load-bearing test — protein-landscape ships this exact shape."""
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "meta" / "next-steps-2026-04-12.md").write_text(
+        _next_steps_body("2026-04-12"), encoding="utf-8",
+    )
+    (tmp_path / "doc" / "meta" / "next-steps-2026-04-19.md").write_text(
+        _next_steps_body(
+            "2026-04-19",
+            prior_analyses=["meta:next-steps-2026-04-12"],
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "broken prior link" not in combined, combined
