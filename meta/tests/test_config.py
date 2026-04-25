@@ -93,7 +93,7 @@ def test_run_result_carries_arrays():
         policy=pol,
         recall=0.5,
         brier=0.25,
-        regret=1.0,
+        signal_count_regret=1.0,
         allocations=np.array([3, 4, 3]),
         final_posteriors=np.ones((3, 2)),
         ground_truth=np.array([1, 0, 1]),

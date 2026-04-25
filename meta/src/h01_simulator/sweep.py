@@ -11,7 +11,7 @@ import numpy as np
 import polars as pl
 
 from .config import BiasModel, PolicyConfig, RunResult, SimConfig
-from .metrics import brier, recall, regret
+from .metrics import brier, recall, signal_count_regret
 from .model import SignalModel, generate_propositions
 from .policies import POLICIES
 
@@ -39,7 +39,7 @@ def run_single(sim_config: SimConfig, policy_config: PolicyConfig) -> RunResult:
         policy=policy_config,
         recall=recall(props.truth, post_mean),
         brier=brier(props.truth, post_mean),
-        regret=regret(props.truth, props.bias_offsets, allocations, sim_config),
+        signal_count_regret=signal_count_regret(props.truth, props.bias_offsets, allocations, sim_config),
         allocations=allocations,
         final_posteriors=np.stack([model.alpha, model.beta], axis=1),
         ground_truth=props.truth,
@@ -148,7 +148,7 @@ def run_sweep(grid: Iterable[tuple[SimConfig, PolicyConfig]], out_path: Path) ->
                 "seed": sim_cfg.seed,
                 "recall": r.recall,
                 "brier": r.brier,
-                "regret": r.regret,
+                "signal_count_regret": r.signal_count_regret,
                 "allocations": r.allocations.tolist(),
                 "final_alpha": r.final_posteriors[:, 0].tolist(),
                 "final_beta": r.final_posteriors[:, 1].tolist(),

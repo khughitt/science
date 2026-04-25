@@ -22,8 +22,8 @@ def test_run_single_returns_result_record_with_expected_shapes():
     assert r.ground_truth.shape == (10,)
     assert r.bias_offsets.shape == (10,)
     assert 0.0 <= r.brier <= 1.0
-    # regret is non-negative within float tolerance
-    assert r.regret >= -1e-9
+    # signal_count_regret is non-negative within float tolerance
+    assert r.signal_count_regret >= -1e-9
 
 
 def test_run_single_deterministic_given_seed():
@@ -101,7 +101,7 @@ def test_run_sweep_writes_parquet_with_list_columns(tmp_path):
         "seed",
         "recall",
         "brier",
-        "regret",
+        "signal_count_regret",
     }
     expected_lists = {"allocations", "final_alpha", "final_beta", "ground_truth"}
     assert expected_scalars.issubset(set(df.columns))

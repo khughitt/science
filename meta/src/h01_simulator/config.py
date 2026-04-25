@@ -87,7 +87,7 @@ class RunResult:
     policy: PolicyConfig
     recall: float
     brier: float
-    regret: float
+    signal_count_regret: float
     allocations: np.ndarray
     final_posteriors: np.ndarray
     ground_truth: np.ndarray
