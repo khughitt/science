@@ -2495,6 +2495,88 @@ def paper_fetch_cmd(
     click.echo(_json.dumps(result.to_dict(), indent=2))
 
 
+@main.group()
+def question() -> None:
+    """Question-file management commands."""
+
+
+def _split_csv(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+@question.command("reserve")
+@click.option("--slug", required=True, help="Kebab-case slug for the question (will be normalized)")
+@click.option("--title", default=None, help="Question title (used in frontmatter and H1)")
+@click.option("--related", default=None, help="Comma-separated related entity IDs")
+@click.option("--ontology", default=None, help="Comma-separated ontology terms")
+@click.option("--source-refs", default=None, help="Comma-separated source references (DOIs, paper citekeys)")
+@click.option("--datasets", default=None, help="Comma-separated dataset IDs")
+@click.option(
+    "--questions-dir",
+    default="doc/questions",
+    type=click.Path(path_type=Path),
+    help="Directory holding question files (default: doc/questions)",
+)
+@click.option(
+    "--template",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Override body template (file content used verbatim, with {title} substituted)",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON")
+def question_reserve_cmd(
+    slug: str,
+    title: str | None,
+    related: str | None,
+    ontology: str | None,
+    source_refs: str | None,
+    datasets: str | None,
+    questions_dir: Path,
+    template: Path | None,
+    as_json: bool,
+) -> None:
+    """Atomically reserve the next q-number and write a stub question file.
+
+    Designed for parallel subagents: the destination file itself is the
+    lock (O_CREAT|O_EXCL), so concurrent reserves never collide. Returns
+    the assigned path so the caller can write the body without re-querying
+    the directory.
+    """
+    import json as _json
+
+    from science_tool.questions import reserve_question
+
+    template_body = template.read_text(encoding="utf-8") if template else None
+    reservation = reserve_question(
+        questions_dir,
+        slug,
+        title=title,
+        related=_split_csv(related),
+        ontology_terms=_split_csv(ontology),
+        source_refs=_split_csv(source_refs),
+        datasets=_split_csv(datasets),
+        template_body=template_body,
+    )
+    if as_json:
+        click.echo(
+            _json.dumps(
+                {
+                    "id": reservation.id,
+                    "number": reservation.number,
+                    "padded": reservation.padded,
+                    "slug": reservation.slug,
+                    "path": str(reservation.path),
+                },
+                indent=2,
+            )
+        )
+    else:
+        click.echo(f"Reserved {reservation.id}")
+        click.echo(f"  path: {reservation.path}")
+
+
 def _extract_title_status(path: Path, _yaml: Any) -> tuple[str, str]:
     """Extract title and status from markdown frontmatter or first heading."""
     text = path.read_text(encoding="utf-8")

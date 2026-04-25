@@ -20,7 +20,15 @@ You are operating inside a Science project. The command preamble at `${CLAUDE_PL
 Before doing any web fetches yourself, run:
 
 ```bash
-uv run science-tool paper-fetch --doi <doi> [--pmid <id>] [--url <landing-url>]
+uv run science-tool paper-fetch --doi <doi>
+# Or, depending on what the user supplied:
+#   --pmid <pmid>      (PubMed ID — resolved via Europe PMC)
+#   --pmcid <pmcid>    (e.g. PMC12934989 — resolved via Europe PMC)
+#   --arxiv <id>       (e.g. 2502.09135 — constructs the 10.48550/arXiv.<id> DOI)
+#   --url <url>        (PubMed, PMC, arXiv, bioRxiv/medRxiv, or doi.org URL)
+# Pass both --doi and --pmid/--pmcid when both are available — the tool
+# cross-checks them and returns status=error on conflict, catching wrong-DOI
+# guesses before they propagate into a summary.
 # (email is read from $SCIENCE_CONTACT_EMAIL if set; otherwise pass --email)
 ```
 
@@ -29,9 +37,10 @@ This tool probes a fixed tiered list of agent-friendly sources (Crossref → Unp
 | `status` | What to do |
 |---|---|
 | `ok` | Read the file at `pdf_path` or `text_path` and fill the template. Full text available. |
-| `paywalled` | Unpaywall confirmed no OA copy exists. Stop and report back — ask the user for a PDF path or defer with `status: paywalled` in frontmatter. Do not scavenge. |
-| `blocked_but_oa` | Unpaywall says an OA copy exists but our agent-accessible tiers failed. A user browser can likely retrieve it. Stop and report back — ask the user for a PDF path. Do not burn turns retrying. |
+| `paywalled` | Unpaywall confirmed no OA copy exists. Default: stop and report back. **Exception** — if the paper is a well-known classic (year ≤ current_year − 3, >500 citations, conceptual task, comprehensive LLM coverage), you may proceed with `Source: LLM knowledge` and generous `[UNVERIFIED]` markers; never invent quantitative claims. For paywalled review papers, triangulate via 2-3 citing primary papers (Europe PMC citations endpoint) instead of relying on the abstract alone. |
+| `blocked_but_oa` | Unpaywall says an OA copy exists but our agent-accessible tiers failed. Try one Europe PMC abstract-level fallback first: `WebFetch https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:"<doi>"&format=json`. If that also fails, stop and report back — ask the orchestrator to request a PDF. Do not burn turns retrying. |
 | `not_found` | DOI did not resolve. Ask the orchestrator for better metadata (full title, first author, year, venue, or a DOI). Only if the user explicitly asks for an open-ended search should you use WebSearch/WebFetch directly. |
+| `error` | Caller-supplied identifiers conflict (`metadata.reason` names the class, e.g. `identifier_mismatch`). Surface the conflict in `access_hint` to the orchestrator and stop — re-checking is the user's call. |
 
 If the input is a title rather than a DOI: resolve the title to a DOI first via a single Crossref search query (`WebFetch` against `https://api.crossref.org/works?query.title=<title>&rows=1&mailto=<email>`), then hand the DOI to `paper-fetch`. Do not attempt to reach the publisher page yourself.
 
@@ -40,6 +49,20 @@ Direct `WebFetch` is permitted only for:
 2. Secondary metadata confirmation when `paper-fetch` returned `ok` but specific fields (affiliations, funding, supplementary data) are missing.
 
 Everything else goes through `paper-fetch`.
+
+## Creating new questions — use `science-tool question reserve`
+
+When the "After Writing" step calls for adding new questions to `doc/questions/`, **always** create them via:
+
+```bash
+uv run science-tool question reserve \
+  --slug "<short-kebab-slug>" \
+  --title "<question title>" \
+  --source-refs "<this paper's citekey>" \
+  --json
+```
+
+This atomically claims the next q-number using `O_CREAT|O_EXCL`, so parallel paper-researcher subagents writing questions concurrently never collide on the same number. The command returns JSON with the assigned `path`; read that file (frontmatter pre-filled, body scaffolded) and edit body sections in place. **Never** create question files directly with `Write` — silent number collisions will require manual renames downstream.
 
 ## Scope discipline
 

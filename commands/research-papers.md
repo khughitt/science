@@ -112,7 +112,19 @@ Follow `.ai/templates/paper.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/pap
 
 1. Add/update the BibTeX entry in `papers/references.bib` (create file with header if missing).
 2. Link relevance to existing hypotheses in `specs/hypotheses/`.
-3. Add new questions to `doc/questions/` using `.ai/templates/question.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/question.md` when appropriate.
+3. Add new questions via `science-tool question reserve`. **Do not** create files under `doc/questions/` directly — parallel subagents racing on the next q-number cause silent collisions. The CLI uses `O_CREAT|O_EXCL` to atomically claim the next slot, even with multiple subagents writing concurrently.
+
+   For each new question:
+   ```bash
+   uv run science-tool question reserve \
+     --slug "<short-kebab-slug>" \
+     --title "<question title>" \
+     --source-refs "<this paper's citekey>" \
+     [--related "<related-id>,<related-id>"] \
+     [--ontology "<term>,<term>"] \
+     --json
+   ```
+   The command returns JSON with the assigned `path`. Read that file (it has frontmatter pre-filled and section scaffolding) and edit the body sections in place. The project's `.ai/templates/question.md` overrides the default body via `--template <path>` if needed.
 4. Note approach implications in `doc/04-approach.md` when relevant.
 5. Commit: `git add -A && git commit -m "papers: research <citekey> - <short title>"`
 
