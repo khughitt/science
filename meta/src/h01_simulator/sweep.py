@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator
@@ -123,38 +124,65 @@ def build_default_grid(seeds: int = 100, quick: bool = False) -> Iterator[tuple[
                                 yield sim, policy
 
 
-def run_sweep(grid: Iterable[tuple[SimConfig, PolicyConfig]], out_path: Path) -> pl.DataFrame:
-    """Run every (sim, policy) pair and write a tidy parquet with list columns."""
-    rows: list[dict] = []
-    for sim_cfg, pol_cfg in grid:
-        r = run_single(sim_cfg, pol_cfg)
-        rows.append(
-            {
-                "policy": pol_cfg.kind,
-                "revisit_prob": pol_cfg.revisit_prob,
-                "warmup_actions": pol_cfg.warmup_actions,
-                "gate_threshold": pol_cfg.gate_threshold,
-                "n_props": sim_cfg.n_propositions,
-                "budget": sim_cfg.budget,
-                "budget_multiple": sim_cfg.budget / sim_cfg.n_propositions,
-                "p_pos": sim_cfg.p_pos,
-                "p_neg": sim_cfg.p_neg,
-                "prior_true": sim_cfg.prior_true,
-                "prior_alpha": sim_cfg.prior_alpha,
-                "prior_beta": sim_cfg.prior_beta,
-                "bias_model": sim_cfg.bias_model,
-                "bias_fraction": sim_cfg.bias_fraction,
-                "bias_sigma": sim_cfg.bias_sigma,
-                "seed": sim_cfg.seed,
-                "recall": r.recall,
-                "brier": r.brier,
-                "signal_count_regret": r.signal_count_regret,
-                "allocations": r.allocations.tolist(),
-                "final_alpha": r.final_posteriors[:, 0].tolist(),
-                "final_beta": r.final_posteriors[:, 1].tolist(),
-                "ground_truth": r.ground_truth.astype(int).tolist(),
-            }
-        )
+def _row_from_result(r: RunResult) -> dict[str, object]:
+    sim_cfg = r.config
+    pol_cfg = r.policy
+    return {
+        "policy": pol_cfg.kind,
+        "revisit_prob": pol_cfg.revisit_prob,
+        "warmup_actions": pol_cfg.warmup_actions,
+        "gate_threshold": pol_cfg.gate_threshold,
+        "n_props": sim_cfg.n_propositions,
+        "budget": sim_cfg.budget,
+        "budget_multiple": sim_cfg.budget / sim_cfg.n_propositions,
+        "p_pos": sim_cfg.p_pos,
+        "p_neg": sim_cfg.p_neg,
+        "prior_true": sim_cfg.prior_true,
+        "prior_alpha": sim_cfg.prior_alpha,
+        "prior_beta": sim_cfg.prior_beta,
+        "bias_model": sim_cfg.bias_model,
+        "bias_fraction": sim_cfg.bias_fraction,
+        "bias_sigma": sim_cfg.bias_sigma,
+        "seed": sim_cfg.seed,
+        "recall": r.recall,
+        "brier": r.brier,
+        "signal_count_regret": r.signal_count_regret,
+        "allocations": r.allocations.tolist(),
+        "final_alpha": r.final_posteriors[:, 0].tolist(),
+        "final_beta": r.final_posteriors[:, 1].tolist(),
+        "ground_truth": r.ground_truth.astype(int).tolist(),
+    }
+
+
+def _run_one(pair: tuple[SimConfig, PolicyConfig]) -> RunResult:
+    sim_cfg, pol_cfg = pair
+    return run_single(sim_cfg, pol_cfg)
+
+
+def run_sweep(
+    grid: Iterable[tuple[SimConfig, PolicyConfig]],
+    out_path: Path,
+    workers: int = 1,
+) -> pl.DataFrame:
+    """Run every (sim, policy) pair and write a tidy parquet with list columns.
+
+    ``workers=1`` runs serially in the caller's process. ``workers>1`` uses a
+    ``ProcessPoolExecutor``. Runs are pure functions of their inputs (seeds
+    are encoded in ``SimConfig``), so parallel and serial outputs are
+    order-insensitive equivalent (including list columns).
+
+    Raises ``ValueError`` for ``workers < 1`` — silent fallback to serial would
+    hide a misconfigured CLI invocation.
+    """
+    if workers < 1:
+        raise ValueError(f"workers must be >= 1, got {workers}")
+    pairs = list(grid)
+    if workers == 1:
+        results = [_run_one(p) for p in pairs]
+    else:
+        with ProcessPoolExecutor(max_workers=workers) as ex:
+            results = list(ex.map(_run_one, pairs))
+    rows = [_row_from_result(r) for r in results]
     df = pl.DataFrame(rows)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.write_parquet(out_path)
@@ -169,21 +197,59 @@ class BenchmarkReport:
     projected_full_grid_runs: int
 
 
+def _select_calibration_slice(
+    pairs: list[tuple[SimConfig, PolicyConfig]],
+    n_calibration_runs: int,
+) -> list[tuple[SimConfig, PolicyConfig]]:
+    """Pick ``n_calibration_runs`` pairs stratified by (n_propositions, budget).
+
+    Per-run cost is dominated by ``n_propositions * budget``; stratifying on
+    that pair guarantees the calibration slice spans cheap and expensive
+    cells in proportion. Within each bucket, pairs are taken at evenly-
+    spaced indices so policy/bias variation is also represented.
+
+    Raises ``ValueError`` for non-positive ``n_calibration_runs``.
+    """
+    if n_calibration_runs <= 0:
+        raise ValueError(f"n_calibration_runs must be positive, got {n_calibration_runs}")
+    if n_calibration_runs >= len(pairs):
+        return list(pairs)
+
+    buckets: dict[tuple[int, int], list[tuple[SimConfig, PolicyConfig]]] = {}
+    for sim, pol in pairs:
+        buckets.setdefault((sim.n_propositions, sim.budget), []).append((sim, pol))
+
+    bucket_keys = sorted(buckets.keys())
+    n_buckets = len(bucket_keys)
+    base_quota = n_calibration_runs // n_buckets
+    remainder = n_calibration_runs - base_quota * n_buckets
+
+    chosen: list[tuple[SimConfig, PolicyConfig]] = []
+    for i, key in enumerate(bucket_keys):
+        bucket = buckets[key]
+        quota = base_quota + (1 if i < remainder else 0)
+        if quota >= len(bucket):
+            chosen.extend(bucket)
+            continue
+        indices = np.linspace(0, len(bucket) - 1, num=quota, dtype=int)
+        chosen.extend(bucket[int(i)] for i in indices)
+    return chosen
+
+
 def benchmark_runtime(
-    n_calibration_runs: int = 200,
+    n_calibration_runs: int = 400,
     seeds_for_full_grid: int = 100,
 ) -> BenchmarkReport:
-    """Time a slice of default-grid runs and extrapolate to the full grid.
+    """Time a stratified slice of default-grid runs and extrapolate to the full grid.
 
-    Uses the first ``n_calibration_runs`` runs produced by
-    ``build_default_grid(seeds=1, quick=False)`` (always-same slice for
-    reproducibility) and extrapolates linearly to the full-seed grid size.
+    400 calibration runs (the default) cuts projection standard deviation roughly 30%
+    vs. the previous 200, keeping the gate from spuriously firing under timing noise. Calibration
+    pairs are sampled stratified by (n_propositions, budget) — the axes that dominate
+    per-run cost — so the timing slice covers cheap and expensive cells in proportion
+    rather than concentrating in the grid prefix. Extrapolation is still linear.
     """
-    calibration = []
-    for sim_cfg, pol_cfg in build_default_grid(seeds=1, quick=False):
-        calibration.append((sim_cfg, pol_cfg))
-        if len(calibration) >= n_calibration_runs:
-            break
+    all_pairs = list(build_default_grid(seeds=1, quick=False))
+    calibration = _select_calibration_slice(all_pairs, n_calibration_runs)
 
     start = time.perf_counter()
     for sim_cfg, pol_cfg in calibration:

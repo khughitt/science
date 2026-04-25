@@ -190,3 +190,64 @@ def test_run_sweep_records_budget_multiple(tmp_path):
     assert "budget_multiple" in df.columns
     for row in df.iter_rows(named=True):
         assert row["budget_multiple"] == pytest.approx(row["budget"] / row["n_props"])
+
+
+def test_run_sweep_parallel_matches_serial(tmp_path):
+    """workers>1 must produce identical rows including list columns (order-insensitive)."""
+    grid_serial = list(build_default_grid(seeds=2, quick=True))
+    grid_parallel = list(build_default_grid(seeds=2, quick=True))
+    df_serial = run_sweep(grid_serial, tmp_path / "serial.parquet", workers=1)
+    df_parallel = run_sweep(grid_parallel, tmp_path / "parallel.parquet", workers=2)
+
+    key_cols = ["policy", "revisit_prob", "n_props", "budget", "p_pos", "p_neg", "prior_true", "bias_model", "seed"]
+    a = df_serial.sort(key_cols)
+    b = df_parallel.sort(key_cols)
+
+    list_cols = ["allocations", "final_alpha", "final_beta", "ground_truth"]
+    assert a.drop(list_cols).equals(b.drop(list_cols))
+
+    for col in list_cols:
+        assert a[col].to_list() == b[col].to_list(), f"list column {col} differs"
+
+
+def test_run_sweep_rejects_invalid_workers(tmp_path):
+    grid = list(build_default_grid(seeds=1, quick=True))
+    with pytest.raises(ValueError, match="workers"):
+        run_sweep(grid, tmp_path / "x.parquet", workers=0)
+    with pytest.raises(ValueError, match="workers"):
+        run_sweep(grid, tmp_path / "x.parquet", workers=-1)
+
+
+def test_select_calibration_slice_stratifies_by_n_props_and_budget():
+    """Calibration slice must (a) cover every (n_props, budget) bucket and
+    (b) keep per-bucket counts within +/-1 of the base quota."""
+    from collections import Counter
+
+    from h01_simulator.sweep import _select_calibration_slice
+
+    full = list(build_default_grid(seeds=1, quick=False))
+    bucket_keys = {(sim.n_propositions, sim.budget) for sim, _ in full}
+
+    n_calibration_runs = 200
+    calibration = _select_calibration_slice(full, n_calibration_runs=n_calibration_runs)
+
+    seen = {(sim.n_propositions, sim.budget) for sim, _ in calibration}
+    assert seen == bucket_keys
+
+    counts = Counter((sim.n_propositions, sim.budget) for sim, _ in calibration)
+    n_buckets = len(bucket_keys)
+    base_quota = n_calibration_runs // n_buckets
+    for key in bucket_keys:
+        assert counts[key] in (base_quota, base_quota + 1), (
+            f"bucket {key} got {counts[key]}, expected {base_quota} or {base_quota + 1}"
+        )
+
+
+def test_select_calibration_slice_rejects_non_positive_n():
+    from h01_simulator.sweep import _select_calibration_slice
+
+    pairs = list(build_default_grid(seeds=1, quick=True))
+    with pytest.raises(ValueError, match="n_calibration_runs"):
+        _select_calibration_slice(pairs, n_calibration_runs=0)
+    with pytest.raises(ValueError, match="n_calibration_runs"):
+        _select_calibration_slice(pairs, n_calibration_runs=-5)
