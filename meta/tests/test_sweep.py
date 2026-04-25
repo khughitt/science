@@ -86,6 +86,7 @@ def test_run_sweep_writes_parquet_with_list_columns(tmp_path):
         "policy",
         "revisit_prob",
         "warmup_actions",
+        "ucb_c",
         "gate_threshold",
         "n_props",
         "budget",

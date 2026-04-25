@@ -118,3 +118,56 @@ def test_thompson_output_is_a_valid_index_and_tracks_posterior():
 
 def test_thompson_dispatch_registered():
     assert "thompson" in POLICIES
+
+
+def test_ucb_warmup_covers_all_arms():
+    """UCB warmup round-robins through all arms before entering UCB selection."""
+    from h01_simulator.config import PolicyConfig, SimConfig
+    from h01_simulator.model import SignalModel, generate_propositions
+    from h01_simulator.policies import POLICIES
+
+    sim = SimConfig(n_propositions=3, budget=10, p_pos=0.9, p_neg=0.1, prior_true=0.5, seed=42)
+    rng = np.random.default_rng(0)
+    props = generate_propositions(sim, rng)
+    model = SignalModel(props, sim, rng)
+    pol = PolicyConfig(kind="ucb", warmup_actions=1, gate_threshold=0.5, ucb_c=1.0)
+    fn = POLICIES["ucb"](pol)
+    pulls = [fn(model, t, rng) for t in range(3)]
+    assert set(pulls) == {0, 1, 2}, f"UCB warmup did not cover all arms: {pulls}"
+
+
+def test_ucb_policy_balances_pulls_via_internal_tracking():
+    """Without any model.observe() calls, posterior_mean stays constant, so the UCB
+    score is driven entirely by the closure's internal pull counter. That means UCB
+    must round-robin through arms (pulling the under-pulled arm each step) purely
+    on the strength of pulls[i] += 1. If the increment were missing, the same arm
+    would be picked repeatedly."""
+    from h01_simulator.config import PolicyConfig, SimConfig
+    from h01_simulator.model import SignalModel, generate_propositions
+    from h01_simulator.policies import POLICIES
+
+    sim = SimConfig(n_propositions=2, budget=100, p_pos=0.9, p_neg=0.1, prior_true=0.5, seed=0)
+    rng = np.random.default_rng(0)
+    props = generate_propositions(sim, rng)
+    model = SignalModel(props, sim, rng)
+    pol = PolicyConfig(kind="ucb", warmup_actions=1, gate_threshold=0.5, ucb_c=1.0)
+    fn = POLICIES["ucb"](pol)
+
+    # Drive 12 calls: 2 warmup + 10 post-warmup. Do NOT call model.observe() so the
+    # posterior_mean stays uniform across arms. Any spread in choices must come from
+    # the closure's pulls[i] += 1 tracking.
+    choices = [fn(model, t, rng) for t in range(12)]
+
+    # Warmup must cover both arms.
+    assert set(choices[:2]) == {0, 1}
+
+    # Post-warmup: with uniform posteriors and closure-tracked pulls, UCB alternates
+    # (pulls the less-pulled arm each step). Over 10 post-warmup calls the two arms
+    # should be selected within 1 of each other.
+    post_warmup = choices[2:]
+    count_0 = post_warmup.count(0)
+    count_1 = post_warmup.count(1)
+    assert abs(count_0 - count_1) <= 1, (
+        f"UCB is not tracking pulls incrementally — arms got {count_0} vs {count_1} "
+        f"selections. Expected near-balance under uniform posteriors."
+    )

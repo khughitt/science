@@ -131,6 +131,7 @@ def _row_from_result(r: RunResult) -> dict[str, object]:
         "policy": pol_cfg.kind,
         "revisit_prob": pol_cfg.revisit_prob,
         "warmup_actions": pol_cfg.warmup_actions,
+        "ucb_c": pol_cfg.ucb_c,
         "gate_threshold": pol_cfg.gate_threshold,
         "n_props": sim_cfg.n_propositions,
         "budget": sim_cfg.budget,

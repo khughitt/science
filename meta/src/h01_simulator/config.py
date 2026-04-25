@@ -7,10 +7,10 @@ from typing import Literal
 
 import numpy as np
 
-PolicyKind = Literal["hard_gate", "constant_revisit", "thompson"]
+PolicyKind = Literal["hard_gate", "constant_revisit", "thompson", "ucb"]
 BiasModel = Literal["none", "independent", "shared"]
 
-_ALLOWED_KINDS = {"hard_gate", "constant_revisit", "thompson"}
+_ALLOWED_KINDS = {"hard_gate", "constant_revisit", "thompson", "ucb"}
 _ALLOWED_BIAS_MODELS = {"none", "independent", "shared"}
 
 
@@ -67,12 +67,15 @@ class PolicyConfig:
     warmup_actions: int = 1
     gate_threshold: float = 0.3
     revisit_prob: float = 0.0
+    ucb_c: float = 1.0
 
     def __post_init__(self) -> None:
         if self.kind not in _ALLOWED_KINDS:
             raise ValueError(f"unknown policy kind: {self.kind}")
         if not 0.0 <= self.revisit_prob <= 1.0:
             raise ValueError(f"revisit_prob must be in [0, 1], got {self.revisit_prob}")
+        if self.ucb_c < 0.0:
+            raise ValueError(f"ucb_c must be non-negative, got {self.ucb_c}")
         if self.warmup_actions <= 0:
             raise ValueError(f"warmup_actions must be positive, got {self.warmup_actions}")
         if not 0.0 < self.gate_threshold < 1.0:
