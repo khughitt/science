@@ -9,10 +9,11 @@ import click
 
 from .sweep import benchmark_runtime, build_default_grid, run_sweep
 
-# Serial CPU budget, re-anchored after Task-1 grid. Measured projection averages ~1740s
-# (range 1696-1781s across 5 runs at n_calibration_runs=400). Wall-clock feasibility via
-# --workers is [t002]'s problem; the gate intentionally measures serial cost only.
-RUNTIME_BUDGET_SECONDS = 1800
+# Serial CPU budget, re-anchored after [t002] grid expansion (UCB + optimistic-init
+# + expanded r-axis). Measured projection across 5 runs at n_calibration_runs=400:
+# average 2967s, max 3115s (range 2871-3115s). Budget includes ~65s safety margin.
+# Wall-clock feasibility via --workers remains [t002]'s sweep-time concern.
+RUNTIME_BUDGET_SECONDS = 3180
 
 
 @click.group()
