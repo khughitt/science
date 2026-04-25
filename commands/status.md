@@ -117,6 +117,12 @@ Flag:
 - stale tasks
 - old untouched hypotheses
 - graph/doc drift if the graph changed but interpretation/docs did not
+- **task archive lag**: when `science-tool health --format json` shows non-zero
+  `archive_lag.done_in_active` or `archive_lag.retired_in_active`, surface it as:
+  > N done/retired task(s) still in `tasks/active.md`. Run `science-tool tasks archive --apply`
+  > to move them to `tasks/done/YYYY-MM.md`.
+  If `archive_lag.missing_completed` is non-zero, call out that those entries need a
+  `completed:` date backfilled before archiving so they route to the correct month.
 
 **Cross-project sync staleness:**
 

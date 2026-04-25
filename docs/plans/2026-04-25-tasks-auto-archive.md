@@ -172,13 +172,13 @@ Add `"archive_lag": archive_lag,` to the returned dict. The planner returns zero
 
 **Files:** Modify `commands/status.md` and `commands/next-steps.md`.
 
-- [ ] **Step 1:** In `commands/status.md` §6 "Staleness Warnings", append a bullet recommending `science-tool tasks archive --apply` when `tasks.archive_lag.{done_in_active, retired_in_active}` is non-zero.
+- [x] **Step 1:** In `commands/status.md` §6 "Staleness Warnings", append a bullet recommending `science-tool tasks archive --apply` when `tasks.archive_lag.{done_in_active, retired_in_active}` is non-zero.
 
-- [ ] **Step 2:** In `commands/next-steps.md` under "Task Tracking Gaps (if any)", append guidance: when `science-tool health --format json` shows non-zero `archive_lag.done_in_active` or `archive_lag.retired_in_active`, add a Recommended Next Action — preview with `science-tool tasks archive`, then `--apply`. Call out `missing_completed` entries so the user backfills `completed:` first.
+- [x] **Step 2:** In `commands/next-steps.md` under "Task Tracking Gaps (if any)", append guidance: when `science-tool health --format json` shows non-zero `archive_lag.done_in_active` or `archive_lag.retired_in_active`, add a Recommended Next Action — preview with `science-tool tasks archive`, then `--apply`. Call out `missing_completed` entries so the user backfills `completed:` first.
 
-- [ ] **Step 3: Verify no orphan guidance** — `rg -n "move.*done.*active\.md|manually archive|tasks/done/YYYY-MM" commands/ docs/ README.md` returns nothing recommending manual moves.
+- [x] **Step 3: Verify no orphan guidance** — `rg -n "move.*done.*active\.md|manually archive|tasks/done/YYYY-MM" commands/ docs/ README.md` returns nothing recommending manual moves.
 
-- [ ] **Step 4: Commit** `docs(tasks-archive): surface archive lag in status and next-steps`.
+- [x] **Step 4: Commit** `docs(tasks-archive): surface archive lag in status and next-steps`.
 
 ---
 

@@ -101,6 +101,12 @@ This longitudinal view makes progress visible and highlights both forward moment
 
 Scan pipeline plans in `doc/plans/` for implementation tasks that are not tracked in `tasks/active.md`. Surface any development work buried in plan documents that should be trackable tasks.
 
+**Archive lag.** Run `science-tool health --format json` and inspect `archive_lag`. When `archive_lag.done_in_active` or `archive_lag.retired_in_active` is non-zero, add a Recommended Next Action:
+
+> Preview with `science-tool tasks archive`, then run `science-tool tasks archive --apply` to move the N done/retired entries from `tasks/active.md` to `tasks/done/YYYY-MM.md`.
+
+If `archive_lag.missing_completed` is non-zero, call those entries out separately so the user backfills `completed:` first — otherwise they route to the current month rather than the month they were actually closed.
+
 ### 3c-bis. Stale Task Status Detection (mandatory)
 
 Before recommending next actions, audit task status against on-disk evidence. For each task in `tasks/active.md` with status `proposed`, `blocked`, or `in_progress`, check whether the work appears already done by scanning for any of:
