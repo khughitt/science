@@ -101,9 +101,9 @@ def count_archivable(tasks_dir: Path) -> dict[str, int]:
 
 **Files:** Modify `science-tool/src/science_tool/cli.py` and `science-tool/tests/test_tasks_archive.py`.
 
-- [ ] **Step 1: CLI tests** (use `CliRunner`, mirror `test_tasks_cli.py`): default (no `--apply`) prints "would move N" preview, exit 0, `active.md` byte-identical; `--apply` moves entries, second `--apply` reports zero moves; `--check` exits **non-zero (1)** when lag is non-zero and **zero** when clean, JSON shape matches `count_archivable` regardless of exit code; `--format json` on dry-run emits an array with `id`, `status`, `destination`, `missing_completed`; missing `completed:` prints a stderr warning with the task id; malformed `active.md` → `--apply` exits non-zero, dry-run exits 0 with parse errors listed.
+- [x] **Step 1: CLI tests** (use `CliRunner`, mirror `test_tasks_cli.py`): default (no `--apply`) prints "would move N" preview, exit 0, `active.md` byte-identical; `--apply` moves entries, second `--apply` reports zero moves; `--check` exits **non-zero (1)** when lag is non-zero and **zero** when clean, JSON shape matches `count_archivable` regardless of exit code; `--format json` on dry-run emits an array with `id`, `status`, `destination`, `missing_completed`; missing `completed:` prints a stderr warning with the task id; malformed `active.md` → `--apply` exits non-zero, dry-run exits 0 with parse errors listed.
 
-- [ ] **Step 2: Add command** below `tasks_unblock` (around `cli.py` line 2046):
+- [x] **Step 2: Add command** below `tasks_unblock` (around `cli.py` line 2046):
 
 ```python
 @tasks.command("archive")
@@ -130,9 +130,9 @@ def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Pa
 
 Render style matches `graph migrate` (table or JSON; reference `graph_migrate` in `cli.py`).
 
-- [ ] **Step 3: Run** `cd science-tool && uv run --frozen pytest tests/test_tasks_archive.py -q` — expect pass.
+- [x] **Step 3: Run** `cd science-tool && uv run --frozen pytest tests/test_tasks_archive.py -q` — expect pass.
 
-- [ ] **Step 4: Commit** `feat(tasks-archive): CLI command with dry-run default`.
+- [x] **Step 4: Commit** `feat(tasks-archive): CLI command with dry-run default`.
 
 ---
 

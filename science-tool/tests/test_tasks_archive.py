@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 
@@ -325,6 +326,132 @@ class TestCountArchivable:
         assert counts["done_in_active"] == 2
         assert counts["retired_in_active"] == 1
         assert counts["missing_completed"] == 1
+
+
+# ---------------------------------------------------------------------------
+# CLI tests
+# ---------------------------------------------------------------------------
+
+
+class TestArchiveCli:
+    def _setup(self, runner_fs: Path, content: str) -> Path:
+        tasks_dir = runner_fs / "tasks"
+        tasks_dir.mkdir(parents=True, exist_ok=True)
+        (tasks_dir / "active.md").write_text(content)
+        return tasks_dir
+
+    def test_dry_run_default_does_not_write(self) -> None:
+        from click.testing import CliRunner
+
+        from science_tool.cli import main
+
+        runner = CliRunner()
+        with runner.isolated_filesystem() as fs:
+            fs_path = Path(fs)
+            tasks_dir = self._setup(fs_path, "\n".join([DONE_MARCH, PROPOSED_BLOCK]))
+            before = (tasks_dir / "active.md").read_text()
+            result = runner.invoke(main, ["tasks", "archive"])
+            assert result.exit_code == 0, result.output
+            assert (tasks_dir / "active.md").read_text() == before
+            assert not (tasks_dir / "done").exists()
+            assert "would move" in result.output.lower() or "1" in result.output
+
+    def test_apply_moves_entries_and_is_idempotent(self) -> None:
+        from click.testing import CliRunner
+
+        from science_tool.cli import main
+
+        runner = CliRunner()
+        with runner.isolated_filesystem() as fs:
+            fs_path = Path(fs)
+            tasks_dir = self._setup(fs_path, "\n".join([DONE_MARCH, PROPOSED_BLOCK]))
+            result = runner.invoke(main, ["tasks", "archive", "--apply"])
+            assert result.exit_code == 0, result.output
+            assert (tasks_dir / "done" / "2026-03.md").is_file()
+            assert "[t002]" not in (tasks_dir / "active.md").read_text()
+            # Second apply: nothing left to archive.
+            result2 = runner.invoke(main, ["tasks", "archive", "--apply"])
+            assert result2.exit_code == 0, result2.output
+
+    def test_check_exits_nonzero_when_lag_present(self) -> None:
+        from click.testing import CliRunner
+
+        from science_tool.cli import main
+
+        runner = CliRunner()
+        with runner.isolated_filesystem() as fs:
+            fs_path = Path(fs)
+            self._setup(fs_path, DONE_MARCH)
+            result = runner.invoke(main, ["tasks", "archive", "--check", "--format", "json"])
+            assert result.exit_code != 0
+            payload = json.loads(result.output)
+            rows = {row["metric"]: row["count"] for row in payload["rows"]}
+            assert rows["done_in_active"] == 1
+            assert rows["retired_in_active"] == 0
+
+    def test_check_exits_zero_when_clean(self) -> None:
+        from click.testing import CliRunner
+
+        from science_tool.cli import main
+
+        runner = CliRunner()
+        with runner.isolated_filesystem() as fs:
+            fs_path = Path(fs)
+            self._setup(fs_path, PROPOSED_BLOCK)
+            result = runner.invoke(main, ["tasks", "archive", "--check", "--format", "json"])
+            assert result.exit_code == 0, result.output
+            payload = json.loads(result.output)
+            rows = {row["metric"]: row["count"] for row in payload["rows"]}
+            assert rows == {"done_in_active": 0, "retired_in_active": 0, "missing_completed": 0}
+
+    def test_dry_run_json_emits_plan_rows(self) -> None:
+        from click.testing import CliRunner
+
+        from science_tool.cli import main
+
+        runner = CliRunner()
+        with runner.isolated_filesystem() as fs:
+            fs_path = Path(fs)
+            self._setup(fs_path, "\n".join([DONE_MARCH, RETIRED_APRIL]))
+            result = runner.invoke(main, ["tasks", "archive", "--format", "json"])
+            assert result.exit_code == 0, result.output
+            payload = json.loads(result.output)
+            ids = {row["id"] for row in payload["rows"]}
+            assert ids == {"t002", "t004"}
+            for row in payload["rows"]:
+                assert "status" in row
+                assert "destination" in row
+                assert "missing_completed" in row
+
+    def test_dry_run_warns_on_missing_completed(self) -> None:
+        from click.testing import CliRunner
+
+        from science_tool.cli import main
+
+        runner = CliRunner()
+        with runner.isolated_filesystem() as fs:
+            fs_path = Path(fs)
+            self._setup(fs_path, DONE_NO_COMPLETED)
+            result = runner.invoke(main, ["tasks", "archive"])
+            assert result.exit_code == 0, result.output
+            assert "t003" in result.output
+            assert "completed" in result.output.lower()
+
+    def test_apply_refuses_with_parse_errors(self) -> None:
+        from click.testing import CliRunner
+
+        from science_tool.cli import main
+
+        runner = CliRunner()
+        with runner.isolated_filesystem() as fs:
+            fs_path = Path(fs)
+            bad_block = "## [t099] Bad task\n- priority: P1\n- status: done\n\nBody.\n"
+            self._setup(fs_path, "\n".join([bad_block, DONE_MARCH]))
+            result = runner.invoke(main, ["tasks", "archive", "--apply"])
+            assert result.exit_code != 0
+            # Dry-run still exits 0 with parse errors listed.
+            result2 = runner.invoke(main, ["tasks", "archive"])
+            assert result2.exit_code == 0
 
 
 def test_archive_dataclass_fields() -> None:

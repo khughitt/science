@@ -2045,6 +2045,104 @@ def tasks_unblock(task_id: str) -> None:
     click.echo(f"[{task.id}] unblocked → active")
 
 
+@tasks.command("archive")
+@click.option("--apply", "do_apply", is_flag=True, help="Write changes to disk (default is dry-run).")
+@click.option(
+    "--check",
+    is_flag=True,
+    help="Print archivable counts and exit non-zero when lag is present (used by science-tool health).",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+)
+@click.option(
+    "--tasks-dir",
+    default=DEFAULT_TASKS_DIR,
+    show_default=True,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Path) -> None:
+    """Move done/retired tasks from active.md to done/YYYY-MM.md.
+
+    Default is dry-run: prints the planned moves without touching disk.
+    Pass --apply to perform the writes (idempotent on re-run).
+    """
+    from science_tool.tasks_archive import apply_archive, count_archivable, plan_archive
+
+    if check:
+        counts = count_archivable(tasks_dir)
+        emit_query_rows(
+            output_format=output_format,
+            title="Tasks Archive Lag",
+            columns=[("metric", "Metric"), ("count", "Count")],
+            rows=[{"metric": k, "count": v} for k, v in counts.items()],
+        )
+        if any(counts.values()):
+            ctx = click.get_current_context()
+            ctx.exit(1)
+        return
+
+    plan = plan_archive(tasks_dir)
+
+    rows: list[dict[str, Any]] = [
+        {
+            "id": entry.task.id,
+            "status": entry.task.status,
+            "destination": str(entry.destination),
+            "missing_completed": entry.missing_completed,
+        }
+        for entry in plan.entries
+    ]
+
+    emit_query_rows(
+        output_format=output_format,
+        title="Tasks Archive Plan",
+        columns=[
+            ("id", "ID"),
+            ("status", "Status"),
+            ("destination", "Destination"),
+            ("missing_completed", "Missing completed:"),
+        ],
+        rows=rows,
+    )
+
+    for entry in plan.entries:
+        if entry.missing_completed:
+            click.echo(
+                f"WARNING: [{entry.task.id}] has no `completed:` date; "
+                f"routed to current month {entry.destination.name}",
+                err=True,
+            )
+
+    for parse_error in plan.parse_errors:
+        click.echo(
+            f"WARNING: parse error in {parse_error.heading!r}: {parse_error.message}",
+            err=True,
+        )
+
+    if not do_apply:
+        if output_format != "json":
+            click.echo(f"Mode: dry-run — would move {len(plan.entries)} task(s)")
+        return
+
+    if plan.parse_errors:
+        raise click.ClickException(
+            f"Refusing to apply: {len(plan.parse_errors)} parse error(s) in active.md"
+        )
+
+    result = apply_archive(plan)
+    if output_format != "json":
+        click.echo(
+            f"Moved {len(result.moved)} task(s); "
+            f"{len(result.skipped_duplicates)} duplicate(s) skipped; "
+            f"wrote {len(result.destinations_written)} destination file(s)"
+        )
+
+
 @tasks.command("edit")
 @click.argument("task_id")
 @click.option("--title", default=None)
