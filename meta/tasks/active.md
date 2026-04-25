@@ -33,3 +33,29 @@ Resolve the three engine issues flagged in `meta/doc/plans/2026-04-24-h01-engine
 - created: 2026-04-24
 
 Execute the engine from [t001] on the default grid and produce the deliverables `specs/h01-simulator.md` names as required: `results/h01-simulator/sweep-<date>.parquet` with full seed count; `notebooks/h01_simulator_results.py` populated with headline figures (recall-vs-noise per policy, reliability diagram, threshold-swept recall, `shared`-vs-`independent` bias comparison); `doc/interpretations/h01-simulator-<date>.md` tying sweep findings to each H01 proposition (P1-P5). Plan to be written after t001 closes, informed by observed engine behaviour.
+
+## [t003] Decide hierarchical task ID convention for science-tool
+- type: research
+- priority: P3
+- status: proposed
+- aspects: [software-development]
+- related: []
+- created: 2026-04-24
+
+Decide a convention for hierarchical / derivative task identifiers in `/science:tasks` and either enforce it via tool validation or explicitly declare flat IDs and locate parent/child structure elsewhere. Surfaced when authoring `[t001b]` in this project — the ad-hoc `b` suffix worked but the design space wasn't actually considered.
+
+Three distinct semantics share the identifier space today and probably shouldn't:
+- **Versioning** — a revision of the same work (e.g. `[t001]` → `[t001v2]`).
+- **Decomposition** — sub-work of a parent (e.g. `[t001.1]`, `[t001/01]`).
+- **Fragment** — follow-up work that emerged after the parent closed but before the next major task starts (e.g. how `[t001b]` was used here).
+
+**Questions to resolve before prescribing:**
+- What is the goal? Each of the three semantics above implies a different scheme.
+- Is the identifier even the right place for this structure? Alternatives: a `parent:` field, the existing `related:` / `blocked_by:` fields, an external tracker.
+- What do existing Science projects already do? Survey at minimum `natural-systems`, `mm30`, `protein-landscape` before prescribing.
+
+**Possible outputs:**
+- A `/science:tasks` convention doc + a validation rule (e.g. a `science health` check that flags ID format deviations).
+- OR an explicit decision that identifiers stay flat and structure goes elsewhere — and that decision recorded somewhere durable.
+
+Tracked under meta because `science-tool/` is not a Science-managed project itself (no `science.yaml`, no `tasks/active.md`); design intent and decisions about tool behaviour are recorded in meta per `meta/AGENTS.md`.
