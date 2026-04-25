@@ -149,6 +149,16 @@ For each suggestion, include:
 Save output to `doc/meta/next-steps-<YYYY-MM-DD>.md`. If a file for today already exists (delta mode), append an `## Update — HH:MM` section instead of creating a new file.
 
 ```markdown
+---
+id: "meta:next-steps-YYYY-MM-DD"
+type: "meta"
+title: "Next Steps — YYYY-MM-DD"
+created: "YYYY-MM-DD"
+updated: "YYYY-MM-DD"
+prior: "meta:next-steps-<predecessor-date>"  # see "Resolve prior link" below; omit if no predecessor
+related: []
+---
+
 # Next Steps — YYYY-MM-DD
 
 ## Recent Progress
@@ -205,6 +215,16 @@ If sync is stale, include a note in the Recommended Next Actions table:
 | P2 | Cross-project sync | Sync is N days stale; N projects may have relevant updates | `/science:sync` |
 
 ## After Writing
+
+### Resolve prior link
+
+Before writing the file, list `doc/meta/next-steps-*.md`. **Exclude any file dated today** (delta-mode appends to that file rather than creating a new one, so the predecessor must be the most recent file *strictly before* today). From the remaining files, select the one with the lexically-greatest `YYYY-MM-DD` in its filename. Set `prior: meta:next-steps-<that-date>` in the new file's frontmatter. If no predecessor exists (this is the first next-steps file in the project), omit the `prior:` field entirely.
+
+Delta mode (append `## Update — HH:MM` to today's existing file) does **not** change the file's `prior:` — the chain link is per-file, not per-update.
+
+Projects that historically use `prior_analyses: [...]` (e.g. protein-landscape) need not migrate: the validator accepts both shapes and only warns on broken `prior:` links.
+
+### Steps
 
 1. Save to `doc/meta/next-steps-<YYYY-MM-DD>.md`. In delta mode, append to the existing file rather than creating a new one — git tracks history, so overwriting the date-stamped file is acceptable.
 2. Offer to create tasks from recommended items: "Create tasks from these suggestions?"
