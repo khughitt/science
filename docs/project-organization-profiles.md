@@ -144,3 +144,14 @@ Conventions:
 - scripts, workflow config, result directories, and interpretation documents should use the same analysis slug where possible
 
 The goal is to make provenance obvious without requiring phase-specific local conventions.
+
+## Code → Task Back-Link
+
+Close the code-side linkage gap (notebooks and scripts → tasks, questions, hypotheses, interpretations) where it is cheap. Four sanctioned patterns:
+
+- **Filename tag** — `t131_<slug>.py`, `q011_<slug>.py`, `h02_<slug>.py`. Best for notebooks. See [`docs/conventions/code-task-backlinks.md`](conventions/code-task-backlinks.md#pattern-1-filename-tag).
+- **Comment-block header** — `# task: t131` near the top of the script body. Best when the filename can't carry the tag. See [`docs/conventions/code-task-backlinks.md`](conventions/code-task-backlinks.md#pattern-2-comment-block-header).
+- **Descriptor sidecar field** — optional `task` / `question` / `hypothesis` / `interpretation` on artifact descriptor JSONs. Best for artifact-producing scripts. See [`docs/conventions/code-task-backlinks.md`](conventions/code-task-backlinks.md#pattern-3-descriptor-sidecar-field).
+- **Commit-message tag** — `fix(t131): ...` Conventional-Commits scope. Orthogonal to the in-file patterns. See [`docs/conventions/code-task-backlinks.md`](conventions/code-task-backlinks.md#pattern-4-commit-message-tag).
+
+Guidance only; no validator rules. See [`docs/conventions/`](conventions/README.md) for the full convention catalog.
