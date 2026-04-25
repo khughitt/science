@@ -342,3 +342,26 @@ def test_validate_warns_on_invalid_phase_value(tmp_path: Path) -> None:
 
     combined = result.stdout + result.stderr
     assert "invalid phase" in combined.lower() and "tentative" in combined, combined
+
+
+def test_validate_warns_on_invalid_phase_with_inline_comment(tmp_path: Path) -> None:
+    """The hypothesis template ships with an inline comment on the phase line.
+    A user copying the template and editing the value must not bypass validation.
+    """
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "specs" / "hypotheses" / "h01-test.md").write_text(
+        _hypothesis_body('phase: "tentative"  # candidate | active'),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    combined = result.stdout + result.stderr
+    assert "invalid phase" in combined.lower() and "tentative" in combined, combined

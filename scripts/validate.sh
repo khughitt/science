@@ -310,7 +310,8 @@ if [ -d "$SPECS_DIR/hypotheses" ]; then
 
         # If phase is present, value must be one of the enumerated values.
         # Absent is fine — defaults to `active` per spec.
-        phase_value=$(sed -n "s/^phase:[[:space:]]*['\"]\\{0,1\\}\\([^'\"]*\\)['\"]\\{0,1\\}[[:space:]]*$/\\1/p" "$hyp_file" | head -n 1 || true)
+        # Tolerates an optional trailing YAML comment (the template ships one).
+        phase_value=$(sed -n "s/^phase:[[:space:]]*['\"]\\{0,1\\}\\([^'\"[:space:]]*\\)['\"]\\{0,1\\}[[:space:]]*\\(#.*\\)\\{0,1\\}\$/\\1/p" "$hyp_file" | head -n 1 || true)
         if [ -n "$phase_value" ] && [ "$phase_value" != "candidate" ] && [ "$phase_value" != "active" ]; then
             warn "${hyp_file} has invalid phase '${phase_value}' (must be 'candidate' or 'active')"
         fi
