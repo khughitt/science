@@ -445,13 +445,31 @@ if [ -d "$DOC_DIR/discussions" ]; then
 fi
 
 # --- Pre-registration documents ---
-for f in "$DOC_DIR/meta/pre-registration-"*.md; do
+# Inspect both placements observed across downstream projects (audit §3.2):
+#   doc/meta/pre-registration-<slug>.md  (natural-systems, protein-landscape, cbioportal)
+#   doc/pre-registrations/<slug>.md      (mm30 canonical)
+for f in "$DOC_DIR/meta/pre-registration-"*.md "$DOC_DIR/pre-registrations/"*.md; do
     [ -f "$f" ] || continue
+
     for section in "Hypotheses Under Test" "Expected Outcomes" "Decision Criteria" "Null Result Plan"; do
         if ! grep -q "## $section" "$f"; then
             warn "Pre-registration $f missing section: $section"
         fi
     done
+
+    # Parse frontmatter type using the same recipe as the notes section.
+    # Note: id-prefix conformance is handled by Plan #7 Task 6's PREFIX_RULES
+    # table, not here, to avoid duplicate warnings on the same condition.
+    pre_type=$(sed -n "s/^type:[[:space:]]*['\"]\\{0,1\\}\\([^'\"]*\\)['\"]\\{0,1\\}[[:space:]]*$/\\1/p" "$f" | head -n 1 || true)
+
+    if [ "$pre_type" = "pre-registration" ]; then
+        if ! grep -Eq '^committed:[[:space:]]' "$f" 2>/dev/null; then
+            warn "${f} type 'pre-registration' should declare a 'committed:' date in frontmatter"
+        fi
+        if ! grep -Eq '^spec:[[:space:]]' "$f" 2>/dev/null; then
+            warn "${f} type 'pre-registration' should declare a 'spec:' field (empty string is OK if no paired design doc)"
+        fi
+    fi
 done
 
 # --- Hypothesis comparison documents ---
