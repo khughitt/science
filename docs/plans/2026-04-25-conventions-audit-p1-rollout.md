@@ -39,17 +39,17 @@ Status updated as each P1 progresses through the workflow.
 
 | ID | Title | Plan doc | Plan | Impl | Review |
 | --- | --- | --- | --- | --- | --- |
-| P1 #2 | Promote `pre-registration` to canonical type | `docs/plans/2026-04-25-pre-registration-canonical-type.md` | ready-for-review | — | — |
-| P1 #4 | Synthesis-rollup frontmatter convention | `docs/plans/2026-04-25-synthesis-rollup-frontmatter.md` | ready-for-review | — | — |
-| P1 #6 | Auto-archive done tasks (`science-tool tasks archive`) | `docs/plans/2026-04-25-tasks-auto-archive.md` | ready-for-review | — | — |
-| P1 #10 | Chained-prior `next-steps` ledger | `docs/plans/2026-04-25-next-steps-chained-prior.md` | ready-for-review | — | — |
+| P1 #2 | Promote `pre-registration` to canonical type | `docs/plans/2026-04-25-pre-registration-canonical-type.md` | approved | — | — |
+| P1 #4 | Synthesis-rollup frontmatter convention | `docs/plans/2026-04-25-synthesis-rollup-frontmatter.md` | approved | — | — |
+| P1 #6 | Auto-archive done tasks (`science-tool tasks archive`) | `docs/plans/2026-04-25-tasks-auto-archive.md` | approved | — | — |
+| P1 #10 | Chained-prior `next-steps` ledger | `docs/plans/2026-04-25-next-steps-chained-prior.md` | approved | — | — |
 
 ### Bucket B — small / additive (dispatched 2026-04-25)
 
 | ID | Title | Plan doc | Plan | Impl | Review |
 | --- | --- | --- | --- | --- | --- |
-| P1 #7 | MAV addendum: audit-surfaced `mav-input` set | `docs/plans/2026-04-25-mav-audit-addendum.md` | ready-for-review | — | — |
-| P1 #9 | Code/notebook → task back-link convention | `docs/plans/2026-04-25-code-task-backlink-convention.md` | ready-for-review | — | — |
+| P1 #7 | MAV addendum: audit-surfaced `mav-input` set | `docs/plans/2026-04-25-mav-audit-addendum.md` | approved (held: MAV not merged) | — | — |
+| P1 #9 | Code/notebook → task back-link convention | `docs/plans/2026-04-25-code-task-backlink-convention.md` | approved | — | — |
 
 ### Plan review pass 1 (2026-04-25)
 
@@ -68,6 +68,13 @@ Six `superpowers:code-reviewer` sub-agents produced independent deep reviews. Fi
 - **Plan #7 revised:** Task 1 framing tightened (verify-only is the expected outcome; canonical bytes only change if Step 1 surfaces an edge case); explicit single-version-bump statement added to bookkeeping section; Task 6 Step 5 expanded to cover both `pre-registration` (depends on plan #2) and `synthesis` (depends on plan #4).
 - **Plan #9 revised:** commit-message tag added as a fourth sanctioned pattern (synthesis §8.2 lists three observed patterns including this one — agent had dropped it); `docs/conventions/` directory creation justified with a seed `README.md` Task 1 establishing the directory's scope; Pattern 3 (descriptor sidecar field) gains an explicit "pending Bucket C namespace decision" status callout in the convention doc itself.
 - **Plan #10 revised:** YAML block-list test variant added (the shape protein-landscape actually ships in `doc/meta/next-steps-2026-04-19.md`; the original plan only tested inline `[...]` form); auto-population guard "exclude today's file" hoisted out of parens (load-bearing for delta-mode semantics).
+
+### Plan review pass 3 — pre-dispatch refinement (2026-04-25)
+
+Final spot-read before user approval surfaced one cross-plan duplication:
+
+- **Plan #2 dropped its in-loop id-prefix check.** The original pre-registration loop in `validate.sh` warned twice on the same condition once Plan #7 lands: once via Plan #2's `if [ "$pre_type" = "pre-registration" ]; then ... grep -Eq '^pre-registration:'` block, and once via Plan #7 Task 6's generic `PREFIX_RULES` table walk. Plan #7 Task 6 is the deliberate single canonical home for id-prefix conformance, so Plan #2's redundant block was removed: bash check, the matching `test_validate_warns_when_pre_registration_id_prefix_wrong` test, and corresponding prose in Architecture / File Structure / Migration Notes / Self-Review. Plan #2 retains the pre-registration-specific `committed:` / `spec:` warnings (which Plan #7 does not cover). After the refinement, four Plan #2 tests remain (acceptance, legacy-silence, missing-committed warn, missing-spec warn).
+- **Trade-off accepted.** Until Plan #7 ships (after MAV), bad pre-reg id-prefixes go unwarned. Practical cost is small: cbioportal already converges canonically; mm30/protein-landscape/natural-systems all use `type: plan` legacy shapes that Plan #7's `pre-registration` row does not match (those projects' id mismatches are their respective `plan` rows in the table — natural-systems opts out via `SCIENCE_VALIDATE_SKIP_ID_PREFIX=1` per follow-on action #5).
 
 ### Cross-plan consistency rules established
 
@@ -125,8 +132,8 @@ These four become design sessions (with the user) once Bucket A+B lands. Output 
 
 - [x] Write this master plan.
 - [x] Dispatch six plan-creation sub-agents in parallel for Bucket A+B.
-- [ ] Review each plan as it lands; mark `ready-for-review` in the table above.
-- [ ] User approval gate per plan; mark `approved`.
-- [ ] Dispatch implementation sub-agents for approved plans (parallel where file structures don't overlap).
+- [x] Review each plan as it lands; mark `ready-for-review` in the table above.
+- [x] User approval gate per plan; mark `approved`. (All six approved 2026-04-25 with Plan #2 id-prefix refinement applied.)
+- [ ] Dispatch implementation sub-agents for approved plans: parallel `#6`, `#9`, and a batched `#2/#4/#10`. Plan `#7` held until MAV merges.
 - [ ] Dispatch code-review sub-agents per implementation; mark `merged` after green.
 - [ ] Schedule a Bucket C design session with the user.

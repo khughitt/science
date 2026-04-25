@@ -4,7 +4,7 @@
 
 **Goal:** Promote `pre-registration` from an implicit project-local kind to a Science-canonical type, so files can declare `type: pre-registration` + `id: pre-registration:<slug>` consistently and be validated as such.
 
-**Architecture:** Three small surfaces change, all additive. (1) `templates/pre-registration.md` gains `id:` and `type: "pre-registration"` frontmatter (plus `committed:`/`spec:`/`related:` placeholders) so new pre-regs ship the canonical shape. (2) `scripts/validate.sh` learns to recognize `type: pre-registration`: when present, the `id:` must use the `pre-registration:` prefix, and the existing pre-registration-section sweep (currently keyed on filename glob `doc/meta/pre-registration-*.md`) gains optional warns for the `committed:` / `spec:` body fields. (3) `commands/pre-register.md` is updated to emit `type: pre-registration` + `id: pre-registration:<slug>` when writing files. Downstream projects are NOT migrated.
+**Architecture:** Three small surfaces change, all additive. (1) `templates/pre-registration.md` gains `id:` and `type: "pre-registration"` frontmatter (plus `committed:`/`spec:`/`related:` placeholders) so new pre-regs ship the canonical shape. (2) `scripts/validate.sh` extends the existing pre-registration-section sweep (currently keyed on filename glob `doc/meta/pre-registration-*.md`) with optional warns for the `committed:` / `spec:` body fields, and broadens the glob to include `doc/pre-registrations/*.md`. **Id-prefix conformance is deliberately NOT added here** — Plan #7 Task 6 ships a generic per-type id-prefix table that includes a `pre-registration` row, and that is the single canonical home for id-prefix checks. Adding the same check here would produce duplicate warnings once Plan #7 lands. (3) `commands/pre-register.md` is updated to emit `type: pre-registration` + `id: pre-registration:<slug>` when writing files. Downstream projects are NOT migrated.
 
 **Tech Stack:** Bash (validate.sh), pytest + subprocess (validator tests), Markdown (template + command file).
 
@@ -15,8 +15,8 @@
 Files modified:
 
 - `templates/pre-registration.md` — replace minimal `title:`/`created:` frontmatter with the canonical `id:`/`type: "pre-registration"`/`title:`/`status:`/`committed:`/`spec:`/`related:`/`created:`/`updated:` shape.
-- `scripts/validate.sh` — add a new section that walks pre-registration files (any `*.md` under `$DOC_DIR/` whose `type:` is `pre-registration` OR which match the existing `$DOC_DIR/meta/pre-registration-*.md` / `$DOC_DIR/pre-registrations/*.md` globs), verifying the `id:` prefix and optionally warning on missing `committed:` / `spec:`. The existing body-section sweep at `scripts/validate.sh:447-455` is preserved.
-- `meta/validate.sh` — mirror the same new section (the two scripts have different sha256 at audit time but are kept in lockstep until managed-artifact-versioning unifies them; locate the equivalent insertion site by content, not line number).
+- `scripts/validate.sh` — extend the existing pre-registration body-section sweep (located by content; `for f in "$DOC_DIR/meta/pre-registration-"*.md`) so it (a) also iterates `$DOC_DIR/pre-registrations/*.md` and (b) when `type: pre-registration`, warns on missing `committed:` / `spec:` frontmatter fields. **Does not** add an id-prefix check — that lives in Plan #7 Task 6's PREFIX_RULES table.
+- `meta/validate.sh` — mirror the same change (the two scripts have different sha256 at audit time but are kept in lockstep until managed-artifact-versioning unifies them; locate the equivalent insertion site by content, not line number).
 - `commands/pre-register.md` — update the "Naming" and "After Writing" sections so the agent writes the new frontmatter, and accept `doc/pre-registrations/<slug>.md` placement (per audit §3.2 mm30 canonical) as well as the existing `doc/meta/pre-registration-<slug>.md`.
 - `science-tool/tests/test_validate_script.py` — add tests for the new validator behavior.
 - `README.md` — if the canonical-types or commands list calls out per-type id prefixes, append `pre-registration` to it; otherwise no change. (Verify in Task 5.)
@@ -138,36 +138,26 @@ def test_validate_accepts_canonical_pre_registration(tmp_path: Path) -> None:
     assert "id prefix" not in combined.lower(), combined
 
 
-def test_validate_warns_when_pre_registration_id_prefix_wrong(tmp_path: Path) -> None:
-    _write_minimal_research_project(tmp_path)
-    (tmp_path / "doc" / "meta" / "pre-registration-h01-test.md").write_text(
-        _pre_registration_body(
-            type_value="pre-registration",
-            id_value="plan:h01-test",  # wrong prefix
-            committed="2026-04-25",
-        ),
-        encoding="utf-8",
-    )
-    result = subprocess.run(
-        ["bash", str(_validate_script_path())],
-        cwd=tmp_path,
-        env=_validate_env(extra_path=tmp_path / "bin"),
-        capture_output=True, text=True, check=False,
-    )
-    combined = result.stdout + result.stderr
-    assert "pre-registration:" in combined and "plan:h01-test" in combined, combined
-    assert result.returncode == 0, combined  # warning, not error (matches Plan #7 Task 6 severity)
+# NOTE: id-prefix conformance for type: pre-registration is intentionally NOT
+# tested here. Plan #7 Task 6's generic PREFIX_RULES table is the single
+# canonical home for that check; the corresponding test lives in Plan #7's
+# test set. Adding it here too would produce duplicate warnings once Plan #7
+# lands.
 
 
 def test_validate_does_not_warn_on_legacy_type_plan_pre_reg(tmp_path: Path) -> None:
-    """Legacy shape (type: plan + id: pre-registration:...) must continue to validate
-    silently — downstream migration is out of scope for this change."""
+    """Legacy shape (type: plan + id: pre-registration:...) must not fire any of
+    the Plan-#2-introduced warnings (committed/spec) — those are gated on
+    type == pre-registration. (Plan #7 Task 6's id-prefix table will warn
+    separately on the type/id mismatch once it ships; that is out of scope
+    for this test.)"""
     _write_minimal_research_project(tmp_path)
     (tmp_path / "doc" / "meta" / "pre-registration-h01-test.md").write_text(
         _pre_registration_body(
             type_value="plan",
             id_value="pre-registration:h01-test",
-            committed="2026-04-25",
+            committed=None,
+            spec=None,
         ),
         encoding="utf-8",
     )
@@ -178,7 +168,8 @@ def test_validate_does_not_warn_on_legacy_type_plan_pre_reg(tmp_path: Path) -> N
         capture_output=True, text=True, check=False,
     )
     combined = result.stdout + result.stderr
-    assert "id prefix" not in combined.lower(), combined
+    assert "should declare a 'committed:'" not in combined, combined
+    assert "should declare a 'spec:'" not in combined, combined
 
 
 def test_validate_warns_when_pre_registration_missing_committed(tmp_path: Path) -> None:
@@ -224,13 +215,13 @@ def test_validate_warns_when_pre_registration_missing_spec(tmp_path: Path) -> No
     assert result.returncode == 0, combined  # warning, not error
 ```
 
-- [ ] **Step 3: Run the new tests to confirm three of five fail**
+- [ ] **Step 3: Run the new tests to confirm two of four fail**
 
 Run:
 ```bash
 cd science-tool && uv run --frozen pytest tests/test_validate_script.py -k "pre_registration" -v
 ```
-Expected: `test_validate_warns_when_pre_registration_id_prefix_wrong`, `test_validate_warns_when_pre_registration_missing_committed`, and `test_validate_warns_when_pre_registration_missing_spec` FAIL (the validator does not yet check these). The two accept/no-warn cases should pass trivially.
+Expected: `test_validate_warns_when_pre_registration_missing_committed` and `test_validate_warns_when_pre_registration_missing_spec` FAIL (the validator does not yet check these). The two no-warn / legacy-silence cases pass trivially.
 
 - [ ] **Step 4: Commit failing tests**
 
@@ -244,17 +235,18 @@ git commit -m "test(validate): pre-registration canonical type checks"
 ## Task 3: Implement `pre-registration` validation in `scripts/validate.sh` and `meta/validate.sh`
 
 **Files:**
-- Modify: `scripts/validate.sh` — extend section 11 (around line 447 where the existing `for f in "$DOC_DIR/meta/pre-registration-"*.md` body-section sweep lives).
-- Modify: `meta/validate.sh` — apply the same extension. The two files have different sha256 but the pre-registration loop is identical in shape; locate the loop by content (`for f in "$DOC_DIR/meta/pre-registration-"*.md`) and apply the same change.
+- Modify: `scripts/validate.sh` — extend the existing `for f in "$DOC_DIR/meta/pre-registration-"*.md` body-section sweep (located by content; ~line 456 at audit time).
+- Modify: `meta/validate.sh` — apply the same extension (~line 448 at audit time; locate by content, `for f in "$DOC_DIR/meta/pre-registration-"*.md`).
 
-The existing loop already iterates `doc/meta/pre-registration-*.md`. We add an inner block that parses `type:` and `id:` from frontmatter (using the same `sed` recipe as the notes section at `scripts/validate.sh:530-543`) and:
+The existing loop already iterates `doc/meta/pre-registration-*.md`. We extend it so it (a) also iterates `$DOC_DIR/pre-registrations/*.md` (mm30's canonical placement per audit §3.2; currently invisible to the validator), and (b) when `type: pre-registration`, warns on missing `committed:` / `spec:` body fields. Frontmatter parsing reuses the same `sed` recipe used elsewhere in the script.
 
-- if `type:` is `pre-registration`, **warn** if the `id:` does not start with `pre-registration:` (warn-not-error to match adjacent id-prefix checks and Plan #7 Task 6's deliberate severity choice);
+Concretely:
+
 - if `type:` is `pre-registration`, warn if `committed:` is absent;
 - if `type:` is `pre-registration`, warn if `spec:` is absent (`spec:` may be empty string — that's OK, project may not have a paired design doc);
-- if `type:` is anything else (legacy `type: plan` in mm30 + protein-landscape; `type: plan` with `id: plan:pre-registration-<slug>` in natural-systems; project-local `type: pre-registration` already in cbioportal — only 2/4 use `type: plan` + `id: pre-registration:*`), do nothing new — the legacy/local file continues to validate without warning. This keeps the change purely additive.
+- if `type:` is anything else (legacy `type: plan` in mm30 + protein-landscape; `type: plan` with `id: plan:pre-registration-<slug>` in natural-systems; project-local `type: pre-registration` already in cbioportal — only 2/4 use `type: plan` + `id: pre-registration:*`), do nothing new — the legacy/local file continues to validate without these warnings. This keeps the change purely additive.
 
-Also extend the file glob to include `$DOC_DIR/pre-registrations/*.md` (mm30's canonical placement per audit §3.2; currently invisible to the validator).
+**Id-prefix conformance is intentionally NOT added in this loop** — Plan #7 Task 6 ships a generic per-type id-prefix table (`PREFIX_RULES`) that includes a `pre-registration:` row. Adding it here too would produce duplicate warnings on the same condition once Plan #7 lands.
 
 - [ ] **Step 1: Read the existing pre-registration loop in both files**
 
@@ -296,14 +288,12 @@ for f in "$DOC_DIR/meta/pre-registration-"*.md "$DOC_DIR/pre-registrations/"*.md
         fi
     done
 
-    # Parse frontmatter type/id using the same recipe as the notes section.
+    # Parse frontmatter type using the same recipe as the notes section.
+    # Note: id-prefix conformance is handled by Plan #7 Task 6's PREFIX_RULES
+    # table, not here, to avoid duplicate warnings on the same condition.
     pre_type=$(sed -n "s/^type:[[:space:]]*['\"]\\{0,1\\}\\([^'\"]*\\)['\"]\\{0,1\\}[[:space:]]*$/\\1/p" "$f" | head -n 1 || true)
-    pre_id=$(sed -n "s/^id:[[:space:]]*['\"]\\{0,1\\}\\([^'\"]*\\)['\"]\\{0,1\\}[[:space:]]*$/\\1/p" "$f" | head -n 1 || true)
 
     if [ "$pre_type" = "pre-registration" ]; then
-        if [ -n "$pre_id" ] && ! printf "%s" "$pre_id" | grep -Eq '^pre-registration:'; then
-            warn "${f} type is 'pre-registration' but id '${pre_id}' does not use the 'pre-registration:' prefix"
-        fi
         if ! grep -Eq '^committed:[[:space:]]' "$f" 2>/dev/null; then
             warn "${f} type 'pre-registration' should declare a 'committed:' date in frontmatter"
         fi
@@ -322,10 +312,10 @@ Verify the change is in place:
 
 ```bash
 grep -n 'pre-registrations' scripts/validate.sh meta/validate.sh
-grep -n 'pre-registration:' scripts/validate.sh meta/validate.sh
+grep -n 'committed:' scripts/validate.sh meta/validate.sh | grep -v '^#'
 ```
 
-Expected: both files show the new glob entry and the warn-on-mismatched-prefix logic.
+Expected: both files show the new `$DOC_DIR/pre-registrations/` glob entry and the warn-on-missing-`committed:` / `spec:` logic.
 
 - [ ] **Step 3: Run targeted tests**
 
@@ -333,7 +323,7 @@ Run:
 ```bash
 cd science-tool && uv run --frozen pytest tests/test_validate_script.py -k "pre_registration" -v
 ```
-Expected: all four pre-registration tests pass.
+Expected: all four pre-registration tests (canonical-acceptance, legacy-silence, missing-committed warn, missing-spec warn) pass.
 
 - [ ] **Step 4: Run full validator test suite for regressions**
 
@@ -355,7 +345,7 @@ Expected: `no pre-registration warnings` (meta has no pre-registration files yet
 
 ```bash
 git add scripts/validate.sh meta/validate.sh
-git commit -m "feat(validate): canonical pre-registration type and id-prefix checks (warn severity)"
+git commit -m "feat(validate): canonical pre-registration committed/spec checks (warn severity)"
 ```
 
 ---
@@ -467,8 +457,8 @@ Otherwise this task ends without a commit.
 
 The validator change in Task 3 is purely additive:
 
-- Files declaring `type: "pre-registration"` (canonical, used today only by cbioportal per `docs/audits/downstream-project-conventions/projects/cbioportal.md` §4) gain enforcement of the `pre-registration:` id prefix and warnings on missing `committed:` / `spec:`.
-- Files declaring `type: "plan"` with `id: "pre-registration:..."` (the 2/4 legacy shape used by mm30 and protein-landscape — e.g. mm30's `doc/pre-registrations/2026-04-15-t085-...md` and protein-landscape's `doc/meta/pre-registration-q63-heldout-taxa-benchmark.md`) continue to validate silently. natural-systems uses a third shape (`type: "plan"` with `id: "plan:pre-registration-<slug>"`) which is also untouched — the validator gates on `type == pre-registration`, so neither legacy shape triggers a warning. cbioportal already registers `type: pre-registration` as a project-local kind and converges on the canonical shape with no migration. No warning is emitted on the type/id mismatch until at least one project opts in.
+- Files declaring `type: "pre-registration"` (canonical, used today only by cbioportal per `docs/audits/downstream-project-conventions/projects/cbioportal.md` §4) gain warnings on missing `committed:` / `spec:` body fields. Id-prefix conformance lands separately via Plan #7 Task 6.
+- Files declaring `type: "plan"` with `id: "pre-registration:..."` (the 2/4 legacy shape used by mm30 and protein-landscape — e.g. mm30's `doc/pre-registrations/2026-04-15-t085-...md` and protein-landscape's `doc/meta/pre-registration-q63-heldout-taxa-benchmark.md`) do not fire any Plan-#2 warning — the new checks are gated on `type == pre-registration`. natural-systems uses a third shape (`type: "plan"` with `id: "plan:pre-registration-<slug>"`) which is similarly untouched by Plan #2. cbioportal already registers `type: pre-registration` as a project-local kind and converges on the canonical shape with no migration. (Plan #7 Task 6 will warn on the legacy type/id mismatches via its generic prefix table once it ships; that is the deliberate single home for that signal.)
 - Pre-registration sections embedded inside hypothesis spec bodies (mm30 `specs/hypotheses/h*.md`, protein-landscape `specs/hypotheses/h0[1-4]-*.md`) are not file-level entities and are unaffected.
 
 A separate cycle should later (a) propose a migration sweep for downstream projects to flip `type: plan` → `type: pre-registration`, (b) decide whether to add a deprecation warning for the legacy shape, and (c) coordinate with the §6.3 sanctioned-local-entity-kind work — once that lands, cbioportal's project-local `pre-registration` registration in `knowledge/sources/local/manifest.yaml` becomes redundant and can be removed in favor of the canonical type.
@@ -479,7 +469,7 @@ This plan does not need a separate plan file for that migration; a brief synthes
 
 ## Self-Review Checklist
 
-- Goal coverage: the canonical type is registered in the template + validator + command file; tests cover acceptance, id-prefix enforcement, legacy-shape silence, and `committed:` warning.
+- Goal coverage: the canonical type is registered in the template + validator + command file; tests cover acceptance, legacy-shape silence, missing-`committed:`, and missing-`spec:`. Id-prefix conformance is owned by Plan #7 Task 6's PREFIX_RULES table — deliberately out of scope here to avoid duplicate warnings.
 - Scope discipline: no migrations of downstream projects; no changes to `commands/interpret-results.md` or `science:big-picture` rendering (those depend on `related[]`, which is unchanged).
-- Backwards compatibility: legacy `type: plan` + `id: pre-registration:*` files validate without new warnings (Task 2 Step 2 third test).
+- Backwards compatibility: legacy `type: plan` + `id: pre-registration:*` files do not fire any Plan-#2-introduced warning (committed/spec are gated on `type == pre-registration`). Plan #7 Task 6 will warn separately on the type/id mismatch when it ships; that is expected.
 - Audit evidence: §3.2 (4/4 use pre-registration; 3/4 overload `type: plan`, of which only 2/4 use `id: pre-registration:*` — natural-systems uses `id: plan:pre-registration-<slug>`) and §8.3 (mm30's `spec:` linkage pattern) are both reflected in the validator and template change set.
