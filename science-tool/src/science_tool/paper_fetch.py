@@ -32,7 +32,7 @@ from typing import Any, Literal
 
 import httpx
 
-FetchStatus = Literal["ok", "paywalled", "not_found", "blocked_but_oa"]
+FetchStatus = Literal["ok", "paywalled", "not_found", "blocked_but_oa", "error"]
 
 _DEFAULT_CACHE_DIR = Path(os.environ.get("SCIENCE_CACHE_DIR", Path.home() / ".cache" / "science"))
 _RATELIMIT_SUBDIR = "ratelimit"
@@ -77,6 +77,9 @@ class FetchResult:
     - ``not_found``: no source resolved the identifier at all.
     - ``blocked_but_oa``: OA copy exists per Unpaywall, but every fetch we tried
       failed. Users can likely access it in a browser — recommend they supply a PDF.
+    - ``error``: caller-supplied identifiers conflicted (or another structured
+      condition the caller should surface). ``metadata['reason']`` names the
+      class (e.g. ``identifier_mismatch``).
     """
 
     status: FetchStatus
@@ -111,6 +114,71 @@ class FetchConfig:
 _DOI_URL_PREFIX = re.compile(r"^https?://(?:dx\.)?doi\.org/", re.IGNORECASE)
 _ARXIV_DOI = re.compile(r"^10\.48550/arxiv\.(?P<id>.+)$", re.IGNORECASE)
 _BIORXIV_DOI = re.compile(r"^10\.1101/(?P<id>.+)$", re.IGNORECASE)
+
+# URL patterns for identifier extraction. The first capture group is the identifier.
+_URL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("pmid", re.compile(r"^https?://pubmed\.ncbi\.nlm\.nih\.gov/(\d+)", re.IGNORECASE)),
+    ("pmid", re.compile(r"^https?://(?:www\.)?ncbi\.nlm\.nih\.gov/pubmed/(\d+)", re.IGNORECASE)),
+    ("pmcid", re.compile(r"^https?://pmc\.ncbi\.nlm\.nih\.gov/articles/(PMC\d+)", re.IGNORECASE)),
+    ("pmcid", re.compile(r"^https?://(?:www\.)?ncbi\.nlm\.nih\.gov/pmc/articles/(PMC\d+)", re.IGNORECASE)),
+    (
+        "arxiv",
+        re.compile(r"^https?://arxiv\.org/(?:abs|pdf)/([\w./-]+?)(?:v\d+)?(?:\.pdf)?(?:[?#].*)?$", re.IGNORECASE),
+    ),
+    ("doi", re.compile(r"^https?://(?:www\.)?(?:bio|med)rxiv\.org/content/(?:.+?/)?(10\.1101/[^/?#]+)", re.IGNORECASE)),
+]
+
+_PMID_RE = re.compile(r"^\d+$")
+_PMCID_RE = re.compile(r"^PMC\d+$", re.IGNORECASE)
+
+
+def normalize_pmid(value: str | None) -> str | None:
+    """Accept a bare PMID; return the canonical form, or None if unparseable."""
+    if not value:
+        return None
+    cleaned = value.strip()
+    return cleaned if _PMID_RE.match(cleaned) else None
+
+
+def normalize_pmcid(value: str | None) -> str | None:
+    """Accept ``PMC12345`` or ``12345``; return ``PMC12345``."""
+    if not value:
+        return None
+    cleaned = value.strip()
+    if cleaned.isdigit():
+        return f"PMC{cleaned}"
+    return cleaned.upper() if _PMCID_RE.match(cleaned) else None
+
+
+def arxiv_id_to_doi(value: str | None) -> str | None:
+    """Convert an arXiv ID (``2502.09135`` or ``2502.09135v2``) to its DOI form."""
+    if not value:
+        return None
+    cleaned = value.strip().lower()
+    cleaned = re.sub(r"v\d+$", "", cleaned)
+    if not re.match(r"^[\w./-]+$", cleaned):
+        return None
+    return f"10.48550/arxiv.{cleaned}"
+
+
+def parse_url_identifier(url: str | None) -> tuple[str, str] | None:
+    """Recognize PubMed, PMC, arXiv, bioRxiv/medRxiv, or DOI URLs.
+
+    Returns ``(kind, value)`` where kind is ``doi``, ``pmid``, ``pmcid``, or
+    ``arxiv``, or None if the URL is not recognized.
+    """
+    if not url:
+        return None
+    cleaned = url.strip()
+    if _DOI_URL_PREFIX.match(cleaned):
+        doi = normalize_doi(cleaned)
+        if doi:
+            return ("doi", doi)
+    for kind, pattern in _URL_PATTERNS:
+        match = pattern.match(cleaned)
+        if match:
+            return (kind, match.group(1))
+    return None
 
 
 def normalize_doi(value: str | None) -> str | None:
@@ -350,15 +418,17 @@ def _try_europepmc_fulltext(
     return dest, None
 
 
-def _resolve_pmcid(
-    doi: str, client: httpx.Client, limiter: RateLimiter, cfg: FetchConfig
-) -> tuple[str | None, str | None]:
-    """Resolve a DOI to a PMCID via the Europe PMC search API.
+def _europepmc_lookup(
+    query: str, client: httpx.Client, limiter: RateLimiter, cfg: FetchConfig
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Run a one-result Europe PMC search and return the first record dict.
 
-    Europe PMC's search endpoint reliably returns JSON for valid queries and
-    surfaces a `pmcid` field when full text is available. We previously tried
-    NCBI's idconv service, but it intermittently responded with HTML error
-    pages even when ``format=json`` was requested, breaking our parser.
+    Europe PMC's search endpoint is the workhorse for cross-identifier
+    resolution: the same query language returns ``doi``, ``pmid``, and
+    ``pmcid`` fields on each record, so DOI↔PMID↔PMCID conversions are all
+    one call. We previously tried NCBI's idconv service, but it intermittently
+    responded with HTML error pages even when ``format=json`` was requested,
+    breaking our parser.
     """
     _ = cfg  # reserved for future polite-pool identification
     data, err = _get_json(
@@ -366,7 +436,7 @@ def _resolve_pmcid(
         limiter,
         "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
         "www.ebi.ac.uk",
-        params={"query": f'DOI:"{doi}"', "format": "json", "resultType": "lite", "pageSize": "1"},
+        params={"query": query, "format": "json", "resultType": "lite", "pageSize": "1"},
     )
     if not data:
         return None, err
@@ -375,9 +445,78 @@ def _resolve_pmcid(
         return None, None
     items = results.get("result") or []
     if items and isinstance(items[0], dict):
-        pmcid = items[0].get("pmcid")
-        if isinstance(pmcid, str) and pmcid:
-            return pmcid, None
+        return items[0], None
+    return None, None
+
+
+def _resolve_pmcid(
+    doi: str, client: httpx.Client, limiter: RateLimiter, cfg: FetchConfig
+) -> tuple[str | None, str | None]:
+    """Resolve a DOI to a PMCID via Europe PMC."""
+    record, err = _europepmc_lookup(f'DOI:"{doi}"', client, limiter, cfg)
+    if not record:
+        return None, err
+    pmcid = record.get("pmcid")
+    return (pmcid if isinstance(pmcid, str) and pmcid else None), None
+
+
+def _resolve_doi_from_pmid(
+    pmid: str, client: httpx.Client, limiter: RateLimiter, cfg: FetchConfig
+) -> tuple[str | None, str | None]:
+    """Resolve a PMID to its DOI via Europe PMC."""
+    record, err = _europepmc_lookup(f"EXT_ID:{pmid} AND SRC:MED", client, limiter, cfg)
+    if not record:
+        return None, err
+    doi = record.get("doi")
+    return (normalize_doi(doi) if isinstance(doi, str) else None), None
+
+
+def _resolve_doi_from_pmcid(
+    pmcid: str, client: httpx.Client, limiter: RateLimiter, cfg: FetchConfig
+) -> tuple[str | None, str | None]:
+    """Resolve a PMCID to its DOI via Europe PMC."""
+    record, err = _europepmc_lookup(f"PMCID:{pmcid}", client, limiter, cfg)
+    if not record:
+        return None, err
+    doi = record.get("doi")
+    return (normalize_doi(doi) if isinstance(doi, str) else None), None
+
+
+def _verify_doi_matches(
+    doi: str,
+    *,
+    expected_pmid: str | None,
+    expected_pmcid: str | None,
+    client: httpx.Client,
+    limiter: RateLimiter,
+    cfg: FetchConfig,
+) -> tuple[dict[str, str] | None, str | None]:
+    """Confirm a DOI maps to the supplied PMID/PMCID.
+
+    Returns ``(mismatch_info, err)`` where ``mismatch_info`` is None on match
+    or when Europe PMC has no record (we don't fail-closed on a third-party
+    gap), and a dict ``{kind, expected, actual}`` when there's a definitive
+    conflict the caller should surface.
+    """
+    if not (expected_pmid or expected_pmcid):
+        return None, None
+    record, err = _europepmc_lookup(f'DOI:"{doi}"', client, limiter, cfg)
+    if not record:
+        return None, err
+    if expected_pmid:
+        actual = record.get("pmid")
+        if isinstance(actual, str) and actual and actual != expected_pmid.strip():
+            return {"kind": "pmid", "expected": expected_pmid.strip(), "actual": actual}, None
+    if expected_pmcid:
+        actual_pmc = record.get("pmcid")
+        normalized_expected = normalize_pmcid(expected_pmcid)
+        if (
+            isinstance(actual_pmc, str)
+            and actual_pmc
+            and normalized_expected
+            and actual_pmc.upper() != normalized_expected
+        ):
+            return {"kind": "pmcid", "expected": normalized_expected, "actual": actual_pmc}, None
     return None, None
 
 
@@ -389,6 +528,8 @@ def fetch_paper(
     doi: str | None = None,
     url: str | None = None,
     pmid: str | None = None,
+    pmcid: str | None = None,
+    arxiv: str | None = None,
     cfg: FetchConfig,
     http: httpx.Client | None = None,
 ) -> FetchResult:
@@ -399,36 +540,106 @@ def fetch_paper(
         headers={"User-Agent": f"science-tool/0.1 (mailto:{cfg.email})"},
     )
     try:
-        return _fetch(doi=doi, url=url, pmid=pmid, cfg=cfg, client=client)
+        return _fetch(doi=doi, url=url, pmid=pmid, pmcid=pmcid, arxiv=arxiv, cfg=cfg, client=client)
     finally:
         if owns_client:
             client.close()
 
 
 def _fetch(
-    *, doi: str | None, url: str | None, pmid: str | None, cfg: FetchConfig, client: httpx.Client
+    *,
+    doi: str | None,
+    url: str | None,
+    pmid: str | None,
+    pmcid: str | None,
+    arxiv: str | None,
+    cfg: FetchConfig,
+    client: httpx.Client,
 ) -> FetchResult:
     tiers: list[str] = []
     errors: list[str] = []
 
-    # If a URL was given and it's a DOI URL, promote to DOI.
-    if url and not doi:
-        candidate = normalize_doi(url)
-        if candidate:
-            doi = candidate
+    # Promote a recognized URL to its native identifier so the resolvers below
+    # can do the heavy lifting uniformly. Explicit flags win over URL-derived
+    # values to honor caller intent.
+    if url:
+        parsed = parse_url_identifier(url)
+        if parsed:
+            kind, value = parsed
+            if kind == "doi" and not doi:
+                doi = value
+            elif kind == "pmid" and not pmid:
+                pmid = value
+            elif kind == "pmcid" and not pmcid:
+                pmcid = value
+            elif kind == "arxiv" and not arxiv:
+                arxiv = value
 
+    # arXiv shortcut: deterministic DOI construction, no API call needed.
+    if arxiv and not doi:
+        doi = arxiv_id_to_doi(arxiv)
+
+    pmid = normalize_pmid(pmid)
+    pmcid = normalize_pmcid(pmcid)
     doi = normalize_doi(doi)
+    limiter = RateLimiter(cfg)
+
+    # Resolve PMID / PMCID -> DOI when we don't already have one.
+    if not doi and pmid:
+        tiers.append("europepmc:pmid->doi")
+        resolved, err = _resolve_doi_from_pmid(pmid, client, limiter, cfg)
+        if err:
+            errors.append(err)
+        if resolved:
+            doi = resolved
+    if not doi and pmcid:
+        tiers.append("europepmc:pmcid->doi")
+        resolved, err = _resolve_doi_from_pmcid(pmcid, client, limiter, cfg)
+        if err:
+            errors.append(err)
+        if resolved:
+            doi = resolved
+
     if not doi:
         return FetchResult(
             status="not_found",
             source="none",
-            metadata={"url": url, "pmid": pmid},
+            metadata={"url": url, "pmid": pmid, "pmcid": pmcid, "arxiv": arxiv},
             tiers_attempted=tiers,
-            errors=["no DOI supplied or inferable (URL-only / title-only lookup not yet implemented)"],
-            access_hint="Supply a DOI or a PDF path directly.",
+            errors=errors or ["no DOI supplied or inferable from PMID/PMCID/arXiv/URL"],
+            access_hint="Supply a DOI, PMID, PMCID, arXiv ID, or a recognized URL.",
         )
 
-    limiter = RateLimiter(cfg)
+    # Cross-check: if caller supplied a DOI plus a PMID/PMCID, verify they
+    # agree before doing real work. This catches the common "wrong DOI"
+    # mistake — both user error and LLM-guessed DOIs that resolve to the
+    # wrong paper.
+    if pmid or pmcid:
+        tiers.append("europepmc:verify")
+        mismatch, err = _verify_doi_matches(
+            doi, expected_pmid=pmid, expected_pmcid=pmcid, client=client, limiter=limiter, cfg=cfg
+        )
+        if err:
+            errors.append(err)
+        if mismatch:
+            return FetchResult(
+                status="error",
+                source="europepmc",
+                metadata={
+                    "doi": doi,
+                    "pmid": pmid,
+                    "pmcid": pmcid,
+                    "reason": "identifier_mismatch",
+                    "mismatch": mismatch,
+                },
+                tiers_attempted=tiers,
+                errors=errors,
+                access_hint=(
+                    f"DOI {doi} resolves to {mismatch['kind']}={mismatch['actual']}, "
+                    f"but caller supplied {mismatch['kind']}={mismatch['expected']}. "
+                    "One of the identifiers is wrong — re-check before summarizing."
+                ),
+            )
     papers_dir = cfg.cache_dir / _PAPERS_SUBDIR
     slug = _cache_slug(doi)
 

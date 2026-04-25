@@ -2443,8 +2443,14 @@ def health_command(project_root: Path, output_format: str) -> None:
 
 @main.command("paper-fetch")
 @click.option("--doi", default=None, help="DOI (bare, doi: prefix, or doi.org URL)")
-@click.option("--url", default=None, help="URL to a DOI-resolving landing page")
-@click.option("--pmid", default=None, help="PubMed ID")
+@click.option(
+    "--url",
+    default=None,
+    help="Landing-page URL: doi.org, PubMed, PMC, arXiv, or bioRxiv/medRxiv",
+)
+@click.option("--pmid", default=None, help="PubMed ID (resolved to DOI via Europe PMC)")
+@click.option("--pmcid", default=None, help="PMC ID, e.g. PMC12345 (resolved to DOI via Europe PMC)")
+@click.option("--arxiv", default=None, help="arXiv ID, e.g. 2502.09135 (constructs the 10.48550/arXiv.<id> DOI)")
 @click.option(
     "--email",
     default=None,
@@ -2457,14 +2463,21 @@ def health_command(project_root: Path, output_format: str) -> None:
     help="Override cache directory (defaults to $SCIENCE_CACHE_DIR or ~/.cache/science)",
 )
 def paper_fetch_cmd(
-    doi: str | None, url: str | None, pmid: str | None, email: str | None, cache_dir: Path | None
+    doi: str | None,
+    url: str | None,
+    pmid: str | None,
+    pmcid: str | None,
+    arxiv: str | None,
+    email: str | None,
+    cache_dir: Path | None,
 ) -> None:
     """Probe agent-friendly sources for a paper and emit a JSON decision record.
 
     Intended for the paper-researcher subagent: call this first, branch on the
     ``status`` field, and only fall back to open-ended search when it reports
     status=not_found. A status of paywalled or blocked_but_oa means the caller
-    should ask the user for a PDF rather than scavenge the web.
+    should ask the user for a PDF rather than scavenge the web. A status of
+    error indicates conflicting identifiers — see ``metadata.reason``.
     """
     import json as _json
     import os as _os
@@ -2478,7 +2491,7 @@ def paper_fetch_cmd(
     if cache_dir is not None:
         cfg_kwargs["cache_dir"] = cache_dir
     cfg = FetchConfig(**cfg_kwargs)
-    result = fetch_paper(doi=doi, url=url, pmid=pmid, cfg=cfg)
+    result = fetch_paper(doi=doi, url=url, pmid=pmid, pmcid=pmcid, arxiv=arxiv, cfg=cfg)
     click.echo(_json.dumps(result.to_dict(), indent=2))
 
 

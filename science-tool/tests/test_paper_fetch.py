@@ -13,8 +13,12 @@ from science_tool.paper_fetch import (
     FetchConfig,
     FetchResult,
     RateLimiter,
+    arxiv_id_to_doi,
     fetch_paper,
     normalize_doi,
+    normalize_pmcid,
+    normalize_pmid,
+    parse_url_identifier,
 )
 
 
@@ -204,6 +208,276 @@ class TestFetchPaperBranches:
         result = fetch_paper(url="https://example.com/paper", cfg=_cfg(tmp_path), http=_make_client(handler))
         assert result.status == "not_found"
         assert "no DOI supplied" in result.errors[0]
+
+
+# --- Identifier normalization helpers ----------------------------------------
+
+
+class TestNormalizePmid:
+    def test_bare_pmid(self) -> None:
+        assert normalize_pmid("39581534") == "39581534"
+
+    def test_whitespace(self) -> None:
+        assert normalize_pmid("  12345  ") == "12345"
+
+    def test_rejects_non_numeric(self) -> None:
+        assert normalize_pmid("PMC123") is None
+        assert normalize_pmid("abc") is None
+        assert normalize_pmid(None) is None
+        assert normalize_pmid("") is None
+
+
+class TestNormalizePmcid:
+    def test_with_prefix(self) -> None:
+        assert normalize_pmcid("PMC12934989") == "PMC12934989"
+
+    def test_lowercase_prefix(self) -> None:
+        assert normalize_pmcid("pmc12934989") == "PMC12934989"
+
+    def test_bare_number(self) -> None:
+        assert normalize_pmcid("12934989") == "PMC12934989"
+
+    def test_rejects_garbage(self) -> None:
+        assert normalize_pmcid("PMCabc") is None
+        assert normalize_pmcid(None) is None
+
+
+class TestArxivIdToDoi:
+    def test_modern_id(self) -> None:
+        assert arxiv_id_to_doi("2502.09135") == "10.48550/arxiv.2502.09135"
+
+    def test_strips_version(self) -> None:
+        assert arxiv_id_to_doi("2502.09135v3") == "10.48550/arxiv.2502.09135"
+
+    def test_rejects_garbage(self) -> None:
+        assert arxiv_id_to_doi("not an id") is None
+        assert arxiv_id_to_doi(None) is None
+
+
+class TestParseUrlIdentifier:
+    def test_pubmed(self) -> None:
+        assert parse_url_identifier("https://pubmed.ncbi.nlm.nih.gov/39581534/") == ("pmid", "39581534")
+
+    def test_pmc(self) -> None:
+        assert parse_url_identifier("https://pmc.ncbi.nlm.nih.gov/articles/PMC12934989/") == ("pmcid", "PMC12934989")
+
+    def test_arxiv_abs(self) -> None:
+        kind, value = parse_url_identifier("https://arxiv.org/abs/2502.09135") or (None, None)
+        assert kind == "arxiv"
+        assert value == "2502.09135"
+
+    def test_arxiv_abs_with_version(self) -> None:
+        kind, value = parse_url_identifier("https://arxiv.org/abs/2502.09135v2") or (None, None)
+        assert kind == "arxiv"
+        assert value == "2502.09135"
+
+    def test_biorxiv(self) -> None:
+        kind, value = parse_url_identifier("https://www.biorxiv.org/content/10.1101/2024.01.02.123456v1.full") or (
+            None,
+            None,
+        )
+        assert kind == "doi"
+        assert value == "10.1101/2024.01.02.123456v1.full"  # raw extraction; normalize_doi handles cleanup downstream
+
+    def test_doi_url(self) -> None:
+        assert parse_url_identifier("https://doi.org/10.1038/s41586-024-00001-1") == (
+            "doi",
+            "10.1038/s41586-024-00001-1",
+        )
+
+    def test_unrecognized(self) -> None:
+        assert parse_url_identifier("https://example.com/paper") is None
+        assert parse_url_identifier(None) is None
+
+
+# --- Identifier resolution paths in fetch_paper -------------------------------
+
+
+class TestIdentifierResolution:
+    def test_pmid_alone_resolves_to_doi_then_proceeds(self, tmp_path: Path) -> None:
+        """PMID-only input should hit Europe PMC for DOI, then run the normal cascade."""
+        seen_queries: list[str] = []
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == "www.ebi.ac.uk":
+                seen_queries.append(dict(req.url.params).get("query", ""))
+                return httpx.Response(
+                    200,
+                    json={"resultList": {"result": [{"doi": "10.1234/ok", "pmid": "39581534", "pmcid": ""}]}},
+                )
+            if req.url.host == "api.crossref.org":
+                return httpx.Response(200, json={"message": {"DOI": "10.1234/ok", "title": ["Found"]}})
+            if req.url.host == "api.unpaywall.org":
+                return httpx.Response(200, json={"is_oa": False})
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        result = fetch_paper(pmid="39581534", cfg=_cfg(tmp_path), http=_make_client(handler))
+        assert result.status == "paywalled"
+        assert any("EXT_ID:39581534" in q for q in seen_queries)
+        # DOI verification step also fires (DOI + PMID present after resolution).
+        assert "europepmc:pmid->doi" in result.tiers_attempted
+        assert "europepmc:verify" in result.tiers_attempted
+
+    def test_pmcid_alone_resolves_to_doi(self, tmp_path: Path) -> None:
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == "www.ebi.ac.uk":
+                query = dict(req.url.params).get("query", "")
+                if query.startswith("PMCID:"):
+                    return httpx.Response(
+                        200,
+                        json={"resultList": {"result": [{"doi": "10.1234/pmcok", "pmid": "", "pmcid": "PMC12934989"}]}},
+                    )
+                # DOI verification round
+                return httpx.Response(
+                    200,
+                    json={"resultList": {"result": [{"doi": "10.1234/pmcok", "pmid": "", "pmcid": "PMC12934989"}]}},
+                )
+            if req.url.host == "api.crossref.org":
+                return httpx.Response(200, json={"message": {"DOI": "10.1234/pmcok"}})
+            if req.url.host == "api.unpaywall.org":
+                return httpx.Response(200, json={"is_oa": False})
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        result = fetch_paper(pmcid="PMC12934989", cfg=_cfg(tmp_path), http=_make_client(handler))
+        assert result.status == "paywalled"
+        assert "europepmc:pmcid->doi" in result.tiers_attempted
+
+    def test_arxiv_shortcut_constructs_doi_without_lookup(self, tmp_path: Path) -> None:
+        """--arxiv builds the DOI deterministically; no Europe PMC call needed."""
+        seen_hosts: list[str] = []
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            seen_hosts.append(req.url.host)
+            if req.url.host == "api.crossref.org":
+                return httpx.Response(200, json={"message": {"DOI": "10.48550/arxiv.2502.09135", "title": ["A"]}})
+            if req.url.host == "api.unpaywall.org":
+                return httpx.Response(200, json={"is_oa": True})
+            if req.url.host == "arxiv.org":
+                return httpx.Response(200, content=b"%PDF-1.4 fake")
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        result = fetch_paper(arxiv="2502.09135", cfg=_cfg(tmp_path), http=_make_client(handler))
+        assert result.status == "ok"
+        assert result.source == "arxiv"
+        assert "www.ebi.ac.uk" not in seen_hosts  # no resolver call needed
+
+    def test_pubmed_url_extracts_pmid(self, tmp_path: Path) -> None:
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == "www.ebi.ac.uk":
+                return httpx.Response(
+                    200,
+                    json={"resultList": {"result": [{"doi": "10.1234/ok", "pmid": "39581534", "pmcid": ""}]}},
+                )
+            if req.url.host == "api.crossref.org":
+                return httpx.Response(200, json={"message": {"DOI": "10.1234/ok"}})
+            if req.url.host == "api.unpaywall.org":
+                return httpx.Response(200, json={"is_oa": False})
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        result = fetch_paper(
+            url="https://pubmed.ncbi.nlm.nih.gov/39581534/", cfg=_cfg(tmp_path), http=_make_client(handler)
+        )
+        assert result.status == "paywalled"
+        assert result.metadata.get("doi") == "10.1234/ok"
+
+    def test_pmc_url_extracts_pmcid(self, tmp_path: Path) -> None:
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == "www.ebi.ac.uk":
+                return httpx.Response(
+                    200,
+                    json={"resultList": {"result": [{"doi": "10.1234/pmcok", "pmcid": "PMC12934989"}]}},
+                )
+            if req.url.host == "api.crossref.org":
+                return httpx.Response(200, json={"message": {"DOI": "10.1234/pmcok"}})
+            if req.url.host == "api.unpaywall.org":
+                return httpx.Response(200, json={"is_oa": False})
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        result = fetch_paper(
+            url="https://pmc.ncbi.nlm.nih.gov/articles/PMC12934989/",
+            cfg=_cfg(tmp_path),
+            http=_make_client(handler),
+        )
+        assert result.status == "paywalled"
+
+    def test_arxiv_url_takes_arxiv_path(self, tmp_path: Path) -> None:
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == "api.crossref.org":
+                return httpx.Response(200, json={"message": {"DOI": "10.48550/arxiv.2502.09135"}})
+            if req.url.host == "api.unpaywall.org":
+                return httpx.Response(200, json={"is_oa": True})
+            if req.url.host == "arxiv.org":
+                return httpx.Response(200, content=b"%PDF")
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        result = fetch_paper(url="https://arxiv.org/abs/2502.09135v2", cfg=_cfg(tmp_path), http=_make_client(handler))
+        assert result.status == "ok"
+        assert result.source == "arxiv"
+
+    def test_no_identifier_returns_not_found(self, tmp_path: Path) -> None:
+        def handler(_req: httpx.Request) -> httpx.Response:  # pragma: no cover
+            raise AssertionError("no HTTP should be issued")
+
+        result = fetch_paper(cfg=_cfg(tmp_path), http=_make_client(handler))
+        assert result.status == "not_found"
+        assert "PMID/PMCID/arXiv/URL" in result.errors[0]
+
+
+class TestIdentifierMismatch:
+    def test_doi_pmid_conflict_returns_error(self, tmp_path: Path) -> None:
+        """DOI + PMID where Europe PMC says DOI maps to a different PMID -> status=error."""
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == "api.crossref.org":
+                return httpx.Response(200, json={"message": {"DOI": "10.1016/j.semcancer.2013.06.005"}})
+            if req.url.host == "api.unpaywall.org":
+                return httpx.Response(200, json={"is_oa": False})
+            if req.url.host == "www.ebi.ac.uk":
+                # The DOI actually belongs to PMID 11111111, not the user-supplied 23792873.
+                return httpx.Response(
+                    200,
+                    json={"resultList": {"result": [{"doi": "10.1016/j.semcancer.2013.06.005", "pmid": "11111111"}]}},
+                )
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        result = fetch_paper(
+            doi="10.1016/j.semcancer.2013.06.005",
+            pmid="23792873",
+            cfg=_cfg(tmp_path),
+            http=_make_client(handler),
+        )
+        assert result.status == "error"
+        assert result.metadata["reason"] == "identifier_mismatch"
+        assert result.metadata["mismatch"] == {"kind": "pmid", "expected": "23792873", "actual": "11111111"}
+        assert "23792873" in (result.access_hint or "")
+
+    def test_doi_pmid_match_proceeds_normally(self, tmp_path: Path) -> None:
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == "api.crossref.org":
+                return httpx.Response(200, json={"message": {"DOI": "10.1234/ok"}})
+            if req.url.host == "api.unpaywall.org":
+                return httpx.Response(200, json={"is_oa": False})
+            if req.url.host == "www.ebi.ac.uk":
+                return httpx.Response(200, json={"resultList": {"result": [{"doi": "10.1234/ok", "pmid": "39581534"}]}})
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        result = fetch_paper(doi="10.1234/ok", pmid="39581534", cfg=_cfg(tmp_path), http=_make_client(handler))
+        assert result.status == "paywalled"
+
+    def test_europepmc_silent_does_not_block(self, tmp_path: Path) -> None:
+        """If Europe PMC has no record for the DOI, the verify step doesn't fail-closed."""
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == "api.crossref.org":
+                return httpx.Response(200, json={"message": {"DOI": "10.1234/obscure"}})
+            if req.url.host == "api.unpaywall.org":
+                return httpx.Response(200, json={"is_oa": False})
+            if req.url.host == "www.ebi.ac.uk":
+                return httpx.Response(200, json={"resultList": {"result": []}})
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        result = fetch_paper(doi="10.1234/obscure", pmid="99999999", cfg=_cfg(tmp_path), http=_make_client(handler))
+        assert result.status == "paywalled"  # cross-check returned None silently; flow continued
 
 
 @pytest.fixture(autouse=True)
