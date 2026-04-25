@@ -45,6 +45,7 @@ For each hypothesis, assemble a bundle. The bundle is a dictionary you construct
 **Aspect filtering**. Before assembling bundles, load project aspects via `load_project_aspects` (or parse `science.yaml` directly). Compute `research_filter = project.aspects \ {software-development}`. Throughout bundle assembly, any entity whose resolved aspects (entity `aspects:` if set, else project `aspects:`) does NOT intersect `research_filter` is excluded from the bundle. This means software-oriented questions (e.g., ones explicitly tagged `aspects: [software-development]`) are dropped before hypothesis matching runs. If `research_filter` is empty, refuse to proceed and point the user at `science-tool big-picture` — research synthesis is undefined on a software-only project.
 
 - `hypothesis_path`: path to the `specs/hypotheses/<id>.md` file.
+- `phase`: read `phase:` from the hypothesis frontmatter; default to `active` if absent.
 - `hypothesis_frontmatter`: parsed YAML.
 - `resolved_questions`: from the resolver output, all questions whose `hypotheses[]` contains this hypothesis. Annotate each with its confidence.
 - `tasks`: glob `tasks/*.md` and `tasks/done/*.md`; parse frontmatter; include entries whose `related:` mentions this hypothesis or any of its resolved questions **AND** whose resolved aspects intersect `research_filter`. If `tasks/active.md` is a single aggregated file (common pattern, e.g., mm30), scan its body for per-task headings and `related:` metadata instead of expecting one file per task.
@@ -151,8 +152,9 @@ Body sections (~1000–1500 words total):
 
 - **TL;DR** — 5–7 bullets, most salient project-wide facts. Distilled from each per-hypothesis State, not a per-hypothesis recap.
 - **State** — cross-hypothesis consolidation. What the project collectively believes, where the strongest evidence sits, what's contested.
-- **Arc** — one paragraph per hypothesis, plus a framing paragraph on how the hypotheses relate.
+- **Arc** — one paragraph per **active** hypothesis (those whose bundle has `phase == "active"` or whose hypothesis file omits `phase:`), plus a framing paragraph on how the active hypotheses relate. Candidate hypotheses are not included here; they appear in the Candidate frames section below.
 - **Research fronts** — ranked list across all hypotheses. Signals: uncertainty density, recent activity, explicit task priority. Cite source: "from <hyp-id>" for each front.
+- **Candidate frames** — one paragraph per hypothesis whose bundle has `phase == "candidate"`. Same citation, grounding, and length rules as the per-hypothesis files. If no candidates exist, emit a single line: `No candidate hypotheses.` Do not suppress the section. Active hypotheses are NOT mentioned here — they appear in the Arc and Research-fronts sections only.
 - **Knowledge Gaps (rollup)** — The orchestrator reuses the `all_gaps` list computed in Phase 1 (no second call to `compute_topic_gaps`). Render the top 10 entries (by `gap_score` desc, ties broken by topic ID asc) as a markdown table with columns: Topic, Coverage, Demand, Gap, Hypotheses. If `all_gaps` is empty, emit the one-liner: "No knowledge gaps detected this run." and skip the table. Per-hypothesis files render their own Knowledge Gaps sub-bullet inside Research Fronts per the spec (with a rendering cap of 5 `demanding_questions` IDs + "… and N more" tail).
 - **Emergent threads** — 2–3 sentence pointer to `_emergent-threads.md`. Include the orphan-question count.
 
