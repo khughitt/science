@@ -22,6 +22,22 @@ The dispatcher gives you:
 
 Write one file at the target output path. Base length target: 200–400 words. On projects with many orphans the budget scales (see "Scaling for large orphan populations" below).
 
+### Frontmatter
+
+```yaml
+id: "synthesis:emergent-threads"
+type: "synthesis"
+report_kind: "emergent-threads"
+generated_at: "{{ISO 8601}}"
+source_commit: "{{40-char sha}}"
+orphan_question_count: {{int}}
+orphan_interpretation_count: {{int}}
+orphan_ids:
+  # See the existing 'Scaling for large orphan populations' subsection
+```
+
+`orphan_ids:` is populated per the scaling rule below — when `N > 15`, list every orphan question and orphan interpretation ID in canonical form so machine consumers retain the full enumeration even when the prose is clustered.
+
 Required sections:
 
 1. **Cross-hypothesis questions** — questions whose resolver output shows ≥2 hypothesis matches at confidence `inverse` or `direct`. For each, give its ID and the matching hypotheses, and briefly (one sentence) note why the cross-cutting nature is interesting (bridge, shared mechanism, etc. — inferable from the question file content).

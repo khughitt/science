@@ -100,6 +100,7 @@ The prompt passed to each sub-agent includes:
 - Hypothesis ID and `hypothesis_path`.
 - The bundle (inlined in the prompt as structured text — the sub-agent does not have access to your in-memory bundle directly).
 - Target output path: `doc/reports/synthesis/<hyp-id>.md`.
+- Frontmatter: emit `type: synthesis` + `report_kind: hypothesis-synthesis` + `id: synthesis:<hyp-id>` + `hypothesis: hypothesis:<hyp-id>` + `generated_at` + `source_commit` + `provenance_coverage`. Do *not* emit `synthesized_from:` (the rollup carries that). See `agents/hypothesis-synthesizer.md` for the full output spec.
 - `generated_at` and `source_commit` values.
 - `provenance_coverage` value.
 - If `--since <date>` is set: pass it through AND the `--output <path>` target. Tell the sub-agent to include `since: <date>` in its frontmatter.
@@ -119,6 +120,7 @@ The prompt includes:
 - Project root path.
 - Full resolver output (JSON from Phase 1).
 - Target output path: `doc/reports/synthesis/_emergent-threads.md`.
+- Frontmatter: emit `type: synthesis` + `report_kind: emergent-threads` + `id: synthesis:emergent-threads` + `generated_at` + `source_commit` + `orphan_question_count` + `orphan_interpretation_count` + `orphan_ids: [...]`. Do *not* emit `synthesized_from:` — emergent-threads is graph-derived, not file-derived.
 - `generated_at` and `source_commit` values.
 
 **Important**: if `--hypothesis <id>` is set, skip the emergent-threads dispatch (it's a whole-project artifact).
@@ -133,11 +135,15 @@ After the dispatch phase completes, read back each just-written per-hypothesis f
 
 Write `doc/reports/synthesis.md` with this structure:
 
+The frontmatter follows the canonical synthesis shape documented in `templates/synthesis.md`. All three artifacts produced by this command (per-hypothesis files, `_emergent-threads.md`, and the project rollup) share `type: synthesis` and differ by `report_kind`. The validator (`meta/validate.sh` section 11a) warns when any `type: synthesis` file omits `report_kind`, and applies per-kind field requirements: `synthesis-rollup` must carry `synthesized_from`; `hypothesis-synthesis` must carry `hypothesis` and `provenance_coverage`; `emergent-threads` must carry `orphan_question_count`, `orphan_interpretation_count`, and `orphan_ids`.
+
 Frontmatter:
 
 ```yaml
 ---
-type: "synthesis-rollup"
+id: "synthesis:rollup"
+type: "synthesis"
+report_kind: "synthesis-rollup"
 generated_at: "<ISO-8601>"
 source_commit: "<SHA>"
 synthesized_from:

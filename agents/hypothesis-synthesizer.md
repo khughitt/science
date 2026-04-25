@@ -34,6 +34,7 @@ Write exactly one file at the target output path with this structure:
 ---
 id: "synthesis:<hyp-id>"
 type: "synthesis"
+report_kind: "hypothesis-synthesis"
 hypothesis: "hypothesis:<hyp-id>"
 generated_at: "<ISO-8601 timestamp provided by dispatcher>"
 source_commit: "<git SHA provided by dispatcher>"
