@@ -41,9 +41,9 @@ No file splits, no migrations of existing downstream files. Tight scope.
 
 The template establishes the canonical frontmatter. The body sections mirror `commands/next-steps.md` Writing block so a hand-edited next-steps file matches what the skill emits.
 
-- [ ] **Step 1: Inspect a peer template** (e.g., `templates/finding.md`, `templates/discussion.md`) to mirror frontmatter conventions (`id`, `type`, `title`, `created`, `updated`, `related: []`).
+- [x] **Step 1: Inspect a peer template** (e.g., `templates/finding.md`, `templates/discussion.md`) to mirror frontmatter conventions (`id`, `type`, `title`, `created`, `updated`, `related: []`).
 
-- [ ] **Step 2: Write the template.** Frontmatter:
+- [x] **Step 2: Write the template.** Frontmatter:
 
   ```yaml
   ---
@@ -59,7 +59,7 @@ The template establishes the canonical frontmatter. The body sections mirror `co
 
   Body: H1 title plus the section headings the validator already enforces (`Recent Progress`, `Current State`, `Coverage Gaps`, `Recommended Next Actions`), each empty under an HTML comment instructing the author to populate via `/science:next-steps`.
 
-- [ ] **Step 3: Verify frontmatter parses as YAML** with `python3 -c "import yaml; ..."`.
+- [x] **Step 3: Verify frontmatter parses as YAML** with `python3 -c "import yaml; ..."`.
 
 ---
 
@@ -70,15 +70,15 @@ The template establishes the canonical frontmatter. The body sections mirror `co
 
 Current behavior: the "Writing" section shows a body-only template with no frontmatter. Change: prepend a frontmatter block, and add a "Resolve `prior:`" sub-step before writing.
 
-- [ ] **Step 1:** In the "Writing" section's fenced markdown block (currently starts with `# Next Steps — YYYY-MM-DD`), insert the canonical frontmatter (per Task 1 shape) above the H1.
+- [x] **Step 1:** In the "Writing" section's fenced markdown block (currently starts with `# Next Steps — YYYY-MM-DD`), insert the canonical frontmatter (per Task 1 shape) above the H1.
 
-- [ ] **Step 2:** Add a new "Resolve prior link" subsection under "## After Writing" (or before "Save to ..." in step 1). The selection rule is **load-bearing for delta-mode semantics** (delta-mode appends to today's file rather than creating a new one, so the predecessor must be the most recent file *strictly before* today, not today itself):
+- [x] **Step 2:** Add a new "Resolve prior link" subsection under "## After Writing" (or before "Save to ..." in step 1). The selection rule is **load-bearing for delta-mode semantics** (delta-mode appends to today's file rather than creating a new one, so the predecessor must be the most recent file *strictly before* today, not today itself):
 
   > Before writing, list `doc/meta/next-steps-*.md`. **Exclude any file dated today** (delta-mode appends to that file rather than creating a new one). From the remaining files, select the one with the lexically-greatest `YYYY-MM-DD` in its filename. Set `prior: meta:next-steps-<that-date>` in the new file's frontmatter. If no predecessor exists (this is the first next-steps file in the project), omit the `prior:` field entirely.
 
-- [ ] **Step 3:** In "Mode Detection", clarify that delta-mode (append `## Update — HH:MM`) does not change the file's `prior:` — the chain link is per-file, not per-update.
+- [x] **Step 3:** In "Mode Detection", clarify that delta-mode (append `## Update — HH:MM`) does not change the file's `prior:` — the chain link is per-file, not per-update.
 
-- [ ] **Step 4:** Add one sentence noting that projects which currently use `prior_analyses:` (protein-landscape) need not migrate; the validator accepts both.
+- [x] **Step 4:** Add one sentence noting that projects which currently use `prior_analyses:` (protein-landscape) need not migrate; the validator accepts both.
 
 ---
 
@@ -89,9 +89,9 @@ Current behavior: the "Writing" section shows a body-only template with no front
 
 Tests use the existing `_write_common_files` / `subprocess.run` fixture pattern. Each test sets up a minimal project, drops one or more `doc/meta/next-steps-*.md` files with crafted `prior:` values, runs the validator, and asserts on the warning output.
 
-- [ ] **Step 1:** Add a `_write_next_steps_file(root, date, prior=None, body_sections=...)` helper that emits a frontmatter-bearing file with the four required body sections (so unrelated section-9 checks pass).
+- [x] **Step 1:** Add a `_write_next_steps_file(root, date, prior=None, body_sections=...)` helper that emits a frontmatter-bearing file with the four required body sections (so unrelated section-9 checks pass).
 
-- [ ] **Step 2:** Add six tests:
+- [x] **Step 2:** Add six tests:
 
   - `test_validate_resolves_prior_by_entity_id` — two files; later one's `prior: meta:next-steps-<earlier>`. Expect no `broken prior link` warning.
   - `test_validate_resolves_prior_by_path` — `prior: doc/meta/next-steps-<earlier>.md`. Expect no warning.
@@ -105,7 +105,7 @@ Tests use the existing `_write_common_files` / `subprocess.run` fixture pattern.
     ```
     Expect no `broken prior link` warning. **This is the load-bearing test** — the shape protein-landscape actually uses in production. **(Clarification: out-of-scope for this plan to require `prior_analyses:` resolution; the test asserts the validator does not error on the field name alone. Resolving the variant's targets is a future cycle.)**
 
-- [ ] **Step 3:** Run the new tests and confirm `test_validate_warns_on_broken_prior_link` fails (the check does not yet exist), the others pass trivially today.
+- [x] **Step 3:** Run the new tests and confirm `test_validate_warns_on_broken_prior_link` fails (the check does not yet exist), the others pass trivially today.
 
 ---
 
@@ -115,7 +115,7 @@ Tests use the existing `_write_common_files` / `subprocess.run` fixture pattern.
 - Modify: `meta/validate.sh:374-393` (section 9)
 - Modify: `scripts/validate.sh:382-393` (mirror change; both scripts must stay in lockstep until the managed-artifact-versioning plan unifies them)
 
-- [ ] **Step 1:** Inside the existing `for f in "$DOC_DIR/meta/next-steps-"*.md; do` loop, after the section-presence check, add:
+- [x] **Step 1:** Inside the existing `for f in "$DOC_DIR/meta/next-steps-"*.md; do` loop, after the section-presence check, add:
 
   ```bash
   # Chain link resolution. Accept entity-id (meta:next-steps-YYYY-MM-DD)
@@ -135,11 +135,11 @@ Tests use the existing `_write_common_files` / `subprocess.run` fixture pattern.
   fi
   ```
 
-- [ ] **Step 2:** Run the test suite from Task 3; confirm all six tests pass.
+- [x] **Step 2:** Run the test suite from Task 3; confirm all six tests pass.
 
-- [ ] **Step 3:** Run `bash meta/validate.sh --verbose` and `bash scripts/validate.sh --verbose` from the repo root. Confirm no new warnings (the meta-project has no next-steps files yet; the repo root has none either).
+- [x] **Step 3:** Run `bash meta/validate.sh --verbose` and `bash scripts/validate.sh --verbose` from the repo root. Confirm no new warnings (the meta-project has no next-steps files yet; the repo root has none either).
 
-- [ ] **Step 4:** Verify the change does **not** error or warn on `prior_analyses:` field-name presence — it simply does not parse it (consistent with the Task 3 accepted-variant test). Mention this explicitly in a comment above the new block.
+- [x] **Step 4:** Verify the change does **not** error or warn on `prior_analyses:` field-name presence — it simply does not parse it (consistent with the Task 3 accepted-variant test). Mention this explicitly in a comment above the new block.
 
 ---
 
@@ -147,12 +147,12 @@ Tests use the existing `_write_common_files` / `subprocess.run` fixture pattern.
 
 **Files:** none modified.
 
-- [ ] **Step 1:** Run `cd science-tool && uv run --frozen pytest tests/test_validate_script.py -v` — expect all tests pass (existing + six new).
+- [x] **Step 1:** Run `cd science-tool && uv run --frozen pytest tests/test_validate_script.py -v` — expect all tests pass (existing + six new).
 
-- [ ] **Step 2:** Run `bash meta/validate.sh --verbose` and `bash scripts/validate.sh --verbose`. Bottom-line summary should be unchanged from a pre-change baseline modulo informational lines.
+- [x] **Step 2:** Run `bash meta/validate.sh --verbose` and `bash scripts/validate.sh --verbose`. Bottom-line summary should be unchanged from a pre-change baseline modulo informational lines.
 
-- [ ] **Step 3:** Manually exercise `commands/next-steps.md` against the meta-project: skill emits a file with frontmatter, no `prior:` field (since none exist yet). Re-run a day later (or simulate by creating two files with different dates) and verify the second file's `prior:` resolves to the first.
+- [x] **Step 3:** Manually exercise `commands/next-steps.md` against the meta-project: skill emits a file with frontmatter, no `prior:` field (since none exist yet). Re-run a day later (or simulate by creating two files with different dates) and verify the second file's `prior:` resolves to the first.
 
-- [ ] **Step 4:** Confirm no migration of downstream projects. mm30, protein-landscape, natural-systems, cbioportal are untouched. Their migration is a separate cycle.
+- [x] **Step 4:** Confirm no migration of downstream projects. mm30, protein-landscape, natural-systems, cbioportal are untouched. Their migration is a separate cycle.
 
-- [ ] **Step 5:** No commit (verification only).
+- [x] **Step 5:** No commit (verification only).

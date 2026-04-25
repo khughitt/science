@@ -56,11 +56,11 @@ No new directories. No file splits. No in-Science-repo migrations. Downstream mi
 
 The template documents the per-`report_kind` frontmatter shape and the enum.
 
-- [ ] **Step 1: List existing templates to confirm placement**
+- [x] **Step 1: List existing templates to confirm placement**
 
 Run: `ls templates/` — confirm `synthesis.md` does not yet exist; note kebab-case single-word filenames.
 
-- [ ] **Step 2: Write `templates/synthesis.md`**
+- [x] **Step 2: Write `templates/synthesis.md`**
 
 Frontmatter shape (presented as one canonical block with inline comments for the discriminating fields):
 
@@ -95,9 +95,9 @@ phase: "active"
 
 Body skeleton: HTML-comment scaffolds for `## TL;DR`, `## State`, `## Arc`, `## Research fronts`, `## Candidate frames`, `## Knowledge Gaps`, `## Emergent threads`, matching the Phase 3 rollup body. No filler — `science:big-picture` writes body procedurally.
 
-- [ ] **Step 3: Verify the template parses as YAML** — `python3 -c "import yaml; t=open('templates/synthesis.md').read(); fm=t.split('---',2)[1]; print(yaml.safe_load(fm))"`. Expected: dict with the top-level keys present (template comments may produce a partial parse; document accepted).
+- [x] **Step 3: Verify the template parses as YAML** — `python3 -c "import yaml; t=open('templates/synthesis.md').read(); fm=t.split('---',2)[1]; print(yaml.safe_load(fm))"`. Expected: dict with the top-level keys present (template comments may produce a partial parse; document accepted).
 
-- [ ] **Step 4: Commit** — `git commit -m "feat(templates): add canonical synthesis template with report_kind enum"`
+- [x] **Step 4: Commit** — `git commit -m "feat(templates): add canonical synthesis template with report_kind enum"`
 
 ---
 
@@ -110,25 +110,25 @@ Body skeleton: HTML-comment scaffolds for `## TL;DR`, `## State`, `## Arc`, `## 
 
 `commands/big-picture.md` Phase 3 currently emits `type: "synthesis-rollup"` (around line 137), which collides with the canonical `type: synthesis` + `report_kind: synthesis-rollup`. The hypothesis-synthesizer agent already emits `id: "synthesis:<hyp-id>"` and `type: "synthesis"` but lacks an explicit `report_kind`. The emergent-threads agent's frontmatter is currently underspecified.
 
-- [ ] **Step 1: Update Phase 3 rollup frontmatter in `commands/big-picture.md`**
+- [x] **Step 1: Update Phase 3 rollup frontmatter in `commands/big-picture.md`**
 
 Find the YAML block under "Phase 3" → "Frontmatter:" (around line 137). Replace `type: "synthesis-rollup"` with three lines: `id: "synthesis:rollup"`, `type: "synthesis"`, `report_kind: "synthesis-rollup"`. Keep `generated_at`, `source_commit`, `synthesized_from`, `emergent_threads_sha` exactly as today.
 
-- [ ] **Step 2: Add a Phase 3 contract note**
+- [x] **Step 2: Add a Phase 3 contract note**
 
 Immediately before that YAML block, insert a paragraph: "The frontmatter follows the canonical synthesis shape documented in `templates/synthesis.md`. All three artifacts produced by this command (per-hypothesis files, `_emergent-threads.md`, and the project rollup) share `type: synthesis` and differ by `report_kind`. The validator (`meta/validate.sh` section 11a) warns when any `type: synthesis` file omits `report_kind`, and applies per-kind field requirements: `synthesis-rollup` must carry `synthesized_from`; `hypothesis-synthesis` must carry `hypothesis` and `provenance_coverage`; `emergent-threads` must carry `orphan_question_count`, `orphan_interpretation_count`, and `orphan_ids`."
 
-- [ ] **Step 3: Update Phase 2 dispatch prompt instructions**
+- [x] **Step 3: Update Phase 2 dispatch prompt instructions**
 
 In Phase 2's per-hypothesis dispatch bullets (around line 97), after "Target output path: `doc/reports/synthesis/<hyp-id>.md`." add: "Frontmatter: emit `type: synthesis` + `report_kind: hypothesis-synthesis` + `id: synthesis:<hyp-id>` + `hypothesis: hypothesis:<hyp-id>` + `generated_at` + `source_commit` + `provenance_coverage`. Do *not* emit `synthesized_from:` (the rollup carries that). See `agents/hypothesis-synthesizer.md` for the full output spec."
 
 In the emergent-threads dispatch bullets (around line 119), after "Target output path: `doc/reports/synthesis/_emergent-threads.md`." add: "Frontmatter: emit `type: synthesis` + `report_kind: emergent-threads` + `id: synthesis:emergent-threads` + `generated_at` + `source_commit` + `orphan_question_count` + `orphan_interpretation_count` + `orphan_ids: [...]`. Do *not* emit `synthesized_from:` — emergent-threads is graph-derived, not file-derived."
 
-- [ ] **Step 4: Update `agents/hypothesis-synthesizer.md` output frontmatter**
+- [x] **Step 4: Update `agents/hypothesis-synthesizer.md` output frontmatter**
 
 In the "## Output you produce" YAML block, insert `report_kind: "hypothesis-synthesis"` between `type:` and `hypothesis:`. Verify the existing `id: "synthesis:<hyp-id>"` is in place. Do **not** add `synthesized_from:` — per-hypothesis files do not carry it.
 
-- [ ] **Step 5: Update `agents/emergent-threads-synthesizer.md` output frontmatter**
+- [x] **Step 5: Update `agents/emergent-threads-synthesizer.md` output frontmatter**
 
 The agent currently does not show its own frontmatter block. Add a "### Frontmatter" subsection at the top of "## Output you produce" with:
 
@@ -146,9 +146,9 @@ orphan_ids:
 
 Cross-reference the existing scaling subsection for `orphan_ids:`.
 
-- [ ] **Step 6: Verify section ordering** — `grep -n '^##\|^###' commands/big-picture.md`. Phase ordering unchanged.
+- [x] **Step 6: Verify section ordering** — `grep -n '^##\|^###' commands/big-picture.md`. Phase ordering unchanged.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add commands/big-picture.md agents/hypothesis-synthesizer.md agents/emergent-threads-synthesizer.md
@@ -164,15 +164,15 @@ git commit -m "feat(big-picture): emit canonical synthesis frontmatter (type+rep
 
 Tests follow the pattern from `2026-04-25-hypothesis-phase.md` Task 2: build a minimal research-profile project, drop synthesis files into `doc/reports/synthesis/`, run the validator, assert on warning output.
 
-- [ ] **Step 1: Read existing helper conventions**
+- [x] **Step 1: Read existing helper conventions**
 
 `tail -120 science-tool/tests/test_validate_script.py` — confirm `_write_common_files`, `_write_python3_stub`, `_write_science_tool_stub`, `_validate_script_path`, `_validate_env`, and `_write_minimal_research_project` (if hypothesis-phase Task 2 has landed; otherwise inline-define). Reuse if available.
 
-- [ ] **Step 2: Add a `_synthesis_body(fields: dict[str, Any]) -> str` helper**
+- [x] **Step 2: Add a `_synthesis_body(fields: dict[str, Any]) -> str` helper**
 
 Composes a synthesis file from a frontmatter-fields dict (mapping handles strings, ints, and list values for `synthesized_from`/`orphan_ids`). Writes a YAML frontmatter block plus a one-line body so the file parses but has no real content.
 
-- [ ] **Step 3: Add seven tests**
+- [x] **Step 3: Add seven tests**
 
 1. `test_validate_accepts_synthesis_rollup_full` — full rollup at `doc/reports/synthesis.md` with `report_kind: synthesis-rollup` + `synthesized_from: [{...}]` + `source_commit:`. Assert no warning.
 2. `test_validate_accepts_hypothesis_synthesis` — per-hypothesis file at `doc/reports/synthesis/h01-test.md` with `report_kind: hypothesis-synthesis` + `hypothesis:` + `provenance_coverage:` + `source_commit:`. **No `synthesized_from`.** Assert no warning.
@@ -182,14 +182,14 @@ Composes a synthesis file from a frontmatter-fields dict (mapping handles string
 6. `test_validate_no_warn_on_per_hyp_without_synthesized_from` — same as test 2; locked-in regression test that per-hypothesis files do **not** require `synthesized_from`.
 7. `test_validate_silent_on_legacy_type_report` — file at `doc/reports/synthesis/h1-legacy.md` with `type: report` + `report_kind: hypothesis-synthesis` (mm30's current shape). Assert no synthesis-section warning. **This is the legacy-silence guarantee.**
 
-- [ ] **Step 4: Run the tests to confirm they fail (red)**
+- [x] **Step 4: Run the tests to confirm they fail (red)**
 
 ```bash
 cd science-tool && uv run --frozen pytest tests/test_validate_script.py -k "synthesis" -v
 ```
 Expected: tests 4, 5 FAIL (rule not implemented yet); tests 1, 2, 3, 6, 7 PASS trivially (no rule, no warnings).
 
-- [ ] **Step 5: Commit the failing tests**
+- [x] **Step 5: Commit the failing tests**
 
 ```bash
 git add science-tool/tests/test_validate_script.py
@@ -208,14 +208,14 @@ Add a new section ("11a. Synthesis frontmatter conformance") between section 11 
 
 Apply the insertion to **both** `meta/validate.sh` and `scripts/validate.sh`. Locate by content (closing `done` of the bias-audit loop, then `# ─── 12. Notes conformance ───` header) rather than absolute line number; the two files have different line counts.
 
-- [ ] **Step 1: Read the existing section 11 and 12 boundaries in both files**
+- [x] **Step 1: Read the existing section 11 and 12 boundaries in both files**
 
 ```bash
 sed -n '407,478p' meta/validate.sh
 sed -n '407,486p' scripts/validate.sh
 ```
 
-- [ ] **Step 2: Insert section 11a in `meta/validate.sh`**
+- [x] **Step 2: Insert section 11a in `meta/validate.sh`**
 
 Logic skeleton:
 
@@ -248,12 +248,12 @@ done
 
 Use the script's existing `warn()` helper. Match the test-asserted messages exactly.
 
-- [ ] **Step 3: Apply the same insertion to `scripts/validate.sh`** at the equivalent boundary (located by content).
+- [x] **Step 3: Apply the same insertion to `scripts/validate.sh`** at the equivalent boundary (located by content).
 
-- [ ] **Step 4: Run synthesis tests (green)** — `cd science-tool && uv run --frozen pytest tests/test_validate_script.py -k "synthesis" -v`. Expected: all seven PASS.
-- [ ] **Step 5: Run the full validate-script test suite** — `uv run --frozen pytest tests/test_validate_script.py -v`. Expected: all pass.
-- [ ] **Step 6: Smoke-test against `meta/` and the repo root** — `cd meta && bash validate.sh 2>&1 | grep -i "synthesis" || echo "no synthesis warnings"`, then `bash scripts/validate.sh 2>&1 | grep -i "synthesis" || echo "no synthesis warnings"`. Expected: no warnings (neither has synthesis files).
-- [ ] **Step 7: Commit** — `git commit -m "feat(validate): warn on type:synthesis frontmatter missing per-kind required fields (silent on legacy type:report)"`
+- [x] **Step 4: Run synthesis tests (green)** — `cd science-tool && uv run --frozen pytest tests/test_validate_script.py -k "synthesis" -v`. Expected: all seven PASS.
+- [x] **Step 5: Run the full validate-script test suite** — `uv run --frozen pytest tests/test_validate_script.py -v`. Expected: all pass.
+- [x] **Step 6: Smoke-test against `meta/` and the repo root** — `cd meta && bash validate.sh 2>&1 | grep -i "synthesis" || echo "no synthesis warnings"`, then `bash scripts/validate.sh 2>&1 | grep -i "synthesis" || echo "no synthesis warnings"`. Expected: no warnings (neither has synthesis files).
+- [x] **Step 7: Commit** — `git commit -m "feat(validate): warn on type:synthesis frontmatter missing per-kind required fields (silent on legacy type:report)"`
 
 ---
 
@@ -261,10 +261,10 @@ Use the script's existing `warn()` helper. Match the test-asserted messages exac
 
 **Files:** None modified. Verification-only; no commit.
 
-- [ ] **Step 1: Run the full meta-project validator** — `cd meta && bash validate.sh --verbose 2>&1 | tail -40`. Expected: no new errors; synthesis section silent.
-- [ ] **Step 2: Run the full science-tool test suite** — `cd science-tool && uv run --frozen pytest -x`. Expected: all pass.
-- [ ] **Step 3: Spot-check downstream validator silence on legacy** — pick mm30 (`type: report` files in `doc/reports/synthesis/`) and run a synthetic validator invocation against a copy. Expected: no synthesis-section warnings (validator gates on `type: synthesis`). This confirms the legacy-silence guarantee in real conditions.
-- [ ] **Step 4: Verify template ↔ command ↔ agent agree** — `grep -E "^(id|type|report_kind|generated_at|source_commit|synthesized_from|hypothesis|provenance_coverage|orphan_question_count|orphan_interpretation_count|orphan_ids):" templates/synthesis.md` plus the analogous greps in `commands/big-picture.md` and the two agent files. Expected: consistent spelling and casing across all four files; per-kind required fields present where they should be.
+- [x] **Step 1: Run the full meta-project validator** — `cd meta && bash validate.sh --verbose 2>&1 | tail -40`. Expected: no new errors; synthesis section silent.
+- [x] **Step 2: Run the full science-tool test suite** — `cd science-tool && uv run --frozen pytest -x`. Expected: all pass.
+- [x] **Step 3: Spot-check downstream validator silence on legacy** — pick mm30 (`type: report` files in `doc/reports/synthesis/`) and run a synthetic validator invocation against a copy. Expected: no synthesis-section warnings (validator gates on `type: synthesis`). This confirms the legacy-silence guarantee in real conditions.
+- [x] **Step 4: Verify template ↔ command ↔ agent agree** — `grep -E "^(id|type|report_kind|generated_at|source_commit|synthesized_from|hypothesis|provenance_coverage|orphan_question_count|orphan_interpretation_count|orphan_ids):" templates/synthesis.md` plus the analogous greps in `commands/big-picture.md` and the two agent files. Expected: consistent spelling and casing across all four files; per-kind required fields present where they should be.
 
 ---
 

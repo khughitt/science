@@ -33,12 +33,12 @@ No new files. No file splits. No restructuring. No migrations of downstream `*.m
 
 The current template ships only `title:` and `created:` (verified at `templates/pre-registration.md:1-4`). All four downstream projects have already converged on richer frontmatter — mm30 carries `id: pre-registration:<slug>, type: plan, status: committed, committed: <date>, spec: <doc/specs/...>, related[]` per `docs/audits/downstream-project-conventions/projects/mm30.md` §4. The right canonical shape is the same fields with `type: "pre-registration"` instead of `type: plan`.
 
-- [ ] **Step 1: Read the current template**
+- [x] **Step 1: Read the current template**
 
 Run: `cat templates/pre-registration.md | head -10`
 Expected: see the two-line frontmatter (`title:` + `created:`).
 
-- [ ] **Step 2: Replace the frontmatter block**
+- [x] **Step 2: Replace the frontmatter block**
 
 In `templates/pre-registration.md`, replace the first four lines (the existing `---`/`title`/`created`/`---` block) with:
 
@@ -60,7 +60,7 @@ updated: "{{YYYY-MM-DD}}"
 
 The body sections are unchanged.
 
-- [ ] **Step 3: Verify the template is well-formed YAML**
+- [x] **Step 3: Verify the template is well-formed YAML**
 
 Run:
 ```bash
@@ -68,7 +68,7 @@ python3 -c "import yaml; t=open('templates/pre-registration.md').read(); fm=t.sp
 ```
 Expected: a Python dict that includes `'type': 'pre-registration'` and `'id': 'pre-registration:{{slug}}'`. No YAML errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add templates/pre-registration.md
@@ -84,7 +84,7 @@ git commit -m "feat(templates): pre-registration uses canonical type and id shap
 
 The existing test file already has `_write_minimal_research_project` and `_write_common_files` helpers (verified at `science-tool/tests/test_validate_script.py:1-110`). The new tests drop pre-registration files at `doc/meta/pre-registration-<slug>.md` (the location the validator already inspects) and assert on validator output.
 
-- [ ] **Step 1: Append a helper that writes a pre-registration file**
+- [x] **Step 1: Append a helper that writes a pre-registration file**
 
 Append after the existing `_hypothesis_body` helper (or near the end of the helper section, before the first `def test_`):
 
@@ -111,7 +111,7 @@ def _pre_registration_body(*, type_value: str, id_value: str, committed: str | N
     return "\n".join(fm_lines)
 ```
 
-- [ ] **Step 2: Append failing tests**
+- [x] **Step 2: Append failing tests**
 
 Append the following tests at the end of the file:
 
@@ -215,7 +215,7 @@ def test_validate_warns_when_pre_registration_missing_spec(tmp_path: Path) -> No
     assert result.returncode == 0, combined  # warning, not error
 ```
 
-- [ ] **Step 3: Run the new tests to confirm two of four fail**
+- [x] **Step 3: Run the new tests to confirm two of four fail**
 
 Run:
 ```bash
@@ -223,7 +223,7 @@ cd science-tool && uv run --frozen pytest tests/test_validate_script.py -k "pre_
 ```
 Expected: `test_validate_warns_when_pre_registration_missing_committed` and `test_validate_warns_when_pre_registration_missing_spec` FAIL (the validator does not yet check these). The two no-warn / legacy-silence cases pass trivially.
 
-- [ ] **Step 4: Commit failing tests**
+- [x] **Step 4: Commit failing tests**
 
 ```bash
 git add science-tool/tests/test_validate_script.py
@@ -248,7 +248,7 @@ Concretely:
 
 **Id-prefix conformance is intentionally NOT added in this loop** — Plan #7 Task 6 ships a generic per-type id-prefix table (`PREFIX_RULES`) that includes a `pre-registration:` row. Adding it here too would produce duplicate warnings on the same condition once Plan #7 lands.
 
-- [ ] **Step 1: Read the existing pre-registration loop in both files**
+- [x] **Step 1: Read the existing pre-registration loop in both files**
 
 ```bash
 sed -n '445,460p' scripts/validate.sh
@@ -256,7 +256,7 @@ sed -n '445,460p' meta/validate.sh   # locate by content; line offset may differ
 ```
 Expected: the small loop that warns on missing body sections, in both files.
 
-- [ ] **Step 2a: Extend the loop in `scripts/validate.sh`**
+- [x] **Step 2a: Extend the loop in `scripts/validate.sh`**
 
 Replace the existing block:
 
@@ -304,7 +304,7 @@ for f in "$DOC_DIR/meta/pre-registration-"*.md "$DOC_DIR/pre-registrations/"*.md
 done
 ```
 
-- [ ] **Step 2b: Apply the same replacement in `meta/validate.sh`**
+- [x] **Step 2b: Apply the same replacement in `meta/validate.sh`**
 
 Locate the same `for f in "$DOC_DIR/meta/pre-registration-"*.md` loop in `meta/validate.sh` (line offset differs from `scripts/validate.sh`; use content search). Apply the identical replacement block. Both validators must contain the same logic until managed-artifact-versioning unifies them.
 
@@ -317,7 +317,7 @@ grep -n 'committed:' scripts/validate.sh meta/validate.sh | grep -v '^#'
 
 Expected: both files show the new `$DOC_DIR/pre-registrations/` glob entry and the warn-on-missing-`committed:` / `spec:` logic.
 
-- [ ] **Step 3: Run targeted tests**
+- [x] **Step 3: Run targeted tests**
 
 Run:
 ```bash
@@ -325,7 +325,7 @@ cd science-tool && uv run --frozen pytest tests/test_validate_script.py -k "pre_
 ```
 Expected: all four pre-registration tests (canonical-acceptance, legacy-silence, missing-committed warn, missing-spec warn) pass.
 
-- [ ] **Step 4: Run full validator test suite for regressions**
+- [x] **Step 4: Run full validator test suite for regressions**
 
 Run:
 ```bash
@@ -333,7 +333,7 @@ cd science-tool && uv run --frozen pytest tests/test_validate_script.py -v
 ```
 Expected: all tests pass.
 
-- [ ] **Step 5: Smoke-test against the live `meta/` project**
+- [x] **Step 5: Smoke-test against the live `meta/` project**
 
 Run from `/mnt/ssd/Dropbox/science/meta`:
 ```bash
@@ -341,7 +341,7 @@ bash validate.sh 2>&1 | grep -i "pre-registration" || echo "no pre-registration 
 ```
 Expected: `no pre-registration warnings` (meta has no pre-registration files yet).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/validate.sh meta/validate.sh
@@ -357,12 +357,12 @@ git commit -m "feat(validate): canonical pre-registration committed/spec checks 
 
 The current command file (verified at `commands/pre-register.md:83-94`) tells the agent to fill in the template's body but does not specify the frontmatter shape — there's no instruction to set `type:` or `id:`. With Task 1's template change the new shape is implicit, but the command should explicitly call it out so the agent fills in `id`, `committed`, and `spec` correctly.
 
-- [ ] **Step 1: Read the current "Writing" and "Naming" sections**
+- [x] **Step 1: Read the current "Writing" and "Naming" sections**
 
 Run: `sed -n '80,100p' commands/pre-register.md`
 Expected: see the existing "Writing" / "Naming" / "After Writing" prose.
 
-- [ ] **Step 2: Replace the "Naming" section**
+- [x] **Step 2: Replace the "Naming" section**
 
 In `commands/pre-register.md`, replace the existing "Naming" subsection with:
 
@@ -381,7 +381,7 @@ Use the hypothesis ID, inquiry slug, or task ID as the basis:
 - The `related` field is what `interpret-results` searches on, so it must be populated.
 ```
 
-- [ ] **Step 3: Update the "After Writing" section's first bullet**
+- [x] **Step 3: Update the "After Writing" section's first bullet**
 
 In the "After Writing" section, replace:
 
@@ -395,7 +395,7 @@ with:
 1. Save to `doc/meta/pre-registration-<slug>.md` (or `doc/pre-registrations/<slug>.md` if the project uses that placement). The frontmatter must declare `type: "pre-registration"` and `id: "pre-registration:<slug>"` per the template.
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add commands/pre-register.md
@@ -411,7 +411,7 @@ git commit -m "feat(pre-register): emit canonical pre-registration type and id"
 
 Both files were spot-checked: neither currently lists Science's canonical types as an explicit enumeration (no "the canonical types are: hypothesis, plan, ..." block). If a future grep confirms an enumeration was added, append `pre-registration`.
 
-- [ ] **Step 1: Search for any canonical-types enumeration**
+- [x] **Step 1: Search for any canonical-types enumeration**
 
 Run:
 ```bash
@@ -419,11 +419,11 @@ grep -nE 'canonical types?|type:[[:space:]]*"?(hypothesis|plan|question|paper|to
 ```
 Expected: a small number of context-only matches (e.g. example frontmatter blocks), no flat enumeration. If a flat enumeration appears, edit it to include `pre-registration` and re-run validation.
 
-- [ ] **Step 2: Update if needed**
+- [x] **Step 2: Update if needed**
 
 If Step 1 found an enumeration, append `pre-registration` in alphabetical order. Otherwise skip.
 
-- [ ] **Step 3: Run full repo validators**
+- [x] **Step 3: Run full repo validators**
 
 Run from `/mnt/ssd/Dropbox/science`:
 ```bash
@@ -431,7 +431,7 @@ cd meta && bash validate.sh --verbose 2>&1 | tail -20
 ```
 Expected: no new errors or warnings introduced by these changes.
 
-- [ ] **Step 4: Run full science-tool test suite**
+- [x] **Step 4: Run full science-tool test suite**
 
 Run:
 ```bash
@@ -439,7 +439,7 @@ cd science-tool && uv run --frozen pytest -x
 ```
 Expected: all tests pass.
 
-- [ ] **Step 5: No commit unless Step 2 modified files**
+- [x] **Step 5: No commit unless Step 2 modified files**
 
 If documentation was edited:
 ```bash
