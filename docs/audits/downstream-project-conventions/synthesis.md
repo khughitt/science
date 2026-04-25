@@ -217,7 +217,7 @@ cbioportal's `knowledge/sources/local/manifest.yaml` with `strictness: typed-ext
 Once this lands, several specific kinds become candidates for **promotion to canonical** based on cross-project recurrence:
 
 - `pre-registration` (4/4) — promote now, see §3.2.
-- `synthesis` (3/4 in production) — promote, see §3.3.
+- `synthesis` (2/4 with structured rollup frontmatter — mm30 as `type: report`, protein-landscape as `type: synthesis` + separate `type: emergent-threads`; the divergence itself is the canonization motivator) — promote, see §3.3.
 - `curation-sweep` (2/4 explicit, mm30 + cbioportal) — P2; cbioportal explicitly cites mm30 as origin. Tied to `science:curate`.
 - `guide` / `modality-guide` (2/4 explicit, mm30 + cbioportal) — P2; same origin lineage as curation-sweep.
 - `proposition` / `finding` / `claim` — see §6.4.

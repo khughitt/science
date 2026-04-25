@@ -135,7 +135,7 @@ Tests use the existing `_write_common_files` / `subprocess.run` fixture pattern.
   fi
   ```
 
-- [ ] **Step 2:** Run the test suite from Task 3; confirm all five tests pass.
+- [ ] **Step 2:** Run the test suite from Task 3; confirm all six tests pass.
 
 - [ ] **Step 3:** Run `bash meta/validate.sh --verbose` and `bash scripts/validate.sh --verbose` from the repo root. Confirm no new warnings (the meta-project has no next-steps files yet; the repo root has none either).
 
@@ -147,7 +147,7 @@ Tests use the existing `_write_common_files` / `subprocess.run` fixture pattern.
 
 **Files:** none modified.
 
-- [ ] **Step 1:** Run `cd science-tool && uv run --frozen pytest tests/test_validate_script.py -v` — expect all tests pass (existing + five new).
+- [ ] **Step 1:** Run `cd science-tool && uv run --frozen pytest tests/test_validate_script.py -v` — expect all tests pass (existing + six new).
 
 - [ ] **Step 2:** Run `bash meta/validate.sh --verbose` and `bash scripts/validate.sh --verbose`. Bottom-line summary should be unchanged from a pre-change baseline modulo informational lines.
 
