@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
 import yaml as _yaml
 
@@ -172,6 +172,12 @@ def collect_lingering_tags(project_root: Path) -> list[LingeringTagsRecord]:
     return results
 
 
+class TaskArchiveLag(TypedDict):
+    done_in_active: int
+    retired_in_active: int
+    missing_completed: int
+
+
 class HealthReport(TypedDict):
     unresolved_refs: list[UnresolvedRef]
     lingering_tags_lines: list[LingeringTagsRecord]
@@ -181,6 +187,7 @@ class HealthReport(TypedDict):
     invalid_entity_aspects: list["InvalidEntityAspectsFinding"]
     legacy_structured_literature_prefixes: list["LegacyStructuredLiteraturePrefixFinding"]
     dataset_anomalies: list[dict]
+    archive_lag: TaskArchiveLag
 
 
 class CoverageMetric(TypedDict):
@@ -249,6 +256,10 @@ def build_health_report(project_root: Path) -> HealthReport:
         if row["warnings"] or row["todos"]
     ]
 
+    from science_tool.tasks_archive import count_archivable
+
+    archive_lag = count_archivable(project_root / "tasks")
+
     return {
         "unresolved_refs": collect_unresolved_refs(project_root),
         "lingering_tags_lines": collect_lingering_tags(project_root),
@@ -269,6 +280,7 @@ def build_health_report(project_root: Path) -> HealthReport:
         "invalid_entity_aspects": collect_invalid_entity_aspects(project_root),
         "legacy_structured_literature_prefixes": collect_legacy_structured_literature_prefixes(project_root),
         "dataset_anomalies": check_dataset_anomalies(project_root),
+        "archive_lag": cast("TaskArchiveLag", archive_lag),
     }
 
 

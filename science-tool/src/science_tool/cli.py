@@ -2406,6 +2406,13 @@ def health_command(project_root: Path, output_format: str) -> None:
         if metric["denominator"] > 0 and metric["numerator"] < metric["denominator"]:
             coverage_gaps += 1
 
+    archive_lag = report.get("archive_lag") or {
+        "done_in_active": 0,
+        "retired_in_active": 0,
+        "missing_completed": 0,
+    }
+    archive_lag_total = sum(archive_lag.values())
+
     total_issues = (
         len(report["unresolved_refs"])
         + len(report["lingering_tags_lines"])
@@ -2414,12 +2421,22 @@ def health_command(project_root: Path, output_format: str) -> None:
         + layered_claim_issue_count
         + coverage_gaps
         + len(report.get("dataset_anomalies") or [])
+        + (1 if archive_lag_total else 0)
     )
     if total_issues == 0:
         click.echo("Project is clean — no issues found.")
         return
 
     console = Console()
+
+    if archive_lag_total:
+        lag_table = Table(title="Tasks Archive Lag")
+        lag_table.add_column("Metric", style="bold")
+        lag_table.add_column("Count", justify="right")
+        for key, value in archive_lag.items():
+            lag_table.add_row(key, str(value))
+        console.print(lag_table)
+        console.print("\n[bold]Next:[/bold] run [cyan]science-tool tasks archive[/cyan] to preview, then [cyan]--apply[/cyan].")
 
     if report["unresolved_refs"]:
         table = Table(title=f"Unresolved references ({len(report['unresolved_refs'])})")

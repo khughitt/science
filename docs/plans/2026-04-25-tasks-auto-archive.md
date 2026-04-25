@@ -140,9 +140,9 @@ Render style matches `graph migrate` (table or JSON; reference `graph_migrate` i
 
 **Files:** Modify `science-tool/src/science_tool/graph/health.py`, `cli.py`, `tests/test_health.py`.
 
-- [ ] **Step 1: Failing health test** (append to `TestBuildHealthReport`): scaffold a project with one done + one proposed entry in `active.md`; assert `report["archive_lag"] == {"done_in_active": 1, "retired_in_active": 0, "missing_completed": 0}`.
+- [x] **Step 1: Failing health test** (append to `TestBuildHealthReport`): scaffold a project with one done + one proposed entry in `active.md`; assert `report["archive_lag"] == {"done_in_active": 1, "retired_in_active": 0, "missing_completed": 0}`.
 
-- [ ] **Step 2: Extend `HealthReport`** in `health.py`:
+- [x] **Step 2: Extend `HealthReport`** in `health.py`:
 
 ```python
 class TaskArchiveLag(TypedDict):
@@ -160,11 +160,11 @@ archive_lag = count_archivable(project_root / "tasks")
 
 Add `"archive_lag": archive_lag,` to the returned dict. The planner returns zero counts when `active.md` is absent (verify in Task 1).
 
-- [ ] **Step 3: Render in `health_command`** — before the unresolved-refs table, render a "Tasks Archive Lag" `Table` if `any(archive_lag.values())`, append a "Next: run `science-tool tasks archive`" hint, and include archive lag in `total_issues` when non-zero.
+- [x] **Step 3: Render in `health_command`** — before the unresolved-refs table, render a "Tasks Archive Lag" `Table` if `any(archive_lag.values())`, append a "Next: run `science-tool tasks archive`" hint, and include archive lag in `total_issues` when non-zero.
 
-- [ ] **Step 4: Run** `cd science-tool && uv run --frozen pytest tests/test_health.py tests/test_tasks_archive.py -q` — expect pass.
+- [x] **Step 4: Run** `cd science-tool && uv run --frozen pytest tests/test_health.py tests/test_tasks_archive.py -q` — expect pass.
 
-- [ ] **Step 5: Commit** `feat(tasks-archive): surface archive lag in health report`.
+- [x] **Step 5: Commit** `feat(tasks-archive): surface archive lag in health report`.
 
 ---
 

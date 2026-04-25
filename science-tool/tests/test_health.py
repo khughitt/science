@@ -374,6 +374,56 @@ class TestBuildHealthReport:
         migration_issues = report["layered_claims"]["migration_issues"]
         assert any("mechanistic" in " ".join(row["warnings"]).lower() for row in migration_issues)
 
+    def test_archive_lag_zero_when_active_md_missing(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        (tmp_path / "science.yaml").write_text("name: test\n")
+        report = build_health_report(tmp_path)
+        assert report["archive_lag"] == {
+            "done_in_active": 0,
+            "retired_in_active": 0,
+            "missing_completed": 0,
+        }
+
+    def test_archive_lag_counts_done_and_retired(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        (tmp_path / "science.yaml").write_text("name: test\n")
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir(parents=True)
+        (tasks_dir / "active.md").write_text(
+            """\
+## [t001] Done task
+- priority: P1
+- status: done
+- created: 2026-03-01
+- completed: 2026-03-15
+
+Done.
+
+## [t002] Retired task
+- priority: P2
+- status: retired
+- created: 2026-03-20
+- completed: 2026-04-02
+
+Retired.
+
+## [t003] Proposed task
+- priority: P3
+- status: proposed
+- created: 2026-04-10
+
+Proposed.
+"""
+        )
+        report = build_health_report(tmp_path)
+        assert report["archive_lag"] == {
+            "done_in_active": 1,
+            "retired_in_active": 1,
+            "missing_completed": 0,
+        }
+
 
 class TestHealthCLI:
     def test_table_output_default(self, tmp_path: Path) -> None:
