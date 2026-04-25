@@ -3,6 +3,7 @@ id: "hypothesis:h{{nn}}-{{slug}}"
 type: "hypothesis"
 title: "{{Short Title}}"
 status: "proposed"
+phase: "active"  # candidate | active. `candidate` for trial framings being promoted to organize work but not yet committed; `active` (default) for committed frames.
 # aspects: ["hypothesis-testing"]  # optional override; omitted entities inherit project aspects
 source_refs: []
 related: []
@@ -57,6 +58,15 @@ Distinguish strong discriminating predictions from weaker corollaries.
 <!--
 What results would materially lower confidence in the core claims?
 Be specific about what would force revision.
+-->
+
+## Promotion criteria
+
+<!--
+Required prose when `phase: candidate`; omit when `phase: active`.
+What evidence or analytic outcome would justify promoting this from
+candidate to active? Be concrete. This is a documentation convention,
+not a validator-enforced rule.
 -->
 
 ## Supporting Evidence
