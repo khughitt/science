@@ -57,9 +57,15 @@ From `tasks/active.md`, show:
 - **Hypothesis / question status** — use the project index from setup (one-line summary per hypothesis/question). Read individual files only when deeper context is needed.
 
 #### Workflow Runs
-- Scan `results/` for `datapackage.json` manifests
-- Report: recent runs (last 7 days), superseded runs, runs with status `draft`
-- Flag any workflow-run that has no corresponding interpretation document
+- Scan `results/` for `datapackage.json` manifests.
+- Report: recent runs (last 7 days), superseded runs, runs with status `draft`.
+- Flag any workflow-run that has no corresponding interpretation document.
+
+**Fallback when no manifests exist.** Some projects have rich results without `datapackage.json` files. If `find results/ -name datapackage.json` returns nothing:
+- Infer run bundles from `results/**/` directory conventions instead — most commonly dated subdirectories (`results/YYYY-MM-DD-<slug>/` or `results/<slug>/`) containing a `report.md` / `summary.md` / notebook outputs.
+- Report: recent bundles by directory mtime (last 7 days), bundles whose name appears superseded by a later one with the same slug, bundles with no linking interpretation under `doc/interpretations/`.
+- Be explicit in the output that these are inferred from directory conventions, not declared manifests — readers should not assume datapackage-grade provenance.
+- Skip the section entirely if neither manifests nor a recognizable `results/` convention exists; do not pad with low-signal noise.
 
 ### 3. Coverage Gap Analysis
 

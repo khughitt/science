@@ -70,6 +70,7 @@ When both a DOI and a PMID/PMCID are available (e.g. user gave both, or a PubMed
 Run `paper-fetch` once with the chosen flag(s) and branch on `status`:
 
 - **`ok`** — read the file at `pdf_path` / `text_path` and fill the template. Cross-check key metadata via targeted searches only when template fields require it; mark unverified details as `[UNVERIFIED]`.
+  - **Author-attribution check (before writing).** If the user's request named an author or research group, compare it against `metadata.authors[0]` from the `paper-fetch` result. On a clear mismatch (different surname, or different institutional group), pause and surface the discrepancy to the orchestrator before writing — the user may have had the wrong paper in mind, or the wrong author for the right paper. Don't silently follow either source; flag the conflict so the orchestrator can confirm with the user.
 
 - **`paywalled`** — Unpaywall has no OA record. By default: stop, set `Source: paywalled`, and either (a) defer with `status: paywalled` in frontmatter, or (b) re-run against a PDF if the user supplies one.
   - **Well-known classic exception** — if *all* of the following hold, you may proceed on LLM knowledge instead of stopping:
@@ -126,7 +127,7 @@ Follow `.ai/templates/paper.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/pap
    ```
    The command returns JSON with the assigned `path`. Read that file (it has frontmatter pre-filled and section scaffolding) and edit the body sections in place. The project's `.ai/templates/question.md` overrides the default body via `--template <path>` if needed.
 4. Note approach implications in `doc/04-approach.md` when relevant.
-5. Commit: `git add -A && git commit -m "papers: research <citekey> - <short title>"`
+5. Commit: `git add -A && git commit -m "docs(papers): research <citekey> - <short title>"`. The `docs(papers):` prefix is commitlint-conventional compliant out of the box; if your project's commitlint config explicitly allows `papers:` as a custom type, prefer that.
 
 ## Orchestrator Post-Dispatch
 

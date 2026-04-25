@@ -36,7 +36,7 @@ This tool probes a fixed tiered list of agent-friendly sources (Crossref → Unp
 
 | `status` | What to do |
 |---|---|
-| `ok` | Read the file at `pdf_path` or `text_path` and fill the template. Full text available. |
+| `ok` | Read the file at `pdf_path` or `text_path` and fill the template. Full text available. **Before writing**, if the user's request named an author or group, compare it to `metadata.authors[0]`; on a clear mismatch (different surname or institution) pause and surface the discrepancy to the orchestrator instead of silently following either source. |
 | `paywalled` | Unpaywall confirmed no OA copy exists. Default: stop and report back. **Exception** — if the paper is a well-known classic (year ≤ current_year − 3, >500 citations, conceptual task, comprehensive LLM coverage), you may proceed with `Source: LLM knowledge` and generous `[UNVERIFIED]` markers; never invent quantitative claims. For paywalled review papers, triangulate via 2-3 citing primary papers (Europe PMC citations endpoint) instead of relying on the abstract alone. |
 | `blocked_but_oa` | Unpaywall says an OA copy exists but our agent-accessible tiers failed. Try one Europe PMC abstract-level fallback first: `WebFetch https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:"<doi>"&format=json`. If that also fails, stop and report back — ask the orchestrator to request a PDF. Do not burn turns retrying. |
 | `not_found` | DOI did not resolve. Ask the orchestrator for better metadata (full title, first author, year, venue, or a DOI). Only if the user explicitly asks for an open-ended search should you use WebSearch/WebFetch directly. |
