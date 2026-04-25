@@ -378,6 +378,24 @@ for f in "$DOC_DIR/meta/next-steps-"*.md; do
             warn "Next-steps $f missing section: $section"
         fi
     done
+
+    # Chain link resolution. Accept entity-id (meta:next-steps-YYYY-MM-DD)
+    # or relative path (doc/meta/next-steps-YYYY-MM-DD.md). Absence is fine.
+    # We deliberately do NOT parse `prior_analyses:` (block- or inline-list);
+    # protein-landscape's variant is accepted by silence — broken-link
+    # resolution for that field is a future cycle.
+    prior_value=$(sed -n "s/^prior:[[:space:]]*['\"]\\{0,1\\}\\([^'\"]*\\)['\"]\\{0,1\\}[[:space:]]*$/\\1/p" "$f" | head -n 1 || true)
+    if [ -n "$prior_value" ]; then
+        candidate_path=""
+        case "$prior_value" in
+            meta:next-steps-*) candidate_path="$DOC_DIR/meta/${prior_value#meta:}.md" ;;
+            *.md) candidate_path="$prior_value" ;;
+            *) candidate_path="$prior_value" ;;
+        esac
+        if [ ! -f "$candidate_path" ]; then
+            warn "${f}: broken prior link '${prior_value}' (resolved to ${candidate_path})"
+        fi
+    fi
 done
 
 if ! ls "$DOC_DIR/meta/next-steps-"*.md 1>/dev/null 2>&1; then
