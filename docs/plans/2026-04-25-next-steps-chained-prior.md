@@ -72,9 +72,9 @@ Current behavior: the "Writing" section shows a body-only template with no front
 
 - [ ] **Step 1:** In the "Writing" section's fenced markdown block (currently starts with `# Next Steps — YYYY-MM-DD`), insert the canonical frontmatter (per Task 1 shape) above the H1.
 
-- [ ] **Step 2:** Add a new "Resolve prior link" subsection under "## After Writing" (or before "Save to ..." in step 1):
+- [ ] **Step 2:** Add a new "Resolve prior link" subsection under "## After Writing" (or before "Save to ..." in step 1). The selection rule is **load-bearing for delta-mode semantics** (delta-mode appends to today's file rather than creating a new one, so the predecessor must be the most recent file *strictly before* today, not today itself):
 
-  > Before writing, list `doc/meta/next-steps-*.md` (excluding any same-day file in delta mode) and select the file with the lexically-greatest `YYYY-MM-DD` in its filename that is strictly earlier than today's date. Set `prior: meta:next-steps-<that-date>` in the frontmatter. If no predecessor exists, omit the `prior:` field entirely.
+  > Before writing, list `doc/meta/next-steps-*.md`. **Exclude any file dated today** (delta-mode appends to that file rather than creating a new one). From the remaining files, select the one with the lexically-greatest `YYYY-MM-DD` in its filename. Set `prior: meta:next-steps-<that-date>` in the new file's frontmatter. If no predecessor exists (this is the first next-steps file in the project), omit the `prior:` field entirely.
 
 - [ ] **Step 3:** In "Mode Detection", clarify that delta-mode (append `## Update — HH:MM`) does not change the file's `prior:` — the chain link is per-file, not per-update.
 
@@ -91,13 +91,19 @@ Tests use the existing `_write_common_files` / `subprocess.run` fixture pattern.
 
 - [ ] **Step 1:** Add a `_write_next_steps_file(root, date, prior=None, body_sections=...)` helper that emits a frontmatter-bearing file with the four required body sections (so unrelated section-9 checks pass).
 
-- [ ] **Step 2:** Add five tests:
+- [ ] **Step 2:** Add six tests:
 
   - `test_validate_resolves_prior_by_entity_id` — two files; later one's `prior: meta:next-steps-<earlier>`. Expect no `broken prior link` warning.
   - `test_validate_resolves_prior_by_path` — `prior: doc/meta/next-steps-<earlier>.md`. Expect no warning.
   - `test_validate_warns_on_broken_prior_link` — file references `meta:next-steps-2025-01-01` that does not exist. Expect a warning containing `broken prior link` and the bad reference.
   - `test_validate_silent_when_prior_absent` — single file with no `prior:`. Expect no warning, no error.
-  - `test_validate_accepts_prior_analyses_variant` — file uses `prior_analyses: [meta:next-steps-<earlier>]` (the protein-landscape variant) referencing an existing file. Expect no `broken prior link` warning. Files using the variant whose targets do exist should pass silently. **(Clarification: out-of-scope for this plan to require `prior_analyses:` resolution; the test asserts the validator does not error on the field name alone. Resolving the variant's targets is a future cycle.)**
+  - `test_validate_accepts_prior_analyses_variant_inline` — file uses inline-list shape `prior_analyses: [meta:next-steps-<earlier>]` (synthetic shape for completeness) referencing an existing file. Expect no `broken prior link` warning.
+  - `test_validate_accepts_prior_analyses_variant_block_list` — file uses YAML block-list shape (the form protein-landscape actually ships in `doc/meta/next-steps-2026-04-19.md`):
+    ```yaml
+    prior_analyses:
+      - "meta:next-steps-2026-04-12"
+    ```
+    Expect no `broken prior link` warning. **This is the load-bearing test** — the shape protein-landscape actually uses in production. **(Clarification: out-of-scope for this plan to require `prior_analyses:` resolution; the test asserts the validator does not error on the field name alone. Resolving the variant's targets is a future cycle.)**
 
 - [ ] **Step 3:** Run the new tests and confirm `test_validate_warns_on_broken_prior_link` fails (the check does not yet exist), the others pass trivially today.
 

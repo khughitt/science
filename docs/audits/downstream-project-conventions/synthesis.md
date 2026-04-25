@@ -28,7 +28,7 @@ The audit does not surface any P0 findings — no project is blocked from safe d
 | 1 | Multi-axis project profile (or formalized aspect-bundle archetype) | §2, §6 | 4/4 projects use `aspects:` as a profile-axis workaround |
 | 2 | First-class `pre-registration` type (not `type: plan` with `id: pre-registration:*`) | §6, §8 | 4/4 use it; 3/4 overload `type: plan`; placement varies (`doc/pre-registrations/`, `doc/meta/pre-registration-*`, hypothesis body section) |
 | 3 | Sanctioned project-local entity-kind extension (formalize `knowledge/sources/local/manifest.yaml` `typed-extension` pattern) | §6, §10 | 2/4 register explicitly; 4/4 need it (other 2 do it via inline conventions) |
-| 4 | `synthesis` rollup convention with SHA-tracked `synthesized_from[]` + `source_commit` + `provenance_coverage` | §6, §8 | 3/4 produce synthesis rollups; mm30's frontmatter shape is complete; tied to `science:big-picture` |
+| 4 | `synthesis` rollup convention with `report_kind` discriminator + structured provenance frontmatter | §6, §8 | 2/4 produce structured rollups (mm30 as `type: report`, protein-landscape as `type: synthesis`); canonize the cleaner `type: synthesis` shape; tied to `science:big-picture` |
 | 5 | Per-type / multi-axis status enums (separate work-status from reading-state, qualifier blocks, phase) | §6 | 4/4 hit status sprawl (9-25 distinct values); cbioportal's reading-state (`read|abstract-read|summarized|unread`) is the cleanest example of axis collision |
 | 6 | Auto-archive of done tasks from `tasks/active.md` to `tasks/done/YYYY-MM.md` | §8, §10 | 3/4 lag (49% / 30% / 44%); cbioportal proves enforceability |
 | 7 | `validate.sh` MAV adoption with explicit knobs for genuine local needs | §9 | 1/4 byte-identical (cbioportal); 3/4 carry mostly-generic drift; concrete `mav-input` set is forming |
@@ -79,11 +79,20 @@ Three of four projects type these as `type: plan` with `id: pre-registration:<sl
 
 **Recommendation:** add `pre-registration` as a Science-canonical type. Body shape is well-converged (locked thresholds + decision rules + `committed:` date + `spec:` back-link to a design doc). Migration cost is low because the file shapes are already aligned; only the `type:` value and validator coverage change.
 
-### 3.3 Synthesis rollups with SHA-tracked sources (3/4) — P1
+### 3.3 Synthesis rollups with structured provenance frontmatter (2/4 with type-naming divergence) — P1
 
-mm30 has the most complete shape: per-hypothesis files at `doc/reports/synthesis/h{1..6}*.md` + `doc/reports/synthesis.md` cross-hypothesis + `_emergent-threads.md`, with `report_kind: hypothesis-synthesis|synthesis-rollup|curation-sweep`, `source_commit`, `synthesized_from: [{hypothesis, file, sha}]`, `emergent_threads_sha`, `orphan_question_count`, `provenance_coverage`. protein-landscape ships the same shape at `doc/reports/synthesis/{_emergent-threads, h0[1-3]-*}.md`. natural-systems has 87 `doc/reports/` files, several of which are syntheses but without the full structured frontmatter. cbioportal has one synthesis (placement under `doc/papers/` is the outlier and likely a `cbioportal`-internal cleanup item).
+**Correction (post-deep-review).** The original draft of this section claimed "3/4 with the same shape." Re-verification against actual file contents shows the truth is more nuanced: two of four projects ship the structured rollup pattern, but they **diverge on `type:` naming**.
 
-Tied to `science:big-picture`. **Recommendation:** bless the mm30/protein-landscape frontmatter shape upstream (with `synthesized_from[]` as the load-bearing reproducibility piece) and update `science:big-picture` to emit it.
+- **mm30** uses `type: "report"` + `report_kind: "hypothesis-synthesis | synthesis-rollup | emergent-threads"` + `id: "report:synthesis-<slug>"`. Per-hypothesis files at `doc/reports/synthesis/h{1..6}*.md`, cross-hypothesis rollup at `doc/reports/synthesis.md`, threads file at `_emergent-threads.md`. Frontmatter includes `source_commit`, `provenance_coverage`, and `hypothesis:` (per-hyp). `synthesized_from: [{hypothesis, file, sha}]` appears **only on the cross-hypothesis rollup** — per-hypothesis and threads files do not carry it. `_emergent-threads.md` carries `orphan_ids: [...]`.
+- **protein-landscape** uses `type: "synthesis"` on per-hypothesis files (`id: "synthesis:<slug>"`) and a separate `type: "emergent-threads"` on the threads file. Same provenance fields (`source_commit`, `generated_at`, `provenance_coverage`). No `synthesized_from:` field on any file.
+- **natural-systems** has 87 `doc/reports/` files, several of which read as syntheses but without the structured rollup frontmatter.
+- **cbioportal** has one synthesis file (placement under `doc/papers/` rather than `doc/reports/synthesis/` — cbioportal-internal cleanup, not a recurring pattern).
+
+The two projects ship the same *shape* (provenance-tracked frontmatter + per-hyp rollups + emergent-threads files), but with incompatible `type:` naming. Tied to `science:big-picture`.
+
+**Recommendation:** canonize the cleaner shape — `type: "synthesis"` for all artifacts with `report_kind: "hypothesis-synthesis | synthesis-rollup | emergent-threads"` discriminator; `id` prefix `synthesis:`. `synthesized_from: [{hypothesis, file, sha}]` is required only on `report_kind: synthesis-rollup` (where it carries the cross-hypothesis sha-tracked provenance); per-hypothesis files carry `hypothesis:` instead, threads files carry `orphan_ids:` and counts. **Both downstream projects need migration to the canonical shape**: mm30 from `type: report` + `report_kind:` to `type: synthesis` + `report_kind:` (and `report:synthesis-*` ids → `synthesis:*`); protein-landscape from `type: emergent-threads` to `type: synthesis` + `report_kind: emergent-threads`. Track both as follow-on tasks; the validator does not warn on legacy `type: report` files in synthesis paths so existing files do not turn the validator red on first managed update.
+
+`curation-sweep` is **not** folded into this `report_kind` enum. It is a separate canonical-promotion candidate (see §6.3); deferring it here keeps this plan tight and lets the curation-sweep promotion pick its own shape.
 
 ### 3.4 Chained next-steps ledger (4/4) — P1
 
@@ -410,7 +419,7 @@ mm30's `core/decisions.md` (D1–D10+) is surfaced via `knowledge/sources/local/
 For reviewers checking the priority assignments:
 
 - §3.2 pre-registration (P1): present in 4/4 projects with substantial body-shape convergence; 3/4 carry the type/id mismatch that resolves to the same fix. Strong P1.
-- §3.3 synthesis rollups (P1): mm30 + protein-landscape have the full structured shape (3/4 ship rollups in some form). Tied to `science:big-picture`. Justified P1.
+- §3.3 synthesis rollups (P1): mm30 + protein-landscape both ship structured rollups but with divergent `type:` naming (mm30 `type: report` + `report_kind:`, protein-landscape `type: synthesis` + separate `type: emergent-threads`). The divergence itself is the strongest evidence that Science needs a canonical shape. Justified P1; canonize the cleaner `type: synthesis` form, accept downstream migration cost as a follow-on.
 - §3.4 chained next-steps (P1): 4/4 produce the files; 2/4 chain via explicit field. P1 because the field convention is straightforward and tied to `science:next-steps`.
 - §3.5 datapackage extension + descriptors (P1): 3/4 ship the pattern, 1/4 has an active task to adopt it. The "+1 acknowledged gap" upgrades 3/4 to a P1 candidate per the convention threshold's "evidence is unusually strong" clause.
 - §6.1 status enum split (P1): 4/4 affected; the recommendation is the only path that reconciles the four observed behaviors.

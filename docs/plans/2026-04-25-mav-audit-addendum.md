@@ -16,12 +16,12 @@
 
 In scope (six concrete fixes):
 
-1. Parameterize `LOCAL_PROFILE` from `science.yaml.knowledge_profiles.local` (already present — verify and remove the residual hard-coded `"local"` fallback path so projects with `project_specific` are not silently miscoerced).
+1. **Verify** `LOCAL_PROFILE` parameterization from `science.yaml.knowledge_profiles.local` is in place (it is — lines 87/111-118 of canonical) and add a regression test that locks in the behavior. Tightening the YAML-error fallback is conditional on Step 1's audit surfacing an edge case; if no edge case is found, the canonical bytes do not change for this fix and the change is test-only.
 2. Sanction `.env` sourcing canonically with an `SCIENCE_VALIDATE_SKIP_DOTENV=1` opt-out env var.
-3. Replace the `ontologies` list-shape check with a `knowledge_profiles.curated` list-shape check.
+3. Add a `knowledge_profiles.curated` list-shape check **alongside** the existing `ontologies` list-shape check (additive — the `ontologies` check stays; removing it is a separate downstream-migration cycle).
 4. Promote graph-audit unparseable output from `warn` to `error`.
 5. Sanction `docs/superpowers/` (and a generalized agent-subtree pattern) in the duplicate-doc-root warning.
-6. Add a per-type id-prefix conformance check driven by a declarative table.
+6. Add a per-type id-prefix conformance check driven by a declarative table. Includes rows for `pre-registration` (depends on plan #2 landing first) and `synthesis` (depends on plan #4 landing first); both rows are forward-compatible — until each plan ships, the table simply doesn't match files of those types because the canonical types don't yet exist downstream.
 
 Out of scope:
 
@@ -54,7 +54,11 @@ Do not modify:
 
 ## Managed-version bookkeeping
 
-Per the MAV plan's Task 3 Step 4 rule: before editing `meta/validate.sh`, capture `managed_content_hash(canonical_content)` of the current file, bump `ArtifactDefinition.version`, append the captured hash to `previous_hashes`. Without this, downstream projects on the prior managed version are reported as `LOCALLY_MODIFIED` instead of `OUTDATED`.
+**Single version bump for the entire addendum.** All six fixes ship in one canonical-content change to `meta/validate.sh` + `scripts/validate.sh` and one corresponding `ArtifactDefinition.version` bump (with one `previous_hashes` append). Do **not** bump six times. Apply the fixes locally to both validators across Tasks 1-6, then perform the bookkeeping in Task 6's commit step (or a dedicated final task — see below).
+
+Per the MAV plan's Task 3 Step 4 rule: before editing the canonical, capture `managed_content_hash(canonical_content)` of the current file. After all six fixes are in place and the test suite is green, bump `ArtifactDefinition.version` and append the captured hash to `previous_hashes`. Without this, downstream projects on the prior managed version are reported as `LOCALLY_MODIFIED` instead of `OUTDATED`.
+
+If Task 1's "verify only" outcome (no canonical bytes change for `LOCAL_PROFILE`) leaves the addendum's net change to be only Tasks 2-6: still bump version once. Tasks 2-6 alone are sufficient to require a managed-version transition.
 
 ---
 
@@ -219,7 +223,7 @@ Walk markdown under `$DOC_DIR/` and `$SPECS_DIR/`; if both `type:` and `id:` are
 
 - [ ] **Step 4: Tests** — matching `type`+`id` (no warn); `type: report` with `id: doc:...` (warn); `type: report` with no `id` (skip — Section 16 catches that); `templates/` (skip; reuse Section 16's exclusion).
 
-- [ ] **Step 5: `pre-registration` dependency.** Synthesis §3.2 has type-promotion in flight. Until then projects use `type: plan` with `id: pre-registration:...`; the table's `plan` row catches the real `type:` value. Note this in a section comment.
+- [ ] **Step 5: `pre-registration` and `synthesis` dependencies.** Synthesis §3.2 (`pre-registration`) and §3.3 (`synthesis`) have type-promotions in flight as plans #2 and #4. Until each lands, projects use legacy shapes (`type: plan` with `id: pre-registration:...` for pre-regs; `type: report` with `id: report:synthesis-...` in mm30; `type: synthesis` with `id: synthesis:...` already in protein-landscape's per-hypothesis files). The table's rows for `plan`, `report`, and `synthesis` are all canonical entries; the rule simply doesn't fire on a file whose `type:` is anything outside the table. Note this in a section comment so future readers understand why two of the rows initially have no canonical-shape downstream usage to warn against.
 
 ---
 

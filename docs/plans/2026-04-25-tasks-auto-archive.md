@@ -4,7 +4,14 @@
 
 **Goal:** Add `science-tool tasks archive` so done/retired entries in `tasks/active.md` are moved to `tasks/done/YYYY-MM.md` deterministically, and surface archive lag in `science-tool health`, eliminating the operational drift seen in 3 of 4 audited downstream projects.
 
-**Evidence (from `docs/audits/downstream-project-conventions/synthesis.md` §5.4 / §8.1):** done entries accumulate in `tasks/active.md` for natural-systems (114/232 = 49%), mm30 (~30%, 44/152 done+retired+deferred), and protein-landscape (44/101 = 44%). cbioportal is clean (0%) — proving the discipline is enforceable, but only because cbioportal moves entries on done. The `## [tNNN] Title` + bullet-key/value shape is identical across all four projects, so a single archiver can serve all of them. P1 #6 in the audit synthesis.
+**Evidence (from `docs/audits/downstream-project-conventions/synthesis.md` §5.4 / §8.1):** done/retired/deferred entries accumulate in `tasks/active.md` across three projects:
+
+- **natural-systems:** 114/232 = 49% with `status: done`.
+- **mm30:** of 152 entries, 36 `done` + 5 `retired` + 3 `deferred` = 44/152 (29%) total terminal-state. The set this archiver actually moves (`done` + `retired`) is 41/152 = 27%; the 3 `deferred` deliberately stay in active for re-engagement (see Shape Decisions).
+- **protein-landscape:** 44/101 = 44% with `status: done`.
+- **cbioportal:** 0% — clean reference, proving the discipline is enforceable, but only because cbioportal moves entries on done.
+
+The `## [tNNN] Title` + bullet-key/value shape is identical across all four projects, so a single archiver can serve all of them. P1 #6 in the audit synthesis.
 
 **Architecture:** Reuse the existing `science_tool.tasks` parser/renderer. Add a focused `science_tool.tasks_archive` module that owns scan, classify, route-by-completed-date, and idempotent file writes. Expose it via the existing `tasks` Click group as `science-tool tasks archive`. Surface drift counts under a new `tasks.archive_lag` block in the health report so `/science:status` and `/science:next-steps` can prompt the user to run the archiver.
 
@@ -20,7 +27,7 @@
 - **Idempotency.** Re-running with no qualifying entries is a no-op (zero writes). Duplicate ids in the destination file are skipped with a warning, not re-appended.
 - **Default = dry-run.** Plain invocation prints the plan; `--apply` performs writes. Matches `graph migrate` / `graph migrate-tags`.
 - **Status set.** Archive `done` and `retired`. Do not archive `deferred` — those stay visible in active for re-engagement.
-- **Health-only mode.** `--check` always exits 0 and emits archivable counts; used by `science-tool health` so the health code does not import the writer.
+- **Health-only mode.** `--check` emits archivable counts as JSON and exits **non-zero (exit 1)** when any of `done_in_active` / `retired_in_active` / `missing_completed` is non-zero; exits 0 when clean. Used by both `science-tool health` (which interprets the exit code) and CI gates that want to fail on lag. The health-report consumer reads counts from JSON output regardless of exit code.
 - **Malformed entries.** Parse errors are collected and reported. Dry-run lists them and exits 0; `--apply` raises and writes nothing.
 
 ---
@@ -66,7 +73,7 @@ Do not modify: `science_tool/tasks.py` itself (the parser/renderer is reused unc
 
 **Files:** Modify `science-tool/src/science_tool/tasks_archive.py` and `science-tool/tests/test_tasks_archive.py`.
 
-- [ ] **Step 1: Failing apply tests** — `apply_archive(plan)` writes `active.md` as preamble + remaining; no disk writes if `plan.entries` is empty; archived tasks appended in plan-order with existing destination entries preserved first; idempotency (capture mtimes, second run leaves them unchanged); duplicate id in destination is skipped, destination file untouched, `duplicate_ids` returned; `parse_errors` non-empty → `RuntimeError`, no writes.
+- [ ] **Step 1: Failing apply tests** — `apply_archive(plan)` writes `active.md` as preamble + remaining; no disk writes if `plan.entries` is empty; archived tasks appended in plan-order with existing destination entries preserved first; **destination preamble preservation** (when `tasks/done/2026-03.md` already has its own preamble text above the first `## [tNNN]`, that preamble survives byte-for-byte after the apply); **prior-month routing precedence** (entry with `completed: 2026-03-15` routes to `tasks/done/2026-03.md` even when `today = 2026-04-25`; the entry's `completed:` always wins over `today`); idempotency (capture mtimes, second run leaves them unchanged); duplicate id in destination is skipped, destination file untouched, `duplicate_ids` returned; `parse_errors` non-empty → `RuntimeError`, no writes.
 
 - [ ] **Step 2: Implement apply**:
   - `@dataclass(frozen=True) ArchiveResult`: `moved: list[Task]`, `skipped_duplicates: list[str]`, `destinations_written: list[Path]`.
@@ -94,7 +101,7 @@ def count_archivable(tasks_dir: Path) -> dict[str, int]:
 
 **Files:** Modify `science-tool/src/science_tool/cli.py` and `science-tool/tests/test_tasks_archive.py`.
 
-- [ ] **Step 1: CLI tests** (use `CliRunner`, mirror `test_tasks_cli.py`): default (no `--apply`) prints "would move N" preview, exit 0, `active.md` byte-identical; `--apply` moves entries, second `--apply` reports zero moves; `--check` always exits 0, JSON shape matches `count_archivable`; `--format json` on dry-run emits an array with `id`, `status`, `destination`, `missing_completed`; missing `completed:` prints a stderr warning with the task id; malformed `active.md` → `--apply` exits non-zero, dry-run exits 0 with parse errors listed.
+- [ ] **Step 1: CLI tests** (use `CliRunner`, mirror `test_tasks_cli.py`): default (no `--apply`) prints "would move N" preview, exit 0, `active.md` byte-identical; `--apply` moves entries, second `--apply` reports zero moves; `--check` exits **non-zero (1)** when lag is non-zero and **zero** when clean, JSON shape matches `count_archivable` regardless of exit code; `--format json` on dry-run emits an array with `id`, `status`, `destination`, `missing_completed`; missing `completed:` prints a stderr warning with the task id; malformed `active.md` → `--apply` exits non-zero, dry-run exits 0 with parse errors listed.
 
 - [ ] **Step 2: Add command** below `tasks_unblock` (around `cli.py` line 2046):
 
@@ -211,3 +218,9 @@ Add `"archive_lag": archive_lag,` to the returned dict. The planner returns zero
 - **Round-trip cleanliness.** Verify `parse_tasks` + `render_tasks` is byte-identical on a clean file, or document the diff; the idempotency test will catch any drift.
 - **Preamble shapes.** Both "no preamble" (file starts with `## [t001]`) and "with preamble + blank line" must be covered.
 - **Concurrent edits.** No locking. Document in slash-command guidance that uncommitted `active.md` edits should be committed or stashed first.
+
+---
+
+## Follow-on actions (NOT part of this plan)
+
+- **`tasks.py` preamble bug.** `_write_active` at `science_tool/tasks.py:164-166` (`(tasks_dir / "active.md").write_text(render_tasks(tasks) if tasks else "")`) silently drops any text above the first `## [tNNN]` heading. The same bug affects `complete_task`, `retire_task`, `add_task`, and `defer_task` — all of which call `_write_active`. The archiver in this plan reads + re-emits preamble correctly, but the preamble bug remains for any other caller. File a separate task to apply the same preamble-preserving rewrite to `tasks.py` so all writers behave consistently.

@@ -50,12 +50,13 @@ title: "{{Short Title}}"
 status: "committed"
 committed: "{{YYYY-MM-DD}}"
 spec: ""  # optional path to design/spec doc, e.g. doc/specs/2026-04-25-<slug>-design.md
-source_refs: []
 related: []  # hypothesis IDs, inquiry slugs, or task IDs this pre-reg covers
 created: "{{YYYY-MM-DD}}"
 updated: "{{YYYY-MM-DD}}"
 ---
 ```
+
+`source_refs:` is intentionally **omitted** — the audit synthesis (§3.2) does not list it as part of the canonical pre-registration shape, and adding it would invent structure beyond audit evidence. Projects that need source-ref tracking on pre-regs may add the field as a project-local extension.
 
 The body sections are unchanged.
 
@@ -95,7 +96,6 @@ def _pre_registration_body(*, type_value: str, id_value: str, committed: str | N
     if spec is not None:
         fm_lines.append(f'spec: "{spec}"')
     fm_lines.extend([
-        "source_refs: []",
         "related: []",
         'created: "2026-04-25"',
         'updated: "2026-04-25"',
@@ -156,6 +156,7 @@ def test_validate_warns_when_pre_registration_id_prefix_wrong(tmp_path: Path) ->
     )
     combined = result.stdout + result.stderr
     assert "pre-registration:" in combined and "plan:h01-test" in combined, combined
+    assert result.returncode == 0, combined  # warning, not error (matches Plan #7 Task 6 severity)
 
 
 def test_validate_does_not_warn_on_legacy_type_plan_pre_reg(tmp_path: Path) -> None:
@@ -199,15 +200,37 @@ def test_validate_warns_when_pre_registration_missing_committed(tmp_path: Path) 
     combined = result.stdout + result.stderr
     assert "committed" in combined.lower(), combined
     assert result.returncode == 0, combined  # warning, not error
+
+
+def test_validate_warns_when_pre_registration_missing_spec(tmp_path: Path) -> None:
+    _write_minimal_research_project(tmp_path)
+    (tmp_path / "doc" / "meta" / "pre-registration-h01-test.md").write_text(
+        _pre_registration_body(
+            type_value="pre-registration",
+            id_value="pre-registration:h01-test",
+            committed="2026-04-25",
+            spec=None,  # missing
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True, text=True, check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "spec" in combined.lower(), combined
+    assert result.returncode == 0, combined  # warning, not error
 ```
 
-- [ ] **Step 3: Run the new tests to confirm three of four fail**
+- [ ] **Step 3: Run the new tests to confirm three of five fail**
 
 Run:
 ```bash
 cd science-tool && uv run --frozen pytest tests/test_validate_script.py -k "pre_registration" -v
 ```
-Expected: `test_validate_warns_when_pre_registration_id_prefix_wrong` and `test_validate_warns_when_pre_registration_missing_committed` FAIL (the validator does not yet check these). The two accept/no-warn cases should pass trivially.
+Expected: `test_validate_warns_when_pre_registration_id_prefix_wrong`, `test_validate_warns_when_pre_registration_missing_committed`, and `test_validate_warns_when_pre_registration_missing_spec` FAIL (the validator does not yet check these). The two accept/no-warn cases should pass trivially.
 
 - [ ] **Step 4: Commit failing tests**
 
@@ -226,19 +249,22 @@ git commit -m "test(validate): pre-registration canonical type checks"
 
 The existing loop already iterates `doc/meta/pre-registration-*.md`. We add an inner block that parses `type:` and `id:` from frontmatter (using the same `sed` recipe as the notes section at `scripts/validate.sh:530-543`) and:
 
-- if `type:` is `pre-registration`, require the `id:` to start with `pre-registration:` (error if mismatched);
+- if `type:` is `pre-registration`, **warn** if the `id:` does not start with `pre-registration:` (warn-not-error to match adjacent id-prefix checks and Plan #7 Task 6's deliberate severity choice);
 - if `type:` is `pre-registration`, warn if `committed:` is absent;
 - if `type:` is `pre-registration`, warn if `spec:` is absent (`spec:` may be empty string — that's OK, project may not have a paired design doc);
-- if `type:` is `plan` (legacy shape used by 3/4 downstream projects), do nothing new — the legacy file continues to validate without warning. This keeps the change purely additive.
+- if `type:` is anything else (legacy `type: plan` in mm30 + protein-landscape; `type: plan` with `id: plan:pre-registration-<slug>` in natural-systems; project-local `type: pre-registration` already in cbioportal — only 2/4 use `type: plan` + `id: pre-registration:*`), do nothing new — the legacy/local file continues to validate without warning. This keeps the change purely additive.
 
 Also extend the file glob to include `$DOC_DIR/pre-registrations/*.md` (mm30's canonical placement per audit §3.2; currently invisible to the validator).
 
-- [ ] **Step 1: Read the existing pre-registration loop**
+- [ ] **Step 1: Read the existing pre-registration loop in both files**
 
-Run: `sed -n '445,460p' scripts/validate.sh`
-Expected: the small loop that warns on missing body sections.
+```bash
+sed -n '445,460p' scripts/validate.sh
+sed -n '445,460p' meta/validate.sh   # locate by content; line offset may differ
+```
+Expected: the small loop that warns on missing body sections, in both files.
 
-- [ ] **Step 2: Extend the loop**
+- [ ] **Step 2a: Extend the loop in `scripts/validate.sh`**
 
 Replace the existing block:
 
@@ -276,7 +302,7 @@ for f in "$DOC_DIR/meta/pre-registration-"*.md "$DOC_DIR/pre-registrations/"*.md
 
     if [ "$pre_type" = "pre-registration" ]; then
         if [ -n "$pre_id" ] && ! printf "%s" "$pre_id" | grep -Eq '^pre-registration:'; then
-            error "${f} type is 'pre-registration' but id '${pre_id}' does not use the 'pre-registration:' prefix"
+            warn "${f} type is 'pre-registration' but id '${pre_id}' does not use the 'pre-registration:' prefix"
         fi
         if ! grep -Eq '^committed:[[:space:]]' "$f" 2>/dev/null; then
             warn "${f} type 'pre-registration' should declare a 'committed:' date in frontmatter"
@@ -287,6 +313,19 @@ for f in "$DOC_DIR/meta/pre-registration-"*.md "$DOC_DIR/pre-registrations/"*.md
     fi
 done
 ```
+
+- [ ] **Step 2b: Apply the same replacement in `meta/validate.sh`**
+
+Locate the same `for f in "$DOC_DIR/meta/pre-registration-"*.md` loop in `meta/validate.sh` (line offset differs from `scripts/validate.sh`; use content search). Apply the identical replacement block. Both validators must contain the same logic until managed-artifact-versioning unifies them.
+
+Verify the change is in place:
+
+```bash
+grep -n 'pre-registrations' scripts/validate.sh meta/validate.sh
+grep -n 'pre-registration:' scripts/validate.sh meta/validate.sh
+```
+
+Expected: both files show the new glob entry and the warn-on-mismatched-prefix logic.
 
 - [ ] **Step 3: Run targeted tests**
 
@@ -315,8 +354,8 @@ Expected: `no pre-registration warnings` (meta has no pre-registration files yet
 - [ ] **Step 6: Commit**
 
 ```bash
-git add scripts/validate.sh
-git commit -m "feat(validate): canonical pre-registration type and id-prefix checks"
+git add scripts/validate.sh meta/validate.sh
+git commit -m "feat(validate): canonical pre-registration type and id-prefix checks (warn severity)"
 ```
 
 ---

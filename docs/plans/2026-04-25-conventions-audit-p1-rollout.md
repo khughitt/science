@@ -51,15 +51,41 @@ Status updated as each P1 progresses through the workflow.
 | P1 #7 | MAV addendum: audit-surfaced `mav-input` set | `docs/plans/2026-04-25-mav-audit-addendum.md` | ready-for-review | — | — |
 | P1 #9 | Code/notebook → task back-link convention | `docs/plans/2026-04-25-code-task-backlink-convention.md` | ready-for-review | — | — |
 
-### Plan review notes (2026-04-25)
+### Plan review pass 1 (2026-04-25)
 
-All six plans drafted by parallel sub-agents, then reviewed for cross-plan consistency. Revisions applied:
+All six plans drafted by parallel sub-agents, then reviewed for cross-plan consistency. First-round revisions applied:
 
 - **Plans #2 and #4** updated to target both `meta/validate.sh` and `scripts/validate.sh` (the two files have different sha256 at audit time and are kept in lockstep until the in-flight managed-artifact-versioning plan unifies them). Plans #7 and #10 already targeted both. This resolves cross-plan inconsistency in validator-canonical interpretation.
 - **Plan #7 Task 1** (`LOCAL_PROFILE` parameterization) verified by reading `meta/validate.sh` lines 87, 111-118: the parameterization is **already in place** in canonical. Agent correctly framed Task 1 as "verify and tighten"; no demotion needed. The natural-systems drift is "natural-systems was patched before the canonical fix landed" — the right resolution is MAV-updating natural-systems, not another canonical change.
-- **Plan #2** flagged two shape decisions for reviewer attention: id-prefix mismatch as **error** (matches adjacent notes-id-prefix check at `scripts/validate.sh:543`); validator glob extension to `doc/pre-registrations/*.md` (mm30's canonical placement). Both kept as agent decided.
-- **Plan #6** flagged edge case: existing `_write_active` drops file preamble; implementation must read+re-emit verbatim. Test coverage planned. Round-trip cleanliness needs verification during implementation.
-- **Plan #7 Task 6** (id-prefix table) explicit dependency on Plan #2 (pre-registration must be canonized first); plan already notes the dependency in its Task 6 section.
+
+### Plan review pass 2 — deep-review findings + revisions (2026-04-25)
+
+Six `superpowers:code-reviewer` sub-agents produced independent deep reviews. Findings folded back as revisions:
+
+- **Plan #4 substantially reworked.** Deep review surfaced two blockers: my synthesis §3.3 misread mm30's actual frontmatter (mm30 uses `type: "report"` + `report_kind:` + `id: "report:synthesis-<slug>"`, not `type: synthesis`), and required `synthesized_from:` on per-hypothesis files even though neither downstream project ships it there. Synthesis §3.3 corrected in place; plan #4 rewritten to canonize the cleaner `type: synthesis` shape (option B per user direction) with `synthesized_from:` required only on `report_kind: synthesis-rollup`. `curation-sweep` dropped from the `report_kind` enum (deferred to §6.3 promotion). Validator silent on legacy `type: report` files — no compatibility layer; mm30 + protein-landscape migrations flagged as follow-ons.
+- **Plan #2 revised:** id-prefix mismatch downgraded `error` → `warn` (matches adjacent notes id-prefix check and Plan #7 Task 6's deliberate severity choice); Migration Notes corrected (only 2/4 use `id: pre-registration:*` legacy shape; natural-systems uses a third shape `id: plan:pre-registration-<slug>`); Task 3 split into Step 2a/2b to actually edit both validators (commit step now adds both); `source_refs:` dropped from canonical template (not in audit evidence — projects can add it as a project-local extension); `warn-on-missing-spec` test added.
+- **Plan #6 revised:** evidence prose clarified (mm30 done+retired = 27%, not 30%; deferred deliberately stays in active); `--check` exit-code semantics changed to non-zero on lag (CI-gateable); destination-preamble preservation test added; prior-month routing precedence test added; **follow-on action filed** for the `tasks.py` `_write_active` preamble bug that affects four other functions outside this plan's scope.
+- **Plan #7 revised:** Task 1 framing tightened (verify-only is the expected outcome; canonical bytes only change if Step 1 surfaces an edge case); explicit single-version-bump statement added to bookkeeping section; Task 6 Step 5 expanded to cover both `pre-registration` (depends on plan #2) and `synthesis` (depends on plan #4).
+- **Plan #9 revised:** commit-message tag added as a fourth sanctioned pattern (synthesis §8.2 lists three observed patterns including this one — agent had dropped it); `docs/conventions/` directory creation justified with a seed `README.md` Task 1 establishing the directory's scope; Pattern 3 (descriptor sidecar field) gains an explicit "pending Bucket C namespace decision" status callout in the convention doc itself.
+- **Plan #10 revised:** YAML block-list test variant added (the shape protein-landscape actually ships in `doc/meta/next-steps-2026-04-19.md`; the original plan only tested inline `[...]` form); auto-population guard "exclude today's file" hoisted out of parens (load-bearing for delta-mode semantics).
+
+### Cross-plan consistency rules established
+
+- **Validator severity:** id-prefix mismatches and structural-field absences are `warn`, not `error`. Established in Plan #7 Task 6 and applied retroactively to Plan #2.
+- **Validator targeting:** all validator-touching plans modify both `meta/validate.sh` and `scripts/validate.sh` until MAV unifies. Locate insertion sites by content, not absolute line.
+- **Type promotion + id-prefix table coordination:** Plan #7 Task 6's id-prefix table includes rows for both `pre-registration` (canonized by Plan #2) and `synthesis` (canonized by Plan #4). These rows are forward-compatible — they activate when each canonical type lands downstream.
+- **No legacy/compatibility layers** (per the user's global rule). Validators stay silent on legacy shapes (`type: plan` pre-regs, `type: report` synthesis files) — this is the natural consequence of additive type-conformance checks, not a permanent accepted variant. Downstream migrations are tracked as follow-on tasks.
+
+### Follow-on actions (NOT part of any individual P1 plan)
+
+These surface from the audit + plan/review passes but are out of scope for the six P1 plans. Tracked here for the user to file as appropriate (downstream `tasks/active.md` entries or upstream Science backlog):
+
+1. **mm30 synthesis-file migration** — rename `type: report` → `type: synthesis` and `id: report:synthesis-*` → `id: synthesis:*` across `doc/reports/synthesis/h{1..6}*.md`, `doc/reports/synthesis.md`, and `_emergent-threads.md`. Triggered by Plan #4 landing.
+2. **protein-landscape synthesis-file migration** — rename `type: emergent-threads` → `type: synthesis` + add `report_kind: emergent-threads` on `doc/reports/synthesis/_emergent-threads.md`. Add `report_kind: hypothesis-synthesis` to existing `type: synthesis` per-hypothesis files. Triggered by Plan #4 landing.
+3. **`tasks.py` preamble bug** — `_write_active` (called by `complete_task`, `retire_task`, `add_task`, `defer_task`) silently drops file preamble. Plan #6's archiver fixes its own writes; the bug remains for the other four callers. File a Science task to apply preamble-preserving rewrite consistently.
+4. **`science-tool` clean-stdout fix** — protein-landscape's `extract_json_payload` workaround in `validate.sh` exists because `science-tool graph audit/validate/diff` and `science-tool inquiry validate` emit non-JSON noise on stdout. The proper fix is upstream (`science-tool` emits clean JSON). File as a `science-tool` task; Plan #7 explicitly defers this rather than absorbing it as a `validate.sh` workaround.
+5. **natural-systems report-id migration** — 26 of 31 `doc/reports/*.md` files use `id: doc:DATE-slug` instead of `id: report:DATE-slug`. Plan #7 Task 6 will warn on these once shipped; natural-systems can opt out via `SCIENCE_VALIDATE_SKIP_ID_PREFIX=1` while migrating.
+6. **Synthesis §3.3 evidence correction** — applied directly to `docs/audits/downstream-project-conventions/synthesis.md`. The original "3/4 ship rollups in some form" overclaim is now a precise "2/4 with type-naming divergence" account; Top P1 candidate table entry updated; Appendix threshold-application notes updated.
 
 ### Bucket C — needs design pass first (deferred)
 
