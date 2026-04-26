@@ -18,24 +18,36 @@ artifacts:
       sidecar_path: validate.local.sh
       hook_namespace: SCIENCE_VALIDATE_HOOKS
       contract: |
-        Sidecar registers hooks via `register_validation_hook <hook> <fn>`;
-        canonical sources sidecar BEFORE validation runs and dispatches at
-        named hook points (see canonical body for current hook names).
+        Sidecar registers hooks via `register_validation_hook <hook> <fn>`.
+        Canonical sources sidecar BEFORE validation runs, then dispatches at:
+          - pre_validation: after helpers + banner, before section 1.
+          - extra_checks: after all canonical sections, before the summary.
+          - post_validation: at process exit (trap EXIT), regardless of pass/fail.
+        Hooks see all helpers and globals (PROFILE, ERRORS, WARNINGS).
+        See docs/superpowers/specs/2026-04-27-validate-hook-points.md.
     mutation_policy:
       requires_clean_worktree: true
       commit_default: true
       transaction_kind: temp_commit
-    version: '2026.04.26.1'
-    current_hash: 31ca36b395f4714842b2263844fe924f73ce1bb922bc3fb002ee6dc25d5ed8f4
+    version: '2026.04.26.2'
+    current_hash: 9d6a34869403411d42cefd0fb7f6a2e433320329d2e8f2da244c2171878eb136
     previous_hashes:
       - version: '2026.04.26'
         hash: f4596de3e9b2696066097621d5aef5606f247d144c5530409433427949c830d1
+      - version: '2026.04.26.1'
+        hash: 31ca36b395f4714842b2263844fe924f73ce1bb922bc3fb002ee6dc25d5ed8f4
     migrations:
       - from: '2026.04.26'
         to: '2026.04.26.1'
         kind: byte_replace
         summary: 'Audit-surfaced six-fix batch (Plan #7).'
         steps: []
+      - from: '2026.04.26.1'
+        to: '2026.04.26.2'
+        kind: byte_replace
+        summary: 'Add named hook dispatch points (pre_validation / extra_checks / post_validation).'
+        steps: []
     changelog:
       '2026.04.26': Initial managed artifact (port of scripts/validate.sh + hook infrastructure).
       '2026.04.26.1': 'Audit-surfaced six-fix batch (Plan #7 of conventions audit).'
+      '2026.04.26.2': 'Add named hook dispatch points; the sourced_sidecar extension protocol is now functional end-to-end.'

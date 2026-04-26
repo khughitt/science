@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.04.26.1
-# science-managed-source-sha256: 31ca36b395f4714842b2263844fe924f73ce1bb922bc3fb002ee6dc25d5ed8f4
+# science-managed-version: 2026.04.26.2
+# science-managed-source-sha256: 9d6a34869403411d42cefd0fb7f6a2e433320329d2e8f2da244c2171878eb136
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -27,6 +27,11 @@ if [[ -f "validate.local.sh" ]]; then
   # shellcheck source=/dev/null
   source "validate.local.sh"
 fi
+
+# Trap post_validation hooks so they fire on every exit path
+# (success, failure, signal). Set AFTER sidecar source so any hooks
+# the sidecar registered are visible.
+trap 'dispatch_hook post_validation' EXIT
 
 # === canonical body ===
 # validate.sh — Structural validation for Science research projects
@@ -157,6 +162,10 @@ fi
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Science Project Validation"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Hook point: pre_validation. Fires after helpers and banner are set up,
+# before any canonical-section runs.
+dispatch_hook "pre_validation"
 
 # ─── 1. Project manifest ───────────────────────────────────────────
 echo ""
@@ -1067,6 +1076,10 @@ else
         fi
     done
 fi
+
+# Hook point: extra_checks. Fires after all canonical sections complete,
+# before the pass/fail summary. Use for project-specific structural checks.
+dispatch_hook "extra_checks"
 
 # ─── Summary ─────────────────────────────────────────────────────
 echo ""
