@@ -22,6 +22,8 @@ Recommendation: do not mutate any downstream project further until (a) the user 
 
 Catalog of every synthesis-area file across the four projects. Frontmatter sampled at HEAD `497a75f`.
 
+> **Post-cycle correction (2026-04-25, after Task 2 execution):** The catalog below highlights `orphan_question_count: 23` only on protein-landscape's rollup and is silent on mm30/NS rollups — readers may infer PL was the only project with orphan counts on rollup. Phase 3 migration showed otherwise: mm30 carried `orphan_question_count: 6` and natural-systems carried `orphan_question_count: 56` on their rollups too. Q1=C migration moved orphan counts rollup→threads atomically across all three. The shape-driven `synthesis-type-and-id-emergent-threads` rule handled all cases correctly. Gap A.5 below should read "all three projects with synthesis areas carry orphan counts on rollup, not just PL."
+
 ### natural-systems (`/home/keith/d/natural-systems`)
 
 Audit said: no synthesis files. **Wrong.** NS has a complete synthesis area:
