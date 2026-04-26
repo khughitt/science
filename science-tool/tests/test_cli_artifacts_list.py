@@ -9,8 +9,12 @@ def test_list_runs_against_packaged_registry() -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["project", "artifacts", "list"])
     assert result.exit_code == 0, result.output
-    # Empty registry initially; output should still render the header row.
-    assert "name" in result.output.lower() or "no managed artifacts" in result.output.lower()
+    # Registry is non-empty after Task 28; expect a row for validate.sh.
+    # When empty, "no managed artifacts" still rendered.
+    assert (
+        "validate.sh" in result.output
+        or "no managed artifacts" in result.output.lower()
+    )
 
 
 def test_list_help_text_present() -> None:
