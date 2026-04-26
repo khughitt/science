@@ -230,6 +230,9 @@ From tasks, graph uncertainty, and recent activity, show:
 - blocked tasks or missing evidence
 - which findings belong in `doc/reports/` or `doc/interpretations/`
 - which follow-up actions should be added under `tasks/`
+- If active hypothesis, inquiry, or task work implies a data analysis but no
+  linked `analysis-plan:<slug>` or `doc/plans/*-analysis-plan.md` exists,
+  suggest `science-plan-analysis` before pre-registration or pipeline planning.
 
 ## Output Format
 

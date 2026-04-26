@@ -53,6 +53,20 @@ def test_generate_codex_skills_emits_all_commands(tmp_path: Path) -> None:
     assert len(list(tmp_path.glob("science-*/SKILL.md"))) == command_count
 
 
+def test_plan_analysis_generated_skill_mentions_index_and_readiness() -> None:
+    text = _read_skill("science-plan-analysis")
+
+    expected_strings = (
+        "name: science-plan-analysis",
+        "skills/INDEX.md",
+        "doc/plans/YYYY-MM-DD-<slug>-analysis-plan.md",
+        "Readiness Decision",
+        "science-tool feedback add",
+    )
+    for expected in expected_strings:
+        assert expected in text
+
+
 def test_science_health_mentions_identity_policy_triage() -> None:
     text = _read_skill("science-health")
 

@@ -79,6 +79,7 @@ Additionally:
 3. Read existing inquiries: run `science-tool inquiry list` (if available).
 4. Read existing pipeline plans in `doc/plans/` (if any).
 5. Read existing pre-registrations in `doc/meta/pre-registration-*.md` to avoid duplication.
+6. Read linked analysis plans in `doc/plans/*-analysis-plan.md` when the user or context references `analysis-plan:<slug>`.
 
 ## Interactive Refinement
 
@@ -89,6 +90,12 @@ Have a natural conversation with the user to formalize their expectations. The q
 - What analysis are you about to run?
 - Which hypotheses does it test? (Reference by ID if they exist in `specs/hypotheses/`)
 - Is there a pipeline plan? (Reference by slug if one exists in `doc/plans/`)
+
+If this is a data-analysis pre-registration and no linked `analysis-plan:<slug>`
+exists, recommend `science-plan-analysis` when any of these are underspecified:
+input QA, preprocessing/normalization checks, independent unit, estimand,
+power/resolution limit, or sensitivity-arbitration rule. The recommendation is
+advisory, not a hard dependency.
 
 ### 2. State Expected Outcomes
 
