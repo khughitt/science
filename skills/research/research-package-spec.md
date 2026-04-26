@@ -112,3 +112,4 @@ The `.vl.json` files are copied into the package's `figures/` directory and refe
 
 - [`../data/frictionless.md`](../data/frictionless.md) - Frictionless descriptor conventions reused by research packages.
 - [`../pipelines/snakemake.md`](../pipelines/snakemake.md) - terminal workflow rules that build and validate packages.
+- [`proposition-schema.md`](proposition-schema.md) - proposition and evidence entity semantics used by package provenance.
