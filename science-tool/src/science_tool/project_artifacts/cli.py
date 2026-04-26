@@ -328,3 +328,50 @@ def pin_cmd(
         click.echo(f"pinned {art.name} to {parsed.version} (committed)")
     else:
         click.echo(f"pinned {art.name} to {parsed.version}")
+
+
+@artifacts_group.command("unpin")
+@click.argument("name")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=str),
+    default=".",
+)
+@click.option("--allow-dirty", is_flag=True)
+@click.option("--no-commit", is_flag=True)
+def unpin_cmd(name: str, project_root: str, allow_dirty: bool, no_commit: bool) -> None:
+    """Remove the pin for NAME in this project."""
+    import subprocess
+    from pathlib import Path
+
+    from science_tool.project_artifacts.pin import PinNotFound, remove_pin
+    from science_tool.project_artifacts.worktree import (
+        dirty_paths,
+        in_git_repo,
+        is_clean,
+        paths_intersect,
+    )
+
+    project = Path(project_root)
+    if in_git_repo(project) and not is_clean(project):
+        if not allow_dirty:
+            raise click.ClickException("refusing to unpin: dirty worktree")
+        conflicts = paths_intersect(["science.yaml"], dirty_paths(project))
+        if conflicts:
+            raise click.ClickException("--allow-dirty path conflict on: science.yaml")
+
+    try:
+        remove_pin(project, name)
+    except PinNotFound as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if not no_commit and in_git_repo(project):
+        subprocess.run(["git", "add", "science.yaml"], cwd=project, check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", f"chore(artifacts): unpin {name}"],
+            cwd=project,
+            check=True,
+        )
+        click.echo(f"unpinned {name} (committed)")
+    else:
+        click.echo(f"unpinned {name}")
