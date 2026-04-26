@@ -45,6 +45,26 @@ data/
 Analysis outputs follow the same Frictionless Data Package convention as input
 data. Each workflow run produces a self-describing result package:
 
+## Output-Path Convention for QA Artifacts
+
+QA artifacts split by lifecycle:
+
+- **Input QA** — per-cohort/per-dataset preprocessing checks that travel with the
+  dataset: `data/processed/<cohort_id>/<qa_step>/`. Examples: `cohort_audit.json`,
+  per-sample QC tables, probe-to-gene mappings, callable-territory tables.
+- **Analysis QA** — per-analysis post-hoc checks tied to a specific result:
+  `results/<workflow>/aNNN-<slug>/<qa_step>/`. Examples: bias audits,
+  reconstruction-error reports, sensitivity panels, model diagnostics.
+
+Every QA output directory must carry a `datapackage.json` (see
+[`frictionless.md`](./frictionless.md)). Leaves should reference this
+convention rather than redefining it.
+
+The two locations are mirrors of each other: input QA lives next to the data
+it audits; analysis QA lives next to the result it diagnoses. A QA step that
+genuinely applies to both (e.g., row-alignment assertions) lives wherever it
+runs; document the convention chosen in the leaf.
+
 ### Directory Convention
 
 ```

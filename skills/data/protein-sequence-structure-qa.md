@@ -84,6 +84,8 @@ leakage, label hierarchy mismatch, and length or taxonomy confounding.
 
 ## Output Package
 
+Generate a `datapackage.json` for this directory; see [`frictionless.md`](./frictionless.md).
+
 ```
 data/processed/<protein_dataset>/
 |-- proteins.parquet

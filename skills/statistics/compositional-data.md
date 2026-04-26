@@ -94,6 +94,8 @@ State:
 
 ## Minimum Artifacts
 
+Generate a `datapackage.json` for this directory; see [`../data/frictionless.md`](../data/frictionless.md).
+
 ```
 results/<analysis>/compositional_qa/
 |-- input_manifest.json

@@ -100,6 +100,8 @@ Report:
 
 ## Minimum Artifacts
 
+Generate a `datapackage.json` for this directory; see [`../data/frictionless.md`](../data/frictionless.md).
+
 ```
 results/<analysis>/model_qa/
 |-- input_manifest.json

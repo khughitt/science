@@ -70,6 +70,8 @@ when one class dominates; report both and inspect the confusion matrix.
 
 ## Minimum Artifacts
 
+Generate a `datapackage.json` for this directory; see [`../data/frictionless.md`](../data/frictionless.md).
+
 ```
 data/processed/<curation_task>/
 |-- schema.json

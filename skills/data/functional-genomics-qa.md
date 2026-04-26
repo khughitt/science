@@ -83,6 +83,8 @@ discordant guides behind a gene-level score.
 
 ## Minimum Artifacts
 
+Generate a `datapackage.json` for this directory; see [`frictionless.md`](./frictionless.md).
+
 ```
 results/<analysis>/functional_genomics_qa/
 |-- input_manifest.json

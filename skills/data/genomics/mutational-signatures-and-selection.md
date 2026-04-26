@@ -100,6 +100,8 @@ Include:
 
 ## Minimum Artifacts
 
+Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../frictionless.md).
+
 ```
 results/<analysis>/signature_selection_qa/
 |-- input_manifest.json

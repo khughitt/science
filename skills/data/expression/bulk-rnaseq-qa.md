@@ -138,6 +138,8 @@ doubt, check the original publication's methods section.
 
 ## Output: a per-cohort QA package
 
+Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../frictionless.md).
+
 ```
 data/processed/<cohort_id>/
 ├── cohort_audit.json         # filter steps, sample counts at each step

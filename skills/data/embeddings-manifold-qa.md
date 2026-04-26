@@ -89,6 +89,8 @@ For CKA, Procrustes, nearest-neighbor overlap, or cross-manifold alignment:
 
 ## Output Package
 
+Generate a `datapackage.json` for this directory; see [`frictionless.md`](./frictionless.md).
+
 ```
 results/<analysis>/embedding_qa/
 |-- row_universe.parquet

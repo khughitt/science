@@ -96,6 +96,8 @@ half the panels has half the maximum callable sample count.
 
 ## Output Package
 
+Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../frictionless.md).
+
 ```
 data/processed/<cohort_id>/somatic_mutation_qa/
 |-- mutation_long.parquet

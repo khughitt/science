@@ -223,6 +223,8 @@ manuscript.
 
 A reasonable QA artifact for each ingested cohort:
 
+Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../frictionless.md).
+
 ```
 data/processed/<cohort_id>/
 ├── cohort_audit.json         # filter chain, counts at each step, dropped patients

@@ -141,6 +141,8 @@ historical results.
 
 ## Output: a per-cohort QA package
 
+Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../frictionless.md).
+
 ```
 data/processed/<cohort_id>/
 ├── cohort_audit.json         # platform GPL ID, normalisation method, sample counts
