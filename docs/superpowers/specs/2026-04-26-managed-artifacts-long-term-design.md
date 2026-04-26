@@ -179,6 +179,8 @@ Sidecar files are project-owned: never updated by Science, never tracked by the 
 
 **Hard principle:** if you can't design a clean extension protocol for an artifact within its consumer class, it's the wrong file to manage. The registry has no escape hatch for "extension forbidden, just freeze the bytes"; opting out is a deliberate `extension_protocol: { kind: none, rationale: <reason> }` field that exists precisely to make the decision visible.
 
+**Hook dispatch implementation:** The `register_validation_hook` API and the `dispatch_hook` infrastructure shipped in v2026.04.26 (Task 27 / Task 28). Concrete dispatch *call sites* in the canonical body landed in v2026.04.26.2 per `docs/superpowers/specs/2026-04-27-validate-hook-points.md` (`pre_validation`, `extra_checks`, `post_validation`).
+
 ### Versioning and hash history
 
 Each artifact carries `version` (`YYYY.MM.DD`, optionally `YYYY.MM.DD.N` for same-day bumps), `current_hash`, and `previous_hashes` — a list of every released `{version, hash}` pair, **uncapped**. Storage cost is trivial (~64 bytes per version) and the cap creates real correctness problems with long-lived pins (a project pinned to a version older than the cap window can no longer be classified). Pin entries also store the hash inline (see "No legacy / compatibility layers") so they remain self-classifiable even if registry retention policy ever changed.

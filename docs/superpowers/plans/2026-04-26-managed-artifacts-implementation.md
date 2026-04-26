@@ -6197,4 +6197,11 @@ No drift detected.
 
 ---
 
+## Post-implementation follow-ups
+
+- **Hook dispatch points landed.** The hook contract was wired structurally in T27/T28 but no `dispatch_hook` calls fired from the canonical body. Resolved in `docs/superpowers/plans/2026-04-27-validate-hook-points-implementation.md` with version bump to 2026.04.26.2.
+- **`Snapshot.restore()` idempotent.** Latent ManifestSnapshot double-restore noted during Phase 8 review fixed in commit `fb9c1cd`.
+
+---
+
 > **End of plan.** Implementation can proceed via `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` (inline). Estimated 37 tasks; phases 1-14 sequential as in the dependency graph.
