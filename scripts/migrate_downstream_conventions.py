@@ -40,10 +40,24 @@ Rules (selected with `--rule`):
   shape observed in natural-systems (26/31 reports affected, plus 200+
   bare mentions).
 
+- ``specs-frontmatter-backfill``: Add minimal canonical frontmatter to
+  ``<project>/specs/*.md`` files that have no frontmatter at all.
+  Derives ``id: spec:<basename>`` from the filename, ``title`` from
+  the first H1 (``# Title`` line), and ``date: YYYY-MM-DD`` if the
+  basename starts with a date. Sets ``type: spec`` and a default
+  ``status: design`` (which the project owner may refine afterwards
+  to ``approved``, ``superseded``, etc.). Does not touch files that
+  already have frontmatter; does not invent ``related_*`` fields.
+  Per audit observation: 22 of 32 specs in natural-systems' 2026-03
+  cohort were authored before the frontmatter convention solidified
+  in 2026-04; the canonical id prefix surfaced from the same audit
+  that drove ``report-id-prefix``.
+
 Usage::
 
     uv run scripts/migrate_downstream_conventions.py <project_root> --rule report-id-prefix
     uv run scripts/migrate_downstream_conventions.py <project_root> --rule report-id-prefix --apply
+    uv run scripts/migrate_downstream_conventions.py <project_root> --rule specs-frontmatter-backfill
     uv run scripts/migrate_downstream_conventions.py --self-test
 
 Safety contract:
@@ -254,6 +268,83 @@ def apply_rule_report_id_prefix(project_root: Path, *, apply: bool) -> RuleResul
     return result
 
 
+# ---------- rule 2: specs-frontmatter-backfill ----------
+
+_RE_SPEC_DATE_PREFIX = re.compile(r"^(\d{4}-\d{2}-\d{2})-")
+_RE_SPEC_FIRST_H1 = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
+
+
+def _yaml_double_quote(value: str) -> str:
+    """Quote ``value`` for a YAML double-quoted scalar.
+
+    Only ``\\`` and ``"`` need escaping in a double-quoted scalar; other
+    printable characters (em-dash, colon, parens) are safe inside the
+    quotes.
+    """
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def apply_rule_specs_frontmatter_backfill(project_root: Path, *, apply: bool) -> RuleResult:
+    """Add minimal canonical frontmatter to ``<project>/specs/*.md`` files."""
+    result = RuleResult(name="specs-frontmatter-backfill")
+    specs_dir = project_root / "specs"
+    if not specs_dir.is_dir():
+        return result
+
+    for path in sorted(specs_dir.glob("*.md")):
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as e:
+            result.errors.append(f"{path}: read failed: {e}")
+            continue
+        if text.startswith("---\n"):
+            # Already has frontmatter — leave alone.
+            continue
+
+        basename = path.stem
+        h1 = _RE_SPEC_FIRST_H1.search(text)
+        title = h1.group(1).strip() if h1 else basename
+        date_match = _RE_SPEC_DATE_PREFIX.match(basename)
+
+        fm_lines = [
+            "---",
+            f'id: "spec:{basename}"',
+            'type: "spec"',
+            f"title: {_yaml_double_quote(title)}",
+        ]
+        if date_match:
+            fm_lines.append(f"date: {date_match.group(1)}")
+        fm_lines.append('status: "design"')
+        fm_lines.append("---")
+        fm_lines.append("")
+        new_frontmatter = "\n".join(fm_lines) + "\n"
+        new_text = new_frontmatter + text
+
+        # Each backfill is a single logical change (add frontmatter block).
+        # Record one line entry pointing at line 1 with a synthesized
+        # before/after summary; the full block goes to disk on apply.
+        result.changes.append(
+            FileChange(
+                path=path,
+                kind="frontmatter-backfill",
+                before="(no frontmatter)",
+                after=f'id: "spec:{basename}"',
+                line_no=1,
+            )
+        )
+        result.files_touched.add(path)
+        if apply:
+            try:
+                path.write_text(new_text, encoding="utf-8")
+            except OSError as e:
+                result.errors.append(f"{path}: write failed: {e}")
+
+    return result
+
+
 # ---------- self-test ----------
 
 
@@ -354,6 +445,78 @@ def _self_test() -> None:
         again = apply_rule_report_id_prefix(root, apply=True)
         assert again.changes == [], f"non-idempotent: {again.changes}"
 
+        # ---- rule 2: specs-frontmatter-backfill ----
+
+        (root / "specs").mkdir()
+        # (s1) dated, no frontmatter, has H1 — should be backfilled
+        spec_drift = root / "specs" / "2026-03-16-foo-design.md"
+        spec_drift_orig = (
+            "# Foo Design: A Worked Example\n"
+            "\n"
+            "**Date:** 2026-03-16\n"
+            "\n"
+            "Body.\n"
+        )
+        spec_drift.write_text(spec_drift_orig, encoding="utf-8")
+        # (s2) non-dated, no frontmatter, no H1 — title falls back to basename
+        spec_no_h1 = root / "specs" / "research-notes.md"
+        spec_no_h1.write_text("Just some prose.\n", encoding="utf-8")
+        # (s3) already has frontmatter — must be left alone
+        spec_canon = root / "specs" / "2026-04-22-bar-design.md"
+        spec_canon_text = (
+            '---\nid: "spec:2026-04-22-bar-design"\ntype: "spec"\n'
+            'title: "Bar"\ndate: 2026-04-22\nstatus: design\n---\n\nBody.\n'
+        )
+        spec_canon.write_text(spec_canon_text, encoding="utf-8")
+        # (s4) title with characters that need YAML escaping
+        spec_special = root / "specs" / "2026-04-01-quoted-title.md"
+        spec_special.write_text(
+            '# Spec: "Quoted" — em-dash & path\\ok\n\nBody.\n',
+            encoding="utf-8",
+        )
+
+        # Dry-run rule 2
+        dry2 = apply_rule_specs_frontmatter_backfill(root, apply=False)
+        assert dry2.errors == [], f"errors: {dry2.errors}"
+        names = sorted(c.path.name for c in dry2.changes)
+        assert names == [
+            "2026-03-16-foo-design.md",
+            "2026-04-01-quoted-title.md",
+            "research-notes.md",
+        ], names
+        assert not any(c.path == spec_canon for c in dry2.changes)
+        # Dry-run did not write
+        assert spec_drift.read_text() == spec_drift_orig
+        assert spec_canon.read_text() == spec_canon_text
+
+        # Apply rule 2
+        wet2 = apply_rule_specs_frontmatter_backfill(root, apply=True)
+        assert wet2.errors == [], f"errors: {wet2.errors}"
+        # Drifted dated spec: id derived from basename, date from prefix, title from H1
+        d_text = spec_drift.read_text()
+        assert d_text.startswith("---\n")
+        assert 'id: "spec:2026-03-16-foo-design"' in d_text
+        assert 'type: "spec"' in d_text
+        assert 'title: "Foo Design: A Worked Example"' in d_text
+        assert "date: 2026-03-16" in d_text
+        assert 'status: "design"' in d_text
+        # Original body intact
+        assert "Body." in d_text
+        # No-H1 non-dated spec: title falls back to basename, no date field
+        n_text = spec_no_h1.read_text()
+        assert 'id: "spec:research-notes"' in n_text
+        assert 'title: "research-notes"' in n_text
+        assert "date:" not in n_text.split("---", 2)[1]
+        # Already-canonical spec: byte-identical
+        assert spec_canon.read_text() == spec_canon_text
+        # Special-character title: YAML-escaped properly
+        s_text = spec_special.read_text()
+        assert 'title: "Spec: \\"Quoted\\" — em-dash & path\\\\ok"' in s_text, s_text
+
+        # Idempotence
+        again2 = apply_rule_specs_frontmatter_backfill(root, apply=True)
+        assert again2.changes == [], f"non-idempotent: {again2.changes}"
+
         click.echo("self-test: PASS")
 
 
@@ -362,6 +525,7 @@ def _self_test() -> None:
 
 RULES = {
     "report-id-prefix": apply_rule_report_id_prefix,
+    "specs-frontmatter-backfill": apply_rule_specs_frontmatter_backfill,
 }
 
 
