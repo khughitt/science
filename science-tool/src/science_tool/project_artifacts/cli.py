@@ -144,3 +144,36 @@ def exec_cmd(name: str, args: tuple[str, ...]) -> None:
 
     # os.execv replaces this process with the canonical.
     os.execv(str(path), [str(path), *args])
+
+
+@artifacts_group.command("install")
+@click.argument("name")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=str),
+    default=".",
+)
+@click.option("--adopt", is_flag=True, help="Claim untracked file matching a known version.")
+@click.option("--force-adopt", is_flag=True, help="Overwrite untracked divergent file.")
+def install_cmd(name: str, project_root: str, adopt: bool, force_adopt: bool) -> None:
+    """Install or adopt the canonical bytes for NAME into PROJECT_ROOT."""
+    from pathlib import Path
+
+    from science_tool.project_artifacts.artifacts import (
+        InstallError,
+        install_artifact,
+    )
+
+    registry = default_registry()
+    art = next((a for a in registry.artifacts if a.name == name), None)
+    if art is None:
+        raise click.ClickException(f"no managed artifact named {name!r} in the registry")
+
+    try:
+        result = install_artifact(art, Path(project_root), adopt=adopt, force_adopt=force_adopt)
+    except InstallError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(f"{art.name}: {result.action.value} ({result.reason})")
+    if result.backup is not None:
+        click.echo(f"  backup written: {result.backup}")
