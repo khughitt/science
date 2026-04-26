@@ -251,6 +251,7 @@ Ensure the project ignores:
 - `.env`
 - `papers/pdfs/`
 - `.worktrees/`
+- `*.pre-update*.bak`
 
 Add profile-specific ignores only when they match the project's actual layout.
 

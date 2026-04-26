@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.04.26.3
-# science-managed-source-sha256: 37aaefd4a45a70987d663f261bc82f4b8714088999a3a2ef30a27af95b2d499a
+# science-managed-version: 2026.04.26.4
+# science-managed-source-sha256: 79d1d8ae81457ac67f9fe3a588332630db9d589612d4888bf115395a6ffd4d4c
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -1070,11 +1070,11 @@ if [ "$xref_result" = "SKIP" ]; then
 elif [ "$xref_result" = "OK" ]; then
     info "All frontmatter cross-references valid"
 else
-    echo "$xref_result" | while IFS=: read -r status filename ref; do
+    while IFS=: read -r status filename ref; do
         if [ "$status" = "BROKEN" ]; then
             warn "Broken reference in $filename: related ID '$ref' not found"
         fi
-    done
+    done < <(echo "$xref_result")
 fi
 
 # Hook point: extra_checks. Fires after all canonical sections complete,

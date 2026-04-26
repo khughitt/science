@@ -211,6 +211,9 @@ __pycache__/
 # Worktrees
 .worktrees/
 
+# Managed artifact rollback backups
+*.pre-update*.bak
+
 # OS
 .DS_Store
 ```

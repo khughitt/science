@@ -29,8 +29,8 @@ artifacts:
       requires_clean_worktree: true
       commit_default: true
       transaction_kind: temp_commit
-    version: '2026.04.26.3'
-    current_hash: 37aaefd4a45a70987d663f261bc82f4b8714088999a3a2ef30a27af95b2d499a
+    version: '2026.04.26.4'
+    current_hash: 79d1d8ae81457ac67f9fe3a588332630db9d589612d4888bf115395a6ffd4d4c
     previous_hashes:
       - version: '2026.04.26'
         hash: f4596de3e9b2696066097621d5aef5606f247d144c5530409433427949c830d1
@@ -38,6 +38,8 @@ artifacts:
         hash: 31ca36b395f4714842b2263844fe924f73ce1bb922bc3fb002ee6dc25d5ed8f4
       - version: '2026.04.26.2'
         hash: 9d6a34869403411d42cefd0fb7f6a2e433320329d2e8f2da244c2171878eb136
+      - version: '2026.04.26.3'
+        hash: 37aaefd4a45a70987d663f261bc82f4b8714088999a3a2ef30a27af95b2d499a
     migrations:
       - from: '2026.04.26'
         to: '2026.04.26.1'
@@ -54,8 +56,14 @@ artifacts:
         kind: byte_replace
         summary: 'Task field check: type -> aspects (per 2026-04-19-entity-aspects-design.md).'
         steps: []
+      - from: '2026.04.26.3'
+        to: '2026.04.26.4'
+        kind: byte_replace
+        summary: 'Keep xref warning counts in the parent shell.'
+        steps: []
     changelog:
       '2026.04.26': Initial managed artifact (port of scripts/validate.sh + hook infrastructure).
       '2026.04.26.1': 'Audit-surfaced six-fix batch (Plan #7 of conventions audit).'
       '2026.04.26.2': 'Add named hook dispatch points; the sourced_sidecar extension protocol is now functional end-to-end.'
       '2026.04.26.3': 'Replace deprecated `type:` task-field check with `aspects:` per 2026-04-19-entity-aspects-design.md.'
+      '2026.04.26.4': 'Keep frontmatter cross-reference warning counts in the parent shell.'

@@ -2625,8 +2625,6 @@ Per spec 'Dirty-worktree and transaction safety'."
 import subprocess
 from pathlib import Path
 
-import pytest
-
 from science_tool.project_artifacts.migrations.transaction import TempCommitSnapshot
 
 
@@ -2683,6 +2681,22 @@ def test_restore_after_failed_apply(tmp_path: Path) -> None:
     snap.restore()
     assert (tmp_path / "a.txt").read_text(encoding="utf-8") == "orig"
     assert not (tmp_path / "b.txt").exists()
+
+
+def test_restore_is_idempotent(tmp_path: Path) -> None:
+    """Calling restore() twice is a no-op the second time.
+
+    Covers update.update_artifact's outer-except path: run_migration already
+    restored on step failure, then update's except handler restores again.
+    """
+    _init_repo(tmp_path)
+    snap = TempCommitSnapshot(tmp_path)
+    snap.take()
+    (tmp_path / "a.txt").write_text("partial", encoding="utf-8")
+    snap.restore()
+    assert (tmp_path / "a.txt").read_text(encoding="utf-8") == "orig"
+    snap.restore()
+    assert (tmp_path / "a.txt").read_text(encoding="utf-8") == "orig"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2735,6 +2749,7 @@ class TempCommitSnapshot:
         self.repo_root = repo_root
         self._snapshot_sha: str | None = None
         self._original_head: str | None = None
+        self._consumed = False
 
     def _git(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -2746,33 +2761,48 @@ class TempCommitSnapshot:
         self._original_head = self._git("rev-parse", "HEAD").stdout.strip()
         self._git("add", "-A")
         # --allow-empty so taking a snapshot of a clean tree still succeeds.
+        # Conventional-commits format: downstream projects often enforce
+        # commitlint via husky commit-msg hooks; a non-conventional message
+        # would fail the hook and abort the snapshot. The commit is discarded
+        # by .discard()/.restore() before any user-visible commit lands.
         self._git(
-            "commit", "-q", "--allow-empty",
-            "-m", "managed-artifacts: temp transaction snapshot",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "chore(artifacts): temp transaction snapshot",
         )
         self._snapshot_sha = self._git("rev-parse", "HEAD").stdout.strip()
 
     def restore(self) -> None:
-        if self._snapshot_sha is None:
+        if self._consumed:
+            return
+        if self._snapshot_sha is None or self._original_head is None:
             raise RuntimeError("snapshot not taken; cannot restore")
-        # Hard-reset to the snapshot, then back up one commit so the snapshot
-        # itself is undone — leaves working tree in pre-take state.
+        # Hard-reset to the snapshot: HEAD/index/worktree all at snap-tree,
+        # which captures the exact pre-take worktree contents.
         self._git("reset", "--hard", self._snapshot_sha)
-        self._git("reset", "--mixed", "HEAD~1")
-        # Restore untracked files: anything in the snapshot tree but not committed at original HEAD
-        # is now in the index. Materialize them.
-        self._git("checkout-index", "-a", "-f")
-        # Files originally untracked at take-time should now be on disk too.
-        # (The temp commit captured them; reset --mixed left them as untracked
-        # additions, which checkout-index materialized.)
+        # Remove anything created after take() that the migration left behind
+        # as untracked (reset --hard does NOT remove untracked files).
+        self._git("clean", "-fd")
+        # Move HEAD back to the original commit so the temp snapshot commit
+        # is no longer reachable; index + worktree stay at snap content.
+        self._git("reset", "--soft", self._original_head)
+        self._consumed = True
 
     def discard(self, *, commit_message: str | None = None) -> None:
-        if self._snapshot_sha is None:
+        if self._consumed:
+            raise RuntimeError("snapshot already restored or discarded")
+        if self._snapshot_sha is None or self._original_head is None:
             raise RuntimeError("snapshot not taken; cannot discard")
-        # Soft-reset removes the temp commit, leaving all changes staged.
-        self._git("reset", "--soft", "HEAD~1")
+        # Move HEAD back to original; index stays at snap-tree, worktree
+        # has the migration's mutations.
+        self._git("reset", "--soft", self._original_head)
         if commit_message is not None:
+            # Stage the migration's mutations on top of the pre-take index.
+            self._git("add", "-A")
             self._git("commit", "-q", "-m", commit_message)
+        self._consumed = True
 
 
 # ManifestSnapshot lands in Task 16.
@@ -2788,7 +2818,7 @@ class ManifestSnapshot:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `uv run --project science-tool pytest tests/test_transaction_temp_commit.py -v`
-Expected: 3 passed.
+Expected: 4 passed.
 
 - [ ] **Step 5: Quality gates**
 
