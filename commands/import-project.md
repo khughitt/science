@@ -200,9 +200,23 @@ Create or normalize:
 @AGENTS.md
 ```
 
-### `validate.sh`
+### Install the managed validator
 
-Copy `${CLAUDE_PLUGIN_ROOT}/scripts/validate.sh` into the project root and make it executable.
+Install Science's managed `validate.sh`:
+
+```bash
+science-tool project artifacts install validate.sh --project-root <project-path>
+```
+
+This drops the canonical `validate.sh` into the project root with the managed header. To stay current on future Science releases, run `science-tool project artifacts check validate.sh` periodically (or rely on `science-tool health` to surface drift).
+
+If the project already has a `validate.sh` from a pre-managed-system era, adopt it:
+
+```bash
+science-tool project artifacts install validate.sh --adopt --project-root <project-path>
+```
+
+`--adopt` rewrites the managed header in place if the body matches a known historical version. If the body diverges from every known version, use `--force-adopt` instead (writes a `.pre-install.bak`).
 
 ### `doc/`
 

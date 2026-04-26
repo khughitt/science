@@ -115,8 +115,20 @@ When migrating an existing project:
 2. Collapse duplicate active roots into the canonical root set.
 3. Move superseded structure into `archive/` if it still has reference value.
 4. Remove broad `paths:` remapping from the steady-state model.
-5. Refresh `validate.sh` after framework validator changes.
+5. Refresh `validate.sh` after framework validator changes (see below).
 6. Re-run project validation and project-native tests before merge.
+
+### Refresh `validate.sh`
+
+`validate.sh` is a managed Science artifact (per `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md`). To check for updates:
+
+```bash
+science-tool project artifacts check validate.sh
+science-tool project artifacts diff validate.sh   # inspect changes
+science-tool project artifacts update validate.sh # apply
+```
+
+Updates may carry migration steps; the CLI surfaces them interactively.
 
 Specific consolidation rules:
 
