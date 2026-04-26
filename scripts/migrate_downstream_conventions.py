@@ -40,42 +40,62 @@ Rules (selected with `--rule`):
   shape observed in natural-systems (26/31 reports affected, plus 200+
   bare mentions).
 
-- ``synthesis-type-mm30``: Migrate mm30-shape synthesis files from
-  ``type: "report"`` to ``type: "synthesis"`` and rewrite their ids
-  from ``report:synthesis-<slug>`` → ``synthesis:<slug>`` (per-hypothesis
-  files under ``<project>/doc/reports/synthesis/*.md``) and the literal
-  ``report:synthesis`` → ``synthesis:rollup`` (the rollup file
-  ``<project>/doc/reports/synthesis.md``). Pass 2 rewrites entity-ref
-  mentions of the same shapes across all tracked markdown. Per audit
-  synthesis §3.3 — mm30 ships the canonical structured-rollup shape
-  but with a divergent ``type:`` value; Plan #4 promoted ``synthesis``
-  as the canonical type.
+- ``synthesis-type-and-id-rollup``: Canonicalize the synthesis rollup
+  file ``<project>/doc/reports/synthesis.md``. Ensures ``type:
+  synthesis``, ``id: synthesis:rollup``, and ``report_kind:
+  synthesis-rollup``. Defensive against starting ``type:`` values of
+  ``report`` / ``synthesis-rollup`` / ``synthesis`` and starting
+  ``id:`` values of ``report:synthesis`` / ``report:project-synthesis``
+  / absent. Per Q1=C (per the 2026-04-25 synthesis-shape
+  investigation), if the rollup carries ``orphan_question_count`` /
+  ``orphan_interpretation_count`` / ``orphan_ids``, MOVES those fields
+  to the companion ``_emergent-threads.md`` file as a logical-atomic
+  apply (both writes succeed or neither does). Mention pass rewrites
+  ``report:synthesis`` (literal) and ``report:project-synthesis`` to
+  ``synthesis:rollup`` across all tracked markdown.
 
-- ``synthesis-type-pl-emergent-threads``: Migrate
-  ``<project>/doc/reports/synthesis/_emergent-threads.md`` from
-  ``type: "emergent-threads"`` to ``type: "synthesis"`` and insert
-  ``id: "synthesis:emergent-threads"`` plus ``report_kind:
-  "emergent-threads"`` immediately after the new ``type:`` line. Other
-  fields (counts, orphan ids, provenance) are unchanged. Per audit
-  synthesis §3.3 / Plan #4. Single-file rule; idempotent if the file
-  already declares the canonical shape.
+- ``synthesis-type-and-id-emergent-threads``: Canonicalize
+  ``<project>/doc/reports/synthesis/_emergent-threads.md``. Ensures
+  ``type: synthesis``, ``id: synthesis:emergent-threads``, and
+  ``report_kind: emergent-threads``. Defensive against starting
+  ``type:`` values of ``report`` / ``emergent-threads`` /
+  ``synthesis`` and starting ``id:`` values of
+  ``report:emergent-threads`` /
+  ``report:synthesis-emergent-threads`` / absent. Does NOT add or
+  modify orphan-count fields — those are managed by the rollup rule's
+  atomic-move logic. Mention pass rewrites
+  ``report:synthesis-emergent-threads`` and
+  ``report:emergent-threads`` to ``synthesis:emergent-threads``.
 
-- ``synthesis-report-kind-pl-hyp``: For per-hypothesis synthesis files
-  ``<project>/doc/reports/synthesis/h*.md`` that already declare
-  ``type: "synthesis"`` but lack ``report_kind:``, insert
-  ``report_kind: "hypothesis-synthesis"`` immediately after the
-  ``type:`` line. No-op if ``report_kind:`` is already present. Per
-  audit synthesis §3.3 / Plan #4.
+- ``synthesis-type-and-id-per-hyp``: Canonicalize per-hypothesis
+  synthesis files ``<project>/doc/reports/synthesis/*.md`` excluding
+  files whose stem starts with ``_``. Ensures ``type: synthesis``,
+  ``id: synthesis:<stem>``, and ``report_kind: hypothesis-synthesis``.
+  Defensive against starting ``type:`` values of ``report`` /
+  ``synthesis`` and starting ``id:`` values of
+  ``report:synthesis-<slug>`` / already-canonical
+  ``synthesis:<slug>``. No filename-prefix gating (directory placement
+  + non-``_`` filename is the discriminator). Mention pass rewrites
+  ``report:synthesis-<slug>`` → ``synthesis:<slug>``, path-keyed
+  against the per-hyp file stems so non-synthesis ids matching the
+  regex are preserved.
 
-- ``pre-registration-type``: Migrate pre-registration files from
-  ``type: "plan"`` to ``type: "pre-registration"`` for files matching
-  ``<project>/doc/meta/pre-registration-*.md`` or
-  ``<project>/doc/pre-registrations/*.md`` whose frontmatter ``id:``
-  starts with ``pre-registration:``. Files with a different id prefix
-  (e.g. ``id: "plan:pre-registration-<slug>"``) are NOT rewritten by
-  this rule; those need a separate id rewrite (see
-  ``natural-systems-pre-reg-frontmatter``). Per audit synthesis §3.2 /
-  Plan #2.
+- ``pre-registration-id-and-type``: Canonicalize pre-registration
+  files matching ``<project>/doc/meta/pre-registration-*.md`` and
+  ``<project>/doc/pre-registrations/*.md``. Ensures ``type:
+  pre-registration``. Handles two starting ``id:`` shapes:
+
+  - ``id: pre-registration:<slug>`` — already canonical id; just
+    rewrite type from ``plan`` (or already ``pre-registration``).
+  - ``id: plan:pre-registration-<slug>`` — strip the ``plan:`` prefix
+    to ``id: pre-registration:<slug>`` and rewrite type.
+
+  Files whose ``id:`` matches neither pattern (e.g. truly empty
+  frontmatter, or NS-style sparse FM with no ``id:``) are SKIPPED —
+  they're handled by ``natural-systems-pre-reg-frontmatter``. Mention
+  pass rewrites ``plan:pre-registration-<slug>`` →
+  ``pre-registration:<slug>``, path-keyed against the pre-reg file
+  stems.
 
 - ``natural-systems-pre-reg-frontmatter``: REPORT-ONLY rule (does NOT
   mutate). For files matching ``<project>/doc/meta/pre-registration-*.md``
@@ -130,7 +150,7 @@ from pathlib import Path
 import click
 
 
-# ---------- rule 1: report-id-prefix ----------
+# ---------- shared infrastructure ----------
 
 _DATE_SLUG = r"\d{4}-\d{2}-\d{2}[A-Za-z0-9_-]*"
 
@@ -145,33 +165,25 @@ _RE_REPORT_ID_FRONTMATTER = re.compile(
 # directory references like ``doc:reports/synthesis`` or
 # ``doc:reports/synthesis/_emergent-threads`` (slug must start with a
 # YYYY-MM-DD date).
-_RE_REPORT_ID_MENTION = re.compile(
-    rf"(?<![A-Za-z0-9_./-])doc:reports/({_DATE_SLUG})(?![A-Za-z0-9_./-])"
-)
+_RE_REPORT_ID_MENTION = re.compile(rf"(?<![A-Za-z0-9_./-])doc:reports/({_DATE_SLUG})(?![A-Za-z0-9_./-])")
 
 # Match bare ``doc:DATE-slug`` entity-ref mentions (no ``reports/`` infix).
 # Path-keyed against the reports directory at substitution time so this only
 # rewrites refs that resolve to a known report file.
-_RE_REPORT_ID_BARE_MENTION = re.compile(
-    rf"(?<![A-Za-z0-9_./-])doc:({_DATE_SLUG})(?![A-Za-z0-9_./-])"
-)
+_RE_REPORT_ID_BARE_MENTION = re.compile(rf"(?<![A-Za-z0-9_./-])doc:({_DATE_SLUG})(?![A-Za-z0-9_./-])")
 
 
 @dataclass
 class FileChange:
     path: Path
-    kind: str  # "frontmatter-id" | "mention"
+    kind: str  # "frontmatter-id" | "mention" | "frontmatter-move" | etc.
     before: str
     after: str
     line_no: int
 
     def render(self, base: Path | None = None) -> str:
         p = self.path.relative_to(base) if base else self.path
-        return (
-            f"  {p}:{self.line_no}  [{self.kind}]\n"
-            f"    - {self.before}\n"
-            f"    + {self.after}"
-        )
+        return f"  {p}:{self.line_no}  [{self.kind}]\n    - {self.before}\n    + {self.after}"
 
 
 @dataclass
@@ -200,11 +212,7 @@ def _tracked_markdown(project_root: Path) -> list[Path]:
         return sorted(project_root / line for line in proc.stdout.splitlines() if line)
     except (subprocess.CalledProcessError, FileNotFoundError):
         excluded = {".git", "node_modules", "archive", "dist", ".venv", ".worktrees"}
-        return sorted(
-            p
-            for p in project_root.rglob("*.md")
-            if not (set(p.relative_to(project_root).parts) & excluded)
-        )
+        return sorted(p for p in project_root.rglob("*.md") if not (set(p.relative_to(project_root).parts) & excluded))
 
 
 def _split_frontmatter(text: str) -> tuple[str, str] | None:
@@ -228,15 +236,12 @@ def _record_line_changes(
     line_offset: int = 0,
 ) -> None:
     """Compare ``before_text`` and ``after_text`` line-by-line and append changes."""
-    for i, (a, b) in enumerate(
-        zip(before_text.splitlines(), after_text.splitlines()), start=1 + line_offset
-    ):
+    for i, (a, b) in enumerate(zip(before_text.splitlines(), after_text.splitlines()), start=1 + line_offset):
         if a != b:
-            result.changes.append(
-                FileChange(
-                    path=path, kind=kind, before=a.strip(), after=b.strip(), line_no=i
-                )
-            )
+            result.changes.append(FileChange(path=path, kind=kind, before=a.strip(), after=b.strip(), line_no=i))
+
+
+# ---------- rule: report-id-prefix ----------
 
 
 def apply_rule_report_id_prefix(project_root: Path, *, apply: bool) -> RuleResult:
@@ -316,118 +321,282 @@ def apply_rule_report_id_prefix(project_root: Path, *, apply: bool) -> RuleResul
     return result
 
 
-# ---------- rule: synthesis-type-mm30 ----------
+# ---------- shared synthesis helpers ----------
 
 # Per-hypothesis synthesis slug regex. Per-hyp slugs are NOT date-prefixed
-# (e.g. ``h1-foo``, ``h01-bar``) so we use a permissive identifier regex.
+# (e.g. ``h1-foo``, ``h01-bar``, ``double-categorical-foo``) so we use a
+# permissive identifier regex.
 _SYNTH_SLUG = r"[A-Za-z0-9_-]+"
 
-# Frontmatter rewrites for mm30-shape synthesis files.
-_RE_SYNTH_TYPE_REPORT = re.compile(
-    r'^(type:\s*)(["\']?)report\2(\s*)$',
+# Generic frontmatter-line regexes (re-used across synthesis rules).
+_RE_FM_TYPE_ANY = re.compile(
+    r'^(?P<prefix>type:\s*)(?P<q>["\']?)(?P<value>[A-Za-z0-9_-]+)(?P=q)(?P<suffix>\s*)$',
     re.MULTILINE,
 )
-_RE_SYNTH_ID_PER_HYP = re.compile(
-    rf'^(id:\s*)(["\']?)report:synthesis-({_SYNTH_SLUG})\2(\s*)$',
+_RE_FM_ID_ANY = re.compile(
+    r'^(?P<prefix>id:\s*)(?P<q>["\']?)(?P<value>[^"\'\s]+)(?P=q)(?P<suffix>\s*)$',
     re.MULTILINE,
 )
-_RE_SYNTH_ID_ROLLUP = re.compile(
-    r'^(id:\s*)(["\']?)report:synthesis\2(\s*)$',
-    re.MULTILINE,
-)
+_RE_FM_HAS_ID = re.compile(r"^id:\s*", re.MULTILINE)
+_RE_FM_HAS_TYPE = re.compile(r"^type:\s*", re.MULTILINE)
+_RE_FM_HAS_REPORT_KIND = re.compile(r"^report_kind:\s*", re.MULTILINE)
 
-# Mention-side rewrites. Match ``report:synthesis-<slug>`` followed by
-# anything that is not part of the slug character class. Path-keyed against
-# known synthesis stems at substitution time so we never rewrite mentions
-# of slugs that aren't real synthesis files.
-_RE_SYNTH_MENTION_PER_HYP = re.compile(
-    rf"(?<![A-Za-z0-9_./-])report:synthesis-({_SYNTH_SLUG})(?![A-Za-z0-9_./-])"
-)
-# Match the literal ``report:synthesis`` (no trailing slug) → ``synthesis:rollup``.
-# Negative lookahead on ``-`` so it doesn't bite ``report:synthesis-h1`` mentions
-# (those are handled by the per-hyp regex above).
-_RE_SYNTH_MENTION_ROLLUP = re.compile(
-    r"(?<![A-Za-z0-9_./-])report:synthesis(?![A-Za-z0-9_./:-])"
+# Orphan-count fields managed by Q1=C (rollup → threads atomic move).
+_ORPHAN_FIELDS = (
+    "orphan_question_count",
+    "orphan_interpretation_count",
+    "orphan_ids",
 )
 
 
-def apply_rule_synthesis_type_mm30(project_root: Path, *, apply: bool) -> RuleResult:
-    """Migrate mm30-shape synthesis frontmatter + mentions to canonical ``synthesis:``."""
-    result = RuleResult(name="synthesis-type-mm30")
-    synth_dir = project_root / "doc" / "reports" / "synthesis"
+def _set_or_insert_after_type(
+    fm: str,
+    field_name: str,
+    new_value_line: str,
+    *,
+    rewrite_existing: bool = True,
+) -> tuple[str, bool]:
+    """Ensure ``field_name`` is present in ``fm`` with ``new_value_line``.
+
+    If absent, insert immediately after the ``type:`` line. If present and
+    ``rewrite_existing`` is True, rewrite the value to match
+    ``new_value_line``. Returns ``(new_fm, changed)``.
+
+    ``new_value_line`` must be a complete frontmatter line (e.g.
+    ``id: "synthesis:rollup"``) — without trailing newline.
+    """
+    has_field_re = re.compile(rf"^{re.escape(field_name)}:\s*", re.MULTILINE)
+    existing = has_field_re.search(fm)
+    if existing is None:
+        # Insert after ``type:`` line (must be present at this point).
+        type_match = re.search(r'^type:\s*["\']?[A-Za-z0-9_-]+["\']?\s*$', fm, re.MULTILINE)
+        if type_match is None:
+            return fm, False
+        insert_at = type_match.end()
+        return fm[:insert_at] + "\n" + new_value_line + fm[insert_at:], True
+    if not rewrite_existing:
+        return fm, False
+    # Rewrite the existing line in place.
+    line_re = re.compile(rf"^{re.escape(field_name)}:.*$", re.MULTILINE)
+    new_fm, n = line_re.subn(new_value_line, fm, count=1)
+    if n == 0 or new_fm == fm:
+        return fm, False
+    return new_fm, True
+
+
+def _rewrite_fm_field(fm: str, field_name: str, new_value_line: str) -> tuple[str, bool]:
+    """Rewrite an existing ``field_name:`` line in ``fm`` to ``new_value_line``.
+
+    Returns ``(new_fm, changed)``. No-op if the field is absent or already
+    equals the target line.
+    """
+    line_re = re.compile(rf"^{re.escape(field_name)}:.*$", re.MULTILINE)
+    m = line_re.search(fm)
+    if m is None:
+        return fm, False
+    if m.group(0) == new_value_line:
+        return fm, False
+    new_fm = line_re.sub(new_value_line, fm, count=1)
+    return new_fm, new_fm != fm
+
+
+def _strip_fm_field(fm: str, field_name: str) -> tuple[str, str | None]:
+    """Strip a single-line ``field_name: value`` entry from ``fm``.
+
+    Returns ``(new_fm, removed_line)`` where ``removed_line`` is the full
+    line (without trailing newline) that was removed, or ``None`` if the
+    field was absent. Only handles single-line scalar fields (does not
+    handle block sequences). For ``orphan_ids`` (which may be ``[]`` or a
+    block list) we only handle the inline form ``orphan_ids: [...]`` or
+    ``orphan_ids: <scalar>``; multi-line block lists are reported as an
+    error to the caller.
+    """
+    line_re = re.compile(rf"^({re.escape(field_name)}:.*)$\n?", re.MULTILINE)
+    m = line_re.search(fm)
+    if m is None:
+        return fm, None
+    removed = m.group(1)
+    new_fm = line_re.sub("", fm, count=1)
+    return new_fm, removed
+
+
+# ---------- rule: synthesis-type-and-id-rollup ----------
+
+
+def _migrate_orphan_fields_to_threads(
+    rollup_fm: str, threads_path: Path, *, apply: bool, result: RuleResult
+) -> tuple[str, dict[Path, str]]:
+    """Move orphan-count fields from ``rollup_fm`` to the threads file.
+
+    Returns ``(new_rollup_fm, threads_writes)`` where ``threads_writes``
+    maps the threads path to its new full-file content if it should be
+    written (empty if the threads file requires no changes). Atomicity:
+    if either the rollup strip or the threads insert fails, NEITHER is
+    applied (errors are recorded and an empty dict is returned).
+    """
+    # Detect whether any orphan field is present on the rollup. If not, no-op.
+    present_fields = [f for f in _ORPHAN_FIELDS if re.search(rf"^{re.escape(f)}:\s*", rollup_fm, re.MULTILINE)]
+    if not present_fields:
+        return rollup_fm, {}
+
+    # Block-list detection for orphan_ids: if `orphan_ids:` is followed by a
+    # newline-then-`-` line, we don't have safe machinery to move it as a
+    # block. Stop and report.
+    block_list_re = re.compile(r"^orphan_ids:\s*$\n(\s+- )", re.MULTILINE)
+    if block_list_re.search(rollup_fm):
+        result.errors.append(
+            f"{threads_path}: rollup has orphan_ids in block-list form; refusing to migrate (move manually)."
+        )
+        return rollup_fm, {}
+
+    # Strip orphan fields from rollup.
+    new_rollup_fm = rollup_fm
+    moved_lines: list[str] = []
+    for f in present_fields:
+        new_rollup_fm, removed = _strip_fm_field(new_rollup_fm, f)
+        if removed is None:
+            continue
+        moved_lines.append(removed)
+
+    # Read threads file (must exist for the move to proceed).
+    if not threads_path.is_file():
+        result.errors.append(
+            f"{threads_path}: rollup carries orphan fields but threads file is missing; cannot atomically move."
+        )
+        return rollup_fm, {}
+    try:
+        threads_text = threads_path.read_text(encoding="utf-8")
+    except OSError as e:
+        result.errors.append(f"{threads_path}: read failed: {e}")
+        return rollup_fm, {}
+    threads_split = _split_frontmatter(threads_text)
+    if threads_split is None:
+        result.errors.append(f"{threads_path}: no frontmatter; cannot move orphan fields here.")
+        return rollup_fm, {}
+    threads_fm, threads_body = threads_split
+
+    # Insert each moved line on the threads file if not already present.
+    new_threads_fm = threads_fm
+    threads_inserted: list[str] = []
+    for line in moved_lines:
+        # Extract field name from the line.
+        field_match = re.match(r"^([A-Za-z0-9_]+):", line)
+        if field_match is None:
+            continue
+        fname = field_match.group(1)
+        if re.search(rf"^{re.escape(fname)}:\s*", new_threads_fm, re.MULTILINE):
+            # Already present on threads; don't clobber. Drop the moved
+            # value silently (the threads file is the source of truth).
+            continue
+        # Insert before the closing ``---`` line of the threads frontmatter.
+        # _split_frontmatter returns fm including the trailing ``---\n``.
+        # Insert right before that final delimiter.
+        if not new_threads_fm.endswith("---\n"):
+            result.errors.append(f"{threads_path}: malformed frontmatter; refusing to migrate.")
+            return rollup_fm, {}
+        # Strip the closing delimiter, append the new line, restore.
+        body_part = new_threads_fm[:-4]  # strips ``---\n``
+        if not body_part.endswith("\n"):
+            body_part += "\n"
+        new_threads_fm = body_part + line + "\n---\n"
+        threads_inserted.append(line)
+
+    if not threads_inserted and new_rollup_fm == rollup_fm:
+        return rollup_fm, {}
+
+    # Record changes for the threads side.
+    if threads_inserted:
+        _record_line_changes(result, threads_path, "frontmatter-move", threads_fm, new_threads_fm)
+        result.files_touched.add(threads_path)
+        new_threads_full = new_threads_fm + threads_body
+        return new_rollup_fm, {threads_path: new_threads_full}
+    return new_rollup_fm, {}
+
+
+def apply_rule_synthesis_type_and_id_rollup(project_root: Path, *, apply: bool) -> RuleResult:
+    """Canonicalize the synthesis rollup file (type/id/report_kind + orphan-move)."""
+    result = RuleResult(name="synthesis-type-and-id-rollup")
     rollup_path = project_root / "doc" / "reports" / "synthesis.md"
+    threads_path = project_root / "doc" / "reports" / "synthesis" / "_emergent-threads.md"
 
     pass1_content: dict[Path, str] = {}
 
-    def _rewrite_fm(path: Path, *, is_rollup: bool) -> None:
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError as e:
-            result.errors.append(f"{path}: read failed: {e}")
-            return
-        split = _split_frontmatter(text)
-        if split is None:
-            return
-        fm, body = split
-        new_fm = fm
-        # Rewrite ``type: "report"`` → ``type: "synthesis"``.
-        new_fm, n_type = _RE_SYNTH_TYPE_REPORT.subn(r"\1\2synthesis\2\3", new_fm)
-        # Id rewrites: rollup form first (only on the rollup file), then per-hyp form.
-        n_id = 0
-        if is_rollup:
-            new_fm, n_id_r = _RE_SYNTH_ID_ROLLUP.subn(
-                r"\1\2synthesis:rollup\2\3", new_fm
-            )
-            n_id += n_id_r
-        new_fm, n_id_h = _RE_SYNTH_ID_PER_HYP.subn(r"\1\2synthesis:\3\2\4", new_fm)
-        n_id += n_id_h
-        if n_type == 0 and n_id == 0:
-            return
-        _record_line_changes(result, path, "frontmatter-id", fm, new_fm)
-        result.files_touched.add(path)
-        new_content = new_fm + body
-        pass1_content[path] = new_content
-        if apply:
-            try:
-                path.write_text(new_content, encoding="utf-8")
-            except OSError as e:
-                result.errors.append(f"{path}: write failed: {e}")
-
-    # Pass 1a: rollup file (``doc/reports/synthesis.md``).
     if rollup_path.is_file():
-        _rewrite_fm(rollup_path, is_rollup=True)
-    # Pass 1b: per-hypothesis files (``doc/reports/synthesis/*.md``), excluding
-    # files whose stem starts with ``_`` (those belong to other rules, e.g.
-    # ``_emergent-threads``).
-    if synth_dir.is_dir():
-        for path in sorted(synth_dir.glob("*.md")):
-            if not path.is_file() or path.stem.startswith("_"):
-                continue
-            _rewrite_fm(path, is_rollup=False)
+        try:
+            text = rollup_path.read_text(encoding="utf-8")
+        except OSError as e:
+            result.errors.append(f"{rollup_path}: read failed: {e}")
+        else:
+            split = _split_frontmatter(text)
+            if split is not None:
+                fm, body = split
+                new_fm = fm
 
-    # Build per-hyp synthesis stem set for path-keyed mention rewrite.
-    synth_stems: set[str] = set()
-    if synth_dir.is_dir():
-        synth_stems = {
-            p.stem
-            for p in synth_dir.glob("*.md")
-            if p.is_file() and not p.stem.startswith("_")
-        }
+                # Step 1: ensure `type: "synthesis"`.
+                m_type = _RE_FM_TYPE_ANY.search(new_fm)
+                if m_type is None:
+                    # No `type:` line at all — insert at top of frontmatter
+                    # (after the opening ``---\n``) to keep the canonical
+                    # cluster intact.
+                    new_fm = _insert_top_of_fm(new_fm, 'type: "synthesis"')
+                elif m_type.group("value") != "synthesis":
+                    new_fm = (
+                        new_fm[: m_type.start()]
+                        + f'{m_type.group("prefix")}"synthesis"{m_type.group("suffix")}'
+                        + new_fm[m_type.end() :]
+                    )
 
-    def _rewrite_per_hyp_mention(match: re.Match[str]) -> str:
-        slug = match.group(1)
-        # ``report:synthesis-<slug>`` mention. The original id form was
-        # ``report:synthesis-<stem>``; the canonical mention form is
-        # ``synthesis:<stem>``. Path-keyed so we don't rewrite slugs that
-        # aren't real synthesis files.
-        if slug in synth_stems:
-            return f"synthesis:{slug}"
-        # Also accept slugs whose stem includes the leading ``synthesis-``
-        # prefix already stripped — e.g. mention ``report:synthesis-foo`` when
-        # the file stem is ``foo``. (Not the case for mm30; defensive only.)
-        return match.group(0)
+                # Step 2: ensure `id: "synthesis:rollup"`.
+                m_id = _RE_FM_ID_ANY.search(new_fm)
+                target_id_line = 'id: "synthesis:rollup"'
+                if m_id is None:
+                    # Insert id immediately after the type line (matching
+                    # template: id, type, report_kind cluster). Per the spec,
+                    # since `type:` is the anchor, we insert AFTER it.
+                    new_fm, _ = _set_or_insert_after_type(new_fm, "id", target_id_line, rewrite_existing=False)
+                elif m_id.group("value") != "synthesis:rollup":
+                    new_fm, _ = _rewrite_fm_field(new_fm, "id", target_id_line)
 
-    # Pass 2: mention rewrites across all tracked markdown.
+                # Step 3: ensure `report_kind: "synthesis-rollup"`.
+                target_rk_line = 'report_kind: "synthesis-rollup"'
+                if _RE_FM_HAS_REPORT_KIND.search(new_fm) is None:
+                    new_fm, _ = _set_or_insert_after_type(new_fm, "report_kind", target_rk_line, rewrite_existing=False)
+                else:
+                    new_fm, _ = _rewrite_fm_field(new_fm, "report_kind", target_rk_line)
+
+                # Step 4: Q1=C orphan-count migration to threads.
+                new_fm, threads_writes = _migrate_orphan_fields_to_threads(
+                    new_fm, threads_path, apply=apply, result=result
+                )
+
+                if new_fm != fm:
+                    _record_line_changes(result, rollup_path, "frontmatter-id", fm, new_fm)
+                    result.files_touched.add(rollup_path)
+                    pass1_content[rollup_path] = new_fm + body
+                    if apply:
+                        # Atomic apply: write threads first, rollup second.
+                        # If threads write fails we won't write the rollup.
+                        try:
+                            for tp, tcontent in threads_writes.items():
+                                tp.write_text(tcontent, encoding="utf-8")
+                            rollup_path.write_text(new_fm + body, encoding="utf-8")
+                        except OSError as e:
+                            result.errors.append(f"{rollup_path}: write failed: {e}")
+                elif threads_writes:
+                    # Edge case: rollup had no FM canonicalization needed but
+                    # orphan-move is still pending (rare). Apply threads only.
+                    if apply:
+                        try:
+                            for tp, tcontent in threads_writes.items():
+                                tp.write_text(tcontent, encoding="utf-8")
+                        except OSError as e:
+                            result.errors.append(f"{tp}: write failed: {e}")
+
+    # Pass 2: mention rewrites for ``report:synthesis`` (literal, no slug)
+    # and ``report:project-synthesis`` → ``synthesis:rollup``.
+    re_literal = re.compile(r"(?<![A-Za-z0-9_./-])report:synthesis(?![A-Za-z0-9_./:-])")
+    re_project = re.compile(r"(?<![A-Za-z0-9_./-])report:project-synthesis(?![A-Za-z0-9_./:-])")
+
     for path in _tracked_markdown(project_root):
         if not path.is_file():
             continue
@@ -439,8 +608,8 @@ def apply_rule_synthesis_type_mm30(project_root: Path, *, apply: bool) -> RuleRe
             except (OSError, UnicodeDecodeError) as e:
                 result.errors.append(f"{path}: read failed: {e}")
                 continue
-        new_text = _RE_SYNTH_MENTION_PER_HYP.sub(_rewrite_per_hyp_mention, text)
-        new_text = _RE_SYNTH_MENTION_ROLLUP.sub("synthesis:rollup", new_text)
+        new_text = re_project.sub("synthesis:rollup", text)
+        new_text = re_literal.sub("synthesis:rollup", new_text)
         if new_text == text:
             continue
         _record_line_changes(result, path, "mention", text, new_text)
@@ -454,144 +623,224 @@ def apply_rule_synthesis_type_mm30(project_root: Path, *, apply: bool) -> RuleRe
     return result
 
 
-# ---------- rule: synthesis-type-pl-emergent-threads ----------
-
-_RE_PL_EMERGENT_TYPE = re.compile(
-    r'^(type:\s*)(["\']?)emergent-threads\2(\s*)$',
-    re.MULTILINE,
-)
-_RE_PL_FM_HAS_ID = re.compile(r"^id:\s*", re.MULTILINE)
-_RE_PL_FM_HAS_REPORT_KIND = re.compile(r"^report_kind:\s*", re.MULTILINE)
+def _insert_top_of_fm(fm: str, line: str) -> str:
+    """Insert ``line`` immediately after the opening ``---\\n`` of ``fm``."""
+    if not fm.startswith("---\n"):
+        return fm
+    return "---\n" + line + "\n" + fm[4:]
 
 
-def apply_rule_synthesis_type_pl_emergent_threads(
-    project_root: Path, *, apply: bool
-) -> RuleResult:
-    """Promote PL ``_emergent-threads.md`` to canonical ``type: synthesis`` + ``report_kind``."""
-    result = RuleResult(name="synthesis-type-pl-emergent-threads")
+# ---------- rule: synthesis-type-and-id-emergent-threads ----------
+
+
+def apply_rule_synthesis_type_and_id_emergent_threads(project_root: Path, *, apply: bool) -> RuleResult:
+    """Canonicalize ``_emergent-threads.md`` (type/id/report_kind)."""
+    result = RuleResult(name="synthesis-type-and-id-emergent-threads")
     path = project_root / "doc" / "reports" / "synthesis" / "_emergent-threads.md"
-    if not path.is_file():
-        return result
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as e:
-        result.errors.append(f"{path}: read failed: {e}")
-        return result
-    split = _split_frontmatter(text)
-    if split is None:
-        return result
-    fm, body = split
+    pass1_content: dict[Path, str] = {}
 
-    # Idempotence: if the file already declares the canonical shape we leave it alone.
-    has_id = _RE_PL_FM_HAS_ID.search(fm) is not None
-    has_report_kind = _RE_PL_FM_HAS_REPORT_KIND.search(fm) is not None
-    if not _RE_PL_EMERGENT_TYPE.search(fm) and has_id and has_report_kind:
-        return result
-
-    new_fm, n = _RE_PL_EMERGENT_TYPE.subn(r"\1\2synthesis\2\3", fm)
-    if n == 0:
-        # type already migrated; still need to backfill id / report_kind if missing.
-        new_fm = fm
-
-    # Insert ``id:`` and ``report_kind:`` immediately after the (new) ``type:`` line,
-    # but only the ones not already present.
-    insertions: list[str] = []
-    if not has_id:
-        insertions.append('id: "synthesis:emergent-threads"')
-    if not has_report_kind:
-        insertions.append('report_kind: "emergent-threads"')
-
-    if insertions:
-        # Find the ``type: "synthesis"`` line (post-rewrite) and insert after it.
-        type_line_re = re.compile(r'^(type:\s*["\']?synthesis["\']?\s*)$', re.MULTILINE)
-        m = type_line_re.search(new_fm)
-        if m is None:
-            result.errors.append(f"{path}: could not locate type: line for insertion")
-            return result
-        insert_at = m.end()
-        new_fm = new_fm[:insert_at] + "\n" + "\n".join(insertions) + new_fm[insert_at:]
-
-    if new_fm == fm:
-        return result
-
-    _record_line_changes(result, path, "frontmatter-id", fm, new_fm)
-    result.files_touched.add(path)
-    if apply:
-        try:
-            path.write_text(new_fm + body, encoding="utf-8")
-        except OSError as e:
-            result.errors.append(f"{path}: write failed: {e}")
-
-    return result
-
-
-# ---------- rule: synthesis-report-kind-pl-hyp ----------
-
-_RE_PL_HYP_TYPE_SYNTHESIS = re.compile(
-    r'^(type:\s*["\']?synthesis["\']?\s*)$',
-    re.MULTILINE,
-)
-
-
-def apply_rule_synthesis_report_kind_pl_hyp(
-    project_root: Path, *, apply: bool
-) -> RuleResult:
-    """Insert ``report_kind: hypothesis-synthesis`` for PL per-hypothesis files lacking it."""
-    result = RuleResult(name="synthesis-report-kind-pl-hyp")
-    synth_dir = project_root / "doc" / "reports" / "synthesis"
-    if not synth_dir.is_dir():
-        return result
-
-    for path in sorted(synth_dir.glob("h*.md")):
-        if not path.is_file():
-            continue
+    if path.is_file():
         try:
             text = path.read_text(encoding="utf-8")
         except OSError as e:
             result.errors.append(f"{path}: read failed: {e}")
+        else:
+            split = _split_frontmatter(text)
+            if split is not None:
+                fm, body = split
+                new_fm = fm
+
+                # Step 1: ensure type.
+                m_type = _RE_FM_TYPE_ANY.search(new_fm)
+                if m_type is None:
+                    new_fm = _insert_top_of_fm(new_fm, 'type: "synthesis"')
+                elif m_type.group("value") != "synthesis":
+                    new_fm = (
+                        new_fm[: m_type.start()]
+                        + f'{m_type.group("prefix")}"synthesis"{m_type.group("suffix")}'
+                        + new_fm[m_type.end() :]
+                    )
+
+                # Step 2: ensure id.
+                target_id_line = 'id: "synthesis:emergent-threads"'
+                m_id = _RE_FM_ID_ANY.search(new_fm)
+                if m_id is None:
+                    new_fm, _ = _set_or_insert_after_type(new_fm, "id", target_id_line, rewrite_existing=False)
+                elif m_id.group("value") != "synthesis:emergent-threads":
+                    new_fm, _ = _rewrite_fm_field(new_fm, "id", target_id_line)
+
+                # Step 3: ensure report_kind.
+                target_rk_line = 'report_kind: "emergent-threads"'
+                if _RE_FM_HAS_REPORT_KIND.search(new_fm) is None:
+                    new_fm, _ = _set_or_insert_after_type(new_fm, "report_kind", target_rk_line, rewrite_existing=False)
+                else:
+                    new_fm, _ = _rewrite_fm_field(new_fm, "report_kind", target_rk_line)
+
+                if new_fm != fm:
+                    _record_line_changes(result, path, "frontmatter-id", fm, new_fm)
+                    result.files_touched.add(path)
+                    pass1_content[path] = new_fm + body
+                    if apply:
+                        try:
+                            path.write_text(new_fm + body, encoding="utf-8")
+                        except OSError as e:
+                            result.errors.append(f"{path}: write failed: {e}")
+
+    # Pass 2: mention rewrites for ``report:emergent-threads`` and
+    # ``report:synthesis-emergent-threads`` → ``synthesis:emergent-threads``.
+    # Order matters: rewrite the longer ``report:synthesis-emergent-threads``
+    # first so the ``report:emergent-threads`` regex doesn't see the prefix.
+    re_long = re.compile(r"(?<![A-Za-z0-9_./-])report:synthesis-emergent-threads(?![A-Za-z0-9_./:-])")
+    re_short = re.compile(r"(?<![A-Za-z0-9_./-])report:emergent-threads(?![A-Za-z0-9_./:-])")
+    for p in _tracked_markdown(project_root):
+        if not p.is_file():
             continue
-        split = _split_frontmatter(text)
-        if split is None:
+        if p in pass1_content:
+            text = pass1_content[p]
+        else:
+            try:
+                text = p.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as e:
+                result.errors.append(f"{p}: read failed: {e}")
+                continue
+        new_text = re_long.sub("synthesis:emergent-threads", text)
+        new_text = re_short.sub("synthesis:emergent-threads", new_text)
+        if new_text == text:
             continue
-        fm, body = split
-        # Skip files that don't declare ``type: synthesis`` — those need rule
-        # ``synthesis-type-mm30`` first.
-        m = _RE_PL_HYP_TYPE_SYNTHESIS.search(fm)
-        if m is None:
+        _record_line_changes(result, p, "mention", text, new_text)
+        result.files_touched.add(p)
+        if apply:
+            try:
+                p.write_text(new_text, encoding="utf-8")
+            except OSError as e:
+                result.errors.append(f"{p}: write failed: {e}")
+
+    return result
+
+
+# ---------- rule: synthesis-type-and-id-per-hyp ----------
+
+
+def apply_rule_synthesis_type_and_id_per_hyp(project_root: Path, *, apply: bool) -> RuleResult:
+    """Canonicalize per-hypothesis synthesis files (type/id/report_kind)."""
+    result = RuleResult(name="synthesis-type-and-id-per-hyp")
+    synth_dir = project_root / "doc" / "reports" / "synthesis"
+    pass1_content: dict[Path, str] = {}
+    synth_stems: set[str] = set()
+
+    if synth_dir.is_dir():
+        for path in sorted(synth_dir.glob("*.md")):
+            if not path.is_file() or path.stem.startswith("_"):
+                continue
+            stem = path.stem
+            synth_stems.add(stem)
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError as e:
+                result.errors.append(f"{path}: read failed: {e}")
+                continue
+            split = _split_frontmatter(text)
+            if split is None:
+                continue
+            fm, body = split
+            new_fm = fm
+
+            # Step 1: ensure type.
+            m_type = _RE_FM_TYPE_ANY.search(new_fm)
+            if m_type is None:
+                new_fm = _insert_top_of_fm(new_fm, 'type: "synthesis"')
+            elif m_type.group("value") != "synthesis":
+                new_fm = (
+                    new_fm[: m_type.start()]
+                    + f'{m_type.group("prefix")}"synthesis"{m_type.group("suffix")}'
+                    + new_fm[m_type.end() :]
+                )
+
+            # Step 2: ensure id == synthesis:<stem>.
+            target_id_line = f'id: "synthesis:{stem}"'
+            m_id = _RE_FM_ID_ANY.search(new_fm)
+            if m_id is None:
+                new_fm, _ = _set_or_insert_after_type(new_fm, "id", target_id_line, rewrite_existing=False)
+            elif m_id.group("value") != f"synthesis:{stem}":
+                new_fm, _ = _rewrite_fm_field(new_fm, "id", target_id_line)
+
+            # Step 3: ensure report_kind.
+            target_rk_line = 'report_kind: "hypothesis-synthesis"'
+            if _RE_FM_HAS_REPORT_KIND.search(new_fm) is None:
+                new_fm, _ = _set_or_insert_after_type(new_fm, "report_kind", target_rk_line, rewrite_existing=False)
+            else:
+                new_fm, _ = _rewrite_fm_field(new_fm, "report_kind", target_rk_line)
+
+            if new_fm != fm:
+                _record_line_changes(result, path, "frontmatter-id", fm, new_fm)
+                result.files_touched.add(path)
+                pass1_content[path] = new_fm + body
+                if apply:
+                    try:
+                        path.write_text(new_fm + body, encoding="utf-8")
+                    except OSError as e:
+                        result.errors.append(f"{path}: write failed: {e}")
+
+    # Pass 2: mention rewrites for ``report:synthesis-<slug>`` →
+    # ``synthesis:<slug>``, path-keyed against ``synth_stems`` so unrelated
+    # ids matching the same regex are preserved.
+    #
+    # Note on path-keying: an existing per-hyp file may have been named
+    # differently from the legacy id (e.g. mm30 ships ``h1-foo.md`` with
+    # legacy id ``report:synthesis-h1-foo`` — same stem). For projects
+    # where the legacy id had a different slug than the file stem (none
+    # observed today), this would silently skip the mention. Documented
+    # for future debugging.
+    mention_re = re.compile(rf"(?<![A-Za-z0-9_./-])report:synthesis-({_SYNTH_SLUG})(?![A-Za-z0-9_./:-])")
+
+    def _rewrite_mention(match: re.Match[str]) -> str:
+        slug = match.group(1)
+        if slug in synth_stems:
+            return f"synthesis:{slug}"
+        return match.group(0)
+
+    for path in _tracked_markdown(project_root):
+        if not path.is_file():
             continue
-        # Idempotence: skip if ``report_kind:`` already present.
-        if _RE_PL_FM_HAS_REPORT_KIND.search(fm) is not None:
+        if path in pass1_content:
+            text = pass1_content[path]
+        else:
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as e:
+                result.errors.append(f"{path}: read failed: {e}")
+                continue
+        new_text = mention_re.sub(_rewrite_mention, text)
+        if new_text == text:
             continue
-        insert_at = m.end()
-        new_fm = (
-            fm[:insert_at] + '\nreport_kind: "hypothesis-synthesis"' + fm[insert_at:]
-        )
-        _record_line_changes(result, path, "frontmatter-id", fm, new_fm)
+        _record_line_changes(result, path, "mention", text, new_text)
         result.files_touched.add(path)
         if apply:
             try:
-                path.write_text(new_fm + body, encoding="utf-8")
+                path.write_text(new_text, encoding="utf-8")
             except OSError as e:
                 result.errors.append(f"{path}: write failed: {e}")
 
     return result
 
 
-# ---------- rule: pre-registration-type ----------
+# ---------- rule: pre-registration-id-and-type ----------
 
-_RE_PREREG_TYPE_PLAN = re.compile(
-    r'^(type:\s*)(["\']?)plan\2(\s*)$',
-    re.MULTILINE,
-)
+
+_PRE_REG_SLUG = r"[A-Za-z0-9_-]+"
 _RE_PREREG_ID_CANONICAL = re.compile(
-    r'^id:\s*["\']?pre-registration:',
+    rf'^id:\s*(["\']?)pre-registration:({_PRE_REG_SLUG})\1\s*$',
+    re.MULTILINE,
+)
+_RE_PREREG_ID_PLAN_PREFIXED = re.compile(
+    rf'^id:\s*(["\']?)plan:pre-registration-({_PRE_REG_SLUG})\1\s*$',
     re.MULTILINE,
 )
 
 
-def apply_rule_pre_registration_type(project_root: Path, *, apply: bool) -> RuleResult:
-    """Migrate ``type: plan`` → ``type: pre-registration`` for canonical-id pre-reg files."""
-    result = RuleResult(name="pre-registration-type")
+def apply_rule_pre_registration_id_and_type(project_root: Path, *, apply: bool) -> RuleResult:
+    """Canonicalize pre-reg files (type + id), handling both starting id shapes."""
+    result = RuleResult(name="pre-registration-id-and-type")
 
     candidates: list[Path] = []
     meta_dir = project_root / "doc" / "meta"
@@ -600,6 +849,9 @@ def apply_rule_pre_registration_type(project_root: Path, *, apply: bool) -> Rule
     pre_dir = project_root / "doc" / "pre-registrations"
     if pre_dir.is_dir():
         candidates.extend(sorted(pre_dir.glob("*.md")))
+
+    pass1_content: dict[Path, str] = {}
+    canonical_stems: set[str] = set()
 
     for path in candidates:
         if not path.is_file():
@@ -613,17 +865,77 @@ def apply_rule_pre_registration_type(project_root: Path, *, apply: bool) -> Rule
         if split is None:
             continue
         fm, body = split
-        # Only rewrite files with both ``type: "plan"`` AND ``id: "pre-registration:..."``.
-        if _RE_PREREG_ID_CANONICAL.search(fm) is None:
+
+        # Determine the canonical slug: prefer the existing canonical id,
+        # else the plan-prefixed id, else SKIP (handled by
+        # ``natural-systems-pre-reg-frontmatter``).
+        m_canon = _RE_PREREG_ID_CANONICAL.search(fm)
+        m_plan = _RE_PREREG_ID_PLAN_PREFIXED.search(fm)
+        if m_canon is not None:
+            slug = m_canon.group(2)
+        elif m_plan is not None:
+            slug = m_plan.group(2)
+        else:
             continue
-        new_fm, n = _RE_PREREG_TYPE_PLAN.subn(r"\1\2pre-registration\2\3", fm)
-        if n == 0:
+        canonical_stems.add(slug)
+
+        new_fm = fm
+
+        # Step 1: rewrite plan-prefixed id → canonical id.
+        if m_plan is not None and m_canon is None:
+            target_id_line = f'id: "pre-registration:{slug}"'
+            new_fm, _ = _rewrite_fm_field(new_fm, "id", target_id_line)
+
+        # Step 2: ensure type: "pre-registration".
+        m_type = _RE_FM_TYPE_ANY.search(new_fm)
+        if m_type is None:
+            new_fm = _insert_top_of_fm(new_fm, 'type: "pre-registration"')
+        elif m_type.group("value") != "pre-registration":
+            new_fm = (
+                new_fm[: m_type.start()]
+                + f'{m_type.group("prefix")}"pre-registration"{m_type.group("suffix")}'
+                + new_fm[m_type.end() :]
+            )
+
+        if new_fm != fm:
+            _record_line_changes(result, path, "frontmatter-id", fm, new_fm)
+            result.files_touched.add(path)
+            pass1_content[path] = new_fm + body
+            if apply:
+                try:
+                    path.write_text(new_fm + body, encoding="utf-8")
+                except OSError as e:
+                    result.errors.append(f"{path}: write failed: {e}")
+
+    # Pass 2: mention rewrites for ``plan:pre-registration-<slug>`` →
+    # ``pre-registration:<slug>``, path-keyed against ``canonical_stems``.
+    mention_re = re.compile(rf"(?<![A-Za-z0-9_./-])plan:pre-registration-({_PRE_REG_SLUG})(?![A-Za-z0-9_./:-])")
+
+    def _rewrite_mention(match: re.Match[str]) -> str:
+        slug = match.group(1)
+        if slug in canonical_stems:
+            return f"pre-registration:{slug}"
+        return match.group(0)
+
+    for path in _tracked_markdown(project_root):
+        if not path.is_file():
             continue
-        _record_line_changes(result, path, "frontmatter-id", fm, new_fm)
+        if path in pass1_content:
+            text = pass1_content[path]
+        else:
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as e:
+                result.errors.append(f"{path}: read failed: {e}")
+                continue
+        new_text = mention_re.sub(_rewrite_mention, text)
+        if new_text == text:
+            continue
+        _record_line_changes(result, path, "mention", text, new_text)
         result.files_touched.add(path)
         if apply:
             try:
-                path.write_text(new_fm + body, encoding="utf-8")
+                path.write_text(new_text, encoding="utf-8")
             except OSError as e:
                 result.errors.append(f"{path}: write failed: {e}")
 
@@ -632,12 +944,8 @@ def apply_rule_pre_registration_type(project_root: Path, *, apply: bool) -> Rule
 
 # ---------- rule: natural-systems-pre-reg-frontmatter (report-only) ----------
 
-_RE_PREREG_FM_HAS_TYPE = re.compile(r"^type:\s*", re.MULTILINE)
 
-
-def apply_rule_natural_systems_pre_reg_frontmatter(
-    project_root: Path, *, apply: bool
-) -> RuleResult:
+def apply_rule_natural_systems_pre_reg_frontmatter(project_root: Path, *, apply: bool) -> RuleResult:
     """Report-only: emit canonical-FM suggestions for NS pre-reg files missing ``id:`` / ``type:``.
 
     This rule never mutates files. It produces ``manual-suggested`` entries
@@ -668,8 +976,8 @@ def apply_rule_natural_systems_pre_reg_frontmatter(
         else:
             fm, _body = split
             current_fm = fm.rstrip("\n")
-            has_id = _RE_PL_FM_HAS_ID.search(fm) is not None
-            has_type = _RE_PREREG_FM_HAS_TYPE.search(fm) is not None
+            has_id = _RE_FM_HAS_ID.search(fm) is not None
+            has_type = _RE_FM_HAS_TYPE.search(fm) is not None
         if has_id and has_type:
             # Already declares both — nothing to suggest.
             continue
@@ -699,7 +1007,7 @@ def apply_rule_natural_systems_pre_reg_frontmatter(
     return result
 
 
-# ---------- rule 2: specs-frontmatter-backfill ----------
+# ---------- rule: specs-frontmatter-backfill ----------
 
 _RE_SPEC_DATE_PREFIX = re.compile(r"^(\d{4}-\d{2}-\d{2})-")
 _RE_SPEC_FIRST_H1 = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
@@ -716,9 +1024,7 @@ def _yaml_double_quote(value: str) -> str:
     return f'"{escaped}"'
 
 
-def apply_rule_specs_frontmatter_backfill(
-    project_root: Path, *, apply: bool
-) -> RuleResult:
+def apply_rule_specs_frontmatter_backfill(project_root: Path, *, apply: bool) -> RuleResult:
     """Add minimal canonical frontmatter to ``<project>/specs/*.md`` files."""
     result = RuleResult(name="specs-frontmatter-backfill")
     specs_dir = project_root / "specs"
@@ -781,540 +1087,613 @@ def apply_rule_specs_frontmatter_backfill(
 # ---------- self-test ----------
 
 
+def _git_init(root: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.email", "t@local"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=root, check=True)
+
+
+def _git_commit_all(root: Path, msg: str = "init") -> None:
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-qm", msg], cwd=root, check=True)
+
+
+def _self_test_report_id_prefix(td: Path) -> None:
+    """Cover the original report-id-prefix rule (kept unchanged)."""
+    root = td / "rip-fixture"
+    root.mkdir()
+    _git_init(root)
+    (root / "doc" / "reports" / "synthesis").mkdir(parents=True)
+    (root / "doc" / "interpretations").mkdir()
+    (root / "tasks").mkdir()
+
+    drifted = root / "doc" / "reports" / "2026-04-25-foo.md"
+    drifted.write_text(
+        '---\nid: "doc:2026-04-25-foo"\ntype: "report"\n---\n\nbody\n',
+        encoding="utf-8",
+    )
+    canon = root / "doc" / "reports" / "2026-04-25-bar.md"
+    canon_text = '---\nid: "report:2026-04-25-bar"\ntype: "report"\n---\n\nbody\n'
+    canon.write_text(canon_text, encoding="utf-8")
+    synth = root / "doc" / "reports" / "synthesis" / "h01.md"
+    synth_text = '---\nid: "synthesis:h01"\ntype: "synthesis"\n---\n\nbody\n'
+    synth.write_text(synth_text, encoding="utf-8")
+    interp = root / "doc" / "interpretations" / "2026-04-13-baz.md"
+    interp_text = '---\nid: "interpretation:2026-04-13-baz"\ntype: "interpretation"\n---\n\nbody\n'
+    interp.write_text(interp_text, encoding="utf-8")
+    tasks = root / "tasks" / "active.md"
+    tasks.write_text(
+        "## [t100] sample\n"
+        "- related: [doc:reports/2026-04-25-foo, doc:reports/synthesis,"
+        " doc:reports/synthesis/_emergent-threads, doc:2026-04-25-foo,"
+        " doc:2026-04-13-baz]\n"
+        "\n"
+        "File path `doc/reports/2026-04-25-foo.md` must NOT match.\n"
+        "Inline mention `doc:reports/2026-04-25-foo` SHOULD match.\n"
+        "Bare report mention `doc:2026-04-25-foo` SHOULD match.\n"
+        "Bare interpretation mention `doc:2026-04-13-baz` must NOT match.\n",
+        encoding="utf-8",
+    )
+    _git_commit_all(root)
+
+    dry = apply_rule_report_id_prefix(root, apply=False)
+    assert dry.errors == [], f"unexpected errors: {dry.errors}"
+    kinds = [(c.path.name, c.kind) for c in dry.changes]
+    assert ("2026-04-25-foo.md", "frontmatter-id") in kinds, kinds
+    assert not any(p == "2026-04-25-bar.md" for p, _ in kinds), kinds
+    mention_changes = [c for c in dry.changes if c.kind == "mention"]
+    assert len(mention_changes) == 3, mention_changes
+
+    wet = apply_rule_report_id_prefix(root, apply=True)
+    assert wet.errors == [], wet.errors
+    assert "report:2026-04-25-foo" in drifted.read_text()
+    again = apply_rule_report_id_prefix(root, apply=True)
+    assert again.changes == [], f"non-idempotent: {again.changes}"
+
+
+def _make_fixture(td: Path, name: str) -> Path:
+    root = td / name
+    root.mkdir()
+    _git_init(root)
+    (root / "doc" / "reports" / "synthesis").mkdir(parents=True)
+    (root / "tasks").mkdir()
+    return root
+
+
+def _self_test_rollup_mm30(td: Path) -> None:
+    """mm30 rollup shape: id: report:synthesis + type: report + report_kind already present."""
+    root = _make_fixture(td, "rollup-mm30")
+    rollup = root / "doc" / "reports" / "synthesis.md"
+    rollup_orig = '---\nid: "report:synthesis"\ntype: "report"\nreport_kind: "synthesis-rollup"\n---\n\nrollup body\n'
+    rollup.write_text(rollup_orig, encoding="utf-8")
+    threads = root / "doc" / "reports" / "synthesis" / "_emergent-threads.md"
+    threads.write_text(
+        '---\ntype: "report"\nid: "report:synthesis-emergent-threads"\n'
+        'report_kind: "emergent-threads"\n---\n\nthreads body\n',
+        encoding="utf-8",
+    )
+    tasks = root / "tasks" / "active.md"
+    tasks.write_text(
+        "Refs: [report:synthesis, report:synthesis-h1-foo].\n",
+        encoding="utf-8",
+    )
+    _git_commit_all(root)
+
+    dry = apply_rule_synthesis_type_and_id_rollup(root, apply=False)
+    assert dry.errors == [], dry.errors
+    assert any(c.path == rollup for c in dry.changes), dry.changes
+    # Mention rewrite expected on tasks file (literal report:synthesis).
+    assert any(c.path == tasks and c.kind == "mention" for c in dry.changes), dry.changes
+    # Dry-run wrote nothing.
+    assert rollup.read_text() == rollup_orig
+
+    wet = apply_rule_synthesis_type_and_id_rollup(root, apply=True)
+    assert wet.errors == [], wet.errors
+    after = rollup.read_text()
+    assert 'type: "synthesis"' in after, after
+    assert 'id: "synthesis:rollup"' in after, after
+    assert 'report_kind: "synthesis-rollup"' in after, after
+    # Mention pass: report:synthesis (literal) → synthesis:rollup, but
+    # report:synthesis-h1-foo (per-hyp) preserved (different rule).
+    ts = tasks.read_text()
+    assert "synthesis:rollup" in ts, ts
+    assert "report:synthesis-h1-foo" in ts, ts
+
+    again = apply_rule_synthesis_type_and_id_rollup(root, apply=True)
+    assert again.changes == [], f"non-idempotent: {again.changes}"
+
+
+def _self_test_rollup_pl(td: Path) -> None:
+    """PL rollup shape: NO id + type: synthesis-rollup + NO report_kind + orphan_question_count."""
+    root = _make_fixture(td, "rollup-pl")
+    rollup = root / "doc" / "reports" / "synthesis.md"
+    rollup_orig = (
+        "---\n"
+        'type: "synthesis-rollup"\n'
+        'generated_at: "2026-04-25T00:00:00Z"\n'
+        'source_commit: "abc123"\n'
+        "synthesized_from:\n"
+        '  - hypothesis: "hypothesis:h01-foo"\n'
+        '    file: "doc/reports/synthesis/h01-foo.md"\n'
+        '    sha: "deadbeef"\n'
+        'emergent_threads_sha: "feedface"\n'
+        "orphan_question_count: 23\n"
+        "orphan_interpretation_count: 5\n"
+        "---\n"
+        "\nrollup body\n"
+    )
+    rollup.write_text(rollup_orig, encoding="utf-8")
+    threads = root / "doc" / "reports" / "synthesis" / "_emergent-threads.md"
+    threads_orig = (
+        '---\ntype: "emergent-threads"\ngenerated_at: "2026-04-25T00:00:00Z"\norphan_ids: []\n---\n\nthreads body\n'
+    )
+    threads.write_text(threads_orig, encoding="utf-8")
+    _git_commit_all(root)
+
+    dry = apply_rule_synthesis_type_and_id_rollup(root, apply=False)
+    assert dry.errors == [], dry.errors
+    # Both rollup and threads should be touched (orphan-move).
+    assert rollup in dry.files_touched, dry.files_touched
+    assert threads in dry.files_touched, dry.files_touched
+    # Dry-run wrote nothing.
+    assert rollup.read_text() == rollup_orig
+    assert threads.read_text() == threads_orig
+
+    wet = apply_rule_synthesis_type_and_id_rollup(root, apply=True)
+    assert wet.errors == [], wet.errors
+    after_rollup = rollup.read_text()
+    assert 'type: "synthesis"' in after_rollup, after_rollup
+    assert 'id: "synthesis:rollup"' in after_rollup, after_rollup
+    assert 'report_kind: "synthesis-rollup"' in after_rollup, after_rollup
+    # Q1=C: orphan fields stripped from rollup, moved to threads.
+    assert "orphan_question_count" not in after_rollup, after_rollup
+    assert "orphan_interpretation_count" not in after_rollup, after_rollup
+    # Surviving fields preserved.
+    assert 'source_commit: "abc123"' in after_rollup
+    assert "synthesized_from:" in after_rollup
+    assert 'emergent_threads_sha: "feedface"' in after_rollup
+    after_threads = threads.read_text()
+    assert "orphan_question_count: 23" in after_threads, after_threads
+    assert "orphan_interpretation_count: 5" in after_threads, after_threads
+    # Existing orphan_ids preserved (already present on threads, not clobbered).
+    assert "orphan_ids: []" in after_threads, after_threads
+
+    again = apply_rule_synthesis_type_and_id_rollup(root, apply=True)
+    assert again.changes == [], f"non-idempotent: {again.changes}"
+
+
+def _self_test_rollup_ns(td: Path) -> None:
+    """NS rollup shape: id: report:project-synthesis + type: report + NO report_kind."""
+    root = _make_fixture(td, "rollup-ns")
+    rollup = root / "doc" / "reports" / "synthesis.md"
+    rollup_orig = (
+        "---\n"
+        'id: "report:project-synthesis"\n'
+        'type: "report"\n'
+        "synthesized_from:\n"
+        '  - hypothesis: "hypothesis:h01"\n'
+        '    file: "doc/reports/synthesis/h01.md"\n'
+        '    sha: "abc"\n'
+        "---\n"
+        "\nrollup body\n"
+    )
+    rollup.write_text(rollup_orig, encoding="utf-8")
+    tasks = root / "tasks" / "active.md"
+    tasks.write_text(
+        "See report:project-synthesis for the rollup.\n",
+        encoding="utf-8",
+    )
+    _git_commit_all(root)
+
+    dry = apply_rule_synthesis_type_and_id_rollup(root, apply=False)
+    assert dry.errors == [], dry.errors
+    assert rollup in dry.files_touched, dry.files_touched
+    assert tasks in dry.files_touched, dry.files_touched
+
+    wet = apply_rule_synthesis_type_and_id_rollup(root, apply=True)
+    assert wet.errors == [], wet.errors
+    after = rollup.read_text()
+    assert 'type: "synthesis"' in after, after
+    assert 'id: "synthesis:rollup"' in after, after
+    assert 'report_kind: "synthesis-rollup"' in after, after
+    ts = tasks.read_text()
+    assert "synthesis:rollup" in ts, ts
+    assert "report:project-synthesis" not in ts, ts
+
+    again = apply_rule_synthesis_type_and_id_rollup(root, apply=True)
+    assert again.changes == [], f"non-idempotent: {again.changes}"
+
+
+def _self_test_threads_mm30(td: Path) -> None:
+    """mm30 threads: id: report:synthesis-emergent-threads + type: report + report_kind already."""
+    root = _make_fixture(td, "threads-mm30")
+    threads = root / "doc" / "reports" / "synthesis" / "_emergent-threads.md"
+    threads_orig = (
+        "---\n"
+        'id: "report:synthesis-emergent-threads"\n'
+        'type: "report"\n'
+        'report_kind: "emergent-threads"\n'
+        "orphan_question_count: 0\n"
+        "orphan_interpretation_count: 0\n"
+        "orphan_ids: []\n"
+        "---\nbody\n"
+    )
+    threads.write_text(threads_orig, encoding="utf-8")
+    tasks = root / "tasks" / "active.md"
+    tasks.write_text(
+        "Refs: [report:synthesis-emergent-threads, report:synthesis-h1-foo].\n",
+        encoding="utf-8",
+    )
+    _git_commit_all(root)
+
+    dry = apply_rule_synthesis_type_and_id_emergent_threads(root, apply=False)
+    assert dry.errors == [], dry.errors
+    assert threads in dry.files_touched
+    assert tasks in dry.files_touched
+
+    wet = apply_rule_synthesis_type_and_id_emergent_threads(root, apply=True)
+    assert wet.errors == [], wet.errors
+    after = threads.read_text()
+    assert 'type: "synthesis"' in after, after
+    assert 'id: "synthesis:emergent-threads"' in after, after
+    assert 'report_kind: "emergent-threads"' in after, after
+    # Existing orphan-count fields preserved (rule 2 must NOT touch them).
+    assert "orphan_question_count: 0" in after
+    assert "orphan_interpretation_count: 0" in after
+    assert "orphan_ids: []" in after
+    ts = tasks.read_text()
+    assert "synthesis:emergent-threads" in ts, ts
+    # Per-hyp mention preserved (different rule's domain).
+    assert "report:synthesis-h1-foo" in ts, ts
+    assert "report:synthesis-emergent-threads" not in ts, ts
+
+    again = apply_rule_synthesis_type_and_id_emergent_threads(root, apply=True)
+    assert again.changes == [], f"non-idempotent: {again.changes}"
+
+
+def _self_test_threads_pl(td: Path) -> None:
+    """PL threads: NO id + type: emergent-threads + NO report_kind + orphan_ids."""
+    root = _make_fixture(td, "threads-pl")
+    threads = root / "doc" / "reports" / "synthesis" / "_emergent-threads.md"
+    threads_orig = (
+        "---\n"
+        'type: "emergent-threads"\n'
+        'generated_at: "2026-04-25T11:45:34Z"\n'
+        'source_commit: "abc"\n'
+        "orphan_ids: []\n"
+        "---\n"
+        "\nbody\n"
+    )
+    threads.write_text(threads_orig, encoding="utf-8")
+    _git_commit_all(root)
+
+    dry = apply_rule_synthesis_type_and_id_emergent_threads(root, apply=False)
+    assert dry.errors == [], dry.errors
+    assert threads in dry.files_touched
+
+    wet = apply_rule_synthesis_type_and_id_emergent_threads(root, apply=True)
+    assert wet.errors == [], wet.errors
+    after = threads.read_text()
+    assert 'type: "synthesis"' in after, after
+    assert 'id: "synthesis:emergent-threads"' in after, after
+    assert 'report_kind: "emergent-threads"' in after, after
+    # Existing fields preserved.
+    assert 'generated_at: "2026-04-25T11:45:34Z"' in after
+    assert "orphan_ids: []" in after
+
+    again = apply_rule_synthesis_type_and_id_emergent_threads(root, apply=True)
+    assert again.changes == [], f"non-idempotent: {again.changes}"
+
+
+def _self_test_threads_ns(td: Path) -> None:
+    """NS threads: id: report:emergent-threads + type: report + NO report_kind."""
+    root = _make_fixture(td, "threads-ns")
+    threads = root / "doc" / "reports" / "synthesis" / "_emergent-threads.md"
+    threads_orig = '---\nid: "report:emergent-threads"\ntype: "report"\norphan_ids: []\n---\nbody\n'
+    threads.write_text(threads_orig, encoding="utf-8")
+    tasks = root / "tasks" / "active.md"
+    tasks.write_text(
+        "See `report:emergent-threads` and report:emergent-threads, ok\n",
+        encoding="utf-8",
+    )
+    _git_commit_all(root)
+
+    dry = apply_rule_synthesis_type_and_id_emergent_threads(root, apply=False)
+    assert dry.errors == [], dry.errors
+    assert threads in dry.files_touched
+    assert tasks in dry.files_touched
+
+    wet = apply_rule_synthesis_type_and_id_emergent_threads(root, apply=True)
+    assert wet.errors == [], wet.errors
+    after = threads.read_text()
+    assert 'type: "synthesis"' in after, after
+    assert 'id: "synthesis:emergent-threads"' in after, after
+    assert 'report_kind: "emergent-threads"' in after, after
+    ts = tasks.read_text()
+    assert "synthesis:emergent-threads" in ts, ts
+    assert "report:emergent-threads" not in ts, ts
+
+    again = apply_rule_synthesis_type_and_id_emergent_threads(root, apply=True)
+    assert again.changes == [], f"non-idempotent: {again.changes}"
+
+
+def _self_test_per_hyp_mm30(td: Path) -> None:
+    """mm30 per-hyp: id: report:synthesis-<slug> + type: report + report_kind already."""
+    root = _make_fixture(td, "per-hyp-mm30")
+    f = root / "doc" / "reports" / "synthesis" / "h1-foo.md"
+    orig = (
+        "---\n"
+        'id: "report:synthesis-h1-foo"\n'
+        'type: "report"\n'
+        'report_kind: "hypothesis-synthesis"\n'
+        'hypothesis: "hypothesis:h1-foo"\n'
+        "---\nbody\n"
+    )
+    f.write_text(orig, encoding="utf-8")
+    tasks = root / "tasks" / "active.md"
+    tasks.write_text(
+        "Refs: [report:synthesis-h1-foo, report:synthesis-unknown].\n"
+        "Path `doc/reports/synthesis/h1-foo.md` must NOT match.\n",
+        encoding="utf-8",
+    )
+    _git_commit_all(root)
+
+    dry = apply_rule_synthesis_type_and_id_per_hyp(root, apply=False)
+    assert dry.errors == [], dry.errors
+    assert f in dry.files_touched
+    assert tasks in dry.files_touched
+
+    wet = apply_rule_synthesis_type_and_id_per_hyp(root, apply=True)
+    assert wet.errors == [], wet.errors
+    after = f.read_text()
+    assert 'id: "synthesis:h1-foo"' in after, after
+    assert 'type: "synthesis"' in after, after
+    ts = tasks.read_text()
+    assert "synthesis:h1-foo" in ts, ts
+    assert "report:synthesis-h1-foo" not in ts, ts
+    # Path-keyed: unknown synthesis slug preserved.
+    assert "report:synthesis-unknown" in ts, ts
+    # File path preserved.
+    assert "doc/reports/synthesis/h1-foo.md" in ts, ts
+
+    again = apply_rule_synthesis_type_and_id_per_hyp(root, apply=True)
+    assert again.changes == [], f"non-idempotent: {again.changes}"
+
+
+def _self_test_per_hyp_pl(td: Path) -> None:
+    """PL per-hyp: id: synthesis:<slug> + type: synthesis + NO report_kind."""
+    root = _make_fixture(td, "per-hyp-pl")
+    f = root / "doc" / "reports" / "synthesis" / "h01-foo.md"
+    orig = '---\nid: "synthesis:h01-foo"\ntype: "synthesis"\nhypothesis: "hypothesis:h01-foo"\n---\nbody\n'
+    f.write_text(orig, encoding="utf-8")
+    _git_commit_all(root)
+
+    dry = apply_rule_synthesis_type_and_id_per_hyp(root, apply=False)
+    assert dry.errors == [], dry.errors
+    assert f in dry.files_touched
+
+    wet = apply_rule_synthesis_type_and_id_per_hyp(root, apply=True)
+    assert wet.errors == [], wet.errors
+    after = f.read_text()
+    assert 'report_kind: "hypothesis-synthesis"' in after, after
+    # Order: type → report_kind insertion is after type.
+    assert after.index('type: "synthesis"') < after.index('report_kind: "hypothesis-synthesis"')
+
+    again = apply_rule_synthesis_type_and_id_per_hyp(root, apply=True)
+    assert again.changes == [], f"non-idempotent: {again.changes}"
+
+
+def _self_test_per_hyp_ns(td: Path) -> None:
+    """NS per-hyp: id: synthesis:<slug> + type: synthesis + NO report_kind + non-h-prefixed names."""
+    root = _make_fixture(td, "per-hyp-ns")
+    files = [
+        ("double-categorical-foo.md", "synthesis:h01-double-categorical-foo"),
+        ("dynamical-invariant-bar.md", "synthesis:h04-dynamical-invariant-bar"),
+        ("higher-order-topology.md", "synthesis:h03-higher-order-topology"),
+    ]
+    for fname, fid in files:
+        p = root / "doc" / "reports" / "synthesis" / fname
+        p.write_text(
+            f'---\nid: "{fid}"\ntype: "synthesis"\n---\nbody\n',
+            encoding="utf-8",
+        )
+    _git_commit_all(root)
+
+    dry = apply_rule_synthesis_type_and_id_per_hyp(root, apply=False)
+    assert dry.errors == [], dry.errors
+    # All three files (no filename-prefix gating) should be touched.
+    assert len(dry.files_touched) == 3, dry.files_touched
+
+    wet = apply_rule_synthesis_type_and_id_per_hyp(root, apply=True)
+    assert wet.errors == [], wet.errors
+    for fname, _ in files:
+        p = root / "doc" / "reports" / "synthesis" / fname
+        after = p.read_text()
+        # Id must be rewritten to match the file stem (this is the
+        # canonical slug). NS's pre-existing ids embedded h-prefixes
+        # that don't match the stem; rule rewrites to the stem.
+        expected_stem = fname.removesuffix(".md")
+        assert f'id: "synthesis:{expected_stem}"' in after, after
+        assert 'report_kind: "hypothesis-synthesis"' in after, after
+
+    again = apply_rule_synthesis_type_and_id_per_hyp(root, apply=True)
+    assert again.changes == [], f"non-idempotent: {again.changes}"
+
+
+def _self_test_per_hyp_excludes_underscore(td: Path) -> None:
+    """``_emergent-threads.md`` and other ``_*`` files are NOT touched by per-hyp rule."""
+    root = _make_fixture(td, "per-hyp-exclude")
+    threads = root / "doc" / "reports" / "synthesis" / "_emergent-threads.md"
+    threads_orig = '---\nid: "report:emergent-threads"\ntype: "report"\n---\nbody\n'
+    threads.write_text(threads_orig, encoding="utf-8")
+    _git_commit_all(root)
+
+    dry = apply_rule_synthesis_type_and_id_per_hyp(root, apply=False)
+    assert dry.errors == [], dry.errors
+    assert threads not in dry.files_touched, dry.files_touched
+    assert threads.read_text() == threads_orig
+
+
+def _self_test_pre_reg_canonical(td: Path) -> None:
+    """Canonical id form: rewrite type only."""
+    root = td / "pre-reg-canonical"
+    root.mkdir()
+    _git_init(root)
+    (root / "doc" / "pre-registrations").mkdir(parents=True)
+    (root / "doc" / "meta").mkdir(parents=True)
+    (root / "tasks").mkdir()
+
+    p = root / "doc" / "pre-registrations" / "2026-04-12-foo.md"
+    orig = '---\nid: "pre-registration:2026-04-12-foo"\ntype: "plan"\ncommitted: 2026-04-12\n---\nbody\n'
+    p.write_text(orig, encoding="utf-8")
+    p_already = root / "doc" / "meta" / "pre-registration-already.md"
+    p_already_orig = '---\nid: "pre-registration:already"\ntype: "pre-registration"\n---\nbody\n'
+    p_already.write_text(p_already_orig, encoding="utf-8")
+    _git_commit_all(root)
+
+    dry = apply_rule_pre_registration_id_and_type(root, apply=False)
+    assert dry.errors == [], dry.errors
+    names = sorted(c.path.name for c in dry.changes)
+    assert names == ["2026-04-12-foo.md"], names
+
+    wet = apply_rule_pre_registration_id_and_type(root, apply=True)
+    assert wet.errors == [], wet.errors
+    assert 'type: "pre-registration"' in p.read_text()
+    assert p_already.read_text() == p_already_orig
+    again = apply_rule_pre_registration_id_and_type(root, apply=True)
+    assert again.changes == [], f"non-idempotent: {again.changes}"
+
+
+def _self_test_pre_reg_ns_third_shape(td: Path) -> None:
+    """NS third-shape id form: id: plan:pre-registration-<slug> + type: plan."""
+    root = td / "pre-reg-ns"
+    root.mkdir()
+    _git_init(root)
+    (root / "doc" / "meta").mkdir(parents=True)
+    (root / "tasks").mkdir()
+
+    p = root / "doc" / "meta" / "pre-registration-t214.md"
+    orig = '---\nid: "plan:pre-registration-t214"\ntype: "plan"\nspec: "specs/something.md"\n---\nbody\n'
+    p.write_text(orig, encoding="utf-8")
+    tasks = root / "tasks" / "active.md"
+    tasks.write_text(
+        "See plan:pre-registration-t214 for details.\nUnknown: plan:pre-registration-other.\n",
+        encoding="utf-8",
+    )
+    _git_commit_all(root)
+
+    dry = apply_rule_pre_registration_id_and_type(root, apply=False)
+    assert dry.errors == [], dry.errors
+    assert p in dry.files_touched
+    assert tasks in dry.files_touched
+
+    wet = apply_rule_pre_registration_id_and_type(root, apply=True)
+    assert wet.errors == [], wet.errors
+    after = p.read_text()
+    assert 'id: "pre-registration:t214"' in after, after
+    assert 'type: "pre-registration"' in after, after
+    # Existing field preserved.
+    assert 'spec: "specs/something.md"' in after
+    ts = tasks.read_text()
+    assert "pre-registration:t214" in ts, ts
+    assert "plan:pre-registration-t214" not in ts, ts
+    # Path-keyed: unknown slug preserved.
+    assert "plan:pre-registration-other" in ts, ts
+
+    again = apply_rule_pre_registration_id_and_type(root, apply=True)
+    assert again.changes == [], f"non-idempotent: {again.changes}"
+
+
+def _self_test_pre_reg_skips_sparse(td: Path) -> None:
+    """Sparse FM (no id:) is SKIPPED — handled by natural-systems rule."""
+    root = td / "pre-reg-skip"
+    root.mkdir()
+    _git_init(root)
+    (root / "doc" / "meta").mkdir(parents=True)
+    p = root / "doc" / "meta" / "pre-registration-sparse.md"
+    orig = "---\ntitle: 'Sparse'\n---\nbody\n"
+    p.write_text(orig, encoding="utf-8")
+    _git_commit_all(root)
+    res = apply_rule_pre_registration_id_and_type(root, apply=True)
+    assert res.changes == [], res.changes
+    assert p.read_text() == orig
+
+
+def _self_test_natural_systems_pre_reg_frontmatter(td: Path) -> None:
+    """Report-only rule for sparse NS pre-reg files."""
+    root = td / "ns-fm-fixture"
+    root.mkdir()
+    _git_init(root)
+    (root / "doc" / "meta").mkdir(parents=True)
+
+    n1 = root / "doc" / "meta" / "pre-registration-q54-temporal-profile.md"
+    n1_orig = "---\ntitle: 'Pre-registration: Temporal Profile'\ncreated: '2026-03-30'\n---\n\nbody\n"
+    n1.write_text(n1_orig, encoding="utf-8")
+    n3 = root / "doc" / "meta" / "pre-registration-t214.md"
+    n3_orig = '---\nid: "plan:pre-registration-t214"\ntype: "plan"\n---\nbody\n'
+    n3.write_text(n3_orig, encoding="utf-8")
+
+    dry = apply_rule_natural_systems_pre_reg_frontmatter(root, apply=False)
+    assert dry.errors == [], dry.errors
+    names = sorted(c.path.name for c in dry.changes)
+    assert names == ["pre-registration-q54-temporal-profile.md"], names
+    for c in dry.changes:
+        assert "<TODO>" in c.after
+        assert 'type: "pre-registration"' in c.after
+    # apply=True must not write.
+    apply_rule_natural_systems_pre_reg_frontmatter(root, apply=True)
+    assert n1.read_text() == n1_orig
+    assert n3.read_text() == n3_orig
+
+
+def _self_test_specs_frontmatter_backfill(td: Path) -> None:
+    """Specs backfill rule — kept unchanged."""
+    root = td / "specs-fixture"
+    root.mkdir()
+    _git_init(root)
+    (root / "specs").mkdir()
+    spec_drift = root / "specs" / "2026-03-16-foo-design.md"
+    spec_drift_orig = "# Foo Design\n\nBody.\n"
+    spec_drift.write_text(spec_drift_orig, encoding="utf-8")
+    _git_commit_all(root)
+    res = apply_rule_specs_frontmatter_backfill(root, apply=True)
+    assert res.errors == [], res.errors
+    after = spec_drift.read_text()
+    assert 'id: "spec:2026-03-16-foo-design"' in after
+    assert 'title: "Foo Design"' in after
+    again = apply_rule_specs_frontmatter_backfill(root, apply=True)
+    assert again.changes == []
+
+
 def _self_test() -> None:
-    """Exercise the rules against a tempdir fixture and assert expected outcomes."""
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td)
-        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
-        subprocess.run(["git", "config", "user.email", "t@local"], cwd=root, check=True)
-        subprocess.run(["git", "config", "user.name", "t"], cwd=root, check=True)
-        (root / "doc" / "reports" / "synthesis").mkdir(parents=True)
-        (root / "doc" / "interpretations").mkdir()
-        (root / "tasks").mkdir()
+    """Exercise all rules against tempdir fixtures and assert expected outcomes."""
+    with tempfile.TemporaryDirectory() as tdname:
+        td = Path(tdname)
+        # Original / kept rules.
+        _self_test_report_id_prefix(td)
+        _self_test_specs_frontmatter_backfill(td)
+        _self_test_natural_systems_pre_reg_frontmatter(td)
 
-        # (a) drifted report — frontmatter id should be migrated
-        drifted = root / "doc" / "reports" / "2026-04-25-foo.md"
-        drifted.write_text(
-            '---\nid: "doc:2026-04-25-foo"\ntype: "report"\n---\n\nbody\n',
-            encoding="utf-8",
-        )
-        # (b) already-canonical report — left alone
-        canon = root / "doc" / "reports" / "2026-04-25-bar.md"
-        canon_text = '---\nid: "report:2026-04-25-bar"\ntype: "report"\n---\n\nbody\n'
-        canon.write_text(canon_text, encoding="utf-8")
-        # (c) synthesis subdir file — outside rule 1 scope
-        synth = root / "doc" / "reports" / "synthesis" / "h01.md"
-        synth_text = '---\nid: "synthesis:h01"\ntype: "synthesis"\n---\n\nbody\n'
-        synth.write_text(synth_text, encoding="utf-8")
-        # (d) sibling interpretation file (its slug must NOT be rewritten when
-        #     mentioned as `doc:DATE-slug` since it is not a report).
-        interp = root / "doc" / "interpretations" / "2026-04-13-baz.md"
-        interp_text = '---\nid: "interpretation:2026-04-13-baz"\ntype: "interpretation"\n---\n\nbody\n'
-        interp.write_text(interp_text, encoding="utf-8")
-        # (e) tasks file with mixed mentions:
-        #   - infix-form mention of a report slug (rewritten)
-        #   - directory-style infix mention (preserved)
-        #   - synthesis subref (preserved)
-        #   - file-path mention (preserved)
-        #   - bare doc:DATE-slug for a *report* (rewritten)
-        #   - bare doc:DATE-slug for an *interpretation* (preserved)
-        tasks = root / "tasks" / "active.md"
-        tasks.write_text(
-            "## [t100] sample\n"
-            "- related: [doc:reports/2026-04-25-foo, doc:reports/synthesis,"
-            " doc:reports/synthesis/_emergent-threads, doc:2026-04-25-foo,"
-            " doc:2026-04-13-baz]\n"
-            "\n"
-            "File path `doc/reports/2026-04-25-foo.md` must NOT match.\n"
-            "Inline mention `doc:reports/2026-04-25-foo` SHOULD match.\n"
-            "Bare report mention `doc:2026-04-25-foo` SHOULD match.\n"
-            "Bare interpretation mention `doc:2026-04-13-baz` must NOT match.\n",
-            encoding="utf-8",
-        )
-        subprocess.run(["git", "add", "-A"], cwd=root, check=True)
-        subprocess.run(["git", "commit", "-qm", "init"], cwd=root, check=True)
+        # Rule 1: synthesis-type-and-id-rollup — 3 fixtures (mm30, PL, NS).
+        _self_test_rollup_mm30(td)
+        _self_test_rollup_pl(td)
+        _self_test_rollup_ns(td)
 
-        # Dry-run: report changes but write nothing.
-        dry = apply_rule_report_id_prefix(root, apply=False)
-        assert dry.errors == [], f"unexpected errors: {dry.errors}"
-        kinds = [(c.path.name, c.kind) for c in dry.changes]
-        assert ("2026-04-25-foo.md", "frontmatter-id") in kinds, kinds
-        assert not any(p == "2026-04-25-bar.md" for p, _ in kinds), kinds
-        assert not any(p == "h01.md" for p, _ in kinds), kinds
-        assert not any(p == "2026-04-13-baz.md" for p, _ in kinds), kinds
-        mention_changes = [c for c in dry.changes if c.kind == "mention"]
-        # Expected mention rewrites in tasks/active.md:
-        # line 2: `[doc:reports/2026-04-25-foo, ..., doc:2026-04-25-foo, ...]`
-        # line 5: ``doc:reports/2026-04-25-foo``
-        # line 6: ``doc:2026-04-25-foo``
-        assert len(mention_changes) == 3, (
-            f"expected 3 mention rewrites, got {mention_changes}"
-        )
-        # Files unchanged after dry-run
-        assert "doc:2026-04-25-foo" in drifted.read_text(), "dry-run must not write"
-        assert canon.read_text() == canon_text
-        assert synth.read_text() == synth_text
-        assert interp.read_text() == interp_text
+        # Rule 2: synthesis-type-and-id-emergent-threads — 3 fixtures.
+        _self_test_threads_mm30(td)
+        _self_test_threads_pl(td)
+        _self_test_threads_ns(td)
 
-        # Apply
-        wet = apply_rule_report_id_prefix(root, apply=True)
-        assert wet.errors == [], f"errors: {wet.errors}"
-        assert "report:2026-04-25-foo" in drifted.read_text()
-        assert "doc:2026-04-25-foo" not in drifted.read_text()
-        ts = tasks.read_text()
-        assert "report:2026-04-25-foo" in ts
-        assert "doc:reports/2026-04-25-foo" not in ts, (
-            "infix-form mention must be rewritten"
-        )
-        assert "doc:reports/synthesis" in ts, "directory ref must survive"
-        assert "doc:reports/synthesis/_emergent-threads" in ts, (
-            "synthesis subref must survive"
-        )
-        assert "doc/reports/2026-04-25-foo.md" in ts, "file-path mention must survive"
-        assert "doc:2026-04-13-baz" in ts, "bare interpretation mention must survive"
-        # Bare report mention: every `doc:2026-04-25-foo` (no `reports/` infix)
-        # should now read `report:2026-04-25-foo`.
-        assert ts.count("doc:2026-04-25-foo") == 0, (
-            "bare report mentions must be rewritten"
-        )
-        assert ts.count("report:2026-04-25-foo") >= 3, (
-            "expected 3 occurrences after rewrite"
-        )
-        assert canon.read_text() == canon_text, "canonical report must be untouched"
-        assert synth.read_text() == synth_text, "synthesis file must be untouched"
-        assert interp.read_text() == interp_text, "interpretation must be untouched"
+        # Rule 3: synthesis-type-and-id-per-hyp — 3 fixtures + scope check.
+        _self_test_per_hyp_mm30(td)
+        _self_test_per_hyp_pl(td)
+        _self_test_per_hyp_ns(td)
+        _self_test_per_hyp_excludes_underscore(td)
 
-        # Idempotence
-        again = apply_rule_report_id_prefix(root, apply=True)
-        assert again.changes == [], f"non-idempotent: {again.changes}"
-
-        # ---- rule: synthesis-type-mm30 ----
-
-        synth_root = Path(td) / "mm30-fixture"
-        synth_root.mkdir()
-        subprocess.run(["git", "init", "-q"], cwd=synth_root, check=True)
-        subprocess.run(
-            ["git", "config", "user.email", "t@local"], cwd=synth_root, check=True
-        )
-        subprocess.run(["git", "config", "user.name", "t"], cwd=synth_root, check=True)
-        (synth_root / "doc" / "reports" / "synthesis").mkdir(parents=True)
-        (synth_root / "tasks").mkdir()
-
-        # (sm1) per-hyp file with drifted type/id
-        per_hyp = synth_root / "doc" / "reports" / "synthesis" / "h1-foo.md"
-        per_hyp_orig = (
-            "---\n"
-            'id: "report:synthesis-h1-foo"\n'
-            'type: "report"\n'
-            'report_kind: "hypothesis-synthesis"\n'
-            'hypothesis: "hypothesis:h1-foo"\n'
-            "---\n"
-            "\nbody\n"
-        )
-        per_hyp.write_text(per_hyp_orig, encoding="utf-8")
-        # (sm2) rollup file with literal ``report:synthesis`` id
-        rollup = synth_root / "doc" / "reports" / "synthesis.md"
-        rollup_orig = (
-            "---\n"
-            'id: "report:synthesis"\n'
-            'type: "report"\n'
-            'report_kind: "synthesis-rollup"\n'
-            "---\n"
-            "\nrollup body\n"
-        )
-        rollup.write_text(rollup_orig, encoding="utf-8")
-        # (sm3) emergent-threads file in the synthesis dir — must NOT be touched
-        # by this rule (its stem starts with ``_``).
-        threads = synth_root / "doc" / "reports" / "synthesis" / "_emergent-threads.md"
-        threads_orig = '---\ntype: "emergent-threads"\n---\n\nthreads\n'
-        threads.write_text(threads_orig, encoding="utf-8")
-        # (sm4) tasks file with mixed mentions:
-        #   - ``report:synthesis-h1-foo`` (per-hyp mention; rewritten)
-        #   - ``report:synthesis`` (rollup mention; rewritten)
-        #   - ``report:synthesis-unknown`` (unknown stem; preserved)
-        #   - file-path mention ``doc/reports/synthesis/h1-foo.md`` (preserved)
-        synth_tasks = synth_root / "tasks" / "active.md"
-        synth_tasks.write_text(
-            "## [t1] sample\n"
-            "- refs: [report:synthesis-h1-foo, report:synthesis,"
-            " report:synthesis-unknown]\n"
-            "\n"
-            "Path `doc/reports/synthesis/h1-foo.md` must NOT match.\n"
-            "Inline `report:synthesis-h1-foo` SHOULD match.\n"
-            "Inline `report:synthesis` SHOULD match.\n",
-            encoding="utf-8",
-        )
-        subprocess.run(["git", "add", "-A"], cwd=synth_root, check=True)
-        subprocess.run(["git", "commit", "-qm", "init"], cwd=synth_root, check=True)
-
-        dry_synth = apply_rule_synthesis_type_mm30(synth_root, apply=False)
-        assert dry_synth.errors == [], dry_synth.errors
-        kinds_synth = [(c.path.name, c.kind) for c in dry_synth.changes]
-        assert ("h1-foo.md", "frontmatter-id") in kinds_synth, kinds_synth
-        assert ("synthesis.md", "frontmatter-id") in kinds_synth, kinds_synth
-        # _emergent-threads.md is out of scope for this rule.
-        assert not any(p == "_emergent-threads.md" for p, _ in kinds_synth), kinds_synth
-        # Mention rewrites in tasks file recorded as line-level diffs:
-        #   line 2: refs: [...] (per-hyp + rollup rewrites collapsed onto one line)
-        #   line 5: per-hyp inline mention
-        #   line 6: rollup inline mention
-        # = 3 distinct line changes.
-        synth_mention_changes = [c for c in dry_synth.changes if c.kind == "mention"]
-        assert len(synth_mention_changes) == 3, synth_mention_changes
-        # Spot-check line 2 carries BOTH rewrites
-        line2 = next(c for c in synth_mention_changes if c.line_no == 2)
-        assert (
-            "synthesis:h1-foo" in line2.after and "synthesis:rollup" in line2.after
-        ), line2
-        # Dry-run did not write
-        assert per_hyp.read_text() == per_hyp_orig
-        assert rollup.read_text() == rollup_orig
-        assert threads.read_text() == threads_orig
-
-        wet_synth = apply_rule_synthesis_type_mm30(synth_root, apply=True)
-        assert wet_synth.errors == [], wet_synth.errors
-        per_hyp_after = per_hyp.read_text()
-        assert 'id: "synthesis:h1-foo"' in per_hyp_after, per_hyp_after
-        assert 'type: "synthesis"' in per_hyp_after, per_hyp_after
-        assert "report:synthesis-h1-foo" not in per_hyp_after
-        rollup_after = rollup.read_text()
-        assert 'id: "synthesis:rollup"' in rollup_after, rollup_after
-        assert 'type: "synthesis"' in rollup_after, rollup_after
-        # Emergent-threads file untouched.
-        assert threads.read_text() == threads_orig
-        ts_synth = synth_tasks.read_text()
-        assert "synthesis:h1-foo" in ts_synth
-        assert "synthesis:rollup" in ts_synth
-        # Unknown synthesis slug preserved (not in path-key set).
-        assert "report:synthesis-unknown" in ts_synth
-        # File-path mention preserved.
-        assert "doc/reports/synthesis/h1-foo.md" in ts_synth
-        # No surviving bare ``report:synthesis`` mentions.
-        assert "report:synthesis-h1-foo" not in ts_synth
-        # ``report:synthesis`` (with no slug suffix) replaced everywhere.
-        assert ts_synth.count("report:synthesis ") == 0
-        assert ts_synth.count("report:synthesis,") == 0
-        assert ts_synth.count("report:synthesis`") == 0
-
-        again_synth = apply_rule_synthesis_type_mm30(synth_root, apply=True)
-        assert again_synth.changes == [], f"non-idempotent: {again_synth.changes}"
-
-        # ---- rule: synthesis-type-pl-emergent-threads ----
-
-        pl_root = Path(td) / "pl-fixture"
-        pl_root.mkdir()
-        subprocess.run(["git", "init", "-q"], cwd=pl_root, check=True)
-        subprocess.run(
-            ["git", "config", "user.email", "t@local"], cwd=pl_root, check=True
-        )
-        subprocess.run(["git", "config", "user.name", "t"], cwd=pl_root, check=True)
-        (pl_root / "doc" / "reports" / "synthesis").mkdir(parents=True)
-
-        pl_threads = pl_root / "doc" / "reports" / "synthesis" / "_emergent-threads.md"
-        pl_threads_orig = (
-            "---\n"
-            'type: "emergent-threads"\n'
-            'generated_at: "2026-04-25T11:45:34Z"\n'
-            'source_commit: "abc"\n'
-            "orphan_question_count: 23\n"
-            "---\n"
-            "\nbody\n"
-        )
-        pl_threads.write_text(pl_threads_orig, encoding="utf-8")
-
-        dry_pl = apply_rule_synthesis_type_pl_emergent_threads(pl_root, apply=False)
-        assert dry_pl.errors == [], dry_pl.errors
-        assert len(dry_pl.changes) > 0
-        assert pl_threads.read_text() == pl_threads_orig
-
-        wet_pl = apply_rule_synthesis_type_pl_emergent_threads(pl_root, apply=True)
-        assert wet_pl.errors == [], wet_pl.errors
-        pl_after = pl_threads.read_text()
-        assert 'type: "synthesis"' in pl_after, pl_after
-        assert 'id: "synthesis:emergent-threads"' in pl_after, pl_after
-        assert 'report_kind: "emergent-threads"' in pl_after, pl_after
-        # Existing fields preserved.
-        assert 'generated_at: "2026-04-25T11:45:34Z"' in pl_after
-        assert "orphan_question_count: 23" in pl_after
-        # Order: ``type:`` → ``id:`` → ``report_kind:`` (id and report_kind are
-        # inserted immediately after the new ``type:`` line).
-        type_idx = pl_after.index("type: ")
-        id_idx = pl_after.index('id: "synthesis:emergent-threads"')
-        rk_idx = pl_after.index('report_kind: "emergent-threads"')
-        assert type_idx < id_idx < rk_idx, (type_idx, id_idx, rk_idx)
-
-        again_pl = apply_rule_synthesis_type_pl_emergent_threads(pl_root, apply=True)
-        assert again_pl.changes == [], f"non-idempotent: {again_pl.changes}"
-
-        # Already-canonical case: should be a no-op.
-        pl_already = pl_root / "pl-fixture-canonical"
-        pl_already.mkdir()
-        (pl_already / "doc" / "reports" / "synthesis").mkdir(parents=True)
-        pl_already_file = (
-            pl_already / "doc" / "reports" / "synthesis" / "_emergent-threads.md"
-        )
-        pl_already_text = (
-            "---\n"
-            'id: "synthesis:emergent-threads"\n'
-            'type: "synthesis"\n'
-            'report_kind: "emergent-threads"\n'
-            "---\nbody\n"
-        )
-        pl_already_file.write_text(pl_already_text, encoding="utf-8")
-        noop_pl = apply_rule_synthesis_type_pl_emergent_threads(pl_already, apply=True)
-        assert noop_pl.changes == [], noop_pl.changes
-        assert pl_already_file.read_text() == pl_already_text
-
-        # ---- rule: synthesis-report-kind-pl-hyp ----
-
-        pl_hyp_root = Path(td) / "pl-hyp-fixture"
-        pl_hyp_root.mkdir()
-        subprocess.run(["git", "init", "-q"], cwd=pl_hyp_root, check=True)
-        subprocess.run(
-            ["git", "config", "user.email", "t@local"], cwd=pl_hyp_root, check=True
-        )
-        subprocess.run(["git", "config", "user.name", "t"], cwd=pl_hyp_root, check=True)
-        (pl_hyp_root / "doc" / "reports" / "synthesis").mkdir(parents=True)
-
-        # (h1) missing report_kind — should be inserted
-        h1 = pl_hyp_root / "doc" / "reports" / "synthesis" / "h01-foo.md"
-        h1_orig = (
-            "---\n"
-            'id: "synthesis:h01-foo"\n'
-            'type: "synthesis"\n'
-            'hypothesis: "hypothesis:h01-foo"\n'
-            "---\n"
-            "\nbody\n"
-        )
-        h1.write_text(h1_orig, encoding="utf-8")
-        # (h2) report_kind already present — no-op
-        h2 = pl_hyp_root / "doc" / "reports" / "synthesis" / "h02-bar.md"
-        h2_orig = (
-            "---\n"
-            'id: "synthesis:h02-bar"\n'
-            'type: "synthesis"\n'
-            'report_kind: "hypothesis-synthesis"\n'
-            "---\n"
-            "\nbody\n"
-        )
-        h2.write_text(h2_orig, encoding="utf-8")
-        # (h3) type is not synthesis — skipped (out of scope; awaits rule
-        # ``synthesis-type-mm30``)
-        h3 = pl_hyp_root / "doc" / "reports" / "synthesis" / "h03-baz.md"
-        h3_orig = '---\nid: "report:synthesis-h03-baz"\ntype: "report"\n---\n\nbody\n'
-        h3.write_text(h3_orig, encoding="utf-8")
-
-        dry_hyp = apply_rule_synthesis_report_kind_pl_hyp(pl_hyp_root, apply=False)
-        assert dry_hyp.errors == [], dry_hyp.errors
-        # Only h01-foo.md should be flagged; multiple line-diff entries are
-        # expected because inserting a new line shifts subsequent FM lines.
-        kinds_hyp = {c.path.name for c in dry_hyp.changes}
-        assert kinds_hyp == {"h01-foo.md"}, kinds_hyp
-        assert len(dry_hyp.files_touched) == 1, dry_hyp.files_touched
-        assert h1.read_text() == h1_orig
-
-        wet_hyp = apply_rule_synthesis_report_kind_pl_hyp(pl_hyp_root, apply=True)
-        assert wet_hyp.errors == [], wet_hyp.errors
-        h1_after = h1.read_text()
-        assert 'report_kind: "hypothesis-synthesis"' in h1_after, h1_after
-        # Order: type: line → report_kind line
-        type_idx = h1_after.index('type: "synthesis"')
-        rk_idx = h1_after.index('report_kind: "hypothesis-synthesis"')
-        assert type_idx < rk_idx
-        # Other files untouched
-        assert h2.read_text() == h2_orig
-        assert h3.read_text() == h3_orig
-
-        again_hyp = apply_rule_synthesis_report_kind_pl_hyp(pl_hyp_root, apply=True)
-        assert again_hyp.changes == [], f"non-idempotent: {again_hyp.changes}"
-
-        # ---- rule: pre-registration-type ----
-
-        pre_root = Path(td) / "pre-fixture"
-        pre_root.mkdir()
-        subprocess.run(["git", "init", "-q"], cwd=pre_root, check=True)
-        subprocess.run(
-            ["git", "config", "user.email", "t@local"], cwd=pre_root, check=True
-        )
-        subprocess.run(["git", "config", "user.name", "t"], cwd=pre_root, check=True)
-        (pre_root / "doc" / "meta").mkdir(parents=True)
-        (pre_root / "doc" / "pre-registrations").mkdir(parents=True)
-
-        # (p1) doc/pre-registrations canonical-id, type:plan — should rewrite
-        p1 = pre_root / "doc" / "pre-registrations" / "2026-04-12-foo.md"
-        p1_orig = (
-            "---\n"
-            'id: "pre-registration:2026-04-12-foo"\n'
-            'type: "plan"\n'
-            "committed: 2026-04-12\n"
-            "---\nbody\n"
-        )
-        p1.write_text(p1_orig, encoding="utf-8")
-        # (p2) doc/meta with canonical id — should rewrite
-        p2 = pre_root / "doc" / "meta" / "pre-registration-bar.md"
-        p2_orig = '---\nid: "pre-registration:bar"\ntype: "plan"\n---\nbody\n'
-        p2.write_text(p2_orig, encoding="utf-8")
-        # (p3) doc/meta with non-canonical id (NS shape) — must NOT rewrite
-        p3 = pre_root / "doc" / "meta" / "pre-registration-baz.md"
-        p3_orig = '---\nid: "plan:pre-registration-baz"\ntype: "plan"\n---\nbody\n'
-        p3.write_text(p3_orig, encoding="utf-8")
-        # (p4) already migrated — no-op
-        p4 = pre_root / "doc" / "pre-registrations" / "2026-04-13-quux.md"
-        p4_orig = (
-            "---\n"
-            'id: "pre-registration:2026-04-13-quux"\n'
-            'type: "pre-registration"\n'
-            "---\nbody\n"
-        )
-        p4.write_text(p4_orig, encoding="utf-8")
-
-        dry_pre = apply_rule_pre_registration_type(pre_root, apply=False)
-        assert dry_pre.errors == [], dry_pre.errors
-        names_pre = sorted(c.path.name for c in dry_pre.changes)
-        assert names_pre == ["2026-04-12-foo.md", "pre-registration-bar.md"], names_pre
-        # Dry-run wrote nothing
-        assert p1.read_text() == p1_orig
-        assert p2.read_text() == p2_orig
-        assert p3.read_text() == p3_orig
-        assert p4.read_text() == p4_orig
-
-        wet_pre = apply_rule_pre_registration_type(pre_root, apply=True)
-        assert wet_pre.errors == [], wet_pre.errors
-        assert 'type: "pre-registration"' in p1.read_text()
-        assert 'type: "pre-registration"' in p2.read_text()
-        # NS-shape file (id starts with plan:) untouched
-        assert p3.read_text() == p3_orig
-        # Already-canonical file untouched
-        assert p4.read_text() == p4_orig
-
-        again_pre = apply_rule_pre_registration_type(pre_root, apply=True)
-        assert again_pre.changes == [], f"non-idempotent: {again_pre.changes}"
-
-        # ---- rule: natural-systems-pre-reg-frontmatter (report-only) ----
-
-        ns_root = Path(td) / "ns-fixture"
-        ns_root.mkdir()
-        subprocess.run(["git", "init", "-q"], cwd=ns_root, check=True)
-        subprocess.run(
-            ["git", "config", "user.email", "t@local"], cwd=ns_root, check=True
-        )
-        subprocess.run(["git", "config", "user.name", "t"], cwd=ns_root, check=True)
-        (ns_root / "doc" / "meta").mkdir(parents=True)
-
-        # (n1) NS-style sparse FM (title + related + created, no id, no type) — should report
-        n1 = ns_root / "doc" / "meta" / "pre-registration-q54-temporal-profile.md"
-        n1_orig = (
-            "---\n"
-            "title: 'Pre-registration: Temporal Profile'\n"
-            "created: '2026-03-30'\n"
-            "---\n"
-            "\nbody\n"
-        )
-        n1.write_text(n1_orig, encoding="utf-8")
-        # (n2) FM with type: but no id: — should report
-        n2 = ns_root / "doc" / "meta" / "pre-registration-t085-t086.md"
-        n2_orig = '---\ntype: "plan"\n---\nbody\n'
-        n2.write_text(n2_orig, encoding="utf-8")
-        # (n3) FM with both id: and type: — should NOT be reported
-        n3 = ns_root / "doc" / "meta" / "pre-registration-t214.md"
-        n3_orig = '---\nid: "plan:pre-registration-t214"\ntype: "plan"\n---\nbody\n'
-        n3.write_text(n3_orig, encoding="utf-8")
-
-        dry_ns = apply_rule_natural_systems_pre_reg_frontmatter(ns_root, apply=False)
-        assert dry_ns.errors == [], dry_ns.errors
-        names_ns = sorted(c.path.name for c in dry_ns.changes)
-        assert names_ns == [
-            "pre-registration-q54-temporal-profile.md",
-            "pre-registration-t085-t086.md",
-        ], names_ns
-        # All entries are manual-suggested.
-        assert all(c.kind == "manual-suggested" for c in dry_ns.changes)
-        # Suggestion includes <TODO> placeholders for committed: and spec:.
-        for c in dry_ns.changes:
-            assert "<TODO>" in c.after, c.after
-            assert "committed:" in c.after, c.after
-            assert "spec:" in c.after, c.after
-            assert 'type: "pre-registration"' in c.after, c.after
-
-        # apply=True must STILL not mutate (report-only rule).
-        wet_ns = apply_rule_natural_systems_pre_reg_frontmatter(ns_root, apply=True)
-        assert n1.read_text() == n1_orig, "report-only rule must not write"
-        assert n2.read_text() == n2_orig, "report-only rule must not write"
-        assert n3.read_text() == n3_orig, "report-only rule must not write"
-        # Re-running yields the same suggestions (the rule is stable; its
-        # ``changes`` count does not drop to zero between invocations because
-        # it never rewrites files — operator must apply manually). This is
-        # the "idempotent on re-apply" contract for a report-only rule:
-        # output is deterministic.
-        assert len(wet_ns.changes) == len(dry_ns.changes)
-
-        # ---- rule 2: specs-frontmatter-backfill ----
-
-        (root / "specs").mkdir()
-        # (s1) dated, no frontmatter, has H1 — should be backfilled
-        spec_drift = root / "specs" / "2026-03-16-foo-design.md"
-        spec_drift_orig = (
-            "# Foo Design: A Worked Example\n\n**Date:** 2026-03-16\n\nBody.\n"
-        )
-        spec_drift.write_text(spec_drift_orig, encoding="utf-8")
-        # (s2) non-dated, no frontmatter, no H1 — title falls back to basename
-        spec_no_h1 = root / "specs" / "research-notes.md"
-        spec_no_h1.write_text("Just some prose.\n", encoding="utf-8")
-        # (s3) already has frontmatter — must be left alone
-        spec_canon = root / "specs" / "2026-04-22-bar-design.md"
-        spec_canon_text = (
-            '---\nid: "spec:2026-04-22-bar-design"\ntype: "spec"\n'
-            'title: "Bar"\ndate: 2026-04-22\nstatus: design\n---\n\nBody.\n'
-        )
-        spec_canon.write_text(spec_canon_text, encoding="utf-8")
-        # (s4) title with characters that need YAML escaping
-        spec_special = root / "specs" / "2026-04-01-quoted-title.md"
-        spec_special.write_text(
-            '# Spec: "Quoted" — em-dash & path\\ok\n\nBody.\n',
-            encoding="utf-8",
-        )
-
-        # Dry-run rule 2
-        dry2 = apply_rule_specs_frontmatter_backfill(root, apply=False)
-        assert dry2.errors == [], f"errors: {dry2.errors}"
-        names = sorted(c.path.name for c in dry2.changes)
-        assert names == [
-            "2026-03-16-foo-design.md",
-            "2026-04-01-quoted-title.md",
-            "research-notes.md",
-        ], names
-        assert not any(c.path == spec_canon for c in dry2.changes)
-        # Dry-run did not write
-        assert spec_drift.read_text() == spec_drift_orig
-        assert spec_canon.read_text() == spec_canon_text
-
-        # Apply rule 2
-        wet2 = apply_rule_specs_frontmatter_backfill(root, apply=True)
-        assert wet2.errors == [], f"errors: {wet2.errors}"
-        # Drifted dated spec: id derived from basename, date from prefix, title from H1
-        d_text = spec_drift.read_text()
-        assert d_text.startswith("---\n")
-        assert 'id: "spec:2026-03-16-foo-design"' in d_text
-        assert 'type: "spec"' in d_text
-        assert 'title: "Foo Design: A Worked Example"' in d_text
-        assert "date: 2026-03-16" in d_text
-        assert 'status: "design"' in d_text
-        # Original body intact
-        assert "Body." in d_text
-        # No-H1 non-dated spec: title falls back to basename, no date field
-        n_text = spec_no_h1.read_text()
-        assert 'id: "spec:research-notes"' in n_text
-        assert 'title: "research-notes"' in n_text
-        assert "date:" not in n_text.split("---", 2)[1]
-        # Already-canonical spec: byte-identical
-        assert spec_canon.read_text() == spec_canon_text
-        # Special-character title: YAML-escaped properly
-        s_text = spec_special.read_text()
-        assert 'title: "Spec: \\"Quoted\\" — em-dash & path\\\\ok"' in s_text, s_text
-
-        # Idempotence
-        again2 = apply_rule_specs_frontmatter_backfill(root, apply=True)
-        assert again2.changes == [], f"non-idempotent: {again2.changes}"
+        # Rule 4: pre-registration-id-and-type — 3 fixtures.
+        _self_test_pre_reg_canonical(td)
+        _self_test_pre_reg_ns_third_shape(td)
+        _self_test_pre_reg_skips_sparse(td)
 
         click.echo("self-test: PASS")
 
@@ -1324,10 +1703,10 @@ def _self_test() -> None:
 
 RULES = {
     "report-id-prefix": apply_rule_report_id_prefix,
-    "synthesis-type-mm30": apply_rule_synthesis_type_mm30,
-    "synthesis-type-pl-emergent-threads": apply_rule_synthesis_type_pl_emergent_threads,
-    "synthesis-report-kind-pl-hyp": apply_rule_synthesis_report_kind_pl_hyp,
-    "pre-registration-type": apply_rule_pre_registration_type,
+    "synthesis-type-and-id-rollup": apply_rule_synthesis_type_and_id_rollup,
+    "synthesis-type-and-id-emergent-threads": apply_rule_synthesis_type_and_id_emergent_threads,
+    "synthesis-type-and-id-per-hyp": apply_rule_synthesis_type_and_id_per_hyp,
+    "pre-registration-id-and-type": apply_rule_pre_registration_id_and_type,
     "natural-systems-pre-reg-frontmatter": apply_rule_natural_systems_pre_reg_frontmatter,
     "specs-frontmatter-backfill": apply_rule_specs_frontmatter_backfill,
 }
@@ -1371,9 +1750,7 @@ def main(
     if project_root is None:
         raise click.UsageError("PROJECT_ROOT is required unless --self-test is given.")
     if rule is None:
-        raise click.UsageError(
-            "--rule is required (choose one: " + ", ".join(sorted(RULES)) + ")"
-        )
+        raise click.UsageError("--rule is required (choose one: " + ", ".join(sorted(RULES)) + ")")
     project_root = project_root.resolve()
     res = RULES[rule](project_root, apply=apply_changes)
 
