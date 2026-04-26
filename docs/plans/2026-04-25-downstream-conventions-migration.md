@@ -148,40 +148,13 @@ For each downstream project, dispatch one sub-agent (or run sequentially) follow
 
 Recommended sequencing (post-investigation): **cbioportal → mm30 → PL → NS**. Rationale: cbioportal is no-op (already done in initial pass) and serves as the dry-run sanity check for the redesigned rules; mm30 is uniformly drifted and is the cleanest test of the redesigned rules; PL has the rollup migration unblocked plus the script-error path resolved; NS goes last because it carries mixed shapes (highest residual surprise risk) and a partial-migration of per-hyp files is already in place from the original Task 1 pass.
 
-- [ ] **cbioportal** (`/home/keith/d/r/cbioportal`)
-  - All shape migrations are no-ops (cbioportal converged canonically per audit; this was confirmed in the initial Task 2 pass). Run dry-runs for rules 1, 2, 3, 4, 5 (with the redesigned shape-driven rules) to confirm zero files affected.
-  - Skip migration #7 until Plan #6 lands; current lag is 0%.
-  - Migration #9 — already uses Pattern 1 for 3 notebooks; no action.
-  - File task entry confirming "no shape migrations needed; pending tasks-archive adoption + MAV update".
+- [x] **cbioportal** (`/home/keith/d/r/cbioportal`) — **DONE 2026-04-25** (warmup pass + redesigned-rules confirmation; both passes 0/0). Task entry `[t140]` filed (cbioportal commit `fad556c`). All shape migrations were no-ops as predicted. Pending: tasks-archive adoption (Plan #6); MAV validator update (Plan #7).
 
-- [ ] **mm30** (`/home/keith/d/r/mm30`)
-  - Rule 2 (`synthesis-type-and-id-rollup`): dry-run → review → apply → commit (`fix(synthesis): rollup adopts canonical type:synthesis + id:synthesis:rollup per Science Plan #4`). Verify rollup id specifically rewrites `report:synthesis` → `synthesis:rollup`.
-  - Rule 3 (`synthesis-type-and-id-emergent-threads`): dry-run → review → apply → commit (`fix(synthesis): emergent-threads adopts canonical type:synthesis + id:synthesis:emergent-threads`). Verify id rewrites from `report:synthesis-emergent-threads` to `synthesis:emergent-threads`.
-  - Rule 4 (`synthesis-type-and-id-per-hyp`): dry-run → review → apply → commit (`fix(synthesis): hypothesis files declare report_kind:hypothesis-synthesis + id:synthesis:<slug>`). Expect ~5 per-hyp files; id rewrites from `report:synthesis-<slug>`.
-  - Rule 5 (`pre-registration-id-and-type`): dry-run; expect ~6 files. Apply → commit (`fix(pre-reg): migrate type:plan → type:pre-registration per Science Plan #2`).
-  - Skip migration #7 until Plan #6 lands.
-  - Migration #8 — already canonical (mm30's `prior:` matches Plan #10). No action.
-  - File task entry.
+- [x] **mm30** (`/home/keith/d/r/mm30`) — **DONE 2026-04-25**. mm30 commits: `f0448f8` rollup (Q1=C atomic move verified: `orphan_question_count: 6` → threads), `74c581c` emergent-threads, `cb0e96d` per-hyp (5 files), `f05045b` pre-reg (16 files — actual count 16 vs predicted ~6, all uniform `type: plan` → `type: pre-registration`), `afd0814` task entry `[t314]`. Validator state unchanged at 160/85. Idempotence ✓. Commitlint enforcement adapted (no `--no-verify` used). Pending: 4 sparse `doc/meta/pre-registration-*.md` files need hand-fill (separate cleanup cycle); tasks-archive (Plan #6); MAV validator update (Plan #7).
 
-- [ ] **protein-landscape** (`/home/keith/d/protein-landscape`)
-  - Rule 2 (`synthesis-type-and-id-rollup`): dry-run → review → apply → commit (`fix(synthesis): rollup adopts canonical type:synthesis + id:synthesis:rollup + orphan-count migration`). Verify the rollup-to-threads orphan-count migration runs (Q1=C); both files land in the same commit (atomic).
-  - Rule 3 (`synthesis-type-and-id-emergent-threads`): dry-run → review → apply → commit (`fix(synthesis): emergent-threads adopts canonical type:synthesis + report_kind`).
-  - Rule 4 (`synthesis-type-and-id-per-hyp`): dry-run → review → apply → commit (`fix(synthesis): hypothesis files declare report_kind:hypothesis-synthesis`). Expect 3 per-hyp files; mostly idempotent (id is already canonical), `report_kind:` insertion is the new change.
-  - Rule 5 (`pre-registration-id-and-type`): dry-run; expect ~2 files (the meta/ ones). Apply → commit.
-  - Skip migration #7 until Plan #6 lands.
-  - Migration #8 — `prior_analyses:` keeps working as accepted variant; no action required, but the project owner may opt to migrate to single-string `prior:` as a future cleanup.
-  - Migration #9 — Pattern 3 adoption: file a separate `[t<NNN>]` task to add `task:`/`question:`/`hypothesis:`/`interpretation:` fields to the 19 `descriptors/<artifact>.parquet.descriptor.json` files. Do NOT batch with this migration cycle (Pattern 3 status is "pending Bucket C namespace decision" per `docs/conventions/code-task-backlinks.md`).
-  - File task entry.
+- [x] **protein-landscape** (`/home/keith/d/protein-landscape`) — **DONE 2026-04-25**. Required two dispatches: first halted on pre-flight (Q63 dev work in progress); user landed Q63 work; resumed cleanly. PL commits: `9bc1477` rollup (Q1=C atomic move verified: `orphan_question_count: 23` → threads; `orphan_interpretation_count` and `orphan_ids:` were already on threads file, script correctly migrated only what was on rollup), `5c882a8` emergent-threads, `33ed567` per-hyp (3 files), `c9791f0` pre-reg (2 files), `6083bfe` task entry `[t168]`. Validator state unchanged at 1/2 (1 pre-existing error from `science-tool` clean-stdout follow-on). Idempotence ✓. Commitlint enforcement adapted. Pending: tasks-archive (Plan #6); MAV validator update (Plan #7); descriptor sidecar Pattern 3 adoption (Plan #9, deferred until Bucket C / P1 #8 namespace decision).
 
-- [ ] **natural-systems** (`/home/keith/d/natural-systems`)
-  - Rule 1 (`report-id-prefix`): dry-run → review → apply → commit (`fix(reports): migrate id: doc:DATE-slug → report:DATE-slug per upstream convention`).
-  - Rule 2 (`synthesis-type-and-id-rollup`): dry-run → review → apply → commit. NS rollup uses `id: report:project-synthesis` (third id form); the redesigned rule handles this.
-  - Rule 3 (`synthesis-type-and-id-emergent-threads`): dry-run → review → apply → commit. NS emergent-threads uses `id: report:emergent-threads` (fourth id form); the redesigned rule handles this.
-  - Rule 4 (`synthesis-type-and-id-per-hyp`): dry-run → review → apply → commit. Expect 4 per-hyp files; redesigned rule has no filename-prefix gating (3 of 4 NS per-hyp files don't start with `h`). Mostly idempotent on `type:`/`id:` (already canonical); `report_kind:` insertion is the new change for all 4.
-  - Rule 5 (`pre-registration-id-and-type`): dry-run; expect ~4 files (NS third shape: `id: plan:pre-registration-<slug>`). Apply → commit (`fix(pre-reg): migrate id:plan:pre-registration-<slug> → id:pre-registration:<slug> + type:pre-registration per Science Plan #2`).
-  - Rule 6 (`natural-systems-pre-reg-frontmatter`): run report-only mode against the 3 NS pre-reg files lacking `id:`/`type:` entirely. Hand the output to the user; this step requires user input on `committed:` / `spec:` values. Do NOT proceed to apply without user confirmation.
-  - Skip migration #7 (tasks archive) until Plan #6 lands upstream and the `science-tool tasks archive` command exists.
-  - File task entry in `<project>/tasks/active.md` listing the rules applied and what remains.
+- [x] **natural-systems** (`/home/keith/d/natural-systems`) — **DONE 2026-04-25**. Rule 1 (`report-id-prefix`) was previously applied by user (NS commit `3adeeb0e`). NS commits this cycle: `5d2fb44a` rollup (Q1=C atomic move verified: `orphan_question_count: 56` → threads), `554b79e5` emergent-threads (3 files / 82 changes — largest mention-rewrite footprint of cycle; no false positives), `ae933219` per-hyp (4 files — non-`h*`-prefixed files caught by Phase 2 glob fix), `444a3ea4` pre-reg (2 files including t214 third-shape `id: plan:pre-registration-t214` → `id: pre-registration:t214`), `67421095` task entry `[t338]`. Validator state: migration commits unchanged at 239/77; task entry added +1 of pre-existing `missing required field: type` class (236 NS tasks share the same shape; not migration-introduced). Idempotence ✓. Commitlint enforcement adapted. Pending: 3 sparse `doc/meta/pre-registration-*.md` files need hand-fill (separate cleanup cycle, suggestions available via `natural-systems-pre-reg-frontmatter --rule`); tasks-archive (Plan #6); MAV validator update (Plan #7).
 
 ---
 
