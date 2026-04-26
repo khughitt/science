@@ -4,7 +4,12 @@ from shutil import copytree
 from click.testing import CliRunner
 
 from science_tool.cli import main
-from science_tool.skills_lint.lint import SkillIssue, check_frontmatter
+from science_tool.skills_lint.lint import (
+    SkillIssue,
+    check_companion_skills,
+    check_frontmatter,
+    check_relative_links,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -34,6 +39,23 @@ def test_missing_description_returns_issue() -> None:
     assert issues[0].field == "description"
 
 
+def test_missing_companion_skills_section_returns_issue() -> None:
+    issues = check_companion_skills(FIXTURES / "bad-no-companion-skills.md")
+    assert any(issue.kind == "missing-section" and issue.detail == "Companion Skills" for issue in issues)
+
+
+def test_valid_relative_link_returns_no_issues() -> None:
+    issues = check_relative_links(FIXTURES / "good-with-companion.md")
+    assert issues == []
+
+
+def test_broken_relative_link_returns_issue() -> None:
+    issues = check_relative_links(FIXTURES / "bad-broken-relative-link.md")
+    assert len(issues) == 1
+    assert issues[0].kind == "broken-relative-link"
+    assert issues[0].detail == "missing.md"
+
+
 def test_lint_cli_against_fixtures(tmp_path: Path) -> None:
     skills_root = tmp_path / "skills"
     copytree(FIXTURES, skills_root)
@@ -44,7 +66,10 @@ def test_lint_cli_against_fixtures(tmp_path: Path) -> None:
     assert "bad-no-frontmatter.md" in result.output
     assert "bad-missing-name.md" in result.output
     assert "bad-missing-description.md" in result.output
+    assert "bad-no-companion-skills.md" in result.output
+    assert "bad-broken-relative-link.md" in result.output
     assert "good.md" not in result.output
+    assert "good-with-companion.md" not in result.output
 
 
 def test_skill_issue_json_uses_posix_path() -> None:

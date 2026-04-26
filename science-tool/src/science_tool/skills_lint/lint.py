@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Literal
 
 import yaml
@@ -34,6 +35,7 @@ class SkillIssue:
 
 
 REQUIRED_FIELDS = ("name", "description")
+MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
 
 
 def check_frontmatter(path: Path) -> list[SkillIssue]:
@@ -58,11 +60,39 @@ def check_frontmatter(path: Path) -> list[SkillIssue]:
     return issues
 
 
+def check_companion_skills(path: Path) -> list[SkillIssue]:
+    text = path.read_text(encoding="utf-8")
+    if not re.search(r"^## Companion Skills$", text, re.MULTILINE):
+        return [SkillIssue(path, "missing-section", detail="Companion Skills")]
+    return []
+
+
+def check_relative_links(path: Path) -> list[SkillIssue]:
+    text = path.read_text(encoding="utf-8")
+    issues: list[SkillIssue] = []
+    for match in MARKDOWN_LINK_RE.finditer(text):
+        target = match.group(1).strip().strip("<>")
+        if not _is_relative_markdown_path(target):
+            continue
+        target_path = target.split("#", 1)[0]
+        if not (path.parent / target_path).is_file():
+            issues.append(SkillIssue(path, "broken-relative-link", detail=target))
+    return issues
+
+
 def check_skills(root: Path) -> list[SkillIssue]:
     issues: list[SkillIssue] = []
     for path in sorted(root.rglob("*.md")):
         issues.extend(_relative_issues(check_frontmatter(path), root))
+        issues.extend(_relative_issues(check_companion_skills(path), root))
+        issues.extend(_relative_issues(check_relative_links(path), root))
     return issues
+
+
+def _is_relative_markdown_path(target: str) -> bool:
+    if target.startswith(("#", "/", "http://", "https://", "mailto:")):
+        return False
+    return target.split("#", 1)[0].endswith(".md")
 
 
 def _relative_issues(issues: list[SkillIssue], root: Path) -> list[SkillIssue]:
