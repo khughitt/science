@@ -25,9 +25,17 @@ artifacts:
       requires_clean_worktree: true
       commit_default: true
       transaction_kind: temp_commit
-    version: '2026.04.26'
-    current_hash: f4596de3e9b2696066097621d5aef5606f247d144c5530409433427949c830d1
-    previous_hashes: []
-    migrations: []
+    version: '2026.04.26.1'
+    current_hash: 31ca36b395f4714842b2263844fe924f73ce1bb922bc3fb002ee6dc25d5ed8f4
+    previous_hashes:
+      - version: '2026.04.26'
+        hash: f4596de3e9b2696066097621d5aef5606f247d144c5530409433427949c830d1
+    migrations:
+      - from: '2026.04.26'
+        to: '2026.04.26.1'
+        kind: byte_replace
+        summary: 'Audit-surfaced six-fix batch (Plan #7).'
+        steps: []
     changelog:
       '2026.04.26': Initial managed artifact (port of scripts/validate.sh + hook infrastructure).
+      '2026.04.26.1': 'Audit-surfaced six-fix batch (Plan #7 of conventions audit).'

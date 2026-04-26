@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.04.26
-# science-managed-source-sha256: f4596de3e9b2696066097621d5aef5606f247d144c5530409433427949c830d1
+# science-managed-version: 2026.04.26.1
+# science-managed-source-sha256: 31ca36b395f4714842b2263844fe924f73ce1bb922bc3fb002ee6dc25d5ed8f4
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -33,14 +33,20 @@ fi
 # Returns non-zero on failure. Used as backpressure in research loops.
 #
 # Usage: bash validate.sh [--verbose]
+#
+# Env opt-outs (managed-artifact contract):
+#   SCIENCE_VALIDATE_SKIP_DOTENV=1    skip auto-sourcing of project-local .env
+#   SCIENCE_VALIDATE_SKIP_ID_PREFIX=1 skip per-type id-prefix conformance check
 
 # Note: intentionally NOT using set -e — we count errors and report at the end.
 set -uo pipefail
 
 export UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/uv-cache}"
 
-# Source .env for SCIENCE_TOOL_PATH and other project-local settings
-if [ -f ".env" ]; then
+# Source .env for SCIENCE_TOOL_PATH and other project-local settings.
+# Set SCIENCE_VALIDATE_SKIP_DOTENV=1 to skip (e.g., when SCIENCE_TOOL_PATH is
+# already exported in the developer's shell).
+if [ -z "${SCIENCE_VALIDATE_SKIP_DOTENV:-}" ] && [ -f ".env" ]; then
     set -a
     # shellcheck disable=SC1091
     . ./.env
@@ -180,8 +186,14 @@ if not isinstance(profiles, dict):
 elif not isinstance(profiles.get("local"), str) or not profiles.get("local"):
     print("missing-local")
 else:
+    # Additive check: knowledge_profiles.curated must be a list when present.
+    # The legacy top-level `ontologies` list-shape check is preserved; removing
+    # it is a separate downstream-migration cycle (see Plan #7 Task 3).
+    curated = profiles.get("curated")
     ontologies = data.get("ontologies")
-    if ontologies is not None and not isinstance(ontologies, list):
+    if curated is not None and not isinstance(curated, list):
+        print("invalid-curated")
+    elif ontologies is not None and not isinstance(ontologies, list):
         print("invalid-ontologies")
     else:
         print("ok")
@@ -194,6 +206,9 @@ PYEOF
             ;;
         missing-local)
             error "science.yaml knowledge_profiles.local missing or empty"
+            ;;
+        invalid-curated)
+            error "science.yaml knowledge_profiles.curated must be a list"
             ;;
         invalid-ontologies)
             error "science.yaml ontologies must be a list"
@@ -250,7 +265,14 @@ if [ "$PROFILE" = "software" ] && [ -f "RESEARCH_PLAN.md" ]; then
 fi
 
 if [ -d "docs" ] && [ -d "$DOC_DIR" ]; then
-    warn "Duplicate document roots detected: ${DOC_DIR}/ and docs/"
+    # Sanction the agent-vs-human authoring split: docs/ that contains only
+    # the docs/superpowers/ subtree (plans/specs authored via skills) is not
+    # a duplicate-root violation. Any other content under docs/ still warns.
+    # Adding a new sanctioned subtree requires a separate plan (see
+    # docs/audits/downstream-project-conventions/synthesis.md §4.5).
+    if find docs -type f ! -path 'docs/superpowers/*' -print -quit 2>/dev/null | grep -q .; then
+        warn "Duplicate document roots detected: ${DOC_DIR}/ and docs/"
+    fi
 fi
 
 if [ "$PROFILE" = "research" ]; then
@@ -655,6 +677,9 @@ fi
 echo ""
 echo "Checking knowledge graph..."
 
+# Gate: when science-tool is unavailable, $SCIENCE_TOOL is empty and the entire
+# block below is skipped — so promoting "unparseable output" from warn to error
+# below cannot fire spuriously on environments without the tool installed.
 if [ -n "$SCIENCE_TOOL" ]; then
     audit_output=$($SCIENCE_TOOL graph audit --project-root . --format json 2>/dev/null) || true
     if printf "%s" "$audit_output" | python3 -c "import sys,json; json.load(sys.stdin)" &>/dev/null; then
@@ -682,7 +707,7 @@ for row in json.load(sys.stdin)['rows']:
 ")
         fi
     else
-        warn "graph audit produced unparseable output (expected for fresh projects)"
+        error "graph audit produced unparseable output"
     fi
 
     if [ -f "$KNOWLEDGE_DIR/graph.trig" ]; then
@@ -816,6 +841,92 @@ else
         info "  $(echo "$task_ids" | wc -l) task(s) validated"
     else
         info "  no tasks in active.md"
+    fi
+fi
+
+# ─── 17. Per-type id-prefix conformance ──────────────────────────
+# Catches drift like `type: report` paired with `id: doc:...` (audit synthesis
+# §9.3 / §5.3). Implemented as a warn (not error): existing downstream projects
+# carry violations and an error here would block adoption on first managed
+# update. Set SCIENCE_VALIDATE_SKIP_ID_PREFIX=1 to skip for projects mid-migration.
+#
+# Note: rows for `pre-registration` and `synthesis` are forward-compatible —
+# they fire only after those type-promotions ship downstream (synthesis §3.2/§3.3).
+# Until then, files using legacy shapes (e.g., `type: plan` for pre-regs,
+# `type: report` with `id: report:synthesis-...`) are unaffected because the
+# rule only fires when `type:` matches a row in PREFIX_RULES.
+if [ -z "${SCIENCE_VALIDATE_SKIP_ID_PREFIX:-}" ]; then
+    echo ""
+    echo "Checking per-type id-prefix conformance..."
+    id_prefix_result=$(IDP_DOC="$DOC_DIR" IDP_SPECS="$SPECS_DIR" python3 - <<'PYEOF'
+import os
+import re
+from pathlib import Path
+
+PREFIX_RULES = {
+    "hypothesis": "hypothesis:",
+    "question": "question:",
+    "paper": "paper:",
+    "interpretation": "interpretation:",
+    "report": "report:",
+    "discussion": "discussion:",
+    "plan": "plan:",
+    "spec": "spec:",
+    "topic": "topic:",
+    "concept": "concept:",
+    "dataset": "dataset:",
+    "method": "method:",
+    "synthesis": "synthesis:",
+    "pre-registration": "pre-registration:",
+}
+
+QUOTE = "[\"']?"
+
+
+def extract_field(text, name):
+    m = re.search(rf'^{name}:\s*{QUOTE}([^"\'\n]+){QUOTE}\s*$', text, re.MULTILINE)
+    return m.group(1).strip() if m else None
+
+
+violations = []
+roots = [os.environ.get("IDP_DOC", "doc"), os.environ.get("IDP_SPECS", "specs")]
+for root in roots:
+    p = Path(root)
+    if not p.is_dir():
+        continue
+    for md in p.rglob("*.md"):
+        # Skip templates (mirrors Section 16 exclusion).
+        if "templates" in md.parts:
+            continue
+        try:
+            content = md.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        m = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
+        if not m:
+            continue
+        fm = m.group(1)
+        t = extract_field(fm, "type")
+        i = extract_field(fm, "id")
+        if not t or not i:
+            continue
+        if t not in PREFIX_RULES:
+            continue
+        expected = PREFIX_RULES[t]
+        if not i.startswith(expected):
+            violations.append(f"{md}: type={t} but id={i} (expected prefix '{expected}')")
+
+for v in violations:
+    print(v)
+PYEOF
+2>/dev/null || true)
+    if [ -n "$id_prefix_result" ]; then
+        while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            warn "id-prefix mismatch: ${line}"
+        done <<< "$id_prefix_result"
+    else
+        info "  all type/id prefixes conform"
     fi
 fi
 
