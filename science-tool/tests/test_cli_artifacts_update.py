@@ -148,3 +148,78 @@ def test_update_allow_dirty_refuses_on_conflict(project_with_stale_install: Path
     )
     assert result.exit_code != 0
     assert "path conflict" in result.output
+
+
+def test_no_commit_alone_still_refuses_dirty(project_with_stale_install: Path) -> None:
+    """--no-commit must NOT bypass the clean-worktree check."""
+    (project_with_stale_install / "unrelated.txt").write_text("dirty", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "project",
+            "artifacts",
+            "update",
+            "validate.sh",
+            "--project-root",
+            str(project_with_stale_install),
+            "--no-commit",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "dirty worktree" in result.output
+
+
+def test_no_commit_skips_commit_on_clean_worktree(project_with_stale_install: Path) -> None:
+    """--no-commit on clean worktree: byte-replaces but does NOT emit a commit."""
+    log_before = subprocess.run(
+        ["git", "log", "--oneline"],
+        cwd=project_with_stale_install,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "project",
+            "artifacts",
+            "update",
+            "validate.sh",
+            "--project-root",
+            str(project_with_stale_install),
+            "--no-commit",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    log_after = subprocess.run(
+        ["git", "log", "--oneline"],
+        cwd=project_with_stale_install,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert log_before == log_after  # no new commit
+    # But the file is updated.
+    assert (project_with_stale_install / "validate.sh").read_bytes() != b""
+
+
+def test_no_commit_with_allow_dirty_no_conflict(project_with_stale_install: Path) -> None:
+    """--no-commit + --allow-dirty (no conflict): proceeds, no commit."""
+    (project_with_stale_install / "unrelated.txt").write_text("dirty", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "project",
+            "artifacts",
+            "update",
+            "validate.sh",
+            "--project-root",
+            str(project_with_stale_install),
+            "--no-commit",
+            "--allow-dirty",
+        ],
+    )
+    assert result.exit_code == 0, result.output
