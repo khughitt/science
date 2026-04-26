@@ -25,11 +25,11 @@ Each row is one migration. "✓" = needed; "—" = not needed; "n/a" = doesn't a
 | # | Migration (rule name) | Driver | natural-systems | mm30 | protein-landscape | cbioportal | Source P1 |
 |---|----------------------|--------|-----------------|------|-------------------|------------|-----------|
 | 1 | `report-id-prefix` | script (exists) | ✓ 26 files + ~200 mentions | — | — | — | follow-on #5 |
-| 2 | `synthesis-type-mm30` | script (new) | — | ✓ 6 hyp + 1 rollup + 1 threads | — | — | follow-on #1 / Plan #4 |
-| 3 | `synthesis-type-pl-emergent-threads` | script (new) | — | — | ✓ `_emergent-threads.md` | — | follow-on #2 / Plan #4 |
-| 4 | `synthesis-report-kind-pl-hyp` | script (new) | — | — | ✓ 4 hypothesis files | — | Plan #4 |
-| 5 | `pre-registration-type` | script (new) | partial (frontmatter is sparser) | ✓ 6 files | ✓ 2 files | — | Plan #2 |
-| 6 | `natural-systems-pre-reg-frontmatter` | manual + helper | ✓ 3 files | — | — | — | Plan #2 |
+| 2 | `synthesis-type-and-id-rollup` (was `synthesis-type-mm30`) | script (Phase 2 redesign) | ✓ rollup (`report:project-synthesis`) | ✓ rollup (`report:synthesis`) | ✓ rollup (no `id:`; `type: synthesis-rollup`; orphan-count migration) | — | follow-on #1 / Plan #4 |
+| 3 | `synthesis-type-and-id-emergent-threads` (was `synthesis-type-pl-emergent-threads`) | script (Phase 2 redesign) | ✓ threads (`report:emergent-threads`) | ✓ threads (`report:synthesis-emergent-threads`) | ✓ threads (`type: emergent-threads`) | — | follow-on #2 / Plan #4 |
+| 4 | `synthesis-type-and-id-per-hyp` (was `synthesis-report-kind-pl-hyp`) | script (Phase 2 redesign) | ✓ 4 per-hyp files (no filename-prefix gating) | ✓ 5 per-hyp files (`report:synthesis-<slug>`) | ✓ 3 per-hyp files | — | Plan #4 |
+| 5 | `pre-registration-id-and-type` (was `pre-registration-type`; generalized) | script (Phase 2 redesign) | ✓ 4 files (`id: plan:pre-registration-<slug>` third shape) | ✓ 6 files | ✓ 2 files | — | Plan #2 |
+| 6 | `natural-systems-pre-reg-frontmatter` | manual + helper | ✓ 3 files (frontmatter lacks `id:` and/or `type:`) | — | — | — | Plan #2 |
 | 7 | tasks archive lag | `science-tool tasks archive --apply` | ✓ ~114 entries | ✓ 41 entries | ✓ 44 entries | — | Plan #6 |
 | 8 | next-steps `prior:` field (new files only) | per-project convention | — (no chain today) | — (already uses `prior:`) | accepted variant (`prior_analyses:` keeps working) | — (no chain today) | Plan #10 |
 | 9 | code/notebook → task back-link | per-project, opt-in | optional | optional | ✓ add `task:`/`question:` to 19 descriptors (Pattern 3) | optional (already uses Pattern 1 for 3 notebooks) | Plan #9 |
@@ -63,52 +63,25 @@ Do not modify:
 
 The existing `apply_rule_report_id_prefix` is the template. Each new rule reuses `RuleResult` / `FileChange` / `_split_frontmatter` / `_record_line_changes` / `_tracked_markdown` and follows the same dry-run-by-default contract. Each rule must be idempotent on re-apply.
 
-- [x] **Step 1: Add `synthesis-type-mm30`.**
+- [x] **Step 1: Add `synthesis-type-mm30`.** **(superseded)**
 
-Targets: `<project_root>/doc/reports/synthesis/*.md` (per-hypothesis files) and `<project_root>/doc/reports/synthesis.md` (rollup) where `type: "report"`. Two passes:
+  **Status:** rules from `497a75f` superseded by Phase 2 redesign — those rule functions will be removed in the redesign commit. See `## Phase 2: Rule redesign (post-investigation)` below.
 
-  - **Pass 1 (frontmatter rewrites):**
-    - `type: "report"` → `type: "synthesis"`.
-    - `id: "report:synthesis-<slug>"` → `id: "synthesis:<slug>"` (per-hypothesis files).
-    - `id: "report:synthesis"` → `id: "synthesis:rollup"` (the rollup file specifically — match by literal id since slug-stripping fails).
-    - Leave `report_kind:`, `synthesized_from:`, `hypothesis:`, `provenance_coverage:`, `generated_at:`, `source_commit:`, `phase:` unchanged.
-  - **Pass 2 (mention rewrites)** across all tracked markdown:
-    - `report:synthesis-<DATE-SLUG>` → `synthesis:<DATE-SLUG>` (entity-ref form). Path-key against the post-pass-1 `doc/reports/synthesis/` stems so non-synthesis ids matching the regex are not rewritten.
-    - `report:synthesis` (literal, no slug) → `synthesis:rollup`.
+- [x] **Step 2: Add `synthesis-type-pl-emergent-threads`.** **(superseded)**
 
-The existing `_DATE_SLUG` regex is general-purpose; per-hypothesis file slugs are NOT date-prefixed (they are `h1-foo`, `h01-bar`, etc.), so use a permissive slug regex `[A-Za-z0-9_-]+` for this rule's mentions. Add a fixture in the self-test for both shapes (rollup id, per-hyp id) and assert idempotence.
+  **Status:** rules from `497a75f` superseded by Phase 2 redesign — those rule functions will be removed in the redesign commit. See `## Phase 2: Rule redesign (post-investigation)` below.
 
-- [x] **Step 2: Add `synthesis-type-pl-emergent-threads`.**
+- [x] **Step 3: Add `synthesis-report-kind-pl-hyp`.** **(superseded)**
 
-Targets: `<project_root>/doc/reports/synthesis/_emergent-threads.md`. This is a single-file rule. One pass:
+  **Status:** rules from `497a75f` superseded by Phase 2 redesign — those rule functions will be removed in the redesign commit. See `## Phase 2: Rule redesign (post-investigation)` below.
 
-  - Frontmatter rewrite: `type: "emergent-threads"` → `type: "synthesis"`. Insert `id: "synthesis:emergent-threads"` and `report_kind: "emergent-threads"` immediately after the new `type:` line. Other fields (`generated_at:`, `source_commit:`, `orphan_question_count:`, `orphan_interpretation_count:`, `orphan_ids:`) are unchanged.
+- [x] **Step 4: Add `pre-registration-type`.** **(superseded)**
 
-If the file already declares `type: "synthesis"` + `report_kind: "emergent-threads"` + an `id:`, the rule is a no-op. The self-test must cover both pre- and post-migration shapes.
+  **Status:** rules from `497a75f` superseded by Phase 2 redesign — those rule functions will be removed in the redesign commit. See `## Phase 2: Rule redesign (post-investigation)` below.
 
-- [x] **Step 3: Add `synthesis-report-kind-pl-hyp`.**
+- [x] **Step 5: Add `natural-systems-pre-reg-frontmatter` (report-only).** **(superseded)**
 
-Targets: `<project_root>/doc/reports/synthesis/h*.md` (per-hypothesis) where `type: "synthesis"` is already in place but `report_kind:` is absent. One pass:
-
-  - Insert `report_kind: "hypothesis-synthesis"` immediately after the `type: "synthesis"` line. Idempotent: if `report_kind:` is already present, skip without recording a change.
-
-The self-test fixture must include one file with `report_kind:` already present (no-op) and one without (rewrite).
-
-- [x] **Step 4: Add `pre-registration-type`.**
-
-Targets: any markdown under `<project_root>/doc/meta/pre-registration-*.md` and `<project_root>/doc/pre-registrations/*.md` where `type: "plan"` AND `id:` starts with `pre-registration:`. One pass:
-
-  - Frontmatter rewrite: `type: "plan"` → `type: "pre-registration"`. Other fields unchanged.
-
-Files where `type: "plan"` AND `id:` starts with anything else (e.g. natural-systems' `id: "plan:pre-registration-<slug>"` shape) are NOT rewritten by this rule — they need the type-promotion AND a separate id rewrite, which is the domain of migration #6 (manual review required because the id-strip is not mechanical when the slug embedding differs).
-
-- [x] **Step 5: Add `natural-systems-pre-reg-frontmatter` (report-only).**
-
-Targets: `<project_root>/doc/meta/pre-registration-*.md` where the frontmatter lacks `id:` AND/OR `type:`. The audit found 3 files in this shape (NS).
-
-This rule does NOT rewrite. It produces a `RuleResult` whose `changes` list is the proposed canonical frontmatter for each file (so the operator can review and apply manually, or feed the output into a separate per-file commit). The values for `id:`, `committed:`, `spec:`, `status:` cannot be derived mechanically (the file may have a `created:` field, but `committed:` and `spec:` need human input). The rule's job is to (a) detect the gap, (b) emit a per-file template suggestion, (c) NOT mutate.
-
-Output shape: `RuleResult.changes` carries a synthetic `kind="manual-suggested"` entry per file with `before` = current FM, `after` = a recommended FM block leaving `committed:` and `spec:` as `<TODO>` placeholders. Operator runs the rule, copies suggestions, fills in `<TODO>` values, applies manually.
+  **Status:** rules from `497a75f` superseded by Phase 2 redesign — those rule functions will be removed in the redesign commit. See `## Phase 2: Rule redesign (post-investigation)` below.
 
 - [x] **Step 6: Update CLI help and `RULES` registry.**
 
@@ -128,6 +101,35 @@ Run `uv run scripts/migrate_downstream_conventions.py --self-test`. Self-test mu
 
 ---
 
+## Phase 2: Rule redesign (post-investigation)
+
+Triggered by the 2026-04-25 synthesis-shape investigation (`docs/audits/downstream-project-conventions/synthesis-shape-investigation-2026-04-25.md`). The original Task 1 rules from `497a75f` (Steps 1-5 above) were modeled per-project rather than per-shape and miss several real downstream shapes. This section sketches the replacements; landing them is a separate Phase 2 dispatch (it does NOT happen as part of the investigation follow-up).
+
+The new rules are **shape-driven, not project-named**: each rule canonicalizes any matching shape regardless of which project ships it. The discriminator is the file's directory placement + filename + (current) `type:`/`id:` field combination, never a project name.
+
+### New rules
+
+- **`synthesis-type-and-id-rollup`** — handles any `<root>/doc/reports/synthesis.md`: ensure `type: synthesis`, `id: synthesis:rollup`, `report_kind: synthesis-rollup`. Defensive: handles starting `type:` values of `report` and `synthesis-rollup`. Also handles `id:` rewrite from any of `report:synthesis`, `report:project-synthesis`, or absent. **If Q1=C and the rollup carries `orphan_question_count` / `orphan_interpretation_count` / `orphan_ids`, MOVE those to the companion `_emergent-threads.md` file** (read rollup → strip → write rollup; read threads → insert → write threads; both writes happen in the same atomic apply step or neither).
+
+- **`synthesis-type-and-id-emergent-threads`** — handles any `<root>/doc/reports/synthesis/_emergent-threads.md`: ensure `type: synthesis`, `id: synthesis:emergent-threads`, `report_kind: emergent-threads`. Defensive: handles starting `type:` values of `report`, `emergent-threads`, or already `synthesis`. Also handles `id:` rewrite from `report:emergent-threads`, `report:synthesis-emergent-threads`, or absent.
+
+- **`synthesis-type-and-id-per-hyp`** — handles any `<root>/doc/reports/synthesis/*.md` excluding `_*`: ensure `type: synthesis`, ensure `report_kind: hypothesis-synthesis`, rewrite `id:` from `report:synthesis-<slug>` to `synthesis:<slug>` if needed. **No filename-prefix gating** (the directory placement is the discriminator). Idempotent on already-canonical files.
+
+- **`pre-registration-id-and-type`** (generalized) — for files matching `<root>/doc/meta/pre-registration-*.md` and `<root>/doc/pre-registrations/*.md`: ensure `type: pre-registration`. Handle two starting id shapes:
+  - `id: pre-registration:<slug>` — already canonical id; just rewrite `type: plan` → `type: pre-registration`. (This is the existing rule's behavior.)
+  - `id: plan:pre-registration-<slug>` — strip the `plan:` prefix, then rewrite `type:`. (NS third-shape; previously unhandled.)
+
+- **Mention rewrites:** any reference to `report:synthesis`, `report:synthesis-<slug>`, `report:project-synthesis`, `report:synthesis-emergent-threads`, `report:emergent-threads`, `plan:pre-registration-<slug>` is rewritten to its canonical equivalent. Path-keyed against the post-pass-1 file set so non-entity references aren't affected.
+
+### Cross-cutting principles
+
+- *Rules are **shape-driven, not project-named** — each rule canonicalizes any matching shape regardless of which project ships it.*
+- *Each rule operates on the abstract entity (`SynthesisFile{kind=rollup|emergent-threads|hypothesis-synthesis}` or `PreRegistrationFile`) — discriminator is the file's directory placement + filename + (current) `type:`/`id:` field combination, not a project name.*
+- *Idempotence is non-negotiable: re-apply produces zero `changes` for any project that has reached canonical.*
+- *Self-test fixtures must cover EVERY observed downstream shape from the investigation memo's "What we observed in the wild" section, not just one example per rule.*
+
+---
+
 ## Task 2: Per-project execution playbook
 
 For each downstream project, dispatch one sub-agent (or run sequentially) following the playbook below. Each sub-agent operates on ONE project and ONE project only.
@@ -144,34 +146,42 @@ For each downstream project, dispatch one sub-agent (or run sequentially) follow
 
 **Per-project tasks:**
 
-- [ ] **natural-systems** (`/home/keith/d/natural-systems`)
-  - Rule 1 (`report-id-prefix`): dry-run → review → apply → commit (`fix(reports): migrate id: doc:DATE-slug → report:DATE-slug per upstream convention`).
-  - Rule 5 (`pre-registration-type`): dry-run; expected zero files (NS uses the third shape, not `id: pre-registration:*`). Confirm zero, skip apply.
-  - Rule 6 (`natural-systems-pre-reg-frontmatter`): run report-only mode against the 3 NS pre-reg files. Hand the output to the user; this step requires user input on `committed:` / `spec:` values. Do NOT proceed to apply without user confirmation.
-  - Skip migration #7 (tasks archive) until Plan #6 lands upstream and the `science-tool tasks archive` command exists.
-  - File task entry in `<project>/tasks/active.md` listing the rules applied and what remains.
+Recommended sequencing (post-investigation): **cbioportal → mm30 → PL → NS**. Rationale: cbioportal is no-op (already done in initial pass) and serves as the dry-run sanity check for the redesigned rules; mm30 is uniformly drifted and is the cleanest test of the redesigned rules; PL has the rollup migration unblocked plus the script-error path resolved; NS goes last because it carries mixed shapes (highest residual surprise risk) and a partial-migration of per-hyp files is already in place from the original Task 1 pass.
+
+- [ ] **cbioportal** (`/home/keith/d/r/cbioportal`)
+  - All shape migrations are no-ops (cbioportal converged canonically per audit; this was confirmed in the initial Task 2 pass). Run dry-runs for rules 1, 2, 3, 4, 5 (with the redesigned shape-driven rules) to confirm zero files affected.
+  - Skip migration #7 until Plan #6 lands; current lag is 0%.
+  - Migration #9 — already uses Pattern 1 for 3 notebooks; no action.
+  - File task entry confirming "no shape migrations needed; pending tasks-archive adoption + MAV update".
 
 - [ ] **mm30** (`/home/keith/d/r/mm30`)
-  - Rule 2 (`synthesis-type-mm30`): dry-run → review → apply → commit (`fix(synthesis): migrate type:report → type:synthesis per Science Plan #4`). Verify rollup id specifically rewrites `report:synthesis` → `synthesis:rollup`.
-  - Rule 5 (`pre-registration-type`): dry-run; expect ~6 files. Apply → commit (`fix(pre-reg): migrate type:plan → type:pre-registration per Science Plan #2`).
+  - Rule 2 (`synthesis-type-and-id-rollup`): dry-run → review → apply → commit (`fix(synthesis): rollup adopts canonical type:synthesis + id:synthesis:rollup per Science Plan #4`). Verify rollup id specifically rewrites `report:synthesis` → `synthesis:rollup`.
+  - Rule 3 (`synthesis-type-and-id-emergent-threads`): dry-run → review → apply → commit (`fix(synthesis): emergent-threads adopts canonical type:synthesis + id:synthesis:emergent-threads`). Verify id rewrites from `report:synthesis-emergent-threads` to `synthesis:emergent-threads`.
+  - Rule 4 (`synthesis-type-and-id-per-hyp`): dry-run → review → apply → commit (`fix(synthesis): hypothesis files declare report_kind:hypothesis-synthesis + id:synthesis:<slug>`). Expect ~5 per-hyp files; id rewrites from `report:synthesis-<slug>`.
+  - Rule 5 (`pre-registration-id-and-type`): dry-run; expect ~6 files. Apply → commit (`fix(pre-reg): migrate type:plan → type:pre-registration per Science Plan #2`).
   - Skip migration #7 until Plan #6 lands.
   - Migration #8 — already canonical (mm30's `prior:` matches Plan #10). No action.
   - File task entry.
 
 - [ ] **protein-landscape** (`/home/keith/d/protein-landscape`)
-  - Rule 3 (`synthesis-type-pl-emergent-threads`): dry-run → review → apply → commit (`fix(synthesis): emergent-threads adopts canonical type:synthesis + report_kind`).
-  - Rule 4 (`synthesis-report-kind-pl-hyp`): dry-run → review → apply → commit (`fix(synthesis): hypothesis files declare report_kind:hypothesis-synthesis`).
-  - Rule 5 (`pre-registration-type`): dry-run; expect ~2 files (the meta/ ones). Apply → commit.
+  - Rule 2 (`synthesis-type-and-id-rollup`): dry-run → review → apply → commit (`fix(synthesis): rollup adopts canonical type:synthesis + id:synthesis:rollup + orphan-count migration`). Verify the rollup-to-threads orphan-count migration runs (Q1=C); both files land in the same commit (atomic).
+  - Rule 3 (`synthesis-type-and-id-emergent-threads`): dry-run → review → apply → commit (`fix(synthesis): emergent-threads adopts canonical type:synthesis + report_kind`).
+  - Rule 4 (`synthesis-type-and-id-per-hyp`): dry-run → review → apply → commit (`fix(synthesis): hypothesis files declare report_kind:hypothesis-synthesis`). Expect 3 per-hyp files; mostly idempotent (id is already canonical), `report_kind:` insertion is the new change.
+  - Rule 5 (`pre-registration-id-and-type`): dry-run; expect ~2 files (the meta/ ones). Apply → commit.
   - Skip migration #7 until Plan #6 lands.
   - Migration #8 — `prior_analyses:` keeps working as accepted variant; no action required, but the project owner may opt to migrate to single-string `prior:` as a future cleanup.
   - Migration #9 — Pattern 3 adoption: file a separate `[t<NNN>]` task to add `task:`/`question:`/`hypothesis:`/`interpretation:` fields to the 19 `descriptors/<artifact>.parquet.descriptor.json` files. Do NOT batch with this migration cycle (Pattern 3 status is "pending Bucket C namespace decision" per `docs/conventions/code-task-backlinks.md`).
   - File task entry.
 
-- [ ] **cbioportal** (`/home/keith/d/r/cbioportal`)
-  - All shape migrations are no-ops (cbioportal converged canonically per audit). Run dry-runs for rules 1, 2, 3, 4, 5 to confirm zero files affected.
-  - Skip migration #7 until Plan #6 lands; current lag is 0%.
-  - Migration #9 — already uses Pattern 1 for 3 notebooks; no action.
-  - File task entry confirming "no shape migrations needed; pending tasks-archive adoption + MAV update".
+- [ ] **natural-systems** (`/home/keith/d/natural-systems`)
+  - Rule 1 (`report-id-prefix`): dry-run → review → apply → commit (`fix(reports): migrate id: doc:DATE-slug → report:DATE-slug per upstream convention`).
+  - Rule 2 (`synthesis-type-and-id-rollup`): dry-run → review → apply → commit. NS rollup uses `id: report:project-synthesis` (third id form); the redesigned rule handles this.
+  - Rule 3 (`synthesis-type-and-id-emergent-threads`): dry-run → review → apply → commit. NS emergent-threads uses `id: report:emergent-threads` (fourth id form); the redesigned rule handles this.
+  - Rule 4 (`synthesis-type-and-id-per-hyp`): dry-run → review → apply → commit. Expect 4 per-hyp files; redesigned rule has no filename-prefix gating (3 of 4 NS per-hyp files don't start with `h`). Mostly idempotent on `type:`/`id:` (already canonical); `report_kind:` insertion is the new change for all 4.
+  - Rule 5 (`pre-registration-id-and-type`): dry-run; expect ~4 files (NS third shape: `id: plan:pre-registration-<slug>`). Apply → commit (`fix(pre-reg): migrate id:plan:pre-registration-<slug> → id:pre-registration:<slug> + type:pre-registration per Science Plan #2`).
+  - Rule 6 (`natural-systems-pre-reg-frontmatter`): run report-only mode against the 3 NS pre-reg files lacking `id:`/`type:` entirely. Hand the output to the user; this step requires user input on `committed:` / `spec:` values. Do NOT proceed to apply without user confirmation.
+  - Skip migration #7 (tasks archive) until Plan #6 lands upstream and the `science-tool tasks archive` command exists.
+  - File task entry in `<project>/tasks/active.md` listing the rules applied and what remains.
 
 ---
 
