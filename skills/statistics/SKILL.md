@@ -10,6 +10,9 @@ in Science projects. The principles here apply across disciplines wherever
 a quantitative claim is being made; the examples are drawn from
 bioinformatics + meta-analysis but generalize.
 
+For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
+`science-plan-analysis`.
+
 ## Leaves
 
 | Leaf | Use when |

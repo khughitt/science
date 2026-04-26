@@ -12,6 +12,9 @@ The default epistemic posture is skeptical:
 - write propositions as uncertain unless the evidence base is unusually strong
 - describe evidence as supporting, disputing, or leaving a proposition unresolved
 
+For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
+`science-plan-analysis`.
+
 ## Leaves
 
 No leaves currently. Planned future areas: pre-registration prose,

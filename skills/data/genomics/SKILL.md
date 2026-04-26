@@ -11,6 +11,9 @@ modes (panel coverage, calling pipeline drift, reference-build mismatches,
 cohort composition) that look plausible until they invalidate downstream
 inference.
 
+For analysis-readiness planning, start at [`../../INDEX.md`](../../INDEX.md) or
+run `science-plan-analysis`.
+
 ## Two layers, two QA mindsets
 
 | Layer | Leaf | Dominant failure modes |

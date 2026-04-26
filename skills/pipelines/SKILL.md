@@ -10,6 +10,9 @@ Decision aid for execution shape. Load **only after** methodology is decided
 substrate before the analysis question is specified usually produces ceremony
 without rigor.
 
+For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
+`science-plan-analysis`.
+
 ## When to use which
 
 | Skill | Load when | Avoid when |

@@ -20,6 +20,9 @@ description: Data acquisition, preprocessing, and management for Science researc
 >
 > Additional source skills and automation tooling are still phased in over time.
 
+For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
+`science-plan-analysis`.
+
 ## Principles
 
 1. **Raw data is immutable.** Never modify files in `data/raw/`. All transformations produce new files in `data/processed/`.

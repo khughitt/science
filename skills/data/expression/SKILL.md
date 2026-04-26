@@ -12,6 +12,9 @@ silent-failure modes that look plausible until they invalidate downstream
 inference. This skill collects the patterns and minimum-viable QA checks
 that prevent the most common landmines.
 
+For analysis-readiness planning, start at [`../../INDEX.md`](../../INDEX.md) or
+run `science-plan-analysis`.
+
 ## Three modalities, three QA mindsets
 
 The three platform families share much of the QA toolkit but differ in

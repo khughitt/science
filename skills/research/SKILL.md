@@ -14,6 +14,9 @@ Science uses a skeptical, proposition-centric model:
 - sparse or single-source support should be treated as fragile
 - contested neighborhoods and propositions lacking empirical support should be treated as prioritization signals, not just annotations
 
+For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
+`science-plan-analysis`.
+
 ## Leaves
 
 | Leaf | Use when |
