@@ -1,9 +1,9 @@
 ---
-name: research-provenance
+name: research-package-spec
 description: Use when defining or reviewing research-package provenance, manifests, evidence tables, and reproducibility metadata.
 ---
 
-# Research Provenance
+# Research Package Specification
 
 > Note: See `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` for the v2.2 unified dataset model: `data-package` → `research-package` rename, dataset entities now carry `origin: external | derived` discriminator.
 

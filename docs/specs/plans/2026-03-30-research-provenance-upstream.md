@@ -58,8 +58,8 @@ src/science_tool/graph/store.py  # Add PROJECT_ENTITY_PREFIXES + add_data_packag
 ### skills — New files
 
 ```
-skills/research/provenance.md    # Layer 1: reproducible workflow skill
-skills/research/lab-notebook.md  # Layer 2: web app rendering skill
+skills/research/research-package-spec.md    # Layer 1: reproducible workflow skill
+skills/research/research-package-rendering.md  # Layer 2: web app rendering skill
 ```
 
 ### skills — Modified files
@@ -1778,7 +1778,7 @@ rule build_package:
 ```
 
 - Note that `workflow-step` entities should carry a `script_path` property for traceability
-- Link to `research/provenance.md` skill for full schema documentation
+- Link to `research/research-package-spec.md` skill for full schema documentation
 
 - [ ] **Step 3: Commit**
 
@@ -1793,11 +1793,11 @@ git commit -m "doc: add research package integration section to Snakemake skill"
 ## Task 9: Research Provenance Skill (Layer 1)
 
 **Files:**
-- Create: `skills/research/provenance.md`
+- Create: `skills/research/research-package-spec.md`
 
 - [ ] **Step 1: Write the skill**
 
-Create `~/d/science/skills/research/provenance.md` with these sections:
+Create `~/d/science/skills/research/research-package-spec.md` with these sections:
 
 1. **Overview**: What is a research package — a Frictionless data package with the `science-research-package` profile that bundles analysis results, narrative prose, code excerpts, and execution provenance
 2. **Package structure**: Directory layout (`datapackage.json`, `cells.json`, `data/`, `figures/`, `prose/`, `excerpts/`)
@@ -1814,7 +1814,7 @@ Create `~/d/science/skills/research/provenance.md` with these sections:
 
 ```bash
 cd ~/d/science
-git add skills/research/provenance.md
+git add skills/research/research-package-spec.md
 git commit -m "doc: add research provenance skill (layer 1 — reproducible workflows)"
 ```
 
@@ -1823,11 +1823,11 @@ git commit -m "doc: add research provenance skill (layer 1 — reproducible work
 ## Task 10: Lab Notebook Skill (Layer 2)
 
 **Files:**
-- Create: `skills/research/lab-notebook.md`
+- Create: `skills/research/research-package-rendering.md`
 
 - [ ] **Step 1: Write the skill**
 
-Create `~/d/science/skills/research/lab-notebook.md` with these sections:
+Create `~/d/science/skills/research/research-package-rendering.md` with these sections:
 
 1. **Overview**: Rendering research packages as notebook-like web pages — builds on the provenance skill
 2. **Cell rendering guidance**: How each cell type maps to a web component:
@@ -1848,7 +1848,7 @@ Create `~/d/science/skills/research/lab-notebook.md` with these sections:
 
 ```bash
 cd ~/d/science
-git add skills/research/lab-notebook.md
+git add skills/research/research-package-rendering.md
 git commit -m "doc: add lab notebook skill (layer 2 — web app rendering)"
 ```
 

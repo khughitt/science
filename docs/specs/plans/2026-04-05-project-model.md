@@ -1290,8 +1290,8 @@ git commit -m "refactor: update predicate registry for Project Model relations"
 **Files:**
 - Modify: `skills/research/SKILL.md`
 - Modify: `skills/writing/SKILL.md`
-- Modify: `skills/research/provenance.md`
-- Modify: `skills/research/lab-notebook.md`
+- Modify: `skills/research/research-package-spec.md`
+- Modify: `skills/research/research-package-rendering.md`
 - Modify: `templates/paper-summary.md`
 - Modify: `templates/hypothesis.md`
 - Modify: `templates/experiment.md`
@@ -1312,13 +1312,13 @@ In `skills/writing/SKILL.md`:
 
 - [ ] **Step 3: Update provenance skill**
 
-In `skills/research/provenance.md`:
+In `skills/research/research-package-spec.md`:
 - Replace `artifact` references → `data-package` with `type: result`
 - Update `derived_from` relation description → finding's `grounded_by` relation
 
 - [ ] **Step 4: Update lab-notebook skill**
 
-In `skills/research/lab-notebook.md`:
+In `skills/research/research-package-rendering.md`:
 - Replace `artifact` registration pattern → data-package pattern
 
 - [ ] **Step 5: Update templates**

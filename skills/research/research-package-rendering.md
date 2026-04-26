@@ -1,11 +1,11 @@
 ---
-name: research-lab-notebook
+name: research-package-rendering
 description: Use when rendering research-package materials into notebook-like review views, summaries, or inspection pages.
 ---
 
-# Lab Notebook Views
+# Research Package Rendering
 
-Render research packages as notebook-like web pages within a project's web application. Builds on the research provenance skill (layer 1).
+Render research packages as notebook-like web pages within a project's web application. Builds on the research package specification skill (layer 1).
 
 ## When to Use
 

@@ -485,7 +485,7 @@ Add a new section on research package integration:
 - Example `onsuccess` handler as alternative to a terminal rule
 - Note that `workflow-step` entities should carry a `script_path` property for traceability
 
-### New: `skills/research/provenance.md` (Layer 1)
+### New: `skills/research/research-package-spec.md` (Layer 1)
 
 Contents:
 - What is a research package and why use one
@@ -499,7 +499,7 @@ Contents:
 - Non-GitHub repos: `github_permalink` and `repository` fields may be empty; code excerpts still work as embedded files
 - Altair/Vega-Lite: producing `.vl.json` specs from Python analysis scripts
 
-### New: `skills/research/lab-notebook.md` (Layer 2)
+### New: `skills/research/research-package-rendering.md` (Layer 2)
 
 Contents:
 - What is a lab notebook view (rendering packages as notebook-like web pages)
@@ -541,8 +541,8 @@ After the upstream changes land:
 4. science-tool: `add_data_package`, `add_artifact` graph store convenience functions
 5. science-tool: `PROJECT_ENTITY_PREFIXES` updates
 6. skills: Update `pipelines/snakemake.md`
-7. skills: New `research/provenance.md` (layer 1)
-8. skills: New `research/lab-notebook.md` (layer 2)
+7. skills: New `research/research-package-spec.md` (layer 1)
+8. skills: New `research/research-package-rendering.md` (layer 2)
 9. natural-systems: Profile migration + tooling convergence
 
 ### Out of scope

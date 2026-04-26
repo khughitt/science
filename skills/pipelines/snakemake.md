@@ -322,4 +322,4 @@ script_path: code/workflows/scripts/analyze.py
 
 For full schema documentation — including `cells.json` structure, cell types, and
 the `science-research-package` datapackage profile — see the
-`skills/research/provenance.md` skill.
+`skills/research/research-package-spec.md` skill.

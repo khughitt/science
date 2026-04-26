@@ -1327,7 +1327,7 @@ git commit -m "feat(templates): unified dataset.md template (rev 2.1)"
 - [ ] **Step 1: Inspect legacy template**
 
 ```bash
-cat templates/data-package.md 2>/dev/null || echo "no data-package.md template — check skills/research/provenance.md for the shape"
+cat templates/data-package.md 2>/dev/null || echo "no data-package.md template — check skills/research/research-package-spec.md for the shape"
 ```
 
 - [ ] **Step 2: Write the new template**
@@ -4702,14 +4702,14 @@ git status
 
 ---
 
-### Task 11.2: Update `skills/research/provenance.md` cross-references
+### Task 11.2: Update `skills/research/research-package-spec.md` cross-references
 
 **Files:**
-- Modify: `skills/research/provenance.md`
+- Modify: `skills/research/research-package-spec.md`
 
 - [ ] **Step 1: Update entity-type references**
 
-In `skills/research/provenance.md`, find references to `data-package` and update where it now means `research-package`:
+In `skills/research/research-package-spec.md`, find references to `data-package` and update where it now means `research-package`:
 
 - "produced by a `workflow-run`" sections — clarify that the **derived dataset entities** are the `produced_by` targets; the `research-package` `displays` them.
 - The "Knowledge Graph Integration" section listing `data-package` — add a note that v2 (rev 2.1 of the dataset entity lifecycle spec) renames this to `research-package` and splits the data half into derived `dataset` entities.
@@ -4719,7 +4719,7 @@ Add a one-line pointer at the top: "See `docs/specs/2026-04-19-dataset-entity-li
 - [ ] **Step 2: Commit**
 
 ```bash
-git add skills/research/provenance.md
+git add skills/research/research-package-spec.md
 git commit -m "docs(skill): cross-reference rev 2.1 dataset-entity-lifecycle spec"
 ```
 
