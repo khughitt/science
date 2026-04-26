@@ -10,6 +10,14 @@ description: Data acquisition, preprocessing, and management for Science researc
 > - `skills/data/sources/openalex.md`
 > - `skills/data/sources/pubmed.md`
 >
+> Modality-specific QA guidance is available in:
+> - `skills/data/expression/SKILL.md` for transcriptomic data
+> - `skills/data/genomics/somatic-mutation-qa.md` for MAF/cBioPortal/TCGA/GENIE mutation cohorts
+> - `skills/data/genomics/mutational-signatures-and-selection.md` for SBS signatures, TMB, dN/dS, and driver-selection analyses
+> - `skills/data/functional-genomics-qa.md` for CRISPR/RNAi screens, DepMap, LINCS/L1000, drug response, and perturbation assays
+> - `skills/data/embeddings-manifold-qa.md` for embeddings, UMAP/HDBSCAN/Mapper, CKA, and manifold comparisons
+> - `skills/data/protein-sequence-structure-qa.md` for protein sequence, structure, label, and homology-split datasets
+>
 > Additional source skills and automation tooling are still phased in over time.
 
 ## Principles
@@ -86,11 +94,31 @@ FASTA files in the `sequences/` subdirectory. Annotate with EDAM terms:
 3. Add acquisition scripts to `code/scripts/`
 4. Create or update `datapackage.json` in the appropriate directory
 
+## When Working With Specialized Biological Data
+
+Load the relevant leaf before designing preprocessing or QA:
+
+- Expression matrices, public h5ad deposits, bulk RNA-seq, microarray, or scRNA-seq:
+  `skills/data/expression/SKILL.md`.
+- Somatic mutation tables, targeted panels, callable denominators, or MAF harmonisation:
+  `skills/data/genomics/somatic-mutation-qa.md`.
+- Mutational signatures, TMB, replication-timing bias, or dN/dS / dNdScv:
+  `skills/data/genomics/mutational-signatures-and-selection.md`.
+- CRISPR/RNAi screens, DepMap dependencies, LINCS/L1000 signatures, drug
+  response, or perturbation replication:
+  `skills/data/functional-genomics-qa.md`.
+- Protein embeddings, PLM manifolds, UMAP/HDBSCAN/Mapper, CKA, or Moran's I:
+  `skills/data/embeddings-manifold-qa.md`.
+- UniProt/Pfam/CATH/Foldseek/MMseqs/DeepLoc/Meltome workflows:
+  `skills/data/protein-sequence-structure-qa.md`.
+
 ## While Tooling Is Still Maturing
 
 Shared runtime and source clients may be incomplete in some projects.
 When automation is unavailable:
-- Manually document data sources using the template
+- Manually document data sources using the template, including source URL or
+  accession, retrieval date, license/access constraints, checksum, and exact
+  files acquired
 - Download data by hand and place in `data/raw/`
 - Write preprocessing scripts in `code/scripts/` with clear comments
 - Always update `science.yaml` data_sources when adding new data

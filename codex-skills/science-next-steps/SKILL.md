@@ -120,9 +120,15 @@ From `tasks/active.md`, show:
 - **Hypothesis / question status** — use the project index from setup (one-line summary per hypothesis/question). Read individual files only when deeper context is needed.
 
 #### Workflow Runs
-- Scan `results/` for `datapackage.json` manifests
-- Report: recent runs (last 7 days), superseded runs, runs with status `draft`
-- Flag any workflow-run that has no corresponding interpretation document
+- Scan `results/` for `datapackage.json` manifests.
+- Report: recent runs (last 7 days), superseded runs, runs with status `draft`.
+- Flag any workflow-run that has no corresponding interpretation document.
+
+**Fallback when no manifests exist.** Some projects have rich results without `datapackage.json` files. If `find results/ -name datapackage.json` returns nothing:
+- Infer run bundles from `results/**/` directory conventions instead — most commonly dated subdirectories (`results/YYYY-MM-DD-<slug>/` or `results/<slug>/`) containing a `report.md` / `summary.md` / notebook outputs.
+- Report: recent bundles by directory mtime (last 7 days), bundles whose name appears superseded by a later one with the same slug, bundles with no linking interpretation under `doc/interpretations/`.
+- Be explicit in the output that these are inferred from directory conventions, not declared manifests — readers should not assume datapackage-grade provenance.
+- Skip the section entirely if neither manifests nor a recognizable `results/` convention exists; do not pad with low-signal noise.
 
 ### 3. Coverage Gap Analysis
 
@@ -157,6 +163,26 @@ This longitudinal view makes progress visible and highlights both forward moment
 ### 3c. Task Tracking Gaps
 
 Scan pipeline plans in `doc/plans/` for implementation tasks that are not tracked in `tasks/active.md`. Surface any development work buried in plan documents that should be trackable tasks.
+
+**Archive lag.** Run `science-tool health --format json` and inspect `archive_lag`. When `archive_lag.done_in_active` or `archive_lag.retired_in_active` is non-zero, add a Recommended Next Action:
+
+> Preview with `science-tool tasks archive`, then run `science-tool tasks archive --apply` to move the N done/retired entries from `tasks/active.md` to `tasks/done/YYYY-MM.md`.
+
+If `archive_lag.missing_completed` is non-zero, call those entries out separately so the user backfills `completed:` first — otherwise they route to the current month rather than the month they were actually closed.
+
+### Managed artifact updates
+
+If `science-tool health` shows any managed artifact with status `stale`, surface as a next-step:
+
+> Update `<artifact-name>` from version `<from>` → `<to>`. Run:
+>
+> ```bash
+> science-tool project artifacts update <artifact-name>
+> ```
+>
+> If a migration step ships with the bump, the CLI will surface it interactively.
+
+If status is `locally_modified` or `missing`, point at the corresponding verb (`install` / `update --force --yes`).
 
 ### 3c-bis. Stale Task Status Detection (mandatory)
 
@@ -206,6 +232,16 @@ For each suggestion, include:
 Save output to `doc/meta/next-steps-<YYYY-MM-DD>.md`. If a file for today already exists (delta mode), append an `## Update — HH:MM` section instead of creating a new file.
 
 ```markdown
+---
+id: "meta:next-steps-YYYY-MM-DD"
+type: "meta"
+title: "Next Steps — YYYY-MM-DD"
+created: "YYYY-MM-DD"
+updated: "YYYY-MM-DD"
+prior: "meta:next-steps-<predecessor-date>"  # see "Resolve prior link" below; omit if no predecessor
+related: []
+---
+
 # Next Steps — YYYY-MM-DD
 
 ## Recent Progress
@@ -262,6 +298,16 @@ If sync is stale, include a note in the Recommended Next Actions table:
 | P2 | Cross-project sync | Sync is N days stale; N projects may have relevant updates | `science-sync` |
 
 ## After Writing
+
+### Resolve prior link
+
+Before writing the file, list `doc/meta/next-steps-*.md`. **Exclude any file dated today** (delta-mode appends to that file rather than creating a new one, so the predecessor must be the most recent file *strictly before* today). From the remaining files, select the one with the lexically-greatest `YYYY-MM-DD` in its filename. Set `prior: meta:next-steps-<that-date>` in the new file's frontmatter. If no predecessor exists (this is the first next-steps file in the project), omit the `prior:` field entirely.
+
+Delta mode (append `## Update — HH:MM` to today's existing file) does **not** change the file's `prior:` — the chain link is per-file, not per-update.
+
+Projects that historically use `prior_analyses: [...]` (e.g. protein-landscape) need not migrate: the validator accepts both shapes and only warns on broken `prior:` links.
+
+### Steps
 
 1. Save to `doc/meta/next-steps-<YYYY-MM-DD>.md`. In delta mode, append to the existing file rather than creating a new one — git tracks history, so overwriting the date-stamped file is acceptable.
 2. Offer to create tasks from recommended items: "Create tasks from these suggestions?"

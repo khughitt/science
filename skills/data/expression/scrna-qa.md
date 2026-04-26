@@ -176,10 +176,11 @@ checking that the marker-set output looks sane on your cohort.
 ## Pseudobulk for cross-platform aggregation
 
 When mixing scRNA-seq with bulk RNA-seq cohorts in a meta-analysis,
-pseudobulk by patient-and-cell-type before testing:
+pseudobulk by patient-and-cell-type before testing. Keep aggregation on
+raw counts; normalise after aggregation with the bulk method:
 
 ```python
-# Aggregate counts per (donor_id, cell_type)
+# Simple small-cohort sketch. Use a sparse group-by helper at scale.
 pseudobulk = (
     adata.to_df(layer="counts")
     .assign(donor_id=adata.obs["donor_id"].values,
@@ -190,7 +191,10 @@ pseudobulk = (
 
 Test on the resulting pseudobulk matrix with bulk methods (DESeq2,
 limma-voom). The cell-level p-values from per-cell tests are not
-comparable to bulk-cohort p-values.
+comparable to bulk-cohort p-values and are pseudoreplicated when cells
+from the same donor are treated as independent. For large sparse
+matrices, avoid `to_df(layer="counts")`; use a sparse group-by or an
+AnnData-aware pseudobulk helper to avoid densifying the full matrix.
 
 ## A note on "the depositor filtered cells"
 

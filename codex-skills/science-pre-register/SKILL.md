@@ -145,15 +145,22 @@ Omit when sampling is straightforward (e.g., "use all available data").
 
 After the conversation, write the pre-registration document using `.ai/templates/pre-registration.md` first, then `templates/pre-registration.md`.
 
-### Naming
+### Naming and Frontmatter
 
-Use the hypothesis ID or inquiry slug as the basis:
-- **Filename:** `doc/meta/pre-registration-<slug>.md`
-- The `related` frontmatter field must list the hypothesis IDs and/or inquiry slugs being tested.
+Use the hypothesis ID, inquiry slug, or task ID as the basis:
+- **Filename:** `doc/meta/pre-registration-<slug>.md` (default), or `doc/pre-registrations/<slug>.md` if the project has adopted that placement.
+- **Frontmatter** must use the canonical pre-registration shape:
+  - `id: "pre-registration:<slug>"`
+  - `type: "pre-registration"`
+  - `status: "committed"` once the user has signed off on the criteria
+  - `committed: "<YYYY-MM-DD>"` — the date the criteria are locked
+  - `spec: "<path-to-design-doc>"` — optional; empty string if no paired design doc exists
+  - `related: [...]` — hypothesis IDs, inquiry slugs, and/or task IDs this pre-reg covers
+- The `related` field is what `interpret-results` searches on, so it must be populated.
 
 ## After Writing
 
-1. Save to `doc/meta/pre-registration-<slug>.md`.
+1. Save to `doc/meta/pre-registration-<slug>.md` (or `doc/pre-registrations/<slug>.md` if the project uses that placement). The frontmatter must declare `type: "pre-registration"` and `id: "pre-registration:<slug>"` per the template.
 2. If relevant hypotheses exist, note in the output that pre-registration is now on record.
 3. Suggest next steps:
    - `science-plan-pipeline` — if no pipeline plan exists yet

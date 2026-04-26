@@ -100,20 +100,26 @@ expression scales are not comparable. Three strategies:
 
 State which strategy upfront. Mixing is rarely defensible.
 
-## The "quantile-normalised across cohort" trap
+## Quantile normalisation: standard, but assumption-heavy
 
-Some depositors quantile-normalise across the entire submitted
-cohort. This makes per-sample distributions identical and removes
-real biological differences in expression-level distribution between
-disease groups. Symptoms:
+Quantile normalisation is standard for many single-channel microarray
+pipelines, especially RMA. It is not automatically a bug. The hidden
+assumption is that most genes are not globally shifted between samples.
+That assumption becomes fragile for strong cell-composition shifts,
+gross tumor-normal differences, or mixed tissues. Symptoms worth
+investigating:
 
 - Per-sample histograms are pixel-perfect identical across all
-  samples in the cohort.
-- Disease-vs-healthy DE has artificially small effect sizes.
+  samples in a biologically heterogeneous cohort.
+- Disease-vs-healthy contrasts have unexpectedly compressed global
+  effect-size distributions.
+- PCA separates by scanner / processing date more than by biology
+  after normalisation.
 
-If you find this, either re-normalise from raw CEL files (if
-available) or accept the depositor's normalisation as a known
-limitation.
+If raw CEL files are available, rerun a controlled pipeline and compare
+the primary contrast. If not, inherit the depositor's matrix but state
+the normalisation as a limitation rather than treating the scale as
+fully comparable to newly processed cohorts.
 
 ## Probe-set obsolescence
 

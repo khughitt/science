@@ -108,6 +108,7 @@ For each hypothesis, assemble a bundle. The bundle is a dictionary you construct
 **Aspect filtering**. Before assembling bundles, load project aspects via `load_project_aspects` (or parse `science.yaml` directly). Compute `research_filter = project.aspects \ {software-development}`. Throughout bundle assembly, any entity whose resolved aspects (entity `aspects:` if set, else project `aspects:`) does NOT intersect `research_filter` is excluded from the bundle. This means software-oriented questions (e.g., ones explicitly tagged `aspects: [software-development]`) are dropped before hypothesis matching runs. If `research_filter` is empty, refuse to proceed and point the user at `science-tool big-picture` — research synthesis is undefined on a software-only project.
 
 - `hypothesis_path`: path to the `specs/hypotheses/<id>.md` file.
+- `phase`: read `phase:` from the hypothesis frontmatter; default to `active` if absent.
 - `hypothesis_frontmatter`: parsed YAML.
 - `resolved_questions`: from the resolver output, all questions whose `hypotheses[]` contains this hypothesis. Annotate each with its confidence.
 - `tasks`: glob `tasks/*.md` and `tasks/done/*.md`; parse frontmatter; include entries whose `related:` mentions this hypothesis or any of its resolved questions **AND** whose resolved aspects intersect `research_filter`. If `tasks/active.md` is a single aggregated file (common pattern, e.g., mm30), scan its body for per-task headings and `related:` metadata instead of expecting one file per task.
@@ -162,6 +163,7 @@ The prompt passed to each sub-agent includes:
 - Hypothesis ID and `hypothesis_path`.
 - The bundle (inlined in the prompt as structured text — the sub-agent does not have access to your in-memory bundle directly).
 - Target output path: `doc/reports/synthesis/<hyp-id>.md`.
+- Frontmatter: emit `type: synthesis` + `report_kind: hypothesis-synthesis` + `id: synthesis:<hyp-id>` + `hypothesis: hypothesis:<hyp-id>` + `generated_at` + `source_commit` + `provenance_coverage`. Do *not* emit `synthesized_from:` (the rollup carries that). See `agents/hypothesis-synthesizer.md` for the full output spec.
 - `generated_at` and `source_commit` values.
 - `provenance_coverage` value.
 - If `--since <date>` is set: pass it through AND the `--output <path>` target. Tell the sub-agent to include `since: <date>` in its frontmatter.
@@ -181,6 +183,7 @@ The prompt includes:
 - Project root path.
 - Full resolver output (JSON from Phase 1).
 - Target output path: `doc/reports/synthesis/_emergent-threads.md`.
+- Frontmatter: emit `type: synthesis` + `report_kind: emergent-threads` + `id: synthesis:emergent-threads` + `generated_at` + `source_commit` + `orphan_question_count` + `orphan_interpretation_count` + `orphan_ids: [...]`. Do *not* emit `synthesized_from:` — emergent-threads is graph-derived, not file-derived.
 - `generated_at` and `source_commit` values.
 
 **Important**: if `--hypothesis <id>` is set, skip the emergent-threads dispatch (it's a whole-project artifact).
@@ -195,15 +198,23 @@ After the dispatch phase completes, read back each just-written per-hypothesis f
 
 Write `doc/reports/synthesis.md` with this structure:
 
+The frontmatter follows the canonical synthesis shape documented in `templates/synthesis.md`. All three artifacts produced by this command (per-hypothesis files, `_emergent-threads.md`, and the project rollup) share `type: synthesis` and differ by `report_kind`. The validator (`meta/validate.sh` section 11a) warns when any `type: synthesis` file omits `report_kind`, and applies per-kind field requirements: `synthesis-rollup` must carry `synthesized_from`; `hypothesis-synthesis` must carry `hypothesis` and `provenance_coverage`; `emergent-threads` must carry `orphan_question_count`, `orphan_interpretation_count`, and `orphan_ids`.
+
 Frontmatter:
+
+The block-list form (one field per line) is canonical — see Plan #4 follow-on for the resolved Q2 in `docs/audits/downstream-project-conventions/synthesis-shape-investigation-2026-04-25.md`. The inline-dict form `[{...}]` is deprecated.
 
 ```yaml
 ---
-type: "synthesis-rollup"
+id: "synthesis:rollup"
+type: "synthesis"
+report_kind: "synthesis-rollup"
 generated_at: "<ISO-8601>"
 source_commit: "<SHA>"
 synthesized_from:
-  - { hypothesis: "<hyp-id>", file: "doc/reports/synthesis/<hyp-id>.md", sha: "<SHA>" }
+  - hypothesis: "hypothesis:<hyp-id>"
+    file: "doc/reports/synthesis/<hyp-id>.md"
+    sha: "<SHA>"
   # one entry per hypothesis
 emergent_threads_sha: "<SHA>"
 orphan_question_count: <int>
@@ -214,8 +225,9 @@ Body sections (~1000–1500 words total):
 
 - **TL;DR** — 5–7 bullets, most salient project-wide facts. Distilled from each per-hypothesis State, not a per-hypothesis recap.
 - **State** — cross-hypothesis consolidation. What the project collectively believes, where the strongest evidence sits, what's contested.
-- **Arc** — one paragraph per hypothesis, plus a framing paragraph on how the hypotheses relate.
-- **Research fronts** — ranked list across all hypotheses. Signals: uncertainty density, recent activity, explicit task priority. Cite source: "from <hyp-id>" for each front.
+- **Arc** — one paragraph per **active** hypothesis (those whose bundle has `phase == "active"` or whose hypothesis file omits `phase:`), plus a framing paragraph on how the active hypotheses relate. Candidate hypotheses are not included here; they appear in the Candidate frames section below.
+- **Research fronts** — ranked list across **active** hypotheses only. Signals: uncertainty density, recent activity, explicit task priority. Cite source: "from <hyp-id>" for each front. Candidate hypotheses do not contribute to this section; their fronts (if any) appear inside their per-hypothesis files at `doc/reports/synthesis/<id>.md`.
+- **Candidate frames** — one paragraph per hypothesis whose bundle has `phase == "candidate"`. Same citation, grounding, and length rules as the per-hypothesis files. If no candidates exist, emit a single line: `No candidate hypotheses.` Do not suppress the section. Active hypotheses are NOT mentioned here — they appear in the Arc and Research-fronts sections only.
 - **Knowledge Gaps (rollup)** — The orchestrator reuses the `all_gaps` list computed in Phase 1 (no second call to `compute_topic_gaps`). Render the top 10 entries (by `gap_score` desc, ties broken by topic ID asc) as a markdown table with columns: Topic, Coverage, Demand, Gap, Hypotheses. If `all_gaps` is empty, emit the one-liner: "No knowledge gaps detected this run." and skip the table. Per-hypothesis files render their own Knowledge Gaps sub-bullet inside Research Fronts per the spec (with a rendering cap of 5 `demanding_questions` IDs + "… and N more" tail).
 - **Emergent threads** — 2–3 sentence pointer to `_emergent-threads.md`. Include the orphan-question count.
 

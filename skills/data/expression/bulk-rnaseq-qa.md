@@ -19,11 +19,15 @@ GEO deposits, MMRF CoMMpass). For platform-general conventions see
      transform. Float, range ~[0, 20]. Comparable across samples for
      PCA / clustering / linear modelling.
    ```python
+   # Assumes genes x samples. Transpose if rows are samples.
    col_sums = X.sum(axis=0)
    print(f"Per-sample sums: median={median(col_sums):.0f} CV={stdev(col_sums)/mean(col_sums):.3f}")
    # CV ≈ 0  → already normalised (TPM, library-size-corrected)
    # CV > 0.3 → raw counts (library size varies)
    ```
+   Do not run DESeq2 / edgeR on TPM, FPKM, z-scores, or batch-corrected
+   residuals. If raw counts are unavailable, switch to a continuous-scale
+   model and state that count-based inference is out of scope.
 
 2. **Gene model version.** GENCODE v27 vs v44 differ by thousands of
    gene-name renames and additions. Cross-cohort meta-analysis on

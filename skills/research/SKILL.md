@@ -18,13 +18,23 @@ Science uses a skeptical, proposition-centric model:
 
 When researching a topic or summarizing a paper, use this priority order:
 
-1. **LLM knowledge first.** Claude was trained on massive scientific literature. Start from what you know. This is fast, context-efficient, and correct for the vast majority of established science.
-2. **Web search second.** Use web search to verify key facts (authors, year, journal, specific numerical results), find recent work (last 1-2 years), and fill gaps in your knowledge.
-3. **PDF reading last.** Only read PDFs when the user explicitly provides a file path. When reading PDFs, use guided extraction: read abstract, introduction, methods, results, discussion. Skip references, supplemental figures, and tables to conserve context.
+1. **Known context for orientation only.** Use model memory to frame search
+   terms, expected concepts, and likely failure modes. Do not treat it as a
+   source for durable claims.
+2. **Primary and authoritative sources.** Verify claims against papers, official
+   documentation, dataset records, or project-local notes before writing durable
+   outputs.
+3. **Web search for discovery and recency.** Use search to find recent work,
+   source metadata, dataset versions, and missing primary sources.
+4. **Full text when details matter.** Read the relevant methods, results,
+   tables, and supplements when extracting parameters, numerical results,
+   benchmark claims, cohort definitions, or evidence used in project decisions.
+   If only the abstract is inspected, mark conclusions as abstract-level and
+   avoid durable evidence updates.
 
 ### Confidence Calibration
 
-"LLM knowledge first" does NOT mean "guess first." Before writing from memory:
+Model memory is for orientation, not citation. Before writing from memory:
 
 - **High confidence** (proceed, then cross-check): You recall specific details — author names, the core method, key findings. The paper is well-known or seminal.
 - **Moderate confidence** (search first, then fill in from memory): You have a general sense of the paper's contribution but are fuzzy on specifics. Or the paper is recent / niche.
@@ -121,6 +131,15 @@ Use `simulation_evidence` only when the result primarily comes from a model worl
 Use `negative_result` when the finding meaningfully disputes a proposition or undermines prior support.
 
 Do not collapse these into a generic "computational evidence" label.
+
+## Annotation and Curation
+
+When creating curated labels, extracted claims, taxonomy/facet assignments,
+or LLM-assisted annotation tables, load
+[`annotation-curation-qa`](./annotation-curation-qa.md). Treat curation as a
+measurement process: define the schema, preserve source spans, record annotator
+or model provenance, measure agreement when possible, and keep adjudication
+separate from downstream interpretation.
 
 ## Recognizing Unmigrated Projects
 

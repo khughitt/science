@@ -1,6 +1,6 @@
 ---
 name: data-expression
-description: Preprocessing and QA for transcriptomic data — bulk microarray, bulk RNA-Seq, single-cell RNA-Seq. Use when ingesting expression datasets into a Science project, building a reusable expression-QA pipeline, evaluating whether a deposited cohort is fit for downstream analysis, or judging whether suspicious results are biology vs preprocessing artifact. Especially relevant on first contact with a new public deposit (GEO, ArrayExpress, MMRF, Human Cell Atlas, recount, ARCHS4) before incorporating it into a meta-analysis or hypothesis test.
+description: Use when ingesting, preprocessing, or QA-reviewing transcriptomic datasets, including bulk RNA-seq, microarray, scRNA-seq, GEO, ArrayExpress, MMRF, HCA, recount, or ARCHS4 cohorts, especially before meta-analysis or when suspicious results may be preprocessing artifacts.
 ---
 
 # Expression Data — Preprocessing & QA
@@ -20,8 +20,8 @@ reference; use this hub to remember the cross-cutting patterns.
 
 | Modality | Leaf | Dominant failure modes |
 |---|---|---|
-| Bulk microarray | [`microarray-qa.md`](./microarray-qa.md) *(planned)* | platform heterogeneity, probe-to-gene mapping ambiguity, normalisation method conflated with cohort effects, batch / scanner artifacts |
-| Bulk RNA-Seq | [`bulk-rnaseq-qa.md`](./bulk-rnaseq-qa.md) *(planned)* | counts vs TPM vs FPKM scale confusion, low library complexity, contamination (rRNA / DNA / adapter), 3'/5' bias from old library prep, gene-model version drift |
+| Bulk microarray | [`microarray-qa.md`](./microarray-qa.md) | platform heterogeneity, probe-to-gene mapping ambiguity, normalisation method conflated with cohort effects, batch / scanner artifacts |
+| Bulk RNA-Seq | [`bulk-rnaseq-qa.md`](./bulk-rnaseq-qa.md) | counts vs TPM vs FPKM scale confusion, low library complexity, contamination (rRNA / DNA / adapter), 3'/5' bias from old library prep, gene-model version drift |
 | Single-cell RNA-Seq | [`scrna-qa.md`](./scrna-qa.md) | doublets, ambient RNA, dying cells, batch / 10x-channel effects, cell-type composition shifts mistaken for biology |
 
 ## Universal pre-flight checklist
@@ -31,8 +31,10 @@ dataset, answer all of these in writing:
 
 1. **What is `.X` actually?** Raw counts, log-normalised, batch-corrected,
    z-scored, residualised? **Read the depositor's README and verify by
-   inspecting the matrix yourself.** A surprising fraction of deposits
-   silently change the contents of `.X` between revisions.
+   inspecting the matrix yourself.** First confirm matrix orientation
+   (`obs` rows vs `var` rows, samples vs genes); then check scale. A
+   surprising fraction of deposits silently change the contents of `.X`
+   between revisions.
    ```python
    sub = a[:200].X.toarray() if sparse.issparse(a.X) else a.X[:200]
    print(f"min={sub.min():.3f}, max={sub.max():.3f}, integer-like={(sub == sub.astype(int)).all()}")
@@ -41,6 +43,8 @@ dataset, answer all of these in writing:
    - Float + max ≤ ~15 → log-normalised (log1p of counts) or log2 + 1.
    - Float + range [-X, +X] symmetric around 0 → z-scored or residualised.
    - Float + max in thousands → linear normalised (TPM-like).
+   Also check `.raw` and `.layers["counts"]`: many AnnData deposits keep
+   transformed values in `.X` and raw counts in a layer.
 2. **What gene identifier is the row axis?** Symbols (HGNC for human),
    Ensembl IDs, RefSeq, probe IDs (Affymetrix), or "gene names" that
    Excel has corrupted (`SEPT1` → `1-Sep`)? Resolve to a canonical ID

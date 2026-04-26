@@ -1,9 +1,10 @@
 # Replicate-Count Justification
 
-How to choose the number of replicates (R) for any resampling-based
-estimator — bootstrap, permutation, Monte Carlo integration, multinomial
-downsampling, multiple imputation, MCMC chain length — without falling
-back to "1000 because that's what the tutorial said".
+How to choose the number of replicates (R) for stochastic estimators
+without falling back to "1000 because that's what the tutorial said".
+This applies directly to point-estimate replication (bootstrap summaries,
+Monte Carlo integration, multinomial downsampling) and gives separate
+checks for p-values, MCMC, and multiple imputation.
 
 ## The problem
 
@@ -14,12 +15,13 @@ inherited from a tutorial: 1000 bootstrap iterations, 10,000 permutations,
 wasteful, and sometimes too small — but the convention prevents anyone
 from finding out which.
 
-The fix is mechanical: **lock R via a measured stopping rule comparing
-replicate-induced variance to between-unit signal variance.** If the
-former is much smaller than the latter, R is sufficient. The rule is the
-same across every resampling context.
+The fix is mechanical: **lock R via a measured stopping rule matched to
+the estimand.** For point estimators, compare replicate-induced variance
+to between-unit signal variance. For p-values, compare Monte Carlo
+uncertainty to the alpha / decision margin. For MCMC and multiple
+imputation, use their native diagnostics.
 
-## The rule
+## Rule for point estimators
 
 State this in your pre-registration before any verdict-bearing computation:
 
@@ -63,26 +65,31 @@ State your θ in the pre-registration regardless.
 
 ## How to estimate `SE_replicates(R)`
 
-For most resampling estimators, this is `SE_single / sqrt(R)` where
-`SE_single` is the within-unit standard deviation across replicates.
-Estimate `SE_single` from a pilot at `R_max` (e.g., 20) and use that
-fixed `SE_single` to scale to any candidate R:
+For most point-estimate replication, this is `SE_single / sqrt(R)`,
+where `SE_single` is the within-unit standard deviation across
+replicates. Estimate `SE_single` from a pilot at `R_max` (e.g., 20) and
+use that fixed `SE_single` to scale to any candidate R:
 
 ```python
 # Pilot: for each unit (cell / patient / sample), draw R_MAX replicates
 H[unit, replicate]  # shape (n_units, R_MAX)
 
-SE_single = H.std(axis=1, ddof=1)        # per-unit single-replicate SD
-SE_replicates_at_R = SE_single.mean() / sqrt(R)   # scaled for averaging
+SE_single = H.std(axis=1, ddof=1)  # per-unit single-replicate SD
+SE_replicates_at_R = sqrt(mean(SE_single**2)) / sqrt(R)  # RMS noise, not mean absolute noise
 
-mean_per_unit_at_R = H[:, :R].mean(axis=1)
-SD_signal_at_R     = mean_per_unit_at_R.std(ddof=1)
+mean_per_unit_at_Rmax = H.mean(axis=1)
+SD_signal = mean_per_unit_at_Rmax.std(ddof=1)
 
-ratio_at_R = SE_replicates_at_R / SD_signal_at_R
+ratio_at_R = SE_replicates_at_R / SD_signal
 ```
 
 Pick the smallest R such that `ratio_at_R ≤ θ`. If even `R = 1` already
 passes, lock R = 1 — no replication needed.
+
+For non-linear verdict statistics (median of patients, max over genes,
+thresholded classifier score), validate the locked R by rerunning the
+whole verdict statistic on several independent replicate seeds. The
+verdict should not change solely because of replicate seed.
 
 ## How to estimate `SD_signal`
 
@@ -98,7 +105,7 @@ condition / one cluster, you can underestimate it. Compute over the
 unit-level pool you are actually averaging across in the verdict-bearing
 step.
 
-## The pilot pattern
+## Point-estimator pilot pattern
 
 ```python
 # 1. Sample units (cells, patients, …) to participate in the pilot.
@@ -107,8 +114,8 @@ pilot_units = sample(units, n=200, seed=PILOT_SEED)
 # 2. For each unit, draw R_MAX = 20 independent replicates of the
 #    estimator. Store H[unit, replicate].
 
-# 3. For each candidate R in {1, 2, 5, 10, 20}, compute
-#    SE_replicates(R), SD_signal at R, and the ratio.
+# 3. Estimate SD_signal from all R_MAX replicates. For each candidate R
+#    in {1, 2, 5, 10, 20}, compute SE_replicates(R) and the ratio.
 
 # 4. Lock R = smallest R with ratio ≤ θ. Document the table in
 #    the pre-registration.
@@ -119,6 +126,29 @@ This adds one short script to the pre-registration timeline (typically
 one. It also surfaces structural problems early — if no R passes at
 R_max = 20, your stochastic noise is comparable to your biological
 signal and you have a bigger problem than replicate counts.
+
+## Rule for permutation / Monte Carlo p-values
+
+The `SE_replicates / SD_signal` ratio is not the right diagnostic for a
+p-value. For a Monte Carlo p-value estimated from B random permutations:
+
+```text
+p_hat = (b + 1) / (B + 1)
+MCSE(p_hat) = sqrt(p_hat * (1 - p_hat) / (B + 1))
+minimum attainable p = 1 / (B + 1)
+```
+
+Lock B so both are true:
+
+- The minimum attainable p is below the smallest alpha you intend to
+  interpret after multiplicity adjustment.
+- `p_hat ± 2 * MCSE` cannot cross the pre-committed decision boundary,
+  or the result is labelled Monte-Carlo-ambiguous and escalated to a
+  larger B.
+
+For example, B = 999 cannot support a claim at p < 0.001 because the
+minimum attainable p is 0.001. That may be fine for an exploratory
+screen and inadequate for a confirmatory tail claim.
 
 ## Worked example: per-cell scRNA-seq downsampling entropy
 
@@ -162,14 +192,14 @@ have appeared as a confusing null in the main run.
 - **Bias, not variance.** Averaging cancels variance but not bias. If
   your estimator has a bias that doesn't shrink with R (e.g., the
   Miller-Madow bias of plug-in Shannon entropy is `−(K-1)/(2N)` for
-  any number of replicates), R won't help. See
-  [`bias-vs-variance-decomposition`](./bias-vs-variance-decomposition.md)
-  *(planned).*
+  any number of replicates), R won't help. Write the bias term down
+  explicitly before spending compute on more replicates.
 - **MCMC convergence.** For Bayesian sampling, the right diagnostic is
   R-hat / ESS, not this ratio. The ratio rule applies to *post-warmup*
   effective sample size for posterior summary statistics — it does not
-  replace convergence diagnostics. The principle is the same: pilot,
-  measure, lock.
+  replace convergence diagnostics, divergent-transition checks, trace
+  inspection, or posterior predictive checks. The principle is the same:
+  pilot, measure, lock.
 - **Multiple imputation under MAR.** The Rubin total variance
   decomposition `T = V_within + (1 + 1/m) × V_between` gives a closed-
   form rule for choosing m; use it directly. The principle of
@@ -181,7 +211,9 @@ In the pre-reg's `Operationalisation` section, include:
 
 1. **The candidate range.** "R ∈ {1, 2, 5, 10, 20}" or whatever your
    pilot grid is.
-2. **The threshold θ.** "Locked at θ = 0.20."
+2. **The threshold θ or p-value precision rule.** "Locked at θ = 0.20"
+   for point estimators, or "B escalates until MCSE cannot cross alpha"
+   for permutation / Monte Carlo p-values.
 3. **The pilot procedure.** N units sampled, seed, R_max.
 4. **The decision rule.** "Smallest R with ratio ≤ θ."
 5. **The pilot table.** Locked at lock-down time, before any

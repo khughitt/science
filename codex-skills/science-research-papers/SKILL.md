@@ -110,15 +110,45 @@ Additionally:
 
 Retrieval is centralized through `science-tool paper-fetch`, which handles tiered source probing (Crossref → Unpaywall → arXiv → bioRxiv/medRxiv → Europe PMC → direct OA PDF) with cross-process rate limiting. This avoids open-ended scavenging and keeps parallel subagents polite to the same servers.
 
-### If given a DOI (or a URL/title that resolves to one):
+### Picking the right identifier flag
 
-1. Normalize the input to a DOI (strip `doi.org/` prefixes; for titles, do one Crossref search to find the DOI).
-2. Run `uv run science-tool paper-fetch --doi <doi>` and branch on `status`:
-   - **`ok`** — read the file at `pdf_path` / `text_path` and fill the template.
-   - **`paywalled`** — Unpaywall has no OA record. Stop. Set `Source: paywalled` and either (a) defer (leave a stub with `status: paywalled` in frontmatter and return to the orchestrator) or (b) if the user supplies a PDF path on request, re-run against the PDF.
-   - **`blocked_but_oa`** — OA copy exists but agent-accessible tiers failed. Stop. Ask the orchestrator to request a PDF from the user. Do not retry with open-ended search.
-   - **`not_found`** — the DOI did not resolve at all. Ask the orchestrator for better metadata.
-3. Cross-check key metadata via targeted searches only when template fields require it. Mark any unverified details as `[UNVERIFIED]`.
+`paper-fetch` accepts the identifier in whatever form the user provided — pass it through as-is rather than pre-resolving:
+
+| User-supplied form | Flag |
+|--------------------|------|
+| DOI or `doi.org/…` URL | `--doi <value>` |
+| arXiv ID (e.g. `2502.09135`) | `--arxiv <id>` |
+| arXiv URL (`arxiv.org/abs/…`) | `--url <url>` |
+| PubMed ID | `--pmid <pmid>` |
+| PubMed URL (`pubmed.ncbi.nlm.nih.gov/…`) | `--url <url>` |
+| PMC ID (e.g. `PMC12934989`) | `--pmcid <pmcid>` |
+| PMC URL (`pmc.ncbi.nlm.nih.gov/articles/…`) | `--url <url>` |
+| bioRxiv/medRxiv URL | `--url <url>` |
+| Title only | One Crossref search, then `--doi <result>` |
+
+When both a DOI and a PMID/PMCID are available (e.g. user gave both, or a PubMed page surfaced both), pass both — `paper-fetch` cross-checks them and returns `status: error` with `metadata.reason: identifier_mismatch` if they conflict, catching wrong-DOI mistakes before you summarize the wrong paper.
+
+### Branching on the result
+
+Run `paper-fetch` once with the chosen flag(s) and branch on `status`:
+
+- **`ok`** — read the file at `pdf_path` / `text_path` and fill the template. Cross-check key metadata via targeted searches only when template fields require it; mark unverified details as `[UNVERIFIED]`.
+  - **Author-attribution check (before writing).** If the user's request named an author or research group, compare it against `metadata.authors[0]` from the `paper-fetch` result. On a clear mismatch (different surname, or different institutional group), pause and surface the discrepancy to the orchestrator before writing — the user may have had the wrong paper in mind, or the wrong author for the right paper. Don't silently follow either source; flag the conflict so the orchestrator can confirm with the user.
+
+- **`paywalled`** — Unpaywall has no OA record. By default: stop, set `Source: paywalled`, and either (a) defer with `status: paywalled` in frontmatter, or (b) re-run against a PDF if the user supplies one.
+  - **Well-known classic exception** — if *all* of the following hold, you may proceed on LLM knowledge instead of stopping:
+    - Published more than 3 calendar years ago (i.e. `year ≤ current_year − 3`).
+    - Widely cited (>500 citations — quick estimate via Crossref `is-referenced-by-count` or a Google Scholar lookup).
+    - Task is conceptual/theoretical synthesis, not data extraction or methods replication.
+    - Paper is comprehensively covered by general LLM training (a foundational paper, not a niche follow-up).
+  - When proceeding under this exception: set `Source: LLM knowledge`, mark every specific number / figure / method detail as `[UNVERIFIED]`, and **do not invent quantitative claims** (cohort sizes, effect sizes, fold-changes, accuracies). Stick to conceptual contributions.
+  - **Review-paper triangulation** — if the paywalled paper's Crossref `type` indicates a review (or the title says "review" / "perspective"), pull 2-3 citing primary papers via Europe PMC's citations endpoint and triangulate the headline claims rather than relying on the abstract alone.
+
+- **`blocked_but_oa`** — OA copy exists but every agent-accessible tier failed. Before asking the orchestrator for a PDF, try one Europe PMC abstract-level fallback: `WebFetch https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:"<doi>"&format=json` — if it returns an abstract, you have enough for the summary's overview/significance fields (mark methods/results as `[UNVERIFIED]`). If that also fails, ask the orchestrator to request a PDF. Do not retry with open-ended search.
+
+- **`not_found`** — no source resolved the identifier. Ask the orchestrator for better metadata; do not fabricate a summary.
+
+- **`error`** — caller-supplied identifiers conflict (`metadata.reason` names the class, e.g. `identifier_mismatch`). Surface the conflict in `access_hint` to the orchestrator and stop — re-checking is the user's call.
 
 ### If given a PDF file path:
 
@@ -126,12 +156,6 @@ Retrieval is centralized through `science-tool paper-fetch`, which handles tiere
 2. Read: Abstract, Introduction, Methods, Results, Discussion/Conclusion.
 3. Skip: References, supplemental materials, acknowledgments unless needed for a template field.
 4. Extract required template fields and cross-check metadata via `paper-fetch --doi <doi>` if the PDF surfaces a DOI (metadata resolution is fast and safe).
-
-### If given a URL that is not a DOI landing page:
-
-1. Fetch the URL once to extract an abstract and any DOI/PMID references.
-2. If a DOI is found, hand off to the DOI branch above.
-3. Otherwise, proceed on LLM knowledge + abstract, and flag the summary `Source: web` with generous `[UNVERIFIED]` markers.
 
 ### If the paper cannot be found:
 
@@ -152,9 +176,21 @@ Follow `.ai/templates/paper.md` first, then `templates/paper.md`, and fill every
 
 1. Add/update the BibTeX entry in `papers/references.bib` (create file with header if missing).
 2. Link relevance to existing hypotheses in `specs/hypotheses/`.
-3. Add new questions to `doc/questions/` using `.ai/templates/question.md` first, then `templates/question.md` when appropriate.
+3. Add new questions via `science-tool question reserve`. **Do not** create files under `doc/questions/` directly — parallel subagents racing on the next q-number cause silent collisions. The CLI uses `O_CREAT|O_EXCL` to atomically claim the next slot, even with multiple subagents writing concurrently.
+
+   For each new question:
+   ```bash
+   uv run science-tool question reserve \
+     --slug "<short-kebab-slug>" \
+     --title "<question title>" \
+     --source-refs "<this paper's citekey>" \
+     [--related "<related-id>,<related-id>"] \
+     [--ontology "<term>,<term>"] \
+     --json
+   ```
+   The command returns JSON with the assigned `path`. Read that file (it has frontmatter pre-filled and section scaffolding) and edit the body sections in place. The project's `.ai/templates/question.md` overrides the default body via `--template <path>` if needed.
 4. Note approach implications in `doc/04-approach.md` when relevant.
-5. Commit: `git add -A && git commit -m "papers: research <citekey> - <short title>"`
+5. Commit: `git add -A && git commit -m "docs(papers): research <citekey> - <short title>"`. The `docs(papers):` prefix is commitlint-conventional compliant out of the box; if your project's commitlint config explicitly allows `papers:` as a custom type, prefer that.
 
 ## Orchestrator Post-Dispatch
 
