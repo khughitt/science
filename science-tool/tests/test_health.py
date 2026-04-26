@@ -482,8 +482,13 @@ class TestHealthCLI:
     def test_clean_project_exits_zero(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
         from science_tool.cli import main
+        from science_tool.project_artifacts import canonical_path
 
         (tmp_path / "science.yaml").write_text("name: test\n")
+        # Install canonical managed artifacts so the project is genuinely clean.
+        target = tmp_path / "validate.sh"
+        target.write_bytes(canonical_path("validate.sh").read_bytes())
+        target.chmod(0o755)
         runner = CliRunner()
         result = runner.invoke(main, ["health", "--project-root", str(tmp_path)])
 

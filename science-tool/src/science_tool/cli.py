@@ -2413,6 +2413,9 @@ def health_command(project_root: Path, output_format: str) -> None:
         archive_lag["done_in_active"] + archive_lag["retired_in_active"] + archive_lag["missing_completed"]
     )
 
+    managed_artifacts = report.get("managed_artifacts") or []
+    managed_artifacts_issue_count = sum(1 for f in managed_artifacts if f.get("counts_as_issue"))
+
     total_issues = (
         len(report["unresolved_refs"])
         + len(report["lingering_tags_lines"])
@@ -2422,6 +2425,7 @@ def health_command(project_root: Path, output_format: str) -> None:
         + coverage_gaps
         + len(report.get("dataset_anomalies") or [])
         + (1 if archive_lag_total else 0)
+        + managed_artifacts_issue_count
     )
     if total_issues == 0:
         click.echo("Project is clean — no issues found.")
@@ -2438,6 +2442,21 @@ def health_command(project_root: Path, output_format: str) -> None:
         console.print(lag_table)
         console.print(
             "\n[bold]Next:[/bold] run [cyan]science-tool tasks archive[/cyan] to preview, then [cyan]--apply[/cyan]."
+        )
+
+    flagged_managed_artifacts = [f for f in managed_artifacts if f.get("counts_as_issue")]
+    if flagged_managed_artifacts:
+        ma_table = Table(title=f"Managed artifacts ({len(flagged_managed_artifacts)})")
+        ma_table.add_column("Name", style="bold")
+        ma_table.add_column("Status")
+        ma_table.add_column("Detail")
+        for row in flagged_managed_artifacts:
+            ma_table.add_row(row["name"], row["status"], row["detail"])
+        console.print(ma_table)
+        console.print(
+            "\n[bold]Next:[/bold] run "
+            "[cyan]science-tool project artifacts check[/cyan] / "
+            "[cyan]update[/cyan] / [cyan]install[/cyan] per status."
         )
 
     if report["unresolved_refs"]:
