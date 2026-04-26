@@ -28,6 +28,7 @@ For brevity, the examples below write just `science-tool <command>` — **always
 
 - **MUST** start from a specified inquiry or a task/question description (see Input Modes below)
 - **MUST** write the plan to `doc/plans/YYYY-MM-DD-<slug>-pipeline-plan.md`
+- **MUST** check whether methodological readiness is already documented by an `analysis-plan:<slug>` artifact. If not, and the user is asking for orchestration before data QA, independent unit, estimand, power/resolution, and sensitivity rules are clear, recommend `/science:plan-analysis` before finalizing the pipeline plan.
 - **SHOULD** add `sci:Transformation` nodes when the project uses formal inquiries
 - **SHOULD** connect transformations with `sci:feedsInto` edges
 - **SHOULD** attach `sci:validatedBy` checks to each transformation
@@ -43,6 +44,10 @@ The plan-pipeline command works with two types of input:
 
 - **Inquiry mode** (default when an inquiry slug is provided): Load the formal inquiry subgraph and translate it into a pipeline plan. Follow Steps 1, 3, and 5 for inquiry loading, graph annotation, and status updates.
 - **Task mode** (when the project uses tasks/questions instead of formal inquiries, or when `$ARGUMENTS` is a task ID or description): Derive the plan directly from the task description, existing code, and project context. Skip inquiry-specific steps (1, 3, 5) — the plan document is the primary deliverable. Graph annotations are secondary.
+
+When an existing analysis plan is in scope, read `doc/plans/*-analysis-plan.md`
+and reuse its methodological readiness checks. Do not re-decide those checks in
+the pipeline plan; focus on execution.
 
 ## Workflow
 

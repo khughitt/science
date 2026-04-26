@@ -101,6 +101,12 @@ This longitudinal view makes progress visible and highlights both forward moment
 
 Scan pipeline plans in `doc/plans/` for implementation tasks that are not tracked in `tasks/active.md`. Surface any development work buried in plan documents that should be trackable tasks.
 
+Scan active analysis-facing tasks and inquiries for linked `analysis-plan:<slug>`
+artifacts. If none exists and the task is about running, validating, or
+pre-registering a data analysis, add a recommended next action to run
+`/science:plan-analysis`. Check `doc/plans/*-analysis-plan.md` before
+recommending a new one.
+
 **Archive lag.** Run `science-tool health --format json` and inspect `archive_lag`. When `archive_lag.done_in_active` or `archive_lag.retired_in_active` is non-zero, add a Recommended Next Action:
 
 > Preview with `science-tool tasks archive`, then run `science-tool tasks archive --apply` to move the N done/retired entries from `tasks/active.md` to `tasks/done/YYYY-MM.md`.

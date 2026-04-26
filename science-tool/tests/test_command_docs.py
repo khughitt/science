@@ -172,6 +172,34 @@ def test_plan_analysis_command_covers_pressure_scenarios() -> None:
         assert expected in text
 
 
+def test_plan_analysis_is_integrated_with_neighbor_commands() -> None:
+    expected_by_path = {
+        "commands/plan-pipeline.md": (
+            "/science:plan-analysis",
+            "methodological readiness",
+            "analysis-plan:<slug>",
+        ),
+        "commands/pre-register.md": (
+            "analysis-plan:<slug>",
+            "doc/plans/*-analysis-plan.md",
+            "/science:plan-analysis",
+        ),
+        "commands/status.md": (
+            "analysis-plan:<slug>",
+            "/science:plan-analysis",
+        ),
+        "commands/next-steps.md": (
+            "analysis-plan:<slug>",
+            "doc/plans/*-analysis-plan.md",
+            "/science:plan-analysis",
+        ),
+    }
+    for path, expected_strings in expected_by_path.items():
+        text = _read(path)
+        for expected in expected_strings:
+            assert expected in text
+
+
 @pytest.mark.parametrize(
     ("path", "expected_strings"),
     [
