@@ -94,6 +94,19 @@ The two projects ship the same *shape* (provenance-tracked frontmatter + per-hyp
 
 `curation-sweep` is **not** folded into this `report_kind` enum. It is a separate canonical-promotion candidate (see §6.3); deferring it here keeps this plan tight and lets the curation-sweep promotion pick its own shape.
 
+### Post-investigation correction (2026-04-25)
+
+The original § 3.3 catalog above undercounted downstream synthesis-area shapes. A migration HALT in `docs/plans/2026-04-25-downstream-conventions-migration.md` Task 2 surfaced six factual gaps; the full investigation lives in `docs/audits/downstream-project-conventions/synthesis-shape-investigation-2026-04-25.md`. Summary of corrections:
+
+1. **NS has a synthesis area** (rollup + emergent-threads + 4 per-hyp). Audit § 3.3 declared NS had none.
+2. **NS rollup uses a third id-form** (`report:project-synthesis`), distinct from mm30 (`report:synthesis`) and PL (no `id:`).
+3. **NS emergent-threads uses a fourth id-form** (`report:emergent-threads`), distinct from mm30's `report:synthesis-emergent-threads`.
+4. **mm30 emergent-threads id-form** (`report:synthesis-emergent-threads`) was not cataloged — audit only listed mm30's per-hyp `report:synthesis-<slug>` and rollup `report:synthesis`.
+5. **PL rollup carries `orphan_question_count`** directly — a Plan-#4 emergent-threads-only field, not cataloged as a PL extension or drift.
+6. **PL rollup lacks any `id:`** — present in audit's prose but not surfaced as a migration target.
+
+Plan #4's canonical shape (`type: synthesis` + `report_kind:` discriminator + per-kind required fields) remains correct; only the per-project drift catalog needed updating.
+
 ### 3.4 Chained next-steps ledger (4/4) — P1
 
 All four projects produce date-stamped `doc/meta/next-steps-YYYY-MM-DD.md` files. Three chain via a `prior:` (mm30) or `prior_analyses:` (protein-landscape) field; natural-systems uses the same temporal cadence without an explicit chain field; cbioportal's four files don't currently chain.
