@@ -42,12 +42,16 @@ class TempCommitSnapshot:
         self._original_head = self._git("rev-parse", "HEAD").stdout.strip()
         self._git("add", "-A")
         # --allow-empty so taking a snapshot of a clean tree still succeeds.
+        # Conventional-commits format: downstream projects often enforce
+        # commitlint via husky commit-msg hooks; a non-conventional message
+        # would fail the hook and abort the snapshot. The commit is discarded
+        # by .discard()/.restore() before any user-visible commit lands.
         self._git(
             "commit",
             "-q",
             "--allow-empty",
             "-m",
-            "managed-artifacts: temp transaction snapshot",
+            "chore(artifacts): temp transaction snapshot",
         )
         self._snapshot_sha = self._git("rev-parse", "HEAD").stdout.strip()
 
