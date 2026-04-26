@@ -84,15 +84,12 @@ half the panels has half the maximum callable sample count.
 - For co-occurrence or mutual exclusivity, restrict to samples callable for both
   genes and adjust for cancer type, TMB, and study when feasible.
 
-## Red Flags Worth Halting On
+## Halt-On Conditions
 
-- A panel-bearing study has no panel metadata.
-- More than 5% of mutated genes are absent from the callable-gene universe.
-- Sample IDs duplicate across studies after normalization.
-- Cancer-type labels are missing or mapped to broad `Other` for verdict-bearing
-  analyses.
-- Mutation counts per sample have a heavy tail but no hypermutator/MSI/POLE
-  annotation.
+- Callable territory is unavailable or incomparable across cohorts.
+- Panel and exome cohorts are mixed without restriction to common territory.
+- Missing mutation calls cannot be distinguished from true zero calls.
+- Hypermutators dominate gene-level contrasts.
 
 ## Output Package
 

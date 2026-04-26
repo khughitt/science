@@ -126,6 +126,13 @@ the primary contrast. If not, inherit the depositor's matrix but state
 the normalisation as a limitation rather than treating the scale as
 fully comparable to newly processed cohorts.
 
+## Halt-On Conditions
+
+- Platform variant is unknown or ambiguous across samples.
+- No probe annotation is available for the platform or custom CDF used.
+- Quantile-normalization assumptions are violated because the cohort is biologically heterogeneous.
+- Two-colour data are being treated as a single-channel intensity matrix.
+
 ## Probe-set obsolescence
 
 Affymetrix probes were designed against gene-model versions current

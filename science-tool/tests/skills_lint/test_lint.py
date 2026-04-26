@@ -8,6 +8,7 @@ from science_tool.skills_lint.lint import (
     SkillIssue,
     check_companion_skills,
     check_frontmatter,
+    check_halt_on_conditions,
     check_relative_links,
 )
 
@@ -44,6 +45,24 @@ def test_missing_companion_skills_section_returns_issue() -> None:
     assert any(issue.kind == "missing-section" and issue.detail == "Companion Skills" for issue in issues)
 
 
+def test_required_halt_on_leaf_with_section_returns_no_issues() -> None:
+    path = FIXTURES / "data" / "embeddings-manifold-qa.md"
+
+    issues = check_halt_on_conditions(path, FIXTURES)
+
+    assert issues == []
+
+
+def test_required_halt_on_leaf_without_section_returns_issue() -> None:
+    path = FIXTURES / "data" / "functional-genomics-qa.md"
+
+    issues = check_halt_on_conditions(path, FIXTURES)
+
+    assert len(issues) == 1
+    assert issues[0].kind == "missing-section"
+    assert issues[0].detail == "Halt-On Conditions"
+
+
 def test_valid_relative_link_returns_no_issues() -> None:
     issues = check_relative_links(FIXTURES / "good-with-companion.md")
     assert issues == []
@@ -68,8 +87,10 @@ def test_lint_cli_against_fixtures(tmp_path: Path) -> None:
     assert "bad-missing-description.md" in result.output
     assert "bad-no-companion-skills.md" in result.output
     assert "bad-broken-relative-link.md" in result.output
+    assert "data/functional-genomics-qa.md" in result.output
     assert "good.md" not in result.output
     assert "good-with-companion.md" not in result.output
+    assert "data/embeddings-manifold-qa.md" not in result.output
 
 
 def test_skill_issue_json_uses_posix_path() -> None:

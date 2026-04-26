@@ -36,6 +36,17 @@ class SkillIssue:
 
 REQUIRED_FIELDS = ("name", "description")
 MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
+HALT_ON_REQUIRED = {
+    "data/embeddings-manifold-qa.md",
+    "data/functional-genomics-qa.md",
+    "data/protein-sequence-structure-qa.md",
+    "data/expression/bulk-rnaseq-qa.md",
+    "data/expression/microarray-qa.md",
+    "data/expression/scrna-qa.md",
+    "data/genomics/somatic-mutation-qa.md",
+    "data/genomics/mutational-signatures-and-selection.md",
+    "research/annotation-curation-qa.md",
+}
 
 
 def check_frontmatter(path: Path) -> list[SkillIssue]:
@@ -67,6 +78,17 @@ def check_companion_skills(path: Path) -> list[SkillIssue]:
     return []
 
 
+def check_halt_on_conditions(path: Path, root: Path) -> list[SkillIssue]:
+    relative_path = path.relative_to(root).as_posix()
+    if relative_path not in HALT_ON_REQUIRED:
+        return []
+
+    text = path.read_text(encoding="utf-8")
+    if not re.search(r"^## Halt-On Conditions$", text, re.MULTILINE):
+        return [SkillIssue(path, "missing-section", detail="Halt-On Conditions")]
+    return []
+
+
 def check_relative_links(path: Path) -> list[SkillIssue]:
     text = path.read_text(encoding="utf-8")
     issues: list[SkillIssue] = []
@@ -85,6 +107,7 @@ def check_skills(root: Path) -> list[SkillIssue]:
     for path in sorted(root.rglob("*.md")):
         issues.extend(_relative_issues(check_frontmatter(path), root))
         issues.extend(_relative_issues(check_companion_skills(path), root))
+        issues.extend(_relative_issues(check_halt_on_conditions(path, root), root))
         issues.extend(_relative_issues(check_relative_links(path), root))
     return issues
 

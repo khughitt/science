@@ -81,6 +81,13 @@ discordant guides behind a gene-level score.
 - **Hit-list circularity.** A validation panel is chosen from the same data used
   to define success.
 
+## Halt-On Conditions
+
+- Guide or reagent annotation is absent.
+- No non-targeting or negative controls are available.
+- Copy-number data are unavailable for a CRISPR amplicon-toxicity check.
+- Cell-line identity is unverified.
+
 ## Minimum Artifacts
 
 Generate a `datapackage.json` for this directory; see [`frictionless.md`](./frictionless.md).

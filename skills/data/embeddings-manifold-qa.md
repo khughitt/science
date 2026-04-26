@@ -87,6 +87,12 @@ For CKA, Procrustes, nearest-neighbor overlap, or cross-manifold alignment:
 - **Metric mismatch.** Cosine-trained embeddings are analyzed with Euclidean
   distances without checking sensitivity.
 
+## Halt-On Conditions
+
+- Row-universe alignment cannot be asserted across all compared lenses.
+- PC1 tracks length, depth, batch, or another nuisance axis and no residualized mode is feasible.
+- No homology-disjoint splits are available for benchmark or validation claims.
+
 ## Output Package
 
 Generate a `datapackage.json` for this directory; see [`frictionless.md`](./frictionless.md).

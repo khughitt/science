@@ -86,6 +86,12 @@ hypothesis, report the result as confounded unless the model adjusts for it.
 - **Circular validation.** A method tuned on CGC/Bailey drivers cannot use those
   same drivers as independent evidence of success.
 
+## Halt-On Conditions
+
+- Opportunity model is unknown for panel-derived data.
+- COSMIC signature database version is not pinned.
+- Driver ranks correlate with coding length and no length-aware model is run.
+
 ## Reporting
 
 Include:

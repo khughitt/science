@@ -82,6 +82,12 @@ leakage, label hierarchy mismatch, and length or taxonomy confounding.
 - **Hierarchy leakage.** Predicting CATH class from CATH topology labels is not
   independent validation.
 
+## Halt-On Conditions
+
+- Identifier mapping is ambiguous, especially gene-symbol joins across paralog families.
+- Train/test homology overlap exceeds the pre-set threshold.
+- Label hierarchy is inconsistent or leaks the prediction target.
+
 ## Output Package
 
 Generate a `datapackage.json` for this directory; see [`frictionless.md`](./frictionless.md).

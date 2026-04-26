@@ -219,6 +219,13 @@ When the depositor's filter cannot be reversed (raw FASTQ unavailable),
 state the filter as a known limitation in any pre-registration or
 manuscript.
 
+## Halt-On Conditions
+
+- The depositor's filter is a cell-type subset and the original cell universe cannot be reconstructed.
+- Doublet calls are absent and the tool or threshold used by the depositor is unknown.
+- Ambient-correction status is unknown for biology that depends on low-expression marker genes.
+- Per-batch median UMI differs by more than 2x and no batch covariate is available.
+
 ## Output: a per-cohort QA package
 
 A reasonable QA artifact for each ingested cohort:

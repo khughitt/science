@@ -136,6 +136,14 @@ GSE106218 in MM30 is a documented pseudobulk that was incorrectly
 treated as bulk in early analyses; it now is excluded (D7). When in
 doubt, check the original publication's methods section.
 
+## Halt-On Conditions
+
+- Matrix scale is unverified and could be TPM, FPKM, z-scores, or residuals masquerading as counts.
+- Gene-model version is unknown across cohorts that will be meta-analyzed.
+- More than 10% of samples have `% rRNA > 20`.
+- PCA shows batch dominating biology and no batch metadata are available for adjustment or exclusion.
+- Per-sample read counts or expressed-gene counts suggest pseudobulk data being treated as true bulk RNA-seq.
+
 ## Output: a per-cohort QA package
 
 Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../frictionless.md).

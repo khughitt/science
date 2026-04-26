@@ -68,6 +68,12 @@ when one class dominates; report both and inspect the confusion matrix.
 - **Circular validation.** Labels extracted from project prose are used to prove
   the project prose is correct.
 
+## Halt-On Conditions
+
+- Schema version is not recorded.
+- Fewer than two annotators reviewed items used for verdict-bearing analysis.
+- Calibration set is missing for LLM-assisted annotation runs.
+
 ## Minimum Artifacts
 
 Generate a `datapackage.json` for this directory; see [`../data/frictionless.md`](../data/frictionless.md).
