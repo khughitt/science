@@ -11,10 +11,7 @@ def test_list_runs_against_packaged_registry() -> None:
     assert result.exit_code == 0, result.output
     # Registry is non-empty after Task 28; expect a row for validate.sh.
     # When empty, "no managed artifacts" still rendered.
-    assert (
-        "validate.sh" in result.output
-        or "no managed artifacts" in result.output.lower()
-    )
+    assert "validate.sh" in result.output or "no managed artifacts" in result.output.lower()
 
 
 def test_list_help_text_present() -> None:

@@ -1,4 +1,5 @@
 """meta/validate.sh and scripts/validate.sh are byte-identical 5-line shims."""
+
 import subprocess
 from pathlib import Path
 
@@ -65,8 +66,9 @@ def test_meta_shim_smoke_runs(tmp_path: Path) -> None:
 
     result = subprocess.run(
         ["bash", str(REPO_ROOT / "meta" / "validate.sh")],
-        cwd=tmp_path, capture_output=True, text=True, check=False,
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
     )
-    assert result.returncode == 0, (
-        f"meta shim exec failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-    )
+    assert result.returncode == 0, f"meta shim exec failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"

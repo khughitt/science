@@ -48,7 +48,7 @@ Status updated as each P1 progresses through the workflow.
 
 | ID | Title | Plan doc | Plan | Impl | Review |
 | --- | --- | --- | --- | --- | --- |
-| P1 #7 | MAV addendum: audit-surfaced `mav-input` set | `docs/plans/2026-04-25-mav-audit-addendum.md` | approved (held: MAV not merged) | — | — |
+| P1 #7 | MAV addendum: audit-surfaced `mav-input` set | `docs/plans/2026-04-25-mav-audit-addendum.md` | subsumed by managed-artifacts implementation T29 | subsumed by managed-artifacts implementation T29 | subsumed by managed-artifacts implementation T29 |
 | P1 #9 | Code/notebook → task back-link convention | `docs/plans/2026-04-25-code-task-backlink-convention.md` | merged | merged (`2768fa2`..`4196b8f`) | APPROVE |
 
 ### Plan review pass 1 (2026-04-25)
@@ -79,7 +79,7 @@ Final spot-read before user approval surfaced one cross-plan duplication:
 ### Cross-plan consistency rules established
 
 - **Validator severity:** id-prefix mismatches and structural-field absences are `warn`, not `error`. Established in Plan #7 Task 6 and applied retroactively to Plan #2.
-- **Validator targeting:** all validator-touching plans modify both `meta/validate.sh` and `scripts/validate.sh` until MAV unifies. Locate insertion sites by content, not absolute line.
+- **Validator targeting:** all validator-touching plans modify both `meta/validate.sh` and `scripts/validate.sh` until MAV unifies. Locate insertion sites by content, not absolute line. **Obsolete after Task 28 of `docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md` lands** — the canonical body lives at `science-tool/src/science_tool/project_artifacts/data/validate.sh` and `meta/validate.sh` / `scripts/validate.sh` are path-convenience shims; future validator changes edit the canonical only.
 - **Type promotion + id-prefix table coordination:** Plan #7 Task 6's id-prefix table includes rows for both `pre-registration` (canonized by Plan #2) and `synthesis` (canonized by Plan #4). These rows are forward-compatible — they activate when each canonical type lands downstream.
 - **No legacy/compatibility layers** (per the user's global rule). Validators stay silent on legacy shapes (`type: plan` pre-regs, `type: report` synthesis files) — this is the natural consequence of additive type-conformance checks, not a permanent accepted variant. Downstream migrations are tracked as follow-on tasks.
 

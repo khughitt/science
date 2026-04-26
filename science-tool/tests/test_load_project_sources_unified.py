@@ -7,7 +7,15 @@ from pathlib import Path
 import pytest
 import yaml
 
-from science_model.entities import DatasetEntity, DomainEntity, Entity, EntityType, MechanismEntity, ProjectEntity, TaskEntity
+from science_model.entities import (
+    DatasetEntity,
+    DomainEntity,
+    Entity,
+    EntityType,
+    MechanismEntity,
+    ProjectEntity,
+    TaskEntity,
+)
 from science_model.identity import EntityScope, ExternalId
 from science_model.profiles.schema import EntityKind, ProfileManifest
 

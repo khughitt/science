@@ -1,5 +1,7 @@
 # Managed Artifact Versioning Implementation Plan
 
+> **Superseded:** Replaced by `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md` and implemented per `docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md`. Do not implement this plan as written.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add explicit version, drift-check, diff, and update support for copied Science-managed artifacts, starting with `validate.sh`.

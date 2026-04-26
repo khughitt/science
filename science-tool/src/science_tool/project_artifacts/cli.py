@@ -56,6 +56,7 @@ def check_cmd(name: str, project_root: str, as_json: bool) -> None:
     import json as _json
     from pathlib import Path
 
+    from science_tool.project_artifacts.pin import read_pins
     from science_tool.project_artifacts.status import classify_full
 
     registry = default_registry()
@@ -63,8 +64,10 @@ def check_cmd(name: str, project_root: str, as_json: bool) -> None:
     if art is None:
         raise click.ClickException(f"no managed artifact named {name!r} in the registry")
 
-    target = Path(project_root) / art.install_target
-    result = classify_full(target, art, [])
+    project = Path(project_root)
+    target = project / art.install_target
+    pins = read_pins(project) if (project / "science.yaml").exists() else []
+    result = classify_full(target, art, pins)
 
     if as_json:
         click.echo(
