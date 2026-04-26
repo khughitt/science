@@ -1,3 +1,8 @@
+---
+name: data-embeddings-manifold-qa
+description: Use when analyzing high-dimensional embeddings, UMAP/t-SNE/PCA projections, HDBSCAN clusters, Mapper graphs, CKA, kNN purity, Moran's I, archetypes, or multi-lens comparisons.
+---
+
 # Embeddings and Manifold QA
 
 Use when analyzing high-dimensional embeddings, UMAP/t-SNE/PCA projections,
@@ -82,7 +87,15 @@ For CKA, Procrustes, nearest-neighbor overlap, or cross-manifold alignment:
 - **Metric mismatch.** Cosine-trained embeddings are analyzed with Euclidean
   distances without checking sensitivity.
 
+## Halt-On Conditions
+
+- Row-universe alignment cannot be asserted across all compared lenses.
+- PC1 tracks length, depth, batch, or another nuisance axis and no residualized mode is feasible.
+- No homology-disjoint splits are available for benchmark or validation claims.
+
 ## Output Package
+
+Generate a `datapackage.json` for this directory; see [`frictionless.md`](./frictionless.md).
 
 ```
 results/<analysis>/embedding_qa/
@@ -101,6 +114,5 @@ seed/hyperparameter, and negative-control checks.
 
 ## Companion Skills
 
-For protein-language-model or structure-derived embeddings, load
-`protein-sequence-structure-qa.md` first enough to validate identity mapping,
-homology leakage, label hierarchy, and split construction.
+- [`protein-sequence-structure-qa.md`](protein-sequence-structure-qa.md) - identity mapping, homology leakage, label hierarchy, and split construction for PLM or structure-derived embeddings.
+- [`../statistics/bias-vs-variance-decomposition.md`](../statistics/bias-vs-variance-decomposition.md) - distinguishing projection variance from estimator bias.

@@ -20,6 +20,9 @@ description: Data acquisition, preprocessing, and management for Science researc
 >
 > Additional source skills and automation tooling are still phased in over time.
 
+For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
+`science-plan-analysis`.
+
 ## Principles
 
 1. **Raw data is immutable.** Never modify files in `data/raw/`. All transformations produce new files in `data/processed/`.
@@ -44,6 +47,26 @@ data/
 
 Analysis outputs follow the same Frictionless Data Package convention as input
 data. Each workflow run produces a self-describing result package:
+
+## Output-Path Convention for QA Artifacts
+
+QA artifacts split by lifecycle:
+
+- **Input QA** — per-cohort/per-dataset preprocessing checks that travel with the
+  dataset: `data/processed/<cohort_id>/<qa_step>/`. Examples: `cohort_audit.json`,
+  per-sample QC tables, probe-to-gene mappings, callable-territory tables.
+- **Analysis QA** — per-analysis post-hoc checks tied to a specific result:
+  `results/<workflow>/aNNN-<slug>/<qa_step>/`. Examples: bias audits,
+  reconstruction-error reports, sensitivity panels, model diagnostics.
+
+Every QA output directory must carry a `datapackage.json` (see
+[`frictionless.md`](./frictionless.md)). Leaves should reference this
+convention rather than redefining it.
+
+The two locations are mirrors of each other: input QA lives next to the data
+it audits; analysis QA lives next to the result it diagnoses. A QA step that
+genuinely applies to both (e.g., row-alignment assertions) lives wherever it
+runs; document the convention chosen in the leaf.
 
 ### Directory Convention
 
@@ -122,3 +145,10 @@ When automation is unavailable:
 - Download data by hand and place in `data/raw/`
 - Write preprocessing scripts in `code/scripts/` with clear comments
 - Always update `science.yaml` data_sources when adding new data
+
+## Companion Skills
+
+- [`expression/SKILL.md`](expression/SKILL.md) - expression-matrix preprocessing and QA.
+- [`frictionless.md`](frictionless.md) - data-package descriptors and validation conventions.
+- [`../statistics/SKILL.md`](../statistics/SKILL.md) - quantitative checks that depend on data shape and independent units.
+- [`../research/SKILL.md`](../research/SKILL.md) - research-methodology context for data-source choices and citation discipline.

@@ -322,4 +322,10 @@ script_path: code/workflows/scripts/analyze.py
 
 For full schema documentation — including `cells.json` structure, cell types, and
 the `science-research-package` datapackage profile — see the
-`skills/research/provenance.md` skill.
+`skills/research/research-package-spec.md` skill.
+
+## Companion Skills
+
+- [`SKILL.md`](SKILL.md) - shared pipeline conventions and workflow artifact expectations.
+- [`../data/frictionless.md`](../data/frictionless.md) - data-package descriptors for workflow inputs and outputs.
+- [`../research/research-package-spec.md`](../research/research-package-spec.md) - research-package schema and validation commands.

@@ -1,3 +1,8 @@
+---
+name: data-protein-sequence-structure-qa
+description: Use when working with protein sequences, UniProt mappings, Pfam/InterPro/CATH labels, Foldseek/MMseqs clusters, PLM embeddings, DeepLoc/Meltome labels, or sequence/structure benchmark splits.
+---
+
 # Protein Sequence and Structure QA
 
 Use when working with protein sequences, UniProt mappings, Pfam/InterPro/CATH
@@ -77,7 +82,15 @@ leakage, label hierarchy mismatch, and length or taxonomy confounding.
 - **Hierarchy leakage.** Predicting CATH class from CATH topology labels is not
   independent validation.
 
+## Halt-On Conditions
+
+- Identifier mapping is ambiguous, especially gene-symbol joins across paralog families.
+- Train/test homology overlap exceeds the pre-set threshold.
+- Label hierarchy is inconsistent or leaks the prediction target.
+
 ## Output Package
+
+Generate a `datapackage.json` for this directory; see [`frictionless.md`](./frictionless.md).
 
 ```
 data/processed/<protein_dataset>/
@@ -96,6 +109,5 @@ sequence version, label source, and split rule each result used.
 
 ## Companion Skills
 
-Load `embeddings-manifold-qa.md` when protein sequences or structures are used
-for PLM embeddings, UMAP/HDBSCAN/Mapper, CKA, Moran's I, archetypes, or
-multi-lens comparisons.
+- [`embeddings-manifold-qa.md`](embeddings-manifold-qa.md) - PLM embeddings, UMAP/HDBSCAN/Mapper, CKA, Moran's I, archetypes, and multi-lens comparisons.
+- [`SKILL.md`](SKILL.md) - generic data-management conventions for processed protein datasets.

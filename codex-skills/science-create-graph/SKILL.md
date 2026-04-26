@@ -67,7 +67,7 @@ Before executing any research command:
    fall back to:
    `uv run --with <science-plugin-root>/science-tool science-tool <command>`
 
-> **Prerequisite:** Load the `knowledge-graph` skill before starting.
+> **Prerequisite:** Read `docs/specs/2026-03-01-knowledge-graph-design.md` and `docs/proposition-and-evidence-model.md` before starting.
 
 ## Overview
 

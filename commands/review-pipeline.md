@@ -5,7 +5,7 @@ description: Critically review a pipeline plan against an evidence rubric — co
 # Review Pipeline
 
 > **Prerequisites:**
-> - Load the `knowledge-graph` skill
+> - Read `docs/proposition-and-evidence-model.md` and `docs/specs/2026-03-01-knowledge-graph-design.md` for graph/entity semantics
 > - Load the `research-methodology` skill
 > - Read the `discussant` role prompt from `prompts/roles/discussant.md` (if available)
 

@@ -1,3 +1,8 @@
+---
+name: data-expression-microarray-qa
+description: Use when ingesting or QA-reviewing bulk microarray cohorts (Affymetrix, Agilent, Illumina BeadArray) for legacy meta-analysis.
+---
+
 # Bulk Microarray QA
 
 Practical QA for bulk microarray cohorts (Affymetrix GeneChip, Agilent,
@@ -121,6 +126,13 @@ the primary contrast. If not, inherit the depositor's matrix but state
 the normalisation as a limitation rather than treating the scale as
 fully comparable to newly processed cohorts.
 
+## Halt-On Conditions
+
+- Platform variant is unknown or ambiguous across samples.
+- No probe annotation is available for the platform or custom CDF used.
+- Quantile-normalization assumptions are violated because the cohort is biologically heterogeneous.
+- Two-colour data are being treated as a single-channel intensity matrix.
+
 ## Probe-set obsolescence
 
 Affymetrix probes were designed against gene-model versions current
@@ -135,6 +147,8 @@ biologically more accurate but breaks reproducibility against
 historical results.
 
 ## Output: a per-cohort QA package
+
+Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../frictionless.md).
 
 ```
 data/processed/<cohort_id>/
@@ -153,3 +167,9 @@ Microarray remains relevant only for legacy meta-analysis where the
 disease cohort has no RNA-Seq alternative at adequate n. The MM30
 project includes 28 microarray cohorts because the alternative would
 be an n ≈ 700 (MMRF) instead of n ≈ 5,400 meta-analysis.
+
+## Companion Skills
+
+- [`SKILL.md`](SKILL.md) - expression-data hub conventions for cross-platform cohort QA.
+- [`bulk-rnaseq-qa.md`](bulk-rnaseq-qa.md) - companion checks when aggregating microarray with RNA-seq cohorts.
+- [`../../statistics/bias-vs-variance-decomposition.md`](../../statistics/bias-vs-variance-decomposition.md) - separating platform bias from estimator variance.

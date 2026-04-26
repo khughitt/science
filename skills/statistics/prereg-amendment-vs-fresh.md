@@ -1,3 +1,8 @@
+---
+name: statistics-prereg-amendment-vs-fresh
+description: Use when a follow-up analysis changes data, operationalisation, model, thresholds, or scope after an earlier pre-registration exists.
+---
+
 # Pre-Registration Amendment vs Fresh Pre-Registration
 
 Use when a follow-up analysis changes data, operationalisation, model,
@@ -81,3 +86,8 @@ Use explicit labels:
 If parent results are already known, say so in the first paragraph. An amendment
 can still be useful, but it cannot pretend to be a fully fresh prospective
 commitment.
+
+## Companion Skills
+
+- [`sensitivity-arbitration.md`](sensitivity-arbitration.md) - inherited or revised verdict rules for amended analyses.
+- [`power-floor-acknowledgement.md`](power-floor-acknowledgement.md) - updated power floors when an amendment changes cohort, contrast, or estimator.

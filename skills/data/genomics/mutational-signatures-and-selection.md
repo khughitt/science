@@ -1,3 +1,8 @@
+---
+name: data-genomics-mutational-signatures-and-selection
+description: Use when analyzing SBS/DBS/ID mutational signatures, tumor mutational burden, replication-timing bias, driver-gene enrichment, dN/dS, dNdScv, or selection signals.
+---
+
 # Mutational Signatures and Selection
 
 Use when analyzing SBS/DBS/ID mutational signatures, tumor mutational burden,
@@ -81,6 +86,12 @@ hypothesis, report the result as confounded unless the model adjusts for it.
 - **Circular validation.** A method tuned on CGC/Bailey drivers cannot use those
   same drivers as independent evidence of success.
 
+## Halt-On Conditions
+
+- Opportunity model is unknown for panel-derived data.
+- COSMIC signature database version is not pinned.
+- Driver ranks correlate with coding length and no length-aware model is run.
+
 ## Reporting
 
 Include:
@@ -94,6 +105,8 @@ Include:
 - known limitations that remain after adjustment.
 
 ## Minimum Artifacts
+
+Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../frictionless.md).
 
 ```
 results/<analysis>/signature_selection_qa/
@@ -113,3 +126,9 @@ results/<analysis>/signature_selection_qa/
 The summary should state whether input calls and denominators were already
 audited. If not, load `somatic-mutation-qa.md` first and complete that audit
 before treating signatures or selection tests as verdict-bearing.
+
+## Companion Skills
+
+- [`somatic-mutation-qa.md`](somatic-mutation-qa.md) - input-call and denominator QA required before signature or selection verdicts.
+- [`../../statistics/power-floor-acknowledgement.md`](../../statistics/power-floor-acknowledgement.md) - low-count signature and driver tests.
+- [`../../statistics/sensitivity-arbitration.md`](../../statistics/sensitivity-arbitration.md) - pre-committed arbitration for hypermutator, panel, and low-count sensitivities.

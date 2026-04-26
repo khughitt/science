@@ -14,6 +14,18 @@ Science uses a skeptical, proposition-centric model:
 - sparse or single-source support should be treated as fragile
 - contested neighborhoods and propositions lacking empirical support should be treated as prioritization signals, not just annotations
 
+For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
+`science-plan-analysis`.
+
+## Leaves
+
+| Leaf | Use when |
+|---|---|
+| [`annotation-curation-qa.md`](./annotation-curation-qa.md) | Designing or reviewing claim extraction, labels, adjudication, or LLM-assisted curation |
+| [`proposition-schema.md`](./proposition-schema.md) | Authoring proposition entities, evidence metadata, or layered-claim fields |
+| [`research-package-rendering.md`](./research-package-rendering.md) | Rendering research packages and source routes in web experiences |
+| [`research-package-spec.md`](./research-package-spec.md) | Defining research-package manifests, cells, provenance, and workflow integration |
+
 ## Source Hierarchy
 
 When researching a topic or summarizing a paper, use this priority order:
@@ -85,35 +97,8 @@ Hypotheses in this project follow a structured format (see the framework `hypoth
 - Note the **evidence type** when possible: literature, empirical-data, simulation, benchmark
 - Track **residual uncertainty** explicitly, especially for single-source or indirect support
 
-When the project uses layered-claim metadata:
-
-- use `claim_layer` only when the authored proposition really needs that distinction
-- treat `identification_strength` as an evidence-design label, not as confidence
-- keep `measurement_model` separate from the concrete `observation`
-- do not promote mechanistic prose into `mechanistic_narrative` unless the supporting lower-layer structure is explicit
-- if rival models are genuinely in play, prefer a bounded `rival_model_packet` over free-form prose comparison
-- treat `current_working_model` as optional; do not invent one just to satisfy a schema
-
-### Allowed enum values
-
-These fields are strict enums. **Do not invent values** — if no listed value fits, drop the field and explain in `measurement_model.rationale` or `known_failure_modes` instead.
-
-- **`claim_layer`** — what kind of claim is this?
-  - `empirical_regularity` — observed pattern in data (a correlation, a frequency, a trend)
-  - `causal_effect` — claim about a causal effect of one variable on another
-  - `mechanistic_narrative` — proposed mechanism story; requires linked lower-layer support
-  - `structural_claim` — claim about graph topology, model structure, or definitional scaffolding
-- **`identification_strength`** — how much causal leverage does this evidence carry *in the target system*?
-  - `none` — no causal handle (descriptive only)
-  - `structural` — derived from network/model structure or theory, not data
-  - `observational` — observational study, association adjusted for confounders
-  - `longitudinal` — within-subject change over time
-  - `interventional` — perturbation in the target system
-  - `analogical` — interventional in a *model* system, extrapolated to target by analogy
-- **`proxy_directness`** — `direct` | `indirect` | `derived`
-- **`supports_scope`** — `local_proposition` | `hypothesis_bundle` | `cross_hypothesis` | `project_wide`
-
-Methodological scaffolding (analysis methods, definitional/framework material, historical context) usually does **not** belong as a `proposition`. Use `method:`, `topic:`, or `discussion:` entity types instead — those don't require enum classification.
+For the strict enum values, layered-claim metadata semantics, and proposition
+entity types, see [`proposition-schema.md`](./proposition-schema.md).
 
 ## Evidence Classification
 
@@ -197,3 +182,10 @@ For terminology and modeling details, see `docs/proposition-and-evidence-model.m
 ## Template Usage
 
 All research documents must follow their corresponding framework template unless the project defines a specific override in `.ai/templates/`. Read the relevant template before writing. The template sections are not optional — fill every section, even if briefly.
+
+## Companion Skills
+
+- [`annotation-curation-qa.md`](annotation-curation-qa.md) - structured extraction, adjudication, and label QA.
+- [`proposition-schema.md`](proposition-schema.md) - strict proposition/evidence enums and claim-layer field semantics.
+- [`research-package-rendering.md`](research-package-rendering.md) - rendered research packages and source routes for web experiences.
+- [`research-package-spec.md`](research-package-spec.md) - Frictionless-style research package schema and workflow integration.

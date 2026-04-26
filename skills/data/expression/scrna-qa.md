@@ -1,3 +1,8 @@
+---
+name: data-expression-scrna-qa
+description: Use when ingesting or QA-reviewing single-cell RNA-Seq cohorts, especially before pseudobulk meta-analysis or cell-type composition claims.
+---
+
 # Single-Cell RNA-Seq QA
 
 Practical QA pipeline for scRNA-seq data, with emphasis on what goes
@@ -214,9 +219,18 @@ When the depositor's filter cannot be reversed (raw FASTQ unavailable),
 state the filter as a known limitation in any pre-registration or
 manuscript.
 
+## Halt-On Conditions
+
+- The depositor's filter is a cell-type subset and the original cell universe cannot be reconstructed.
+- Doublet calls are absent and the tool or threshold used by the depositor is unknown.
+- Ambient-correction status is unknown for biology that depends on low-expression marker genes.
+- Per-batch median UMI differs by more than 2x and no batch covariate is available.
+
 ## Output: a per-cohort QA package
 
 A reasonable QA artifact for each ingested cohort:
+
+Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../frictionless.md).
 
 ```
 data/processed/<cohort_id>/
@@ -233,3 +247,9 @@ data/processed/<cohort_id>/
 This artifact is sufficient for downstream analyses to inherit the
 QA without re-deriving it, and for reviewers to audit the
 preprocessing without rerunning anything.
+
+## Companion Skills
+
+- [`SKILL.md`](SKILL.md) - expression-data hub conventions for cross-platform cohort QA.
+- [`../../statistics/compositional-data.md`](../../statistics/compositional-data.md) - cell fractions, donor-level composition, and denominator choices.
+- [`../../statistics/power-floor-acknowledgement.md`](../../statistics/power-floor-acknowledgement.md) - donor-level power floors and cell-n inflation checks.

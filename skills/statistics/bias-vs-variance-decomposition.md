@@ -1,3 +1,8 @@
+---
+name: statistics-bias-vs-variance-decomposition
+description: Use when choosing estimators, replicate counts, correction terms, simulation designs, or sensitivity analyses where stochastic noise and systematic error could be confused.
+---
+
 # Bias vs Variance Decomposition
 
 Use when choosing estimators, replicate counts, correction terms, simulation
@@ -83,3 +88,9 @@ Include:
 
 If the analysis cannot separate bias from signal, report the result as
 confounded or measurement-limited rather than as a clean null or clean support.
+
+## Companion Skills
+
+- [`replicate-count-justification.md`](replicate-count-justification.md) - algorithmic replicate variance and resampling-count decisions.
+- [`sensitivity-arbitration.md`](sensitivity-arbitration.md) - verdict downgrades when bias diagnostics disagree.
+- [`power-floor-acknowledgement.md`](power-floor-acknowledgement.md) - independent-unit precision limits that cannot be repaired by more computation.

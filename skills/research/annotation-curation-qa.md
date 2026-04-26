@@ -1,3 +1,8 @@
+---
+name: research-annotation-curation-qa
+description: Use when creating or auditing curated labels, extracted claims, taxonomy/facet assignments, model annotations, literature-derived tables, or LLM-assisted annotation workflows.
+---
+
 # Annotation and Curation QA
 
 Use when creating or auditing curated labels, extracted claims, taxonomy/facet
@@ -63,7 +68,15 @@ when one class dominates; report both and inspect the confusion matrix.
 - **Circular validation.** Labels extracted from project prose are used to prove
   the project prose is correct.
 
+## Halt-On Conditions
+
+- Schema version is not recorded.
+- Fewer than two annotators reviewed items used for verdict-bearing analysis.
+- Calibration set is missing for LLM-assisted annotation runs.
+
 ## Minimum Artifacts
+
+Generate a `datapackage.json` for this directory; see [`../data/frictionless.md`](../data/frictionless.md).
 
 ```
 data/processed/<curation_task>/
@@ -90,3 +103,8 @@ Report:
 - adjudication rule,
 - fraction uncertain or excluded,
 - downstream analyses that depend on fragile labels.
+
+## Companion Skills
+
+- [`SKILL.md`](SKILL.md) - research-methodology and citation-discipline conventions.
+- [`../statistics/sensitivity-arbitration.md`](../statistics/sensitivity-arbitration.md) - verdict handling when curated labels or adjudication choices change results.

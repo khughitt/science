@@ -1,3 +1,8 @@
+---
+name: statistics-sensitivity-arbitration
+description: Use when an analysis includes multiple robustness checks, alternate operationalisations, filters, covariate sets, priors, models, or negative controls whose results could change interpretation.
+---
+
 # Sensitivity Arbitration
 
 Use when an analysis includes multiple robustness checks, alternate
@@ -83,3 +88,9 @@ Include:
 - result of each sensitivity,
 - final verdict label produced mechanically by the rule,
 - post-hoc analyses clearly separated from pre-committed arbitration.
+
+## Companion Skills
+
+- [`power-floor-acknowledgement.md`](power-floor-acknowledgement.md) - determining whether a null sensitivity can arbitrate.
+- [`survival-and-hierarchical-models.md`](survival-and-hierarchical-models.md) - diagnostics for model adequacy and grouped data.
+- [`compositional-data.md`](compositional-data.md) - sensitivity rules for denominator, zero-handling, and basis choices.

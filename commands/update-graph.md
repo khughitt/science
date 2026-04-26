@@ -4,7 +4,7 @@ description: Re-audit and re-materialize the knowledge graph after canonical sou
 
 # Update Knowledge Graph
 
-> **Prerequisite:** Load the `knowledge-graph` skill before starting.
+> **Prerequisite:** Read `docs/specs/2026-03-01-knowledge-graph-design.md` and `docs/proposition-and-evidence-model.md` before starting.
 
 ## Overview
 

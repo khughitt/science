@@ -1,4 +1,9 @@
-# Research Provenance
+---
+name: research-package-spec
+description: Use when defining or reviewing research-package provenance, manifests, evidence tables, and reproducibility metadata.
+---
+
+# Research Package Specification
 
 > Note: See `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` for the v2.2 unified dataset model: `data-package` → `research-package` rename, dataset entities now carry `origin: external | derived` discriminator.
 
@@ -102,3 +107,9 @@ chart.save("results/figures/kappa-by-theme.vl.json")
 ```
 
 The `.vl.json` files are copied into the package's `figures/` directory and referenced via `vegalite` cells.
+
+## Companion Skills
+
+- [`../data/frictionless.md`](../data/frictionless.md) - Frictionless descriptor conventions reused by research packages.
+- [`../pipelines/snakemake.md`](../pipelines/snakemake.md) - terminal workflow rules that build and validate packages.
+- [`proposition-schema.md`](proposition-schema.md) - proposition and evidence entity semantics used by package provenance.

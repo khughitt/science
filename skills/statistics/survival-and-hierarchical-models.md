@@ -1,3 +1,8 @@
+---
+name: statistics-survival-and-hierarchical-models
+description: Use when designing or reviewing Cox, Weibull, AFT, frailty, mixed-effects, Bayesian hierarchical, or multi-dataset causal models.
+---
+
 # Survival and Hierarchical Models
 
 Use when designing or reviewing Cox, Weibull, accelerated-failure-time,
@@ -95,6 +100,8 @@ Report:
 
 ## Minimum Artifacts
 
+Generate a `datapackage.json` for this directory; see [`../data/frictionless.md`](../data/frictionless.md).
+
 ```
 results/<analysis>/model_qa/
 |-- input_manifest.json
@@ -111,3 +118,9 @@ results/<analysis>/model_qa/
 The summary should state the independent unit, grouping structure, diagnostics
 that failed, and any verdict downgrade caused by censoring, non-PH,
 non-identifiability, divergences, or sensitivity disagreement.
+
+## Companion Skills
+
+- [`sensitivity-arbitration.md`](sensitivity-arbitration.md) - pre-committed verdict rules for model diagnostics and sensitivity runs.
+- [`power-floor-acknowledgement.md`](power-floor-acknowledgement.md) - independent-unit power floors for survival and hierarchical models.
+- [`compositional-data.md`](compositional-data.md) - denominator and zero-handling rules for fraction-valued model inputs.

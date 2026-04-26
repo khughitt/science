@@ -12,6 +12,9 @@ silent-failure modes that look plausible until they invalidate downstream
 inference. This skill collects the patterns and minimum-viable QA checks
 that prevent the most common landmines.
 
+For analysis-readiness planning, start at [`../../INDEX.md`](../../INDEX.md) or
+run `science-plan-analysis`.
+
 ## Three modalities, three QA mindsets
 
 The three platform families share much of the QA toolkit but differ in
@@ -155,11 +158,12 @@ preprocessing. The choice cascades.
 - Writing the data section of a methods paper or preprint.
 - Reviewing someone else's preprocessing pipeline.
 
-## Companion skills
+## Companion Skills
 
 - [`../SKILL.md`](../SKILL.md) — generic data-management conventions.
 - [`../frictionless.md`](../frictionless.md) — Frictionless Data Package
   format for the cohort_audit / preprocessing-provenance sidecars.
+- [`../genomics/SKILL.md`](../genomics/SKILL.md) — mutation cohorts often paired with expression cohorts.
 - [`../../statistics/SKILL.md`](../../statistics/SKILL.md) — statistical
   decisions that depend on data characteristics (count vs continuous,
   zero-inflation, etc.).

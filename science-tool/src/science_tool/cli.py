@@ -85,6 +85,7 @@ from science_tool.prose import scan_prose
 from science_tool.refs_cli import refs_group
 from science_tool.research_package.cli import research_package_group
 from science_tool.verdict.cli import verdict_group
+from science_tool.skills_lint import skills_group
 
 
 @click.group()
@@ -176,6 +177,7 @@ main.add_command(research_package_group)
 main.add_command(verdict_group)
 main.add_command(big_picture_group)
 main.add_command(refs_group)
+main.add_command(skills_group)
 
 
 @main.group()
