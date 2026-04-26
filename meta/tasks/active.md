@@ -111,3 +111,27 @@ The new `science_tool.tasks_archive` module (Plan #6, 2026-04-25) reads + re-emi
 Add regression tests in `science-tool/tests/test_tasks.py` covering each writer (`add_task`, `complete_task`, `defer_task`, `retire_task`, `edit_task`) round-tripping a file with a non-empty preamble. The `tasks_archive` test fixtures show the canonical preamble shape (text before `## [`).
 
 Surfaced by: code-review pass on `docs/plans/2026-04-25-tasks-auto-archive.md` 2026-04-25 (master rollout follow-on action #3).
+
+## [t008] Validator: warn on inline-dict synthesized_from items
+- priority: P3
+- status: proposed
+- aspects: [software-development]
+- related: []
+- created: 2026-04-25
+
+Per the 2026-04-25 synthesis-shape investigation Q2, the canonical form for `synthesized_from:` items in `type: synthesis` + `report_kind: synthesis-rollup` files is **block-list** (one field per line):
+
+```yaml
+synthesized_from:
+  - hypothesis: "hypothesis:<slug>"
+    file: "doc/reports/synthesis/<slug>.md"
+    sha: "<SHA>"
+```
+
+The inline-dict form (`synthesized_from: [{hypothesis: "...", file: "...", sha: "..."}]`) is deprecated. Currently `meta/validate.sh` § 11a only checks for the presence of the `synthesized_from:` field, not item shape.
+
+Extend the validator (both `meta/validate.sh` and `scripts/validate.sh` per the lockstep convention) to warn (not error) when `synthesized_from:` items are inline-dict shape on a `report_kind: synthesis-rollup` file. Use the warn severity (matches surrounding validator conventions per the master rollout plan).
+
+Add a regression test in `science-tool/tests/test_validate_script.py` covering the inline-dict warn case + the block-list silent case + the absent-field skip case.
+
+Surfaced by: `docs/audits/downstream-project-conventions/synthesis-shape-investigation-2026-04-25.md` Q2 resolution.
