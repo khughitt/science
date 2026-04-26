@@ -238,3 +238,93 @@ def update_cmd(
     click.echo(f"  backup: {result.backup}")
     if result.migrated_steps:
         click.echo(f"  migration steps: {', '.join(result.migrated_steps)}")
+
+
+@artifacts_group.command("pin")
+@click.argument("name")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=str),
+    default=".",
+)
+@click.option("--rationale", required=True, help="Why this pin exists.")
+@click.option("--revisit-by", required=True, help="ISO date YYYY-MM-DD.")
+@click.option("--allow-dirty", is_flag=True, help="Permit pinning under dirty worktree.")
+@click.option("--no-commit", is_flag=True, help="Skip commit emission.")
+def pin_cmd(
+    name: str,
+    project_root: str,
+    rationale: str,
+    revisit_by: str,
+    allow_dirty: bool,
+    no_commit: bool,
+) -> None:
+    """Pin NAME to its installed version in this project."""
+    import subprocess
+    from pathlib import Path
+
+    from science_tool.project_artifacts.hashing import body_hash
+    from science_tool.project_artifacts.header import parse_header
+    from science_tool.project_artifacts.pin import PinAlreadyExists, add_pin
+    from science_tool.project_artifacts.registry_schema import Pin
+    from science_tool.project_artifacts.worktree import (
+        dirty_paths,
+        in_git_repo,
+        is_clean,
+        paths_intersect,
+    )
+
+    registry = default_registry()
+    art = next((a for a in registry.artifacts if a.name == name), None)
+    if art is None:
+        raise click.ClickException(f"no managed artifact named {name!r} in the registry")
+
+    project = Path(project_root)
+    target = project / art.install_target
+    if not target.exists():
+        raise click.ClickException(f"no installed file at {target}; install before pinning")
+
+    # Worktree check (touched: science.yaml only).
+    if in_git_repo(project) and not is_clean(project):
+        if not allow_dirty:
+            raise click.ClickException(
+                "refusing to pin: dirty worktree (use --allow-dirty if science.yaml is the only conflict)"
+            )
+        conflicts = paths_intersect(["science.yaml"], dirty_paths(project))
+        if conflicts:
+            raise click.ClickException("--allow-dirty path conflict on: science.yaml")
+
+    file_bytes = target.read_bytes()
+    parsed = parse_header(file_bytes, art.header_protocol)
+    if parsed is None:
+        raise click.ClickException(f"installed {target} has no managed header; cannot determine pin version")
+    pinned_hash = body_hash(file_bytes, art.header_protocol)
+
+    pin = Pin(
+        name=art.name,
+        pinned_to=parsed.version,
+        pinned_hash=pinned_hash,
+        rationale=rationale,
+        revisit_by=revisit_by,
+    )
+    try:
+        add_pin(project, pin)
+    except PinAlreadyExists as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if not no_commit and in_git_repo(project):
+        subprocess.run(["git", "add", "science.yaml"], cwd=project, check=True)
+        subprocess.run(
+            [
+                "git",
+                "commit",
+                "-q",
+                "-m",
+                f"chore(artifacts): pin {art.name} to {parsed.version}",
+            ],
+            cwd=project,
+            check=True,
+        )
+        click.echo(f"pinned {art.name} to {parsed.version} (committed)")
+    else:
+        click.echo(f"pinned {art.name} to {parsed.version}")
