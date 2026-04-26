@@ -63,7 +63,7 @@ Do not modify:
 
 The existing `apply_rule_report_id_prefix` is the template. Each new rule reuses `RuleResult` / `FileChange` / `_split_frontmatter` / `_record_line_changes` / `_tracked_markdown` and follows the same dry-run-by-default contract. Each rule must be idempotent on re-apply.
 
-- [ ] **Step 1: Add `synthesis-type-mm30`.**
+- [x] **Step 1: Add `synthesis-type-mm30`.**
 
 Targets: `<project_root>/doc/reports/synthesis/*.md` (per-hypothesis files) and `<project_root>/doc/reports/synthesis.md` (rollup) where `type: "report"`. Two passes:
 
@@ -78,7 +78,7 @@ Targets: `<project_root>/doc/reports/synthesis/*.md` (per-hypothesis files) and 
 
 The existing `_DATE_SLUG` regex is general-purpose; per-hypothesis file slugs are NOT date-prefixed (they are `h1-foo`, `h01-bar`, etc.), so use a permissive slug regex `[A-Za-z0-9_-]+` for this rule's mentions. Add a fixture in the self-test for both shapes (rollup id, per-hyp id) and assert idempotence.
 
-- [ ] **Step 2: Add `synthesis-type-pl-emergent-threads`.**
+- [x] **Step 2: Add `synthesis-type-pl-emergent-threads`.**
 
 Targets: `<project_root>/doc/reports/synthesis/_emergent-threads.md`. This is a single-file rule. One pass:
 
@@ -86,7 +86,7 @@ Targets: `<project_root>/doc/reports/synthesis/_emergent-threads.md`. This is a 
 
 If the file already declares `type: "synthesis"` + `report_kind: "emergent-threads"` + an `id:`, the rule is a no-op. The self-test must cover both pre- and post-migration shapes.
 
-- [ ] **Step 3: Add `synthesis-report-kind-pl-hyp`.**
+- [x] **Step 3: Add `synthesis-report-kind-pl-hyp`.**
 
 Targets: `<project_root>/doc/reports/synthesis/h*.md` (per-hypothesis) where `type: "synthesis"` is already in place but `report_kind:` is absent. One pass:
 
@@ -94,7 +94,7 @@ Targets: `<project_root>/doc/reports/synthesis/h*.md` (per-hypothesis) where `ty
 
 The self-test fixture must include one file with `report_kind:` already present (no-op) and one without (rewrite).
 
-- [ ] **Step 4: Add `pre-registration-type`.**
+- [x] **Step 4: Add `pre-registration-type`.**
 
 Targets: any markdown under `<project_root>/doc/meta/pre-registration-*.md` and `<project_root>/doc/pre-registrations/*.md` where `type: "plan"` AND `id:` starts with `pre-registration:`. One pass:
 
@@ -102,7 +102,7 @@ Targets: any markdown under `<project_root>/doc/meta/pre-registration-*.md` and 
 
 Files where `type: "plan"` AND `id:` starts with anything else (e.g. natural-systems' `id: "plan:pre-registration-<slug>"` shape) are NOT rewritten by this rule — they need the type-promotion AND a separate id rewrite, which is the domain of migration #6 (manual review required because the id-strip is not mechanical when the slug embedding differs).
 
-- [ ] **Step 5: Add `natural-systems-pre-reg-frontmatter` (report-only).**
+- [x] **Step 5: Add `natural-systems-pre-reg-frontmatter` (report-only).**
 
 Targets: `<project_root>/doc/meta/pre-registration-*.md` where the frontmatter lacks `id:` AND/OR `type:`. The audit found 3 files in this shape (NS).
 
@@ -110,19 +110,19 @@ This rule does NOT rewrite. It produces a `RuleResult` whose `changes` list is t
 
 Output shape: `RuleResult.changes` carries a synthetic `kind="manual-suggested"` entry per file with `before` = current FM, `after` = a recommended FM block leaving `committed:` and `spec:` as `<TODO>` placeholders. Operator runs the rule, copies suggestions, fills in `<TODO>` values, applies manually.
 
-- [ ] **Step 6: Update CLI help and `RULES` registry.**
+- [x] **Step 6: Update CLI help and `RULES` registry.**
 
 Update the module docstring's "Rules" section and the `RULES` dict to register all five new rules. Verify `--help` lists them.
 
-- [ ] **Step 7: Self-test all rules.**
+- [x] **Step 7: Self-test all rules.**
 
 Run `uv run scripts/migrate_downstream_conventions.py --self-test`. Self-test must cover dry-run, apply, and idempotence for every new rule using the existing tempdir-fixture pattern. Each new rule gets its own fixture + assertions.
 
-- [ ] **Step 8: Lint & format.**
+- [x] **Step 8: Lint & format.**
 
 `uv run --frozen ruff check scripts/migrate_downstream_conventions.py` and `uv run --frozen ruff format scripts/migrate_downstream_conventions.py`. No new pyright errors.
 
-- [ ] **Step 9: Commit.**
+- [x] **Step 9: Commit.**
 
 `git commit -m "feat(scripts): add five canonical-shape rules to migrate_downstream_conventions"`.
 
