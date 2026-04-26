@@ -10,6 +10,8 @@ dependencies = [
   "rdflib>=7.0",
   "pyyaml>=6.0",
   "jsonschema>=4.0",
+  "pydantic>=2.0",
+  "ruamel.yaml>=0.17",
   "science-model",
   "ruff>=0.15.6",
 ]
@@ -39,6 +41,8 @@ packages = ["src/science_tool"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/science_tool/dag/edges.schema.json" = "science_tool/dag/edges.schema.json"
+"src/science_tool/project_artifacts/registry.yaml" = "science_tool/project_artifacts/registry.yaml"
+"src/science_tool/project_artifacts/data" = "science_tool/project_artifacts/data"
 
 [tool.uv.sources]
 science-model = { path = "../science-model", editable = true }

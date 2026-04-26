@@ -188,6 +188,8 @@ class HealthReport(TypedDict):
     legacy_structured_literature_prefixes: list["LegacyStructuredLiteraturePrefixFinding"]
     dataset_anomalies: list[dict]
     archive_lag: TaskArchiveLag
+    managed_artifacts: list[dict]
+    total_issues: int
 
 
 class CoverageMetric(TypedDict):
@@ -260,27 +262,62 @@ def build_health_report(project_root: Path) -> HealthReport:
 
     archive_lag = count_archivable(project_root / "tasks")
 
+    from science_tool.project_artifacts.health_integration import health_findings as _ma_findings
+
+    managed_artifacts = _ma_findings(project_root)
+
+    unresolved_refs = collect_unresolved_refs(project_root)
+    lingering_tags_lines = collect_lingering_tags(project_root)
+    legacy_structured_literature_prefixes = collect_legacy_structured_literature_prefixes(project_root)
+    dataset_anomalies = check_dataset_anomalies(project_root)
+
+    layered_claim_issue_count = len(migration_issues) + len(rival_model_gaps)
+    coverage_gaps = 0
+    proposition_coverage = _coverage_metric(
+        numerator=sum(1 for entity in proposition_entities if entity.claim_layer is not None),
+        denominator=len(proposition_entities),
+    )
+    causal_coverage = _coverage_metric(
+        numerator=sum(1 for row in causal_leaning_rows if row["authored_identification_strength"] is not None),
+        denominator=len(causal_leaning_rows),
+    )
+    for metric in (proposition_coverage, causal_coverage):
+        if metric["denominator"] > 0 and metric["numerator"] < metric["denominator"]:
+            coverage_gaps += 1
+
+    archive_lag_total = (
+        archive_lag["done_in_active"] + archive_lag["retired_in_active"] + archive_lag["missing_completed"]
+    )
+
+    total_issues = (
+        len(unresolved_refs)
+        + len(lingering_tags_lines)
+        + len(identity_policy_findings)
+        + len(legacy_structured_literature_prefixes)
+        + layered_claim_issue_count
+        + coverage_gaps
+        + len(dataset_anomalies)
+        + (1 if archive_lag_total else 0)
+        + sum(1 for f in managed_artifacts if f["counts_as_issue"])
+    )
+
     return {
-        "unresolved_refs": collect_unresolved_refs(project_root),
-        "lingering_tags_lines": collect_lingering_tags(project_root),
+        "unresolved_refs": unresolved_refs,
+        "lingering_tags_lines": lingering_tags_lines,
         "identity_policy": identity_policy_findings,
         "layered_claims": {
-            "proposition_claim_layer_coverage": _coverage_metric(
-                numerator=sum(1 for entity in proposition_entities if entity.claim_layer is not None),
-                denominator=len(proposition_entities),
-            ),
-            "causal_leaning_identification_coverage": _coverage_metric(
-                numerator=sum(1 for row in causal_leaning_rows if row["authored_identification_strength"] is not None),
-                denominator=len(causal_leaning_rows),
-            ),
+            "proposition_claim_layer_coverage": proposition_coverage,
+            "causal_leaning_identification_coverage": causal_coverage,
             "rival_model_packets_missing_discriminating_predictions": rival_model_gaps,
             "migration_issues": migration_issues,
         },
         "legacy_task_type": collect_legacy_task_type(project_root),
         "invalid_entity_aspects": collect_invalid_entity_aspects(project_root),
-        "legacy_structured_literature_prefixes": collect_legacy_structured_literature_prefixes(project_root),
-        "dataset_anomalies": check_dataset_anomalies(project_root),
+        "legacy_structured_literature_prefixes": legacy_structured_literature_prefixes,
+        "dataset_anomalies": dataset_anomalies,
         "archive_lag": cast("TaskArchiveLag", archive_lag),
+        "managed_artifacts": cast("list[dict]", managed_artifacts),
+        "total_issues": total_issues,
     }
 
 

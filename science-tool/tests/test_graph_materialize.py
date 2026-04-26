@@ -351,7 +351,11 @@ def test_materialize_graph_emits_mechanism_participants_and_propositions(tmp_pat
     proposition_uri = PROJECT_NS["proposition/anti-coupling"]
 
     assert (mechanism_uri, RDF.type, SCI.Mechanism) in knowledge
-    assert (mechanism_uri, SCHEMA.description, Literal("Translation and cell-state programs move in opposite directions.")) in knowledge
+    assert (
+        mechanism_uri,
+        SCHEMA.description,
+        Literal("Translation and cell-state programs move in opposite directions."),
+    ) in knowledge
     assert (mechanism_uri, SCI.hasParticipant, translation_uri) in knowledge
     assert (mechanism_uri, SCI.hasParticipant, cell_state_uri) in knowledge
     assert (mechanism_uri, SCI.hasProposition, proposition_uri) in knowledge

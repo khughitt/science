@@ -107,6 +107,20 @@ Scan pipeline plans in `doc/plans/` for implementation tasks that are not tracke
 
 If `archive_lag.missing_completed` is non-zero, call those entries out separately so the user backfills `completed:` first — otherwise they route to the current month rather than the month they were actually closed.
 
+### Managed artifact updates
+
+If `science-tool health` shows any managed artifact with status `stale`, surface as a next-step:
+
+> Update `<artifact-name>` from version `<from>` → `<to>`. Run:
+>
+> ```bash
+> science-tool project artifacts update <artifact-name>
+> ```
+>
+> If a migration step ships with the bump, the CLI will surface it interactively.
+
+If status is `locally_modified` or `missing`, point at the corresponding verb (`install` / `update --force --yes`).
+
 ### 3c-bis. Stale Task Status Detection (mandatory)
 
 Before recommending next actions, audit task status against on-disk evidence. For each task in `tasks/active.md` with status `proposed`, `blocked`, or `in_progress`, check whether the work appears already done by scanning for any of:

@@ -7,7 +7,12 @@ from pathlib import Path
 
 
 def _validate_script_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "scripts" / "validate.sh"
+    # Target the canonical validate.sh shipped with science-tool. The
+    # repo-root scripts/validate.sh is a thin shim that delegates to
+    # `science-tool project artifacts exec validate.sh`; these tests
+    # exercise the canonical's failure handling directly to avoid a
+    # fragile dependency on `uv` being on PATH inside the test sandbox.
+    return Path(__file__).resolve().parents[1] / "src" / "science_tool" / "project_artifacts" / "data" / "validate.sh"
 
 
 def _write_common_files(root: Path, profile: str) -> None:
@@ -131,20 +136,22 @@ def _hypothesis_body(phase_line: str) -> str:
     ]
     if phase_line:
         fm_lines.append(phase_line)
-    fm_lines.extend([
-        "source_refs: []",
-        "related: []",
-        'created: "2026-04-25"',
-        'updated: "2026-04-25"',
-        "---",
-        "",
-        "# Hypothesis: Test",
-        "",
-        "## Falsifiability",
-        "",
-        "Some falsifiability prose.",
-        "",
-    ])
+    fm_lines.extend(
+        [
+            "source_refs: []",
+            "related: []",
+            'created: "2026-04-25"',
+            'updated: "2026-04-25"',
+            "---",
+            "",
+            "# Hypothesis: Test",
+            "",
+            "## Falsifiability",
+            "",
+            "Some falsifiability prose.",
+            "",
+        ]
+    )
     return "\n".join(fm_lines)
 
 
@@ -167,19 +174,21 @@ def _pre_registration_body(
         fm_lines.append(f'committed: "{committed}"')
     if spec is not None:
         fm_lines.append(f'spec: "{spec}"')
-    fm_lines.extend([
-        "related: []",
-        'created: "2026-04-25"',
-        'updated: "2026-04-25"',
-        "---",
-        "",
-        "# Pre-registration: Test",
-        "",
-        "## Hypotheses Under Test\n\nh01.\n",
-        "## Expected Outcomes\n\nSomething.\n",
-        "## Decision Criteria\n\nThreshold X.\n",
-        "## Null Result Plan\n\nFallback Y.\n",
-    ])
+    fm_lines.extend(
+        [
+            "related: []",
+            'created: "2026-04-25"',
+            'updated: "2026-04-25"',
+            "---",
+            "",
+            "# Pre-registration: Test",
+            "",
+            "## Hypotheses Under Test\n\nh01.\n",
+            "## Expected Outcomes\n\nSomething.\n",
+            "## Decision Criteria\n\nThreshold X.\n",
+            "## Null Result Plan\n\nFallback Y.\n",
+        ]
+    )
     return "\n".join(fm_lines)
 
 
@@ -548,20 +557,22 @@ def test_validate_accepts_synthesis_rollup_full(tmp_path: Path) -> None:
     _write_minimal_research_project(tmp_path)
     (tmp_path / "doc" / "reports").mkdir(parents=True, exist_ok=True)
     (tmp_path / "doc" / "reports" / "synthesis.md").write_text(
-        _synthesis_body({
-            "id": "synthesis:rollup",
-            "type": "synthesis",
-            "report_kind": "synthesis-rollup",
-            "generated_at": "2026-04-25T00:00:00Z",
-            "source_commit": "0" * 40,
-            "synthesized_from": [
-                {
-                    "hypothesis": "hypothesis:h01-test",
-                    "file": "doc/reports/synthesis/h01-test.md",
-                    "sha": "1" * 40,
-                }
-            ],
-        }),
+        _synthesis_body(
+            {
+                "id": "synthesis:rollup",
+                "type": "synthesis",
+                "report_kind": "synthesis-rollup",
+                "generated_at": "2026-04-25T00:00:00Z",
+                "source_commit": "0" * 40,
+                "synthesized_from": [
+                    {
+                        "hypothesis": "hypothesis:h01-test",
+                        "file": "doc/reports/synthesis/h01-test.md",
+                        "sha": "1" * 40,
+                    }
+                ],
+            }
+        ),
         encoding="utf-8",
     )
     result = subprocess.run(
@@ -582,15 +593,17 @@ def test_validate_accepts_hypothesis_synthesis(tmp_path: Path) -> None:
     _write_minimal_research_project(tmp_path)
     (tmp_path / "doc" / "reports" / "synthesis").mkdir(parents=True, exist_ok=True)
     (tmp_path / "doc" / "reports" / "synthesis" / "h01-test.md").write_text(
-        _synthesis_body({
-            "id": "synthesis:h01-test",
-            "type": "synthesis",
-            "report_kind": "hypothesis-synthesis",
-            "generated_at": "2026-04-25T00:00:00Z",
-            "source_commit": "0" * 40,
-            "hypothesis": "hypothesis:h01-test",
-            "provenance_coverage": "full",
-        }),
+        _synthesis_body(
+            {
+                "id": "synthesis:h01-test",
+                "type": "synthesis",
+                "report_kind": "hypothesis-synthesis",
+                "generated_at": "2026-04-25T00:00:00Z",
+                "source_commit": "0" * 40,
+                "hypothesis": "hypothesis:h01-test",
+                "provenance_coverage": "full",
+            }
+        ),
         encoding="utf-8",
     )
     result = subprocess.run(
@@ -611,16 +624,18 @@ def test_validate_accepts_emergent_threads(tmp_path: Path) -> None:
     _write_minimal_research_project(tmp_path)
     (tmp_path / "doc" / "reports" / "synthesis").mkdir(parents=True, exist_ok=True)
     (tmp_path / "doc" / "reports" / "synthesis" / "_emergent-threads.md").write_text(
-        _synthesis_body({
-            "id": "synthesis:emergent-threads",
-            "type": "synthesis",
-            "report_kind": "emergent-threads",
-            "generated_at": "2026-04-25T00:00:00Z",
-            "source_commit": "0" * 40,
-            "orphan_question_count": 0,
-            "orphan_interpretation_count": 0,
-            "orphan_ids": [],
-        }),
+        _synthesis_body(
+            {
+                "id": "synthesis:emergent-threads",
+                "type": "synthesis",
+                "report_kind": "emergent-threads",
+                "generated_at": "2026-04-25T00:00:00Z",
+                "source_commit": "0" * 40,
+                "orphan_question_count": 0,
+                "orphan_interpretation_count": 0,
+                "orphan_ids": [],
+            }
+        ),
         encoding="utf-8",
     )
     result = subprocess.run(
@@ -642,13 +657,15 @@ def test_validate_warns_on_rollup_missing_synthesized_from(tmp_path: Path) -> No
     _write_minimal_research_project(tmp_path)
     (tmp_path / "doc" / "reports").mkdir(parents=True, exist_ok=True)
     (tmp_path / "doc" / "reports" / "synthesis.md").write_text(
-        _synthesis_body({
-            "id": "synthesis:rollup",
-            "type": "synthesis",
-            "report_kind": "synthesis-rollup",
-            "generated_at": "2026-04-25T00:00:00Z",
-            "source_commit": "0" * 40,
-        }),
+        _synthesis_body(
+            {
+                "id": "synthesis:rollup",
+                "type": "synthesis",
+                "report_kind": "synthesis-rollup",
+                "generated_at": "2026-04-25T00:00:00Z",
+                "source_commit": "0" * 40,
+            }
+        ),
         encoding="utf-8",
     )
     result = subprocess.run(
@@ -667,13 +684,15 @@ def test_validate_warns_on_invalid_report_kind(tmp_path: Path) -> None:
     _write_minimal_research_project(tmp_path)
     (tmp_path / "doc" / "reports" / "synthesis").mkdir(parents=True, exist_ok=True)
     (tmp_path / "doc" / "reports" / "synthesis" / "weird.md").write_text(
-        _synthesis_body({
-            "id": "synthesis:weird",
-            "type": "synthesis",
-            "report_kind": "rollup",  # invalid
-            "generated_at": "2026-04-25T00:00:00Z",
-            "source_commit": "0" * 40,
-        }),
+        _synthesis_body(
+            {
+                "id": "synthesis:weird",
+                "type": "synthesis",
+                "report_kind": "rollup",  # invalid
+                "generated_at": "2026-04-25T00:00:00Z",
+                "source_commit": "0" * 40,
+            }
+        ),
         encoding="utf-8",
     )
     result = subprocess.run(
@@ -693,15 +712,17 @@ def test_validate_no_warn_on_per_hyp_without_synthesized_from(tmp_path: Path) ->
     _write_minimal_research_project(tmp_path)
     (tmp_path / "doc" / "reports" / "synthesis").mkdir(parents=True, exist_ok=True)
     (tmp_path / "doc" / "reports" / "synthesis" / "h01-test.md").write_text(
-        _synthesis_body({
-            "id": "synthesis:h01-test",
-            "type": "synthesis",
-            "report_kind": "hypothesis-synthesis",
-            "generated_at": "2026-04-25T00:00:00Z",
-            "source_commit": "0" * 40,
-            "hypothesis": "hypothesis:h01-test",
-            "provenance_coverage": "full",
-        }),
+        _synthesis_body(
+            {
+                "id": "synthesis:h01-test",
+                "type": "synthesis",
+                "report_kind": "hypothesis-synthesis",
+                "generated_at": "2026-04-25T00:00:00Z",
+                "source_commit": "0" * 40,
+                "hypothesis": "hypothesis:h01-test",
+                "provenance_coverage": "full",
+            }
+        ),
         encoding="utf-8",
     )
     result = subprocess.run(
@@ -722,12 +743,14 @@ def test_validate_silent_on_legacy_type_report(tmp_path: Path) -> None:
     _write_minimal_research_project(tmp_path)
     (tmp_path / "doc" / "reports" / "synthesis").mkdir(parents=True, exist_ok=True)
     (tmp_path / "doc" / "reports" / "synthesis" / "h1-legacy.md").write_text(
-        _synthesis_body({
-            "id": "report:synthesis-h1-legacy",
-            "type": "report",
-            "report_kind": "hypothesis-synthesis",
-            "generated_at": "2026-04-25T00:00:00Z",
-        }),
+        _synthesis_body(
+            {
+                "id": "report:synthesis-h1-legacy",
+                "type": "report",
+                "report_kind": "hypothesis-synthesis",
+                "generated_at": "2026-04-25T00:00:00Z",
+            }
+        ),
         encoding="utf-8",
     )
     result = subprocess.run(
@@ -746,8 +769,13 @@ def test_validate_silent_on_legacy_type_report(tmp_path: Path) -> None:
     assert "missing provenance_coverage" not in combined, combined
 
 
-def _next_steps_body(date: str, *, prior: str | None = None, prior_analyses: list[str] | None = None,
-                     prior_analyses_inline: str | None = None) -> str:
+def _next_steps_body(
+    date: str,
+    *,
+    prior: str | None = None,
+    prior_analyses: list[str] | None = None,
+    prior_analyses_inline: str | None = None,
+) -> str:
     """Compose a minimal next-steps file body. The four section headings keep
     the existing section-9 conformance check happy.
     """
@@ -762,29 +790,32 @@ def _next_steps_body(date: str, *, prior: str | None = None, prior_analyses: lis
     if prior is not None:
         lines.append(f'prior: "{prior}"')
     if prior_analyses_inline is not None:
-        lines.append(f'prior_analyses: {prior_analyses_inline}')
+        lines.append(f"prior_analyses: {prior_analyses_inline}")
     elif prior_analyses is not None:
         lines.append("prior_analyses:")
         for entry in prior_analyses:
             lines.append(f'  - "{entry}"')
-    lines.extend([
-        "related: []",
-        "---",
-        "",
-        f"# Next Steps — {date}",
-        "",
-        "## Recent Progress\n\nProgress.\n",
-        "## Current State\n\nState.\n",
-        "## Coverage Gaps\n\nGaps.\n",
-        "## Recommended Next Actions\n\nActions.\n",
-    ])
+    lines.extend(
+        [
+            "related: []",
+            "---",
+            "",
+            f"# Next Steps — {date}",
+            "",
+            "## Recent Progress\n\nProgress.\n",
+            "## Current State\n\nState.\n",
+            "## Coverage Gaps\n\nGaps.\n",
+            "## Recommended Next Actions\n\nActions.\n",
+        ]
+    )
     return "\n".join(lines)
 
 
 def test_validate_resolves_prior_by_entity_id(tmp_path: Path) -> None:
     _write_minimal_research_project(tmp_path)
     (tmp_path / "doc" / "meta" / "next-steps-2026-04-20.md").write_text(
-        _next_steps_body("2026-04-20"), encoding="utf-8",
+        _next_steps_body("2026-04-20"),
+        encoding="utf-8",
     )
     (tmp_path / "doc" / "meta" / "next-steps-2026-04-25.md").write_text(
         _next_steps_body("2026-04-25", prior="meta:next-steps-2026-04-20"),
@@ -805,7 +836,8 @@ def test_validate_resolves_prior_by_entity_id(tmp_path: Path) -> None:
 def test_validate_resolves_prior_by_path(tmp_path: Path) -> None:
     _write_minimal_research_project(tmp_path)
     (tmp_path / "doc" / "meta" / "next-steps-2026-04-20.md").write_text(
-        _next_steps_body("2026-04-20"), encoding="utf-8",
+        _next_steps_body("2026-04-20"),
+        encoding="utf-8",
     )
     (tmp_path / "doc" / "meta" / "next-steps-2026-04-25.md").write_text(
         _next_steps_body("2026-04-25", prior="doc/meta/next-steps-2026-04-20.md"),
@@ -845,7 +877,8 @@ def test_validate_warns_on_broken_prior_link(tmp_path: Path) -> None:
 def test_validate_silent_when_prior_absent(tmp_path: Path) -> None:
     _write_minimal_research_project(tmp_path)
     (tmp_path / "doc" / "meta" / "next-steps-2026-04-25.md").write_text(
-        _next_steps_body("2026-04-25"), encoding="utf-8",
+        _next_steps_body("2026-04-25"),
+        encoding="utf-8",
     )
     result = subprocess.run(
         ["bash", str(_validate_script_path())],
@@ -863,7 +896,8 @@ def test_validate_silent_when_prior_absent(tmp_path: Path) -> None:
 def test_validate_accepts_prior_analyses_variant_inline(tmp_path: Path) -> None:
     _write_minimal_research_project(tmp_path)
     (tmp_path / "doc" / "meta" / "next-steps-2026-04-20.md").write_text(
-        _next_steps_body("2026-04-20"), encoding="utf-8",
+        _next_steps_body("2026-04-20"),
+        encoding="utf-8",
     )
     (tmp_path / "doc" / "meta" / "next-steps-2026-04-25.md").write_text(
         _next_steps_body(
@@ -888,7 +922,8 @@ def test_validate_accepts_prior_analyses_variant_block_list(tmp_path: Path) -> N
     """Load-bearing test — protein-landscape ships this exact shape."""
     _write_minimal_research_project(tmp_path)
     (tmp_path / "doc" / "meta" / "next-steps-2026-04-12.md").write_text(
-        _next_steps_body("2026-04-12"), encoding="utf-8",
+        _next_steps_body("2026-04-12"),
+        encoding="utf-8",
     )
     (tmp_path / "doc" / "meta" / "next-steps-2026-04-19.md").write_text(
         _next_steps_body(

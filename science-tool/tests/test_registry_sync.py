@@ -6,7 +6,13 @@ from pathlib import Path
 from science_model.identity import EntityScope, ExternalId
 from science_model.entities import EntityType, ProjectEntity
 
-from science_tool.registry.index import RegistryEntity, RegistryEntitySource, RegistryIndex, load_registry_index, save_registry_index
+from science_tool.registry.index import (
+    RegistryEntity,
+    RegistryEntitySource,
+    RegistryIndex,
+    load_registry_index,
+    save_registry_index,
+)
 from science_tool.registry.sync import SyncReport, align_registry, collect_all_project_sources, run_sync
 
 

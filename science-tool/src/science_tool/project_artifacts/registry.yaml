@@ -1,0 +1,41 @@
+# science-tool/src/science_tool/project_artifacts/registry.yaml
+# Managed-artifact registry — capabilities matrices.
+# See docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md.
+artifacts:
+  - name: validate.sh
+    source: data/validate.sh
+    install_target: validate.sh
+    description: Structural validation for Science research projects.
+    content_type: text
+    newline: lf
+    mode: '0755'
+    consumer: direct_execute
+    header_protocol:
+      kind: shebang_comment
+      comment_prefix: '#'
+    extension_protocol:
+      kind: sourced_sidecar
+      sidecar_path: validate.local.sh
+      hook_namespace: SCIENCE_VALIDATE_HOOKS
+      contract: |
+        Sidecar registers hooks via `register_validation_hook <hook> <fn>`;
+        canonical sources sidecar BEFORE validation runs and dispatches at
+        named hook points (see canonical body for current hook names).
+    mutation_policy:
+      requires_clean_worktree: true
+      commit_default: true
+      transaction_kind: temp_commit
+    version: '2026.04.26.1'
+    current_hash: 31ca36b395f4714842b2263844fe924f73ce1bb922bc3fb002ee6dc25d5ed8f4
+    previous_hashes:
+      - version: '2026.04.26'
+        hash: f4596de3e9b2696066097621d5aef5606f247d144c5530409433427949c830d1
+    migrations:
+      - from: '2026.04.26'
+        to: '2026.04.26.1'
+        kind: byte_replace
+        summary: 'Audit-surfaced six-fix batch (Plan #7).'
+        steps: []
+    changelog:
+      '2026.04.26': Initial managed artifact (port of scripts/validate.sh + hook infrastructure).
+      '2026.04.26.1': 'Audit-surfaced six-fix batch (Plan #7 of conventions audit).'

@@ -15,6 +15,17 @@ between projects.
 2. Run `science-tool sync status` to check current sync state.
 3. Run `science-tool sync projects` to list registered projects.
 
+### Pre-sync managed-artifact check
+
+Before performing project sync operations, query `science-tool health` for any managed artifact whose status is not `current` or `pinned`. If any are found, surface a warning at the top of sync output:
+
+> ⚠️  N managed artifact(s) require attention:
+> - `<artifact-name>`: `<status>` — `<detail>`
+>
+> Sync proceeds; consider `science-tool project artifacts update` after sync completes.
+
+The warning does NOT block sync; it surfaces alongside other top-of-sync warnings.
+
 ## Execution
 
 Run the sync:

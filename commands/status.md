@@ -124,6 +124,18 @@ Flag:
   If `archive_lag.missing_completed` is non-zero, call out that those entries need a
   `completed:` date backfilled before archiving so they route to the correct month.
 
+### Managed artifacts
+
+If `science-tool health` reports any managed artifact whose status is not `current` (or `pinned`), surface it:
+
+- `<artifact-name>: <status>` — `<detail>`
+  - For `stale`: "Run `science-tool project artifacts update <name>` to refresh."
+  - For `locally_modified`: "Run `science-tool project artifacts diff <name>` to inspect; `update --force --yes` to overwrite."
+  - For `missing`: "Run `science-tool project artifacts install <name>` to install."
+  - For `pinned_but_locally_modified`: "Pin no longer protects what was pinned. Run `diff` then either `update --force --yes` or `unpin`."
+
+The list comes from the `managed_artifacts` field of the health report.
+
 **Cross-project sync staleness:**
 
 Run `science-tool sync status` to check when the last cross-project sync was performed.

@@ -97,6 +97,8 @@ These were settled by the user during this session. A future orchestrator should
 
 `docs/plans/2026-04-25-managed-artifact-versioning.md` exists but is not yet executed. Once MAV merges, Plan #7 (the audit-surfaced `mav-input` set addendum) can be dispatched. After Plan #7 lands, downstream projects can `science-tool project artifacts update validate.sh` to pull the canonical with the audit-surfaced fixes. This is the largest open thread that genuinely depends on prior work landing first.
 
+> Addressed by `docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md`.
+
 ### 2. Bucket C design session
 
 Four P1s explicitly deferred for user-in-the-loop design:

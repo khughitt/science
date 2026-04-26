@@ -286,9 +286,15 @@ For `software` projects:
 
 Create the canonical document taxonomy and add a minimal overview/plan starter where appropriate.
 
-### `validate.sh`
+### Install the managed validator
 
-Copy the validation script from `${CLAUDE_PLUGIN_ROOT}/scripts/validate.sh` and make it executable.
+After scaffolding the project, install Science's managed `validate.sh`:
+
+```bash
+science-tool project artifacts install validate.sh --project-root <project-path>
+```
+
+This drops the canonical `validate.sh` into the project root with the managed header. To stay current on future Science releases, run `science-tool project artifacts check validate.sh` periodically (or rely on `science-tool health` to surface drift).
 
 ### Prompts And Templates
 
