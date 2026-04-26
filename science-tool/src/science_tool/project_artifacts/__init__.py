@@ -1,8 +1,24 @@
 """Managed-artifact lifecycle for Science projects.
 
 See docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md.
-Public API will be filled in as implementation lands. Importing the package
-loads and validates the registry (see Task 3).
 """
 
-__all__: list[str] = []
+from science_tool.project_artifacts.loader import (
+    RegistryLoadError,
+    load_packaged_registry,
+    load_registry,
+)
+from science_tool.project_artifacts.registry_schema import Registry
+
+
+def default_registry() -> Registry:
+    """Return the packaged registry. Validates at import time on first call."""
+    return load_packaged_registry()
+
+
+__all__ = [
+    "Registry",
+    "RegistryLoadError",
+    "default_registry",
+    "load_registry",
+]
