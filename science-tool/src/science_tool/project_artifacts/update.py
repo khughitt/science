@@ -6,12 +6,18 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from science_tool.project_artifacts.migrations import run_migration
 from science_tool.project_artifacts.migrations.transaction import (
     ManifestSnapshot,
     TempCommitSnapshot,
 )
 from science_tool.project_artifacts.paths import canonical_path
-from science_tool.project_artifacts.registry_schema import Artifact, Pin, TransactionKind
+from science_tool.project_artifacts.registry_schema import (
+    Artifact,
+    MigrationKind,
+    Pin,
+    TransactionKind,
+)
 from science_tool.project_artifacts.status import Status, classify_full
 from science_tool.project_artifacts.worktree import (
     dirty_paths,
@@ -89,7 +95,22 @@ def update_artifact(
     snapshot.take()
 
     try:
-        # 4. Byte-replace + write .pre-update.bak.
+        # 4. Run any project_action migrations targeting the version we're upgrading TO.
+        migrated_step_ids: list[str] = []
+        for entry in artifact.migrations:
+            if entry.to_version != artifact.version:
+                continue
+            if entry.kind is MigrationKind.PROJECT_ACTION and entry.steps:
+                mig_result = run_migration(entry.steps, project_root, snapshot, auto_apply=auto_apply)
+                if not mig_result.all_succeeded:
+                    failure = next((s for s in mig_result.steps if s.action == "failed"), None)
+                    raise UpdateError(
+                        f"migration step {failure.step_id if failure else '?'!r} failed: "
+                        f"{failure.detail if failure else '(unknown)'}"
+                    )
+                migrated_step_ids.extend(s.step_id for s in mig_result.steps if s.action == "applied")
+
+        # 5. Byte-replace + write .pre-update.bak.
         backup = target.with_suffix(target.suffix + ".pre-update.bak")
         if target.exists():
             shutil.copy(target, backup)
@@ -97,14 +118,20 @@ def update_artifact(
         shutil.copy(canonical_path(artifact.name), target)
         target.chmod(int(artifact.mode, 8))
 
-        # 5. Commit.
+        # 6. Commit.
         committed = False
         from_version = classified.detail.split()[-1] if classified.status is Status.STALE else None
-        commit_message = (
-            f"chore(artifacts): refresh {artifact.name} to {artifact.version}\n\n"
-            f"From: {from_version or 'unknown'}\n"
-            f"To:   {artifact.version}\n"
-        )
+        commit_lines = [
+            f"chore(artifacts): refresh {artifact.name} to {artifact.version}",
+            "",
+            f"From: {from_version or 'unknown'}",
+            f"To:   {artifact.version}",
+        ]
+        if migrated_step_ids:
+            commit_lines.append("")
+            commit_lines.append(f"Migrated steps: {', '.join(migrated_step_ids)}")
+        commit_message = "\n".join(commit_lines) + "\n"
+
         if no_commit or not artifact.mutation_policy.commit_default:
             snapshot.discard(commit_message=None)
         else:
@@ -120,8 +147,12 @@ def update_artifact(
             to_version=artifact.version,
             backup=backup,
             committed=committed,
-            migrated_steps=[],
+            migrated_steps=migrated_step_ids,
         )
     except Exception:
         snapshot.restore()
+        # On migration failure, ensure no leftover backup is visible.
+        backup = target.with_suffix(target.suffix + ".pre-update.bak")
+        if backup.exists():
+            backup.unlink()
         raise
