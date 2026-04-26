@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.04.26.2
-# science-managed-source-sha256: 9d6a34869403411d42cefd0fb7f6a2e433320329d2e8f2da244c2171878eb136
+# science-managed-version: 2026.04.26.3
+# science-managed-source-sha256: 37aaefd4a45a70987d663f261bc82f4b8714088999a3a2ef30a27af95b2d499a
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -841,7 +841,7 @@ else
             if [ -z "$block" ]; then
                 block=$(sed -n "/^## \[${tid}\]/,\$p" "$TASKS_DIR/active.md")
             fi
-            for field in type priority status created; do
+            for field in aspects priority status created; do
                 if ! echo "$block" | grep -qP "^- ${field}:" 2>/dev/null; then
                     error "task ${tid} missing required field: ${field}"
                 fi
