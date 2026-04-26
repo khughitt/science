@@ -254,6 +254,13 @@ def test_project_bootstrap_docs_cover_science_tool_install_contract(
         assert expected in text
 
 
+@pytest.mark.parametrize("path", ["commands/create-project.md", "commands/import-project.md"])
+def test_project_bootstrap_docs_ignore_managed_artifact_update_backups(path: str) -> None:
+    text = _read(path)
+
+    assert "*.pre-update*.bak" in text
+
+
 @pytest.mark.parametrize(
     ("path", "legacy_strings"),
     [

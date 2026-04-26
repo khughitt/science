@@ -244,6 +244,44 @@ def test_validate_accepts_software_profile_without_research_code_roots(tmp_path:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_validate_summary_counts_broken_xref_warnings(tmp_path: Path) -> None:
+    _write_common_files(tmp_path, "software")
+    _write_python3_stub(tmp_path / "bin")
+    _write_science_tool_stub(tmp_path / "bin")
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "src").mkdir(parents=True)
+    (tmp_path / "tests").mkdir(parents=True)
+    (tmp_path / "doc" / "questions" / "broken-xref.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "question:broken-xref"',
+                'type: "question"',
+                'related: ["question:missing"]',
+                "---",
+                "",
+                "# Broken xref",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    combined = result.stdout + result.stderr
+    assert result.returncode == 0, combined
+    assert "Broken reference in broken-xref.md: related ID 'question:missing' not found" in combined
+    assert "PASSED with 1 warning(s)" in combined
+
+
 def test_validate_fails_when_science_tool_is_missing(tmp_path: Path) -> None:
     _write_common_files(tmp_path, "software")
     _write_python3_stub(tmp_path / "bin")

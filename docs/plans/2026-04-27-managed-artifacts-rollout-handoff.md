@@ -24,6 +24,14 @@ Projects (each repo):
 
 ## Follow-ups
 
+### Progress update — 2026-04-26
+
+Completed in `managed-artifacts-followups`:
+
+- **(1)** Canonical `validate.sh` warning counter now keeps xref warning increments in the parent shell. Bumped `validate.sh` to v2026.04.26.4 with a byte-replace migration record.
+- **(4)** Updated the TempCommitSnapshot implementation-plan literal to match shipped `restore()` / `discard()` behavior, including idempotent restore.
+- **(5)** Added `*.pre-update*.bak` to create/import `.gitignore` guidance and matching Codex skill copies.
+
 ### Framework-side
 
 1. **`warn`-inside-`while`-subshell counter loss in canonical.** The xref-result loop pipes into `while IFS=: read ...; do warn "..."; done`. The subshell increments `WARNINGS`, but the value is lost when the subshell exits. Effect: the summary undercounts (e.g., protein-landscape's run shows `10 warnings` but ~224 `meta:` warns are emitted to stdout). Exit code is unaffected. Fix: rework the loop with process substitution `done < <(echo "$xref_result")` to keep the increment in the parent shell. Single canonical bump (v2026.04.26.4); same byte_replace migration shape as the prior bumps.
