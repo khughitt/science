@@ -10,6 +10,18 @@ in Science projects. The principles here apply across disciplines wherever
 a quantitative claim is being made; the examples are drawn from
 bioinformatics + meta-analysis but generalize.
 
+## Leaves
+
+| Leaf | Use when |
+|---|---|
+| [`replicate-count-justification.md`](./replicate-count-justification.md) | Choosing R for bootstrap, permutation, Monte Carlo, downsampling, or MCMC |
+| [`bias-vs-variance-decomposition.md`](./bias-vs-variance-decomposition.md) | Naming which error term shrinks with more data vs more replicates vs better estimator |
+| [`power-floor-acknowledgement.md`](./power-floor-acknowledgement.md) | Before interpreting a null, weak, or boundary result |
+| [`sensitivity-arbitration.md`](./sensitivity-arbitration.md) | Pre-committing the rule for resolving disagreement among robustness checks |
+| [`prereg-amendment-vs-fresh.md`](./prereg-amendment-vs-fresh.md) | Deciding whether a follow-up needs a fresh pre-reg or an amendment |
+| [`survival-and-hierarchical-models.md`](./survival-and-hierarchical-models.md) | Cox / Weibull / mixed-effects / Bayesian hierarchical models |
+| [`compositional-data.md`](./compositional-data.md) | Proportions, fractions, deconvolution outputs, microbiome relative abundance |
+
 ## Principles
 
 1. **Lock parameters by measurement, not convention.** Anywhere you would
