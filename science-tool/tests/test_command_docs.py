@@ -137,6 +137,41 @@ def test_command_docs_use_explicit_framework_resolution(
         assert expected in text
 
 
+def test_plan_analysis_command_defines_methodology_readiness_workflow() -> None:
+    text = _read("commands/plan-analysis.md")
+
+    expected_strings = (
+        "${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md",
+        "${CLAUDE_PLUGIN_ROOT}/skills/INDEX.md",
+        "doc/plans/YYYY-MM-DD-<slug>-analysis-plan.md",
+        "type: analysis-plan",
+        "skills_loaded:",
+        "Readiness Decision",
+        "ready-with-caveats",
+        "science-tool feedback add",
+        '--target "command:plan-analysis"',
+    )
+    for expected in expected_strings:
+        assert expected in text
+
+
+def test_plan_analysis_command_covers_pressure_scenarios() -> None:
+    text = _read("commands/plan-analysis.md")
+
+    expected_strings = (
+        "MM30 scRNA pseudobulk / entropy analysis",
+        "cBioPortal targeted-panel mutation frequency or dN/dS analysis",
+        "Natural-systems annotation/curation agreement analysis",
+        "Protein-landscape heldout benchmark or embedding-manifold analysis",
+        "data-expression-scrna-qa",
+        "data-genomics-somatic-mutation-qa",
+        "research-annotation-curation-qa",
+        "data-protein-sequence-structure-qa",
+    )
+    for expected in expected_strings:
+        assert expected in text
+
+
 @pytest.mark.parametrize(
     ("path", "expected_strings"),
     [
