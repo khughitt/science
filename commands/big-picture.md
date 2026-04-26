@@ -139,6 +139,8 @@ The frontmatter follows the canonical synthesis shape documented in `templates/s
 
 Frontmatter:
 
+The block-list form (one field per line) is canonical — see Plan #4 follow-on for the resolved Q2 in `docs/audits/downstream-project-conventions/synthesis-shape-investigation-2026-04-25.md`. The inline-dict form `[{...}]` is deprecated.
+
 ```yaml
 ---
 id: "synthesis:rollup"
@@ -147,7 +149,9 @@ report_kind: "synthesis-rollup"
 generated_at: "<ISO-8601>"
 source_commit: "<SHA>"
 synthesized_from:
-  - { hypothesis: "<hyp-id>", file: "doc/reports/synthesis/<hyp-id>.md", sha: "<SHA>" }
+  - hypothesis: "hypothesis:<hyp-id>"
+    file: "doc/reports/synthesis/<hyp-id>.md"
+    sha: "<SHA>"
   # one entry per hypothesis
 emergent_threads_sha: "<SHA>"
 orphan_question_count: <int>
