@@ -282,6 +282,58 @@ def test_validate_summary_counts_broken_xref_warnings(tmp_path: Path) -> None:
     assert "PASSED with 1 warning(s)" in combined
 
 
+def test_validate_resolves_root_specs_in_frontmatter_xrefs(tmp_path: Path) -> None:
+    _write_common_files(tmp_path, "software")
+    _write_python3_stub(tmp_path / "bin")
+    _write_science_tool_stub(tmp_path / "bin")
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "src").mkdir(parents=True)
+    (tmp_path / "tests").mkdir(parents=True)
+    (tmp_path / "specs" / "research-question.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "spec:research-question"',
+                'type: "spec"',
+                "---",
+                "",
+                "# Research Question",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "doc" / "questions" / "root-spec-xref.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "question:root-spec-xref"',
+                'type: "question"',
+                'related: ["spec:research-question"]',
+                "---",
+                "",
+                "# Root spec xref",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    combined = result.stdout + result.stderr
+    assert result.returncode == 0, combined
+    assert "Broken reference in root-spec-xref.md: related ID 'spec:research-question' not found" not in combined
+    assert "PASSED: all checks clean" in combined
+
+
 def test_validate_fails_when_science_tool_is_missing(tmp_path: Path) -> None:
     _write_common_files(tmp_path, "software")
     _write_python3_stub(tmp_path / "bin")

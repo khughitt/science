@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.04.26.4
-# science-managed-source-sha256: 79d1d8ae81457ac67f9fe3a588332630db9d589612d4888bf115395a6ffd4d4c
+# science-managed-version: 2026.04.26.5
+# science-managed-source-sha256: 87b571ea042e804dee44fce39a1b3336e6c50be041d07ddc3c5c0a0c5389d2df
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -943,7 +943,7 @@ fi
 echo ""
 echo "Checking frontmatter cross-references..."
 
-xref_result=$(XREF_SPECS="$SPECS_DIR/hypotheses" XREF_DOC="$DOC_DIR" XREF_TASKS="$TASKS_DIR" XREF_ENTITIES="$LOCAL_PROFILE_DIR/entities.yaml" python3 << 'PYEOF'
+xref_result=$(XREF_SPECS="$SPECS_DIR" XREF_DOC="$DOC_DIR" XREF_TASKS="$TASKS_DIR" XREF_ENTITIES="$LOCAL_PROFILE_DIR/entities.yaml" python3 << 'PYEOF'
 import os, re
 
 try:
