@@ -1,9 +1,22 @@
 ---
 name: statistics-replicate-count-justification
 description: Use when choosing the number of replicates for stochastic estimators (bootstrap, permutation, Monte Carlo, downsampling, MCMC) and you would otherwise pick a round-number default.
+type: deep-reference
 ---
 
 # Replicate-Count Justification
+
+## TL;DR
+
+Lock replicate count R from a measured pilot, not a tutorial default.
+
+- **Point estimators:** smallest R such that `SE_replicates(R) / SD_signal <= theta` (default theta = 0.20).
+- **Permutation/MC p-values:** smallest B such that minimum-attainable p < target alpha and `p_hat +/- 2*MCSE` cannot cross the decision boundary.
+- **MCMC:** R-hat / ESS, not the ratio rule. `R-hat ~= 1.00`, ESS adequate for tail probabilities used in the verdict.
+- **Multiple imputation:** Rubin's `T = V_within + (1+1/m)*V_between`.
+
+The rest of this file is the long-form derivation, worked examples, and
+gotchas. Skim the TL;DR; read the body when designing the pilot.
 
 How to choose the number of replicates (R) for stochastic estimators
 without falling back to "1000 because that's what the tutorial said".

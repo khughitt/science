@@ -40,6 +40,18 @@ def test_missing_description_returns_issue() -> None:
     assert issues[0].field == "description"
 
 
+def test_deep_reference_type_is_valid() -> None:
+    issues = check_frontmatter(FIXTURES / "good-deep-reference.md")
+    assert issues == []
+
+
+def test_invalid_type_returns_issue() -> None:
+    issues = check_frontmatter(FIXTURES / "bad-invalid-type.md")
+    assert len(issues) == 1
+    assert issues[0].kind == "invalid-field"
+    assert issues[0].field == "type"
+
+
 def test_missing_companion_skills_section_returns_issue() -> None:
     issues = check_companion_skills(FIXTURES / "bad-no-companion-skills.md")
     assert any(issue.kind == "missing-section" and issue.detail == "Companion Skills" for issue in issues)
@@ -85,11 +97,13 @@ def test_lint_cli_against_fixtures(tmp_path: Path) -> None:
     assert "bad-no-frontmatter.md" in result.output
     assert "bad-missing-name.md" in result.output
     assert "bad-missing-description.md" in result.output
+    assert "bad-invalid-type.md" in result.output
     assert "bad-no-companion-skills.md" in result.output
     assert "bad-broken-relative-link.md" in result.output
     assert "data/functional-genomics-qa.md" in result.output
     assert "good.md" not in result.output
     assert "good-with-companion.md" not in result.output
+    assert "good-deep-reference.md" not in result.output
     assert "data/embeddings-manifold-qa.md" not in result.output
 
 

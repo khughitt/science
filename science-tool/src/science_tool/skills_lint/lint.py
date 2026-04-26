@@ -35,6 +35,7 @@ class SkillIssue:
 
 
 REQUIRED_FIELDS = ("name", "description")
+VALID_SKILL_TYPES = {"skill", "deep-reference"}
 MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
 HALT_ON_REQUIRED = {
     "data/embeddings-manifold-qa.md",
@@ -68,6 +69,9 @@ def check_frontmatter(path: Path) -> list[SkillIssue]:
     for field in REQUIRED_FIELDS:
         if not parsed.get(field):
             issues.append(SkillIssue(path, "missing-field", field=field))
+    skill_type = parsed.get("type", "skill")
+    if skill_type not in VALID_SKILL_TYPES:
+        issues.append(SkillIssue(path, "invalid-field", field="type", detail=str(skill_type)))
     return issues
 
 
