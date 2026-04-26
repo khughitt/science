@@ -56,3 +56,17 @@ def test_discard_is_noop(tmp_path: Path) -> None:
     target.write_text("y", encoding="utf-8")
     snap.discard(commit_message="ignored")
     assert target.read_text(encoding="utf-8") == "y"  # discard does not restore
+
+
+def test_restore_is_idempotent(tmp_path: Path) -> None:
+    target = tmp_path / "a.txt"
+    target.write_text("orig", encoding="utf-8")
+    snap = ManifestSnapshot(tmp_path, touched_paths=[Path("a.txt")])
+    snap.take()
+    target.write_text("mod", encoding="utf-8")
+    snap.restore()
+    assert target.read_text(encoding="utf-8") == "orig"
+    # Second restore must not raise; covers update.update_artifact's
+    # outer-except path that runs after run_migration already restored.
+    snap.restore()
+    assert target.read_text(encoding="utf-8") == "orig"

@@ -27,6 +27,7 @@ class TempCommitSnapshot:
         self.repo_root = repo_root
         self._snapshot_sha: str | None = None
         self._original_head: str | None = None
+        self._consumed = False
 
     def _git(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -51,6 +52,8 @@ class TempCommitSnapshot:
         self._snapshot_sha = self._git("rev-parse", "HEAD").stdout.strip()
 
     def restore(self) -> None:
+        if self._consumed:
+            return
         if self._snapshot_sha is None or self._original_head is None:
             raise RuntimeError("snapshot not taken; cannot restore")
         # Hard-reset to the snapshot: HEAD/index/worktree all at snap-tree,
@@ -62,8 +65,11 @@ class TempCommitSnapshot:
         # Move HEAD back to the original commit so the temp snapshot commit
         # is no longer reachable; index + worktree stay at snap content.
         self._git("reset", "--soft", self._original_head)
+        self._consumed = True
 
     def discard(self, *, commit_message: str | None = None) -> None:
+        if self._consumed:
+            raise RuntimeError("snapshot already restored or discarded")
         if self._snapshot_sha is None or self._original_head is None:
             raise RuntimeError("snapshot not taken; cannot discard")
         # Move HEAD back to original; index stays at snap-tree, worktree
@@ -73,6 +79,7 @@ class TempCommitSnapshot:
             # Stage the migration's mutations on top of the pre-take index.
             self._git("add", "-A")
             self._git("commit", "-q", "-m", commit_message)
+        self._consumed = True
 
 
 class ManifestSnapshot:
@@ -86,6 +93,7 @@ class ManifestSnapshot:
         self.repo_root = repo_root
         self.touched_paths = list(touched_paths)
         self._tempdir: Path | None = None
+        self._consumed = False
         # For each declared path, store (rel, source_existed, copy_path|None).
         self._captured: list[tuple[Path, bool, Path | None]] = []
 
@@ -102,6 +110,8 @@ class ManifestSnapshot:
                 self._captured.append((rel, False, None))
 
     def restore(self) -> None:
+        if self._consumed:
+            return
         if self._tempdir is None:
             raise RuntimeError("snapshot not taken; cannot restore")
         for rel, existed, copy in self._captured:
@@ -113,11 +123,15 @@ class ManifestSnapshot:
             elif target.exists():
                 target.unlink()
         self._cleanup()
+        self._consumed = True
 
     def discard(self, *, commit_message: str | None = None) -> None:
+        if self._consumed:
+            raise RuntimeError("snapshot already restored or discarded")
         # No-op for manifest snapshots; the canonical commit (if any) is the
         # caller's responsibility.
         self._cleanup()
+        self._consumed = True
 
     def _cleanup(self) -> None:
         if self._tempdir is not None and self._tempdir.exists():

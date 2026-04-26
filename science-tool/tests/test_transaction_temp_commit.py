@@ -62,3 +62,19 @@ def test_restore_after_failed_apply(tmp_path: Path) -> None:
     snap.restore()
     assert (tmp_path / "a.txt").read_text(encoding="utf-8") == "orig"
     assert not (tmp_path / "b.txt").exists()
+
+
+def test_restore_is_idempotent(tmp_path: Path) -> None:
+    """Calling restore() twice is a no-op the second time.
+
+    Covers update.update_artifact's outer-except path: run_migration already
+    restored on step failure, then update's except handler restores again.
+    """
+    _init_repo(tmp_path)
+    snap = TempCommitSnapshot(tmp_path)
+    snap.take()
+    (tmp_path / "a.txt").write_text("partial", encoding="utf-8")
+    snap.restore()
+    assert (tmp_path / "a.txt").read_text(encoding="utf-8") == "orig"
+    snap.restore()
+    assert (tmp_path / "a.txt").read_text(encoding="utf-8") == "orig"
