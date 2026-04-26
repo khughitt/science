@@ -5,8 +5,8 @@ description: Sketch a research model interactively as an inquiry subgraph — va
 # Sketch a Research Model
 
 > **Prerequisites:**
-> - Load the `knowledge-graph` skill for ontology reference before starting.
-> - If causal mode is active: also load the `causal-dag` skill.
+> - Read `docs/proposition-and-evidence-model.md` and `docs/specs/2026-03-01-knowledge-graph-design.md` for ontology reference before starting.
+> - If causal mode is active: also read `references/dag-two-axis-evidence-model.md` and `docs/specs/2026-03-07-phase4b-causal-dag-design.md`.
 
 ## Overview
 

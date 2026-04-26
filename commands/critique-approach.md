@@ -4,7 +4,7 @@ description: Critically review a causal DAG inquiry for missing confounders, ide
 
 # Critique a Causal Approach
 
-> **Prerequisite:** Load the `knowledge-graph` and `causal-dag` skills for ontology and causal modeling reference.
+> **Prerequisite:** Read `docs/proposition-and-evidence-model.md`, `docs/specs/2026-03-01-knowledge-graph-design.md`, `references/dag-two-axis-evidence-model.md`, and `docs/specs/2026-03-07-phase4b-causal-dag-design.md` for ontology and causal modeling reference.
 
 ## Overview
 
@@ -29,7 +29,7 @@ For brevity, examples write just `science-tool <command>` — **always expand to
 - **MUST** assess identifiability (can the target effect be estimated from observables?)
 - **MUST** write review report to `doc/inquiries/<slug>-critique.md`
 - **MUST NOT** dismiss concerns as "minor" or "unlikely" — surface all issues
-- **SHOULD** reference the causal-dag skill for pitfall patterns
+- **SHOULD** reference `references/dag-two-axis-evidence-model.md` for pitfall patterns
 
 ## Workflow
 

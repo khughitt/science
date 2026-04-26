@@ -4,7 +4,7 @@ description: Formalize a research model with explicit claims, evidence provenanc
 
 # Specify a Research Model
 
-> **Prerequisite:** Load the `knowledge-graph` skill for ontology reference before starting.
+> **Prerequisite:** Read `docs/proposition-and-evidence-model.md` and `docs/specs/2026-03-01-knowledge-graph-design.md` for ontology reference before starting.
 
 ## Overview
 

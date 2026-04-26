@@ -107,7 +107,7 @@ Gather or infer:
 2. Tags
 3. Aspects
 4. Data sources
-5. Knowledge-graph usage (`knowledge_profiles`)
+5. Knowledge graph usage (`knowledge_profiles`)
 
 If the target profile is `research`, also gather:
 

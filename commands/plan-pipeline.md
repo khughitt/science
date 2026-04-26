@@ -5,7 +5,7 @@ description: Generate a computational implementation plan from an inquiry — pi
 # Plan Pipeline from Inquiry
 
 > **Prerequisites:**
-> - Load the `knowledge-graph` skill for ontology reference
+> - Read `docs/proposition-and-evidence-model.md` and `docs/specs/2026-03-01-knowledge-graph-design.md` for ontology reference
 > - Load the `research-methodology` skill for evidence standards
 
 ## Overview

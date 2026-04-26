@@ -68,7 +68,7 @@ Before executing any research command:
    `uv run --with <science-plugin-root>/science-tool science-tool <command>`
 
 > **Prerequisites:**
-> - Load the `knowledge-graph` skill for ontology reference
+> - Read `docs/proposition-and-evidence-model.md` and `docs/specs/2026-03-01-knowledge-graph-design.md` for ontology reference
 > - Load the `research-methodology` skill for evidence standards
 
 ## Overview
