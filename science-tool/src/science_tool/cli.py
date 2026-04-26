@@ -80,6 +80,7 @@ from science_tool.big_picture.cli import big_picture_group
 from science_tool.curate.cli import curate_group
 from science_tool.dag.cli import dag_group
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows
+from science_tool.project_artifacts.cli import artifacts_group as _artifacts_group
 from science_tool.prose import scan_prose
 from science_tool.refs_cli import refs_group
 from science_tool.research_package.cli import research_package_group
@@ -2305,6 +2306,9 @@ def tasks_summary() -> None:
 @main.group()
 def project() -> None:
     """Project-level commands."""
+
+
+project.add_command(_artifacts_group)
 
 
 @project.command("index")
