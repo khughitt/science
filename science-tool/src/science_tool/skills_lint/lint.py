@@ -37,6 +37,7 @@ class SkillIssue:
 REQUIRED_FIELDS = ("name", "description")
 VALID_SKILL_TYPES = {"skill", "deep-reference"}
 MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
+INLINE_CODE_RE = re.compile(r"`([^`]+\.md)`")
 HALT_ON_REQUIRED = {
     "data/embeddings-manifold-qa.md",
     "data/functional-genomics-qa.md",
@@ -106,6 +107,21 @@ def check_relative_links(path: Path) -> list[SkillIssue]:
     return issues
 
 
+def check_index_coverage(root: Path) -> list[SkillIssue]:
+    index_path = root / "INDEX.md"
+    if not index_path.is_file():
+        return [SkillIssue(Path("INDEX.md"), "missing-index-entry", detail="INDEX.md")]
+
+    indexed_paths = _collect_indexed_paths(index_path.read_text(encoding="utf-8"))
+    issues: list[SkillIssue] = []
+    for path in sorted(root.rglob("*.md")):
+        relative_path = path.relative_to(root).as_posix()
+        if relative_path == "INDEX.md" or relative_path in indexed_paths:
+            continue
+        issues.append(SkillIssue(Path("INDEX.md"), "missing-index-entry", detail=relative_path))
+    return issues
+
+
 def check_skills(root: Path) -> list[SkillIssue]:
     issues: list[SkillIssue] = []
     for path in sorted(root.rglob("*.md")):
@@ -113,6 +129,7 @@ def check_skills(root: Path) -> list[SkillIssue]:
         issues.extend(_relative_issues(check_companion_skills(path), root))
         issues.extend(_relative_issues(check_halt_on_conditions(path, root), root))
         issues.extend(_relative_issues(check_relative_links(path), root))
+    issues.extend(check_index_coverage(root))
     return issues
 
 
@@ -120,6 +137,30 @@ def _is_relative_markdown_path(target: str) -> bool:
     if target.startswith(("#", "/", "http://", "https://", "mailto:")):
         return False
     return target.split("#", 1)[0].endswith(".md")
+
+
+def _collect_indexed_paths(index_text: str) -> set[str]:
+    targets = [match.group(1) for match in MARKDOWN_LINK_RE.finditer(index_text)]
+    targets.extend(match.group(1) for match in INLINE_CODE_RE.finditer(index_text))
+    indexed_paths: set[str] = set()
+    for target in targets:
+        normalized = _normalize_index_target(target)
+        if normalized is not None:
+            indexed_paths.add(normalized)
+    return indexed_paths
+
+
+def _normalize_index_target(target: str) -> str | None:
+    clean_target = target.strip().strip("<>").split("#", 1)[0]
+    if not _is_relative_markdown_path(clean_target):
+        return None
+    if clean_target.startswith("./"):
+        clean_target = clean_target[2:]
+    if clean_target.startswith("skills/"):
+        clean_target = clean_target.removeprefix("skills/")
+    if clean_target.startswith("../"):
+        return None
+    return Path(clean_target).as_posix()
 
 
 def _relative_issues(issues: list[SkillIssue], root: Path) -> list[SkillIssue]:

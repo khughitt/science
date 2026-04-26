@@ -9,6 +9,7 @@ from science_tool.skills_lint.lint import (
     check_companion_skills,
     check_frontmatter,
     check_halt_on_conditions,
+    check_index_coverage,
     check_relative_links,
 )
 
@@ -85,6 +86,31 @@ def test_broken_relative_link_returns_issue() -> None:
     assert len(issues) == 1
     assert issues[0].kind == "broken-relative-link"
     assert issues[0].detail == "missing.md"
+
+
+def test_index_coverage_reports_unindexed_markdown(tmp_path: Path) -> None:
+    skills_root = tmp_path / "skills"
+    skills_root.mkdir()
+    (skills_root / "INDEX.md").write_text("`skills/indexed.md`\n", encoding="utf-8")
+    (skills_root / "indexed.md").write_text("# Indexed\n", encoding="utf-8")
+    (skills_root / "unindexed.md").write_text("# Unindexed\n", encoding="utf-8")
+
+    issues = check_index_coverage(skills_root)
+
+    assert len(issues) == 1
+    assert issues[0].kind == "missing-index-entry"
+    assert issues[0].detail == "unindexed.md"
+
+
+def test_index_coverage_accepts_markdown_links(tmp_path: Path) -> None:
+    skills_root = tmp_path / "skills"
+    skills_root.mkdir()
+    (skills_root / "INDEX.md").write_text("[Indexed](indexed.md)\n", encoding="utf-8")
+    (skills_root / "indexed.md").write_text("# Indexed\n", encoding="utf-8")
+
+    issues = check_index_coverage(skills_root)
+
+    assert issues == []
 
 
 def test_lint_cli_against_fixtures(tmp_path: Path) -> None:
