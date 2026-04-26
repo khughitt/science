@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Protocol
 
@@ -73,13 +75,51 @@ class TempCommitSnapshot:
             self._git("commit", "-q", "-m", commit_message)
 
 
-# ManifestSnapshot lands in Task 16.
 class ManifestSnapshot:
-    """Placeholder; implemented in Task 16."""
+    """Snapshot a declared list of paths via copy into a tempdir.
+
+    Used outside Git or for `transaction_kind: manifest` artifacts.
+    Captures only the declared touched_paths (not arbitrary files).
+    """
 
     def __init__(self, repo_root: Path, touched_paths: list[Path]) -> None:
-        raise NotImplementedError("ManifestSnapshot lands in Task 16")
+        self.repo_root = repo_root
+        self.touched_paths = list(touched_paths)
+        self._tempdir: Path | None = None
+        # For each declared path, store (rel, source_existed, copy_path|None).
+        self._captured: list[tuple[Path, bool, Path | None]] = []
 
-    def take(self) -> None: ...
-    def restore(self) -> None: ...
-    def discard(self, *, commit_message: str | None = None) -> None: ...
+    def take(self) -> None:
+        self._tempdir = Path(tempfile.mkdtemp(prefix="science-managed-snapshot-"))
+        for rel in self.touched_paths:
+            src = self.repo_root / rel
+            if src.exists():
+                dst = self._tempdir / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                self._captured.append((rel, True, dst))
+            else:
+                self._captured.append((rel, False, None))
+
+    def restore(self) -> None:
+        if self._tempdir is None:
+            raise RuntimeError("snapshot not taken; cannot restore")
+        for rel, existed, copy in self._captured:
+            target = self.repo_root / rel
+            if existed:
+                assert copy is not None
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(copy, target)
+            elif target.exists():
+                target.unlink()
+        self._cleanup()
+
+    def discard(self, *, commit_message: str | None = None) -> None:
+        # No-op for manifest snapshots; the canonical commit (if any) is the
+        # caller's responsibility.
+        self._cleanup()
+
+    def _cleanup(self) -> None:
+        if self._tempdir is not None and self._tempdir.exists():
+            shutil.rmtree(self._tempdir)
+        self._tempdir = None
