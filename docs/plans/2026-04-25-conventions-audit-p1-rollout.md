@@ -39,17 +39,17 @@ Status updated as each P1 progresses through the workflow.
 
 | ID | Title | Plan doc | Plan | Impl | Review |
 | --- | --- | --- | --- | --- | --- |
-| P1 #2 | Promote `pre-registration` to canonical type | `docs/plans/2026-04-25-pre-registration-canonical-type.md` | approved | — | — |
-| P1 #4 | Synthesis-rollup frontmatter convention | `docs/plans/2026-04-25-synthesis-rollup-frontmatter.md` | approved | — | — |
-| P1 #6 | Auto-archive done tasks (`science-tool tasks archive`) | `docs/plans/2026-04-25-tasks-auto-archive.md` | approved | — | — |
-| P1 #10 | Chained-prior `next-steps` ledger | `docs/plans/2026-04-25-next-steps-chained-prior.md` | approved | — | — |
+| P1 #2 | Promote `pre-registration` to canonical type | `docs/plans/2026-04-25-pre-registration-canonical-type.md` | merged | merged (`d840e07`..`fc1cc80`) | APPROVE |
+| P1 #4 | Synthesis-rollup frontmatter convention | `docs/plans/2026-04-25-synthesis-rollup-frontmatter.md` | merged | merged (`4dcd2ed`..`d1e4751`) | APPROVE |
+| P1 #6 | Auto-archive done tasks (`science-tool tasks archive`) | `docs/plans/2026-04-25-tasks-auto-archive.md` | merged | merged (`dbee325`..`c29e4b7`) | APPROVE-WITH-FIXES |
+| P1 #10 | Chained-prior `next-steps` ledger | `docs/plans/2026-04-25-next-steps-chained-prior.md` | merged | merged (`d5aa677`..`aee533f`) | APPROVE |
 
 ### Bucket B — small / additive (dispatched 2026-04-25)
 
 | ID | Title | Plan doc | Plan | Impl | Review |
 | --- | --- | --- | --- | --- | --- |
 | P1 #7 | MAV addendum: audit-surfaced `mav-input` set | `docs/plans/2026-04-25-mav-audit-addendum.md` | approved (held: MAV not merged) | — | — |
-| P1 #9 | Code/notebook → task back-link convention | `docs/plans/2026-04-25-code-task-backlink-convention.md` | approved | — | — |
+| P1 #9 | Code/notebook → task back-link convention | `docs/plans/2026-04-25-code-task-backlink-convention.md` | merged | merged (`2768fa2`..`4196b8f`) | APPROVE |
 
 ### Plan review pass 1 (2026-04-25)
 
@@ -134,6 +134,8 @@ These four become design sessions (with the user) once Bucket A+B lands. Output 
 - [x] Dispatch six plan-creation sub-agents in parallel for Bucket A+B.
 - [x] Review each plan as it lands; mark `ready-for-review` in the table above.
 - [x] User approval gate per plan; mark `approved`. (All six approved 2026-04-25 with Plan #2 id-prefix refinement applied.)
-- [ ] Dispatch implementation sub-agents for approved plans: parallel `#6`, `#9`, and a batched `#2/#4/#10`. Plan `#7` held until MAV merges.
-- [ ] Dispatch code-review sub-agents per implementation; mark `merged` after green.
+- [x] Dispatch implementation sub-agents for approved plans: parallel `#6`, `#9`, and a batched `#2/#4/#10`. Plan `#7` held until MAV merges. (All five landed `d840e07`..`c29e4b7`.)
+- [x] Dispatch code-review sub-agents per implementation; mark `merged` after green. (All five APPROVE / APPROVE-WITH-FIXES; Plan #6's one actionable nit filed as `meta/tasks/active.md` `[t007]`.)
+- [ ] Land Plan #7 once MAV merges (currently held).
+- [ ] Execute downstream conventions migration per `docs/plans/2026-04-25-downstream-conventions-migration.md`.
 - [ ] Schedule a Bucket C design session with the user.

@@ -96,3 +96,18 @@ Fix: skip leading blank lines between the header and the first `- key: value` li
 Add a regression test in `science-tool/tests/test_tasks.py` covering both shapes (blank-after-header and contiguous), plus a "header but truly no fields" negative case to confirm the new error message.
 
 Surfaced by: `natural-systems /science:health` 2026-04-25.
+
+## [t007] Fix `_write_active` silently dropping `tasks/active.md` preamble
+- priority: P2
+- status: proposed
+- aspects: [software-development]
+- related: []
+- created: 2026-04-25
+
+`science_tool.tasks._write_active` writes `render_tasks(tasks) if tasks else ""` to `tasks/active.md`, which silently discards any text above the first `## [tNNN]` heading (the file preamble). The same bug affects every caller of `_write_active`: `add_task`, `complete_task`, `defer_task`, `retire_task`, and `edit_task`. A user who keeps a file-level note above the first task heading loses it on the next mutation.
+
+The new `science_tool.tasks_archive` module (Plan #6, 2026-04-25) reads + re-emits the preamble correctly, but does not fix the underlying writer — Plan #6 was scoped tightly to its own surface. Apply the same preamble-preserving rewrite to `tasks.py`'s `_write_active` so all writers behave consistently.
+
+Add regression tests in `science-tool/tests/test_tasks.py` covering each writer (`add_task`, `complete_task`, `defer_task`, `retire_task`, `edit_task`) round-tripping a file with a non-empty preamble. The `tasks_archive` test fixtures show the canonical preamble shape (text before `## [`).
+
+Surfaced by: code-review pass on `docs/plans/2026-04-25-tasks-auto-archive.md` 2026-04-25 (master rollout follow-on action #3).
