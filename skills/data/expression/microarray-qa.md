@@ -1,3 +1,8 @@
+---
+name: data-expression-microarray-qa
+description: Use when ingesting or QA-reviewing bulk microarray cohorts (Affymetrix, Agilent, Illumina BeadArray) for legacy meta-analysis.
+---
+
 # Bulk Microarray QA
 
 Practical QA for bulk microarray cohorts (Affymetrix GeneChip, Agilent,

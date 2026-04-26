@@ -1,3 +1,8 @@
+---
+name: statistics-prereg-amendment-vs-fresh
+description: Use when a follow-up analysis changes data, operationalisation, model, thresholds, or scope after an earlier pre-registration exists.
+---
+
 # Pre-Registration Amendment vs Fresh Pre-Registration
 
 Use when a follow-up analysis changes data, operationalisation, model,

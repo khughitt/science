@@ -1,3 +1,8 @@
+---
+name: statistics-bias-vs-variance-decomposition
+description: Use when choosing estimators, replicate counts, correction terms, simulation designs, or sensitivity analyses where stochastic noise and systematic error could be confused.
+---
+
 # Bias vs Variance Decomposition
 
 Use when choosing estimators, replicate counts, correction terms, simulation

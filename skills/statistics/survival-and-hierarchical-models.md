@@ -1,3 +1,8 @@
+---
+name: statistics-survival-and-hierarchical-models
+description: Use when designing or reviewing Cox, Weibull, AFT, frailty, mixed-effects, Bayesian hierarchical, or multi-dataset causal models.
+---
+
 # Survival and Hierarchical Models
 
 Use when designing or reviewing Cox, Weibull, accelerated-failure-time,

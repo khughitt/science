@@ -1,3 +1,8 @@
+---
+name: data-protein-sequence-structure-qa
+description: Use when working with protein sequences, UniProt mappings, Pfam/InterPro/CATH labels, Foldseek/MMseqs clusters, PLM embeddings, DeepLoc/Meltome labels, or sequence/structure benchmark splits.
+---
+
 # Protein Sequence and Structure QA
 
 Use when working with protein sequences, UniProt mappings, Pfam/InterPro/CATH

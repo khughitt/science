@@ -1,3 +1,8 @@
+---
+name: statistics-replicate-count-justification
+description: Use when choosing the number of replicates for stochastic estimators (bootstrap, permutation, Monte Carlo, downsampling, MCMC) and you would otherwise pick a round-number default.
+---
+
 # Replicate-Count Justification
 
 How to choose the number of replicates (R) for stochastic estimators
