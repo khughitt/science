@@ -120,3 +120,27 @@ def diff_cmd(name: str, project_root: str) -> None:
     )
     for line in diff:
         click.echo(line, nl=False)
+
+
+@artifacts_group.command(
+    "exec",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.argument("name")
+@click.argument("args", nargs=-1, type=click.UNPROCESSED)
+def exec_cmd(name: str, args: tuple[str, ...]) -> None:
+    """Exec the canonical bytes file for NAME with ARGS.
+
+    Replaces this process. Used by path-convenience shims (Tasks 30-31).
+    """
+    import os
+
+    from science_tool.project_artifacts.paths import canonical_path
+
+    try:
+        path = canonical_path(name)
+    except KeyError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    # os.execv replaces this process with the canonical.
+    os.execv(str(path), [str(path), *args])
