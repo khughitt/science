@@ -135,3 +135,28 @@ Extend the validator (both `meta/validate.sh` and `scripts/validate.sh` per the 
 Add a regression test in `science-tool/tests/test_validate_script.py` covering the inline-dict warn case + the block-list silent case + the absent-field skip case.
 
 Surfaced by: `docs/audits/downstream-project-conventions/synthesis-shape-investigation-2026-04-25.md` Q2 resolution.
+
+## [t009] Entity-rename / declarative-migrations primitive (Q5 follow-up)
+- priority: P2
+- status: proposed
+- aspects: [software-development]
+- related: []
+- created: 2026-04-26
+
+Land the long-term ideal articulated as Q5 in the 2026-04-25 synthesis-shape investigation: entity-id references become first-class citizens of the knowledge graph, and migrations become **declarative** rather than imperative. Concrete deliverables to scope when this lands:
+
+- `science-tool entity rename <old-id> <new-id>` as a primitive that rewrites every reference graph-wide (not regex-driven; uses the actual reference index).
+- A declarative migration shape: "transition entity instances of kind K from shape S₀ to shape S₁" — a registry-like description that the tool can plan, dry-run, and apply, rather than ad-hoc Python scripts.
+- Composes WITH the managed-artifact system (per `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md` — to be written): managed-artifact version bumps that need entity-shape changes ride into the same declarative migration channel. The managed-artifact system is one delivery surface; entity-rename / declarative migrations are the other.
+
+**Why this is its own track:** The 2026-04-25 conventions audit's Bucket C (P1 #1, #3, #5, #8 — design-pass items) defines the abstract entity data model that this primitive needs. Bucket C must land first, or at least its load-bearing pieces (the multi-axis profile shape and the sanctioned entity-kind extension surface). Until that, entity-rename has no stable referent shape to operate over.
+
+**Sequencing recommendation:**
+1. Bucket C design session (P1 #1/#3/#5/#8 — separate cycle, with user).
+2. Implement Bucket C decisions.
+3. Implement managed-artifact long-term system (per the 2026-04-26 design spec).
+4. Then this task: entity-rename primitive + declarative migration registry.
+
+Phase 2 of `scripts/migrate_downstream_conventions.py` (shape-driven rules, landed `fe8d974`) is the first concrete step toward this; it should be cited as the prior art when planning the declarative migration shape.
+
+Surfaced by: 2026-04-26 brainstorm of the managed-artifact long-term design (Q5 referenced from `docs/audits/downstream-project-conventions/synthesis-shape-investigation-2026-04-25.md` and `docs/plans/2026-04-25-rollout-and-migration-handoff.md` decision #6).
