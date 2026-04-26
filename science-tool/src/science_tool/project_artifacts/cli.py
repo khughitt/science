@@ -83,3 +83,40 @@ def check_cmd(name: str, project_root: str, as_json: bool) -> None:
         click.echo(f"{art.name}: {result.status.value}")
         if result.detail:
             click.echo(f"  {result.detail}")
+
+
+@artifacts_group.command("diff")
+@click.argument("name")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=str),
+    default=".",
+)
+def diff_cmd(name: str, project_root: str) -> None:
+    """Show unified diff: installed vs canonical for NAME."""
+    import difflib
+    from pathlib import Path
+
+    from science_tool.project_artifacts.paths import canonical_path
+
+    registry = default_registry()
+    art = next((a for a in registry.artifacts if a.name == name), None)
+    if art is None:
+        raise click.ClickException(f"no managed artifact named {name!r} in the registry")
+
+    target = Path(project_root) / art.install_target
+    if not target.exists():
+        raise click.ClickException(f"no installed file at {target}")
+
+    canonical = canonical_path(name)
+    installed_lines = target.read_text(encoding="utf-8").splitlines(keepends=True)
+    canonical_lines = canonical.read_text(encoding="utf-8").splitlines(keepends=True)
+
+    diff = difflib.unified_diff(
+        canonical_lines,
+        installed_lines,
+        fromfile=f"canonical/{art.name}",
+        tofile=f"installed/{art.name}",
+    )
+    for line in diff:
+        click.echo(line, nl=False)
