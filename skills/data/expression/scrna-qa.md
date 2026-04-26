@@ -240,3 +240,9 @@ data/processed/<cohort_id>/
 This artifact is sufficient for downstream analyses to inherit the
 QA without re-deriving it, and for reviewers to audit the
 preprocessing without rerunning anything.
+
+## Companion Skills
+
+- [`SKILL.md`](SKILL.md) - expression-data hub conventions for cross-platform cohort QA.
+- [`../../statistics/compositional-data.md`](../../statistics/compositional-data.md) - cell fractions, donor-level composition, and denominator choices.
+- [`../../statistics/power-floor-acknowledgement.md`](../../statistics/power-floor-acknowledgement.md) - donor-level power floors and cell-n inflation checks.

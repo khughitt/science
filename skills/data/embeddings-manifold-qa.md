@@ -108,6 +108,5 @@ seed/hyperparameter, and negative-control checks.
 
 ## Companion Skills
 
-For protein-language-model or structure-derived embeddings, load
-`protein-sequence-structure-qa.md` first enough to validate identity mapping,
-homology leakage, label hierarchy, and split construction.
+- [`protein-sequence-structure-qa.md`](protein-sequence-structure-qa.md) - identity mapping, homology leakage, label hierarchy, and split construction for PLM or structure-derived embeddings.
+- [`../statistics/bias-vs-variance-decomposition.md`](../statistics/bias-vs-variance-decomposition.md) - distinguishing projection variance from estimator bias.

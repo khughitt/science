@@ -111,3 +111,9 @@ results/<analysis>/compositional_qa/
 The summary should state which checks passed, which failed, and whether any
 verdict was downgraded because composition, depth, or zero handling remained
 ambiguous.
+
+## Companion Skills
+
+- [`../data/expression/scrna-qa.md`](../data/expression/scrna-qa.md) - donor-level single-cell composition and pseudobulk QA.
+- [`survival-and-hierarchical-models.md`](survival-and-hierarchical-models.md) - hierarchical models for repeated fractions or grouped denominators.
+- [`bias-vs-variance-decomposition.md`](bias-vs-variance-decomposition.md) - distinguishing compositional bias from sampling variance.

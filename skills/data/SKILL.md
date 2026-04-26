@@ -142,3 +142,10 @@ When automation is unavailable:
 - Download data by hand and place in `data/raw/`
 - Write preprocessing scripts in `code/scripts/` with clear comments
 - Always update `science.yaml` data_sources when adding new data
+
+## Companion Skills
+
+- [`expression/SKILL.md`](expression/SKILL.md) - expression-matrix preprocessing and QA.
+- [`frictionless.md`](frictionless.md) - data-package descriptors and validation conventions.
+- [`../statistics/SKILL.md`](../statistics/SKILL.md) - quantitative checks that depend on data shape and independent units.
+- [`../research/SKILL.md`](../research/SKILL.md) - research-methodology context for data-source choices and citation discipline.

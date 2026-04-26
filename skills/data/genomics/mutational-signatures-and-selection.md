@@ -120,3 +120,9 @@ results/<analysis>/signature_selection_qa/
 The summary should state whether input calls and denominators were already
 audited. If not, load `somatic-mutation-qa.md` first and complete that audit
 before treating signatures or selection tests as verdict-bearing.
+
+## Companion Skills
+
+- [`somatic-mutation-qa.md`](somatic-mutation-qa.md) - input-call and denominator QA required before signature or selection verdicts.
+- [`../../statistics/power-floor-acknowledgement.md`](../../statistics/power-floor-acknowledgement.md) - low-count signature and driver tests.
+- [`../../statistics/sensitivity-arbitration.md`](../../statistics/sensitivity-arbitration.md) - pre-committed arbitration for hypermutator, panel, and low-count sensitivities.

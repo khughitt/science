@@ -110,3 +110,9 @@ State:
 - lineage/cell-line context,
 - dose/time comparability,
 - verdict downgrades caused by toxicity, growth, copy number, or weak controls.
+
+## Companion Skills
+
+- [`embeddings-manifold-qa.md`](embeddings-manifold-qa.md) - manifold and representation checks for CRISPR, LINCS, and dependency embeddings.
+- [`expression/scrna-qa.md`](expression/scrna-qa.md) - single-cell perturbation and pseudobulk QA.
+- [`../statistics/sensitivity-arbitration.md`](../statistics/sensitivity-arbitration.md) - verdict rules when toxicity, batch, or copy-number sensitivities disagree.

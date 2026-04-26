@@ -117,3 +117,8 @@ Each PubMed-derived item must include:
 - identifier fields (PMID/PMCID/DOI as available)
 - ranking rationale text
 
+## Companion Skills
+
+- [`openalex.md`](openalex.md) - citation-count, author-order, and OpenAlex identifier reconciliation.
+- [`../../research/annotation-curation-qa.md`](../../research/annotation-curation-qa.md) - label, claim, and source-curation QA for ranked literature sets.
+- [`../../research/SKILL.md`](../../research/SKILL.md) - citation discipline and project-awareness rules.

@@ -73,7 +73,7 @@ Use this skill any time you are:
 - Analyzing proportions, cell fractions, deconvolution outputs, or other
   compositional measurements.
 
-## Companion skills
+## Companion Skills
 
 - [`research`](../research/SKILL.md) — high-level research methodology;
   this skill is the quantitative-design layer beneath it.

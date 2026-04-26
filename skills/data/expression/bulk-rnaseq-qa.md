@@ -149,3 +149,9 @@ data/processed/<cohort_id>/
 ├── counts_or_normalized.parquet  # the matrix used downstream
 └── README.md                 # one-paragraph summary
 ```
+
+## Companion Skills
+
+- [`SKILL.md`](SKILL.md) - expression-data hub conventions for cross-platform cohort QA.
+- [`../../statistics/power-floor-acknowledgement.md`](../../statistics/power-floor-acknowledgement.md) - independent-unit and interval-resolution checks for cohort-level contrasts.
+- [`../../statistics/bias-vs-variance-decomposition.md`](../../statistics/bias-vs-variance-decomposition.md) - separating preprocessing bias from estimator variance.

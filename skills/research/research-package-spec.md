@@ -107,3 +107,8 @@ chart.save("results/figures/kappa-by-theme.vl.json")
 ```
 
 The `.vl.json` files are copied into the package's `figures/` directory and referenced via `vegalite` cells.
+
+## Companion Skills
+
+- [`../data/frictionless.md`](../data/frictionless.md) - Frictionless descriptor conventions reused by research packages.
+- [`../pipelines/snakemake.md`](../pipelines/snakemake.md) - terminal workflow rules that build and validate packages.

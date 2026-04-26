@@ -118,3 +118,9 @@ results/<analysis>/model_qa/
 The summary should state the independent unit, grouping structure, diagnostics
 that failed, and any verdict downgrade caused by censoring, non-PH,
 non-identifiability, divergences, or sensitivity disagreement.
+
+## Companion Skills
+
+- [`sensitivity-arbitration.md`](sensitivity-arbitration.md) - pre-committed verdict rules for model diagnostics and sensitivity runs.
+- [`power-floor-acknowledgement.md`](power-floor-acknowledgement.md) - independent-unit power floors for survival and hierarchical models.
+- [`compositional-data.md`](compositional-data.md) - denominator and zero-handling rules for fraction-valued model inputs.

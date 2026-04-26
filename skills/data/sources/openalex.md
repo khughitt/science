@@ -116,3 +116,8 @@ Each included OpenAlex-derived item must carry:
 - source tag `openalex`
 - ranking rationale text
 
+## Companion Skills
+
+- [`pubmed.md`](pubmed.md) - biomedical metadata reconciliation and PMID/PMCID authority.
+- [`../../research/annotation-curation-qa.md`](../../research/annotation-curation-qa.md) - label, claim, and source-curation QA for ranked literature sets.
+- [`../../research/SKILL.md`](../../research/SKILL.md) - citation discipline and project-awareness rules.

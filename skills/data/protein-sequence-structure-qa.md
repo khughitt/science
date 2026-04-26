@@ -103,6 +103,5 @@ sequence version, label source, and split rule each result used.
 
 ## Companion Skills
 
-Load `embeddings-manifold-qa.md` when protein sequences or structures are used
-for PLM embeddings, UMAP/HDBSCAN/Mapper, CKA, Moran's I, archetypes, or
-multi-lens comparisons.
+- [`embeddings-manifold-qa.md`](embeddings-manifold-qa.md) - PLM embeddings, UMAP/HDBSCAN/Mapper, CKA, Moran's I, archetypes, and multi-lens comparisons.
+- [`SKILL.md`](SKILL.md) - generic data-management conventions for processed protein datasets.

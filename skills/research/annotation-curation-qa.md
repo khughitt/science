@@ -97,3 +97,8 @@ Report:
 - adjudication rule,
 - fraction uncertain or excluded,
 - downstream analyses that depend on fragile labels.
+
+## Companion Skills
+
+- [`SKILL.md`](SKILL.md) - research-methodology and citation-discipline conventions.
+- [`../statistics/sensitivity-arbitration.md`](../statistics/sensitivity-arbitration.md) - verdict handling when curated labels or adjudication choices change results.

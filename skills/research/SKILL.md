@@ -197,3 +197,9 @@ For terminology and modeling details, see `docs/proposition-and-evidence-model.m
 ## Template Usage
 
 All research documents must follow their corresponding framework template unless the project defines a specific override in `.ai/templates/`. Read the relevant template before writing. The template sections are not optional — fill every section, even if briefly.
+
+## Companion Skills
+
+- [`annotation-curation-qa.md`](annotation-curation-qa.md) - structured extraction, adjudication, and label QA.
+- [`research-package-rendering.md`](research-package-rendering.md) - rendered research packages and source routes for web experiences.
+- [`research-package-spec.md`](research-package-spec.md) - Frictionless-style research package schema and workflow integration.

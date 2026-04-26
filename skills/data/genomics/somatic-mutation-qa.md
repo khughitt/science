@@ -115,6 +115,6 @@ negative mutation frequencies.
 
 ## Companion Skills
 
-Load `mutational-signatures-and-selection.md` after this skill when the same
-mutation calls feed SBS signatures, TMB, dN/dS, dNdScv, or driver-ranking
-analyses.
+- [`mutational-signatures-and-selection.md`](mutational-signatures-and-selection.md) - downstream SBS signatures, TMB, dN/dS, dNdScv, and driver-ranking analyses.
+- [`../../statistics/power-floor-acknowledgement.md`](../../statistics/power-floor-acknowledgement.md) - low-power mutation-frequency contrasts.
+- [`../../statistics/sensitivity-arbitration.md`](../../statistics/sensitivity-arbitration.md) - hypermutator-included versus hypermutator-excluded arbitration.

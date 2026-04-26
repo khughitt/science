@@ -81,3 +81,9 @@ Include:
 When exact power is hard to compute, provide a conservative simulation or
 interval-resolution statement. Do not omit the power floor because the model is
 complex.
+
+## Companion Skills
+
+- [`sensitivity-arbitration.md`](sensitivity-arbitration.md) - verdict rules when a powered primary analysis and sensitivity checks disagree.
+- [`bias-vs-variance-decomposition.md`](bias-vs-variance-decomposition.md) - separating lack of precision from measurement or estimator bias.
+- [`replicate-count-justification.md`](replicate-count-justification.md) - algorithmic-replicate decisions that do not change independent-unit power.

@@ -172,3 +172,8 @@ Move project-specific orchestration into a local Python CLI when:
 - the Bash scripts are turning into a real application
 
 Keep the transport layer simple. The point of this skill is to make rented GPU pods reusable without introducing a second framework.
+
+## Companion Skills
+
+- [`SKILL.md`](SKILL.md) - shared pipeline conventions and artifact contracts.
+- [`snakemake.md`](snakemake.md) - production workflow rules for remote workloads that have stabilized.

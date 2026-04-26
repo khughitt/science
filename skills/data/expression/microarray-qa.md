@@ -160,3 +160,9 @@ Microarray remains relevant only for legacy meta-analysis where the
 disease cohort has no RNA-Seq alternative at adequate n. The MM30
 project includes 28 microarray cohorts because the alternative would
 be an n ≈ 700 (MMRF) instead of n ≈ 5,400 meta-analysis.
+
+## Companion Skills
+
+- [`SKILL.md`](SKILL.md) - expression-data hub conventions for cross-platform cohort QA.
+- [`bulk-rnaseq-qa.md`](bulk-rnaseq-qa.md) - companion checks when aggregating microarray with RNA-seq cohorts.
+- [`../../statistics/bias-vs-variance-decomposition.md`](../../statistics/bias-vs-variance-decomposition.md) - separating platform bias from estimator variance.

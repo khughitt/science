@@ -157,3 +157,8 @@ output_dir.mkdir(parents=True, exist_ok=True)
 - Load `datapackage.json` to understand available fields
 - Export results with provenance metadata
 - Document findings in `doc/` after exploration
+
+## Companion Skills
+
+- [`SKILL.md`](SKILL.md) - shared pipeline conventions and workflow artifact expectations.
+- [`snakemake.md`](snakemake.md) - production workflow patterns once notebook exploration stabilizes.

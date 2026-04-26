@@ -129,3 +129,9 @@ Add a `sources` field to track where data came from:
   "resources": [...]
 }
 ```
+
+## Companion Skills
+
+- [`SKILL.md`](SKILL.md) - data-management conventions that require descriptors for raw and processed datasets.
+- [`../pipelines/snakemake.md`](../pipelines/snakemake.md) - workflow rules that generate package descriptors as terminal artifacts.
+- [`../research/research-package-spec.md`](../research/research-package-spec.md) - research-package profile built on Frictionless data-package structure.

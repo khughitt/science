@@ -36,7 +36,7 @@ All documents follow framework templates unless the project defines an override 
 
 - **Lead with the point.** First paragraph should state the main takeaway.
 - **Sections are self-contained.** A reader should be able to read any section in isolation and get value.
-- **Cross-reference liberally.** Link to other project documents: `(see [Background: Topic A](background/01-topic-a.md))`.
+- **Cross-reference liberally.** Link to other project documents, for example `(see Background: Topic A)`.
 - **End with implications.** What does this mean for the project? What should we do next?
 
 ## Citation Format
@@ -77,3 +77,8 @@ For the project’s reasoning model, see `docs/proposition-and-evidence-model.md
 - **Hypothesis descriptions** (`specs/hypotheses/`): 300-1000 words. Thorough enough to be actionable.
 - **Open questions** (`doc/questions/`): 50-200 words per question. Concise and specific.
 - **Overview** (`doc/01-overview.md`): 500-1000 words. The "elevator pitch" for the whole project.
+
+## Companion Skills
+
+- [`../research/SKILL.md`](../research/SKILL.md) - research-methodology conventions that govern factual claims, citations, and project awareness.
+- [`../statistics/SKILL.md`](../statistics/SKILL.md) - statistical reporting language for pre-registrations, analyses, and verdicts.
