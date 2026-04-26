@@ -7,7 +7,19 @@ from pathlib import Path
 
 
 def _validate_script_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "scripts" / "validate.sh"
+    # Target the canonical validate.sh shipped with science-tool. The
+    # repo-root scripts/validate.sh is a thin shim that delegates to
+    # `science-tool project artifacts exec validate.sh`; these tests
+    # exercise the canonical's failure handling directly to avoid a
+    # fragile dependency on `uv` being on PATH inside the test sandbox.
+    return (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "science_tool"
+        / "project_artifacts"
+        / "data"
+        / "validate.sh"
+    )
 
 
 def _write_common_files(root: Path, profile: str) -> None:
