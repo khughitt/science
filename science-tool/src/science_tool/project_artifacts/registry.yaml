@@ -1,0 +1,5 @@
+# science-tool/src/science_tool/project_artifacts/registry.yaml
+# Managed-artifact registry — capabilities matrices.
+# See docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md.
+# Initially empty; the first artifact lands in Task 28.
+artifacts: []
