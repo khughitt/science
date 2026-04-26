@@ -177,3 +177,64 @@ def install_cmd(name: str, project_root: str, adopt: bool, force_adopt: bool) ->
     click.echo(f"{art.name}: {result.action.value} ({result.reason})")
     if result.backup is not None:
         click.echo(f"  backup written: {result.backup}")
+
+
+@artifacts_group.command("update")
+@click.argument("name")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=str),
+    default=".",
+)
+@click.option(
+    "--allow-dirty",
+    is_flag=True,
+    help="Proceed against a dirty worktree (path-conflict-checked).",
+)
+@click.option("--no-commit", is_flag=True, help="Skip commit emission.")
+@click.option("--force", is_flag=True, help="Overwrite a locally-modified install.")
+@click.option("--yes", is_flag=True, help="Required with --force.")
+@click.option(
+    "--auto-apply",
+    is_flag=True,
+    help="Apply idempotent migration steps without confirmation.",
+)
+def update_cmd(
+    name: str,
+    project_root: str,
+    allow_dirty: bool,
+    no_commit: bool,
+    force: bool,
+    yes: bool,
+    auto_apply: bool,
+) -> None:
+    """Update NAME to the canonical version."""
+    from pathlib import Path
+
+    from science_tool.project_artifacts.update import UpdateError, update_artifact
+
+    registry = default_registry()
+    art = next((a for a in registry.artifacts if a.name == name), None)
+    if art is None:
+        raise click.ClickException(f"no managed artifact named {name!r} in the registry")
+
+    try:
+        result = update_artifact(
+            art,
+            Path(project_root),
+            allow_dirty=allow_dirty,
+            no_commit=no_commit,
+            force=force,
+            yes=yes,
+            auto_apply=auto_apply,
+        )
+    except UpdateError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(
+        f"{result.name}: {result.from_version or 'unknown'} → {result.to_version}"
+        f" ({'committed' if result.committed else 'no commit'})"
+    )
+    click.echo(f"  backup: {result.backup}")
+    if result.migrated_steps:
+        click.echo(f"  migration steps: {', '.join(result.migrated_steps)}")
