@@ -14,6 +14,15 @@ Science uses a skeptical, proposition-centric model:
 - sparse or single-source support should be treated as fragile
 - contested neighborhoods and propositions lacking empirical support should be treated as prioritization signals, not just annotations
 
+## Leaves
+
+| Leaf | Use when |
+|---|---|
+| [`annotation-curation-qa.md`](./annotation-curation-qa.md) | Designing or reviewing claim extraction, labels, adjudication, or LLM-assisted curation |
+| [`proposition-schema.md`](./proposition-schema.md) | Authoring proposition entities, evidence metadata, or layered-claim fields |
+| [`research-package-rendering.md`](./research-package-rendering.md) | Rendering research packages and source routes in web experiences |
+| [`research-package-spec.md`](./research-package-spec.md) | Defining research-package manifests, cells, provenance, and workflow integration |
+
 ## Source Hierarchy
 
 When researching a topic or summarizing a paper, use this priority order:

@@ -12,6 +12,11 @@ The default epistemic posture is skeptical:
 - write propositions as uncertain unless the evidence base is unusually strong
 - describe evidence as supporting, disputing, or leaving a proposition unresolved
 
+## Leaves
+
+No leaves currently. Planned future areas: pre-registration prose,
+results-interpretation, paper-summary.
+
 ## Voice and Tone
 
 - **Precise.** Choose words carefully. "The model predicts" is different from "the model suggests."
