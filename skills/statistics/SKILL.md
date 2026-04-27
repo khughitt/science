@@ -1,6 +1,6 @@
 ---
 name: statistics
-description: Use when designing, pre-registering, or reviewing finite-sample quantitative analyses, especially bootstrap, permutation, Monte Carlo, downsampling, MCMC, power, bias-vs-variance, sensitivity arbitration, or any analysis that would otherwise choose a round-number default.
+description: Use when designing, pre-registering, or reviewing finite-sample quantitative analyses, especially bootstrap, permutation, Monte Carlo, downsampling, MCMC, power, bias-vs-variance, sensitivity arbitration, defensive instrumentation for multi-candidate pre-registered tests, or any analysis that would otherwise choose a round-number default.
 ---
 
 # Statistics
@@ -22,6 +22,7 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
 | [`power-floor-acknowledgement.md`](./power-floor-acknowledgement.md) | Before interpreting a null, weak, or boundary result |
 | [`sensitivity-arbitration.md`](./sensitivity-arbitration.md) | Pre-committing the rule for resolving disagreement among robustness checks |
 | [`prereg-amendment-vs-fresh.md`](./prereg-amendment-vs-fresh.md) | Deciding whether a follow-up needs a fresh pre-reg or an amendment |
+| [`prereg-defensive-instrumentation.md`](./prereg-defensive-instrumentation.md) | Pre-registering a multi-candidate test that needs universe locks, snapshot freezes, familywise nulls, leakage hedges, suspicious-result tripwires, or locked decision tables |
 | [`survival-and-hierarchical-models.md`](./survival-and-hierarchical-models.md) | Cox / Weibull / mixed-effects / Bayesian hierarchical models |
 | [`compositional-data.md`](./compositional-data.md) | Proportions, fractions, deconvolution outputs, microbiome relative abundance |
 
@@ -62,12 +63,22 @@ For analysis-readiness planning, start at [`../INDEX.md`](../INDEX.md) or run
    didn't change. See
    [`prereg-amendment-vs-fresh`](./prereg-amendment-vs-fresh.md).
 
-6. **Model the independent unit.** Repeated cells, genes, mutations, or samples
+6. **Instrument the pre-reg defensively when the test selects among candidates
+   or depends on frozen inputs.** Universe locks, candidate-snapshot
+   freezes, familywise nulls, leakage hedges, suspicious-result
+   tripwires, and locked decision tables convert "the run was honest"
+   from a narrative claim made afterwards into runtime checks the
+   pre-reg commits to in advance. The full set is appropriate for
+   confirmatory tests that update a hypothesis verdict; pick the subset
+   whose failure modes apply otherwise. See
+   [`prereg-defensive-instrumentation`](./prereg-defensive-instrumentation.md).
+
+7. **Model the independent unit.** Repeated cells, genes, mutations, or samples
    inside a donor/study are not independent observations. For survival,
    multi-cohort, mixed-effect, or Bayesian hierarchical analyses, see
    [`survival-and-hierarchical-models`](./survival-and-hierarchical-models.md).
 
-7. **Respect compositional constraints.** Fractions, proportions, and mixture
+8. **Respect compositional constraints.** Fractions, proportions, and mixture
    outputs require denominator, zero-handling, and log-ratio decisions before
    ordinary regression or correlation. See
    [`compositional-data`](./compositional-data.md).
@@ -84,6 +95,10 @@ Use this skill any time you are:
 - Deciding whether to apply a bias correction (Miller-Madow, jackknife,
   bootstrap-bias-correction, Hodges-Lehmann, etc.).
 - Resolving conflicting sensitivity passes after a run.
+- Pre-registering a test that selects a winner among multiple
+  candidate operationalisations, depends on frozen input data, or
+  could produce a "too good to be true" headline that needs a
+  runtime tripwire.
 - Designing survival, mixed-effect, or hierarchical Bayesian models.
 - Analyzing proportions, cell fractions, deconvolution outputs, or other
   compositional measurements.
