@@ -106,6 +106,25 @@ Rules (selected with `--rule`):
   Per audit synthesis §3.2 — natural-systems' three sparser pre-reg
   files need human input on these fields.
 
+- ``task-status-canonicalize``: Normalize task ``status:`` values in
+  ``<project>/tasks/active.md`` and ``<project>/tasks/done/*.md`` to the
+  canonical task-status set ``{active, blocked, deferred, done, proposed,
+  retired}``. Drift values mapped:
+
+  - ``completed`` → ``done``
+  - ``complete`` → ``done``
+  - ``in-progress`` → ``active``
+  - ``in_progress`` → ``active``
+
+  Only the ``- status: <value>`` lines inside task blocks (lines starting
+  with ``- status:`` or ``status:`` directly under a ``## [tNNN]`` header)
+  are touched. Other ``status:`` fields (e.g. document frontmatter) are
+  out of scope. Unmapped drift values are left in place and surfaced as
+  errors so new drift shapes are not silently masked. Per the recurring
+  drift class observed across natural-systems (t324 ``completed``, t328
+  ``completed``, t338 ``in-progress``); ``science-tool tasks list`` warns
+  on these but does not auto-correct.
+
 - ``specs-frontmatter-backfill``: Add minimal canonical frontmatter to
   ``<project>/specs/*.md`` files that have no frontmatter at all.
   Derives ``id: spec:<basename>`` from the filename, ``title`` from
@@ -1084,6 +1103,112 @@ def apply_rule_specs_frontmatter_backfill(project_root: Path, *, apply: bool) ->
     return result
 
 
+# ---------- rule: task-status-canonicalize ----------
+
+
+_CANONICAL_TASK_STATUSES = frozenset({"active", "blocked", "deferred", "done", "proposed", "retired"})
+
+# Map drifted values to their canonical equivalent. Unmapped non-canonical
+# values (e.g. typos, novel drift shapes) are surfaced as errors rather than
+# guessed at.
+_TASK_STATUS_DRIFT_MAP = {
+    "completed": "done",
+    "complete": "done",
+    "in-progress": "active",
+    "in_progress": "active",
+}
+
+# Match a task-block status line. Tolerates both `- status: value` (the dominant
+# shape in tasks/active.md and tasks/done/*.md) and bare `status: value` (the
+# shape used inside frontmatter blocks). The leading dash form is the one we
+# expect in task entries; `_in_task_block` gates application either way.
+_RE_TASK_STATUS_LINE = re.compile(r'^(\s*-?\s*status:\s*)(["\']?)([A-Za-z][A-Za-z0-9_-]*)\2(\s*)$')
+
+# Match a task-block header (`## [tNNN] Title` or `## [tNNN-slug] Title`).
+_RE_TASK_BLOCK_HEADER = re.compile(r"^##\s+\[t[A-Za-z0-9_-]+\]")
+
+
+def apply_rule_task_status_canonicalize(project_root: Path, *, apply: bool) -> RuleResult:
+    """Normalize task ``status:`` values to the canonical set."""
+    result = RuleResult(name="task-status-canonicalize")
+    candidates: list[Path] = []
+    active = project_root / "tasks" / "active.md"
+    if active.is_file():
+        candidates.append(active)
+    done_dir = project_root / "tasks" / "done"
+    if done_dir.is_dir():
+        candidates.extend(sorted(p for p in done_dir.glob("*.md") if p.is_file()))
+
+    for path in candidates:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as e:
+            result.errors.append(f"{path}: read failed: {e}")
+            continue
+
+        original_lines = text.splitlines(keepends=True)
+        new_lines: list[str] = []
+        in_task_block = False
+        changed = False
+
+        for line_no, line in enumerate(original_lines, start=1):
+            if _RE_TASK_BLOCK_HEADER.match(line):
+                in_task_block = True
+                new_lines.append(line)
+                continue
+            if line.strip() == "" and in_task_block:
+                # Blank line ends the metadata block within a task.
+                in_task_block = False
+                new_lines.append(line)
+                continue
+            if not in_task_block:
+                new_lines.append(line)
+                continue
+
+            m = _RE_TASK_STATUS_LINE.match(line.rstrip("\n"))
+            if not m:
+                new_lines.append(line)
+                continue
+
+            prefix, quote, value, trailing = m.group(1), m.group(2), m.group(3), m.group(4)
+            if value in _CANONICAL_TASK_STATUSES:
+                new_lines.append(line)
+                continue
+
+            mapped = _TASK_STATUS_DRIFT_MAP.get(value)
+            if mapped is None:
+                result.errors.append(
+                    f"{path}:{line_no}: unmapped non-canonical status {value!r}; "
+                    "extend _TASK_STATUS_DRIFT_MAP before re-running."
+                )
+                new_lines.append(line)
+                continue
+
+            new_line_body = f"{prefix}{quote}{mapped}{quote}{trailing}"
+            ending = "\n" if line.endswith("\n") else ""
+            new_lines.append(new_line_body + ending)
+            changed = True
+            result.changes.append(
+                FileChange(
+                    path=path,
+                    kind="task-status",
+                    before=line.rstrip("\n").strip(),
+                    after=new_line_body.strip(),
+                    line_no=line_no,
+                )
+            )
+
+        if changed:
+            result.files_touched.add(path)
+            if apply:
+                try:
+                    path.write_text("".join(new_lines), encoding="utf-8")
+                except OSError as e:
+                    result.errors.append(f"{path}: write failed: {e}")
+
+    return result
+
+
 # ---------- self-test ----------
 
 
@@ -1665,6 +1790,125 @@ def _self_test_specs_frontmatter_backfill(td: Path) -> None:
     assert again.changes == []
 
 
+def _self_test_task_status_canonicalize(td: Path) -> None:
+    """Exercise the task-status-canonicalize rule across drift shapes."""
+    root = td / "task-status-fixture"
+    root.mkdir()
+    _git_init(root)
+    (root / "tasks").mkdir()
+    (root / "tasks" / "done").mkdir()
+
+    active = root / "tasks" / "active.md"
+    active_orig = (
+        "# Active tasks\n"
+        "\n"
+        "## [t100] Drifted completed\n"
+        "- priority: P1\n"
+        "- status: completed\n"
+        "- aspects: [hypothesis-testing]\n"
+        "- created: 2026-04-25\n"
+        "\n"
+        "Body line.\n"
+        "\n"
+        "## [t101] Drifted in-progress\n"
+        "- priority: P2\n"
+        "- status: in-progress\n"
+        "- created: 2026-04-25\n"
+        "\n"
+        "Body.\n"
+        "\n"
+        "## [t102] Drifted in_progress (underscore variant)\n"
+        '- status: "in_progress"\n'
+        "- priority: P2\n"
+        "\n"
+        "Body.\n"
+        "\n"
+        "## [t103] Already canonical\n"
+        "- status: proposed\n"
+        "- priority: P3\n"
+        "\n"
+        "Body.\n"
+    )
+    active.write_text(active_orig, encoding="utf-8")
+
+    done = root / "tasks" / "done" / "2026-04.md"
+    done_orig = (
+        "## [t050] Drifted complete\n"
+        "- priority: P1\n"
+        "- status: complete\n"
+        "- created: 2026-04-01\n"
+        "\n"
+        "Body.\n"
+        "\n"
+        "## [t051] Canonical done\n"
+        "- status: done\n"
+        "- priority: P2\n"
+        "\n"
+        "Body.\n"
+    )
+    done.write_text(done_orig, encoding="utf-8")
+
+    # A non-task file with `status: completed` in frontmatter — must not be touched.
+    (root / "doc" / "interpretations").mkdir(parents=True)
+    interp = root / "doc" / "interpretations" / "x.md"
+    interp_orig = '---\nid: "interpretation:x"\nstatus: "complete"\n---\n\nBody.\n'
+    interp.write_text(interp_orig, encoding="utf-8")
+
+    _git_commit_all(root)
+
+    # Dry run — count and shape of changes.
+    dry = apply_rule_task_status_canonicalize(root, apply=False)
+    assert dry.errors == [], dry.errors
+    assert {c.path for c in dry.changes} == {active, done}, [c.path for c in dry.changes]
+    by_line = {(c.path.name, c.line_no): (c.before, c.after) for c in dry.changes}
+    # active.md: t100 (line 5), t101 (line 13), t102 (line 19). t103 unchanged.
+    assert by_line[("active.md", 5)][0].endswith("completed")
+    assert by_line[("active.md", 5)][1].endswith("done")
+    assert by_line[("active.md", 13)][0].endswith("in-progress")
+    assert by_line[("active.md", 13)][1].endswith("active")
+    assert "in_progress" in by_line[("active.md", 19)][0]
+    assert by_line[("active.md", 19)][1].endswith('"active"'), by_line[("active.md", 19)][1]
+    # done file: t050 (line 3) `complete` → `done`. t051 unchanged.
+    assert by_line[("2026-04.md", 3)][0].endswith("complete")
+    assert by_line[("2026-04.md", 3)][1].endswith("done")
+    # Non-task file untouched.
+    assert active.read_text() == active_orig
+    assert done.read_text() == done_orig
+    assert interp.read_text() == interp_orig
+
+    # Apply.
+    res = apply_rule_task_status_canonicalize(root, apply=True)
+    assert res.errors == [], res.errors
+    after_active = active.read_text()
+    assert "- status: done\n" in after_active
+    assert "- status: active\n" in after_active
+    assert '- status: "active"\n' in after_active  # quoted variant preserved
+    # No status line should still carry a drift value. Title text on `## [t...]`
+    # lines is allowed to contain the word "completed" / "in-progress".
+    status_lines = [ln for ln in after_active.splitlines() if "status:" in ln and not ln.startswith("##")]
+    assert all("completed" not in ln for ln in status_lines), status_lines
+    assert all("in-progress" not in ln for ln in status_lines), status_lines
+    assert all("in_progress" not in ln for ln in status_lines), status_lines
+    after_done = done.read_text()
+    assert "- status: done\n" in after_done
+    done_status_lines = [ln for ln in after_done.splitlines() if "status:" in ln and not ln.startswith("##")]
+    assert all("complete" not in ln for ln in done_status_lines), done_status_lines
+    # Idempotent.
+    again = apply_rule_task_status_canonicalize(root, apply=True)
+    assert again.changes == [], again.changes
+    # Non-task file still untouched.
+    assert interp.read_text() == interp_orig
+
+    # Unmapped drift surfaces as an error.
+    weird = root / "tasks" / "active.md"
+    weird.write_text(
+        "## [t999] Weird status\n- status: started\n- priority: P3\n\nBody.\n",
+        encoding="utf-8",
+    )
+    bad = apply_rule_task_status_canonicalize(root, apply=False)
+    assert any("unmapped non-canonical status 'started'" in e for e in bad.errors), bad.errors
+
+
 def _self_test() -> None:
     """Exercise all rules against tempdir fixtures and assert expected outcomes."""
     with tempfile.TemporaryDirectory() as tdname:
@@ -1673,6 +1917,7 @@ def _self_test() -> None:
         _self_test_report_id_prefix(td)
         _self_test_specs_frontmatter_backfill(td)
         _self_test_natural_systems_pre_reg_frontmatter(td)
+        _self_test_task_status_canonicalize(td)
 
         # Rule 1: synthesis-type-and-id-rollup — 3 fixtures (mm30, PL, NS).
         _self_test_rollup_mm30(td)
@@ -1709,6 +1954,7 @@ RULES = {
     "pre-registration-id-and-type": apply_rule_pre_registration_id_and_type,
     "natural-systems-pre-reg-frontmatter": apply_rule_natural_systems_pre_reg_frontmatter,
     "specs-frontmatter-backfill": apply_rule_specs_frontmatter_backfill,
+    "task-status-canonicalize": apply_rule_task_status_canonicalize,
 }
 
 
