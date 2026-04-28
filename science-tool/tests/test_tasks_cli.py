@@ -251,9 +251,7 @@ class TestTasksNote:
                 "Archived details.\n"
             )
 
-            result = runner.invoke(
-                main, ["tasks", "note", "t141", "Archived clarification.", "--date", "2026-04-28"]
-            )
+            result = runner.invoke(main, ["tasks", "note", "t141", "Archived clarification.", "--date", "2026-04-28"])
 
             assert result.exit_code == 0, result.output
             assert "Added note to [t141] (2026-04-28)" in result.output

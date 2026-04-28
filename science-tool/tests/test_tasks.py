@@ -473,9 +473,7 @@ Newer archive.
         assert location.path == tasks_dir / "done" / "2026-04.md"
         assert location.task.title == "Newer archived task"
 
-    def test_find_task_location_active_wins_duplicate(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_find_task_location_active_wins_duplicate(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         tasks_dir = self._setup_active_and_done(tmp_path)
         _write(
             tasks_dir / "done" / "2026-05.md",
