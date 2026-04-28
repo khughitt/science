@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import date
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from science_tool.entities import (
     edit_entity,
     find_entity,
     generate_entity_id,
+    graph_is_stale,
     list_entities,
     path_for_entity,
     resolve_entity_ref,
@@ -532,3 +534,16 @@ def test_list_entities_orders_by_canonical_id(tmp_path: Path) -> None:
     )
     rows = list_entities(tmp_path, kind="question")
     assert [row["id"] for row in rows] == ["question:q01-alpha", "question:q02-beta"]
+
+
+def test_graph_is_stale_when_source_newer_than_graph(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir(parents=True)
+    graph_path.write_text("", encoding="utf-8")
+    source = write_markdown_entity(
+        tmp_path, "doc/questions/q01-alpha.md", {"id": "question:q01-alpha", "type": "question", "title": "Alpha"}
+    )
+    os.utime(graph_path, (1, 1))
+    os.utime(source, (2, 2))
+    assert graph_is_stale(tmp_path, graph_path) is True

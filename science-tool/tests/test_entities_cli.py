@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -248,3 +249,43 @@ def test_graph_add_question_mentions_entity_create() -> None:
 
         assert result.exit_code == 0, result.output
         assert "entity create question" in result.output
+
+
+def test_entity_neighbors_source_only_warns_and_returns_no_rows() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "doc/questions/q01-alpha.md",
+            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+        )
+        graph = Path("knowledge/graph.trig")
+        graph.parent.mkdir(parents=True)
+        graph.write_text("@prefix sci: <http://example.org/science/vocab/> .\n", encoding="utf-8")
+        os.utime(graph, (1, 1))
+        os.utime(Path("doc/questions/q01-alpha.md"), (2, 2))
+
+        result = runner.invoke(main, ["entity", "neighbors", "question:q01-alpha", "--format", "json"])
+
+        assert result.exit_code == 0, result.output
+        assert "WARNING" in result.output
+        assert "[]" in result.output
+
+
+def test_entity_neighbors_missing_graph_fails_cleanly() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "doc/questions/q01-alpha.md",
+            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+        )
+
+        result = runner.invoke(main, ["entity", "neighbors", "question:q01-alpha"])
+
+        assert result.exit_code != 0
+        assert "Graph file not found: knowledge/graph.trig" in result.output

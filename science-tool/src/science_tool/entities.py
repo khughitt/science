@@ -12,6 +12,7 @@ import yaml
 
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.sources import load_project_sources
+from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
 
 EntityFilenamePolicy = Literal["local-part", "date-local-part"]
 
@@ -347,6 +348,21 @@ def list_entities(project_root: Path, kind: str | None = None, status: str | Non
             }
         )
     return sorted(rows, key=lambda row: row["id"])
+
+
+def graph_is_stale(project_root: Path, graph_path: Path) -> bool:
+    if not graph_path.exists():
+        return True
+    markdown_paths = [
+        path
+        for root in MarkdownAdapter().scan_roots
+        for path in project_root.glob(f"{root}/**/*.md")
+    ]
+    source_paths = [*markdown_paths, *project_root.glob("tasks/**/*.md")]
+    if not source_paths:
+        return False
+    newest_source_mtime = max(path.stat().st_mtime for path in source_paths)
+    return newest_source_mtime > graph_path.stat().st_mtime
 
 
 def append_note_to_body(body: str, note_line: str) -> str:

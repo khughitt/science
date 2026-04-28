@@ -19,6 +19,7 @@ from science_tool.entities import (
     create_entity,
     edit_entity,
     find_entity,
+    graph_is_stale,
     list_entities,
 )
 from science_tool.graph.materialize import materialization_audit, materialize_graph
@@ -337,6 +338,34 @@ def entity_list(kind: str | None, status: str | None, output_format: str) -> Non
         output_format=output_format,
         title="Entities",
         columns=[("id", "ID"), ("kind", "Kind"), ("status", "Status"), ("title", "Title"), ("path", "Path")],
+        rows=rows,
+    )
+
+
+@entity_group.command("neighbors")
+@click.argument("ref")
+@click.option("--hops", type=int, default=2, show_default=True)
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def entity_neighbors(ref: str, hops: int, output_format: str) -> None:
+    """Show graph neighbors for a source-authored entity."""
+
+    try:
+        location = find_entity(Path.cwd(), ref)
+    except EntityCommandError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if graph_is_stale(Path.cwd(), DEFAULT_GRAPH_PATH):
+        click.echo("WARNING: graph materialization may be stale; results below could miss recent edits.")
+    rows = query_neighborhood(
+        graph_path=DEFAULT_GRAPH_PATH,
+        center=location.entity_id,
+        hops=hops,
+        graph_layer="graph/knowledge",
+        limit=200,
+    )
+    emit_query_rows(
+        output_format=output_format,
+        title="Entity Neighbors",
+        columns=[("subject", "Subject"), ("predicate", "Predicate"), ("object", "Object")],
         rows=rows,
     )
 
