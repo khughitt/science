@@ -178,7 +178,7 @@ Generic commands:
 science-tool entity create <kind> <title> \
   [--id <kind:slug>] [--slug <slug>] [--path <path>] \
   [--status <status>] [--related <ref>] [--source-ref <ref>]
-science-tool entity show <ref>
+science-tool entity show <ref> [--format table|json]
 science-tool entity edit <ref> [--title ...] [--status ...] [--related ...] [--source-ref ...]
 science-tool entity note <ref> <note> [--date YYYY-MM-DD]
 science-tool entity list [--kind <kind>] [--status <status>] [--format table|json]
@@ -223,15 +223,15 @@ Resulting file, assuming the next observed project question id is `q102`:
 
 ```markdown
 ---
-id: "question:q102-what-explains-model-family-overlap"
-type: "question"
-title: "What explains model family overlap?"
-status: "open"
+id: question:q102-what-explains-model-family-overlap
+type: question
+title: What explains model family overlap?
+status: open
 related:
-  - "hypothesis:h01"
+- hypothesis:h01
 source_refs: []
-created: "2026-04-28"
-updated: "2026-04-28"
+created: '2026-04-28'
+updated: '2026-04-28'
 ---
 
 # What explains model family overlap?
@@ -553,7 +553,7 @@ existing `graph neighborhood` behavior later.
 Staleness warning rule:
 
 - compare `knowledge/graph.trig` mtime to the newest discovered source file
-  mtime under the source roots used by the markdown adapter plus task files
+  mtime under `MarkdownAdapter().scan_roots` plus `tasks/**/*.md`
 - if any source file is newer than `graph.trig`, print a warning that neighbor
   results may be stale
 - do not auto-build the graph
@@ -626,6 +626,10 @@ Warning rows:
   `related` or `source_refs`
 - pre-existing audit failures that were already present before the attempted
   write
+
+Pre-existing audit failures are printed as warnings after a successful write
+so the user sees the project is already degraded, but they do not block the
+entity operation.
 
 This preserves scaffolding workflows such as adding `--related hypothesis:h01`
 before that hypothesis exists, while still refusing structural corruption.
@@ -712,6 +716,8 @@ Core unit tests:
   ID guidance
 - validation temp files use a non-markdown suffix and do not pollute markdown
   adapter discovery
+- create/edit/note roll back destination files when prospective validation
+  introduces a blocking audit row
 - `entity create concept ...` is rejected with graph-level concept and ontology
   import guidance
 - `note` creates a `## Notes` section when missing
@@ -726,10 +732,12 @@ CLI tests:
 - `entity create question ...`
 - `question create ...` wrapper delegates to the same writer
 - `entity show question:...`
+- `entity show question:... --format json`
 - `entity edit question:... --status ...`
 - `entity note question:... "..."`
 - `entity list --kind question`
 - `entity list --status answered` filters by exact status equality
+- `entity list` orders rows by canonical id
 - `entity neighbors question:...`
 - `entity neighbors` on a source-only entity emits the staleness warning and
   returns no graph neighbors
