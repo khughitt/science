@@ -10,6 +10,7 @@ import pytest
 from science_tool.tasks import (
     Task,
     add_task,
+    append_task_note,
     block_task,
     complete_task,
     defer_task,
@@ -528,6 +529,142 @@ Duplicate.
 
         archived_tasks = parse_tasks(tasks_dir / "done" / "2026-04.md")
         assert archived_tasks[0].status == "done"
+
+    def test_append_task_note_creates_notes_section(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_active_and_done(tmp_path)
+
+        task = append_task_note(tasks_dir, "t001", "Clarified scope.", note_date=date(2026, 4, 28))
+
+        assert task.description == "Active description.\n\n### Notes\n\n- 2026-04-28: Clarified scope."
+
+    def test_append_task_note_empty_description_starts_with_notes(self, tmp_path: Path) -> None:
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir()
+        _write(
+            tasks_dir / "active.md",
+            """\
+## [t001] Empty description
+- priority: P1
+- status: active
+- created: 2026-04-01
+
+""",
+        )
+
+        task = append_task_note(tasks_dir, "t001", "First note.", note_date=date(2026, 4, 28))
+
+        assert task.description == "### Notes\n\n- 2026-04-28: First note."
+
+    def test_append_task_note_appends_to_existing_notes_section(self, tmp_path: Path) -> None:
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir()
+        _write(
+            tasks_dir / "active.md",
+            """\
+## [t001] Has notes
+- priority: P1
+- status: active
+- created: 2026-04-01
+
+Body.
+
+### Notes
+
+- 2026-04-27: First note.
+""",
+        )
+
+        task = append_task_note(tasks_dir, "t001", "Second note.", note_date=date(2026, 4, 21))
+
+        assert task.description.endswith("- 2026-04-27: First note.\n- 2026-04-21: Second note.")
+
+    def test_append_task_note_inserts_before_following_equal_heading(self, tmp_path: Path) -> None:
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir()
+        _write(
+            tasks_dir / "active.md",
+            """\
+## [t001] Has trailing heading
+- priority: P1
+- status: active
+- created: 2026-04-01
+
+Body.
+
+### Notes
+
+- 2026-04-27: First note.
+
+### References
+
+- paper:smith2024
+""",
+        )
+
+        task = append_task_note(tasks_dir, "t001", "Inserted note.", note_date=date(2026, 4, 28))
+
+        assert task.description == (
+            "Body.\n\n"
+            "### Notes\n\n"
+            "- 2026-04-27: First note.\n"
+            "- 2026-04-28: Inserted note.\n\n"
+            "### References\n\n"
+            "- paper:smith2024"
+        )
+
+    def test_append_task_note_rewrites_archived_owner_file(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_active_and_done(tmp_path)
+
+        task = append_task_note(tasks_dir, "t002", "Archived note.", note_date=date(2026, 4, 28))
+
+        assert task.title == "Newer archived task"
+        assert "Archived note." in (tasks_dir / "done" / "2026-04.md").read_text()
+        assert "Archived note." not in (tasks_dir / "done" / "2026-03.md").read_text()
+
+    def test_append_task_note_rejects_blank_note(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_active_and_done(tmp_path)
+
+        with pytest.raises(ValueError, match="Task note cannot be empty"):
+            append_task_note(tasks_dir, "t001", "   ", note_date=date(2026, 4, 28))
+
+    def test_render_tasks_is_idempotent_after_parse(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_active_and_done(tmp_path)
+        parsed_once = parse_tasks(tasks_dir / "done" / "2026-04.md")
+        rendered_once = render_tasks(parsed_once)
+        parsed_twice = parse_tasks(_write(tmp_path / "roundtrip.md", rendered_once))
+        rendered_twice = render_tasks(parsed_twice)
+
+        assert rendered_twice == rendered_once
+
+    def test_append_task_note_roundtrip_preserves_other_tasks(self, tmp_path: Path) -> None:
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir()
+        _write(
+            tasks_dir / "active.md",
+            """\
+## [t001] First
+- priority: P1
+- status: active
+- created: 2026-04-01
+
+First body.
+
+## [t002] Second
+- priority: P2
+- status: active
+- created: 2026-04-02
+
+Second body.
+""",
+        )
+        before = parse_tasks(tasks_dir / "active.md")
+
+        append_task_note(tasks_dir, "t001", "Only first changes.", note_date=date(2026, 4, 28))
+        after = parse_tasks(tasks_dir / "active.md")
+
+        assert after[1] == before[1]
+        assert after[0].title == before[0].title
+        assert after[0].description != before[0].description
 
 
 class TestListTasks:

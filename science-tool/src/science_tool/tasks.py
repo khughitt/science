@@ -19,6 +19,7 @@ __all__ = [
     "TaskLocation",
     "TaskStatus",
     "TaskUpdate",
+    "append_task_note",
     "find_task_location",
     "retire_task",
     "write_task_location",
@@ -30,6 +31,8 @@ _VALID_STATUSES = {s.value for s in TaskStatus}
 _HEADER_RE = re.compile(r"^##\s+\[(\w+)\]\s+(.+)$")
 _FIELD_RE = re.compile(r"^-\s+([\w-]+):\s*(.*)$")
 _LIST_RE = re.compile(r"^\[(.+)\]$")
+_MARKDOWN_HEADING_RE = re.compile(r"^(#{1,3})\s+.+$")
+_NOTES_HEADING_RE = re.compile(r"^###\s+Notes\s*$")
 
 
 def _parse_list_value(raw: str) -> list[str]:
@@ -221,6 +224,57 @@ def write_task_location(location: TaskLocation) -> None:
     """Rewrite the markdown file that owns a task location."""
     location.path.parent.mkdir(parents=True, exist_ok=True)
     location.path.write_text(render_tasks(location.tasks) if location.tasks else "")
+
+
+def _format_note(note_date: date, note: str) -> str:
+    cleaned = note.strip()
+    if not cleaned:
+        msg = "Task note cannot be empty"
+        raise ValueError(msg)
+    return f"- {note_date.isoformat()}: {cleaned}"
+
+
+def _heading_level(line: str) -> int | None:
+    match = _MARKDOWN_HEADING_RE.match(line)
+    if match is None:
+        return None
+    return len(match.group(1))
+
+
+def _append_note_to_description(description: str, note_line: str) -> str:
+    description = description.strip()
+    if not description:
+        return f"### Notes\n\n{note_line}"
+
+    lines = description.splitlines()
+    notes_index = next((i for i, line in enumerate(lines) if _NOTES_HEADING_RE.match(line)), None)
+    if notes_index is None:
+        return f"{description}\n\n### Notes\n\n{note_line}"
+
+    insert_index = len(lines)
+    for i in range(notes_index + 1, len(lines)):
+        level = _heading_level(lines[i])
+        if level is not None and level <= 3:
+            insert_index = i
+            break
+
+    before = lines[:insert_index]
+    while before and before[-1] == "":
+        before.pop()
+    after = lines[insert_index:]
+    if after:
+        return "\n".join([*before, note_line, "", *after]).strip()
+    return "\n".join([*before, note_line]).strip()
+
+
+def append_task_note(tasks_dir: Path, task_id: str, note: str, note_date: date | None = None) -> Task:
+    """Append a dated journal note to a task in active.md or done/*.md."""
+    location = find_task_location(tasks_dir, task_id)
+    task = location.task
+    line = _format_note(note_date or date.today(), note)
+    task.description = _append_note_to_description(task.description, line)
+    write_task_location(location)
+    return task
 
 
 def _find_task(tasks: list[Task], task_id: str) -> Task:
