@@ -170,6 +170,53 @@ class TestTasksEdit:
             )
             assert result.exit_code == 0
 
+    def test_edit_archived_description(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            from pathlib import Path
+
+            tasks_dir = Path("tasks")
+            (tasks_dir / "done").mkdir(parents=True)
+            (tasks_dir / "active.md").write_text("")
+            archived_path = tasks_dir / "done" / "2026-04.md"
+            archived_path.write_text(
+                "## [t141] Archived task\n"
+                "- priority: P1\n"
+                "- status: done\n"
+                "- created: 2026-04-01\n"
+                "- completed: 2026-04-02\n"
+                "\n"
+                "Archived details.\n"
+            )
+
+            result = runner.invoke(main, ["tasks", "edit", "t141", "--description", "Corrected details."])
+
+            assert result.exit_code == 0, result.output
+            assert "Corrected details." in archived_path.read_text()
+
+    def test_edit_archived_rejects_non_closed_status(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            from pathlib import Path
+
+            tasks_dir = Path("tasks")
+            (tasks_dir / "done").mkdir(parents=True)
+            (tasks_dir / "active.md").write_text("")
+            archived_path = tasks_dir / "done" / "2026-04.md"
+            archived_path.write_text(
+                "## [t141] Archived task\n"
+                "- priority: P1\n"
+                "- status: done\n"
+                "- created: 2026-04-01\n"
+                "- completed: 2026-04-02\n"
+                "\n"
+                "Archived details.\n"
+            )
+
+            result = runner.invoke(main, ["tasks", "edit", "t141", "--status", "active"])
+
+            assert result.exit_code != 0
+            assert "Cannot set archived task t141 to non-closed status 'active'" in result.output
+            assert "- status: done" in archived_path.read_text()
+
 
 class TestTasksList:
     def test_list_empty(self, runner: CliRunner) -> None:
@@ -286,6 +333,44 @@ class TestTasksShow:
         with runner.isolated_filesystem():
             result = runner.invoke(main, ["tasks", "show", "t999"])
             assert result.exit_code != 0
+
+    def test_show_displays_archived_task(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            from pathlib import Path
+
+            tasks_dir = Path("tasks")
+            (tasks_dir / "done").mkdir(parents=True)
+            (tasks_dir / "active.md").write_text("")
+            (tasks_dir / "done" / "2026-04.md").write_text(
+                "## [t141] Archived task\n"
+                "- priority: P1\n"
+                "- status: done\n"
+                "- created: 2026-04-01\n"
+                "- completed: 2026-04-02\n"
+                "\n"
+                "Archived details.\n"
+            )
+
+            result = runner.invoke(main, ["tasks", "show", "t141"])
+
+            assert result.exit_code == 0, result.output
+            assert "Archived task" in result.output
+            assert "Archived details." in result.output
+
+    def test_show_missing_task_mentions_archives(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            from pathlib import Path
+
+            tasks_dir = Path("tasks")
+            (tasks_dir / "done").mkdir(parents=True)
+            (tasks_dir / "active.md").write_text("")
+            (tasks_dir / "done" / "2026-04.md").write_text("")
+
+            result = runner.invoke(main, ["tasks", "show", "t999"])
+
+            assert result.exit_code != 0
+            assert "tasks/done/*.md" in result.output
+            assert "2026-04.md" in result.output
 
 
 class TestTasksRetire:

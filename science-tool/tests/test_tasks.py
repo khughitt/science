@@ -509,6 +509,26 @@ Duplicate.
         assert "2026-03.md" in message
         assert "2026-04.md" in message
 
+    def test_edit_task_rewrites_archived_owner_file(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_active_and_done(tmp_path)
+
+        task = edit_task(tasks_dir, "t002", description="Updated archived description.")
+
+        assert task.description == "Updated archived description."
+        archived_tasks = parse_tasks(tasks_dir / "done" / "2026-04.md")
+        older_tasks = parse_tasks(tasks_dir / "done" / "2026-03.md")
+        assert archived_tasks[0].description == "Updated archived description."
+        assert older_tasks[0].description == "Older archive."
+
+    def test_edit_task_rejects_reopening_archived_task(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_active_and_done(tmp_path)
+
+        with pytest.raises(ValueError, match="Cannot set archived task t002 to non-closed status 'active'"):
+            edit_task(tasks_dir, "t002", status="active")
+
+        archived_tasks = parse_tasks(tasks_dir / "done" / "2026-04.md")
+        assert archived_tasks[0].status == "done"
+
 
 class TestListTasks:
     def _setup_multi(self, tmp_path: Path) -> Path:

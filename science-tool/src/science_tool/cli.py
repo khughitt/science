@@ -2194,7 +2194,7 @@ def tasks_edit(
             blocked_by=list(blocked_by) if blocked_by else None,
             group=group,
         )
-    except KeyError as e:
+    except (KeyError, ValueError) as e:
         raise click.ClickException(str(e)) from e
     click.echo(f"Edited [{task.id}] {task.title}")
 
@@ -2269,13 +2269,13 @@ def tasks_list(
 @click.argument("task_id")
 def tasks_show(task_id: str) -> None:
     """Show full details of a task."""
-    from science_tool.tasks import parse_tasks, render_task
+    from science_tool.tasks import find_task_location, render_task
 
-    active = parse_tasks(DEFAULT_TASKS_DIR / "active.md")
-    matching = [t for t in active if t.id == task_id]
-    if not matching:
-        raise click.ClickException(f"Task {task_id} not found in active.md")
-    click.echo(render_task(matching[0]))
+    try:
+        location = find_task_location(DEFAULT_TASKS_DIR, task_id)
+    except KeyError as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(render_task(location.task))
 
 
 @tasks.command("summary")

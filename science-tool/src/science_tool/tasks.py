@@ -364,8 +364,12 @@ def edit_task(
     group: str | None = None,
 ) -> Task:
     """Update specified fields on a task."""
-    tasks = _read_active(tasks_dir)
-    task = _find_task(tasks, task_id)
+    location = find_task_location(tasks_dir, task_id)
+    task = location.task
+
+    if location.path != tasks_dir / "active.md" and status is not None and status not in _CLOSED_STATUS_VALUES:
+        msg = f"Cannot set archived task {task_id} to non-closed status '{status}'"
+        raise ValueError(msg)
 
     if title is not None:
         task.title = title
@@ -384,7 +388,7 @@ def edit_task(
     if group is not None:
         task.group = group
 
-    _write_active(tasks_dir, tasks)
+    write_task_location(location)
     return task
 
 
@@ -401,6 +405,7 @@ def warn_invalid_statuses(tasks: list[Task]) -> None:
 
 # Statuses that represent closed tasks (excluded from default listing)
 _CLOSED_STATUSES = {TaskStatus.DONE, TaskStatus.RETIRED}
+_CLOSED_STATUS_VALUES = {TaskStatus.DONE.value, TaskStatus.RETIRED.value}
 
 
 def list_tasks(
