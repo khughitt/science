@@ -110,11 +110,15 @@ def generate_entity_id(
     title: str,
     entity_id: str | None,
     slug: str | None,
+    today: date | None = None,
 ) -> str:
     if entity_id is not None:
         return validate_entity_id(kind, entity_id)
 
     slug_value = validate_slug(slug) if slug is not None else derive_slug(title)
+    if resolve_path_policy(kind).filename == "date-local-part":
+        date_value = today or date.today()
+        return f"{kind}:{date_value.isoformat()}-{slug_value}"
     siblings = _existing_local_parts(project_root, kind)
     if not siblings:
         raise EntityCommandError(f"No existing {kind} siblings; provide --id for the first source-authored entity")
@@ -233,7 +237,7 @@ def create_entity(
     if slug is not None and entity_id is not None:
         raise EntityCommandError("Use either --slug or --id, not both")
 
-    entity_id_value = generate_entity_id(project_root, kind, title, entity_id, slug)
+    entity_id_value = generate_entity_id(project_root, kind, title, entity_id, slug, today=today_value)
     status_value = status or _DEFAULT_STATUS[kind]
     _validate_status(kind, status_value)
     rel_path = _resolve_destination_rel_path(project_root, kind, entity_id_value, explicit_path, today_value)

@@ -544,3 +544,39 @@ def test_graph_is_stale_when_source_newer_than_graph(tmp_path: Path) -> None:
     os.utime(graph_path, (1, 1))
     os.utime(source, (2, 2))
     assert graph_is_stale(tmp_path, graph_path) is True
+
+
+def test_generate_entity_id_uses_today_for_date_policy_kinds(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    assert (
+        generate_entity_id(tmp_path, "discussion", "Planning Session", None, None, today=date(2026, 4, 28))
+        == "discussion:2026-04-28-planning-session"
+    )
+    assert (
+        generate_entity_id(tmp_path, "interpretation", "Run 1 Result", None, None, today=date(2026, 4, 28))
+        == "interpretation:2026-04-28-run-1-result"
+    )
+
+
+def test_create_entity_auto_generates_discussion_id_without_siblings(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    result = create_entity(
+        project_root=tmp_path,
+        kind="discussion",
+        title="Planning Session",
+        today=date(2026, 4, 28),
+    )
+    assert result.entity_id == "discussion:2026-04-28-planning-session"
+    assert result.path == tmp_path / "doc/discussions/2026-04-28-planning-session.md"
+
+
+def test_create_entity_auto_generates_interpretation_id_without_siblings(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    result = create_entity(
+        project_root=tmp_path,
+        kind="interpretation",
+        title="Run 1 Result",
+        today=date(2026, 4, 28),
+    )
+    assert result.entity_id == "interpretation:2026-04-28-run-1-result"
+    assert result.path == tmp_path / "doc/interpretations/2026-04-28-run-1-result.md"

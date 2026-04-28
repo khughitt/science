@@ -310,16 +310,15 @@ def entity_edit(
 def entity_note(ref: str, note: str, note_date: str | None) -> None:
     """Append a dated note to a source-authored entity."""
 
+    from datetime import date as _date
+
     try:
         date_value = _parse_entity_date(note_date) if note_date else None
         result = append_entity_note(Path.cwd(), ref, note, note_date=date_value)
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
-    shown_date = note_date or result.path.stat().st_mtime
-    if date_value is not None:
-        click.echo(f"Added note to {result.entity_id} ({date_value.isoformat()})")
-    else:
-        click.echo(f"Added note to {result.entity_id} ({shown_date})")
+    display_date = (date_value or _date.today()).isoformat()
+    click.echo(f"Added note to {result.entity_id} ({display_date})")
     _emit_entity_warnings(result.warnings)
 
 

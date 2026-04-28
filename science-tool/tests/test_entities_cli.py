@@ -307,3 +307,39 @@ def test_entity_neighbors_missing_graph_fails_cleanly() -> None:
 
         assert result.exit_code != 0
         assert "Graph file not found: knowledge/graph.trig" in result.output
+
+
+def test_entity_note_without_date_prints_today() -> None:
+    from datetime import date
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "doc/questions/q01-alpha.md",
+            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            "# Alpha\n",
+        )
+
+        result = runner.invoke(main, ["entity", "note", "q01", "Clarified."])
+
+        assert result.exit_code == 0, result.output
+        assert f"Added note to question:q01-alpha ({date.today().isoformat()})" in result.output
+
+
+def test_discussion_create_without_id_uses_today() -> None:
+    from datetime import date
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(main, ["discussion", "create", "Planning"])
+
+        assert result.exit_code == 0, result.output
+        today = date.today().isoformat()
+        assert f"discussion:{today}-planning" in result.output
+        assert Path(f"doc/discussions/{today}-planning.md").is_file()
