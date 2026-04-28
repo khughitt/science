@@ -12,15 +12,19 @@ TDD plan:
   path templates are a future registry/profile extension.
 - ID generation infers each project's existing sibling convention instead of
   hardcoding `qNN`.
+- Slug derivation is deterministic, and `--slug` overrides only the generated
+  slug component.
 - Filename slug equals the entity id local part for files created by the CLI.
 - Created frontmatter has a canonical minimum schema and edits preserve unknown
   frontmatter fields.
-- Validation uses a prospective temp-file write and rolls back on failures.
+- Validation uses a prospective `.md.tmp` write and rolls back on blocking
+  failures.
 - Source-authored commands are preferred; overlapping `graph add` commands stay
   but emit soft-deprecation guidance for source-authored kinds.
 - Reference resolution is exact by canonical id, with narrowly-defined
   unambiguous local-part shorthand.
 - `related:` writes are unidirectional in source.
+- `related:` and `source_refs:` edits are additive in the MVP.
 
 ## Problem
 
@@ -140,9 +144,10 @@ Creation should be conservative. If the entity can be represented by an
 existing ontology/catalog term, the CLI should prefer linking/registering the
 existing authority rather than inventing a local `concept:*`.
 
-The first increment should validate that the target kind is registered and
-should point users toward the entity creation cookbook when a local concept is
-not the right representation. Full authority search/import is deferred.
+The first increment should reject `entity create concept ...` with guidance to
+use `science-tool graph add concept ...` for graph-level experiments or the
+entity creation cookbook for source-authoring decisions. Full authority
+search/import is deferred.
 
 ### 3. Project-Specific Domain Entities
 
@@ -170,9 +175,11 @@ structure and relations that require specialized writers.
 Generic commands:
 
 ```bash
-science-tool entity create <kind> <title> [--id <kind:slug>] [--path <path>] [--status <status>] [--related <ref>] [--source-ref <ref>]
+science-tool entity create <kind> <title> \
+  [--id <kind:slug>] [--slug <slug>] [--path <path>] \
+  [--status <status>] [--related <ref>] [--source-ref <ref>]
 science-tool entity show <ref>
-science-tool entity edit <ref> [--title ...] [--status ...] [--related ...]
+science-tool entity edit <ref> [--title ...] [--status ...] [--related ...] [--source-ref ...]
 science-tool entity note <ref> <note> [--date YYYY-MM-DD]
 science-tool entity list [--kind <kind>] [--status <status>] [--format table|json]
 science-tool entity neighbors <ref> [--hops 1] [--format table|json]
@@ -181,32 +188,45 @@ science-tool entity neighbors <ref> [--hops 1] [--format table|json]
 Typed wrappers:
 
 ```bash
-science-tool question create "<question text>" [--id question:q102-slug] [--related hypothesis:h01]
-science-tool hypothesis create "<title>" [--id hypothesis:h08-slug]
-science-tool discussion create "<title>" [--focus question:q102-slug]
-science-tool interpretation create "<title>" [--input results/path]
+science-tool question create "<question text>" [--id question:q102-slug] [--slug slug] [--related hypothesis:h01]
+science-tool hypothesis create "<title>" [--id hypothesis:h08-slug] [--slug slug]
+science-tool discussion create "<title>" [--slug slug] [--focus question:q102-slug]
+science-tool interpretation create "<title>" [--slug slug] [--input results/path]
 ```
 
 Typed wrappers call the same generic core. They should not duplicate writers or
 validation rules.
 
+Typed-wrapper convenience flags map to the same frontmatter fields as generic
+flags:
+
+- `discussion create --focus <ref>` is sugar for `--related <ref>`.
+- `interpretation create --input <source>` is sugar for
+  `--source-ref <source>`.
+
+`--focus` accepts the same reference syntax as `--related`. `--input` accepts a
+non-empty source reference string. It can be a canonical id, an external
+reference, or a project-relative path-like value such as `results/path`.
+Canonical-looking unresolved values follow the unresolved-reference warning
+rules in the validation section.
+
 Example round trip:
 
 ```bash
 science-tool question create "What explains model family overlap?"
-science-tool entity edit question:q102-model-family-overlap --status active --related hypothesis:h01
-science-tool entity note question:q102-model-family-overlap "This also touches the morphism taxonomy."
-science-tool entity show question:q102-model-family-overlap
+science-tool entity edit question:q102-what-explains-model-family-overlap --status open --related hypothesis:h01
+science-tool entity note question:q102-what-explains-model-family-overlap "This also touches the morphism taxonomy."
+science-tool entity show question:q102-what-explains-model-family-overlap
 ```
 
 Resulting file, assuming the next observed project question id is `q102`:
 
 ```markdown
 ---
-id: "question:q102-model-family-overlap"
+id: "question:q102-what-explains-model-family-overlap"
 type: "question"
 title: "What explains model family overlap?"
-status: "active"
+status: "open"
 related:
   - "hypothesis:h01"
 source_refs: []
@@ -218,7 +238,7 @@ updated: "2026-04-28"
 
 ## Summary
 
-### Notes
+## Notes
 
 - 2026-04-28: This also touches the morphism taxonomy.
 ```
@@ -319,6 +339,35 @@ references.
 - canonical id must not already exist in loaded project sources
 - destination path must not already exist
 
+For source-authored CLI commands, science domain `concept` creation is rejected
+in the MVP. Users should use `science-tool graph add concept ...` for
+graph-level concept experiments, or wait for the deferred ontology-authority
+lookup/import path for durable source-authored domain entities.
+
+Slug derivation for generated IDs is deterministic:
+
+- normalize Unicode text to ASCII with compatibility decomposition; strip
+  characters that cannot be represented as ASCII
+- lowercase
+- replace every run of characters outside `[a-z0-9]` with `-`
+- collapse repeated hyphens
+- trim leading and trailing hyphens
+- do not strip stop words
+- truncate to at most 72 characters, then trim any trailing hyphen
+- reject the generated slug if it is empty or shorter than three characters
+
+Examples:
+
+- `What explains model family overlap?` -> `what-explains-model-family-overlap`
+- `Model-family overlap: v2` -> `model-family-overlap-v2`
+- `Café response -- Δ` -> `cafe-response`
+- `???` -> error requiring `--slug`
+
+`--slug <slug>` overrides only this derived slug component. It is valid only
+when `--id` is omitted, must match `[a-z0-9][a-z0-9-]*[a-z0-9]`, and must be at
+least three characters. If the user needs a fully custom prefix/local-part,
+they should use `--id`.
+
 Typed wrappers auto-generate ids only after inspecting existing sibling files
 for that kind. They infer the numeric pattern from observed ids:
 
@@ -331,6 +380,10 @@ If existing siblings mix incompatible numeric prefixes for the same kind and
 directory, auto-generation fails and asks for explicit `--id`. Generic
 `entity create` requires `--id` unless a built-in kind policy supplies a
 single unambiguous generator.
+
+If there are no existing siblings for a typed wrapper to inspect, auto-ID
+generation fails with guidance to supply `--id`. The MVP does not pick the
+first project convention implicitly.
 
 Concurrent creation races are out of scope. The writer still checks existing
 ids and paths immediately before write, and the prospective validation step
@@ -355,7 +408,9 @@ updated: "<YYYY-MM-DD>"
 Rules:
 
 - `type:` is the canonical persisted field for markdown frontmatter in this
-  increment. The loader already normalizes `type` to `kind`.
+  increment. `MarkdownAdapter.load_raw()` in
+  `science_tool/graph/storage_adapters/markdown.py` already normalizes `type`
+  to `kind` for registry dispatch.
 - `kind:` is not emitted for MVP markdown files.
 - Empty list fields are emitted as empty arrays for schema consistency.
 - `created` and `updated` are always emitted on new files.
@@ -378,7 +433,7 @@ Minimum bodies:
 
 ## Summary
 
-### Notes
+## Notes
 ```
 
 `hypothesis`:
@@ -390,7 +445,7 @@ Minimum bodies:
 
 ## Current Uncertainty
 
-### Notes
+## Notes
 ```
 
 `discussion`:
@@ -402,7 +457,7 @@ Minimum bodies:
 
 ## Synthesis
 
-### Notes
+## Notes
 ```
 
 `interpretation`:
@@ -414,7 +469,7 @@ Minimum bodies:
 
 ## Findings Summary
 
-### Notes
+## Notes
 ```
 
 Templates can become file-backed later. The MVP should keep them in code so
@@ -422,27 +477,30 @@ the writer and tests have a small, explicit contract.
 
 ## Notes
 
-Use the same note section grammar as the task note workflow:
+Entity notes use a peer section in the entity body:
 
 ```markdown
-### Notes
+## Notes
 
 - 2026-04-28: Clarification text.
 ```
 
 Rules:
 
-- The notes heading match is exact and case-sensitive:
-  `^###\s+Notes\s*$`.
+- The notes heading match is exact and case-sensitive: `^##\s+Notes\s*$`.
 - Notes are append-only by insertion order, not sorted by date. `--date`
   allows backfills and future-dated planning notes.
-- If no `### Notes` heading exists, `entity note` appends one at the end of
+- If no `## Notes` heading exists, `entity note` appends one at the end of
   the body, preceded by one blank line when the body is non-empty.
 - If a notes section exists, insert the dated bullet before the next heading of
   equal-or-higher level, or at EOF if there is no later boundary.
-- The section has one blank line between `### Notes` and the first bullet.
+- The section has one blank line between `## Notes` and the first bullet.
 - There is no required trailing blank line after the final note bullet.
-- Empty body text starts directly with `### Notes`, with no leading blank line.
+- Empty body text starts directly with `## Notes`, with no leading blank line.
+
+This differs from task notes, which use `### Notes` inside a task description.
+Entity documents use `##` body sections, so notes should be a peer of sections
+such as `## Summary`, not a child of the previous section.
 
 `entity note` edits the source file, adds or updates `updated: YYYY-MM-DD`, and
 then reloads project sources to verify the edited entity remains valid.
@@ -457,6 +515,10 @@ then reloads project sources to verify the edited entity remains valid.
 - `--source-ref`, repeatable
 - `--updated YYYY-MM-DD`
 
+`--related` and `--source-ref` are additive on edit. They append values that
+are not already present and preserve existing values. Set/clear operations such
+as `--related-set`, `--clear-related`, or `--clear-source-refs` are deferred.
+
 Replacing body content or opening an editor is deferred. The first version
 should avoid ambiguity between journal notes and wholesale document rewriting.
 
@@ -464,7 +526,7 @@ Status values are not globally free-form, but per-kind status enums are not
 fully standardized yet. MVP behavior:
 
 - known built-in kinds get small allow-lists:
-  - `question`: `active`, `open`, `partially-answered`, `answered`, `retired`
+  - `question`: `open`, `partially-answered`, `answered`, `retired`
   - `hypothesis`: `candidate`, `proposed`, `active`, `retired`
   - `discussion`: `in-progress`, `active`, `closed`, `retired`
   - `interpretation`: `active`, `superseded`, `retired`
@@ -499,10 +561,18 @@ Staleness warning rule:
 This is deliberately mtime-based for the MVP. Hash/revision-based staleness can
 reuse graph revision metadata later.
 
+If the entity exists in source but not yet in `knowledge/graph.trig`,
+`neighbors` emits the staleness warning and returns no graph neighbors. The MVP
+does not perform a source-driven fallback for just-authored `related` edges.
+
 `entity list` reads live project sources, not the materialized graph. Source
 scan is authoritative and ensures newly-created entities appear before graph
 materialization. Performance is acceptable for the MVP; output can add paging
 or graph-backed caching later if needed.
+
+`entity list --status <status>` uses exact string equality against the loaded
+entity status. It does not validate the filter value against per-kind status
+enums, so older or deprecated statuses remain discoverable.
 
 ## Reference Resolution
 
@@ -526,20 +596,44 @@ unidirectional; graph materialization may expose inverse/fanout views.
 
 After create/edit/note:
 
-1. Write the prospective file contents to a temporary path in the destination
-   directory.
-2. Load project sources as they would look after the write, with the
+1. Run a baseline source audit before the write.
+2. Write the prospective file contents to a temporary path in the destination
+   directory with a non-markdown suffix such as `.md.tmp`.
+3. Load project sources as they would look after the write, with the
    destination path's contents substituted by the prospective content and the
    temporary staging path excluded from markdown discovery.
-3. Confirm the target canonical id exists.
-4. Treat audit rows with failure status as blocking errors.
-5. Atomically replace the destination file only after validation passes.
+4. Confirm the target canonical id exists.
+5. Compare the prospective audit rows to the baseline audit rows.
+6. Treat new blocking rows as errors.
+7. Atomically replace the destination file only after validation passes.
 
 Implementation detail: existing `audit_project_sources()` returns rows plus a
 boolean failure flag rather than raising, and it expects loaded
-`ProjectSources`. The entity writer must translate blocking failure rows into
-a Click error or library exception. Warnings may be printed but must not
-silently pass as successful validation if `has_failures` is true.
+`ProjectSources`. The entity writer must translate new blocking failure rows
+into a Click error or library exception.
+
+Blocking rows:
+
+- identity collisions
+- malformed frontmatter
+- kind/type mismatch
+- invalid registered schema
+- ambiguous references
+
+Warning rows:
+
+- new `unresolved_reference` rows introduced by the target entity in
+  `related` or `source_refs`
+- pre-existing audit failures that were already present before the attempted
+  write
+
+This preserves scaffolding workflows such as adding `--related hypothesis:h01`
+before that hypothesis exists, while still refusing structural corruption.
+
+The temp file uses a non-`.md` suffix so the current markdown adapter's
+`**/*.md` discovery does not load it accidentally. Final replacement uses
+`os.replace` from a temp file in the destination directory, so the rename is
+atomic on POSIX filesystems.
 
 If validation fails, the original project files are left unchanged and the temp
 file is removed. Partial-bad source state is not allowed.
@@ -556,8 +650,14 @@ file is removed. Partial-bad source state is not allowed.
 - Invalid note text: reject empty or whitespace-only notes.
 - Invalid date: reject non-ISO dates.
 - Invalid id shape or mismatched id prefix: fail before writing.
+- Invalid slug shape, empty derived slug, or `--slug` combined with `--id`:
+  fail before writing.
 - Mixed sibling ID conventions during auto-generation: fail and ask for
   explicit `--id`.
+- Empty sibling set during typed-wrapper auto-ID generation: fail and ask for
+  explicit `--id`.
+- `entity create concept ...`: fail with graph-level concept and ontology
+  import guidance.
 
 ## Migration And Compatibility
 
@@ -599,7 +699,22 @@ Core unit tests:
 - unknown kind fails loudly
 - ID generation respects both `qNN-...` and `NN-...` sibling conventions
 - mixed ID conventions fail auto-generation and require `--id`
-- `note` creates a `### Notes` section when missing
+- slug derivation is deterministic for normal ASCII titles, punctuation,
+  stop-word-heavy titles, very long titles, and non-ASCII input
+- `--slug` overrides derived slugs and is rejected when combined with `--id`
+- typed-wrapper flags map to frontmatter as specified: `--focus` to `related`,
+  `--input` to `source_refs`
+- unresolved `--related` or `--source-ref` values introduced by the target
+  entity produce a warning, not a blocking validation failure
+- `edit --related` and `edit --source-ref` append without replacing existing
+  list values
+- empty project plus typed-wrapper create without `--id` fails with explicit
+  ID guidance
+- validation temp files use a non-markdown suffix and do not pollute markdown
+  adapter discovery
+- `entity create concept ...` is rejected with graph-level concept and ontology
+  import guidance
+- `note` creates a `## Notes` section when missing
 - `note` adds `updated` when missing
 - validation failure leaves no partially-written destination file
 - `edit` preserves unknown frontmatter fields
@@ -614,7 +729,10 @@ CLI tests:
 - `entity edit question:... --status ...`
 - `entity note question:... "..."`
 - `entity list --kind question`
+- `entity list --status answered` filters by exact status equality
 - `entity neighbors question:...`
+- `entity neighbors` on a source-only entity emits the staleness warning and
+  returns no graph neighbors
 - shorthand ref resolution rejects ambiguous prefixes
 - `--related` mutates only the new/edited source file
 
@@ -633,9 +751,9 @@ Integration smoke:
   `--id` is omitted.
 - Generic `entity create` requires `--id` unless the kind has a built-in path
   policy and ID-generation rule.
-- `discussion create` and `interpretation create` use date-prefixed filenames
-  even when the entity id itself is not date-prefixed, because the existing
-  project layout uses date-prefixed files heavily.
+- `discussion create` and `interpretation create` use date-prefixed local
+  parts and filenames because the existing project layout uses date-prefixed
+  files heavily.
 - `neighbors` reads the materialized graph when present and warns if graph
   materialization appears stale. It does not auto-build the graph in the first
   increment.
