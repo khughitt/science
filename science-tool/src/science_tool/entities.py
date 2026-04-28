@@ -58,6 +58,18 @@ class EntityWriteResult:
     warnings: list[str]
 
 
+@dataclass(frozen=True)
+class EntityLocation:
+    entity_id: str
+    kind: str
+    title: str
+    status: str
+    path: Path
+    rel_path: str
+    frontmatter: dict[str, object]
+    body: str
+
+
 def resolve_path_policy(kind: str) -> EntityPathPolicy:
     try:
         return _BUILTIN_MARKDOWN_POLICIES[kind]
@@ -147,6 +159,29 @@ def resolve_entity_ref(project_root: Path, ref: str) -> str:
     return matches[0]
 
 
+def find_entity(project_root: Path, ref: str) -> EntityLocation:
+    project_root = project_root.resolve()
+    entity_id = resolve_entity_ref(project_root, ref)
+    for entity in _load_markdown_entities(project_root):
+        if entity["id"] != entity_id:
+            continue
+        path = entity["path"]
+        frontmatter, body = _parse_markdown_file(path)
+        kind = str(frontmatter.get("type") or frontmatter.get("kind") or entity_id.split(":", 1)[0])
+        return EntityLocation(
+            entity_id=entity_id,
+            kind=kind,
+            title=str(frontmatter.get("title") or ""),
+            status=str(frontmatter.get("status") or ""),
+            path=path,
+            rel_path=path.relative_to(project_root).as_posix(),
+            frontmatter=dict(frontmatter),
+            body=body,
+        )
+    roots = ", ".join(str(policy.root) for policy in _BUILTIN_MARKDOWN_POLICIES.values())
+    raise EntityCommandError(f"Entity not found: {ref}. Searched source roots: {roots}")
+
+
 def build_entity_markdown(
     *,
     kind: str,
@@ -232,6 +267,88 @@ def create_entity(
     return EntityWriteResult(entity_id=entity_id_value, path=destination, warnings=warnings)
 
 
+def edit_entity(
+    project_root: Path,
+    ref: str,
+    *,
+    title: str | None = None,
+    status: str | None = None,
+    related: list[str] | None = None,
+    source_refs: list[str] | None = None,
+    updated: date | None = None,
+    today: date | None = None,
+) -> EntityWriteResult:
+    project_root = project_root.resolve()
+    location = find_entity(project_root, ref)
+    frontmatter = dict(location.frontmatter)
+    if title is not None:
+        frontmatter["title"] = title
+    if status is not None:
+        _validate_status(location.kind, status)
+        frontmatter["status"] = status
+    if related:
+        frontmatter["related"] = _append_unique_string_values(frontmatter.get("related"), related)
+    if source_refs:
+        frontmatter["source_refs"] = _append_unique_string_values(frontmatter.get("source_refs"), source_refs)
+    frontmatter["updated"] = (updated or today or date.today()).isoformat()
+
+    text = _render_markdown(frontmatter, location.body)
+    warnings = _validate_prospective_write(
+        project_root=project_root,
+        rel_path=Path(location.rel_path),
+        text=text,
+        target_entity_id=location.entity_id,
+    )
+    _atomic_replace_text(location.path, text)
+    return EntityWriteResult(entity_id=location.entity_id, path=location.path, warnings=warnings)
+
+
+def append_entity_note(
+    project_root: Path,
+    ref: str,
+    note: str,
+    note_date: date | None = None,
+) -> EntityWriteResult:
+    note_text = note.strip()
+    if not note_text:
+        raise EntityCommandError("Note cannot be empty")
+    project_root = project_root.resolve()
+    location = find_entity(project_root, ref)
+    frontmatter = dict(location.frontmatter)
+    date_value = note_date or date.today()
+    frontmatter["updated"] = date_value.isoformat()
+    body = append_note_to_body(location.body, f"- {date_value.isoformat()}: {note_text}")
+    text = _render_markdown(frontmatter, body)
+    warnings = _validate_prospective_write(
+        project_root=project_root,
+        rel_path=Path(location.rel_path),
+        text=text,
+        target_entity_id=location.entity_id,
+    )
+    _atomic_replace_text(location.path, text)
+    return EntityWriteResult(entity_id=location.entity_id, path=location.path, warnings=warnings)
+
+
+def list_entities(project_root: Path, kind: str | None = None, status: str | None = None) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for entity in load_project_sources(project_root.resolve()).entities:
+        if kind is not None and entity.kind != kind:
+            continue
+        entity_status = entity.status or ""
+        if status is not None and entity_status != status:
+            continue
+        rows.append(
+            {
+                "id": entity.canonical_id,
+                "kind": entity.kind,
+                "title": entity.title,
+                "status": entity_status,
+                "path": entity.file_path,
+            }
+        )
+    return sorted(rows, key=lambda row: row["id"])
+
+
 def append_note_to_body(body: str, note_line: str) -> str:
     lines = body.splitlines()
     for index, line in enumerate(lines):
@@ -256,6 +373,32 @@ def append_note_to_body(body: str, note_line: str) -> str:
 
 def _dump_frontmatter(frontmatter: dict[str, object]) -> str:
     return yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=False)
+
+
+def _render_markdown(frontmatter: dict[str, object], body: str) -> str:
+    return "---\n" + _dump_frontmatter(frontmatter) + "---\n" + body
+
+
+def _append_unique_string_values(existing: object, additions: list[str]) -> list[str]:
+    values = [str(value) for value in existing] if isinstance(existing, list) else []
+    for addition in additions:
+        if addition not in values:
+            values.append(addition)
+    return values
+
+
+def _atomic_replace_text(path: Path, text: str) -> None:
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    try:
+        tmp_path.write_text(text, encoding="utf-8")
+        os.replace(tmp_path, path)
+    except Exception:
+        if tmp_path.exists():
+            tmp_path.unlink()
+        raise
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
 
 
 def _validate_status(kind: str, status: str) -> None:

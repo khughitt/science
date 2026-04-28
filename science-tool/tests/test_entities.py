@@ -10,10 +10,14 @@ from _fixtures.entity_helpers import seed_project, write_markdown_entity
 from science_tool.entities import (
     EntityCommandError,
     append_note_to_body,
+    append_entity_note,
     build_entity_markdown,
     create_entity,
     derive_slug,
+    edit_entity,
+    find_entity,
     generate_entity_id,
+    list_entities,
     path_for_entity,
     resolve_entity_ref,
     resolve_path_policy,
@@ -327,3 +331,204 @@ def test_create_entity_reports_preexisting_audit_failures_as_warnings(
 
     assert result.entity_id == "question:q02-new-question"
     assert any("pre-existing audit failure" in warning for warning in result.warnings)
+
+
+def test_resolve_entity_ref_accepts_canonical_and_unique_prefix(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path, "doc/questions/q01-alpha.md", {"id": "question:q01-alpha", "type": "question", "title": "Alpha"}
+    )
+    assert resolve_entity_ref(tmp_path, "question:q01-alpha") == "question:q01-alpha"
+    assert resolve_entity_ref(tmp_path, "q01") == "question:q01-alpha"
+
+
+def test_resolve_entity_ref_rejects_ambiguous_prefix(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path, "doc/questions/q01-alpha.md", {"id": "question:q01-alpha", "type": "question", "title": "Alpha"}
+    )
+    write_markdown_entity(
+        tmp_path, "doc/questions/q01-beta.md", {"id": "question:q01-beta", "type": "question", "title": "Beta"}
+    )
+    with pytest.raises(EntityCommandError, match="Ambiguous"):
+        resolve_entity_ref(tmp_path, "q01")
+
+
+def test_edit_entity_preserves_unknown_frontmatter_and_adds_related(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    path = write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-alpha.md",
+        {
+            "id": "question:q01-alpha",
+            "type": "question",
+            "title": "Alpha",
+            "status": "open",
+            "tags": ["biology"],
+            "related": ["hypothesis:h01"],
+            "source_refs": [],
+            "created": "2026-04-27",
+            "updated": "2026-04-27",
+        },
+        "# Alpha\n\n## Summary\n",
+    )
+
+    result = edit_entity(
+        tmp_path,
+        "question:q01-alpha",
+        title="Alpha updated",
+        related=["hypothesis:h02"],
+        today=date(2026, 4, 28),
+    )
+
+    assert any("unresolved_reference" in warning for warning in result.warnings)
+    text = path.read_text(encoding="utf-8")
+    assert "Alpha updated" in text
+    assert "tags:" in text
+    assert "hypothesis:h01" in text
+    assert "hypothesis:h02" in text
+    assert "updated: '2026-04-28'" in text or 'updated: "2026-04-28"' in text or "updated: 2026-04-28" in text
+
+
+def test_edit_entity_rejects_invalid_question_status(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-alpha.md",
+        {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+    )
+    with pytest.raises(EntityCommandError, match="Invalid status"):
+        edit_entity(tmp_path, "question:q01-alpha", status="active")
+
+
+def test_append_entity_note_creates_notes_section_and_updated_field(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    path = write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-alpha.md",
+        {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+        "# Alpha\n\n## Summary\n\nBody.\n",
+    )
+
+    append_entity_note(tmp_path, "q01", "Clarified scope.", note_date=date(2026, 4, 28))
+
+    text = path.read_text(encoding="utf-8")
+    assert "## Notes\n\n- 2026-04-28: Clarified scope." in text
+    assert "updated:" in text
+
+
+def test_append_entity_note_rejects_blank(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path, "doc/questions/q01-alpha.md", {"id": "question:q01-alpha", "type": "question", "title": "Alpha"}
+    )
+    with pytest.raises(EntityCommandError, match="cannot be empty"):
+        append_entity_note(tmp_path, "q01", "   ", note_date=date(2026, 4, 28))
+
+
+def test_edit_entity_prospective_audit_failure_rolls_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seed_project(tmp_path)
+    path = write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-alpha.md",
+        {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+        "# Alpha\n",
+    )
+    original = path.read_text(encoding="utf-8")
+    calls = 0
+
+    def fake_audit_project_sources(sources: object) -> tuple[list[dict[str, str]], bool]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return [], False
+        return [
+            {
+                "check": "ambiguous_cross_kind_reference",
+                "status": "fail",
+                "source": "question:q01-alpha",
+                "field": "related",
+                "target": "q01",
+                "details": "q01 resolves to multiple canonical identities",
+            }
+        ], True
+
+    monkeypatch.setattr("science_tool.entities.audit_project_sources", fake_audit_project_sources)
+
+    with pytest.raises(EntityCommandError, match="ambiguous_cross_kind_reference"):
+        edit_entity(tmp_path, "q01", related=["q01"], today=date(2026, 4, 28))
+
+    assert path.read_text(encoding="utf-8") == original
+    assert not list(tmp_path.rglob("*.md.tmp"))
+
+
+def test_append_entity_note_prospective_audit_failure_rolls_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seed_project(tmp_path)
+    path = write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-alpha.md",
+        {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+        "# Alpha\n",
+    )
+    original = path.read_text(encoding="utf-8")
+    calls = 0
+
+    def fake_audit_project_sources(sources: object) -> tuple[list[dict[str, str]], bool]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return [], False
+        return [
+            {
+                "check": "invalid_registered_schema",
+                "status": "fail",
+                "source": "question:q01-alpha",
+                "field": "type",
+                "target": "question",
+                "details": "forced failure",
+            }
+        ], True
+
+    monkeypatch.setattr("science_tool.entities.audit_project_sources", fake_audit_project_sources)
+
+    with pytest.raises(EntityCommandError, match="invalid_registered_schema"):
+        append_entity_note(tmp_path, "q01", "Clarified.", note_date=date(2026, 4, 28))
+
+    assert path.read_text(encoding="utf-8") == original
+    assert not list(tmp_path.rglob("*.md.tmp"))
+
+
+def test_list_entities_filters_kind_and_exact_status(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-alpha.md",
+        {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+    )
+    write_markdown_entity(
+        tmp_path,
+        "doc/questions/q02-beta.md",
+        {"id": "question:q02-beta", "type": "question", "title": "Beta", "status": "answered"},
+    )
+    rows = list_entities(tmp_path, kind="question", status="answered")
+    assert [row["id"] for row in rows] == ["question:q02-beta"]
+
+
+def test_list_entities_orders_by_canonical_id(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/questions/q02-beta.md",
+        {"id": "question:q02-beta", "type": "question", "title": "Beta", "status": "open"},
+    )
+    write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-alpha.md",
+        {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+    )
+    rows = list_entities(tmp_path, kind="question")
+    assert [row["id"] for row in rows] == ["question:q01-alpha", "question:q02-beta"]
