@@ -14,6 +14,7 @@ from science_tool.tasks import (
     complete_task,
     defer_task,
     edit_task,
+    find_task_location,
     list_tasks,
     next_task_id,
     parse_tasks,
@@ -412,6 +413,101 @@ class TestEditTask:
         tasks_dir = _make_tasks_dir(tmp_path)
         with pytest.raises(KeyError):
             edit_task(tasks_dir, "t999", priority="P3")
+
+
+class TestTaskLocation:
+    def _setup_active_and_done(self, tmp_path: Path) -> Path:
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir()
+        _write(
+            tasks_dir / "active.md",
+            """\
+## [t001] Active copy
+- priority: P1
+- status: active
+- created: 2026-04-01
+
+Active description.
+""",
+        )
+        _write(
+            tasks_dir / "done" / "2026-03.md",
+            """\
+## [t002] Older archived task
+- priority: P2
+- status: done
+- created: 2026-03-01
+- completed: 2026-03-05
+
+Older archive.
+""",
+        )
+        _write(
+            tasks_dir / "done" / "2026-04.md",
+            """\
+## [t002] Newer archived task
+- priority: P0
+- status: done
+- created: 2026-04-01
+- completed: 2026-04-05
+
+Newer archive.
+""",
+        )
+        return tasks_dir
+
+    def test_find_task_location_finds_active_task(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_active_and_done(tmp_path)
+
+        location = find_task_location(tasks_dir, "t001")
+
+        assert location.path == tasks_dir / "active.md"
+        assert location.task.title == "Active copy"
+
+    def test_find_task_location_searches_archives_newest_first(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_active_and_done(tmp_path)
+
+        location = find_task_location(tasks_dir, "t002")
+
+        assert location.path == tasks_dir / "done" / "2026-04.md"
+        assert location.task.title == "Newer archived task"
+
+    def test_find_task_location_active_wins_duplicate(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        tasks_dir = self._setup_active_and_done(tmp_path)
+        _write(
+            tasks_dir / "done" / "2026-05.md",
+            """\
+## [t001] Archived duplicate
+- priority: P3
+- status: done
+- created: 2026-05-01
+- completed: 2026-05-02
+
+Duplicate.
+""",
+        )
+
+        location = find_task_location(tasks_dir, "t001")
+
+        captured = capsys.readouterr()
+        assert location.path == tasks_dir / "active.md"
+        assert "WARNING: duplicate task id t001 found in" in captured.err
+        assert "active.md" in captured.err
+        assert "2026-05.md" in captured.err
+
+    def test_find_task_location_missing_lists_searched_files(self, tmp_path: Path) -> None:
+        tasks_dir = self._setup_active_and_done(tmp_path)
+
+        with pytest.raises(KeyError) as excinfo:
+            find_task_location(tasks_dir, "t999")
+
+        message = str(excinfo.value)
+        assert "Task t999 not found" in message
+        assert "active.md" in message
+        assert "2026-03.md" in message
+        assert "2026-04.md" in message
 
 
 class TestListTasks:

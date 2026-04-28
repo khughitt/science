@@ -7,12 +7,22 @@ from __future__ import annotations
 
 import re
 import sys
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
 from science_model.tasks import Task, TaskCreate, TaskStatus, TaskUpdate
 
-__all__ = ["Task", "TaskCreate", "TaskStatus", "TaskUpdate", "retire_task"]
+__all__ = [
+    "Task",
+    "TaskCreate",
+    "TaskLocation",
+    "TaskStatus",
+    "TaskUpdate",
+    "find_task_location",
+    "retire_task",
+    "write_task_location",
+]
 
 _VALID_STATUSES = {s.value for s in TaskStatus}
 
@@ -164,6 +174,53 @@ def _read_active(tasks_dir: Path) -> list[Task]:
 def _write_active(tasks_dir: Path, tasks: list[Task]) -> None:
     tasks_dir.mkdir(parents=True, exist_ok=True)
     (tasks_dir / "active.md").write_text(render_tasks(tasks) if tasks else "")
+
+
+@dataclass(frozen=True)
+class TaskLocation:
+    """A task plus the markdown file that currently owns it."""
+
+    path: Path
+    task: Task
+    tasks: list[Task]
+
+
+def _task_search_paths(tasks_dir: Path) -> list[Path]:
+    paths = [tasks_dir / "active.md"]
+    done_dir = tasks_dir / "done"
+    if done_dir.is_dir():
+        paths.extend(sorted(done_dir.glob("*.md"), reverse=True))
+    return paths
+
+
+def _find_matches(tasks_dir: Path, task_id: str) -> list[TaskLocation]:
+    matches: list[TaskLocation] = []
+    for path in _task_search_paths(tasks_dir):
+        tasks = parse_tasks(path)
+        for task in tasks:
+            if task.id == task_id:
+                matches.append(TaskLocation(path=path, task=task, tasks=tasks))
+                break
+    return matches
+
+
+def find_task_location(tasks_dir: Path, task_id: str) -> TaskLocation:
+    """Find a task in active.md or done/*.md, preferring active then newest archives."""
+    matches = _find_matches(tasks_dir, task_id)
+    if not matches:
+        searched = ", ".join(str(path) for path in _task_search_paths(tasks_dir))
+        msg = f"Task {task_id} not found in tasks/active.md or tasks/done/*.md (searched: {searched})"
+        raise KeyError(msg)
+    if len(matches) > 1:
+        locations = ", ".join(str(match.path) for match in matches)
+        print(f"WARNING: duplicate task id {task_id} found in {locations}; using {matches[0].path}", file=sys.stderr)
+    return matches[0]
+
+
+def write_task_location(location: TaskLocation) -> None:
+    """Rewrite the markdown file that owns a task location."""
+    location.path.parent.mkdir(parents=True, exist_ok=True)
+    location.path.write_text(render_tasks(location.tasks) if location.tasks else "")
 
 
 def _find_task(tasks: list[Task], task_id: str) -> Task:
