@@ -173,10 +173,9 @@ output.
 
 The patterns above (marker files, `protected()` caveats) target **workflow
 authors**. They cannot defend a pipeline that an author has already shipped
-with declared outputs at canonical paths — and they do nothing if the runner
-invokes snakemake with hazardous defaults. Two snakemake defaults are
-particularly destructive on production pipelines and must be neutralized
-**at the project level**, not per-invocation:
+with declared outputs at canonical paths, and they cannot prevent a runner
+from invoking snakemake with hazardous defaults. Two snakemake defaults are
+particularly destructive on production pipelines:
 
 **1. `--use-singularity` / `--use-apptainer` / `--use-conda` are opt-in.**
 Without these flags, snakemake silently ignores `container:`, `conda:`, and
@@ -184,69 +183,92 @@ Without these flags, snakemake silently ignores `container:`, `conda:`, and
 The log line `Singularity containers: ignored` is the only warning. This is
 the dominant cause of "mysterious R/Python package missing" errors when an
 existing pipeline is run from a workstation that doesn't have the project's
-full env — and it cascades into the next failsafe failure:
+full env. It cascades into the next failure mode:
 
-**2. `--keep-incomplete` is opt-in.** Without it, when a rule fails,
-snakemake removes ALL declared outputs of that rule — including pre-existing
-files that were not modified by the failed run, on the principle that "if
-the rule failed, its outputs are suspect." For rules whose outputs sit at
-canonical paths (vendor data preprocessing, expensive intermediates that
-other rules consume directly), a transient runtime error then permanently
-destroys the on-disk copy — even when the actual failure was something
-trivially recoverable like a missing R package.
+**2. Pre-rule output cleanup ALWAYS runs (no flag disables it).** When
+snakemake decides to re-run a rule (for any reason: code/mtime/params
+change, fresh `out_dir` metadata, etc.), it removes the rule's declared
+outputs *before the rule body executes*. Combined with #1, this means: a
+host invocation of a `container:`-bearing rule silently runs in the wrong
+env, fails in some trivial way (missing R package), and the canonical
+outputs are gone before the rule body even started.
 
-The combination is especially dangerous for **rules that have a `container:`
-directive but were invoked without `--use-singularity`**. The container is
-silently ignored, the rule runs in a host env it was never meant to run in,
-the rule fails for env reasons, and existing outputs are deleted. We have
-seen this destroy multiple GB of pre-computed intermediates in real
-projects.
+> **Critical clarification:** `--keep-incomplete` does NOT prevent the
+> pre-rule cleanup. It addresses a different mechanism: post-failure
+> cleanup of partially-written outputs (so you can debug them). The
+> deletion that destroys canonical outputs happens BEFORE the rule body
+> writes anything — it is the pre-rule clear-the-slate step. There is no
+> snakemake flag that disables pre-rule cleanup.
 
-**Pattern: codify safe defaults in a project profile.** Both flags are
-project-level decisions, not per-invocation. Set them once and make them
-the default for every run.
+This makes the marker-file pattern above the **only structural defense**
+for canonical outputs that other rules consume directly. The pattern is
+required, not optional, for any rule whose declared outputs sit at paths
+that downstream rules treat as stable inputs.
+
+**Two-layer fix.** Both layers are needed; either alone leaves the
+incident class open:
+
+**Layer A (invocation discipline) — codify in a project profile + wrapper.**
+Even with marker-file rules, you want runtime invocation to fail closed
+when the env can't satisfy `container:` directives. Snakemake won't fail
+loudly on its own — it just runs in the wrong env. So:
 
 ```yaml
 # profile/config.yaml
+# Note: keep-incomplete only protects against post-failure cleanup of
+# partial writes — a useful but narrow property. It does NOT protect
+# against pre-rule cleanup; that requires Layer B (marker-file pattern).
 keep-incomplete: true
-software-deployment-method:
-  - apptainer
 ```
 
-Then either invoke explicitly with `--profile profile/`:
-
-```bash
-snakemake --profile profile/ <target>
-```
-
-Or wrap snakemake in `bin/snakemake` that applies the profile automatically:
+Wrap snakemake in `bin/snakemake` (fail-closed pattern):
 
 ```bash
 #!/usr/bin/env bash
-# bin/snakemake — wraps `snakemake` to force the project profile.
+# bin/snakemake — refuse non-informational invocations on host.
 set -euo pipefail
 PROFILE="${PROJECT_SNAKEMAKE_PROFILE:-profile/}"
+
+is_informational=false
 for arg in "$@"; do
   case "$arg" in
-    --profile|--profile=*) exec snakemake "$@" ;;
+    -n|--dryrun|--lint|--list|--summary|--detailed-summary|--printshellcmds|\
+    --version|--help|-h|--dag|--rulegraph|--filegraph|--report)
+      is_informational=true ;;
   esac
+done
+
+if [[ "$is_informational" == "false" \
+      && "${BYPASS_HOST_GUARD:-0}" != "1" \
+      && ! -f /.dockerenv ]]; then
+  echo "ERROR: refusing non-informational invocation on host." >&2
+  echo "  Container: directives are silently ignored without --use-singularity." >&2
+  echo "  Use docker/<project>-run.sh or set BYPASS_HOST_GUARD=1 (rare)." >&2
+  exit 1
+fi
+for arg in "$@"; do
+  case "$arg" in --profile|--profile=*) exec snakemake "$@" ;; esac
 done
 exec snakemake --profile "$PROFILE" "$@"
 ```
 
-Project AGENTS.md / README should forbid bare `snakemake` and direct all
-invocations through `bin/snakemake` (or the project's container wrapper).
-Bare `snakemake` is acceptable only inside containers where the env is
-guaranteed and the worktree is ephemeral.
+The wrapper is fail-closed: it does NOT try to detect container directives
+via dry-run probes (which can fail for unrelated reasons and silently let
+hazardous runs through). It refuses ALL non-informational host invocations
+by default. Production runs go through the project's container wrapper.
+
+**Layer B (workflow author) — marker-file pattern.** For any rule whose
+canonical outputs are consumed by downstream rules, use the marker-file
+pattern in the section above. This is the only defense against pre-rule
+cleanup. Layer A protects against the silent-ignore-container failure
+mode at the invocation level; Layer B protects against the cleanup
+mechanism at the rule level. Both are needed.
 
 **When to apply this:** any project with R rules, conda/container
-directives, or expensive intermediates on shared filesystems. The cost is
-one config file plus one shell wrapper.
-
-**Cross-reference:** the marker-file pattern above (`protected()` caveats)
-targets *unrecoverable* outputs (network downloads). The profile pattern
-here targets the *cleanup default* for *recoverable* outputs. Both
-failsafes are needed; they cover different failure modes.
+directives, or expensive intermediates on shared filesystems. The cost
+is one config file, one shell wrapper, and a marker-file refactor for
+each canonical-output rule. Cheap relative to a single destroyed
+intermediate.
 
 ### Scripts vs shell
 - **Shell:** simple commands, tool invocations
