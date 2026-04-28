@@ -218,6 +218,66 @@ class TestTasksEdit:
             assert "- status: done" in archived_path.read_text()
 
 
+class TestTasksNote:
+    def test_note_appends_to_active_task(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            from pathlib import Path
+
+            runner.invoke(main, ["tasks", "add", "Needs note", "--priority", "P1"])
+
+            result = runner.invoke(main, ["tasks", "note", "t001", "Clarified scope.", "--date", "2026-04-28"])
+
+            assert result.exit_code == 0, result.output
+            assert "Added note to [t001] (2026-04-28)" in result.output
+            body = Path("tasks/active.md").read_text()
+            assert "### Notes" in body
+            assert "- 2026-04-28: Clarified scope." in body
+
+    def test_note_appends_to_archived_task(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            from pathlib import Path
+
+            tasks_dir = Path("tasks")
+            (tasks_dir / "done").mkdir(parents=True)
+            (tasks_dir / "active.md").write_text("")
+            archived_path = tasks_dir / "done" / "2026-04.md"
+            archived_path.write_text(
+                "## [t141] Archived task\n"
+                "- priority: P1\n"
+                "- status: done\n"
+                "- created: 2026-04-01\n"
+                "- completed: 2026-04-02\n"
+                "\n"
+                "Archived details.\n"
+            )
+
+            result = runner.invoke(
+                main, ["tasks", "note", "t141", "Archived clarification.", "--date", "2026-04-28"]
+            )
+
+            assert result.exit_code == 0, result.output
+            assert "Added note to [t141] (2026-04-28)" in result.output
+            assert "- 2026-04-28: Archived clarification." in archived_path.read_text()
+
+    def test_note_rejects_blank_note(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            runner.invoke(main, ["tasks", "add", "Needs note", "--priority", "P1"])
+
+            result = runner.invoke(main, ["tasks", "note", "t001", "   ", "--date", "2026-04-28"])
+
+            assert result.exit_code != 0
+            assert "Task note cannot be empty" in result.output
+
+    def test_note_rejects_invalid_date(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            runner.invoke(main, ["tasks", "add", "Needs note", "--priority", "P1"])
+
+            result = runner.invoke(main, ["tasks", "note", "t001", "Clarified.", "--date", "not-a-date"])
+
+            assert result.exit_code != 0
+            assert "Date must use YYYY-MM-DD" in result.output
+
+
 class TestTasksList:
     def test_list_empty(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():

@@ -2199,6 +2199,30 @@ def tasks_edit(
     click.echo(f"Edited [{task.id}] {task.title}")
 
 
+@tasks.command("note")
+@click.argument("task_id")
+@click.argument("note")
+@click.option("--date", "note_date_raw", default=None, help="Note date in YYYY-MM-DD format.")
+def tasks_note(task_id: str, note: str, note_date_raw: str | None) -> None:
+    """Append a dated note to a task."""
+    from datetime import date
+
+    from science_tool.tasks import append_task_note
+
+    note_date = date.today()
+    if note_date_raw is not None:
+        try:
+            note_date = date.fromisoformat(note_date_raw)
+        except ValueError as exc:
+            raise click.ClickException("Date must use YYYY-MM-DD") from exc
+
+    try:
+        task = append_task_note(DEFAULT_TASKS_DIR, task_id, note, note_date=note_date)
+    except (KeyError, ValueError) as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(f"Added note to [{task.id}] ({note_date.isoformat()})")
+
+
 @tasks.command("list")
 @click.option("--priority", default=None, type=click.Choice(["P0", "P1", "P2", "P3"]))
 @click.option(
