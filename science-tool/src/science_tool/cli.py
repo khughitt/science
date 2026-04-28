@@ -13,6 +13,14 @@ from science_tool.datasets.validate import validate_data_packages
 from science_tool.distill.openalex import distill_openalex
 from science_tool.distill.pykeen_source import distill_pykeen
 from science_tool.doi import lookup_doi_metadata
+from science_tool.entities import (
+    EntityCommandError,
+    append_entity_note,
+    create_entity,
+    edit_entity,
+    find_entity,
+    list_entities,
+)
 from science_tool.graph.materialize import materialization_audit, materialize_graph
 from science_tool.graph.cross_impact import query_cross_impact
 from science_tool.graph.migrate import (
@@ -178,6 +186,179 @@ main.add_command(verdict_group)
 main.add_command(big_picture_group)
 main.add_command(refs_group)
 main.add_command(skills_group)
+
+
+@main.group("entity")
+def entity_group() -> None:
+    """Create, edit, note, list, and inspect source-authored entities."""
+
+
+@entity_group.command("create")
+@click.argument("kind")
+@click.argument("title")
+@click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
+@click.option("--source-ref", "source_refs", multiple=True, help="Source reference (repeatable)")
+@click.option("--id", "entity_id")
+@click.option("--slug")
+@click.option("--path", "explicit_path", type=click.Path(path_type=Path))
+@click.option("--status")
+def entity_create(
+    kind: str,
+    title: str,
+    related_refs: tuple[str, ...],
+    source_refs: tuple[str, ...],
+    entity_id: str | None,
+    slug: str | None,
+    explicit_path: Path | None,
+    status: str | None,
+) -> None:
+    """Create a source-authored entity markdown file."""
+
+    try:
+        result = create_entity(
+            project_root=Path.cwd(),
+            kind=kind,
+            title=title,
+            entity_id=entity_id,
+            slug=slug,
+            explicit_path=explicit_path,
+            status=status,
+            related=list(related_refs),
+            source_refs=list(source_refs),
+        )
+    except EntityCommandError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Created {result.entity_id} at {result.path.relative_to(Path.cwd())}")
+    _emit_entity_warnings(result.warnings)
+
+
+@entity_group.command("show")
+@click.argument("ref")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def entity_show(ref: str, output_format: str) -> None:
+    """Show a source-authored entity."""
+
+    try:
+        location = find_entity(Path.cwd(), ref)
+    except EntityCommandError as exc:
+        raise click.ClickException(str(exc)) from exc
+    related = _frontmatter_string_list(location.frontmatter.get("related"))
+    source_refs = _frontmatter_string_list(location.frontmatter.get("source_refs"))
+    payload = {
+        "id": location.entity_id,
+        "kind": location.kind,
+        "title": location.title,
+        "status": location.status,
+        "path": location.rel_path,
+        "related": related,
+        "source_refs": source_refs,
+        "body": location.body,
+    }
+    if output_format == "json":
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+    click.echo(f"id: {payload['id']}")
+    click.echo(f"type: {payload['kind']}")
+    click.echo(f"title: {payload['title']}")
+    click.echo(f"status: {payload['status']}")
+    click.echo(f"path: {payload['path']}")
+    click.echo(f"related: {', '.join(related)}")
+    click.echo(f"source_refs: {', '.join(source_refs)}")
+    if location.body:
+        click.echo()
+        click.echo(location.body.rstrip("\n"))
+
+
+@entity_group.command("edit")
+@click.argument("ref")
+@click.option("--title")
+@click.option("--status")
+@click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
+@click.option("--source-ref", "source_refs", multiple=True, help="Source reference (repeatable)")
+@click.option("--updated")
+def entity_edit(
+    ref: str,
+    title: str | None,
+    status: str | None,
+    related_refs: tuple[str, ...],
+    source_refs: tuple[str, ...],
+    updated: str | None,
+) -> None:
+    """Edit source-authored entity metadata."""
+
+    try:
+        result = edit_entity(
+            Path.cwd(),
+            ref,
+            title=title,
+            status=status,
+            related=list(related_refs),
+            source_refs=list(source_refs),
+            updated=_parse_entity_date(updated) if updated else None,
+        )
+    except EntityCommandError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Updated {result.entity_id} at {result.path.relative_to(Path.cwd())}")
+    _emit_entity_warnings(result.warnings)
+
+
+@entity_group.command("note")
+@click.argument("ref")
+@click.argument("note")
+@click.option("--date", "note_date")
+def entity_note(ref: str, note: str, note_date: str | None) -> None:
+    """Append a dated note to a source-authored entity."""
+
+    try:
+        date_value = _parse_entity_date(note_date) if note_date else None
+        result = append_entity_note(Path.cwd(), ref, note, note_date=date_value)
+    except EntityCommandError as exc:
+        raise click.ClickException(str(exc)) from exc
+    shown_date = note_date or result.path.stat().st_mtime
+    if date_value is not None:
+        click.echo(f"Added note to {result.entity_id} ({date_value.isoformat()})")
+    else:
+        click.echo(f"Added note to {result.entity_id} ({shown_date})")
+    _emit_entity_warnings(result.warnings)
+
+
+@entity_group.command("list")
+@click.option("--kind")
+@click.option("--status")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def entity_list(kind: str | None, status: str | None, output_format: str) -> None:
+    """List source-authored entities."""
+
+    try:
+        rows = list_entities(Path.cwd(), kind=kind, status=status)
+    except EntityCommandError as exc:
+        raise click.ClickException(str(exc)) from exc
+    emit_query_rows(
+        output_format=output_format,
+        title="Entities",
+        columns=[("id", "ID"), ("kind", "Kind"), ("status", "Status"), ("title", "Title"), ("path", "Path")],
+        rows=rows,
+    )
+
+
+def _emit_entity_warnings(warnings: list[str]) -> None:
+    for warning in warnings:
+        click.echo(f"WARNING: {warning}")
+
+
+def _frontmatter_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value]
+
+
+def _parse_entity_date(value: str) -> Any:
+    from datetime import date
+
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise click.ClickException(f"Invalid date: {value}") from exc
 
 
 @main.group()

@@ -1,0 +1,176 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from click.testing import CliRunner
+
+from _fixtures.entity_helpers import seed_project, write_markdown_entity
+from science_tool.cli import main
+
+
+def test_entity_create_question_writes_source() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "doc/questions/q01-existing.md",
+            {"id": "question:q01-existing", "type": "question", "title": "Existing", "status": "open"},
+        )
+
+        result = runner.invoke(main, ["entity", "create", "question", "New Question"])
+
+        assert result.exit_code == 0, result.output
+        assert "question:q02-new-question" in result.output
+        assert Path("doc/questions/q02-new-question.md").is_file()
+
+
+def test_entity_create_with_unresolved_related_prints_warning() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "doc/questions/q01-existing.md",
+            {"id": "question:q01-existing", "type": "question", "title": "Existing", "status": "open"},
+        )
+
+        result = runner.invoke(main, ["entity", "create", "question", "New Question", "--related", "hypothesis:h01"])
+
+        assert result.exit_code == 0, result.output
+        assert "WARNING" in result.output
+
+
+def test_entity_show_finds_source_entity_by_shorthand() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "doc/questions/q01-alpha.md",
+            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+        )
+
+        result = runner.invoke(main, ["entity", "show", "q01"])
+
+        assert result.exit_code == 0, result.output
+        assert "question:q01-alpha" in result.output
+        assert "Alpha" in result.output
+
+
+def test_entity_show_emits_body_content() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "doc/questions/q01-alpha.md",
+            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            "# Alpha\n\n## Summary\n\nBody content.\n",
+        )
+
+        result = runner.invoke(main, ["entity", "show", "q01"])
+
+        assert result.exit_code == 0, result.output
+        assert "## Summary" in result.output
+        assert "Body content." in result.output
+
+
+def test_entity_show_json_outputs_machine_readable_payload() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "doc/questions/q01-alpha.md",
+            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+        )
+
+        result = runner.invoke(main, ["entity", "show", "q01", "--format", "json"])
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert payload == {
+            "id": "question:q01-alpha",
+            "kind": "question",
+            "title": "Alpha",
+            "status": "open",
+            "path": "doc/questions/q01-alpha.md",
+            "related": [],
+            "source_refs": [],
+            "body": "",
+        }
+
+
+def test_entity_edit_adds_related_without_replacing_existing() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        path = write_markdown_entity(
+            root,
+            "doc/questions/q01-alpha.md",
+            {
+                "id": "question:q01-alpha",
+                "type": "question",
+                "title": "Alpha",
+                "status": "open",
+                "related": ["hypothesis:h01"],
+            },
+        )
+
+        result = runner.invoke(main, ["entity", "edit", "q01", "--related", "hypothesis:h02"])
+
+        assert result.exit_code == 0, result.output
+        assert "WARNING" in result.output
+        text = path.read_text(encoding="utf-8")
+        assert "hypothesis:h01" in text
+        assert "hypothesis:h02" in text
+
+
+def test_entity_note_adds_dated_note() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        path = write_markdown_entity(
+            root,
+            "doc/questions/q01-alpha.md",
+            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+            "# Alpha\n",
+        )
+
+        result = runner.invoke(main, ["entity", "note", "q01", "Clarified.", "--date", "2026-04-28"])
+
+        assert result.exit_code == 0, result.output
+        assert "Added note to question:q01-alpha (2026-04-28)" in result.output
+        assert "- 2026-04-28: Clarified." in path.read_text(encoding="utf-8")
+
+
+def test_entity_list_filters_exact_status() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "doc/questions/q01-alpha.md",
+            {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
+        )
+        write_markdown_entity(
+            root,
+            "doc/questions/q02-beta.md",
+            {"id": "question:q02-beta", "type": "question", "title": "Beta", "status": "answered"},
+        )
+
+        result = runner.invoke(main, ["entity", "list", "--kind", "question", "--status", "answered", "--format", "json"])
+
+        assert result.exit_code == 0, result.output
+        assert "question:q02-beta" in result.output
+        assert "question:q01-alpha" not in result.output
