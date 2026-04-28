@@ -80,3 +80,53 @@ def test_load_raw_handles_file_without_frontmatter(tmp_path: Path, monkeypatch: 
     # Adapter returns the content and file_path at minimum.
     assert raw["content"].startswith("Just prose")
     assert raw["file_path"] == "doc/no_fm.md"
+
+
+def test_virtual_markdown_override_is_discovered_and_loaded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    adapter = MarkdownAdapter(
+        virtual_files={
+            "doc/questions/q01-example.md": '---\nid: "question:q01-example"\ntype: "question"\ntitle: "Q1"\n---\nBody.\n'
+        }
+    )
+
+    refs = adapter.discover(tmp_path)
+
+    assert [ref.path for ref in refs] == ["doc/questions/q01-example.md"]
+    monkeypatch.chdir(tmp_path)
+    raw = adapter.load_raw(refs[0])
+    assert raw["canonical_id"] == "question:q01-example"
+    assert raw["kind"] == "question"
+    assert raw["content"] == "Body.\n"
+
+
+def test_virtual_markdown_override_replaces_disk_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "doc" / "questions").mkdir(parents=True)
+    (tmp_path / "doc" / "questions" / "q01-example.md").write_text(
+        '---\nid: "question:q01-example"\ntype: "question"\ntitle: "Old"\n---\nOld body.\n',
+        encoding="utf-8",
+    )
+    adapter = MarkdownAdapter(
+        virtual_files={
+            "doc/questions/q01-example.md": '---\nid: "question:q01-example"\ntype: "question"\ntitle: "New"\n---\nNew body.\n'
+        }
+    )
+
+    refs = adapter.discover(tmp_path)
+
+    assert [ref.path for ref in refs] == ["doc/questions/q01-example.md"]
+    monkeypatch.chdir(tmp_path)
+    raw = adapter.load_raw(refs[0])
+    assert raw["title"] == "New"
+    assert raw["content"] == "New body.\n"
+
+
+def test_md_tmp_files_are_not_discovered(tmp_path: Path) -> None:
+    (tmp_path / "doc" / "questions").mkdir(parents=True)
+    (tmp_path / "doc" / "questions" / "q01-example.md.tmp").write_text(
+        '---\nid: "question:q01-example"\ntype: "question"\ntitle: "Q1"\n---\n',
+        encoding="utf-8",
+    )
+
+    assert MarkdownAdapter().discover(tmp_path) == []

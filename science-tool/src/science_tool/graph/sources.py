@@ -117,7 +117,7 @@ class ProjectSources(BaseModel):
 SourceBinding = BindingSource
 
 
-def load_project_sources(project_root: Path) -> ProjectSources:
+def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] | None = None) -> ProjectSources:
     """Load all project entities through the unified registry + adapters flow."""
     project_root = project_root.resolve()
     config = _read_project_config(project_root)
@@ -152,7 +152,7 @@ def load_project_sources(project_root: Path) -> ProjectSources:
             registry.register_extension_kind(entity_kind.name, ProjectEntity)
 
     adapters: list[StorageAdapter] = [
-        MarkdownAdapter(),
+        MarkdownAdapter(virtual_files=markdown_overrides),
         AggregateAdapter(local_profile=local_profile),
         DatapackageAdapter(),
         TaskAdapter(),
