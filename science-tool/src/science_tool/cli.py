@@ -341,6 +341,132 @@ def entity_list(kind: str | None, status: str | None, output_format: str) -> Non
     )
 
 
+@main.group("hypothesis")
+def hypothesis_group() -> None:
+    """Hypothesis source commands."""
+
+
+@hypothesis_group.command("create")
+@click.argument("title")
+@click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
+@click.option("--source-ref", "source_refs", multiple=True, help="Source reference (repeatable)")
+@click.option("--id", "entity_id")
+@click.option("--slug")
+@click.option("--status")
+def hypothesis_create(
+    title: str,
+    related_refs: tuple[str, ...],
+    source_refs: tuple[str, ...],
+    entity_id: str | None,
+    slug: str | None,
+    status: str | None,
+) -> None:
+    """Create a source-authored hypothesis."""
+
+    _create_typed_entity(
+        kind="hypothesis",
+        title=title,
+        entity_id=entity_id,
+        slug=slug,
+        status=status,
+        related=list(related_refs),
+        source_refs=list(source_refs),
+    )
+
+
+@main.group("discussion")
+def discussion_group() -> None:
+    """Discussion source commands."""
+
+
+@discussion_group.command("create")
+@click.argument("title")
+@click.option("--focus", "focus_refs", multiple=True, help="Focus entity reference (repeatable)")
+@click.option("--source-ref", "source_refs", multiple=True, help="Source reference (repeatable)")
+@click.option("--id", "entity_id")
+@click.option("--slug")
+@click.option("--status")
+def discussion_create(
+    title: str,
+    focus_refs: tuple[str, ...],
+    source_refs: tuple[str, ...],
+    entity_id: str | None,
+    slug: str | None,
+    status: str | None,
+) -> None:
+    """Create a source-authored discussion."""
+
+    _create_typed_entity(
+        kind="discussion",
+        title=title,
+        entity_id=entity_id,
+        slug=slug,
+        status=status,
+        related=list(focus_refs),
+        source_refs=list(source_refs),
+    )
+
+
+@main.group("interpretation")
+def interpretation_group() -> None:
+    """Interpretation source commands."""
+
+
+@interpretation_group.command("create")
+@click.argument("title")
+@click.option("--input", "input_refs", multiple=True, help="Input source reference (repeatable)")
+@click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
+@click.option("--id", "entity_id")
+@click.option("--slug")
+@click.option("--status")
+def interpretation_create(
+    title: str,
+    input_refs: tuple[str, ...],
+    related_refs: tuple[str, ...],
+    entity_id: str | None,
+    slug: str | None,
+    status: str | None,
+) -> None:
+    """Create a source-authored interpretation."""
+
+    _create_typed_entity(
+        kind="interpretation",
+        title=title,
+        entity_id=entity_id,
+        slug=slug,
+        status=status,
+        related=list(related_refs),
+        source_refs=list(input_refs),
+    )
+
+
+def _create_typed_entity(
+    *,
+    kind: str,
+    title: str,
+    entity_id: str | None,
+    slug: str | None,
+    status: str | None,
+    related: list[str],
+    source_refs: list[str],
+) -> None:
+    try:
+        result = create_entity(
+            project_root=Path.cwd(),
+            kind=kind,
+            title=title,
+            entity_id=entity_id,
+            slug=slug,
+            status=status,
+            related=related,
+            source_refs=source_refs,
+        )
+    except EntityCommandError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Created {result.entity_id} at {result.path.relative_to(Path.cwd())}")
+    _emit_entity_warnings(result.warnings)
+
+
 def _emit_entity_warnings(warnings: list[str]) -> None:
     for warning in warnings:
         click.echo(f"WARNING: {warning}")
@@ -359,6 +485,12 @@ def _parse_entity_date(value: str) -> Any:
         return date.fromisoformat(value)
     except ValueError as exc:
         raise click.ClickException(f"Invalid date: {value}") from exc
+
+
+def _normalize_legacy_graph_source(source: str) -> str:
+    if source.startswith("manual:"):
+        return "source/" + source.split(":", 1)[1]
+    return source
 
 
 @main.group()
@@ -1375,10 +1507,11 @@ def graph_add_hypothesis(hypothesis_id: str, text: str, source: str, status: str
         graph_path=graph_path,
         hypothesis_id=hypothesis_id,
         text=text,
-        source=source,
+        source=_normalize_legacy_graph_source(source),
         status=status,
     )
     click.echo(f"Added hypothesis: {hypothesis_uri}")
+    click.echo("Tip: use `science-tool entity create hypothesis <title>` for durable source-authored project work.")
 
 
 @graph_add.command("question")
@@ -1408,12 +1541,13 @@ def graph_add_question(
         graph_path=graph_path,
         question_id=question_id,
         text=text,
-        source=source,
+        source=_normalize_legacy_graph_source(source),
         maturity=maturity,
         status=status,
         related=list(related_refs) if related_refs else None,
     )
     click.echo(f"Added question: {question_uri}")
+    click.echo("Tip: use `science-tool entity create question <title>` for durable source-authored project work.")
 
 
 @graph_add.command("edge")
@@ -1492,6 +1626,7 @@ def add_interpretation_cmd(
     """Add an interpretation — one analysis session's narrative and findings."""
     uri = add_interpretation(graph_path, summary, list(findings), interp_context, prior, interpretation_id)
     click.echo(f"Added interpretation: {uri}")
+    click.echo("Tip: use `science-tool entity create interpretation <title>` for durable source-authored project work.")
 
 
 @graph_add.command("discussion")
@@ -1514,6 +1649,7 @@ def add_discussion_cmd(
     """Add a discussion — theoretical reasoning producing propositions."""
     uri = add_discussion(graph_path, summary, list(propositions), disc_context, prior, discussion_id)
     click.echo(f"Added discussion: {uri}")
+    click.echo("Tip: use `science-tool entity create discussion <title>` for durable source-authored project work.")
 
 
 @graph_add.command("falsification")
@@ -2841,6 +2977,34 @@ def paper_fetch_cmd(
 @main.group()
 def question() -> None:
     """Question-file management commands."""
+
+
+@question.command("create")
+@click.argument("title")
+@click.option("--related", "related_refs", multiple=True, help="Related entity reference (repeatable)")
+@click.option("--source-ref", "source_refs", multiple=True, help="Source reference (repeatable)")
+@click.option("--id", "entity_id")
+@click.option("--slug")
+@click.option("--status")
+def question_create(
+    title: str,
+    related_refs: tuple[str, ...],
+    source_refs: tuple[str, ...],
+    entity_id: str | None,
+    slug: str | None,
+    status: str | None,
+) -> None:
+    """Create a source-authored question."""
+
+    _create_typed_entity(
+        kind="question",
+        title=title,
+        entity_id=entity_id,
+        slug=slug,
+        status=status,
+        related=list(related_refs),
+        source_refs=list(source_refs),
+    )
 
 
 def _split_csv(value: str | None) -> list[str]:

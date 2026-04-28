@@ -174,3 +174,77 @@ def test_entity_list_filters_exact_status() -> None:
         assert result.exit_code == 0, result.output
         assert "question:q02-beta" in result.output
         assert "question:q01-alpha" not in result.output
+
+
+def test_question_create_wrapper_delegates_to_entity_create() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "doc/questions/q01-existing.md",
+            {"id": "question:q01-existing", "type": "question", "title": "Existing", "status": "open"},
+        )
+
+        result = runner.invoke(main, ["question", "create", "Wrapper Question", "--slug", "wrapper"])
+
+        assert result.exit_code == 0, result.output
+        assert "question:q02-wrapper" in result.output
+        assert Path("doc/questions/q02-wrapper.md").is_file()
+
+
+def test_discussion_focus_maps_to_related() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(
+            main,
+            ["discussion", "create", "Planning", "--id", "discussion:2026-04-28-planning", "--focus", "question:q01-alpha"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "question:q01-alpha" in Path("doc/discussions/2026-04-28-planning.md").read_text(encoding="utf-8")
+
+
+def test_interpretation_input_maps_to_source_refs() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(
+            main,
+            ["interpretation", "create", "Result", "--id", "interpretation:2026-04-28-result", "--input", "results/run-1"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "results/run-1" in Path("doc/interpretations/2026-04-28-result.md").read_text(encoding="utf-8")
+
+
+def test_graph_add_question_mentions_entity_create() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        init = runner.invoke(main, ["graph", "init"])
+        assert init.exit_code == 0, init.output
+
+        result = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "question",
+                "q01-legacy",
+                "--text",
+                "Legacy question",
+                "--source",
+                "manual:test",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "entity create question" in result.output
