@@ -127,7 +127,18 @@ If the hypothesis has genuinely competing structural readings, note the likely r
 
 ## Writing
 
-After the conversation, write the hypothesis document using `.ai/templates/hypothesis.md` first, then `templates/hypothesis.md`.
+After the conversation, create the hypothesis with `science-tool hypothesis create`. The tool assigns the next sequential `hNN` ID, places the file under `specs/hypotheses/`, and writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`). It also runs prospective validation against the project's audit rules — unresolved references emit warnings, structural problems block.
+
+```bash
+uv run science-tool hypothesis create "<short title>" \
+  --related <question:qNN-...> \
+  --related <hypothesis:hMM-...> \
+  --source-ref <paper-or-package-ref>
+```
+
+The command prints the chosen ID (e.g. `hypothesis:h03-short-title`) and the file path. Do NOT pre-write the file or hand-pick the ID — let the tool sequence and validate. If the user wants a specific slug, pass `--slug <slug>`; if they need a literal ID, pass `--id hypothesis:<local-part>`.
+
+After the file is created, open it and fill in the body using `.ai/templates/hypothesis.md` first, then `templates/hypothesis.md` as the writing reference. Preserve the frontmatter `science-tool` produced; only edit the body. Use `science-tool hypothesis edit <ref>` (or `science-tool entity edit <ref>`) for later metadata changes — both run prospective validation and update `updated` automatically.
 
 Write the hypothesis as:
 - one organizing conjecture
@@ -136,40 +147,32 @@ Write the hypothesis as:
 
 Do not frame a single paper or result as proving the hypothesis.
 
-### Assigning an ID
+### Naming Conventions
 
-Check existing files in `specs/hypotheses/` and assign the next sequential number.
-
-- **Filename:** lowercase `h` prefix: `h01-short-title.md`, `h02-short-title.md`, etc.
-- **Frontmatter `id`:** uses the filename stem: `"hypothesis:h01-short-title"`, `"hypothesis:h02-short-title"`, etc.
+- **Filename:** lowercase `h` prefix: `h01-short-title.md`, `h02-short-title.md`, etc. (assigned by `science-tool hypothesis create`).
+- **Frontmatter `id`:** matches the filename stem: `"hypothesis:h01-short-title"`.
 - **Prose references:** uppercase `H` prefix: `H01`, `H02`, etc.
 
-### Populating Frontmatter
+### Body And Optional Frontmatter
 
-- `status`: `"proposed"` unless the user already has active investigation underway, then `"under-investigation"`
-- `related`: list related hypotheses, questions, or topics
-- `source_refs`: papers or prior project artifacts cited in the document
-- `created` and `updated`: today's date
+`science-tool hypothesis create` defaults `status` to `candidate`. The supported values are `candidate`, `active`, `rejected`, and `supported`. Use `--status active` only if the user already has investigation underway. Avoid `supported` or `rejected` as the default outcome of authoring a new hypothesis.
 
-Use optional layered-claim fields only when they reduce ambiguity:
+Use optional layered-claim fields only when they reduce ambiguity, by editing the file body and frontmatter after creation:
 - `claim_layer`
 - `identification_strength`
 - `measurement_model`
 - `supports_scope` as a review hint, not as a graph override
 - `rival_model_packet`
 
-Avoid status labels like `supported` or `refuted` as the default outcome of authoring a new hypothesis.
-
 ## After Writing
 
-1. Save to `specs/hypotheses/hNN-short-title.md`.
-2. If the hypothesis addresses an open question, update the relevant file in `doc/questions/`.
-3. If the hypothesis naturally decomposes into graph-native propositions, note the likely propositions the user may want to formalize later.
-4. Suggest 2-3 papers that may be relevant to testing this hypothesis.
+1. If the hypothesis addresses an open question, link it via `science-tool entity edit <question-ref> --related hypothesis:h<NN>-<short-title>`. (Or update the question body in place if it needs prose changes.)
+2. If the hypothesis naturally decomposes into graph-native propositions, note the likely propositions the user may want to formalize later.
+3. Suggest 2-3 papers that may be relevant to testing this hypothesis.
 Source-check titles and authors via web search before presenting them.
-5. If the hypothesis is ready to be formalized in the graph, suggest `science-specify-model`.
-6. If the user wants to design a test before running it, suggest `science-pre-register`.
-7. Commit: `git add -A && git commit -m "hypothesis: add H<NN> - <short title>"`
+4. If the hypothesis is ready to be formalized in the graph, suggest `science-specify-model`.
+5. If the user wants to design a test before running it, suggest `science-pre-register`.
+6. Commit: `git add -A && git commit -m "hypothesis: add H<NN> - <short title>"`
 
 ## Process Reflection
 

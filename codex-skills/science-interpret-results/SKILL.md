@@ -255,8 +255,10 @@ After analyzing results, create structured entities in addition to the prose doc
 4. Bundle into a finding:
    `science-tool graph add finding "<summary>" --confidence moderate --proposition <ref> --observation <ref> --source <data-package-ref>`
 
-5. Create the interpretation:
-   `science-tool graph add interpretation "<summary>" --finding <ref> --context "<what prompted this>"`
+5. Create the interpretation as a source-authored entity:
+   `science-tool interpretation create "<summary>" --input <data-package-ref> --related <finding-or-proposition-ref>`
+
+   This places the file under `doc/interpretations/<today>-<slug>.md` with canonical frontmatter and runs prospective validation. Prefer this over the older `science-tool graph add interpretation`, which still works but does not produce a durable source document.
 
 ### 6. Surface New Questions
 
@@ -310,21 +312,21 @@ Pick the template that matches the mode:
 - **All other modes (write / update / conceptual):** follow `.ai/templates/interpretation.md` first, then `templates/interpretation.md`.
 
 If the project uses open questions rather than formal hypotheses, adapt section headers in the output document accordingly — e.g., "Question-Level Implications" instead of "Hypothesis-Level Implications". Evaluate against questions in `doc/questions/` rather than hypothesis files in `specs/hypotheses/`.
-Save to `doc/interpretations/YYYY-MM-DD-<slug>.md`.
 
-Populate frontmatter:
-- `id`
-- `related`
-- `source_refs`
-- `input`
-- `created`
-- `updated`
+Create the interpretation file with `science-tool interpretation create`:
+
+```bash
+uv run science-tool interpretation create "<short title>" \
+  --input <data-package-or-run-ref> \
+  --related <hypothesis:hNN-...|question:qNN-...>
+```
+
+The tool builds the canonical `interpretation:<today>-<slug>` ID, places the file under `doc/interpretations/`, writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`), and runs prospective validation. `--input` maps to `source_refs`; `--related` is repeatable. After creation, open the file and fill the body using the template — preserve the frontmatter the tool produced. Add custom fields (e.g. `input` if the project schema requires it) by editing the frontmatter directly.
 
 ## After Writing
 
-1. Update relevant hypothesis documents with new support/dispute and uncertainty notes.
-Do not mechanically flip them to `supported` or `refuted`.
-2. Add new questions to `doc/questions/` when needed.
+1. Update relevant hypothesis documents with new support/dispute and uncertainty notes. For metadata changes use `science-tool hypothesis edit <ref> --status ...`; for body changes edit the file in place. Do not mechanically flip statuses to `supported` or `rejected`.
+2. **New questions surfaced:** create them with `science-tool question create "<text>" [--related <ref>] [--source-ref <ref>]`. To attach the new question to the interpretation, run `science-tool entity edit <interpretation-ref> --related <question-ref>`.
 3. Update tasks via `science-tool tasks`.
 Write durable result interpretations under `doc/interpretations/`, and when the findings change the project-level narrative or current state substantially, summarize that in `doc/reports/` as well.
 4. If graph updates were proposed, point the user to the exact proposition or evidence updates to make.

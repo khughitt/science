@@ -112,16 +112,19 @@ Use when the user asks for independent reasoning before synthesis.
 
 ## Writing Output
 
-Save to `doc/discussions/YYYY-MM-DD-<slug>.md`.
+Create the discussion with `science-tool discussion create`. The tool builds the canonical `discussion:<today>-<slug>` ID, places the file under `doc/discussions/`, writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`), and runs prospective validation.
 
-Populate frontmatter fields:
-- `id`: `"discussion:YYYY-MM-DD-<slug>"`
-- `related`: IDs of the focus entity and any hypotheses, questions, or topics discussed
-- `source_refs`: IDs of papers cited during the discussion
-- `focus_type` and `focus_ref`: from the user's input or inferred from context
-- `mode`: `"standard"` or `"double-blind"` based on the user's choice
+```bash
+uv run science-tool discussion create "<short title>" \
+  --focus <hypothesis:hNN-...|question:qNN-...|topic:...> \
+  --source-ref <paper-or-package-ref>
+```
 
-Sections:
+`--focus` is repeatable and maps to `related`. `--source-ref` is repeatable. The command prints the chosen ID (e.g. `discussion:2026-04-28-<slug>`) and the file path. After creation, open the file and fill in the body sections below; preserve the frontmatter the tool produced.
+
+The default `status` is `active`. Switch to `closed` once the discussion is wrapped up via `science-tool discussion edit <ref> --status closed` (or `science-tool entity edit`). Add `focus_type`, `focus_ref`, or `mode` fields by editing the frontmatter directly — these are project-specific and survive the audit.
+
+Sections (in the body):
 
 1. `## Focus`
 2. `## Current Position`
@@ -130,14 +133,17 @@ Sections:
 5. `## Prioritized Follow-Ups`
 6. `## Synthesis` (include side-by-side summary in double-blind mode)
 
+Use `.ai/templates/discussion.md` first, then `templates/discussion.md` as the writing reference.
+
 ## After Discussion
 
-1. Add/adjust entries in `doc/questions/` using `.ai/templates/question.md` first, then `templates/question.md`.
-2. Offer to create follow-up tasks via `science-tool tasks add` with appropriate priority and related entities.
-3. If discussion changes hypothesis wording, update relevant file in `specs/hypotheses/`.
-4. **Task reframing check:** Review whether the discussion reframes the meaning of any existing tasks. If a task's purpose or scope has changed, update its description in `tasks/active.md` to reflect the new framing.
-5. Commit: `git add -A && git commit -m "doc: discuss <slug> and update priorities"`
-6. **Actionable recommendations:** If the discussion produced a concrete, low-cost design change or implementation recommendation (something testable in under an hour), it should be flagged with `[actionable now]` in the Prioritized Follow-Ups table. Offer to implement it immediately rather than creating a task for later. This prevents useful small changes from being buried in discussion documents.
+1. **New questions surfaced:** create them with `science-tool question create "<text>" [--related <ref>] [--source-ref <ref>]`. To attach a question to an existing discussion or hypothesis, use `science-tool entity edit <question-ref> --related <other-ref>` (additive — preserves existing related entries).
+2. **Existing question updates:** if the discussion changes the framing of an existing question, edit its body in place; for metadata, use `science-tool question edit <ref>` / `science-tool entity edit <ref>`.
+3. Offer to create follow-up tasks via `science-tool tasks add` with appropriate priority and related entities.
+4. **Hypothesis wording changes:** for metadata (status, related), use `science-tool hypothesis edit <ref> --status ...`. For body changes, edit the file in place.
+5. **Task reframing check:** Review whether the discussion reframes the meaning of any existing tasks. If a task's purpose or scope has changed, update its description in `tasks/active.md` to reflect the new framing.
+6. Commit: `git add -A && git commit -m "doc: discuss <slug> and update priorities"`
+7. **Actionable recommendations:** If the discussion produced a concrete, low-cost design change or implementation recommendation (something testable in under an hour), it should be flagged with `[actionable now]` in the Prioritized Follow-Ups table. Offer to implement it immediately rather than creating a task for later. This prevents useful small changes from being buried in discussion documents.
 
 ## Process Reflection
 
