@@ -169,6 +169,85 @@ own tree; if other tooling needs the data at a canonical location, treat
 that location as a side effect of the rule body, not as the declared
 output.
 
+### Invocation discipline (failsafes for executing existing pipelines)
+
+The patterns above (marker files, `protected()` caveats) target **workflow
+authors**. They cannot defend a pipeline that an author has already shipped
+with declared outputs at canonical paths — and they do nothing if the runner
+invokes snakemake with hazardous defaults. Two snakemake defaults are
+particularly destructive on production pipelines and must be neutralized
+**at the project level**, not per-invocation:
+
+**1. `--use-singularity` / `--use-apptainer` / `--use-conda` are opt-in.**
+Without these flags, snakemake silently ignores `container:`, `conda:`, and
+`singularity:` rule directives and runs every rule in the host environment.
+The log line `Singularity containers: ignored` is the only warning. This is
+the dominant cause of "mysterious R/Python package missing" errors when an
+existing pipeline is run from a workstation that doesn't have the project's
+full env — and it cascades into the next failsafe failure:
+
+**2. `--keep-incomplete` is opt-in.** Without it, when a rule fails,
+snakemake removes ALL declared outputs of that rule — including pre-existing
+files that were not modified by the failed run, on the principle that "if
+the rule failed, its outputs are suspect." For rules whose outputs sit at
+canonical paths (vendor data preprocessing, expensive intermediates that
+other rules consume directly), a transient runtime error then permanently
+destroys the on-disk copy — even when the actual failure was something
+trivially recoverable like a missing R package.
+
+The combination is especially dangerous for **rules that have a `container:`
+directive but were invoked without `--use-singularity`**. The container is
+silently ignored, the rule runs in a host env it was never meant to run in,
+the rule fails for env reasons, and existing outputs are deleted. We have
+seen this destroy multiple GB of pre-computed intermediates in real
+projects.
+
+**Pattern: codify safe defaults in a project profile.** Both flags are
+project-level decisions, not per-invocation. Set them once and make them
+the default for every run.
+
+```yaml
+# profile/config.yaml
+keep-incomplete: true
+software-deployment-method:
+  - apptainer
+```
+
+Then either invoke explicitly with `--profile profile/`:
+
+```bash
+snakemake --profile profile/ <target>
+```
+
+Or wrap snakemake in `bin/snakemake` that applies the profile automatically:
+
+```bash
+#!/usr/bin/env bash
+# bin/snakemake — wraps `snakemake` to force the project profile.
+set -euo pipefail
+PROFILE="${PROJECT_SNAKEMAKE_PROFILE:-profile/}"
+for arg in "$@"; do
+  case "$arg" in
+    --profile|--profile=*) exec snakemake "$@" ;;
+  esac
+done
+exec snakemake --profile "$PROFILE" "$@"
+```
+
+Project AGENTS.md / README should forbid bare `snakemake` and direct all
+invocations through `bin/snakemake` (or the project's container wrapper).
+Bare `snakemake` is acceptable only inside containers where the env is
+guaranteed and the worktree is ephemeral.
+
+**When to apply this:** any project with R rules, conda/container
+directives, or expensive intermediates on shared filesystems. The cost is
+one config file plus one shell wrapper.
+
+**Cross-reference:** the marker-file pattern above (`protected()` caveats)
+targets *unrecoverable* outputs (network downloads). The profile pattern
+here targets the *cleanup default* for *recoverable* outputs. Both
+failsafes are needed; they cover different failure modes.
+
 ### Scripts vs shell
 - **Shell:** simple commands, tool invocations
 - **Scripts:** anything needing Python logic (access `snakemake.input`, `snakemake.output`, `snakemake.params`)
