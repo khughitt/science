@@ -16,7 +16,6 @@ from science_tool.entities import (
     create_entity,
     derive_slug,
     edit_entity,
-    find_entity,
     generate_entity_id,
     graph_is_stale,
     list_entities,
@@ -92,7 +91,9 @@ def test_generate_entity_id_respects_existing_numeric_prefix(tmp_path: Path) -> 
 
 def test_generate_entity_id_rejects_mixed_prefixes(tmp_path: Path) -> None:
     seed_project(tmp_path)
-    write_markdown_entity(tmp_path, "doc/questions/q01-a.md", {"id": "question:q01-a", "type": "question", "title": "A"})
+    write_markdown_entity(
+        tmp_path, "doc/questions/q01-a.md", {"id": "question:q01-a", "type": "question", "title": "A"}
+    )
     write_markdown_entity(tmp_path, "doc/questions/02-b.md", {"id": "question:02-b", "type": "question", "title": "B"})
     with pytest.raises(EntityCommandError, match="Mixed ID conventions"):
         generate_entity_id(tmp_path, "question", "New Thing", None, None)
@@ -124,9 +125,7 @@ def test_path_for_entity_couples_filename_and_local_part() -> None:
 
 
 def test_path_for_entity_round_trips_dot_bearing_manual_id() -> None:
-    assert path_for_entity("question", "question:q01.draft", date(2026, 4, 28)) == Path(
-        "doc/questions/q01.draft.md"
-    )
+    assert path_for_entity("question", "question:q01.draft", date(2026, 4, 28)) == Path("doc/questions/q01.draft.md")
 
 
 def test_resolve_entity_ref_distinguishes_dot_and_dash_local_parts(tmp_path: Path) -> None:
@@ -428,9 +427,7 @@ def test_append_entity_note_rejects_blank(tmp_path: Path) -> None:
         append_entity_note(tmp_path, "q01", "   ", note_date=date(2026, 4, 28))
 
 
-def test_edit_entity_prospective_audit_failure_rolls_back(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_edit_entity_prospective_audit_failure_rolls_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     seed_project(tmp_path)
     path = write_markdown_entity(
         tmp_path,

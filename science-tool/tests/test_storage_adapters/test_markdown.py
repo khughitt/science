@@ -82,9 +82,7 @@ def test_load_raw_handles_file_without_frontmatter(tmp_path: Path, monkeypatch: 
     assert raw["file_path"] == "doc/no_fm.md"
 
 
-def test_virtual_markdown_override_is_discovered_and_loaded(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_virtual_markdown_override_is_discovered_and_loaded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     adapter = MarkdownAdapter(
         virtual_files={
             "doc/questions/q01-example.md": '---\nid: "question:q01-example"\ntype: "question"\ntitle: "Q1"\n---\nBody.\n'

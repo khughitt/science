@@ -170,7 +170,9 @@ def test_entity_list_filters_exact_status() -> None:
             {"id": "question:q02-beta", "type": "question", "title": "Beta", "status": "answered"},
         )
 
-        result = runner.invoke(main, ["entity", "list", "--kind", "question", "--status", "answered", "--format", "json"])
+        result = runner.invoke(
+            main, ["entity", "list", "--kind", "question", "--status", "answered", "--format", "json"]
+        )
 
         assert result.exit_code == 0, result.output
         assert "question:q02-beta" in result.output
@@ -203,7 +205,15 @@ def test_discussion_focus_maps_to_related() -> None:
 
         result = runner.invoke(
             main,
-            ["discussion", "create", "Planning", "--id", "discussion:2026-04-28-planning", "--focus", "question:q01-alpha"],
+            [
+                "discussion",
+                "create",
+                "Planning",
+                "--id",
+                "discussion:2026-04-28-planning",
+                "--focus",
+                "question:q01-alpha",
+            ],
         )
 
         assert result.exit_code == 0, result.output
@@ -218,7 +228,15 @@ def test_interpretation_input_maps_to_source_refs() -> None:
 
         result = runner.invoke(
             main,
-            ["interpretation", "create", "Result", "--id", "interpretation:2026-04-28-result", "--input", "results/run-1"],
+            [
+                "interpretation",
+                "create",
+                "Result",
+                "--id",
+                "interpretation:2026-04-28-result",
+                "--input",
+                "results/run-1",
+            ],
         )
 
         assert result.exit_code == 0, result.output

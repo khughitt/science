@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import os
 import re
 import unicodedata
-import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -125,7 +126,11 @@ def generate_entity_id(
             continue
         prefix = match.group("prefix").lower()
         number = int(match.group("number"))
-        conventions[prefix] = (prefix, max(number, conventions.get(prefix, (prefix, 0, 0))[1]), len(match.group("number")))
+        conventions[prefix] = (
+            prefix,
+            max(number, conventions.get(prefix, (prefix, 0, 0))[1]),
+            len(match.group("number")),
+        )
 
     if len(conventions) != 1:
         raise EntityCommandError(f"Mixed ID conventions for {kind}; provide --id explicitly")
@@ -353,11 +358,7 @@ def list_entities(project_root: Path, kind: str | None = None, status: str | Non
 def graph_is_stale(project_root: Path, graph_path: Path) -> bool:
     if not graph_path.exists():
         return True
-    markdown_paths = [
-        path
-        for root in MarkdownAdapter().scan_roots
-        for path in project_root.glob(f"{root}/**/*.md")
-    ]
+    markdown_paths = [path for root in MarkdownAdapter().scan_roots for path in project_root.glob(f"{root}/**/*.md")]
     source_paths = [*markdown_paths, *project_root.glob("tasks/**/*.md")]
     if not source_paths:
         return False
@@ -454,12 +455,14 @@ def _validate_prospective_write(
 ) -> list[str]:
     rel_path_text = rel_path.as_posix()
     baseline_rows, _ = audit_project_sources(load_project_sources(project_root))
-    prospective_rows, _ = audit_project_sources(load_project_sources(project_root, markdown_overrides={rel_path_text: text}))
+    prospective_rows, _ = audit_project_sources(
+        load_project_sources(project_root, markdown_overrides={rel_path_text: text})
+    )
 
     baseline_keys = {_audit_row_key(row) for row in baseline_rows}
     new_rows = [row for row in prospective_rows if _audit_row_key(row) not in baseline_keys]
     warnings = [_format_preexisting_warning(row) for row in baseline_rows if row.get("status") == "fail"]
-    blocking_rows: list[dict[str, Any]] = []
+    blocking_rows: list[Mapping[str, object]] = []
     for row in new_rows:
         if _is_allowed_unresolved_target_warning(row, target_entity_id):
             warnings.append(_format_new_warning(row))
@@ -471,7 +474,7 @@ def _validate_prospective_write(
     return warnings
 
 
-def _audit_row_key(row: dict[str, Any]) -> tuple[str, str, str, str, str, str]:
+def _audit_row_key(row: Mapping[str, object]) -> tuple[str, str, str, str, str, str]:
     return (
         str(row.get("check", "")),
         str(row.get("status", "")),
@@ -482,7 +485,7 @@ def _audit_row_key(row: dict[str, Any]) -> tuple[str, str, str, str, str, str]:
     )
 
 
-def _is_allowed_unresolved_target_warning(row: dict[str, Any], target_entity_id: str) -> bool:
+def _is_allowed_unresolved_target_warning(row: Mapping[str, object], target_entity_id: str) -> bool:
     return (
         row.get("check") == "unresolved_reference"
         and row.get("status") == "fail"
@@ -491,15 +494,15 @@ def _is_allowed_unresolved_target_warning(row: dict[str, Any], target_entity_id:
     )
 
 
-def _format_preexisting_warning(row: dict[str, Any]) -> str:
+def _format_preexisting_warning(row: Mapping[str, object]) -> str:
     return f"pre-existing audit failure: {row.get('check')} on {row.get('source')}: {row.get('details')}"
 
 
-def _format_new_warning(row: dict[str, Any]) -> str:
+def _format_new_warning(row: Mapping[str, object]) -> str:
     return f"{row.get('check')} on {row.get('source')}: {row.get('details')}"
 
 
-def _format_blocking_row(row: dict[str, Any]) -> str:
+def _format_blocking_row(row: Mapping[str, object]) -> str:
     return f"{row.get('check')} on {row.get('source')}: {row.get('details')}"
 
 
