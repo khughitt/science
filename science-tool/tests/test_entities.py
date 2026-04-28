@@ -11,6 +11,7 @@ from science_tool.entities import (
     EntityCommandError,
     append_note_to_body,
     build_entity_markdown,
+    create_entity,
     derive_slug,
     generate_entity_id,
     path_for_entity,
@@ -18,6 +19,7 @@ from science_tool.entities import (
     resolve_path_policy,
     validate_slug,
 )
+from science_tool.graph.sources import load_project_sources
 
 
 def test_builtin_path_policy_maps_core_kinds() -> None:
@@ -168,3 +170,160 @@ def test_append_note_to_body_inserts_before_next_peer_heading() -> None:
     body = "# Title\n\n## Summary\n\nBody.\n\n## Notes\n\n- 2026-04-27: Earlier.\n\n## Evidence\n\nDetails."
     updated = append_note_to_body(body, "- 2026-04-28: Later.")
     assert "- 2026-04-28: Later.\n\n## Evidence" in updated
+
+
+def test_create_entity_writes_question_source_and_loads_it(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-existing.md",
+        {"id": "question:q01-existing", "type": "question", "title": "Existing", "status": "open"},
+    )
+
+    result = create_entity(
+        project_root=tmp_path,
+        kind="question",
+        title="What explains model family overlap?",
+        today=date(2026, 4, 28),
+    )
+
+    assert result.entity_id == "question:q02-what-explains-model-family-overlap"
+    assert result.path == tmp_path / "doc/questions/q02-what-explains-model-family-overlap.md"
+    assert result.warnings == []
+    sources = load_project_sources(tmp_path)
+    assert "question:q02-what-explains-model-family-overlap" in {entity.canonical_id for entity in sources.entities}
+
+
+def test_create_entity_rejects_existing_destination(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-existing.md",
+        {"id": "question:q01-existing", "type": "question", "title": "Existing"},
+    )
+    with pytest.raises(EntityCommandError, match="already exists"):
+        create_entity(
+            project_root=tmp_path,
+            kind="question",
+            title="Existing",
+            entity_id="question:q01-existing",
+            today=date(2026, 4, 28),
+        )
+
+
+def test_create_entity_with_unresolved_related_succeeds_with_warning(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-existing.md",
+        {"id": "question:q01-existing", "type": "question", "title": "Existing"},
+    )
+
+    result = create_entity(
+        project_root=tmp_path,
+        kind="question",
+        title="New Question",
+        related=["hypothesis:h01"],
+        today=date(2026, 4, 28),
+    )
+
+    assert result.entity_id == "question:q02-new-question"
+    assert any("unresolved_reference" in warning for warning in result.warnings)
+
+
+def test_create_entity_rejects_concept_with_guidance(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    with pytest.raises(EntityCommandError, match="graph add concept"):
+        create_entity(project_root=tmp_path, kind="concept", title="Local Concept", entity_id="concept:local")
+
+
+def test_create_entity_prewrite_validation_removes_no_tmp_file(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-existing.md",
+        {"id": "question:q01-existing", "type": "question", "title": "Existing"},
+    )
+    with pytest.raises(EntityCommandError, match="prefix"):
+        create_entity(
+            project_root=tmp_path,
+            kind="question",
+            title="Bad",
+            entity_id="hypothesis:h01-bad",
+            today=date(2026, 4, 28),
+        )
+    assert not list(tmp_path.rglob("*.md.tmp"))
+
+
+def test_create_entity_prospective_audit_failure_rolls_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-existing.md",
+        {"id": "question:q01-existing", "type": "question", "title": "Existing"},
+    )
+    calls = 0
+
+    def fake_audit_project_sources(sources: object) -> tuple[list[dict[str, str]], bool]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return [], False
+        return [
+            {
+                "check": "ambiguous_cross_kind_reference",
+                "status": "fail",
+                "source": "question:q02-new-question",
+                "field": "related",
+                "target": "q01",
+                "details": "q01 resolves to multiple canonical identities",
+            }
+        ], True
+
+    monkeypatch.setattr("science_tool.entities.audit_project_sources", fake_audit_project_sources)
+
+    with pytest.raises(EntityCommandError, match="ambiguous_cross_kind_reference"):
+        create_entity(
+            project_root=tmp_path,
+            kind="question",
+            title="New Question",
+            related=["q01"],
+            today=date(2026, 4, 28),
+        )
+
+    assert not (tmp_path / "doc/questions/q02-new-question.md").exists()
+    assert not list(tmp_path.rglob("*.md.tmp"))
+
+
+def test_create_entity_reports_preexisting_audit_failures_as_warnings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-existing.md",
+        {"id": "question:q01-existing", "type": "question", "title": "Existing"},
+    )
+    preexisting_row = {
+        "check": "unresolved_reference",
+        "status": "fail",
+        "source": "question:q01-existing",
+        "field": "related",
+        "target": "hypothesis:h-missing",
+        "details": "pre-existing missing hypothesis",
+    }
+
+    def fake_audit_project_sources(sources: object) -> tuple[list[dict[str, str]], bool]:
+        return [preexisting_row], True
+
+    monkeypatch.setattr("science_tool.entities.audit_project_sources", fake_audit_project_sources)
+
+    result = create_entity(
+        project_root=tmp_path,
+        kind="question",
+        title="New Question",
+        today=date(2026, 4, 28),
+    )
+
+    assert result.entity_id == "question:q02-new-question"
+    assert any("pre-existing audit failure" in warning for warning in result.warnings)

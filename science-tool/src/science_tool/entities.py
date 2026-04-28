@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import re
 import unicodedata
+import os
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
+
+from science_tool.graph.migrate import audit_project_sources
+from science_tool.graph.sources import load_project_sources
 
 EntityFilenamePolicy = Literal["local-part", "date-local-part"]
 
@@ -32,6 +36,26 @@ _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 _LOCAL_PART_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _ID_PREFIX_RE = re.compile(r"^(?P<prefix>[a-z]?)(?P<number>\d+)-", re.IGNORECASE)
 _NOTES_HEADING_RE = re.compile(r"^##\s+Notes\s*$")
+_DEFAULT_STATUS: dict[str, str] = {
+    "question": "open",
+    "hypothesis": "candidate",
+    "discussion": "active",
+    "interpretation": "active",
+}
+_STATUS_VALUES: dict[str, frozenset[str]] = {
+    "question": frozenset({"open", "answered", "closed"}),
+    "hypothesis": frozenset({"candidate", "active", "rejected", "supported"}),
+    "discussion": frozenset({"active", "closed"}),
+    "interpretation": frozenset({"active", "superseded"}),
+}
+_ALLOWED_EXPLICIT_ROOTS = (Path("doc"), Path("specs"), Path("research/packages"))
+
+
+@dataclass(frozen=True)
+class EntityWriteResult:
+    entity_id: str
+    path: Path
+    warnings: list[str]
 
 
 def resolve_path_policy(kind: str) -> EntityPathPolicy:
@@ -147,6 +171,67 @@ def build_entity_markdown(
     return "---\n" + _dump_frontmatter(frontmatter) + "---\n" + body
 
 
+def create_entity(
+    project_root: Path,
+    kind: str,
+    title: str,
+    *,
+    entity_id: str | None = None,
+    slug: str | None = None,
+    explicit_path: Path | None = None,
+    status: str | None = None,
+    related: list[str] | None = None,
+    source_refs: list[str] | None = None,
+    today: date | None = None,
+) -> EntityWriteResult:
+    project_root = project_root.resolve()
+    today_value = today or date.today()
+    if kind == "concept":
+        raise EntityCommandError("Source-authored concepts are not supported; use graph add concept instead")
+    resolve_path_policy(kind)
+    if slug is not None and entity_id is not None:
+        raise EntityCommandError("Use either --slug or --id, not both")
+
+    entity_id_value = generate_entity_id(project_root, kind, title, entity_id, slug)
+    status_value = status or _DEFAULT_STATUS[kind]
+    _validate_status(kind, status_value)
+    rel_path = _resolve_destination_rel_path(project_root, kind, entity_id_value, explicit_path, today_value)
+    destination = project_root / rel_path
+    if destination.exists():
+        raise EntityCommandError(f"Destination already exists: {rel_path}")
+
+    text = build_entity_markdown(
+        kind=kind,
+        entity_id=entity_id_value,
+        title=title,
+        status=status_value,
+        related=list(related or []),
+        source_refs=list(source_refs or []),
+        today=today_value,
+    )
+    warnings = _validate_prospective_write(
+        project_root=project_root,
+        rel_path=rel_path,
+        text=text,
+        target_entity_id=entity_id_value,
+    )
+
+    tmp_path = destination.with_suffix(destination.suffix + ".tmp")
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path.write_text(text, encoding="utf-8")
+        os.replace(tmp_path, destination)
+    except Exception:
+        if tmp_path.exists():
+            tmp_path.unlink()
+        raise
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+    return EntityWriteResult(entity_id=entity_id_value, path=destination, warnings=warnings)
+
+
 def append_note_to_body(body: str, note_line: str) -> str:
     lines = body.splitlines()
     for index, line in enumerate(lines):
@@ -171,6 +256,92 @@ def append_note_to_body(body: str, note_line: str) -> str:
 
 def _dump_frontmatter(frontmatter: dict[str, object]) -> str:
     return yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=False)
+
+
+def _validate_status(kind: str, status: str) -> None:
+    if status not in _STATUS_VALUES[kind]:
+        raise EntityCommandError(f"Invalid status for {kind}: {status}")
+
+
+def _resolve_destination_rel_path(
+    project_root: Path,
+    kind: str,
+    entity_id: str,
+    explicit_path: Path | None,
+    today: date,
+) -> Path:
+    if explicit_path is None:
+        return path_for_entity(kind, entity_id, today)
+    if explicit_path.is_absolute():
+        raise EntityCommandError("--path must be relative to the project root")
+    if ".." in explicit_path.parts:
+        raise EntityCommandError("--path must not contain '..'")
+    if explicit_path.suffix != ".md":
+        raise EntityCommandError("--path must point to a .md file")
+    resolved = (project_root / explicit_path).resolve()
+    if not resolved.is_relative_to(project_root):
+        raise EntityCommandError("--path must stay within the project root")
+    if not any(explicit_path == root or explicit_path.is_relative_to(root) for root in _ALLOWED_EXPLICIT_ROOTS):
+        raise EntityCommandError("--path must be under doc, specs, or research/packages")
+    return explicit_path
+
+
+def _validate_prospective_write(
+    *,
+    project_root: Path,
+    rel_path: Path,
+    text: str,
+    target_entity_id: str,
+) -> list[str]:
+    rel_path_text = rel_path.as_posix()
+    baseline_rows, _ = audit_project_sources(load_project_sources(project_root))
+    prospective_rows, _ = audit_project_sources(load_project_sources(project_root, markdown_overrides={rel_path_text: text}))
+
+    baseline_keys = {_audit_row_key(row) for row in baseline_rows}
+    new_rows = [row for row in prospective_rows if _audit_row_key(row) not in baseline_keys]
+    warnings = [_format_preexisting_warning(row) for row in baseline_rows if row.get("status") == "fail"]
+    blocking_rows: list[dict[str, Any]] = []
+    for row in new_rows:
+        if _is_allowed_unresolved_target_warning(row, target_entity_id):
+            warnings.append(_format_new_warning(row))
+            continue
+        if row.get("status") == "fail":
+            blocking_rows.append(row)
+    if blocking_rows:
+        raise EntityCommandError("; ".join(_format_blocking_row(row) for row in blocking_rows))
+    return warnings
+
+
+def _audit_row_key(row: dict[str, Any]) -> tuple[str, str, str, str, str, str]:
+    return (
+        str(row.get("check", "")),
+        str(row.get("status", "")),
+        str(row.get("source", "")),
+        str(row.get("field", "")),
+        str(row.get("target", "")),
+        str(row.get("details", "")),
+    )
+
+
+def _is_allowed_unresolved_target_warning(row: dict[str, Any], target_entity_id: str) -> bool:
+    return (
+        row.get("check") == "unresolved_reference"
+        and row.get("status") == "fail"
+        and row.get("source") == target_entity_id
+        and row.get("field") in {"related", "source_refs"}
+    )
+
+
+def _format_preexisting_warning(row: dict[str, Any]) -> str:
+    return f"pre-existing audit failure: {row.get('check')} on {row.get('source')}: {row.get('details')}"
+
+
+def _format_new_warning(row: dict[str, Any]) -> str:
+    return f"{row.get('check')} on {row.get('source')}: {row.get('details')}"
+
+
+def _format_blocking_row(row: dict[str, Any]) -> str:
+    return f"{row.get('check')} on {row.get('source')}: {row.get('details')}"
 
 
 def _existing_local_parts(project_root: Path, kind: str) -> list[str]:
