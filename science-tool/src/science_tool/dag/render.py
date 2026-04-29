@@ -32,7 +32,8 @@ Overrides:
 
 YAML is read directly via ``yaml.safe_load``; schema validation is a separate
 concern (the render path must tolerate legacy ``doi: null`` entries and other
-not-yet-migrated data).
+not-yet-migrated data). YAML records whose ``source``/``target`` pair is absent
+from the DOT are treated as claim-only evidence records and are not rendered.
 """
 
 from __future__ import annotations
@@ -40,6 +41,7 @@ from __future__ import annotations
 import logging
 import re
 import subprocess
+from collections import defaultdict, deque
 from pathlib import Path
 
 import yaml
@@ -55,6 +57,7 @@ STATUS_STYLES = {
     "unknown": {"color": "#c62828", "penwidth": 1.2, "style": "dashed"},
     "eliminated": {"color": "#9e9e9e", "penwidth": 1.0, "style": "dotted"},
 }
+
 
 def identification_arrowhead(ident: str) -> str:
     if ident == "interventional":
@@ -167,18 +170,19 @@ def style_for_edge(edge: dict) -> dict:  # type: ignore[type-arg]
     return attrs
 
 
+def _edge_lookup(edges: list[dict]) -> defaultdict[tuple[str, str], deque[dict]]:  # type: ignore[type-arg]
+    lookup: defaultdict[tuple[str, str], deque[dict]] = defaultdict(deque)
+    for edge in edges:
+        lookup[(edge["source"], edge["target"])].append(edge)
+    return lookup
+
+
 def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None:  # type: ignore[type-arg]
     """Rewrite the topology DOT with auto-styled edges + a legend subgraph."""
     text = _flatten_multiline_attrs(dot_path.read_text())
     lines = text.splitlines()
     out: list[str] = []
-    edge_iter = iter(edges)
-
-    def next_edge() -> dict | None:  # type: ignore[type-arg]
-        try:
-            return next(edge_iter)
-        except StopIteration:
-            return None
+    edges_by_pair = _edge_lookup(edges)
 
     # Inject a header banner so the auto-styled version is visually distinct.
     banner_inserted = False
@@ -203,14 +207,11 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
 
         em = EDGE_RE.match(line)
         if em:
-            edge = next_edge()
-            if edge is None:
+            queue = edges_by_pair[(em.group("src"), em.group("tgt"))]
+            if not queue:
                 out.append(line)
                 continue
-            assert em.group("src") == edge["source"] and em.group("tgt") == edge["target"], (
-                f"edge mismatch {em.group('src')}->{em.group('tgt')} "
-                f"vs {edge['source']}->{edge['target']} (id={edge['id']})"
-            )
+            edge = queue.popleft()
             attrs = style_for_edge(edge)
             attr_str = ", ".join(f"{k}={v}" for k, v in attrs.items())
             out.append(f"{em.group('indent')}{edge['source']} -> {edge['target']} [{attr_str}];")

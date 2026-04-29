@@ -53,6 +53,49 @@ def test_render_one_structural_invariants(render_workspace: Path) -> None:
         assert f"[{edge['id']}]" in dot, f"edge id [{edge['id']}] missing from rendered .dot"
 
 
+def test_render_one_ignores_claim_only_yaml_edges(render_workspace: Path) -> None:
+    dot_path = render_workspace / "claim-only.dot"
+    dot_path.write_text(
+        """digraph claim_only {
+  a -> b;
+  b -> c;
+}
+"""
+    )
+    yaml_path = render_workspace / "claim-only.edges.yaml"
+    yaml_path.write_text(
+        """dag: claim-only
+source_dot: doc/figures/dags/claim-only.dot
+graph_scope: figure_plus_claim_edges
+edges:
+- id: 1
+  source: a
+  target: b
+  original_label: ""
+  edge_status: supported
+  identification: observational
+- id: 2
+  source: claim
+  target: only
+  original_label: claim-only
+  edge_status: tentative
+  identification: observational
+- id: 3
+  source: b
+  target: c
+  original_label: ""
+  edge_status: structural
+  identification: structural
+"""
+    )
+    render_one(render_workspace, "claim-only")
+
+    dot = (render_workspace / "claim-only-auto.dot").read_text()
+    assert "[1]" in dot
+    assert "[3]" in dot
+    assert "[2]" not in dot
+
+
 def test_render_discovers_slugs_when_whitelist_absent(render_workspace: Path) -> None:
     paths = DagPaths(dag_dir=render_workspace, tasks_dir=render_workspace.parent, dags=None)
     render_all(paths)

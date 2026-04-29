@@ -4,7 +4,7 @@
 digraph h2_subtype_architecture {
   rankdir=TB;
   labelloc="t";
-  label=<<b>H2 Subtype architecture</b><br/><font point-size="11">Primary lineage + secondary events → divergent mechanisms, shared endpoint (inquiry:h2-subtype-architecture)</font><br/><font point-size="9" color="#555"><i>auto-styled from edges.yaml — color=edge_status, width=|β|, style=HDI-crosses-zero-dashed, [I]=interventional, [L]=longitudinal</i></font>>;
+  label=<<b>H2 Subtype architecture</b><br/><font point-size="11">Primary lineage + secondary events → divergent mechanisms, shared endpoint (inquiry:h2-subtype-architecture)</font><br/><font point-size="9" color="#555"><i>auto-styled from edges.yaml — color=edge_status, width=|β|, style=HDI-crosses-zero-dashed, arrowhead=identification</i></font>>;
   fontsize=14;
   node [shape=box, style="rounded,filled", fillcolor="#f0f0f0", fontsize=10];
   edge [fontsize=9];
@@ -63,8 +63,8 @@ digraph h2_subtype_architecture {
   lineage -> del17p [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal, label="[4] propensity", fontsize=10, fontcolor="#1565c0"];
 
   // Evolutionary state → secondary events
-  evo -> gain1q [color="#1565c0", penwidth=1.6, style="solid", arrowhead=vee, label="[5]\n[L]", fontsize=10, fontcolor="#1565c0"];
-  evo -> del17p [color="#1565c0", penwidth=1.6, style="solid", arrowhead=vee, label="[6]\n[L]", fontsize=10, fontcolor="#1565c0"];
+  evo -> gain1q [color="#1565c0", penwidth=1.6, style="solid", arrowhead=odot, label="[5]", fontsize=10, fontcolor="#1565c0"];
+  evo -> del17p [color="#1565c0", penwidth=1.6, style="solid", arrowhead=odot, label="[6]", fontsize=10, fontcolor="#1565c0"];
   evo -> gain8q [color="#c62828", penwidth=1.2, style="dashed", arrowhead=normal, label="[7]", fontsize=10, fontcolor="#c62828"];
   evo -> muts [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal, label="[8]", fontsize=10, fontcolor="#1565c0"];
   evo -> burden [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[9]", fontsize=10, fontcolor="#757575"];
@@ -72,7 +72,7 @@ digraph h2_subtype_architecture {
   // Architecture generation
   gain1q -> dosage [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[10]", fontsize=10, fontcolor="#757575"];
   dosage -> arch_1q [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[11]", fontsize=10, fontcolor="#2e7d32"];
-  gain1q -> epi [color="#2e7d32:#ffffff:#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[12] PHF19/PRC2 targeted\n[I]", fontsize=10, fontcolor="#2e7d32"];
+  gain1q -> epi [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=diamond, label="[12] PHF19/PRC2 targeted", fontsize=10, fontcolor="#2e7d32"];
   lineage -> epi [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[13] NSD2 global or neutral", fontsize=10, fontcolor="#2e7d32"];
   epi -> arch_1q [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[14]", fontsize=10, fontcolor="#2e7d32"];
   epi -> arch_non1q [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal, label="[15]", fontsize=10, fontcolor="#1565c0"];
@@ -92,7 +92,7 @@ digraph h2_subtype_architecture {
   stage -> treatment [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[25] intensity", fontsize=10, fontcolor="#757575"];
   stage -> muts [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal, label="[26] late hits", fontsize=10, fontcolor="#1565c0"];
   stage -> survival [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[27] time in disease", fontsize=10, fontcolor="#757575"];
-  stage -> arch_1q [color="#1565c0", penwidth=1.6, style="solid", arrowhead=vee, label="[28] progression upregulates\n[L]", fontsize=10, fontcolor="#1565c0"];
+  stage -> arch_1q [color="#1565c0", penwidth=1.6, style="solid", arrowhead=odot, label="[28] progression upregulates", fontsize=10, fontcolor="#1565c0"];
   stage -> arch_non1q [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal, label="[29] progression upregulates", fontsize=10, fontcolor="#1565c0"];
 
   // Outcomes
@@ -111,24 +111,30 @@ digraph h2_subtype_architecture {
   treatment -> survival [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[42] mediator", fontsize=10, fontcolor="#757575"];
   treatment -> drug [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[43]", fontsize=10, fontcolor="#757575"];
 
-  // --- Auto-legend (two-axis: edge_status + identification) ---
-  subgraph cluster_autolegend {
-    label=<<b>Legend</b> (auto-styled)  —  color/width = edge_status; double-line = interventional; vee arrow = longitudinal>;
-    fontsize=10; color="#999"; style="rounded"; margin=12;
+  // --- Auto-footer legend (two-axis: edge_status + identification) ---
+  subgraph cluster_auto_footer_legend {
+    rank=sink;
+    label="";
+    color="#bdbdbd"; style="rounded"; margin=10;
+    node [shape=plaintext, fontsize=9];
+    footer_legend [label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="5" color="#bdbdbd">
+      <tr><td bgcolor="#f5f5f5"><b>Auto legend</b></td><td bgcolor="#f5f5f5">color/width = edge_status</td><td bgcolor="#f5f5f5">arrowhead = identification</td></tr>
+      <tr><td><font color="#2e7d32">supported</font></td><td><font color="#1565c0">tentative</font> / <font color="#757575">structural</font> / <font color="#c62828">unknown</font> / <font color="#9e9e9e">eliminated</font></td><td>normal = observational/structural/none; diamond = interventional; odot = longitudinal</td></tr>
+    </table>>];
     node [shape=plaintext, fontsize=9];
     lg_supp_a [label="supported"]; lg_supp_b [label=""];
     lg_tent_a [label="tentative"]; lg_tent_b [label=""];
     lg_struct_a [label="structural"]; lg_struct_b [label=""];
     lg_unk_a [label="unknown"]; lg_unk_b [label=""];
-    lg_elim_a [label="[✗] eliminated"]; lg_elim_b [label=""];
-    lg_int_a [label="[I] interventional"]; lg_int_b [label=""];
-    lg_long_a [label="[L] longitudinal"]; lg_long_b [label=""];
+    lg_elim_a [label="[x] eliminated"]; lg_elim_b [label=""];
+    lg_int_a [label="interventional"]; lg_int_b [label=""];
+    lg_long_a [label="longitudinal"]; lg_long_b [label=""];
     lg_supp_a -> lg_supp_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal];
     lg_tent_a -> lg_tent_b [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal];
     lg_struct_a -> lg_struct_b [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal];
     lg_unk_a -> lg_unk_b [color="#c62828", penwidth=1.2, style="dashed", arrowhead=normal];
     lg_elim_a -> lg_elim_b [color="#9e9e9e", penwidth=1.0, style="dotted", arrowhead=normal];
-    lg_int_a -> lg_int_b [color="#2e7d32:#ffffff:#2e7d32", penwidth=2.5, style="solid", arrowhead=normal];
-    lg_long_a -> lg_long_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=vee];
+    lg_int_a -> lg_int_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=diamond];
+    lg_long_a -> lg_long_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=odot];
   }
 }

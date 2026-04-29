@@ -5,7 +5,7 @@
 digraph h1_prognosis {
   rankdir=TB;
   labelloc="t";
-  label=<<b>H1 Prognosis</b><br/><font point-size="11">PHF19-mediated epigenetic silencing → MM survival (inquiry:h1-prognosis)</font><br/><font point-size="9" color="#555"><i>auto-styled from edges.yaml — color=edge_status, width=|β|, style=HDI-crosses-zero-dashed, [I]=interventional, [L]=longitudinal</i></font>>;
+  label=<<b>H1 Prognosis</b><br/><font point-size="11">PHF19-mediated epigenetic silencing → MM survival (inquiry:h1-prognosis)</font><br/><font point-size="9" color="#555"><i>auto-styled from edges.yaml — color=edge_status, width=|β|, style=HDI-crosses-zero-dashed, arrowhead=identification</i></font>>;
   fontsize=14;
   node [shape=box, style="rounded,filled", fillcolor="#f0f0f0", fontsize=10];
   edge [fontsize=9];
@@ -54,13 +54,13 @@ digraph h1_prognosis {
   gain1q -> pbx1 [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[1] dosage", fontsize=10, fontcolor="#2e7d32"];
   pbx1 -> phf19 [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal, label="[2] transcription", fontsize=10, fontcolor="#1565c0"];
   other_reg -> phf19 [color="#c62828", penwidth=1.2, style="dashed", arrowhead=normal, label="[3] ?", fontsize=10, fontcolor="#c62828"];
-  phf19 -> prc2 [color="#2e7d32:#ffffff:#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[4] Tudor domain recruitment\n[I]", fontsize=10, fontcolor="#2e7d32"];
+  phf19 -> prc2 [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=diamond, label="[4] Tudor domain recruitment", fontsize=10, fontcolor="#2e7d32"];
   // IFN arm: 4 interventional anchors × 2 cell lines × 3 modalities (Ren 2019 shRNA +
   // Ishiguro 2021 GSK126 + Yu 2023 MS177 + Ismail 2022 EZH2+G9a). Perturbation-mechanism-robust.
-  prc2 -> ifn [color="#2e7d32:#ffffff:#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[5] H3K27me3 at new loci (IFN arm: 4 interventional anchors × 2 cell lines)\n[I]", fontsize=10, fontcolor="#2e7d32"];
+  prc2 -> ifn [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=diamond, label="[5] H3K27me3 at new loci (IFN arm: 4 interventional anchors × 2 cell lines)", fontsize=10, fontcolor="#2e7d32"];
   // E2F arm: perturbation-mechanism-dependent. PRC2-complex loss (shRNA, MS177 degrader) engages;
   // catalytic-only inhibition (GSK126, C24 parent) fails in MM.1S. Context also cell-line-dependent.
-  prc2 -> ccis [color="#2e7d32:#ffffff:#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[6] broad domains (E2F arm: perturbation-mechanism-dependent — PRC2-complex loss required)\n[I]", fontsize=10, fontcolor="#2e7d32"];
+  prc2 -> ccis [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=diamond, label="[6] broad domains (E2F arm: perturbation-mechanism-dependent — PRC2-complex loss required)", fontsize=10, fontcolor="#2e7d32"];
 
   // Cell-cycle sub-circuit (Beguelin 2017; Bayesian edges t135, t154, t159)
   gain1q -> e2f1 [color="#2e7d32", penwidth=2.4, style="solid", arrowhead=normal, label="[7] via 1q-dosed regulators\nβ=+0.21", fontsize=10, fontcolor="#2e7d32"];
@@ -70,7 +70,7 @@ digraph h1_prognosis {
 
   // Downstream
   ifn -> immune [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal, label="[11] reduced IFN signal", fontsize=10, fontcolor="#1565c0"];
-  ccis -> cell_state [color="#2e7d32:#ffffff:#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[12] checkpoint release\n[I]", fontsize=10, fontcolor="#2e7d32"];
+  ccis -> cell_state [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=diamond, label="[12] checkpoint release", fontsize=10, fontcolor="#2e7d32"];
 
   // Non-PHF19 gain(1q) path
   gain1q -> other_1q [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[13] dosage", fontsize=10, fontcolor="#757575"];
@@ -78,13 +78,13 @@ digraph h1_prognosis {
 
   // Confounders
   other_lesions -> prc2 [color="#c62828", penwidth=1.2, style="dashed", arrowhead=normal, label="[15] NSD2 also modifies chromatin", fontsize=10, fontcolor="#c62828"];
-  other_lesions -> survival [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=vee, label="[16]\n[L]", fontsize=10, fontcolor="#2e7d32"];
+  other_lesions -> survival [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=odot, label="[16]", fontsize=10, fontcolor="#2e7d32"];
 
   // Disease stage: upstream confounder
   stage -> cell_state [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[17] progression→ faster cycling", fontsize=10, fontcolor="#2e7d32"];
   stage -> burden [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[18] accumulation", fontsize=10, fontcolor="#757575"];
   stage -> treatment [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal, label="[19] intensity", fontsize=10, fontcolor="#757575"];
-  stage -> phf19 [color="#2e7d32", penwidth=3.7, style="solid", arrowhead=vee, label="[20] t055 acquisition\nβ=+0.52 · [L]", fontsize=10, fontcolor="#2e7d32"];
+  stage -> phf19 [color="#2e7d32", penwidth=3.7, style="solid", arrowhead=odot, label="[20] t055 acquisition\nβ=+0.52", fontsize=10, fontcolor="#2e7d32"];
   stage -> survival [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal, label="[21] time in disease", fontsize=10, fontcolor="#2e7d32"];
 
   // Cell-cycle state proxy
@@ -101,24 +101,30 @@ digraph h1_prognosis {
   // Terminal effects on survival
   immune -> survival [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal, label="[29]", fontsize=10, fontcolor="#1565c0"];
 
-  // --- Auto-legend (two-axis: edge_status + identification) ---
-  subgraph cluster_autolegend {
-    label=<<b>Legend</b> (auto-styled)  —  color/width = edge_status; double-line = interventional; vee arrow = longitudinal>;
-    fontsize=10; color="#999"; style="rounded"; margin=12;
+  // --- Auto-footer legend (two-axis: edge_status + identification) ---
+  subgraph cluster_auto_footer_legend {
+    rank=sink;
+    label="";
+    color="#bdbdbd"; style="rounded"; margin=10;
+    node [shape=plaintext, fontsize=9];
+    footer_legend [label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="5" color="#bdbdbd">
+      <tr><td bgcolor="#f5f5f5"><b>Auto legend</b></td><td bgcolor="#f5f5f5">color/width = edge_status</td><td bgcolor="#f5f5f5">arrowhead = identification</td></tr>
+      <tr><td><font color="#2e7d32">supported</font></td><td><font color="#1565c0">tentative</font> / <font color="#757575">structural</font> / <font color="#c62828">unknown</font> / <font color="#9e9e9e">eliminated</font></td><td>normal = observational/structural/none; diamond = interventional; odot = longitudinal</td></tr>
+    </table>>];
     node [shape=plaintext, fontsize=9];
     lg_supp_a [label="supported"]; lg_supp_b [label=""];
     lg_tent_a [label="tentative"]; lg_tent_b [label=""];
     lg_struct_a [label="structural"]; lg_struct_b [label=""];
     lg_unk_a [label="unknown"]; lg_unk_b [label=""];
-    lg_elim_a [label="[✗] eliminated"]; lg_elim_b [label=""];
-    lg_int_a [label="[I] interventional"]; lg_int_b [label=""];
-    lg_long_a [label="[L] longitudinal"]; lg_long_b [label=""];
+    lg_elim_a [label="[x] eliminated"]; lg_elim_b [label=""];
+    lg_int_a [label="interventional"]; lg_int_b [label=""];
+    lg_long_a [label="longitudinal"]; lg_long_b [label=""];
     lg_supp_a -> lg_supp_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal];
     lg_tent_a -> lg_tent_b [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal];
     lg_struct_a -> lg_struct_b [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal];
     lg_unk_a -> lg_unk_b [color="#c62828", penwidth=1.2, style="dashed", arrowhead=normal];
     lg_elim_a -> lg_elim_b [color="#9e9e9e", penwidth=1.0, style="dotted", arrowhead=normal];
-    lg_int_a -> lg_int_b [color="#2e7d32:#ffffff:#2e7d32", penwidth=2.5, style="solid", arrowhead=normal];
-    lg_long_a -> lg_long_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=vee];
+    lg_int_a -> lg_int_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=diamond];
+    lg_long_a -> lg_long_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=odot];
   }
 }
