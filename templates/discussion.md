@@ -2,7 +2,7 @@
 id: "discussion:{{YYYY-MM-DD-slug}}"
 type: "discussion"
 title: "{{discussion title}}"
-status: "in-progress"
+status: "active"
 source_refs: []
 related: []
 created: "{{YYYY-MM-DD}}"

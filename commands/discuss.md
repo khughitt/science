@@ -59,7 +59,7 @@ uv run science-tool discussion create "<short title>" \
 
 `--focus` is repeatable and maps to `related`. `--source-ref` is repeatable. The command prints the chosen ID (e.g. `discussion:2026-04-28-<slug>`) and the file path. After creation, open the file and fill in the body sections below; preserve the frontmatter the tool produced.
 
-The default `status` is `active`. Switch to `closed` once the discussion is wrapped up via `science-tool discussion edit <ref> --status closed` (or `science-tool entity edit`). Add `focus_type`, `focus_ref`, or `mode` fields by editing the frontmatter directly — these are project-specific and survive the audit.
+The default `status` is `active`. Switch to `complete` once the discussion is wrapped up via `science-tool discussion edit <ref> --status complete` (or `science-tool entity edit`); use `superseded` if a later discussion replaces this one. Add `focus_type`, `focus_ref`, or `mode` fields by editing the frontmatter directly — these are project-specific and survive the audit.
 
 Sections (in the body):
 

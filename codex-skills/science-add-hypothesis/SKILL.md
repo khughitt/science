@@ -155,7 +155,7 @@ Do not frame a single paper or result as proving the hypothesis.
 
 ### Body And Optional Frontmatter
 
-`science-tool hypothesis create` defaults `status` to `candidate`. The supported values are `candidate`, `active`, `rejected`, and `supported`. Use `--status active` only if the user already has investigation underway. Avoid `supported` or `rejected` as the default outcome of authoring a new hypothesis.
+`science-tool hypothesis create` defaults `status` to `proposed`. The supported life-cycle values are `proposed`, `under-investigation`, `partially-supported`, `supported`, `weakened`, and `refuted`. Use `--status under-investigation` only if active testing is already underway. Avoid `supported`, `weakened`, or `refuted` as the default outcome of authoring a new hypothesis — those are evidence-based exit states.
 
 Use optional layered-claim fields only when they reduce ambiguity, by editing the file body and frontmatter after creation:
 - `claim_layer`

@@ -39,16 +39,25 @@ _LOCAL_PART_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _ID_PREFIX_RE = re.compile(r"^(?P<prefix>[a-z]?)(?P<number>\d+)-", re.IGNORECASE)
 _NOTES_HEADING_RE = re.compile(r"^##\s+Notes\s*$")
 _DEFAULT_STATUS: dict[str, str] = {
-    "question": "open",
-    "hypothesis": "candidate",
+    "question": "active",
+    "hypothesis": "proposed",
     "discussion": "active",
     "interpretation": "active",
 }
 _STATUS_VALUES: dict[str, frozenset[str]] = {
-    "question": frozenset({"open", "answered", "closed"}),
-    "hypothesis": frozenset({"candidate", "active", "rejected", "supported"}),
-    "discussion": frozenset({"active", "closed"}),
-    "interpretation": frozenset({"active", "superseded"}),
+    "question": frozenset({"active", "partially-answered", "answered", "deferred", "retired"}),
+    "hypothesis": frozenset(
+        {
+            "proposed",
+            "under-investigation",
+            "partially-supported",
+            "supported",
+            "weakened",
+            "refuted",
+        }
+    ),
+    "discussion": frozenset({"active", "complete", "superseded"}),
+    "interpretation": frozenset({"active", "complete", "superseded"}),
 }
 _ALLOWED_EXPLICIT_ROOTS = (Path("doc"), Path("specs"), Path("research/packages"))
 

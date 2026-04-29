@@ -399,7 +399,7 @@ def test_edit_entity_rejects_invalid_question_status(tmp_path: Path) -> None:
         {"id": "question:q01-alpha", "type": "question", "title": "Alpha", "status": "open"},
     )
     with pytest.raises(EntityCommandError, match="Invalid status"):
-        edit_entity(tmp_path, "question:q01-alpha", status="active")
+        edit_entity(tmp_path, "question:q01-alpha", status="closed")
 
 
 def test_append_entity_note_creates_notes_section_and_updated_field(tmp_path: Path) -> None:
