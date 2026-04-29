@@ -23,9 +23,9 @@ record; a ``[✗]`` marker is prepended to the label.
 Overrides:
   - Posterior HDI crosses zero → force ``style=dashed`` (uncertainty cue).
   - Posterior |β| present → scale penwidth = 1.6 + |β|·4, capped at 4.5.
-  - Identification marker appended to label:
-      interventional → "[I]", longitudinal → "[L]"
-      (observational / structural / none → unmarked).
+  - Identification encoded by arrowhead:
+      observational/structural/none → normal, interventional → diamond,
+      longitudinal → odot.
   - Posterior auto-label suffix: "β=±0.XX" and "HR=X.X" when available.
   - ``edge_status: eliminated`` wins over posterior-based styling (the
     mechanism has been retracted; visual should not imply live support).
@@ -56,31 +56,11 @@ STATUS_STYLES = {
     "eliminated": {"color": "#9e9e9e", "penwidth": 1.0, "style": "dotted"},
 }
 
-IDENT_MARKERS = {
-    "interventional": "[I]",
-    "longitudinal": "[L]",
-    "observational": "",
-    "structural": "",
-    "none": "",
-    "": "",
-}
-
-
-# Identification-axis modifiers — applied on TOP of the edge_status color/width.
-# Intent: identification strength is visually legible at a glance, not buried
-# in the [I]/[L] label markers. Interventional gets a double-line color
-# ("COLOR:white:COLOR" in graphviz parallel-line syntax). Longitudinal keeps a
-# single line but gets a thicker arrowhead. Observational is the default.
-def identification_color(base_color: str, ident: str) -> str:
-    if ident == "interventional":
-        # Double-line: same color above and below a thin white gap.
-        return f"{base_color}:#ffffff:{base_color}"
-    return base_color
-
-
 def identification_arrowhead(ident: str) -> str:
+    if ident == "interventional":
+        return "diamond"
     if ident == "longitudinal":
-        return "vee"
+        return "odot"
     return "normal"
 
 
@@ -171,17 +151,12 @@ def style_for_edge(edge: dict) -> dict:  # type: ignore[type-arg]
             suffix_bits.append(f"HR={float(hr):.1f}")
         except (TypeError, ValueError):
             pass
-    marker = IDENT_MARKERS.get(ident, "")
-    if marker:
-        suffix_bits.append(marker)
-
     label = " ".join(parts).strip()
     if suffix_bits:
         label = (label + "\\n" + " · ".join(suffix_bits)).strip()
 
-    ident_color = identification_color(base["color"], ident)
     attrs = {
-        "color": f'"{ident_color}"',
+        "color": f'"{base["color"]}"',
         "penwidth": f"{base['penwidth']:.1f}",
         "style": f'"{base["style"]}"',
         "arrowhead": identification_arrowhead(ident),
@@ -217,7 +192,7 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
                 auto_banner = (
                     '<br/><font point-size="9" color="#555"><i>'
                     "auto-styled from edges.yaml — color=edge_status, width=|β|, "
-                    "style=HDI-crosses-zero-dashed, [I]=interventional, [L]=longitudinal"
+                    "style=HDI-crosses-zero-dashed, arrowhead=identification"
                     "</i></font>"
                 )
                 # Inject the banner right before the closing `>`.
@@ -243,29 +218,47 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
 
         out.append(line)
 
-    # Append a legend subgraph before the closing brace.
-    # Two axes: color/width = edge_status; double-line/arrowhead = identification.
+    # Append a footer legend strip before the closing brace.
+    # Two axes: color/width = edge_status; arrowhead = identification.
     legend = [
         "",
-        "  // --- Auto-legend (two-axis: edge_status + identification) ---",
-        "  subgraph cluster_autolegend {",
-        "    label=<<b>Legend</b> (auto-styled)  —  color/width = edge_status; double-line = interventional; vee arrow = longitudinal>;",
-        '    fontsize=10; color="#999"; style="rounded"; margin=12;',
+        "  // --- Auto-footer legend (two-axis: edge_status + identification) ---",
+        "  subgraph cluster_auto_footer_legend {",
+        "    rank=sink;",
+        "    label=\"\";",
+        '    color="#bdbdbd"; style="rounded"; margin=10;',
+        "    node [shape=plaintext, fontsize=9];",
+        '    footer_legend [label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="5" color="#bdbdbd">',
+        (
+            '      <tr><td bgcolor="#f5f5f5"><b>Auto legend</b></td>'
+            '<td bgcolor="#f5f5f5">color/width = edge_status</td>'
+            '<td bgcolor="#f5f5f5">arrowhead = identification</td></tr>'
+        ),
+        (
+            '      <tr><td><font color="#2e7d32">supported</font></td>'
+            '<td><font color="#1565c0">tentative</font> / '
+            '<font color="#757575">structural</font> / '
+            '<font color="#c62828">unknown</font> / '
+            '<font color="#9e9e9e">eliminated</font></td>'
+            '<td>normal = observational/structural/none; '
+            'diamond = interventional; odot = longitudinal</td></tr>'
+        ),
+        '    </table>>];',
         "    node [shape=plaintext, fontsize=9];",
         '    lg_supp_a [label="supported"]; lg_supp_b [label=""];',
         '    lg_tent_a [label="tentative"]; lg_tent_b [label=""];',
         '    lg_struct_a [label="structural"]; lg_struct_b [label=""];',
         '    lg_unk_a [label="unknown"]; lg_unk_b [label=""];',
-        '    lg_elim_a [label="[✗] eliminated"]; lg_elim_b [label=""];',
-        '    lg_int_a [label="[I] interventional"]; lg_int_b [label=""];',
-        '    lg_long_a [label="[L] longitudinal"]; lg_long_b [label=""];',
+        '    lg_elim_a [label="[x] eliminated"]; lg_elim_b [label=""];',
+        '    lg_int_a [label="interventional"]; lg_int_b [label=""];',
+        '    lg_long_a [label="longitudinal"]; lg_long_b [label=""];',
         '    lg_supp_a -> lg_supp_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal];',
         '    lg_tent_a -> lg_tent_b [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal];',
         '    lg_struct_a -> lg_struct_b [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal];',
         '    lg_unk_a -> lg_unk_b [color="#c62828", penwidth=1.2, style="dashed", arrowhead=normal];',
         '    lg_elim_a -> lg_elim_b [color="#9e9e9e", penwidth=1.0, style="dotted", arrowhead=normal];',
-        '    lg_int_a -> lg_int_b [color="#2e7d32:#ffffff:#2e7d32", penwidth=2.5, style="solid", arrowhead=normal];',
-        '    lg_long_a -> lg_long_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=vee];',
+        '    lg_int_a -> lg_int_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=diamond];',
+        '    lg_long_a -> lg_long_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=odot];',
         "  }",
     ]
     # Insert legend before the closing `}` of the outermost digraph.
