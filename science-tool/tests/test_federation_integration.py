@@ -75,9 +75,7 @@ children:
     dataset = Dataset()
     dataset.parse(meta / "knowledge" / "graph.trig", format="trig")
     graph_names = {
-        str(graph.identifier)
-        for graph in dataset.graphs()
-        if graph.identifier != URIRef("urn:x-rdflib:default")
+        str(graph.identifier) for graph in dataset.graphs() if graph.identifier != URIRef("urn:x-rdflib:default")
     }
     assert {"cancer://a", "cancer://b", "cancer://meta"}.issubset(graph_names)
 

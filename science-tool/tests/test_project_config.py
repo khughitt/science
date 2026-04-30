@@ -4,8 +4,6 @@ import pytest
 from pydantic import ValidationError
 
 from science_tool.project_config import (
-    ChildEntry,
-    ProjectConfig,
     ProjectRole,
     load_project_config,
 )

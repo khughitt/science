@@ -79,7 +79,9 @@ research_question: "..."
 
     dataset = Dataset()
     dataset.parse(out_path, format="trig")
-    graph_names = {str(graph.identifier) for graph in dataset.graphs() if graph.identifier != URIRef("urn:x-rdflib:default")}
+    graph_names = {
+        str(graph.identifier) for graph in dataset.graphs() if graph.identifier != URIRef("urn:x-rdflib:default")
+    }
     assert "cancer://a" in graph_names
     assert "cancer://b" in graph_names
     assert "cancer://meta" in graph_names
@@ -90,10 +92,7 @@ research_question: "..."
     assert "https://example.org/a-link" in a_subjects, "bridge-layer triple missing"
 
     meta_graph = dataset.graph(URIRef("cancer://meta"))
-    prov_rows = {
-        (str(subject), str(obj))
-        for subject, _, obj in meta_graph.triples((None, PROV.wasDerivedFrom, None))
-    }
+    prov_rows = {(str(subject), str(obj)) for subject, _, obj in meta_graph.triples((None, PROV.wasDerivedFrom, None))}
     prov_subjects = {subject for subject, _ in prov_rows}
     assert "cancer://a" in prov_subjects
     assert "cancer://b" in prov_subjects

@@ -56,9 +56,7 @@ research_question: "..."
     out_ds = Dataset()
     out_ds.parse(meta / "knowledge" / "graph.trig", format="trig")
     graph_names = {
-        str(graph.identifier)
-        for graph in out_ds.graphs()
-        if graph.identifier != URIRef("urn:x-rdflib:default")
+        str(graph.identifier) for graph in out_ds.graphs() if graph.identifier != URIRef("urn:x-rdflib:default")
     }
     assert "cancer://a" in graph_names
     assert "cancer://meta" in graph_names
