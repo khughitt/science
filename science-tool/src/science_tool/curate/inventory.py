@@ -12,6 +12,7 @@ import yaml
 from science_model.frontmatter import parse_frontmatter
 
 from science_tool.tasks import parse_tasks
+from science_tool.curate.agents_md import AgentsMdDigestState, collect_agents_md_state
 
 ArtifactClass: TypeAlias = str
 
@@ -70,6 +71,7 @@ class CurationInventory(BaseModel):
     artifact_counts: dict[str, int] = Field(default_factory=dict)
     artifacts: list[InventoryArtifact] = Field(default_factory=list)
     candidate_signals: CandidateSignals = Field(default_factory=CandidateSignals)
+    agents_md: AgentsMdDigestState | None = None
 
 
 def collect_inventory(project_root: Path, today: date | None = None) -> CurationInventory:
@@ -120,11 +122,13 @@ def collect_inventory(project_root: Path, today: date | None = None) -> Curation
         key=lambda path: (modified_lookup[path] or 0, path),
     )
 
+    agents_md_state = collect_agents_md_state(project_root)
     return CurationInventory(
         project_root=str(project_root),
         artifact_counts=artifact_counts,
         artifacts=artifacts,
         candidate_signals=candidate_signals,
+        agents_md=agents_md_state,
     )
 
 

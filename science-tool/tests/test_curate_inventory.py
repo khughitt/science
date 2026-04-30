@@ -176,3 +176,34 @@ def test_collect_inventory_tracks_counts_and_candidate_signals(curated_project: 
     assert knowledge_source.title == "Local entities"
     assert knowledge_source.related_count == 1
     assert knowledge_source.source_refs_count == 1
+
+
+def test_collect_inventory_includes_agents_md_state(curated_project: Path) -> None:
+    # The curated_project fixture has no AGENTS.md / CLAUDE.md / core/.
+    # The agents_md state should still be present and report absence cleanly.
+    inventory = collect_inventory(curated_project, today=date(2026, 4, 21))
+    assert inventory.agents_md is not None
+    assert inventory.agents_md.agents_md_present is False
+    assert inventory.agents_md.claude_md_present is False
+    assert inventory.agents_md.drift_signals == []
+
+
+def test_collect_inventory_surfaces_agents_md_drift(curated_project: Path) -> None:
+    _write(
+        curated_project / "AGENTS.md",
+        "@core/overview.md\n@core/decisions.md\n\n# project\n",
+    )
+    _write(curated_project / "CLAUDE.md", "@AGENTS.md\n")
+    _write(
+        curated_project / "core/decisions.md",
+        "## D-001: Thing\n\n- **Status:** active\n",
+    )
+
+    inventory = collect_inventory(curated_project, today=date(2026, 4, 21))
+    assert inventory.agents_md is not None
+    assert inventory.agents_md.agents_md_legacy_at_includes == [
+        "@core/overview.md",
+        "@core/decisions.md",
+    ]
+    assert "agents_md_legacy_includes" in inventory.agents_md.drift_signals
+    assert "markers_missing" in inventory.agents_md.drift_signals
