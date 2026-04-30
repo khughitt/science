@@ -47,6 +47,14 @@ Science treats research graphs as uncertain by default.
 
 If a project still mainly expresses confidence as scalar values on hypotheses or questions, and does not yet expose proposition-backed evidence, it is only partially migrated to the current model.
 
+## Federation
+
+Science supports a v1.0 meta-project federation model for umbrella projects that coordinate multiple child projects
+without taking ownership of their files. A `role: meta` project declares a `children:` manifest, can validate child
+`parent:` back-references with `science-tool federation validate`, and can materialize a read-only federated graph with
+`science-tool graph build`. See [docs/federation.md](docs/federation.md) for the schema, graph behavior, status rollup,
+and deferred v1.1+ work.
+
 ## Installation
 
 ### From a Marketplace
