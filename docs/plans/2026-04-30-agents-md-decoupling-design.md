@@ -79,6 +79,8 @@ The `core/` files are referenced via the Pointers section, never `@`-included.
 
 Curate regenerates the content *between the BEGIN/END markers* when drift is detected. Each entry is one line: `**D-NNN:** <imperative-phrased rule>`. The "why" stays in `core/decisions.md`. Markers make regeneration deterministic and protect free-form sections above.
 
+The digest contains **only decisions whose `Status:` is `active`**. Superseded and abandoned decisions are dropped (their constraint no longer binds). When a decision is superseded, the new entry replaces the old one in the digest and the rule wording reflects the new decision.
+
 If markers are absent (older AGENTS.md), curate proposes inserting them with the digest. User approves before the edit is applied.
 
 ### 3. Drift detection (in `/science:curate`)
@@ -86,17 +88,23 @@ If markers are absent (older AGENTS.md), curate proposes inserting them with the
 Add an `agents-md` curation theme. Phase 1 evidence gathering adds:
 
 - `mtime(AGENTS.md)` vs `mtime(core/decisions.md)`, `mtime(core/overview.md)`
-- count of `## D-NNN` headings in `core/decisions.md` vs count of `**D-NNN:**` entries in the AGENTS.md digest
+- parse `core/decisions.md` for `## D-NNN` headings and read each entry's `Status:` line; the **active set** is the IDs whose status is `active` (not `superseded by ...` or `abandoned`)
+- the digest's set of `**D-NNN:**` entries inside the markers
 - presence/absence of the `BEGIN/END` markers
-- presence/absence of legacy `@core/overview.md` / `@core/decisions.md` directives at the top of AGENTS.md (and `CLAUDE.md`)
+- presence/absence of legacy `@core/overview.md` / `@core/decisions.md` directives at the top of AGENTS.md
+- shape of `CLAUDE.md`: whether it contains anything beyond `@AGENTS.md` and legacy `@core/*` directives (whitespace and blank lines tolerated)
 
 Phase 2 produces candidates:
 
-- `core/*` newer than AGENTS.md *and* decision-count differs → propose digest refresh (agent reads `core/decisions.md`, drafts one-line rules per active decision, shows diff).
-- legacy `@core/*` directives present → propose removal from AGENTS.md and (if also in CLAUDE.md) normalize CLAUDE.md to `@AGENTS.md`.
-- markers missing → propose inserting them with a freshly-generated digest.
+- `mtime(core/decisions.md) > mtime(AGENTS.md)` **or** the active-decision set differs from the digest's ID set → propose digest refresh (agent reads `core/decisions.md`, drafts one-line rules per **active** decision, shows diff). The mtime trigger covers the common case where an existing decision's status, implications, or wording changes without the ID set changing.
+- legacy `@core/*` directives present in AGENTS.md → propose removal.
+- legacy `@core/*` directives present in CLAUDE.md → propose normalization to a single `@AGENTS.md`.
+- markers missing in AGENTS.md → propose inserting them with a freshly-generated digest.
 
-Only legacy `@core/*` directive removal (and the paired CLAUDE.md normalization to `@AGENTS.md`) is eligible for `--apply-obvious` — it is a purely structural deletion with no semantic content.
+`--apply-obvious` eligibility is narrow:
+
+- Removing legacy `@core/*` directives from AGENTS.md is always eligible (purely structural deletion).
+- Normalizing CLAUDE.md to `@AGENTS.md` is eligible **only** when the file's content (after stripping whitespace and blank lines) consists exclusively of `@AGENTS.md` and legacy `@core/*` directives. If CLAUDE.md carries any other content (project-specific guidance, comments, additional includes), the proposal is shown as a diff for user approval — silent deletion of project-specific instructions is the failure mode this guards against.
 
 Initial marker insertion, digest generation, and edits to existing digest entries always require user approval, since they involve drafting one-line summaries from `core/decisions.md`.
 
@@ -106,6 +114,7 @@ Initial marker insertion, digest generation, and edits to existing digest entrie
 - `commands/import-project.md` §"AGENTS.md" / "CLAUDE.md" — same change; explicitly call out: "If the existing AGENTS.md begins with `@core/*` directives, remove them; the constraint digest is maintained by `/science:curate` instead."
 - `references/project-structure.md` §`core/` — change "`AGENTS.md` should `@core/overview.md` and `@core/decisions.md` when they exist" to "`AGENTS.md` references `core/` via the Pointers section and carries a managed digest of load-bearing constraints; it does not `@`-include `core/`."
 - New file: `templates/agents-md.md` — the canonical scaffold above. `commands/create-project.md` now points to it instead of inlining a description.
+- `codex-skills/` — regenerate after the `commands/` edits land. `codex-skills/science-create-project/SKILL.md` currently mirrors the old guidance (lines 305–312) and must be updated by re-running `scripts/generate_codex_skills.py` per `codex-skills/INSTALL.codex.md`. The implementation plan must include this regeneration step *and* a verification check that no generated `codex-skills/**/SKILL.md` contains the literal strings `@core/overview.md` or `@core/decisions.md`.
 
 ### 5. Live example: `meta/AGENTS.md`
 
@@ -130,8 +139,9 @@ No new tool subcommands. Curate's existing inventory + ledger machinery carries 
 
 ## Testing
 
-- Update existing curate tests (if any) to cover the `agents-md` theme: drift detected, no-drift skipped, marker-insertion proposal, legacy `@core/*` removal proposal.
-- Add a smoke test that the scaffolded AGENTS.md template does not contain `@core/`.
+- Update existing curate tests (if any) to cover the `agents-md` theme: drift detected, no-drift skipped, marker-insertion proposal, legacy `@core/*` removal proposal, CLAUDE.md normalization gated on "no semantic content beyond `@AGENTS.md` and legacy `@core/*`."
+- Add a smoke test that `templates/agents-md.md` does not contain `@core/`.
+- Add a smoke test that no generated `codex-skills/**/SKILL.md` contains `@core/overview.md` or `@core/decisions.md`.
 - No tests required for `meta/AGENTS.md` (one-time content edit).
 
 ## Migration
