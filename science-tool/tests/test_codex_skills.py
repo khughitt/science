@@ -96,3 +96,45 @@ def test_sync_mentions_scope_and_collision_warnings() -> None:
     assert "`scope: shared`" in text
     assert "`scope: project`" in text
     assert "primary_external_id collision" in text
+
+
+# ---------------------------------------------------------------------------
+# Smoke tests: generated skills must not inject @core/*.md
+# ---------------------------------------------------------------------------
+
+# Phrases that appeared verbatim in the old (pre-Task-2/3) injection guidance.
+# Presence of any of these means the generator picked up stale source content.
+_INJECTION_PHRASES = (
+    "include `@core/overview.md` and `@core/decisions.md` near the top",
+    "include @core/overview.md and @core/decisions.md",
+)
+
+CODEX_SKILLS_ROOT = ROOT / "codex-skills"
+
+
+def test_no_generated_skill_has_at_core_injection_guidance() -> None:
+    """Generated skills must not instruct agents to insert @core/* includes.
+
+    Prose references to @core/*.md that explain what to *remove* are fine.
+    Only positive injection instructions (the old pattern) are forbidden.
+    """
+    if not CODEX_SKILLS_ROOT.is_dir():
+        return  # Repo checkout without generated artifacts; skip silently.
+    offenders: list[str] = []
+    for skill_md in CODEX_SKILLS_ROOT.rglob("SKILL.md"):
+        text = skill_md.read_text(encoding="utf-8")
+        if any(phrase in text for phrase in _INJECTION_PHRASES):
+            offenders.append(str(skill_md.relative_to(ROOT)))
+    assert not offenders, (
+        "Generated codex-skills must not instruct agents to insert @core/*.md includes. "
+        "Regenerate via scripts/generate_codex_skills.py after editing commands/. "
+        f"Offenders: {offenders}"
+    )
+
+
+def test_agents_md_template_has_no_at_core_includes() -> None:
+    """The canonical AGENTS.md template must not contain @core/ include directives."""
+    template = ROOT / "templates" / "agents-md.md"
+    text = template.read_text(encoding="utf-8")
+    assert "@core/overview.md" not in text
+    assert "@core/decisions.md" not in text
