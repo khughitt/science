@@ -10,7 +10,7 @@ This document describes the standard directory layouts for Science-managed proje
 | `.env` | API keys (gitignored) | User |
 | `.gitignore` | Git ignore rules | Agent on project creation |
 | `CLAUDE.md` | Single-line pointer to `AGENTS.md` | Agent on project creation |
-| `AGENTS.md` | Operational guide (tools, validation, conventions) | Agent during loops |
+| `AGENTS.md` | Operational guide (tools, validation, conventions, managed load-bearing-constraints digest) | Agent during loops; digest section managed by `/science:curate` |
 | `pyproject.toml` | Root tool manifest for project-local Science tooling | Agent on project creation / import |
 | `RESEARCH_PLAN.md` | Optional high-level research strategy when not inlined into `README.md` | Agent during planning |
 | `validate.sh` | Structural validation script | Copied from plugin |
@@ -97,8 +97,12 @@ Recommended files (each capped at ~100-150 lines):
   approaches, rejected alternatives, hard constraints). Append-only; do not
   rewrite history when a decision is superseded — record the supersession.
 
-`AGENTS.md` should `@core/overview.md` and `@core/decisions.md` when they exist;
-both files are optional and AGENTS.md must tolerate their absence.
+`AGENTS.md` references `core/` via its Pointers section and carries a managed
+digest of load-bearing constraints between `<!-- BEGIN: load-bearing-constraints -->`
+and `<!-- END: load-bearing-constraints -->` markers. The digest is refreshed
+by `/science:curate` from `core/decisions.md` (active decisions only). AGENTS.md
+does **not** `@`-include `core/*.md` — those files routinely run into the
+hundreds of lines and would inflate every turn's context.
 
 ### `.ai/` — Project-Specific AI Overrides
 
