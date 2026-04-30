@@ -82,3 +82,26 @@ def load_project_config(project_root: Path) -> ProjectConfig:
 def resolve_child_path(child: ChildEntry) -> Path:
     """Resolve a tilde-prefixed child path to a physical path."""
     return Path(child.path).expanduser().resolve()
+
+
+def paths_equivalent(a: Path, b: Path) -> bool:
+    """Compare two paths after symlink resolution."""
+    try:
+        return a.expanduser().resolve() == b.expanduser().resolve()
+    except OSError:
+        return False
+
+
+def resolve_parent_path(parent: str | None) -> Path | None:
+    """Resolve a tilde-prefixed parent path.
+
+    If the path does not exist, return the expanded but unresolved path so callers can
+    distinguish "not configured" from "configured but absent".
+    """
+    if parent is None:
+        return None
+    expanded = Path(parent).expanduser()
+    try:
+        return expanded.resolve(strict=True)
+    except (OSError, FileNotFoundError):
+        return expanded
