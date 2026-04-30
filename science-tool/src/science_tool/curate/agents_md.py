@@ -44,3 +44,30 @@ def _split_decision_sections(text: str) -> list[tuple[str, str]]:
         end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
         sections.append((match.group(1), text[start:end]))
     return sections
+
+
+BEGIN_MARKER = "<!-- BEGIN: load-bearing-constraints (managed by /science:curate; edit core/decisions.md instead) -->"
+END_MARKER = "<!-- END: load-bearing-constraints -->"
+
+_DIGEST_ENTRY = re.compile(r"^-\s+\*\*(D-\d+):\*\*", re.MULTILINE)
+
+
+def parse_marker_state(agents_md: Path) -> bool:
+    """Return True iff both BEGIN and END markers are present."""
+    if not agents_md.is_file():
+        return False
+    text = agents_md.read_text(encoding="utf-8")
+    return BEGIN_MARKER in text and END_MARKER in text
+
+
+def parse_digest_ids(agents_md: Path) -> list[str]:
+    """Return D-NNN IDs listed inside the load-bearing-constraints markers."""
+    if not agents_md.is_file():
+        return []
+    text = agents_md.read_text(encoding="utf-8")
+    begin = text.find(BEGIN_MARKER)
+    end = text.find(END_MARKER, begin + len(BEGIN_MARKER)) if begin != -1 else -1
+    if begin == -1 or end == -1:
+        return []
+    section = text[begin + len(BEGIN_MARKER) : end]
+    return [match.group(1) for match in _DIGEST_ENTRY.finditer(section)]
