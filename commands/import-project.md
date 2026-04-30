@@ -192,13 +192,25 @@ Extend or create `AGENTS.md` so it reflects:
 - conventions
 - operational constraints
 
+Use `${CLAUDE_PLUGIN_ROOT}/templates/agents-md.md` as the structural reference.
+
+If the existing `AGENTS.md` begins with `@core/overview.md` or
+`@core/decisions.md` directives, remove them. Those files routinely run into
+the hundreds of lines and would be injected into context every turn. The
+"Load-bearing constraints" digest in `AGENTS.md` is maintained by
+`/science:curate` based on `core/decisions.md` instead.
+
 ### `CLAUDE.md`
 
-Create or normalize:
+Create or normalize to a single line:
 
 ```md
 @AGENTS.md
 ```
+
+If the existing `CLAUDE.md` carries duplicated `@core/*` directives or
+project-specific guidance, move any non-include guidance into `AGENTS.md` and
+collapse `CLAUDE.md` to the single `@AGENTS.md` pointer.
 
 ### Install the managed validator
 
