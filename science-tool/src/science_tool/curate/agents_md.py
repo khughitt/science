@@ -12,6 +12,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from pydantic import BaseModel, Field
+
 _DECISION_HEADING = re.compile(r"^##\s+(D-\d+)\b", re.MULTILINE)
 _STATUS_LINE = re.compile(r"^-\s+\*\*Status:\*\*\s*(.+?)\s*$", re.MULTILINE)
 
@@ -121,3 +123,68 @@ def is_claude_md_normalizable(claude_md: Path) -> bool:
         if not match.group(1).startswith("core/"):
             return False
     return seen_pointer
+
+
+class AgentsMdDigestState(BaseModel):
+    agents_md_present: bool = False
+    claude_md_present: bool = False
+    markers_present: bool = False
+    agents_md_legacy_at_includes: list[str] = Field(default_factory=list)
+    claude_md_legacy_at_includes: list[str] = Field(default_factory=list)
+    claude_md_normalizable: bool = False
+    active_decision_ids: list[str] = Field(default_factory=list)
+    digest_ids: list[str] = Field(default_factory=list)
+    decisions_mtime_seconds: float | None = None
+    overview_mtime_seconds: float | None = None
+    agents_md_mtime_seconds: float | None = None
+    drift_signals: list[str] = Field(default_factory=list)
+
+
+def collect_agents_md_state(project_root: Path) -> AgentsMdDigestState:
+    """Gather the inputs `/science:curate` needs to propose AGENTS.md edits."""
+    project_root = Path(project_root)
+    agents_md = project_root / "AGENTS.md"
+    claude_md = project_root / "CLAUDE.md"
+    decisions_md = project_root / "core" / "decisions.md"
+    overview_md = project_root / "core" / "overview.md"
+
+    state = AgentsMdDigestState(
+        agents_md_present=agents_md.is_file(),
+        claude_md_present=claude_md.is_file(),
+        markers_present=parse_marker_state(agents_md),
+        agents_md_legacy_at_includes=detect_legacy_at_includes(agents_md),
+        claude_md_legacy_at_includes=detect_legacy_at_includes(claude_md),
+        claude_md_normalizable=is_claude_md_normalizable(claude_md),
+        active_decision_ids=parse_active_decision_ids(decisions_md),
+        digest_ids=parse_digest_ids(agents_md),
+        decisions_mtime_seconds=_mtime_seconds(decisions_md),
+        overview_mtime_seconds=_mtime_seconds(overview_md),
+        agents_md_mtime_seconds=_mtime_seconds(agents_md),
+    )
+    state.drift_signals = _compute_drift_signals(state)
+    return state
+
+
+def _mtime_seconds(path: Path) -> float | None:
+    return path.stat().st_mtime if path.is_file() else None
+
+
+def _compute_drift_signals(state: AgentsMdDigestState) -> list[str]:
+    if not state.agents_md_present:
+        return []
+    signals: list[str] = []
+    if state.agents_md_legacy_at_includes:
+        signals.append("agents_md_legacy_includes")
+    if state.claude_md_legacy_at_includes:
+        signals.append("claude_md_legacy_includes")
+    if not state.markers_present:
+        signals.append("markers_missing")
+    if (
+        state.decisions_mtime_seconds is not None
+        and state.agents_md_mtime_seconds is not None
+        and state.decisions_mtime_seconds > state.agents_md_mtime_seconds
+    ):
+        signals.append("core_decisions_newer_than_agents_md")
+    if state.active_decision_ids != state.digest_ids and state.active_decision_ids:
+        signals.append("active_decisions_differ_from_digest")
+    return signals

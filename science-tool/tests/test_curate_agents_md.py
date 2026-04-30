@@ -279,3 +279,159 @@ def test_is_claude_md_normalizable_rejects_indented_directive(tmp_path: Path) ->
     # so this CLAUDE.md carries non-include content beyond `@AGENTS.md` and is
     # not safe to silently overwrite.
     assert is_claude_md_normalizable(claude_md) is False
+
+
+import os
+from datetime import datetime, timezone
+
+from science_tool.curate.agents_md import collect_agents_md_state
+
+
+def _set_mtime_iso(path: Path, when_iso: str) -> None:
+    stamp = datetime.fromisoformat(when_iso).replace(tzinfo=timezone.utc).timestamp()
+    os.utime(path, (stamp, stamp))
+
+
+def test_collect_agents_md_state_pristine_modern_project(tmp_path: Path) -> None:
+    _write(tmp_path / "CLAUDE.md", "@AGENTS.md\n")
+    _write(
+        tmp_path / "AGENTS.md",
+        f"""
+        # P — Agent Guide
+
+        {BEGIN_MARKER}
+        - **D-001:** Stay calm.
+        {END_MARKER}
+        """,
+    )
+    _write(
+        tmp_path / "core" / "decisions.md",
+        """
+        ## D-001: Stay calm
+
+        - **Date:** 2026-04-01
+        - **Status:** active
+        """,
+    )
+    _set_mtime_iso(tmp_path / "core" / "decisions.md", "2026-04-01T00:00:00")
+    _set_mtime_iso(tmp_path / "AGENTS.md", "2026-04-02T00:00:00")
+
+    state = collect_agents_md_state(tmp_path)
+
+    assert state.agents_md_present is True
+    assert state.claude_md_present is True
+    assert state.markers_present is True
+    assert state.active_decision_ids == ["D-001"]
+    assert state.digest_ids == ["D-001"]
+    assert state.agents_md_legacy_at_includes == []
+    assert state.claude_md_legacy_at_includes == []
+    assert state.claude_md_normalizable is True  # pure `@AGENTS.md`
+    assert state.drift_signals == []
+
+
+def test_collect_agents_md_state_legacy_project_full_drift(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "CLAUDE.md",
+        """
+        @AGENTS.md
+        @core/overview.md
+        @core/decisions.md
+        """,
+    )
+    _write(
+        tmp_path / "AGENTS.md",
+        """
+        @core/overview.md
+        @core/decisions.md
+
+        # P — Agent Guide
+
+        Some prose, no markers.
+        """,
+    )
+    _write(
+        tmp_path / "core" / "decisions.md",
+        """
+        ## D-001: One
+
+        - **Status:** active
+
+        ---
+
+        ## D-002: Two
+
+        - **Status:** active
+        """,
+    )
+    _set_mtime_iso(tmp_path / "AGENTS.md", "2026-01-01T00:00:00")
+    _set_mtime_iso(tmp_path / "core" / "decisions.md", "2026-04-01T00:00:00")
+
+    state = collect_agents_md_state(tmp_path)
+
+    assert state.agents_md_legacy_at_includes == ["@core/overview.md", "@core/decisions.md"]
+    assert state.claude_md_legacy_at_includes == ["@core/overview.md", "@core/decisions.md"]
+    assert state.markers_present is False
+    assert state.active_decision_ids == ["D-001", "D-002"]
+    assert state.digest_ids == []
+    assert state.claude_md_normalizable is True
+    assert "agents_md_legacy_includes" in state.drift_signals
+    assert "claude_md_legacy_includes" in state.drift_signals
+    assert "markers_missing" in state.drift_signals
+    assert "core_decisions_newer_than_agents_md" in state.drift_signals
+    assert "active_decisions_differ_from_digest" in state.drift_signals
+
+
+def test_collect_agents_md_state_mtime_drift_only(tmp_path: Path) -> None:
+    _write(tmp_path / "CLAUDE.md", "@AGENTS.md\n")
+    _write(
+        tmp_path / "AGENTS.md",
+        f"""
+        # P — Agent Guide
+
+        {BEGIN_MARKER}
+        - **D-001:** Stay calm.
+        {END_MARKER}
+        """,
+    )
+    _write(
+        tmp_path / "core" / "decisions.md",
+        """
+        ## D-001: Stay calm (wording updated)
+
+        - **Status:** active
+        """,
+    )
+    _set_mtime_iso(tmp_path / "AGENTS.md", "2026-04-01T00:00:00")
+    _set_mtime_iso(tmp_path / "core" / "decisions.md", "2026-04-15T00:00:00")
+
+    state = collect_agents_md_state(tmp_path)
+
+    assert state.active_decision_ids == ["D-001"]
+    assert state.digest_ids == ["D-001"]
+    assert "core_decisions_newer_than_agents_md" in state.drift_signals
+    assert "active_decisions_differ_from_digest" not in state.drift_signals
+
+
+def test_collect_agents_md_state_no_agents_md(tmp_path: Path) -> None:
+    state = collect_agents_md_state(tmp_path)
+    assert state.agents_md_present is False
+    assert state.claude_md_present is False
+    assert state.drift_signals == []
+
+
+def test_collect_agents_md_state_claude_md_with_extra_content_not_normalizable(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "CLAUDE.md",
+        """
+        @AGENTS.md
+        @core/overview.md
+
+        # Project-specific guidance
+        Always use uv.
+        """,
+    )
+    _write(tmp_path / "AGENTS.md", "# P\n")
+    state = collect_agents_md_state(tmp_path)
+    assert state.claude_md_legacy_at_includes == ["@core/overview.md"]
+    assert state.claude_md_normalizable is False
+    assert "claude_md_legacy_includes" in state.drift_signals
