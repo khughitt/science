@@ -64,6 +64,33 @@ Useful targets include:
 - old papers, topics, discussions, interpretations, and plans that look newly relevant;
 - prior curation, status, next-steps, synthesis, and task-review docs when they help verify drift.
 
+### `agents-md` theme
+
+The CLI inventory exposes `agents_md` with the per-project state of `AGENTS.md`,
+`CLAUDE.md`, and `core/decisions.md`. Inspect `inventory.agents_md.drift_signals`
+and propose edits as follows:
+
+- `agents_md_legacy_includes` present → propose removing the top-of-file
+  `@core/overview.md` / `@core/decisions.md` directives from `AGENTS.md`. This
+  is structural (no semantic content lost) and is eligible for `--apply-obvious`.
+- `claude_md_legacy_includes` present → propose normalizing `CLAUDE.md` to the
+  single line `@AGENTS.md`. Eligible for `--apply-obvious` only when
+  `inventory.agents_md.claude_md_normalizable` is `true`. Otherwise show the
+  diff and require user approval (CLAUDE.md carries non-include content that
+  must be moved manually, typically into `AGENTS.md`).
+- `markers_missing` → propose inserting the `BEGIN: load-bearing-constraints`
+  / `END: load-bearing-constraints` markers in `AGENTS.md` (canonical wording
+  in `templates/agents-md.md`) along with a freshly drafted digest. This
+  always requires user approval.
+- `core_decisions_newer_than_agents_md` or `active_decisions_differ_from_digest`
+  → read `core/decisions.md`, draft a one-line imperative rule per
+  `inventory.agents_md.active_decision_ids`, and propose replacing the content
+  between the existing markers. Always requires user approval (semantic
+  judgement on rule wording).
+
+Drop the entire theme silently when `inventory.agents_md.drift_signals` is
+empty.
+
 ## Phase 3: Semantic curation
 
 For each finding, record:
