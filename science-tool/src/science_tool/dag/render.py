@@ -226,7 +226,7 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
         "  // --- Auto-footer legend (two-axis: edge_status + identification) ---",
         "  subgraph cluster_auto_footer_legend {",
         "    rank=sink;",
-        "    label=\"\";",
+        '    label="";',
         '    color="#bdbdbd"; style="rounded"; margin=10;',
         "    node [shape=plaintext, fontsize=9];",
         '    footer_legend [label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="5" color="#bdbdbd">',
@@ -241,10 +241,10 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
             '<font color="#757575">structural</font> / '
             '<font color="#c62828">unknown</font> / '
             '<font color="#9e9e9e">eliminated</font></td>'
-            '<td>normal = observational/structural/none; '
-            'diamond = interventional; odot = longitudinal</td></tr>'
+            "<td>normal = observational/structural/none; "
+            "diamond = interventional; odot = longitudinal</td></tr>"
         ),
-        '    </table>>];',
+        "    </table>>];",
         "    node [shape=plaintext, fontsize=9];",
         '    lg_supp_a [label="supported"]; lg_supp_b [label=""];',
         '    lg_tent_a [label="tentative"]; lg_tent_b [label=""];',

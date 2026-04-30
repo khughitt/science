@@ -13,7 +13,9 @@ Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `discussant
 
 Additionally:
 1. Read `.ai/templates/discussion.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/discussion.md`.
-2. Read relevant context tied to the chosen focus:
+2. If the discussion may create follow-up questions, read `.ai/templates/question.md`
+   first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/question.md`.
+3. Read relevant context tied to the chosen focus:
    - `doc/topics/`
    - `specs/hypotheses/`
    - `doc/questions/`

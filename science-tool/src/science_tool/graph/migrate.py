@@ -505,7 +505,7 @@ def _audit_relation_endpoint(
                 "field": field_name,
                 "target": raw_target,
                 "details": f"{relation.source_path} uses an external term as a relation subject",
-                }
+            }
         ]
 
     resolution = resolver.resolve(raw_target)
@@ -555,8 +555,7 @@ def _audit_reference(
                 "field": field_name,
                 "target": raw_target,
                 "details": (
-                    f"{entity.file_path} resolves to multiple canonical identities: "
-                    + ", ".join(resolution.candidates)
+                    f"{entity.file_path} resolves to multiple canonical identities: " + ", ".join(resolution.candidates)
                 ),
             }
         ]

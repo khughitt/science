@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+import os
 from pathlib import Path
 import textwrap
 
-import pytest
-
-from science_tool.curate.agents_md import parse_active_decision_ids
+from science_tool.curate.agents_md import (
+    BEGIN_MARKER,
+    END_MARKER,
+    collect_agents_md_state,
+    detect_legacy_at_includes,
+    is_claude_md_normalizable,
+    parse_active_decision_ids,
+    parse_digest_ids,
+    parse_marker_state,
+)
 
 
 def _write(path: Path, text: str) -> None:
@@ -76,14 +85,6 @@ def test_parse_active_decision_ids_handles_no_status_line(tmp_path: Path) -> Non
     assert parse_active_decision_ids(decisions) == []
 
 
-from science_tool.curate.agents_md import (
-    BEGIN_MARKER,
-    END_MARKER,
-    parse_digest_ids,
-    parse_marker_state,
-)
-
-
 def test_parse_marker_state_detects_present_markers(tmp_path: Path) -> None:
     agents_md = tmp_path / "AGENTS.md"
     _write(
@@ -142,12 +143,6 @@ def test_parse_digest_ids_returns_empty_when_markers_missing(tmp_path: Path) -> 
 
 def test_parse_digest_ids_returns_empty_when_file_missing(tmp_path: Path) -> None:
     assert parse_digest_ids(tmp_path / "AGENTS.md") == []
-
-
-from science_tool.curate.agents_md import (
-    detect_legacy_at_includes,
-    is_claude_md_normalizable,
-)
 
 
 def test_detect_legacy_at_includes_finds_directives(tmp_path: Path) -> None:
@@ -279,12 +274,6 @@ def test_is_claude_md_normalizable_rejects_indented_directive(tmp_path: Path) ->
     # so this CLAUDE.md carries non-include content beyond `@AGENTS.md` and is
     # not safe to silently overwrite.
     assert is_claude_md_normalizable(claude_md) is False
-
-
-import os
-from datetime import datetime, timezone
-
-from science_tool.curate.agents_md import collect_agents_md_state
 
 
 def _set_mtime_iso(path: Path, when_iso: str) -> None:

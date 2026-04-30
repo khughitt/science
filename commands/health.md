@@ -38,6 +38,12 @@ For the `topic` cluster, sub-cluster by user judgment hint:
 - Pure short words (`genomics`, `protein`): likely real topics
 - State-like (`blocked`, `phase3b`, `cycle1`): likely operational
 
+For refs that look like legitimate new entities, read `docs/process/entity-creation-cookbook.md`
+before proposing action. Apply its identity policy triage explicitly: check the
+external-id requirement, decide whether the item belongs in a shared registry kind
+or a project-local kind, and use the prose-only fallback when the mention should
+remain prose rather than become a graph entity.
+
 ### 3. Present findings
 
 Show a structured summary:

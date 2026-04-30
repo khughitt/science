@@ -117,6 +117,11 @@ For each stale source:
 3. Add or revise local-profile entities and alias mappings when the project introduces new local semantics.
 4. If a file was removed, decide whether the represented entity should also be removed or replaced by another canonical source. Do not silently orphan it.
 
+Use a fix-on-touch policy for legacy entity IDs encountered during the update:
+when a stale source already requires editing, apply the safe rename/xref addition
+needed to move it toward canonical identity instead of leaving known legacy
+references behind.
+
 ### Step 4: Audit before rebuild
 
 Run:

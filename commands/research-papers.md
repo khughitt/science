@@ -114,6 +114,8 @@ Follow `.ai/templates/paper.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/pap
 1. Add/update the BibTeX entry in `papers/references.bib` (create file with header if missing).
 2. Link relevance to existing hypotheses in `specs/hypotheses/`.
 3. Add new questions via `science-tool question reserve`. **Do not** create files under `doc/questions/` directly — parallel subagents racing on the next q-number cause silent collisions. The CLI uses `O_CREAT|O_EXCL` to atomically claim the next slot, even with multiple subagents writing concurrently.
+   Read `.ai/templates/question.md` first; if not found, read
+   `${CLAUDE_PLUGIN_ROOT}/templates/question.md` before drafting question bodies.
 
    For each new question:
    ```bash

@@ -76,7 +76,9 @@ Follow the Science Codex Command Preamble before executing this skill. Use the `
 
 Additionally:
 1. Read `.ai/templates/discussion.md` first; if not found, read `templates/discussion.md`.
-2. Read relevant context tied to the chosen focus:
+2. If the discussion may create follow-up questions, read `.ai/templates/question.md`
+   first; if not found, read `templates/question.md`.
+3. Read relevant context tied to the chosen focus:
    - `doc/topics/`
    - `specs/hypotheses/`
    - `doc/questions/`

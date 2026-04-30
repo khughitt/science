@@ -33,6 +33,11 @@ For brevity, the examples below write just `science-tool <command>`; always expa
 
 Before adding new entities, check the cross-project registry for existing definitions. Run `science-tool sync status` to see if the registry is populated. If it is, new entities added during graph creation will be checked against the registry during `graph build` to detect potential duplicates across projects. If a match is found, prefer reusing the existing canonical ID and aliases rather than creating a new entity.
 
+For every new entity, read `docs/process/entity-creation-cookbook.md` and
+check shared kinds before creating project-local entries. If no shared identity fits,
+prefer a local `concept:*` entity for project-scoped concepts rather than
+inventing a shared canonical ID.
+
 ## Canonical Inputs
 
 Build the graph from these upstream sources:

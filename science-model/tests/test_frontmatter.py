@@ -271,13 +271,7 @@ def test_parse_entity_file_rejects_invalid_scope(tmp_path: Path) -> None:
     md = tmp_path / "doc" / "genes" / "EZH2.md"
     md.parent.mkdir(parents=True)
     md.write_text(
-        "---\n"
-        'id: "gene:EZH2"\n'
-        'kind: "gene"\n'
-        'title: "EZH2"\n'
-        'scope: "private"\n'
-        "---\n"
-        "Body.\n",
+        '---\nid: "gene:EZH2"\nkind: "gene"\ntitle: "EZH2"\nscope: "private"\n---\nBody.\n',
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="invalid scope"):
@@ -327,12 +321,7 @@ def test_parse_entity_file_rejects_malformed_xrefs(tmp_path: Path) -> None:
 def test_parse_entity_file_preserves_legacy_unknown_type(tmp_path: Path) -> None:
     md = tmp_path / "legacy-unknown.md"
     md.write_text(
-        "---\n"
-        'id: "unknown:legacy-record"\n'
-        "type: unknown\n"
-        'title: "Legacy unknown"\n'
-        "---\n"
-        "Body.\n",
+        '---\nid: "unknown:legacy-record"\ntype: unknown\ntitle: "Legacy unknown"\n---\nBody.\n',
         encoding="utf-8",
     )
     entity = parse_entity_file(md, project_slug="demo")

@@ -52,6 +52,10 @@ After sync completes, present the report:
 ### Drift Warnings
 
 - Same entity with conflicting metadata across projects
+- Scope mismatches where one project treats an entity as `scope: shared` and
+  another treats the same identity as `scope: project`
+- Any primary_external_id collision, especially when two canonical IDs claim
+  the same external identifier
 
 ## Follow-Up
 

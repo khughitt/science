@@ -10,8 +10,8 @@ def test_registry_has_two_versions() -> None:
     reg = load_packaged_registry()
     art = next(a for a in reg.artifacts if a.name == "validate.sh")
     assert len(art.previous_hashes) >= 4
-    assert art.version == "2026.04.26.4"
-    assert art.previous_hashes[-1].version == "2026.04.26.3"
+    assert art.version == "2026.04.26.5"
+    assert art.previous_hashes[-1].version == "2026.04.26.4"
 
 
 def test_byte_replace_migration_recorded() -> None:
@@ -38,9 +38,9 @@ def test_old_install_classifies_as_stale(tmp_path: Path) -> None:
     target = tmp_path / "validate.sh"
     target.write_bytes(
         b"#!/usr/bin/env bash\n# science-managed-artifact: validate.sh\n"
-        b"# science-managed-version: 2026.04.26.3\n"
+        b"# science-managed-version: 2026.04.26.4\n"
         + f"# science-managed-source-sha256: {prev.hash}\n".encode()
         + b"# (body would be the actual previous canonical body)\n"
     )
-    assert prev.version == "2026.04.26.3"
+    assert prev.version == "2026.04.26.4"
     assert len(prev.hash) == 64

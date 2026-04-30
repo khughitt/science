@@ -164,7 +164,9 @@ def _collect_identity_drift_warnings(index: RegistryIndex) -> list[str]:
     return warnings
 
 
-def _shared_identity_signature(entries: list[RegistryEntity]) -> tuple[tuple[str, str | None, str | None, str | None], ...] | None:
+def _shared_identity_signature(
+    entries: list[RegistryEntity],
+) -> tuple[tuple[str, str | None, str | None, str | None], ...] | None:
     signatures = {
         (
             entry.kind,

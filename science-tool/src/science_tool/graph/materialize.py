@@ -217,9 +217,7 @@ def _add_relations(
 
         target_uri = _entity_uri(target.canonical_id)
         predicate = (
-            SCI_NS.tests
-            if entity.kind == "task" and target.kind in {"hypothesis", "question"}
-            else SKOS.related
+            SCI_NS.tests if entity.kind == "task" and target.kind in {"hypothesis", "question"} else SKOS.related
         )
         knowledge.add((entity_uri, predicate, target_uri))
 

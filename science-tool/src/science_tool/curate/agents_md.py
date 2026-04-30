@@ -182,8 +182,6 @@ def _compute_drift_signals(state: AgentsMdDigestState) -> list[str]:
         and state.decisions_mtime_seconds > state.agents_md_mtime_seconds
     ):
         signals.append("core_decisions_newer_than_agents_md")
-    if state.active_decision_ids != state.digest_ids and (
-        state.active_decision_ids or state.digest_ids
-    ):
+    if state.active_decision_ids != state.digest_ids and (state.active_decision_ids or state.digest_ids):
         signals.append("active_decisions_differ_from_digest")
     return signals
