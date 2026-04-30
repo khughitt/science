@@ -228,23 +228,21 @@ Create:
 @AGENTS.md
 ```
 
+`CLAUDE.md` is a single-line pointer. Do not add `@core/*.md` directives or
+project-specific guidance here — both belong in `AGENTS.md`.
+
 ### `AGENTS.md`
 
-Create a concise project-specific operational guide that covers:
+Use the canonical scaffold at `${CLAUDE_PLUGIN_ROOT}/templates/agents-md.md` as the
+starting point. Fill in the project-specific sections (What this is, Profile,
+Conventions, Task execution, Known issues) from the conversation in Step 1.
 
-- project overview
-- validation commands
-- conventions
-- task execution constraints
-- data access notes
-- known issues
-
-If the project has (or will have) curated orientation docs under `core/`,
-include `@core/overview.md` and `@core/decisions.md` near the top of `AGENTS.md`
-so they load at session start. The directives must tolerate missing files —
-the `core/` directory is optional. See `core/` in
-`${CLAUDE_PLUGIN_ROOT}/references/project-structure.md` for conventions and
-length caps.
+Do **not** insert `@core/overview.md` or `@core/decisions.md` directives. The
+`core/` files are referenced from the Pointers section instead. The
+"Load-bearing constraints" section between the BEGIN/END markers is left empty
+on initial scaffold; `/science:curate` populates it once `core/decisions.md`
+has entries. See `core/` in
+`${CLAUDE_PLUGIN_ROOT}/references/project-structure.md` for the conventions.
 
 Offer to scaffold `core/overview.md` and `core/decisions.md` from
 `${CLAUDE_PLUGIN_ROOT}/templates/core-overview.md` and
