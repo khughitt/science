@@ -553,11 +553,14 @@ def graph_init(graph_path: Path) -> None:
 )
 def graph_build(project_root: Path) -> None:
     """Materialize graph.trig from structured upstream project sources."""
+    from science_tool.graph.federation import assemble_federated_graph
+    from science_tool.project_config import ProjectRole
     from science_tool.project_config import load_project_config, resolve_parent_path
     from science_tool.registry.config import ensure_registered
 
     _project_root = Path.cwd() if str(project_root) == "." else project_root
     _science_yaml = _project_root / "science.yaml"
+    _cfg = None
     if _science_yaml.is_file():
         _cfg = load_project_config(_project_root)
         ensure_registered(
@@ -579,8 +582,18 @@ def graph_build(project_root: Path) -> None:
                     parent=_parent_cfg.parent,
                 )
 
+    if _cfg is not None and _cfg.role == ProjectRole.META:
+        try:
+            local_trig_path = materialize_graph(_project_root)
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo(f"Materialized meta local graph at {local_trig_path}")
+        federated_path = assemble_federated_graph(_project_root)
+        click.echo(f"Materialized federated graph at {federated_path}")
+        return
+
     try:
-        trig_path = materialize_graph(project_root)
+        trig_path = materialize_graph(_project_root)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Materialized graph at {trig_path}")
