@@ -71,3 +71,55 @@ def parse_digest_ids(agents_md: Path) -> list[str]:
         return []
     section = text[begin + len(BEGIN_MARKER) : end]
     return [match.group(1) for match in _DIGEST_ENTRY.finditer(section)]
+
+
+_AT_INCLUDE_LINE = re.compile(r"^@(\S+)\s*$")
+
+
+def detect_legacy_at_includes(markdown_file: Path) -> list[str]:
+    """Return `@core/*` directives that appear in the top-of-file include block.
+
+    Claude Code only treats `@path` lines at the very top of a markdown file
+    (before any non-include content) as include directives. We mirror that:
+    walk lines from the top, collect `@path` lines, stop at the first
+    non-include, non-blank line, then filter for `core/` paths.
+    """
+    if not markdown_file.is_file():
+        return []
+    legacy: list[str] = []
+    for line in markdown_file.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        match = _AT_INCLUDE_LINE.match(stripped)
+        if match is None:
+            break
+        path = match.group(1)
+        if path.startswith("core/"):
+            legacy.append(f"@{path}")
+    return legacy
+
+
+def is_claude_md_normalizable(claude_md: Path) -> bool:
+    """Return True iff CLAUDE.md is safe to overwrite with a bare `@AGENTS.md`.
+
+    Safe means: every non-blank line is either `@AGENTS.md` or a legacy
+    `@core/*` directive. Anything else (project-specific guidance, other
+    `@`-includes, prose) means manual review is required.
+    """
+    if not claude_md.is_file():
+        return False
+    seen_pointer = False
+    for line in claude_md.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped == "@AGENTS.md":
+            seen_pointer = True
+            continue
+        match = _AT_INCLUDE_LINE.match(stripped)
+        if match is None:
+            return False
+        if not match.group(1).startswith("core/"):
+            return False
+    return seen_pointer

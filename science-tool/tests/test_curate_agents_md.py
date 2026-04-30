@@ -142,3 +142,108 @@ def test_parse_digest_ids_returns_empty_when_markers_missing(tmp_path: Path) -> 
 
 def test_parse_digest_ids_returns_empty_when_file_missing(tmp_path: Path) -> None:
     assert parse_digest_ids(tmp_path / "AGENTS.md") == []
+
+
+from science_tool.curate.agents_md import (
+    detect_legacy_at_includes,
+    is_claude_md_normalizable,
+)
+
+
+def test_detect_legacy_at_includes_finds_directives(tmp_path: Path) -> None:
+    agents_md = tmp_path / "AGENTS.md"
+    _write(
+        agents_md,
+        """
+        @core/overview.md
+        @core/decisions.md
+
+        # P — Agent Guide
+        """,
+    )
+    assert detect_legacy_at_includes(agents_md) == ["@core/overview.md", "@core/decisions.md"]
+
+
+def test_detect_legacy_at_includes_only_matches_at_top(tmp_path: Path) -> None:
+    agents_md = tmp_path / "AGENTS.md"
+    _write(
+        agents_md,
+        """
+        # P — Agent Guide
+
+        ## Some section
+
+        @core/overview.md
+        """,
+    )
+    # Directive in the middle of the file is not a Claude Code include directive
+    # (those must be at the top of the file). Treat as content, not legacy include.
+    assert detect_legacy_at_includes(agents_md) == []
+
+
+def test_detect_legacy_at_includes_returns_empty_for_missing(tmp_path: Path) -> None:
+    assert detect_legacy_at_includes(tmp_path / "AGENTS.md") == []
+
+
+def test_detect_legacy_at_includes_finds_only_core_paths(tmp_path: Path) -> None:
+    agents_md = tmp_path / "AGENTS.md"
+    _write(
+        agents_md,
+        """
+        @AGENTS.md
+        @core/overview.md
+        @other/file.md
+        """,
+    )
+    assert detect_legacy_at_includes(agents_md) == ["@core/overview.md"]
+
+
+def test_is_claude_md_normalizable_pure_pointer(tmp_path: Path) -> None:
+    claude_md = tmp_path / "CLAUDE.md"
+    _write(claude_md, "@AGENTS.md\n")
+    assert is_claude_md_normalizable(claude_md) is True
+
+
+def test_is_claude_md_normalizable_pointer_plus_legacy_includes(tmp_path: Path) -> None:
+    claude_md = tmp_path / "CLAUDE.md"
+    _write(
+        claude_md,
+        """
+        @AGENTS.md
+        @core/overview.md
+        @core/decisions.md
+        """,
+    )
+    assert is_claude_md_normalizable(claude_md) is True
+
+
+def test_is_claude_md_normalizable_with_extra_content(tmp_path: Path) -> None:
+    claude_md = tmp_path / "CLAUDE.md"
+    _write(
+        claude_md,
+        """
+        @AGENTS.md
+        @core/overview.md
+
+        # Project-specific Claude Code guidance
+
+        Always use uv, never pip.
+        """,
+    )
+    assert is_claude_md_normalizable(claude_md) is False
+
+
+def test_is_claude_md_normalizable_with_extra_at_include(tmp_path: Path) -> None:
+    claude_md = tmp_path / "CLAUDE.md"
+    _write(
+        claude_md,
+        """
+        @AGENTS.md
+        @other/notes.md
+        """,
+    )
+    assert is_claude_md_normalizable(claude_md) is False
+
+
+def test_is_claude_md_normalizable_returns_false_for_missing(tmp_path: Path) -> None:
+    assert is_claude_md_normalizable(tmp_path / "CLAUDE.md") is False
