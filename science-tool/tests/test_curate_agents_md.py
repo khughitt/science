@@ -247,3 +247,35 @@ def test_is_claude_md_normalizable_with_extra_at_include(tmp_path: Path) -> None
 
 def test_is_claude_md_normalizable_returns_false_for_missing(tmp_path: Path) -> None:
     assert is_claude_md_normalizable(tmp_path / "CLAUDE.md") is False
+
+
+def test_detect_legacy_at_includes_rejects_indented_directive(tmp_path: Path) -> None:
+    agents_md = tmp_path / "AGENTS.md"
+    _write(
+        agents_md,
+        """
+          @core/overview.md
+        @core/decisions.md
+
+        # P
+        """,
+    )
+    # First line is `  @core/overview.md` (indented) — Claude Code would not
+    # treat it as an include. We mirror that strictness: detection must stop
+    # at the first non-include non-blank line, which here is the indented one.
+    assert detect_legacy_at_includes(agents_md) == []
+
+
+def test_is_claude_md_normalizable_rejects_indented_directive(tmp_path: Path) -> None:
+    claude_md = tmp_path / "CLAUDE.md"
+    _write(
+        claude_md,
+        """
+        @AGENTS.md
+          @core/overview.md
+        """,
+    )
+    # The indented `@core/overview.md` is NOT a Claude Code include directive,
+    # so this CLAUDE.md carries non-include content beyond `@AGENTS.md` and is
+    # not safe to silently overwrite.
+    assert is_claude_md_normalizable(claude_md) is False

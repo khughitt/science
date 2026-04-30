@@ -88,10 +88,9 @@ def detect_legacy_at_includes(markdown_file: Path) -> list[str]:
         return []
     legacy: list[str] = []
     for line in markdown_file.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped:
+        if not line.strip():
             continue
-        match = _AT_INCLUDE_LINE.match(stripped)
+        match = _AT_INCLUDE_LINE.match(line)
         if match is None:
             break
         path = match.group(1)
@@ -111,13 +110,12 @@ def is_claude_md_normalizable(claude_md: Path) -> bool:
         return False
     seen_pointer = False
     for line in claude_md.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped:
+        if not line.strip():
             continue
-        if stripped == "@AGENTS.md":
+        if line == "@AGENTS.md":
             seen_pointer = True
             continue
-        match = _AT_INCLUDE_LINE.match(stripped)
+        match = _AT_INCLUDE_LINE.match(line)
         if match is None:
             return False
         if not match.group(1).startswith("core/"):
