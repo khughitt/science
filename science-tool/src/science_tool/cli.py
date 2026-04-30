@@ -88,6 +88,7 @@ from science_tool.aspects.cli import aspects_group
 from science_tool.big_picture.cli import big_picture_group
 from science_tool.curate.cli import curate_group
 from science_tool.dag.cli import dag_group
+from science_tool.federation_cli import federation_group
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows
 from science_tool.project_artifacts.cli import artifacts_group as _artifacts_group
 from science_tool.prose import scan_prose
@@ -187,6 +188,7 @@ main.add_command(verdict_group)
 main.add_command(big_picture_group)
 main.add_command(refs_group)
 main.add_command(skills_group)
+main.add_command(federation_group)
 
 
 @main.group("entity")
@@ -551,15 +553,31 @@ def graph_init(graph_path: Path) -> None:
 )
 def graph_build(project_root: Path) -> None:
     """Materialize graph.trig from structured upstream project sources."""
-    import yaml as _yaml
-
+    from science_tool.project_config import load_project_config, resolve_parent_path
     from science_tool.registry.config import ensure_registered
 
     _project_root = Path.cwd() if str(project_root) == "." else project_root
     _science_yaml = _project_root / "science.yaml"
     if _science_yaml.is_file():
-        _project_name = (_yaml.safe_load(_science_yaml.read_text()) or {}).get("name", _project_root.name)
-        ensure_registered(_project_root, str(_project_name))
+        _cfg = load_project_config(_project_root)
+        ensure_registered(
+            _project_root,
+            _cfg.name,
+            project_id=_cfg.id,
+            role=str(_cfg.role),
+            parent=_cfg.parent,
+        )
+        if _cfg.parent is not None:
+            _parent_path = resolve_parent_path(_cfg.parent)
+            if _parent_path is not None and (_parent_path / "science.yaml").is_file():
+                _parent_cfg = load_project_config(_parent_path)
+                ensure_registered(
+                    _parent_path,
+                    _parent_cfg.name,
+                    project_id=_parent_cfg.id,
+                    role=str(_parent_cfg.role),
+                    parent=_parent_cfg.parent,
+                )
 
     try:
         trig_path = materialize_graph(project_root)

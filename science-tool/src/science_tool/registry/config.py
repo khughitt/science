@@ -44,6 +44,9 @@ class RegisteredProject(BaseModel):
     path: str
     name: str
     registered: date
+    id: str | None = None
+    role: str | None = None
+    parent: str | None = None
 
 
 class GlobalConfig(BaseModel):
@@ -95,14 +98,29 @@ def ensure_registered(
     project_root: Path,
     project_name: str,
     config_path: Path | None = None,
+    project_id: str | None = None,
+    role: str | None = None,
+    parent: str | None = None,
 ) -> None:
-    """Register a project if not already listed. Idempotent; uses resolved path."""
+    """Register or refresh a project. Idempotent; uses resolved path."""
     config_path = config_path or get_default_config_path()
     resolved = str(project_root.resolve())
     cfg = load_global_config(config_path)
 
     for project in cfg.projects:
         if project.path == resolved:
+            changed = False
+            if project_id is not None and project.id != project_id:
+                project.id = project_id
+                changed = True
+            if role is not None and project.role != role:
+                project.role = role
+                changed = True
+            if parent is not None and project.parent != parent:
+                project.parent = parent
+                changed = True
+            if changed:
+                save_global_config(cfg, config_path)
             return
 
     cfg.projects.append(
@@ -110,6 +128,9 @@ def ensure_registered(
             path=resolved,
             name=project_name,
             registered=date.today(),
+            id=project_id,
+            role=role,
+            parent=parent,
         )
     )
     save_global_config(cfg, config_path)
