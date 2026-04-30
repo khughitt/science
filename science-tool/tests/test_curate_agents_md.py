@@ -435,3 +435,49 @@ def test_collect_agents_md_state_claude_md_with_extra_content_not_normalizable(t
     assert state.claude_md_legacy_at_includes == ["@core/overview.md"]
     assert state.claude_md_normalizable is False
     assert "claude_md_legacy_includes" in state.drift_signals
+
+
+def test_collect_agents_md_state_all_decisions_superseded_still_signals_drift(tmp_path: Path) -> None:
+    # All active decisions are gone (all superseded) but the digest still lists
+    # stale entries. The drift signal must fire so the user gets a chance to
+    # clean the stale digest, instead of it silently rotting forever.
+    _write(tmp_path / "CLAUDE.md", "@AGENTS.md\n")
+    _write(
+        tmp_path / "AGENTS.md",
+        f"""
+        # P — Agent Guide
+
+        {BEGIN_MARKER}
+        - **D-001:** Stale rule still in digest.
+        {END_MARKER}
+        """,
+    )
+    _write(
+        tmp_path / "core" / "decisions.md",
+        """
+        ## D-001: First decision
+
+        - **Status:** superseded by D-002
+
+        ---
+
+        ## D-002: Second decision
+
+        - **Status:** abandoned
+        """,
+    )
+    _set_mtime_iso(tmp_path / "AGENTS.md", "2026-04-15T00:00:00")
+    _set_mtime_iso(tmp_path / "core" / "decisions.md", "2026-04-01T00:00:00")
+
+    state = collect_agents_md_state(tmp_path)
+
+    assert state.active_decision_ids == []
+    assert state.digest_ids == ["D-001"]
+    assert "active_decisions_differ_from_digest" in state.drift_signals
+
+
+def test_agents_md_digest_state_does_not_expose_overview_mtime(tmp_path: Path) -> None:
+    # overview_mtime_seconds was removed because no drift signal consumes it
+    # and it added noise to the public JSON surface. Lock that decision in.
+    state = collect_agents_md_state(tmp_path)
+    assert "overview_mtime_seconds" not in state.model_dump()

@@ -135,7 +135,6 @@ class AgentsMdDigestState(BaseModel):
     active_decision_ids: list[str] = Field(default_factory=list)
     digest_ids: list[str] = Field(default_factory=list)
     decisions_mtime_seconds: float | None = None
-    overview_mtime_seconds: float | None = None
     agents_md_mtime_seconds: float | None = None
     drift_signals: list[str] = Field(default_factory=list)
 
@@ -146,7 +145,6 @@ def collect_agents_md_state(project_root: Path) -> AgentsMdDigestState:
     agents_md = project_root / "AGENTS.md"
     claude_md = project_root / "CLAUDE.md"
     decisions_md = project_root / "core" / "decisions.md"
-    overview_md = project_root / "core" / "overview.md"
 
     state = AgentsMdDigestState(
         agents_md_present=agents_md.is_file(),
@@ -158,7 +156,6 @@ def collect_agents_md_state(project_root: Path) -> AgentsMdDigestState:
         active_decision_ids=parse_active_decision_ids(decisions_md),
         digest_ids=parse_digest_ids(agents_md),
         decisions_mtime_seconds=_mtime_seconds(decisions_md),
-        overview_mtime_seconds=_mtime_seconds(overview_md),
         agents_md_mtime_seconds=_mtime_seconds(agents_md),
     )
     state.drift_signals = _compute_drift_signals(state)
@@ -185,6 +182,8 @@ def _compute_drift_signals(state: AgentsMdDigestState) -> list[str]:
         and state.decisions_mtime_seconds > state.agents_md_mtime_seconds
     ):
         signals.append("core_decisions_newer_than_agents_md")
-    if state.active_decision_ids != state.digest_ids and state.active_decision_ids:
+    if state.active_decision_ids != state.digest_ids and (
+        state.active_decision_ids or state.digest_ids
+    ):
         signals.append("active_decisions_differ_from_digest")
     return signals
