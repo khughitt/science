@@ -16,6 +16,22 @@ Output goes to the terminal unless `$ARGUMENTS` contains `--save`.
 
 ## Setup
 
+## Federation handling
+
+If `science.yaml` declares `role: meta`, the rest of this skill's per-project
+flow is replaced by:
+
+```bash
+science-tool federation status
+```
+
+Print the result and stop. Do not attempt to read individual children's project
+files yourself — the CLI does that consistently and is the single source of
+truth for cross-project rollups.
+
+For non-meta projects (the default), proceed with the existing per-project
+status flow below.
+
 1. Read `specs/research-question.md`.
 2. Read `science.yaml`.
 3. If present, read `${CLAUDE_PLUGIN_ROOT}/docs/proposition-and-evidence-model.md`.
