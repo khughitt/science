@@ -1,6 +1,3 @@
-@core/overview.md
-@core/decisions.md
-
 # science-meta — Agent Guide
 
 ## What this is
@@ -56,3 +53,20 @@ bash validate.sh --verbose
   environment.
 - Notebooks live at `meta/notebooks/` rather than `meta/code/notebooks/` —
   the software profile warns on top-level `code/`.
+
+<!-- BEGIN: load-bearing-constraints (managed by /science:curate; edit core/decisions.md instead) -->
+## Load-bearing constraints
+
+- **D-001:** Run science commands from `meta/` (or with `--project meta`); commits touching tool code stay scoped to the repo root, not `meta/`.
+- **D-002:** Implementation root is `src/`, not `code/`; no `RESEARCH_PLAN.md` (the strategic plan lives in `README.md`).
+- **D-003:** Tool-level beliefs are continuous probabilities strictly bounded away from 0 and 1; do not collapse beliefs to 0 or 1 in code paths, and decisions that need a binary choice compute it from the belief at the decision point.
+- **D-004:** Shipped Python packages live under `meta/src/` (e.g. `h01_simulator`); notebooks under `meta/notebooks/`; `uv sync` from `meta/` is the setup step.
+<!-- END: load-bearing-constraints -->
+
+## Pointers
+
+- Decisions: `core/decisions.md`
+- Project overview: `core/overview.md`
+- Active tasks: `tasks/active.md`
+- Hypotheses: `specs/hypotheses/`
+- Strategic plan: `README.md`
