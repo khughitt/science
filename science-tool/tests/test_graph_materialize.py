@@ -8,8 +8,9 @@ import textwrap
 import time
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
-from rdflib import Dataset, Literal, Namespace
+from rdflib import Dataset, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, SKOS, XSD
 
 from science_tool.cli import main
@@ -202,6 +203,101 @@ def test_materialize_graph_writes_bridge_layer_for_external_terms(tmp_path: Path
     assert (external_uri, SCHEMA.identifier, None) in bridge
     assert (hypothesis_uri, PROV.wasDerivedFrom, None) in provenance
     assert (question_uri, PROV.wasDerivedFrom, hypothesis_uri) in provenance
+
+
+def test_source_refs_with_cross_project_address_still_fails(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    question = project / "doc" / "questions" / "q01-demo.md"
+    question.write_text(
+        question.read_text(encoding="utf-8").replace(
+            'source_refs: ["hypothesis:h01-demo"]',
+            'source_refs: ["cbioportal:doc/background/papers/Mina2020.md"]',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="unresolved references"):
+        materialize_graph(project)
+
+
+def test_evidence_refs_with_cross_project_address_materializes_provenance(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    question = project / "doc" / "questions" / "q01-demo.md"
+    question.write_text(
+        question.read_text(encoding="utf-8").replace(
+            'source_refs: ["hypothesis:h01-demo"]',
+            "\n".join(
+                [
+                    'source_refs: ["hypothesis:h01-demo"]',
+                    'evidence_refs: ["cbioportal:doc/background/papers/Mina2020.md"]',
+                ]
+            ),
+        ),
+        encoding="utf-8",
+    )
+
+    trig_path = materialize_graph(project)
+    dataset = Dataset()
+    dataset.parse(trig_path, format="trig")
+    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+
+    assert (
+        PROJECT_NS["question/q01-demo"],
+        PROV.wasDerivedFrom,
+        URIRef("cancer://cbioportal/doc/background/papers/Mina2020.md"),
+    ) in provenance
+
+
+def test_evidence_refs_with_local_ref_materializes_provenance(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    question = project / "doc" / "questions" / "q01-demo.md"
+    question.write_text(
+        question.read_text(encoding="utf-8").replace(
+            'source_refs: ["hypothesis:h01-demo"]',
+            "\n".join(
+                [
+                    "source_refs: []",
+                    'evidence_refs: ["hypothesis:h01-demo"]',
+                ]
+            ),
+        ),
+        encoding="utf-8",
+    )
+
+    trig_path = materialize_graph(project)
+    dataset = Dataset()
+    dataset.parse(trig_path, format="trig")
+    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+
+    assert (
+        PROJECT_NS["question/q01-demo"],
+        PROV.wasDerivedFrom,
+        PROJECT_NS["hypothesis/h01-demo"],
+    ) in provenance
+
+
+def test_evidence_refs_with_unknown_local_ref_still_fails(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    question = project / "doc" / "questions" / "q01-demo.md"
+    question.write_text(
+        question.read_text(encoding="utf-8").replace(
+            'source_refs: ["hypothesis:h01-demo"]',
+            "\n".join(
+                [
+                    "source_refs: []",
+                    'evidence_refs: ["hypothesis:h99-missing"]',
+                ]
+            ),
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="unresolved references"):
+        materialize_graph(project)
 
 
 def test_materialize_graph_allows_tag_refs_in_related_without_emitting_edges(tmp_path: Path) -> None:

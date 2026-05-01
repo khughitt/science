@@ -344,6 +344,7 @@ def _enrich_raw(
     raw.setdefault("ontology_terms", [])
     raw.setdefault("related", [])
     raw.setdefault("source_refs", [])
+    raw.setdefault("evidence_refs", [])
     raw.setdefault("same_as", [])
     raw.setdefault("aliases", [])
     raw.setdefault("xrefs", [])
@@ -377,7 +378,7 @@ def _enrich_raw(
         canonical_id = canonical_paper_id(canonical_id)
         raw["canonical_id"] = canonical_id
         raw.setdefault("id", canonical_id)
-    for ref_field in ("related", "source_refs", "same_as", "blocked_by"):
+    for ref_field in ("related", "source_refs", "evidence_refs", "same_as", "blocked_by"):
         vals = raw.get(ref_field)
         if isinstance(vals, list):
             raw[ref_field] = [canonical_paper_id(str(v)) for v in vals]

@@ -145,6 +145,7 @@ class Entity(BaseModel):
     related: list[str]
     same_as: list[str] = Field(default_factory=list)
     source_refs: list[str]
+    evidence_refs: list[str] = Field(default_factory=list)
     content_preview: str
     content: str = ""
     file_path: str

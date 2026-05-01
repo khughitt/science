@@ -11,6 +11,7 @@ import yaml
 from science_model.entities import Entity
 from science_model.frontmatter import parse_frontmatter
 
+from science_tool.addressing import is_address
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
     AliasCollisionError,
@@ -23,6 +24,7 @@ from science_tool.graph.sources import (
     load_project_sources,
     local_profile_sources_dir,
 )
+from science_tool.graph.store import PROJECT_ENTITY_PREFIXES
 from science_tool.paths import resolve_paths
 
 
@@ -324,6 +326,18 @@ def _audit_entity(
                 allow_cross_kind_fallback=True,
             )
         )
+    for target in getattr(entity, "evidence_refs", []) or []:
+        rows.extend(
+            _audit_reference(
+                entity,
+                "evidence_refs",
+                target,
+                resolver,
+                ext_prefixes=ext_prefixes,
+                allow_cross_kind_fallback=True,
+                allow_cross_project_address=True,
+            )
+        )
     for target in entity.same_as:
         rows.extend(_audit_reference(entity, "same_as", target, resolver, ext_prefixes=ext_prefixes))
     return rows
@@ -533,6 +547,7 @@ def _audit_reference(
     ext_prefixes: frozenset[str],
     allow_cross_kind_fallback: bool = False,
     allow_tag: bool = False,
+    allow_cross_project_address: bool = False,
 ) -> list[AuditRow]:
     if is_external_reference(raw_target, known_prefixes=ext_prefixes):
         return []
@@ -560,6 +575,8 @@ def _audit_reference(
             }
         ]
     if resolution.status == "unresolved":
+        if allow_cross_project_address and _is_cross_project_address(raw_target):
+            return []
         return [
             {
                 "check": "unresolved_reference",
@@ -572,6 +589,13 @@ def _audit_reference(
         ]
 
     return []
+
+
+def _is_cross_project_address(raw_target: str) -> bool:
+    if not is_address(raw_target):
+        return False
+    prefix, _ = raw_target.split(":", 1)
+    return prefix not in PROJECT_ENTITY_PREFIXES
 
 
 def _placeholder_entity(target: str, *, local_profile: str) -> dict[str, str] | None:

@@ -13,6 +13,7 @@ from science_model.entities import Entity
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.reasoning import MeasurementModel, RivalModelPacket
 
+from science_tool.addressing import is_address, parse_address
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
@@ -268,6 +269,24 @@ def _add_relations(
             continue
         provenance.add((entity_uri, PROV.wasDerivedFrom, _entity_uri(target.canonical_id)))
 
+    for raw_target in sorted(getattr(entity, "evidence_refs", []) or []):
+        if is_external_reference(raw_target, known_prefixes=ext_prefixes):
+            _link_external_term(entity_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)
+            continue
+        if is_metadata_reference(raw_target):
+            continue
+        resolution = resolver.resolve(raw_target, allow_cross_kind_fallback=True)
+        if resolution.status == "resolved":
+            assert resolution.canonical_id is not None
+            target = entity_index.get(resolution.canonical_id)
+            if target is None:
+                continue
+            provenance.add((entity_uri, PROV.wasDerivedFrom, _entity_uri(target.canonical_id)))
+            continue
+        if _is_cross_project_address(raw_target):
+            provenance.add((entity_uri, PROV.wasDerivedFrom, _address_uri(raw_target)))
+            continue
+
 
 def _link_external_term(
     source_uri: URIRef, raw_target: str, *, bridge, ontology_catalogs: list[OntologyCatalog]
@@ -453,6 +472,18 @@ def _external_uri(raw_target: str) -> URIRef:
     prefix, suffix = raw_target.split(":", 1)
     safe_suffix = quote(suffix.strip(), safe="")
     return URIRef(PROJECT_NS[f"external/{prefix.lower()}/{safe_suffix}"])
+
+
+def _address_uri(raw_target: str) -> URIRef:
+    address = parse_address(raw_target)
+    return URIRef(f"cancer://{address.project_id}/{address.artifact_id}")
+
+
+def _is_cross_project_address(raw_target: str) -> bool:
+    if not is_address(raw_target):
+        return False
+    prefix, _ = raw_target.split(":", 1)
+    return prefix not in PROJECT_ENTITY_PREFIXES
 
 
 def _binding_uri(binding: SourceBinding) -> URIRef:
