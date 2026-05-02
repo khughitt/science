@@ -99,6 +99,49 @@ research_question: "..."
     assert any(obj.startswith("file://") and obj.endswith("/a/knowledge/graph.trig") for _, obj in prov_rows)
 
 
+def test_federated_graph_assembly_is_byte_stable_for_identical_inputs(tmp_path: Path) -> None:
+    meta = tmp_path / "meta"
+    child = tmp_path / "child"
+    for directory in (meta, child):
+        directory.mkdir()
+
+    _write_yaml(
+        meta,
+        f"""
+name: meta
+id: meta
+role: meta
+profile: research
+research_question: "..."
+children:
+  - id: child
+    path: {child}
+    role: cancer-type
+""",
+    )
+    _write_yaml(
+        child,
+        f"""
+name: child
+id: child
+role: cancer-type
+parent: {meta}
+profile: research
+research_question: "..."
+""",
+    )
+    _write_layered_trig(child, "child")
+
+    out_path = assemble_federated_graph(meta)
+    first = out_path.read_bytes()
+    out_path.unlink()
+
+    out_path = assemble_federated_graph(meta)
+    second = out_path.read_bytes()
+
+    assert second == first
+
+
 def test_includes_meta_local_triples(tmp_path: Path) -> None:
     """Meta's own local graph must end up in cancer://meta."""
     meta = tmp_path / "meta"

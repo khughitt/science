@@ -19,6 +19,7 @@ from rdflib import Dataset, Literal, URIRef
 from rdflib.graph import Graph
 from rdflib.namespace import PROV, RDF, XSD
 
+from science_tool.graph.io import save_canonical_graph_dataset
 from science_tool.project_config import ChildEntry, ProjectRole, load_project_config, resolve_child_path
 
 _URI_SCHEME = "cancer"
@@ -43,17 +44,17 @@ def assemble_federated_graph(meta_root: Path) -> Path:
     meta_graph = dataset.graph(meta_uri)
     _include_meta_local_graph(meta_root, meta_graph)
 
-    timestamp = Literal(datetime.now(timezone.utc).isoformat(), datatype=XSD.dateTime)
     for child in cfg.children:
         child_uri = _project_uri(child.id)
         included = _include_child_graph(dataset, child, child_uri)
         if included:
-            source_uri = URIRef(_child_graph_path(child).resolve().as_uri())
+            child_graph_path = _child_graph_path(child)
+            source_uri = URIRef(child_graph_path.resolve().as_uri())
             meta_graph.add((child_uri, PROV.wasDerivedFrom, source_uri))
             meta_graph.add((source_uri, RDF.type, PROV.Entity))
-            meta_graph.add((child_uri, PROV.generatedAtTime, timestamp))
+            meta_graph.add((child_uri, PROV.generatedAtTime, _source_graph_timestamp(child_graph_path)))
 
-    dataset.serialize(destination=out_path, format="trig")
+    save_canonical_graph_dataset(dataset, out_path)
     return out_path
 
 
@@ -71,6 +72,12 @@ def _include_meta_local_graph(meta_root: Path, dest_graph: Graph) -> None:
 
 def _child_graph_path(child: ChildEntry) -> Path:
     return resolve_child_path(child) / "knowledge" / "graph.trig"
+
+
+def _source_graph_timestamp(graph_path: Path) -> Literal:
+    seconds, nanoseconds = divmod(graph_path.stat().st_mtime_ns, 1_000_000_000)
+    timestamp = datetime.fromtimestamp(seconds, tz=timezone.utc).replace(microsecond=nanoseconds // 1000)
+    return Literal(timestamp.isoformat().replace("+00:00", "Z"), datatype=XSD.dateTime)
 
 
 def _include_child_graph(dataset: Dataset, child: ChildEntry, child_uri: URIRef) -> bool:
