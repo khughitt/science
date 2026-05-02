@@ -28,17 +28,23 @@ from science_tool.graph.export_types import (
     build_graph_export_edge_id,
     build_graph_export_node_id,
 )
+from science_tool.graph.io import (
+    BIOLINK_NS,
+    CITO_NS,
+    DCTERMS_NS,
+    PROJECT_NS,
+    REVISION_URI,
+    SCHEMA_NS,
+    SCI_NS,
+    SCIC_NS,
+    build_input_manifest as _build_input_manifest,
+    project_root_from_graph_path as _project_root_from_graph_path,
+    read_revision_manifest as _read_revision_manifest,
+    save_canonical_graph_dataset,
+)
 from science_tool.graph.sources import is_metadata_reference
 
 DEFAULT_GRAPH_PATH = Path("knowledge/graph.trig")
-PROJECT_NS = Namespace("http://example.org/project/")
-SCI_NS = Namespace("http://example.org/science/vocab/")
-SCIC_NS = Namespace("http://example.org/science/vocab/causal/")
-SCHEMA_NS = Namespace("https://schema.org/")
-BIOLINK_NS = Namespace("https://w3id.org/biolink/vocab/")
-CITO_NS = Namespace("http://purl.org/spar/cito/")
-DCTERMS_NS = Namespace("http://purl.org/dc/terms/")
-REVISION_URI = URIRef(PROJECT_NS["graph_revision"])
 
 
 class InquiryEdge(TypedDict):
@@ -4643,248 +4649,16 @@ def _load_dataset(graph_path: Path) -> Dataset:
 
 
 def _save_dataset(dataset: Dataset, graph_path: Path) -> None:
-    _upsert_revision_metadata(dataset, graph_path)
-    graph_path.write_text(_serialize_dataset_deterministically(dataset), encoding="utf-8")
+    save_graph_dataset(dataset, graph_path)
 
 
 def save_graph_dataset(dataset: Dataset, graph_path: Path) -> None:
     """Persist a graph dataset with revision metadata refreshed."""
-    _save_dataset(dataset, graph_path)
-
-
-def _upsert_revision_metadata(dataset: Dataset, graph_path: Path) -> None:
-    provenance = dataset.graph(_graph_uri("graph/provenance"))
-    for triple in list(provenance.triples((REVISION_URI, None, None))):
-        provenance.remove(triple)
-
-    manifest = _build_input_manifest(graph_path=graph_path)
-    manifest_json = json.dumps(manifest, sort_keys=True, separators=(",", ":"))
-    revision_time = _revision_timestamp_from_manifest(manifest)
-
-    provenance.add((REVISION_URI, RDF.type, PROV.Entity))
-    provenance.add((REVISION_URI, SCHEMA_NS.name, Literal("graph-revision")))
-    provenance.add((REVISION_URI, SCHEMA_NS.dateModified, Literal(revision_time, datatype=XSD.dateTime)))
-    provenance.add((REVISION_URI, SCHEMA_NS.text, Literal(manifest_json)))
-
-    preview_text = _serialize_dataset_deterministically(dataset)
-    graph_hash = hashlib.sha256(preview_text.encode("utf-8")).hexdigest()
-    provenance.add((REVISION_URI, SCHEMA_NS.sha256, Literal(graph_hash)))
-
-
-_SERIALIZER_PREFIXES: tuple[tuple[str, str], ...] = (
-    ("rdf", str(RDF)),
-    ("prov", str(PROV)),
-    ("schema", str(SCHEMA_NS)),
-    ("skos", str(SKOS)),
-    ("xsd", str(XSD)),
-    ("sci", str(SCI_NS)),
-    ("scic", str(SCIC_NS)),
-    ("biolink", str(BIOLINK_NS)),
-    ("cito", str(CITO_NS)),
-    ("dcterms", str(DCTERMS_NS)),
-)
-_SAFE_PREFIX_LOCAL_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9._-]*$")
-
-
-def _serialize_dataset_deterministically(dataset: Dataset) -> str:
-    lines = [f"@prefix {prefix}: <{namespace}> ." for prefix, namespace in _SERIALIZER_PREFIXES]
-    lines.append("")
-
-    default_graph = dataset.default_graph
-    if len(default_graph):
-        lines.extend(_render_graph_triples(default_graph))
-        lines.append("")
-
-    named_graphs: dict[str, object] = {}
-    for graph in dataset.graphs():
-        if graph.identifier == default_graph.identifier:
-            continue
-        named_graphs[str(graph.identifier)] = graph
-
-    ordered_graph_ids = [str(PROJECT_NS[layer]) for layer in GRAPH_LAYERS if str(PROJECT_NS[layer]) in named_graphs]
-    ordered_graph_ids.extend(sorted(graph_id for graph_id in named_graphs if graph_id not in ordered_graph_ids))
-
-    for index, graph_id in enumerate(ordered_graph_ids):
-        graph = named_graphs[graph_id]
-        lines.append(f"<{graph_id}> {{")
-        graph_lines = _render_graph_triples(graph, indent="    ")
-        lines.extend(graph_lines)
-        lines.append("}")
-        if index != len(ordered_graph_ids) - 1:
-            lines.append("")
-
-    return "\n".join(lines) + "\n"
-
-
-def _render_graph_triples(graph, *, indent: str = "") -> list[str]:
-    triples = sorted(graph, key=_triple_sort_key)
-    if not triples:
-        return []
-
-    grouped: list[tuple[object, list[tuple[object, list[object]]]]] = []
-    for subject, predicate, obj in triples:
-        if not grouped or grouped[-1][0] != subject:
-            grouped.append((subject, []))
-        predicates = grouped[-1][1]
-        if not predicates or predicates[-1][0] != predicate:
-            predicates.append((predicate, []))
-        predicates[-1][1].append(obj)
-
-    lines: list[str] = []
-    for subject, predicates in grouped:
-        rendered_subject = _format_trig_term(subject)
-        for predicate_index, (predicate, objects) in enumerate(predicates):
-            rendered_predicate = "a" if predicate == RDF.type else _format_trig_term(predicate)
-            rendered_objects = _render_object_list(objects, indent=indent)
-            suffix = " ." if predicate_index == len(predicates) - 1 else " ;"
-            if predicate_index == 0:
-                lines.append(f"{indent}{rendered_subject} {rendered_predicate} {rendered_objects}{suffix}")
-                continue
-            lines.append(f"{indent}    {rendered_predicate} {rendered_objects}{suffix}")
-    return lines
-
-
-def _render_object_list(objects: list[object], *, indent: str) -> str:
-    rendered = [_format_trig_term(obj) for obj in objects]
-    if len(rendered) == 1:
-        return rendered[0]
-    separator = ",\n" + indent + "        "
-    return separator.join(rendered)
-
-
-def _triple_sort_key(triple: tuple[object, object, object]) -> tuple[tuple[int, str], tuple[int, str], tuple[int, str]]:
-    subject, predicate, obj = triple
-    return (_term_sort_key(subject), _term_sort_key(predicate), _term_sort_key(obj))
-
-
-def _term_sort_key(term: object) -> tuple[int, str]:
-    if isinstance(term, URIRef):
-        return (0, str(term))
-    if isinstance(term, Literal):
-        return (1, f"{term.language or ''}|{term.datatype or ''}|{term}")
-    msg = f"Unsupported RDF term for deterministic serialization: {term!r}"
-    raise TypeError(msg)
-
-
-def _format_trig_term(term: object) -> str:
-    if isinstance(term, URIRef):
-        return _format_uri(term)
-    if isinstance(term, Literal):
-        return term.n3()
-    msg = f"Unsupported RDF term for deterministic serialization: {term!r}"
-    raise TypeError(msg)
-
-
-def _format_uri(uri: URIRef) -> str:
-    uri_text = str(uri)
-    for prefix, namespace in _SERIALIZER_PREFIXES:
-        if not uri_text.startswith(namespace):
-            continue
-        local = uri_text.removeprefix(namespace)
-        if _SAFE_PREFIX_LOCAL_RE.match(local):
-            return f"{prefix}:{local}"
-    return f"<{uri_text}>"
-
-
-def _revision_timestamp_from_manifest(manifest: dict[str, dict[str, int | str]]) -> str:
-    latest_mtime_ns = max(
-        (
-            int(metadata["mtime_ns"])
-            for metadata in manifest.values()
-            if isinstance(metadata, dict) and isinstance(metadata.get("mtime_ns"), int)
-        ),
-        default=0,
+    save_canonical_graph_dataset(
+        dataset,
+        graph_path,
+        preferred_graph_order=[PROJECT_NS[layer] for layer in GRAPH_LAYERS],
     )
-    revision_time = datetime.fromtimestamp(latest_mtime_ns / 1_000_000_000, tz=timezone.utc)
-    return revision_time.replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def _read_revision_manifest(dataset: Dataset) -> dict[str, dict[str, int | str]]:
-    provenance = dataset.graph(_graph_uri("graph/provenance"))
-    manifest_literal = next(provenance.objects(REVISION_URI, SCHEMA_NS.text), None)
-    if manifest_literal is None:
-        return {}
-
-    try:
-        loaded = json.loads(str(manifest_literal))
-    except json.JSONDecodeError:
-        return {}
-    if not isinstance(loaded, dict):
-        return {}
-
-    manifest: dict[str, dict[str, int | str]] = {}
-    for key, value in loaded.items():
-        if not isinstance(key, str) or not isinstance(value, dict):
-            continue
-        sha = value.get("sha256")
-        mtime = value.get("mtime_ns")
-        if not isinstance(sha, str):
-            continue
-        if not isinstance(mtime, int):
-            continue
-        manifest[key] = {"sha256": sha, "mtime_ns": mtime}
-    return manifest
-
-
-def _build_input_manifest(graph_path: Path) -> dict[str, dict[str, int | str]]:
-    project_root = _project_root_from_graph_path(graph_path)
-
-    try:
-        from science_tool.paths import resolve_paths
-
-        pp = resolve_paths(project_root)
-        include_dirs: list[Path] = [
-            pp.doc_dir,
-            pp.specs_dir,
-            pp.papers_dir / "summaries",
-            pp.code_dir,
-            pp.tasks_dir,
-            pp.knowledge_dir / "sources",
-        ]
-        notes_dir = project_root / "notes"
-        if notes_dir.is_dir():
-            include_dirs.append(notes_dir)
-    except Exception:
-        include_dirs = [project_root / d for d in ("doc", "specs", "notes", "papers/summaries", "code")]
-
-    include_files = ("RESEARCH_PLAN.md", "science.yaml", "CLAUDE.md", "AGENTS.md")
-
-    files: set[Path] = set()
-    for file_name in include_files:
-        candidate = project_root / file_name
-        if candidate.is_file():
-            files.add(candidate)
-
-    for base in include_dirs:
-        if not base.is_dir():
-            continue
-        for candidate in base.rglob("*"):
-            if candidate.is_file():
-                files.add(candidate)
-
-    manifest: dict[str, dict[str, int | str]] = {}
-    for file_path in sorted(files):
-        rel_path = file_path.relative_to(project_root).as_posix()
-        stat = file_path.stat()
-        manifest[rel_path] = {
-            "mtime_ns": int(stat.st_mtime_ns),
-            "sha256": _sha256_file(file_path),
-        }
-    return manifest
-
-
-def _project_root_from_graph_path(graph_path: Path) -> Path:
-    if graph_path.name == "graph.trig" and graph_path.parent.name == "knowledge":
-        return graph_path.parent.parent
-    return graph_path.parent
-
-
-def _sha256_file(file_path: Path) -> str:
-    digest = hashlib.sha256()
-    with file_path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(8192), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _resolve_center_entity(value: str) -> URIRef:
