@@ -5,7 +5,7 @@ from __future__ import annotations
 from rdflib import Dataset, URIRef
 
 from science_tool.graph.freshness import derive_bears_on_from_typed_edges
-from science_tool.graph.store import PROJECT_NS, SCI_NS
+from science_tool.graph.store import CITO_NS, PROJECT_NS, SCI_NS
 
 
 def _u(local: str) -> URIRef:
@@ -37,17 +37,13 @@ def test_tests_emits_bears_on():
 
 def test_supports_emits_bears_on():
     """observation cito:supports proposition -> bears_on (signed -> unsigned)."""
-    from rdflib.namespace import Namespace
-    cito = Namespace("http://purl.org/spar/cito/")
-    ds = _make_dataset_with([(_u("observation/o1"), cito.supports, _u("proposition/p1"))])
+    ds = _make_dataset_with([(_u("observation/o1"), CITO_NS.supports, _u("proposition/p1"))])
     derive_bears_on_from_typed_edges(ds)
     assert (str(_u("observation/o1")), str(_u("proposition/p1"))) in _bears_on_pairs(ds)
 
 
 def test_disputes_emits_bears_on():
-    from rdflib.namespace import Namespace
-    cito = Namespace("http://purl.org/spar/cito/")
-    ds = _make_dataset_with([(_u("proposition/p1"), cito.disputes, _u("hypothesis/h1"))])
+    ds = _make_dataset_with([(_u("proposition/p1"), CITO_NS.disputes, _u("hypothesis/h1"))])
     derive_bears_on_from_typed_edges(ds)
     assert (str(_u("proposition/p1")), str(_u("hypothesis/h1"))) in _bears_on_pairs(ds)
 

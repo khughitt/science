@@ -14,11 +14,8 @@ Public surface:
 from __future__ import annotations
 
 from rdflib import Dataset, URIRef
-from rdflib.namespace import Namespace
 
-from science_tool.graph.store import PROJECT_NS, SCI_NS
-
-CITO_NS = Namespace("http://purl.org/spar/cito/")
+from science_tool.graph.store import CITO_NS, PROJECT_NS, SCI_NS
 
 
 def derive_bears_on_from_typed_edges(dataset: Dataset) -> None:
@@ -53,13 +50,9 @@ def derive_bears_on_from_typed_edges(dataset: Dataset) -> None:
         SCI_NS.hasProposition,
     ]
 
-    new_triples: list[tuple[URIRef, URIRef, URIRef]] = []
     for predicate in direct_predicates:
         for s, _, o in knowledge.triples((None, predicate, None)):
-            new_triples.append((s, SCI_NS.bearsOn, o))
+            knowledge.add((s, SCI_NS.bearsOn, o))
     for predicate in inverse_predicates:
         for s, _, o in knowledge.triples((None, predicate, None)):
-            new_triples.append((o, SCI_NS.bearsOn, s))
-
-    for triple in new_triples:
-        knowledge.add(triple)
+            knowledge.add((o, SCI_NS.bearsOn, s))
