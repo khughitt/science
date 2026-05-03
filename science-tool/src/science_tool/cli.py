@@ -2452,6 +2452,7 @@ def tasks_add(
         validate_entity_aspects,
     )
     from science_tool.tasks import add_task
+    from science_tool.tasks_blockers import BlockerValidationError
 
     validated_aspects: list[str] = []
     if aspects:
@@ -2461,16 +2462,20 @@ def tasks_add(
         except AspectValidationError as exc:
             raise click.ClickException(str(exc)) from exc
 
-    task = add_task(
-        tasks_dir=DEFAULT_TASKS_DIR,
-        title=title,
-        priority=priority,
-        aspects=validated_aspects or None,
-        related=list(related) or None,
-        blocked_by=list(blocked_by) or None,
-        group=group,
-        description=description,
-    )
+    try:
+        task = add_task(
+            project_root=Path.cwd(),
+            tasks_dir=DEFAULT_TASKS_DIR,
+            title=title,
+            priority=priority,
+            aspects=validated_aspects or None,
+            related=list(related) or None,
+            blocked_by=list(blocked_by) or None,
+            group=group,
+            description=description,
+        )
+    except BlockerValidationError as exc:
+        raise click.ClickException(str(exc)) from exc
     click.echo(f"Created [{task.id}] {task.title}")
 
 
@@ -2522,9 +2527,17 @@ def tasks_retire(task_id: str, reason: str | None) -> None:
 def tasks_block(task_id: str, blocked_by: str) -> None:
     """Block a task."""
     from science_tool.tasks import block_task
+    from science_tool.tasks_blockers import BlockerValidationError
 
     try:
-        task = block_task(DEFAULT_TASKS_DIR, task_id, blocked_by=blocked_by)
+        task = block_task(
+            project_root=Path.cwd(),
+            tasks_dir=DEFAULT_TASKS_DIR,
+            task_id=task_id,
+            blocked_by=[blocked_by],
+        )
+    except BlockerValidationError as e:
+        raise click.ClickException(str(e)) from e
     except KeyError as e:
         raise click.ClickException(str(e)) from e
     click.echo(f"[{task.id}] blocked by {blocked_by}")
@@ -2667,6 +2680,7 @@ def tasks_edit(
         validate_entity_aspects,
     )
     from science_tool.tasks import edit_task
+    from science_tool.tasks_blockers import BlockerValidationError
 
     validated_aspects: list[str] | None = None
     if aspects:
@@ -2678,6 +2692,7 @@ def tasks_edit(
 
     try:
         task = edit_task(
+            project_root=Path.cwd(),
             tasks_dir=DEFAULT_TASKS_DIR,
             task_id=task_id,
             title=title,
@@ -2689,6 +2704,8 @@ def tasks_edit(
             blocked_by=list(blocked_by) if blocked_by else None,
             group=group,
         )
+    except BlockerValidationError as e:
+        raise click.ClickException(str(e)) from e
     except (KeyError, ValueError) as e:
         raise click.ClickException(str(e)) from e
     click.echo(f"Edited [{task.id}] {task.title}")

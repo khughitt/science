@@ -309,6 +309,7 @@ def _find_task(tasks: list[Task], task_id: str) -> Task:
 
 
 def add_task(
+    project_root: Path,
     tasks_dir: Path,
     title: str,
     priority: str,
@@ -318,8 +319,17 @@ def add_task(
     blocked_by: list[str] | None = None,
     group: str = "",
     description: str = "",
+    *,
+    force: bool = False,
 ) -> Task:
     """Create a task with status 'proposed', auto-assign ID, write to active.md."""
+    from science_tool.tasks_blockers import validate_blocker_refs  # noqa: PLC0415
+
+    validated_blockers = (
+        validate_blocker_refs(project_root, blocked_by, force=force)
+        if blocked_by
+        else []
+    )
     task_id = next_task_id(tasks_dir)
     task = Task(
         id=task_id,
@@ -330,7 +340,7 @@ def add_task(
         status="proposed",
         created=date.today(),
         related=related or [],
-        blocked_by=blocked_by or [],
+        blocked_by=validated_blockers,
         group=group,
         description=description,
     )
@@ -403,14 +413,25 @@ def retire_task(tasks_dir: Path, task_id: str, reason: str | None = None) -> Tas
     return task
 
 
-def block_task(tasks_dir: Path, task_id: str, blocked_by: str) -> Task:
-    """Add blocker to blocked_by list, set status to 'blocked'."""
+def block_task(
+    project_root: Path,
+    tasks_dir: Path,
+    task_id: str,
+    blocked_by: list[str],
+    *,
+    force: bool = False,
+) -> Task:
+    """Add typed blockers to a task, set status to 'blocked'."""
+    from science_tool.tasks_blockers import validate_blocker_refs  # noqa: PLC0415
+
+    validated = validate_blocker_refs(project_root, blocked_by, force=force)
     tasks = _read_active(tasks_dir)
     task = _find_task(tasks, task_id)
 
     task.status = "blocked"
-    if blocked_by not in task.blocked_by:
-        task.blocked_by.append(blocked_by)
+    for ref in validated:
+        if ref not in task.blocked_by:
+            task.blocked_by.append(ref)
 
     _write_active(tasks_dir, tasks)
     return task
@@ -429,6 +450,7 @@ def unblock_task(tasks_dir: Path, task_id: str) -> Task:
 
 
 def edit_task(
+    project_root: Path,
     tasks_dir: Path,
     task_id: str,
     title: str | None = None,
@@ -439,8 +461,12 @@ def edit_task(
     related: list[str] | None = None,
     blocked_by: list[str] | None = None,
     group: str | None = None,
+    *,
+    force: bool = False,
 ) -> Task:
     """Update specified fields on a task."""
+    from science_tool.tasks_blockers import validate_blocker_refs  # noqa: PLC0415
+
     location = find_task_location(tasks_dir, task_id)
     task = location.task
 
@@ -461,7 +487,7 @@ def edit_task(
     if related is not None:
         task.related = related
     if blocked_by is not None:
-        task.blocked_by = blocked_by
+        task.blocked_by = validate_blocker_refs(project_root, blocked_by, force=force)
     if group is not None:
         task.group = group
 

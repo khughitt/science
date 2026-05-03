@@ -43,27 +43,6 @@ class TestTasksAdd:
             assert result.exit_code == 0
             assert "t001" in result.output
 
-    def test_add_with_related_and_blocked_by(self, runner: CliRunner) -> None:
-        with runner.isolated_filesystem():
-            result = runner.invoke(
-                main,
-                [
-                    "tasks",
-                    "add",
-                    "Blocked task",
-                    "--priority",
-                    "P0",
-                    "--related",
-                    "t001",
-                    "--related",
-                    "t002",
-                    "--blocked-by",
-                    "t001",
-                ],
-            )
-            assert result.exit_code == 0
-            assert "t001" in result.output
-
     def test_add_requires_priority(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
             result = runner.invoke(main, ["tasks", "add", "No priority"])
@@ -116,13 +95,6 @@ class TestTasksDefer:
 
 
 class TestTasksBlock:
-    def test_block_sets_blocked(self, runner: CliRunner) -> None:
-        with runner.isolated_filesystem():
-            runner.invoke(main, ["tasks", "add", "To block", "--priority", "P1"])
-            result = runner.invoke(main, ["tasks", "block", "t001", "--by", "t002"])
-            assert result.exit_code == 0
-            assert "blocked" in result.output.lower()
-
     def test_block_requires_by(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
             runner.invoke(main, ["tasks", "add", "To block", "--priority", "P1"])

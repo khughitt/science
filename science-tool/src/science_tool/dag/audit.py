@@ -100,6 +100,7 @@ def _open_review_task(
     Isolated here so tests can monkeypatch without touching real tasks.
     """
     _tasks_mod.add_task(
+        project_root=tasks_dir.parent,
         tasks_dir=tasks_dir,
         title=title,
         priority=priority,
