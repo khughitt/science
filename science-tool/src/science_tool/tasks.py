@@ -21,6 +21,7 @@ __all__ = [
     "TaskUpdate",
     "append_task_note",
     "find_task_location",
+    "parse_tasks_for_cli",
     "retire_task",
     "write_task_location",
 ]
@@ -114,6 +115,28 @@ def parse_tasks(path: Path) -> list[Task]:
         blocks.append(current)
 
     return [_parse_task_block(block) for block in blocks]
+
+
+def parse_tasks_for_cli(path: Path) -> tuple[list[Task], list[str]]:
+    """Parse tasks AND surface user-facing warnings.
+
+    Detects legacy untyped blocker refs and returns them as warning strings.
+    Programmatic callers should prefer `parse_tasks` to avoid noise.
+    """
+    # Deferred import to avoid a circular dependency:
+    # tasks_blockers -> entities -> graph -> tasks
+    from science_tool.tasks_blockers import _TYPED_REF_RE  # noqa: PLC0415
+
+    tasks = parse_tasks(path)
+    warnings: list[str] = []
+    for task in tasks:
+        for ref in task.blocked_by:
+            if not _TYPED_REF_RE.match(ref):
+                warnings.append(
+                    f"task {task.id}: legacy untyped blocker {ref!r} — "
+                    f"run 'science-tool tasks fix-blockers' to retype"
+                )
+    return tasks, warnings
 
 
 def render_task(task: Task) -> str:
