@@ -23,10 +23,15 @@ class Readiness(BaseModel):
     detail: str = ""  # optional one-line elaboration for `tasks show`
 
 
+class ReadinessResolverProtocol(Protocol):
+    def resolve_ref(self, ref: str) -> Readiness:
+        ...
+
+
 class ProjectEntity(Entity):
     # … existing fields …
 
-    def readiness(self, resolver: "ReadinessResolver | None" = None) -> Readiness:
+    def readiness(self, resolver: ReadinessResolverProtocol | None = None) -> Readiness:
         """Default readiness: ready iff status == 'done'.
 
         `resolver` is optional; subclasses that need to traverse other
@@ -49,7 +54,7 @@ class ReadinessResolver:
     lifetime so the same blocker referenced N times costs one resolution.
     """
 
-    def __init__(self, lookup: Callable[[str], Entity | None]):
+    def __init__(self, lookup: Callable[[str], ProjectEntity | None]):
         self._lookup = lookup
         self._visiting: set[str] = set()
         self._cache: dict[str, Readiness] = {}
@@ -84,7 +89,7 @@ Overrides:
     - `availability == "available"`, no exception, `verified == False` → `ready=False, state=f"{level}, unverified"`.
   - `origin == "derived"`: requires `resolver`. If `resolver is None`, returns `Readiness(ready=False, state="unknown", detail="derived dataset readiness requires resolver context")`. Otherwise looks up `self.derivation.workflow_run` via the resolver and returns whatever the workflow-run reports.
 - **`WorkflowRunEntity.readiness(resolver=None)`** — `ready=True, state="complete"` iff `self.status == "complete"` (matches the existing workflow-run template's vocabulary). Otherwise `ready=False, state=self.status or "unknown"`.
-- All other entities use the default.
+- All other project entities use the default. Domain/catalog entities are not valid task blockers in this spec.
 
 Each entity that wants non-default readiness overrides the method directly. The resolver is the only piece that's generalizable infrastructure.
 
@@ -128,7 +133,7 @@ Cross-project blockers move to the trajectory section, conditional on cross-proj
 `science-tool tasks block <task_id> --by <typed-ref>`:
 
 - **Strict typing.** Rejects untyped strings: `--by some-string` → error `"blocker must be typed: <kind>:<local-id> (e.g. dataset:foo, task:t007)"`.
-- **Strict resolution.** Validates the ref resolves to a known entity in the local project (cross-project refs are out of scope; see trajectory item 1). If not: error with create-stub hint: `"unknown entity dataset:foo. Create it first with: science-tool dataset create …"`.
+- **Strict resolution.** Validates the ref resolves to a known project entity in the local project (cross-project refs and domain/catalog entities are out of scope; see trajectory item 1). If not: error with create-stub hint: `"unknown entity dataset:foo. Create the entity first (for datasets, add doc/datasets/foo.md or use the appropriate dataset workflow)."`
 - **Repeatable.** `--by` accepts multiple values in one invocation: `tasks block t002 --by dataset:a --by dataset:b --by dataset:c`. (Current single-blocker form is a regression vs. the underlying data model, which has always supported a list.)
 - **`--force` escape hatch.** Records the blocker even if the entity doesn't yet exist. Emits a warning; `graph audit` will flag the unresolved reference. Used for the legitimate case of "I know I'll need this dataset but haven't created the entity yet."
 
@@ -176,7 +181,7 @@ This is a nudge, not enforcement; it gives the auto-unblock value without commit
 - Default: prints per-blocker readiness as a table.
 - `--format=json`: machine-readable output, **always includes per-blocker readiness** (`ref`, `ready`, `state`, `detail`, `unresolved` flag). Useful for scripting and for the future auto-unblock sweep.
 
-`science-tool tasks list --format=json` likewise includes a `blocked_by_readiness` array per blocked task with the same shape, so scripted callers don't have to issue per-task follow-up calls.
+`science-tool tasks list --format=json` likewise includes a `blocked_by_readiness` array per blocked task inside each row in the existing `{"rows": [...], "meta": {...}}` payload, so scripted callers don't have to issue per-task follow-up calls.
 
 ### Legacy migration command
 
@@ -213,7 +218,7 @@ def validate_blocker_refs(
 
 ### Updated function signatures
 
-`block_task`, `update_task`, and `create_task` (in `science-tool/src/science_tool/tasks.py`) gain a `project_root: Path` parameter so they can call `validate_blocker_refs`. The CLI commands already have `project_root` available; threading it down is a small change.
+`block_task`, `edit_task`, and `add_task` (in `science-tool/src/science_tool/tasks.py`) gain a `project_root: Path` parameter so they can call `validate_blocker_refs`. The CLI commands already have `project_root` available as `Path.cwd()` in the current task command group; threading it down is a small change.
 
 ### Read path
 
@@ -293,9 +298,10 @@ In a tmp project with one task and one embargoed dataset: `block` → `show` →
 | `science-model/src/science_model/entities.py` | Add `Readiness` model; default `readiness(resolver=None)` on `ProjectEntity`; overrides on `DatasetEntity` and `WorkflowRunEntity` |
 | `science-model/src/science_model/packages/schema.py` | Extend `AccessBlock` with `availability` + `available_after` + validator |
 | `science-model/tests/test_readiness.py` | New |
-| `science-tool/src/science_tool/tasks.py` | Thread `project_root` into `block_task` / `update_task` / `create_task`; route blocker writes through `validate_blocker_refs`; add `parse_tasks_for_cli` wrapper. `parse_tasks` itself stays clean |
+| `science-tool/src/science_tool/tasks.py` | Thread `project_root` into `block_task` / `edit_task` / `add_task`; route blocker writes through `validate_blocker_refs`; add `parse_tasks_for_cli` wrapper. `parse_tasks` itself stays clean |
 | `science-tool/src/science_tool/tasks_blockers.py` | New: `validate_blocker_refs`, `BlockerValidationError` |
 | `science-tool/src/science_tool/tasks_readiness.py` | New: `ReadinessResolver` |
+| `science-tool/src/science_tool/entities.py` | Add `load_local_entity_ids()` and `load_local_entity_index()` helpers backed by `load_project_sources()` and filtered to `ProjectEntity` |
 | `science-tool/src/science_tool/cli.py` | Repeatable `--by`, `--force`; new `tasks blockers` and `tasks fix-blockers` commands; CLI commands call `parse_tasks_for_cli` |
 | `science-tool/src/science_tool/tasks_display.py` | Construct `ReadinessResolver`, resolve and render readiness, add nudge |
 | `science-tool/tests/test_tasks_blockers.py` | New |
@@ -303,7 +309,7 @@ In a tmp project with one task and one embargoed dataset: `block` → `show` →
 | `science-tool/tests/test_tasks_cli.py` | Extend |
 | `science-tool/tests/test_tasks_display.py` | Extend |
 | `commands/tasks.md` | Document typed-ref convention; mention `--force` and `fix-blockers` |
-| `skills/science/tasks/SKILL.md` (or whichever path holds the active tasks skill) | Same |
+| active tasks skill, if present (find with `rg -l "Manage the project task queue" skills .codex 2>/dev/null`) | Same |
 | `templates/dataset.md` (if it exists) | Add `availability` field with default and HTML hint |
 
 ---
@@ -337,9 +343,9 @@ These are named so the future direction is documented. **None are built in this 
 ## Self-Review
 
 - **Placeholders.** None. All sections describe concrete behavior; no TBD or TODO markers.
-- **Internal consistency.** `Readiness` shape (`bool + state + detail`) consistent across entity overrides, `ReadinessResolver`, CLI display, `tasks blockers --format=json`, and `tasks list --format=json`. `AccessBlock.availability` and `exception.mode` semantics match across the entity validator, dataset readiness override, display strings, and tests. `ReadinessResolver` is the single owner of cross-entity lookup, cycle protection, and per-invocation caching.
+- **Internal consistency.** `Readiness` shape (`bool + state + detail`) consistent across entity overrides, `ReadinessResolver`, CLI display, `tasks blockers --format=json`, and `tasks list --format=json`. `tasks list --format=json` preserves the existing `{"rows": [...], "meta": {...}}` envelope and adds `blocked_by_readiness` inside rows. `AccessBlock.availability` and `exception.mode` semantics match across the entity validator, dataset readiness override, display strings, and tests. `ReadinessResolver` is the single owner of cross-entity lookup, cycle protection, and per-invocation caching.
 - **Scope.** Single-project, single-spec scope: data-model extension + readiness protocol/resolver + validation helper + CLI/display surface. Cross-project blockers, auto-unblock, and graph-substrate work are explicitly deferred. Sized for one implementation plan.
-- **Service boundary.** `validate_blocker_refs` is the single owner of ref validation; `block_task` / `update_task` / `create_task` route through it. `ReadinessResolver` is the single owner of readiness resolution; entity `readiness()` methods are pure local logic plus optional resolver delegation. `parse_tasks` stays pure; `parse_tasks_for_cli` is the warning-surfacing wrapper.
+- **Service boundary.** `validate_blocker_refs` is the single owner of ref validation; `block_task` / `edit_task` / `add_task` route through it. `ReadinessResolver` is the single owner of readiness resolution; entity `readiness()` methods are pure local logic plus optional resolver delegation. `load_local_entity_ids()` and `load_local_entity_index()` are the single local project-entity lookup helpers for validation and display. `parse_tasks` stays pure; `parse_tasks_for_cli` is the warning-surfacing wrapper.
 - **Workflow-run rule.** Pinned to `status == "complete"` (matches the existing template vocabulary). No deferral.
 - **Cross-project blockers.** Explicitly out of scope; promoted to trajectory item 1 with prerequisites named.
 
@@ -550,9 +556,13 @@ Expected: FAIL with `ImportError: cannot import name 'Readiness' from science_mo
 
 - [ ] **Step 3: Implement**
 
-In `science-model/src/science_model/entities.py`:
+In `science-model/src/science_model/entities.py`, add `Protocol` to the typing imports:
 
-(a) Add the `Readiness` model. Put it near the other small models near the top, e.g. just above `class ProjectEntity`:
+```python
+from typing import Protocol
+```
+
+Then add the readiness models/protocol near the other small models near the top, e.g. just above `class ProjectEntity`:
 
 ```python
 class Readiness(BaseModel):
@@ -566,15 +576,21 @@ class Readiness(BaseModel):
     ready: bool
     state: str
     detail: str = ""
+
+
+class ReadinessResolverProtocol(Protocol):
+    """Structural protocol implemented by science-tool's ReadinessResolver."""
+
+    def resolve_ref(self, ref: str) -> Readiness: ...
 ```
 
-(b) Add the default `readiness()` method to `ProjectEntity`:
+Add the default `readiness()` method to `ProjectEntity`:
 
 ```python
 class ProjectEntity(Entity):
     # … existing fields unchanged …
 
-    def readiness(self, resolver: "ReadinessResolver | None" = None) -> Readiness:  # noqa: F821
+    def readiness(self, resolver: ReadinessResolverProtocol | None = None) -> Readiness:
         """Default readiness: ready iff status == 'done'.
 
         `resolver` is optional context for subclasses that need to traverse
@@ -586,15 +602,13 @@ class ProjectEntity(Entity):
         return Readiness(ready=False, state=self.status or "unknown")
 ```
 
-The forward-ref to `ReadinessResolver` is a string literal, so importing the class isn't required here. The resolver lives in `science-tool` and entities never construct one — they only receive one. The `# noqa: F821` suppresses the unused-forward-ref lint.
-
-(c) Override on `WorkflowRunEntity`:
+Override on `WorkflowRunEntity`:
 
 ```python
 class WorkflowRunEntity(ProjectEntity):
     """Workflow run — readiness is `complete` when status == 'complete'."""
 
-    def readiness(self, resolver: "ReadinessResolver | None" = None) -> Readiness:  # noqa: F821
+    def readiness(self, resolver: ReadinessResolverProtocol | None = None) -> Readiness:
         if self.status == "complete":
             return Readiness(ready=True, state="complete")
         return Readiness(ready=False, state=self.status or "unknown")
@@ -777,7 +791,7 @@ class DatasetEntity(ProjectEntity):
         # … existing invariant enforcement unchanged …
         return self
 
-    def readiness(self, resolver: "ReadinessResolver | None" = None) -> Readiness:  # noqa: F821
+    def readiness(self, resolver: ReadinessResolverProtocol | None = None) -> Readiness:
         if self.origin == "external":
             return self._external_readiness()
         if self.origin == "derived":
@@ -808,7 +822,7 @@ class DatasetEntity(ProjectEntity):
             return Readiness(ready=True, state="available")
         return Readiness(ready=False, state=f"{access.level}, unverified")
 
-    def _derived_readiness(self, resolver: "ReadinessResolver | None") -> Readiness:  # noqa: F821
+    def _derived_readiness(self, resolver: ReadinessResolverProtocol | None) -> Readiness:
         if resolver is None:
             return Readiness(
                 ready=False,
@@ -855,7 +869,7 @@ from __future__ import annotations
 
 from science_model.entities import (
     DatasetEntity,
-    Entity,
+    ProjectEntity,
     Readiness,
     WorkflowRunEntity,
 )
@@ -903,7 +917,7 @@ def test_resolver_caches_repeated_lookups():
     wfr = _wfr("workflow-run:r1", status="complete")
     calls: list[str] = []
 
-    def lookup(ref: str) -> Entity | None:
+    def lookup(ref: str) -> ProjectEntity | None:
         calls.append(ref)
         return wfr if ref == "workflow-run:r1" else None
 
@@ -976,13 +990,13 @@ from __future__ import annotations
 
 from typing import Callable
 
-from science_model.entities import Entity, Readiness
+from science_model.entities import ProjectEntity, Readiness
 
 
 class ReadinessResolver:
     """Resolves entity references to Readiness, guarding against cycles."""
 
-    def __init__(self, lookup: Callable[[str], Entity | None]) -> None:
+    def __init__(self, lookup: Callable[[str], ProjectEntity | None]) -> None:
         self._lookup = lookup
         self._visiting: set[str] = set()
         self._cache: dict[str, Readiness] = {}
@@ -1026,9 +1040,10 @@ git commit -m "feat(tool): add ReadinessResolver with cycle protection + caching
 
 ---
 
-## Task 5: `validate_blocker_refs` helper
+## Task 5: Local entity lookup helpers + `validate_blocker_refs`
 
 **Files:**
+- Modify: `science-tool/src/science_tool/entities.py` — add `load_local_entity_ids()` and `load_local_entity_index()`
 - Create: `science-tool/src/science_tool/tasks_blockers.py`
 - Create: `science-tool/tests/test_tasks_blockers.py`
 
@@ -1045,6 +1060,8 @@ from pathlib import Path
 import pytest
 
 from _fixtures.entity_helpers import seed_project, write_markdown_entity
+from science_model.entities import DatasetEntity
+from science_tool.entities import load_local_entity_ids, load_local_entity_index
 from science_tool.tasks_blockers import (
     BlockerValidationError,
     validate_blocker_refs,
@@ -1066,6 +1083,18 @@ def _setup_project_with_dataset(tmp_path: Path) -> Path:
         },
     )
     return tmp_path
+
+
+def test_load_local_entity_ids_returns_project_entity_ids(tmp_path: Path):
+    _setup_project_with_dataset(tmp_path)
+    ids = load_local_entity_ids(tmp_path)
+    assert "dataset:foo" in ids
+
+
+def test_load_local_entity_index_returns_project_entities(tmp_path: Path):
+    _setup_project_with_dataset(tmp_path)
+    index = load_local_entity_index(tmp_path)
+    assert isinstance(index["dataset:foo"], DatasetEntity)
 
 
 def test_validate_rejects_untyped_string(tmp_path: Path):
@@ -1110,11 +1139,36 @@ def test_validate_multiple_refs_reports_first_failure(tmp_path: Path):
 uv run --frozen pytest science-tool/tests/test_tasks_blockers.py -q
 ```
 
-Expected: FAIL with `ModuleNotFoundError: No module named 'science_tool.tasks_blockers'`.
+Expected: FAIL with import errors for missing `load_local_entity_ids`, `load_local_entity_index`, and `science_tool.tasks_blockers`.
 
 - [ ] **Step 3: Implement**
 
-Create `science-tool/src/science_tool/tasks_blockers.py`:
+First, add local project-entity lookup helpers to `science-tool/src/science_tool/entities.py` near `list_entities()`:
+
+```python
+from science_model.entities import ProjectEntity
+
+
+def load_local_entity_index(project_root: Path) -> dict[str, ProjectEntity]:
+    """Return local project entities keyed by canonical id.
+
+    Domain/catalog entities are intentionally excluded: task blockers are
+    project-state dependencies such as tasks, datasets, workflow-runs, and
+    other ProjectEntity subclasses. Cross-project entities are out of scope.
+    """
+    index: dict[str, ProjectEntity] = {}
+    for entity in load_project_sources(project_root.resolve()).entities:
+        if isinstance(entity, ProjectEntity):
+            index[entity.canonical_id] = entity
+    return index
+
+
+def load_local_entity_ids(project_root: Path) -> set[str]:
+    """Return canonical ids for local ProjectEntity records."""
+    return set(load_local_entity_index(project_root))
+```
+
+Then create `science-tool/src/science_tool/tasks_blockers.py`:
 
 ```python
 """Validation helpers for typed blocker refs on tasks."""
@@ -1122,6 +1176,8 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+
+from science_tool.entities import load_local_entity_ids
 
 # Format: <kind>:<local-id> where kind is lowercase letters/digits/hyphens
 # and local-id is anything non-empty without whitespace.
@@ -1141,7 +1197,7 @@ def validate_blocker_refs(
     """Validate and normalize a list of blocker refs.
 
     - Rejects refs not matching `^<kind>:<local-id>$` (always; --force does not bypass).
-    - Rejects refs that don't resolve to a known local entity, unless `force=True`.
+    - Rejects refs that don't resolve to a known local ProjectEntity, unless `force=True`.
     - Returns the (possibly normalized) ref list on success.
     - Raises `BlockerValidationError` with a concrete actionable message on failure.
     """
@@ -1155,31 +1211,16 @@ def validate_blocker_refs(
     if force:
         return list(refs)
 
-    known = _load_local_entity_ids(project_root)
+    known = load_local_entity_ids(project_root)
     for ref in refs:
         if ref not in known:
-            kind = ref.split(":", 1)[0]
             raise BlockerValidationError(
                 f"unknown entity {ref}. Create it first with: "
-                f"science-tool {kind} create …  (or pass --force to record anyway)"
+                "add the corresponding entity file or use the appropriate creation workflow "
+                "(or pass --force to record anyway)"
             )
     return list(refs)
-
-
-def _load_local_entity_ids(project_root: Path) -> set[str]:
-    """Return the set of entity ids known to the local project.
-
-    Uses the existing entity loading machinery; does not include
-    federated peers (cross-project blockers are out of scope for this spec).
-    """
-    # The exact loader entry point is whatever is currently used by
-    # `science-tool entity list` and `graph audit` for local resolution.
-    # See science-tool/src/science_tool/entities.py for the canonical loader.
-    from science_tool.entities import load_local_entity_ids  # type: ignore[attr-defined]
-    return set(load_local_entity_ids(project_root))
 ```
-
-If `load_local_entity_ids` does not exist by that name, find the equivalent in `science-tool/src/science_tool/entities.py` (look for the function used by `entity list` to enumerate entities) and import it directly. The implementer should adjust the import path to match what's actually exported; the function's contract is the only thing that matters here: take a project root, return iterable of `<kind>:<local-id>` strings.
 
 - [ ] **Step 4: Run, verify pass**
 
@@ -1192,8 +1233,8 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/tasks_blockers.py science-tool/tests/test_tasks_blockers.py
-git commit -m "feat(tool): add validate_blocker_refs with strict typing + --force"
+git add science-tool/src/science_tool/entities.py science-tool/src/science_tool/tasks_blockers.py science-tool/tests/test_tasks_blockers.py
+git commit -m "feat(tool): add local entity lookup + typed blocker validation"
 ```
 
 ---
@@ -1327,12 +1368,12 @@ git commit -m "feat(tool): add parse_tasks_for_cli wrapper for legacy-blocker wa
 
 ---
 
-## Task 7: Wire validation into `block_task` / `update_task` / `create_task`
+## Task 7: Wire validation into `block_task` / `edit_task` / `add_task`
 
 Thread `project_root` through and route blocker writes through `validate_blocker_refs`.
 
 **Files:**
-- Modify: `science-tool/src/science_tool/tasks.py` — `block_task`, `update_task`, `create_task` (function name may be slightly different — check `__all__`)
+- Modify: `science-tool/src/science_tool/tasks.py` — `block_task`, `edit_task`, `add_task`
 - Modify: `science-tool/tests/test_tasks.py` — extend with validation cases
 
 - [ ] **Step 1: Write the failing tests**
@@ -1346,10 +1387,8 @@ from pathlib import Path
 from _fixtures.entity_helpers import seed_project, write_markdown_entity
 from science_tool.tasks_blockers import BlockerValidationError
 from science_tool.tasks import (
-    DEFAULT_TASKS_DIR,  # adjust if differently named in current code
+    add_task,
     block_task,
-    create_task,
-    update_task,
 )
 
 
@@ -1368,12 +1407,12 @@ def _seed_with_dataset(tmp_path: Path) -> Path:
         },
     )
     # Also create a baseline task to block.
-    create_task(
+    add_task(
         project_root=tmp_path,
         tasks_dir=tmp_path / "tasks",
         title="baseline",
         priority="P2",
-        type="dev",
+        task_type="dev",
     )
     return tmp_path
 
@@ -1485,9 +1524,68 @@ def block_task(
     return task
 ```
 
-In `update_task`, when `blocked_by is not None`, call `validate_blocker_refs(project_root, blocked_by, force=force)` before assigning. Add `project_root: Path` and `force: bool = False` parameters.
+In `edit_task`, when `blocked_by is not None`, call `validate_blocker_refs(project_root, blocked_by, force=force)` before assigning. Add `project_root: Path` and `force: bool = False` parameters.
 
-In `create_task`, when `blocked_by` is non-empty, call the same validator before constructing the Task. Add `project_root: Path` and `force: bool = False` parameters.
+In `add_task`, when `blocked_by` is non-empty, call the same validator before constructing the Task. Add `project_root: Path` and `force: bool = False` parameters.
+
+The signatures become, and the current assignment sites change as shown:
+
+```python
+def add_task(
+    project_root: Path,
+    tasks_dir: Path,
+    title: str,
+    priority: str,
+    task_type: str = "",
+    aspects: list[str] | None = None,
+    related: list[str] | None = None,
+    blocked_by: list[str] | None = None,
+    group: str = "",
+    description: str = "",
+    *,
+    force: bool = False,
+) -> Task:
+    validated_blockers = (
+        validate_blocker_refs(project_root, blocked_by, force=force)
+        if blocked_by
+        else []
+    )
+    task = Task(
+        id=next_task_id(tasks_dir),
+        title=title,
+        type=task_type,
+        aspects=aspects or [],
+        priority=priority,
+        status="proposed",
+        created=date.today(),
+        related=related or [],
+        blocked_by=validated_blockers,
+        group=group,
+        description=description,
+    )
+```
+
+```python
+def edit_task(
+    project_root: Path,
+    tasks_dir: Path,
+    task_id: str,
+    title: str | None = None,
+    description: str | None = None,
+    priority: str | None = None,
+    status: str | None = None,
+    aspects: list[str] | None = None,
+    related: list[str] | None = None,
+    blocked_by: list[str] | None = None,
+    group: str | None = None,
+    *,
+    force: bool = False,
+) -> Task:
+    location = find_task_location(tasks_dir, task_id)
+    task = location.task
+    if blocked_by is not None:
+        task.blocked_by = validate_blocker_refs(project_root, blocked_by, force=force)
+```
 
 - [ ] **Step 4: Run, verify pass**
 
@@ -1495,13 +1593,13 @@ In `create_task`, when `blocked_by` is non-empty, call the same validator before
 uv run --frozen pytest science-tool/tests/test_tasks.py -q
 ```
 
-Expected: PASS. Update any pre-existing tests that call `block_task` / `update_task` / `create_task` with the old single-string signature; the test failures will name them precisely.
+Expected: PASS. Update any pre-existing tests that call `block_task` with the old single-string signature or `add_task` / `edit_task` without `project_root`; the test failures will name them precisely.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add science-tool/src/science_tool/tasks.py science-tool/tests/test_tasks.py
-git commit -m "feat(tool): require typed blockers in block/create/update task"
+git commit -m "feat(tool): require typed blockers in block/add/edit task"
 ```
 
 ---
@@ -1552,7 +1650,7 @@ def _setup(tmp_path):
     runner = CliRunner()
     runner.invoke(
         main,
-        ["tasks", "add", "Block-me", "--type", "dev", "--priority", "P2"],
+        ["tasks", "add", "Block-me", "--priority", "P2"],
     )
     return runner
 
@@ -1586,6 +1684,7 @@ def test_tasks_block_force_accepts_unknown(tmp_path, monkeypatch):
     )
     assert result.exit_code == 0, result.output
     assert "dataset:not-yet" in result.output
+    assert "WARNING" in result.output
 ```
 
 - [ ] **Step 2: Run, verify failure**
@@ -1607,18 +1706,17 @@ In `science-tool/src/science_tool/cli.py`, replace the existing `tasks_block` co
               help="Typed blocker ref (repeatable): <kind>:<local-id>")
 @click.option("--force", is_flag=True,
               help="Record blocker even if entity not yet known")
-@click.pass_context
 def tasks_block(
-    ctx: click.Context, task_id: str, blocked_by: tuple[str, ...], force: bool
+    task_id: str, blocked_by: tuple[str, ...], force: bool
 ) -> None:
     """Block a task by one or more typed entity references."""
     from science_tool.tasks import block_task
     from science_tool.tasks_blockers import BlockerValidationError
+    from science_tool.entities import load_local_entity_ids
 
-    project_root = ctx.obj["project_root"] if ctx.obj else Path.cwd()
     try:
         task = block_task(
-            project_root=project_root,
+            project_root=Path.cwd(),
             tasks_dir=DEFAULT_TASKS_DIR,
             task_id=task_id,
             blocked_by=list(blocked_by),
@@ -1629,13 +1727,20 @@ def tasks_block(
     except BlockerValidationError as exc:
         raise click.ClickException(str(exc)) from exc
 
+    if force:
+        known = load_local_entity_ids(Path.cwd())
+        for ref in blocked_by:
+            if ref not in known:
+                click.echo(
+                    f"WARNING: recorded unresolved blocker {ref}; graph audit will flag it",
+                    err=True,
+                )
+
     refs = ", ".join(task.blocked_by)
     click.echo(f"[{task.id}] blocked by {refs}")
 ```
 
-If the `ctx.obj["project_root"]` pattern is not how project root is currently passed in this CLI, use whatever pattern is used by other commands that need it (e.g. `tasks_add`). Inspect the existing `tasks_add` body for the right idiom and mirror it.
-
-Apply the same `--force` flag to `tasks_add` and `tasks_edit`'s `--blocked-by` handling: thread `force=force` through to `create_task` / `update_task`.
+Apply the same `--force` flag to `tasks_add` and `tasks_edit`'s `--blocked-by` handling: thread `project_root=Path.cwd()` and `force=force` through to `add_task` / `edit_task`. Do not add a `--type` option to `tasks add`; the current CLI intentionally rejects it, and existing tests cover that behavior.
 
 - [ ] **Step 4: Run, verify pass**
 
@@ -1726,23 +1831,21 @@ In `science-tool/src/science_tool/cli.py`, add the `tasks_blockers` command:
 @tasks.command("blockers")
 @click.argument("task_id")
 @click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
-@click.pass_context
-def tasks_blockers(ctx: click.Context, task_id: str, fmt: str) -> None:
+def tasks_blockers(task_id: str, fmt: str) -> None:
     """Show per-blocker readiness for a task."""
     import json as _json
 
     from science_tool.tasks import _find_task, _read_active
     from science_tool.tasks_readiness import ReadinessResolver
-    from science_tool.entities import load_local_entity_index  # see note below
+    from science_tool.entities import load_local_entity_index
 
-    project_root = ctx.obj["project_root"] if ctx.obj else Path.cwd()
     tasks = _read_active(DEFAULT_TASKS_DIR)
     try:
         task = _find_task(tasks, task_id)
     except KeyError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    index = load_local_entity_index(project_root)  # dict[str, Entity]
+    index = load_local_entity_index(Path.cwd())  # dict[str, ProjectEntity]
     resolver = ReadinessResolver(lookup=index.get)
 
     rows = []
@@ -1773,7 +1876,7 @@ def tasks_blockers(ctx: click.Context, task_id: str, fmt: str) -> None:
         click.echo(line)
 ```
 
-`load_local_entity_index(project_root) -> dict[str, Entity]` is the inverse of `load_local_entity_ids` from Task 5 — same loader, returning the actual entity objects keyed by id. If no equivalent exists, write one in `science-tool/src/science_tool/entities.py` (small wrapper around the existing entity-loading machinery).
+`load_local_entity_index(project_root) -> dict[str, ProjectEntity]` was added in Task 5. It returns local project entities keyed by canonical id; domain/catalog entities and federated peers are intentionally excluded.
 
 - [ ] **Step 4: Run, verify pass**
 
@@ -1880,17 +1983,14 @@ In `science-tool/src/science_tool/cli.py`:
 @tasks.command("fix-blockers")
 @click.option("--dry-run", is_flag=True,
               help="List legacy untyped blockers without modifying any files")
-@click.pass_context
-def tasks_fix_blockers(ctx: click.Context, dry_run: bool) -> None:
+def tasks_fix_blockers(dry_run: bool) -> None:
     """Interactive sweep to retype legacy untyped blockers."""
     from science_tool.tasks import (
-        _read_active,
         _write_active,
         parse_tasks_for_cli,
     )
     from science_tool.tasks_blockers import _TYPED_REF_RE
 
-    project_root = ctx.obj["project_root"] if ctx.obj else Path.cwd()
     tasks_path = DEFAULT_TASKS_DIR / "active.md"
     tasks_, warnings = parse_tasks_for_cli(tasks_path)
     if not warnings:
@@ -2012,7 +2112,7 @@ def test_tasks_list_shows_mixed_blocker_states(tmp_path, monkeypatch):
         },
     )
     runner = CliRunner()
-    runner.invoke(main, ["tasks", "add", "T", "--type", "dev", "--priority", "P2"])
+    runner.invoke(main, ["tasks", "add", "T", "--priority", "P2"])
     runner.invoke(
         main,
         ["tasks", "block", "t001", "--by", "dataset:foo", "--by", "dataset:bar"],
@@ -2032,7 +2132,7 @@ def test_tasks_list_json_includes_blocker_readiness(tmp_path, monkeypatch):
     result = runner.invoke(main, ["tasks", "list", "--format", "json"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
-    blocked = [t for t in payload if t["status"] == "blocked"]
+    blocked = [t for t in payload["rows"] if t["status"] == "blocked"]
     assert blocked
     assert "blocked_by_readiness" in blocked[0]
     readiness = blocked[0]["blocked_by_readiness"]
@@ -2124,7 +2224,7 @@ def test_tasks_show_renders_per_blocker_readiness(tmp_path, monkeypatch):
         },
     )
     runner = CliRunner()
-    runner.invoke(main, ["tasks", "add", "T", "--type", "dev", "--priority", "P2"])
+    runner.invoke(main, ["tasks", "add", "T", "--priority", "P2"])
     runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:embargoed"])
     result = runner.invoke(main, ["tasks", "show", "t001"])
     assert result.exit_code == 0, result.output
@@ -2179,7 +2279,7 @@ git commit -m "feat(cli): tasks show renders per-blocker readiness"
 
 **Files:**
 - Modify: `commands/tasks.md`
-- Modify: `skills/science:tasks/SKILL.md` (or whichever path holds the active tasks skill — find with `rg -l "Manage the project task queue" skills`)
+- Modify: active tasks skill, if present — find with `rg -l "Manage the project task queue" skills .codex 2>/dev/null`
 - Modify: `templates/dataset.md` (and `science-model/src/science_model/templates/dataset.md` if it exists per the templates packaging convention) — add the new `availability` and `available_after` fields with HTML hint comments
 
 - [ ] **Step 1: Locate and read current docs**
@@ -2260,7 +2360,7 @@ uv run --frozen ruff check science-model/src/science_model science-tool/src/scie
 uv run --frozen pyright science-model/src/science_model science-tool/src/science_tool
 ```
 
-Expected: PASS. Common issues: missing forward-ref imports for `ReadinessResolver`, unused imports in the CLI module.
+Expected: PASS. Common issues: unused imports in the CLI module, or a resolver annotation that names the concrete tool-layer class instead of the `ReadinessResolverProtocol`.
 
 - [ ] **Step 7: End-to-end smoke**
 
@@ -2294,7 +2394,7 @@ access:
 EOF
 (
   cd "$tmpdir"
-  uv run --project /mnt/ssd/Dropbox/science/science-tool science-tool tasks add "Use embargoed data" --type dev --priority P1
+  uv run --project /mnt/ssd/Dropbox/science/science-tool science-tool tasks add "Use embargoed data" --priority P1
   uv run --project /mnt/ssd/Dropbox/science/science-tool science-tool tasks block t001 --by dataset:embargoed
   uv run --project /mnt/ssd/Dropbox/science/science-tool science-tool tasks show t001
   uv run --project /mnt/ssd/Dropbox/science/science-tool science-tool tasks blockers t001 --format json
@@ -2330,6 +2430,6 @@ git commit -m "docs: document typed blockers, --force, blockers, fix-blockers, d
   - `tasks fix-blockers` migration → Task 10
   - Validation table → Tasks 5, 6, 7
   - Documentation → Task 13
-- **Placeholder scan:** None of "TBD"/"TODO"/"add appropriate error handling"/"similar to Task N". Two pieces of conditional guidance are flagged inline (Task 5: import path may need adjusting; Task 8: project-root passing pattern may need mirroring) — both name a concrete file to inspect rather than punting.
-- **Type consistency:** `Readiness(ready, state, detail)` shape matches across Tasks 2/3/4/9/11/12. `validate_blocker_refs(project_root, refs, *, force=False) -> list[str]` matches across Tasks 5/7/8. `block_task(project_root, tasks_dir, task_id, blocked_by: list[str], *, force=False)` matches across Tasks 7/8. JSON shape `{ref, ready, state, detail, unresolved}` matches across Tasks 9 and 11.
+- **Placeholder scan:** None of "TBD"/"TODO"/"add appropriate error handling"/"similar to Task N". Repo-specific helper names and CLI signatures are pinned to the current codebase.
+- **Type consistency:** `Readiness(ready, state, detail)` shape matches across Tasks 2/3/4/9/11/12. `ReadinessResolver` uses `ProjectEntity` lookup and satisfies `ReadinessResolverProtocol` structurally. `validate_blocker_refs(project_root, refs, *, force=False) -> list[str]` matches across Tasks 5/7/8. `block_task(project_root, tasks_dir, task_id, blocked_by: list[str], *, force=False)`, `add_task(project_root, tasks_dir, ...)`, and `edit_task(project_root, tasks_dir, ...)` match across Tasks 7/8. `tasks list --format=json` preserves the existing rows/meta envelope; per-blocker JSON shape `{ref, ready, state, detail, unresolved}` matches across Tasks 9 and 11.
 - **Commit cadence:** 13 commits, one per task, scoped narrowly enough to revert any one without unwinding others.
