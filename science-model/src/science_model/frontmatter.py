@@ -8,7 +8,7 @@ from typing import Literal, cast
 
 import yaml
 
-from science_model.entities import Entity, EntityType, MechanismEntity, core_entity_type_for_kind
+from science_model.entities import Entity, EntityType, EpistemicReviewState, MechanismEntity, core_entity_type_for_kind
 from science_model.identity import EntityScope, ExternalId
 from science_model.packages.schema import AccessBlock, AccessException, DerivationBlock
 from science_model.sync import SyncSource
@@ -245,11 +245,10 @@ def _coerce_access(fm: dict) -> AccessBlock | None:
     return None
 
 
-def _coerce_review_state(fm: dict) -> "EpistemicReviewState | None":
+def _coerce_review_state(fm: dict) -> EpistemicReviewState | None:
     raw = fm.get("review_state")
     if not isinstance(raw, dict):
         return None
-    from science_model.entities import EpistemicReviewState
     return EpistemicReviewState(
         last_reviewed=_coerce_date(raw.get("last_reviewed")),
         last_review_note=str(raw.get("last_review_note") or ""),
