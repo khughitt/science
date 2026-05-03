@@ -1,7 +1,7 @@
 ---
 id: "hypothesis:h{{nn}}-{{slug}}"
 type: "hypothesis"
-title: "{{Short Title}}"
+title: "{{title}}"
 status: "proposed"
 phase: "active"  # candidate | active. `candidate` for trial framings being promoted to organize work but not yet committed; `active` (default) for committed frames.
 # aspects: ["hypothesis-testing"]  # optional override; omitted entities inherit project aspects
@@ -9,9 +9,31 @@ source_refs: []
 related: []
 created: "{{YYYY-MM-DD}}"
 updated: "{{YYYY-MM-DD}}"
+_template:
+  frontmatter:
+    id: { from: entity_id }
+    type: { default: "hypothesis" }
+    title: { from: title }
+    status: { from: status }
+    phase: { default: "active" }
+    source_refs: { from: source_refs }
+    related: { from: related }
+    created: { from: created }
+    updated: { from: updated }
+  sections:
+    - { key: organizing-conjecture, name: "Organizing Conjecture", required: true }
+    - { key: proposition-bundle, name: "Proposition Bundle", required: true }
+    - { key: current-uncertainty, name: "Current Uncertainty", required: true }
+    - { key: predictions, name: "Predictions", required: true }
+    - { key: falsifiability, name: "Falsifiability", required: true }
+    - { key: promotion-criteria, name: "Promotion criteria", required: false }
+    - { key: supporting-evidence, name: "Supporting Evidence", required: true }
+    - { key: disputing-evidence, name: "Disputing Evidence", required: true }
+    - { key: evidence-needed-to-shift-belief, name: "Evidence Needed To Shift Belief", required: true }
+    - { key: related-work, name: "Related Work", required: true }
 ---
 
-# Hypothesis: {{Short Title}}
+# Hypothesis: {{title}}
 
 ## Organizing Conjecture
 

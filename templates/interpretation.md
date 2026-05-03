@@ -1,7 +1,7 @@
 ---
 id: "interpretation:{{slug}}"
 type: "interpretation"
-title: "{{Short Title}}"
+title: "{{title}}"
 status: "active"
 # aspects: ["hypothesis-testing"]  # optional override; omitted entities inherit project aspects
 source_refs: []
@@ -11,9 +11,34 @@ updated: "{{YYYY-MM-DD}}"
 input: "{{path to results, notebook, or prose description}}"
 workflow_run: "<workflow-run-slug>"  # optional: links to the run that produced the interpreted results
 prior_interpretations: []  # optional: interpretation IDs this document extends or supersedes
+_template:
+  frontmatter:
+    id: { from: entity_id }
+    type: { default: "interpretation" }
+    title: { from: title }
+    status: { from: status }
+    source_refs: { from: source_refs }
+    related: { from: related }
+    created: { from: created }
+    updated: { from: updated }
+    input: { from: source_refs }
+    workflow_run: { omit: true }
+    prior_interpretations: { default: [] }
+  sections:
+    - { key: verdict, name: "Verdict", required: true }
+    - { key: findings-summary, name: "Findings Summary", required: true }
+    - { key: evidence-quality, name: "Evidence Quality", required: true }
+    - { key: data-quality-checks, name: "Data Quality Checks", required: true }
+    - { key: proposition-level-updates, name: "Proposition-Level Updates", required: true }
+    - { key: hypothesis-level-implications, name: "Hypothesis-Level Implications", required: true }
+    - { key: evidence-vs-open-questions, name: "Evidence vs. Open Questions", required: true }
+    - { key: new-questions-raised, name: "New Questions Raised", required: true }
+    - { key: user-questions, name: "User Questions", required: false }
+    - { key: limitations-residual-uncertainty, name: "Limitations & Residual Uncertainty", required: true }
+    - { key: updated-priorities, name: "Updated Priorities", required: true }
 ---
 
-# Interpretation: {{Short Title}}
+# Interpretation: {{title}}
 
 ## Verdict
 
