@@ -718,3 +718,88 @@ def test_tasks_blockers_json_unresolved(tmp_path, monkeypatch):
     assert blocker["ref"] == "dataset:gone"
     assert blocker["unresolved"] is True
     assert blocker["ready"] is False
+
+
+def test_tasks_fix_blockers_lists_legacy(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    seed_project(tmp_path)
+    # Hand-write an active.md with a legacy untyped blocker, since the new
+    # CLI rejects them at write time.
+    (tmp_path / "tasks").mkdir(exist_ok=True)
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t001] Old\n"
+        "- type: dev\n"
+        "- priority: P2\n"
+        "- status: blocked\n"
+        "- blocked-by: [old-string]\n"
+        "- created: 2026-05-01\n\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+    # Non-interactive dry-run: just lists what would change.
+    result = runner.invoke(main, ["tasks", "fix-blockers", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert "t001" in result.output
+    assert "old-string" in result.output
+
+
+def test_tasks_fix_blockers_retypes_with_input(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/datasets/foo.md",
+        {
+            "id": "dataset:foo",
+            "type": "dataset",
+            "title": "Foo",
+            "status": "active",
+            "origin": "external",
+            "access": {"level": "public", "verified": True},
+        },
+    )
+    (tmp_path / "tasks").mkdir(exist_ok=True)
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t001] Old\n"
+        "- type: dev\n"
+        "- priority: P2\n"
+        "- status: blocked\n"
+        "- blocked-by: [old-string]\n"
+        "- created: 2026-05-01\n\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+    # Interactive: provide replacement, then accept.
+    result = runner.invoke(
+        main, ["tasks", "fix-blockers"], input="dataset:foo\ny\n"
+    )
+    assert result.exit_code == 0, result.output
+    rewritten = (tmp_path / "tasks" / "active.md").read_text()
+    assert "dataset:foo" in rewritten
+    assert "old-string" not in rewritten
+
+
+def test_tasks_fix_blockers_drops_with_empty_input(tmp_path, monkeypatch):
+    """User dropping a blocker (empty input) is persisted, not silently discarded."""
+    monkeypatch.chdir(tmp_path)
+    seed_project(tmp_path)
+    (tmp_path / "tasks").mkdir(exist_ok=True)
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t001] Old\n"
+        "- type: dev\n"
+        "- priority: P2\n"
+        "- status: blocked\n"
+        "- blocked-by: [old-string]\n"
+        "- created: 2026-05-01\n\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+    # Interactive: empty input drops the blocker; then accept the write.
+    result = runner.invoke(main, ["tasks", "fix-blockers"], input="\ny\n")
+    assert result.exit_code == 0, result.output
+    rewritten = (tmp_path / "tasks" / "active.md").read_text()
+    assert "old-string" not in rewritten
+    assert "Updated." in result.output

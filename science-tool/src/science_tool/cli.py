@@ -2608,6 +2608,63 @@ def tasks_blockers(task_id: str, fmt: str) -> None:
         click.echo(line)
 
 
+@tasks.command("fix-blockers")
+@click.option("--dry-run", is_flag=True,
+              help="List legacy untyped blockers without modifying any files")
+def tasks_fix_blockers(dry_run: bool) -> None:
+    """Interactive sweep to retype legacy untyped blockers."""
+    from science_tool.tasks import (
+        _write_active,
+        parse_tasks_for_cli,
+    )
+    from science_tool.tasks_blockers import _TYPED_REF_RE
+
+    tasks_path = DEFAULT_TASKS_DIR / "active.md"
+    tasks_, warnings = parse_tasks_for_cli(tasks_path)
+    if not warnings:
+        click.echo("No legacy untyped blockers found.")
+        return
+
+    if dry_run:
+        click.echo("Legacy untyped blockers (dry-run):")
+        for w in warnings:
+            click.echo(f"  {w}")
+        return
+
+    changed = False
+    for task in tasks_:
+        new_blockers: list[str] = []
+        for ref in task.blocked_by:
+            if _TYPED_REF_RE.match(ref):
+                new_blockers.append(ref)
+                continue
+            click.echo(f"\nTask [{task.id}] {task.title}")
+            click.echo(f"  legacy blocker: {ref!r}")
+            replacement = click.prompt(
+                "  replace with (typed ref, or empty to drop, or '!' to keep as-is)",
+                default="",
+                show_default=False,
+            ).strip()
+            if replacement == "!":
+                new_blockers.append(ref)
+            elif replacement == "":
+                changed = True  # drop
+            else:
+                if not _TYPED_REF_RE.match(replacement):
+                    click.echo(f"  ! {replacement!r} not a typed ref; keeping original")
+                    new_blockers.append(ref)
+                else:
+                    new_blockers.append(replacement)
+                    changed = True
+        task.blocked_by = new_blockers
+
+    if changed and click.confirm("\nWrite changes to tasks/active.md?", default=True):
+        _write_active(DEFAULT_TASKS_DIR, tasks_)
+        click.echo("Updated.")
+    else:
+        click.echo("No changes written.")
+
+
 @tasks.command("unblock")
 @click.argument("task_id")
 def tasks_unblock(task_id: str) -> None:
