@@ -2615,7 +2615,7 @@ def tasks_fix_blockers(dry_run: bool) -> None:
         _write_active,
         parse_tasks_for_cli,
     )
-    from science_tool.tasks_blockers import _TYPED_REF_RE
+    from science_tool.tasks_blockers import is_typed_ref
 
     tasks_path = DEFAULT_TASKS_DIR / "active.md"
     tasks_, warnings = parse_tasks_for_cli(tasks_path)
@@ -2633,7 +2633,7 @@ def tasks_fix_blockers(dry_run: bool) -> None:
     for task in tasks_:
         new_blockers: list[str] = []
         for ref in task.blocked_by:
-            if _TYPED_REF_RE.match(ref):
+            if is_typed_ref(ref):
                 new_blockers.append(ref)
                 continue
             click.echo(f"\nTask [{task.id}] {task.title}")
@@ -2648,7 +2648,7 @@ def tasks_fix_blockers(dry_run: bool) -> None:
             elif replacement == "":
                 changed = True  # drop
             else:
-                if not _TYPED_REF_RE.match(replacement):
+                if not is_typed_ref(replacement):
                     click.echo(f"  ! {replacement!r} not a typed ref; keeping original")
                     new_blockers.append(ref)
                 else:

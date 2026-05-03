@@ -125,13 +125,13 @@ def parse_tasks_for_cli(path: Path) -> tuple[list[Task], list[str]]:
     """
     # Deferred import to avoid a circular dependency:
     # tasks_blockers -> entities -> graph -> tasks
-    from science_tool.tasks_blockers import _TYPED_REF_RE  # noqa: PLC0415
+    from science_tool.tasks_blockers import is_typed_ref  # noqa: PLC0415
 
     tasks = parse_tasks(path)
     warnings: list[str] = []
     for task in tasks:
         for ref in task.blocked_by:
-            if not _TYPED_REF_RE.match(ref):
+            if not is_typed_ref(ref):
                 warnings.append(
                     f"task {task.id}: legacy untyped blocker {ref!r} — "
                     f"run 'science-tool tasks fix-blockers' to retype"

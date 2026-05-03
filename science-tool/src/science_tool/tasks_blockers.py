@@ -11,6 +11,11 @@ from science_tool.entities import load_local_entity_ids
 _TYPED_REF_RE = re.compile(r"^[a-z][a-z0-9-]*:\S+$")
 
 
+def is_typed_ref(ref: str) -> bool:
+    """Return True if `ref` matches the typed entity reference format <kind>:<local-id>."""
+    return _TYPED_REF_RE.match(ref) is not None
+
+
 class BlockerValidationError(ValueError):
     """Raised when a blocker reference fails validation."""
 

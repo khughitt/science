@@ -1,5 +1,7 @@
 # Typed Entity Blockers Design & Implementation Plan
 
+> **Status:** Implemented on branch `feature/typed-entity-blockers` (commit range `d1b33ec..accef7e`).
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. The design portion is informational context; the Implementation Plan section at the bottom is the executable work.
 
 **Goal.** Make `Task.blocked_by` accept typed entity references (`<kind>:<local-id>`), validate them, and surface readiness state derived from the blocker entity itself. Single source of truth for "is this blocker satisfied yet?" lives on the blocker entity, not on the task.
