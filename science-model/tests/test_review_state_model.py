@@ -1,13 +1,15 @@
-"""Unit tests for EntityClass and EpistemicReviewState."""
+"""Unit tests for EntityClass, EpistemicReviewState, and review_state frontmatter parsing."""
 
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from science_model.entities import EntityClass, EpistemicReviewState
+from science_model.frontmatter import parse_entity_file
 
 
 def test_entity_class_values():
@@ -42,10 +44,6 @@ def test_review_state_rejects_negative_horizon():
 def test_review_state_rejects_zero_horizon():
     with pytest.raises(ValidationError, match="review_horizon_days"):
         EpistemicReviewState(review_horizon_days=0)
-
-
-from pathlib import Path
-from science_model.frontmatter import parse_entity_file
 
 
 def test_entity_default_review_state_is_unset(tmp_path: Path):

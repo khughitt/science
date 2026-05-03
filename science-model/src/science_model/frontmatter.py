@@ -246,6 +246,7 @@ def _coerce_access(fm: dict) -> AccessBlock | None:
 
 
 def _coerce_review_state(fm: dict) -> EpistemicReviewState | None:
+    """Build EpistemicReviewState from frontmatter `review_state:` block, or None if absent/malformed."""
     raw = fm.get("review_state")
     if not isinstance(raw, dict):
         return None
