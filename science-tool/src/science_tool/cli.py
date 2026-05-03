@@ -8,6 +8,7 @@ import click
 
 from science_tool.causal.export_chirho import export_chirho_script
 from science_tool.causal.export_pgmpy import export_pgmpy_script
+from science_tool.data_worktree import hydrate_worktree_data
 from science_tool.datasets import available_adapters, get_adapter, search_all
 from science_tool.datasets.validate import validate_data_packages
 from science_tool.distill.openalex import distill_openalex
@@ -2311,6 +2312,54 @@ def datasets_validate(data_path: Path, output_format: str) -> None:
         rows=results,
     )
     if any(r["status"] == "fail" for r in results):
+        raise click.exceptions.Exit(1)
+
+
+@datasets.command("hydrate-worktree")
+@click.option("--project-root", default=".", show_default=True, type=click.Path(path_type=Path))
+@click.option(
+    "--source-root",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Checkout that already has ignored local data directories. Defaults to auto-detecting another git worktree.",
+)
+@click.option("--dry-run", is_flag=True, help="Report actions without creating symlinks.")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def datasets_hydrate_worktree(
+    project_root: Path,
+    source_root: Path | None,
+    dry_run: bool,
+    output_format: str,
+) -> None:
+    """Symlink ignored data directories from another checkout into this worktree."""
+    try:
+        actions = hydrate_worktree_data(project_root=project_root, source_root=source_root, dry_run=dry_run)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    rows = [
+        {
+            "path": action.relative_path.as_posix(),
+            "status": action.status,
+            "source": str(action.source),
+            "target": str(action.target),
+            "details": action.details,
+        }
+        for action in actions
+    ]
+    emit_query_rows(
+        output_format=output_format,
+        title="Data Worktree Hydration",
+        columns=[
+            ("path", "Path"),
+            ("status", "Status"),
+            ("source", "Source"),
+            ("target", "Target"),
+            ("details", "Details"),
+        ],
+        rows=rows,
+    )
+    if all(action.status == "missing-source" for action in actions):
         raise click.exceptions.Exit(1)
 
 
