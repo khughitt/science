@@ -74,9 +74,26 @@ Close a task that is no longer a priority (not completed, just abandoned). Moves
 uv run science-tool tasks retire <task_id> [--reason="<reason>"]
 ```
 
-### "block <task_id> --by <blocker_id>"
+### "block <task_id> --by <typed-ref> [--by <typed-ref>...]"
 
-Mark a task as blocked by another task.
+Block a task by one or more **typed entity references** (`<kind>:<local-id>`).
+Refs must resolve to known local entities. Repeatable.
+
+- `--force` records the ref even if the entity is not yet known (e.g.
+  you plan to create the dataset shortly). The unresolved reference will
+  be flagged by `science-tool graph audit`.
+- Blockers are validated at write time. Untyped strings (legacy form) are
+  rejected. Use `science-tool tasks fix-blockers` to retype existing
+  legacy blockers.
+
+### "blockers <task_id>"
+
+Show per-blocker readiness for a task. `--format json` for scripting.
+
+### "fix-blockers"
+
+Interactive sweep to retype legacy untyped blockers in `tasks/active.md`.
+`--dry-run` lists what would change without modifying files.
 
 ### "unblock <task_id>"
 
@@ -117,7 +134,7 @@ uv run science-tool tasks <action> [args...]
 
 When working through tasks, follow these principles:
 
-- **Respect `blocked-by` dependencies.** Don't start a blocked task until its blockers are complete. Run `/science:tasks list --status=active` to see what's actionable.
+- **Respect typed blocker dependencies.** Don't start a blocked task until its blockers are ready. Use `tasks blockers <task_id>` to inspect per-blocker readiness (e.g., embargoed datasets, incomplete workflow runs). Run `/science:tasks list --status=active` to see what's actionable overall.
 - **Don't parallelize tasks that share environment state.** Tasks that install/change packages, modify shared config, or compete for GPU memory must run sequentially. Only parallelize truly independent work (e.g., two literature reviews).
 - **Log failures into the task.** If a task fails, update its description with what went wrong: `science-tool tasks edit <id> --status=blocked`. This prevents repeating the same failed approach.
 - **Check `AGENTS.md` before executing.** The project's operational guide may document known issues, environment constraints, or workarounds discovered in previous sessions.
