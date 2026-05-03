@@ -2570,8 +2570,7 @@ def tasks_block(
 def tasks_blockers(task_id: str, fmt: str) -> None:
     """Show per-blocker readiness for a task."""
     from science_tool.tasks import _find_task, _read_active
-    from science_tool.tasks_readiness import ReadinessResolver
-    from science_tool.entities import load_local_entity_index
+    from science_tool.tasks_readiness import make_local_resolver
 
     tasks = _read_active(DEFAULT_TASKS_DIR)
     try:
@@ -2579,8 +2578,7 @@ def tasks_blockers(task_id: str, fmt: str) -> None:
     except KeyError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    index = load_local_entity_index(Path.cwd())
-    resolver = ReadinessResolver(lookup=index.get)
+    resolver = make_local_resolver()
 
     rows = []
     for ref in task.blocked_by:
@@ -2882,8 +2880,15 @@ def tasks_list(
     output_format: str,
 ) -> None:
     """List tasks. Done/retired tasks are hidden by default; use --all or --status=done to include them."""
-    from science_tool.tasks import list_tasks
+    from science_model.tasks import Task
+    from science_tool.tasks import list_tasks, parse_tasks_for_cli
     from science_tool.tasks_display import render_tasks_table, sort_tasks
+    from science_tool.tasks_readiness import make_local_resolver
+
+    # Surface legacy-untyped-blocker warnings on stderr.
+    _, warnings = parse_tasks_for_cli(DEFAULT_TASKS_DIR / "active.md")
+    for w in warnings:
+        click.echo(f"WARNING: {w}", err=True)
 
     matched = list_tasks(
         DEFAULT_TASKS_DIR,
@@ -2897,6 +2902,8 @@ def tasks_list(
     )
     matched = sort_tasks(matched)
 
+    resolver = make_local_resolver()
+
     if output_format == "json":
         columns: list[tuple[str, str]] = [
             ("id", "ID"),
@@ -2908,8 +2915,9 @@ def tasks_list(
             ("related", "Related"),
             ("created", "Created"),
         ]
-        rows = [
-            {
+
+        def _row_with_readiness(t: Task) -> dict:
+            row: dict = {
                 "id": t.id,
                 "title": t.title,
                 "type": t.type,
@@ -2919,8 +2927,23 @@ def tasks_list(
                 "related": ", ".join(t.related),
                 "created": t.created.isoformat(),
             }
-            for t in matched
-        ]
+            if t.status == "blocked" and t.blocked_by:
+                readiness_entries = []
+                for ref in t.blocked_by:
+                    r = resolver.resolve_ref(ref)
+                    readiness_entries.append(
+                        {
+                            "ref": ref,
+                            "ready": r.ready,
+                            "state": r.state,
+                            "detail": r.detail,
+                            "unresolved": r.state == "unresolved",
+                        }
+                    )
+                row["blocked_by_readiness"] = readiness_entries
+            return row
+
+        rows = [_row_with_readiness(t) for t in matched]
         # Total count of active-file tasks before any filtering, so callers can
         # tell whether they're looking at a curated view or the full list
         # (fb-2026-05-01-006).
@@ -2950,7 +2973,7 @@ def tasks_list(
             output_format=output_format, title="Tasks", columns=columns, rows=rows, meta=meta
         )
     else:
-        render_tasks_table(matched)
+        render_tasks_table(matched, resolver=resolver)
 
 
 @tasks.command("show")

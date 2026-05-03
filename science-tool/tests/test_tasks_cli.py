@@ -803,3 +803,81 @@ def test_tasks_fix_blockers_drops_with_empty_input(tmp_path, monkeypatch):
     rewritten = (tmp_path / "tasks" / "active.md").read_text()
     assert "old-string" not in rewritten
     assert "Updated." in result.output
+
+
+# ---------------------------------------------------------------------------
+# Task 11: tasks list — blocker summary, JSON readiness, all-ready nudge
+# ---------------------------------------------------------------------------
+
+
+def test_tasks_list_shows_blocker_summary(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+    runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:foo"])
+    result = runner.invoke(main, ["tasks", "list"])
+    assert result.exit_code == 0, result.output
+    # Default render must include a blocker-count line for blocked tasks.
+    assert "blocked-by: 1" in result.output
+    # Since dataset:foo is verified-public → ready, the all-ready nudge fires.
+    assert "all ready" in result.output
+    assert "tasks unblock t001" in result.output
+
+
+def test_tasks_list_shows_mixed_blocker_states(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/datasets/foo.md",
+        {
+            "id": "dataset:foo",
+            "type": "dataset",
+            "title": "Foo",
+            "status": "active",
+            "origin": "external",
+            "access": {"level": "public", "verified": True},
+        },
+    )
+    write_markdown_entity(
+        tmp_path,
+        "doc/datasets/bar.md",
+        {
+            "id": "dataset:bar",
+            "type": "dataset",
+            "title": "Bar",
+            "status": "active",
+            "origin": "external",
+            "access": {
+                "level": "controlled",
+                "verified": False,
+                "availability": "embargoed",
+            },
+        },
+    )
+    runner = CliRunner()
+    runner.invoke(main, ["tasks", "add", "T", "--priority", "P2"])
+    runner.invoke(
+        main,
+        ["tasks", "block", "t001", "--by", "dataset:foo", "--by", "dataset:bar"],
+    )
+    result = runner.invoke(main, ["tasks", "list"])
+    assert result.exit_code == 0
+    assert "blocked-by: 2" in result.output
+    assert "embargoed" in result.output
+    # Mixed → no all-ready nudge.
+    assert "all ready" not in result.output
+
+
+def test_tasks_list_json_includes_blocker_readiness(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+    runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:foo"])
+    result = runner.invoke(main, ["tasks", "list", "--format", "json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    blocked = [t for t in payload["rows"] if t["status"] == "blocked"]
+    assert blocked
+    assert "blocked_by_readiness" in blocked[0]
+    readiness = blocked[0]["blocked_by_readiness"]
+    assert readiness[0]["ref"] == "dataset:foo"
+    assert readiness[0]["ready"] is True

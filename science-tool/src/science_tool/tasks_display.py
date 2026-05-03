@@ -9,6 +9,7 @@ from rich.style import Style
 from rich.table import Table
 from rich.text import Text
 from science_model.tasks import Task
+from science_tool.tasks_readiness import ReadinessResolver
 
 # ── Status: sort order and colors ────────────────────────────────────────
 
@@ -78,10 +79,30 @@ def sort_tasks(tasks: list[Task]) -> list[Task]:
     return sorted(tasks, key=lambda t: (_STATUS_ORDER.get(t.status, 99), t.id))
 
 
+# ── Blocker summary ──────────────────────────────────────────────────────
+
+
+def render_blocker_summary(task: Task, resolver: ReadinessResolver) -> str | None:
+    """Render the second-line blocker summary, or None when not blocked."""
+    if task.status != "blocked" or not task.blocked_by:
+        return None
+    readinesses = [resolver.resolve_ref(ref) for ref in task.blocked_by]
+    count = len(readinesses)
+    if all(r.ready for r in readinesses):
+        return f"        [{task.id}] blocked-by: {count} (all ready — run 'tasks unblock {task.id}')"
+    # Group not-ready readinesses by state for the breakdown.
+    by_state: dict[str, int] = {}
+    for r in readinesses:
+        if not r.ready:
+            by_state[r.state] = by_state.get(r.state, 0) + 1
+    breakdown = ", ".join(f"{count_n} {state}" for state, count_n in by_state.items())
+    return f"        [{task.id}] blocked-by: {count} ({breakdown})"
+
+
 # ── Table rendering ──────────────────────────────────────────────────────
 
 
-def render_tasks_table(tasks: list[Task]) -> None:
+def render_tasks_table(tasks: list[Task], resolver: ReadinessResolver | None = None) -> None:
     """Render a colored Rich table of tasks to stdout."""
     has_groups = any(t.group for t in tasks)
     has_related = any(t.related for t in tasks)
@@ -117,3 +138,9 @@ def render_tasks_table(tasks: list[Task]) -> None:
 
     console = Console()
     console.print(table)
+
+    if resolver is not None:
+        for t in tasks:
+            summary = render_blocker_summary(t, resolver)
+            if summary is not None:
+                console.print(summary)

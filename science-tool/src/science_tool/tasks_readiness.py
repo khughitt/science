@@ -6,6 +6,7 @@ referenced by N tasks costs one resolution.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Callable
 
 from science_model.entities import ProjectEntity, Readiness
@@ -39,3 +40,12 @@ class ReadinessResolver:
             self._visiting.discard(ref)
         self._cache[ref] = result
         return result
+
+
+def make_local_resolver(project_root: Path | None = None) -> ReadinessResolver:
+    """Construct a ReadinessResolver backed by the local project's entity index."""
+    from science_tool.entities import load_local_entity_index
+
+    root = project_root or Path.cwd()
+    index = load_local_entity_index(root)
+    return ReadinessResolver(lookup=index.get)
