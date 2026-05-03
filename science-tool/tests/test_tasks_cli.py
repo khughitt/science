@@ -43,27 +43,6 @@ class TestTasksAdd:
             assert result.exit_code == 0
             assert "t001" in result.output
 
-    def test_add_with_related_and_blocked_by(self, runner: CliRunner) -> None:
-        with runner.isolated_filesystem():
-            result = runner.invoke(
-                main,
-                [
-                    "tasks",
-                    "add",
-                    "Blocked task",
-                    "--priority",
-                    "P0",
-                    "--related",
-                    "t001",
-                    "--related",
-                    "t002",
-                    "--blocked-by",
-                    "t001",
-                ],
-            )
-            assert result.exit_code == 0
-            assert "t001" in result.output
-
     def test_add_requires_priority(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
             result = runner.invoke(main, ["tasks", "add", "No priority"])
@@ -116,13 +95,6 @@ class TestTasksDefer:
 
 
 class TestTasksBlock:
-    def test_block_sets_blocked(self, runner: CliRunner) -> None:
-        with runner.isolated_filesystem():
-            runner.invoke(main, ["tasks", "add", "To block", "--priority", "P1"])
-            result = runner.invoke(main, ["tasks", "block", "t001", "--by", "t002"])
-            assert result.exit_code == 0
-            assert "blocked" in result.output.lower()
-
     def test_block_requires_by(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
             runner.invoke(main, ["tasks", "add", "To block", "--priority", "P1"])
@@ -134,7 +106,8 @@ class TestTasksUnblock:
     def test_unblock_clears_blockers(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
             runner.invoke(main, ["tasks", "add", "Blocked", "--priority", "P1"])
-            runner.invoke(main, ["tasks", "block", "t001", "--by", "t002"])
+            block_result = runner.invoke(main, ["tasks", "block", "t001", "--by", "task:t002", "--force"])
+            assert block_result.exit_code == 0, block_result.output
             result = runner.invoke(main, ["tasks", "unblock", "t001"])
             assert result.exit_code == 0
             assert "active" in result.output.lower()
@@ -632,3 +605,309 @@ def test_tasks_list_filter_by_aspect(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "t001" in result.output
     assert "t002" not in result.output
+
+
+# ---------------------------------------------------------------------------
+# Typed-blocker CLI tests (Task 8)
+# ---------------------------------------------------------------------------
+
+from _fixtures.entity_helpers import seed_project, write_markdown_entity  # noqa: E402
+
+
+def _setup(tmp_path):
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/datasets/foo.md",
+        {
+            "id": "dataset:foo",
+            "type": "dataset",
+            "title": "Foo",
+            "status": "active",
+            "origin": "external",
+            "access": {"level": "public", "verified": True},
+        },
+    )
+    write_markdown_entity(
+        tmp_path,
+        "doc/datasets/bar.md",
+        {
+            "id": "dataset:bar",
+            "type": "dataset",
+            "title": "Bar",
+            "status": "active",
+            "origin": "external",
+            "access": {"level": "public", "verified": True},
+        },
+    )
+    runner = CliRunner()
+    runner.invoke(
+        main,
+        ["tasks", "add", "Block-me", "--priority", "P2"],
+    )
+    return runner
+
+
+def test_tasks_block_rejects_untyped(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+    result = runner.invoke(main, ["tasks", "block", "t001", "--by", "untyped"])
+    assert result.exit_code != 0
+    assert "must be typed" in result.output
+
+
+def test_tasks_block_repeatable(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+    result = runner.invoke(
+        main,
+        ["tasks", "block", "t001", "--by", "dataset:foo", "--by", "dataset:bar"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "dataset:foo" in result.output
+    assert "dataset:bar" in result.output
+
+
+def test_tasks_block_force_accepts_unknown(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+    result = runner.invoke(
+        main,
+        ["tasks", "block", "t001", "--by", "dataset:not-yet", "--force"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "dataset:not-yet" in result.output
+    assert "WARNING" in result.output
+
+
+def test_tasks_blockers_table(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+    runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:foo"])
+    result = runner.invoke(main, ["tasks", "blockers", "t001"])
+    assert result.exit_code == 0, result.output
+    assert "dataset:foo" in result.output
+    assert "available" in result.output  # the readiness state for verified public datasets
+
+
+def test_tasks_blockers_json(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+    runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:foo"])
+    result = runner.invoke(main, ["tasks", "blockers", "t001", "--format", "json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["task_id"] == "t001"
+    assert len(payload["blockers"]) == 1
+    blocker = payload["blockers"][0]
+    assert blocker["ref"] == "dataset:foo"
+    assert blocker["ready"] is True
+    assert blocker["state"] == "available"
+    assert "detail" in blocker
+    assert blocker["unresolved"] is False
+
+
+def test_tasks_blockers_json_unresolved(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+    runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:gone", "--force"])
+    result = runner.invoke(main, ["tasks", "blockers", "t001", "--format", "json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    blocker = payload["blockers"][0]
+    assert blocker["ref"] == "dataset:gone"
+    assert blocker["unresolved"] is True
+    assert blocker["ready"] is False
+
+
+def test_tasks_fix_blockers_lists_legacy(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    seed_project(tmp_path)
+    # Hand-write an active.md with a legacy untyped blocker, since the new
+    # CLI rejects them at write time.
+    (tmp_path / "tasks").mkdir(exist_ok=True)
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t001] Old\n"
+        "- type: dev\n"
+        "- priority: P2\n"
+        "- status: blocked\n"
+        "- blocked-by: [old-string]\n"
+        "- created: 2026-05-01\n\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+    # Non-interactive dry-run: just lists what would change.
+    result = runner.invoke(main, ["tasks", "fix-blockers", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert "t001" in result.output
+    assert "old-string" in result.output
+
+
+def test_tasks_fix_blockers_retypes_with_input(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/datasets/foo.md",
+        {
+            "id": "dataset:foo",
+            "type": "dataset",
+            "title": "Foo",
+            "status": "active",
+            "origin": "external",
+            "access": {"level": "public", "verified": True},
+        },
+    )
+    (tmp_path / "tasks").mkdir(exist_ok=True)
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t001] Old\n"
+        "- type: dev\n"
+        "- priority: P2\n"
+        "- status: blocked\n"
+        "- blocked-by: [old-string]\n"
+        "- created: 2026-05-01\n\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+    # Interactive: provide replacement, then accept.
+    result = runner.invoke(
+        main, ["tasks", "fix-blockers"], input="dataset:foo\ny\n"
+    )
+    assert result.exit_code == 0, result.output
+    rewritten = (tmp_path / "tasks" / "active.md").read_text()
+    assert "dataset:foo" in rewritten
+    assert "old-string" not in rewritten
+
+
+def test_tasks_fix_blockers_drops_with_empty_input(tmp_path, monkeypatch):
+    """User dropping a blocker (empty input) is persisted, not silently discarded."""
+    monkeypatch.chdir(tmp_path)
+    seed_project(tmp_path)
+    (tmp_path / "tasks").mkdir(exist_ok=True)
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t001] Old\n"
+        "- type: dev\n"
+        "- priority: P2\n"
+        "- status: blocked\n"
+        "- blocked-by: [old-string]\n"
+        "- created: 2026-05-01\n\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+    # Interactive: empty input drops the blocker; then accept the write.
+    result = runner.invoke(main, ["tasks", "fix-blockers"], input="\ny\n")
+    assert result.exit_code == 0, result.output
+    rewritten = (tmp_path / "tasks" / "active.md").read_text()
+    assert "old-string" not in rewritten
+    assert "Updated." in result.output
+
+
+# ---------------------------------------------------------------------------
+# Task 11: tasks list — blocker summary, JSON readiness, all-ready nudge
+# ---------------------------------------------------------------------------
+
+
+def test_tasks_list_shows_blocker_summary(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+    runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:foo"])
+    result = runner.invoke(main, ["tasks", "list"])
+    assert result.exit_code == 0, result.output
+    # Default render must include a blocker-count line for blocked tasks.
+    assert "blocked-by: 1" in result.output
+    # Since dataset:foo is verified-public → ready, the all-ready nudge fires.
+    assert "all ready" in result.output
+    assert "tasks unblock t001" in result.output
+
+
+def test_tasks_list_shows_mixed_blocker_states(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/datasets/foo.md",
+        {
+            "id": "dataset:foo",
+            "type": "dataset",
+            "title": "Foo",
+            "status": "active",
+            "origin": "external",
+            "access": {"level": "public", "verified": True},
+        },
+    )
+    write_markdown_entity(
+        tmp_path,
+        "doc/datasets/bar.md",
+        {
+            "id": "dataset:bar",
+            "type": "dataset",
+            "title": "Bar",
+            "status": "active",
+            "origin": "external",
+            "access": {
+                "level": "controlled",
+                "verified": False,
+                "availability": "embargoed",
+            },
+        },
+    )
+    runner = CliRunner()
+    runner.invoke(main, ["tasks", "add", "T", "--priority", "P2"])
+    runner.invoke(
+        main,
+        ["tasks", "block", "t001", "--by", "dataset:foo", "--by", "dataset:bar"],
+    )
+    result = runner.invoke(main, ["tasks", "list"])
+    assert result.exit_code == 0
+    assert "blocked-by: 2" in result.output
+    assert "embargoed" in result.output
+    # Mixed → no all-ready nudge.
+    assert "all ready" not in result.output
+
+
+def test_tasks_list_json_includes_blocker_readiness(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+    runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:foo"])
+    result = runner.invoke(main, ["tasks", "list", "--format", "json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    blocked = [t for t in payload["rows"] if t["status"] == "blocked"]
+    assert blocked
+    assert "blocked_by_readiness" in blocked[0]
+    readiness = blocked[0]["blocked_by_readiness"]
+    assert readiness[0]["ref"] == "dataset:foo"
+    assert readiness[0]["ready"] is True
+
+
+def test_tasks_show_renders_per_blocker_readiness(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/datasets/embargoed.md",
+        {
+            "id": "dataset:embargoed",
+            "type": "dataset",
+            "title": "E",
+            "status": "active",
+            "origin": "external",
+            "access": {
+                "level": "controlled",
+                "verified": False,
+                "availability": "embargoed",
+                "available_after": "2026-Q3",
+            },
+        },
+    )
+    runner = CliRunner()
+    runner.invoke(main, ["tasks", "add", "T", "--priority", "P2"])
+    runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:embargoed"])
+    result = runner.invoke(main, ["tasks", "show", "t001"])
+    assert result.exit_code == 0, result.output
+    assert "dataset:embargoed" in result.output
+    assert "embargoed" in result.output
+    assert "2026-Q3" in result.output

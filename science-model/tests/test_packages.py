@@ -18,6 +18,8 @@ from science_model.packages.cells import (
     parse_cells,
 )
 from science_model.packages.schema import (
+    AccessBlock,
+    AccessException,
     CodeExcerpt,
     ProvenanceInput,
     ResearchPackageDescriptor,
@@ -273,3 +275,45 @@ class TestCheckFreshness:
         result = check_freshness(pkg_dir, project_root)
         assert len(result.warnings) == 1
         assert "stale" in result.warnings[0].lower() or "changed" in result.warnings[0].lower()
+
+
+class TestAccessBlockAvailability:
+    def test_access_block_availability_default_is_available(self) -> None:
+        block = AccessBlock(level="public", verified=True)
+        assert block.availability == "available"
+        assert block.available_after == ""
+
+    def test_access_block_embargoed_with_window(self) -> None:
+        block = AccessBlock(
+            level="controlled",
+            verified=False,
+            availability="embargoed",
+            available_after="2026-Q3",
+        )
+        assert block.availability == "embargoed"
+        assert block.available_after == "2026-Q3"
+
+    def test_access_block_embargoed_without_window_is_valid(self) -> None:
+        block = AccessBlock(level="controlled", verified=False, availability="embargoed")
+        assert block.availability == "embargoed"
+        assert block.available_after == ""
+
+    def test_access_block_withdrawn(self) -> None:
+        block = AccessBlock(level="controlled", verified=True, availability="withdrawn")
+        assert block.availability == "withdrawn"
+
+    def test_access_block_rejects_available_after_when_not_embargoed(self) -> None:
+        with pytest.raises(ValidationError, match="available_after"):
+            AccessBlock(
+                level="public",
+                verified=True,
+                availability="available",
+                available_after="2026-Q3",
+            )
+
+
+def test_access_exception_rejects_unknown_mode():
+    """Documents the Literal constraint that makes the unknown-mode branch
+    in DatasetEntity._external_readiness unreachable under normal construction."""
+    with pytest.raises(ValidationError, match="mode"):
+        AccessException(mode="invented-mode")

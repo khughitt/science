@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date
 from enum import StrEnum
 
+from typing import Protocol
+
 from pydantic import BaseModel, Field, model_validator
 
 from science_model.identity import EntityScope, ExternalId
@@ -207,6 +209,25 @@ class Entity(BaseModel):
         return self
 
 
+class Readiness(BaseModel):
+    """Result of evaluating an entity's readiness for downstream use.
+
+    `state` is a short, display-ready label (e.g. "done", "embargoed",
+    "controlled, unverified"). `detail` is an optional one-line elaboration
+    rendered by `tasks show`.
+    """
+
+    ready: bool
+    state: str
+    detail: str = ""
+
+
+class ReadinessResolverProtocol(Protocol):
+    """Structural protocol implemented by science-tool's ReadinessResolver."""
+
+    def resolve_ref(self, ref: str) -> Readiness: ...
+
+
 class ProjectEntity(Entity):
     """Entity about the conduct of a science project (tasks, hypotheses, datasets...).
 
@@ -232,6 +253,17 @@ class ProjectEntity(Entity):
     # reference only). `evidence_role` was previously on SourceEntity.
     evidence_role: EvidenceRole | None = None
     rival_model_packet: RivalModelPacket | None = None
+
+    def readiness(self, resolver: ReadinessResolverProtocol | None = None) -> Readiness:
+        """Default readiness: ready iff status == 'done'.
+
+        `resolver` is optional context for subclasses that need to traverse
+        other entities (e.g. derived datasets → producing workflow-run).
+        Subclasses without cross-entity dependencies ignore it.
+        """
+        if self.status == "done":
+            return Readiness(ready=True, state="done")
+        return Readiness(ready=False, state=self.status or "unknown")
 
 
 class DomainEntity(Entity):
@@ -313,15 +345,57 @@ class DatasetEntity(ProjectEntity):
             raise ValueError(f"{self.id}: origin must be 'external' or 'derived', got {self.origin!r}")
         return self
 
+    def readiness(self, resolver: ReadinessResolverProtocol | None = None) -> Readiness:
+        if self.origin == "external":
+            return self._external_readiness()
+        if self.origin == "derived":
+            return self._derived_readiness(resolver)
+        return Readiness(ready=False, state="unknown", detail=f"unknown origin {self.origin!r}")
+
+    def _external_readiness(self) -> Readiness:
+        access = self.access
+        if access is None:
+            # Should be unreachable per invariant #7, but guard anyway.
+            return Readiness(ready=False, state="missing-access-block")
+        if access.availability == "withdrawn":
+            return Readiness(ready=False, state="withdrawn")
+        if access.availability == "embargoed":
+            detail = f"available_after: {access.available_after}" if access.available_after else ""
+            return Readiness(ready=False, state="embargoed", detail=detail)
+        # availability == "available"
+        if access.exception.mode:
+            mode = access.exception.mode
+            rationale = access.exception.rationale
+            if mode == "expanded-to-acquire":
+                return Readiness(ready=False, state="acquiring", detail=rationale)
+            if mode in ("scope-reduced", "substituted"):
+                return Readiness(ready=True, state=f"consumable-via-{mode}", detail=rationale)
+            # Unknown mode — defensive fallthrough for model_construct() bypass; pydantic
+            # Literal validation prevents this path under normal construction.
+            return Readiness(ready=False, state=f"exception:{mode}", detail=rationale)
+        if access.verified:
+            return Readiness(ready=True, state="available")
+        return Readiness(ready=False, state=f"{access.level}, unverified")
+
+    def _derived_readiness(self, resolver: ReadinessResolverProtocol | None) -> Readiness:
+        if resolver is None:
+            return Readiness(
+                ready=False,
+                state="unknown",
+                detail="derived dataset readiness requires resolver context",
+            )
+        if self.derivation is None:
+            return Readiness(ready=False, state="missing-derivation-block")
+        return resolver.resolve_ref(self.derivation.workflow_run)
+
 
 class WorkflowRunEntity(ProjectEntity):
-    """Workflow run — placeholder typed entity.
+    """Workflow run — readiness is `complete` when status == 'complete'."""
 
-    Workflow-run-specific semantics (production metadata, provenance refs) can
-    be added as @model_validator methods here as they're formalized.
-    """
-
-    pass
+    def readiness(self, resolver: ReadinessResolverProtocol | None = None) -> Readiness:
+        if self.status == "complete":
+            return Readiness(ready=True, state="complete")
+        return Readiness(ready=False, state=self.status or "unknown")
 
 
 class ResearchPackageEntity(ProjectEntity):

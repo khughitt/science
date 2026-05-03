@@ -18,6 +18,8 @@ local_path: ""                    # external single-file escape hatch (mutually 
 accessions: []                    # external accession IDs (renamed from `datasets:`)
 access:
   level: "public"                 # public | registration | controlled | commercial | mixed
+  availability: "available"       # available | embargoed | withdrawn
+  available_after: ""             # free-form window (ISO date when known, else e.g. "2026-Q3", "after Lee2026 publication"). Only set when availability is "embargoed".
   verified: false
   verification_method: ""         # "" | retrieved | credential-confirmed
   last_reviewed: ""               # YYYY-MM-DD

@@ -2436,6 +2436,7 @@ def tasks() -> None:
 @click.option("--blocked-by", multiple=True)
 @click.option("--group", default="")
 @click.option("--description", default="")
+@click.option("--force", is_flag=True, help="Record blockers even if entity not yet known")
 def tasks_add(
     title: str,
     priority: str,
@@ -2444,6 +2445,7 @@ def tasks_add(
     blocked_by: tuple[str, ...],
     group: str,
     description: str,
+    force: bool,
 ) -> None:
     """Add a new task."""
     from science_model.aspects import (
@@ -2452,6 +2454,7 @@ def tasks_add(
         validate_entity_aspects,
     )
     from science_tool.tasks import add_task
+    from science_tool.tasks_blockers import BlockerValidationError
 
     validated_aspects: list[str] = []
     if aspects:
@@ -2461,16 +2464,21 @@ def tasks_add(
         except AspectValidationError as exc:
             raise click.ClickException(str(exc)) from exc
 
-    task = add_task(
-        tasks_dir=DEFAULT_TASKS_DIR,
-        title=title,
-        priority=priority,
-        aspects=validated_aspects or None,
-        related=list(related) or None,
-        blocked_by=list(blocked_by) or None,
-        group=group,
-        description=description,
-    )
+    try:
+        task = add_task(
+            project_root=Path.cwd(),
+            tasks_dir=DEFAULT_TASKS_DIR,
+            title=title,
+            priority=priority,
+            aspects=validated_aspects or None,
+            related=list(related) or None,
+            blocked_by=list(blocked_by) or None,
+            group=group,
+            description=description,
+            force=force,
+        )
+    except BlockerValidationError as exc:
+        raise click.ClickException(str(exc)) from exc
     click.echo(f"Created [{task.id}] {task.title}")
 
 
@@ -2518,16 +2526,141 @@ def tasks_retire(task_id: str, reason: str | None) -> None:
 
 @tasks.command("block")
 @click.argument("task_id")
-@click.option("--by", "blocked_by", required=True)
-def tasks_block(task_id: str, blocked_by: str) -> None:
-    """Block a task."""
+@click.option("--by", "blocked_by", multiple=True, required=True,
+              help="Typed blocker ref (repeatable): <kind>:<local-id>")
+@click.option("--force", is_flag=True,
+              help="Record blocker even if entity not yet known")
+def tasks_block(
+    task_id: str, blocked_by: tuple[str, ...], force: bool
+) -> None:
+    """Block a task by one or more typed entity references."""
     from science_tool.tasks import block_task
+    from science_tool.tasks_blockers import BlockerValidationError
+    from science_tool.entities import load_local_entity_ids
 
     try:
-        task = block_task(DEFAULT_TASKS_DIR, task_id, blocked_by=blocked_by)
-    except KeyError as e:
-        raise click.ClickException(str(e)) from e
-    click.echo(f"[{task.id}] blocked by {blocked_by}")
+        task = block_task(
+            project_root=Path.cwd(),
+            tasks_dir=DEFAULT_TASKS_DIR,
+            task_id=task_id,
+            blocked_by=list(blocked_by),
+            force=force,
+        )
+    except KeyError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except BlockerValidationError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if force:
+        known = load_local_entity_ids(Path.cwd())
+        for ref in blocked_by:
+            if ref not in known:
+                click.echo(
+                    f"WARNING: recorded unresolved blocker {ref}; graph audit will flag it",
+                    err=True,
+                )
+
+    refs = ", ".join(task.blocked_by)
+    click.echo(f"[{task.id}] blocked by {refs}")
+
+
+@tasks.command("blockers")
+@click.argument("task_id")
+@click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
+def tasks_blockers(task_id: str, fmt: str) -> None:
+    """Show per-blocker readiness for a task."""
+    from science_tool.tasks import _find_task, _read_active
+    from science_tool.tasks_readiness import make_local_resolver
+
+    tasks = _read_active(DEFAULT_TASKS_DIR)
+    try:
+        task = _find_task(tasks, task_id)
+    except KeyError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    resolver = make_local_resolver()
+
+    rows = []
+    for ref in task.blocked_by:
+        readiness = resolver.resolve_ref(ref)
+        rows.append(
+            {
+                "ref": ref,
+                "ready": readiness.ready,
+                "state": readiness.state,
+                "detail": readiness.detail,
+                "unresolved": readiness.state == "unresolved",
+            }
+        )
+
+    if fmt == "json":
+        click.echo(json.dumps({"task_id": task.id, "blockers": rows}, indent=2))
+        return
+
+    click.echo(f"Blockers for [{task.id}] {task.title}:")
+    for row in rows:
+        marker = "✓" if row["ready"] else "·"
+        line = f"  {marker} {row['ref']:40s}  {row['state']}"
+        if row["detail"]:
+            line += f"  ({row['detail']})"
+        click.echo(line)
+
+
+@tasks.command("fix-blockers")
+@click.option("--dry-run", is_flag=True,
+              help="List legacy untyped blockers without modifying any files")
+def tasks_fix_blockers(dry_run: bool) -> None:
+    """Interactive sweep to retype legacy untyped blockers."""
+    from science_tool.tasks import (
+        _write_active,
+        parse_tasks_for_cli,
+    )
+    from science_tool.tasks_blockers import is_typed_ref
+
+    tasks_path = DEFAULT_TASKS_DIR / "active.md"
+    tasks_, warnings = parse_tasks_for_cli(tasks_path)
+    if not warnings:
+        click.echo("No legacy untyped blockers found.")
+        return
+
+    if dry_run:
+        click.echo("Legacy untyped blockers (dry-run):")
+        for w in warnings:
+            click.echo(f"  {w}")
+        return
+
+    changed = False
+    for task in tasks_:
+        new_blockers: list[str] = []
+        for ref in task.blocked_by:
+            if is_typed_ref(ref):
+                new_blockers.append(ref)
+                continue
+            click.echo(f"\nTask [{task.id}] {task.title}")
+            click.echo(f"  legacy blocker: {ref!r}")
+            replacement = click.prompt(
+                "  replace with (typed ref, or empty to drop, or '!' to keep as-is)",
+                default="",
+                show_default=False,
+            ).strip()
+            if replacement == "!":
+                new_blockers.append(ref)
+            elif replacement == "":
+                changed = True  # drop
+            else:
+                if not is_typed_ref(replacement):
+                    click.echo(f"  ! {replacement!r} not a typed ref; keeping original")
+                    new_blockers.append(ref)
+                else:
+                    new_blockers.append(replacement)
+                    changed = True
+        task.blocked_by = new_blockers
+
+    if changed and click.confirm("\nWrite changes to tasks/active.md?", default=True):
+        _write_active(DEFAULT_TASKS_DIR, tasks_)
+        click.echo("Updated.")
+    else:
+        click.echo("No changes written.")
 
 
 @tasks.command("unblock")
@@ -2649,6 +2782,7 @@ def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Pa
 @click.option("--related", multiple=True)
 @click.option("--blocked-by", multiple=True)
 @click.option("--group", default=None)
+@click.option("--force", is_flag=True, help="Record blockers even if entity not yet known")
 def tasks_edit(
     task_id: str,
     title: str | None,
@@ -2659,6 +2793,7 @@ def tasks_edit(
     related: tuple[str, ...],
     blocked_by: tuple[str, ...],
     group: str | None,
+    force: bool,
 ) -> None:
     """Edit an existing task's fields."""
     from science_model.aspects import (
@@ -2667,6 +2802,7 @@ def tasks_edit(
         validate_entity_aspects,
     )
     from science_tool.tasks import edit_task
+    from science_tool.tasks_blockers import BlockerValidationError
 
     validated_aspects: list[str] | None = None
     if aspects:
@@ -2678,6 +2814,7 @@ def tasks_edit(
 
     try:
         task = edit_task(
+            project_root=Path.cwd(),
             tasks_dir=DEFAULT_TASKS_DIR,
             task_id=task_id,
             title=title,
@@ -2688,7 +2825,10 @@ def tasks_edit(
             related=list(related) if related else None,
             blocked_by=list(blocked_by) if blocked_by else None,
             group=group,
+            force=force,
         )
+    except BlockerValidationError as e:
+        raise click.ClickException(str(e)) from e
     except (KeyError, ValueError) as e:
         raise click.ClickException(str(e)) from e
     click.echo(f"Edited [{task.id}] {task.title}")
@@ -2740,8 +2880,15 @@ def tasks_list(
     output_format: str,
 ) -> None:
     """List tasks. Done/retired tasks are hidden by default; use --all or --status=done to include them."""
-    from science_tool.tasks import list_tasks
+    from science_model.tasks import Task
+    from science_tool.tasks import list_tasks, parse_tasks_for_cli
     from science_tool.tasks_display import render_tasks_table, sort_tasks
+    from science_tool.tasks_readiness import make_local_resolver
+
+    # Surface legacy-untyped-blocker warnings on stderr.
+    _, warnings = parse_tasks_for_cli(DEFAULT_TASKS_DIR / "active.md")
+    for w in warnings:
+        click.echo(f"WARNING: {w}", err=True)
 
     matched = list_tasks(
         DEFAULT_TASKS_DIR,
@@ -2755,6 +2902,8 @@ def tasks_list(
     )
     matched = sort_tasks(matched)
 
+    resolver = make_local_resolver()
+
     if output_format == "json":
         columns: list[tuple[str, str]] = [
             ("id", "ID"),
@@ -2766,8 +2915,9 @@ def tasks_list(
             ("related", "Related"),
             ("created", "Created"),
         ]
-        rows = [
-            {
+
+        def _row_with_readiness(t: Task) -> dict:
+            row: dict = {
                 "id": t.id,
                 "title": t.title,
                 "type": t.type,
@@ -2777,8 +2927,23 @@ def tasks_list(
                 "related": ", ".join(t.related),
                 "created": t.created.isoformat(),
             }
-            for t in matched
-        ]
+            if t.status == "blocked" and t.blocked_by:
+                readiness_entries = []
+                for ref in t.blocked_by:
+                    r = resolver.resolve_ref(ref)
+                    readiness_entries.append(
+                        {
+                            "ref": ref,
+                            "ready": r.ready,
+                            "state": r.state,
+                            "detail": r.detail,
+                            "unresolved": r.state == "unresolved",
+                        }
+                    )
+                row["blocked_by_readiness"] = readiness_entries
+            return row
+
+        rows = [_row_with_readiness(t) for t in matched]
         # Total count of active-file tasks before any filtering, so callers can
         # tell whether they're looking at a curated view or the full list
         # (fb-2026-05-01-006).
@@ -2808,7 +2973,7 @@ def tasks_list(
             output_format=output_format, title="Tasks", columns=columns, rows=rows, meta=meta
         )
     else:
-        render_tasks_table(matched)
+        render_tasks_table(matched, resolver=resolver)
 
 
 @tasks.command("show")
@@ -2816,12 +2981,28 @@ def tasks_list(
 def tasks_show(task_id: str) -> None:
     """Show full details of a task."""
     from science_tool.tasks import find_task_location, render_task
+    from science_tool.tasks_readiness import make_local_resolver
 
     try:
         location = find_task_location(DEFAULT_TASKS_DIR, task_id)
-    except KeyError as e:
-        raise click.ClickException(str(e)) from e
-    click.echo(render_task(location.task))
+    except KeyError as exc:
+        raise click.ClickException(str(exc)) from exc
+    task = location.task
+    click.echo(render_task(task))
+
+    # Append a resolver-enriched readiness section. render_task() already
+    # emitted the raw blocked-by line; suppression would require coupling
+    # render_task to a resolver, but render_task is also the on-disk
+    # serializer and must stay pure.
+    if task.blocked_by:
+        resolver = make_local_resolver()
+        click.echo("\nBlocker readiness:")
+        for ref in task.blocked_by:
+            readiness = resolver.resolve_ref(ref)
+            line = f"  - {ref:40s}  {readiness.state}"
+            if readiness.detail:
+                line += f"  ({readiness.detail})"
+            click.echo(line)
 
 
 @tasks.command("summary")

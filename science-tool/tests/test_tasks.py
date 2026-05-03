@@ -89,7 +89,7 @@ def test_render_and_parse_task_without_tags(tmp_path: Path) -> None:
     """Tasks should render and parse without any tags field."""
     tasks_dir = tmp_path / "tasks"
     tasks_dir.mkdir()
-    t = add_task(tasks_dir, "Test task", "dev", "P1", related=["topic:umap"])
+    t = add_task(tmp_path, tasks_dir, "Test task", "P1", task_type="dev", related=["topic:umap"])
     assert "- tags:" not in render_task(t)
     tasks = parse_tasks(tasks_dir / "active.md")
     assert tasks[0].related == ["topic:umap"]
@@ -286,7 +286,7 @@ class TestAddTask:
     def test_add_creates_task_in_active(self, tmp_path: Path) -> None:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
-        t = add_task(tasks_dir, title="New task", task_type="research", priority="P2")
+        t = add_task(tmp_path, tasks_dir, title="New task", task_type="research", priority="P2")
         assert t.id == "t001"
         assert t.title == "New task"
         assert t.type == "research"
@@ -300,7 +300,7 @@ class TestAddTask:
 
     def test_add_appends_to_existing(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        t = add_task(tasks_dir, title="Second task", task_type="dev", priority="P1")
+        t = add_task(tmp_path, tasks_dir, title="Second task", task_type="dev", priority="P1")
         assert t.id == "t002"
         tasks = parse_tasks(tasks_dir / "active.md")
         assert len(tasks) == 2
@@ -310,16 +310,18 @@ class TestAddTask:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
         t = add_task(
+            tmp_path,
             tasks_dir,
             title="Blocked task",
             task_type="dev",
             priority="P1",
             related=["hypothesis:h01"],
-            blocked_by=["t001"],
+            blocked_by=["task:t001"],
             description="Some notes.",
+            force=True,
         )
         assert t.related == ["hypothesis:h01"]
-        assert t.blocked_by == ["t001"]
+        assert t.blocked_by == ["task:t001"]
         assert t.description == "Some notes."
 
 
@@ -366,25 +368,25 @@ class TestDeferTask:
 class TestBlockTask:
     def test_block_adds_blocker(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        t = block_task(tasks_dir, "t001", blocked_by="t002")
+        t = block_task(tmp_path, tasks_dir, "t001", blocked_by=["task:t002"], force=True)
         assert t.status == "blocked"
-        assert "t002" in t.blocked_by
+        assert "task:t002" in t.blocked_by
         tasks = parse_tasks(tasks_dir / "active.md")
         assert tasks[0].status == "blocked"
-        assert "t002" in tasks[0].blocked_by
+        assert "task:t002" in tasks[0].blocked_by
 
     def test_block_appends_to_existing_blockers(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        block_task(tasks_dir, "t001", blocked_by="t002")
-        t = block_task(tasks_dir, "t001", blocked_by="t003")
-        assert "t002" in t.blocked_by
-        assert "t003" in t.blocked_by
+        block_task(tmp_path, tasks_dir, "t001", blocked_by=["task:t002"], force=True)
+        t = block_task(tmp_path, tasks_dir, "t001", blocked_by=["task:t003"], force=True)
+        assert "task:t002" in t.blocked_by
+        assert "task:t003" in t.blocked_by
 
 
 class TestUnblockTask:
     def test_unblock_clears_blockers(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        block_task(tasks_dir, "t001", blocked_by="t002")
+        block_task(tmp_path, tasks_dir, "t001", blocked_by=["task:t002"], force=True)
         t = unblock_task(tasks_dir, "t001")
         assert t.status == "active"
         assert t.blocked_by == []
@@ -393,27 +395,27 @@ class TestUnblockTask:
 class TestEditTask:
     def test_edit_priority(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        t = edit_task(tasks_dir, "t001", priority="P3")
+        t = edit_task(tmp_path, tasks_dir, "t001", priority="P3")
         assert t.priority == "P3"
         tasks = parse_tasks(tasks_dir / "active.md")
         assert tasks[0].priority == "P3"
 
     def test_edit_multiple_fields(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        t = edit_task(tasks_dir, "t001", priority="P2", status="todo", aspects=["hypothesis-testing"])
+        t = edit_task(tmp_path, tasks_dir, "t001", priority="P2", status="todo", aspects=["hypothesis-testing"])
         assert t.priority == "P2"
         assert t.status == "todo"
         assert t.aspects == ["hypothesis-testing"]
 
     def test_edit_related(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        t = edit_task(tasks_dir, "t001", related=["hypothesis:h01"])
+        t = edit_task(tmp_path, tasks_dir, "t001", related=["hypothesis:h01"])
         assert t.related == ["hypothesis:h01"]
 
     def test_edit_not_found_raises(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
         with pytest.raises(KeyError):
-            edit_task(tasks_dir, "t999", priority="P3")
+            edit_task(tmp_path, tasks_dir, "t999", priority="P3")
 
 
 class TestTaskLocation:
@@ -511,7 +513,7 @@ Duplicate.
     def test_edit_task_rewrites_archived_owner_file(self, tmp_path: Path) -> None:
         tasks_dir = self._setup_active_and_done(tmp_path)
 
-        task = edit_task(tasks_dir, "t002", description="Updated archived description.")
+        task = edit_task(tmp_path, tasks_dir, "t002", description="Updated archived description.")
 
         assert task.description == "Updated archived description."
         archived_tasks = parse_tasks(tasks_dir / "done" / "2026-04.md")
@@ -523,7 +525,7 @@ Duplicate.
         tasks_dir = self._setup_active_and_done(tmp_path)
 
         with pytest.raises(ValueError, match="Cannot set archived task t002 to non-closed status 'active'"):
-            edit_task(tasks_dir, "t002", status="active")
+            edit_task(tmp_path, tasks_dir, "t002", status="active")
 
         archived_tasks = parse_tasks(tasks_dir / "done" / "2026-04.md")
         assert archived_tasks[0].status == "done"
@@ -879,6 +881,7 @@ class TestTagsAndGroups:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
         t = add_task(
+            tmp_path,
             tasks_dir,
             title="Tagged task",
             task_type="dev",
@@ -894,15 +897,15 @@ class TestTagsAndGroups:
 
     def test_edit_group(self, tmp_path: Path) -> None:
         tasks_dir = _make_tasks_dir(tmp_path)
-        t = edit_task(tasks_dir, "t001", group="new-group")
+        t = edit_task(tmp_path, tasks_dir, "t001", group="new-group")
         assert t.group == "new-group"
 
     def test_list_by_related(self, tmp_path: Path) -> None:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
-        add_task(tasks_dir, "T1", "dev", "P1", related=["topic:alpha", "topic:beta"])
-        add_task(tasks_dir, "T2", "dev", "P2", related=["topic:beta", "topic:gamma"])
-        add_task(tasks_dir, "T3", "dev", "P1", related=["topic:alpha"])
+        add_task(tmp_path, tasks_dir, "T1", "P1", task_type="dev", related=["topic:alpha", "topic:beta"])
+        add_task(tmp_path, tasks_dir, "T2", "P2", task_type="dev", related=["topic:beta", "topic:gamma"])
+        add_task(tmp_path, tasks_dir, "T3", "P1", task_type="dev", related=["topic:alpha"])
         result = list_tasks(tasks_dir, related="topic:alpha")
         assert len(result) == 2
         assert {t.id for t in result} == {"t001", "t003"}
@@ -910,9 +913,9 @@ class TestTagsAndGroups:
     def test_list_by_group(self, tmp_path: Path) -> None:
         tasks_dir = tmp_path / "tasks"
         tasks_dir.mkdir()
-        add_task(tasks_dir, "T1", "dev", "P1", group="lens")
-        add_task(tasks_dir, "T2", "dev", "P2", group="lens")
-        add_task(tasks_dir, "T3", "dev", "P1", group="other")
+        add_task(tmp_path, tasks_dir, "T1", "P1", task_type="dev", group="lens")
+        add_task(tmp_path, tasks_dir, "T2", "P2", task_type="dev", group="lens")
+        add_task(tmp_path, tasks_dir, "T3", "P1", task_type="dev", group="other")
         result = list_tasks(tasks_dir, group="lens")
         assert len(result) == 2
 
@@ -1023,6 +1026,7 @@ def test_add_task_with_aspects(tmp_path) -> None:
     (tmp_path / "active.md").write_text("")
 
     task = add_task(
+        project_root=tmp_path,
         tasks_dir=tmp_path,
         title="Test task",
         priority="P1",
@@ -1039,7 +1043,121 @@ def test_add_task_without_aspects_writes_no_aspects_line(tmp_path) -> None:
     from science_tool.tasks import add_task
 
     (tmp_path / "active.md").write_text("")
-    add_task(tasks_dir=tmp_path, title="Test", priority="P2")
+    add_task(project_root=tmp_path, tasks_dir=tmp_path, title="Test", priority="P2")
 
     body = (tmp_path / "active.md").read_text()
     assert "aspects" not in body
+
+
+# ---------------------------------------------------------------------------
+# Tests for typed-blocker validation wired into block_task / add_task / edit_task
+# ---------------------------------------------------------------------------
+
+
+from _fixtures.entity_helpers import seed_project, write_markdown_entity  # noqa: E402
+from science_tool.tasks_blockers import BlockerValidationError  # noqa: E402
+
+
+def _seed_with_dataset(tmp_path: Path) -> Path:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/datasets/foo.md",
+        {
+            "id": "dataset:foo",
+            "type": "dataset",
+            "title": "Foo",
+            "status": "active",
+            "origin": "external",
+            "access": {"level": "public", "verified": True},
+        },
+    )
+    add_task(
+        project_root=tmp_path,
+        tasks_dir=tmp_path / "tasks",
+        title="baseline",
+        priority="P2",
+        task_type="dev",
+    )
+    return tmp_path
+
+
+def test_block_task_rejects_untyped_blocker(tmp_path: Path):
+    root = _seed_with_dataset(tmp_path)
+    with pytest.raises(BlockerValidationError):
+        block_task(
+            project_root=root,
+            tasks_dir=root / "tasks",
+            task_id="t001",
+            blocked_by=["just-a-string"],
+        )
+
+
+def test_block_task_rejects_unknown_typed_ref(tmp_path: Path):
+    root = _seed_with_dataset(tmp_path)
+    with pytest.raises(BlockerValidationError):
+        block_task(
+            project_root=root,
+            tasks_dir=root / "tasks",
+            task_id="t001",
+            blocked_by=["dataset:does-not-exist"],
+        )
+
+
+def test_block_task_accepts_known_typed_ref(tmp_path: Path):
+    root = _seed_with_dataset(tmp_path)
+    task = block_task(
+        project_root=root,
+        tasks_dir=root / "tasks",
+        task_id="t001",
+        blocked_by=["dataset:foo"],
+    )
+    assert task.status == "blocked"
+    assert task.blocked_by == ["dataset:foo"]
+
+
+def test_block_task_force_accepts_unknown_typed_ref(tmp_path: Path):
+    root = _seed_with_dataset(tmp_path)
+    task = block_task(
+        project_root=root,
+        tasks_dir=root / "tasks",
+        task_id="t001",
+        blocked_by=["dataset:does-not-exist"],
+        force=True,
+    )
+    assert task.blocked_by == ["dataset:does-not-exist"]
+
+
+def test_block_task_multiple_blockers(tmp_path: Path):
+    root = _seed_with_dataset(tmp_path)
+    write_markdown_entity(
+        root,
+        "doc/datasets/bar.md",
+        {
+            "id": "dataset:bar",
+            "type": "dataset",
+            "title": "Bar",
+            "status": "active",
+            "origin": "external",
+            "access": {"level": "public", "verified": True},
+        },
+    )
+    task = block_task(
+        project_root=root,
+        tasks_dir=root / "tasks",
+        task_id="t001",
+        blocked_by=["dataset:foo", "dataset:bar"],
+    )
+    assert task.blocked_by == ["dataset:foo", "dataset:bar"]
+
+
+def test_edit_task_rejects_untyped_blocker(tmp_path: Path):
+    """edit_task wires through validate_blocker_refs when blocked_by is provided."""
+    root = _seed_with_dataset(tmp_path)
+    with pytest.raises(BlockerValidationError):
+        edit_task(
+            project_root=root,
+            tasks_dir=root / "tasks",
+            task_id="t001",
+            blocked_by=["just-a-string"],
+        )
