@@ -678,3 +678,43 @@ def test_tasks_block_force_accepts_unknown(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "dataset:not-yet" in result.output
     assert "WARNING" in result.output
+
+
+def test_tasks_blockers_table(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+    runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:foo"])
+    result = runner.invoke(main, ["tasks", "blockers", "t001"])
+    assert result.exit_code == 0, result.output
+    assert "dataset:foo" in result.output
+    assert "available" in result.output  # the readiness state for verified public datasets
+
+
+def test_tasks_blockers_json(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+    runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:foo"])
+    result = runner.invoke(main, ["tasks", "blockers", "t001", "--format", "json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["task_id"] == "t001"
+    assert len(payload["blockers"]) == 1
+    blocker = payload["blockers"][0]
+    assert blocker["ref"] == "dataset:foo"
+    assert blocker["ready"] is True
+    assert blocker["state"] == "available"
+    assert "detail" in blocker
+    assert blocker["unresolved"] is False
+
+
+def test_tasks_blockers_json_unresolved(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+    runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:gone", "--force"])
+    result = runner.invoke(main, ["tasks", "blockers", "t001", "--format", "json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    blocker = payload["blockers"][0]
+    assert blocker["ref"] == "dataset:gone"
+    assert blocker["unresolved"] is True
+    assert blocker["ready"] is False

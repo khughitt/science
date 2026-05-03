@@ -2564,6 +2564,50 @@ def tasks_block(
     click.echo(f"[{task.id}] blocked by {refs}")
 
 
+@tasks.command("blockers")
+@click.argument("task_id")
+@click.option("--format", "fmt", type=click.Choice(["table", "json"]), default="table")
+def tasks_blockers(task_id: str, fmt: str) -> None:
+    """Show per-blocker readiness for a task."""
+    from science_tool.tasks import _find_task, _read_active
+    from science_tool.tasks_readiness import ReadinessResolver
+    from science_tool.entities import load_local_entity_index
+
+    tasks = _read_active(DEFAULT_TASKS_DIR)
+    try:
+        task = _find_task(tasks, task_id)
+    except KeyError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    index = load_local_entity_index(Path.cwd())
+    resolver = ReadinessResolver(lookup=index.get)
+
+    rows = []
+    for ref in task.blocked_by:
+        readiness = resolver.resolve_ref(ref)
+        rows.append(
+            {
+                "ref": ref,
+                "ready": readiness.ready,
+                "state": readiness.state,
+                "detail": readiness.detail,
+                "unresolved": readiness.state == "unresolved",
+            }
+        )
+
+    if fmt == "json":
+        click.echo(json.dumps({"task_id": task.id, "blockers": rows}, indent=2))
+        return
+
+    click.echo(f"Blockers for [{task.id}] {task.title}:")
+    for row in rows:
+        marker = "✓" if row["ready"] else "·"
+        line = f"  {marker} {row['ref']:40s}  {row['state']}"
+        if row["detail"]:
+            line += f"  ({row['detail']})"
+        click.echo(line)
+
+
 @tasks.command("unblock")
 @click.argument("task_id")
 def tasks_unblock(task_id: str) -> None:
