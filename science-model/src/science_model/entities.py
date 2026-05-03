@@ -207,6 +207,19 @@ class Entity(BaseModel):
         return self
 
 
+class Readiness(BaseModel):
+    """Result of evaluating an entity's readiness for downstream use.
+
+    `state` is a short, display-ready label (e.g. "done", "embargoed",
+    "controlled, unverified"). `detail` is an optional one-line elaboration
+    rendered by `tasks show`.
+    """
+
+    ready: bool
+    state: str
+    detail: str = ""
+
+
 class ProjectEntity(Entity):
     """Entity about the conduct of a science project (tasks, hypotheses, datasets...).
 
@@ -232,6 +245,17 @@ class ProjectEntity(Entity):
     # reference only). `evidence_role` was previously on SourceEntity.
     evidence_role: EvidenceRole | None = None
     rival_model_packet: RivalModelPacket | None = None
+
+    def readiness(self, resolver: "ReadinessResolver | None" = None) -> Readiness:  # noqa: F821
+        """Default readiness: ready iff status == 'done'.
+
+        `resolver` is optional context for subclasses that need to traverse
+        other entities (e.g. derived datasets → producing workflow-run).
+        Subclasses without cross-entity dependencies ignore it.
+        """
+        if self.status == "done":
+            return Readiness(ready=True, state="done")
+        return Readiness(ready=False, state=self.status or "unknown")
 
 
 class DomainEntity(Entity):
@@ -315,13 +339,12 @@ class DatasetEntity(ProjectEntity):
 
 
 class WorkflowRunEntity(ProjectEntity):
-    """Workflow run — placeholder typed entity.
+    """Workflow run — readiness is `complete` when status == 'complete'."""
 
-    Workflow-run-specific semantics (production metadata, provenance refs) can
-    be added as @model_validator methods here as they're formalized.
-    """
-
-    pass
+    def readiness(self, resolver: "ReadinessResolver | None" = None) -> Readiness:  # noqa: F821
+        if self.status == "complete":
+            return Readiness(ready=True, state="complete")
+        return Readiness(ready=False, state=self.status or "unknown")
 
 
 class ResearchPackageEntity(ProjectEntity):
