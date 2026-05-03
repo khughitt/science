@@ -2436,6 +2436,7 @@ def tasks() -> None:
 @click.option("--blocked-by", multiple=True)
 @click.option("--group", default="")
 @click.option("--description", default="")
+@click.option("--force", is_flag=True, help="Record blockers even if entity not yet known")
 def tasks_add(
     title: str,
     priority: str,
@@ -2444,6 +2445,7 @@ def tasks_add(
     blocked_by: tuple[str, ...],
     group: str,
     description: str,
+    force: bool,
 ) -> None:
     """Add a new task."""
     from science_model.aspects import (
@@ -2473,6 +2475,7 @@ def tasks_add(
             blocked_by=list(blocked_by) or None,
             group=group,
             description=description,
+            force=force,
         )
     except BlockerValidationError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -2523,24 +2526,42 @@ def tasks_retire(task_id: str, reason: str | None) -> None:
 
 @tasks.command("block")
 @click.argument("task_id")
-@click.option("--by", "blocked_by", required=True)
-def tasks_block(task_id: str, blocked_by: str) -> None:
-    """Block a task."""
+@click.option("--by", "blocked_by", multiple=True, required=True,
+              help="Typed blocker ref (repeatable): <kind>:<local-id>")
+@click.option("--force", is_flag=True,
+              help="Record blocker even if entity not yet known")
+def tasks_block(
+    task_id: str, blocked_by: tuple[str, ...], force: bool
+) -> None:
+    """Block a task by one or more typed entity references."""
     from science_tool.tasks import block_task
     from science_tool.tasks_blockers import BlockerValidationError
+    from science_tool.entities import load_local_entity_ids
 
     try:
         task = block_task(
             project_root=Path.cwd(),
             tasks_dir=DEFAULT_TASKS_DIR,
             task_id=task_id,
-            blocked_by=[blocked_by],
+            blocked_by=list(blocked_by),
+            force=force,
         )
-    except BlockerValidationError as e:
-        raise click.ClickException(str(e)) from e
-    except KeyError as e:
-        raise click.ClickException(str(e)) from e
-    click.echo(f"[{task.id}] blocked by {blocked_by}")
+    except KeyError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except BlockerValidationError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if force:
+        known = load_local_entity_ids(Path.cwd())
+        for ref in blocked_by:
+            if ref not in known:
+                click.echo(
+                    f"WARNING: recorded unresolved blocker {ref}; graph audit will flag it",
+                    err=True,
+                )
+
+    refs = ", ".join(task.blocked_by)
+    click.echo(f"[{task.id}] blocked by {refs}")
 
 
 @tasks.command("unblock")
@@ -2662,6 +2683,7 @@ def tasks_archive(do_apply: bool, check: bool, output_format: str, tasks_dir: Pa
 @click.option("--related", multiple=True)
 @click.option("--blocked-by", multiple=True)
 @click.option("--group", default=None)
+@click.option("--force", is_flag=True, help="Record blockers even if entity not yet known")
 def tasks_edit(
     task_id: str,
     title: str | None,
@@ -2672,6 +2694,7 @@ def tasks_edit(
     related: tuple[str, ...],
     blocked_by: tuple[str, ...],
     group: str | None,
+    force: bool,
 ) -> None:
     """Edit an existing task's fields."""
     from science_model.aspects import (
@@ -2703,6 +2726,7 @@ def tasks_edit(
             related=list(related) if related else None,
             blocked_by=list(blocked_by) if blocked_by else None,
             group=group,
+            force=force,
         )
     except BlockerValidationError as e:
         raise click.ClickException(str(e)) from e
