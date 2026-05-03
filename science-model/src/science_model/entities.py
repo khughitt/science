@@ -199,6 +199,7 @@ class Entity(BaseModel):
     scope: EntityScope = EntityScope.PROJECT
     provisional: bool = False
     review_after: date | None = None
+    review_state: EpistemicReviewState | None = None
     deprecated_ids: list[str] = Field(default_factory=list)
     replaced_by: str | None = None
     taxon: str | None = None

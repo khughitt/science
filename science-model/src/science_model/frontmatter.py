@@ -245,6 +245,18 @@ def _coerce_access(fm: dict) -> AccessBlock | None:
     return None
 
 
+def _coerce_review_state(fm: dict) -> "EpistemicReviewState | None":
+    raw = fm.get("review_state")
+    if not isinstance(raw, dict):
+        return None
+    from science_model.entities import EpistemicReviewState
+    return EpistemicReviewState(
+        last_reviewed=_coerce_date(raw.get("last_reviewed")),
+        last_review_note=str(raw.get("last_review_note") or ""),
+        review_horizon_days=raw.get("review_horizon_days"),
+    )
+
+
 def _coerce_derivation(fm: dict) -> DerivationBlock | None:
     raw = fm.get("derivation")
     if not isinstance(raw, dict):
@@ -323,6 +335,7 @@ def parse_entity_file(path: Path, project_slug: str) -> Entity | None:
         "scope": _coerce_scope(fm.get("scope")),
         "provisional": bool(fm.get("provisional", False)),
         "review_after": _coerce_date(fm.get("review_after")),
+        "review_state": _coerce_review_state(fm),
         "deprecated_ids": list(fm.get("deprecated_ids") or []),
         "replaced_by": fm.get("replaced_by"),
         "taxon": fm.get("taxon"),

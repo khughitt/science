@@ -42,3 +42,64 @@ def test_review_state_rejects_negative_horizon():
 def test_review_state_rejects_zero_horizon():
     with pytest.raises(ValidationError, match="review_horizon_days"):
         EpistemicReviewState(review_horizon_days=0)
+
+
+from pathlib import Path
+from science_model.frontmatter import parse_entity_file
+
+
+def test_entity_default_review_state_is_unset(tmp_path: Path):
+    p = tmp_path / "h01.md"
+    p.write_text(
+        '---\n'
+        'id: "hypothesis:h01"\n'
+        'kind: "hypothesis"\n'
+        'title: "Test hypothesis"\n'
+        'created: "2026-04-01"\n'
+        '---\n\nBody.\n'
+    )
+    entity = parse_entity_file(p, project_slug="demo")
+    assert entity is not None
+    assert entity.review_state is None
+
+
+def test_entity_parses_review_state_block(tmp_path: Path):
+    p = tmp_path / "h01.md"
+    p.write_text(
+        '---\n'
+        'id: "hypothesis:h01"\n'
+        'kind: "hypothesis"\n'
+        'title: "Test hypothesis"\n'
+        'created: "2026-04-01"\n'
+        'review_state:\n'
+        '  last_reviewed: "2026-05-01"\n'
+        '  last_review_note: "Re-checked after Lee2026 added"\n'
+        '  review_horizon_days: 90\n'
+        '---\n\nBody.\n'
+    )
+    entity = parse_entity_file(p, project_slug="demo")
+    assert entity is not None
+    assert entity.review_state is not None
+    assert entity.review_state.last_reviewed == date(2026, 5, 1)
+    assert entity.review_state.last_review_note == "Re-checked after Lee2026 added"
+    assert entity.review_state.review_horizon_days == 90
+
+
+def test_entity_review_state_partial_block(tmp_path: Path):
+    p = tmp_path / "h01.md"
+    p.write_text(
+        '---\n'
+        'id: "hypothesis:h01"\n'
+        'kind: "hypothesis"\n'
+        'title: "Test hypothesis"\n'
+        'created: "2026-04-01"\n'
+        'review_state:\n'
+        '  last_reviewed: "2026-05-01"\n'
+        '---\n\nBody.\n'
+    )
+    entity = parse_entity_file(p, project_slug="demo")
+    assert entity is not None
+    assert entity.review_state is not None
+    assert entity.review_state.last_reviewed == date(2026, 5, 1)
+    assert entity.review_state.last_review_note == ""
+    assert entity.review_state.review_horizon_days is None
