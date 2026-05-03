@@ -205,6 +205,9 @@ def entity_group() -> None:
 @click.option("--slug")
 @click.option("--path", "explicit_path", type=click.Path(path_type=Path))
 @click.option("--status")
+@click.option("--with", "with_sections", multiple=True, help="Include optional template section key (repeatable)")
+@click.option("--without", "without_sections", multiple=True, help="Drop required template section key (repeatable)")
+@click.option("--no-hints", is_flag=True, help="Strip authored HTML hint comments from the rendered shell")
 def entity_create(
     kind: str,
     title: str,
@@ -214,6 +217,9 @@ def entity_create(
     slug: str | None,
     explicit_path: Path | None,
     status: str | None,
+    with_sections: tuple[str, ...],
+    without_sections: tuple[str, ...],
+    no_hints: bool,
 ) -> None:
     """Create a source-authored entity markdown file."""
 
@@ -228,6 +234,9 @@ def entity_create(
             status=status,
             related=list(related_refs),
             source_refs=list(source_refs),
+            with_sections=list(with_sections),
+            without_sections=list(without_sections),
+            no_hints=no_hints,
         )
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -343,6 +352,34 @@ def entity_list(kind: str | None, status: str | None, output_format: str) -> Non
     )
 
 
+@entity_group.command("sections")
+@click.argument("kind")
+def entity_sections(kind: str) -> None:
+    """List template sections for a source-authored entity kind."""
+
+    from science_model.templates import EntityTemplateError, Renderer
+
+    try:
+        sections = Renderer().sections(kind)
+    except EntityTemplateError as exc:
+        raise click.ClickException(str(exc)) from exc
+    rows = [
+        {
+            "key": section.key,
+            "required": "required" if section.required else "optional",
+            "name": section.name,
+            "hint": section.hint[:80],
+        }
+        for section in sections
+    ]
+    emit_query_rows(
+        output_format="table",
+        title=f"{kind} Template Sections",
+        columns=[("key", "KEY"), ("required", "REQ?"), ("name", "NAME"), ("hint", "HINT")],
+        rows=rows,
+    )
+
+
 @entity_group.command("neighbors")
 @click.argument("ref")
 @click.option("--hops", type=int, default=2, show_default=True)
@@ -383,6 +420,9 @@ def hypothesis_group() -> None:
 @click.option("--id", "entity_id")
 @click.option("--slug")
 @click.option("--status")
+@click.option("--with", "with_sections", multiple=True, help="Include optional template section key (repeatable)")
+@click.option("--without", "without_sections", multiple=True, help="Drop required template section key (repeatable)")
+@click.option("--no-hints", is_flag=True, help="Strip authored HTML hint comments from the rendered shell")
 def hypothesis_create(
     title: str,
     related_refs: tuple[str, ...],
@@ -390,6 +430,9 @@ def hypothesis_create(
     entity_id: str | None,
     slug: str | None,
     status: str | None,
+    with_sections: tuple[str, ...],
+    without_sections: tuple[str, ...],
+    no_hints: bool,
 ) -> None:
     """Create a source-authored hypothesis."""
 
@@ -401,6 +444,9 @@ def hypothesis_create(
         status=status,
         related=list(related_refs),
         source_refs=list(source_refs),
+        with_sections=list(with_sections),
+        without_sections=list(without_sections),
+        no_hints=no_hints,
     )
 
 
@@ -416,6 +462,9 @@ def discussion_group() -> None:
 @click.option("--id", "entity_id")
 @click.option("--slug")
 @click.option("--status")
+@click.option("--with", "with_sections", multiple=True, help="Include optional template section key (repeatable)")
+@click.option("--without", "without_sections", multiple=True, help="Drop required template section key (repeatable)")
+@click.option("--no-hints", is_flag=True, help="Strip authored HTML hint comments from the rendered shell")
 def discussion_create(
     title: str,
     focus_refs: tuple[str, ...],
@@ -423,6 +472,9 @@ def discussion_create(
     entity_id: str | None,
     slug: str | None,
     status: str | None,
+    with_sections: tuple[str, ...],
+    without_sections: tuple[str, ...],
+    no_hints: bool,
 ) -> None:
     """Create a source-authored discussion."""
 
@@ -434,6 +486,9 @@ def discussion_create(
         status=status,
         related=list(focus_refs),
         source_refs=list(source_refs),
+        with_sections=list(with_sections),
+        without_sections=list(without_sections),
+        no_hints=no_hints,
     )
 
 
@@ -449,6 +504,9 @@ def interpretation_group() -> None:
 @click.option("--id", "entity_id")
 @click.option("--slug")
 @click.option("--status")
+@click.option("--with", "with_sections", multiple=True, help="Include optional template section key (repeatable)")
+@click.option("--without", "without_sections", multiple=True, help="Drop required template section key (repeatable)")
+@click.option("--no-hints", is_flag=True, help="Strip authored HTML hint comments from the rendered shell")
 def interpretation_create(
     title: str,
     input_refs: tuple[str, ...],
@@ -456,6 +514,9 @@ def interpretation_create(
     entity_id: str | None,
     slug: str | None,
     status: str | None,
+    with_sections: tuple[str, ...],
+    without_sections: tuple[str, ...],
+    no_hints: bool,
 ) -> None:
     """Create a source-authored interpretation."""
 
@@ -467,6 +528,9 @@ def interpretation_create(
         status=status,
         related=list(related_refs),
         source_refs=list(input_refs),
+        with_sections=list(with_sections),
+        without_sections=list(without_sections),
+        no_hints=no_hints,
     )
 
 
@@ -479,6 +543,9 @@ def _create_typed_entity(
     status: str | None,
     related: list[str],
     source_refs: list[str],
+    with_sections: list[str] | None = None,
+    without_sections: list[str] | None = None,
+    no_hints: bool = False,
 ) -> None:
     try:
         result = create_entity(
@@ -490,6 +557,9 @@ def _create_typed_entity(
             status=status,
             related=related,
             source_refs=source_refs,
+            with_sections=with_sections,
+            without_sections=without_sections,
+            no_hints=no_hints,
         )
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -3072,6 +3142,9 @@ def question() -> None:
 @click.option("--id", "entity_id")
 @click.option("--slug")
 @click.option("--status")
+@click.option("--with", "with_sections", multiple=True, help="Include optional template section key (repeatable)")
+@click.option("--without", "without_sections", multiple=True, help="Drop required template section key (repeatable)")
+@click.option("--no-hints", is_flag=True, help="Strip authored HTML hint comments from the rendered shell")
 def question_create(
     title: str,
     related_refs: tuple[str, ...],
@@ -3079,6 +3152,9 @@ def question_create(
     entity_id: str | None,
     slug: str | None,
     status: str | None,
+    with_sections: tuple[str, ...],
+    without_sections: tuple[str, ...],
+    no_hints: bool,
 ) -> None:
     """Create a source-authored question."""
 
@@ -3090,6 +3166,9 @@ def question_create(
         status=status,
         related=list(related_refs),
         source_refs=list(source_refs),
+        with_sections=list(with_sections),
+        without_sections=list(without_sections),
+        no_hints=no_hints,
     )
 
 

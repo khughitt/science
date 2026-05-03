@@ -343,3 +343,61 @@ def test_discussion_create_without_id_uses_today() -> None:
         today = date.today().isoformat()
         assert f"discussion:{today}-planning" in result.output
         assert Path(f"doc/discussions/{today}-planning.md").is_file()
+
+
+def test_discussion_create_with_optional_section_includes_addendum() -> None:
+    from datetime import date
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(
+            main, ["discussion", "create", "Test discussion", "--with", "double-blind-addendum"]
+        )
+
+        assert result.exit_code == 0, result.output
+        today = date.today().isoformat()
+        path = Path(f"doc/discussions/{today}-test-discussion.md")
+        assert path.is_file()
+        assert "## Double-Blind Addendum" in path.read_text(encoding="utf-8")
+
+
+def test_discussion_create_no_hints_strips_html_comments() -> None:
+    from datetime import date
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(main, ["discussion", "create", "Test discussion", "--no-hints"])
+
+        assert result.exit_code == 0, result.output
+        today = date.today().isoformat()
+        path = Path(f"doc/discussions/{today}-test-discussion.md")
+        text = path.read_text(encoding="utf-8")
+        assert "<!--" not in text
+
+
+def test_entity_sections_lists_template_sections() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["entity", "sections", "discussion"], env={"COLUMNS": "200"})
+        assert result.exit_code == 0, result.output
+        assert "double-blind-addendum" in result.output
+        assert "optional" in result.output
+
+
+def test_discussion_create_unknown_section_key_errors() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(main, ["discussion", "create", "Test discussion", "--with", "bogus"])
+
+        assert result.exit_code != 0
+        assert "bogus" in result.output
+        assert "double-blind-addendum" in result.output
