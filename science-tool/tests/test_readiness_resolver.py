@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from science_model.entities import (
     DatasetEntity,
-    Entity,
     EntityType,
+    ProjectEntity,
     Readiness,
     WorkflowRunEntity,
 )
@@ -49,7 +49,7 @@ def _derived(ds_id: str, run_id: str) -> DatasetEntity:
 
 
 def test_resolver_returns_unresolved_for_unknown_ref():
-    resolver = ReadinessResolver(lookup=lambda ref: None)
+    resolver = ReadinessResolver(lookup=lambda _: None)
     r = resolver.resolve_ref("dataset:nope")
     assert r.ready is False
     assert r.state == "unresolved"
@@ -67,7 +67,7 @@ def test_resolver_caches_repeated_lookups():
     wfr = _wfr("workflow-run:r1", status="complete")
     calls: list[str] = []
 
-    def lookup(ref: str) -> Entity | None:
+    def lookup(ref: str) -> ProjectEntity | None:
         calls.append(ref)
         return wfr if ref == "workflow-run:r1" else None
 

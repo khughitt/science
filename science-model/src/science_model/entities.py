@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date
 from enum import StrEnum
 
+from typing import Protocol
+
 from pydantic import BaseModel, Field, model_validator
 
 from science_model.identity import EntityScope, ExternalId
@@ -220,6 +222,12 @@ class Readiness(BaseModel):
     detail: str = ""
 
 
+class ReadinessResolverProtocol(Protocol):
+    """Structural protocol implemented by science-tool's ReadinessResolver."""
+
+    def resolve_ref(self, ref: str) -> Readiness: ...
+
+
 class ProjectEntity(Entity):
     """Entity about the conduct of a science project (tasks, hypotheses, datasets...).
 
@@ -246,7 +254,7 @@ class ProjectEntity(Entity):
     evidence_role: EvidenceRole | None = None
     rival_model_packet: RivalModelPacket | None = None
 
-    def readiness(self, resolver: "ReadinessResolver | None" = None) -> Readiness:  # noqa: F821
+    def readiness(self, resolver: ReadinessResolverProtocol | None = None) -> Readiness:
         """Default readiness: ready iff status == 'done'.
 
         `resolver` is optional context for subclasses that need to traverse
@@ -337,7 +345,7 @@ class DatasetEntity(ProjectEntity):
             raise ValueError(f"{self.id}: origin must be 'external' or 'derived', got {self.origin!r}")
         return self
 
-    def readiness(self, resolver: "ReadinessResolver | None" = None) -> Readiness:  # noqa: F821
+    def readiness(self, resolver: ReadinessResolverProtocol | None = None) -> Readiness:
         if self.origin == "external":
             return self._external_readiness()
         if self.origin == "derived":
@@ -369,7 +377,7 @@ class DatasetEntity(ProjectEntity):
             return Readiness(ready=True, state="available")
         return Readiness(ready=False, state=f"{access.level}, unverified")
 
-    def _derived_readiness(self, resolver: "ReadinessResolver | None") -> Readiness:  # noqa: F821
+    def _derived_readiness(self, resolver: ReadinessResolverProtocol | None) -> Readiness:
         if resolver is None:
             return Readiness(
                 ready=False,
@@ -384,7 +392,7 @@ class DatasetEntity(ProjectEntity):
 class WorkflowRunEntity(ProjectEntity):
     """Workflow run — readiness is `complete` when status == 'complete'."""
 
-    def readiness(self, resolver: "ReadinessResolver | None" = None) -> Readiness:  # noqa: F821
+    def readiness(self, resolver: ReadinessResolverProtocol | None = None) -> Readiness:
         if self.status == "complete":
             return Readiness(ready=True, state="complete")
         return Readiness(ready=False, state=self.status or "unknown")

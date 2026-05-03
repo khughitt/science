@@ -8,13 +8,13 @@ from __future__ import annotations
 
 from typing import Callable
 
-from science_model.entities import Entity, Readiness
+from science_model.entities import ProjectEntity, Readiness
 
 
 class ReadinessResolver:
     """Resolves entity references to Readiness, guarding against cycles."""
 
-    def __init__(self, lookup: Callable[[str], Entity | None]) -> None:
+    def __init__(self, lookup: Callable[[str], ProjectEntity | None]) -> None:
         self._lookup = lookup
         self._visiting: set[str] = set()
         self._cache: dict[str, Readiness] = {}
