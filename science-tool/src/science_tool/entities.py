@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 import yaml
 
+from science_model.entities import ProjectEntity
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
@@ -416,6 +417,25 @@ def list_entities(project_root: Path, kind: str | None = None, status: str | Non
             }
         )
     return sorted(rows, key=lambda row: row["id"])
+
+
+def load_local_entity_index(project_root: Path) -> dict[str, ProjectEntity]:
+    """Return local project entities keyed by canonical id.
+
+    Domain/catalog entities are intentionally excluded: task blockers are
+    project-state dependencies such as tasks, datasets, workflow-runs, and
+    other ProjectEntity subclasses. Cross-project entities are out of scope.
+    """
+    index: dict[str, ProjectEntity] = {}
+    for entity in load_project_sources(project_root.resolve()).entities:
+        if isinstance(entity, ProjectEntity):
+            index[entity.canonical_id] = entity
+    return index
+
+
+def load_local_entity_ids(project_root: Path) -> set[str]:
+    """Return canonical ids for local ProjectEntity records."""
+    return set(load_local_entity_index(project_root))
 
 
 def graph_is_stale(project_root: Path, graph_path: Path) -> bool:
