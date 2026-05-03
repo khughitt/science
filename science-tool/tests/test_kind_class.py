@@ -9,34 +9,20 @@ from science_tool.graph.entity_registry import EntityRegistry
 
 
 def test_with_core_types_classifies_every_kind():
-    """Every kind registered by with_core_types() must have a classification."""
+    """Every kind registered by with_core_types() must have a classification
+    matching the source-of-truth _CORE_KIND_CLASSES dict. Exhaustive equality
+    check rather than spot-check, so dropping or re-classifying any kind fails
+    loudly."""
+    from science_tool.graph.entity_registry import _CORE_KIND_CLASSES
+
     r = EntityRegistry.with_core_types()
     classifications = r.all_kind_classes()
-    # Spot-check a representative sample of each class.
-    assert classifications["hypothesis"] == EntityClass.EPISTEMIC
-    assert classifications["proposition"] == EntityClass.EPISTEMIC
-    assert classifications["observation"] == EntityClass.EPISTEMIC
-    assert classifications["finding"] == EntityClass.EPISTEMIC
-    assert classifications["interpretation"] == EntityClass.EPISTEMIC
-    assert classifications["discussion"] == EntityClass.EPISTEMIC
-    assert classifications["story"] == EntityClass.EPISTEMIC
-    assert classifications["mechanism"] == EntityClass.EPISTEMIC
-
-    assert classifications["task"] == EntityClass.OPERATIONAL
-    assert classifications["dataset"] == EntityClass.OPERATIONAL
-    assert classifications["workflow"] == EntityClass.OPERATIONAL
-    assert classifications["workflow-run"] == EntityClass.OPERATIONAL
-    assert classifications["workflow-step"] == EntityClass.OPERATIONAL
-    assert classifications["data-package"] == EntityClass.OPERATIONAL
-    assert classifications["research-package"] == EntityClass.OPERATIONAL
-    assert classifications["paper"] == EntityClass.OPERATIONAL
-    assert classifications["plan"] == EntityClass.OPERATIONAL
-
-    assert classifications["concept"] == EntityClass.REFERENCE
-    assert classifications["topic"] == EntityClass.REFERENCE
-    assert classifications["article"] == EntityClass.REFERENCE
-    assert classifications["variable"] == EntityClass.REFERENCE
-    assert classifications["inquiry"] == EntityClass.REFERENCE
+    assert set(classifications) == set(_CORE_KIND_CLASSES), (
+        f"missing: {set(_CORE_KIND_CLASSES) - set(classifications)}, "
+        f"extra: {set(classifications) - set(_CORE_KIND_CLASSES)}"
+    )
+    for kind, expected in _CORE_KIND_CLASSES.items():
+        assert classifications[kind] == expected, kind
 
 
 def test_kind_class_lookup_returns_classification():
@@ -71,6 +57,28 @@ def test_register_extension_kind_accepts_explicit_class():
 
     r.register_extension_kind("nat-sys:eco-claim", MyExt, entity_class=EntityClass.EPISTEMIC)
     assert r.kind_class("nat-sys:eco-claim") == EntityClass.EPISTEMIC
+
+
+def test_register_profile_kind_defaults_to_operational():
+    r = EntityRegistry()
+
+    class MyProfileEntity(ProjectEntity):
+        pass
+
+    r.register_profile_kind("local:thing", MyProfileEntity, owner="local")
+    assert r.kind_class("local:thing") == EntityClass.OPERATIONAL
+
+
+def test_register_catalog_kind_defaults_to_reference():
+    from science_model.entities import DomainEntity
+
+    r = EntityRegistry()
+
+    class MyCatalogEntity(DomainEntity):
+        pass
+
+    r.register_catalog_kind("biology:gene-mock", MyCatalogEntity, owner="biology")
+    assert r.kind_class("biology:gene-mock") == EntityClass.REFERENCE
 
 
 def test_register_core_kind_requires_entity_class():
