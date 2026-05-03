@@ -337,6 +337,49 @@ class DatasetEntity(ProjectEntity):
             raise ValueError(f"{self.id}: origin must be 'external' or 'derived', got {self.origin!r}")
         return self
 
+    def readiness(self, resolver: "ReadinessResolver | None" = None) -> Readiness:  # noqa: F821
+        if self.origin == "external":
+            return self._external_readiness()
+        if self.origin == "derived":
+            return self._derived_readiness(resolver)
+        return Readiness(ready=False, state="unknown", detail=f"unknown origin {self.origin!r}")
+
+    def _external_readiness(self) -> Readiness:
+        access = self.access
+        if access is None:
+            # Should be unreachable per invariant #7, but guard anyway.
+            return Readiness(ready=False, state="missing-access-block")
+        if access.availability == "withdrawn":
+            return Readiness(ready=False, state="withdrawn")
+        if access.availability == "embargoed":
+            detail = f"available_after: {access.available_after}" if access.available_after else ""
+            return Readiness(ready=False, state="embargoed", detail=detail)
+        # availability == "available"
+        if access.exception.mode:
+            mode = access.exception.mode
+            rationale = access.exception.rationale
+            if mode == "expanded-to-acquire":
+                return Readiness(ready=False, state="acquiring", detail=rationale)
+            if mode in ("scope-reduced", "substituted"):
+                return Readiness(ready=True, state=f"consumable-via-{mode}", detail=rationale)
+            # Unknown mode — defensive fallthrough for model_construct() bypass; pydantic
+            # Literal validation prevents this path under normal construction.
+            return Readiness(ready=False, state=f"exception:{mode}", detail=rationale)
+        if access.verified:
+            return Readiness(ready=True, state="available")
+        return Readiness(ready=False, state=f"{access.level}, unverified")
+
+    def _derived_readiness(self, resolver: "ReadinessResolver | None") -> Readiness:  # noqa: F821
+        if resolver is None:
+            return Readiness(
+                ready=False,
+                state="unknown",
+                detail="derived dataset readiness requires resolver context",
+            )
+        if self.derivation is None:
+            return Readiness(ready=False, state="missing-derivation-block")
+        return resolver.resolve_ref(self.derivation.workflow_run)
+
 
 class WorkflowRunEntity(ProjectEntity):
     """Workflow run — readiness is `complete` when status == 'complete'."""

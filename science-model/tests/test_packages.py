@@ -19,6 +19,7 @@ from science_model.packages.cells import (
 )
 from science_model.packages.schema import (
     AccessBlock,
+    AccessException,
     CodeExcerpt,
     ProvenanceInput,
     ResearchPackageDescriptor,
@@ -309,3 +310,10 @@ class TestAccessBlockAvailability:
                 availability="available",
                 available_after="2026-Q3",
             )
+
+
+def test_access_exception_rejects_unknown_mode():
+    """Documents the Literal constraint that makes the unknown-mode branch
+    in DatasetEntity._external_readiness unreachable under normal construction."""
+    with pytest.raises(ValidationError, match="mode"):
+        AccessException(mode="invented-mode")
