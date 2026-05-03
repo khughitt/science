@@ -14,27 +14,37 @@ Public surface:
 from __future__ import annotations
 
 from rdflib import Dataset, URIRef
+from rdflib.namespace import PROV
 
+from science_model.entities import EntityClass
 from science_tool.graph.store import CITO_NS, PROJECT_NS, SCI_NS
 
 
-def derive_bears_on_from_typed_edges(dataset: Dataset) -> None:
+def derive_bears_on_from_typed_edges(
+    dataset: Dataset,
+    *,
+    kind_class: dict[str, EntityClass] | None = None,
+) -> None:
     """Emit `bears_on` triples derived from the project's typed relations.
 
-    Reads the knowledge layer; writes new `sci:bearsOn` triples back into the
-    same layer. Idempotent: re-running on a dataset that already contains
-    derived edges does not emit duplicates (rdflib graphs are sets).
+    `kind_class` maps an entity URI (as str) to its EntityClass. It is required
+    for the `mechanism sci:hasParticipant ?p` rule, which only emits `bears_on`
+    when the participant is itself epistemic. Other rules ignore it.
+
+    See module docstring for the full rule list.
 
     Rules:
       ?s sci:tests           ?t  -> ?s bears_on ?t
       ?s cito:supports       ?t  -> ?s bears_on ?t
       ?s cito:disputes       ?t  -> ?s bears_on ?t
       ?s sci:grounds         ?t  -> ?s bears_on ?t
-      ?f sci:groundedBy      ?s  -> ?s bears_on ?f          (inverse)
-      ?c sci:contains        ?m  -> ?m bears_on ?c          (inverse)
-      ?s sci:synthesizes     ?t  -> ?t bears_on ?s          (inverse)
-      ?m sci:hasProposition  ?p  -> ?p bears_on ?m          (inverse)
+      ?f sci:groundedBy      ?s  -> ?s bears_on ?f                       (inverse)
+      ?c sci:contains        ?m  -> ?m bears_on ?c                       (inverse)
+      ?s sci:synthesizes     ?t  -> ?t bears_on ?s                       (inverse)
+      ?m sci:hasProposition  ?p  -> ?p bears_on ?m                       (inverse)
+      ?m sci:hasParticipant  ?p  -> ?p bears_on ?m  iff p is epistemic   (inverse, filtered)
     """
+    kc = kind_class or {}
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 
     direct_predicates: list[URIRef] = [
@@ -55,4 +65,32 @@ def derive_bears_on_from_typed_edges(dataset: Dataset) -> None:
             knowledge.add((s, SCI_NS.bearsOn, o))
     for predicate in inverse_predicates:
         for s, _, o in knowledge.triples((None, predicate, None)):
+            knowledge.add((o, SCI_NS.bearsOn, s))
+
+    # has_participant: emit only when participant is itself epistemic.
+    for s, _, o in knowledge.triples((None, SCI_NS.hasParticipant, None)):
+        if kc.get(str(o)) == EntityClass.EPISTEMIC:
+            knowledge.add((o, SCI_NS.bearsOn, s))
+
+
+def derive_bears_on_from_provenance(
+    dataset: Dataset,
+    *,
+    kind_class: dict[str, EntityClass],
+) -> None:
+    """Emit `bears_on` triples from prov:wasDerivedFrom edges.
+
+    Rule: `?d prov:wasDerivedFrom ?s` -> `?s bears_on ?d` iff `?d` is epistemic.
+    This is how papers/articles enter the dependency graph, since the core
+    profile has no direct paper -> hypothesis edge — paper-to-claim provenance
+    flows through `source_refs`/`evidence_refs` and is materialized as
+    PROV.wasDerivedFrom by `_add_relations` in `materialize.py`.
+    """
+    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    for s, _, o in provenance.triples((None, PROV.wasDerivedFrom, None)):
+        # In materialize.py the *derived* side is the subject of wasDerivedFrom.
+        # If the derived entity is epistemic, the source bears on it.
+        if kind_class.get(str(s)) == EntityClass.EPISTEMIC:
             knowledge.add((o, SCI_NS.bearsOn, s))

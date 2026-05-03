@@ -98,3 +98,56 @@ def test_idempotent():
     derive_bears_on_from_typed_edges(ds)
     second = _bears_on_pairs(ds)
     assert first == second
+
+
+from rdflib.namespace import PROV
+from science_model.entities import EntityClass
+from science_tool.graph.freshness import derive_bears_on_from_provenance
+
+
+def test_provenance_emits_bears_on_for_epistemic_target():
+    """hypothesis prov:wasDerivedFrom article -> article bears_on hypothesis."""
+    ds = _make_dataset_with([])
+    provenance = ds.graph(PROJECT_NS["graph/provenance"])
+    provenance.add((_u("hypothesis/h1"), PROV.wasDerivedFrom, _u("article/lee2026")))
+
+    kind_class = {
+        str(_u("hypothesis/h1")): EntityClass.EPISTEMIC,
+        str(_u("article/lee2026")): EntityClass.REFERENCE,
+    }
+    derive_bears_on_from_provenance(ds, kind_class=kind_class)
+
+    assert (str(_u("article/lee2026")), str(_u("hypothesis/h1"))) in _bears_on_pairs(ds)
+
+
+def test_provenance_skips_non_epistemic_target():
+    """dataset prov:wasDerivedFrom article -> NO bears_on (dataset is operational)."""
+    ds = _make_dataset_with([])
+    provenance = ds.graph(PROJECT_NS["graph/provenance"])
+    provenance.add((_u("dataset/foo"), PROV.wasDerivedFrom, _u("article/lee2026")))
+
+    kind_class = {
+        str(_u("dataset/foo")): EntityClass.OPERATIONAL,
+        str(_u("article/lee2026")): EntityClass.REFERENCE,
+    }
+    derive_bears_on_from_provenance(ds, kind_class=kind_class)
+
+    assert _bears_on_pairs(ds) == set()
+
+
+def test_has_participant_emits_bears_on_for_epistemic_participants_only():
+    """mechanism sci:hasParticipant ?p -> ?p bears_on mechanism iff p is epistemic."""
+    ds = _make_dataset_with([
+        (_u("mechanism/m1"), SCI_NS.hasParticipant, _u("proposition/p1")),
+        (_u("mechanism/m1"), SCI_NS.hasParticipant, _u("concept/c1")),
+    ])
+    kind_class = {
+        str(_u("mechanism/m1")): EntityClass.EPISTEMIC,
+        str(_u("proposition/p1")): EntityClass.EPISTEMIC,
+        str(_u("concept/c1")): EntityClass.REFERENCE,
+    }
+    derive_bears_on_from_typed_edges(ds, kind_class=kind_class)
+
+    pairs = _bears_on_pairs(ds)
+    assert (str(_u("proposition/p1")), str(_u("mechanism/m1"))) in pairs
+    assert (str(_u("concept/c1")), str(_u("mechanism/m1"))) not in pairs
