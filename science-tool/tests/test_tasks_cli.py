@@ -881,3 +881,33 @@ def test_tasks_list_json_includes_blocker_readiness(tmp_path, monkeypatch):
     readiness = blocked[0]["blocked_by_readiness"]
     assert readiness[0]["ref"] == "dataset:foo"
     assert readiness[0]["ready"] is True
+
+
+def test_tasks_show_renders_per_blocker_readiness(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/datasets/embargoed.md",
+        {
+            "id": "dataset:embargoed",
+            "type": "dataset",
+            "title": "E",
+            "status": "active",
+            "origin": "external",
+            "access": {
+                "level": "controlled",
+                "verified": False,
+                "availability": "embargoed",
+                "available_after": "2026-Q3",
+            },
+        },
+    )
+    runner = CliRunner()
+    runner.invoke(main, ["tasks", "add", "T", "--priority", "P2"])
+    runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:embargoed"])
+    result = runner.invoke(main, ["tasks", "show", "t001"])
+    assert result.exit_code == 0, result.output
+    assert "dataset:embargoed" in result.output
+    assert "embargoed" in result.output
+    assert "2026-Q3" in result.output

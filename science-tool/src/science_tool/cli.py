@@ -2981,12 +2981,28 @@ def tasks_list(
 def tasks_show(task_id: str) -> None:
     """Show full details of a task."""
     from science_tool.tasks import find_task_location, render_task
+    from science_tool.tasks_readiness import make_local_resolver
 
     try:
         location = find_task_location(DEFAULT_TASKS_DIR, task_id)
-    except KeyError as e:
-        raise click.ClickException(str(e)) from e
-    click.echo(render_task(location.task))
+    except KeyError as exc:
+        raise click.ClickException(str(exc)) from exc
+    task = location.task
+    click.echo(render_task(task))
+
+    # Append a resolver-enriched readiness section. render_task() already
+    # emitted the raw blocked-by line; suppression would require coupling
+    # render_task to a resolver, but render_task is also the on-disk
+    # serializer and must stay pure.
+    if task.blocked_by:
+        resolver = make_local_resolver()
+        click.echo("\nBlocker readiness:")
+        for ref in task.blocked_by:
+            readiness = resolver.resolve_ref(ref)
+            line = f"  - {ref:40s}  {readiness.state}"
+            if readiness.detail:
+                line += f"  ({readiness.detail})"
+            click.echo(line)
 
 
 @tasks.command("summary")
