@@ -178,6 +178,12 @@ class TaskArchiveLag(TypedDict):
     missing_completed: int
 
 
+class ToolingScaffoldFinding(TypedDict):
+    code: str       # pyproject_missing | science_tool_dep_missing | env_missing | env_path_missing
+    detail: str     # human-readable description
+    fix: str        # suggested remediation command
+
+
 class HealthReport(TypedDict):
     unresolved_refs: list[UnresolvedRef]
     lingering_tags_lines: list[LingeringTagsRecord]
@@ -189,6 +195,7 @@ class HealthReport(TypedDict):
     dataset_anomalies: list[dict]
     archive_lag: TaskArchiveLag
     managed_artifacts: list[dict]
+    tooling_scaffold: list[ToolingScaffoldFinding]
     total_issues: int
 
 
@@ -265,6 +272,7 @@ def build_health_report(project_root: Path) -> HealthReport:
     from science_tool.project_artifacts.health_integration import health_findings as _ma_findings
 
     managed_artifacts = _ma_findings(project_root)
+    tooling_scaffold = collect_tooling_scaffold_findings(project_root)
 
     unresolved_refs = collect_unresolved_refs(project_root)
     lingering_tags_lines = collect_lingering_tags(project_root)
@@ -299,6 +307,7 @@ def build_health_report(project_root: Path) -> HealthReport:
         + len(dataset_anomalies)
         + (1 if archive_lag_total else 0)
         + sum(1 for f in managed_artifacts if f["counts_as_issue"])
+        + len(tooling_scaffold)
     )
 
     return {
@@ -317,8 +326,89 @@ def build_health_report(project_root: Path) -> HealthReport:
         "dataset_anomalies": dataset_anomalies,
         "archive_lag": cast("TaskArchiveLag", archive_lag),
         "managed_artifacts": cast("list[dict]", managed_artifacts),
+        "tooling_scaffold": tooling_scaffold,
         "total_issues": total_issues,
     }
+
+
+def collect_tooling_scaffold_findings(project_root: Path) -> list[ToolingScaffoldFinding]:
+    """Check the project has the canonical science-tool invocation scaffold.
+
+    A compliant project has:
+      - root `pyproject.toml` (so `uv run` resolves a project context)
+      - `science-tool` listed under `[dependency-groups].dev`
+      - `.env` containing `SCIENCE_TOOL_PATH=...`
+
+    Without these, the documented `uv run science-tool <cmd>` shorthand cannot
+    work; users fall back to verbose `uv run --project ...` or `uv run --with ...`
+    forms. See `commands/create-project.md` (pyproject.toml section).
+    """
+    findings: list[ToolingScaffoldFinding] = []
+
+    pyproject_path = project_root / "pyproject.toml"
+    if not pyproject_path.exists():
+        findings.append(
+            {
+                "code": "pyproject_missing",
+                "detail": "No root pyproject.toml — `uv run science-tool ...` cannot resolve.",
+                "fix": "Create pyproject.toml per commands/create-project.md, then `uv add --dev --editable \"$SCIENCE_TOOL_PATH\"`.",
+            }
+        )
+    else:
+        has_dep = False
+        try:
+            text = pyproject_path.read_text(encoding="utf-8")
+            try:
+                import tomllib  # py3.11+
+            except ModuleNotFoundError:  # pragma: no cover
+                import tomli as tomllib  # type: ignore[import-not-found]
+            data = tomllib.loads(text)
+            dev_group = data.get("dependency-groups", {}).get("dev", [])
+            for entry in dev_group:
+                # entries can be strings ("science-tool") or tables; we only need name match
+                if isinstance(entry, str) and entry.split("[")[0].split(">=")[0].split("==")[0].strip() == "science-tool":
+                    has_dep = True
+                    break
+        except Exception as exc:
+            findings.append(
+                {
+                    "code": "pyproject_unreadable",
+                    "detail": f"pyproject.toml could not be parsed: {exc}",
+                    "fix": "Repair pyproject.toml — see commands/create-project.md for canonical shape.",
+                }
+            )
+            has_dep = True  # don't double-report; parsing already failed
+
+        if not has_dep:
+            findings.append(
+                {
+                    "code": "science_tool_dep_missing",
+                    "detail": "pyproject.toml does not list `science-tool` under [dependency-groups].dev.",
+                    "fix": "Run `uv add --dev --editable \"$SCIENCE_TOOL_PATH\"` from the project root.",
+                }
+            )
+
+    env_path = project_root / ".env"
+    if not env_path.exists():
+        findings.append(
+            {
+                "code": "env_missing",
+                "detail": "No .env file — SCIENCE_TOOL_PATH is unset for validate.sh and other tooling.",
+                "fix": "Create .env with `SCIENCE_TOOL_PATH=<absolute-path-to-science-tool>` (see create-project.md).",
+            }
+        )
+    else:
+        env_text = env_path.read_text(encoding="utf-8")
+        if not any(line.strip().startswith("SCIENCE_TOOL_PATH=") for line in env_text.splitlines()):
+            findings.append(
+                {
+                    "code": "env_path_missing",
+                    "detail": ".env exists but does not define SCIENCE_TOOL_PATH.",
+                    "fix": "Add `SCIENCE_TOOL_PATH=<absolute-path-to-science-tool>` to .env.",
+                }
+            )
+
+    return findings
 
 
 def _coverage_metric(*, numerator: int, denominator: int) -> CoverageMetric:

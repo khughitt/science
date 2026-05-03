@@ -2915,6 +2915,8 @@ def health_command(project_root: Path, output_format: str) -> None:
     managed_artifacts = report.get("managed_artifacts") or []
     managed_artifacts_issue_count = sum(1 for f in managed_artifacts if f.get("counts_as_issue"))
 
+    tooling_scaffold = report.get("tooling_scaffold") or []
+
     total_issues = (
         len(report["unresolved_refs"])
         + len(report["lingering_tags_lines"])
@@ -2925,6 +2927,7 @@ def health_command(project_root: Path, output_format: str) -> None:
         + len(report.get("dataset_anomalies") or [])
         + (1 if archive_lag_total else 0)
         + managed_artifacts_issue_count
+        + len(tooling_scaffold)
     )
     if total_issues == 0:
         click.echo("Project is clean — no issues found.")
@@ -2956,6 +2959,19 @@ def health_command(project_root: Path, output_format: str) -> None:
             "\n[bold]Next:[/bold] run "
             "[cyan]science-tool project artifacts check[/cyan] / "
             "[cyan]update[/cyan] / [cyan]install[/cyan] per status."
+        )
+
+    if tooling_scaffold:
+        ts_table = Table(title=f"Tooling scaffold ({len(tooling_scaffold)})")
+        ts_table.add_column("Code", style="bold")
+        ts_table.add_column("Detail")
+        ts_table.add_column("Fix")
+        for row in tooling_scaffold:
+            ts_table.add_row(row["code"], row["detail"], row["fix"])
+        console.print(ts_table)
+        console.print(
+            "\n[bold]Next:[/bold] follow the suggested fix for each row — "
+            "see [cyan]commands/create-project.md[/cyan] for the canonical scaffold."
         )
 
     if report["unresolved_refs"]:

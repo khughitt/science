@@ -29,8 +29,8 @@ artifacts:
       requires_clean_worktree: true
       commit_default: true
       transaction_kind: temp_commit
-    version: '2026.04.26.5'
-    current_hash: 87b571ea042e804dee44fce39a1b3336e6c50be041d07ddc3c5c0a0c5389d2df
+    version: '2026.05.03.1'
+    current_hash: a4f191308ca95899e096792a800b46f5d6df30f869728c31b30243d07b4a3ecf
     previous_hashes:
       - version: '2026.04.26'
         hash: f4596de3e9b2696066097621d5aef5606f247d144c5530409433427949c830d1
@@ -42,6 +42,8 @@ artifacts:
         hash: 37aaefd4a45a70987d663f261bc82f4b8714088999a3a2ef30a27af95b2d499a
       - version: '2026.04.26.4'
         hash: 79d1d8ae81457ac67f9fe3a588332630db9d589612d4888bf115395a6ffd4d4c
+      - version: '2026.04.26.5'
+        hash: 87b571ea042e804dee44fce39a1b3336e6c50be041d07ddc3c5c0a0c5389d2df
     migrations:
       - from: '2026.04.26'
         to: '2026.04.26.1'
@@ -68,6 +70,11 @@ artifacts:
         kind: byte_replace
         summary: 'Resolve frontmatter cross-references against all root specs.'
         steps: []
+      - from: '2026.04.26.5'
+        to: '2026.05.03.1'
+        kind: byte_replace
+        summary: 'Add Section 0 tooling-scaffold check (pyproject.toml, .env, uv-run smoke test).'
+        steps: []
     changelog:
       '2026.04.26': Initial managed artifact (port of scripts/validate.sh + hook infrastructure).
       '2026.04.26.1': 'Audit-surfaced six-fix batch (Plan #7 of conventions audit).'
@@ -75,3 +82,4 @@ artifacts:
       '2026.04.26.3': 'Replace deprecated `type:` task-field check with `aspects:` per 2026-04-19-entity-aspects-design.md.'
       '2026.04.26.4': 'Keep frontmatter cross-reference warning counts in the parent shell.'
       '2026.04.26.5': 'Resolve frontmatter cross-references against root specs as well as hypothesis specs.'
+      '2026.05.03.1': 'Add Section 0 tooling-scaffold check: warns when pyproject.toml is missing, lacks the science-tool dev dep, or .env lacks SCIENCE_TOOL_PATH; runs a `uv run science-tool --help` smoke test when uv is available.'

@@ -38,6 +38,13 @@ def _write_common_files(root: Path, profile: str) -> None:
     )
     (root / "AGENTS.md").write_text("# Operational Guide\n", encoding="utf-8")
     (root / "CLAUDE.md").write_text("@AGENTS.md\n", encoding="utf-8")
+    # Tooling scaffold (Section 0): pyproject.toml + .env keep the validate run silent.
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "demo-science-tools"\nversion = "0.1.0"\n'
+        '[dependency-groups]\ndev = ["science-tool"]\n',
+        encoding="utf-8",
+    )
+    (root / ".env").write_text("SCIENCE_TOOL_PATH=/dev/null\n", encoding="utf-8")
     (root / "tasks").mkdir(parents=True)
     (root / "tasks" / "active.md").write_text("<!-- tasks -->\n", encoding="utf-8")
     (root / "specs").mkdir(parents=True)
@@ -62,6 +69,9 @@ def _validate_env(*, extra_path: Path | None = None) -> dict[str, str]:
         path_parts.append(str(extra_path))
     path_parts.extend(["/usr/bin", "/bin", "/usr/sbin", "/sbin"])
     env["PATH"] = ":".join(path_parts)
+    # Tests stub `science-tool` on PATH; skip dotenv sourcing so the placeholder
+    # SCIENCE_TOOL_PATH in the test fixture's .env doesn't override the stub.
+    env["SCIENCE_VALIDATE_SKIP_DOTENV"] = "1"
     return env
 
 

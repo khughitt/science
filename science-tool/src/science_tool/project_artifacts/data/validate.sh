@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.04.26.5
-# science-managed-source-sha256: 87b571ea042e804dee44fce39a1b3336e6c50be041d07ddc3c5c0a0c5389d2df
+# science-managed-version: 2026.05.03.1
+# science-managed-source-sha256: a4f191308ca95899e096792a800b46f5d6df30f869728c31b30243d07b4a3ecf
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -166,6 +166,43 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 # Hook point: pre_validation. Fires after helpers and banner are set up,
 # before any canonical-section runs.
 dispatch_hook "pre_validation"
+
+# ─── 0. Tooling scaffold ──────────────────────────────────────────
+# Self-contained bash check (no dependency on science-tool itself, so this
+# still fires when the scaffold is broken). Mirrors the static portion of
+# `science-tool health`'s tooling_scaffold check.
+echo ""
+echo "Checking tooling scaffold..."
+
+if [ ! -f "pyproject.toml" ]; then
+    warn "pyproject.toml missing — \`uv run science-tool ...\` cannot resolve (fix: see commands/create-project.md, then \`uv add --dev --editable \"\$SCIENCE_TOOL_PATH\"\`)"
+else
+    info "pyproject.toml present"
+    if ! grep -q 'science-tool' pyproject.toml; then
+        warn "pyproject.toml does not reference science-tool (fix: \`uv add --dev --editable \"\$SCIENCE_TOOL_PATH\"\`)"
+    else
+        info "  science-tool reference present"
+    fi
+fi
+
+if [ ! -f ".env" ]; then
+    warn ".env missing — SCIENCE_TOOL_PATH is unset (fix: create .env with \`SCIENCE_TOOL_PATH=<absolute-path-to-science-tool>\`)"
+elif ! grep -q '^SCIENCE_TOOL_PATH=' .env; then
+    warn ".env exists but does not define SCIENCE_TOOL_PATH (fix: add \`SCIENCE_TOOL_PATH=<absolute-path>\` to .env)"
+else
+    info ".env defines SCIENCE_TOOL_PATH"
+fi
+
+# Smoke test: confirm `uv run science-tool` resolves. Skipped if `uv` is
+# absent (e.g. minimal CI image) or if the project hasn't been synced yet
+# (no `.venv`) — the static checks above already cover the scaffold contract.
+if [ -d ".venv" ] && command -v uv >/dev/null 2>&1; then
+    if uv run --quiet science-tool --help >/dev/null 2>&1; then
+        info "  \`uv run science-tool --help\` succeeds"
+    else
+        warn "\`uv run science-tool --help\` failed — scaffold may be incomplete or stale (fix: run \`uv run science-tool health\` for a structured diagnosis)"
+    fi
+fi
 
 # ─── 1. Project manifest ───────────────────────────────────────────
 echo ""

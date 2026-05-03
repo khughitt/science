@@ -41,6 +41,19 @@ bash validate.sh --verbose
   repo, invisible to other agents and to fresh clones, and they fight
   the science task system. Use `science-tool tasks` exclusively for
   task management on this project.
+- Common invocations (run from the project root):
+
+  ```bash
+  uv run science-tool tasks list
+  uv run science-tool tasks add "TITLE" --priority P2 --description "..."
+  uv run science-tool tasks done <task_id> --note "..."
+  ```
+
+  The bare `uv run science-tool ...` form requires the project's root
+  `pyproject.toml` to list `science-tool` as a dev dependency (see the
+  create-project / import-project commands). If that fails, run
+  `uv run science-tool health` — it surfaces missing scaffold pieces
+  with concrete fix commands.
 - <other bullets — how tasks are run, where commits go, etc.>
 
 ## Known issues / nuances
