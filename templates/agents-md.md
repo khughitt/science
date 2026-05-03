@@ -33,7 +33,15 @@ bash validate.sh --verbose
 
 ## Task execution
 
-- <bullets — how tasks are run, where commits go, etc.>
+- Tasks live in `tasks/active.md`, managed by `science-tool tasks` (or
+  the `/science:tasks` slash command). Completed/retired tasks archive
+  to `tasks/done/YYYY-MM.md`.
+- **Do not use Claude Code's built-in `TaskCreate` / `TaskUpdate` /
+  `TaskList` tools.** They create a parallel task store outside the
+  repo, invisible to other agents and to fresh clones, and they fight
+  the science task system. Use `science-tool tasks` exclusively for
+  task management on this project.
+- <other bullets — how tasks are run, where commits go, etc.>
 
 ## Known issues / nuances
 

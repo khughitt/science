@@ -7,6 +7,15 @@ description: Manage research and development tasks — add, complete, defer, ret
 Manage the project task queue in `tasks/active.md`.
 `$ARGUMENTS` specifies the action (add, done, defer, retire, list, show, summary) and any parameters.
 
+> **Do not use Claude Code's built-in `TaskCreate` / `TaskUpdate` /
+> `TaskList` tools** for science projects. The science task system is
+> the authoritative store: it lives in the repo (`tasks/active.md`),
+> survives clones, and integrates with the knowledge graph via
+> `--related`. The Claude-Code task tools maintain a parallel,
+> session-scoped store that is invisible to other agents and creates
+> drift between what the conversation thinks is the task list and what
+> the project actually tracks.
+
 ## Setup
 
 Read `tasks/active.md` if it exists. If `tasks/` directory doesn't exist, create it.
