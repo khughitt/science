@@ -160,3 +160,54 @@ Land the long-term ideal articulated as Q5 in the 2026-04-25 synthesis-shape inv
 Phase 2 of `scripts/migrate_downstream_conventions.py` (shape-driven rules, landed `fe8d974`) is the first concrete step toward this; it should be cited as the prior art when planning the declarative migration shape.
 
 Surfaced by: 2026-04-26 brainstorm of the managed-artifact long-term design (Q5 referenced from `docs/audits/downstream-project-conventions/synthesis-shape-investigation-2026-04-25.md` and `docs/plans/2026-04-25-rollout-and-migration-handoff.md` decision #6).
+
+## [t010] Epistemic dependency graph — Phase 1 (taxonomy + bears_on + freshness)
+- priority: P2
+- status: proposed
+- aspects: [software-development, framework-design]
+- related: [hypothesis:h01-stochastic-revisiting]
+- created: 2026-05-03
+
+Implement Phase 1 of `docs/plans/2026-05-03-epistemic-dependency-graph-design.md`: explicit epistemic/operational/reference entity taxonomy on `EntityKind`, the `bears_on` relation kind with auto-derivation rules, and per-entity `EpistemicFreshness` state with a graph-build propagation step.
+
+Companion to the typed-entity-blockers work (`feature/typed-entity-blockers` branch). The two land independently — typed-blockers covers forward operational dependencies ("why can't this task proceed?"), this covers backward epistemic dependencies ("when upstream X changes, what beliefs downstream need review?"). Together they make the project knowledge graph live rather than static.
+
+Anchors in existing project decisions: D-003 (continuous beliefs in (0,1), never 0 or 1) and H01's validated stochastic-revisiting finding (`[t002]`). Phase 1 here is the structural surface those decisions need; Phase 2 (`[t011]`) is the behavioral payoff.
+
+Plan to be written in implementation form (task-by-task) when this is picked up; the design sketch is the input. Quality gates: ruff + pyright + pytest + validate.sh; downstream projects unmodified.
+
+## [t011] Epistemic dependency graph — Phase 2 (weighted sampling for attention)
+- priority: P2
+- status: deferred
+- aspects: [software-development, framework-design, hypothesis-testing]
+- related: [hypothesis:h01-stochastic-revisiting]
+- blocked_by: [t010]
+- created: 2026-05-03
+
+Phase 2 of `docs/plans/2026-05-03-epistemic-dependency-graph-design.md`: replace deterministic top-N selection in `science:next-steps`, `science:curate`, `science:big-picture`, and task-prioritization sweeps with **weighted random sampling** over candidate epistemic entities. Weight function uses observable graph properties (incoming `bears_on` count, days-since-review, freshness state, evidence-imbalance skew) plus an `ε` floor so nothing collapses to zero — operationalizing D-003 at the attention layer.
+
+This is the entity-graph-layer implementation of H01's validated mechanism: the H01 simulator (`[t002]`) showed exploration-based policies strictly beat hard-gating on noisy evidence, with UCB-style uncertainty-guided exploration outperforming pure Thompson sampling. Phase-2 weights should be proxies for uncertainty/contestedness, not noise — track that interpretation refinement.
+
+**Crucial constraint:** weights are derived from observable graph state, not from LLM-estimated probabilities. The continuous-belief framing manifests as continuous *attention probability*, not as fake-precise posteriors stored on entities.
+
+Blocked on `[t010]` because there is nothing meaningful to sample weights from until `bears_on` and `EpistemicFreshness` exist. Tracked here so the philosophical motivation isn't lost during Phase-1 implementation.
+
+Surfaced by: 2026-05-03 design discussion on continuous-belief flow / hard-gate brittleness in pre-registration semantics.
+
+## [t012] Pre-registration semantics recast (epistemic vs operational targets)
+- priority: P2
+- status: proposed
+- aspects: [skills, framework-design]
+- related: [hypothesis:h01-stochastic-revisiting]
+- created: 2026-05-03
+
+Update `science:pre-register` and `science:interpret-results` skills (and the project-level docs `docs/claim-and-evidence-model.md`, `docs/proposition-and-evidence-model.md`) to reflect the recast articulated in `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` § Part 4: a pre-registration over an *operational* claim ("we will run pipeline P with params X before unblinding") stays binary and gating; a pre-reg over an *epistemic* claim ("if we observe Y we will treat hypothesis H as supported") becomes evidence input to H's standing rather than a verdict on H.
+
+Zero schema change to pre-reg entities. Behavioral changes:
+- `science:pre-register` prompts the user to identify whether the target is operational or epistemic, and frames the commitment language accordingly.
+- `science:interpret-results` reads the pre-reg's commitment, evaluates the result against it, and emits a `bears_on` edge into the epistemic target — weighted by pre-reg commitment, not as a binary verdict.
+- Skill prose explicitly drops "kill switch" framing for null results against epistemic targets.
+
+Independent of `[t010]`/`[t011]`: can land before, during, or after the code changes since it touches only skills and prose. Do *not* land before downstream projects (myeloma, natural-systems) have a chance to surface objections — the recast changes how their existing pre-regs are interpreted.
+
+Surfaced by: 2026-05-03 design discussion on continuous-belief flow.
