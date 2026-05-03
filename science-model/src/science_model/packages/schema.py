@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ResourceSchema(BaseModel):
@@ -97,6 +97,8 @@ class AccessBlock(BaseModel):
     """External dataset access verification gate state."""
 
     level: Literal["public", "registration", "controlled", "commercial", "mixed"]
+    availability: Literal["available", "embargoed", "withdrawn"] = "available"
+    available_after: str = ""
     verified: bool
     verification_method: Literal["", "retrieved", "credential-confirmed"] = ""
     last_reviewed: str = ""
@@ -104,6 +106,14 @@ class AccessBlock(BaseModel):
     source_url: str = ""
     credentials_required: str = ""
     exception: AccessException = Field(default_factory=AccessException)
+
+    @model_validator(mode="after")
+    def _validate_availability(self) -> "AccessBlock":
+        if self.available_after and self.availability != "embargoed":
+            raise ValueError(
+                "available_after may only be set when availability == 'embargoed'"
+            )
+        return self
 
 
 class DerivationBlock(BaseModel):
