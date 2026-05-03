@@ -221,8 +221,28 @@ def build_entity_markdown(
         "created": today.isoformat(),
         "updated": today.isoformat(),
     }
-    body = f"# {title}\n\n## Summary\n\n\n## Notes\n"
+    body = _entity_body_template(kind, title)
     return "---\n" + _dump_frontmatter(frontmatter) + "---\n" + body
+
+
+# Body templates per entity kind. Discussion uses the canonical sections expected
+# by the science:discuss skill (fb-2026-04-30-001) so the shell created here is
+# usable as-is. Other kinds keep the generic Summary/Notes shape.
+_DISCUSSION_BODY_SECTIONS: tuple[str, ...] = (
+    "Focus",
+    "Current Position",
+    "Critical Analysis",
+    "Evidence Needed",
+    "Prioritized Follow-Ups",
+    "Synthesis",
+)
+
+
+def _entity_body_template(kind: str, title: str) -> str:
+    if kind == "discussion":
+        sections = "\n\n".join(f"## {name}\n" for name in _DISCUSSION_BODY_SECTIONS)
+        return f"# {title}\n\n{sections}\n"
+    return f"# {title}\n\n## Summary\n\n\n## Notes\n"
 
 
 def create_entity(

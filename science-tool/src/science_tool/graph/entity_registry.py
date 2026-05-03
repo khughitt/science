@@ -82,6 +82,7 @@ class EntityRegistry:
             "validation-report",
             "unknown",
             "spec",
+            "curation-sweep",
         ):
             r.register_core_kind(kind, ProjectEntity)
         return r

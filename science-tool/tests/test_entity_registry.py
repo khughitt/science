@@ -36,6 +36,13 @@ def test_generic_kinds_default_to_project_entity() -> None:
     assert registry.resolve("topic") is ProjectEntity
 
 
+def test_curation_sweep_kind_registered() -> None:
+    """fb-2026-05-01-007: curation-sweep ledgers must resolve so health/inventory
+    don't emit skip-noise on every run."""
+    registry = EntityRegistry.with_core_types()
+    assert registry.resolve("curation-sweep") is ProjectEntity
+
+
 def test_mechanism_kind_resolves_to_typed_entity() -> None:
     registry = EntityRegistry.with_core_types()
     assert registry.resolve("mechanism") is MechanismEntity

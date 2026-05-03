@@ -17,7 +17,10 @@ from science_tool.curate.agents_md import AgentsMdDigestState, collect_agents_md
 ArtifactClass: TypeAlias = str
 
 _RECENT_DAYS = 7
+_RECENT_TOP_K = 20
 _LONG_IDLE_DAYS = 30
+_EMERGENT_THREADS_PATH = Path("doc/reports/synthesis/_emergent-threads.md")
+_EMERGENT_THREADS_FRESH_DAYS = 30
 _RELATED_CLASSES = {"hypothesis", "interpretation", "paper", "question"}
 _SOURCE_REF_CLASSES = {"interpretation", "paper"}
 _DOC_KIND_BY_DIR = {
@@ -64,6 +67,7 @@ class CandidateSignals(BaseModel):
     no_outbound_links: list[str] = Field(default_factory=list)
     recently_modified: list[str] = Field(default_factory=list)
     long_idle: list[str] = Field(default_factory=list)
+    no_frontmatter_files: list[str] = Field(default_factory=list)
 
 
 class CurationInventory(BaseModel):
@@ -74,8 +78,20 @@ class CurationInventory(BaseModel):
     agents_md: AgentsMdDigestState | None = None
 
 
-def collect_inventory(project_root: Path, today: date | None = None) -> CurationInventory:
-    """Collect a deterministic inventory of curated project artifacts."""
+def collect_inventory(
+    project_root: Path,
+    today: date | None = None,
+    *,
+    recent_days: int = _RECENT_DAYS,
+    recent_top_k: int | None = _RECENT_TOP_K,
+) -> CurationInventory:
+    """Collect a deterministic inventory of curated project artifacts.
+
+    ``recently_modified`` over-emits in busy projects (fb-2026-05-01-005). Two
+    knobs let callers shape the signal: ``recent_days`` tightens the window;
+    ``recent_top_k`` caps the result to the K most-recently-modified entries
+    (set to ``None`` to disable the cap).
+    """
     project_root = Path(project_root)
     today = today or datetime.now(tz=timezone.utc).date()
 
@@ -83,6 +99,14 @@ def collect_inventory(project_root: Path, today: date | None = None) -> Curation
     candidate_signals = CandidateSignals()
 
     for path in _collect_markdown_paths(project_root):
+        rel_path = path.relative_to(project_root)
+        # Surface markdown files in known doc roots that lack YAML frontmatter
+        # so curation can catch drift the inventory would otherwise hide
+        # (fb-2026-05-01-002). _has_frontmatter is independent of the artifact
+        # parser so we don't depend on its tolerance for empty fm.
+        if _markdown_artifact_class(rel_path) is not None and not _has_frontmatter(path):
+            candidate_signals.no_frontmatter_files.append(str(rel_path))
+            continue
         record = _record_markdown(project_root, path, today)
         if record is None:
             continue
@@ -100,19 +124,33 @@ def collect_inventory(project_root: Path, today: date | None = None) -> Curation
     records.sort(key=lambda record: record.path)
     artifacts = records
 
+    # If a fresh _emergent-threads.md exists, defer to its orphan_ids: any id
+    # already enumerated there is absorbed into the synthesis and need not be
+    # re-flagged by missing_source_refs (fb-2026-05-01-004).
+    threads_orphans = _load_emergent_threads_orphans(project_root, today)
+    if threads_orphans:
+        id_for_path = {a.path: a.id for a in records}
+        candidate_signals.missing_source_refs = [
+            p for p in candidate_signals.missing_source_refs
+            if id_for_path.get(p) not in threads_orphans
+        ]
+
     artifact_counts: dict[str, int] = {}
     for artifact in artifacts:
         artifact_counts[artifact.artifact_class] = artifact_counts.get(artifact.artifact_class, 0) + 1
 
     modified_lookup = {artifact.path: artifact.modified_days_ago for artifact in artifacts}
-    candidate_signals.recently_modified = sorted(
+    recently_modified = sorted(
         [
             artifact.path
             for artifact in artifacts
-            if artifact.modified_days_ago is not None and artifact.modified_days_ago <= _RECENT_DAYS
+            if artifact.modified_days_ago is not None and artifact.modified_days_ago <= recent_days
         ],
         key=lambda path: (modified_lookup[path] or 0, path),
     )
+    if recent_top_k is not None:
+        recently_modified = recently_modified[:recent_top_k]
+    candidate_signals.recently_modified = recently_modified
     candidate_signals.long_idle = sorted(
         [
             artifact.path
@@ -121,6 +159,7 @@ def collect_inventory(project_root: Path, today: date | None = None) -> Curation
         ],
         key=lambda path: (modified_lookup[path] or 0, path),
     )
+    candidate_signals.no_frontmatter_files.sort()
 
     agents_md_state = collect_agents_md_state(project_root)
     return CurationInventory(
@@ -234,6 +273,33 @@ def _count_entries(value: object) -> int:
     if isinstance(value, list):
         return len(value)
     return 1
+
+
+def _load_emergent_threads_orphans(project_root: Path, today: date) -> set[str]:
+    """Return orphan_ids from a fresh _emergent-threads.md, or empty set."""
+    path = project_root / _EMERGENT_THREADS_PATH
+    if not path.is_file():
+        return set()
+    age = _modified_days_ago(path, today)
+    if age is None or age > _EMERGENT_THREADS_FRESH_DAYS:
+        return set()
+    fm_body = parse_frontmatter(path)
+    if fm_body is None:
+        return set()
+    fm, _body = fm_body
+    raw = fm.get("orphan_ids")
+    if not isinstance(raw, list):
+        return set()
+    return {str(item) for item in raw if isinstance(item, str)}
+
+
+def _has_frontmatter(path: Path) -> bool:
+    """Return True iff *path* opens with a YAML frontmatter delimiter."""
+    if not path.is_file():
+        return False
+    with path.open("r", encoding="utf-8") as fh:
+        first = fh.read(3)
+    return first == "---"
 
 
 def _modified_days_ago(path: Path, today: date) -> int | None:

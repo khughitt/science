@@ -118,6 +118,21 @@ def test_audit_to_json_is_stable(tmp_path: Path) -> None:
     json.dumps(as_dict)  # round-trip
 
 
+def test_audit_cli_empty_project_exits_zero(tmp_path: Path) -> None:
+    """fb-2026-05-01-001: software-profile project with no dag: block and no edges.yaml."""
+    from click.testing import CliRunner
+    from science_tool.dag.cli import audit_cmd
+
+    (tmp_path / "science.yaml").write_text("profile: software\n")
+    runner = CliRunner()
+    result = runner.invoke(audit_cmd, ["--json", "--project", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    # No DAGs were configured or discovered → empty validation/staleness.
+    assert payload["validation"]["ok"] is True
+    assert payload["mutations"] == []
+
+
 def test_audit_smoke_on_mm30_fixture() -> None:
     """Real mm30 fixture runs end-to-end without error."""
     paths = DagPaths(

@@ -12,7 +12,12 @@ from typing import Protocol
 class Snapshot(Protocol):
     def take(self) -> None: ...
     def restore(self) -> None: ...
-    def discard(self, *, commit_message: str | None = None) -> None: ...
+    def discard(
+        self,
+        *,
+        commit_message: str | None = None,
+        commit_paths: list[Path] | None = None,
+    ) -> None: ...
 
 
 class TempCommitSnapshot:
@@ -71,7 +76,12 @@ class TempCommitSnapshot:
         self._git("reset", "--soft", self._original_head)
         self._consumed = True
 
-    def discard(self, *, commit_message: str | None = None) -> None:
+    def discard(
+        self,
+        *,
+        commit_message: str | None = None,
+        commit_paths: list[Path] | None = None,
+    ) -> None:
         if self._consumed:
             raise RuntimeError("snapshot already restored or discarded")
         if self._snapshot_sha is None or self._original_head is None:
@@ -80,8 +90,17 @@ class TempCommitSnapshot:
         # has the migration's mutations.
         self._git("reset", "--soft", self._original_head)
         if commit_message is not None:
-            # Stage the migration's mutations on top of the pre-take index.
-            self._git("add", "-A")
+            if commit_paths is None:
+                # Legacy path: stage every worktree change. Used when callers
+                # cannot enumerate the artifact-owned paths.
+                self._git("add", "-A")
+            else:
+                # Stage only the artifact's own paths so unrelated dirty paths
+                # the user already had in their worktree are not swept into the
+                # artifact commit (fb-2026-04-27-001).
+                self._git("reset", "-q", "HEAD", "--", ".")
+                rels = [str(p) for p in commit_paths]
+                self._git("add", "-A", "--", *rels)
             self._git("commit", "-q", "-m", commit_message)
         self._consumed = True
 
@@ -129,7 +148,12 @@ class ManifestSnapshot:
         self._cleanup()
         self._consumed = True
 
-    def discard(self, *, commit_message: str | None = None) -> None:
+    def discard(
+        self,
+        *,
+        commit_message: str | None = None,
+        commit_paths: list[Path] | None = None,
+    ) -> None:
         if self._consumed:
             raise RuntimeError("snapshot already restored or discarded")
         # No-op for manifest snapshots; the canonical commit (if any) is the

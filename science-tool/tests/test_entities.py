@@ -165,6 +165,32 @@ def test_build_entity_markdown_uses_canonical_frontmatter_and_body() -> None:
     assert "## Notes" in text
 
 
+def test_build_entity_markdown_for_discussion_uses_canonical_sections() -> None:
+    """fb-2026-04-30-001: discussion bodies must match the science:discuss skill's
+    canonical sections (Focus, Current Position, Critical Analysis, Evidence Needed,
+    Prioritized Follow-Ups, Synthesis) so the shell is usable as-is."""
+    text = build_entity_markdown(
+        kind="discussion",
+        entity_id="discussion:d-2026-05-03-test",
+        title="Test discussion",
+        status="active",
+        related=[],
+        source_refs=[],
+        today=date(2026, 5, 3),
+    )
+    for section in (
+        "## Focus",
+        "## Current Position",
+        "## Critical Analysis",
+        "## Evidence Needed",
+        "## Prioritized Follow-Ups",
+        "## Synthesis",
+    ):
+        assert section in text, f"discussion shell missing canonical section {section!r}"
+    assert "## Summary" not in text
+    assert "## Notes" not in text
+
+
 def test_append_note_to_body_creates_peer_notes_section() -> None:
     body = "# Title\n\n## Summary\n\nBody."
     updated = append_note_to_body(body, "- 2026-04-28: Clarified.")

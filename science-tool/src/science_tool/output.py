@@ -17,9 +17,13 @@ def emit_query_rows(
     title: str,
     columns: list[tuple[str, str]],
     rows: Sequence[Mapping[str, Any]],
+    meta: Mapping[str, Any] | None = None,
 ) -> None:
     if output_format == "json":
-        click.echo(json.dumps({"format": "json", "rows": rows}, indent=2))
+        payload: dict[str, Any] = {"format": "json", "rows": list(rows)}
+        if meta is not None:
+            payload["meta"] = dict(meta)
+        click.echo(json.dumps(payload, indent=2))
         return
 
     table = Table(title=title)

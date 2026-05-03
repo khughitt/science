@@ -130,6 +130,50 @@ def test_update_allow_dirty_proceeds_when_no_conflict(project_with_stale_install
     assert result.exit_code == 0, result.output
 
 
+def test_update_allow_dirty_does_not_sweep_unrelated_paths(project_with_stale_install: Path) -> None:
+    """fb-2026-04-27-001: --allow-dirty must commit only artifact-owned paths.
+
+    Pre-existing dirty paths the user had in their worktree must remain
+    uncommitted so the user can stage them in a separate, honest commit.
+    """
+    project = project_with_stale_install
+    (project / "unrelated.txt").write_text("dirty", encoding="utf-8")
+    (project / "subdir").mkdir(exist_ok=True)
+    (project / "subdir" / "another.md").write_text("also dirty", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "project",
+            "artifacts",
+            "update",
+            "validate.sh",
+            "--project-root",
+            str(project),
+            "--allow-dirty",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    # The artifact commit must touch only artifact-owned paths.
+    last = subprocess.run(
+        ["git", "show", "--name-only", "--pretty=", "HEAD"],
+        cwd=project, capture_output=True, text=True, check=True,
+    ).stdout.split()
+    assert "validate.sh" in last
+    assert "unrelated.txt" not in last, f"unrelated path was swept into artifact commit: {last}"
+    assert "subdir/another.md" not in last, f"unrelated path was swept into artifact commit: {last}"
+
+    # Unrelated paths must still be present in the worktree as dirty.
+    status = subprocess.run(
+        ["git", "status", "--porcelain", "-uall"],
+        cwd=project, capture_output=True, text=True, check=True,
+    ).stdout
+    assert "unrelated.txt" in status
+    assert "subdir/another.md" in status
+
+
 def test_update_allow_dirty_refuses_on_conflict(project_with_stale_install: Path) -> None:
     # Modify the artifact path itself (conflicts).
     (project_with_stale_install / "validate.sh").write_text("dirty content", encoding="utf-8")

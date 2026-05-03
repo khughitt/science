@@ -178,6 +178,80 @@ def test_collect_inventory_tracks_counts_and_candidate_signals(curated_project: 
     assert knowledge_source.source_refs_count == 1
 
 
+def test_collect_inventory_defers_to_emergent_threads_orphans(curated_project: Path) -> None:
+    """fb-2026-05-01-004: a fresh _emergent-threads.md suppresses missing_source_refs
+    for ids already enumerated there."""
+    threads = curated_project / "doc/reports/synthesis/_emergent-threads.md"
+    threads.parent.mkdir(parents=True, exist_ok=True)
+    threads.write_text(
+        "---\n"
+        "orphan_ids:\n"
+        "  - interpretation:i1\n"
+        "---\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+    _set_mtime(threads, date(2026, 4, 21))
+
+    inventory = collect_inventory(curated_project, today=date(2026, 4, 21))
+    # Without the deferral, doc/interpretations/i1.md would appear here.
+    assert inventory.candidate_signals.missing_source_refs == []
+
+
+def test_collect_inventory_ignores_stale_emergent_threads(curated_project: Path) -> None:
+    """fb-2026-05-01-004: a stale _emergent-threads.md (> 30 days old) does NOT suppress."""
+    threads = curated_project / "doc/reports/synthesis/_emergent-threads.md"
+    threads.parent.mkdir(parents=True, exist_ok=True)
+    threads.write_text(
+        "---\norphan_ids:\n  - interpretation:i1\n---\n",
+        encoding="utf-8",
+    )
+    _set_mtime(threads, date(2026, 1, 1))  # >30 days before 2026-04-21
+
+    inventory = collect_inventory(curated_project, today=date(2026, 4, 21))
+    assert inventory.candidate_signals.missing_source_refs == ["doc/interpretations/i1.md"]
+
+
+def test_collect_inventory_recent_top_k_caps_recently_modified(curated_project: Path) -> None:
+    """fb-2026-05-01-005: recent_top_k caps recently_modified to the K most-recent entries."""
+    inventory = collect_inventory(curated_project, today=date(2026, 4, 21), recent_top_k=2)
+    assert len(inventory.candidate_signals.recently_modified) == 2
+    # Ensure the cap kept the most-recent (smallest modified_days_ago).
+    assert inventory.candidate_signals.recently_modified == [
+        "doc/questions/q1.md",
+        "tasks/active.md#t001",
+    ]
+
+
+def test_collect_inventory_recent_days_tightens_window(curated_project: Path) -> None:
+    """fb-2026-05-01-005: recent_days tightens the window so noise drops fast."""
+    inventory = collect_inventory(
+        curated_project, today=date(2026, 4, 21), recent_days=1, recent_top_k=None
+    )
+    # With a 1-day window, only artifacts modified within 1 day qualify.
+    assert inventory.candidate_signals.recently_modified == [
+        "doc/questions/q1.md",
+        "tasks/active.md#t001",
+    ]
+
+
+def test_collect_inventory_surfaces_frontmatter_less_files(curated_project: Path) -> None:
+    """fb-2026-05-01-002: markdown files in known doc roots without frontmatter
+    must surface in candidate_signals.no_frontmatter_files so curation catches drift."""
+    _write(
+        curated_project / "doc/reports/2026-05-01-untracked-report.md",
+        "# Untracked report\n\nSome body without frontmatter.\n",
+    )
+    _write(
+        curated_project / "doc/reports/2026-05-01-with-fm.md",
+        "---\nid: report:r1\ntitle: Tracked\n---\nBody.\n",
+    )
+    inventory = collect_inventory(curated_project, today=date(2026, 5, 1))
+    assert inventory.candidate_signals.no_frontmatter_files == [
+        "doc/reports/2026-05-01-untracked-report.md",
+    ]
+
+
 def test_collect_inventory_includes_agents_md_state(curated_project: Path) -> None:
     # The curated_project fixture has no AGENTS.md / CLAUDE.md / core/.
     # The agents_md state should still be present and report absence cleanly.

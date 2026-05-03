@@ -116,6 +116,9 @@ _ARXIV_DOI = re.compile(r"^10\.48550/arxiv\.(?P<id>.+)$", re.IGNORECASE)
 _BIORXIV_DOI = re.compile(r"^10\.1101/(?P<id>.+)$", re.IGNORECASE)
 
 # URL patterns for identifier extraction. The first capture group is the identifier.
+# Publisher URLs that embed the DOI directly are matched here; URLs that only
+# carry a publisher-internal article ID (AACR, Elsevier PII, etc.) cannot be
+# resolved without an HTTP roundtrip and are out of scope for this regex layer.
 _URL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("pmid", re.compile(r"^https?://pubmed\.ncbi\.nlm\.nih\.gov/(\d+)", re.IGNORECASE)),
     ("pmid", re.compile(r"^https?://(?:www\.)?ncbi\.nlm\.nih\.gov/pubmed/(\d+)", re.IGNORECASE)),
@@ -126,7 +129,27 @@ _URL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         re.compile(r"^https?://arxiv\.org/(?:abs|pdf)/([\w./-]+?)(?:v\d+)?(?:\.pdf)?(?:[?#].*)?$", re.IGNORECASE),
     ),
     ("doi", re.compile(r"^https?://(?:www\.)?(?:bio|med)rxiv\.org/content/(?:.+?/)?(10\.1101/[^/?#]+)", re.IGNORECASE)),
+    # Wiley: https://onlinelibrary.wiley.com/doi/10.1002/...
+    ("doi", re.compile(r"^https?://onlinelibrary\.wiley\.com/doi/(?:abs/|full/|epdf/|pdf/)?(10\.\d+/[^/?#]+)", re.IGNORECASE)),
+    # Springer: https://link.springer.com/article/10.1007/...
+    ("doi", re.compile(r"^https?://link\.springer\.com/(?:article|chapter|book|protocol|referenceworkentry)/(10\.\d+/[^/?#]+)", re.IGNORECASE)),
+    # Nature articles: https://www.nature.com/articles/<slug> → 10.1038/<slug>
+    ("doi", re.compile(r"^https?://(?:www\.)?nature\.com/articles/([^/?#]+)", re.IGNORECASE)),
+    # SAGE: https://journals.sagepub.com/doi/10.1177/...
+    ("doi", re.compile(r"^https?://journals\.sagepub\.com/doi/(?:abs/|full/|epdf/|pdf/)?(10\.\d+/[^/?#]+)", re.IGNORECASE)),
+    # Taylor & Francis: https://www.tandfonline.com/doi/10.1080/...
+    ("doi", re.compile(r"^https?://(?:www\.)?tandfonline\.com/doi/(?:abs/|full/|epdf/|pdf/)?(10\.\d+/[^/?#]+)", re.IGNORECASE)),
+    # Oxford Academic: https://academic.oup.com/<journal>/doi/10.1093/<journal>/<id>
+    # Oxford DOIs commonly have multi-segment suffixes, so capture across slashes.
+    ("doi", re.compile(r"^https?://academic\.oup\.com/[^/]+/doi/(?:abs/|full/|epdf/|pdf/)?(10\.\d+/[^?#]+)", re.IGNORECASE)),
 ]
+
+# Nature article slugs map deterministically to 10.1038/<slug>. Captured above
+# without the DOI prefix so this map can complete the join.
+_DOI_PREFIX_BY_HOST = {
+    "nature.com": "10.1038",
+    "www.nature.com": "10.1038",
+}
 
 _PMID_RE = re.compile(r"^\d+$")
 _PMCID_RE = re.compile(r"^PMC\d+$", re.IGNORECASE)
@@ -177,7 +200,14 @@ def parse_url_identifier(url: str | None) -> tuple[str, str] | None:
     for kind, pattern in _URL_PATTERNS:
         match = pattern.match(cleaned)
         if match:
-            return (kind, match.group(1))
+            value = match.group(1)
+            if kind == "doi" and not value.startswith("10."):
+                # Nature pattern captures only the slug; prepend the host's prefix.
+                prefix = _DOI_PREFIX_BY_HOST.get(_host_of(cleaned).lower())
+                if prefix is None:
+                    continue
+                value = f"{prefix}/{value}"
+            return (kind, value)
     return None
 
 

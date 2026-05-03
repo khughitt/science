@@ -377,6 +377,24 @@ class TestTasksList:
             assert len(data["rows"]) == 1
             assert data["rows"][0]["title"] == "JSON task"
 
+    def test_list_json_includes_meta(self, runner: CliRunner) -> None:
+        """fb-2026-05-01-006: JSON output exposes counts, sort order, and applied filters
+        so callers can tell whether they're seeing the full list or a curated view."""
+        with runner.isolated_filesystem():
+            runner.invoke(main, ["tasks", "add", "Active task", "--priority", "P1"])
+            runner.invoke(main, ["tasks", "add", "Other task", "--priority", "P2"])
+            # Filtered view: only P1
+            result = runner.invoke(main, ["tasks", "list", "--format", "json", "--priority", "P1"])
+            assert result.exit_code == 0
+            data = json.loads(result.output)
+            meta = data["meta"]
+            assert meta["active_total"] == 2
+            assert meta["returned_count"] == 1
+            assert meta["sort_order"] == "status_rank,id"
+            assert meta["applied_filters"]["priority"] == "P1"
+            # Default exclusion of done/retired surfaces under applied_filters too.
+            assert meta["applied_filters"]["exclude_status"] == ["done", "retired"]
+
 
 class TestTasksShow:
     def test_show_displays_task(self, runner: CliRunner) -> None:

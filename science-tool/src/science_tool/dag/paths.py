@@ -18,22 +18,19 @@ class DagPaths:
 def load_dag_paths(project_root: Path) -> DagPaths:
     """Load DAG path configuration from science.yaml.
 
-    Falls back to research-profile defaults when the ``dag:`` block is absent.
-    Raises ``FileNotFoundError`` for non-research profiles that lack the block.
+    Falls back to defaults when the ``dag:`` block is absent. A project with
+    no ``dag:`` block and no ``*.edges.yaml`` files is a valid empty state:
+    auto-discover yields zero slugs and audit/validate return clean results.
     """
     cfg: dict = yaml.safe_load((project_root / "science.yaml").read_text()) or {}
-    profile = cfg.get("profile", "research")
     block: dict | None = cfg.get("dag")
 
-    if block is None and profile == "research":
+    if block is None:
         return DagPaths(
             dag_dir=project_root / "doc/figures/dags",
             tasks_dir=project_root / "tasks",
             dags=None,
         )
-
-    if block is None:
-        raise FileNotFoundError(f"'dag:' block required in science.yaml for profile={profile!r}")
 
     return DagPaths(
         dag_dir=project_root / block.get("dag_dir", "doc/figures/dags"),

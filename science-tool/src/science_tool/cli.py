@@ -2660,7 +2660,34 @@ def tasks_list(
             }
             for t in matched
         ]
-        emit_query_rows(output_format=output_format, title="Tasks", columns=columns, rows=rows)
+        # Total count of active-file tasks before any filtering, so callers can
+        # tell whether they're looking at a curated view or the full list
+        # (fb-2026-05-01-006).
+        from science_tool.tasks import _read_active
+
+        active_total = len(_read_active(DEFAULT_TASKS_DIR))
+        applied_filters: dict[str, object] = {}
+        if priority is not None:
+            applied_filters["priority"] = priority
+        if status is not None:
+            applied_filters["status"] = status
+        if related is not None:
+            applied_filters["related"] = related
+        if group is not None:
+            applied_filters["group"] = group
+        if aspects:
+            applied_filters["aspects"] = list(aspects)
+        if not show_all and status is None:
+            applied_filters["exclude_status"] = ["done", "retired"]
+        meta = {
+            "active_total": active_total,
+            "returned_count": len(rows),
+            "sort_order": "status_rank,id",
+            "applied_filters": applied_filters,
+        }
+        emit_query_rows(
+            output_format=output_format, title="Tasks", columns=columns, rows=rows, meta=meta
+        )
     else:
         render_tasks_table(matched)
 

@@ -132,11 +132,22 @@ def update_artifact(
             commit_lines.append(f"Migrated steps: {', '.join(migrated_step_ids)}")
         commit_message = "\n".join(commit_lines) + "\n"
 
+        # Compute the set of paths the artifact itself owns: install target,
+        # the .pre-update.bak that step 5 writes alongside, plus every migration
+        # step's touched_paths. The discard path stages only these so unrelated
+        # dirty paths are not swept in under --allow-dirty (fb-2026-04-27-001).
+        commit_paths = [Path(target.relative_to(project_root))]
+        if backup.exists():
+            commit_paths.append(Path(backup.relative_to(project_root)))
+        for m in artifact.migrations:
+            for step in m.steps:
+                commit_paths.extend(Path(p) for p in step.touched_paths)
+
         if no_commit or not artifact.mutation_policy.commit_default:
             snapshot.discard(commit_message=None)
         else:
             if in_git_repo(project_root):
-                snapshot.discard(commit_message=commit_message)
+                snapshot.discard(commit_message=commit_message, commit_paths=commit_paths)
                 committed = True
             else:
                 snapshot.discard(commit_message=None)

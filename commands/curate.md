@@ -36,6 +36,19 @@ uv run science-tool sync status
 git log --oneline -30 --format="%h %s (%cr)"
 ```
 
+### Carry-over from prior sweeps
+
+Before running new analysis, read the most recent prior ledger at
+`doc/meta/curation/curation-sweep-*.md` (sorted descending by filename).
+Extract its **Pending Decisions** section. Items the user has not acted on
+since must surface in the new ledger as carry-overs rather than being
+re-derived as fresh medium-confidence findings (fb-2026-05-01-003). Mark
+each carry-over with the originating sweep date, e.g.
+`Carry-over from 2026-04-28 sweep:`. To detect "not acted on", check whether
+the artifact's frontmatter or content actually changed since the prior
+ledger's commit; if it has, the item may have been resolved silently and
+should be re-evaluated, not blindly carried.
+
 If DAG tooling is present and the project has DAGs:
 
 ```bash
@@ -139,7 +152,7 @@ Suggested body:
 - **Drift** - docs, tasks, DAGs, or summaries that lag behind newer evidence.
 - **Duplication and Fragmentation** - overlapping topics, repeated questions, repeated summaries, or parallel notes.
 - **Actioned Fixes** - exact files changed, with rationale.
-- **Pending Decisions** - items that need user judgement.
+- **Pending Decisions** - items that need user judgement. Each entry must distinguish *new* decisions (first surfaced this sweep) from *carry-overs* extracted in Phase 1 from the most recent prior ledger; tag carry-overs with the originating sweep date, e.g. `Carry-over from 2026-04-28 sweep`.
 - **Suggested Follow-Ups** - tasks, commands, or synthesis updates to queue next.
 - **Self-Reflection** - improvements noticed for `/science:curate`, the skill, prompts, inventory helpers, graph surfaces, entity metadata, or conventions.
 
