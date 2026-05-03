@@ -162,7 +162,8 @@ def test_build_entity_markdown_uses_canonical_frontmatter_and_body() -> None:
     assert frontmatter["status"] == "open"
     assert frontmatter["related"] == ["hypothesis:h01"]
     assert "# New Thing" in text
-    assert "## Notes" in text
+    assert "## Why It Matters" in text
+    assert "## Notes" not in text
 
 
 def test_build_entity_markdown_for_discussion_uses_canonical_sections() -> None:
@@ -189,6 +190,62 @@ def test_build_entity_markdown_for_discussion_uses_canonical_sections() -> None:
         assert section in text, f"discussion shell missing canonical section {section!r}"
     assert "## Summary" not in text
     assert "## Notes" not in text
+
+
+def test_build_entity_markdown_can_include_optional_template_section() -> None:
+    text = build_entity_markdown(
+        kind="discussion",
+        entity_id="discussion:2026-05-03-test",
+        title="Test discussion",
+        status="active",
+        related=[],
+        source_refs=[],
+        today=date(2026, 5, 3),
+        with_sections=["double-blind-addendum"],
+    )
+    assert "## Double-Blind Addendum" in text
+
+
+def test_build_entity_markdown_can_strip_template_hints() -> None:
+    text = build_entity_markdown(
+        kind="discussion",
+        entity_id="discussion:2026-05-03-test",
+        title="Test discussion",
+        status="active",
+        related=[],
+        source_refs=[],
+        today=date(2026, 5, 3),
+        no_hints=True,
+    )
+    assert "<!--" not in text
+
+
+def test_template_driven_create_entity_passes_prospective_audit_for_all_migrated_kinds(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/questions/q01-seed.md",
+        {"id": "question:q01-seed", "type": "question", "title": "Seed", "status": "active"},
+    )
+
+    cases: list[tuple[str, str, str | None]] = [
+        ("question", "What should we test next?", None),
+        ("hypothesis", "Template shell hypothesis", "hypothesis:h01-template-shell"),
+        ("discussion", "Template shell discussion", None),
+        ("interpretation", "Template shell interpretation", None),
+    ]
+    for kind, title, entity_id in cases:
+        result = create_entity(
+            project_root=tmp_path,
+            kind=kind,
+            title=title,
+            entity_id=entity_id,
+            related=[],
+            source_refs=[],
+            today=date(2026, 5, 3),
+        )
+        assert result.warnings == []
+        assert result.path.exists()
 
 
 def test_append_note_to_body_creates_peer_notes_section() -> None:

@@ -210,7 +210,41 @@ def build_entity_markdown(
     related: list[str],
     source_refs: list[str],
     today: date,
+    with_sections: list[str] | None = None,
+    without_sections: list[str] | None = None,
+    no_hints: bool = False,
 ) -> str:
+    from science_model.templates import MIGRATED_KINDS, EntityTemplateError, Renderer
+
+    if kind in MIGRATED_KINDS:
+        validated_id = validate_entity_id(kind, entity_id)
+        local_part = validated_id.split(":", 1)[1]
+        date_prefix = f"{today.isoformat()}-"
+        slug_value = local_part.removeprefix(date_prefix) if local_part.startswith(date_prefix) else local_part
+        fields: dict[str, object] = {
+            "entity_id": validated_id,
+            "kind": kind,
+            "title": title,
+            "status": status,
+            "related": related,
+            "source_refs": source_refs,
+            "created": today.isoformat(),
+            "updated": today.isoformat(),
+            "slug": slug_value,
+            "local_part": local_part,
+            "nn": _leading_number(local_part),
+        }
+        try:
+            return Renderer(today=today).render(
+                kind,
+                fields=fields,
+                with_keys=list(with_sections or []),
+                without_keys=list(without_sections or []),
+                no_hints=no_hints,
+            )
+        except EntityTemplateError as exc:
+            raise EntityCommandError(str(exc)) from exc
+
     frontmatter: dict[str, object] = {
         "id": validate_entity_id(kind, entity_id),
         "type": kind,
@@ -225,24 +259,14 @@ def build_entity_markdown(
     return "---\n" + _dump_frontmatter(frontmatter) + "---\n" + body
 
 
-# Body templates per entity kind. Discussion uses the canonical sections expected
-# by the science:discuss skill (fb-2026-04-30-001) so the shell created here is
-# usable as-is. Other kinds keep the generic Summary/Notes shape.
-_DISCUSSION_BODY_SECTIONS: tuple[str, ...] = (
-    "Focus",
-    "Current Position",
-    "Critical Analysis",
-    "Evidence Needed",
-    "Prioritized Follow-Ups",
-    "Synthesis",
-)
-
-
 def _entity_body_template(kind: str, title: str) -> str:
-    if kind == "discussion":
-        sections = "\n\n".join(f"## {name}\n" for name in _DISCUSSION_BODY_SECTIONS)
-        return f"# {title}\n\n{sections}\n"
+    del kind
     return f"# {title}\n\n## Summary\n\n\n## Notes\n"
+
+
+def _leading_number(local_part: str) -> str:
+    match = _ID_PREFIX_RE.match(local_part)
+    return match.group("number") if match else ""
 
 
 def create_entity(
@@ -257,6 +281,9 @@ def create_entity(
     related: list[str] | None = None,
     source_refs: list[str] | None = None,
     today: date | None = None,
+    with_sections: list[str] | None = None,
+    without_sections: list[str] | None = None,
+    no_hints: bool = False,
 ) -> EntityWriteResult:
     project_root = project_root.resolve()
     today_value = today or date.today()
@@ -282,6 +309,9 @@ def create_entity(
         related=list(related or []),
         source_refs=list(source_refs or []),
         today=today_value,
+        with_sections=with_sections,
+        without_sections=without_sections,
+        no_hints=no_hints,
     )
     warnings = _validate_prospective_write(
         project_root=project_root,
