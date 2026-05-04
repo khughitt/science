@@ -457,6 +457,47 @@ def test_materialize_graph_emits_mechanism_participants_and_propositions(tmp_pat
     assert (mechanism_uri, SCI.hasProposition, proposition_uri) in knowledge
 
 
+def test_materialize_graph_emits_theme_node_and_related_edges(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    (project / "doc" / "themes").mkdir(parents=True)
+    (project / "doc" / "themes" / "transportability.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "theme:transportability"',
+                'type: "theme"',
+                'title: "Transportability"',
+                'status: "active"',
+                'theme_kind: "methodological"',
+                'theme_scope: "federation"',
+                'related: ["question:q01-demo"]',
+                "source_refs: []",
+                "evidence_refs: []",
+                "---",
+                "",
+                "# Theme: Transportability",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    trig_path = materialize_graph(project)
+
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    theme_uri = PROJECT_NS["theme/transportability"]
+    question_uri = PROJECT_NS["question/q01-demo"]
+
+    assert (theme_uri, RDF.type, SCI.Theme) in knowledge
+    assert (theme_uri, SKOS.prefLabel, Literal("Transportability")) in knowledge
+    assert (theme_uri, SCI.profile, Literal("core")) in knowledge
+    assert (theme_uri, SKOS.related, question_uri) in knowledge
+
+
 def test_materialize_graph_uses_kind_for_task_edge_special_case(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
