@@ -235,3 +235,88 @@ def test_derive_freshness_no_last_reviewed_triple_when_unset() -> None:
     }
     derive_freshness(ds, entities=entities, today=date(2026, 5, 4))
     assert list(knowledge.triples((h, SCI_NS.lastReviewed, None))) == []
+
+
+def test_horizon_boundary_inclusive_at_threshold() -> None:
+    """today - baseline == horizon → still fresh (uses strict `>`)."""
+    from datetime import date, timedelta
+    from rdflib import Dataset, Literal, URIRef
+    from science_model.entities import EntityClass
+    from science_tool.graph.freshness import derive_freshness
+    from science_tool.graph.store import PROJECT_NS, SCI_NS
+
+    ds = Dataset()
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    h = URIRef("http://example.org/hypothesis/h")
+    baseline = date(2026, 1, 1)
+    horizon = 30
+    entities = {
+        str(h): {
+            "kind_class": EntityClass.EPISTEMIC,
+            "last_reviewed": baseline,
+            "created": baseline,
+            "updated": None,
+            "review_horizon_days": horizon,
+        }
+    }
+    today_eq = baseline + timedelta(days=horizon)
+    derive_freshness(ds, entities=entities, today=today_eq)
+    assert (h, SCI_NS.freshnessState, Literal("fresh")) in knowledge
+
+
+def test_horizon_one_day_past_threshold_is_stale() -> None:
+    """today - baseline == horizon + 1 → stale (crosses the strict `>` boundary)."""
+    from datetime import date, timedelta
+    from rdflib import Dataset, Literal, URIRef
+    from science_model.entities import EntityClass
+    from science_tool.graph.freshness import derive_freshness
+    from science_tool.graph.store import PROJECT_NS, SCI_NS
+
+    ds = Dataset()
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    h = URIRef("http://example.org/hypothesis/h")
+    baseline = date(2026, 1, 1)
+    horizon = 30
+    entities = {
+        str(h): {
+            "kind_class": EntityClass.EPISTEMIC,
+            "last_reviewed": baseline,
+            "created": baseline,
+            "updated": None,
+            "review_horizon_days": horizon,
+        }
+    }
+    today_past = baseline + timedelta(days=horizon + 1)
+    derive_freshness(ds, entities=entities, today=today_past)
+    assert (h, SCI_NS.freshnessState, Literal("stale")) in knowledge
+
+
+def test_horizon_one_day_minimum() -> None:
+    """horizon=1: 1 day after baseline → fresh; 2 days after → stale."""
+    from datetime import date, timedelta
+    from rdflib import Dataset, Literal, URIRef
+    from science_model.entities import EntityClass
+    from science_tool.graph.freshness import derive_freshness
+    from science_tool.graph.store import PROJECT_NS, SCI_NS
+
+    baseline = date(2026, 1, 1)
+    entities = {
+        "http://example.org/hypothesis/h": {
+            "kind_class": EntityClass.EPISTEMIC,
+            "last_reviewed": baseline,
+            "created": baseline,
+            "updated": None,
+            "review_horizon_days": 1,
+        }
+    }
+    h = URIRef("http://example.org/hypothesis/h")
+
+    # day after baseline → still fresh (today - baseline == 1, not > 1)
+    ds1 = Dataset()
+    derive_freshness(ds1, entities=entities, today=baseline + timedelta(days=1))
+    assert (h, SCI_NS.freshnessState, Literal("fresh")) in ds1.graph(PROJECT_NS["graph/knowledge"])
+
+    # two days after → stale
+    ds2 = Dataset()
+    derive_freshness(ds2, entities=entities, today=baseline + timedelta(days=2))
+    assert (h, SCI_NS.freshnessState, Literal("stale")) in ds2.graph(PROJECT_NS["graph/knowledge"])
