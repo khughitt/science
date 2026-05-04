@@ -7,6 +7,7 @@ from rdflib.namespace import PROV
 
 from science_model.entities import EntityClass
 from science_tool.graph.freshness import (
+    close_bears_on,
     derive_bears_on_from_provenance,
     derive_bears_on_from_typed_edges,
 )
@@ -151,3 +152,60 @@ def test_has_participant_emits_bears_on_for_epistemic_participants_only():
     pairs = _bears_on_pairs(ds)
     assert (str(_u("proposition/p1")), str(_u("mechanism/m1"))) in pairs
     assert (str(_u("concept/c1")), str(_u("mechanism/m1"))) not in pairs
+
+
+def test_close_bears_on_walks_to_epistemic_target():
+    """A bears_on B (operational) bears_on C (epistemic) -> A bears_on C."""
+    ds = _make_dataset_with([])
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    knowledge.add((_u("dataset/d1"), SCI_NS.bearsOn, _u("workflow-run/wfr1")))
+    knowledge.add((_u("workflow-run/wfr1"), SCI_NS.bearsOn, _u("hypothesis/h1")))
+
+    kind_class = {
+        str(_u("dataset/d1")): EntityClass.OPERATIONAL,
+        str(_u("workflow-run/wfr1")): EntityClass.OPERATIONAL,
+        str(_u("hypothesis/h1")): EntityClass.EPISTEMIC,
+    }
+    close_bears_on(ds, kind_class=kind_class)
+
+    assert (str(_u("dataset/d1")), str(_u("hypothesis/h1"))) in _bears_on_pairs(ds)
+
+
+def test_close_bears_on_terminates_on_cycle():
+    """A bears_on B bears_on A (cycle) does not infinite loop and adds nothing extra."""
+    ds = _make_dataset_with([])
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    knowledge.add((_u("workflow-run/a"), SCI_NS.bearsOn, _u("workflow-run/b")))
+    knowledge.add((_u("workflow-run/b"), SCI_NS.bearsOn, _u("workflow-run/a")))
+    knowledge.add((_u("workflow-run/a"), SCI_NS.bearsOn, _u("hypothesis/h1")))
+
+    kind_class = {
+        str(_u("workflow-run/a")): EntityClass.OPERATIONAL,
+        str(_u("workflow-run/b")): EntityClass.OPERATIONAL,
+        str(_u("hypothesis/h1")): EntityClass.EPISTEMIC,
+    }
+    close_bears_on(ds, kind_class=kind_class)
+
+    pairs = _bears_on_pairs(ds)
+    # Closure should add: workflow-run/b bears_on hypothesis/h1 (via a)
+    assert (str(_u("workflow-run/b")), str(_u("hypothesis/h1"))) in pairs
+    # Should NOT loop forever or self-edge.
+    self_edges = {(s, o) for s, o in pairs if s == o}
+    assert self_edges == set()
+
+
+def test_close_bears_on_does_not_create_edges_to_operational():
+    """Closure only emits edges to epistemic targets."""
+    ds = _make_dataset_with([])
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    knowledge.add((_u("dataset/d1"), SCI_NS.bearsOn, _u("workflow-run/wfr1")))
+
+    kind_class = {
+        str(_u("dataset/d1")): EntityClass.OPERATIONAL,
+        str(_u("workflow-run/wfr1")): EntityClass.OPERATIONAL,
+    }
+    close_bears_on(ds, kind_class=kind_class)
+
+    # Existing edge preserved; no new closure edges since target is not epistemic.
+    pairs = _bears_on_pairs(ds)
+    assert pairs == {(str(_u("dataset/d1")), str(_u("workflow-run/wfr1")))}

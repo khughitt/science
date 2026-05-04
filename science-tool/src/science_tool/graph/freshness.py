@@ -92,3 +92,42 @@ def derive_bears_on_from_provenance(
         # If the derived entity is epistemic, the source bears on it.
         if kind_class.get(str(s)) == EntityClass.EPISTEMIC:
             knowledge.add((o, SCI_NS.bearsOn, s))
+
+
+def close_bears_on(
+    dataset: Dataset,
+    *,
+    kind_class: dict[str, EntityClass],
+) -> None:
+    """Emit transitive `bears_on` edges via DFS with cycle protection.
+
+    For each source S that has any outgoing `bears_on` edge, walk the chain
+    forward; whenever a reachable node is epistemic, emit `S bears_on T`.
+    Skip self-edges (cycles through operational hops produce them otherwise).
+
+    `kind_class` is required: closure terminates at epistemic targets, so
+    we must classify every reachable node.
+    """
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    # Build adjacency map from existing bears_on edges.
+    adjacency: dict[URIRef, set[URIRef]] = {}
+    for s, _, o in knowledge.triples((None, SCI_NS.bearsOn, None)):
+        adjacency.setdefault(s, set()).add(o)
+
+    new_triples: set[tuple[URIRef, URIRef, URIRef]] = set()
+    for source in list(adjacency):
+        # DFS from source.
+        stack: list[URIRef] = list(adjacency[source])
+        visited: set[URIRef] = set()
+        while stack:
+            node = stack.pop()
+            if node in visited or node == source:
+                continue
+            visited.add(node)
+            if kind_class.get(str(node)) == EntityClass.EPISTEMIC:
+                new_triples.add((source, SCI_NS.bearsOn, node))
+            stack.extend(adjacency.get(node, set()))
+
+    for triple in new_triples:
+        knowledge.add(triple)
