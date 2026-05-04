@@ -247,20 +247,23 @@ def derive_freshness(
 def propagate_freshness_in_memory(project_root: Path) -> list[dict]:
     """Compute freshness without writing the materialized graph.
 
-    Loads project sources, builds the same in-memory dataset
-    `materialize_graph` would build (via `_build_dataset_from_sources`),
-    extracts the freshness rows, returns them. Never writes the trig
-    and never mutates entity files.
-
-    Same semantics as `graph build` for which entities surface as
-    needs-review / stale, by construction (shared helper).
+    Same audit gate as `materialize_graph`: raises ValueError if any
+    source_refs / evidence_refs / typed-relation reference is unresolved.
+    Without this, a project with broken refs would silently produce an
+    incomplete freshness picture.
 
     Returns rows of {"id": "<canonical_id>", "kind": "<kind>", "state": "<state>"}.
     """
-    # Lazy import to avoid cycle: materialize.py imports freshness.py at module level.
+    # Lazy imports to avoid cycle.
     from science_tool.graph.materialize import _build_dataset_from_sources
+    from science_tool.graph.migrate import audit_project_sources
 
     sources = load_project_sources(project_root.resolve())
+    rows, has_failures = audit_project_sources(sources)
+    if has_failures:
+        details = "; ".join(f"{row['source']} -> {row['target']}" for row in rows if row["status"] == "fail")
+        raise ValueError(f"Cannot compute freshness with unresolved references: {details}")
+
     dataset = _build_dataset_from_sources(sources)
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 
