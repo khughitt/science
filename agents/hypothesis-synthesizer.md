@@ -92,4 +92,4 @@ Write the file. Report back with:
 - Path written.
 - Word count per section.
 - Count of distinct interpretations/tasks/edges cited.
-- Any bundle items that you could not ground into the output (surface as "unused in synthesis").
+- Any bundle items that you could not ground into the output (surface as "unused in synthesis"). Exclude items whose IDs are in `edge_cited_interpretation_ids` from this list — those are appropriately covered through the edge-level citation layer and their absence from the prose-level interpretation list is expected, not a gap.
