@@ -47,7 +47,7 @@ from science_tool.graph.store import (
 )
 
 
-def build_dataset_from_sources(sources: ProjectSources) -> Dataset:
+def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     """Build the in-memory rdflib Dataset that `materialize_graph` would write.
 
     Composes the existing emission helpers (`_add_entity`, `_add_relations`,
@@ -149,7 +149,7 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
         msg = f"Cannot materialize graph with unresolved references: {details}"
         raise ValueError(msg)
 
-    dataset = build_dataset_from_sources(sources)
+    dataset = _build_dataset_from_sources(sources)
 
     trig_path = project_root / DEFAULT_GRAPH_PATH
     trig_path.parent.mkdir(parents=True, exist_ok=True)

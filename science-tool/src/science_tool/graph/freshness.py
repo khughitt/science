@@ -21,7 +21,8 @@ from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, XSD
 
 from science_model.entities import EntityClass
-from science_tool.graph.store import CITO_NS, PROJECT_NS, SCI_NS
+from science_tool.graph.sources import load_project_sources
+from science_tool.graph.store import CITO_NS, PROJECT_NS, SCI_NS, canonical_id_from_entity_uri
 
 
 class EntityFreshnessInfo(TypedDict):
@@ -240,7 +241,7 @@ def propagate_freshness_in_memory(project_root: Path) -> list[dict]:
     """Compute freshness without writing the materialized graph.
 
     Loads project sources, builds the same in-memory dataset
-    `materialize_graph` would build (via `build_dataset_from_sources`),
+    `materialize_graph` would build (via `_build_dataset_from_sources`),
     extracts the freshness rows, returns them. Never writes the trig
     and never mutates entity files.
 
@@ -249,12 +250,11 @@ def propagate_freshness_in_memory(project_root: Path) -> list[dict]:
 
     Returns rows of {"id": "<canonical_id>", "kind": "<kind>", "state": "<state>"}.
     """
-    from science_tool.graph.materialize import build_dataset_from_sources
-    from science_tool.graph.sources import load_project_sources
-    from science_tool.graph.store import canonical_id_from_entity_uri
+    # Lazy import to avoid cycle: materialize.py imports freshness.py at module level.
+    from science_tool.graph.materialize import _build_dataset_from_sources
 
     sources = load_project_sources(project_root.resolve())
-    dataset = build_dataset_from_sources(sources)
+    dataset = _build_dataset_from_sources(sources)
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 
     rows: list[dict] = []
