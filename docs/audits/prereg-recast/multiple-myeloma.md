@@ -3,7 +3,7 @@
 **Audit date:** 2026-05-04
 **Project root:** `~/d/cancer/cancer-types/multiple-myeloma` (= `/mnt/ssd/Dropbox/cancer/cancer-types/multiple-myeloma`)
 **Scope:** all 30 pre-regs across two placements
-**Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 2)
+**Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 3; code prerequisites merged 2026-05-04)
 
 ---
 
@@ -13,7 +13,7 @@ multiple-myeloma is the largest pre-reg-using project across the entire surveyed
 
 1. **Two-generation split.** 4 older pre-regs at `doc/meta/pre-registration-*.md` (March / early-April 2026) use **non-canonical frontmatter and inline-body hypothesis labels** (H1/H2/H3/H4/H5 in prose, no `hypothesis:hN-...` refs in `related:`). 26 newer pre-regs at `doc/pre-registrations/<date>-<slug>.md` (mid-April onward) use **fully canonical frontmatter** with proper entity-form `hypothesis:` refs. The migration appears to coincide with the project adopting `2026-04-25-pre-registration-canonical-type.md`.
 
-2. **The 4 older pre-regs surface a substantive plan-level issue:** they target hypotheses *in their bodies* but not in `related:`. The recast's auto-derivation rule only sees `related:`, so for these older pre-regs the hypothesis-level `bears_on` edge will not fire — even though the pre-reg clearly tests a hypothesis. The recast skill prose needs to handle inline-body hypothesis references for pre-canonical pre-regs.
+2. **The 4 older pre-regs surface a substantive migration issue:** they target hypotheses *in their bodies* but not in `related:`. The recast's auto-derivation rule only sees `related:` / `commits_to:`, so these older files need canonical frontmatter and explicit `commits_to:` scoping. The safest migration is to connect only targets that already exist as formal epistemic entities, and leave body-only H labels as prose until the project promotes or maps them deliberately.
 
 3. **Two new unregistered kinds surfaced:** `decision:` (D1–D11, used in 7+ pre-regs' `related:`) and `latent:` (latent:state_commitment_entropy, latent:disease_severity_index, latent:hopfield_basin_energy, used in 6+ pre-regs). Both are absent from `_CORE_KIND_CLASSES`; both will be silently skipped during source loading. mm has a documented internal cleanup task for `decision:` registration (`doc/meta/2026-04-25-graph-data-cleanup.md`). The recast's Prerequisite-1 register-the-kind pattern applies cleanly to both, but only if the project decides which `EntityClass` they belong to.
 
@@ -21,7 +21,13 @@ multiple-myeloma is the largest pre-reg-using project across the entire surveyed
 
 5. **Heavy chained-pre-reg pattern** confirmed at scale. At least 8 of the 30 pre-regs reference other pre-regs in `related:`. One (t419) makes the parent-child relationship explicit via `parent_pre_registration:` field.
 
-**Recommendation for multiple-myeloma:** No file edits required for the recast itself, but the older 4 pre-regs would benefit from migration to canonical shape (out of t012 scope; project's own roadmap). The audit's findings strengthen the `related:` conflation issue (universal across all projects now) and surface a new dimension: **pre-regs whose epistemic targets are in body prose, not in `related:`**.
+**Recommendation for multiple-myeloma:** Apply a small project migration after the recast lands:
+
+- canonicalize the 4 pre-canonical `doc/meta/pre-registration-*.md` files;
+- add `commits_to:` to the 3 inquiry-targeting Gen-2 pre-regs so `related:` context does not over-derive `bears_on` edges;
+- use `commits_to: []` for operational quality gates such as t28 where epistemic refs are context, not commitments;
+- remove the stale project-local `pre-registration` extension-kind registration now that Science provides the core kind;
+- defer `decision:` / `latent:` kind registration to a separate project-kind cleanup.
 
 ---
 
@@ -73,7 +79,7 @@ multiple-myeloma is the largest pre-reg-using project across the entire surveyed
 | t498-myc-r-warburg-reallocation | 2026-05-03 | — (none!) | 2 inquiries | 6 papers, interpretation, discussion, pre-reg, decision | — |
 | t500-eif4a-inhibitor-sensitivity | 2026-05-04 | — (none!) | inquiry:h-myc-r-translation-vulnerability | 2 interpretations, 2 decisions | — |
 
-**Note three Generation-2 pre-regs (t494, t498, t500) have no `hypothesis:` ref in `related:` either — they target inquiries instead.** The h-myc-r-* and h-jun-hyperdiploidy-ap1 work is structured around inquiries that may not have promoted to formal hypotheses yet. `inquiry` is `REFERENCE` class, so the recast's auto-derivation rule will not fire `bears_on` to inquiry refs — same epistemic-targeting gap as the older 4.
+**Note three Generation-2 pre-regs (t494, t498, t500) have no `hypothesis:` ref in `related:` either — they target inquiries instead.** The h-myc-r-* work is structured around inquiries that may not have promoted to formal hypotheses yet. After the recast, `inquiry` is `EPISTEMIC`, so these pre-regs can produce `bears_on` edges. They still need `commits_to:` because their `related:` lists also include interpretations and other navigation context.
 
 ### Classification breakdown
 
@@ -81,7 +87,7 @@ multiple-myeloma is the largest pre-reg-using project across the entire surveyed
 - **Pure-operational:** 0
 - **Mixed:** 30
 
-But of the 30, **9 have no hypothesis target visible to the recast** (4 pre-canonical + 3 inquiry-only Gen-2 + 2 question-only-with-no-hypothesis Gen-1 cases) — meaning 30% of mm's pre-regs would not produce a hypothesis-level `bears_on` edge under the recast as currently drafted.
+But of the 30, **9 have no hypothesis target visible to the recast** (4 pre-canonical + 3 inquiry-only Gen-2 + 2 question-only-with-no-hypothesis Gen-1 cases). Under revision 3 this is no longer a total invisibility problem: `question:` and `inquiry:` are epistemic targets. The remaining migration concern is precision — using `commits_to:` to distinguish true epistemic commitments from navigational `related:` context.
 
 ---
 
@@ -120,21 +126,16 @@ This is a real plan-level issue: **the recast's classification rule is blind to 
 
 Body opens with explicit references to `inquiry:h-myc-r-direct-program` and `inquiry:h-myc-r-translation-vulnerability` as the targets. No hypothesis ref in `related:` because the work is at inquiry stage — it's testing whether to promote the inquiry to a formal hypothesis.
 
-Under the recast:
-- `inquiry` is REFERENCE — auto-derivation rule does not fire `bears_on` to inquiry refs.
-- The pre-reg is operationally locked (Phase 1 spec) and references decisions (D5, D11) for context.
-- No epistemic `bears_on` edge will be produced for this pre-reg, even though it's clearly part of the epistemic graph through the inquiry chain.
+Under revision 3 of the recast:
+- `inquiry` is `EPISTEMIC`, so the auto-derivation rule can fire `bears_on` to inquiry refs.
+- The pre-reg is also operationally locked (Phase 1 spec) and references decisions (D5, D11) for context.
+- Without `commits_to:`, the fallback would treat all epistemic `related:` refs as commitment targets, including interpretation context. The project migration should therefore add `commits_to:` to t494/t498/t500.
 
-**This is a different gap than the Gen-1 inline-body issue.** Gen-1's gap is "hypothesis exists but isn't referenced." Gen-2-inquiry's gap is "the project hasn't promoted to formal hypothesis yet, and the recast's classification doesn't surface inquiry-level commitments." Worth flagging as a separate plan-level issue.
+**This is a different shape than the Gen-1 inline-body issue.** Gen-1's gap is "hypothesis exists in prose but isn't referenced." Gen-2-inquiry's issue is "the project hasn't promoted to formal hypothesis yet, but still needs an epistemic commitment edge." Revision 3 resolves the classification part by making `inquiry` epistemic; the project migration resolves the scoping part with `commits_to:`.
 
 The inquiry stage matters because mm uses inquiries as **pre-hypothesis structure** — a way to organize work toward a future hypothesis without committing to one yet. Treating inquiries as REFERENCE under the recast loses the epistemic-commitment signal.
 
-**Resolution options:**
-- (a) **Reclassify `inquiry` as EPISTEMIC.** Conceptually defensible (inquiries organize uncertain assertions), but breaks symmetry — questions are EPISTEMIC, but inquiries currently aren't. Worth discussing.
-- (b) **Add an auto-derivation rule** for pre-reg → inquiry: emit `bears_on` only for inquiry targets that themselves transitively bear on an EPISTEMIC entity. Mechanical but adds graph complexity.
-- (c) **Accept the gap and address at inquiry-promotion time.** When an inquiry is promoted to a hypothesis, retroactively scan pre-regs that referenced the inquiry and prompt the user to update their `related:` fields. Feels like the pragmatic choice.
-
-**Lean: (a).** Inquiries are epistemic structures.
+**Resolution applied:** `inquiry` was reclassified as `EPISTEMIC` in the recast implementation. For mm, t494 should commit to both `inquiry:h-myc-r-direct-program` and `inquiry:h-myc-r-translation-vulnerability`; t498 and t500 should commit only to `inquiry:h-myc-r-translation-vulnerability`.
 
 ### `t468-hd-ap1-construction-qa` — `amendment_history:` custom field
 
@@ -152,17 +153,11 @@ The 4 older mm pre-regs at `doc/meta/pre-registration-*.md` have hypotheses in b
 
 **Resolution:** project-side migration to canonical shape (out of t012 scope), plus a recast prose note in `interpret-results` § 4d for the transition period. **No structural change to the recast plan.**
 
-### Issue 2 (substantive, new): inquiry-targeting pre-regs
+### Issue 2 (resolved by recast revision 3): inquiry-targeting pre-regs
 
-3 of 30 mm pre-regs (t494, t498, t500) target `inquiry:` entities but no `hypothesis:` entity. `inquiry` is REFERENCE under the recast's classification, so auto-derivation does not fire `bears_on` to inquiry refs.
+3 of 30 mm pre-regs (t494, t498, t500) target `inquiry:` entities but no `hypothesis:` entity. `inquiry` is now `EPISTEMIC`, so auto-derivation can fire `bears_on` to inquiry refs.
 
-This is a real epistemic structure: mm uses inquiries as pre-hypothesis exploration. The recast's "no `bears_on` to REFERENCE targets" rule loses this signal.
-
-**Resolution lean:** reclassify `inquiry` as `EPISTEMIC` in the recast's Prerequisite 1. **This is a small but substantive change to the recast plan** — questions are EPISTEMIC, propositions are EPISTEMIC, inquiries are organizing structures over questions and propositions, so they should be EPISTEMIC too.
-
-But: this is a project-conceptual decision that should be confirmed with the broader project before the recast lands. The Science cluster uses `inquiry` as REFERENCE (per `_CORE_KIND_CLASSES`); reclassifying breaks symmetry there too.
-
-**Recommendation:** raise this as an explicit plan-level decision: do we reclassify `inquiry` to `EPISTEMIC` as part of the recast's Prerequisite 1, or do we accept the inquiry-targeting gap?
+This is a real epistemic structure: mm uses inquiries as pre-hypothesis exploration. The remaining project action is explicit scoping: add `commits_to:` to t494/t498/t500 so interpretations and decisions in `related:` stay as context.
 
 ### Issue 3 (substantive, new): unregistered kinds in `related:` — `decision:`, `latent:`
 
@@ -193,15 +188,16 @@ Same as natural-systems' Issue 4 and seq-feats' Issue 2. The recast must handle 
 
 ### For multiple-myeloma
 
-1. **No file edits required for the recast itself.**
-2. **Pre-canonical pre-reg migration** (out of t012 scope): the 4 older pre-regs at `doc/meta/pre-registration-*.md` would benefit from canonical-shape migration. Specifically, hypothesis refs should be added to `related:` so the recast's deriver sees them.
-3. **`decision:` and `latent:` kind registration** (project-side, mm has a documented cleanup task): when the project decides which `EntityClass` they belong to, register them. Lean: `decision` → `REFERENCE`; `latent` → `EPISTEMIC` (latent variables are uncertain assertions about underlying constructs).
-4. **Confirm:** for the 3 inquiry-targeting Gen-2 pre-regs (t494, t498, t500), do you expect `bears_on` edges to the inquiry refs? This affects whether `inquiry` should be reclassified as `EPISTEMIC` in Prerequisite 1.
+1. **Pre-canonical pre-reg migration:** canonicalize the 4 older pre-regs at `doc/meta/pre-registration-*.md` and add explicit `commits_to:`. Do not invent mappings from body-only H labels to modern hypotheses unless the project owner confirms the mapping.
+2. **Inquiry-targeting pre-reg migration:** add `commits_to:` to t494/t498/t500. Recommended targets: t494 → both h-myc-r inquiries; t498/t500 → `inquiry:h-myc-r-translation-vulnerability`.
+3. **Operational gate scoping:** add `commits_to: []` to t28 so the `question:simpsons-paradox-purity` ref remains navigation context rather than a derived epistemic commitment.
+4. **Stale local prereg kind cleanup:** remove `pre-registration` from `knowledge/sources/local/manifest.yaml` and remove stale aggregate placeholders for preregs now loaded from markdown frontmatter.
+5. **`decision:` and `latent:` kind registration** (project-side, mm has a documented cleanup task): when the project decides which `EntityClass` they belong to, register them. Lean: `decision` → `REFERENCE`; `latent` → `EPISTEMIC` (latent variables are uncertain assertions about underlying constructs).
 
 ### For the recast plan (`docs/plans/2026-05-04-prereg-recast-draft.md`)
 
-1. **NEW Issue 2 (inquiry classification).** Decide: reclassify `inquiry` as `EPISTEMIC` in Prerequisite 1, or document the inquiry-targeting gap. Lean: reclassify, with cross-project sign-off.
-2. **NEW Issue 3 (unregistered kinds in `related:`).** Document the silent-skip behavior and recommend project-side regularization.
+1. **Inquiry classification resolved.** Revision 3 reclassifies `inquiry` as `EPISTEMIC`.
+2. **Unregistered kinds in `related:`.** Document the silent-skip behavior and recommend project-side regularization.
 3. **Confirms Issue 1, 4, 5** from prior audits.
 4. **Update the missing-myeloma footnote.** mm is at `~/d/cancer/cancer-types/multiple-myeloma/` with 30 pre-regs. Definitely the highest-impact downstream project.
 
@@ -209,10 +205,9 @@ Same as natural-systems' Issue 4 and seq-feats' Issue 2. The recast must handle 
 
 ## Open questions for project owner
 
-1. For the 4 older pre-canonical pre-regs (decomposition, h-mgus-enrichment, integration, t28-fraction-qc): is canonical-shape migration on the project's roadmap?
-2. For the 3 inquiry-targeting Gen-2 pre-regs (t494, t498, t500): do you expect `bears_on` edges to fire on the inquiry refs? (This is the load-bearing question for whether `inquiry` should be reclassified to `EPISTEMIC` cluster-wide.)
-3. Custom frontmatter fields (`parent_pre_registration:`, `amendment_history:`, `drafted:`, `plan:`, etc.) — are these intentional project-level extensions, or convention drift the project would like to regularize?
-4. Does the project have any tooling that loads `decision:` or `latent:` refs from pre-reg `related:`? (If so, the silent-skip behavior under the recast may surprise.)
+1. For the 4 older pre-canonical pre-regs (decomposition, h-mgus-enrichment, integration, t28-fraction-qc): should any body-only H labels be promoted to formal entities or mapped onto existing hypotheses/questions?
+2. Custom frontmatter fields (`parent_pre_registration:`, `amendment_history:`, `drafted:`, `plan:`, etc.) — are these intentional project-level extensions, or convention drift the project would like to regularize?
+3. Does the project have any tooling that loads `decision:` or `latent:` refs from pre-reg `related:`? (If so, the silent-skip behavior under the recast may surprise.)
 
 ---
 
