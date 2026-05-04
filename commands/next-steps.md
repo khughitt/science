@@ -154,6 +154,21 @@ If the project is at a fork — a moment where the next direction depends on a c
 
 This captures strategic framing that individual task recommendations don't. Omit if no strategic decision is pending.
 
+### 3e. Needs-Review Entities
+
+When the backlog is sparse or the user is otherwise blocked, run:
+
+```bash
+science-tool entity needs-review
+```
+
+This lists epistemic entities flagged `needs-review` or `stale` in the materialized graph
+(`sci:freshnessState`) — entities whose upstream evidence changed after their last
+reviewed-as-of date. Frame each as "you reviewed this on date X; since then upstream Y
+changed — worth a fresh look?" rather than as a verdict. `needs-review` is a flag for
+attention, not a claim that the prior conclusion is wrong. Propose one as a candidate next
+step and add a corresponding task if accepted.
+
 ### 4. Suggested Next Steps
 
 Recommend 3-5 actions based on:
@@ -162,6 +177,7 @@ Recommend 3-5 actions based on:
 - Highest-priority active tasks without recent commits
 - Stale tasks (active but no related activity in >7 days)
 - Open high-priority questions that could become tasks
+- Needs-review entities from `science-tool entity needs-review` (when backlog is unclear)
 
 For each suggestion, include:
 - The task ID (if it exists) or "new task" if suggesting something not yet tracked

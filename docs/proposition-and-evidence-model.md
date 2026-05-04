@@ -253,3 +253,27 @@ Use this language consistently across docs, commands, templates, and code:
 - support and dispute are both first-class
 - hypotheses are proposition bundles or proposition-like conjectures
 - propositions with S-P-O structure are the graph-native form of uncertain scientific assertions
+
+## Epistemic Dependency: `bears_on` and Freshness
+
+Propositions, observations, findings, and interpretations all participate in the project's
+forward-in-time epistemic dependency graph via the `bears_on` relation. When an upstream
+entity changes — a dataset is re-processed, a paper is added to `source_refs`, an
+observation's grounding workflow-run is rerun — the freshness engine flags downstream
+propositions and interpretations as `needs-review`. This complements the static `supports`
+/ `disputes` evidence edges by making "what should I revisit?" a query the system can answer.
+
+`graph build` derives `bears_on` automatically from typed edges (`tests`, `grounded_by`,
+`contains`, `synthesizes`, `has_proposition`, `grounds`, `cito:supports`/`cito:disputes`)
+and from `prov:wasDerivedFrom` provenance triples, closing the relation transitively across
+operational hops. The resulting freshness flag (`fresh` / `needs-review` / `stale`) is
+stored as `sci:freshnessState` in the materialized graph.
+
+**Freshness is a flag, not a gate.** A `needs-review` proposition remains readable, citable,
+and usable in synthesis — the flag only affects what `science:status` and
+`science:next-steps` surface for human attention.
+
+The flag is set and cleared via `science-tool entity review <id>` (records last-reviewed)
+and surfaced via `science-tool entity needs-review` (read-only listing). See
+`docs/claim-and-evidence-model.md` for the full mechanism description and
+`docs/plans/2026-05-03-epistemic-dependency-graph-design.md` for the design.

@@ -174,3 +174,38 @@ Use this language consistently across docs, commands, templates, and code:
 - support and dispute are both first-class
 - hypotheses are claim bundles or claim-like conjectures
 - relation claims are the graph-native form of uncertain scientific assertions
+
+## Epistemic Dependency: `bears_on` and Freshness
+
+Beyond the static claim-evidence shape (supports/disputes), Science maintains a
+forward-in-time dependency view: when upstream evidence changes, which downstream beliefs
+need attention. This is captured by the `bears_on` relation in the core profile,
+auto-derived from typed edges (`tests`, `grounded_by`, `contains`, `synthesizes`,
+`has_proposition`, `grounds`, `cito:supports`/`cito:disputes`, epistemic-only
+`has_participant`) and from `prov:wasDerivedFrom` provenance triples. The auto-derivation
+runs at `graph build` time and is closed transitively across operational hops, so a chain
+like `dataset → workflow-run → finding → interpretation` produces a direct `bears_on` from
+the dataset to the interpretation.
+
+Each epistemic entity carries an optional `review_state` block in its frontmatter:
+
+- `last_reviewed`: the date the user (or agent) last considered this entity in light of all evidence
+- `last_review_note`: optional human-readable note about that review
+- `review_horizon_days`: optional per-entity threshold for the `stale` state
+
+`graph build` compares `last_reviewed` (or `created` if absent) against the most recent
+`updated` date of any upstream `bears_on` source and emits an `EpistemicFreshness` flag
+(`fresh` / `needs-review` / `stale`) into the materialized graph as `sci:freshnessState`,
+plus `sci:upstreamChangeAt` and `sci:triggeredBy` triples.
+
+**Freshness is a flag, not a gate.** A `needs-review` entity remains readable, citable, and
+usable in synthesis — the flag only affects what `science:status` and `science:next-steps`
+surface for human attention.
+
+Two CLI commands consume the flag:
+
+- `science-tool entity review <id>` records `last_reviewed = today` on the entity's frontmatter (preserving sibling `review_state` fields).
+- `science-tool entity needs-review` lists currently-flagged entities from the materialized graph.
+- `science-tool graph propagate-freshness` runs the freshness derivation in memory without writing the graph file (useful in CI or pre-commit hooks).
+
+See `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` for the full design.

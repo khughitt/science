@@ -133,6 +133,10 @@ Flag:
 - stale tasks
 - old untouched hypotheses
 - graph/doc drift if the graph changed but interpretation/docs did not
+- **needs-review entities**: run `science-tool entity needs-review` to list epistemic
+  entities whose upstream evidence has changed since their last reviewed-as-of date
+  (the materialized graph carries this state via `sci:freshnessState`). Include up to 5
+  of the highest-impact ones — these are entities the user should consider revisiting.
 - **task archive lag**: when `science-tool health --format json` shows non-zero
   `archive_lag.done_in_active` or `archive_lag.retired_in_active`, surface it as:
   > N done/retired task(s) still in `tasks/active.md`. Run `science-tool tasks archive --apply`
