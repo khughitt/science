@@ -438,6 +438,29 @@ def _entity_kind_from_uri(uri: URIRef) -> str | None:
     return head if head in PROJECT_ENTITY_PREFIXES else None
 
 
+def canonical_id_from_entity_uri(uri: str) -> str | None:
+    """Recover an entity canonical_id (e.g. "hypothesis:h1") from its project URI.
+
+    Inverse of `_entity_uri` in materialize.py: PROJECT_NS["hypothesis/h1"] -> "hypothesis:h1".
+    Returns None if the URI doesn't match the project-entity shape (e.g. external CURIEs,
+    layer URIs, source URIs).
+    """
+    prefix = str(PROJECT_NS)
+    if not uri.startswith(prefix):
+        return None
+    tail = uri[len(prefix):]
+    if "/" not in tail:
+        return None
+    kind, _, slug = tail.partition("/")
+    if not kind or not slug:
+        return None
+    # Reject layer URIs like "graph/knowledge", "graph/provenance" — they share the
+    # PROJECT_NS prefix but aren't entities.
+    if kind == "graph":
+        return None
+    return f"{kind}:{slug}"
+
+
 STRUCTURED_PROPOSITION_PREDICATES: frozenset[URIRef] = frozenset(
     {
         SCI_NS.relatedTo,

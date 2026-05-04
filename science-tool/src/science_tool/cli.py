@@ -428,22 +428,25 @@ def entity_review(ref: str, note: str | None) -> None:
 
 
 @entity_group.command("needs-review")
-@click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+)
 def entity_needs_review(output_format: str) -> None:
     """List epistemic entities flagged needs-review or stale by the materialized graph."""
     from science_tool.entity_review import list_needs_review
+    from science_tool.output import emit_query_rows
 
     rows = list_needs_review(Path.cwd())
-    if output_format == "json":
-        click.echo(json.dumps(rows, indent=2))
-        return
-    if not rows:
-        click.echo("No entities flagged.")
-        return
-    click.echo(f"{'state':<14}{'kind':<20}{'id':<40}")
-    click.echo("-" * 74)
-    for row in rows:
-        click.echo(f"{row['state']:<14}{row['kind']:<20}{row['id']:<40}")
+    emit_query_rows(
+        output_format=output_format,
+        title="Entities needing review",
+        columns=[("state", "State"), ("kind", "Kind"), ("id", "ID")],
+        rows=rows,
+    )
 
 
 @main.group("hypothesis")

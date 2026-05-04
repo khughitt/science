@@ -245,7 +245,9 @@ def test_entity_needs_review_json_format(tmp_path: Path, monkeypatch):
     assert result.exit_code == 0, result.output
 
     payload = json.loads(result.output)
-    ids = {row["id"] for row in payload}
+    assert payload["format"] == "json"
+    rows = payload["rows"]
+    ids = {row["id"] for row in rows}
     assert "hypothesis:h1" in ids
 
 

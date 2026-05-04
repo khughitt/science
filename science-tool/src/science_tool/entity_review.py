@@ -22,7 +22,12 @@ from science_tool.entities import (
     _render_markdown,
     find_entity,
 )
-from science_tool.graph.store import DEFAULT_GRAPH_PATH, PROJECT_NS, SCI_NS
+from science_tool.graph.store import (
+    DEFAULT_GRAPH_PATH,
+    PROJECT_NS,
+    SCI_NS,
+    canonical_id_from_entity_uri,
+)
 
 
 class ReviewError(Exception):
@@ -86,15 +91,14 @@ def list_needs_review(project_root: Path) -> list[dict[str, str]]:
     knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
 
     rows: list[dict[str, str]] = []
-    prefix = str(PROJECT_NS)
     for s, _, o in knowledge.triples((None, SCI_NS.freshnessState, None)):
         state = str(o)
         if state not in {"needs-review", "stale"}:
             continue
-        uri = str(s)
-        if uri.startswith(prefix):
-            tail = uri[len(prefix):]  # e.g. "hypothesis/h1"
-            kind, _, slug = tail.partition("/")
-            rows.append({"id": f"{kind}:{slug}", "kind": kind, "state": state})
+        canonical_id = canonical_id_from_entity_uri(str(s))
+        if canonical_id is None:
+            continue
+        kind, _, _ = canonical_id.partition(":")
+        rows.append({"id": canonical_id, "kind": kind, "state": state})
     rows.sort(key=lambda r: (r["state"], r["kind"], r["id"]))
     return rows
