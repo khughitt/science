@@ -198,9 +198,16 @@ def derive_freshness(
         entity_uri = URIRef(entity_uri_str)
         baseline = info.get("last_reviewed") or info.get("created")
         if baseline is None:
-            # Defensive: an entity with neither last_reviewed nor created is
-            # treated as fresh. Validation ensures `created` is normally set.
-            knowledge.add((entity_uri, SCI_NS.freshnessState, Literal("fresh")))
+            # An entity with neither last_reviewed nor created has no defensible
+            # baseline. Surface the inconsistency rather than masking it as fresh —
+            # downstream consumers (entity needs-review, science:status) will then
+            # see the entity flagged for human attention.
+            knowledge.add((entity_uri, SCI_NS.freshnessState, Literal("needs-review")))
+            knowledge.add((
+                entity_uri,
+                SCI_NS.triggeredBy,
+                Literal("missing-baseline: no last_reviewed or created date"),
+            ))
             continue
 
         triggered: list[URIRef] = []
