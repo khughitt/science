@@ -10,7 +10,7 @@ from typing import Any, TypeVar
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError
-from science_model.entities import Entity, EntityType, ProjectEntity, DomainEntity, core_entity_type_for_kind
+from science_model.entities import Entity, EntityClass, EntityType, ProjectEntity, DomainEntity, core_entity_type_for_kind
 from science_model.ontologies import load_catalogs_for_names
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE, load_profile_manifest, load_shared_profile
@@ -112,9 +112,23 @@ class ProjectSources(BaseModel):
     bindings: list[BindingSource] = Field(default_factory=list)
     manual_aliases: dict[str, str] = Field(default_factory=dict)
     ontology_catalogs: list[OntologyCatalog] = Field(default_factory=list)
+    registry: EntityRegistry
+    freshness_enabled: bool = True
 
 
 SourceBinding = BindingSource
+
+
+def _resolve_entity_class(declared: str | None, default: EntityClass) -> EntityClass:
+    """Parse entity_class from a manifest string, or return the default."""
+    if declared is None:
+        return default
+    try:
+        return EntityClass(declared)
+    except ValueError:
+        raise ValueError(
+            f"Invalid entity_class {declared!r} in profile manifest; expected one of {[c.value for c in EntityClass]}"
+        )
 
 
 def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] | None = None) -> ProjectSources:
@@ -123,6 +137,8 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
     config = _read_project_config(project_root)
     profiles = KnowledgeProfiles.model_validate(config["knowledge_profiles"])
     local_profile = profiles.local
+    freshness_block = config.get("freshness") or {}
+    freshness_enabled = bool(freshness_block.get("enabled", True))
 
     declared_ontologies: list[str] = list(config.get("ontologies") or [])  # type: ignore[union-attr]
     ontology_catalogs = load_catalogs_for_names(declared_ontologies) if declared_ontologies else []
@@ -143,13 +159,22 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
     registry = EntityRegistry.with_core_types()
     for profile in profile_manifests:
         for entity_kind in profile.entity_kinds:
-            registry.register_profile_kind(entity_kind.name, ProjectEntity, owner=profile.name)
+            registry.register_profile_kind(
+                entity_kind.name,
+                ProjectEntity,
+                owner=profile.name,
+                entity_class=_resolve_entity_class(entity_kind.entity_class, EntityClass.OPERATIONAL),
+            )
     for catalog in ontology_catalogs:
         for entity_type in catalog.entity_types:
             registry.register_catalog_kind(entity_type.name, DomainEntity, owner=catalog.ontology)
     if local_profile_manifest is not None:
         for entity_kind in local_profile_manifest.entity_kinds:
-            registry.register_extension_kind(entity_kind.name, ProjectEntity)
+            registry.register_extension_kind(
+                entity_kind.name,
+                ProjectEntity,
+                entity_class=_resolve_entity_class(entity_kind.entity_class, EntityClass.OPERATIONAL),
+            )
 
     adapters: list[StorageAdapter] = [
         MarkdownAdapter(virtual_files=markdown_overrides),
@@ -268,6 +293,8 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
         bindings=bindings,
         manual_aliases=_load_manual_aliases(project_root, local_profile=local_profile),
         ontology_catalogs=ontology_catalogs,
+        registry=registry,
+        freshness_enabled=freshness_enabled,
     )
 
 
@@ -496,14 +523,9 @@ def _load_legacy_records(
             "ontology_terms": list(record.ontology_terms),
             "aliases": list(record.aliases),
         }
-        # canonical_parameter is not a registered kind; register on-the-fly.
-        # The spec routes unknown project kinds through ProjectEntity, but the
-        # registry requires explicit registration.
-        try:
-            schema: type[Entity] = registry.resolve("canonical_parameter")
-        except Exception:  # noqa: BLE001
-            registry.register_extension_kind("canonical_parameter", ProjectEntity)
-            schema = registry.resolve("canonical_parameter")
+        # canonical_parameter is registered as a profile kind by LOCAL_PROFILE,
+        # which is always included in profile_manifests above.
+        schema: type[Entity] = registry.resolve("canonical_parameter")
 
         _enrich_raw(
             raw,
@@ -641,12 +663,17 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     if not isinstance(raw_ontologies, list):
         raw_ontologies = []
 
+    raw_freshness = data.get("freshness") or {}
+    if not isinstance(raw_freshness, dict):
+        raw_freshness = {}
+
     return {
         "name": str(data.get("name") or project_root.name),
         "knowledge_profiles": {
             "local": str(knowledge_profiles.get("local") or "local"),
         },
         "ontologies": [str(o) for o in raw_ontologies],
+        "freshness": raw_freshness,
     }
 
 

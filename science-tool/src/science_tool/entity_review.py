@@ -16,12 +16,14 @@ from pathlib import Path
 
 from rdflib import Dataset
 
+from science_model.entities import EntityClass
 from science_tool.entities import (
     EntityCommandError,
     _atomic_replace_text,
     _render_markdown,
     find_entity,
 )
+from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.store import (
     DEFAULT_GRAPH_PATH,
     PROJECT_NS,
@@ -55,6 +57,17 @@ def review_entity(
         location = find_entity(project_root, entity_ref)
     except EntityCommandError as exc:
         raise ReviewError(str(exc)) from exc
+
+    registry = EntityRegistry.with_core_types()
+    try:
+        kind_class = registry.kind_class(location.kind)
+    except EntityKindNotRegisteredError:
+        kind_class = None  # extension kinds default to allowed
+    if kind_class is not None and kind_class != EntityClass.EPISTEMIC:
+        raise ReviewError(
+            f"entity {entity_ref!r} has kind {location.kind!r} "
+            f"({kind_class.value}); review_state is only meaningful on epistemic entities"
+        )
 
     path = project_root / location.rel_path
     frontmatter = dict(location.frontmatter)

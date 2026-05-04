@@ -200,6 +200,27 @@ class Entity(BaseModel):
     provisional: bool = False
     review_after: date | None = None
     review_state: EpistemicReviewState | None = None
+
+    @model_validator(mode="after")
+    def _validate_review_state_kind(self) -> "Entity":
+        # Closed list of clearly-non-epistemic core kinds. Avoids registry
+        # coupling at the science-model layer while still rejecting the
+        # high-confidence cases.
+        non_epistemic = {
+            "task",
+            "dataset",
+            "workflow-run",
+            "data-package",
+            "paper",
+            "experiment",
+        }
+        if self.review_state is not None and self.kind in non_epistemic:
+            raise ValueError(
+                f"review_state is not allowed on kind {self.kind!r} "
+                f"(non-epistemic by design)"
+            )
+        return self
+
     deprecated_ids: list[str] = Field(default_factory=list)
     replaced_by: str | None = None
     taxon: str | None = None

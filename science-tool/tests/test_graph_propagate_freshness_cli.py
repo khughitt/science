@@ -85,3 +85,34 @@ def test_propagate_freshness_does_not_mutate_entity_files(tmp_path: Path, monkey
     runner.invoke(cli_main, ["graph", "propagate-freshness"])
 
     assert h_path.stat().st_mtime_ns == before_mtime
+
+
+def _build_project_with_unresolved_ref(tmp_path: Path) -> Path:
+    """Project where the hypothesis cites a non-existent paper."""
+    root = tmp_path / "demo"
+    (root / "specs" / "hypotheses").mkdir(parents=True)
+    (root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: core\n")
+    (root / "specs" / "hypotheses" / "h1.md").write_text(
+        dedent(
+            """
+            ---
+            id: "hypothesis:h1"
+            kind: "hypothesis"
+            title: "Demo"
+            created: "2026-04-01"
+            updated: "2026-04-01"
+            source_refs: ["paper:does-not-exist"]
+            ---
+            Body.
+            """
+        ).lstrip()
+    )
+    return root
+
+
+def test_propagate_freshness_raises_on_unresolved_refs(tmp_path: Path) -> None:
+    import pytest
+    from science_tool.graph.freshness import propagate_freshness_in_memory
+    project_root = _build_project_with_unresolved_ref(tmp_path)
+    with pytest.raises(ValueError, match="unresolved references"):
+        propagate_freshness_in_memory(project_root)

@@ -15,7 +15,6 @@ from science_model.ontologies.schema import OntologyCatalog
 from science_model.reasoning import MeasurementModel, RivalModelPacket
 
 from science_tool.addressing import is_address, parse_address
-from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.freshness import (
     EntityFreshnessInfo,
     close_bears_on,
@@ -51,9 +50,9 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
     """Build the in-memory rdflib Dataset that `materialize_graph` would write.
 
     Composes the existing emission helpers (`_add_entity`, `_add_relations`,
-    `_add_authored_relation`, `_add_binding`) and the freshness derivation
-    helpers (`_classify_entities`, `_build_entity_meta`,
-    `_derive_epistemic_layer`). Pure: takes `ProjectSources`, returns a
+    `_add_authored_relation`, `_add_binding`) and the epistemic derivation
+    helpers (`_classify_entities`, `_derive_bears_on_layer`,
+    `_derive_freshness_layer`). Pure: takes `ProjectSources`, returns a
     populated `Dataset`. Never touches the filesystem.
 
     Used by both `materialize_graph` (which writes to disk) and the
@@ -108,8 +107,10 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
             resolver=resolver,
         )
 
-    entity_meta = _build_entity_meta(sources, kind_class)
-    _derive_epistemic_layer(dataset, kind_class=kind_class, entity_meta=entity_meta)
+    _derive_bears_on_layer(dataset, kind_class=kind_class)
+    if sources.freshness_enabled:
+        entity_meta = _build_entity_meta(sources, kind_class)
+        _derive_freshness_layer(dataset, entities=entity_meta, today=_date.today())
 
     return dataset
 
@@ -577,18 +578,15 @@ def _external_profile(raw_target: str, ontology_catalogs: list[OntologyCatalog])
 def _classify_entities(sources: ProjectSources) -> dict[str, EntityClass]:
     """Build a {URI string -> EntityClass} map from the project's entities.
 
-    Phase 1 fallback: any kind not registered in EntityRegistry.with_core_types()
-    classifies as OPERATIONAL. Profile-, catalog-, and extension-kind classification
-    is not threaded through ProjectSources yet (see design doc § Decisions #4).
+    Uses the registry built by load_project_sources, which knows about profile,
+    catalog, and extension kinds. Every entity in `sources.entities` was
+    accepted by `registry.resolve(kind)` during loading, so kind_class lookup
+    is guaranteed to succeed — let any unexpected miss raise loudly.
     """
-    registry = EntityRegistry.with_core_types()
     kind_class: dict[str, EntityClass] = {}
     for entity in sources.entities:
         uri_str = str(_entity_uri(entity.canonical_id))
-        try:
-            kind_class[uri_str] = registry.kind_class(entity.kind)
-        except EntityKindNotRegisteredError:
-            kind_class[uri_str] = EntityClass.OPERATIONAL
+        kind_class[uri_str] = sources.registry.kind_class(entity.kind)
     return kind_class
 
 
@@ -612,19 +610,29 @@ def _build_entity_meta(
     return entity_meta
 
 
-def _derive_epistemic_layer(
+def _derive_bears_on_layer(
     dataset: Dataset,
     *,
     kind_class: dict[str, EntityClass],
-    entity_meta: dict[str, EntityFreshnessInfo],
 ) -> None:
-    """Run the four-step epistemic derivation pipeline against the dataset.
+    """Derive sci:bearsOn triples (typed-edge + provenance + closure).
 
-    Mutates the knowledge graph in place: emits sci:bearsOn (typed-edge +
-    provenance + closure), then sci:freshnessState / sci:upstreamChangeAt /
-    sci:triggeredBy.
+    Always runs regardless of freshness.enabled — bears_on edges are
+    independently useful for dependency queries and are not part of freshness.
     """
     derive_bears_on_from_typed_edges(dataset, kind_class=kind_class)
     derive_bears_on_from_provenance(dataset, kind_class=kind_class)
     close_bears_on(dataset, kind_class=kind_class)
-    derive_freshness(dataset, entities=entity_meta, today=_date.today())
+
+
+def _derive_freshness_layer(
+    dataset: Dataset,
+    *,
+    entities: dict[str, EntityFreshnessInfo],
+    today: _date,
+) -> None:
+    """Derive freshness state triples (sci:freshnessState / sci:upstreamChangeAt / sci:triggeredBy).
+
+    Gated on sources.freshness_enabled — skipped entirely when opt-out is active.
+    """
+    derive_freshness(dataset, entities=entities, today=today)
