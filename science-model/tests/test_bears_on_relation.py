@@ -38,6 +38,7 @@ def test_bears_on_targets_match_target_kinds_exactly() -> None:
         "question",
         "report",
         "story",
+        "theme",
         "validation-report",
     }
     assert set(bears_on.target_kinds) == expected
