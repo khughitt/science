@@ -17,8 +17,10 @@ from datetime import date
 from pathlib import Path
 from typing import TypedDict
 
+import hashlib
+
 from rdflib import Dataset, Literal, URIRef
-from rdflib.namespace import PROV, XSD
+from rdflib.namespace import PROV, RDF, XSD
 
 from science_model.entities import EntityClass
 from science_tool.graph.sources import load_project_sources
@@ -36,6 +38,28 @@ class EntityFreshnessInfo(TypedDict):
     created: date | None
     updated: date | None
     review_horizon_days: int | None
+
+
+def _emit_bears_on_edge(knowledge, source: URIRef, target: URIRef, depth: int) -> None:
+    """Emit a reified BearsOnEdge with depth metadata for Phase 2 sampling.
+
+    Each call adds a content-addressed named node carrying (source, target, depth).
+    The node URI is derived from a SHA-256 hash of the (source, target, depth)
+    tuple, ensuring deterministic and stable identifiers (no blank nodes — the
+    canonical graph serializer forbids them).
+
+    Phase 2 queries `MIN(?depth) WHERE { ?bn a sci:BearsOnEdge ; sci:bearsOnSource
+    ?s ; sci:bearsOnTarget ?t ; sci:bearsOnDepth ?depth }` to recover the shortest
+    path. Direct (depth 1) and closure (depth 2+) edges for the same pair coexist;
+    SPARQL MIN is the canonical aggregator.
+    """
+    key = f"{source}\x00{target}\x00{depth}"
+    digest = hashlib.sha256(key.encode()).hexdigest()[:16]
+    edge_node = URIRef(PROJECT_NS[f"bears-on-edge/{digest}"])
+    knowledge.add((edge_node, RDF.type, SCI_NS.BearsOnEdge))
+    knowledge.add((edge_node, SCI_NS.bearsOnSource, source))
+    knowledge.add((edge_node, SCI_NS.bearsOnTarget, target))
+    knowledge.add((edge_node, SCI_NS.bearsOnDepth, Literal(depth, datatype=XSD.integer)))
 
 
 def derive_bears_on_from_typed_edges(
@@ -79,14 +103,17 @@ def derive_bears_on_from_typed_edges(
     for predicate in direct_predicates:
         for s, _, o in knowledge.triples((None, predicate, None)):
             knowledge.add((s, SCI_NS.bearsOn, o))
+            _emit_bears_on_edge(knowledge, s, o, 1)
     for predicate in inverse_predicates:
         for s, _, o in knowledge.triples((None, predicate, None)):
             knowledge.add((o, SCI_NS.bearsOn, s))
+            _emit_bears_on_edge(knowledge, o, s, 1)
 
     # has_participant: emit only when participant is itself epistemic.
     for s, _, o in knowledge.triples((None, SCI_NS.hasParticipant, None)):
         if kind_class.get(str(o)) == EntityClass.EPISTEMIC:
             knowledge.add((o, SCI_NS.bearsOn, s))
+            _emit_bears_on_edge(knowledge, o, s, 1)
 
 
 def derive_bears_on_from_provenance(
@@ -110,6 +137,7 @@ def derive_bears_on_from_provenance(
         # If the derived entity is epistemic, the source bears on it.
         if kind_class.get(str(s)) == EntityClass.EPISTEMIC:
             knowledge.add((o, SCI_NS.bearsOn, s))
+            _emit_bears_on_edge(knowledge, o, s, 1)
 
 
 def close_bears_on(
@@ -117,40 +145,57 @@ def close_bears_on(
     *,
     kind_class: dict[str, EntityClass],
 ) -> None:
-    """Emit transitive `bears_on` edges via DFS with cycle protection.
+    """Emit transitive `bears_on` edges via BFS with depth tracking.
 
     For each source S that has any outgoing `bears_on` edge, walk the chain
-    forward; whenever a reachable node is epistemic, emit `S bears_on T`.
-    Skip self-edges (cycles through operational hops produce them otherwise).
+    forward via BFS (breadth-first for shortest-path semantics); whenever a
+    reachable epistemic node is found at depth ≥ 2, emit `S bears_on T` and
+    a BearsOnEdge with the minimum depth across all paths.
 
     `kind_class` is required. Unclassified nodes are treated as non-epistemic —
-    they are traversed during DFS but never emitted as closure targets. This
+    they are traversed during BFS but never emitted as closure targets. This
     matches the design doc's "default to operational" stance for unclassified
     extension kinds.
+
+    Direct (depth-1) edges are not re-emitted by the closure — they are
+    already emitted by `derive_bears_on_from_typed_edges` and
+    `derive_bears_on_from_provenance`. Phase 2 uses `SELECT MIN(?depth)` over
+    all BearsOnEdge blank nodes for a given (source, target) pair.
     """
+    from collections import deque
+
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 
-    # Build adjacency map from existing bears_on edges.
+    # Build adjacency map from existing bears_on edges (depth-1 direct ones).
     adjacency: dict[URIRef, set[URIRef]] = {}
     for s, _, o in knowledge.triples((None, SCI_NS.bearsOn, None)):
         adjacency.setdefault(s, set()).add(o)
 
-    new_triples: set[tuple[URIRef, URIRef, URIRef]] = set()
+    # BFS from each source, starting from grand-neighbors (depth 2) to avoid
+    # re-emitting direct edges that are already depth-1 BearsOnEdge nodes.
+    new_edges: dict[tuple[URIRef, URIRef], int] = {}
     for source in list(adjacency):
-        # DFS from source.
-        stack: list[URIRef] = list(adjacency[source])
-        visited: set[URIRef] = set()
-        while stack:
-            node = stack.pop()
-            if node in visited or node == source:
+        queue: deque[tuple[URIRef, int]] = deque()
+        visited: set[URIRef] = {source}
+        for direct_nbr in adjacency[source]:
+            visited.add(direct_nbr)
+            for grand_nbr in adjacency.get(direct_nbr, set()):
+                queue.append((grand_nbr, 2))
+        while queue:
+            node, depth = queue.popleft()
+            if node in visited:
                 continue
             visited.add(node)
             if kind_class.get(str(node)) == EntityClass.EPISTEMIC:
-                new_triples.add((source, SCI_NS.bearsOn, node))
-            stack.extend(adjacency.get(node, set()))
+                key = (source, node)
+                if key not in new_edges or depth < new_edges[key]:
+                    new_edges[key] = depth
+            for nbr in adjacency.get(node, set()):
+                queue.append((nbr, depth + 1))
 
-    for triple in new_triples:
-        knowledge.add(triple)
+    for (source, target), depth in new_edges.items():
+        knowledge.add((source, SCI_NS.bearsOn, target))
+        _emit_bears_on_edge(knowledge, source, target, depth)
 
 
 def derive_freshness(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from rdflib import Dataset, URIRef
-from rdflib.namespace import PROV
+from rdflib.namespace import PROV, RDF
 
 from science_model.entities import EntityClass
 from science_tool.graph.freshness import (
@@ -232,3 +232,68 @@ def test_close_bears_on_handles_three_hops():
     assert (str(_u("dataset/d1")), h_uri) in pairs
     assert (str(_u("workflow-run/wfr1")), h_uri) in pairs
     assert (str(_u("workflow-run/wfr2")), h_uri) in pairs
+
+
+# ---------------------------------------------------------------------------
+# Depth tracking tests (Phase 2 sampling prep)
+# ---------------------------------------------------------------------------
+
+
+def _bears_on_depth(ds: Dataset, source: URIRef, target: URIRef) -> int | None:
+    """Return the minimum sci:bearsOnDepth for (source, target), or None if no edge."""
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    depths: list[int] = []
+    for bn, _, _ in knowledge.triples((None, RDF.type, SCI_NS.BearsOnEdge)):
+        if (bn, SCI_NS.bearsOnSource, source) in knowledge and (bn, SCI_NS.bearsOnTarget, target) in knowledge:
+            for _, _, d in knowledge.triples((bn, SCI_NS.bearsOnDepth, None)):
+                depths.append(int(d))
+    return min(depths) if depths else None
+
+
+def test_direct_typed_edge_has_depth_one():
+    h = _u("hypothesis/h1")
+    t = _u("task/t1")
+    ds = _make_dataset_with([(t, SCI_NS.tests, h)])
+    derive_bears_on_from_typed_edges(ds, kind_class={str(t): EntityClass.OPERATIONAL, str(h): EntityClass.EPISTEMIC})
+    assert _bears_on_depth(ds, t, h) == 1
+
+
+def test_closure_emits_minimum_depth_through_chain():
+    # workflow-run grounds observation; observation supports hypothesis.
+    # Closure: workflow-run bears_on hypothesis at depth 2.
+    wr = _u("workflow-run/w1")
+    o = _u("observation/o1")
+    h = _u("hypothesis/h1")
+    ds = _make_dataset_with([(wr, SCI_NS.grounds, o), (o, CITO_NS.supports, h)])
+    kc = {
+        str(wr): EntityClass.OPERATIONAL,
+        str(o): EntityClass.EPISTEMIC,
+        str(h): EntityClass.EPISTEMIC,
+    }
+    derive_bears_on_from_typed_edges(ds, kind_class=kc)
+    close_bears_on(ds, kind_class=kc)
+    assert _bears_on_depth(ds, wr, o) == 1
+    assert _bears_on_depth(ds, wr, h) == 2
+
+
+def test_closure_diamond_takes_minimum_depth():
+    # A -> B -> D (depth 2); A -> C -> X -> D (depth 3 via three hops). Min should be 2.
+    a = _u("workflow-run/a")
+    b = _u("observation/b")
+    c = _u("observation/c")
+    x = _u("observation/x")
+    d = _u("hypothesis/d")
+    ds = _make_dataset_with([
+        (a, SCI_NS.grounds, b), (b, CITO_NS.supports, d),
+        (a, SCI_NS.grounds, c), (c, CITO_NS.supports, x), (x, CITO_NS.supports, d),
+    ])
+    kc = {
+        str(a): EntityClass.OPERATIONAL,
+        str(b): EntityClass.EPISTEMIC,
+        str(c): EntityClass.EPISTEMIC,
+        str(x): EntityClass.EPISTEMIC,
+        str(d): EntityClass.EPISTEMIC,
+    }
+    derive_bears_on_from_typed_edges(ds, kind_class=kc)
+    close_bears_on(ds, kind_class=kc)
+    assert _bears_on_depth(ds, a, d) == 2
