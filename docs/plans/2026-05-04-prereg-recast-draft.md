@@ -1,6 +1,6 @@
 # Pre-registration semantics recast — draft proposal
 
-> **Status:** Draft for circulation (t012). Do **not** merge until downstream projects (natural-systems, protein-landscape, seq-feats, 3d-attention-bias, cats) have surfaced objections. The recast changes how their existing pre-regs are interpreted, even though no schema or file content changes.
+> **Status:** Draft for circulation (t012), revision 2 (2026-05-04 post initial review). Do **not** merge until downstream projects (natural-systems, protein-landscape, seq-feats, 3d-attention-bias, cats) have surfaced objections. The recast changes how their existing pre-regs are interpreted; no entity-file content changes, but two small code prerequisites are required (see § "Code prerequisites").
 >
 > *t012's task description names "myeloma, natural-systems" as the primary downstream projects to consult. `myeloma` is not a locally-present Science project as of 2026-05-04 — confirm with the project owner before treating its absence as final.*
 
@@ -50,7 +50,9 @@ Concrete edits to `commands/pre-register.md`:
    - **Operational target** — a procedure, pipeline run, dataset processing step, or experimental protocol. The commitment is "we will execute X before observing Y." Deviation requires an amendment.
    - **Epistemic target** — a hypothesis, question, proposition, or interpretation rule. The commitment is "we will *interpret* observed Y in this way to update belief about X." Deviation does not require an amendment, because the pre-reg is not gating a procedure; it is constraining how a future result feeds the epistemic graph.
 
-   Mixed targets are common (e.g., "we will run analysis A and treat H as supported if effect > 0.3"). Treat the procedure portion as operational and the interpretation portion as epistemic. The tool can derive both: the operational `bears_on` from the procedure description, the epistemic `bears_on` from the interpretation rule.
+   Mixed targets are common (e.g., "we will run analysis A and treat H as supported if effect > 0.3"). Treat the procedure portion and the interpretation portion separately:
+   - **Operational portion:** stays as an amendment-gate check. `science:interpret-results` confirms the analysis ran as committed (or that any deviation has a corresponding `amendments:` record). No `bears_on` edge — operational targets are not `bears_on` sinks (`science-tool/.../graph/materialize.py` rejects authored `bears_on` edges to non-epistemic targets).
+   - **Epistemic portion:** materializes as a `bears_on` edge from the pre-reg into the epistemic target via the new auto-derivation rule (see § "Auto-derivation rule for pre-reg → epistemic target" below). This is the load-bearing graph change of the recast.
 
 2. **Revise § 3 "Define Decision Criteria":** drop the implicit binary framing. Today's wording:
 
@@ -84,19 +86,17 @@ Concrete edits to `commands/interpret-results.md`:
 
 1. **New § 4d "Pre-registration evaluation":** insert after § 4c "Suspiciously good results", before § 5 "Update Proposition Support / Dispute".
 
-   - Locate any pre-reg with the current analysis or its hypothesis/question in its `related` set. Two existing options:
+   - Locate any pre-reg with the current analysis or its hypothesis/question in its `related` set. Today, the only working approach is a path scan:
 
      ```bash
-     # List all pre-regs, then filter by inspecting `related:` (matches today's
-     # interpret-results pattern, which already references the doc/meta path
-     # under § "Suspiciously good results")
-     science-tool entity list --type pre-registration
-
-     # Or read directly from the conventional path
+     # Read directly from the conventional paths (matches today's
+     # interpret-results pattern under § "Suspiciously good results")
      ls doc/meta/pre-registration-*.md doc/pre-registrations/*.md 2>/dev/null
      ```
 
-     *Open question: should we add `entity list --related <ref>` filtering as a small CLI ergonomics fix? Out of scope for t012, worth flagging as `[t012c]` if it materially improves the workflow.*
+     *Why not `science-tool entity list --kind pre-registration`?* It does not work today because (a) `pre-registration` is missing from `_CORE_KIND_CLASSES` in `entity_registry.py` and (b) source loading skips unknown kinds (`graph/sources.py`). Both are fixed by the prerequisite registry change (see § "The pre-registration kind classification gap" below). Once that lands, prefer the CLI form. **Until then, the path scan is the only correct lookup and the skill should recommend only that.**
+
+     *Possible future ergonomics fix:* add `entity list --related <ref>` filtering — out of scope for t012, flagged as `[t012c]` if it materially improves the workflow.
 
    - For each found pre-reg, read its `committed:` clause and its target class (derivable from each `related:` ref's registered `EntityClass`).
 
@@ -151,7 +151,10 @@ commitment shapes coexist under the single `type: pre-registration`:
 The classification falls out of the registered `EntityClass` of each entity
 in the pre-reg's `related:` field — no per-entity schema change is needed.
 Mixed pre-regs (an analysis that commits to both a procedure and an
-interpretation rule) generate both kinds of `bears_on` automatically.
+interpretation rule) split cleanly: the operational portion remains an
+amendment-gate check at interpret-results time, and the epistemic portion
+materializes as a `bears_on` edge into the epistemic target. Operational
+targets are not `bears_on` sinks, so no operational `bears_on` is emitted.
 
 This dissolves the "gate slammed shut on a viable pathway" failure mode:
 under hard-gating semantics, a null result against a pre-registered
@@ -172,39 +175,61 @@ This document is already marked `Superseded` (line 4) and points readers to `pro
 
 ---
 
-## The pre-registration kind classification gap
+## Code prerequisites (must land before the prose recast)
 
-**Surfaced during this draft:** `pre-registration` is not in `science_tool/graph/entity_registry.py`'s `_CORE_KIND_CLASSES` mapping. Every other kind referenced in the recast (hypothesis, question, proposition, interpretation, finding, task, workflow-run, dataset, etc.) is registered with an explicit class. Pre-reg is not.
+Two code changes are **required** for the recast to mean anything in the materialized graph. The original draft framed both as optional follow-ups; that was wrong (see § "What changed in this revision" at the bottom).
 
-This isn't a t012 blocker, but it should be resolved before the recast actually ships:
+### Prerequisite 1: register `pre-registration` as a kind
 
-- **Recommended classification:** `EntityClass.OPERATIONAL`. A pre-reg is fundamentally a *procedural commitment* — it commits to executing or interpreting in advance. Even epistemic-target pre-regs are themselves operational in nature (they commit to a procedure for interpretation). The pre-reg's role as a `bears_on` source on epistemic targets is independent of its own class.
+`pre-registration` is missing from `science_tool/graph/entity_registry.py`'s `_CORE_KIND_CLASSES` mapping. Every other kind referenced in the recast (hypothesis, question, proposition, interpretation, finding, task, workflow-run, dataset, etc.) is registered with an explicit class.
 
-- **Alternative:** `EntityClass.REFERENCE`. Argued: pre-regs are authored declarations that don't change after committed. Counter-argument: they participate in the dependency graph (their commitment dates are load-bearing), which is more like operational behavior than reference behavior.
+Two consequences as long as it's missing:
 
-- **Suggested follow-up task:** add `"pre-registration": EntityClass.OPERATIONAL` to `_CORE_KIND_CLASSES` (one-line registry change + test). This unblocks both prose recast (skills can branch on `kind_class("pre-registration")`) and the auto-derivation rule below.
+- `science-tool entity list --kind pre-registration` returns nothing — source loading skips unknown kinds (`graph/sources.py`).
+- The auto-derivation rule below has no kind to dispatch on.
 
-### Auto-derivation rule for pre-reg → epistemic target
+**Fix:** add `"pre-registration": EntityClass.OPERATIONAL` to `_CORE_KIND_CLASSES` and the matching `register_core_kind` call in `with_core_types()`. One-line registry change plus a test asserting `kind_class("pre-registration") == OPERATIONAL`.
 
-If we want a pre-reg with an epistemic target to show up as a `bears_on` source automatically (rather than relying on the analysis's interpretation entity to carry the chain), we need a new rule in `freshness.py`'s `derive_bears_on_from_typed_edges`:
+**Why OPERATIONAL, not REFERENCE:** a pre-reg is fundamentally a *procedural commitment* — it commits to executing or interpreting in advance, and its `committed:` date is load-bearing in the dependency graph. REFERENCE classification would be argued for "authored declaration that doesn't change after committed", but pre-regs do participate as `bears_on` *sources* (after Prerequisite 2), which is operational behavior. The pre-reg's class as a node is independent of the class of its target.
+
+Tracked as `[t012b]`.
+
+### Prerequisite 2: auto-derive `bears_on` from pre-reg `related:` to epistemic targets
+
+A pre-reg's `related:` field materializes as `skos:related` (`graph/materialize.py`). Freshness derivation does not consume `skos:related`. So without an explicit auto-derivation rule, the recast has no graph effect on `bears_on` edges into the epistemic target — the prose changes would be teaching humans to think differently while the materialized graph behaves identically to today.
+
+**Fix:** add a rule in `freshness.py`'s `derive_bears_on_from_typed_edges` (or a sibling deriver):
 
 > For a `pre-registration` entity P with `related:` member E:
->   - if `EntityClass(E) == EPISTEMIC`: emit `P bears_on E` at depth 1.
->   - if `EntityClass(E) == OPERATIONAL`: do not emit (operational targets aren't `bears_on` sinks).
+>   - if `kind_class(kind_of(E)) == EPISTEMIC`: emit `P bears_on E` at depth 1.
+>   - if `kind_class(kind_of(E)) == OPERATIONAL` or `REFERENCE`: do not emit (operational and reference targets are not `bears_on` sinks; materialization rejects authored `bears_on` edges to non-epistemic targets per `graph/materialize.py`).
 
-This is a small implementation follow-up — call it `[t012b]`. It's *optional* for the prose recast (the existing chain `pre-reg → analysis → interpretation → hypothesis` already produces the right edge through closure if the pre-reg participates in the analysis's `related:` graph), but it would make the relationship explicit and let `science:status` surface "this hypothesis has N pre-registered bears_on sources" cleanly.
+Tests: pre-reg with `related: [hypothesis:H]` → `P bears_on H` derived; pre-reg with `related: [task:T]` → no `bears_on` derived; mixed `related: [hypothesis:H, task:T]` → exactly one edge to H. Unit-test against the existing freshness derivation harness.
 
-**Recommendation:** Land t012 (prose) first. Land the registry classification (`pre-registration` → OPERATIONAL) as a tiny standalone fix concurrently with t012's first downstream review. Defer the auto-derivation rule until Phase 2 (`[t011]`) needs it for weighting.
+Tracked as `[t012b']` (companion to t012b — same PR is fine, since both are tiny and tightly coupled).
+
+### Why these are prerequisites, not follow-ups
+
+The original draft asserted that the existing closure chain `pre-reg → analysis → interpretation → hypothesis` already produces the right edge. This was wrong: that chain depends on each hop being a typed edge that triggers an auto-derivation rule, and `pre-reg related: analysis` is `skos:related` — untyped from the freshness derivation's perspective. The chain is broken at the first hop. So:
+
+- Without Prerequisite 1: the skill cannot even ask the registry whether a target is epistemic, because pre-reg isn't a registered kind.
+- Without Prerequisite 2: the prose recast is purely cosmetic — humans get new framing language, but `science:status`, `science:next-steps`, `bears_on`-derived freshness, and Phase-2 sampling weights see no new edges.
+
+**Sequencing:**
+
+1. Land Prerequisites 1 & 2 (small, mechanical, can ship as one PR — call it `[t012b]`).
+2. Apply prose changes from § "Skill changes" and § "Doc changes". Skill prose can now safely reference `science-tool entity list --kind pre-registration` and rely on the auto-derived edges existing in the graph.
+3. Circulate to downstream maintainers per § "Downstream impact".
 
 ---
 
 ## Downstream impact
 
-26 existing pre-regs across 4 of 5 locally-present Science projects (counted 2026-05-04):
+26 existing pre-regs across 4 of 5 locally-present Science projects (counted 2026-05-04, excluding `.worktrees/` duplicates):
 
 | Project | Pre-reg count | Notable instances |
 |---|---|---|
-| natural-systems | 13 | `pre-registration-h07-beta-arbitration.md` targets `hypothesis:h07-...` + 4 questions (epistemic); `pre-registration-t085-t086.md` targets task IDs (operational) |
+| natural-systems | 14 | `pre-registration-h07-beta-arbitration.md` targets `hypothesis:h07-...` + 4 questions (epistemic); `pre-registration-t085-t086.md` targets task IDs (operational) |
 | 3d-attention-bias | 4 | `pre-registration-phase1-ablation.md`; `pre-registration-t045-t046-mechanism-and-env-shift.md` |
 | seq-feats | 5 | `pre-registration-t152-bpe-nda.md`; `pre-registration-cycle1-domains.md` |
 | protein-landscape | 3 | `pre-registration-q63-heldout-taxa-benchmark.md` (question target — epistemic) |
@@ -227,12 +252,13 @@ This is a small implementation follow-up — call it `[t012b]`. It's *optional* 
 
 ## Sequencing for landing
 
-1. **Now:** circulate this draft (or its summary) to downstream maintainers. Solicit objections specifically on (a) whether the recast changes intent of any existing pre-reg, (b) whether `commitment_weight` is worth adding as an optional field or should be derived from prose, (c) whether any project has tooling that depends on the binary-verdict reading of pre-regs.
-2. **After objections resolved:** apply the skill changes from § "Skill changes" and the doc change from § "Doc changes".
-3. **Concurrently or shortly after:** land the registry classification fix (`pre-registration` → OPERATIONAL).
-4. **Phase 2 prep:** if/when Phase-2 sampling (`[t011]`) needs explicit pre-reg `bears_on` edges, add the auto-derivation rule then.
+1. **Now:** circulate this draft to downstream maintainers. Solicit objections specifically on (a) whether the recast changes intent of any existing pre-reg, (b) whether `commitment_weight` is worth adding as an optional field or should be derived from prose, (c) whether any project has tooling that depends on the binary-verdict reading of pre-regs.
+2. **Land code prerequisites (`[t012b]`):** add `pre-registration` → `EntityClass.OPERATIONAL` to the registry, plus the `pre-reg related: → bears_on epistemic-target` auto-derivation rule. One small PR. See § "Code prerequisites" for details and tests.
+3. **Apply prose changes:** the skill edits from § "Skill changes" and the doc edit from § "Doc changes". Now safe because the registry knows about pre-reg and the graph carries the new edges.
+4. **(If applicable)** Land any `commitment_weight` field per the resolution of Open Question #1.
+5. **Phase 2:** when `[t011]` lands weighted sampling, the pre-reg `bears_on` edges are already in place to feed weighting.
 
-Total prose-edit work in step 2 is small: ~80 lines added across `commands/pre-register.md`, `commands/interpret-results.md`, and `docs/proposition-and-evidence-model.md`, plus zero edits to `docs/claim-and-evidence-model.md` (already superseded).
+Total prose-edit work in step 3 is small: ~80 lines added across `commands/pre-register.md`, `commands/interpret-results.md`, and `docs/proposition-and-evidence-model.md`, plus zero edits to `docs/claim-and-evidence-model.md` (already superseded).
 
 ---
 
@@ -247,6 +273,19 @@ Total prose-edit work in step 2 is small: ~80 lines added across `commands/pre-r
 
 ## What this draft is **not**
 
-- It is not the final recast text. The skill files and proposition-and-evidence-model.md should be edited only after objections come back.
-- It is not a code change. No `science-tool` or `science-model` source files change for t012 itself. The classification fix (pre-reg → OPERATIONAL) and the auto-derivation rule are separate, smaller follow-ups.
+- It is not the final recast text. The skill files and `proposition-and-evidence-model.md` should be edited only after objections come back and the code prerequisites land.
 - It is not retroactive. Existing pre-regs stay valid as authored; only their interpretation at evaluation time shifts.
+
+The original draft additionally claimed "no code changes for t012 itself." That was withdrawn in revision 2 — see § "What changed in this revision" below.
+
+---
+
+## What changed in this revision
+
+Revision 2 (2026-05-04, post initial review):
+
+- **Auto-derivation rule is required, not optional.** The original draft asserted that the existing chain `pre-reg → analysis → interpretation → hypothesis` produces the right `bears_on` edge through closure. That was wrong: a pre-reg's `related:` materializes as `skos:related`, which freshness derivation does not consume. The recast has no graph effect without the explicit pre-reg → epistemic-target derivation rule. Promoted from "optional follow-up `[t012b]`" to "Prerequisite 2".
+- **Registry classification is required for the prose recast to even branch correctly.** Without `pre-registration` in `_CORE_KIND_CLASSES`, `science-tool entity list --kind pre-registration` returns nothing (source loading skips unknown kinds) and the deriver has no kind to dispatch on. Promoted from "concurrent" to "Prerequisite 1".
+- **CLI command corrected.** `science-tool entity list --type` → `--kind` (the `--kind` form is the one supported by `cli.py`). Recommended lookup is path-scan only until the registry change lands.
+- **Mixed-target language corrected.** Operational targets are not `bears_on` sinks (materialization rejects them), so a "mixed pre-reg" does not generate "both kinds of bears_on" — only the epistemic portion produces a `bears_on` edge. The operational portion stays a procedural amendment-gate check.
+- **Count corrected.** natural-systems pre-reg count was 13; correct is 14 (the original `find` command included `.worktrees/` duplicates which inflated other counts; the table number was off by one). Total of 26 was correct.
