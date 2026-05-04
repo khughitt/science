@@ -28,6 +28,32 @@ def test_entity_create_question_writes_source() -> None:
         assert Path("doc/questions/q02-new-question.md").is_file()
 
 
+def test_entity_create_theme_cli_round_trips() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(
+            main,
+            [
+                "entity",
+                "create",
+                "theme",
+                "Transportability Across Cancer Types",
+                "--id",
+                "theme:transportability-across-cancer-types",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        path = Path("doc/themes/transportability-across-cancer-types.md")
+        assert path.exists()
+        text = path.read_text(encoding="utf-8")
+        assert "theme:transportability-across-cancer-types" in text
+        assert "## Definition" in text
+
+
 def test_entity_create_with_unresolved_related_prints_warning() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
