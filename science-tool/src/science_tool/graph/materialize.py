@@ -106,6 +106,24 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
             ext_prefixes=ext_prefixes,
         )
 
+    # Phase 1 epistemic dependency graph: build kind_class before the authored-
+    # relation loop so the bears_on guard in _add_authored_relation can fire.
+    # Use EntityRegistry.with_core_types() for classification. Profile-,
+    # catalog-, and extension-kind classification is not threaded here in
+    # Phase 1: those kinds default to OPERATIONAL via the defensive fallback,
+    # which is the documented Phase-1 behavior (see design doc § Decisions
+    # #4). Later phases can plumb the full registry through ProjectSources.
+    registry = EntityRegistry.with_core_types()
+
+    kind_class: dict[str, EntityClass] = {}
+    for entity in sources.entities:
+        uri_str = str(_entity_uri(entity.canonical_id))
+        try:
+            entity_class = registry.kind_class(entity.kind)
+        except EntityKindNotRegisteredError:
+            entity_class = EntityClass.OPERATIONAL  # Phase-1 default for non-core kinds.
+        kind_class[uri_str] = entity_class
+
     for relation in sources.relations:
         _add_authored_relation(
             relation,
@@ -115,6 +133,7 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
             bridge=bridge,
             ontology_catalogs=sources.ontology_catalogs,
             ext_prefixes=ext_prefixes,
+            kind_class=kind_class,
         )
 
     for binding in sources.bindings:
@@ -126,25 +145,11 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
             resolver=resolver,
         )
 
-    # Phase 1 epistemic dependency graph: derive bears_on + freshness.
-    # Use EntityRegistry.with_core_types() for classification. Profile-,
-    # catalog-, and extension-kind classification is not threaded here in
-    # Phase 1: those kinds default to OPERATIONAL via the defensive fallback,
-    # which is the documented Phase-1 behavior (see design doc § Decisions
-    # #4). Later phases can plumb the full registry through ProjectSources.
-    registry = EntityRegistry.with_core_types()
-
-    kind_class: dict[str, EntityClass] = {}
     entity_meta: dict[str, dict] = {}
     for entity in sources.entities:
         uri_str = str(_entity_uri(entity.canonical_id))
-        try:
-            entity_class = registry.kind_class(entity.kind)
-        except EntityKindNotRegisteredError:
-            entity_class = EntityClass.OPERATIONAL  # Phase-1 default for non-core kinds.
-        kind_class[uri_str] = entity_class
         entity_meta[uri_str] = {
-            "kind_class": entity_class,
+            "kind_class": kind_class[uri_str],
             "last_reviewed": entity.review_state.last_reviewed if entity.review_state else None,
             "created": entity.created,
             "updated": entity.updated,
@@ -366,6 +371,7 @@ def _add_authored_relation(
     bridge,
     ontology_catalogs: list[OntologyCatalog],
     ext_prefixes: frozenset[str],
+    kind_class: dict[str, EntityClass] | None = None,
 ) -> None:
     graph = dataset.graph(_graph_uri(relation.graph_layer))
     subject_uri = _canonical_entity_uri(relation.subject, entity_index=entity_index, resolver=resolver)
@@ -376,6 +382,17 @@ def _add_authored_relation(
         _register_external_term(object_uri, relation.object, bridge=bridge, ontology_catalogs=ontology_catalogs)
     else:
         object_uri = _canonical_entity_uri(relation.object, entity_index=entity_index, resolver=resolver)
+
+    # Phase 1 guard: hand-authored bears_on edges may only target epistemic kinds.
+    # The auto-derivation engine respects this by construction; this catches
+    # human-authored mistakes at the same place we accept their structured edges.
+    if predicate_uri == SCI_NS.bearsOn and kind_class is not None:
+        target_class = kind_class.get(str(object_uri))
+        if target_class is not None and target_class != EntityClass.EPISTEMIC:
+            raise ValueError(
+                f"hand-authored bears_on must target an epistemic entity, got "
+                f"{relation.object!r} (classified {target_class.value})"
+            )
 
     graph.add((subject_uri, predicate_uri, object_uri))
 
