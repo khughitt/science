@@ -728,6 +728,34 @@ def graph_build(project_root: Path) -> None:
         pass  # Suggestions are non-blocking
 
 
+@graph.command("propagate-freshness")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+)
+def graph_propagate_freshness(project_root: Path, output_format: str) -> None:
+    """Read-only freshness sweep — recomputes in memory and reports flagged entities."""
+    from science_tool.graph.freshness import propagate_freshness_in_memory
+
+    _project_root = Path.cwd() if str(project_root) == "." else project_root
+    rows = propagate_freshness_in_memory(_project_root)
+    emit_query_rows(
+        output_format=output_format,
+        title="Entities needing review (in-memory)",
+        columns=[("state", "State"), ("kind", "Kind"), ("id", "ID")],
+        rows=rows,
+    )
+
+
 @graph.command("audit")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 @click.option(

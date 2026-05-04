@@ -47,41 +47,18 @@ from science_tool.graph.store import (
 )
 
 
-def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
-    """Build `knowledge/graph.trig` deterministically from project sources.
+def build_dataset_from_sources(sources: ProjectSources) -> Dataset:
+    """Build the in-memory rdflib Dataset that `materialize_graph` would write.
 
-    When `strict=True` (the default), raises RuntimeError if any legacy
-    data-package entities have not yet been migrated via
-    `science-tool data-package migrate`.
+    Composes the existing emission helpers (`_add_entity`, `_add_relations`,
+    `_add_authored_relation`, `_add_binding`) and the freshness derivation
+    helpers (`_classify_entities`, `_build_entity_meta`,
+    `_derive_epistemic_layer`). Pure: takes `ProjectSources`, returns a
+    populated `Dataset`. Never touches the filesystem.
+
+    Used by both `materialize_graph` (which writes to disk) and the
+    `propagate_freshness_in_memory` sweep (which discards the dataset).
     """
-    project_root = project_root.resolve()
-
-    if strict:
-        from science_model.frontmatter import parse_frontmatter
-
-        unmigrated: list[str] = []
-        dp_dir = project_root / "doc" / "data-packages"
-        if dp_dir.exists():
-            for md in dp_dir.rglob("*.md"):
-                result = parse_frontmatter(md)
-                fm = result[0] if result else {}
-                if fm.get("type") == "data-package" and fm.get("status") != "superseded":
-                    unmigrated.append(str(fm.get("id", md.stem)))
-        if unmigrated:
-            slugs = ", ".join(sorted(unmigrated))
-            raise RuntimeError(
-                f"unmigrated data-package entities: {slugs}. "
-                f"Run `science-tool data-package migrate <slug>` to split each into "
-                f"derived dataset(s) + research-package."
-            )
-
-    sources = load_project_sources(project_root)
-    rows, has_failures = audit_project_sources(sources)
-    if has_failures:
-        details = "; ".join(f"{row['source']} -> {row['target']}" for row in rows if row["status"] == "fail")
-        msg = f"Cannot materialize graph with unresolved references: {details}"
-        raise ValueError(msg)
-
     dataset = Dataset()
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
     bridge = dataset.graph(PROJECT_NS["graph/bridge"])
@@ -133,6 +110,46 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
 
     entity_meta = _build_entity_meta(sources, kind_class)
     _derive_epistemic_layer(dataset, kind_class=kind_class, entity_meta=entity_meta)
+
+    return dataset
+
+
+def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
+    """Build `knowledge/graph.trig` deterministically from project sources.
+
+    When `strict=True` (the default), raises RuntimeError if any legacy
+    data-package entities have not yet been migrated via
+    `science-tool data-package migrate`.
+    """
+    project_root = project_root.resolve()
+
+    if strict:
+        from science_model.frontmatter import parse_frontmatter
+
+        unmigrated: list[str] = []
+        dp_dir = project_root / "doc" / "data-packages"
+        if dp_dir.exists():
+            for md in dp_dir.rglob("*.md"):
+                result = parse_frontmatter(md)
+                fm = result[0] if result else {}
+                if fm.get("type") == "data-package" and fm.get("status") != "superseded":
+                    unmigrated.append(str(fm.get("id", md.stem)))
+        if unmigrated:
+            slugs = ", ".join(sorted(unmigrated))
+            raise RuntimeError(
+                f"unmigrated data-package entities: {slugs}. "
+                f"Run `science-tool data-package migrate <slug>` to split each into "
+                f"derived dataset(s) + research-package."
+            )
+
+    sources = load_project_sources(project_root)
+    rows, has_failures = audit_project_sources(sources)
+    if has_failures:
+        details = "; ".join(f"{row['source']} -> {row['target']}" for row in rows if row["status"] == "fail")
+        msg = f"Cannot materialize graph with unresolved references: {details}"
+        raise ValueError(msg)
+
+    dataset = build_dataset_from_sources(sources)
 
     trig_path = project_root / DEFAULT_GRAPH_PATH
     trig_path.parent.mkdir(parents=True, exist_ok=True)

@@ -14,6 +14,7 @@ Public surface:
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 from typing import TypedDict
 
 from rdflib import Dataset, Literal, URIRef
@@ -233,3 +234,38 @@ def derive_freshness(
             ))
         for source_uri in sorted(triggered):
             knowledge.add((entity_uri, SCI_NS.triggeredBy, source_uri))
+
+
+def propagate_freshness_in_memory(project_root: Path) -> list[dict]:
+    """Compute freshness without writing the materialized graph.
+
+    Loads project sources, builds the same in-memory dataset
+    `materialize_graph` would build (via `build_dataset_from_sources`),
+    extracts the freshness rows, returns them. Never writes the trig
+    and never mutates entity files.
+
+    Same semantics as `graph build` for which entities surface as
+    needs-review / stale, by construction (shared helper).
+
+    Returns rows of {"id": "<canonical_id>", "kind": "<kind>", "state": "<state>"}.
+    """
+    from science_tool.graph.materialize import build_dataset_from_sources
+    from science_tool.graph.sources import load_project_sources
+    from science_tool.graph.store import canonical_id_from_entity_uri
+
+    sources = load_project_sources(project_root.resolve())
+    dataset = build_dataset_from_sources(sources)
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    rows: list[dict] = []
+    for s, _, o in knowledge.triples((None, SCI_NS.freshnessState, None)):
+        state = str(o)
+        if state == "fresh":
+            continue
+        canonical_id = canonical_id_from_entity_uri(str(s))
+        if canonical_id is None:
+            continue
+        kind, _, _ = canonical_id.partition(":")
+        rows.append({"id": canonical_id, "kind": kind, "state": state})
+    rows.sort(key=lambda r: (r["state"], r["kind"], r["id"]))
+    return rows
