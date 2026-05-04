@@ -211,3 +211,149 @@ def test_materialize_emits_closure_bears_on_through_observation(tmp_path: Path):
 
     # Transitive closure should emit:
     assert (wfr_uri, p_uri) in pairs, "closure should produce wfr -> proposition"
+
+
+def test_provenance_plus_closure_end_to_end(tmp_path: Path):
+    """A paper cited via source_refs of a hypothesis flows through provenance
+    derivation; if a story synthesizes that hypothesis, closure emits
+    paper bears_on story as well.
+
+    Chain:
+      paper:p1  wasDerivedFrom->  hypothesis:h1   (source_refs / provenance)
+      => paper:p1 bears_on hypothesis:h1           (depth 1, provenance rule)
+      story:s1  sci:synthesizes -> hypothesis:h1
+      => hypothesis:h1 bears_on story:s1           (depth 1, synthesizes inverse)
+      closure => paper:p1 bears_on story:s1        (depth 2)
+
+    Note: `paper` is OPERATIONAL (it is a reference artifact, not an epistemic
+    claim), so it cannot be a closure *target* — but it can be a closure *source*.
+    `story` is EPISTEMIC, so it is a valid closure target.
+    """
+    root = tmp_path / "demo"
+    _write(root / "science.yaml", """
+        name: demo
+        knowledge_profiles:
+          local: core
+    """)
+    # Paper entity — scanned automatically because markdown adapter covers doc/
+    _write(root / "doc" / "papers" / "p1.md", """
+        ---
+        id: "paper:p1"
+        kind: "paper"
+        title: "Demo paper"
+        created: "2026-03-01"
+        updated: "2026-03-01"
+        ---
+        Body.
+    """)
+    # Hypothesis cites the paper via source_refs → provenance materialises
+    # hypothesis:h1 prov:wasDerivedFrom paper:p1, which the freshness engine
+    # converts to paper:p1 bears_on hypothesis:h1 (depth 1).
+    _write(root / "specs" / "hypotheses" / "h1.md", """
+        ---
+        id: "hypothesis:h1"
+        kind: "hypothesis"
+        title: "Demo hypothesis"
+        created: "2026-04-01"
+        updated: "2026-04-01"
+        source_refs: ["paper:p1"]
+        ---
+        Body.
+    """)
+    # Story entity — scanned automatically because markdown adapter covers doc/
+    _write(root / "doc" / "stories" / "s1.md", """
+        ---
+        id: "story:s1"
+        kind: "story"
+        title: "Demo story"
+        created: "2026-04-15"
+        updated: "2026-04-15"
+        ---
+        Body.
+    """)
+    # sci:synthesizes is an inverse bears_on rule: story synthesizes hypothesis
+    # => hypothesis bears_on story.  We author this as a structured relation
+    # because the markdown frontmatter for generic ProjectEntity kinds does not
+    # have a first-class `synthesizes` field (that field lives on the legacy
+    # store API only).
+    _write(root / "knowledge" / "sources" / "core" / "relations.yaml", """
+        relations:
+          - subject: "story:s1"
+            predicate: "sci:synthesizes"
+            object: "hypothesis:h1"
+            graph_layer: "graph/knowledge"
+    """)
+
+    trig = materialize_graph(root)
+    ds = _load_dataset(trig)
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+
+    paper_uri = str(URIRef(PROJECT_NS["paper/p1"]))
+    h_uri = str(URIRef(PROJECT_NS["hypothesis/h1"]))
+    story_uri = str(URIRef(PROJECT_NS["story/s1"]))
+
+    pairs = {(str(s), str(o)) for s, _, o in knowledge.triples((None, SCI_NS.bearsOn, None))}
+    # Direct: paper -> hypothesis (provenance derivation)
+    assert (paper_uri, h_uri) in pairs, "provenance rule: paper bears_on hypothesis"
+    # Direct: hypothesis -> story (synthesizes inverse rule)
+    assert (h_uri, story_uri) in pairs, "synthesizes inverse: hypothesis bears_on story"
+    # Closure: paper -> story (transitive, depth 2)
+    assert (paper_uri, story_uri) in pairs, "closure: paper bears_on story"
+
+
+def test_propagate_and_materialize_agree(tmp_path: Path):
+    """propagate_freshness_in_memory should produce the same needs-review/stale
+    rows as materialize_graph + parse-trig, since they use the same underlying
+    pipeline.
+    """
+    from science_tool.graph.freshness import propagate_freshness_in_memory
+    from science_tool.graph.store import canonical_id_from_entity_uri
+
+    root = _build_min_project(tmp_path)
+
+    in_memory_rows = propagate_freshness_in_memory(root)
+    in_memory_set = {(r["id"], r["kind"], r["state"]) for r in in_memory_rows}
+
+    trig = materialize_graph(root)
+    ds = _load_dataset(trig)
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    materialize_set = set()
+    for s, _, o in knowledge.triples((None, SCI_NS.freshnessState, None)):
+        state = str(o)
+        if state == "fresh":
+            continue
+        cid = canonical_id_from_entity_uri(str(s))
+        if cid is None:
+            continue
+        kind, _, _ = cid.partition(":")
+        materialize_set.add((cid, kind, state))
+
+    assert in_memory_set == materialize_set
+
+
+def test_audit_gate_runs_even_when_freshness_disabled(tmp_path: Path):
+    """`freshness.enabled: false` does NOT bypass the audit gate."""
+    import pytest as _pytest
+    from science_tool.graph.freshness import propagate_freshness_in_memory
+
+    root = tmp_path / "demo"
+    _write(root / "science.yaml", """
+        name: demo
+        knowledge_profiles:
+          local: core
+        freshness:
+          enabled: false
+    """)
+    _write(root / "specs" / "hypotheses" / "h1.md", """
+        ---
+        id: "hypothesis:h1"
+        kind: "hypothesis"
+        title: "Demo"
+        created: "2026-04-01"
+        updated: "2026-04-01"
+        source_refs: ["paper:does-not-exist"]
+        ---
+        Body.
+    """)
+    with _pytest.raises(ValueError, match="unresolved references"):
+        propagate_freshness_in_memory(root)
