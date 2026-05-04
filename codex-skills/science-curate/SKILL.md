@@ -16,7 +16,7 @@ Before executing any research command:
    - `research` → `doc/`, `specs/`, `tasks/`, `knowledge/`, `papers/`, `models/`, `data/`, `code/`
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
-3. Load the `research-methodology` and `scientific-writing` skills.
+3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
 4. Read `specs/research-question.md` for project context when it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
    For each declared aspect, resolve the aspect file in this order:
@@ -98,6 +98,19 @@ uv run science-tool big-picture resolve-questions --project-root .
 uv run science-tool sync status
 git log --oneline -30 --format="%h %s (%cr)"
 ```
+
+### Carry-over from prior sweeps
+
+Before running new analysis, read the most recent prior ledger at
+`doc/meta/curation/curation-sweep-*.md` (sorted descending by filename).
+Extract its **Pending Decisions** section. Items the user has not acted on
+since must surface in the new ledger as carry-overs rather than being
+re-derived as fresh medium-confidence findings (fb-2026-05-01-003). Mark
+each carry-over with the originating sweep date, e.g.
+`Carry-over from 2026-04-28 sweep:`. To detect "not acted on", check whether
+the artifact's frontmatter or content actually changed since the prior
+ledger's commit; if it has, the item may have been resolved silently and
+should be re-evaluated, not blindly carried.
 
 If DAG tooling is present and the project has DAGs:
 
@@ -202,7 +215,7 @@ Suggested body:
 - **Drift** - docs, tasks, DAGs, or summaries that lag behind newer evidence.
 - **Duplication and Fragmentation** - overlapping topics, repeated questions, repeated summaries, or parallel notes.
 - **Actioned Fixes** - exact files changed, with rationale.
-- **Pending Decisions** - items that need user judgement.
+- **Pending Decisions** - items that need user judgement. Each entry must distinguish *new* decisions (first surfaced this sweep) from *carry-overs* extracted in Phase 1 from the most recent prior ledger; tag carry-overs with the originating sweep date, e.g. `Carry-over from 2026-04-28 sweep`.
 - **Suggested Follow-Ups** - tasks, commands, or synthesis updates to queue next.
 - **Self-Reflection** - improvements noticed for `science-curate`, the skill, prompts, inventory helpers, graph surfaces, entity metadata, or conventions.
 

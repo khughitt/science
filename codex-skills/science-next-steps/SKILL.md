@@ -16,7 +16,7 @@ Before executing any research command:
    - `research` → `doc/`, `specs/`, `tasks/`, `knowledge/`, `papers/`, `models/`, `data/`, `code/`
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
-3. Load the `research-methodology` and `scientific-writing` skills.
+3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
 4. Read `specs/research-question.md` for project context when it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
    For each declared aspect, resolve the aspect file in this order:
@@ -217,6 +217,21 @@ If the project is at a fork — a moment where the next direction depends on a c
 
 This captures strategic framing that individual task recommendations don't. Omit if no strategic decision is pending.
 
+### 3e. Needs-Review Entities
+
+When the backlog is sparse or the user is otherwise blocked, run:
+
+```bash
+science-tool entity needs-review
+```
+
+This lists epistemic entities flagged `needs-review` or `stale` in the materialized graph
+(`sci:freshnessState`) — entities whose upstream evidence changed after their last
+reviewed-as-of date. Frame each as "you reviewed this on date X; since then upstream Y
+changed — worth a fresh look?" rather than as a verdict. `needs-review` is a flag for
+attention, not a claim that the prior conclusion is wrong. Propose one as a candidate next
+step and add a corresponding task if accepted.
+
 ### 4. Suggested Next Steps
 
 Recommend 3-5 actions based on:
@@ -225,6 +240,7 @@ Recommend 3-5 actions based on:
 - Highest-priority active tasks without recent commits
 - Stale tasks (active but no related activity in >7 days)
 - Open high-priority questions that could become tasks
+- Needs-review entities from `science-tool entity needs-review` (when backlog is unclear)
 
 For each suggestion, include:
 - The task ID (if it exists) or "new task" if suggesting something not yet tracked

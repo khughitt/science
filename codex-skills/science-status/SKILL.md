@@ -16,7 +16,7 @@ Before executing any research command:
    - `research` → `doc/`, `specs/`, `tasks/`, `knowledge/`, `papers/`, `models/`, `data/`, `code/`
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
-3. Load the `research-methodology` and `scientific-writing` skills.
+3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
 4. Read `specs/research-question.md` for project context when it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
    For each declared aspect, resolve the aspect file in this order:
@@ -196,6 +196,10 @@ Flag:
 - stale tasks
 - old untouched hypotheses
 - graph/doc drift if the graph changed but interpretation/docs did not
+- **needs-review entities**: run `science-tool entity needs-review` to list epistemic
+  entities whose upstream evidence has changed since their last reviewed-as-of date
+  (the materialized graph carries this state via `sci:freshnessState`). Include up to 5
+  of the highest-impact ones — these are entities the user should consider revisiting.
 - **task archive lag**: when `science-tool health --format json` shows non-zero
   `archive_lag.done_in_active` or `archive_lag.retired_in_active`, surface it as:
   > N done/retired task(s) still in `tasks/active.md`. Run `science-tool tasks archive --apply`
