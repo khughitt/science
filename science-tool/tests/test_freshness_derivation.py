@@ -171,3 +171,28 @@ def test_freshness_emits_upstream_change_at():
     assert upstream_at_values == ["2026-05-01"]
     triggered = _triggered_by(ds, _u("hypothesis/h1"))
     assert triggered == {str(_u("dataset/d1")), str(_u("dataset/d2"))}
+
+
+def test_freshness_needs_review_wins_over_stale_when_both_apply():
+    """When both upstream change and horizon-exceeded apply, needs-review wins."""
+    ds = _ds_with_bears_on([(_u("dataset/d1"), _u("hypothesis/h1"))])
+    entities = {
+        str(_u("hypothesis/h1")): {
+            "kind_class": EntityClass.EPISTEMIC,
+            "last_reviewed": date(2025, 1, 1),  # Long ago
+            "created": date(2024, 12, 1),
+            "updated": date(2025, 1, 1),
+            "review_horizon_days": 90,  # Way exceeded
+        },
+        str(_u("dataset/d1")): {
+            "kind_class": EntityClass.OPERATIONAL,
+            "last_reviewed": None,
+            "created": date(2025, 1, 1),
+            "updated": date(2026, 5, 1),  # Post-dates baseline
+            "review_horizon_days": None,
+        },
+    }
+    derive_freshness(ds, entities=entities, today=date(2026, 5, 3))
+    # Both conditions apply: upstream change AND horizon exceeded.
+    # needs-review must win.
+    assert _state_for(ds, _u("hypothesis/h1")) == "needs-review"

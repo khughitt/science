@@ -8,18 +8,32 @@ Public surface:
     derive_bears_on_from_typed_edges(dataset)
     derive_bears_on_from_provenance(dataset, *, kind_class)
     close_bears_on(dataset, *, kind_class)
-    derive_freshness(dataset, *, entities, kind_class, today)
+    derive_freshness(dataset, *, entities, today)
 """
 
 from __future__ import annotations
 
-from datetime import date as _date
+from datetime import date
+from typing import TypedDict
 
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, XSD
 
 from science_model.entities import EntityClass
 from science_tool.graph.store import CITO_NS, PROJECT_NS, SCI_NS
+
+
+class EntityFreshnessInfo(TypedDict):
+    """Per-entity metadata required by derive_freshness().
+
+    Built by callers (typically materialize_graph) from each project entity,
+    keyed in the entities dict by the entity's URI string.
+    """
+    kind_class: EntityClass
+    last_reviewed: date | None
+    created: date | None
+    updated: date | None
+    review_horizon_days: int | None
 
 
 def derive_bears_on_from_typed_edges(
@@ -140,8 +154,8 @@ def close_bears_on(
 def derive_freshness(
     dataset: Dataset,
     *,
-    entities: dict[str, dict],
-    today: _date,
+    entities: dict[str, EntityFreshnessInfo],
+    today: date,
 ) -> None:
     """Compute EpistemicFreshness for every epistemic entity and emit triples.
 
@@ -153,6 +167,8 @@ def derive_freshness(
         review_horizon_days: int | None
 
     Algorithm:
+      State precedence (highest first): needs-review > stale > fresh.
+
       1. For each epistemic entity E:
          a. baseline = E.last_reviewed or E.created
          b. Walk every (S, bears_on, E) triple. For each S, change_at = S.updated or S.created.
@@ -186,7 +202,7 @@ def derive_freshness(
             continue
 
         triggered: list[URIRef] = []
-        upstream_change_at: _date | None = None
+        upstream_change_at: date | None = None
         for source_uri in bears_on_in.get(entity_uri, set()):
             source_info = entities.get(str(source_uri))
             if source_info is None:
