@@ -234,6 +234,15 @@ def derive_freshness(
                 state = "fresh"
 
         knowledge.add((entity_uri, SCI_NS.freshnessState, Literal(state)))
+        # Phase 2 prep: emit last_reviewed when set so sampling can read it
+        # from the graph instead of re-parsing markdown frontmatter.
+        last_reviewed = info.get("last_reviewed")
+        if last_reviewed is not None:
+            knowledge.add((
+                entity_uri,
+                SCI_NS.lastReviewed,
+                Literal(last_reviewed.isoformat(), datatype=XSD.date),
+            ))
         if upstream_change_at is not None:
             knowledge.add((
                 entity_uri,

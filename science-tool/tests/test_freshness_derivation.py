@@ -196,3 +196,42 @@ def test_freshness_needs_review_wins_over_stale_when_both_apply():
     # Both conditions apply: upstream change AND horizon exceeded.
     # needs-review must win.
     assert _state_for(ds, _u("hypothesis/h1")) == "needs-review"
+
+
+def test_derive_freshness_emits_last_reviewed_triple() -> None:
+    from rdflib import Literal
+    from rdflib.namespace import XSD
+
+    ds = Dataset()
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    h = URIRef("http://example.org/hypothesis/h")
+    entities = {
+        str(h): {
+            "kind_class": EntityClass.EPISTEMIC,
+            "last_reviewed": date(2026, 1, 15),
+            "created": date(2025, 1, 1),
+            "updated": None,
+            "review_horizon_days": None,
+        }
+    }
+    derive_freshness(ds, entities=entities, today=date(2026, 5, 4))
+
+    triples = list(knowledge.triples((h, SCI_NS.lastReviewed, None)))
+    assert triples == [(h, SCI_NS.lastReviewed, Literal("2026-01-15", datatype=XSD.date))]
+
+
+def test_derive_freshness_no_last_reviewed_triple_when_unset() -> None:
+    ds = Dataset()
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    h = URIRef("http://example.org/hypothesis/h")
+    entities = {
+        str(h): {
+            "kind_class": EntityClass.EPISTEMIC,
+            "last_reviewed": None,
+            "created": date(2025, 1, 1),
+            "updated": None,
+            "review_horizon_days": None,
+        }
+    }
+    derive_freshness(ds, entities=entities, today=date(2026, 5, 4))
+    assert list(knowledge.triples((h, SCI_NS.lastReviewed, None))) == []
