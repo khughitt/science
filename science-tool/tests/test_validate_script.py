@@ -1042,3 +1042,48 @@ def test_validate_accepts_prior_analyses_variant_block_list(tmp_path: Path) -> N
     )
     combined = result.stdout + result.stderr
     assert "broken prior link" not in combined, combined
+
+
+def test_validate_warns_on_review_state_with_invalid_horizon(tmp_path: Path) -> None:
+    """review_state.review_horizon_days <= 0 must produce a warning."""
+    _write_minimal_research_project(tmp_path)
+    h = tmp_path / "specs" / "hypotheses" / "h-bad.md"
+    h.parent.mkdir(parents=True, exist_ok=True)
+    # Use _hypothesis_body for the standard shape then append review_state in
+    # the frontmatter.  We build manually to keep the review_state block inside
+    # the YAML front matter (before the closing ---).
+    h.write_text(
+        "---\n"
+        'id: "hypothesis:h-bad"\n'
+        'type: "hypothesis"\n'
+        'title: "Bad horizon"\n'
+        'status: "proposed"\n'
+        "source_refs: []\n"
+        "related: []\n"
+        'created: "2026-01-01"\n'
+        'updated: "2026-01-01"\n'
+        "review_state:\n"
+        '  last_reviewed: "2026-01-01"\n'
+        "  review_horizon_days: -5\n"
+        "---\n"
+        "\n"
+        "# Hypothesis: Bad horizon\n"
+        "\n"
+        "## Falsifiability\n"
+        "\n"
+        "This is falsifiable.\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    combined = result.stdout + result.stderr
+    assert "review_horizon_days" in combined, combined
+    assert result.returncode == 0, combined  # warning, not error

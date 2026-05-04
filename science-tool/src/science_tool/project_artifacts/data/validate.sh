@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.05.03.1
-# science-managed-source-sha256: a4f191308ca95899e096792a800b46f5d6df30f869728c31b30243d07b4a3ecf
+# science-managed-version: 2026.05.03.2
+# science-managed-source-sha256: c0cf78f20e7f71b9c066fbb3d14cedcabf337e8351f774e39f5eb66370feefcd
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -415,6 +415,20 @@ if [ -d "$SPECS_DIR/hypotheses" ]; then
         fi
     done
 fi
+
+# ─── 5a. review_state.review_horizon_days shape validation ───────
+# Pydantic rejects non-positive values at parse time; this check gives faster
+# feedback during the edit/validate loop (before graph build runs).
+for f in $(find "$DOC_DIR" "$SPECS_DIR" -name "*.md" -type f 2>/dev/null); do
+    horizon=$(awk '
+        /^review_state:/ { in_rs=1; next }
+        in_rs && /^[^ ]/ { in_rs=0 }
+        in_rs && /review_horizon_days:/ { print $2 }
+    ' "$f" | head -1 | tr -d '"')
+    if [ -n "$horizon" ] && [ "$horizon" -le 0 ] 2>/dev/null; then
+        warn "$f: review_state.review_horizon_days must be positive (got $horizon)"
+    fi
+done
 
 # ─── 6. Citation integrity ───────────────────────────────────────
 echo ""
