@@ -62,6 +62,44 @@ class EntityType(StrEnum):
     UNKNOWN = "unknown"
 
 
+class EntityClass(StrEnum):
+    """High-level taxonomic classification of an entity kind.
+
+    Distinguishes which kinds carry continuous belief (epistemic), which
+    represent operational artifacts produced by project work (operational),
+    and which name external things that rarely change (reference).
+
+    Used by the freshness engine to decide whether an entity participates
+    in `bears_on` propagation: only EPISTEMIC entities are valid targets.
+    """
+
+    EPISTEMIC = "epistemic"
+    OPERATIONAL = "operational"
+    REFERENCE = "reference"
+
+
+class EpistemicReviewState(BaseModel):
+    """Per-entity review-as-of state for epistemic entities.
+
+    `last_reviewed` is the date the user (or agent) last considered this
+    entity in light of all evidence. `last_review_note` is an optional
+    human-readable note about that review. `review_horizon_days` is an
+    optional per-entity threshold for the `stale` state — when set,
+    entities whose `last_reviewed` is older than `now - horizon` flip
+    to `stale` even without any upstream change.
+    """
+
+    last_reviewed: date | None = None
+    last_review_note: str = ""
+    review_horizon_days: int | None = None
+
+    @model_validator(mode="after")
+    def _validate_horizon(self) -> "EpistemicReviewState":
+        if self.review_horizon_days is not None and self.review_horizon_days <= 0:
+            raise ValueError("review_horizon_days must be positive when set")
+        return self
+
+
 class EntityUpdate(BaseModel):
     """Partial update for entity metadata (written back to frontmatter)."""
 
@@ -161,6 +199,7 @@ class Entity(BaseModel):
     scope: EntityScope = EntityScope.PROJECT
     provisional: bool = False
     review_after: date | None = None
+    review_state: EpistemicReviewState | None = None
     deprecated_ids: list[str] = Field(default_factory=list)
     replaced_by: str | None = None
     taxon: str | None = None

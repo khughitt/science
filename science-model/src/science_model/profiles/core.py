@@ -249,5 +249,29 @@ CORE_PROFILE = ProfileManifest(
             layer="layer/core",
             description="A data package was produced by a specific workflow run.",
         ),
+        RelationKind(
+            name="bears_on",
+            predicate="sci:bearsOn",
+            source_kinds=[],
+            target_kinds=[
+                "hypothesis",
+                "question",
+                "proposition",
+                "observation",
+                "finding",
+                "interpretation",
+                "discussion",
+                "story",
+                "mechanism",
+            ],
+            layer="layer/core",
+            description=(
+                "Source entity's state contributes to the evidence base of the "
+                "target epistemic entity. Direction is upstream→downstream "
+                "(evidence → belief). Auto-derived from typed edges and "
+                "prov:wasDerivedFrom triples by the freshness engine; may also "
+                "be hand-authored for cases the auto-rules miss."
+            ),
+        ),
     ],
 )

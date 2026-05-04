@@ -7,6 +7,7 @@ import pytest
 from science_model.entities import (
     DatasetEntity,
     DomainEntity,
+    EntityClass,
     MechanismEntity,
     ProjectEntity,
     TaskEntity,
@@ -57,7 +58,7 @@ def test_unknown_kind_raises() -> None:
 def test_duplicate_core_registration_is_hard_error() -> None:
     registry = EntityRegistry.with_core_types()
     with pytest.raises(EntityKindAlreadyRegisteredError):
-        registry.register_core_kind("task", TaskEntity)
+        registry.register_core_kind("task", TaskEntity, entity_class=EntityClass.OPERATIONAL)
 
 
 def test_duplicate_extension_registration_is_hard_error() -> None:
@@ -124,4 +125,4 @@ def test_registered_class_must_subclass_entity() -> None:
 
     registry = EntityRegistry()
     with pytest.raises(TypeError, match="must subclass Entity"):
-        registry.register_core_kind("x", NotAnEntity)  # type: ignore[arg-type]
+        registry.register_core_kind("x", NotAnEntity, entity_class=EntityClass.OPERATIONAL)  # type: ignore[arg-type]

@@ -4,19 +4,29 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import date as _date
 from pathlib import Path
 from urllib.parse import quote
 
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
-from science_model.entities import Entity
+from science_model.entities import Entity, EntityClass
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.reasoning import MeasurementModel, RivalModelPacket
 
 from science_tool.addressing import is_address, parse_address
+from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
+from science_tool.graph.freshness import (
+    EntityFreshnessInfo,
+    close_bears_on,
+    derive_bears_on_from_provenance,
+    derive_bears_on_from_typed_edges,
+    derive_freshness,
+)
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
+    ProjectSources,
     SourceBinding,
     SourceRelation,
     _EXTERNAL_PREFIXES,
@@ -35,6 +45,73 @@ from science_tool.graph.store import (
     SCI_NS,
     save_graph_dataset,
 )
+
+
+def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
+    """Build the in-memory rdflib Dataset that `materialize_graph` would write.
+
+    Composes the existing emission helpers (`_add_entity`, `_add_relations`,
+    `_add_authored_relation`, `_add_binding`) and the freshness derivation
+    helpers (`_classify_entities`, `_build_entity_meta`,
+    `_derive_epistemic_layer`). Pure: takes `ProjectSources`, returns a
+    populated `Dataset`. Never touches the filesystem.
+
+    Used by both `materialize_graph` (which writes to disk) and the
+    `propagate_freshness_in_memory` sweep (which discards the dataset).
+    """
+    dataset = Dataset()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    bridge = dataset.graph(PROJECT_NS["graph/bridge"])
+    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+    dataset.graph(PROJECT_NS["graph/causal"])
+    dataset.graph(PROJECT_NS["graph/datasets"])
+
+    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+    entity_index = {entity.canonical_id: entity for entity in sources.entities}
+    ext_prefixes = _EXTERNAL_PREFIXES | external_prefixes(sources.ontology_catalogs)
+
+    for entity in sources.entities:
+        _add_entity(entity=entity, knowledge=knowledge, provenance=provenance)
+
+    for entity in sources.entities:
+        _add_relations(
+            entity,
+            entity_index=entity_index,
+            resolver=resolver,
+            knowledge=knowledge,
+            bridge=bridge,
+            provenance=provenance,
+            ontology_catalogs=sources.ontology_catalogs,
+            ext_prefixes=ext_prefixes,
+        )
+
+    kind_class = _classify_entities(sources)
+
+    for relation in sources.relations:
+        _add_authored_relation(
+            relation,
+            dataset=dataset,
+            entity_index=entity_index,
+            resolver=resolver,
+            bridge=bridge,
+            ontology_catalogs=sources.ontology_catalogs,
+            ext_prefixes=ext_prefixes,
+            kind_class=kind_class,
+        )
+
+    for binding in sources.bindings:
+        _add_binding(
+            binding,
+            knowledge=knowledge,
+            provenance=provenance,
+            entity_index=entity_index,
+            resolver=resolver,
+        )
+
+    entity_meta = _build_entity_meta(sources, kind_class)
+    _derive_epistemic_layer(dataset, kind_class=kind_class, entity_meta=entity_meta)
+
+    return dataset
 
 
 def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
@@ -72,51 +149,7 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
         msg = f"Cannot materialize graph with unresolved references: {details}"
         raise ValueError(msg)
 
-    dataset = Dataset()
-    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
-    bridge = dataset.graph(PROJECT_NS["graph/bridge"])
-    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
-    dataset.graph(PROJECT_NS["graph/causal"])
-    dataset.graph(PROJECT_NS["graph/datasets"])
-
-    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
-    entity_index = {entity.canonical_id: entity for entity in sources.entities}
-    ext_prefixes = _EXTERNAL_PREFIXES | external_prefixes(sources.ontology_catalogs)
-
-    for entity in sources.entities:
-        _add_entity(entity=entity, knowledge=knowledge, provenance=provenance)
-
-    for entity in sources.entities:
-        _add_relations(
-            entity,
-            entity_index=entity_index,
-            resolver=resolver,
-            knowledge=knowledge,
-            bridge=bridge,
-            provenance=provenance,
-            ontology_catalogs=sources.ontology_catalogs,
-            ext_prefixes=ext_prefixes,
-        )
-
-    for relation in sources.relations:
-        _add_authored_relation(
-            relation,
-            dataset=dataset,
-            entity_index=entity_index,
-            resolver=resolver,
-            bridge=bridge,
-            ontology_catalogs=sources.ontology_catalogs,
-            ext_prefixes=ext_prefixes,
-        )
-
-    for binding in sources.bindings:
-        _add_binding(
-            binding,
-            knowledge=knowledge,
-            provenance=provenance,
-            entity_index=entity_index,
-            resolver=resolver,
-        )
+    dataset = _build_dataset_from_sources(sources)
 
     trig_path = project_root / DEFAULT_GRAPH_PATH
     trig_path.parent.mkdir(parents=True, exist_ok=True)
@@ -326,6 +359,7 @@ def _add_authored_relation(
     bridge,
     ontology_catalogs: list[OntologyCatalog],
     ext_prefixes: frozenset[str],
+    kind_class: dict[str, EntityClass] | None = None,
 ) -> None:
     graph = dataset.graph(_graph_uri(relation.graph_layer))
     subject_uri = _canonical_entity_uri(relation.subject, entity_index=entity_index, resolver=resolver)
@@ -336,6 +370,18 @@ def _add_authored_relation(
         _register_external_term(object_uri, relation.object, bridge=bridge, ontology_catalogs=ontology_catalogs)
     else:
         object_uri = _canonical_entity_uri(relation.object, entity_index=entity_index, resolver=resolver)
+
+    # Phase 1 guard: hand-authored bears_on edges may only target epistemic kinds.
+    # The auto-derivation engine respects this by construction; this catches
+    # human-authored mistakes at the same place we accept their structured edges.
+    if predicate_uri == SCI_NS.bearsOn and kind_class is not None:
+        target_class = kind_class.get(str(object_uri))
+        if target_class is not None and target_class != EntityClass.EPISTEMIC:
+            raise ValueError(
+                f"hand-authored bears_on must target an epistemic entity: "
+                f"{relation.subject} -> {relation.object} in {relation.source_path} "
+                f"(target classified {target_class.value})"
+            )
 
     graph.add((subject_uri, predicate_uri, object_uri))
 
@@ -526,3 +572,59 @@ def _external_profile(raw_target: str, ontology_catalogs: list[OntologyCatalog])
             if prefix_lower in {p.lower() for p in et.curie_prefixes}:
                 return catalog.ontology
     return "external"
+
+
+def _classify_entities(sources: ProjectSources) -> dict[str, EntityClass]:
+    """Build a {URI string -> EntityClass} map from the project's entities.
+
+    Phase 1 fallback: any kind not registered in EntityRegistry.with_core_types()
+    classifies as OPERATIONAL. Profile-, catalog-, and extension-kind classification
+    is not threaded through ProjectSources yet (see design doc § Decisions #4).
+    """
+    registry = EntityRegistry.with_core_types()
+    kind_class: dict[str, EntityClass] = {}
+    for entity in sources.entities:
+        uri_str = str(_entity_uri(entity.canonical_id))
+        try:
+            kind_class[uri_str] = registry.kind_class(entity.kind)
+        except EntityKindNotRegisteredError:
+            kind_class[uri_str] = EntityClass.OPERATIONAL
+    return kind_class
+
+
+def _build_entity_meta(
+    sources: ProjectSources,
+    kind_class: dict[str, EntityClass],
+) -> dict[str, EntityFreshnessInfo]:
+    """Build the per-entity metadata dict consumed by derive_freshness."""
+    entity_meta: dict[str, EntityFreshnessInfo] = {}
+    for entity in sources.entities:
+        uri_str = str(_entity_uri(entity.canonical_id))
+        entity_meta[uri_str] = {
+            "kind_class": kind_class[uri_str],
+            "last_reviewed": entity.review_state.last_reviewed if entity.review_state else None,
+            "created": entity.created,
+            "updated": entity.updated,
+            "review_horizon_days": (
+                entity.review_state.review_horizon_days if entity.review_state else None
+            ),
+        }
+    return entity_meta
+
+
+def _derive_epistemic_layer(
+    dataset: Dataset,
+    *,
+    kind_class: dict[str, EntityClass],
+    entity_meta: dict[str, EntityFreshnessInfo],
+) -> None:
+    """Run the four-step epistemic derivation pipeline against the dataset.
+
+    Mutates the knowledge graph in place: emits sci:bearsOn (typed-edge +
+    provenance + closure), then sci:freshnessState / sci:upstreamChangeAt /
+    sci:triggeredBy.
+    """
+    derive_bears_on_from_typed_edges(dataset, kind_class=kind_class)
+    derive_bears_on_from_provenance(dataset, kind_class=kind_class)
+    close_bears_on(dataset, kind_class=kind_class)
+    derive_freshness(dataset, entities=entity_meta, today=_date.today())

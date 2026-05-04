@@ -409,6 +409,46 @@ def entity_neighbors(ref: str, hops: int, output_format: str) -> None:
     )
 
 
+@entity_group.command("review")
+@click.argument("ref")
+@click.option("--note", default=None, help="Optional note recorded with the review.")
+def entity_review(ref: str, note: str | None) -> None:
+    """Mark an epistemic entity as reviewed-as-of today."""
+    from science_tool.entity_review import ReviewError, review_entity
+
+    try:
+        path, changed = review_entity(Path.cwd(), ref, note=note)
+    except ReviewError as exc:
+        raise click.ClickException(str(exc)) from exc
+    rel = path.relative_to(Path.cwd())
+    if changed:
+        click.echo(f"Reviewed {ref} -> {rel}")
+    else:
+        click.echo(f"Reviewed {ref} -> {rel} (no changes)")
+
+
+@entity_group.command("needs-review")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+)
+def entity_needs_review(output_format: str) -> None:
+    """List epistemic entities flagged needs-review or stale by the materialized graph."""
+    from science_tool.entity_review import list_needs_review
+    from science_tool.output import emit_query_rows
+
+    rows = list_needs_review(Path.cwd())
+    emit_query_rows(
+        output_format=output_format,
+        title="Entities needing review",
+        columns=[("state", "State"), ("kind", "Kind"), ("id", "ID")],
+        rows=rows,
+    )
+
+
 @main.group("hypothesis")
 def hypothesis_group() -> None:
     """Hypothesis source commands."""
@@ -686,6 +726,34 @@ def graph_build(project_root: Path) -> None:
             )
     except Exception:  # noqa: BLE001
         pass  # Suggestions are non-blocking
+
+
+@graph.command("propagate-freshness")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+)
+def graph_propagate_freshness(project_root: Path, output_format: str) -> None:
+    """Read-only freshness sweep — recomputes in memory and reports flagged entities."""
+    from science_tool.graph.freshness import propagate_freshness_in_memory
+
+    _project_root = (Path.cwd() if str(project_root) == "." else project_root).resolve()
+    rows = propagate_freshness_in_memory(_project_root)
+    emit_query_rows(
+        output_format=output_format,
+        title="Entities needing review (in-memory)",
+        columns=[("state", "State"), ("kind", "Kind"), ("id", "ID")],
+        rows=rows,
+    )
 
 
 @graph.command("audit")
