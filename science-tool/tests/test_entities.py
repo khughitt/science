@@ -32,6 +32,7 @@ def test_builtin_path_policy_maps_core_kinds() -> None:
     assert resolve_path_policy("hypothesis").root == Path("specs/hypotheses")
     assert resolve_path_policy("discussion").filename == "date-local-part"
     assert resolve_path_policy("interpretation").filename == "date-local-part"
+    assert resolve_path_policy("theme").root == Path("doc/themes")
 
 
 @pytest.mark.parametrize(
@@ -233,6 +234,7 @@ def test_template_driven_create_entity_passes_prospective_audit_for_all_migrated
         ("hypothesis", "Template shell hypothesis", "hypothesis:h01-template-shell"),
         ("discussion", "Template shell discussion", None),
         ("interpretation", "Template shell interpretation", None),
+        ("theme", "Template shell theme", "theme:template-shell-theme"),
     ]
     for kind, title, entity_id in cases:
         result = create_entity(
@@ -280,6 +282,31 @@ def test_create_entity_writes_question_source_and_loads_it(tmp_path: Path) -> No
     assert result.warnings == []
     sources = load_project_sources(tmp_path)
     assert "question:q02-what-explains-model-family-overlap" in {entity.canonical_id for entity in sources.entities}
+
+
+def test_create_entity_writes_theme_source_and_loads_it(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+
+    result = create_entity(
+        project_root=tmp_path,
+        kind="theme",
+        title="Transportability Across Cancer Types",
+        entity_id="theme:transportability-across-cancer-types",
+        related=[],
+        source_refs=[],
+        today=date(2026, 5, 4),
+    )
+
+    assert result.entity_id == "theme:transportability-across-cancer-types"
+    assert result.path == tmp_path / "doc/themes/transportability-across-cancer-types.md"
+    assert result.warnings == []
+    text = result.path.read_text(encoding="utf-8")
+    assert "type: theme" in text or 'type: "theme"' in text or "type: 'theme'" in text
+    assert "theme_kind: methodological" in text or 'theme_kind: "methodological"' in text
+    assert "## Definition" in text
+    sources = load_project_sources(tmp_path)
+    by_id = {entity.canonical_id: entity for entity in sources.entities}
+    assert "theme:transportability-across-cancer-types" in by_id
 
 
 def test_create_entity_rejects_existing_destination(tmp_path: Path) -> None:

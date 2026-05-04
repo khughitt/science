@@ -33,7 +33,7 @@ def _frontmatter(text: str) -> dict[str, object]:
     return loaded
 
 
-@pytest.mark.parametrize("kind", ["hypothesis", "question", "interpretation", "discussion"])
+@pytest.mark.parametrize("kind", ["hypothesis", "question", "interpretation", "discussion", "theme"])
 def test_packaged_template_renders_required_sections(kind: str) -> None:
     text = Renderer(today=date(2026, 5, 3)).render(kind, fields=_fields(kind))
     frontmatter = _frontmatter(text)
@@ -42,7 +42,12 @@ def test_packaged_template_renders_required_sections(kind: str) -> None:
     assert "_template" not in frontmatter
     assert "{{title}}" not in text
     assert "{{YYYY-MM-DD}}" not in text
-    if kind == "question":
+    if kind == "theme":
+        assert frontmatter["theme_kind"] == "methodological"
+        assert frontmatter["theme_scope"] == "project"
+        assert "## Definition" in text
+        assert "## Guardrails" in text
+    elif kind == "question":
         assert "## Summary" in text
     else:
         assert "# " in text
@@ -167,7 +172,7 @@ Body.
         Renderer(template_root=tmp_path, today=date(2026, 5, 3)).render("bad-null", fields=_fields("bad-null"))
 
 
-@pytest.mark.parametrize("kind", ["hypothesis", "question", "interpretation", "discussion"])
+@pytest.mark.parametrize("kind", ["hypothesis", "question", "interpretation", "discussion", "theme"])
 def test_root_and_packaged_migrated_templates_match(kind: str) -> None:
     root_template = Path(__file__).parents[2] / "templates" / f"{kind}.md"
     packaged_template = Path(__file__).parents[1] / "src" / "science_model" / "templates" / f"{kind}.md"

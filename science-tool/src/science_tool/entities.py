@@ -34,6 +34,7 @@ _BUILTIN_MARKDOWN_POLICIES: dict[str, EntityPathPolicy] = {
     "hypothesis": EntityPathPolicy(root=Path("specs/hypotheses"), filename="local-part"),
     "discussion": EntityPathPolicy(root=Path("doc/discussions"), filename="date-local-part"),
     "interpretation": EntityPathPolicy(root=Path("doc/interpretations"), filename="date-local-part"),
+    "theme": EntityPathPolicy(root=Path("doc/themes"), filename="local-part"),
 }
 _SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 _LOCAL_PART_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -44,6 +45,7 @@ _DEFAULT_STATUS: dict[str, str] = {
     "hypothesis": "proposed",
     "discussion": "active",
     "interpretation": "active",
+    "theme": "active",
 }
 _STATUS_VALUES: dict[str, frozenset[str]] = {
     "question": frozenset({"active", "partially-answered", "answered", "deferred", "retired"}),
@@ -59,6 +61,7 @@ _STATUS_VALUES: dict[str, frozenset[str]] = {
     ),
     "discussion": frozenset({"active", "complete", "superseded"}),
     "interpretation": frozenset({"active", "complete", "superseded"}),
+    "theme": frozenset({"draft", "active", "superseded", "retired"}),
 }
 _ALLOWED_EXPLICIT_ROOTS = (Path("doc"), Path("specs"), Path("research/packages"))
 
