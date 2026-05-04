@@ -105,8 +105,10 @@ def close_bears_on(
     forward; whenever a reachable node is epistemic, emit `S bears_on T`.
     Skip self-edges (cycles through operational hops produce them otherwise).
 
-    `kind_class` is required: closure terminates at epistemic targets, so
-    we must classify every reachable node.
+    `kind_class` is required. Unclassified nodes are treated as non-epistemic —
+    they are traversed during DFS but never emitted as closure targets. This
+    matches the design doc's "default to operational" stance for unclassified
+    extension kinds.
     """
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 

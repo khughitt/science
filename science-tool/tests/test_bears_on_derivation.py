@@ -209,3 +209,26 @@ def test_close_bears_on_does_not_create_edges_to_operational():
     # Existing edge preserved; no new closure edges since target is not epistemic.
     pairs = _bears_on_pairs(ds)
     assert pairs == {(str(_u("dataset/d1")), str(_u("workflow-run/wfr1")))}
+
+
+def test_close_bears_on_handles_three_hops():
+    """A bears_on B bears_on C bears_on D (epistemic) -> A and B and C all bears_on D."""
+    ds = _make_dataset_with([])
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    knowledge.add((_u("dataset/d1"), SCI_NS.bearsOn, _u("workflow-run/wfr1")))
+    knowledge.add((_u("workflow-run/wfr1"), SCI_NS.bearsOn, _u("workflow-run/wfr2")))
+    knowledge.add((_u("workflow-run/wfr2"), SCI_NS.bearsOn, _u("hypothesis/h1")))
+
+    kind_class = {
+        str(_u("dataset/d1")): EntityClass.OPERATIONAL,
+        str(_u("workflow-run/wfr1")): EntityClass.OPERATIONAL,
+        str(_u("workflow-run/wfr2")): EntityClass.OPERATIONAL,
+        str(_u("hypothesis/h1")): EntityClass.EPISTEMIC,
+    }
+    close_bears_on(ds, kind_class=kind_class)
+
+    pairs = _bears_on_pairs(ds)
+    h_uri = str(_u("hypothesis/h1"))
+    assert (str(_u("dataset/d1")), h_uri) in pairs
+    assert (str(_u("workflow-run/wfr1")), h_uri) in pairs
+    assert (str(_u("workflow-run/wfr2")), h_uri) in pairs
