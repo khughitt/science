@@ -215,10 +215,11 @@ Surfaced by: 2026-05-03 design discussion on continuous-belief flow.
 
 ## [t013] Phase 1 follow-ups: tighten freshness and registry surface
 - priority: P3
-- status: proposed
+- status: done
 - aspects: [software-development]
 - related: []
 - created: 2026-05-03
+- completed: 2026-05-04
 
 Bundle of follow-ups surfaced by the final code review of `[t010]` (commit `d2c4fd2` on branch `feature/epistemic-dependency-graph`). Phase 1 is functionally complete — these are quality/forward-compat items that should land before `[t011]` Phase 2 builds on top.
 
