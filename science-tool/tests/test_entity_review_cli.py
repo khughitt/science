@@ -261,3 +261,39 @@ def test_entity_needs_review_empty_when_all_fresh(tmp_path: Path, monkeypatch):
     result = runner.invoke(cli_main, ["entity", "needs-review"])
     assert result.exit_code == 0, result.output
     assert "hypothesis:h1" not in result.output
+
+
+def _setup_project_with_dataset(tmp_path: Path) -> Path:
+    """Project with a dataset entity placed under the hypotheses root so find_entity can load it.
+
+    _load_markdown_entities scans policy-rooted directories but includes any
+    entity whose frontmatter has a valid id/kind — so a file with kind:dataset
+    placed in specs/hypotheses/ is discoverable by find_entity("dataset:d1").
+    """
+    root = tmp_path / "demo"
+    (root / "specs" / "hypotheses").mkdir(parents=True)
+    (root / "science.yaml").write_text("name: demo\nknowledge_profiles:\n  local: core\n")
+    (root / "specs" / "hypotheses" / "d1.md").write_text(
+        dedent(
+            """
+            ---
+            id: "dataset:d1"
+            kind: "dataset"
+            title: "Demo dataset"
+            created: "2026-04-01"
+            updated: "2026-04-01"
+            ---
+            Body.
+            """
+        ).lstrip()
+    )
+    return root
+
+
+def test_entity_review_rejects_non_epistemic_target(tmp_path: Path, monkeypatch):
+    root = _setup_project_with_dataset(tmp_path)
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    result = runner.invoke(cli_main, ["entity", "review", "dataset:d1"])
+    assert result.exit_code != 0, result.output
+    assert "non-epistemic" in result.output.lower() or "operational" in result.output.lower()
