@@ -13,13 +13,13 @@ Public surface:
 
 from __future__ import annotations
 
+import hashlib
+from collections import deque
 from datetime import date
 from pathlib import Path
 from typing import TypedDict
 
-import hashlib
-
-from rdflib import Dataset, Literal, URIRef
+from rdflib import Dataset, Graph, Literal, URIRef
 from rdflib.namespace import PROV, RDF, XSD
 
 from science_model.entities import EntityClass
@@ -40,7 +40,7 @@ class EntityFreshnessInfo(TypedDict):
     review_horizon_days: int | None
 
 
-def _emit_bears_on_edge(knowledge, source: URIRef, target: URIRef, depth: int) -> None:
+def _emit_bears_on_edge(knowledge: Graph, source: URIRef, target: URIRef, depth: int) -> None:
     """Emit a reified BearsOnEdge with depth metadata for Phase 2 sampling.
 
     Each call adds a content-addressed named node carrying (source, target, depth).
@@ -160,10 +160,8 @@ def close_bears_on(
     Direct (depth-1) edges are not re-emitted by the closure — they are
     already emitted by `derive_bears_on_from_typed_edges` and
     `derive_bears_on_from_provenance`. Phase 2 uses `SELECT MIN(?depth)` over
-    all BearsOnEdge blank nodes for a given (source, target) pair.
+    all BearsOnEdge nodes for a given (source, target) pair.
     """
-    from collections import deque
-
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 
     # Build adjacency map from existing bears_on edges (depth-1 direct ones).
