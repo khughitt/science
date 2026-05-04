@@ -163,10 +163,11 @@ Surfaced by: 2026-04-26 brainstorm of the managed-artifact long-term design (Q5 
 
 ## [t010] Epistemic dependency graph — Phase 1 (taxonomy + bears_on + freshness)
 - priority: P2
-- status: proposed
+- status: done
 - aspects: [software-development, framework-design]
 - related: [hypothesis:h01-stochastic-revisiting]
 - created: 2026-05-03
+- completed: 2026-05-03
 
 Implement Phase 1 of `docs/plans/2026-05-03-epistemic-dependency-graph-design.md`: explicit epistemic/operational/reference entity taxonomy on `EntityKind`, the `bears_on` relation kind with auto-derivation rules, and per-entity `EpistemicFreshness` state with a graph-build propagation step.
 
@@ -211,3 +212,26 @@ Zero schema change to pre-reg entities. Behavioral changes:
 Independent of `[t010]`/`[t011]`: can land before, during, or after the code changes since it touches only skills and prose. Do *not* land before downstream projects (myeloma, natural-systems) have a chance to surface objections — the recast changes how their existing pre-regs are interpreted.
 
 Surfaced by: 2026-05-03 design discussion on continuous-belief flow.
+
+## [t013] Phase 1 follow-ups: tighten freshness and registry surface
+- priority: P3
+- status: proposed
+- aspects: [software-development]
+- related: []
+- created: 2026-05-03
+
+Bundle of follow-ups surfaced by the final code review of `[t010]` (commit `d2c4fd2` on branch `feature/epistemic-dependency-graph`). Phase 1 is functionally complete — these are quality/forward-compat items that should land before `[t011]` Phase 2 builds on top.
+
+1. **`review_state` validator** — `Entity.review_state` accepts the field on any kind today. Add a model-side validator that rejects `review_state` on a closed list of clearly-not-epistemic core kinds (`task`, `dataset`, `workflow-run`, `data-package`, `paper`, `experiment`). Avoids registry coupling at the science-model layer.
+2. **`entity review` epistemic check** — `science-tool entity review dataset:foo` silently mutates frontmatter the freshness engine ignores. Reject non-epistemic targets at the CLI with the same message as the validator from #1.
+3. **Profile/extension classification through `_classify_entities`** — `materialize.py:_classify_entities` builds a fresh `EntityRegistry.with_core_types()` per call, so profile- and extension-registered kinds always default OPERATIONAL. Thread the project's full registry (with profile/catalog/extension classifications) through `ProjectSources` so an extension that declared `entity_class=EPISTEMIC` actually classifies that way at materialize time.
+4. **Audit gate on `propagate-freshness`** — `propagate_freshness_in_memory` skips the `audit_project_sources` failure check that `materialize_graph` enforces. In a project with broken refs (e.g. natural-systems today), the sweep silently produces a partial picture. Either share the gate or document the divergence.
+5. **`bears_on` `target_kinds` reconciliation** — `profiles/core.py` declares targets `{hypothesis, question, proposition, observation, finding, interpretation, discussion, story, mechanism}` but the freshness engine treats `assumption`, `model`, `report`, `validation-report` as EPISTEMIC too. Either expand the relation declaration or document why the runtime classification is intentionally broader.
+6. **Phase-2 prep triples** — emit `sci:lastReviewed` per epistemic entity (so phase-2 sampling can read it from the graph without re-parsing markdown) and `sci:bearsOnDepth` per closure-emitted triple (so phase-2 attention can weight directness without re-deriving depth). Both add ~3 lines and are zero-cost in Phase 1.
+7. **Migration heads-up or opt-out** — first `graph build` on existing downstream projects (myeloma, natural-systems) will likely flag many entities as `needs-review` because `last_reviewed=None` everywhere. Document this in the design's Migration section, OR implement the `freshness.enabled: false` opt-out the design promised but Phase 1 didn't ship.
+8. **Integration test gaps** — add tests for: extension EPISTEMIC kind through materialize_graph; provenance + closure end-to-end; `propagate_freshness_in_memory` and `materialize_graph` agree on the same project; `entity review` on non-epistemic target.
+9. **`derive_freshness` boundary tests** — test `review_horizon_days=1` and `today == baseline + horizon` to lock the `>` vs `>=` boundary.
+
+Each item is small (most are 1–3 hours of work). Bundle is P3 because Phase 1 is functionally complete and these are quality/forward-compat tightening rather than missing functionality.
+
+Surfaced by: final code review of `feature/epistemic-dependency-graph` 2026-05-03.
