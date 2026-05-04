@@ -166,3 +166,31 @@ def test_entity_review_replaces_existing_note_when_new_note_passed(tmp_path: Pat
     text = h_path.read_text()
     assert "Original note" not in text
     assert "New note" in text
+
+
+def test_entity_review_clears_existing_note_when_empty_string_passed(tmp_path: Path, monkeypatch):
+    """Passing --note '' clears any pre-existing last_review_note."""
+    root = _setup_project_with_hypothesis(tmp_path)
+    h_path = root / "specs" / "hypotheses" / "h1.md"
+    h_path.write_text(
+        dedent(
+            """
+            ---
+            id: "hypothesis:h1"
+            kind: "hypothesis"
+            title: "Demo"
+            created: "2026-04-01"
+            review_state:
+              last_reviewed: "2026-04-15"
+              last_review_note: "Original note"
+            ---
+            Body.
+            """
+        ).lstrip()
+    )
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    runner.invoke(cli_main, ["entity", "review", "hypothesis:h1", "--note", ""])
+    text = h_path.read_text()
+    assert "last_review_note" not in text
+    assert "Original note" not in text

@@ -417,10 +417,14 @@ def entity_review(ref: str, note: str | None) -> None:
     from science_tool.entity_review import ReviewError, review_entity
 
     try:
-        path = review_entity(Path.cwd(), ref, note=note)
+        path, changed = review_entity(Path.cwd(), ref, note=note)
     except ReviewError as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(f"Reviewed {ref} -> {path.relative_to(Path.cwd())}")
+    rel = path.relative_to(Path.cwd())
+    if changed:
+        click.echo(f"Reviewed {ref} -> {rel}")
+    else:
+        click.echo(f"Reviewed {ref} -> {rel} (no changes)")
 
 
 @main.group("hypothesis")
