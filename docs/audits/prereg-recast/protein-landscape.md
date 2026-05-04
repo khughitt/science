@@ -9,13 +9,15 @@
 
 ## Summary
 
-protein-landscape has the smallest pre-reg count of any pre-reg-using project (3 of 26), but two of its pre-regs (`q63`, `q81`) are **deliberately structured as discriminating tests between competing hypotheses**, and one (`q63`) contains an **explicit, pre-registered falsification clause** with strict thresholds. This is a different shape than natural-systems' single-hypothesis tests and it surfaces a substantive plan-level issue:
+protein-landscape has the smallest pre-reg count of any pre-reg-using project (3 of 26), but two of its pre-regs (`q63`, `q81`) are **deliberately structured as discriminating tests between competing hypotheses**. One (`q63`) contains a "No post-hoc revision of the thresholds in this section is permitted" clause that initially looked like a deliberately authored kill switch.
 
-> **The recast says "null is not a kill switch," but q63 contains a deliberately authored kill switch.** The author has thought carefully about which result patterns falsify which propositions, with explicit "No post-hoc revision of the thresholds in this section is permitted" language.
+On closer reading **it is not a kill switch in the recast's sense** — it is an **anti-bias procedural lock** ("don't let me nudge thresholds after seeing data"). The author committed to procedural rigor against post-hoc threshold-shifting, not to a metaphysical claim that the hypothesis "can never be true." Under the recast, this lock is preserved verbatim as the operational portion of the pre-reg (locked thresholds, no post-hoc revision). What happens *after* the threshold fires is normal evidence flow: the result becomes a `disputes bears_on` edge weighted by what the actual analysis shows (effect sizes, CIs, magnitudes of disagreement), not by a binary "threshold crossed → hypothesis terminated."
 
-This isn't a contradiction with the recast's underlying intent — the recast's concern is that hypotheses get *removed* from the graph or stop being queryable when null results land. q63's falsification clause doesn't remove the hypothesis; it commits to an interpretation pattern strongly. But the recast's framing language ("no kill switches") needs to distinguish between "no graph removal on null" (correct) and "no strong-weight commitments allowed" (incorrect — q63 should still be honored). See § "Plan-level issues surfaced — Issue 1".
+This is the recast's core philosophical stance: all scientific analyses are imperfect; upstream changes (better data, better processing, better baselines) can shift epistemic status even for things we currently put very low confidence in. The pre-reg's role is to prevent the author from p-hacking their own confidence higher; it is not to declare the hypothesis dead on threshold-crossing.
 
-**Recommendation for protein-landscape:** no file edits required. The pre-regs' explicit falsification commitments should map cleanly to strong-weight `bears_on` edges under the recast.
+**Recommendation for protein-landscape:** no file edits required. The pre-regs' falsification clauses are operational rigor commitments that the recast preserves; the resulting evidence flow is normal weighted-update flow.
+
+The audit *did* surface one substantive plan-level issue — but it's the same `related:` conflation already noted in the natural-systems audit (Issue 2 below). No new plan-level issue from protein-landscape.
 
 ---
 
@@ -43,30 +45,34 @@ All three pre-regs have canonical frontmatter (`id`, `type`, `committed`). **Non
 
 ## Author-intent vs. recast interpretation
 
-### `q63-heldout-taxa-benchmark` — explicit pre-registered falsification
+### `q63-heldout-taxa-benchmark` — anti-bias procedural lock, not a kill switch
 
-This is the canonical example of a sophisticated discriminating-test pre-reg. Notable features:
+This pre-reg's "joint-failure clause" initially looks like a deliberately authored kill switch:
 
-**Pre-registered "joint-failure clause":**
 > `gap(low-LAD) ≤ 0` (95% CI includes 0 or is negative) on both tasks, **AND** raw-PCA50 also fails to beat Pfam on low-LAD on at least one task, **jointly refutes** H02 P3 and H03 P-predict-1 as currently stated. This is the falsification condition. **No post-hoc revision of the thresholds in this section is permitted.**
 
-**Graded null-result handling** (separate from joint failure):
+On the right reading, **this is an anti-bias procedural lock, not a verdict gate.** The "no post-hoc revision permitted" line is anti-p-hacking — the author committed in advance to *not letting themselves shift the thresholds after seeing data*. That commitment is to procedural rigor, not to a metaphysical claim that H02 P3 is removable from the graph if the threshold crosses.
+
+What actually happens under the recast when this clause fires:
+
+1. **Operational portion (preserved verbatim):** the locked thresholds, the no-post-hoc-revision rule, and the cohort/CI specifications stay exactly as written. `science:interpret-results` confirms these were honored. If they weren't, that's an `amendments:` violation — same as today.
+2. **Epistemic portion (normal evidence flow):** the gap-on-low-LAD result feeds H02 P3 and H03 P-predict-1 as a `disputes bears_on` edge. The edge's effective weight is driven by *what the data actually shows* — effect sizes, CIs, magnitudes of disagreement — not by the binary fact that the threshold was crossed. If the gap is large and confidently negative, the edge has high weight and belief drops a lot. If the gap is barely negative with a wide CI, the edge has low weight and belief drops a little.
+
+The `is currently stated` qualifier in the falsification clause is doing real work here. The author isn't saying "H02 P3 can never be true"; they're saying "if we observe X, the version of H02 P3 we currently hold is mistaken" — which is exactly weighted-update semantics. Future evidence can re-elevate H02 P3 (perhaps in a re-formulated version), and the recast's graph structure preserves that pathway.
+
+**Graded null-result handling** (smaller than joint-failure):
 > Update H02 P3 to specify "at some scale k" rather than a blanket claim, and re-run at the winning k as a confirmatory follow-up.
+
+This is the recast's spirit operating without explicit awareness of the recast — null → refine the proposition, not abandon the hypothesis.
 
 **Explicit "ambiguous" handling** (won't retroactively reclassify):
 > The decision rule explicitly includes an "ambiguous" label. In that case the project writes the interpretation as "evidence insufficient to discriminate Reading A from Reading B" and does **not** retroactively re-classify the outcome into a more favourable bucket.
 
-The author has built a **graded kill-switch**: small null → refine the proposition; joint-failure threshold met → falsification of the propositions as currently stated. This is much more careful than blanket "null = kill" semantics.
+Also recast-spirit. No conflict.
 
-**How the recast should handle this.** Three readings of the recast's "no kill switches" language:
+**No plan change required.** The recast's "null is not a kill switch" framing is correct as-stated; q63's "kill switch" reads correctly as an anti-bias procedural lock once parsed carefully.
 
-- **Reading A** (the recast as currently drafted, taken literally): "even pre-registered kill switches become weighted updates" — would *override* q63's deliberate falsification commitment. **Wrong reading.**
-- **Reading B** (the recast's actual intent, charitably): "no graph-level removal of hypotheses on null; belief can drop very low, but the hypothesis remains queryable" — q63's falsification still fires, producing a strong-weight `disputes bears_on` edge that drives belief very low. **Right reading.**
-- **Reading C** (the recast's actual intent, sharper): "default semantics: null = weighted update; pre-registered explicit falsification: null = strong-weight `disputes` evidence with the commitment level the author specified." **Best reading.**
-
-The recast's draft text ("a null result against a pre-registered prediction is **evidence**, weighted by the pre-reg's commitment, but it is not a kill switch") points toward Reading C if "weighted by the pre-reg's commitment" is interpreted to mean "strong-weight if the author explicitly registered a falsification clause, lighter weight otherwise." But that interpretation is not made explicit in the draft, and Reading A is plausibly what a casual reader would extract.
-
-**Plan-level finding:** the recast should make Reading C explicit. See § "Plan-level issues surfaced — Issue 1".
+**Skill-prose implication only:** `commands/pre-register.md` and `commands/interpret-results.md` should help authors and interpreters parse falsification clauses this way. A pre-reg author who writes "this jointly refutes H02 P3" should be guided to read their own commitment as "this commits us to taking that result as strong disputes evidence, weighted by what we actually observe." This is a phrasing-and-prompts refinement, not a structural plan change.
 
 ### `q81-curator-derived-non-structural` — discriminating test, follow-up shape
 
@@ -91,23 +97,13 @@ The pre-reg also has a **bias-audit revision history** documented in the body op
 
 ## Plan-level issues surfaced
 
-### Issue 1 (substantive, new): pre-registered falsification clauses
-
-**Not surfaced in natural-systems' audit.** q63 contains an explicit "no post-hoc revision permitted" falsification threshold. The recast's "null is not a kill switch" framing, taken literally, would override this commitment.
-
-**Resolution proposed:** make Reading C explicit in the recast draft. Specifically, edit `commands/pre-register.md` § "Section 0" target-class prompt to add:
-
-> If the pre-reg includes an **explicit falsification clause** (a pattern that, if observed, the author commits to interpreting as "this hypothesis is refuted as currently stated"), record this as a strong-weight `disputes` commitment. Belief about the hypothesis can drop very low under this clause; the hypothesis remains a graph entity (queryable, citable, reviewable) but is unlikely to be re-elevated without significant new evidence. The recast's "no kill switches" framing prevents *graph removal* on null, not strong-weight belief loss.
-
-This refinement also helps the q63 case interpret cleanly under the recast: the pre-registered falsification produces a high-weight `disputes` edge; belief about H02 P3 drops sharply; the hypothesis remains a node in the graph; future work that wishes to re-elevate H02 P3 must produce new evidence at a similarly high weight.
-
-### Issue 2 (substantive, recurrent): `related:` conflates commitment target with navigation context
+### Issue 1 (substantive, recurrent): `related:` conflates commitment target with navigation context
 
 **Same issue as natural-systems' Issue 1.** `t098-phylogenetic-2m`'s body is methodologically operational; the epistemic entities in `related:` (q11, q14, F43, propositions) are context, not commitment targets. Confirms the cross-project pattern: pre-reg authors use `related:` for discovery/navigation, not exclusively for declaring commitment targets.
 
 The natural-systems audit's recommended resolution (a sub-prompt at pre-reg authoring time to confirm which `related:` entries are commitment targets) applies here too. Two of three protein-landscape pre-regs (`q81`, `t098`) would benefit from the prompt; only `q63` is unambiguously a commitment-to-the-target pre-reg.
 
-### Issue 3 (minor): `task:bias-audit-...` reference shape
+### Issue 2 (minor): `task:bias-audit-...` reference shape
 
 Pre-existing convention drift (a non-task entity referenced as a task). Not a recast issue but worth flagging in a separate cleanup pass — possibly aligns with `[t008]` (validator: warn on inline-dict synthesized_from items) or `[t009]` (entity-rename / declarative-migrations primitive).
 
@@ -117,41 +113,42 @@ Pre-existing convention drift (a non-task entity referenced as a task). Not a re
 
 ### For protein-landscape
 
-1. **No file edits required.** All three pre-regs' intent is preserved by the recast under Reading C (see Issue 1 resolution).
-2. **Author confirmation requested:** for `t098-phylogenetic-2m`, confirm whether the epistemic entities in `related:` (q11, q14, F43, propositions) are commitment targets (the pre-reg promises a result-pattern interpretation for them) or navigation context (the pre-reg is procedurally locked, the questions are what's being tested).
+1. **No file edits required.** All three pre-regs' intent is preserved by the recast: q63's falsification language is correctly read as an anti-bias procedural lock (operational, preserved verbatim), and the resulting evidence flow is normal weighted-update flow.
+2. **Author confirmation requested:** for `t098-phylogenetic-2m`, confirm whether the epistemic entries in `related:` (q11, q14, F43, propositions) are commitment targets (the pre-reg promises a result-pattern interpretation for them) or navigation context (the pre-reg is procedurally locked, the questions are what's being tested).
 3. **Pre-existing convention drift** (`task:bias-audit-...`): consider regularizing in a separate pass; not blocking.
 
 ### For the recast plan (`docs/plans/2026-05-04-prereg-recast-draft.md`)
 
-1. **NEW: add Issue 1 (pre-registered falsification clauses) resolution.** Revise the recast's "no kill switches" framing to make Reading C explicit: "no graph removal on null + default-light-weighted; explicit pre-registered falsification clauses produce strong-weight `disputes` edges that can drive belief very low while keeping the hypothesis as a graph entity." This is a substantive refinement to the recast's central claim.
+1. **Confirms Issue 1 from natural-systems audit (`related:` conflation).** Cross-project pattern confirmed; the natural-systems audit's resolution applies. No new structural plan change from protein-landscape.
 
-2. **Confirms Issue 1 from natural-systems audit (`related:` conflation).** Cross-project pattern confirmed; the natural-systems audit's resolution applies.
-
-3. **Remember:** Issue 1 here is *additive* to natural-systems' Issue 1. The two are different concerns:
-   - natural-systems' Issue 1: classification rule too coarse — operational pre-regs with epistemic context get misclassified.
-   - protein-landscape's Issue 1: blanket "no kill switches" too aggressive — pre-registered falsification clauses get overridden.
-
-   Both need addressing in the recast.
+2. **Skill-prose refinement (no plan-structure change):** `commands/pre-register.md` and `commands/interpret-results.md` should help authors and interpreters parse "this jointly refutes hypothesis H" pre-reg language as **anti-bias procedural commitment** ("if we observe X, we commit to taking that as strong disputes evidence"), rather than verdict-gate language. This is a phrasing-and-prompts refinement, not a structural change to the recast's claims.
 
 ---
 
 ## Open questions for project owner
 
 1. For `t098-phylogenetic-2m`: are the epistemic entries in `related:` (q11, q14, F43, propositions) commitment targets or context?
-2. For `q63-heldout-taxa-benchmark`: under the recast, would a strong-weight `disputes` edge that drops H02 P3's belief very low (without removing it from the graph) preserve the falsification's intended effect? (Confirming Reading C is acceptable.)
+2. For `q63-heldout-taxa-benchmark`: confirming the audit's reading — the "No post-hoc revision permitted" clause is anti-bias procedural rigor (preserved verbatim under the recast), not a metaphysical "this hypothesis can never be true" claim. Result feeds in as normal weighted-update evidence whose weight reflects the actual gap-on-low-LAD magnitude/CI rather than a binary threshold-crossing flag. Acceptable framing?
 3. Does the project have any tooling that depends on a binary-verdict reading of `q63`'s falsification clause? (None found in audit; please confirm.)
 
 ---
 
 ## Cross-project pattern (after natural-systems + protein-landscape)
 
-Two distinct shapes are emerging:
-1. **Operational pre-regs with epistemic context in `related:`** (h07, t098). The recast's classification rule is too coarse to handle these correctly. → natural-systems' Issue 1.
-2. **Epistemic pre-regs with explicit falsification thresholds** (q63). The recast's "no kill switches" language is too aggressive. → protein-landscape's Issue 1 (new).
+One substantive plan-level issue is recurrent across both projects:
 
-A third potential shape — **purely-epistemic, no falsification clause, weighted-update by default** — would be the "vanilla" recast case. None of the audited natural-systems or protein-landscape pre-regs are this shape unambiguously; the closest is q81 (discriminating, no explicit falsification clause).
+- **Operational pre-regs with epistemic context in `related:`** (h07, t098). The recast's classification rule is too coarse to distinguish a pre-reg's commitment targets from its navigation/discoverability context. → natural-systems' Issue 1.
 
-This suggests the recast's draft target ("vanilla weighted update") is the *least common* pre-reg shape in the surveyed projects so far. The recast's prose needs to handle the two more-common shapes well, not just the vanilla case.
+A second pattern surfaced but resolved without a plan change:
+
+- **Pre-registered falsification clauses** (q63). On first read these look like recast-incompatible kill switches; on closer reading they are **anti-bias procedural locks** — anti-p-hacking commitments that "we will not nudge thresholds after seeing data." The recast preserves these verbatim as the operational portion of the pre-reg, and the resulting evidence flow is normal weighted-update flow whose weight reflects the actual analysis result, not the binary threshold-crossing event. No plan change required; skill prose should help authors and interpreters parse falsification language this way.
+
+Pre-reg shapes seen so far across the two projects:
+- Operational with epistemic context (most common): h07, t098, t214, most natural-systems pre-regs with operational tasks in `related:`.
+- Discriminating epistemic test (less common but present): q63, q81. These are the cleanest fit for the recast's epistemic-arm semantics.
+- Purely operational with no epistemic context (rare): none seen yet.
+
+The recast's draft target — "epistemic-arm pre-reg whose commitment is an interpretation rule" — applies cleanly to the discriminating-test shape (q63, q81) once falsification clauses are read as anti-bias procedural locks. The operational-with-epistemic-context shape is what surfaces the substantive plan-level issue.
 
 ---
 
