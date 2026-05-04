@@ -316,6 +316,9 @@ def propagate_freshness_in_memory(project_root: Path) -> list[dict]:
         details = "; ".join(f"{row['source']} -> {row['target']}" for row in audit_rows if row["status"] == "fail")
         raise ValueError(f"Cannot compute freshness with unresolved references: {details}")
 
+    if not sources.freshness_enabled:
+        return []
+
     dataset = _build_dataset_from_sources(sources)
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 

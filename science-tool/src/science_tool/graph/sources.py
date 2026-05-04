@@ -113,6 +113,7 @@ class ProjectSources(BaseModel):
     manual_aliases: dict[str, str] = Field(default_factory=dict)
     ontology_catalogs: list[OntologyCatalog] = Field(default_factory=list)
     registry: EntityRegistry
+    freshness_enabled: bool = True
 
 
 SourceBinding = BindingSource
@@ -136,6 +137,8 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
     config = _read_project_config(project_root)
     profiles = KnowledgeProfiles.model_validate(config["knowledge_profiles"])
     local_profile = profiles.local
+    freshness_block = config.get("freshness") or {}
+    freshness_enabled = bool(freshness_block.get("enabled", True))
 
     declared_ontologies: list[str] = list(config.get("ontologies") or [])  # type: ignore[union-attr]
     ontology_catalogs = load_catalogs_for_names(declared_ontologies) if declared_ontologies else []
@@ -291,6 +294,7 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
         manual_aliases=_load_manual_aliases(project_root, local_profile=local_profile),
         ontology_catalogs=ontology_catalogs,
         registry=registry,
+        freshness_enabled=freshness_enabled,
     )
 
 
@@ -659,12 +663,17 @@ def _read_project_config(project_root: Path) -> dict[str, object]:
     if not isinstance(raw_ontologies, list):
         raw_ontologies = []
 
+    raw_freshness = data.get("freshness") or {}
+    if not isinstance(raw_freshness, dict):
+        raw_freshness = {}
+
     return {
         "name": str(data.get("name") or project_root.name),
         "knowledge_profiles": {
             "local": str(knowledge_profiles.get("local") or "local"),
         },
         "ontologies": [str(o) for o in raw_ontologies],
+        "freshness": raw_freshness,
     }
 
 

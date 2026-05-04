@@ -327,7 +327,7 @@ Phase-2 design is **out of scope for this doc** but is tracked as a task so it i
 
 **Schema.** All new fields default to backward-compatible values (`entity_class` derived from kind via the manifest; `freshness.state="fresh"` if absent). Existing entities continue to validate without edits.
 
-**Data.** No automatic rewrite. The first `graph build` after this lands will populate `bears_on` triples and an initial freshness baseline (everything starts `fresh`). Downstream projects opt in by running `graph propagate-freshness`.
+**Data.** No automatic rewrite. The first `graph build` after this lands will populate `bears_on` triples and an initial freshness baseline (everything starts `fresh` if `last_reviewed`/`created` provides a baseline; `needs-review` otherwise). Projects mid-migration can set `freshness.enabled: false` in `science.yaml` to skip freshness emission while still benefiting from `bears_on`.
 
 **Skills.** `science:pre-register`, `science:interpret-results`, `science:next-steps`, `science:curate`, `science:big-picture`, and `science:status` need updates to consume the new field. Tracked as a follow-up sweep.
 
