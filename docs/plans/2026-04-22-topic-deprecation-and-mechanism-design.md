@@ -100,17 +100,23 @@ When a user currently reaches for `topic:*`, the system should instead ask:
    Use `concept`, preferably in lightweight aggregate storage such as
    `terms.yaml`.
 
-4. **Is this a conjecture under investigation?**
+4. **Is this a durable cross-cutting organizing frame?**
+   Use `theme`. A theme links multiple questions, hypotheses, tasks,
+   reports, methods, concepts, child projects, or guardrails as a named
+   project lens. It is not a generic background topic and should carry
+   boundaries, current links, guardrails, downstream work, and update triggers.
+
+5. **Is this a conjecture under investigation?**
    Use `hypothesis`.
 
-5. **Is this an analysis-session narrative?**
+6. **Is this an analysis-session narrative?**
    Use `interpretation`.
 
-6. **Is this a communication-layer synthesis organized around a question or
+7. **Is this a communication-layer synthesis organized around a question or
    hypothesis?**
    Use `story`.
 
-7. **Is this a named explanatory multi-entity structure that the graph needs to
+8. **Is this a named explanatory multi-entity structure that the graph needs to
    treat as a semantic object?**
    Use `mechanism`.
 

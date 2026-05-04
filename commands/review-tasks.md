@@ -63,11 +63,11 @@ Look for:
 ### 6. Thematic grouping
 
 If tasks lack `group` labels, suggest groupings based on shared themes. Common patterns:
-- Tasks sharing the same `related` entities (especially topic references)
+- Tasks sharing the same `related` entities, especially `theme:` references for cross-cutting work and `method:` references for analytical procedures
 - Tasks that form a dependency chain
 - Tasks addressing the same system component or research question
 
-For open questions, suggest topic connections via `related` (e.g., `topic:protein-folding`)
+For open questions, suggest theme connections via `related` (e.g., `theme:protein-folding-generalization`)
 when they share themes with existing hypotheses, tasks, or other questions. Questions
 should be linkable to the same entity graph used for tasks.
 

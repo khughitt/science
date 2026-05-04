@@ -105,6 +105,7 @@ Fix every unresolved reference in the canonical sources before building:
 - convert legacy short IDs to canonical IDs
 - add explicit aliases in `mappings.yaml` when a temporary migration bridge is still needed
 - add missing local-profile entities for legitimate project-local concepts
+- add `theme` markdown entities under `doc/themes/` when the missing node is a durable cross-cutting organizing frame that links multiple questions, hypotheses, tasks, reports, methods, concepts, child projects, or guardrails.
 
 ### Step 4: Materialize the graph
 

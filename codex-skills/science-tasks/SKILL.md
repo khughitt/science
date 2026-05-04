@@ -104,7 +104,7 @@ uv run science-tool tasks list --related=topic:lens --group=visualization
 Interactively create a task. Ask the user for:
 - **Type:** research or dev
 - **Priority:** P0-P3
-- **Related entities:** (optional) typed refs for hypotheses, topics, questions, etc. — e.g. hypothesis:h01, topic:protein-folding, topic:umap
+- **Related entities:** (optional) typed refs for hypotheses, themes, methods, questions, etc. — e.g. hypothesis:h01, theme:protein-folding-generalization, method:umap
 - **Group:** (optional) single group label for thematic clustering
 
 Then run:
@@ -204,7 +204,7 @@ When working through tasks, follow these principles:
 - **Mark progress as you go.** Set tasks to `active` when starting, `done` when complete. Don't leave tasks in ambiguous states.
 - **Retire rather than delete.** When a task is no longer relevant, use `retire` instead of deleting. This preserves the decision record.
 - **Use groups for thematic clusters.** When multiple tasks share a theme (e.g., "lens-system", "formula-integration"), assign a group to enable filtered views.
-- **Use `related` for cross-cutting connections.** Link tasks to hypotheses, topics, or other entities with `--related` (e.g., `--related=topic:umap`). Related entries become edges in the knowledge graph, and the same entity can appear across multiple groups. Use the `meta:` prefix for annotations you want to keep visible but exclude from the KG (e.g., `--related=meta:phase3b`).
+- **Use `related` for cross-cutting connections.** Link tasks to hypotheses, themes, methods, or other entities with `--related` (e.g., `--related=method:umap`). Related entries become edges in the knowledge graph, and the same entity can appear across multiple groups. Use the `meta:` prefix for annotations you want to keep visible but exclude from the KG (e.g., `--related=meta:phase3b`).
 
 ## After Changes
 
