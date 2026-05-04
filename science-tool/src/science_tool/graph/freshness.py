@@ -13,8 +13,10 @@ Public surface:
 
 from __future__ import annotations
 
-from rdflib import Dataset, URIRef
-from rdflib.namespace import PROV
+from datetime import date as _date
+
+from rdflib import Dataset, Literal, URIRef
+from rdflib.namespace import PROV, XSD
 
 from science_model.entities import EntityClass
 from science_tool.graph.store import CITO_NS, PROJECT_NS, SCI_NS
@@ -133,3 +135,85 @@ def close_bears_on(
 
     for triple in new_triples:
         knowledge.add(triple)
+
+
+def derive_freshness(
+    dataset: Dataset,
+    *,
+    entities: dict[str, dict],
+    today: _date,
+) -> None:
+    """Compute EpistemicFreshness for every epistemic entity and emit triples.
+
+    `entities` maps URI string -> dict with keys:
+        kind_class: EntityClass
+        last_reviewed: date | None
+        created: date | None
+        updated: date | None
+        review_horizon_days: int | None
+
+    Algorithm:
+      1. For each epistemic entity E:
+         a. baseline = E.last_reviewed or E.created
+         b. Walk every (S, bears_on, E) triple. For each S, change_at = S.updated or S.created.
+         c. If any change_at > baseline, state = "needs-review", upstream_change_at = max(change_at).
+            triggered_by = list of all S with change_at > baseline.
+         d. Else if review_horizon_days set and (today - baseline).days > horizon, state = "stale".
+         e. Else state = "fresh".
+      2. Emit:
+         (E, sci:freshnessState, Literal(state))
+         (E, sci:upstreamChangeAt, Literal(date, datatype=xsd:date))   if upstream_change_at
+         (E, sci:triggeredBy, S)                                       for each S in triggered_by
+
+    Skips non-epistemic entities silently (no triples emitted).
+    """
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    # Build inverse adjacency: target -> {sources that bear on it}.
+    bears_on_in: dict[URIRef, set[URIRef]] = {}
+    for s, _, o in knowledge.triples((None, SCI_NS.bearsOn, None)):
+        bears_on_in.setdefault(o, set()).add(s)
+
+    for entity_uri_str, info in entities.items():
+        if info["kind_class"] != EntityClass.EPISTEMIC:
+            continue
+        entity_uri = URIRef(entity_uri_str)
+        baseline = info.get("last_reviewed") or info.get("created")
+        if baseline is None:
+            # Defensive: an entity with neither last_reviewed nor created is
+            # treated as fresh. Validation ensures `created` is normally set.
+            knowledge.add((entity_uri, SCI_NS.freshnessState, Literal("fresh")))
+            continue
+
+        triggered: list[URIRef] = []
+        upstream_change_at: _date | None = None
+        for source_uri in bears_on_in.get(entity_uri, set()):
+            source_info = entities.get(str(source_uri))
+            if source_info is None:
+                continue
+            change_at = source_info.get("updated") or source_info.get("created")
+            if change_at is None:
+                continue
+            if change_at > baseline:
+                triggered.append(source_uri)
+                if upstream_change_at is None or change_at > upstream_change_at:
+                    upstream_change_at = change_at
+
+        if triggered:
+            state = "needs-review"
+        else:
+            horizon = info.get("review_horizon_days")
+            if horizon is not None and (today - baseline).days > horizon:
+                state = "stale"
+            else:
+                state = "fresh"
+
+        knowledge.add((entity_uri, SCI_NS.freshnessState, Literal(state)))
+        if upstream_change_at is not None:
+            knowledge.add((
+                entity_uri,
+                SCI_NS.upstreamChangeAt,
+                Literal(upstream_change_at.isoformat(), datatype=XSD.date),
+            ))
+        for source_uri in sorted(triggered):
+            knowledge.add((entity_uri, SCI_NS.triggeredBy, source_uri))
