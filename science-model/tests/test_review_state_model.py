@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from science_model.entities import EntityClass, EpistemicReviewState
+from science_model.entities import Entity, EntityClass, EpistemicReviewState, core_entity_type_for_kind
 from science_model.frontmatter import parse_entity_file
 
 
@@ -101,3 +101,40 @@ def test_entity_review_state_partial_block(tmp_path: Path):
     assert entity.review_state.last_reviewed == date(2026, 5, 1)
     assert entity.review_state.last_review_note == ""
     assert entity.review_state.review_horizon_days is None
+
+
+NON_EPISTEMIC_KINDS = ["task", "dataset", "workflow-run", "data-package", "paper", "experiment"]
+
+
+def _baseline_kwargs(kind: str) -> dict:
+    return {
+        "id": f"{kind}:t",
+        "kind": kind,
+        "type": core_entity_type_for_kind(kind),
+        "title": "T",
+        "project": "p",
+        "ontology_terms": [],
+        "related": [],
+        "source_refs": [],
+        "content_preview": "",
+        "file_path": "x.md",
+    }
+
+
+@pytest.mark.parametrize("kind", NON_EPISTEMIC_KINDS)
+def test_review_state_rejected_on_non_epistemic_kinds(kind: str) -> None:
+    rs = EpistemicReviewState(last_reviewed=None)
+    with pytest.raises(ValidationError, match="review_state"):
+        Entity(**_baseline_kwargs(kind), review_state=rs)
+
+
+@pytest.mark.parametrize("kind", NON_EPISTEMIC_KINDS)
+def test_no_review_state_still_valid_on_non_epistemic_kinds(kind: str) -> None:
+    Entity(**_baseline_kwargs(kind))
+
+
+def test_review_state_allowed_on_open_kinds() -> None:
+    # Kinds outside the closed list (incl. extension kinds) keep accepting review_state.
+    rs = EpistemicReviewState(last_reviewed=None)
+    Entity(**_baseline_kwargs("hypothesis"), review_state=rs)
+    Entity(**_baseline_kwargs("custom-extension-kind"), review_state=rs)
