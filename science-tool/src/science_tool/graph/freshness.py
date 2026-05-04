@@ -23,13 +23,12 @@ from science_tool.graph.store import CITO_NS, PROJECT_NS, SCI_NS
 def derive_bears_on_from_typed_edges(
     dataset: Dataset,
     *,
-    kind_class: dict[str, EntityClass] | None = None,
+    kind_class: dict[str, EntityClass],
 ) -> None:
     """Emit `bears_on` triples derived from the project's typed relations.
 
-    `kind_class` maps an entity URI (as str) to its EntityClass. It is required
-    for the `mechanism sci:hasParticipant ?p` rule, which only emits `bears_on`
-    when the participant is itself epistemic. Other rules ignore it.
+    `kind_class` maps an entity URI (as str) to its EntityClass; required for
+    the `has_participant` rule's epistemic filter.
 
     See module docstring for the full rule list.
 
@@ -44,7 +43,6 @@ def derive_bears_on_from_typed_edges(
       ?m sci:hasProposition  ?p  -> ?p bears_on ?m                       (inverse)
       ?m sci:hasParticipant  ?p  -> ?p bears_on ?m  iff p is epistemic   (inverse, filtered)
     """
-    kc = kind_class or {}
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 
     direct_predicates: list[URIRef] = [
@@ -69,7 +67,7 @@ def derive_bears_on_from_typed_edges(
 
     # has_participant: emit only when participant is itself epistemic.
     for s, _, o in knowledge.triples((None, SCI_NS.hasParticipant, None)):
-        if kc.get(str(o)) == EntityClass.EPISTEMIC:
+        if kind_class.get(str(o)) == EntityClass.EPISTEMIC:
             knowledge.add((o, SCI_NS.bearsOn, s))
 
 
