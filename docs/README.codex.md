@@ -28,8 +28,8 @@ Fetch and follow instructions from https://raw.githubusercontent.com/khughitt/sc
 2. Create the skills symlink:
 
    ```bash
-   mkdir -p ~/.agents/skills
-   ln -s ~/.codex/science/codex-skills ~/.agents/skills/science
+   mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
+   ln -s ~/.codex/science/codex-skills "${CODEX_HOME:-$HOME/.codex}/skills/science"
    ```
 
 3. Restart Codex.
@@ -39,14 +39,19 @@ Fetch and follow instructions from https://raw.githubusercontent.com/khughitt/sc
 Use a junction instead of a symlink:
 
 ```powershell
-New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.agents\skills"
-cmd /c mklink /J "$env:USERPROFILE\.agents\skills\science" "$env:USERPROFILE\.codex\science\codex-skills"
+$CodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { "$env:USERPROFILE\.codex" }
+New-Item -ItemType Directory -Force -Path "$CodexHome\skills"
+cmd /c mklink /J "$CodexHome\skills\science" "$env:USERPROFILE\.codex\science\codex-skills"
 ```
 
 ## What Is Installed
 
 Codex discovers all generated `science-*` skills from `codex-skills/`.
-These are generated from the Claude command corpus in `commands/` and kept separate from the Claude-facing `skills/` tree to avoid duplicate trigger surfaces.
+Command skills are generated from the Claude command corpus in `commands/`.
+Companion methodology skills are adapted from the canonical Science `skills/`
+tree so command skills can invoke them through native Codex skill discovery.
+
+See `codex-skills/INDEX.md` for the complete generated map.
 
 Examples:
 
@@ -54,6 +59,8 @@ Examples:
 - `science-research-topic`
 - `science-search-literature`
 - `science-add-hypothesis`
+- `science-research-methodology`
+- `science-scientific-writing`
 
 ## Regenerating Skills
 

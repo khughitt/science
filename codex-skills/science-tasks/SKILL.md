@@ -16,7 +16,7 @@ Before executing any research command:
    - `research` → `doc/`, `specs/`, `tasks/`, `knowledge/`, `papers/`, `models/`, `data/`, `code/`
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
-3. Load the `research-methodology` and `scientific-writing` skills.
+3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
 4. Read `specs/research-question.md` for project context when it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
    For each declared aspect, resolve the aspect file in this order:
@@ -69,6 +69,15 @@ Before executing any research command:
 
 Manage the project task queue in `tasks/active.md`.
 the user input specifies the action (add, done, defer, retire, list, show, summary) and any parameters.
+
+> **Do not use Claude Code's built-in `TaskCreate` / `TaskUpdate` /
+> `TaskList` tools** for science projects. The science task system is
+> the authoritative store: it lives in the repo (`tasks/active.md`),
+> survives clones, and integrates with the knowledge graph via
+> `--related`. The Claude-Code task tools maintain a parallel,
+> session-scoped store that is invisible to other agents and creates
+> drift between what the conversation thinks is the task list and what
+> the project actually tracks.
 
 ## Setup
 
@@ -188,7 +197,7 @@ uv run science-tool tasks <action> [args...]
 
 When working through tasks, follow these principles:
 
-- **Respect typed blocker dependencies.** Don't start a blocked task until its blockers are ready. Use `tasks blockers <task_id>` to inspect per-blocker readiness (e.g., embargoed datasets, incomplete workflow runs). Run `science-tool tasks list --status=active` to see what's actionable overall.
+- **Respect typed blocker dependencies.** Don't start a blocked task until its blockers are ready. Use `tasks blockers <task_id>` to inspect per-blocker readiness (e.g., embargoed datasets, incomplete workflow runs). Run `science-tasks list --status=active` to see what's actionable overall.
 - **Don't parallelize tasks that share environment state.** Tasks that install/change packages, modify shared config, or compete for GPU memory must run sequentially. Only parallelize truly independent work (e.g., two literature reviews).
 - **Log failures into the task.** If a task fails, update its description with what went wrong: `science-tool tasks edit <id> --status=blocked`. This prevents repeating the same failed approach.
 - **Check `AGENTS.md` before executing.** The project's operational guide may document known issues, environment constraints, or workarounds discovered in previous sessions.

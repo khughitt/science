@@ -49,8 +49,55 @@ def test_generate_codex_skills_emits_all_commands(tmp_path: Path) -> None:
     generated = generate_codex_skills(ROOT, tmp_path)
 
     command_count = len(list((ROOT / "commands").glob("*.md")))
-    assert len(generated) == command_count
-    assert len(list(tmp_path.glob("science-*/SKILL.md"))) == command_count
+    assert len(generated) == command_count + 2
+    assert len(list(tmp_path.glob("science-*/SKILL.md"))) == command_count + 2
+
+
+def test_generate_codex_skills_emits_companion_methodology_skills(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+
+    research_skill = generated["science-research-methodology"].read_text(encoding="utf-8")
+    writing_skill = generated["science-scientific-writing"].read_text(encoding="utf-8")
+
+    assert "name: science-research-methodology" in research_skill
+    assert "Adapted from canonical Science skill `skills/research/SKILL.md`." in research_skill
+    assert "Core research methodology for scientific investigation." in research_skill
+    assert '\\"research methodology.\\"' in research_skill
+    assert "name: science-scientific-writing" in writing_skill
+    assert "Adapted from canonical Science skill `skills/writing/SKILL.md`." in writing_skill
+    assert "scientific-writing" in writing_skill
+    assert "../science-research-methodology/SKILL.md" in writing_skill
+    assert "../research/SKILL.md" not in writing_skill
+    assert "../../skills/statistics/SKILL.md" in writing_skill
+    assert "../statistics/SKILL.md" not in writing_skill
+
+
+def test_generated_command_preamble_references_codex_companion_skills(tmp_path: Path) -> None:
+    generated = generate_codex_skills(ROOT, tmp_path)
+    text = generated["science-research-papers"].read_text(encoding="utf-8")
+
+    assert "Load the `science-research-methodology` and `science-scientific-writing` Codex skills." in text
+    assert "If native skill loading is unavailable, use `codex-skills/INDEX.md`" in text
+    assert "Load the `research-methodology` and `scientific-writing` skills." not in text
+
+
+def test_generate_codex_skills_writes_index(tmp_path: Path) -> None:
+    generate_codex_skills(ROOT, tmp_path)
+    text = (tmp_path / "INDEX.md").read_text(encoding="utf-8")
+
+    assert "# Science Codex Skills" in text
+    assert "| `research-methodology` | `science-research-methodology` | `science-research-methodology/SKILL.md` | `skills/research/SKILL.md` |" in text
+    assert "| `scientific-writing` | `science-scientific-writing` | `science-scientific-writing/SKILL.md` | `skills/writing/SKILL.md` |" in text
+    assert "| `status` | `science-status` | `science-status/SKILL.md` | `commands/status.md` |" in text
+
+
+def test_codex_install_docs_use_codex_home_skills() -> None:
+    install_text = (ROOT / "codex-skills" / "INSTALL.codex.md").read_text(encoding="utf-8")
+    readme_text = (ROOT / "docs" / "README.codex.md").read_text(encoding="utf-8")
+
+    for text in (install_text, readme_text):
+        assert "${CODEX_HOME:-$HOME/.codex}/skills" in text
+        assert "mkdir -p ~/.agents/skills" not in text
 
 
 def test_plan_analysis_generated_skill_mentions_index_and_readiness() -> None:

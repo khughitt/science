@@ -16,7 +16,7 @@ Before executing any research command:
    - `research` → `doc/`, `specs/`, `tasks/`, `knowledge/`, `papers/`, `models/`, `data/`, `code/`
    - `software` → `doc/`, `specs/`, `tasks/`, `knowledge/`, plus native implementation roots such as `src/` and `tests/`
 2. Load role prompt: `.ai/prompts/<role>.md` if present, else `references/role-prompts/<role>.md`.
-3. Load the `research-methodology` and `scientific-writing` skills.
+3. Load the `science-research-methodology` and `science-scientific-writing` Codex skills. If native skill loading is unavailable, use `codex-skills/INDEX.md` to map canonical Science skill names to generated skill files and source paths.
 4. Read `specs/research-question.md` for project context when it exists.
 5. **Load project aspects:** Read `aspects` from `science.yaml` (default: empty list).
    For each declared aspect, resolve the aspect file in this order:
@@ -69,7 +69,7 @@ Before executing any research command:
 
 > **Prerequisites:**
 > - Read `docs/proposition-and-evidence-model.md` and `docs/specs/2026-03-01-knowledge-graph-design.md` for graph/entity semantics
-> - Load the `research-methodology` skill
+> - Load the `science-research-methodology` Codex skill
 > - Read the `discussant` role prompt from `prompts/roles/discussant.md` (if available)
 
 ## Overview

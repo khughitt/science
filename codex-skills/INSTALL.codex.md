@@ -17,15 +17,16 @@ Enable Science skills in Codex via native skill discovery.
 2. Create the skills symlink:
 
    ```bash
-   mkdir -p ~/.agents/skills
-   ln -s ~/.codex/science/codex-skills ~/.agents/skills/science
+   mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
+   ln -s ~/.codex/science/codex-skills "${CODEX_HOME:-$HOME/.codex}/skills/science"
    ```
 
    Windows (PowerShell):
 
    ```powershell
-   New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.agents\skills"
-   cmd /c mklink /J "$env:USERPROFILE\.agents\skills\science" "$env:USERPROFILE\.codex\science\codex-skills"
+   $CodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { "$env:USERPROFILE\.codex" }
+   New-Item -ItemType Directory -Force -Path "$CodexHome\skills"
+   cmd /c mklink /J "$CodexHome\skills\science" "$env:USERPROFILE\.codex\science\codex-skills"
    ```
 
 3. Restart Codex to discover the skills.
@@ -33,10 +34,14 @@ Enable Science skills in Codex via native skill discovery.
 ## Verify
 
 ```bash
-ls -la ~/.agents/skills/science
+ls -la "${CODEX_HOME:-$HOME/.codex}/skills/science"
 ```
 
 You should see a symlink or junction pointing at the repo's `codex-skills/` directory.
+
+`codex-skills/INDEX.md` lists the installed Science command skills and companion
+methodology skills. Command skills reference the Codex-facing companion skills
+`science-research-methodology` and `science-scientific-writing`.
 
 ## Update Generated Skills
 
@@ -50,7 +55,7 @@ UV_CACHE_DIR=/tmp/uv-cache uv run --project science-tool python scripts/generate
 ## Uninstall
 
 ```bash
-rm ~/.agents/skills/science
+rm "${CODEX_HOME:-$HOME/.codex}/skills/science"
 ```
 
 Optionally delete the clone:
