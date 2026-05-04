@@ -4,7 +4,6 @@ from __future__ import annotations
 from pathlib import Path
 from textwrap import dedent
 
-import pytest
 from rdflib import Dataset
 
 from science_tool.graph.freshness import propagate_freshness_in_memory
