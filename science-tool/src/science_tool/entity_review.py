@@ -14,12 +14,15 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+from rdflib import Dataset
+
 from science_tool.entities import (
     EntityCommandError,
     _atomic_replace_text,
     _render_markdown,
     find_entity,
 )
+from science_tool.graph.store import DEFAULT_GRAPH_PATH, PROJECT_NS, SCI_NS
 
 
 class ReviewError(Exception):
@@ -67,3 +70,31 @@ def review_entity(
         return path, False
     _atomic_replace_text(path, new_text)
     return path, True
+
+
+def list_needs_review(project_root: Path) -> list[dict[str, str]]:
+    """Read the materialized graph and return rows for needs-review/stale entities.
+
+    Each row: {"id": "<entity-id>", "kind": "<kind>", "state": "<state>"}.
+    Returns an empty list if the graph file doesn't exist yet.
+    """
+    trig = project_root / DEFAULT_GRAPH_PATH
+    if not trig.exists():
+        return []
+    ds = Dataset()
+    ds.parse(trig, format="trig")
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+
+    rows: list[dict[str, str]] = []
+    prefix = str(PROJECT_NS)
+    for s, _, o in knowledge.triples((None, SCI_NS.freshnessState, None)):
+        state = str(o)
+        if state not in {"needs-review", "stale"}:
+            continue
+        uri = str(s)
+        if uri.startswith(prefix):
+            tail = uri[len(prefix):]  # e.g. "hypothesis/h1"
+            kind, _, slug = tail.partition("/")
+            rows.append({"id": f"{kind}:{slug}", "kind": kind, "state": state})
+    rows.sort(key=lambda r: (r["state"], r["kind"], r["id"]))
+    return rows

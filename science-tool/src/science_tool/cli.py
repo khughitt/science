@@ -427,6 +427,25 @@ def entity_review(ref: str, note: str | None) -> None:
         click.echo(f"Reviewed {ref} -> {rel} (no changes)")
 
 
+@entity_group.command("needs-review")
+@click.option("--format", "output_format", type=click.Choice(["table", "json"]), default="table")
+def entity_needs_review(output_format: str) -> None:
+    """List epistemic entities flagged needs-review or stale by the materialized graph."""
+    from science_tool.entity_review import list_needs_review
+
+    rows = list_needs_review(Path.cwd())
+    if output_format == "json":
+        click.echo(json.dumps(rows, indent=2))
+        return
+    if not rows:
+        click.echo("No entities flagged.")
+        return
+    click.echo(f"{'state':<14}{'kind':<20}{'id':<40}")
+    click.echo("-" * 74)
+    for row in rows:
+        click.echo(f"{row['state']:<14}{row['kind']:<20}{row['id']:<40}")
+
+
 @main.group("hypothesis")
 def hypothesis_group() -> None:
     """Hypothesis source commands."""

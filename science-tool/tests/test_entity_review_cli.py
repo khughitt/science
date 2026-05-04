@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 from textwrap import dedent
@@ -9,6 +10,7 @@ from textwrap import dedent
 from click.testing import CliRunner
 
 from science_tool.cli import main as cli_main
+from science_tool.graph.materialize import materialize_graph
 
 
 def _setup_project_with_hypothesis(tmp_path: Path) -> Path:
@@ -194,3 +196,66 @@ def test_entity_review_clears_existing_note_when_empty_string_passed(tmp_path: P
     text = h_path.read_text()
     assert "last_review_note" not in text
     assert "Original note" not in text
+
+
+def _setup_with_built_graph(tmp_path: Path) -> Path:
+    """Project where graph build has run and h1 ends up needs-review.
+
+    Uses a `task` fixture (not workflow-run) because materialize.py converts
+    `related: [hypothesis:foo]` to `sci:tests` only when the source kind is
+    `task` — see materialize.py:220 and T9's integration test fixture.
+    """
+    root = _setup_project_with_hypothesis(tmp_path)
+    (root / "doc" / "tasks").mkdir(parents=True)
+    (root / "doc" / "tasks" / "t1.md").write_text(
+        dedent(
+            """
+            ---
+            id: "task:t1"
+            kind: "task"
+            title: "Demo task"
+            status: "active"
+            created: "2026-05-01"
+            updated: "2026-05-01"
+            related: ["hypothesis:h1"]
+            ---
+            Body.
+            """
+        ).lstrip()
+    )
+    materialize_graph(root)
+    return root
+
+
+def test_entity_needs_review_lists_flagged(tmp_path: Path, monkeypatch):
+    root = _setup_with_built_graph(tmp_path)
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    result = runner.invoke(cli_main, ["entity", "needs-review"])
+    assert result.exit_code == 0, result.output
+    assert "hypothesis:h1" in result.output
+    assert "needs-review" in result.output
+
+
+def test_entity_needs_review_json_format(tmp_path: Path, monkeypatch):
+    root = _setup_with_built_graph(tmp_path)
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    result = runner.invoke(cli_main, ["entity", "needs-review", "--format", "json"])
+    assert result.exit_code == 0, result.output
+
+    payload = json.loads(result.output)
+    ids = {row["id"] for row in payload}
+    assert "hypothesis:h1" in ids
+
+
+def test_entity_needs_review_empty_when_all_fresh(tmp_path: Path, monkeypatch):
+    """If h1's last_reviewed is set after the upstream change, it shouldn't be flagged."""
+    root = _setup_project_with_hypothesis(tmp_path)
+    monkeypatch.chdir(root)
+    runner = CliRunner()
+    runner.invoke(cli_main, ["entity", "review", "hypothesis:h1"])
+    materialize_graph(root)
+    result = runner.invoke(cli_main, ["entity", "needs-review"])
+    assert result.exit_code == 0, result.output
+    assert "hypothesis:h1" not in result.output
