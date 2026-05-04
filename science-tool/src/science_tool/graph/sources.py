@@ -112,7 +112,7 @@ class ProjectSources(BaseModel):
     bindings: list[BindingSource] = Field(default_factory=list)
     manual_aliases: dict[str, str] = Field(default_factory=dict)
     ontology_catalogs: list[OntologyCatalog] = Field(default_factory=list)
-    registry: EntityRegistry = Field(default_factory=EntityRegistry.with_core_types)
+    registry: EntityRegistry
 
 
 SourceBinding = BindingSource
