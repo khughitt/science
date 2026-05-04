@@ -519,14 +519,9 @@ def _load_legacy_records(
             "ontology_terms": list(record.ontology_terms),
             "aliases": list(record.aliases),
         }
-        # canonical_parameter is not a registered kind; register on-the-fly.
-        # The spec routes unknown project kinds through ProjectEntity, but the
-        # registry requires explicit registration.
-        try:
-            schema: type[Entity] = registry.resolve("canonical_parameter")
-        except Exception:  # noqa: BLE001
-            registry.register_extension_kind("canonical_parameter", ProjectEntity)
-            schema = registry.resolve("canonical_parameter")
+        # canonical_parameter is registered as a profile kind by LOCAL_PROFILE,
+        # which is always included in profile_manifests above.
+        schema: type[Entity] = registry.resolve("canonical_parameter")
 
         _enrich_raw(
             raw,
