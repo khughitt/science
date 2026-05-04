@@ -8,6 +8,23 @@ def test_core_profile_contains_task_and_hypothesis() -> None:
     assert {"task", "hypothesis", "question", "proposition", "experiment", "observation"} <= names
 
 
+def test_core_profile_contains_theme_kind() -> None:
+    kind_names = {kind.name for kind in CORE_PROFILE.entity_kinds}
+    assert "theme" in kind_names
+
+
+def test_theme_kind_profile_metadata() -> None:
+    kind = next(kind for kind in CORE_PROFILE.entity_kinds if kind.name == "theme")
+    assert kind.canonical_prefix == "theme"
+    assert kind.layer == "layer/core"
+    assert "cross-cutting" in kind.description
+
+
+def test_bears_on_targets_theme() -> None:
+    rel = next(relation for relation in CORE_PROFILE.relation_kinds if relation.name == "bears_on")
+    assert "theme" in rel.target_kinds
+
+
 def test_core_profile_contains_workflow_kinds() -> None:
     names = {kind.name for kind in CORE_PROFILE.entity_kinds}
     assert {"method", "workflow", "workflow-run", "workflow-step"} <= names

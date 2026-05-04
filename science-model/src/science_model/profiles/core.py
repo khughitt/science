@@ -62,6 +62,12 @@ CORE_PROFILE = ProfileManifest(
             description="Named explanatory structure linking multiple typed entities and propositions.",
         ),
         EntityKind(
+            name="theme",
+            canonical_prefix="theme",
+            layer="layer/core",
+            description="Durable cross-cutting organizing frame linking project questions, hypotheses, tasks, reports, concepts, and guardrails.",
+        ),
+        EntityKind(
             name="paper",
             canonical_prefix="paper",
             layer="layer/core",
@@ -265,6 +271,7 @@ CORE_PROFILE = ProfileManifest(
                 "question",
                 "report",
                 "story",
+                "theme",
                 "validation-report",
             ],
             layer="layer/core",

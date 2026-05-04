@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from enum import StrEnum
 
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -51,6 +51,7 @@ class EntityType(StrEnum):
     RESEARCH_PACKAGE = "research-package"
     FINDING = "finding"
     STORY = "story"
+    THEME = "theme"
     MECHANISM = "mechanism"
     PAPER = "paper"
     SEARCH = "search"
@@ -358,6 +359,20 @@ class MechanismEntity(ProjectEntity):
         if not self.summary.strip():
             raise ValueError("mechanism requires a non-empty summary")
         return self
+
+
+class ThemeEntity(ProjectEntity):
+    """Durable cross-cutting organizing frame for project knowledge."""
+
+    theme_kind: Literal[
+        "methodological",
+        "biological",
+        "translational",
+        "evidence-quality",
+        "organizational",
+    ] = "methodological"
+    theme_scope: Literal["project", "federation", "child"] = "project"
+    summary: str = ""
 
 
 class TaskEntity(ProjectEntity):
