@@ -421,9 +421,13 @@ fi
 # feedback during the edit/validate loop (before graph build runs).
 for f in $(find "$DOC_DIR" "$SPECS_DIR" -name "*.md" -type f 2>/dev/null); do
     horizon=$(awk '
-        /^review_state:/ { in_rs=1; next }
-        in_rs && /^[^ ]/ { in_rs=0 }
-        in_rs && /review_horizon_days:/ { print $2 }
+        /^---$/ {
+            if (in_fm == 0) { in_fm=1; next }
+            else { exit }
+        }
+        in_fm && /^review_state:/ { in_rs=1; next }
+        in_fm && in_rs && /^[^ \t]/ { in_rs=0 }
+        in_fm && in_rs && /^[ \t]+review_horizon_days:/ { print $2 }
     ' "$f" | head -1 | tr -d '"')
     if [ -n "$horizon" ] && [ "$horizon" -le 0 ] 2>/dev/null; then
         warn "$f: review_state.review_horizon_days must be positive (got $horizon)"

@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from textwrap import dedent
 
 
 def _validate_script_path() -> Path:
@@ -1087,3 +1088,34 @@ def test_validate_warns_on_review_state_with_invalid_horizon(tmp_path: Path) -> 
     combined = result.stdout + result.stderr
     assert "review_horizon_days" in combined, combined
     assert result.returncode == 0, combined  # warning, not error
+
+
+def test_validate_does_not_warn_when_review_state_absent(tmp_path: Path) -> None:
+    """A hypothesis without a review_state block should not produce a review_horizon_days warning."""
+    _write_minimal_research_project(tmp_path)
+    h = tmp_path / "specs" / "hypotheses" / "h-clean.md"
+    h.parent.mkdir(parents=True, exist_ok=True)
+    h.write_text(
+        dedent(
+            """
+            ---
+            id: "hypothesis:h-clean"
+            kind: "hypothesis"
+            title: "Clean entity"
+            created: "2026-01-01"
+            ---
+            Body text.
+            """
+        ).lstrip(),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "review_horizon_days" not in combined

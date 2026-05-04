@@ -29,8 +29,8 @@ artifacts:
       requires_clean_worktree: true
       commit_default: true
       transaction_kind: temp_commit
-    version: '2026.05.03.2'
-    current_hash: c0cf78f20e7f71b9c066fbb3d14cedcabf337e8351f774e39f5eb66370feefcd
+    version: '2026.05.03.3'
+    current_hash: 80d6063276fcc8f511c9b0a08ef84d15761366246136ea31f09ab65d4270c5fd
     previous_hashes:
       - version: '2026.04.26'
         hash: f4596de3e9b2696066097621d5aef5606f247d144c5530409433427949c830d1
@@ -46,6 +46,8 @@ artifacts:
         hash: 87b571ea042e804dee44fce39a1b3336e6c50be041d07ddc3c5c0a0c5389d2df
       - version: '2026.05.03.1'
         hash: a4f191308ca95899e096792a800b46f5d6df30f869728c31b30243d07b4a3ecf
+      - version: '2026.05.03.2'
+        hash: c0cf78f20e7f71b9c066fbb3d14cedcabf337e8351f774e39f5eb66370feefcd
     migrations:
       - from: '2026.04.26'
         to: '2026.04.26.1'
@@ -82,6 +84,11 @@ artifacts:
         kind: byte_replace
         summary: 'Add Section 5a: warn when review_state.review_horizon_days <= 0.'
         steps: []
+      - from: '2026.05.03.2'
+        to: '2026.05.03.3'
+        kind: byte_replace
+        summary: 'Anchor Section 5a awk to YAML frontmatter; tab-tolerant exit pattern eliminates body-text false positives and tab-indented field skips.'
+        steps: []
     changelog:
       '2026.04.26': Initial managed artifact (port of scripts/validate.sh + hook infrastructure).
       '2026.04.26.1': 'Audit-surfaced six-fix batch (Plan #7 of conventions audit).'
@@ -91,3 +98,4 @@ artifacts:
       '2026.04.26.5': 'Resolve frontmatter cross-references against root specs as well as hypothesis specs.'
       '2026.05.03.1': 'Add Section 0 tooling-scaffold check: warns when pyproject.toml is missing, lacks the science-tool dev dep, or .env lacks SCIENCE_TOOL_PATH; runs a `uv run science-tool --help` smoke test when uv is available.'
       '2026.05.03.2': 'Add Section 5a: warn when review_state.review_horizon_days is present and <= 0 (Pydantic rejects at parse time; this surfaces the error earlier in the edit/validate loop).'
+      '2026.05.03.3': 'Harden Section 5a awk: anchor parsing to YAML frontmatter delimiters to prevent body-text false positives; extend exit pattern to match tab-indented lines so tab-indented fields are no longer silently skipped.'
