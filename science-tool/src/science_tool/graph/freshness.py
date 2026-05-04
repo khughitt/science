@@ -6,6 +6,7 @@ project's typed relations and provenance triples by `materialize_graph()`.
 
 Public surface:
     derive_bears_on_from_typed_edges(dataset)
+    derive_bears_on_from_pre_registrations(dataset, *, pre_registration_targets, kind_class)
     derive_bears_on_from_provenance(dataset, *, kind_class)
     close_bears_on(dataset, *, kind_class)
     derive_freshness(dataset, *, entities, today)
@@ -102,18 +103,45 @@ def derive_bears_on_from_typed_edges(
 
     for predicate in direct_predicates:
         for s, _, o in knowledge.triples((None, predicate, None)):
+            if not isinstance(s, URIRef) or not isinstance(o, URIRef):
+                continue
             knowledge.add((s, SCI_NS.bearsOn, o))
             _emit_bears_on_edge(knowledge, s, o, 1)
     for predicate in inverse_predicates:
         for s, _, o in knowledge.triples((None, predicate, None)):
+            if not isinstance(s, URIRef) or not isinstance(o, URIRef):
+                continue
             knowledge.add((o, SCI_NS.bearsOn, s))
             _emit_bears_on_edge(knowledge, o, s, 1)
 
     # has_participant: emit only when participant is itself epistemic.
     for s, _, o in knowledge.triples((None, SCI_NS.hasParticipant, None)):
+        if not isinstance(s, URIRef) or not isinstance(o, URIRef):
+            continue
         if kind_class.get(str(o)) == EntityClass.EPISTEMIC:
             knowledge.add((o, SCI_NS.bearsOn, s))
             _emit_bears_on_edge(knowledge, o, s, 1)
+
+
+def derive_bears_on_from_pre_registrations(
+    dataset: Dataset,
+    *,
+    pre_registration_targets: dict[URIRef, list[URIRef]],
+    kind_class: dict[str, EntityClass],
+) -> None:
+    """Emit pre-registration `bears_on` edges to epistemic commitment targets.
+
+    `pre_registration_targets` is built from source frontmatter by the
+    materializer so this deriver can distinguish absent `commits_to` from an
+    explicit empty list. Only epistemic targets are valid `bears_on` sinks.
+    """
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    for pre_registration_uri, targets in pre_registration_targets.items():
+        for target_uri in targets:
+            if kind_class.get(str(target_uri)) != EntityClass.EPISTEMIC:
+                continue
+            knowledge.add((pre_registration_uri, SCI_NS.bearsOn, target_uri))
+            _emit_bears_on_edge(knowledge, pre_registration_uri, target_uri, 1)
 
 
 def derive_bears_on_from_provenance(
@@ -133,6 +161,8 @@ def derive_bears_on_from_provenance(
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 
     for s, _, o in provenance.triples((None, PROV.wasDerivedFrom, None)):
+        if not isinstance(s, URIRef) or not isinstance(o, URIRef):
+            continue
         # In materialize.py the *derived* side is the subject of wasDerivedFrom.
         # If the derived entity is epistemic, the source bears on it.
         if kind_class.get(str(s)) == EntityClass.EPISTEMIC:
@@ -167,6 +197,8 @@ def close_bears_on(
     # Build adjacency map from existing bears_on edges (depth-1 direct ones).
     adjacency: dict[URIRef, set[URIRef]] = {}
     for s, _, o in knowledge.triples((None, SCI_NS.bearsOn, None)):
+        if not isinstance(s, URIRef) or not isinstance(o, URIRef):
+            continue
         adjacency.setdefault(s, set()).add(o)
 
     # BFS from each source, starting from grand-neighbors (depth 2) to avoid
@@ -233,6 +265,8 @@ def derive_freshness(
     # Build inverse adjacency: target -> {sources that bear on it}.
     bears_on_in: dict[URIRef, set[URIRef]] = {}
     for s, _, o in knowledge.triples((None, SCI_NS.bearsOn, None)):
+        if not isinstance(s, URIRef) or not isinstance(o, URIRef):
+            continue
         bears_on_in.setdefault(o, set()).add(s)
 
     for entity_uri_str, info in entities.items():

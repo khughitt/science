@@ -18,6 +18,7 @@ from science_tool.addressing import is_address, parse_address
 from science_tool.graph.freshness import (
     EntityFreshnessInfo,
     close_bears_on,
+    derive_bears_on_from_pre_registrations,
     derive_bears_on_from_provenance,
     derive_bears_on_from_typed_edges,
     derive_freshness,
@@ -85,6 +86,11 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
         )
 
     kind_class = _classify_entities(sources)
+    pre_registration_targets = _pre_registration_commitment_targets(
+        sources,
+        entity_index=entity_index,
+        resolver=resolver,
+    )
 
     for relation in sources.relations:
         _add_authored_relation(
@@ -107,7 +113,11 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
             resolver=resolver,
         )
 
-    _derive_bears_on_layer(dataset, kind_class=kind_class)
+    _derive_bears_on_layer(
+        dataset,
+        kind_class=kind_class,
+        pre_registration_targets=pre_registration_targets,
+    )
     if sources.freshness_enabled:
         entity_meta = _build_entity_meta(sources, kind_class)
         _derive_freshness_layer(dataset, entities=entity_meta, today=_date.today())
@@ -146,7 +156,9 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
     sources = load_project_sources(project_root)
     rows, has_failures = audit_project_sources(sources)
     if has_failures:
-        details = "; ".join(f"{row['source']} -> {row['target']}" for row in rows if row["status"] == "fail")
+        details = "; ".join(
+            f"{row['source']} {row['field']} -> {row['target']}" for row in rows if row["status"] == "fail"
+        )
         msg = f"Cannot materialize graph with unresolved references: {details}"
         raise ValueError(msg)
 
@@ -256,6 +268,7 @@ def _add_relations(
         )
         knowledge.add((entity_uri, predicate, target_uri))
 
+
     # `blocked_by` lives on ProjectEntity; defensive getattr for bare Entity instances.
     for raw_target in sorted(getattr(entity, "blocked_by", []) or []):
         if is_metadata_reference(raw_target):
@@ -320,6 +333,41 @@ def _add_relations(
         if _is_cross_project_address(raw_target):
             provenance.add((entity_uri, PROV.wasDerivedFrom, _address_uri(raw_target)))
             continue
+
+
+def _pre_registration_commitment_targets(
+    sources: ProjectSources,
+    *,
+    entity_index: dict[str, Entity],
+    resolver: ReferenceResolver,
+) -> dict[URIRef, list[URIRef]]:
+    """Resolve pre-registration commitment targets for bears_on derivation.
+
+    When `commits_to:` is present, it overrides `related:`. An explicit empty
+    list means "derive no pre-reg bears_on edges".
+    """
+    targets_by_pre_registration: dict[URIRef, list[URIRef]] = {}
+    ext_prefixes = external_prefixes(sources.ontology_catalogs)
+    for entity in sources.entities:
+        if entity.kind != "pre-registration":
+            continue
+        raw_targets = entity.commits_to if entity.commits_to is not None else entity.related
+        resolved_targets: list[URIRef] = []
+        for raw_target in sorted(raw_targets):
+            if is_external_reference(raw_target, known_prefixes=ext_prefixes):
+                continue
+            if is_metadata_reference(raw_target):
+                continue
+            resolution = resolver.resolve(raw_target, allow_cross_kind_fallback=True, allow_tag=True)
+            if resolution.status != "resolved":
+                continue
+            assert resolution.canonical_id is not None
+            target = entity_index.get(resolution.canonical_id)
+            if target is None:
+                continue
+            resolved_targets.append(_entity_uri(target.canonical_id))
+        targets_by_pre_registration[_entity_uri(entity.canonical_id)] = resolved_targets
+    return targets_by_pre_registration
 
 
 def _link_external_term(
@@ -614,6 +662,7 @@ def _derive_bears_on_layer(
     dataset: Dataset,
     *,
     kind_class: dict[str, EntityClass],
+    pre_registration_targets: dict[URIRef, list[URIRef]],
 ) -> None:
     """Derive sci:bearsOn triples (typed-edge + provenance + closure).
 
@@ -621,6 +670,11 @@ def _derive_bears_on_layer(
     independently useful for dependency queries and are not part of freshness.
     """
     derive_bears_on_from_typed_edges(dataset, kind_class=kind_class)
+    derive_bears_on_from_pre_registrations(
+        dataset,
+        pre_registration_targets=pre_registration_targets,
+        kind_class=kind_class,
+    )
     derive_bears_on_from_provenance(dataset, kind_class=kind_class)
     close_bears_on(dataset, kind_class=kind_class)
 

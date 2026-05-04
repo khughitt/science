@@ -312,6 +312,18 @@ def _audit_entity(
                 allow_tag=True,
             )
         )
+    for target in getattr(entity, "commits_to", None) or []:
+        rows.extend(
+            _audit_reference(
+                entity,
+                "commits_to",
+                target,
+                resolver,
+                ext_prefixes=ext_prefixes,
+                allow_cross_kind_fallback=True,
+                allow_tag=True,
+            )
+        )
     # `blocked_by` lives on ProjectEntity; defensive getattr for bare Entity instances.
     for target in getattr(entity, "blocked_by", []) or []:
         rows.extend(_audit_reference(entity, "blocked_by", target, resolver, ext_prefixes=ext_prefixes))

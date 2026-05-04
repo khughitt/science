@@ -1,6 +1,6 @@
 # Pre-registration semantics recast — draft proposal
 
-> **Status:** Draft for circulation (t012), revision 3 (2026-05-04 post 9-project audit). Do **not** merge until downstream projects (Science cluster: natural-systems, protein-landscape, seq-feats, 3d-attention-bias; cancer cluster: multiple-myeloma, cbioportal, mechanisms/evolution, cancer/meta) have surfaced objections. The recast changes how their existing pre-regs are interpreted; no entity-file content changes, but small code prerequisites are required (see § "Code prerequisites"). Per-project audit reports under `docs/audits/prereg-recast/` cover all 60 surveyed pre-regs across 7 pre-reg-using projects.
+> **Status:** Draft for circulation (t012), revision 3 (2026-05-04 post 9-project audit). Do **not** merge until downstream projects (Science cluster: natural-systems, protein-landscape, seq-feats, 3d-attention-bias; cancer cluster: multiple-myeloma, cbioportal, mechanisms/evolution, cancer/meta) have surfaced objections. The recast changes how their existing pre-regs are interpreted; no pre-reg body content changes, but some mixed pre-regs may need `commits_to:` frontmatter clarification and small code prerequisites are required (see § "Code prerequisites"). Per-project audit reports under `docs/audits/prereg-recast/` cover all 60 surveyed pre-regs across 7 pre-reg-using projects.
 
 **Source design:** `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` § Part 4.
 
@@ -23,7 +23,7 @@ The shift dissolves the "gate slammed shut on a viable pathway" failure mode wit
 
 ### Why this is safe to change without schema migration
 
-Existing pre-regs already declare their target via `related:`. The classification of that target as operational or epistemic falls out of the entity registry's `EntityClass` mapping (added in `[t010]`, refined in this recast — see § "Code prerequisites"):
+Existing pre-regs already list candidate targets and navigation context via `related:`. The classification of each referenced entity as operational or epistemic falls out of the entity registry's `EntityClass` mapping (added in `[t010]`, refined in this recast — see § "Code prerequisites"):
 
 - `related: [hypothesis:h07-...]` → epistemic target (since `hypothesis` is `EPISTEMIC`)
 - `related: [question:q63-...]` → epistemic target (since `question` is `EPISTEMIC`)
@@ -32,7 +32,7 @@ Existing pre-regs already declare their target via `related:`. The classificatio
 - `related: [task:t342]` → operational target (since `task` is `OPERATIONAL`)
 - `related: [workflow-run:...]` → operational target (since `workflow-run` is `OPERATIONAL`)
 
-So a pre-reg's "class of target" is computable today from existing data, plus the inquiry reclassification this recast introduces. Skills can branch on it without any frontmatter changes.
+So a referenced entity's target class is computable today from existing data, plus the inquiry reclassification this recast introduces. What is not always computable from `related:` alone is whether an epistemic ref is a true commitment target or only navigation context. That ambiguity is resolved by the optional `commits_to:` field introduced below; mixed existing pre-regs need maintainer review before merge to decide whether that clarification is required.
 
 ---
 
@@ -64,7 +64,9 @@ Concrete edits to `commands/pre-register.md`:
 
    > "Of the epistemic entries in `related:`, which are commitment targets — i.e., entities this pre-reg actually constrains the interpretation of? Anything *not* called out here will still appear in `related:` for discoverability, but won't produce a `bears_on` edge."
 
-   Record the commitment-target subset as `commits_to:` in the pre-reg frontmatter (new optional field; if absent, the recast falls back to "all epistemic `related:` entries are commitment targets" — the over-deriving default). The auto-derivation rule (Prerequisite 2 below) then prefers `commits_to:` when present.
+   Record the commitment-target subset as `commits_to:` in the pre-reg frontmatter (new optional field). The field means **"derive pre-reg `bears_on` edges to these targets"**; it does **not** mean "lock these targets forever." Any epistemic entity named in `commits_to:` remains a normal epistemic entity: it can still become `needs-review` when upstream datasets, workflow-runs, observations, propositions, interpretations, reports, or other epistemic dependencies change.
+
+   If `commits_to:` is absent, the recast falls back to "all epistemic `related:` entries are commitment targets." Audit found this over-derives edges for many existing mixed pre-regs, so downstream review must explicitly identify which existing pre-regs need `commits_to:` before merge. This is still a small frontmatter edit, but it is not a semantic nicety — it controls which freshness edges fire. The auto-derivation rule (Prerequisite 2 below) then prefers `commits_to:` when present.
 
    This handles the recurrent pattern surfaced by the audit:
    - `pre-registration-h07-beta-arbitration` lists `hypothesis:h07-...` for context but its body is operationally locked. Author would set `commits_to:` to operational tasks only.
@@ -132,7 +134,19 @@ Concrete edits to `commands/interpret-results.md`:
      For these pre-regs the auto-derivation rule produces no `bears_on` edge to the body-level hypothesis (it only sees `related:`). When interpreting the analysis:
 
      1. Read the pre-reg's body for inline hypothesis labels (H1, H2, ...) and identify the corresponding `hypothesis:` entity, if one exists.
-     2. If the entity exists, emit the evidence edge by hand using `science-tool graph add proposition --pre-registration <pre-reg-ref>` plus `cito:supports` / `cito:disputes` to the hypothesis. The `sci:preRegisteredIn` triple still threads through correctly.
+     2. If the entity exists, emit the proposition with the pre-registration backlink, then add the evidence edge explicitly. Today this is a two-command sequence because `graph add proposition` records `sci:preRegisteredIn`, while `graph add evidence` records the `cito:supports` / `cito:disputes` edge:
+
+        ```bash
+        science-tool graph add proposition "<observed result proposition>" \
+          --source <data-package-or-workflow-run-ref> \
+          --pre-registration pre-registration:<slug> \
+          --id <proposition-id>
+
+        science-tool graph add evidence proposition:<proposition-id> hypothesis:<target-id> \
+          --stance supports  # or disputes
+        ```
+
+        The `sci:preRegisteredIn` triple threads through the proposition metadata, and the evidence edge remains a normal `cito:supports` / `cito:disputes` edge into the hypothesis.
      3. If no formal `hypothesis:` entity exists yet (cbioportal t077 case — hypothesis lives only in `specs/research-question.md`), flag this in the interpretation document and recommend the project promote it to a formal entity. The recast cannot fully derive `bears_on` for body-only hypotheses; project-side cleanup is the resolution path.
 
      This is a transitional accommodation — once projects regularize their pre-canonical pre-regs (out of t012 scope), the auto-derivation rule will catch them naturally and this manual step disappears.
@@ -196,6 +210,16 @@ that field overrides `related:` for commitment-target derivation:
 only. This handles the common case where `related:` is used both for
 genuine commitment targets and for discoverability.
 
+`commits_to:` is an edge-scoping field, not a lock. It records which
+epistemic entities receive the pre-reg's evidential signal; it does not
+freeze those entities, suppress upstream changes, or exempt them from
+freshness propagation. A committed-to hypothesis, question, proposition, or
+inquiry remains responsive to every other upstream dependency in the
+`bears_on` graph. If a newer dataset, workflow-run, observation, proposition,
+interpretation, report, or other upstream epistemic entity changes, the
+target should still become `needs-review` through the existing freshness
+engine.
+
 This dissolves the "gate slammed shut on a viable pathway" failure mode:
 under hard-gating semantics, a null result against a pre-registered
 prediction terminates a hypothesis even when the underlying physical claim
@@ -234,17 +258,24 @@ Two consequences as long as it's missing:
 
 Tracked as `[t012b]`.
 
-### Prerequisite 2: auto-derive `bears_on` from pre-reg `related:` to epistemic targets
+### Prerequisite 2: auto-derive `bears_on` from pre-reg commitment targets to epistemic targets
 
 A pre-reg's `related:` field materializes as `skos:related` (`graph/materialize.py`). Freshness derivation does not consume `skos:related`. So without an explicit auto-derivation rule, the recast has no graph effect on `bears_on` edges into the epistemic target — the prose changes would be teaching humans to think differently while the materialized graph behaves identically to today.
 
-**Fix:** add a rule in `freshness.py`'s `derive_bears_on_from_typed_edges` (or a sibling deriver):
+**Fix:** add a pre-reg-specific derivation rule in `freshness.py` (or a sibling deriver), and ensure the deriver can see the relevant frontmatter. The current materializer only emits `skos:related` from `entity.related`; `commits_to:` is not preserved in the RDF dataset by default. The prerequisite therefore has two parts:
 
-> For a `pre-registration` entity P with `related:` member E:
+1. Preserve `commits_to:` from pre-registration frontmatter into the source model / materialization context, or emit a typed internal relation for it before derivation. Fail early if `commits_to:` contains an unresolved ref.
+2. Derive `bears_on` from the pre-reg to epistemic commitment targets, using `commits_to:` when present and falling back to epistemic `related:` entries only when absent.
+
+Rule:
+
+> For a `pre-registration` entity P with candidate commitment target E:
 >   - if `kind_class(kind_of(E)) == EPISTEMIC`: emit `P bears_on E` at depth 1.
 >   - if `kind_class(kind_of(E)) == OPERATIONAL` or `REFERENCE`: do not emit (operational and reference targets are not `bears_on` sinks; materialization rejects authored `bears_on` edges to non-epistemic targets per `graph/materialize.py`).
 
-Tests: pre-reg with `related: [hypothesis:H]` → `P bears_on H` derived; pre-reg with `related: [task:T]` → no `bears_on` derived; mixed `related: [hypothesis:H, task:T]` → exactly one edge to H. **If `commits_to:` is present in the pre-reg frontmatter, prefer it over `related:` for commitment-target derivation** (per § "Skill changes" Section 0 sub-prompt) — `related:` then becomes navigation context only and does not produce `bears_on`. Unit-test against the existing freshness derivation harness.
+Tests: pre-reg with `related: [hypothesis:H]` and no `commits_to:` → `P bears_on H` derived; pre-reg with `related: [task:T]` and no `commits_to:` → no `bears_on` derived; mixed `related: [hypothesis:H, task:T]` with no `commits_to:` → exactly one edge to H; pre-reg with `related: [hypothesis:H]` and `commits_to: []` → no `bears_on` edge to H; pre-reg with `related: [hypothesis:H1, hypothesis:H2]` and `commits_to: [hypothesis:H2]` → exactly one edge to H2.
+
+Also test the anti-locking invariant: an epistemic target with both `pre-registration:P bears_on H` and `observation:O bears_on H` still becomes `needs-review` when `O.updated` advances beyond H's review baseline. `commits_to:` scopes the pre-reg edge; it must not pin H's freshness or suppress unrelated upstream changes.
 
 Tracked as `[t012b']` (companion to t012b — same PR is fine, since both are tiny and tightly coupled).
 
@@ -300,11 +331,7 @@ The original draft asserted that the existing closure chain `pre-reg → analysi
 - Without Prerequisite 1: the skill cannot even ask the registry whether a target is epistemic, because pre-reg isn't a registered kind.
 - Without Prerequisite 2: the prose recast is purely cosmetic — humans get new framing language, but `science:status`, `science:next-steps`, `bears_on`-derived freshness, and Phase-2 sampling weights see no new edges.
 
-**Sequencing:**
-
-1. Land Prerequisites 1 & 2 (small, mechanical, can ship as one PR — call it `[t012b]`).
-2. Apply prose changes from § "Skill changes" and § "Doc changes". Skill prose can now safely reference `science-tool entity list --kind pre-registration` and rely on the auto-derived edges existing in the graph.
-3. Circulate to downstream maintainers per § "Downstream impact".
+**Sequencing:** circulate the draft first, then land the code prerequisites after downstream maintainers confirm that the recast and `commits_to:` shape match project intent. Once Prerequisites 1-3 land, apply the prose changes from § "Skill changes" and § "Doc changes"; at that point skill prose can safely reference `science-tool entity list --kind pre-registration` and rely on the auto-derived edges existing in the graph.
 
 ---
 
@@ -331,13 +358,13 @@ The original draft asserted that the existing closure chain `pre-reg → analysi
 | mechanisms/evolution | 2 | Cleanest, most recast-compatible pre-regs across all 9 projects. Explicit narrow-scope verdict language with 4-tier outcome buckets. Three new unregistered kinds (`bias-audit:`, `analysis-plan:`, `meta:`). |
 | cancer/meta | 0 | Federation umbrella; federates 32 pre-reg identifiers from children. Inherits standard validation; the recast's deriver inherits automatically through `science-tool` (see § Code prerequisites — Federation behavior). |
 
-**No file in any project needs editing.** Each existing pre-reg's `related:` field already declares its targets; the recast changes how those targets are interpreted at evaluation time, plus the inquiry reclassification adds new `bears_on` edges from inquiry-targeting pre-regs (multiple-myeloma is the primary affected project).
+No pre-reg body content needs editing for the recast itself. However, existing pre-regs whose `related:` field mixes commitment targets with navigation context may need a small `commits_to:` frontmatter clarification before merge. That clarification controls which `bears_on` edges are derived; it does not re-date, rewrite, or weaken the original pre-registration.
 
 ### What downstream maintainers should review before merge
 
 1. **For each existing pre-reg with epistemic targets:** does the recast change the *intended* meaning of that pre-reg? Audit found that author practice already aligns with the recast's spirit across all surveyed projects, but project-owner confirmation is the right gate.
 
-2. **For pre-regs whose `related:` mixes commitment targets with navigation context** (the universal pattern surfaced by audit): consider authoring a `commits_to:` field on existing pre-regs to disambiguate. This is optional — the recast's default falls back to "all epistemic `related:` entries are commitment targets" if `commits_to:` is absent, which over-derives but doesn't fail. Setting `commits_to:` is the precise way to control which `bears_on` edges fire.
+2. **For pre-regs whose `related:` mixes commitment targets with navigation context** (the universal pattern surfaced by audit): identify which existing pre-regs need a `commits_to:` field before merge. The fallback remains "all epistemic `related:` entries are commitment targets" when `commits_to:` is absent, but the audit found that fallback over-derives for many mixed pre-regs. Setting `commits_to:` is the precise way to control which `bears_on` edges fire.
 
 3. **Operational pre-regs are unaffected.** Anything pre-registering a procedural commitment (run-with-params, datapackage-before-unblinding) keeps its current gating semantics.
 
@@ -363,12 +390,13 @@ The original draft asserted that the existing closure chain `pre-reg → analysi
 1. **Now:** circulate this draft (and the per-project audit reports under `docs/audits/prereg-recast/`) to downstream maintainers. Solicit objections specifically on:
    - Whether the recast changes intent of any existing pre-reg (cross-project audit found author practice already aligns).
    - Whether the inquiry reclassification (`REFERENCE` → `EPISTEMIC`) is acceptable cluster-wide.
-   - Whether the `commits_to:` optional frontmatter field is the right resolution for the `related:` conflation issue, or if a different shape is preferred.
+   - Whether the `commits_to:` frontmatter field is the right resolution for the `related:` conflation issue, or if a different shape is preferred.
+   - Which existing mixed pre-regs need `commits_to:` populated before the derivation rule lands.
    - Whether any project has tooling that depends on the binary-verdict reading of pre-regs.
 
 2. **Land code prerequisites (`[t012b]` / `[t012b']` / `[t012b'']`):** all three changes can ship in one small PR:
    - Register `pre-registration` → `EntityClass.OPERATIONAL` in `_CORE_KIND_CLASSES` (Prerequisite 1).
-   - Add the `pre-reg related: → bears_on epistemic-target` auto-derivation rule, with `commits_to:` precedence over `related:` (Prerequisite 2).
+   - Preserve `commits_to:` through source loading / materialization and add the pre-reg commitment-target → `bears_on` epistemic-target auto-derivation rule, with `commits_to:` precedence over `related:` (Prerequisite 2).
    - Reclassify `inquiry` from `REFERENCE` to `EPISTEMIC` (Prerequisite 3).
 
    See § "Code prerequisites" for details and tests.
@@ -390,7 +418,7 @@ Total prose-edit work in step 3 is small: ~120 lines added across `commands/pre-
 
 1. **`commitment_weight` field — yes or no?** Adding it (even optional) is a soft schema change and a new authoring decision the user must make at pre-reg time. Alternative: omit it, treat all pre-regs as `strong`, and add weighting later if Phase-2 needs the gradient. **Lean: omit for now.**
 2. ~~**Pre-reg classification: OPERATIONAL or REFERENCE?**~~ **Resolved (revision 3): OPERATIONAL** per Prerequisite 1.
-3. **`commits_to:` field — accepted shape?** The audit-driven resolution to the `related:` conflation issue introduces `commits_to:` as an optional frontmatter field that overrides `related:` for commitment-target derivation. Alternative shapes considered and rejected: (a) repurposing existing `committed:` (already used for the date), (b) splitting `related:` into `commits_to:` + `context:` (more invasive — every pre-reg would need migration). **Lean: optional `commits_to:` with `related:` fallback. Confirmation requested.**
+3. **`commits_to:` field — accepted shape?** The audit-driven resolution to the `related:` conflation issue introduces `commits_to:` as a frontmatter field that overrides `related:` for commitment-target derivation. It scopes derived pre-reg `bears_on` edges; it does not lock the target or suppress normal freshness propagation. Alternative shapes considered and rejected: (a) repurposing existing `committed:` (already used for the date), (b) splitting `related:` into `commits_to:` + `context:` (more invasive — every pre-reg would need migration). **Lean: optional for new clean pre-regs, but required as a pre-merge clarification for existing mixed pre-regs where `related:` would otherwise over-derive. Confirmation requested.**
 4. **Inquiry reclassification — cross-cluster acceptable?** Reclassifying `inquiry` from `REFERENCE` to `EPISTEMIC` affects all 9 audited projects, not just multiple-myeloma. Audit found inquiry refs in pre-regs only in multiple-myeloma and natural-systems; other projects unaffected. **Lean: reclassify (per agreement); confirm cluster-wide.**
 5. **Should `bias-audit` skill be reframed in this same recast?** Lean: defer — its current language is mild enough not to mislead.
 6. **Should the supersede notice in `claim-and-evidence-model.md` be strengthened?** Lean: out of scope for t012; do separately if at all.
@@ -412,7 +440,7 @@ The original draft additionally claimed "no code changes for t012 itself." That 
 Revision 3 (2026-05-04, post 9-project audit):
 
 - **Inquiry reclassified to EPISTEMIC** (Prerequisite 3, new). Per multiple-myeloma audit Issue 2 and agreed cluster-wide. mm uses inquiries as pre-hypothesis structure; without this reclassification, 3 of mm's 30 pre-regs (t494, t498, t500) produce no `bears_on` edges. natural-systems also uses inquiry refs in some pre-regs; reclassification is conceptually right (inquiries organize uncertain assertions, same as questions and propositions). One-line change in `_CORE_KIND_CLASSES` plus tests.
-- **Sub-prompt for `commits_to:` vs navigation context** added to `commands/pre-register.md` § Section 0. Audit found that every pre-reg-using project (7 of 7) mixes commitment targets with navigation context in `related:`. The recast's auto-derivation rule would over-derive `bears_on` edges without this. The `commits_to:` field is optional; absent → fall back to "all epistemic `related:` entries are commitment targets" (over-deriving but not failing).
+- **Sub-prompt for `commits_to:` vs navigation context** added to `commands/pre-register.md` § Section 0. Audit found that every pre-reg-using project (7 of 7) mixes commitment targets with navigation context in `related:`. The recast's auto-derivation rule would over-derive `bears_on` edges without this. `commits_to:` is now framed as edge-scoping, not locking: targets remain responsive to all other upstream freshness dependencies. Existing mixed pre-regs need maintainer review before merge to decide where `commits_to:` must be populated.
 - **Prose for hypothesis-in-body-only pre-regs** added to `commands/interpret-results.md` § 4d. Audit found 5 such pre-regs across 2 projects (mm 4 pre-canonical, cbioportal t077). Manual evidence-edge emission is the transitional accommodation; project-side cleanup is the resolution path.
 - **Silent-skip behavior for unregistered kinds** documented in § "Code prerequisites". Audit surfaced 6+ unregistered kinds (`decision:`, `latent:`, `bias-audit:`, `analysis-plan:`, `meta:`, `rq:`). Silent-skip is correct semantics; project-side resolution paths documented. Recommended `[t012d]` health-check follow-up.
 - **Federation behavior** documented in § "Code prerequisites". Federated graph builders inherit the deriver automatically (no federation-specific config). cancer/meta confirms this.
