@@ -45,9 +45,7 @@ def test_entity_review_sets_last_reviewed(tmp_path: Path, monkeypatch):
     today = date.today().isoformat()
     assert "review_state:" in text
     assert (
-        f"last_reviewed: \"{today}\"" in text
-        or f"last_reviewed: '{today}'" in text
-        or f"last_reviewed: {today}" in text
+        f'last_reviewed: "{today}"' in text or f"last_reviewed: '{today}'" in text or f"last_reviewed: {today}" in text
     )
 
 
@@ -55,9 +53,7 @@ def test_entity_review_records_note(tmp_path: Path, monkeypatch):
     root = _setup_project_with_hypothesis(tmp_path)
     monkeypatch.chdir(root)
     runner = CliRunner()
-    result = runner.invoke(
-        cli_main, ["entity", "review", "hypothesis:h1", "--note", "Re-checked after Lee2026"]
-    )
+    result = runner.invoke(cli_main, ["entity", "review", "hypothesis:h1", "--note", "Re-checked after Lee2026"])
     assert result.exit_code == 0, result.output
 
     text = (root / "specs" / "hypotheses" / "h1.md").read_text()

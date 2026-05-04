@@ -179,9 +179,9 @@ class TaskArchiveLag(TypedDict):
 
 
 class ToolingScaffoldFinding(TypedDict):
-    code: str       # pyproject_missing | science_tool_dep_missing | env_missing | env_path_missing
-    detail: str     # human-readable description
-    fix: str        # suggested remediation command
+    code: str  # pyproject_missing | science_tool_dep_missing | env_missing | env_path_missing
+    detail: str  # human-readable description
+    fix: str  # suggested remediation command
 
 
 class HealthReport(TypedDict):
@@ -351,7 +351,7 @@ def collect_tooling_scaffold_findings(project_root: Path) -> list[ToolingScaffol
             {
                 "code": "pyproject_missing",
                 "detail": "No root pyproject.toml — `uv run science-tool ...` cannot resolve.",
-                "fix": "Create pyproject.toml per commands/create-project.md, then `uv add --dev --editable \"$SCIENCE_TOOL_PATH\"`.",
+                "fix": 'Create pyproject.toml per commands/create-project.md, then `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.',
             }
         )
     else:
@@ -366,7 +366,10 @@ def collect_tooling_scaffold_findings(project_root: Path) -> list[ToolingScaffol
             dev_group = data.get("dependency-groups", {}).get("dev", [])
             for entry in dev_group:
                 # entries can be strings ("science-tool") or tables; we only need name match
-                if isinstance(entry, str) and entry.split("[")[0].split(">=")[0].split("==")[0].strip() == "science-tool":
+                if (
+                    isinstance(entry, str)
+                    and entry.split("[")[0].split(">=")[0].split("==")[0].strip() == "science-tool"
+                ):
                     has_dep = True
                     break
         except Exception as exc:
@@ -384,7 +387,7 @@ def collect_tooling_scaffold_findings(project_root: Path) -> list[ToolingScaffol
                 {
                     "code": "science_tool_dep_missing",
                     "detail": "pyproject.toml does not list `science-tool` under [dependency-groups].dev.",
-                    "fix": "Run `uv add --dev --editable \"$SCIENCE_TOOL_PATH\"` from the project root.",
+                    "fix": 'Run `uv add --dev --editable "$SCIENCE_TOOL_PATH"` from the project root.',
                 }
             )
 

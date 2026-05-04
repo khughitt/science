@@ -35,6 +35,7 @@ def test_kind_class_lookup_returns_classification():
 
 def test_kind_class_lookup_for_unknown_kind_raises():
     from science_tool.graph.entity_registry import EntityKindNotRegisteredError
+
     r = EntityRegistry.with_core_types()
     with pytest.raises(EntityKindNotRegisteredError):
         r.kind_class("frobnicator")

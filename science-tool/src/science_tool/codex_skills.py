@@ -228,8 +228,7 @@ def _write_index(output_root: Path, command_paths: list[Path], companion_skills:
         command_name = command_path.stem
         skill_name = command_to_skill_name(command_path)
         lines.append(
-            f"| `{command_name}` | `{skill_name}` | `{skill_name}/SKILL.md` | "
-            f"`commands/{command_path.name}` |"
+            f"| `{command_name}` | `{skill_name}` | `{skill_name}/SKILL.md` | `commands/{command_path.name}` |"
         )
 
     lines.extend(

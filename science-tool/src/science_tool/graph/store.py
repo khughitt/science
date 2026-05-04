@@ -448,7 +448,7 @@ def canonical_id_from_entity_uri(uri: str) -> str | None:
     prefix = str(PROJECT_NS)
     if not uri.startswith(prefix):
         return None
-    tail = uri[len(prefix):]
+    tail = uri[len(prefix) :]
     if "/" not in tail:
         return None
     kind, _, slug = tail.partition("/")

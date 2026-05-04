@@ -1,4 +1,5 @@
 """freshness.enabled: false opt-out for downstream projects mid-migration."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,7 +24,9 @@ def _build_minimal_project(tmp_path: Path, *, freshness_enabled: bool | None) ->
     if freshness_enabled is not None:
         yaml += f"freshness:\n  enabled: {'true' if freshness_enabled else 'false'}\n"
     _write(root / "science.yaml", yaml)
-    _write(root / "specs" / "hypotheses" / "h1.md", """
+    _write(
+        root / "specs" / "hypotheses" / "h1.md",
+        """
         ---
         id: "hypothesis:h1"
         kind: "hypothesis"
@@ -32,8 +35,11 @@ def _build_minimal_project(tmp_path: Path, *, freshness_enabled: bool | None) ->
         updated: "2026-04-01"
         ---
         Body.
-    """)
-    _write(root / "doc" / "tasks" / "t1.md", """
+    """,
+    )
+    _write(
+        root / "doc" / "tasks" / "t1.md",
+        """
         ---
         id: "task:t1"
         kind: "task"
@@ -44,7 +50,8 @@ def _build_minimal_project(tmp_path: Path, *, freshness_enabled: bool | None) ->
         related: ["hypothesis:h1"]
         ---
         Body.
-    """)
+    """,
+    )
     return root
 
 

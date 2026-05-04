@@ -2594,13 +2594,11 @@ def tasks_retire(task_id: str, reason: str | None) -> None:
 
 @tasks.command("block")
 @click.argument("task_id")
-@click.option("--by", "blocked_by", multiple=True, required=True,
-              help="Typed blocker ref (repeatable): <kind>:<local-id>")
-@click.option("--force", is_flag=True,
-              help="Record blocker even if entity not yet known")
-def tasks_block(
-    task_id: str, blocked_by: tuple[str, ...], force: bool
-) -> None:
+@click.option(
+    "--by", "blocked_by", multiple=True, required=True, help="Typed blocker ref (repeatable): <kind>:<local-id>"
+)
+@click.option("--force", is_flag=True, help="Record blocker even if entity not yet known")
+def tasks_block(task_id: str, blocked_by: tuple[str, ...], force: bool) -> None:
     """Block a task by one or more typed entity references."""
     from science_tool.tasks import block_task
     from science_tool.tasks_blockers import BlockerValidationError
@@ -2675,8 +2673,7 @@ def tasks_blockers(task_id: str, fmt: str) -> None:
 
 
 @tasks.command("fix-blockers")
-@click.option("--dry-run", is_flag=True,
-              help="List legacy untyped blockers without modifying any files")
+@click.option("--dry-run", is_flag=True, help="List legacy untyped blockers without modifying any files")
 def tasks_fix_blockers(dry_run: bool) -> None:
     """Interactive sweep to retype legacy untyped blockers."""
     from science_tool.tasks import (
@@ -3037,9 +3034,7 @@ def tasks_list(
             "sort_order": "status_rank,id",
             "applied_filters": applied_filters,
         }
-        emit_query_rows(
-            output_format=output_format, title="Tasks", columns=columns, rows=rows, meta=meta
-        )
+        emit_query_rows(output_format=output_format, title="Tasks", columns=columns, rows=rows, meta=meta)
     else:
         render_tasks_table(matched, resolver=resolver)
 

@@ -131,8 +131,7 @@ def collect_inventory(
     if threads_orphans:
         id_for_path = {a.path: a.id for a in records}
         candidate_signals.missing_source_refs = [
-            p for p in candidate_signals.missing_source_refs
-            if id_for_path.get(p) not in threads_orphans
+            p for p in candidate_signals.missing_source_refs if id_for_path.get(p) not in threads_orphans
         ]
 
     artifact_counts: dict[str, int] = {}

@@ -27,13 +27,18 @@ def _build_min_project(tmp_path: Path) -> Path:
     in a fixture; the bears_on derivation rule fires identically either way.
     """
     root = tmp_path / "demo"
-    _write(root / "science.yaml", """
+    _write(
+        root / "science.yaml",
+        """
         name: demo
         knowledge_profiles:
           local: core
-    """)
+    """,
+    )
     _write(root / "knowledge" / "graph.trig", "")
-    _write(root / "doc" / "hypotheses" / "h1.md", """
+    _write(
+        root / "doc" / "hypotheses" / "h1.md",
+        """
         ---
         id: "hypothesis:h1"
         kind: "hypothesis"
@@ -42,8 +47,11 @@ def _build_min_project(tmp_path: Path) -> Path:
         updated: "2026-04-01"
         ---
         Body.
-    """)
-    _write(root / "doc" / "tasks" / "t1.md", """
+    """,
+    )
+    _write(
+        root / "doc" / "tasks" / "t1.md",
+        """
         ---
         id: "task:t1"
         kind: "task"
@@ -54,7 +62,8 @@ def _build_min_project(tmp_path: Path) -> Path:
         related: ["hypothesis:h1"]
         ---
         Body.
-    """)
+    """,
+    )
     return root
 
 
@@ -147,12 +156,17 @@ def test_materialize_emits_closure_bears_on_through_observation(tmp_path: Path):
     as a transitive triple.
     """
     root = tmp_path / "demo"
-    _write(root / "science.yaml", """
+    _write(
+        root / "science.yaml",
+        """
         name: demo
         knowledge_profiles:
           local: core
-    """)
-    _write(root / "doc" / "propositions" / "p1.md", """
+    """,
+    )
+    _write(
+        root / "doc" / "propositions" / "p1.md",
+        """
         ---
         id: "proposition:p1"
         kind: "proposition"
@@ -161,8 +175,11 @@ def test_materialize_emits_closure_bears_on_through_observation(tmp_path: Path):
         updated: "2026-04-01"
         ---
         Body.
-    """)
-    _write(root / "doc" / "observations" / "o1.md", """
+    """,
+    )
+    _write(
+        root / "doc" / "observations" / "o1.md",
+        """
         ---
         id: "observation:o1"
         kind: "observation"
@@ -171,9 +188,12 @@ def test_materialize_emits_closure_bears_on_through_observation(tmp_path: Path):
         updated: "2026-04-01"
         ---
         Body.
-    """)
+    """,
+    )
     # observation supports proposition (cito:supports edge via authored relations)
-    _write(root / "knowledge" / "sources" / "core" / "relations.yaml", """
+    _write(
+        root / "knowledge" / "sources" / "core" / "relations.yaml",
+        """
         relations:
           - subject: "observation:o1"
             predicate: "cito:supports"
@@ -183,8 +203,11 @@ def test_materialize_emits_closure_bears_on_through_observation(tmp_path: Path):
             predicate: "sci:grounds"
             object: "observation:o1"
             graph_layer: "graph/knowledge"
-    """)
-    _write(root / "doc" / "workflow-runs" / "wfr1.md", """
+    """,
+    )
+    _write(
+        root / "doc" / "workflow-runs" / "wfr1.md",
+        """
         ---
         id: "workflow-run:wfr1"
         kind: "workflow-run"
@@ -194,7 +217,8 @@ def test_materialize_emits_closure_bears_on_through_observation(tmp_path: Path):
         updated: "2026-04-01"
         ---
         Body.
-    """)
+    """,
+    )
 
     trig = materialize_graph(root)
     ds = _load_dataset(trig)
@@ -230,13 +254,18 @@ def test_provenance_plus_closure_end_to_end(tmp_path: Path):
     `story` is EPISTEMIC, so it is a valid closure target.
     """
     root = tmp_path / "demo"
-    _write(root / "science.yaml", """
+    _write(
+        root / "science.yaml",
+        """
         name: demo
         knowledge_profiles:
           local: core
-    """)
+    """,
+    )
     # Paper entity — scanned automatically because markdown adapter covers doc/
-    _write(root / "doc" / "papers" / "p1.md", """
+    _write(
+        root / "doc" / "papers" / "p1.md",
+        """
         ---
         id: "paper:p1"
         kind: "paper"
@@ -245,11 +274,14 @@ def test_provenance_plus_closure_end_to_end(tmp_path: Path):
         updated: "2026-03-01"
         ---
         Body.
-    """)
+    """,
+    )
     # Hypothesis cites the paper via source_refs → provenance materialises
     # hypothesis:h1 prov:wasDerivedFrom paper:p1, which the freshness engine
     # converts to paper:p1 bears_on hypothesis:h1 (depth 1).
-    _write(root / "specs" / "hypotheses" / "h1.md", """
+    _write(
+        root / "specs" / "hypotheses" / "h1.md",
+        """
         ---
         id: "hypothesis:h1"
         kind: "hypothesis"
@@ -259,9 +291,12 @@ def test_provenance_plus_closure_end_to_end(tmp_path: Path):
         source_refs: ["paper:p1"]
         ---
         Body.
-    """)
+    """,
+    )
     # Story entity — scanned automatically because markdown adapter covers doc/
-    _write(root / "doc" / "stories" / "s1.md", """
+    _write(
+        root / "doc" / "stories" / "s1.md",
+        """
         ---
         id: "story:s1"
         kind: "story"
@@ -270,19 +305,23 @@ def test_provenance_plus_closure_end_to_end(tmp_path: Path):
         updated: "2026-04-15"
         ---
         Body.
-    """)
+    """,
+    )
     # sci:synthesizes is an inverse bears_on rule: story synthesizes hypothesis
     # => hypothesis bears_on story.  We author this as a structured relation
     # because the markdown frontmatter for generic ProjectEntity kinds does not
     # have a first-class `synthesizes` field (that field lives on the legacy
     # store API only).
-    _write(root / "knowledge" / "sources" / "core" / "relations.yaml", """
+    _write(
+        root / "knowledge" / "sources" / "core" / "relations.yaml",
+        """
         relations:
           - subject: "story:s1"
             predicate: "sci:synthesizes"
             object: "hypothesis:h1"
             graph_layer: "graph/knowledge"
-    """)
+    """,
+    )
 
     trig = materialize_graph(root)
     ds = _load_dataset(trig)
@@ -337,14 +376,19 @@ def test_audit_gate_runs_even_when_freshness_disabled(tmp_path: Path):
     from science_tool.graph.freshness import propagate_freshness_in_memory
 
     root = tmp_path / "demo"
-    _write(root / "science.yaml", """
+    _write(
+        root / "science.yaml",
+        """
         name: demo
         knowledge_profiles:
           local: core
         freshness:
           enabled: false
-    """)
-    _write(root / "specs" / "hypotheses" / "h1.md", """
+    """,
+    )
+    _write(
+        root / "specs" / "hypotheses" / "h1.md",
+        """
         ---
         id: "hypothesis:h1"
         kind: "hypothesis"
@@ -354,6 +398,7 @@ def test_audit_gate_runs_even_when_freshness_disabled(tmp_path: Path):
         source_refs: ["paper:does-not-exist"]
         ---
         Body.
-    """)
+    """,
+    )
     with _pytest.raises(ValueError, match="unresolved references"):
         propagate_freshness_in_memory(root)

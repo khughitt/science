@@ -1,4 +1,5 @@
 """Tests for ReadinessResolver."""
+
 from __future__ import annotations
 
 from science_model.entities import (

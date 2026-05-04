@@ -379,9 +379,7 @@ def test_discussion_create_with_optional_section_includes_addendum() -> None:
         root = Path.cwd()
         seed_project(root)
 
-        result = runner.invoke(
-            main, ["discussion", "create", "Test discussion", "--with", "double-blind-addendum"]
-        )
+        result = runner.invoke(main, ["discussion", "create", "Test discussion", "--with", "double-blind-addendum"])
 
         assert result.exit_code == 0, result.output
         today = date.today().isoformat()

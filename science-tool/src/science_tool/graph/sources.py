@@ -10,7 +10,14 @@ from typing import Any, TypeVar
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError
-from science_model.entities import Entity, EntityClass, EntityType, ProjectEntity, DomainEntity, core_entity_type_for_kind
+from science_model.entities import (
+    Entity,
+    EntityClass,
+    EntityType,
+    ProjectEntity,
+    DomainEntity,
+    core_entity_type_for_kind,
+)
 from science_model.ontologies import load_catalogs_for_names
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE, load_profile_manifest, load_shared_profile

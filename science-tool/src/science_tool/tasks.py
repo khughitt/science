@@ -133,8 +133,7 @@ def parse_tasks_for_cli(path: Path) -> tuple[list[Task], list[str]]:
         for ref in task.blocked_by:
             if not is_typed_ref(ref):
                 warnings.append(
-                    f"task {task.id}: legacy untyped blocker {ref!r} — "
-                    f"run 'science-tool tasks fix-blockers' to retype"
+                    f"task {task.id}: legacy untyped blocker {ref!r} — run 'science-tool tasks fix-blockers' to retype"
                 )
     return tasks, warnings
 
@@ -325,11 +324,7 @@ def add_task(
     """Create a task with status 'proposed', auto-assign ID, write to active.md."""
     from science_tool.tasks_blockers import validate_blocker_refs  # noqa: PLC0415
 
-    validated_blockers = (
-        validate_blocker_refs(project_root, blocked_by, force=force)
-        if blocked_by
-        else []
-    )
+    validated_blockers = validate_blocker_refs(project_root, blocked_by, force=force) if blocked_by else []
     task_id = next_task_id(tasks_dir)
     task = Task(
         id=task_id,

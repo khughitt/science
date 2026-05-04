@@ -33,6 +33,7 @@ class EntityFreshnessInfo(TypedDict):
     Built by callers (typically materialize_graph) from each project entity,
     keyed in the entities dict by the entity's URI string.
     """
+
     kind_class: EntityClass
     last_reviewed: date | None
     created: date | None
@@ -246,11 +247,13 @@ def derive_freshness(
             # downstream consumers (entity needs-review, science:status) will then
             # see the entity flagged for human attention.
             knowledge.add((entity_uri, SCI_NS.freshnessState, Literal("needs-review")))
-            knowledge.add((
-                entity_uri,
-                SCI_NS.triggeredBy,
-                Literal("missing-baseline: no last_reviewed or created date"),
-            ))
+            knowledge.add(
+                (
+                    entity_uri,
+                    SCI_NS.triggeredBy,
+                    Literal("missing-baseline: no last_reviewed or created date"),
+                )
+            )
             continue
 
         triggered: list[URIRef] = []
@@ -281,17 +284,21 @@ def derive_freshness(
         # from the graph instead of re-parsing markdown frontmatter.
         last_reviewed = info.get("last_reviewed")
         if last_reviewed is not None:
-            knowledge.add((
-                entity_uri,
-                SCI_NS.lastReviewed,
-                Literal(last_reviewed.isoformat(), datatype=XSD.date),
-            ))
+            knowledge.add(
+                (
+                    entity_uri,
+                    SCI_NS.lastReviewed,
+                    Literal(last_reviewed.isoformat(), datatype=XSD.date),
+                )
+            )
         if upstream_change_at is not None:
-            knowledge.add((
-                entity_uri,
-                SCI_NS.upstreamChangeAt,
-                Literal(upstream_change_at.isoformat(), datatype=XSD.date),
-            ))
+            knowledge.add(
+                (
+                    entity_uri,
+                    SCI_NS.upstreamChangeAt,
+                    Literal(upstream_change_at.isoformat(), datatype=XSD.date),
+                )
+            )
         for source_uri in sorted(triggered):
             knowledge.add((entity_uri, SCI_NS.triggeredBy, source_uri))
 

@@ -184,11 +184,7 @@ def test_collect_inventory_defers_to_emergent_threads_orphans(curated_project: P
     threads = curated_project / "doc/reports/synthesis/_emergent-threads.md"
     threads.parent.mkdir(parents=True, exist_ok=True)
     threads.write_text(
-        "---\n"
-        "orphan_ids:\n"
-        "  - interpretation:i1\n"
-        "---\n"
-        "Body.\n",
+        "---\norphan_ids:\n  - interpretation:i1\n---\nBody.\n",
         encoding="utf-8",
     )
     _set_mtime(threads, date(2026, 4, 21))
@@ -225,9 +221,7 @@ def test_collect_inventory_recent_top_k_caps_recently_modified(curated_project: 
 
 def test_collect_inventory_recent_days_tightens_window(curated_project: Path) -> None:
     """fb-2026-05-01-005: recent_days tightens the window so noise drops fast."""
-    inventory = collect_inventory(
-        curated_project, today=date(2026, 4, 21), recent_days=1, recent_top_k=None
-    )
+    inventory = collect_inventory(curated_project, today=date(2026, 4, 21), recent_days=1, recent_top_k=None)
     # With a 1-day window, only artifacts modified within 1 day qualify.
     assert inventory.candidate_signals.recently_modified == [
         "doc/questions/q1.md",

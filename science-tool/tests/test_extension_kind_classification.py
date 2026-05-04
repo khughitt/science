@@ -1,5 +1,6 @@
 """Verify extension kinds with declared epistemic class flow through
 materialize_graph end-to-end (regression for t013 #3)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -15,12 +16,15 @@ def _build_extension_project(tmp_path: Path) -> Path:
     """Project with an extension manifest declaring entity_class: epistemic."""
     root = tmp_path / "demo"
     (root / "knowledge" / "sources" / "ext").mkdir(parents=True)
-    (root / "science.yaml").write_text(dedent("""
+    (root / "science.yaml").write_text(
+        dedent("""
         name: demo
         knowledge_profiles:
           local: ext
-    """).lstrip())
-    (root / "knowledge" / "sources" / "ext" / "manifest.yaml").write_text(dedent("""
+    """).lstrip()
+    )
+    (root / "knowledge" / "sources" / "ext" / "manifest.yaml").write_text(
+        dedent("""
         name: ext
         imports: []
         strictness: typed-extension
@@ -31,7 +35,8 @@ def _build_extension_project(tmp_path: Path) -> Path:
             description: Test extension kind classified as epistemic.
             entity_class: epistemic
         relation_kinds: []
-    """).lstrip())
+    """).lstrip()
+    )
     return root
 
 

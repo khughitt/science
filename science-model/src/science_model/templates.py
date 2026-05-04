@@ -205,9 +205,7 @@ def _assert_known_keys(
     valid_set = set(valid_keys)
     for key in list(with_keys) + list(without_keys):
         if key not in valid_set:
-            raise EntityTemplateError(
-                f"Unknown section key '{key}'. Valid keys: " + ", ".join(valid_keys)
-            )
+            raise EntityTemplateError(f"Unknown section key '{key}'. Valid keys: " + ", ".join(valid_keys))
 
 
 def _context_with_computed_fields(fields: dict[str, object], today: date) -> dict[str, object]:

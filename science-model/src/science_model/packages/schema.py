@@ -110,9 +110,7 @@ class AccessBlock(BaseModel):
     @model_validator(mode="after")
     def _validate_availability(self) -> "AccessBlock":
         if self.available_after and self.availability != "embargoed":
-            raise ValueError(
-                "available_after may only be set when availability == 'embargoed'"
-            )
+            raise ValueError("available_after may only be set when availability == 'embargoed'")
         return self
 
 

@@ -216,10 +216,7 @@ class Entity(BaseModel):
             "experiment",
         }
         if self.review_state is not None and self.kind in non_epistemic:
-            raise ValueError(
-                f"review_state is not allowed on kind {self.kind!r} "
-                f"(non-epistemic by design)"
-            )
+            raise ValueError(f"review_state is not allowed on kind {self.kind!r} (non-epistemic by design)")
         return self
 
     deprecated_ids: list[str] = Field(default_factory=list)

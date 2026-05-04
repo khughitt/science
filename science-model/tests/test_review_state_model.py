@@ -49,12 +49,7 @@ def test_review_state_rejects_zero_horizon():
 def test_entity_default_review_state_is_unset(tmp_path: Path):
     p = tmp_path / "h01.md"
     p.write_text(
-        '---\n'
-        'id: "hypothesis:h01"\n'
-        'kind: "hypothesis"\n'
-        'title: "Test hypothesis"\n'
-        'created: "2026-04-01"\n'
-        '---\n\nBody.\n'
+        '---\nid: "hypothesis:h01"\nkind: "hypothesis"\ntitle: "Test hypothesis"\ncreated: "2026-04-01"\n---\n\nBody.\n'
     )
     entity = parse_entity_file(p, project_slug="demo")
     assert entity is not None
@@ -64,16 +59,16 @@ def test_entity_default_review_state_is_unset(tmp_path: Path):
 def test_entity_parses_review_state_block(tmp_path: Path):
     p = tmp_path / "h01.md"
     p.write_text(
-        '---\n'
+        "---\n"
         'id: "hypothesis:h01"\n'
         'kind: "hypothesis"\n'
         'title: "Test hypothesis"\n'
         'created: "2026-04-01"\n'
-        'review_state:\n'
+        "review_state:\n"
         '  last_reviewed: "2026-05-01"\n'
         '  last_review_note: "Re-checked after Lee2026 added"\n'
-        '  review_horizon_days: 90\n'
-        '---\n\nBody.\n'
+        "  review_horizon_days: 90\n"
+        "---\n\nBody.\n"
     )
     entity = parse_entity_file(p, project_slug="demo")
     assert entity is not None
@@ -86,14 +81,14 @@ def test_entity_parses_review_state_block(tmp_path: Path):
 def test_entity_review_state_partial_block(tmp_path: Path):
     p = tmp_path / "h01.md"
     p.write_text(
-        '---\n'
+        "---\n"
         'id: "hypothesis:h01"\n'
         'kind: "hypothesis"\n'
         'title: "Test hypothesis"\n'
         'created: "2026-04-01"\n'
-        'review_state:\n'
+        "review_state:\n"
         '  last_reviewed: "2026-05-01"\n'
-        '---\n\nBody.\n'
+        "---\n\nBody.\n"
     )
     entity = parse_entity_file(p, project_slug="demo")
     assert entity is not None

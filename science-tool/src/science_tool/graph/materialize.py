@@ -603,9 +603,7 @@ def _build_entity_meta(
             "last_reviewed": entity.review_state.last_reviewed if entity.review_state else None,
             "created": entity.created,
             "updated": entity.updated,
-            "review_horizon_days": (
-                entity.review_state.review_horizon_days if entity.review_state else None
-            ),
+            "review_horizon_days": (entity.review_state.review_horizon_days if entity.review_state else None),
         }
     return entity_meta
 

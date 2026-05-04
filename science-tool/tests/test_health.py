@@ -487,8 +487,7 @@ class TestHealthCLI:
         (tmp_path / "science.yaml").write_text("name: test\n")
         # Tooling scaffold required for a "clean" project.
         (tmp_path / "pyproject.toml").write_text(
-            '[project]\nname = "t"\nversion = "0.0"\n'
-            '[dependency-groups]\ndev = ["science-tool"]\n'
+            '[project]\nname = "t"\nversion = "0.0"\n[dependency-groups]\ndev = ["science-tool"]\n'
         )
         (tmp_path / ".env").write_text("SCIENCE_TOOL_PATH=/dev/null\n")
         # Install canonical managed artifacts so the project is genuinely clean.

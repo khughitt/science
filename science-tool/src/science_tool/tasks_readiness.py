@@ -4,6 +4,7 @@ Constructed per CLI invocation with a snapshot of the local entity store.
 Caches resolved readiness within its own lifetime so the same blocker
 referenced by N tasks costs one resolution.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -25,14 +26,10 @@ class ReadinessResolver:
         if cached is not None:
             return cached
         if ref in self._visiting:
-            return Readiness(
-                ready=False, state="cycle", detail=f"derivation cycle through {ref}"
-            )
+            return Readiness(ready=False, state="cycle", detail=f"derivation cycle through {ref}")
         entity = self._lookup(ref)
         if entity is None:
-            return Readiness(
-                ready=False, state="unresolved", detail=f"unknown entity {ref}"
-            )
+            return Readiness(ready=False, state="unresolved", detail=f"unknown entity {ref}")
         self._visiting.add(ref)
         try:
             result = entity.readiness(resolver=self)

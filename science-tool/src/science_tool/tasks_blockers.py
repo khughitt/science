@@ -1,4 +1,5 @@
 """Validation helpers for typed blocker refs on tasks."""
+
 from __future__ import annotations
 
 import re
@@ -36,8 +37,7 @@ def validate_blocker_refs(
     for ref in refs:
         if not _TYPED_REF_RE.match(ref):
             raise BlockerValidationError(
-                f"blocker {ref!r} must be typed: <kind>:<local-id> "
-                "(e.g. dataset:foo, task:t007)"
+                f"blocker {ref!r} must be typed: <kind>:<local-id> (e.g. dataset:foo, task:t007)"
             )
 
     if force:
@@ -47,8 +47,6 @@ def validate_blocker_refs(
     for ref in refs:
         if ref not in known:
             raise BlockerValidationError(
-                f"unknown entity {ref}. "
-                "Create the corresponding entity file first, "
-                "or pass --force to record anyway."
+                f"unknown entity {ref}. Create the corresponding entity file first, or pass --force to record anyway."
             )
     return list(refs)

@@ -41,8 +41,7 @@ def _write_common_files(root: Path, profile: str) -> None:
     (root / "CLAUDE.md").write_text("@AGENTS.md\n", encoding="utf-8")
     # Tooling scaffold (Section 0): pyproject.toml + .env keep the validate run silent.
     (root / "pyproject.toml").write_text(
-        '[project]\nname = "demo-science-tools"\nversion = "0.1.0"\n'
-        '[dependency-groups]\ndev = ["science-tool"]\n',
+        '[project]\nname = "demo-science-tools"\nversion = "0.1.0"\n[dependency-groups]\ndev = ["science-tool"]\n',
         encoding="utf-8",
     )
     (root / ".env").write_text("SCIENCE_TOOL_PATH=/dev/null\n", encoding="utf-8")

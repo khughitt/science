@@ -291,37 +291,44 @@ class TestParseUrlIdentifier:
 
     def test_wiley_doi_url(self) -> None:
         """fb-2026-05-02-001: extract DOI from Wiley URLs."""
-        assert parse_url_identifier(
-            "https://onlinelibrary.wiley.com/doi/10.1002/anie.202300001"
-        ) == ("doi", "10.1002/anie.202300001")
-        assert parse_url_identifier(
-            "https://onlinelibrary.wiley.com/doi/full/10.1002/anie.202300001"
-        ) == ("doi", "10.1002/anie.202300001")
+        assert parse_url_identifier("https://onlinelibrary.wiley.com/doi/10.1002/anie.202300001") == (
+            "doi",
+            "10.1002/anie.202300001",
+        )
+        assert parse_url_identifier("https://onlinelibrary.wiley.com/doi/full/10.1002/anie.202300001") == (
+            "doi",
+            "10.1002/anie.202300001",
+        )
 
     def test_springer_doi_url(self) -> None:
         """fb-2026-05-02-001: extract DOI from Springer Link URLs."""
-        assert parse_url_identifier(
-            "https://link.springer.com/article/10.1038/s41586-020-03175-7"
-        ) == ("doi", "10.1038/s41586-020-03175-7")
-        assert parse_url_identifier(
-            "https://link.springer.com/chapter/10.1007/978-3-030-04456-1_1"
-        ) == ("doi", "10.1007/978-3-030-04456-1_1")
+        assert parse_url_identifier("https://link.springer.com/article/10.1038/s41586-020-03175-7") == (
+            "doi",
+            "10.1038/s41586-020-03175-7",
+        )
+        assert parse_url_identifier("https://link.springer.com/chapter/10.1007/978-3-030-04456-1_1") == (
+            "doi",
+            "10.1007/978-3-030-04456-1_1",
+        )
 
     def test_nature_articles_url(self) -> None:
         """fb-2026-05-02-001: nature.com article slugs map to 10.1038/<slug>."""
-        assert parse_url_identifier(
-            "https://www.nature.com/articles/s41586-020-2649-2"
-        ) == ("doi", "10.1038/s41586-020-2649-2")
+        assert parse_url_identifier("https://www.nature.com/articles/s41586-020-2649-2") == (
+            "doi",
+            "10.1038/s41586-020-2649-2",
+        )
 
     def test_sage_doi_url(self) -> None:
-        assert parse_url_identifier(
-            "https://journals.sagepub.com/doi/10.1177/1745691617746796"
-        ) == ("doi", "10.1177/1745691617746796")
+        assert parse_url_identifier("https://journals.sagepub.com/doi/10.1177/1745691617746796") == (
+            "doi",
+            "10.1177/1745691617746796",
+        )
 
     def test_oxford_doi_url(self) -> None:
-        assert parse_url_identifier(
-            "https://academic.oup.com/bioinformatics/doi/10.1093/bioinformatics/btab123"
-        ) == ("doi", "10.1093/bioinformatics/btab123")
+        assert parse_url_identifier("https://academic.oup.com/bioinformatics/doi/10.1093/bioinformatics/btab123") == (
+            "doi",
+            "10.1093/bioinformatics/btab123",
+        )
 
 
 # --- Identifier resolution paths in fetch_paper -------------------------------

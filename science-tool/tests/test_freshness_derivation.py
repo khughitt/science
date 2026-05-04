@@ -135,10 +135,12 @@ def test_freshness_skips_non_epistemic_entities():
 
 
 def test_freshness_emits_upstream_change_at():
-    ds = _ds_with_bears_on([
-        (_u("dataset/d1"), _u("hypothesis/h1")),
-        (_u("dataset/d2"), _u("hypothesis/h1")),
-    ])
+    ds = _ds_with_bears_on(
+        [
+            (_u("dataset/d1"), _u("hypothesis/h1")),
+            (_u("dataset/d2"), _u("hypothesis/h1")),
+        ]
+    )
     entities = {
         str(_u("hypothesis/h1")): {
             "kind_class": EntityClass.EPISTEMIC,
@@ -164,10 +166,7 @@ def test_freshness_emits_upstream_change_at():
     }
     derive_freshness(ds, entities=entities, today=date(2026, 5, 3))
     knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
-    upstream_at_values = [
-        str(o)
-        for _, _, o in knowledge.triples((_u("hypothesis/h1"), SCI_NS.upstreamChangeAt, None))
-    ]
+    upstream_at_values = [str(o) for _, _, o in knowledge.triples((_u("hypothesis/h1"), SCI_NS.upstreamChangeAt, None))]
     assert upstream_at_values == ["2026-05-01"]
     triggered = _triggered_by(ds, _u("hypothesis/h1"))
     assert triggered == {str(_u("dataset/d1")), str(_u("dataset/d2"))}

@@ -86,8 +86,14 @@ def test_generate_codex_skills_writes_index(tmp_path: Path) -> None:
     text = (tmp_path / "INDEX.md").read_text(encoding="utf-8")
 
     assert "# Science Codex Skills" in text
-    assert "| `research-methodology` | `science-research-methodology` | `science-research-methodology/SKILL.md` | `skills/research/SKILL.md` |" in text
-    assert "| `scientific-writing` | `science-scientific-writing` | `science-scientific-writing/SKILL.md` | `skills/writing/SKILL.md` |" in text
+    assert (
+        "| `research-methodology` | `science-research-methodology` | `science-research-methodology/SKILL.md` | `skills/research/SKILL.md` |"
+        in text
+    )
+    assert (
+        "| `scientific-writing` | `science-scientific-writing` | `science-scientific-writing/SKILL.md` | `skills/writing/SKILL.md` |"
+        in text
+    )
     assert "| `status` | `science-status` | `science-status/SKILL.md` | `commands/status.md` |" in text
 
 

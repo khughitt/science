@@ -1,4 +1,5 @@
 """Tests for the Readiness protocol on project entities."""
+
 from __future__ import annotations
 
 import pytest
@@ -114,9 +115,7 @@ def test_dataset_external_available_unverified_is_not_ready():
 
 
 def test_dataset_external_embargoed_is_not_ready():
-    ds = _external_dataset(
-        AccessBlock(level="controlled", verified=False, availability="embargoed")
-    )
+    ds = _external_dataset(AccessBlock(level="controlled", verified=False, availability="embargoed"))
     r = ds.readiness()
     assert r.ready is False
     assert r.state == "embargoed"
@@ -138,9 +137,7 @@ def test_dataset_external_embargoed_with_window_includes_detail():
 
 
 def test_dataset_external_withdrawn_is_not_ready():
-    ds = _external_dataset(
-        AccessBlock(level="controlled", verified=True, availability="withdrawn")
-    )
+    ds = _external_dataset(AccessBlock(level="controlled", verified=True, availability="withdrawn"))
     r = ds.readiness()
     assert r.ready is False
     assert r.state == "withdrawn"

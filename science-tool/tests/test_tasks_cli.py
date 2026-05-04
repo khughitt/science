@@ -772,9 +772,7 @@ def test_tasks_fix_blockers_retypes_with_input(tmp_path, monkeypatch):
     )
     runner = CliRunner()
     # Interactive: provide replacement, then accept.
-    result = runner.invoke(
-        main, ["tasks", "fix-blockers"], input="dataset:foo\ny\n"
-    )
+    result = runner.invoke(main, ["tasks", "fix-blockers"], input="dataset:foo\ny\n")
     assert result.exit_code == 0, result.output
     rewritten = (tmp_path / "tasks" / "active.md").read_text()
     assert "dataset:foo" in rewritten

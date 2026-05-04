@@ -130,18 +130,40 @@ _URL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ),
     ("doi", re.compile(r"^https?://(?:www\.)?(?:bio|med)rxiv\.org/content/(?:.+?/)?(10\.1101/[^/?#]+)", re.IGNORECASE)),
     # Wiley: https://onlinelibrary.wiley.com/doi/10.1002/...
-    ("doi", re.compile(r"^https?://onlinelibrary\.wiley\.com/doi/(?:abs/|full/|epdf/|pdf/)?(10\.\d+/[^/?#]+)", re.IGNORECASE)),
+    (
+        "doi",
+        re.compile(
+            r"^https?://onlinelibrary\.wiley\.com/doi/(?:abs/|full/|epdf/|pdf/)?(10\.\d+/[^/?#]+)", re.IGNORECASE
+        ),
+    ),
     # Springer: https://link.springer.com/article/10.1007/...
-    ("doi", re.compile(r"^https?://link\.springer\.com/(?:article|chapter|book|protocol|referenceworkentry)/(10\.\d+/[^/?#]+)", re.IGNORECASE)),
+    (
+        "doi",
+        re.compile(
+            r"^https?://link\.springer\.com/(?:article|chapter|book|protocol|referenceworkentry)/(10\.\d+/[^/?#]+)",
+            re.IGNORECASE,
+        ),
+    ),
     # Nature articles: https://www.nature.com/articles/<slug> → 10.1038/<slug>
     ("doi", re.compile(r"^https?://(?:www\.)?nature\.com/articles/([^/?#]+)", re.IGNORECASE)),
     # SAGE: https://journals.sagepub.com/doi/10.1177/...
-    ("doi", re.compile(r"^https?://journals\.sagepub\.com/doi/(?:abs/|full/|epdf/|pdf/)?(10\.\d+/[^/?#]+)", re.IGNORECASE)),
+    (
+        "doi",
+        re.compile(r"^https?://journals\.sagepub\.com/doi/(?:abs/|full/|epdf/|pdf/)?(10\.\d+/[^/?#]+)", re.IGNORECASE),
+    ),
     # Taylor & Francis: https://www.tandfonline.com/doi/10.1080/...
-    ("doi", re.compile(r"^https?://(?:www\.)?tandfonline\.com/doi/(?:abs/|full/|epdf/|pdf/)?(10\.\d+/[^/?#]+)", re.IGNORECASE)),
+    (
+        "doi",
+        re.compile(
+            r"^https?://(?:www\.)?tandfonline\.com/doi/(?:abs/|full/|epdf/|pdf/)?(10\.\d+/[^/?#]+)", re.IGNORECASE
+        ),
+    ),
     # Oxford Academic: https://academic.oup.com/<journal>/doi/10.1093/<journal>/<id>
     # Oxford DOIs commonly have multi-segment suffixes, so capture across slashes.
-    ("doi", re.compile(r"^https?://academic\.oup\.com/[^/]+/doi/(?:abs/|full/|epdf/|pdf/)?(10\.\d+/[^?#]+)", re.IGNORECASE)),
+    (
+        "doi",
+        re.compile(r"^https?://academic\.oup\.com/[^/]+/doi/(?:abs/|full/|epdf/|pdf/)?(10\.\d+/[^?#]+)", re.IGNORECASE),
+    ),
 ]
 
 # Nature article slugs map deterministically to 10.1038/<slug>. Captured above

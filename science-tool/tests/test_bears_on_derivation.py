@@ -28,10 +28,7 @@ def _make_dataset_with(triples: list[tuple[URIRef, URIRef, URIRef]]) -> Dataset:
 
 def _bears_on_pairs(ds: Dataset) -> set[tuple[str, str]]:
     knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
-    return {
-        (str(s), str(o))
-        for s, _, o in knowledge.triples((None, SCI_NS.bearsOn, None))
-    }
+    return {(str(s), str(o)) for s, _, o in knowledge.triples((None, SCI_NS.bearsOn, None))}
 
 
 def test_tests_emits_bears_on():
@@ -138,10 +135,12 @@ def test_provenance_skips_non_epistemic_target():
 
 def test_has_participant_emits_bears_on_for_epistemic_participants_only():
     """mechanism sci:hasParticipant ?p -> ?p bears_on mechanism iff p is epistemic."""
-    ds = _make_dataset_with([
-        (_u("mechanism/m1"), SCI_NS.hasParticipant, _u("proposition/p1")),
-        (_u("mechanism/m1"), SCI_NS.hasParticipant, _u("concept/c1")),
-    ])
+    ds = _make_dataset_with(
+        [
+            (_u("mechanism/m1"), SCI_NS.hasParticipant, _u("proposition/p1")),
+            (_u("mechanism/m1"), SCI_NS.hasParticipant, _u("concept/c1")),
+        ]
+    )
     kind_class = {
         str(_u("mechanism/m1")): EntityClass.EPISTEMIC,
         str(_u("proposition/p1")): EntityClass.EPISTEMIC,
@@ -283,10 +282,15 @@ def test_closure_diamond_takes_minimum_depth():
     c = _u("observation/c")
     x = _u("observation/x")
     d = _u("hypothesis/d")
-    ds = _make_dataset_with([
-        (a, SCI_NS.grounds, b), (b, CITO_NS.supports, d),
-        (a, SCI_NS.grounds, c), (c, CITO_NS.supports, x), (x, CITO_NS.supports, d),
-    ])
+    ds = _make_dataset_with(
+        [
+            (a, SCI_NS.grounds, b),
+            (b, CITO_NS.supports, d),
+            (a, SCI_NS.grounds, c),
+            (c, CITO_NS.supports, x),
+            (x, CITO_NS.supports, d),
+        ]
+    )
     kc = {
         str(a): EntityClass.OPERATIONAL,
         str(b): EntityClass.EPISTEMIC,

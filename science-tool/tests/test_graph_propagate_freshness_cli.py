@@ -113,6 +113,7 @@ def _build_project_with_unresolved_ref(tmp_path: Path) -> Path:
 def test_propagate_freshness_raises_on_unresolved_refs(tmp_path: Path) -> None:
     import pytest
     from science_tool.graph.freshness import propagate_freshness_in_memory
+
     project_root = _build_project_with_unresolved_ref(tmp_path)
     with pytest.raises(ValueError, match="unresolved references"):
         propagate_freshness_in_memory(project_root)

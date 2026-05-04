@@ -159,7 +159,10 @@ def test_update_allow_dirty_does_not_sweep_unrelated_paths(project_with_stale_in
     # The artifact commit must touch only artifact-owned paths.
     last = subprocess.run(
         ["git", "show", "--name-only", "--pretty=", "HEAD"],
-        cwd=project, capture_output=True, text=True, check=True,
+        cwd=project,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.split()
     assert "validate.sh" in last
     assert "unrelated.txt" not in last, f"unrelated path was swept into artifact commit: {last}"
@@ -168,7 +171,10 @@ def test_update_allow_dirty_does_not_sweep_unrelated_paths(project_with_stale_in
     # Unrelated paths must still be present in the worktree as dirty.
     status = subprocess.run(
         ["git", "status", "--porcelain", "-uall"],
-        cwd=project, capture_output=True, text=True, check=True,
+        cwd=project,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
     assert "unrelated.txt" in status
     assert "subdir/another.md" in status

@@ -1,4 +1,5 @@
 """Tests for the CLI-only parse wrapper that surfaces legacy-blocker warnings."""
+
 from __future__ import annotations
 
 from pathlib import Path
