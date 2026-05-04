@@ -4,16 +4,24 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import date as _date
 from pathlib import Path
 from urllib.parse import quote
 
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
-from science_model.entities import Entity
+from science_model.entities import Entity, EntityClass
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.reasoning import MeasurementModel, RivalModelPacket
 
 from science_tool.addressing import is_address, parse_address
+from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
+from science_tool.graph.freshness import (
+    close_bears_on,
+    derive_bears_on_from_provenance,
+    derive_bears_on_from_typed_edges,
+    derive_freshness,
+)
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
@@ -117,6 +125,38 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
             entity_index=entity_index,
             resolver=resolver,
         )
+
+    # Phase 1 epistemic dependency graph: derive bears_on + freshness.
+    # Use EntityRegistry.with_core_types() for classification. Profile-,
+    # catalog-, and extension-kind classification is not threaded here in
+    # Phase 1: those kinds default to OPERATIONAL via the defensive fallback,
+    # which is the documented Phase-1 behavior (see design doc § Decisions
+    # #4). Later phases can plumb the full registry through ProjectSources.
+    registry = EntityRegistry.with_core_types()
+
+    kind_class: dict[str, EntityClass] = {}
+    entity_meta: dict[str, dict] = {}
+    for entity in sources.entities:
+        uri_str = str(_entity_uri(entity.canonical_id))
+        try:
+            entity_class = registry.kind_class(entity.kind)
+        except EntityKindNotRegisteredError:
+            entity_class = EntityClass.OPERATIONAL  # Phase-1 default for non-core kinds.
+        kind_class[uri_str] = entity_class
+        entity_meta[uri_str] = {
+            "kind_class": entity_class,
+            "last_reviewed": entity.review_state.last_reviewed if entity.review_state else None,
+            "created": entity.created,
+            "updated": entity.updated,
+            "review_horizon_days": (
+                entity.review_state.review_horizon_days if entity.review_state else None
+            ),
+        }
+
+    derive_bears_on_from_typed_edges(dataset, kind_class=kind_class)
+    derive_bears_on_from_provenance(dataset, kind_class=kind_class)
+    close_bears_on(dataset, kind_class=kind_class)
+    derive_freshness(dataset, entities=entity_meta, today=_date.today())
 
     trig_path = project_root / DEFAULT_GRAPH_PATH
     trig_path.parent.mkdir(parents=True, exist_ok=True)
