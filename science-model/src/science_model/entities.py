@@ -184,6 +184,7 @@ class Entity(BaseModel):
     created: date | None = None
     updated: date | None = None
     related: list[str]
+    commits_to: list[str] | None = None
     same_as: list[str] = Field(default_factory=list)
     source_refs: list[str]
     evidence_refs: list[str] = Field(default_factory=list)

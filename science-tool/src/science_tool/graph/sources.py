@@ -145,6 +145,8 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
     profiles = KnowledgeProfiles.model_validate(config["knowledge_profiles"])
     local_profile = profiles.local
     freshness_block = config.get("freshness") or {}
+    if not isinstance(freshness_block, dict):
+        freshness_block = {}
     freshness_enabled = bool(freshness_block.get("enabled", True))
 
     declared_ontologies: list[str] = list(config.get("ontologies") or [])  # type: ignore[union-attr]
@@ -412,7 +414,7 @@ def _enrich_raw(
         canonical_id = canonical_paper_id(canonical_id)
         raw["canonical_id"] = canonical_id
         raw.setdefault("id", canonical_id)
-    for ref_field in ("related", "source_refs", "evidence_refs", "same_as", "blocked_by"):
+    for ref_field in ("related", "commits_to", "source_refs", "evidence_refs", "same_as", "blocked_by"):
         vals = raw.get(ref_field)
         if isinstance(vals, list):
             raw[ref_field] = [canonical_paper_id(str(v)) for v in vals]

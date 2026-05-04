@@ -73,6 +73,11 @@ def _load_dataset(path: Path) -> Dataset:
     return ds
 
 
+def _bears_on_pairs(ds: Dataset) -> set[tuple[str, str]]:
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    return {(str(s), str(o)) for s, _, o in knowledge.triples((None, SCI_NS.bearsOn, None))}
+
+
 def test_materialize_emits_bears_on_when_task_tests_hypothesis(tmp_path: Path):
     root = _build_min_project(tmp_path)
     trig = materialize_graph(root)
@@ -235,6 +240,218 @@ def test_materialize_emits_closure_bears_on_through_observation(tmp_path: Path):
 
     # Transitive closure should emit:
     assert (wfr_uri, p_uri) in pairs, "closure should produce wfr -> proposition"
+
+
+def test_pre_registration_related_epistemic_targets_derive_bears_on_by_default(tmp_path: Path):
+    root = _build_min_project(tmp_path)
+    _write(root / "doc" / "pre-registrations" / "p1.md", """
+        ---
+        id: "pre-registration:p1"
+        type: "pre-registration"
+        title: "Demo pre-reg"
+        status: "committed"
+        committed: "2026-04-15"
+        spec: ""
+        related: ["hypothesis:h1", "task:t1"]
+        created: "2026-04-15"
+        updated: "2026-04-15"
+        ---
+        Body.
+    """)
+
+    trig = materialize_graph(root)
+    pairs = _bears_on_pairs(_load_dataset(trig))
+
+    pre_reg_uri = str(URIRef(PROJECT_NS["pre-registration/p1"]))
+    h_uri = str(URIRef(PROJECT_NS["hypothesis/h1"]))
+    task_uri = str(URIRef(PROJECT_NS["task/t1"]))
+    assert (pre_reg_uri, h_uri) in pairs
+    assert (pre_reg_uri, task_uri) not in pairs
+
+
+def test_pre_registration_commits_to_overrides_related_for_bears_on_derivation(tmp_path: Path):
+    root = _build_min_project(tmp_path)
+    _write(root / "doc" / "hypotheses" / "h2.md", """
+        ---
+        id: "hypothesis:h2"
+        kind: "hypothesis"
+        title: "Second hypothesis"
+        created: "2026-04-01"
+        updated: "2026-04-01"
+        ---
+        Body.
+    """)
+    _write(root / "doc" / "pre-registrations" / "p1.md", """
+        ---
+        id: "pre-registration:p1"
+        type: "pre-registration"
+        title: "Demo pre-reg"
+        status: "committed"
+        committed: "2026-04-15"
+        spec: ""
+        related: ["hypothesis:h1", "hypothesis:h2", "task:t1"]
+        commits_to: ["hypothesis:h2"]
+        created: "2026-04-15"
+        updated: "2026-04-15"
+        ---
+        Body.
+    """)
+
+    trig = materialize_graph(root)
+    pairs = _bears_on_pairs(_load_dataset(trig))
+
+    pre_reg_uri = str(URIRef(PROJECT_NS["pre-registration/p1"]))
+    h1_uri = str(URIRef(PROJECT_NS["hypothesis/h1"]))
+    h2_uri = str(URIRef(PROJECT_NS["hypothesis/h2"]))
+    assert (pre_reg_uri, h1_uri) not in pairs
+    assert (pre_reg_uri, h2_uri) in pairs
+
+
+def test_pre_registration_empty_commits_to_suppresses_related_fallback(tmp_path: Path):
+    root = _build_min_project(tmp_path)
+    _write(root / "doc" / "pre-registrations" / "p1.md", """
+        ---
+        id: "pre-registration:p1"
+        type: "pre-registration"
+        title: "Demo pre-reg"
+        status: "committed"
+        committed: "2026-04-15"
+        spec: ""
+        related: ["hypothesis:h1"]
+        commits_to: []
+        created: "2026-04-15"
+        updated: "2026-04-15"
+        ---
+        Body.
+    """)
+
+    trig = materialize_graph(root)
+    pairs = _bears_on_pairs(_load_dataset(trig))
+
+    assert (str(URIRef(PROJECT_NS["pre-registration/p1"])), str(URIRef(PROJECT_NS["hypothesis/h1"]))) not in pairs
+
+
+def test_pre_registration_commits_to_unresolved_ref_blocks_materialization(tmp_path: Path):
+    root = _build_min_project(tmp_path)
+    _write(root / "doc" / "pre-registrations" / "p1.md", """
+        ---
+        id: "pre-registration:p1"
+        type: "pre-registration"
+        title: "Demo pre-reg"
+        status: "committed"
+        committed: "2026-04-15"
+        spec: ""
+        related: ["hypothesis:h1"]
+        commits_to: ["hypothesis:missing"]
+        created: "2026-04-15"
+        updated: "2026-04-15"
+        ---
+        Body.
+    """)
+
+    with pytest.raises(ValueError, match="commits_to.*hypothesis:missing"):
+        materialize_graph(root)
+
+
+def test_pre_registration_can_bear_on_inquiry_after_reclassification(tmp_path: Path):
+    root = tmp_path / "demo"
+    _write(root / "science.yaml", """
+        name: demo
+        knowledge_profiles:
+          local: core
+    """)
+    _write(root / "doc" / "inquiries" / "i1.md", """
+        ---
+        id: "inquiry:i1"
+        kind: "inquiry"
+        title: "Demo inquiry"
+        created: "2026-04-01"
+        updated: "2026-04-01"
+        ---
+        Body.
+    """)
+    _write(root / "doc" / "pre-registrations" / "p1.md", """
+        ---
+        id: "pre-registration:p1"
+        type: "pre-registration"
+        title: "Demo pre-reg"
+        status: "committed"
+        committed: "2026-04-15"
+        spec: ""
+        related: ["inquiry:i1"]
+        created: "2026-04-15"
+        updated: "2026-04-15"
+        ---
+        Body.
+    """)
+
+    trig = materialize_graph(root)
+    pairs = _bears_on_pairs(_load_dataset(trig))
+
+    assert (str(URIRef(PROJECT_NS["pre-registration/p1"])), str(URIRef(PROJECT_NS["inquiry/i1"]))) in pairs
+
+
+def test_commits_to_does_not_lock_target_against_other_upstream_changes(tmp_path: Path):
+    root = tmp_path / "demo"
+    _write(root / "science.yaml", """
+        name: demo
+        knowledge_profiles:
+          local: core
+    """)
+    _write(root / "doc" / "hypotheses" / "h1.md", """
+        ---
+        id: "hypothesis:h1"
+        kind: "hypothesis"
+        title: "Demo hypothesis"
+        created: "2026-04-01"
+        updated: "2026-05-01"
+        review_state:
+          last_reviewed: "2026-05-01"
+        ---
+        Body.
+    """)
+    _write(root / "doc" / "observations" / "o1.md", """
+        ---
+        id: "observation:o1"
+        kind: "observation"
+        title: "New observation"
+        created: "2026-05-03"
+        updated: "2026-05-03"
+        ---
+        Body.
+    """)
+    _write(root / "doc" / "pre-registrations" / "p1.md", """
+        ---
+        id: "pre-registration:p1"
+        type: "pre-registration"
+        title: "Demo pre-reg"
+        status: "committed"
+        committed: "2026-04-15"
+        spec: ""
+        related: ["hypothesis:h1"]
+        commits_to: ["hypothesis:h1"]
+        created: "2026-04-15"
+        updated: "2026-04-15"
+        ---
+        Body.
+    """)
+    _write(root / "knowledge" / "sources" / "core" / "relations.yaml", """
+        relations:
+          - subject: "observation:o1"
+            predicate: "cito:supports"
+            object: "hypothesis:h1"
+            graph_layer: "graph/knowledge"
+    """)
+
+    trig = materialize_graph(root)
+    ds = _load_dataset(trig)
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    h_uri = URIRef(PROJECT_NS["hypothesis/h1"])
+
+    assert (URIRef(PROJECT_NS["pre-registration/p1"]), SCI_NS.bearsOn, h_uri) in knowledge
+    assert (URIRef(PROJECT_NS["observation/o1"]), SCI_NS.bearsOn, h_uri) in knowledge
+    assert [str(o) for _, _, o in knowledge.triples((h_uri, SCI_NS.freshnessState, None))] == ["needs-review"]
+    assert (h_uri, SCI_NS.triggeredBy, URIRef(PROJECT_NS["observation/o1"])) in knowledge
 
 
 def test_provenance_plus_closure_end_to_end(tmp_path: Path):

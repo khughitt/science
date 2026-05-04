@@ -44,6 +44,17 @@ def test_curation_sweep_kind_registered() -> None:
     assert registry.resolve("curation-sweep") is ProjectEntity
 
 
+def test_pre_registration_kind_registered_as_operational() -> None:
+    registry = EntityRegistry.with_core_types()
+    assert registry.resolve("pre-registration") is ProjectEntity
+    assert registry.kind_class("pre-registration") == EntityClass.OPERATIONAL
+
+
+def test_inquiry_kind_is_epistemic() -> None:
+    registry = EntityRegistry.with_core_types()
+    assert registry.kind_class("inquiry") == EntityClass.EPISTEMIC
+
+
 def test_mechanism_kind_resolves_to_typed_entity() -> None:
     registry = EntityRegistry.with_core_types()
     assert registry.resolve("mechanism") is MechanismEntity
