@@ -269,6 +269,12 @@ def _setup_project_with_dataset(tmp_path: Path) -> Path:
     _load_markdown_entities scans policy-rooted directories but includes any
     entity whose frontmatter has a valid id/kind — so a file with kind:dataset
     placed in specs/hypotheses/ is discoverable by find_entity("dataset:d1").
+
+    Scope: this exercises the registry-gate logic in review_entity(). It does
+    not prove the gate fires when a dataset is discovered via its canonical
+    path; in real projects datasets aren't loaded through find_entity at all
+    (no entry in _BUILTIN_MARKDOWN_POLICIES — they flow through dedicated
+    adapters like DatapackageAdapter).
     """
     root = tmp_path / "demo"
     (root / "specs" / "hypotheses").mkdir(parents=True)
