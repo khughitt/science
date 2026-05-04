@@ -17,6 +17,7 @@ from science_model.reasoning import MeasurementModel, RivalModelPacket
 from science_tool.addressing import is_address, parse_address
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.freshness import (
+    EntityFreshnessInfo,
     close_bears_on,
     derive_bears_on_from_provenance,
     derive_bears_on_from_typed_edges,
@@ -25,6 +26,7 @@ from science_tool.graph.freshness import (
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
+    ProjectSources,
     SourceBinding,
     SourceRelation,
     _EXTERNAL_PREFIXES,
@@ -106,23 +108,7 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
             ext_prefixes=ext_prefixes,
         )
 
-    # Phase 1 epistemic dependency graph: build kind_class before the authored-
-    # relation loop so the bears_on guard in _add_authored_relation can fire.
-    # Use EntityRegistry.with_core_types() for classification. Profile-,
-    # catalog-, and extension-kind classification is not threaded here in
-    # Phase 1: those kinds default to OPERATIONAL via the defensive fallback,
-    # which is the documented Phase-1 behavior (see design doc § Decisions
-    # #4). Later phases can plumb the full registry through ProjectSources.
-    registry = EntityRegistry.with_core_types()
-
-    kind_class: dict[str, EntityClass] = {}
-    for entity in sources.entities:
-        uri_str = str(_entity_uri(entity.canonical_id))
-        try:
-            entity_class = registry.kind_class(entity.kind)
-        except EntityKindNotRegisteredError:
-            entity_class = EntityClass.OPERATIONAL  # Phase-1 default for non-core kinds.
-        kind_class[uri_str] = entity_class
+    kind_class = _classify_entities(sources)
 
     for relation in sources.relations:
         _add_authored_relation(
@@ -145,23 +131,8 @@ def materialize_graph(project_root: Path, *, strict: bool = True) -> Path:
             resolver=resolver,
         )
 
-    entity_meta: dict[str, dict] = {}
-    for entity in sources.entities:
-        uri_str = str(_entity_uri(entity.canonical_id))
-        entity_meta[uri_str] = {
-            "kind_class": kind_class[uri_str],
-            "last_reviewed": entity.review_state.last_reviewed if entity.review_state else None,
-            "created": entity.created,
-            "updated": entity.updated,
-            "review_horizon_days": (
-                entity.review_state.review_horizon_days if entity.review_state else None
-            ),
-        }
-
-    derive_bears_on_from_typed_edges(dataset, kind_class=kind_class)
-    derive_bears_on_from_provenance(dataset, kind_class=kind_class)
-    close_bears_on(dataset, kind_class=kind_class)
-    derive_freshness(dataset, entities=entity_meta, today=_date.today())
+    entity_meta = _build_entity_meta(sources, kind_class)
+    _derive_epistemic_layer(dataset, kind_class=kind_class, entity_meta=entity_meta)
 
     trig_path = project_root / DEFAULT_GRAPH_PATH
     trig_path.parent.mkdir(parents=True, exist_ok=True)
@@ -390,8 +361,9 @@ def _add_authored_relation(
         target_class = kind_class.get(str(object_uri))
         if target_class is not None and target_class != EntityClass.EPISTEMIC:
             raise ValueError(
-                f"hand-authored bears_on must target an epistemic entity, got "
-                f"{relation.object!r} (classified {target_class.value})"
+                f"hand-authored bears_on must target an epistemic entity: "
+                f"{relation.subject} -> {relation.object} in {relation.source_path} "
+                f"(target classified {target_class.value})"
             )
 
     graph.add((subject_uri, predicate_uri, object_uri))
@@ -583,3 +555,59 @@ def _external_profile(raw_target: str, ontology_catalogs: list[OntologyCatalog])
             if prefix_lower in {p.lower() for p in et.curie_prefixes}:
                 return catalog.ontology
     return "external"
+
+
+def _classify_entities(sources: ProjectSources) -> dict[str, EntityClass]:
+    """Build a {URI string -> EntityClass} map from the project's entities.
+
+    Phase 1 fallback: any kind not registered in EntityRegistry.with_core_types()
+    classifies as OPERATIONAL. Profile-, catalog-, and extension-kind classification
+    is not threaded through ProjectSources yet (see design doc § Decisions #4).
+    """
+    registry = EntityRegistry.with_core_types()
+    kind_class: dict[str, EntityClass] = {}
+    for entity in sources.entities:
+        uri_str = str(_entity_uri(entity.canonical_id))
+        try:
+            kind_class[uri_str] = registry.kind_class(entity.kind)
+        except EntityKindNotRegisteredError:
+            kind_class[uri_str] = EntityClass.OPERATIONAL
+    return kind_class
+
+
+def _build_entity_meta(
+    sources: ProjectSources,
+    kind_class: dict[str, EntityClass],
+) -> dict[str, EntityFreshnessInfo]:
+    """Build the per-entity metadata dict consumed by derive_freshness."""
+    entity_meta: dict[str, EntityFreshnessInfo] = {}
+    for entity in sources.entities:
+        uri_str = str(_entity_uri(entity.canonical_id))
+        entity_meta[uri_str] = {
+            "kind_class": kind_class[uri_str],
+            "last_reviewed": entity.review_state.last_reviewed if entity.review_state else None,
+            "created": entity.created,
+            "updated": entity.updated,
+            "review_horizon_days": (
+                entity.review_state.review_horizon_days if entity.review_state else None
+            ),
+        }
+    return entity_meta
+
+
+def _derive_epistemic_layer(
+    dataset: Dataset,
+    *,
+    kind_class: dict[str, EntityClass],
+    entity_meta: dict[str, EntityFreshnessInfo],
+) -> None:
+    """Run the four-step epistemic derivation pipeline against the dataset.
+
+    Mutates the knowledge graph in place: emits sci:bearsOn (typed-edge +
+    provenance + closure), then sci:freshnessState / sci:upstreamChangeAt /
+    sci:triggeredBy.
+    """
+    derive_bears_on_from_typed_edges(dataset, kind_class=kind_class)
+    derive_bears_on_from_provenance(dataset, kind_class=kind_class)
+    close_bears_on(dataset, kind_class=kind_class)
+    derive_freshness(dataset, entities=entity_meta, today=_date.today())

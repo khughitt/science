@@ -136,3 +136,78 @@ def test_materialize_rejects_hand_authored_bears_on_to_non_epistemic_target(tmp_
 
     with pytest.raises(ValueError, match="bears_on"):
         materialize_graph(root)
+
+
+def test_materialize_emits_closure_bears_on_through_observation(tmp_path: Path):
+    """Closure end-to-end: workflow-run grounds observation supports proposition addresses hypothesis.
+
+    Note: at materialize time, only the typed-edge bears_on rules fire directly
+    (workflow-run grounds observation -> bears_on; observation supports proposition
+    -> bears_on). Closure should then emit (workflow-run, bears_on, proposition)
+    as a transitive triple.
+    """
+    root = tmp_path / "demo"
+    _write(root / "science.yaml", """
+        name: demo
+        knowledge_profiles:
+          local: core
+    """)
+    _write(root / "doc" / "propositions" / "p1.md", """
+        ---
+        id: "proposition:p1"
+        kind: "proposition"
+        title: "Demo prop"
+        created: "2026-04-01"
+        updated: "2026-04-01"
+        ---
+        Body.
+    """)
+    _write(root / "doc" / "observations" / "o1.md", """
+        ---
+        id: "observation:o1"
+        kind: "observation"
+        title: "Demo obs"
+        created: "2026-04-01"
+        updated: "2026-04-01"
+        ---
+        Body.
+    """)
+    # observation supports proposition (cito:supports edge via authored relations)
+    _write(root / "knowledge" / "sources" / "core" / "relations.yaml", """
+        relations:
+          - subject: "observation:o1"
+            predicate: "cito:supports"
+            object: "proposition:p1"
+            graph_layer: "graph/knowledge"
+          - subject: "workflow-run:wfr1"
+            predicate: "sci:grounds"
+            object: "observation:o1"
+            graph_layer: "graph/knowledge"
+    """)
+    _write(root / "doc" / "workflow-runs" / "wfr1.md", """
+        ---
+        id: "workflow-run:wfr1"
+        kind: "workflow-run"
+        title: "Demo run"
+        status: "complete"
+        created: "2026-04-01"
+        updated: "2026-04-01"
+        ---
+        Body.
+    """)
+
+    trig = materialize_graph(root)
+    ds = _load_dataset(trig)
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+
+    pairs = {(str(s), str(o)) for s, _, o in knowledge.triples((None, SCI_NS.bearsOn, None))}
+    wfr_uri = str(URIRef(PROJECT_NS["workflow-run/wfr1"]))
+    o_uri = str(URIRef(PROJECT_NS["observation/o1"]))
+    p_uri = str(URIRef(PROJECT_NS["proposition/p1"]))
+
+    # Direct bears_on edges from typed-edge rules:
+    assert (wfr_uri, o_uri) in pairs, "sci:grounds rule should produce bears_on"
+    assert (o_uri, p_uri) in pairs, "cito:supports rule should produce bears_on"
+
+    # Transitive closure should emit:
+    assert (wfr_uri, p_uri) in pairs, "closure should produce wfr -> proposition"
