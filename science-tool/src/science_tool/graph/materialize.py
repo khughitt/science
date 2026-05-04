@@ -15,7 +15,6 @@ from science_model.ontologies.schema import OntologyCatalog
 from science_model.reasoning import MeasurementModel, RivalModelPacket
 
 from science_tool.addressing import is_address, parse_address
-from science_tool.graph.entity_registry import EntityKindNotRegisteredError
 from science_tool.graph.freshness import (
     EntityFreshnessInfo,
     close_bears_on,
@@ -580,15 +579,14 @@ def _classify_entities(sources: ProjectSources) -> dict[str, EntityClass]:
     """Build a {URI string -> EntityClass} map from the project's entities.
 
     Uses the registry built by load_project_sources, which knows about profile,
-    catalog, and extension kinds. Unregistered kinds default to OPERATIONAL.
+    catalog, and extension kinds. Every entity in `sources.entities` was
+    accepted by `registry.resolve(kind)` during loading, so kind_class lookup
+    is guaranteed to succeed — let any unexpected miss raise loudly.
     """
     kind_class: dict[str, EntityClass] = {}
     for entity in sources.entities:
         uri_str = str(_entity_uri(entity.canonical_id))
-        try:
-            kind_class[uri_str] = sources.registry.kind_class(entity.kind)
-        except EntityKindNotRegisteredError:
-            kind_class[uri_str] = EntityClass.OPERATIONAL
+        kind_class[uri_str] = sources.registry.kind_class(entity.kind)
     return kind_class
 
 
