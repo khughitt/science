@@ -409,6 +409,20 @@ def entity_neighbors(ref: str, hops: int, output_format: str) -> None:
     )
 
 
+@entity_group.command("review")
+@click.argument("ref")
+@click.option("--note", default=None, help="Optional note recorded with the review.")
+def entity_review(ref: str, note: str | None) -> None:
+    """Mark an epistemic entity as reviewed-as-of today."""
+    from science_tool.entity_review import ReviewError, review_entity
+
+    try:
+        path = review_entity(Path.cwd(), ref, note=note)
+    except ReviewError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Reviewed {ref} -> {path.relative_to(Path.cwd())}")
+
+
 @main.group("hypothesis")
 def hypothesis_group() -> None:
     """Hypothesis source commands."""
