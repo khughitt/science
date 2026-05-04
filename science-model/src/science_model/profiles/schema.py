@@ -14,6 +14,7 @@ class EntityKind(BaseModel):
     canonical_prefix: str
     layer: str
     description: str
+    entity_class: str | None = None  # "epistemic" | "operational" | "reference"; None defaults to caller's choice
 
 
 class RelationKind(BaseModel):

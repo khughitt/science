@@ -15,7 +15,7 @@ from science_model.ontologies.schema import OntologyCatalog
 from science_model.reasoning import MeasurementModel, RivalModelPacket
 
 from science_tool.addressing import is_address, parse_address
-from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
+from science_tool.graph.entity_registry import EntityKindNotRegisteredError
 from science_tool.graph.freshness import (
     EntityFreshnessInfo,
     close_bears_on,
@@ -577,16 +577,14 @@ def _external_profile(raw_target: str, ontology_catalogs: list[OntologyCatalog])
 def _classify_entities(sources: ProjectSources) -> dict[str, EntityClass]:
     """Build a {URI string -> EntityClass} map from the project's entities.
 
-    Phase 1 fallback: any kind not registered in EntityRegistry.with_core_types()
-    classifies as OPERATIONAL. Profile-, catalog-, and extension-kind classification
-    is not threaded through ProjectSources yet (see design doc § Decisions #4).
+    Uses the registry built by load_project_sources, which knows about profile,
+    catalog, and extension kinds. Unregistered kinds default to OPERATIONAL.
     """
-    registry = EntityRegistry.with_core_types()
     kind_class: dict[str, EntityClass] = {}
     for entity in sources.entities:
         uri_str = str(_entity_uri(entity.canonical_id))
         try:
-            kind_class[uri_str] = registry.kind_class(entity.kind)
+            kind_class[uri_str] = sources.registry.kind_class(entity.kind)
         except EntityKindNotRegisteredError:
             kind_class[uri_str] = EntityClass.OPERATIONAL
     return kind_class

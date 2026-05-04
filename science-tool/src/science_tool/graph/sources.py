@@ -10,7 +10,7 @@ from typing import Any, TypeVar
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError
-from science_model.entities import Entity, EntityType, ProjectEntity, DomainEntity, core_entity_type_for_kind
+from science_model.entities import Entity, EntityClass, EntityType, ProjectEntity, DomainEntity, core_entity_type_for_kind
 from science_model.ontologies import load_catalogs_for_names
 from science_model.ontologies.schema import OntologyCatalog
 from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE, load_profile_manifest, load_shared_profile
@@ -112,9 +112,22 @@ class ProjectSources(BaseModel):
     bindings: list[BindingSource] = Field(default_factory=list)
     manual_aliases: dict[str, str] = Field(default_factory=dict)
     ontology_catalogs: list[OntologyCatalog] = Field(default_factory=list)
+    registry: EntityRegistry = Field(default_factory=EntityRegistry.with_core_types)
 
 
 SourceBinding = BindingSource
+
+
+def _resolve_entity_class(declared: str | None, default: EntityClass) -> EntityClass:
+    """Parse entity_class from a manifest string, or return the default."""
+    if declared is None:
+        return default
+    try:
+        return EntityClass(declared)
+    except ValueError:
+        raise ValueError(
+            f"Invalid entity_class {declared!r} in profile manifest; expected one of {[c.value for c in EntityClass]}"
+        )
 
 
 def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] | None = None) -> ProjectSources:
@@ -143,13 +156,22 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
     registry = EntityRegistry.with_core_types()
     for profile in profile_manifests:
         for entity_kind in profile.entity_kinds:
-            registry.register_profile_kind(entity_kind.name, ProjectEntity, owner=profile.name)
+            registry.register_profile_kind(
+                entity_kind.name,
+                ProjectEntity,
+                owner=profile.name,
+                entity_class=_resolve_entity_class(entity_kind.entity_class, EntityClass.OPERATIONAL),
+            )
     for catalog in ontology_catalogs:
         for entity_type in catalog.entity_types:
             registry.register_catalog_kind(entity_type.name, DomainEntity, owner=catalog.ontology)
     if local_profile_manifest is not None:
         for entity_kind in local_profile_manifest.entity_kinds:
-            registry.register_extension_kind(entity_kind.name, ProjectEntity)
+            registry.register_extension_kind(
+                entity_kind.name,
+                ProjectEntity,
+                entity_class=_resolve_entity_class(entity_kind.entity_class, EntityClass.OPERATIONAL),
+            )
 
     adapters: list[StorageAdapter] = [
         MarkdownAdapter(virtual_files=markdown_overrides),
@@ -268,6 +290,7 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
         bindings=bindings,
         manual_aliases=_load_manual_aliases(project_root, local_profile=local_profile),
         ontology_catalogs=ontology_catalogs,
+        registry=registry,
     )
 
 
