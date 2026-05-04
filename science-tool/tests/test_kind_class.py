@@ -30,6 +30,7 @@ def test_kind_class_lookup_returns_classification():
     assert r.kind_class("hypothesis") == EntityClass.EPISTEMIC
     assert r.kind_class("dataset") == EntityClass.OPERATIONAL
     assert r.kind_class("article") == EntityClass.REFERENCE
+    assert r.kind_class("theme") == EntityClass.EPISTEMIC
 
 
 def test_kind_class_lookup_for_unknown_kind_raises():

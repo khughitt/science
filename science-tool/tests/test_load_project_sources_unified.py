@@ -15,6 +15,7 @@ from science_model.entities import (
     MechanismEntity,
     ProjectEntity,
     TaskEntity,
+    ThemeEntity,
 )
 from science_model.identity import EntityScope, ExternalId
 from science_model.profiles.schema import EntityKind, ProfileManifest
@@ -190,6 +191,58 @@ def test_load_project_sources_returns_typed_mechanism_entity(tmp_path: Path) -> 
     assert isinstance(mechanism, MechanismEntity)
     assert mechanism.participants == ["concept:translation", "concept:cell-state"]
     assert mechanism.propositions == ["proposition:anti-coupling"]
+
+
+def test_load_project_sources_returns_typed_theme_entity(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    (tmp_path / "doc" / "themes").mkdir(parents=True)
+    (tmp_path / "doc" / "themes" / "transportability.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "theme:transportability"',
+                'type: "theme"',
+                'title: "Transportability"',
+                'status: "active"',
+                'theme_kind: "methodological"',
+                'theme_scope: "federation"',
+                'related: ["question:q001-recurring"]',
+                "source_refs: []",
+                "evidence_refs: []",
+                "---",
+                "",
+                "# Theme: Transportability",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "doc" / "questions").mkdir(parents=True)
+    (tmp_path / "doc" / "questions" / "q001-recurring.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "question:q001-recurring"',
+                'type: "question"',
+                'title: "What recurs?"',
+                "related: []",
+                "source_refs: []",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(tmp_path)
+    by_id = {entity.canonical_id: entity for entity in sources.entities}
+    theme = by_id["theme:transportability"]
+
+    assert isinstance(theme, ThemeEntity)
+    assert theme.kind == "theme"
+    assert theme.type == EntityType.THEME
+    assert theme.theme_kind == "methodological"
+    assert theme.theme_scope == "federation"
 
 
 def test_load_project_sources_preserves_markdown_identity_fields(tmp_path: Path) -> None:

@@ -20,6 +20,7 @@ from science_model.entities import (
     ProjectEntity,
     ResearchPackageEntity,
     TaskEntity,
+    ThemeEntity,
     WorkflowRunEntity,
 )
 
@@ -45,6 +46,7 @@ _CORE_KIND_CLASSES: dict[str, EntityClass] = {
     "workflow-run": EntityClass.OPERATIONAL,
     "research-package": EntityClass.OPERATIONAL,
     "mechanism": EntityClass.EPISTEMIC,
+    "theme": EntityClass.EPISTEMIC,
     # Generic project kinds (alphabetized)
     "article": EntityClass.REFERENCE,
     "assumption": EntityClass.EPISTEMIC,
@@ -99,6 +101,7 @@ class EntityRegistry:
             "research-package", ResearchPackageEntity, entity_class=_CORE_KIND_CLASSES["research-package"]
         )
         r.register_core_kind("mechanism", MechanismEntity, entity_class=_CORE_KIND_CLASSES["mechanism"])
+        r.register_core_kind("theme", ThemeEntity, entity_class=_CORE_KIND_CLASSES["theme"])
         # Generic project kinds → ProjectEntity.
         for kind in (
             "concept",
