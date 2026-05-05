@@ -1726,6 +1726,13 @@ def add_proposition_cmd(
         bridge_between_refs=list(bridge_between_refs) if bridge_between_refs else None,
     )
     click.echo(f"Added proposition: {uri}")
+    click.echo(
+        "WARNING: this entry is written directly to graph.trig and will be wiped on the next "
+        "`science-tool graph build`, which rematerialises the graph from markdown sources."
+    )
+    click.echo(
+        "Tip: use `science-tool proposition create <title>` for durable source-authored project work."
+    )
 
 
 @graph_add.command("observation")
@@ -1752,6 +1759,11 @@ def add_observation_cmd(
     """Add an observation — a concrete empirical fact anchored to data."""
     uri = add_observation(graph_path, description, data_source, metric, value, uncertainty, conditions, observation_id)
     click.echo(f"Added observation: {uri}")
+    click.echo(
+        "WARNING: this entry is written directly to graph.trig and will be wiped on the next "
+        "`science-tool graph build`, which rematerialises the graph from markdown sources. "
+        "Anchor observations inside an interpretation, finding, or proposition source file to make them durable."
+    )
 
 
 @graph_add.command("evidence")
@@ -1785,6 +1797,11 @@ def add_evidence_cmd(
         graph_path, source_entity, target_entity, stance, strength, caveats, evidence_method, independence
     )
     click.echo(f"Added {stance} edge: {source_entity} \u2192 {target_entity}")
+    click.echo(
+        "WARNING: this edge is written directly to graph.trig and will be wiped on the next "
+        "`science-tool graph build`, which rematerialises the graph from markdown sources. "
+        "Author evidence relations inside the source file (proposition, finding, or interpretation) to make them durable."
+    )
 
 
 @graph_add.command("hypothesis")
@@ -1899,6 +1916,11 @@ def add_finding_cmd(
     """Add a finding — propositions grounded by observations."""
     uri = add_finding(graph_path, summary, confidence, list(propositions), list(observations), source, finding_id)
     click.echo(f"Added finding: {uri}")
+    click.echo(
+        "WARNING: this entry is written directly to graph.trig and will be wiped on the next "
+        "`science-tool graph build`, which rematerialises the graph from markdown sources. "
+        "Anchor findings inside an interpretation source file to make them durable."
+    )
 
 
 @graph_add.command("interpretation")

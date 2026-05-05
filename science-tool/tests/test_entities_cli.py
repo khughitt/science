@@ -367,6 +367,112 @@ def test_proposition_create_writes_source() -> None:
         assert "## Claim" in text
 
 
+def test_graph_add_proposition_warns_about_ephemerality() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        init = runner.invoke(main, ["graph", "init"])
+        assert init.exit_code == 0, init.output
+
+        result = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "proposition",
+                "Cadence shapes recovered switch history",
+                "--source",
+                "data-package:t015-baseline",
+                "--id",
+                "p01-cadence-shapes-switch-history",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "wiped on the next" in result.output
+        assert "proposition create" in result.output
+
+
+def test_graph_add_observation_warns_about_ephemerality() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        init = runner.invoke(main, ["graph", "init"])
+        assert init.exit_code == 0, init.output
+
+        result = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "observation",
+                "Switch event count fell with cadence",
+                "--data-source",
+                "data-package:t015-baseline",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "wiped on the next" in result.output
+
+
+def test_graph_add_finding_warns_about_ephemerality() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        init = runner.invoke(main, ["graph", "init"])
+        assert init.exit_code == 0, init.output
+
+        result = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "finding",
+                "Cadence shapes switch history",
+                "--confidence",
+                "moderate",
+                "--proposition",
+                "proposition:p01-cadence",
+                "--observation",
+                "observation:t015-2026-05",
+                "--source",
+                "data-package:t015-baseline",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "wiped on the next" in result.output
+
+
+def test_graph_add_evidence_warns_about_ephemerality() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        init = runner.invoke(main, ["graph", "init"])
+        assert init.exit_code == 0, init.output
+
+        result = runner.invoke(
+            main,
+            [
+                "graph",
+                "add",
+                "evidence",
+                "observation:t015-2026-05",
+                "proposition:p01-cadence",
+                "--stance",
+                "supports",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "wiped on the next" in result.output
+
+
 def test_entity_neighbors_source_only_warns_and_returns_no_rows() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
