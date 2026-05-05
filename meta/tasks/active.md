@@ -36,10 +36,11 @@ Execute the engine from [t001] on the default grid and produce the deliverables 
 
 ## [t003] Decide hierarchical task ID convention for science-tool
 - priority: P3
-- status: proposed
+- status: done
 - aspects: [software-development]
-- related: []
+- related: [task:t020]
 - created: 2026-04-24
+- completed: 2026-05-05
 
 Decide a convention for hierarchical / derivative task identifiers in `/science:tasks` and either enforce it via tool validation or explicitly declare flat IDs and locate parent/child structure elsewhere. Surfaced when authoring `[t020]` in this project — the ad-hoc `b` suffix worked but the design space wasn't actually considered.
 
@@ -58,6 +59,8 @@ Three distinct semantics share the identifier space today and probably shouldn't
 - OR an explicit decision that identifiers stay flat and structure goes elsewhere — and that decision recorded somewhere durable.
 
 Tracked under meta because `science-tool/` is not a Science-managed project itself (no `science.yaml`, no `tasks/active.md`); design intent and decisions about tool behaviour are recorded in meta per `meta/AGENTS.md`.
+
+**COMPLETED 2026-05-05.** Decision: task IDs are flat local identifiers matching `tNNN` or wider (`t1000`), and hierarchy moves out of the ID. Local structural parentage is represented by `parent: task:t001`; visible graph/search relationships still use `related:`. Cross-project refs use namespace-first form (`<project-id>:<kind>:<slug>`), while bare `t123` and `task:t123` always mean local tasks. Implemented in `science_tool.tasks`, task models, managed `validate.sh`, reference validation, and docs; plan tracked at `docs/superpowers/plans/2026-05-05-task-ids-and-cross-project-references.md`.
 
 ## [t004] Extend H01 r-curve to resolve P5
 - priority: P2
