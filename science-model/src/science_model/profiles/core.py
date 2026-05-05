@@ -237,9 +237,9 @@ CORE_PROFILE = ProfileManifest(
             name="synthesizes",
             predicate="sci:synthesizes",
             source_kinds=["story"],
-            target_kinds=["interpretation", "discussion"],
+            target_kinds=["interpretation", "discussion", "hypothesis"],
             layer="layer/core",
-            description="A story synthesizes interpretations and discussions.",
+            description="A story synthesizes interpretations, discussions, or hypotheses.",
         ),
         RelationKind(
             name="organized_by",

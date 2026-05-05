@@ -253,7 +253,7 @@ def test_grounded_by_relation() -> None:
 def test_synthesizes_relation() -> None:
     rel = next(r for r in CORE_PROFILE.relation_kinds if r.name == "synthesizes")
     assert rel.source_kinds == ["story"]
-    assert set(rel.target_kinds) == {"interpretation", "discussion"}
+    assert set(rel.target_kinds) == {"interpretation", "discussion", "hypothesis"}
     assert rel.predicate == "sci:synthesizes"
 
 
