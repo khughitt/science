@@ -245,7 +245,7 @@ def _bears_on_depth(ds: Dataset, source: URIRef, target: URIRef) -> int | None:
     for bn, _, _ in knowledge.triples((None, RDF.type, SCI_NS.BearsOnEdge)):
         if (bn, SCI_NS.bearsOnSource, source) in knowledge and (bn, SCI_NS.bearsOnTarget, target) in knowledge:
             for _, _, d in knowledge.triples((bn, SCI_NS.bearsOnDepth, None)):
-                depths.append(int(d))
+                depths.append(int(str(d)))
     return min(depths) if depths else None
 
 

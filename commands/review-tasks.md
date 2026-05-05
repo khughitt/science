@@ -17,6 +17,12 @@ uv run science-tool tasks list --format=json
 uv run science-tool tasks summary
 ```
 
+If `knowledge/graph.trig` exists, also run:
+
+```bash
+uv run science-tool graph attention-sample --limit 8 --format json
+```
+
 Read `tasks/active.md` for full task descriptions. Note the total count and distribution.
 
 ### 2. Identify review scope
@@ -46,6 +52,7 @@ Evaluate priorities against the current project trajectory:
 - What are the active research questions and hypotheses?
 - Which tasks have the highest strategic value right now?
 - Which tasks are research rabbit holes with diminishing returns?
+- Which weighted attention sample rows suggest neglected or needs-review epistemic targets that should influence task priority?
 
 Recommend:
 - **Promotions** (P2/P3 -> P1): tasks with high strategic value or that unblock important work

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -1330,6 +1331,59 @@ def graph_inquiry_summary(top: int, output_format: str, graph_path: Path) -> Non
             ("no_empirical_claim_count", "No Empirical"),
             ("inquiry_type", "Type"),
             ("status", "Status"),
+        ],
+        rows=rows,
+    )
+
+
+@graph.command("attention-sample")
+@click.option("--limit", type=int, default=5, show_default=True)
+@click.option("--seed", type=int, default=None, help="Seed for reproducible weighted sampling.")
+@click.option("--kind", "kinds", multiple=True, help="Restrict candidates to one or more entity kinds.")
+@click.option("--epsilon", type=float, default=0.05, show_default=True, help="Positive weight floor.")
+@click.option("--today", type=click.DateTime(formats=["%Y-%m-%d"]), default=None, help="Date for age weighting.")
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+@click.option(
+    "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
+)
+def graph_attention_sample(
+    limit: int,
+    seed: int | None,
+    kinds: tuple[str, ...],
+    epsilon: float,
+    today: datetime | None,
+    output_format: str,
+    graph_path: Path,
+) -> None:
+    """Sample epistemic entities by graph-derived attention weight."""
+    from science_tool.graph.attention import query_attention_sample
+
+    if limit < 0:
+        raise click.ClickException("--limit must be >= 0")
+    sample_date: date | None = today.date() if today is not None else None
+    try:
+        rows = query_attention_sample(
+            graph_path=graph_path,
+            limit=limit,
+            seed=seed,
+            today=sample_date,
+            kinds=set(kinds) if kinds else None,
+            epsilon=epsilon,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    emit_query_rows(
+        output_format=output_format,
+        title="Graph Attention Sample",
+        columns=[
+            ("id", "ID"),
+            ("freshness_state", "Freshness"),
+            ("attention_weight", "Weight"),
+            ("incoming_bears_on", "Bears On"),
+            ("days_since_last_review", "Days"),
+            ("support_count", "Supports"),
+            ("dispute_count", "Disputes"),
+            ("label", "Label"),
         ],
         rows=rows,
     )

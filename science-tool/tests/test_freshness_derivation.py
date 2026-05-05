@@ -7,7 +7,7 @@ from datetime import date
 from rdflib import Dataset, URIRef
 
 from science_model.entities import EntityClass
-from science_tool.graph.freshness import derive_freshness
+from science_tool.graph.freshness import EntityFreshnessInfo, derive_freshness
 from science_tool.graph.store import PROJECT_NS, SCI_NS
 
 
@@ -37,7 +37,7 @@ def _triggered_by(ds: Dataset, target: URIRef) -> set[str]:
 
 def test_freshness_fresh_when_no_upstream_change():
     ds = _ds_with_bears_on([(_u("dataset/d1"), _u("hypothesis/h1"))])
-    entities = {
+    entities: dict[str, EntityFreshnessInfo] = {
         str(_u("hypothesis/h1")): {
             "kind_class": EntityClass.EPISTEMIC,
             "last_reviewed": date(2026, 5, 1),
@@ -60,7 +60,7 @@ def test_freshness_fresh_when_no_upstream_change():
 
 def test_freshness_needs_review_when_upstream_changed_after_last_review():
     ds = _ds_with_bears_on([(_u("dataset/d1"), _u("hypothesis/h1"))])
-    entities = {
+    entities: dict[str, EntityFreshnessInfo] = {
         str(_u("hypothesis/h1")): {
             "kind_class": EntityClass.EPISTEMIC,
             "last_reviewed": date(2026, 4, 1),
@@ -83,7 +83,7 @@ def test_freshness_needs_review_when_upstream_changed_after_last_review():
 
 def test_freshness_falls_back_to_created_when_last_reviewed_unset():
     ds = _ds_with_bears_on([(_u("dataset/d1"), _u("hypothesis/h1"))])
-    entities = {
+    entities: dict[str, EntityFreshnessInfo] = {
         str(_u("hypothesis/h1")): {
             "kind_class": EntityClass.EPISTEMIC,
             "last_reviewed": None,
@@ -106,7 +106,7 @@ def test_freshness_falls_back_to_created_when_last_reviewed_unset():
 
 def test_freshness_stale_when_horizon_exceeded_without_upstream_change():
     ds = _ds_with_bears_on([])
-    entities = {
+    entities: dict[str, EntityFreshnessInfo] = {
         str(_u("hypothesis/h1")): {
             "kind_class": EntityClass.EPISTEMIC,
             "last_reviewed": date(2025, 1, 1),
@@ -121,7 +121,7 @@ def test_freshness_stale_when_horizon_exceeded_without_upstream_change():
 
 def test_freshness_skips_non_epistemic_entities():
     ds = _ds_with_bears_on([])
-    entities = {
+    entities: dict[str, EntityFreshnessInfo] = {
         str(_u("dataset/d1")): {
             "kind_class": EntityClass.OPERATIONAL,
             "last_reviewed": None,
@@ -141,7 +141,7 @@ def test_freshness_emits_upstream_change_at():
             (_u("dataset/d2"), _u("hypothesis/h1")),
         ]
     )
-    entities = {
+    entities: dict[str, EntityFreshnessInfo] = {
         str(_u("hypothesis/h1")): {
             "kind_class": EntityClass.EPISTEMIC,
             "last_reviewed": date(2026, 4, 1),
@@ -175,7 +175,7 @@ def test_freshness_emits_upstream_change_at():
 def test_freshness_needs_review_wins_over_stale_when_both_apply():
     """When both upstream change and horizon-exceeded apply, needs-review wins."""
     ds = _ds_with_bears_on([(_u("dataset/d1"), _u("hypothesis/h1"))])
-    entities = {
+    entities: dict[str, EntityFreshnessInfo] = {
         str(_u("hypothesis/h1")): {
             "kind_class": EntityClass.EPISTEMIC,
             "last_reviewed": date(2025, 1, 1),  # Long ago
@@ -204,7 +204,7 @@ def test_derive_freshness_emits_last_reviewed_triple() -> None:
     ds = Dataset()
     knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
     h = URIRef("http://example.org/hypothesis/h")
-    entities = {
+    entities: dict[str, EntityFreshnessInfo] = {
         str(h): {
             "kind_class": EntityClass.EPISTEMIC,
             "last_reviewed": date(2026, 1, 15),
@@ -223,7 +223,7 @@ def test_derive_freshness_no_last_reviewed_triple_when_unset() -> None:
     ds = Dataset()
     knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
     h = URIRef("http://example.org/hypothesis/h")
-    entities = {
+    entities: dict[str, EntityFreshnessInfo] = {
         str(h): {
             "kind_class": EntityClass.EPISTEMIC,
             "last_reviewed": None,
@@ -249,7 +249,7 @@ def test_horizon_boundary_inclusive_at_threshold() -> None:
     h = URIRef("http://example.org/hypothesis/h")
     baseline = date(2026, 1, 1)
     horizon = 30
-    entities = {
+    entities: dict[str, EntityFreshnessInfo] = {
         str(h): {
             "kind_class": EntityClass.EPISTEMIC,
             "last_reviewed": baseline,
@@ -276,7 +276,7 @@ def test_horizon_one_day_past_threshold_is_stale() -> None:
     h = URIRef("http://example.org/hypothesis/h")
     baseline = date(2026, 1, 1)
     horizon = 30
-    entities = {
+    entities: dict[str, EntityFreshnessInfo] = {
         str(h): {
             "kind_class": EntityClass.EPISTEMIC,
             "last_reviewed": baseline,
@@ -299,7 +299,7 @@ def test_horizon_one_day_minimum() -> None:
     from science_tool.graph.store import PROJECT_NS, SCI_NS
 
     baseline = date(2026, 1, 1)
-    entities = {
+    entities: dict[str, EntityFreshnessInfo] = {
         "http://example.org/hypothesis/h": {
             "kind_class": EntityClass.EPISTEMIC,
             "last_reviewed": baseline,

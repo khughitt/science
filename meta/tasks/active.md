@@ -179,10 +179,11 @@ Plan to be written in implementation form (task-by-task) when this is picked up;
 
 ## [t011] Epistemic dependency graph — Phase 2 (weighted sampling for attention)
 - priority: P2
-- status: deferred
+- status: done
 - aspects: [software-development, framework-design, hypothesis-testing]
 - related: [hypothesis:h01-stochastic-revisiting]
 - created: 2026-05-03
+- completed: 2026-05-05
 
 Phase 2 of `docs/plans/2026-05-03-epistemic-dependency-graph-design.md`: replace deterministic top-N selection in `science:next-steps`, `science:curate`, `science:big-picture`, and task-prioritization sweeps with **weighted random sampling** over candidate epistemic entities. Weight function uses observable graph properties (incoming `bears_on` count, days-since-review, freshness state, evidence-imbalance skew) plus an `ε` floor so nothing collapses to zero — operationalizing D-003 at the attention layer.
 
@@ -193,6 +194,8 @@ This is the entity-graph-layer implementation of H01's validated mechanism: the 
 Originally blocked on `[t010]`; Phase 1 is now done, so this is unblocked but still deferred until we deliberately design the sampling policy and integration surface.
 
 Surfaced by: 2026-05-03 design discussion on continuous-belief flow / hard-gate brittleness in pre-registration semantics.
+
+**COMPLETED 2026-05-05.** Added `science_tool.graph.attention` with graph-derived attention weights over epistemic entities carrying `sci:freshnessState`: incoming `bears_on` count, days since `sci:lastReviewed` (with a never-reviewed signal), freshness multiplier, supports/disputes balance, and an additive epsilon floor. Added seeded weighted sampling without replacement and a `science-tool graph attention-sample` CLI with `--limit`, `--seed`, `--kind`, `--epsilon`, and `--today` for reproducible sweeps. Updated `science:next-steps`, `science:status`, `science:curate`, `science:big-picture`, and `science:review-tasks` guidance to use the sampler as the close-reading / revisiting surface rather than deterministic top-N narrowing. Tests cover weight components, seeded sampling, epsilon floor reachability, and CLI JSON output.
 
 ## [t012] Pre-registration semantics recast (epistemic vs operational targets)
 - priority: P2

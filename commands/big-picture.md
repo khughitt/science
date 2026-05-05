@@ -26,6 +26,7 @@ Run these from the project root. All `science-tool` invocations use `uv run scie
 uv run science-tool graph project-summary --format json
 uv run science-tool graph question-summary --format json
 uv run science-tool graph inquiry-summary --format json
+uv run science-tool graph attention-sample --limit 8 --format json
 uv run science-tool graph dashboard-summary --format json
 uv run science-tool graph uncertainty --format json
 uv run science-tool graph neighborhood-summary --format json
@@ -35,6 +36,9 @@ uv run science-tool big-picture resolve-questions --project-root .
 All graph summary commands default to `--path knowledge/graph.trig` (the Science convention), so no flag is needed when run from the project root.
 
 For `software` profile projects, skip `graph project-summary` (follows `/science:status` precedent).
+Use `graph attention-sample` to choose which epistemic entities receive close
+reading in this synthesis pass. Do not narrow the synthesis solely by
+deterministic top-N priority rows.
 
 **Note on `graph gaps`**: unlike the other summaries, `graph gaps` requires a `CENTER` argument (the node to analyze around). It is **not** called globally in this phase. Per-hypothesis `gaps_slice` is computed during bundle assembly below, centered on each hypothesis ID.
 
