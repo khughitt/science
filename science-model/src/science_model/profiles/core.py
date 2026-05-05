@@ -1,6 +1,21 @@
 """Core profile manifest for Science-native knowledge graph semantics."""
 
-from science_model.profiles.schema import EntityKind, ProfileManifest, RelationKind
+from science_model.profiles.schema import EntityKind, ProfileManifest, RelationEndpointPair, RelationKind
+
+_CONCLUSION_KINDS = [
+    "interpretation",
+    "finding",
+    "discussion",
+    "report",
+    "validation-report",
+    "story",
+]
+
+_CONCLUSION_KIND_PAIRS = [
+    RelationEndpointPair(source_kind=source_kind, target_kind=target_kind)
+    for source_kind in _CONCLUSION_KINDS
+    for target_kind in _CONCLUSION_KINDS
+]
 
 CORE_PROFILE = ProfileManifest(
     name="core",
@@ -178,10 +193,29 @@ CORE_PROFILE = ProfileManifest(
         RelationKind(
             name="supersedes",
             predicate="sci:supersedes",
-            source_kinds=["workflow-run"],
-            target_kinds=["workflow-run"],
+            source_kinds=["workflow-run", *_CONCLUSION_KINDS],
+            target_kinds=["workflow-run", *_CONCLUSION_KINDS],
+            allowed_kind_pairs=[
+                RelationEndpointPair(source_kind="workflow-run", target_kind="workflow-run"),
+                *_CONCLUSION_KIND_PAIRS,
+            ],
             layer="layer/core",
-            description="A workflow run replaces a prior run.",
+            description=(
+                "A newer entity replaces an older entity as canonical. Valid "
+                "for workflow-run replacement and conclusion-level replacement."
+            ),
+        ),
+        RelationKind(
+            name="amends",
+            predicate="sci:amends",
+            source_kinds=_CONCLUSION_KINDS,
+            target_kinds=_CONCLUSION_KINDS,
+            allowed_kind_pairs=_CONCLUSION_KIND_PAIRS,
+            layer="layer/core",
+            description=(
+                "A newer conclusion revises, narrows, qualifies, or extends an "
+                "older conclusion without replacing it."
+            ),
         ),
         RelationKind(
             name="feeds_into",

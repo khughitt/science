@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class EntityKind(BaseModel):
@@ -17,6 +17,13 @@ class EntityKind(BaseModel):
     entity_class: str | None = None  # "epistemic" | "operational" | "reference"; None defaults to caller's choice
 
 
+class RelationEndpointPair(BaseModel):
+    """One allowed source-kind / target-kind pair for a relation kind."""
+
+    source_kind: str
+    target_kind: str
+
+
 class RelationKind(BaseModel):
     """A relation kind declared by a knowledge profile."""
 
@@ -24,6 +31,7 @@ class RelationKind(BaseModel):
     predicate: str
     source_kinds: list[str]
     target_kinds: list[str]
+    allowed_kind_pairs: list[RelationEndpointPair] = Field(default_factory=list)
     layer: str
     description: str = ""
 
