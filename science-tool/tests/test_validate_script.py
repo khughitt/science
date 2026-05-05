@@ -1118,3 +1118,242 @@ def test_validate_does_not_warn_when_review_state_absent(tmp_path: Path) -> None
     )
     combined = result.stdout + result.stderr
     assert "review_horizon_days" not in combined
+
+
+def test_validate_rejects_invalid_task_id_suffix(tmp_path: Path) -> None:
+    _write_common_files(tmp_path, "software")
+    _write_python3_stub(tmp_path / "bin")
+    _write_science_tool_stub(tmp_path / "bin")
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "src").mkdir(parents=True)
+    (tmp_path / "tests").mkdir(parents=True)
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t001b] Follow-up\n"
+        "- aspects: [software-development]\n"
+        "- priority: P1\n"
+        "- status: proposed\n"
+        "- created: 2026-05-05\n\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    combined = result.stdout + result.stderr
+    assert result.returncode == 1, combined
+    assert (
+        "Invalid task id 't001b' in tasks/active.md: task ids must match tNNN. "
+        "Use parent: task:t001 for fragments or subtasks."
+    ) in combined
+
+
+def test_validate_rejects_cross_project_parent(tmp_path: Path) -> None:
+    _write_common_files(tmp_path, "software")
+    _write_python3_stub(tmp_path / "bin")
+    _write_science_tool_stub(tmp_path / "bin")
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "src").mkdir(parents=True)
+    (tmp_path / "tests").mkdir(parents=True)
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t016] Follow-up\n"
+        "- aspects: [software-development]\n"
+        "- priority: P1\n"
+        "- status: proposed\n"
+        "- parent: natural-systems:task:t001\n"
+        "- created: 2026-05-05\n\n"
+        "Body.\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    combined = result.stdout + result.stderr
+    assert result.returncode == 1, combined
+    assert "task t016 parent must be local task ref like task:t001" in combined
+
+
+def test_validate_catches_stale_task_ref_after_migration(tmp_path: Path) -> None:
+    _write_common_files(tmp_path, "software")
+    _write_python3_stub(tmp_path / "bin")
+    _write_science_tool_stub(tmp_path / "bin")
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "src").mkdir(parents=True)
+    (tmp_path / "tests").mkdir(parents=True)
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t001] Parent task\n"
+        "- aspects: [software-development]\n"
+        "- priority: P1\n"
+        "- status: done\n"
+        "- created: 2026-05-04\n\n"
+        "Parent body.\n\n"
+        "## [t016] Follow-up\n"
+        "- aspects: [software-development]\n"
+        "- priority: P1\n"
+        "- status: proposed\n"
+        "- parent: task:t001\n"
+        "- related: [task:t001, task:t001b]\n"
+        "- created: 2026-05-05\n\n"
+        "The body can use words like task, to, and the without task-ref false positives.\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    combined = result.stdout + result.stderr
+    assert result.returncode == 1, combined
+    assert "stale or invalid task ref 't001b' in tasks/active.md" in combined
+    assert "stale or invalid task ref 'task'" not in combined
+    assert "stale or invalid task ref 'to'" not in combined
+    assert "stale task ref 't001'" not in combined
+
+
+def test_validate_accepts_namespace_first_ref_for_declared_child(tmp_path: Path) -> None:
+    _write_common_files(tmp_path, "software")
+    _write_python3_stub(tmp_path / "bin")
+    _write_science_tool_stub(tmp_path / "bin")
+    (tmp_path / "science.yaml").write_text(
+        'name: "demo"\n'
+        'created: "2026-03-18"\n'
+        'last_modified: "2026-03-18"\n'
+        'summary: "demo"\n'
+        'status: "active"\n'
+        "profile: software\n"
+        "layout_version: 2\n"
+        "knowledge_profiles:\n"
+        "  local: local\n"
+        "children:\n"
+        "  - id: natural-systems\n"
+        f"    path: {tmp_path / 'natural-systems'}\n"
+        "    role: data-source\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "src").mkdir(parents=True)
+    (tmp_path / "tests").mkdir(parents=True)
+    (tmp_path / "doc" / "questions" / "x.md").write_text(
+        "---\n"
+        'id: "question:x"\n'
+        'type: "question"\n'
+        'related: ["natural-systems:task:t335"]\n'
+        "---\n\n"
+        "# X\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    combined = result.stdout + result.stderr
+    assert result.returncode == 0, combined
+    assert "natural-systems:task:t335" not in combined
+
+
+def test_validate_reports_unknown_namespace_with_raw_ref(tmp_path: Path) -> None:
+    _write_common_files(tmp_path, "software")
+    _write_python3_stub(tmp_path / "bin")
+    _write_science_tool_stub(tmp_path / "bin")
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "src").mkdir(parents=True)
+    (tmp_path / "tests").mkdir(parents=True)
+    (tmp_path / "doc" / "questions" / "x.md").write_text(
+        "---\n"
+        'id: "question:x"\n'
+        'type: "question"\n'
+        'related: ["natural-systems:task:t335"]\n'
+        "---\n\n"
+        "# X\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    combined = result.stdout + result.stderr
+    assert result.returncode == 1, combined
+    assert (
+        "Unknown project namespace 'natural-systems' in ref 'natural-systems:task:t335'. "
+        "Add it to science.yaml children: or use a local ref."
+    ) in combined
+
+
+def test_validate_reports_legacy_two_part_cross_project_ref(tmp_path: Path) -> None:
+    _write_common_files(tmp_path, "software")
+    _write_python3_stub(tmp_path / "bin")
+    _write_science_tool_stub(tmp_path / "bin")
+    (tmp_path / "science.yaml").write_text(
+        'name: "demo"\n'
+        'created: "2026-03-18"\n'
+        'last_modified: "2026-03-18"\n'
+        'summary: "demo"\n'
+        'status: "active"\n'
+        "profile: software\n"
+        "layout_version: 2\n"
+        "knowledge_profiles:\n"
+        "  local: local\n"
+        "children:\n"
+        "  - id: cbioportal\n"
+        f"    path: {tmp_path / 'cbioportal'}\n"
+        "    role: data-source\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "src").mkdir(parents=True)
+    (tmp_path / "tests").mkdir(parents=True)
+    (tmp_path / "doc" / "questions" / "x.md").write_text(
+        "---\n"
+        'id: "question:x"\n'
+        'type: "question"\n'
+        'related: ["cbioportal:q014"]\n'
+        "---\n\n"
+        "# X\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    combined = result.stdout + result.stderr
+    assert result.returncode == 0, combined
+    assert (
+        "Legacy cross-project ref 'cbioportal:q014' is missing an entity kind. "
+        "Use 'cbioportal:question:q014' or another explicit <project-id>:<kind>:<slug> ref."
+    ) in combined

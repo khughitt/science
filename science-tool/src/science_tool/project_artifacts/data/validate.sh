@@ -880,31 +880,130 @@ if [ ! -f "$TASKS_DIR/active.md" ]; then
     warn "$TASKS_DIR/active.md not found (use /science:tasks to create)"
 else
     info "$TASKS_DIR/active.md exists"
-    # Check for duplicate task IDs
-    task_ids=$(grep -oP '^\#\# \[\Kt\d+' "$TASKS_DIR/active.md" 2>/dev/null || true)
-    if [ -n "$task_ids" ]; then
-        dupes=$(echo "$task_ids" | sort | uniq -d)
-        if [ -n "$dupes" ]; then
-            error "duplicate task IDs in active.md: ${dupes}"
-        else
-            info "  no duplicate task IDs"
-        fi
-        # Check each task has required fields
-        while IFS= read -r tid; do
-            # Extract the block for this task (from ## [tNNN] to next ## or EOF)
-            block=$(sed -n "/^## \[${tid}\]/,/^## \[t/p" "$TASKS_DIR/active.md" | head -n -1)
-            if [ -z "$block" ]; then
-                block=$(sed -n "/^## \[${tid}\]/,\$p" "$TASKS_DIR/active.md")
-            fi
-            for field in aspects priority status created; do
-                if ! echo "$block" | grep -qP "^- ${field}:" 2>/dev/null; then
-                    error "task ${tid} missing required field: ${field}"
-                fi
-            done
-        done <<< "$task_ids"
-        info "  $(echo "$task_ids" | wc -l) task(s) validated"
+    task_check_result=$(XREF_TASKS="$TASKS_DIR" python3 <<'PYEOF' 2>/dev/null
+import os
+import re
+from pathlib import Path
+
+tasks_dir = Path(os.environ["XREF_TASKS"])
+header_any = re.compile(r"^##\s+\[([^\]]+)\]\s+(.+)$")
+header_valid = re.compile(r"^##\s+\[(t[0-9]{3,})\]\s+(.+)$")
+task_ref = re.compile(r"\bt\d+[A-Za-z.]*\b")
+local_parent = re.compile(r"^task:t[0-9]{3,}$")
+required = ("aspects", "priority", "status", "created")
+ref_fields = {"related", "blocked-by", "blocked_by", "parent"}
+
+
+def display_path(path):
+    try:
+        return path.relative_to(Path.cwd()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def split_list_value(raw):
+    value = raw.strip()
+    if value.startswith("[") and value.endswith("]"):
+        return [item.strip() for item in value[1:-1].split(",") if item.strip()]
+    return [value] if value else []
+
+
+paths = [tasks_dir / "active.md"]
+done_dir = tasks_dir / "done"
+if done_dir.is_dir():
+    paths.extend(sorted(done_dir.glob("*.md")))
+
+declared = set()
+blocks = []
+for path in paths:
+    if not path.is_file():
+        continue
+    lines = path.read_text(encoding="utf-8").splitlines()
+    current = None
+    for line_no, line in enumerate(lines, start=1):
+        any_match = header_any.match(line)
+        if any_match:
+            task_id = any_match.group(1)
+            valid_match = header_valid.match(line)
+            if valid_match is None:
+                print(
+                    f"ERROR:Invalid task id '{task_id}' in {display_path(path)}: task ids must match tNNN. "
+                    "Use parent: task:t001 for fragments or subtasks."
+                )
+                current = None
+                continue
+            current = {"path": display_path(path), "line": line_no, "id": task_id, "lines": []}
+            blocks.append(current)
+            declared.add(task_id)
+            continue
+        if current is not None:
+            current["lines"].append(line)
+
+seen = {}
+for task_id in sorted(declared):
+    count = sum(1 for block in blocks if block["id"] == task_id)
+    if count > 1:
+        seen[task_id] = count
+for task_id in sorted(seen):
+    print(f"ERROR:duplicate task IDs in active.md: {task_id}")
+
+for block in blocks:
+    fields = {}
+    for line in block["lines"]:
+        match = re.match(r"^-\s+([\w-]+):\s*(.*)$", line)
+        if match:
+            fields[match.group(1)] = match.group(2).strip()
+    for field in required:
+        if field not in fields:
+            print(f"ERROR:task {block['id']} missing required field: {field}")
+    parent = fields.get("parent", "")
+    if parent and not local_parent.match(parent):
+        print(f"ERROR:task {block['id']} parent must be local task ref like task:t001")
+    refs_to_check = []
+    for field_name in ref_fields:
+        for value in split_list_value(fields.get(field_name, "")):
+            refs_to_check.append(value)
+    for raw_ref in refs_to_check:
+        if raw_ref.count(":") == 2:
+            continue
+        for match in task_ref.finditer(raw_ref):
+            raw = match.group(0)
+            if raw in declared:
+                continue
+            if re.fullmatch(r"t[0-9]{3,}", raw):
+                print(f"ERROR:stale task ref '{raw}' in {block['path']}")
+            elif raw.startswith("t"):
+                print(f"ERROR:stale or invalid task ref '{raw}' in {block['path']}")
+
+if blocks:
+    print(f"OK:{len(blocks)}")
+else:
+    print("EMPTY:0")
+PYEOF
+) || task_check_result="SKIP"
+
+    if [ "$task_check_result" = "SKIP" ]; then
+        warn "Task queue check skipped (python3 error)"
     else
-        info "  no tasks in active.md"
+        task_count=0
+        while IFS=: read -r status detail; do
+            case "$status" in
+                ERROR)
+                    error "$detail"
+                    ;;
+                OK)
+                    task_count="$detail"
+                    ;;
+                EMPTY)
+                    task_count=0
+                    ;;
+            esac
+        done <<< "$task_check_result"
+        if [ "$task_count" = "0" ]; then
+            info "  no tasks in active.md"
+        else
+            info "  ${task_count} task(s) validated"
+        fi
     fi
 fi
 
@@ -998,7 +1097,7 @@ fi
 echo ""
 echo "Checking frontmatter cross-references..."
 
-xref_result=$(XREF_SPECS="$SPECS_DIR" XREF_DOC="$DOC_DIR" XREF_TASKS="$TASKS_DIR" XREF_ENTITIES="$LOCAL_PROFILE_DIR/entities.yaml" python3 << 'PYEOF'
+xref_result=$(XREF_SPECS="$SPECS_DIR" XREF_DOC="$DOC_DIR" XREF_TASKS="$TASKS_DIR" XREF_ENTITIES="$LOCAL_PROFILE_DIR/entities.yaml" XREF_SCIENCE_YAML="science.yaml" python3 << 'PYEOF'
 import os, re
 
 try:
@@ -1008,6 +1107,13 @@ except Exception:  # pragma: no cover - shell fallback
 
 QUOTE = "[\"']?"
 NOT_QUOTE = "[^\"'\n]+"
+LOCAL_KINDS = {
+    "assumption", "concept", "data-package", "dataset", "discussion", "experiment",
+    "finding", "hypothesis", "inquiry", "interpretation", "mechanism", "method",
+    "model", "observation", "paper", "pre-registration", "proposition", "question",
+    "report", "source", "story", "task", "theme", "topic", "validation-report",
+    "workflow", "workflow-run", "meta",
+}
 
 def extract_frontmatter(path):
     try:
@@ -1069,6 +1175,45 @@ def load_task_ids(tasks_dir):
     return task_ids
 
 
+def load_project_ids(path):
+    if yaml is None or not os.path.isfile(path):
+        return set()
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+    except Exception:
+        return set()
+    ids = set()
+    project_id = data.get("id")
+    if isinstance(project_id, str) and project_id:
+        ids.add(project_id)
+    children = data.get("children")
+    if isinstance(children, list):
+        for child in children:
+            if isinstance(child, dict) and isinstance(child.get("id"), str):
+                ids.add(child["id"])
+    return ids
+
+
+def classify_ref(ref, project_ids):
+    parts = ref.split(":")
+    if re.fullmatch(r"t[0-9]{3,}", ref):
+        return "local"
+    if len(parts) == 2:
+        first, _slug = parts
+        if first in LOCAL_KINDS:
+            return "local"
+        if first in project_ids:
+            return "legacy"
+        return "local"
+    if len(parts) == 3:
+        project_id, _kind, _slug = parts
+        if project_id in project_ids:
+            return "cross"
+        return "unknown-namespace"
+    return "local"
+
+
 def load_structured_ids(path):
     ids = set()
     if yaml is None or not os.path.isfile(path):
@@ -1108,12 +1253,30 @@ for search_dir in search_dirs:
 
 all_ids.update(load_task_ids(os.environ["XREF_TASKS"]))
 all_ids.update(load_structured_ids(os.environ["XREF_ENTITIES"]))
+project_ids = load_project_ids(os.environ["XREF_SCIENCE_YAML"])
+
+
+def emit(*parts):
+    print("\t".join(str(part) for part in parts))
+
 
 broken = 0
 for path, refs in refs_by_file.items():
     for ref in refs:
+        shape = classify_ref(ref, project_ids)
+        if shape == "cross":
+            continue
+        if shape == "unknown-namespace":
+            project_id = ref.split(":", 1)[0]
+            emit("UNKNOWN_NAMESPACE", os.path.basename(path), project_id, "-", ref)
+            broken += 1
+            continue
+        if shape == "legacy":
+            project_id, slug = ref.split(":", 1)
+            emit("LEGACY_PROJECT_REF", os.path.basename(path), project_id, slug, ref)
+            continue
         if ref not in all_ids:
-            print(f'BROKEN:{os.path.basename(path)}:{ref}')
+            emit("BROKEN", os.path.basename(path), ref, "-", ref)
             broken += 1
 if broken == 0:
     print('OK')
@@ -1125,9 +1288,14 @@ if [ "$xref_result" = "SKIP" ]; then
 elif [ "$xref_result" = "OK" ]; then
     info "All frontmatter cross-references valid"
 else
-    while IFS=: read -r status filename ref; do
+    while IFS=$'\t' read -r status filename project_id slug raw; do
         if [ "$status" = "BROKEN" ]; then
+            ref="$project_id"
             warn "Broken reference in $filename: related ID '$ref' not found"
+        elif [ "$status" = "UNKNOWN_NAMESPACE" ]; then
+            error "Unknown project namespace '${project_id}' in ref '${raw}'. Add it to science.yaml children: or use a local ref."
+        elif [ "$status" = "LEGACY_PROJECT_REF" ]; then
+            warn "Legacy cross-project ref '${raw}' is missing an entity kind. Use '${project_id}:question:${slug}' or another explicit <project-id>:<kind>:<slug> ref."
         fi
     done < <(echo "$xref_result")
 fi
