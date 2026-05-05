@@ -3,19 +3,26 @@
 **Audit date:** 2026-05-04
 **Project root:** `~/d/cancer/data-sources/cbioportal` (= `/mnt/ssd/Dropbox/cancer/data-sources/cbioportal`)
 **Scope:** all 2 pre-regs under `doc/meta/pre-registration-*.md`
-**Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 2)
+**Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 3; code prerequisites merged 2026-05-04)
 
 ---
 
 ## Summary
 
-cbioportal has 2 pre-regs, both from mid-late April 2026. Both have **mostly-canonical frontmatter** but use `status: active` (non-canonical vocabulary) and a doubled-prefix `id:` field (`pre-registration:pre-registration-<slug>`). Beyond the convention drift, the two pre-regs are very different in shape:
+cbioportal has 2 pre-regs, both from mid-late April 2026. Both had **mostly-canonical frontmatter** but used `status: active` (non-canonical vocabulary) and a doubled-prefix `id:` field (`pre-registration:pre-registration-<slug>`). Beyond the convention drift, the two pre-regs are very different in shape:
 
-1. **`t077-glmm-logit-pooling`** is the cbioportal version of the **hypothesis-in-body-only pattern** surfaced by multiple-myeloma's audit. Its `related:` field has zero epistemic targets — only tasks (operational), topic (reference), search (operational), and 7 papers (operational). The body, however, opens with a clear "H1 (primary, confirmatory)" claim that's defined in `specs/research-question.md` (a `spec:` entity, OPERATIONAL) — **not** as a formal `hypothesis:hN-...` entity, even though cbioportal does have h01-h06 formal hypothesis entities elsewhere. So under the recast, t077 produces **zero `bears_on` edges** despite testing a real epistemic claim.
+1. **`t077-glmm-logit-pooling`** is the cbioportal version of the **hypothesis-in-body-only pattern** surfaced by multiple-myeloma's audit. Its original `related:` field had zero epistemic targets — only tasks (operational), topic (reference), search (operational), and 7 papers (operational). The body, however, opens with a clear "H1 (primary, confirmatory)" claim that's defined in `specs/research-question.md` (a `spec:` entity, OPERATIONAL). The closest formal hypothesis entity is `hypothesis:h02-cross-study-ranking-divergence-is-structured`, whose body explicitly names the flagship research question about cross-study recurring gene-cancer associations. The migration should add that formal hypothesis to `related:` and `commits_to:`.
 
-2. **`t126-sbs1-lrr-bias-test`** is a more typical mixed pre-reg, with `question:q009-...`, a discussion, and 3 interpretations in `related:` providing epistemic linkage. The bias test is methodological (testing whether SBS1 LRR is a contamination flag) but with clear epistemic targets in `related:`.
+2. **`t126-sbs1-lrr-bias-test`** is a more typical mixed pre-reg, with `question:q009-...`, a discussion, and 3 interpretations in `related:` providing epistemic linkage. The bias test is methodological (testing whether SBS1 LRR is a contamination flag) but with a clear epistemic target in `related:`. The migration should add `commits_to: [question:q009-sbs1-lrr-bias-as-normal-contamination-flag]` so prior interpretations remain context rather than commitment targets.
 
-**Recommendation for cbioportal:** No file edits required for the recast itself. The audit reinforces multiple-myeloma's Issue 1 (hypothesis-in-body-only). Convention-drift items (`status: active`, doubled `id:` prefix, `task:bias-audit-...` shape) are pre-existing data-quality issues out of t012 scope.
+**Recommendation for cbioportal:** Apply a small project migration after the recast lands:
+
+- canonicalize both pre-reg IDs (`pre-registration:t077-glmm-logit-pooling`, `pre-registration:t126-sbs1-lrr-bias-test`);
+- change both pre-reg statuses from `active` to `committed`;
+- add explicit `commits_to:` scoping;
+- update authored backlinks from the old doubled t126 ID to the canonical ID;
+- remove stale local extension declarations for kinds now supplied by the Science core registry;
+- leave `task:bias-audit-...` regularization for a separate convention cleanup.
 
 ---
 
@@ -28,11 +35,11 @@ cbioportal has 2 pre-regs, both from mid-late April 2026. Both have **mostly-can
 
 ### Frontmatter anomalies
 
-Both pre-regs have:
-- `id:` with **doubled prefix** — `pre-registration:pre-registration-t077-glmm-logit-pooling` instead of `pre-registration:t077-glmm-logit-pooling`. This is a frontmatter authoring drift; the canonical shape per `2026-04-25-pre-registration-canonical-type.md` is `pre-registration:<slug>`. Pre-existing data-quality issue.
+Both pre-regs originally had:
+- `id:` with **doubled prefix** — `pre-registration:pre-registration-t077-glmm-logit-pooling` instead of `pre-registration:t077-glmm-logit-pooling`. This is a frontmatter authoring drift; the canonical shape per `2026-04-25-pre-registration-canonical-type.md` is `pre-registration:<slug>`.
 - `status: active` — non-canonical (canonical: `draft` / `committed` / `complete`).
 
-Both have full `committed:` dates and `type:` fields, so the recast's auto-derivation rule will reach them — the doubled prefix in `id:` is cosmetic for the recast (it's still a valid pre-registration identifier; just an unusual slug).
+Migration action: fix both IDs and statuses. The ID change requires updating authored backlinks to the old t126 pre-reg ID.
 
 `t077` also references `task:bias-audit-cross-study-aggregation-pipeline` — same `task:bias-audit-...` non-canonical shape seen in protein-landscape's t098. Cross-project convention drift.
 
@@ -58,14 +65,14 @@ This is the cleanest example I've seen of the pattern multiple-myeloma's audit s
 
 H1 is a real epistemic claim about cross-study meta-analysis recovering robust gene-cancer associations. **G1 is an operational gate** — methodological convergence is the gating condition; if G1 fails, the H1 evidence is not evaluable.
 
-Under the recast as currently drafted:
-- `related:` has 0 epistemic targets. The auto-derivation rule fires no `bears_on` edges.
+Under the original revision 2 audit:
+- `related:` had 0 epistemic targets. The auto-derivation rule would fire no `bears_on` edges.
 - The body's H1 references `specs/research-question.md` — a `spec:` entity, OPERATIONAL. Even if we somehow extracted that ref, it wouldn't trigger `bears_on`.
-- **The pre-reg's epistemic commitment is invisible to the materialized graph.**
+- **The pre-reg's epistemic commitment was invisible to the materialized graph.**
 
 This compounds with multiple-myeloma's Issue 1 (pre-canonical pre-regs reference hypotheses inline-only): cbioportal also has formal hypothesis entities (`specs/hypotheses/h01-...md` through `h06-...md`), but **none of them are the H1 t077 references**. The cbioportal team uses "H1" in the research-question doc to mean the project's central hypothesis at a different level than h01-h06. There's no formal hypothesis entity for t077 to point at, even if it wanted to.
 
-**Resolution:** same as mm Issue 1 — project-side cleanup (promote `specs/research-question.md`'s H1 to a formal hypothesis entity, or accept the gap for this style of pre-reg). The recast adds prose to `interpret-results` § 4d for the transition period.
+**Resolution:** project-side cleanup by linking the pre-reg to the closest formal hypothesis already in the project: `hypothesis:h02-cross-study-ranking-divergence-is-structured`. This avoids inventing a new entity during migration while making the pre-reg's central epistemic commitment graph-visible.
 
 The G1 / H1 split is also worth noting structurally: the pre-reg explicitly distinguishes operational (G1, methodological convergence) from epistemic (H1, the meta-analysis claim) commitments **in body language**, while collapsing them in `related:`. This is exactly what the natural-systems audit's Issue 1 (`related:` conflation) describes — the pre-reg's author has the operational/epistemic distinction in mind but the schema doesn't capture it. A sub-prompt at authoring time would help.
 
@@ -81,7 +88,7 @@ Tests whether SBS1 log-rate-ratio bias can serve as a flag for normal-tissue con
 - The discussion ref records the t124/q009 fork decision.
 - Tasks (t126, t124, t109, t110, t121) are operational.
 
-Under the recast: `bears_on` edge from the pre-reg to `question:q009`, with depth-1 weight; question's freshness propagates downstream when the pre-reg's analysis lands. Clean fit.
+Under the recast: `bears_on` edge from the pre-reg to `question:q009`, with depth-1 weight; question's freshness propagates downstream when the pre-reg's analysis lands. Clean fit. Because the pre-reg also cites prior interpretations, the migration should use `commits_to:` so those prior evidence documents stay contextual.
 
 ---
 
@@ -89,11 +96,11 @@ Under the recast: `bears_on` edge from the pre-reg to `question:q009`, with dept
 
 ### Issue 1 (recurrent, strengthened): hypothesis-in-body-only
 
-Multiple-myeloma surfaced this issue with 4 pre-canonical pre-regs. cbioportal extends it to a different shape: **a fully-canonical-frontmatter pre-reg whose body references a hypothesis that exists only in a `spec:` entity, not as a formal `hypothesis:` entity.**
+Multiple-myeloma surfaced this issue with 4 pre-canonical pre-regs. cbioportal extends it to a different shape: **a mostly-canonical-frontmatter pre-reg whose body references a hypothesis that exists only in a `spec:` entity, not as a formal `hypothesis:` entity.**
 
 This isn't a frontmatter migration issue (cbioportal already has canonical-ish frontmatter); it's a **deeper data-modeling gap** — the project's central research-question hypothesis isn't promoted to a formal `hypothesis:` entity, so there's nothing for `related:` to point at even if the author wanted to.
 
-**Resolution:** project-side promotion of research-question H1 to a formal hypothesis entity (out of t012 scope). The recast plan's prose note covers the transition.
+**Resolution:** project-side migration can either promote research-question H1 to a formal hypothesis entity or link to the closest existing hypothesis. For this migration, link t077 to `hypothesis:h02-cross-study-ranking-divergence-is-structured`, because h02 explicitly formalizes the flagship cross-study replication/ranking premise.
 
 This finding **does not change the recast plan's structure**; it strengthens the existing Issue 1 from mm and reinforces that the project-side cleanup work is real and meaningful for the recast's full benefit.
 
@@ -115,12 +122,14 @@ All pre-existing; out of t012 scope.
 
 ### For cbioportal
 
-1. **No file edits required for the recast itself.**
-2. **Pre-existing convention drift** (out of t012 scope):
-   - Doubled `id:` prefix on both pre-regs — fix to canonical `pre-registration:<slug>` shape.
-   - `status: active` — migrate to canonical vocabulary.
-   - `task:bias-audit-...` ref shape on t077 — regularize.
-3. **Consider:** promote `specs/research-question.md`'s H1 to a formal `hypothesis:` entity so future pre-regs (and t077 itself, if revised) can point at it via `related:`. This is a deeper data-modeling decision not blocking the recast.
+1. **Canonical frontmatter:** fix both doubled pre-reg IDs and change `status: active` to `status: committed`.
+2. **Commitment scoping:** add `commits_to:` to both pre-regs.
+   - t077 → `hypothesis:h02-cross-study-ranking-divergence-is-structured`
+   - t126 → `question:q009-sbs1-lrr-bias-as-normal-contamination-flag`
+3. **Backlink rewrite:** update authored references to the old doubled t126 ID.
+4. **Local profile cleanup:** remove `pre-registration` and `curation-sweep` from `knowledge/sources/local/manifest.yaml`; both are now registered by Science core and local redeclaration shadows the shared registry.
+5. **Defer:** `task:bias-audit-...` ref shape on t077; this is cross-project convention drift, not prereg-recast blocking.
+6. **Consider later:** promote `specs/research-question.md`'s H1 to a dedicated formal `hypothesis:` entity if h02 is too narrow for future use.
 
 ### For the recast plan (`docs/plans/2026-05-04-prereg-recast-draft.md`)
 
@@ -131,9 +140,8 @@ All pre-existing; out of t012 scope.
 
 ## Open questions for project owner
 
-1. For `t077-glmm-logit-pooling`: is the H1 in body prose intended to refer to the project's research-question-level hypothesis, or to one of the formal `hypothesis:h01-h06` entities? (If the latter, would adding the appropriate ref to `related:` be acceptable as part of a regularization pass?)
-2. The doubled `id:` prefix (`pre-registration:pre-registration-<slug>`) on both pre-regs — is this an intentional namespacing choice or convention drift to be regularized?
-3. Does the project have any tooling that loads `topic:` or `search:` refs from pre-reg `related:`? (Both are non-bearing under the recast; silent-skip is fine if no tooling depends on them.)
+1. For `t077-glmm-logit-pooling`: is `hypothesis:h02-cross-study-ranking-divergence-is-structured` broad enough as the formal target, or should research-question H1 become its own hypothesis entity later?
+2. Does the project have any tooling that loads `topic:` or `search:` refs from pre-reg `related:`? (Both are non-bearing under the recast; silent-skip is fine if no tooling depends on them.)
 
 ---
 
