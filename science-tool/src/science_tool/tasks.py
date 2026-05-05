@@ -76,18 +76,31 @@ def _parse_parent(raw: str, *, task_id: str) -> str:
     raise ValueError(f"parent for task {task_id} must be local task ref like task:t001")
 
 
+def _required_field(fields: dict[str, str], field: str, *, task_id: str, path: Path | None) -> str:
+    try:
+        return fields[field]
+    except KeyError as exc:
+        where = f" in {path}" if path is not None else ""
+        raise ValueError(f"task {task_id}{where} missing required field: {field}") from exc
+
+
 def _parse_task_block(lines: list[str], *, path: Path | None = None) -> Task:
     """Parse a single task block (header line + metadata + description)."""
     task_id, title = _parse_task_header(lines[0], path=path)
 
     fields: dict[str, str] = {}
     desc_start = 1
+    seen_field = False
     for i, line in enumerate(lines[1:], start=1):
         fm = _FIELD_RE.match(line)
         if fm:
+            seen_field = True
             fields[fm.group(1)] = fm.group(2).strip()
             desc_start = i + 1
         elif line.strip() == "":
+            if not seen_field:
+                desc_start = i + 1
+                continue
             desc_start = i + 1
             break
         else:
@@ -97,7 +110,7 @@ def _parse_task_block(lines: list[str], *, path: Path | None = None) -> Task:
     desc_lines = lines[desc_start:]
     description = "\n".join(desc_lines).strip()
 
-    created = date.fromisoformat(fields["created"])
+    created = date.fromisoformat(_required_field(fields, "created", task_id=task_id, path=path))
     completed_raw = fields.get("completed")
     completed = date.fromisoformat(completed_raw) if completed_raw else None
 

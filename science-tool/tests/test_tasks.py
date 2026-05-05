@@ -200,6 +200,71 @@ Just a minimal task.
     assert t.completed is None
 
 
+def test_parse_accepts_blank_line_between_header_and_fields(tmp_path: Path) -> None:
+    f = _write(
+        tmp_path / "active.md",
+        """\
+## [t335] Natural systems follow-up
+
+- type: dev
+- priority: P2
+- status: proposed
+- created: 2026-04-25
+
+Body after a natural blank line.
+""",
+    )
+
+    task = parse_tasks(f)[0]
+
+    assert task.id == "t335"
+    assert task.priority == "P2"
+    assert task.status == "proposed"
+    assert task.created == date(2026, 4, 25)
+    assert task.description == "Body after a natural blank line."
+
+
+def test_parse_still_accepts_contiguous_header_and_fields(tmp_path: Path) -> None:
+    f = _write(
+        tmp_path / "active.md",
+        """\
+## [t336] Contiguous fields
+- type: dev
+- priority: P1
+- status: active
+- created: 2026-04-25
+
+Body.
+""",
+    )
+
+    task = parse_tasks(f)[0]
+
+    assert task.id == "t336"
+    assert task.priority == "P1"
+    assert task.status == "active"
+
+
+def test_parse_missing_created_field_names_task_and_file(tmp_path: Path) -> None:
+    f = _write(
+        tmp_path / "active.md",
+        """\
+## [t337] Missing created
+- type: dev
+- priority: P2
+- status: proposed
+
+Body.
+""",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"task t337 in .*active\.md missing required field: created",
+    ):
+        parse_tasks(f)
+
+
 def test_roundtrip_parse_render_parse(tmp_path: Path) -> None:
     f = _write(tmp_path / "active.md", SINGLE_TASK)
     tasks1 = parse_tasks(f)

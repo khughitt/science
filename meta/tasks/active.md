@@ -88,10 +88,11 @@ Tests whether the H01 finding generalises beyond binary signals. If it does, D-0
 
 ## [t006] Fix `parse_tasks` blank-line-after-header silently dropping fields
 - priority: P2
-- status: proposed
+- status: done
 - aspects: [software-development]
 - related: []
 - created: 2026-04-25
+- completed: 2026-05-05
 
 `science_tool.tasks._parse_task_block` (`science-tool/src/science_tool/tasks.py:33-77`) walks lines after the `## [tNNN] Title` header collecting `- key: value` field bullets, but breaks on the *first* blank line (lines 50–52). When a task is authored with a blank line between the header and the field list — a natural shape and one not rejected by `validate.sh` — every field is silently dropped, then `KeyError: 'created'` is raised at line 60, which crashes any caller that touches the file (`science-tool health`, `science-tool tasks list`, the `task` storage adapter, and the curation flows that load tasks). This was hit in `natural-systems` on 3 newly-authored tasks (t335, t336, t337) and required hand-patching the file before `science-tool health` would run.
 
@@ -100,6 +101,8 @@ Fix: skip leading blank lines between the header and the first `- key: value` li
 Add a regression test in `science-tool/tests/test_tasks.py` covering both shapes (blank-after-header and contiguous), plus a "header but truly no fields" negative case to confirm the new error message.
 
 Surfaced by: `natural-systems /science:health` 2026-04-25.
+
+**COMPLETED 2026-05-05.** `science_tool.tasks._parse_task_block` now skips leading blank lines between a task header and metadata fields instead of terminating field parsing. Missing required metadata now raises a path-aware `ValueError` naming the task and missing field instead of surfacing a raw `KeyError`. Regression tests cover blank-after-header parsing, contiguous metadata parsing, and the missing-`created` error.
 
 ## [t007] Fix `_write_active` silently dropping `tasks/active.md` preamble
 - priority: P2
