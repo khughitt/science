@@ -160,6 +160,31 @@ def _write_demo_project(
     )
 
 
+def _write_minimal_entity(
+    path: Path,
+    canonical_id: str,
+    kind: str,
+    title: str,
+    extra_frontmatter: list[str] | None = None,
+) -> None:
+    lines = [
+        "---",
+        f'id: "{canonical_id}"',
+        f'kind: "{kind}"',
+        f'title: "{title}"',
+        'status: "active"',
+        'created: "2026-05-01"',
+        'updated: "2026-05-01"',
+        "related: []",
+        "source_refs: []",
+    ]
+    if extra_frontmatter:
+        lines.extend(extra_frontmatter)
+    lines.extend(["---", "", f"{title} body.", ""])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
 def test_materialize_graph_includes_task_nodes_and_canonical_links(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
@@ -738,6 +763,203 @@ def test_materialize_graph_applies_source_entity_relations(tmp_path: Path) -> No
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
 
     assert (PROJECT_NS["interpretation/new"], SCI.amends, PROJECT_NS["interpretation/old"]) in knowledge
+
+
+def test_materialize_graph_accepts_conclusion_amends_and_supersedes(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    _write_minimal_entity(
+        project / "doc" / "interpretations" / "old.md",
+        "interpretation:old",
+        "interpretation",
+        "Old interpretation",
+    )
+    _write_minimal_entity(
+        project / "doc" / "interpretations" / "new.md",
+        "interpretation:new",
+        "interpretation",
+        "New interpretation",
+        [
+            "relations:",
+            '  - predicate: "sci:amends"',
+            '    target: "interpretation:old"',
+            '  - predicate: "sci:supersedes"',
+            '    target: "interpretation:old"',
+        ],
+    )
+
+    trig_path = materialize_graph(project)
+
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    assert (PROJECT_NS["interpretation/new"], SCI.amends, PROJECT_NS["interpretation/old"]) in knowledge
+    assert (PROJECT_NS["interpretation/new"], SCI.supersedes, PROJECT_NS["interpretation/old"]) in knowledge
+
+
+def test_materialize_graph_preserves_workflow_run_supersedes(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    _write_minimal_entity(project / "doc" / "runs" / "old.md", "workflow-run:old-run", "workflow-run", "Old run")
+    _write_minimal_entity(
+        project / "doc" / "runs" / "new.md",
+        "workflow-run:new-run",
+        "workflow-run",
+        "New run",
+        [
+            "relations:",
+            '  - predicate: "sci:supersedes"',
+            '    target: "workflow-run:old-run"',
+        ],
+    )
+
+    trig_path = materialize_graph(project)
+
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    assert (PROJECT_NS["workflow-run/new-run"], SCI.supersedes, PROJECT_NS["workflow-run/old-run"]) in knowledge
+
+
+def test_materialize_graph_rejects_invalid_supersedes_pair(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    _write_minimal_entity(
+        project / "doc" / "interpretations" / "new.md",
+        "interpretation:new",
+        "interpretation",
+        "New interpretation",
+    )
+    _write_minimal_entity(project / "doc" / "runs" / "old.md", "workflow-run:old-run", "workflow-run", "Old run")
+    local_sources = project / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "relations.yaml").write_text(
+        "\n".join(
+            [
+                "relations:",
+                '  - subject: "interpretation:new"',
+                '    predicate: "sci:supersedes"',
+                '    object: "workflow-run:old-run"',
+                '    source_path: "knowledge/sources/local/relations.yaml"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"invalid authored relation endpoint.*interpretation:new.*sci:supersedes.*workflow-run:old-run.*relations.yaml",
+    ):
+        materialize_graph(project)
+
+
+def test_materialize_graph_rejects_invalid_amends_pair(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    _write_minimal_entity(project / "doc" / "runs" / "old.md", "workflow-run:old-run", "workflow-run", "Old run")
+    _write_minimal_entity(
+        project / "doc" / "runs" / "new.md",
+        "workflow-run:new-run",
+        "workflow-run",
+        "New run",
+        [
+            "relations:",
+            '  - predicate: "sci:amends"',
+            '    target: "workflow-run:old-run"',
+        ],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"invalid authored relation endpoint.*workflow-run:new-run.*sci:amends.*workflow-run:old-run.*new.md",
+    ):
+        materialize_graph(project)
+
+
+def test_materialize_graph_rejects_self_supersedes(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    _write_minimal_entity(
+        project / "doc" / "interpretations" / "same.md",
+        "interpretation:same",
+        "interpretation",
+        "Self replacement",
+        [
+            "relations:",
+            '  - predicate: "sci:supersedes"',
+            '    target: "interpretation:same"',
+        ],
+    )
+
+    with pytest.raises(ValueError, match=r"self-referential authored relation.*interpretation:same.*sci:supersedes"):
+        materialize_graph(project)
+
+
+def test_materialize_graph_rejects_amendment_cycle(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    _write_minimal_entity(
+        project / "doc" / "interpretations" / "a.md",
+        "interpretation:a",
+        "interpretation",
+        "A",
+        [
+            "relations:",
+            '  - predicate: "sci:amends"',
+            '    target: "interpretation:b"',
+        ],
+    )
+    _write_minimal_entity(
+        project / "doc" / "interpretations" / "b.md",
+        "interpretation:b",
+        "interpretation",
+        "B",
+        [
+            "relations:",
+            '  - predicate: "sci:amends"',
+            '    target: "interpretation:a"',
+        ],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"cycle in amendment/supersession relations: interpretation:a -> interpretation:b -> interpretation:a",
+    ):
+        materialize_graph(project)
+
+
+def test_materialize_graph_rejects_mixed_amends_supersedes_cycle(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    _write_minimal_entity(
+        project / "doc" / "interpretations" / "a.md",
+        "interpretation:a",
+        "interpretation",
+        "A",
+        [
+            "relations:",
+            '  - predicate: "sci:amends"',
+            '    target: "interpretation:b"',
+        ],
+    )
+    _write_minimal_entity(
+        project / "doc" / "interpretations" / "b.md",
+        "interpretation:b",
+        "interpretation",
+        "B",
+        [
+            "relations:",
+            '  - predicate: "sci:supersedes"',
+            '    target: "interpretation:a"',
+        ],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"cycle in amendment/supersession relations: interpretation:a -> interpretation:b -> interpretation:a",
+    ):
+        materialize_graph(project)
 
 
 def test_materialize_graph_applies_structured_relations_with_external_targets(tmp_path: Path) -> None:
