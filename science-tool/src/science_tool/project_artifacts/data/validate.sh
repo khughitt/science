@@ -37,7 +37,13 @@ trap 'dispatch_hook post_validation' EXIT
 # validate.sh — Structural validation for Science research projects
 # Returns non-zero on failure. Used as backpressure in research loops.
 #
-# Usage: bash validate.sh [--verbose]
+# Usage: bash validate.sh [--verbose] [--strict]
+#
+# Flags:
+#   --verbose   Print info-level lines for passing checks (default: only WARN/ERROR).
+#   --strict    Emit WARN for advisory/structural checks that are otherwise silent
+#               (e.g. missing optional sections in templates). Off by default so
+#               the loop signal stays scoped to canonical violations.
 #
 # Env opt-outs (managed-artifact contract):
 #   SCIENCE_VALIDATE_SKIP_DOTENV=1    skip auto-sourcing of project-local .env
@@ -58,9 +64,30 @@ if [ -z "${SCIENCE_VALIDATE_SKIP_DOTENV:-}" ] && [ -f ".env" ]; then
     set +a
 fi
 
-VERBOSE="${1:-}"
+VERBOSE=0
+STRICT=0
 ERRORS=0
 WARNINGS=0
+
+usage() {
+    printf "Usage: bash validate.sh [--verbose] [--strict]\n"
+}
+
+for arg in "$@"; do
+    case "$arg" in
+        --verbose) VERBOSE=1 ;;
+        --strict)  STRICT=1 ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            printf "ERROR: Unknown argument: %s\n" "$arg" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
 
 red()    { printf "\033[31m%s\033[0m\n" "$1"; }
 yellow() { printf "\033[33m%s\033[0m\n" "$1"; }
@@ -76,8 +103,17 @@ warn() {
     WARNINGS=$((WARNINGS + 1))
 }
 
+# Emit a WARN only when --strict is set. Used for advisory/structural checks
+# (missing optional template sections, etc.) that should not contribute to the
+# default loop signal but are useful when explicitly requested.
+strict_warn() {
+    if [ "$STRICT" -eq 1 ]; then
+        warn "$1"
+    fi
+}
+
 info() {
-    if [ "$VERBOSE" = "--verbose" ]; then
+    if [ "$VERBOSE" -eq 1 ]; then
         echo "  $1"
     fi
 }
@@ -91,6 +127,7 @@ resolve_science_tool() {
     if command -v uv &>/dev/null; then
         for candidate in \
             "./science-tool" \
+            "../../../science/science-tool" \
             "../science/science-tool" \
             "../science-tool"
         do
