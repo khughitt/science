@@ -476,6 +476,9 @@ Existing description.
     return tasks_dir
 
 
+PREAMBLE = "<!-- Task queue. Use /science:tasks to manage. -->\n\n"
+
+
 class TestAddTask:
     def test_add_creates_task_in_active(self, tmp_path: Path) -> None:
         tasks_dir = tmp_path / "tasks"
@@ -518,6 +521,15 @@ class TestAddTask:
         assert t.blocked_by == ["task:t001"]
         assert t.description == "Some notes."
 
+    def test_add_preserves_active_preamble(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        active = tasks_dir / "active.md"
+        active.write_text(PREAMBLE + active.read_text(encoding="utf-8"), encoding="utf-8")
+
+        add_task(tmp_path, tasks_dir, title="Second task", task_type="dev", priority="P1")
+
+        assert active.read_text(encoding="utf-8").startswith(PREAMBLE)
+
 
 class TestCompleteTask:
     def test_complete_moves_to_done(self, tmp_path: Path) -> None:
@@ -544,6 +556,15 @@ class TestCompleteTask:
         with pytest.raises(KeyError):
             complete_task(tasks_dir, "t999")
 
+    def test_complete_preserves_active_preamble(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        active = tasks_dir / "active.md"
+        active.write_text(PREAMBLE + active.read_text(encoding="utf-8"), encoding="utf-8")
+
+        complete_task(tasks_dir, "t001")
+
+        assert active.read_text(encoding="utf-8") == PREAMBLE
+
 
 class TestDeferTask:
     def test_defer_sets_status(self, tmp_path: Path) -> None:
@@ -557,6 +578,15 @@ class TestDeferTask:
         tasks_dir = _make_tasks_dir(tmp_path)
         t = defer_task(tasks_dir, "t001", reason="Waiting on data.")
         assert "Waiting on data." in t.description
+
+    def test_defer_preserves_active_preamble(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        active = tasks_dir / "active.md"
+        active.write_text(PREAMBLE + active.read_text(encoding="utf-8"), encoding="utf-8")
+
+        defer_task(tasks_dir, "t001", reason="Waiting on data.")
+
+        assert active.read_text(encoding="utf-8").startswith(PREAMBLE)
 
 
 class TestBlockTask:
@@ -610,6 +640,26 @@ class TestEditTask:
         tasks_dir = _make_tasks_dir(tmp_path)
         with pytest.raises(KeyError):
             edit_task(tmp_path, tasks_dir, "t999", priority="P3")
+
+    def test_edit_preserves_active_preamble(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        active = tasks_dir / "active.md"
+        active.write_text(PREAMBLE + active.read_text(encoding="utf-8"), encoding="utf-8")
+
+        edit_task(tmp_path, tasks_dir, "t001", priority="P3")
+
+        assert active.read_text(encoding="utf-8").startswith(PREAMBLE)
+
+
+class TestRetireTaskPreamble:
+    def test_retire_preserves_active_preamble(self, tmp_path: Path) -> None:
+        tasks_dir = _make_tasks_dir(tmp_path)
+        active = tasks_dir / "active.md"
+        active.write_text(PREAMBLE + active.read_text(encoding="utf-8"), encoding="utf-8")
+
+        retire_task(tasks_dir, "t001", reason="Out of scope.")
+
+        assert active.read_text(encoding="utf-8") == PREAMBLE
 
 
 class TestTaskLocation:

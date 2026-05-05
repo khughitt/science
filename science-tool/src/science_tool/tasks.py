@@ -37,6 +37,7 @@ _LIST_RE = re.compile(r"^\[(.+)\]$")
 _MARKDOWN_HEADING_RE = re.compile(r"^(#{1,3})\s+.+$")
 _NOTES_HEADING_RE = re.compile(r"^###\s+Notes\s*$")
 _LOCAL_PARENT_RE = re.compile(r"^task:t[0-9]{3,}$")
+_TASK_HEADING_PREFIX_RE = re.compile(r"^##\s+\[", re.MULTILINE)
 
 
 def _parse_list_value(raw: str) -> list[str]:
@@ -243,9 +244,26 @@ def _read_active(tasks_dir: Path) -> list[Task]:
     return parse_tasks(tasks_dir / "active.md")
 
 
+def _task_file_preamble(path: Path) -> str:
+    if not path.is_file():
+        return ""
+    text = path.read_text()
+    match = _TASK_HEADING_PREFIX_RE.search(text)
+    if match is None:
+        return text
+    return text[: match.start()]
+
+
+def _render_task_file(path: Path, tasks: list[Task]) -> str:
+    preamble = _task_file_preamble(path)
+    rendered = render_tasks(tasks) if tasks else ""
+    return preamble + rendered
+
+
 def _write_active(tasks_dir: Path, tasks: list[Task]) -> None:
     tasks_dir.mkdir(parents=True, exist_ok=True)
-    (tasks_dir / "active.md").write_text(render_tasks(tasks) if tasks else "")
+    active = tasks_dir / "active.md"
+    active.write_text(_render_task_file(active, tasks))
 
 
 @dataclass(frozen=True)
@@ -292,7 +310,7 @@ def find_task_location(tasks_dir: Path, task_id: str) -> TaskLocation:
 def write_task_location(location: TaskLocation) -> None:
     """Rewrite the markdown file that owns a task location."""
     location.path.parent.mkdir(parents=True, exist_ok=True)
-    location.path.write_text(render_tasks(location.tasks) if location.tasks else "")
+    location.path.write_text(_render_task_file(location.path, location.tasks))
 
 
 def _format_note(note_date: date, note: str) -> str:
