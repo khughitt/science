@@ -102,6 +102,11 @@ conclusion-like epistemic entities:
 - `validation-report`
 - `story`
 
+The conclusion relation design is symmetric across these kinds: any
+conclusion-like kind may amend or supersede any other conclusion-like kind. For
+example, `report:new sci:amends interpretation:old` and
+`interpretation:new sci:amends report:old` are both valid.
+
 Do not allow arbitrary operational entities as endpoints for these conclusion
 relations. `workflow-run`, `dataset`, `data-package`, and `task` already have
 separate operational lifecycle semantics.
@@ -110,7 +115,63 @@ The existing `workflow-run -> workflow-run` `supersedes` relation remains valid
 for operational run replacement. The first implementation should preserve that
 behavior while expanding `supersedes` to also support conclusion replacement.
 
-### 5. Authored Relation Blocks Are The Initial Write Surface
+### 5. Relation Kinds Need Explicit Endpoint Pairs
+
+`RelationKind` currently has flat `source_kinds` and `target_kinds` lists. That
+shape implies a Cartesian product, which cannot express:
+
+```text
+workflow-run -> workflow-run
+OR
+conclusion-kind -> conclusion-kind
+```
+
+without also allowing invalid pairs such as:
+
+```text
+interpretation -> workflow-run
+workflow-run -> interpretation
+```
+
+For this task, extend the relation schema with an optional explicit endpoint
+pair list, for example:
+
+```python
+class RelationEndpointPair(BaseModel):
+    source_kind: str
+    target_kind: str
+
+
+class RelationKind(BaseModel):
+    name: str
+    predicate: str
+    source_kinds: list[str]
+    target_kinds: list[str]
+    allowed_kind_pairs: list[RelationEndpointPair] = Field(default_factory=list)
+    layer: str
+    description: str = ""
+```
+
+Validation semantics:
+
+- When `allowed_kind_pairs` is non-empty, it is the authoritative endpoint
+  allow-list.
+- When `allowed_kind_pairs` is empty, keep the current Cartesian
+  `source_kinds` / `target_kinds` behavior.
+- Empty `source_kinds` or `target_kinds` keep their current "unrestricted"
+  meaning for relations that intentionally allow broad endpoints.
+
+Use `allowed_kind_pairs` for:
+
+- `amends`: full conclusion-kind Cartesian product.
+- `supersedes`: full conclusion-kind Cartesian product plus exactly
+  `workflow-run -> workflow-run`.
+
+Do not model this as two `RelationKind` entries sharing `sci:supersedes`.
+`build_relation_registry` keys by relation name, and split names would make
+predicate-level consumers harder to reason about.
+
+### 6. Authored Relation Blocks Are The Initial Write Surface
 
 The first implementation should use the existing authored relation machinery.
 For a new conclusion that amends an older one:
@@ -155,7 +216,7 @@ The normal `needs-review` resolution flow is:
    conclusion.
 6. If using `sci:supersedes`, mark the old conclusion `status: superseded` as
    an explicit authoring action.
-7. Run:
+7. Run this on the flagged entity, not on the newly authored conclusion:
 
    ```bash
    science-tool entity review <target-ref> --note "Reconsidered; see interpretation:new."
@@ -193,9 +254,16 @@ Update `commands/interpret-results.md` so update mode distinguishes:
   conclusion `status: superseded`
 
 Update `templates/interpretation.md` and `templates/interpretation-dev.md` to
-include relation guidance near `prior_interpretations`. The existing
-`prior_interpretations` field can remain as a prose-friendly list, but first
-class graph semantics should come from `relations`.
+include relation guidance near `prior_interpretations`.
+
+`prior_interpretations` is not a semantic source of truth after this task. It
+may remain as a narrative/display breadcrumb, but first-class amendment and
+supersession semantics must come from `relations`. Update
+`commands/big-picture.md` so provenance coverage and arc reconstruction consult
+materialized `sci:amends` / `sci:supersedes` chains instead of treating
+`prior_interpretations` as the machine-readable chain. Do not materialize
+`prior_interpretations` into `sci:amends`; the field cannot distinguish
+amendment from replacement.
 
 Update `commands/next-steps.md` and `commands/status.md` so `needs-review`
 entities are framed as candidates for this resolution workflow, not as evidence
@@ -206,11 +274,13 @@ that prior conclusions are wrong.
 The first implementation should:
 
 - Add `amends` to the core relation profile.
-- Broaden `supersedes` while preserving existing `workflow-run -> workflow-run`
-  semantics.
-- Validate endpoint combinations for `amends` and `supersedes` during graph
-  materialization.
-- Update interpretation templates and relevant command prose.
+- Add `allowed_kind_pairs` to `RelationKind` and use it to broaden
+  `supersedes` without allowing invalid cross-domain pairs.
+- Introduce authored-relation endpoint validation during graph materialization.
+  This is new validator infrastructure, not a small tweak to an existing
+  endpoint checker.
+- Update interpretation templates and relevant command prose, including the
+  `big-picture` chain/coverage reader.
 - Leave `entity review` behavior unchanged.
 - Leave freshness behavior unchanged except for any tests proving it ignores
   amendment relations.
@@ -219,8 +289,21 @@ Do not add a new review transaction command in this task.
 
 ## Validation And Error Handling
 
-Invalid amendment endpoints should fail early during materialization with a
-message naming the subject, predicate, object, and source path.
+Invalid amendment or supersession endpoints should fail early during
+materialization with a message naming the subject, predicate, object, and source
+path.
+
+The endpoint validator should run for declared authored relations after subject
+and object refs resolve to canonical entities. For declared predicates:
+
+1. Look up the matching `RelationKind` by predicate.
+2. Resolve subject and object kinds.
+3. If `allowed_kind_pairs` is non-empty, require that exact pair.
+4. Otherwise apply the existing `source_kinds` / `target_kinds` constraints.
+5. Include the source relation's `source_path` in failures.
+
+This generalizes the current `bears_on` materialization guard instead of adding
+another predicate-specific branch.
 
 Valid examples:
 
@@ -242,8 +325,38 @@ workflow-run:new sci:amends workflow-run:old
 The `workflow-run -> workflow-run` example remains valid only for
 `sci:supersedes`, not for `sci:amends`.
 
+Self-reference is invalid: an entity must not amend or supersede itself. Cycles
+in the amendment/supersession subgraph are invalid and should fail
+materialization with the cycle path. Multiple newer conclusions may supersede
+the same older conclusion; consumers should choose the current canonical item by
+newest `updated` date, falling back to `created`, and report an ambiguity when
+dates tie.
+
+`sci:supersedes` is distinct from the existing `sci:supersedesClaim` predicate
+used by falsification records. This task does not change
+`sci:supersedesClaim`.
+
+## Superseded Status Consumers
+
+The first implementation should update only the surfaces touched by this
+workflow:
+
+- `commands/interpret-results.md`: tells authors when to set
+  `status: superseded`.
+- `commands/status.md` and `commands/next-steps.md`: describe superseded
+  conclusions as non-current when they appear near a `needs-review` workflow.
+- `commands/big-picture.md`: reconstructs current arcs from
+  `sci:amends` / `sci:supersedes` and should prefer non-superseded current
+  conclusions when a replacement chain exists.
+
+Weighted attention sampling does not change in this task. If other summaries
+need to filter or demote superseded conclusions, that should be a follow-up
+consumer task rather than hidden behavior in the relation implementation.
+
 ## Test Plan
 
+- `RelationKind.allowed_kind_pairs` validates and preserves existing
+  Cartesian behavior when unset.
 - Materialization emits `sci:amends` for a valid conclusion relation.
 - Materialization emits `sci:supersedes` for a valid conclusion replacement.
 - Materialization still accepts `workflow-run -> workflow-run`
@@ -254,6 +367,10 @@ The `workflow-run -> workflow-run` example remains valid only for
 - `entity review` tests continue to prove only `review_state` changes.
 - Freshness tests prove `amends` / `supersedes` edges do not directly clear or
   create `needs-review`.
+- Cycle/self-reference tests prove invalid conclusion chains fail during
+  materialization.
+- Big-picture tests prove chain/coverage logic reads
+  `sci:amends` / `sci:supersedes` rather than `prior_interpretations`.
 - Command/template tests or snapshot checks confirm the new decision-tree prose
   is present.
 
