@@ -33,6 +33,8 @@ def test_builtin_path_policy_maps_core_kinds() -> None:
     assert resolve_path_policy("discussion").filename == "date-local-part"
     assert resolve_path_policy("interpretation").filename == "date-local-part"
     assert resolve_path_policy("theme").root == Path("doc/themes")
+    assert resolve_path_policy("proposition").root == Path("specs/propositions")
+    assert resolve_path_policy("proposition").filename == "local-part"
 
 
 @pytest.mark.parametrize(
@@ -235,6 +237,7 @@ def test_template_driven_create_entity_passes_prospective_audit_for_all_migrated
         ("discussion", "Template shell discussion", None),
         ("interpretation", "Template shell interpretation", None),
         ("theme", "Template shell theme", "theme:template-shell-theme"),
+        ("proposition", "Template shell proposition", "proposition:p01-template-shell"),
     ]
     for kind, title, entity_id in cases:
         result = create_entity(
@@ -307,6 +310,68 @@ def test_create_entity_writes_theme_source_and_loads_it(tmp_path: Path) -> None:
     sources = load_project_sources(tmp_path)
     by_id = {entity.canonical_id: entity for entity in sources.entities}
     assert "theme:transportability-across-cancer-types" in by_id
+
+
+def test_create_entity_writes_proposition_source_and_loads_it(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+
+    result = create_entity(
+        project_root=tmp_path,
+        kind="proposition",
+        title="Treatment exposure changes under sparse PSA monitoring",
+        entity_id="proposition:p01-cadence-shapes-exposure",
+        related=[],
+        source_refs=[],
+        today=date(2026, 5, 5),
+    )
+
+    assert result.entity_id == "proposition:p01-cadence-shapes-exposure"
+    assert result.path == tmp_path / "specs/propositions/p01-cadence-shapes-exposure.md"
+    assert result.warnings == []
+    text = result.path.read_text(encoding="utf-8")
+    assert "type: proposition" in text or 'type: "proposition"' in text or "type: 'proposition'" in text
+    assert "claim_layer: empirical_regularity" in text or 'claim_layer: "empirical_regularity"' in text
+    assert "identification_strength: observational" in text or 'identification_strength: "observational"' in text
+    assert "## Claim" in text
+    assert "## Evidence Summary" in text
+    assert "## Caveats" in text
+    sources = load_project_sources(tmp_path)
+    by_id = {entity.canonical_id: entity for entity in sources.entities}
+    assert "proposition:p01-cadence-shapes-exposure" in by_id
+
+
+def test_create_entity_rejects_invalid_proposition_status(tmp_path: Path) -> None:
+    seed_project(tmp_path)
+    with pytest.raises(EntityCommandError, match="Invalid status"):
+        create_entity(
+            project_root=tmp_path,
+            kind="proposition",
+            title="Some claim",
+            entity_id="proposition:p01-some-claim",
+            status="speculative",  # not in the proposition status enum
+            related=[],
+            source_refs=[],
+            today=date(2026, 5, 5),
+        )
+
+
+def test_create_entity_accepts_all_proposition_statuses(tmp_path: Path) -> None:
+    valid_statuses = {"draft", "active", "supported", "contested", "weakened", "retired", "superseded"}
+    for status in valid_statuses:
+        project_root = tmp_path / f"project-{status}"
+        project_root.mkdir()
+        seed_project(project_root)
+        result = create_entity(
+            project_root=project_root,
+            kind="proposition",
+            title=f"Claim under {status}",
+            entity_id=f"proposition:p01-claim-{status}",
+            status=status,
+            related=[],
+            source_refs=[],
+            today=date(2026, 5, 5),
+        )
+        assert result.warnings == []
 
 
 def test_create_entity_rejects_existing_destination(tmp_path: Path) -> None:

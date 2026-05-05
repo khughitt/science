@@ -341,6 +341,32 @@ def test_graph_add_question_mentions_entity_create() -> None:
         assert "entity create question" in result.output
 
 
+def test_proposition_create_writes_source() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+
+        result = runner.invoke(
+            main,
+            [
+                "proposition",
+                "create",
+                "Cadence shapes recovered switch history",
+                "--id",
+                "proposition:p01-cadence-shapes-switch-history",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "proposition:p01-cadence-shapes-switch-history" in result.output
+        path = Path("specs/propositions/p01-cadence-shapes-switch-history.md")
+        assert path.is_file()
+        text = path.read_text(encoding="utf-8")
+        assert "type: proposition" in text or 'type: "proposition"' in text
+        assert "## Claim" in text
+
+
 def test_entity_neighbors_source_only_warns_and_returns_no_rows() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
