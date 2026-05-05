@@ -11,11 +11,12 @@ Implement the engine per `specs/h01-simulator.md`: Beta-Bernoulli signal model w
 
 **COMPLETED 2026-04-24.** Engine shipped as `h01_simulator` package in `meta/src/`. Modules: config (with prior_alpha / prior_beta, bias_model ∈ {none, independent, shared}, bias_sigma), model (Propositions + SignalModel with configurable Beta prior), policies (hard_gate / constant_revisit / thompson), metrics (recall, brier, bias-aware regret). Sweep runner produces list-column parquet with allocations + final α/β arrays. CLI exposes `sweep` and `benchmark` subcommands. Benchmark projection: 981.6s for full grid at 100 seeds (72 000 runs; budget 600s — tighten grid or add parallelism in [t002] before running full sweep). Calibration sample: 200 runs in 2.73s. All quality gates pass (ruff, pyright, pytest 59/59, validate.sh). [t002] unblocked.
 
-## [t001b] H01 engine follow-ups (grid, metrics, parallelism)
+## [t020] H01 engine follow-ups (grid, metrics, parallelism)
 - priority: P1
 - status: done
 - aspects: [software-development, hypothesis-testing]
-- related: [hypothesis:h01-stochastic-revisiting]
+- parent: task:t001
+- related: [hypothesis:h01-stochastic-revisiting, task:t001]
 - blocked_by: [t001]
 - created: 2026-04-24
 
@@ -26,7 +27,7 @@ Resolve the three engine issues flagged in `meta/doc/plans/2026-04-24-h01-engine
 - status: done
 - aspects: [hypothesis-testing, software-development]
 - related: [hypothesis:h01-stochastic-revisiting, question:01-bioinformatics-generalizability]
-- blocked_by: [t001b]
+- blocked_by: [t020]
 - created: 2026-04-24
 
 Execute the engine from [t001] on the default grid and produce the deliverables `specs/h01-simulator.md` names as required: `results/h01-simulator/sweep-<date>.parquet` with full seed count; `notebooks/h01_simulator_results.py` populated with headline figures (recall-vs-noise per policy, reliability diagram, threshold-swept recall, `shared`-vs-`independent` bias comparison); `doc/interpretations/h01-simulator-<date>.md` tying sweep findings to each H01 proposition (P1-P5). Plan to be written after t001 closes, informed by observed engine behaviour.
@@ -40,12 +41,12 @@ Execute the engine from [t001] on the default grid and produce the deliverables 
 - related: []
 - created: 2026-04-24
 
-Decide a convention for hierarchical / derivative task identifiers in `/science:tasks` and either enforce it via tool validation or explicitly declare flat IDs and locate parent/child structure elsewhere. Surfaced when authoring `[t001b]` in this project — the ad-hoc `b` suffix worked but the design space wasn't actually considered.
+Decide a convention for hierarchical / derivative task identifiers in `/science:tasks` and either enforce it via tool validation or explicitly declare flat IDs and locate parent/child structure elsewhere. Surfaced when authoring `[t020]` in this project — the ad-hoc `b` suffix worked but the design space wasn't actually considered.
 
 Three distinct semantics share the identifier space today and probably shouldn't:
 - **Versioning** — a revision of the same work (e.g. `[t001]` → `[t001v2]`).
 - **Decomposition** — sub-work of a parent (e.g. `[t001.1]`, `[t001/01]`).
-- **Fragment** — follow-up work that emerged after the parent closed but before the next major task starts (e.g. how `[t001b]` was used here).
+- **Fragment** — follow-up work that emerged after the parent closed but before the next major task starts (e.g. how `[t020]` was used here).
 
 **Questions to resolve before prescribing:**
 - What is the goal? Each of the three semantics above implies a different scheme.

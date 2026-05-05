@@ -1,4 +1,4 @@
-# H01 Engine Follow-Ups — Implementation Plan (t001b)
+# H01 Engine Follow-Ups — Implementation Plan (t020)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -31,7 +31,7 @@
 - `meta/tests/test_metrics.py` — rename existing `regret` tests to the new name.
 - `meta/tests/test_config.py` — update `RunResult` construction.
 - `meta/tests/test_sweep.py` — update parquet schema assertions; add tests for grid filtering, `budget_multiple` recording, stratified calibration sampling, parallel-sweep equivalence (including list columns), `workers` validation.
-- `meta/tasks/active.md` — add `[t001b]` entry; update `[t002]`'s `blocked_by`.
+- `meta/tasks/active.md` — add `[t020]` entry; update `[t002]`'s `blocked_by`.
 
 **Create:** (none — all changes land in existing modules.)
 
@@ -834,17 +834,17 @@ Addresses issue 3 in meta/doc/plans/2026-04-24-h01-engine-handoff.md."
 
 ---
 
-### Task 4: Close `[t001b]` in the task backlog
+### Task 4: Close `[t020]` in the task backlog
 
 **Files:**
 - Modify: `meta/tasks/active.md`.
 
-- [ ] **Step 1: Add `[t001b]` with status `done`**
+- [ ] **Step 1: Add `[t020]` with status `done`**
 
 Insert between `[t001]` and `[t002]` in `meta/tasks/active.md`:
 
 ```markdown
-## [t001b] H01 engine follow-ups (grid, metrics, parallelism)
+## [t020] H01 engine follow-ups (grid, metrics, parallelism)
 - type: implementation
 - priority: P1
 - status: done
@@ -856,13 +856,13 @@ Insert between `[t001]` and `[t002]` in `meta/tasks/active.md`:
 Resolve the three engine issues flagged in `meta/doc/plans/2026-04-24-h01-engine-handoff.md`: (1) parameterise the default grid in dimensionless budget-multiples with degenerate-cell filtering; (2) rename `regret` to `signal_count_regret` and document its decorrelation from recall under shared bias at high noise (no companion metric added; a budget-aware recall oracle is deferred until interpretation needs it); (3) parallelise `run_sweep` via `ProcessPoolExecutor` with validated `workers >= 1`, sample `benchmark_runtime` calibration stratified by `(n_propositions, budget)`, and re-anchor `RUNTIME_BUDGET_SECONDS` to honest serial CPU. Plan: `meta/doc/plans/2026-04-24-h01-engine-followups.md`. Unblocks [t002].
 ```
 
-Also update `[t002]`'s `blocked_by` from `[t001]` to `[t001b]`.
+Also update `[t002]`'s `blocked_by` from `[t001]` to `[t020]`.
 
 - [ ] **Step 2: Commit**
 
 ```
 git add meta/tasks/active.md
-git commit -m "docs(meta): close [t001b] H01 engine follow-ups; unblock [t002]"
+git commit -m "docs(meta): close [t020] H01 engine follow-ups; unblock [t002]"
 ```
 
 ---
@@ -873,7 +873,7 @@ git commit -m "docs(meta): close [t001b] H01 engine follow-ups; unblock [t002]"
 - [x] No placeholder steps — every code-step includes the full code.
 - [x] Type / name consistency: `signal_count_regret` used uniformly across `metrics.py`, `RunResult`, `sweep.py` row-builder, parquet column, and tests. `DEFAULT_BUDGET_MULTIPLES` / `DEFAULT_N_PROPS` referenced consistently.
 - [x] Each task ends with full quality gates (ruff, pyright, pytest) before committing.
-- [x] `[t001b]` task entry added + `[t002]` unblocked.
+- [x] `[t020]` task entry added + `[t002]` unblocked.
 - [x] Out-of-scope items (reference policies, Gaussian variant, alternative framings, budget-aware recall oracle) explicitly excluded in the Goal / Out of Scope section, with rationale.
 - [x] All file references and commit-message references use `meta/...` paths so agents resolve them from any cwd.
 - [x] No silent fallbacks: `workers < 1` raises in `run_sweep`; `n_calibration_runs <= 0` raises in `_select_calibration_slice`; CLI uses `click.IntRange(min=1)`.

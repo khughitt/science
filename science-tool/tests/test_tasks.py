@@ -122,6 +122,54 @@ def test_parse_multiple_tasks(tmp_path: Path) -> None:
     assert tasks[1].blocked_by == ["t001"]
 
 
+def test_parse_accepts_three_and_four_digit_task_ids(tmp_path: Path) -> None:
+    f = _write(
+        tmp_path / "active.md",
+        """\
+## [t016] Three digit
+- type: dev
+- priority: P2
+- status: proposed
+- created: 2026-05-05
+
+Body.
+
+## [t1000] Four digit
+- type: dev
+- priority: P2
+- status: proposed
+- created: 2026-05-05
+
+Body.
+""",
+    )
+
+    tasks = parse_tasks(f)
+
+    assert [task.id for task in tasks] == ["t016", "t1000"]
+
+
+def test_parse_rejects_suffix_task_id_without_partial_parse(tmp_path: Path) -> None:
+    f = _write(
+        tmp_path / "active.md",
+        """\
+## [t001b] H01 engine follow-ups
+- type: dev
+- priority: P1
+- status: active
+- created: 2026-04-24
+
+Body.
+""",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"Invalid task id 't001b' in .*active\.md: task ids must match tNNN",
+    ):
+        parse_tasks(f)
+
+
 def test_parse_empty_file(tmp_path: Path) -> None:
     f = _write(tmp_path / "empty.md", "")
     tasks = parse_tasks(f)
@@ -256,6 +304,33 @@ Done desc.
 """,
     )
     assert next_task_id(tasks_dir) == "t006"
+
+
+def test_next_task_id_ignores_invalid_suffix_header(tmp_path: Path) -> None:
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    _write(
+        tasks_dir / "active.md",
+        """\
+## [t009] Valid task
+- type: dev
+- priority: P2
+- status: proposed
+- created: 2026-05-05
+
+Body.
+
+## [t010b] Invalid suffix task
+- type: dev
+- priority: P2
+- status: proposed
+- created: 2026-05-05
+
+Body.
+""",
+    )
+
+    assert next_task_id(tasks_dir) == "t010"
 
 
 # ---------------------------------------------------------------------------

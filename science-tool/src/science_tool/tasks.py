@@ -29,7 +29,9 @@ __all__ = [
 _VALID_STATUSES = {s.value for s in TaskStatus}
 
 
-_HEADER_RE = re.compile(r"^##\s+\[(\w+)\]\s+(.+)$")
+_TASK_ID_PATTERN = r"t[0-9]{3,}"
+_HEADER_RE = re.compile(rf"^##\s+\[({_TASK_ID_PATTERN})\]\s+(.+)$")
+_ANY_TASK_HEADER_RE = re.compile(r"^##\s+\[([^\]]+)\]\s+(.+)$")
 _FIELD_RE = re.compile(r"^-\s+([\w-]+):\s*(.*)$")
 _LIST_RE = re.compile(r"^\[(.+)\]$")
 _MARKDOWN_HEADING_RE = re.compile(r"^(#{1,3})\s+.+$")
@@ -44,15 +46,29 @@ def _parse_list_value(raw: str) -> list[str]:
     return [item.strip() for item in m.group(1).split(",") if item.strip()]
 
 
-def _parse_task_block(lines: list[str]) -> Task:
-    """Parse a single task block (header line + metadata + description)."""
-    header_match = _HEADER_RE.match(lines[0])
-    if not header_match:
-        msg = f"Invalid task header: {lines[0]}"
+def _parse_task_header(line: str, *, path: Path | None = None) -> tuple[str, str]:
+    """Parse and validate a task header line."""
+    match = _HEADER_RE.match(line)
+    if match:
+        return match.group(1), match.group(2).strip()
+
+    loose = _ANY_TASK_HEADER_RE.match(line)
+    if loose:
+        task_id = loose.group(1)
+        where = f" in {path}" if path is not None else ""
+        msg = (
+            f"Invalid task id '{task_id}'{where}: task ids must match tNNN. "
+            "Use parent: task:t001 for fragments or subtasks."
+        )
         raise ValueError(msg)
 
-    task_id = header_match.group(1)
-    title = header_match.group(2).strip()
+    where = f" in {path}" if path is not None else ""
+    raise ValueError(f"Invalid task header{where}: {line}")
+
+
+def _parse_task_block(lines: list[str], *, path: Path | None = None) -> Task:
+    """Parse a single task block (header line + metadata + description)."""
+    task_id, title = _parse_task_header(lines[0], path=path)
 
     fields: dict[str, str] = {}
     desc_start = 1
@@ -101,11 +117,12 @@ def parse_tasks(path: Path) -> list[Task]:
         return []
 
     lines = text.splitlines()
-    # Split into blocks at ## headers
+    # Split into blocks at task headers, including malformed task headers so
+    # validation can fail with a task-ID-specific error.
     blocks: list[list[str]] = []
     current: list[str] = []
     for line in lines:
-        if _HEADER_RE.match(line):
+        if _ANY_TASK_HEADER_RE.match(line):
             if current:
                 blocks.append(current)
             current = [line]
@@ -114,7 +131,7 @@ def parse_tasks(path: Path) -> list[Task]:
     if current:
         blocks.append(current)
 
-    return [_parse_task_block(block) for block in blocks]
+    return [_parse_task_block(block, path=path) for block in blocks]
 
 
 def parse_tasks_for_cli(path: Path) -> tuple[list[Task], list[str]]:
@@ -169,25 +186,29 @@ def render_tasks(tasks: list[Task]) -> str:
     return "\n".join(render_task(t) for t in tasks)
 
 
-_TASK_ID_RE = re.compile(r"\[t(\d+)\]")
+def _strict_task_ids_in_text(text: str) -> list[str]:
+    ids: list[str] = []
+    for line in text.splitlines():
+        match = _HEADER_RE.match(line)
+        if match:
+            ids.append(match.group(1))
+    return ids
 
 
 def next_task_id(tasks_dir: Path) -> str:
     """Determine the next task ID by scanning active.md and done/ directory."""
     max_num = 0
 
-    # Scan active.md
     active = tasks_dir / "active.md"
     if active.is_file():
-        for m in _TASK_ID_RE.finditer(active.read_text()):
-            max_num = max(max_num, int(m.group(1)))
+        for task_id in _strict_task_ids_in_text(active.read_text()):
+            max_num = max(max_num, int(task_id[1:]))
 
-    # Scan done/ directory
     done_dir = tasks_dir / "done"
     if done_dir.is_dir():
         for f in done_dir.glob("*.md"):
-            for m in _TASK_ID_RE.finditer(f.read_text()):
-                max_num = max(max_num, int(m.group(1)))
+            for task_id in _strict_task_ids_in_text(f.read_text()):
+                max_num = max(max_num, int(task_id[1:]))
 
     return f"t{max_num + 1:03d}"
 

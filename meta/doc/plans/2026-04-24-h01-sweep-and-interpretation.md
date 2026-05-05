@@ -6,7 +6,7 @@
 
 **Architecture:** Three engine extensions that ship with the default grid (UCB policy; optimistic-init priors as additional `hard_gate` entries; expanded `constant_revisit` r-axis), the runtime gate re-anchored to the new grid shape, then the analysis pipeline (sweep → marimo figures → interpretation writeup). The engine extensions are *permanent* additions to the default grid because they represent the level of detail every future H0x sweep will want; they are not `[t002]`-specific overrides.
 
-**Tech Stack:** Existing — numpy, polars, click, pytest, marimo, altair. No new runtime deps. Uses the parallel `run_sweep` from `[t001b]` (`--workers`).
+**Tech Stack:** Existing — numpy, polars, click, pytest, marimo, altair. No new runtime deps. Uses the parallel `run_sweep` from `[t020]` (`--workers`).
 
 **Why these specific extensions, and not others:**
 - **UCB** disentangles "any uncertainty representation helps" from "stochastic revisit mechanism specifically helps." Without it, a Thompson-vs-hard_gate gap could be attributed to either.
@@ -17,7 +17,7 @@
 **Out of scope:**
 - Annealed revisit, restart, info-gain policies (handoff alternatives, deferred to future work).
 - Gaussian effect-size variant of the simulator.
-- A budget-aware recall oracle (deferred from `[t001b]`; revisit only if interpretation needs it).
+- A budget-aware recall oracle (deferred from `[t020]`; revisit only if interpretation needs it).
 - Detectability hypothesis (a successor question, not part of `[t002]`).
 
 **Context docs:**
@@ -410,7 +410,7 @@ Part of [t002]; plan: meta/doc/plans/2026-04-24-h01-sweep-and-interpretation.md.
 
 ### Task 3: Re-anchor `RUNTIME_BUDGET_SECONDS` for the expanded grid
 
-The grid grew from 4 policy entries to 8 (1 hard_gate + 1 hard_gate-optimistic + 4 constant_revisit + 1 thompson + 1 ucb). Roughly 2× the runs. The `[t001b]` projection of ~1740s serial against the 1800s budget will fail; we re-anchor honestly.
+The grid grew from 4 policy entries to 8 (1 hard_gate + 1 hard_gate-optimistic + 4 constant_revisit + 1 thompson + 1 ucb). Roughly 2× the runs. The `[t020]` projection of ~1740s serial against the 1800s budget will fail; we re-anchor honestly.
 
 **Files:**
 - Modify: `meta/src/h01_simulator/cli.py` — update `RUNTIME_BUDGET_SECONDS` based on a fresh measurement.
@@ -715,7 +715,7 @@ The handoff note's "Alternative explanations and framings to consider" section l
 - Exploration of prior-sampling distribution (now testable via the optimistic-init cells).
 - Beta-Bernoulli artifact (still untestable in this sweep — note as future work).
 - Budget-per-proposition vs. noise-effect (partly addressed via budget_multiple axis).
-- Oracle artifact in regret (addressed by the rename + caveat from `[t001b]`).
+- Oracle artifact in regret (addressed by the rename + caveat from `[t020]`).
 
 The writeup confirms or refutes each.
 
@@ -766,7 +766,7 @@ Not testable in this sweep. A Gaussian effect-size variant of the simulator is n
 [Address using the budget_multiple axis. If recall-vs-noise patterns are similar across budget_multiple values, the noise effect is robust to budget.]
 
 ### Oracle artifact in regret
-Addressed structurally by `[t001b]`: `signal_count_regret` is renamed and documented as unreliable in `shared` rows. Recall and Brier are the load-bearing metrics in the interpretation above; `signal_count_regret` is reported in the parquet but treated as a diagnostic.
+Addressed structurally by `[t020]`: `signal_count_regret` is renamed and documented as unreliable in `shared` rows. Recall and Brier are the load-bearing metrics in the interpretation above; `signal_count_regret` is reported in the parquet but treated as a diagnostic.
 
 ## Calibration check
 
