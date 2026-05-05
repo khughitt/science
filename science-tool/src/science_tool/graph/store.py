@@ -10,7 +10,7 @@ from collections import deque
 from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
-from typing import NotRequired, TypedDict, cast
+from typing import Any, NotRequired, TypedDict, cast
 
 import click
 from rdflib import Dataset, Graph, Literal, Namespace, URIRef
@@ -2566,7 +2566,8 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
             treatment_name = shorten_uri(str(treatment_uri)).rsplit("/", 1)[-1]
             outcome_name = shorten_uri(str(outcome_uri)).rsplit("/", 1)[-1]
 
-            _pgmpy_available = True
+            _BN: Any | None = None
+            CausalInference: Any | None = None
             try:
                 pgmpy_models = importlib.import_module("pgmpy.models")
                 bn_cls = getattr(pgmpy_models, "DiscreteBayesianNetwork", None)
@@ -2575,10 +2576,10 @@ def validate_inquiry(graph_path: Path, slug: str) -> list[dict]:
                 _BN = bn_cls
                 causal_inference_module = importlib.import_module("pgmpy.inference")
                 CausalInference = getattr(causal_inference_module, "CausalInference")
-            except ImportError:
-                _pgmpy_available = False
+            except (AttributeError, ImportError):
+                pass
 
-            if not _pgmpy_available:
+            if _BN is None or CausalInference is None:
                 results.append(
                     {
                         "check": "identifiability",
