@@ -337,12 +337,13 @@ def entity_note(ref: str, note: str, note_date: str | None) -> None:
 @entity_group.command("list")
 @click.option("--kind")
 @click.option("--status")
+@click.option("--related")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
-def entity_list(kind: str | None, status: str | None, output_format: str) -> None:
+def entity_list(kind: str | None, status: str | None, related: str | None, output_format: str) -> None:
     """List source-authored entities."""
 
     try:
-        rows = list_entities(Path.cwd(), kind=kind, status=status)
+        rows = list_entities(Path.cwd(), kind=kind, status=status, related=related)
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
     emit_query_rows(
@@ -3209,9 +3210,11 @@ def health_command(project_root: Path, output_format: str) -> None:
     managed_artifacts_issue_count = sum(1 for f in managed_artifacts if f.get("counts_as_issue"))
 
     tooling_scaffold = report.get("tooling_scaffold") or []
+    unregistered_ref_kinds = report.get("unregistered_ref_kinds") or []
 
     total_issues = (
         len(report["unresolved_refs"])
+        + len(unregistered_ref_kinds)
         + len(report["lingering_tags_lines"])
         + len(report["identity_policy"])
         + len(report["legacy_structured_literature_prefixes"])
@@ -3279,6 +3282,27 @@ def health_command(project_root: Path, output_format: str) -> None:
                 srcs += f", … (+{len(row['sources']) - 3})"
             table.add_row(row["target"], str(row["mention_count"]), row["looks_like"], srcs)
         console.print(table)
+
+    if unregistered_ref_kinds:
+        table = Table(title=f"Unregistered reference kinds ({len(unregistered_ref_kinds)})")
+        table.add_column("Kind", style="bold")
+        table.add_column("Field")
+        table.add_column("Mentions", justify="right")
+        table.add_column("Refs (first 3)")
+        table.add_column("Sources (first 3)")
+        for row in unregistered_ref_kinds:
+            refs = ", ".join(row["refs"][:3])
+            if len(row["refs"]) > 3:
+                refs += f", … (+{len(row['refs']) - 3})"
+            srcs = ", ".join(row["sources"][:3])
+            if len(row["sources"]) > 3:
+                srcs += f", … (+{len(row['sources']) - 3})"
+            table.add_row(row["kind"], row["field"], str(row["mention_count"]), refs, srcs)
+        console.print(table)
+        console.print(
+            "\n[bold]Next:[/bold] register these entity kinds in a profile, migrate the refs to "
+            "registered kinds, or move non-entity annotations to [cyan]meta:*[/cyan]."
+        )
 
     if report["lingering_tags_lines"]:
         with_values = [r for r in report["lingering_tags_lines"] if r["values"]]

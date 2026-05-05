@@ -321,6 +321,47 @@ class TestBuildHealthReport:
         assert report["lingering_tags_lines"] == []
         assert report["layered_claims"]["migration_issues"] == []
 
+    def test_reports_unregistered_reference_kinds_in_identity_fields(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+        doc = tmp_path / "doc" / "questions"
+        doc.mkdir(parents=True)
+        (doc / "q01.md").write_text(
+            "---\n"
+            'id: "question:q01"\n'
+            'type: "question"\n'
+            'title: "Q1"\n'
+            'status: "open"\n'
+            'related: ["decision:d1", "hypothesis:h01"]\n'
+            'commits_to: ["latent:l1"]\n'
+            'source_refs: ["go:0008150"]\n'
+            "---\n"
+            "Body.\n",
+            encoding="utf-8",
+        )
+
+        report = build_health_report(tmp_path)
+
+        assert report["unregistered_ref_kinds"] == [
+            {
+                "kind": "decision",
+                "field": "related",
+                "mention_count": 1,
+                "refs": ["decision:d1"],
+                "sources": ["doc/questions/q01.md"],
+            },
+            {
+                "kind": "latent",
+                "field": "commits_to",
+                "mention_count": 1,
+                "refs": ["latent:l1"],
+                "sources": ["doc/questions/q01.md"],
+            },
+        ]
+        assert any(row["target"] == "hypothesis:h01" for row in report["unresolved_refs"])
+        assert report["total_issues"] >= 2
+
     def test_includes_identity_policy_section(self, tmp_path: Path) -> None:
         from science_tool.graph.health import build_health_report
 
@@ -435,7 +476,7 @@ class TestHealthCLI:
         spec.mkdir(parents=True)
         (spec / "h01.md").write_text(
             '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
-            'status: "proposed"\nrelated: [topic:missing]\n'
+            'status: "proposed"\nrelated: [topic:missing, decision:d1]\n'
             'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n'
         )
 
@@ -444,6 +485,8 @@ class TestHealthCLI:
 
         assert result.exit_code == 0, result.output
         assert "topic:missing" in result.output
+        assert "Unregistered reference kinds" in result.output
+        assert "decision" in result.output
 
     def test_json_output(self, tmp_path: Path) -> None:
         from click.testing import CliRunner

@@ -205,6 +205,52 @@ def test_entity_list_filters_exact_status() -> None:
         assert "question:q01-alpha" not in result.output
 
 
+def test_entity_list_filters_related_refs_with_alias_resolution() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        root = Path.cwd()
+        seed_project(root)
+        write_markdown_entity(
+            root,
+            "specs/hypotheses/h01-anchor.md",
+            {
+                "id": "hypothesis:h01-anchor",
+                "type": "hypothesis",
+                "title": "Anchor",
+                "status": "proposed",
+                "aliases": ["hypothesis:anchor-alias"],
+            },
+        )
+        write_markdown_entity(
+            root,
+            "doc/questions/q01-alpha.md",
+            {
+                "id": "question:q01-alpha",
+                "type": "question",
+                "title": "Alpha",
+                "status": "open",
+                "related": ["hypothesis:anchor-alias"],
+            },
+        )
+        write_markdown_entity(
+            root,
+            "doc/questions/q02-beta.md",
+            {
+                "id": "question:q02-beta",
+                "type": "question",
+                "title": "Beta",
+                "status": "open",
+                "related": ["hypothesis:h02-other"],
+            },
+        )
+
+        result = runner.invoke(main, ["entity", "list", "--related", "hypothesis:h01-anchor", "--format", "json"])
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert [row["id"] for row in payload["rows"]] == ["question:q01-alpha"]
+
+
 def test_question_create_wrapper_delegates_to_entity_create() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():

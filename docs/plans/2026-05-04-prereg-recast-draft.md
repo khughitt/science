@@ -1,6 +1,6 @@
-# Pre-registration semantics recast — draft proposal
+# Pre-registration semantics recast — implementation record
 
-> **Status:** Draft for circulation (t012), revision 3 (2026-05-04 post 9-project audit). Do **not** merge until downstream projects (Science cluster: natural-systems, protein-landscape, seq-feats, 3d-attention-bias; cancer cluster: multiple-myeloma, cbioportal, mechanisms/evolution, cancer/meta) have surfaced objections. The recast changes how their existing pre-regs are interpreted; no pre-reg body content changes, but some mixed pre-regs may need `commits_to:` frontmatter clarification and small code prerequisites are required (see § "Code prerequisites"). Per-project audit reports under `docs/audits/prereg-recast/` cover all 60 surveyed pre-regs across 7 pre-reg-using projects.
+> **Status:** Implemented, revision 4 (2026-05-05 post code prerequisites, downstream migrations, and follow-up ergonomics). The recast, `commits_to:` edge scoping, pre-registration registry support, inquiry reclassification, and pre-reg → epistemic-target `bears_on` derivation have landed. Downstream migration of the audited projects is complete; remaining items in this document are nonblocking project-side cleanup candidates and adjacent prose follow-ups.
 
 **Source design:** `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` § Part 4.
 
@@ -105,17 +105,13 @@ Concrete edits to `commands/interpret-results.md`:
 
 1. **New § 4d "Pre-registration evaluation":** insert after § 4c "Suspiciously good results", before § 5 "Update Proposition Support / Dispute".
 
-   - Locate any pre-reg with the current analysis or its hypothesis/question in its `related` set. Today, the only working approach is a path scan:
+   - Locate any pre-reg with the current analysis or its hypothesis/question in its `related` set:
 
      ```bash
-     # Read directly from the conventional paths (matches today's
-     # interpret-results pattern under § "Suspiciously good results")
-     ls doc/meta/pre-registration-*.md doc/pre-registrations/*.md 2>/dev/null
+     science-tool entity list --kind pre-registration --related <ref>
      ```
 
-     *Why not `science-tool entity list --kind pre-registration`?* It does not work today because (a) `pre-registration` is missing from `_CORE_KIND_CLASSES` in `entity_registry.py` and (b) source loading skips unknown kinds (`graph/sources.py`). Both are fixed by the prerequisite registry change (see § "The pre-registration kind classification gap" below). Once that lands, prefer the CLI form. **Until then, the path scan is the only correct lookup and the skill should recommend only that.**
-
-     *Possible future ergonomics fix:* add `entity list --related <ref>` filtering — out of scope for t012, flagged as `[t012c]` if it materially improves the workflow.
+     `science-tool entity list --related <ref>` filters entities whose `related:` refs point to the current analysis, hypothesis, question, or other focus entity. The filter resolves aliases where possible and falls back to exact authored refs when resolution is unavailable. A direct path scan of `doc/meta/pre-registration-*.md` and `doc/pre-registrations/*.md` remains useful only for debugging malformed or pre-canonical files that fail source loading.
 
    - For each found pre-reg, read its `committed:` clause and its target class (derivable from each `related:` ref's registered `EntityClass`).
 
@@ -239,9 +235,9 @@ This document is already marked `Superseded` (line 4) and points readers to `pro
 
 ---
 
-## Code prerequisites (must land before the prose recast)
+## Code prerequisites (landed before the prose recast)
 
-Three code changes are **required** for the recast to mean anything in the materialized graph. The original draft framed two as optional follow-ups; that was corrected in revision 2. Revision 3 adds the inquiry reclassification (Prerequisite 3) per multiple-myeloma audit findings.
+Three code changes were **required** for the recast to mean anything in the materialized graph. They have landed: `pre-registration` is registered as an operational kind, `commits_to:` is preserved and preferred for pre-reg commitment-target derivation, and `inquiry` is now epistemic.
 
 ### Prerequisite 1: register `pre-registration` as a kind
 
@@ -252,7 +248,7 @@ Two consequences as long as it's missing:
 - `science-tool entity list --kind pre-registration` returns nothing — source loading skips unknown kinds (`graph/sources.py`).
 - The auto-derivation rule below has no kind to dispatch on.
 
-**Fix:** add `"pre-registration": EntityClass.OPERATIONAL` to `_CORE_KIND_CLASSES` and the matching `register_core_kind` call in `with_core_types()`. One-line registry change plus a test asserting `kind_class("pre-registration") == OPERATIONAL`.
+**Implemented:** `"pre-registration": EntityClass.OPERATIONAL` is registered in the core entity registry, with coverage asserting `kind_class("pre-registration") == OPERATIONAL`.
 
 **Why OPERATIONAL, not REFERENCE:** a pre-reg is fundamentally a *procedural commitment* — it commits to executing or interpreting in advance, and its `committed:` date is load-bearing in the dependency graph. REFERENCE classification would be argued for "authored declaration that doesn't change after committed", but pre-regs do participate as `bears_on` *sources* (after Prerequisite 2), which is operational behavior. The pre-reg's class as a node is independent of the class of its target.
 
@@ -262,7 +258,7 @@ Tracked as `[t012b]`.
 
 A pre-reg's `related:` field materializes as `skos:related` (`graph/materialize.py`). Freshness derivation does not consume `skos:related`. So without an explicit auto-derivation rule, the recast has no graph effect on `bears_on` edges into the epistemic target — the prose changes would be teaching humans to think differently while the materialized graph behaves identically to today.
 
-**Fix:** add a pre-reg-specific derivation rule in `freshness.py` (or a sibling deriver), and ensure the deriver can see the relevant frontmatter. The current materializer only emits `skos:related` from `entity.related`; `commits_to:` is not preserved in the RDF dataset by default. The prerequisite therefore has two parts:
+**Implemented:** a pre-reg-specific derivation rule derives `bears_on` edges from pre-registration commitment targets to epistemic targets, and the source layer preserves `commits_to:` so the deriver can distinguish commitment targets from navigation context. The implementation has two parts:
 
 1. Preserve `commits_to:` from pre-registration frontmatter into the source model / materialization context, or emit a typed internal relation for it before derivation. Fail early if `commits_to:` contains an unresolved ref.
 2. Derive `bears_on` from the pre-reg to epistemic commitment targets, using `commits_to:` when present and falling back to epistemic `related:` entries only when absent.
@@ -273,7 +269,7 @@ Rule:
 >   - if `kind_class(kind_of(E)) == EPISTEMIC`: emit `P bears_on E` at depth 1.
 >   - if `kind_class(kind_of(E)) == OPERATIONAL` or `REFERENCE`: do not emit (operational and reference targets are not `bears_on` sinks; materialization rejects authored `bears_on` edges to non-epistemic targets per `graph/materialize.py`).
 
-Tests: pre-reg with `related: [hypothesis:H]` and no `commits_to:` → `P bears_on H` derived; pre-reg with `related: [task:T]` and no `commits_to:` → no `bears_on` derived; mixed `related: [hypothesis:H, task:T]` with no `commits_to:` → exactly one edge to H; pre-reg with `related: [hypothesis:H]` and `commits_to: []` → no `bears_on` edge to H; pre-reg with `related: [hypothesis:H1, hypothesis:H2]` and `commits_to: [hypothesis:H2]` → exactly one edge to H2.
+Tests cover: pre-reg with `related: [hypothesis:H]` and no `commits_to:` → `P bears_on H` derived; pre-reg with `related: [task:T]` and no `commits_to:` → no `bears_on` derived; mixed `related: [hypothesis:H, task:T]` with no `commits_to:` → exactly one edge to H; pre-reg with `related: [hypothesis:H]` and `commits_to: []` → no `bears_on` edge to H; pre-reg with `related: [hypothesis:H1, hypothesis:H2]` and `commits_to: [hypothesis:H2]` → exactly one edge to H2.
 
 Also test the anti-locking invariant: an epistemic target with both `pre-registration:P bears_on H` and `observation:O bears_on H` still becomes `needs-review` when `O.updated` advances beyond H's review baseline. `commits_to:` scopes the pre-reg edge; it must not pin H's freshness or suppress unrelated upstream changes.
 
@@ -287,7 +283,7 @@ Under the current REFERENCE classification, the auto-derivation rule (Prerequisi
 
 **Why EPISTEMIC, conceptually:** inquiry is an organizing structure over questions and propositions, both of which are EPISTEMIC. An inquiry collects uncertain assertions and the work done to constrain them. That's epistemic behavior — same as questions or propositions, just at a coarser organizational level. The Science cluster's current REFERENCE classification was a default rather than a deliberate decision.
 
-**Fix:** change `_CORE_KIND_CLASSES["inquiry"]` from `EntityClass.REFERENCE` to `EntityClass.EPISTEMIC` in `science_tool/graph/entity_registry.py`. One-line change plus tests:
+**Implemented:** `_CORE_KIND_CLASSES["inquiry"]` changed from `EntityClass.REFERENCE` to `EntityClass.EPISTEMIC` in `science_tool/graph/entity_registry.py`, with tests for:
 
 - Test 1: `kind_class("inquiry") == EPISTEMIC`.
 - Test 2: pre-reg with `related: [inquiry:I]` → `P bears_on I` derived (the auto-derivation rule from Prerequisite 2 now fires on inquiry refs).
@@ -305,13 +301,13 @@ Audit surfaced 6+ unregistered kind prefixes used in `related:` across projects:
 
 Under the recast (and today), these are silently skipped during source loading per `science_tool/graph/sources.py`. **This is correct semantics, not a bug.** The auto-derivation rule has no class to dispatch on, so it cannot fire `bears_on`. Skipping is the safe behavior.
 
-Project-side resolution paths (out of t012 scope but worth flagging in the recast plan):
+Project-side resolution paths (nonblocking cleanup, now surfaced by `science-tool health`):
 
 1. **Register the kind as a project-specific extension** via `register_extension_kind` (existing `science-tool` API), assigning the appropriate `EntityClass`. Suitable for kinds the project intends to keep (e.g., mm's `decision:` — likely `REFERENCE`; mm's `latent:` — possibly `EPISTEMIC` if latent variables are uncertain assertions about underlying constructs).
 2. **Migrate to a canonical kind.** E.g., `bias-audit:<slug>` → `task:bias-audit-<slug>` (matches an alternate convention also seen in cbioportal and protein-landscape).
 3. **Drop the ref entirely** if the entity isn't authored anywhere.
 
-**Recommended health-check pattern:** add a `science-tool health` (or sibling) check that lists unregistered ref kinds in `related:` across all entities in the project, so projects can audit their own kind taxonomies. Out of t012 scope; could be tracked as `[t012d]`.
+**Implemented health-check pattern:** `science-tool health` now lists unregistered ref kinds in identity-bearing fields, including `related:` and `commits_to:`, so projects can audit their own kind taxonomies without inferring semantics for unknown prefixes.
 
 ### Federation behavior
 
@@ -358,13 +354,13 @@ The original draft asserted that the existing closure chain `pre-reg → analysi
 | mechanisms/evolution | 2 | Cleanest, most recast-compatible pre-regs across all 9 projects. Explicit narrow-scope verdict language with 4-tier outcome buckets. Three new unregistered kinds (`bias-audit:`, `analysis-plan:`, `meta:`). |
 | cancer/meta | 0 | Federation umbrella; federates 32 pre-reg identifiers from children. Inherits standard validation; the recast's deriver inherits automatically through `science-tool` (see § Code prerequisites — Federation behavior). |
 
-No pre-reg body content needs editing for the recast itself. However, existing pre-regs whose `related:` field mixes commitment targets with navigation context may need a small `commits_to:` frontmatter clarification before merge. That clarification controls which `bears_on` edges are derived; it does not re-date, rewrite, or weaken the original pre-registration.
+No pre-reg body content needed editing for the recast itself. Existing pre-regs whose `related:` field mixed commitment targets with navigation context were handled with small `commits_to:` frontmatter clarifications during migration. That clarification controls which `bears_on` edges are derived; it does not re-date, rewrite, or weaken the original pre-registration.
 
-### What downstream maintainers should review before merge
+### Downstream review outcomes
 
-1. **For each existing pre-reg with epistemic targets:** does the recast change the *intended* meaning of that pre-reg? Audit found that author practice already aligns with the recast's spirit across all surveyed projects, but project-owner confirmation is the right gate.
+1. **For each existing pre-reg with epistemic targets:** audit found that author practice already aligns with the recast's spirit across all surveyed projects.
 
-2. **For pre-regs whose `related:` mixes commitment targets with navigation context** (the universal pattern surfaced by audit): identify which existing pre-regs need a `commits_to:` field before merge. The fallback remains "all epistemic `related:` entries are commitment targets" when `commits_to:` is absent, but the audit found that fallback over-derives for many mixed pre-regs. Setting `commits_to:` is the precise way to control which `bears_on` edges fire.
+2. **For pre-regs whose `related:` mixes commitment targets with navigation context:** migration used `commits_to:` where the fallback "all epistemic `related:` entries are commitment targets" would over-derive. Setting `commits_to:` is the precise way to control which `bears_on` edges fire.
 
 3. **Operational pre-regs are unaffected.** Anything pre-registering a procedural commitment (run-with-params, datapackage-before-unblinding) keeps its current gating semantics.
 
@@ -372,7 +368,7 @@ No pre-reg body content needs editing for the recast itself. However, existing p
 
 5. **Anti-bias procedural locks** (e.g., q63's "No post-hoc revision permitted") are preserved verbatim under the recast. They read as anti-p-hacking commitments to threshold rigor, not as metaphysical "this hypothesis can never be true" verdicts. Project-owner confirmation of this reading is recommended.
 
-**Specific maintainers to flag (highest impact first):**
+**Project notes (highest impact first):**
 
 - **multiple-myeloma** — 30 pre-regs, including the inquiry-targeting cases (t494, t498, t500) that gain new `bears_on` edges from the inquiry reclassification, and the 4 pre-canonical pre-regs whose hypothesis-in-body-only pattern requires manual evidence-edge emission per § "Skill changes" interpret-results subsection.
 - **natural-systems** — 14 pre-regs, mostly mixed; cross-project pattern poster child for the `commits_to:` resolution.
@@ -387,48 +383,51 @@ No pre-reg body content needs editing for the recast itself. However, existing p
 
 ## Sequencing for landing
 
-1. **Now:** circulate this draft (and the per-project audit reports under `docs/audits/prereg-recast/`) to downstream maintainers. Solicit objections specifically on:
-   - Whether the recast changes intent of any existing pre-reg (cross-project audit found author practice already aligns).
-   - Whether the inquiry reclassification (`REFERENCE` → `EPISTEMIC`) is acceptable cluster-wide.
-   - Whether the `commits_to:` frontmatter field is the right resolution for the `related:` conflation issue, or if a different shape is preferred.
-   - Which existing mixed pre-regs need `commits_to:` populated before the derivation rule lands.
-   - Whether any project has tooling that depends on the binary-verdict reading of pre-regs.
+1. **Completed:** circulated the draft and per-project audit reports, reviewed the downstream pre-reg corpus, and migrated audited projects where `commits_to:` clarification was needed.
 
-2. **Land code prerequisites (`[t012b]` / `[t012b']` / `[t012b'']`):** all three changes can ship in one small PR:
-   - Register `pre-registration` → `EntityClass.OPERATIONAL` in `_CORE_KIND_CLASSES` (Prerequisite 1).
-   - Preserve `commits_to:` through source loading / materialization and add the pre-reg commitment-target → `bears_on` epistemic-target auto-derivation rule, with `commits_to:` precedence over `related:` (Prerequisite 2).
-   - Reclassify `inquiry` from `REFERENCE` to `EPISTEMIC` (Prerequisite 3).
+2. **Completed:** landed code prerequisites (`[t012b]` / `[t012b']` / `[t012b'']`):
+   - Registered `pre-registration` → `EntityClass.OPERATIONAL`.
+   - Preserved `commits_to:` through source loading and added the pre-reg commitment-target → `bears_on` epistemic-target auto-derivation rule, with `commits_to:` precedence over `related:`.
+   - Reclassified `inquiry` from `REFERENCE` to `EPISTEMIC`.
 
-   See § "Code prerequisites" for details and tests.
+3. **Completed:** added follow-up ergonomics:
+   - `[t012c]`: `science-tool entity list --related <ref>` filtering for lookup by authored or resolved `related:` refs.
+   - `[t012d]`: `science-tool health` check listing unregistered ref kinds in identity-bearing fields, especially `related:` and `commits_to:`.
 
-3. **Apply prose changes:** the skill edits from § "Skill changes" and the doc edit from § "Doc changes". Safe because the registry now knows about pre-reg, inquiry is properly classified, and the graph carries the new edges.
+4. **Remaining, nonblocking prose work:** apply the skill edits from § "Skill changes" and the doc edit from § "Doc changes" if they have not already been applied in the downstream command files. Safe because the registry now knows about pre-regs, inquiry is properly classified, and the graph carries the new edges.
 
-4. **Phase 2:** when `[t011]` lands weighted sampling, the pre-reg `bears_on` edges are already in place to feed weighting. The inquiry reclassification gives Phase 2 access to inquiry-level signal as well.
+5. **Phase 2:** when `[t011]` lands weighted sampling, the pre-reg `bears_on` edges are already in place to feed weighting. The inquiry reclassification gives Phase 2 access to inquiry-level signal as well.
 
-5. **Out-of-scope follow-ups** (tracked separately, not blocking t012):
-   - `[t012c]`: add `entity list --related <ref>` filtering for ergonomic pre-reg lookup.
-   - `[t012d]`: `science-tool health` check listing unregistered ref kinds in `related:` across project entities (recommended by audit cumulative finding).
-   - Project-side regularization passes (multiple projects): canonical frontmatter migration, amendment-field shape unification, custom-kind registration via `register_extension_kind`. Tracked per-project in audit reports.
+### Project-side cleanup candidates
+
+These are not blockers for the recast, but they are worth tracking per project after the migration:
+
+| Candidate | Why it matters | Suggested owner/path |
+|---|---|---|
+| Amendment-field shape unification | Projects still use a mix of `amendments:`, `amendment_history:`, `amended:`, or body-only amendment notes. Normalizing this would make operational pre-reg deviation checks easier to automate. | Project-led cleanup, guided by each audit report. |
+| Body-only hypothesis promotion | cbioportal `t077-glmm-logit-pooling` has H1 only in `specs/research-question.md`, so full auto-derived `bears_on` benefit requires a formal `hypothesis:` entity. | cbioportal. |
+| Custom-kind registration or migration | Prefixes such as `decision:`, `latent:`, `bias-audit:`, `analysis-plan:`, and `rq:` are now visible in health. Register durable project kinds with `register_extension_kind`, migrate to canonical kinds, or move non-entity annotations to `meta:*`. | Project-led, with `science-tool health` as the inventory source. |
+| Residual frontmatter regularization | Pre-canonical files with `date:`/`status: registered` conventions or minimal frontmatter work under the recast but remain harder to query consistently. | Project-led; prioritize only where active interpretation workflows touch the files. |
 
 Total prose-edit work in step 3 is small: ~120 lines added across `commands/pre-register.md`, `commands/interpret-results.md`, and `docs/proposition-and-evidence-model.md`, plus zero edits to `docs/claim-and-evidence-model.md` (already superseded).
 
 ---
 
-## Open questions for review
+## Resolved and deferred questions
 
-1. **`commitment_weight` field — yes or no?** Adding it (even optional) is a soft schema change and a new authoring decision the user must make at pre-reg time. Alternative: omit it, treat all pre-regs as `strong`, and add weighting later if Phase-2 needs the gradient. **Lean: omit for now.**
+1. **`commitment_weight` field — yes or no?** Resolved for this recast: omit for now. Treat pre-registered evidence as strongly committed unless Phase 2 later needs a gradient.
 2. ~~**Pre-reg classification: OPERATIONAL or REFERENCE?**~~ **Resolved (revision 3): OPERATIONAL** per Prerequisite 1.
-3. **`commits_to:` field — accepted shape?** The audit-driven resolution to the `related:` conflation issue introduces `commits_to:` as a frontmatter field that overrides `related:` for commitment-target derivation. It scopes derived pre-reg `bears_on` edges; it does not lock the target or suppress normal freshness propagation. Alternative shapes considered and rejected: (a) repurposing existing `committed:` (already used for the date), (b) splitting `related:` into `commits_to:` + `context:` (more invasive — every pre-reg would need migration). **Lean: optional for new clean pre-regs, but required as a pre-merge clarification for existing mixed pre-regs where `related:` would otherwise over-derive. Confirmation requested.**
-4. **Inquiry reclassification — cross-cluster acceptable?** Reclassifying `inquiry` from `REFERENCE` to `EPISTEMIC` affects all 9 audited projects, not just multiple-myeloma. Audit found inquiry refs in pre-regs only in multiple-myeloma and natural-systems; other projects unaffected. **Lean: reclassify (per agreement); confirm cluster-wide.**
+3. **`commits_to:` field — accepted shape?** Resolved for this recast: accepted as the optional frontmatter field that overrides `related:` for commitment-target derivation. It scopes derived pre-reg `bears_on` edges; it does not lock the target or suppress normal freshness propagation.
+4. **Inquiry reclassification — cross-cluster acceptable?** Resolved for this recast: `inquiry` is `EPISTEMIC`.
 5. **Should `bias-audit` skill be reframed in this same recast?** Lean: defer — its current language is mild enough not to mislead.
 6. **Should the supersede notice in `claim-and-evidence-model.md` be strengthened?** Lean: out of scope for t012; do separately if at all.
 7. **Pre-canonical pre-reg migration — project-led or cluster-wide initiative?** 12 of 60 surveyed pre-regs are pre-canonical (mm 4, seq-feats 5, 3d-attention-bias 3 with date-field drift, plus 3 minimal-frontmatter cases in natural-systems). Each project's roadmap is independent. **Lean: project-led; not blocking the recast.**
 
 ---
 
-## What this draft is **not**
+## Scope boundaries
 
-- It is not the final recast text. The skill files and `proposition-and-evidence-model.md` should be edited only after objections come back and the code prerequisites land.
+- It is not the final skill prose. The skill files and `proposition-and-evidence-model.md` can now be edited against this implementation record because the code prerequisites have landed.
 - It is not retroactive. Existing pre-regs stay valid as authored; only their interpretation at evaluation time shifts.
 
 The original draft additionally claimed "no code changes for t012 itself." That was withdrawn in revision 2 — see § "What changed in this revision" below.
@@ -436,6 +435,14 @@ The original draft additionally claimed "no code changes for t012 itself." That 
 ---
 
 ## What changed in this revision
+
+Revision 4 (2026-05-05, post implementation and migrations):
+
+- **Status changed from draft to implementation record.** The registry changes, `commits_to:` preservation, pre-reg commitment-target deriver, inquiry reclassification, and downstream migrations have landed.
+- **`entity list --related <ref>` documented as implemented.** The CLI now filters source-authored entities by `related:` refs and resolves aliases where possible.
+- **Unregistered ref-kind health check documented as implemented.** `science-tool health` now surfaces unregistered prefixes in identity-bearing fields, including `related:` and `commits_to:`, without inferring semantics for unknown kinds.
+- **Open questions resolved or deferred.** `commitment_weight` remains omitted; `commits_to:` is the accepted edge-scoping field; `inquiry` is `EPISTEMIC`.
+- **Project-side cleanup candidates captured.** Amendment-field unification, body-only hypothesis promotion, custom-kind registration/migration, and residual frontmatter regularization are explicitly nonblocking follow-ups.
 
 Revision 3 (2026-05-04, post 9-project audit):
 

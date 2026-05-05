@@ -13,6 +13,7 @@ import yaml
 
 from science_model.entities import ProjectEntity
 from science_tool.graph.migrate import audit_project_sources
+from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import load_project_sources
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
 
@@ -402,13 +403,24 @@ def append_entity_note(
     return EntityWriteResult(entity_id=location.entity_id, path=location.path, warnings=warnings)
 
 
-def list_entities(project_root: Path, kind: str | None = None, status: str | None = None) -> list[dict[str, str]]:
+def list_entities(
+    project_root: Path,
+    kind: str | None = None,
+    status: str | None = None,
+    related: str | None = None,
+) -> list[dict[str, str]]:
+    sources = load_project_sources(project_root.resolve())
+    resolver = ReferenceResolver.from_entities(sources.entities, manual_aliases=sources.manual_aliases)
+    related_key = _resolved_ref_key(resolver, related) if related is not None else None
+
     rows: list[dict[str, str]] = []
-    for entity in load_project_sources(project_root.resolve()).entities:
+    for entity in sources.entities:
         if kind is not None and entity.kind != kind:
             continue
         entity_status = entity.status or ""
         if status is not None and entity_status != status:
+            continue
+        if related_key is not None and not _related_refs_match(entity.related, related_key, resolver):
             continue
         rows.append(
             {
@@ -420,6 +432,21 @@ def list_entities(project_root: Path, kind: str | None = None, status: str | Non
             }
         )
     return sorted(rows, key=lambda row: row["id"])
+
+
+def _resolved_ref_key(resolver: ReferenceResolver, raw: str) -> str:
+    resolution = resolver.resolve(raw, allow_cross_kind_fallback=True, allow_tag=True)
+    return resolution.canonical_id or raw
+
+
+def _related_refs_match(related_refs: list[str], related_key: str, resolver: ReferenceResolver) -> bool:
+    for raw in related_refs:
+        if raw == related_key:
+            return True
+        resolution = resolver.resolve(raw, allow_cross_kind_fallback=True, allow_tag=True)
+        if resolution.canonical_id == related_key:
+            return True
+    return False
 
 
 def load_local_entity_index(project_root: Path) -> dict[str, ProjectEntity]:

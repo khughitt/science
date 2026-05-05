@@ -16,8 +16,9 @@ import yaml as _yaml
 
 from science_model.entities import Entity
 from science_tool.big_picture.literature_prefix import canonical_paper_id
+from science_tool.graph.entity_registry import EntityKindNotRegisteredError
 from science_tool.graph.migrate import audit_project_sources, build_layered_claim_migration_report
-from science_tool.graph.sources import load_project_sources
+from science_tool.graph.sources import external_prefixes, is_external_reference, is_metadata_reference, load_project_sources
 
 
 DATASET_ANOMALY_CODES: tuple[str, ...] = (
@@ -41,6 +42,20 @@ class UnresolvedRef(TypedDict):
     mention_count: int
     sources: list[str]
     looks_like: str  # "semantic-triage" | "task" | "hypothesis" | "question" | "unknown"
+
+
+class UnregisteredRefKind(TypedDict):
+    kind: str
+    field: str
+    mention_count: int
+    refs: list[str]
+    sources: list[str]
+
+
+class _UnregisteredRefKindAccumulator(TypedDict):
+    mention_count: int
+    refs: set[str]
+    sources: set[str]
 
 
 # Heuristic patterns for classifying mis-prefixed `topic:` refs.
@@ -94,6 +109,60 @@ def collect_unresolved_refs(project_root: Path) -> list[UnresolvedRef]:
     ]
     result.sort(key=lambda r: (-r["mention_count"], r["target"]))
     return result
+
+
+def collect_unregistered_ref_kinds(project_root: Path) -> list[UnregisteredRefKind]:
+    """Report identity refs whose CURIE prefix is not a registered entity kind."""
+    sources = load_project_sources(project_root.resolve())
+    external = external_prefixes(sources.ontology_catalogs)
+    grouped: dict[tuple[str, str], _UnregisteredRefKindAccumulator] = {}
+
+    for entity in sources.entities:
+        source_path = entity.file_path
+        for field in _IDENTITY_REFERENCE_FIELDS:
+            for raw in _string_refs(getattr(entity, field, None)):
+                if (
+                    ":" not in raw
+                    or is_metadata_reference(raw)
+                    or is_external_reference(raw)
+                    or is_external_reference(raw, known_prefixes=external)
+                ):
+                    continue
+                kind, _ = raw.split(":", 1)
+                kind = kind.lower()
+                try:
+                    sources.registry.kind_class(kind)
+                except EntityKindNotRegisteredError:
+                    bucket = grouped.setdefault(
+                        (kind, field),
+                        {"mention_count": 0, "refs": set(), "sources": set()},
+                    )
+                    bucket["mention_count"] += 1
+                    bucket["refs"].add(raw)
+                    bucket["sources"].add(source_path)
+
+    rows: list[UnregisteredRefKind] = []
+    for (kind, field), bucket in grouped.items():
+        rows.append(
+            {
+                "kind": kind,
+                "field": field,
+                "mention_count": bucket["mention_count"],
+                "refs": sorted(bucket["refs"]),
+                "sources": sorted(bucket["sources"]),
+            }
+        )
+    return sorted(rows, key=lambda row: (row["kind"], row["field"]))
+
+
+def _string_refs(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, (list, tuple, set)):
+        return [item for item in value if isinstance(item, str)]
+    return []
 
 
 class LingeringTagsRecord(TypedDict):
@@ -186,6 +255,7 @@ class ToolingScaffoldFinding(TypedDict):
 
 class HealthReport(TypedDict):
     unresolved_refs: list[UnresolvedRef]
+    unregistered_ref_kinds: list[UnregisteredRefKind]
     lingering_tags_lines: list[LingeringTagsRecord]
     identity_policy: list["IdentityPolicyFinding"]
     layered_claims: "LayeredClaimHealthReport"
@@ -275,6 +345,7 @@ def build_health_report(project_root: Path) -> HealthReport:
     tooling_scaffold = collect_tooling_scaffold_findings(project_root)
 
     unresolved_refs = collect_unresolved_refs(project_root)
+    unregistered_ref_kinds = collect_unregistered_ref_kinds(project_root)
     lingering_tags_lines = collect_lingering_tags(project_root)
     legacy_structured_literature_prefixes = collect_legacy_structured_literature_prefixes(project_root)
     dataset_anomalies = check_dataset_anomalies(project_root)
@@ -299,6 +370,7 @@ def build_health_report(project_root: Path) -> HealthReport:
 
     total_issues = (
         len(unresolved_refs)
+        + len(unregistered_ref_kinds)
         + len(lingering_tags_lines)
         + len(identity_policy_findings)
         + len(legacy_structured_literature_prefixes)
@@ -312,6 +384,7 @@ def build_health_report(project_root: Path) -> HealthReport:
 
     return {
         "unresolved_refs": unresolved_refs,
+        "unregistered_ref_kinds": unregistered_ref_kinds,
         "lingering_tags_lines": lingering_tags_lines,
         "identity_policy": identity_policy_findings,
         "layered_claims": {
@@ -490,7 +563,15 @@ _IDENTITY_REQUIRED_KINDS = frozenset(
     }
 )
 _TAXON_REQUIRED_KINDS = frozenset({"gene", "protein"})
-_IDENTITY_REFERENCE_FIELDS = ("related", "source_refs", "same_as", "blocked_by", "consumed_by")
+_IDENTITY_REFERENCE_FIELDS = (
+    "related",
+    "commits_to",
+    "source_refs",
+    "evidence_refs",
+    "same_as",
+    "blocked_by",
+    "consumed_by",
+)
 
 
 def _coerce_external_curie(raw: object) -> str | None:
