@@ -44,6 +44,57 @@ New-Item -ItemType Directory -Force -Path "$CodexHome\skills"
 cmd /c mklink /J "$CodexHome\skills\science" "$env:USERPROFILE\.codex\science\codex-skills"
 ```
 
+## Project Installation
+
+Use a project-local install when only one repository should see the Science
+skills. Codex discovers repo-scoped skills from `.agents/skills/` directories
+inside the project tree, so put the Science skill root there instead of under
+`${CODEX_HOME:-$HOME/.codex}/skills`.
+
+### Link an Existing Science Clone
+
+If Science is already cloned somewhere on the machine:
+
+```bash
+cd <project-root>
+mkdir -p .agents/skills
+ln -s ~/.codex/science/codex-skills .agents/skills/science
+```
+
+Restart Codex from inside that project. The Science skills are available only
+for that project tree.
+
+### Vendor Science in the Project
+
+If the project should carry its own Science checkout, keep the clone under
+`.agents/` and link its generated Codex skills:
+
+```bash
+cd <project-root>
+git clone https://github.com/khughitt/science.git .agents/science
+mkdir -p .agents/skills
+ln -s ../science/codex-skills .agents/skills/science
+```
+
+For a committed dependency, use a submodule instead of a plain clone:
+
+```bash
+cd <project-root>
+git submodule add https://github.com/khughitt/science.git .agents/science
+mkdir -p .agents/skills
+ln -s ../science/codex-skills .agents/skills/science
+```
+
+### Windows
+
+Use a junction inside the project:
+
+```powershell
+Set-Location <project-root>
+New-Item -ItemType Directory -Force -Path ".agents\skills"
+cmd /c mklink /J ".agents\skills\science" "$env:USERPROFILE\.codex\science\codex-skills"
+```
+
 ## What Is Installed
 
 Codex discovers all generated `science-*` skills from `codex-skills/`.
