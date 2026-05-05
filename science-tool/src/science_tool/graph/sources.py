@@ -270,6 +270,7 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
     entities.sort(key=lambda e: e.canonical_id)
 
     relations = _load_structured_relations(project_root, local_profile=local_profile)
+    relations.extend(_entity_nested_relations(entities))
     # Legacy model/parameter relations come from the nested authored-relations block.
     relations.extend(
         _legacy_nested_relations(
@@ -379,6 +380,7 @@ def _enrich_raw(
     raw.setdefault("project", project_slug)
     raw.setdefault("ontology_terms", [])
     raw.setdefault("related", [])
+    raw.setdefault("relations", [])
     raw.setdefault("source_refs", [])
     raw.setdefault("evidence_refs", [])
     raw.setdefault("same_as", [])
@@ -574,6 +576,24 @@ def _legacy_nested_relations(
             continue
         out.extend(_nested_relations(cid, rels, source_path=src_path))
     return out
+
+
+def _entity_nested_relations(entities: list[Entity]) -> list[SourceRelation]:
+    flattened: list[SourceRelation] = []
+    for entity in entities:
+        if not entity.relations:
+            continue
+        for relation in entity.relations:
+            flattened.append(
+                SourceRelation(
+                    subject=entity.canonical_id,
+                    predicate=relation.predicate,
+                    object=canonical_paper_id(relation.target),
+                    graph_layer=relation.graph_layer,
+                    source_path=entity.file_path,
+                )
+            )
+    return flattened
 
 
 def _load_binding_sources(project_root: Path, *, local_profile: str) -> list[BindingSource]:

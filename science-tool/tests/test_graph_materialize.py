@@ -682,6 +682,64 @@ def test_materialize_graph_applies_structured_relations_with_internal_targets(tm
     assert (paper_uri, CITO.discusses, question_uri) in knowledge
 
 
+def test_materialize_graph_applies_source_entity_relations(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    interpretations = project / "doc" / "interpretations"
+    interpretations.mkdir(parents=True)
+    (interpretations / "old.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "interpretation:old"',
+                'kind: "interpretation"',
+                'title: "Old interpretation"',
+                'status: "active"',
+                'created: "2026-05-01"',
+                'updated: "2026-05-01"',
+                "related: []",
+                "source_refs: []",
+                "---",
+                "",
+                "Old body.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (interpretations / "new.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "interpretation:new"',
+                'kind: "interpretation"',
+                'title: "New interpretation"',
+                'status: "active"',
+                'created: "2026-05-02"',
+                'updated: "2026-05-02"',
+                "related: []",
+                "source_refs: []",
+                "relations:",
+                '  - predicate: "sci:amends"',
+                '    target: "interpretation:old"',
+                "---",
+                "",
+                "New body.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    trig_path = materialize_graph(project)
+
+    dataset = Dataset()
+    dataset.parse(source=str(trig_path), format="trig")
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+
+    assert (PROJECT_NS["interpretation/new"], SCI.amends, PROJECT_NS["interpretation/old"]) in knowledge
+
+
 def test_materialize_graph_applies_structured_relations_with_external_targets(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)
