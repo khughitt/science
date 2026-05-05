@@ -3399,6 +3399,21 @@ def test_graph_add_edge_warns_on_reversed_addresses_direction() -> None:
         assert "direction looks reversed" in result.output
 
 
+def test_graph_add_edge_warns_on_invalid_supersedes_kind_pair() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        result = runner.invoke(
+            main,
+            ["graph", "add", "edge", "interpretation/new_interpretation", "sci:supersedes", "workflow-run/old-run"],
+        )
+        assert result.exit_code == 0
+        assert "unexpected kinds" in result.output
+        assert "interpretation -> workflow-run" in result.output
+
+
 def test_graph_project_summary_rolls_up_research_profile() -> None:
     runner = CliRunner()
 

@@ -16,7 +16,9 @@ import click
 from rdflib import Dataset, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
 from science_model.profiles import CORE_PROFILE
+from science_model.profiles.schema import RelationKind
 from science_model.reasoning import MeasurementModel, RivalModelPacket
+from science_model.relations import relation_allows_kinds
 
 from science_tool.graph.export_types import (
     GraphExportEdge,
@@ -401,6 +403,7 @@ PROJECT_ENTITY_PREFIXES: set[str] = {
     "inquiry",
     "task",
     "data-package",
+    "workflow-run",
     "finding",
     "interpretation",
     "story",
@@ -411,14 +414,11 @@ PROJECT_ENTITY_PREFIXES: set[str] = {
     "pre-registration",
 }
 
-# Lookup of `predicate URI -> (allowed source kinds, allowed target kinds)`,
+# Lookup of `predicate URI -> relation kind`,
 # derived once from CORE_PROFILE so add_edge can warn on direction mistakes
 # without scanning the profile on every call.
-_RELATION_KIND_BY_PREDICATE: dict[URIRef, tuple[frozenset[str], frozenset[str]]] = {
-    URIRef(SCI_NS[rk.predicate.split(":", 1)[1]] if rk.predicate.startswith("sci:") else rk.predicate): (
-        frozenset(rk.source_kinds),
-        frozenset(rk.target_kinds),
-    )
+_RELATION_KIND_BY_PREDICATE: dict[URIRef, RelationKind] = {
+    URIRef(SCI_NS[rk.predicate.split(":", 1)[1]] if rk.predicate.startswith("sci:") else rk.predicate): rk
     for rk in CORE_PROFILE.relation_kinds
     if rk.predicate.startswith("sci:")
 }
@@ -1177,24 +1177,23 @@ def _warn_on_relation_direction_mismatch(
     constraint = _RELATION_KIND_BY_PREDICATE.get(predicate_uri)
     if constraint is None:
         return
-    allowed_subject_kinds, allowed_object_kinds = constraint
+    relation_kind = constraint
     subject_kind = _entity_kind_from_uri(subject_uri)
     object_kind = _entity_kind_from_uri(object_uri)
     if subject_kind is None or object_kind is None:
         return
-    if subject_kind in allowed_subject_kinds and object_kind in allowed_object_kinds:
+    if relation_allows_kinds(relation_kind, subject_kind, object_kind):
         return
-    if object_kind in allowed_subject_kinds and subject_kind in allowed_object_kinds:
+    if relation_allows_kinds(relation_kind, object_kind, subject_kind):
         click.echo(
             f"Warning: '{predicate}' direction looks reversed — "
-            f"profile expects {sorted(allowed_subject_kinds)} -> {sorted(allowed_object_kinds)} "
-            f"but got {subject_kind} -> {object_kind}.",
+            f"profile accepts {relation_kind.name} endpoints but got reversed "
+            f"{subject_kind} -> {object_kind}.",
             err=True,
         )
         return
     click.echo(
         f"Warning: '{predicate}' edge has unexpected kinds — "
-        f"profile expects {sorted(allowed_subject_kinds)} -> {sorted(allowed_object_kinds)}, "
         f"got {subject_kind} -> {object_kind}.",
         err=True,
     )
