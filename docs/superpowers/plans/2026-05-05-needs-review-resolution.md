@@ -25,7 +25,11 @@ The spec covers schema/profile declarations, relation loading/materialization, f
   - Add `sci:amends`.
   - Broaden `sci:supersedes` with explicit allowed pairs.
 - `science-model/src/science_model/entities.py`
-  - Preserve source-authored `relations:` frontmatter on `Entity`.
+  - Preserve source-authored `relations:` frontmatter on `Entity`. A repo scan
+    before this plan found no current entity frontmatter using `relations:`, so
+    the new typed field does not conflict with existing data. After this lands,
+    malformed `relations:` blocks should fail entity parsing instead of being
+    silently ignored.
 - `science-tool/src/science_tool/graph/sources.py`
   - Convert markdown entity `relations:` blocks into `SourceRelation` records.
 - `science-tool/src/science_tool/graph/materialize.py`
@@ -684,6 +688,36 @@ def test_materialize_graph_rejects_amendment_cycle(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match=r"cycle in amendment/supersession relations: interpretation:a -> interpretation:b -> interpretation:a"):
         materialize_graph(project)
+
+
+def test_materialize_graph_rejects_mixed_amends_supersedes_cycle(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    _write_minimal_entity(
+        project / "doc" / "interpretations" / "a.md",
+        "interpretation:a",
+        "interpretation",
+        "A",
+        [
+            "relations:",
+            '  - predicate: "sci:amends"',
+            '    target: "interpretation:b"',
+        ],
+    )
+    _write_minimal_entity(
+        project / "doc" / "interpretations" / "b.md",
+        "interpretation:b",
+        "interpretation",
+        "B",
+        [
+            "relations:",
+            '  - predicate: "sci:supersedes"',
+            '    target: "interpretation:a"',
+        ],
+    )
+
+    with pytest.raises(ValueError, match=r"cycle in amendment/supersession relations: interpretation:a -> interpretation:b -> interpretation:a"):
+        materialize_graph(project)
 ```
 
 - [ ] **Step 3: Run tests to verify they fail**
@@ -731,6 +765,12 @@ Add these helpers below `_add_authored_relation()` in `science-tool/src/science_
 _AMENDMENT_RELATION_PREDICATES = frozenset({SCI_NS.amends, SCI_NS.supersedes})
 
 
+def _relation_name_for_error(relation_kind: RelationKind | None, predicate: str) -> str:
+    if relation_kind is not None:
+        return relation_kind.name
+    return predicate
+
+
 def _canonical_entity(
     raw_value: str,
     *,
@@ -764,20 +804,23 @@ def _validate_authored_relation_endpoint(
         if relation_kind.target_kinds or relation_kind.allowed_kind_pairs:
             raise ValueError(
                 "invalid authored relation endpoint: "
-                f"{relation.subject} {relation.predicate} {relation.object} in {relation.source_path} "
+                f"{relation.subject} {relation.predicate} ({_relation_name_for_error(relation_kind, relation.predicate)}) "
+                f"{relation.object} in {relation.source_path} "
                 "targets an external reference but the predicate requires a project entity"
             )
         return
     if object_entity is not None and subject_entity.canonical_id == object_entity.canonical_id:
         raise ValueError(
             "self-referential authored relation: "
-            f"{relation.subject} {relation.predicate} {relation.object} in {relation.source_path}"
+            f"{relation.subject} {relation.predicate} ({_relation_name_for_error(relation_kind, relation.predicate)}) "
+            f"{relation.object} in {relation.source_path}"
         )
     if relation_allows_kinds(relation_kind, subject_entity.kind, object_entity.kind):
         return
     raise ValueError(
         "invalid authored relation endpoint: "
-        f"{relation.subject} {relation.predicate} {relation.object} in {relation.source_path} "
+        f"{relation.subject} {relation.predicate} ({_relation_name_for_error(relation_kind, relation.predicate)}) "
+        f"{relation.object} in {relation.source_path} "
         f"(got {subject_entity.kind} -> {object_entity.kind})"
     )
 
@@ -787,13 +830,14 @@ def _display_entity_uri(uri: URIRef) -> str:
     return canonical_id or str(uri)
 
 
-def _validate_no_amendment_cycles(knowledge) -> None:
+def _validate_no_amendment_cycles(dataset: Dataset) -> None:
     adjacency: dict[URIRef, set[URIRef]] = {}
-    for predicate in _AMENDMENT_RELATION_PREDICATES:
-        for source, _, target in knowledge.triples((None, predicate, None)):
-            if not isinstance(source, URIRef) or not isinstance(target, URIRef):
-                continue
-            adjacency.setdefault(source, set()).add(target)
+    for graph in dataset.graphs():
+        for predicate in _AMENDMENT_RELATION_PREDICATES:
+            for source, _, target in graph.triples((None, predicate, None)):
+                if not isinstance(source, URIRef) or not isinstance(target, URIRef):
+                    continue
+                adjacency.setdefault(source, set()).add(target)
 
     visited: set[URIRef] = set()
     visiting: set[URIRef] = set()
@@ -862,8 +906,12 @@ def _add_authored_relation(
 In `_build_dataset_from_sources()`, after the `for binding in sources.bindings:` loop and before `_derive_bears_on_layer(...)`, add:
 
 ```python
-    _validate_no_amendment_cycles(knowledge)
+    _validate_no_amendment_cycles(dataset)
 ```
+
+This intentionally treats `sci:amends` and `sci:supersedes` as one combined
+conclusion-chain DAG, and it scans all named graphs so a relation authored on a
+non-knowledge layer cannot escape cycle validation.
 
 - [ ] **Step 8: Run endpoint validation tests**
 
@@ -1163,7 +1211,11 @@ In `templates/interpretation.md` and `science-model/src/science_model/templates/
     relations: { default: [] }
 ```
 
-Add this comment block below the frontmatter in all four files:
+Add this comment block below the frontmatter in all four files, directly after
+the closing `---` and before the first `#` heading. Only
+`templates/interpretation.md` and
+`science-model/src/science_model/templates/interpretation.md` have a
+`_template.frontmatter` mapping; do not add that mapping to the dev templates.
 
 ```markdown
 <!--
@@ -1179,7 +1231,20 @@ Conclusion chains:
 
 - [ ] **Step 5: Update `commands/interpret-results.md`**
 
-In `commands/interpret-results.md`, replace the "Cross-Referencing Prior Interpretations" subsection with:
+In `commands/interpret-results.md`, replace this existing block:
+
+```markdown
+### Cross-Referencing Prior Interpretations
+
+When interpreting multiple tasks jointly or building on a prior interpretation, list which earlier interpretation documents this one extends or supersedes using the `prior_interpretations` frontmatter field.
+
+- **Combined interpretations:** When interpreting 2+ tasks as a single arc, list any prior single-task interpretations that this combined document supersedes. The prior documents remain for provenance; the combined one is canonical for downstream reference.
+- **Update mode:** When updating an existing interpretation with new evidence, reference the prior version's ID.
+
+This creates a provenance chain across interpretation documents.
+```
+
+with:
 
 ````markdown
 ### Cross-Referencing Prior Interpretations
@@ -1271,7 +1336,16 @@ freshness state as a conclusion that the old standing is wrong.
 
 - [ ] **Step 8: Update `commands/big-picture.md`**
 
-Replace the current `provenance_coverage` rule block in `commands/big-picture.md` with:
+In `commands/big-picture.md`, replace this existing block:
+
+```markdown
+Compute `provenance_coverage` per hypothesis:
+- `high` if ≥1 `.edges.yaml` is present OR ≥1 graph claim surfaces AND ≥60% of related interpretations have `prior_interpretations` chains.
+- `partial` if neither of those but ≥30% of related interpretations have `prior_interpretations`.
+- `thin` otherwise.
+```
+
+with:
 
 ```markdown
 Compute `provenance_coverage` per hypothesis:
