@@ -72,9 +72,17 @@ Then for each hypothesis bundle, filter `all_gaps` to topics whose `hypotheses` 
 `included_question_ids` is the exact set already computed earlier in Phase 1 for aspect filtering — DO NOT recompute it here.
 
 Compute `provenance_coverage` per hypothesis:
-- `high` if ≥1 `.edges.yaml` is present OR ≥1 graph claim surfaces AND ≥60% of related interpretations have `prior_interpretations` chains.
-- `partial` if neither of those but ≥30% of related interpretations have `prior_interpretations`.
+- `high` if >=1 `.edges.yaml` is present OR >=1 graph claim surfaces AND >=60% of
+  related interpretations participate in materialized `sci:amends` /
+  `sci:supersedes` conclusion chains.
+- `partial` if neither of those but >=30% of related interpretations participate
+  in materialized `sci:amends` / `sci:supersedes` chains.
 - `thin` otherwise.
+
+`prior_interpretations` is a narrative breadcrumb, not the machine-readable chain.
+Use materialized `sci:amends` and `sci:supersedes` edges for arc
+reconstruction. When a replacement chain exists, prefer non-superseded current
+conclusions in the synthesis and keep superseded conclusions as provenance.
 
 Record the project-level `source_commit`:
 

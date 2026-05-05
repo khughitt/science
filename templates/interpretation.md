@@ -11,6 +11,7 @@ updated: "{{YYYY-MM-DD}}"
 input: "{{path to results, notebook, or prose description}}"
 workflow_run: "<workflow-run-slug>"  # optional: links to the run that produced the interpreted results
 prior_interpretations: []  # optional: interpretation IDs this document extends or supersedes
+relations: []  # optional graph relations; use sci:amends or sci:supersedes for conclusion chains
 _template:
   frontmatter:
     id: { from: entity_id }
@@ -24,6 +25,7 @@ _template:
     input: { from: source_refs }
     workflow_run: { omit: true }
     prior_interpretations: { default: [] }
+    relations: { default: [] }
   sections:
     - { key: verdict, name: "Verdict", required: true }
     - { key: findings-summary, name: "Findings Summary", required: true }
@@ -37,6 +39,16 @@ _template:
     - { key: limitations-residual-uncertainty, name: "Limitations & Residual Uncertainty", required: true }
     - { key: updated-priorities, name: "Updated Priorities", required: true }
 ---
+
+<!--
+Conclusion chains:
+- Use `relations:` with `predicate: "sci:amends"` when this interpretation revises,
+  narrows, qualifies, or extends an older conclusion.
+- Use `relations:` with `predicate: "sci:supersedes"` when this interpretation
+  replaces an older conclusion as the current canonical reading.
+- Keep `prior_interpretations` only as a narrative breadcrumb. The graph relation
+  is the machine-readable source of truth.
+-->
 
 # Interpretation: {{title}}
 

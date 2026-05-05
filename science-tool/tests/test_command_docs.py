@@ -200,6 +200,62 @@ def test_plan_analysis_is_integrated_with_neighbor_commands() -> None:
             assert expected in text
 
 
+def test_needs_review_resolution_docs_cover_amendment_workflow() -> None:
+    expected_by_path = {
+        "commands/interpret-results.md": (
+            "needs-review resolution",
+            "sci:amends",
+            "sci:supersedes",
+            "sci:supersedesClaim",
+            "entity review <target-ref>",
+            "flagged entity",
+            "status: superseded",
+        ),
+        "commands/next-steps.md": (
+            "needs-review",
+            "review prompt",
+            "sci:amends",
+            "sci:supersedes",
+        ),
+        "commands/status.md": (
+            "needs-review",
+            "review workflow",
+            "sci:amends",
+            "sci:supersedes",
+        ),
+        "commands/big-picture.md": (
+            "sci:amends",
+            "sci:supersedes",
+            "prior_interpretations",
+            "not the machine-readable chain",
+        ),
+        "templates/interpretation.md": (
+            "relations:",
+            "sci:amends",
+            "sci:supersedes",
+        ),
+        "templates/interpretation-dev.md": (
+            "relations:",
+            "sci:amends",
+            "sci:supersedes",
+        ),
+        "science-model/src/science_model/templates/interpretation.md": (
+            "relations:",
+            "sci:amends",
+            "sci:supersedes",
+        ),
+        "science-model/src/science_model/templates/interpretation-dev.md": (
+            "relations:",
+            "sci:amends",
+            "sci:supersedes",
+        ),
+    }
+    for path, expected_strings in expected_by_path.items():
+        text = _read(path)
+        for expected in expected_strings:
+            assert expected in text
+
+
 @pytest.mark.parametrize(
     ("path", "expected_strings"),
     [

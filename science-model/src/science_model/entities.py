@@ -20,6 +20,7 @@ from science_model.reasoning import (
     RivalModelPacket,
     SupportScope,
 )
+from science_model.source_contracts import AuthoredTargetedRelation
 from science_model.sync import SyncSource
 
 
@@ -184,6 +185,7 @@ class Entity(BaseModel):
     created: date | None = None
     updated: date | None = None
     related: list[str]
+    relations: list[AuthoredTargetedRelation] = Field(default_factory=list)
     commits_to: list[str] | None = None
     same_as: list[str] = Field(default_factory=list)
     source_refs: list[str]

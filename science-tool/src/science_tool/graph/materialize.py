@@ -12,7 +12,10 @@ from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import PROV, RDF, SKOS, XSD
 from science_model.entities import Entity, EntityClass
 from science_model.ontologies.schema import OntologyCatalog
+from science_model.profiles import CORE_PROFILE
+from science_model.profiles.schema import RelationKind
 from science_model.reasoning import MeasurementModel, RivalModelPacket
+from science_model.relations import relation_allows_kinds
 
 from science_tool.addressing import is_address, parse_address
 from science_tool.graph.freshness import (
@@ -43,6 +46,7 @@ from science_tool.graph.store import (
     PROJECT_NS,
     SCHEMA_NS,
     SCI_NS,
+    canonical_id_from_entity_uri,
     save_graph_dataset,
 )
 
@@ -112,6 +116,8 @@ def _build_dataset_from_sources(sources: ProjectSources) -> Dataset:
             entity_index=entity_index,
             resolver=resolver,
         )
+
+    _validate_no_amendment_cycles(dataset)
 
     _derive_bears_on_layer(
         dataset,
@@ -410,29 +416,127 @@ def _add_authored_relation(
     ext_prefixes: frozenset[str],
     kind_class: dict[str, EntityClass] | None = None,
 ) -> None:
+    del kind_class  # endpoint validation is now driven by the relation profile
     graph = dataset.graph(_graph_uri(relation.graph_layer))
-    subject_uri = _canonical_entity_uri(relation.subject, entity_index=entity_index, resolver=resolver)
+    subject_entity = _canonical_entity(relation.subject, entity_index=entity_index, resolver=resolver)
+    subject_uri = _entity_uri(subject_entity.canonical_id)
     predicate_uri = _resolve_relation_term(relation.predicate)
 
+    object_entity: Entity | None = None
     if is_external_reference(relation.object, known_prefixes=ext_prefixes):
         object_uri = _external_uri(relation.object)
         _register_external_term(object_uri, relation.object, bridge=bridge, ontology_catalogs=ontology_catalogs)
     else:
-        object_uri = _canonical_entity_uri(relation.object, entity_index=entity_index, resolver=resolver)
+        object_entity = _canonical_entity(relation.object, entity_index=entity_index, resolver=resolver)
+        object_uri = _entity_uri(object_entity.canonical_id)
 
-    # Phase 1 guard: hand-authored bears_on edges may only target epistemic kinds.
-    # The auto-derivation engine respects this by construction; this catches
-    # human-authored mistakes at the same place we accept their structured edges.
-    if predicate_uri == SCI_NS.bearsOn and kind_class is not None:
-        target_class = kind_class.get(str(object_uri))
-        if target_class is not None and target_class != EntityClass.EPISTEMIC:
-            raise ValueError(
-                f"hand-authored bears_on must target an epistemic entity: "
-                f"{relation.subject} -> {relation.object} in {relation.source_path} "
-                f"(target classified {target_class.value})"
-            )
+    relation_kind = _profile_relation_for_predicate(predicate_uri)
+    _validate_authored_relation_endpoint(
+        relation,
+        relation_kind=relation_kind,
+        subject_entity=subject_entity,
+        object_entity=object_entity,
+    )
 
     graph.add((subject_uri, predicate_uri, object_uri))
+
+
+_AMENDMENT_RELATION_PREDICATES = frozenset({SCI_NS.amends, SCI_NS.supersedes})
+
+
+def _relation_name_for_error(relation_kind: RelationKind | None, predicate: str) -> str:
+    if relation_kind is not None:
+        return relation_kind.name
+    return predicate
+
+
+def _canonical_entity(
+    raw_value: str,
+    *,
+    entity_index: dict[str, Entity],
+    resolver: ReferenceResolver,
+) -> Entity:
+    resolution = resolver.resolve(raw_value)
+    entity = entity_index.get(resolution.canonical_id or "")
+    if entity is None:
+        raise ValueError(f"Unknown canonical entity: {raw_value}")
+    return entity
+
+
+def _profile_relation_for_predicate(predicate_uri: URIRef) -> RelationKind | None:
+    for relation_kind in CORE_PROFILE.relation_kinds:
+        if _resolve_relation_term(relation_kind.predicate) == predicate_uri:
+            return relation_kind
+    return None
+
+
+def _validate_authored_relation_endpoint(
+    relation: SourceRelation,
+    *,
+    relation_kind: RelationKind | None,
+    subject_entity: Entity,
+    object_entity: Entity | None,
+) -> None:
+    if relation_kind is None:
+        return
+    if object_entity is None:
+        if relation_kind.target_kinds or relation_kind.allowed_kind_pairs:
+            raise ValueError(
+                "invalid authored relation endpoint: "
+                f"{relation.subject} {relation.predicate} ({_relation_name_for_error(relation_kind, relation.predicate)}) "
+                f"{relation.object} in {relation.source_path} "
+                "targets an external reference but the predicate requires a project entity"
+            )
+        return
+    if object_entity is not None and subject_entity.canonical_id == object_entity.canonical_id:
+        raise ValueError(
+            "self-referential authored relation: "
+            f"{relation.subject} {relation.predicate} ({_relation_name_for_error(relation_kind, relation.predicate)}) "
+            f"{relation.object} in {relation.source_path}"
+        )
+    if relation_allows_kinds(relation_kind, subject_entity.kind, object_entity.kind):
+        return
+    raise ValueError(
+        "invalid authored relation endpoint: "
+        f"{relation.subject} {relation.predicate} ({_relation_name_for_error(relation_kind, relation.predicate)}) "
+        f"{relation.object} in {relation.source_path} "
+        f"(got {subject_entity.kind} -> {object_entity.kind})"
+    )
+
+
+def _display_entity_uri(uri: URIRef) -> str:
+    canonical_id = canonical_id_from_entity_uri(str(uri))
+    return canonical_id or str(uri)
+
+
+def _validate_no_amendment_cycles(dataset: Dataset) -> None:
+    adjacency: dict[URIRef, set[URIRef]] = {}
+    for graph in dataset.graphs():
+        for predicate in _AMENDMENT_RELATION_PREDICATES:
+            for source, _, target in graph.triples((None, predicate, None)):
+                if not isinstance(source, URIRef) or not isinstance(target, URIRef):
+                    continue
+                adjacency.setdefault(source, set()).add(target)
+
+    visited: set[URIRef] = set()
+    visiting: set[URIRef] = set()
+
+    def visit(node: URIRef, path: list[URIRef]) -> None:
+        if node in visiting:
+            start = path.index(node)
+            cycle = path[start:] + [node]
+            cycle_text = " -> ".join(_display_entity_uri(item) for item in cycle)
+            raise ValueError(f"cycle in amendment/supersession relations: {cycle_text}")
+        if node in visited:
+            return
+        visiting.add(node)
+        for target in sorted(adjacency.get(node, set()), key=str):
+            visit(target, [*path, target])
+        visiting.remove(node)
+        visited.add(node)
+
+    for node in sorted(adjacency, key=str):
+        visit(node, [node])
 
 
 def _add_binding(

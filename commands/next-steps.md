@@ -165,10 +165,15 @@ science-tool graph attention-sample --limit 5 --format json
 
 This samples epistemic entities using graph-derived attention weights:
 incoming `bears_on` count, days since review, freshness state, evidence balance,
-and an epsilon floor. Treat the sample as a revisiting queue, not a ranked verdict.
-Frame `needs-review` or `stale` rows as "this deserves a fresh look" rather than
-as a claim that the prior conclusion is wrong. Propose one as a candidate next
-step and add a corresponding task if accepted.
+and an epsilon floor. Treat the sample as a revisiting queue, not a ranked
+verdict. Frame `needs-review` or `stale` rows as a review prompt rather than as
+evidence that a prior conclusion is wrong.
+
+When recommending work on a `needs-review` entity, name the resolution path:
+unchanged review (`science-tool entity review <target-ref>`), amendment
+(`sci:amends` from a new conclusion to the old conclusion), or replacement
+(`sci:supersedes` plus `status: superseded` on the old conclusion). Propose one
+as a candidate next step and add a corresponding task if accepted.
 
 ### 4. Suggested Next Steps
 

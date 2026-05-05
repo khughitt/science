@@ -1,6 +1,8 @@
 import yaml
 
 from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE, load_profile_manifest, load_shared_profile
+from science_model.profiles.schema import RelationEndpointPair, RelationKind
+from science_model.relations import relation_allows_kinds
 
 
 def test_core_profile_contains_task_and_hypothesis() -> None:
@@ -25,6 +27,39 @@ def test_bears_on_targets_theme() -> None:
     assert "theme" in rel.target_kinds
 
 
+def test_relation_kind_allowed_pairs_override_cartesian_kind_sets() -> None:
+    relation = RelationKind(
+        name="supersedes",
+        predicate="sci:supersedes",
+        source_kinds=["workflow-run", "interpretation"],
+        target_kinds=["workflow-run", "interpretation"],
+        allowed_kind_pairs=[
+            RelationEndpointPair(source_kind="workflow-run", target_kind="workflow-run"),
+            RelationEndpointPair(source_kind="interpretation", target_kind="interpretation"),
+        ],
+        layer="layer/core",
+    )
+
+    assert relation_allows_kinds(relation, "workflow-run", "workflow-run")
+    assert relation_allows_kinds(relation, "interpretation", "interpretation")
+    assert not relation_allows_kinds(relation, "interpretation", "workflow-run")
+    assert not relation_allows_kinds(relation, "workflow-run", "interpretation")
+
+
+def test_relation_kind_without_allowed_pairs_keeps_cartesian_behavior() -> None:
+    relation = RelationKind(
+        name="tests",
+        predicate="sci:tests",
+        source_kinds=["task", "workflow-run"],
+        target_kinds=["hypothesis", "question"],
+        layer="layer/core",
+    )
+
+    assert relation_allows_kinds(relation, "task", "hypothesis")
+    assert relation_allows_kinds(relation, "workflow-run", "question")
+    assert not relation_allows_kinds(relation, "hypothesis", "task")
+
+
 def test_core_profile_contains_workflow_kinds() -> None:
     names = {kind.name for kind in CORE_PROFILE.entity_kinds}
     assert {"method", "workflow", "workflow-run", "workflow-step"} <= names
@@ -39,6 +74,41 @@ def test_core_profile_no_pipeline_step() -> None:
 def test_core_profile_workflow_relations() -> None:
     relation_names = {relation.name for relation in CORE_PROFILE.relation_kinds}
     assert {"realizes", "contains", "executes", "supersedes"} <= relation_names
+
+
+def test_core_profile_declares_amends_and_non_cartesian_supersedes() -> None:
+    relations = {relation.name: relation for relation in CORE_PROFILE.relation_kinds}
+    conclusion_kinds = {
+        "interpretation",
+        "finding",
+        "discussion",
+        "report",
+        "validation-report",
+        "story",
+    }
+
+    amends = relations["amends"]
+    supersedes = relations["supersedes"]
+
+    assert amends.predicate == "sci:amends"
+    assert supersedes.predicate == "sci:supersedes"
+    assert relation_allows_kinds(amends, "interpretation", "finding")
+    assert relation_allows_kinds(amends, "report", "interpretation")
+    assert not relation_allows_kinds(amends, "workflow-run", "workflow-run")
+
+    assert relation_allows_kinds(supersedes, "workflow-run", "workflow-run")
+    assert relation_allows_kinds(supersedes, "interpretation", "finding")
+    assert relation_allows_kinds(supersedes, "story", "validation-report")
+    assert not relation_allows_kinds(supersedes, "interpretation", "workflow-run")
+    assert not relation_allows_kinds(supersedes, "workflow-run", "interpretation")
+
+    amends_pairs = {(pair.source_kind, pair.target_kind) for pair in amends.allowed_kind_pairs}
+    supersedes_pairs = {(pair.source_kind, pair.target_kind) for pair in supersedes.allowed_kind_pairs}
+    for source_kind in conclusion_kinds:
+        for target_kind in conclusion_kinds:
+            assert (source_kind, target_kind) in amends_pairs
+            assert (source_kind, target_kind) in supersedes_pairs
+    assert ("workflow-run", "workflow-run") in supersedes_pairs
 
 
 def test_tests_relation_accepts_workflow_run() -> None:
@@ -183,7 +253,7 @@ def test_grounded_by_relation() -> None:
 def test_synthesizes_relation() -> None:
     rel = next(r for r in CORE_PROFILE.relation_kinds if r.name == "synthesizes")
     assert rel.source_kinds == ["story"]
-    assert set(rel.target_kinds) == {"interpretation", "discussion"}
+    assert set(rel.target_kinds) == {"interpretation", "discussion", "hypothesis"}
     assert rel.predicate == "sci:synthesizes"
 
 
