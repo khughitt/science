@@ -77,26 +77,43 @@ machine-specific physical paths in manifests.
 
 ## Addressing
 
-Cross-project addresses use:
+Canonical cross-project entity references use namespace-first form:
 
 ```text
-<project-id>:<artifact-id>
+<project-id>:<kind>:<slug>
 ```
 
 Examples:
 
-- `cbioportal:q014`
-- `multiple-myeloma:h003`
-- `evolution:t012`
-- `cbioportal:topics/clonal-hematopoiesis-contamination`
+- `cbioportal:question:q014`
+- `multiple-myeloma:hypothesis:h003`
+- `evolution:task:t012`
+- `cbioportal:topic:clonal-hematopoiesis-contamination`
+
+The first segment is a federation project ID from the meta project's `children:` manifest or the current project's own
+`id`. The remaining segments are the target project's normal local entity reference.
+
+Local refs stay local by default:
+
+- `task:t123`
+- `hypothesis:h01`
+- `question:q006`
+
+Bare task shorthand such as `t123` always means a local task. It never names another project.
+
+Artifact addresses remain two-part or path-style addresses when the target is a file-like artifact rather than a
+canonical entity. For example, `cbioportal:topics/clonal-hematopoiesis-contamination` is an artifact address, while the
+canonical topic entity ref is `cbioportal:topic:clonal-hematopoiesis-contamination`.
+
+Two-part entity shorthand such as `cbioportal:q014`, `multiple-myeloma:h003`, or `evolution:t012` is legacy and non-canonical.
+Migrate those references to explicit entity form, such as `cbioportal:question:q014`,
+`multiple-myeloma:hypothesis:h003`, or `evolution:task:t012`.
 
 Graph URI form is:
 
 ```text
 <cancer://project-id/artifact-id>
 ```
-
-For v1.0 this is a convention and helper API only. Automated resolution and link checking are deferred.
 
 ## Federated Graphs
 

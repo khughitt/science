@@ -387,3 +387,32 @@ def test_entity_creation_cookbook_covers_positive_and_negative_examples() -> Non
         "concept:high-proliferation-rate",
     ):
         assert expected in text
+
+
+def test_tasks_command_documents_flat_ids_parent_and_namespace_refs() -> None:
+    text = _read("commands/tasks.md")
+
+    expected_strings = (
+        "Task IDs are flat local identifiers in the form `tNNN`",
+        "`parent: task:t001`",
+        "`natural-systems:task:t335`",
+        "Bare `t123` always means a local task",
+    )
+    for expected in expected_strings:
+        assert expected in text
+
+
+def test_federation_docs_document_canonical_entity_refs_and_artifact_addresses() -> None:
+    text = _read("docs/federation.md")
+
+    expected_strings = (
+        "<project-id>:<kind>:<slug>",
+        "`cbioportal:question:q014`",
+        "`multiple-myeloma:hypothesis:h003`",
+        "`cbioportal:topics/clonal-hematopoiesis-contamination` is an artifact address",
+        "Two-part entity shorthand such as",
+        "`cbioportal:q014`",
+        "is legacy and non-canonical",
+    )
+    for expected in expected_strings:
+        assert expected in text
