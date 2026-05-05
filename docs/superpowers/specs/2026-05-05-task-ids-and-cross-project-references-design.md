@@ -44,7 +44,11 @@ Canonical task IDs use only:
 tNNN
 ```
 
-Examples: `t001`, `t016`, `t335`.
+Examples: `t001`, `t016`, `t335`, `t1000`.
+
+`tNNN` means "at least three digits, zero-padded to three digits while the
+sequence is below 1000." Four or more digits are valid once a project reaches
+that many tasks.
 
 Task header validation is strict:
 
@@ -79,9 +83,17 @@ from this parent task." `related:` remains the many-valued general-purpose link
 field and should include the parent when useful for existing graph and search
 surfaces.
 
+`parent:` must be local. A cross-project structural parent would couple task
+ownership across project boundaries; use `related:` for cross-project
+associations such as `natural-systems:task:t335`.
+
 No separate `work_kind` field is required for the first implementation. If the
 project later needs to distinguish fragment, subtask, and revision semantics, it
 can add a typed field then. For now, the task title and body carry that nuance.
+
+Supersession/revision chains are not modeled by `parent:`. A future
+`supersedes:` field can cover "this task replaces that task" if the project
+needs that workflow.
 
 ### 3. Local References Stay Local By Default
 
@@ -129,6 +141,17 @@ currently describes `<project-id>:<artifact-id>`. The broad namespace-first
 rule remains; this design makes canonical entity refs explicit by requiring the
 local `kind:slug` after the project namespace.
 
+Existing two-part federation examples such as `cbioportal:q014`,
+`multiple-myeloma:h003`, and `evolution:t012` are legacy shorthand and must be
+audited/migrated during implementation. Checked-in examples in
+`docs/federation.md` and `science-tool/tests/test_addressing.py` should either
+move to the three-part entity form or be explicitly labeled as legacy artifact
+addresses.
+
+Path-style addresses such as `cbioportal:topics/clonal-hematopoiesis-contamination`
+are artifact addresses, not canonical entity refs. For entity references, topic
+documents use the entity kind form: `cbioportal:topic:clonal-hematopoiesis-contamination`.
+
 ### 5. Resolution And Validation
 
 Reference parsing should distinguish three shapes:
@@ -146,19 +169,26 @@ For any entity kind:
 | `kind:slug` | local canonical entity ref |
 | `project-id:kind:slug` | cross-project canonical entity ref |
 
+Parsing and validation are separate steps. A value can be syntactically local
+(`meta:next-steps-2026-05-05`) and still fail later if `meta` is not a registered
+local entity kind or the slug does not resolve.
+
 Validation behavior:
 
 - Local refs are resolved against the current project.
 - Cross-project refs resolve through the federation membership table when
   available.
-- If federation metadata is unavailable, namespace-first refs are syntactically
-  accepted but reported as unresolved namespace, not misclassified as local
-  malformed refs.
+- Three-part namespace-first refs are syntactically accepted but reported as an
+  unresolved namespace when the first segment is not in federation metadata.
+- Two-part refs remain local `kind:slug` when the first segment is a registered
+  local entity kind.
+- Two-part refs whose first segment is a known project ID but not a local entity
+  kind are legacy cross-project shorthand. Report a deprecation/error with a
+  suggested three-part replacement rather than silently treating them as local.
+
 For the initial implementation, the parser can use an explicit project-ID set
 from federation config to decide whether the first segment is a namespace. It
-should not infer namespaces from arbitrary strings. Two-part refs always remain
-local `kind:slug`; three-part refs are namespace-first only when the first part
-is a known project ID.
+should not infer namespaces from arbitrary strings.
 
 ## Migration
 
@@ -185,18 +215,24 @@ The migration should be explicit and small. Do not add a legacy alias layer for
 ## Implementation Surface
 
 - `science-tool/src/science_tool/tasks.py`
-  - Make task header parsing strict.
+  - Make task header parsing strict, using one anchored source of truth for
+    task headers.
+  - Replace `next_task_id()`'s loose `_TASK_ID_RE` scan with strict header
+    parsing; do not derive numbers from partial matches such as `[t001b]`.
   - Add optional `parent` parse/render support.
   - Preserve local task ID generation.
 - `science_model.tasks.Task`
   - Add optional `parent: str`.
 - Task storage adapter
-  - Materialize `parent` as a task relationship if the graph layer has an
-    existing suitable predicate; otherwise expose it in the source entity record
-    for later graph use.
+  - Parse/render `parent` and expose it in the raw task entity record.
+  - Do not emit a graph predicate for `parent` in the first implementation.
+    Graph semantics for structural containment/supersession should be designed
+    separately from this parser/namespace fix.
 - Reference parsing / validation
   - Add a small parser for local vs namespace-first refs.
   - Validate namespace-first refs through federation config where available.
+  - Detect legacy two-part cross-project shorthand when the first segment is a
+    known project ID and suggest `<project-id>:<kind>:<slug>`.
 - `commands/tasks.md`
   - Document flat IDs, `parent:`, and namespace-first cross-project refs.
 - `docs/federation.md`
@@ -219,20 +255,30 @@ Unresolved namespace:
 Unknown project namespace 'natural-systems' in ref 'natural-systems:task:t335'. Add it to science.yaml children: or use a local ref.
 ```
 
+Legacy two-part cross-project ref:
+
+```text
+Legacy cross-project ref 'cbioportal:q014' is missing an entity kind. Use 'cbioportal:question:q014' or another explicit <project-id>:<kind>:<slug> ref.
+```
+
 ## Testing Strategy
 
 - Parser accepts `## [t016] Title`.
+- Parser accepts `## [t1000] Title`.
 - Parser rejects `## [t001b] Title` with the clear error above.
 - Parser round-trips `parent: task:t001`.
-- `next_task_id()` ignores invalid task-like headers instead of deriving
-  numbers from partial matches.
+- `next_task_id()` uses strict task-header parsing and does not derive `001`
+  from `[t001b]`.
 - Validation catches stale references to `t001b` after migration.
+- `parent: natural-systems:task:t001` is rejected because `parent` must be local.
 - Reference parser classifies:
   - `t123` as local task shorthand.
   - `task:t123` as local entity ref.
   - `natural-systems:task:t335` as cross-project entity ref.
   - `meta:next-steps-2026-05-05` as a local `meta` entity ref, even when
     `meta` is also a project ID.
+  - `cbioportal:q014` as legacy two-part cross-project shorthand when
+    `cbioportal` is a known project ID and not a local entity kind.
   - unknown namespace as unresolved namespace.
 - Federation-aware validation resolves a child task ref when the child project
   is declared in `children:`.
@@ -242,4 +288,5 @@ Unknown project namespace 'natural-systems' in ref 'natural-systems:task:t335'. 
 - `meta/validate.sh --verbose` no longer fails on duplicate `t001`.
 - The meta task queue contains no semantic task-ID suffixes.
 - Cross-project task refs have a documented canonical shape.
-- Local task workflows remain unchanged for the common case.
+- `science-tool tasks add` still produces `## [tNNN] Title` with no `parent:`
+  line by default.
