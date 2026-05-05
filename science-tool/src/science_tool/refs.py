@@ -13,6 +13,9 @@ from pathlib import Path
 
 from science_model.frontmatter import parse_frontmatter
 
+from science_tool.addressing import classify_entity_ref
+from science_tool.project_config import load_project_config
+
 
 @dataclass
 class RefIssue:
@@ -52,6 +55,38 @@ _SCAN_DIRS = ("doc", "specs")
 _SCAN_FILES = ("RESEARCH_PLAN.md",)
 # Skip directories
 _SKIP_DIRS = {"templates", ".venv", "data", ".git", "__pycache__"}
+_LOCAL_ENTITY_KINDS = frozenset(
+    {
+        "assumption",
+        "concept",
+        "data-package",
+        "dataset",
+        "discussion",
+        "experiment",
+        "finding",
+        "hypothesis",
+        "inquiry",
+        "interpretation",
+        "mechanism",
+        "method",
+        "model",
+        "observation",
+        "paper",
+        "pre-registration",
+        "proposition",
+        "question",
+        "report",
+        "source",
+        "story",
+        "task",
+        "theme",
+        "topic",
+        "validation-report",
+        "workflow",
+        "workflow-run",
+        "meta",
+    }
+)
 
 
 def _collect_markdown_files(root: Path) -> list[Path]:
@@ -112,6 +147,45 @@ def _load_task_ids(root: Path) -> set[str]:
         for match in _TASK_DECL_RE.finditer(text):
             declared.add(match.group(1))
     return declared
+
+
+def _load_project_ids(root: Path) -> set[str]:
+    try:
+        cfg = load_project_config(root)
+    except Exception:
+        return set()
+    ids = {child.id for child in cfg.children}
+    if cfg.id:
+        ids.add(cfg.id)
+    return ids
+
+
+def _extract_frontmatter_refs(path: Path) -> list[str]:
+    parsed = parse_frontmatter(path)
+    if parsed is None:
+        return []
+    fm, _body = parsed
+    refs: list[str] = []
+    for key in ("related", "blocked_by", "blocked-by", "source_refs"):
+        value = fm.get(key)
+        if isinstance(value, str):
+            refs.append(value)
+        elif isinstance(value, list):
+            refs.extend(item for item in value if isinstance(item, str))
+    return refs
+
+
+def _frontmatter_line_numbers(path: Path) -> set[int]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return set()
+    if not lines or lines[0].strip() != "---":
+        return set()
+    for index, line in enumerate(lines[1:], start=2):
+        if line.strip() == "---":
+            return set(range(1, index + 1))
+    return set()
 
 
 def _load_bib_keys(root: Path) -> set[str]:
@@ -189,9 +263,46 @@ def check_refs(root: Path) -> list[RefIssue]:
     hyp_ids = _load_hypothesis_ids(root)
     bib_keys = _load_bib_keys(root)
     task_ids = _load_task_ids(root)
+    project_ids = _load_project_ids(root)
 
     for file_path in files:
         rel_path = str(file_path.relative_to(root))
+        frontmatter_lines = _frontmatter_line_numbers(file_path)
+        for raw_ref in _extract_frontmatter_refs(file_path):
+            parsed_ref = classify_entity_ref(
+                raw_ref,
+                local_kinds=_LOCAL_ENTITY_KINDS,
+                project_ids=frozenset(project_ids),
+            )
+            if parsed_ref.shape == "cross-project-entity":
+                continue
+            if parsed_ref.shape == "unknown-namespace":
+                issues.append(
+                    RefIssue(
+                        file=rel_path,
+                        line=1,
+                        ref_type="namespace",
+                        ref_value=raw_ref,
+                        message=(
+                            f"Unknown project namespace '{parsed_ref.project_id}' in ref '{raw_ref}'. "
+                            "Add it to science.yaml children: or use a local ref."
+                        ),
+                    )
+                )
+            elif parsed_ref.shape == "legacy-cross-project":
+                issues.append(
+                    RefIssue(
+                        file=rel_path,
+                        line=1,
+                        ref_type="legacy-cross-project",
+                        ref_value=raw_ref,
+                        message=(
+                            f"Legacy cross-project ref '{raw_ref}' is missing an entity kind. "
+                            f"Use '{parsed_ref.project_id}:question:{parsed_ref.slug}' or another explicit "
+                            "<project-id>:<kind>:<slug> ref."
+                        ),
+                    )
+                )
         # Determine if this file IS a hypothesis file (skip self-references)
         own_hyp_ids: set[str] = set()
         if "hypotheses" in file_path.parts:
@@ -213,6 +324,9 @@ def check_refs(root: Path) -> list[RefIssue]:
         skip_task_check = skip_task_check or rel_path.startswith("tasks/")
 
         for line_num, line in enumerate(lines, start=1):
+            if line_num in frontmatter_lines:
+                continue
+
             # Skip headings and frontmatter for hypothesis checks
             if _is_heading_line(line):
                 continue
