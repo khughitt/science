@@ -330,3 +330,185 @@ Add a command that flips `status: blocked` to `status: active` for tasks whose t
 Design before implementation: dry-run by default, explicit `--apply`, clear audit output, no action on unresolved/forced blockers, and a policy for preserving notes about why the task had been blocked. This should land only after the manual readiness workflow has proven stable enough to automate.
 
 Surfaced by: typed-entity-blockers trajectory item 2.
+
+## [t021] Evidence Payload Schema task group
+- priority: P1
+- status: proposed
+- aspects: [software-development, framework-design, hypothesis-testing, causal-modeling]
+- group: evidence-payload-schema
+- related: [question:01-evidence-payload-schema, question:02-causal-synthesis-guardrails, hypothesis:h01-stochastic-revisiting, topic:bayesian-methods-continuous-belief]
+- created: 2026-05-05
+
+Coordinate the post-Batch-1 work on quantitative evidence representation.
+Batch 1 showed that evidence updates need more than `supports` / `disputes` plus a scalar: they need comparison target, estimand, model family, prior, heterogeneity, bias model, study power, diagnostics, causal target population, aggregation operator, and sensitivity deltas.
+Batch 2 extends this with source behavior and pipeline provenance: source reliability, source dependence, omission semantics, missingness class, cleaning/extraction/preprocessing provenance, source population, target population, transport assumptions, prior provenance, identifiability, and validation role.
+
+This parent task tracks the group.
+Concrete implementation/design tasks are `[t022]` through `[t026]`.
+Do not implement a schema directly from this parent; use it to keep the work visible and grouped.
+
+Surfaced by: `doc/background/papers/synthesis-2026-05-05-bayesian-evidence-synthesis.md`.
+
+## [t022] Design minimum quantitative evidence payload schema
+- priority: P1
+- status: proposed
+- aspects: [software-development, framework-design, hypothesis-testing]
+- parent: task:t021
+- group: evidence-payload-schema
+- related: [task:t021, question:01-evidence-payload-schema, hypothesis:h01-stochastic-revisiting, topic:bayesian-methods-continuous-belief]
+- created: 2026-05-05
+
+Design the minimum structured payload required for quantitative support/dispute evidence.
+The schema should cover at least: source, proposition, comparison target / hypothesis set, evidence type, estimand, model family, prior, aggregation operator, heterogeneity, bias model, study power or information strength, diagnostics, sensitivity-analysis deltas, uncertainty, source reliability model, source-dependence refs, claim presence / omission state, missingness class, pipeline provenance, source population, target population, covariate coverage, transport assumptions, identifiability status, and validation role.
+
+Key constraint: keep the core small enough for routine authoring, then allow typed method payloads for Bayes factors, Bayesian model averaging, Bayesian Evidence Synthesis, diagnostic-test meta-analysis, posterior-sample evidence estimation, causal synthesis, truth discovery, data cleaning, external-data transport, and multi-view data integration.
+
+Deliverables:
+- a design note in `meta/doc/plans/` or `meta/docs/` scoped to the meta-project;
+- proposed fields and strict enum values where possible;
+- examples from Batch 1 and Batch 2 paper summaries;
+- migration notes for existing support/dispute evidence edges.
+
+## [t023] Design typed synthesis nodes
+- priority: P2
+- status: proposed
+- aspects: [software-development, framework-design, hypothesis-testing]
+- parent: task:t021
+- group: evidence-payload-schema
+- related: [task:t021, question:01-evidence-payload-schema, topic:bayesian-methods-continuous-belief]
+- created: 2026-05-05
+
+Design first-class synthesis node types so Science does not collapse incompatible aggregation operations into one belief update.
+At minimum distinguish:
+- effect-size pooling;
+- hypothesis-support synthesis;
+- causal synthesis;
+- diagnostic-test synthesis;
+- model-comparison synthesis;
+- Bayesian model-averaged synthesis.
+- truth-discovery synthesis;
+- data-cleaning / repair synthesis;
+- multi-view data-integration synthesis;
+- graph-estimation versus debiased edge-inference synthesis.
+
+For each synthesis type, specify required inputs, output fields, provenance, graph edges, and validation checks.
+Use Batch 1 as motivating cases: BES/PBF, RoBMA/BMA, diagnostic-test accuracy, posterior-sample evidence estimation, and causal meta-analysis.
+Use Batch 2 as motivating cases: truth discovery, MCDA, Bayesian ODE data integration, JMMLE, heterogeneous external-data regression, disease-model calibration, and Bayesian data cleaning.
+
+## [t024] Represent heterogeneity and bias as evidence-generation mechanisms
+- priority: P2
+- status: proposed
+- aspects: [software-development, framework-design, hypothesis-testing]
+- parent: task:t021
+- group: evidence-payload-schema
+- related: [task:t021, question:01-evidence-payload-schema, hypothesis:h01-stochastic-revisiting]
+- created: 2026-05-05
+
+Model heterogeneity and bias as explicit mechanisms that bear on evidence interpretation rather than as prose-only caveats.
+Candidate mechanism classes include publication bias, p-hacking / selection, model uncertainty, imperfect reference labels, study dependence, source copying, shared pipeline bias, extraction uncertainty, data-cleaning bias, batch effects, missing views, source-target population mismatch, prior-resolved non-identifiability, and agent search bias.
+
+Deliverables:
+- propose entity kinds or payload fields for these mechanisms;
+- define how they attach to studies, evidence edges, synthesis nodes, propositions, and H01 attention signals;
+- identify which mechanisms are general enough for core Science versus project-specific extensions.
+
+## [t025] Add reason-coded uncertainty features to H01 attention
+- priority: P2
+- status: proposed
+- aspects: [software-development, framework-design, hypothesis-testing]
+- parent: task:t021
+- group: evidence-payload-schema
+- related: [task:t021, hypothesis:h01-stochastic-revisiting, question:01-evidence-payload-schema]
+- created: 2026-05-05
+
+Extend H01-style revisiting beyond posterior/support magnitude by adding reason-coded uncertainty features.
+Candidate reasons from Batch 1: `underpowered-evidence`, `high-heterogeneity`, `publication-bias-risk`, `model-uncertainty`, `prior-sensitive`, `imperfect-label`, `boundary-case`, `complex-hypothesis-penalty`, and `estimand-mismatch`.
+Candidate reasons from Batch 2: `source-unreliable`, `source-dependent`, `omission-ambiguous`, `missing-view`, `source-target-mismatch`, `prior-resolved-nonidentifiability`, `cleaning-unvalidated`, `repair-uncertain`, `shared-structure-assumption`, and `debiased-inference-missing`.
+
+Design how these reasons are recorded on evidence/synthesis artifacts and how `science-tool graph attention-sample` could incorporate them without using LLM-estimated probabilities.
+This should follow `[t022]` enough to avoid inventing a parallel schema.
+
+## [t026] Causal synthesis guardrails
+- priority: P2
+- status: proposed
+- aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
+- parent: task:t021
+- group: evidence-payload-schema
+- related: [task:t021, question:02-causal-synthesis-guardrails, question:01-evidence-payload-schema]
+- created: 2026-05-05
+
+Design guardrails for when meta-analytic or synthesized evidence can strengthen causal propositions or causal edges.
+Require explicit target population, source population where relevant, causal contrast, effect measure, aggregation rule, covariate coverage, transport or exchangeability assumptions, evidence role, validation role, and assumptions before a synthesis node can update a causal proposition.
+
+Special attention:
+- non-collapsible measures such as odds ratios;
+- target-population mismatch;
+- source-population and covariate-coverage mismatch;
+- arm-based versus contrast-based aggregation;
+- graph estimates versus debiased inferential edge claims;
+- whether missing metadata should produce a warning, validation error, or H01 revisit signal.
+
+Start from `paper:Berenfeld2026`, `paper:Dai2023`, `paper:Thijssen2017`, `paper:Majumdar2022`, and the causal-modeling aspect.
+
+## [t027] Draft H02-H04 after Batch 2 synthesis
+- priority: P2
+- status: done
+- completed: 2026-05-05
+- aspects: [hypothesis-testing, framework-design]
+- group: evidence-payload-schema
+- related: [hypothesis:h01-stochastic-revisiting, question:01-evidence-payload-schema, question:02-causal-synthesis-guardrails]
+- created: 2026-05-05
+
+After Batch 2 is summarized and synthesized, decide whether to create the following hypotheses:
+- **H02: Rich evidence payloads improve graph calibration.** A graph that stores comparison target, estimand, priors, heterogeneity, bias model, diagnostics, and sensitivity deltas will produce better calibrated belief updates than scalar support/dispute edges.
+- **H03: Reason-coded revisiting beats posterior-only revisiting.** H01 attention should improve if low-confidence propositions carry reason codes such as `underpowered`, `prior-sensitive`, `high-heterogeneity`, `publication-bias-risk`, `imperfect-label`, or `estimand-mismatch`.
+- **H04: Causal-estimand guardrails reduce false causal edge strengthening.** Requiring target population, contrast, and aggregation-rule metadata before causal updates should reduce invalid causal conclusions from synthesized evidence.
+
+Do not draft these before Batch 2 unless the user explicitly asks.
+Batch 2's data-integration and truth-discovery papers may change the best formulation.
+
+**COMPLETED 2026-05-05.** Drafted:
+- `hypothesis:h02-rich-evidence-payloads-improve-graph-calibration`;
+- `hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting`;
+- `hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening`.
+
+Batch 2 refined all three: H02 now includes source reliability, source dependence, and pipeline provenance; H03 includes source/pipeline reason codes; H04 includes source-to-target transport, covariate coverage, evidence role, and graph-estimate versus inferential-edge distinctions.
+
+## [t028] Follow-up literature on Bayesian synthesis, causal meta-analysis, and anytime-valid evidence
+- priority: P2
+- status: proposed
+- aspects: [research, hypothesis-testing, causal-modeling]
+- group: evidence-payload-schema
+- related: [question:01-evidence-payload-schema, question:02-causal-synthesis-guardrails, topic:bayesian-methods-continuous-belief]
+- created: 2026-05-05
+
+Track highest-value reading leads surfaced by Batch 1:
+- Kuiper et al. 2013 on original Bayesian Evidence Synthesis / product Bayes factor;
+- Gu et al. 2018 and Hoijtink's informative-hypothesis work behind `bain` and BES;
+- Bartoš et al. on RoBMA extensions and publication-bias model averaging;
+- Dahabreh / Robertson / Steingrimsson on causally interpretable meta-analysis and target-population transportability;
+- e-values / anytime-valid inference for iterative graph evidence monitoring.
+
+Deliverable: either add PDFs to `meta/papers/pdfs/` and process them in a later batch, or write a short topic note explaining why each lead matters.
+
+## [t029] Improve `science-research-papers` batch workflow
+- priority: P2
+- status: proposed
+- aspects: [software-development, skills, research]
+- group: research-papers-workflow
+- related: [question:01-evidence-payload-schema]
+- created: 2026-05-05
+
+Update the `science-research-papers` skill / command and related tooling based on Batch 1 friction.
+
+Concrete improvements to design and implement:
+- resolve software-profile research-layer summaries to `doc/background/papers/`, not `doc/papers/`;
+- make `question reserve --source-refs` normalize bare BibTeX keys to `cite:<key>` or reject them early with a clear error;
+- add real batch mode where workers write only paper summaries and the orchestrator owns `references.bib`, questions, and synthesis to avoid races;
+- add a dedicated batch-synthesis template/location so validation does not treat synthesis files as paper summaries;
+- add an "Implications" section to paper summaries for graph implications, evidence-schema implications, H01/revisiting implications, and command/skill feedback;
+- add a post-batch prompt that proposes questions, hypotheses, task groups, and command improvements;
+- record `[UNVERIFIED]` counts in the orchestrator report.
+- register `synthesis` as a graph entity kind or keep batch synthesis artifacts out of graph-audited entity scans; `hypothesis create` currently reports unknown `synthesis` kind while scanning paper-batch synthesis files.
+
+Start with a design pass before editing generated commands or skills.
