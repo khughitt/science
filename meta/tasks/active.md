@@ -182,7 +182,6 @@ Plan to be written in implementation form (task-by-task) when this is picked up;
 - status: deferred
 - aspects: [software-development, framework-design, hypothesis-testing]
 - related: [hypothesis:h01-stochastic-revisiting]
-- blocked_by: [t010]
 - created: 2026-05-03
 
 Phase 2 of `docs/plans/2026-05-03-epistemic-dependency-graph-design.md`: replace deterministic top-N selection in `science:next-steps`, `science:curate`, `science:big-picture`, and task-prioritization sweeps with **weighted random sampling** over candidate epistemic entities. Weight function uses observable graph properties (incoming `bears_on` count, days-since-review, freshness state, evidence-imbalance skew) plus an `ε` floor so nothing collapses to zero — operationalizing D-003 at the attention layer.
@@ -191,7 +190,7 @@ This is the entity-graph-layer implementation of H01's validated mechanism: the 
 
 **Crucial constraint:** weights are derived from observable graph state, not from LLM-estimated probabilities. The continuous-belief framing manifests as continuous *attention probability*, not as fake-precise posteriors stored on entities.
 
-Blocked on `[t010]` because there is nothing meaningful to sample weights from until `bears_on` and `EpistemicFreshness` exist. Tracked here so the philosophical motivation isn't lost during Phase-1 implementation.
+Originally blocked on `[t010]`; Phase 1 is now done, so this is unblocked but still deferred until we deliberately design the sampling policy and integration surface.
 
 Surfaced by: 2026-05-03 design discussion on continuous-belief flow / hard-gate brittleness in pre-registration semantics.
 
@@ -236,3 +235,82 @@ Bundle of follow-ups surfaced by the final code review of `[t010]` (commit `d2c4
 Each item is small (most are 1–3 hours of work). Bundle is P3 because Phase 1 is functionally complete and these are quality/forward-compat tightening rather than missing functionality.
 
 Surfaced by: final code review of `feature/epistemic-dependency-graph` 2026-05-03.
+
+## [t014] Epistemic freshness: content-hash upstream change detection
+- priority: P3
+- status: proposed
+- aspects: [software-development, framework-design]
+- related: [hypothesis:h01-stochastic-revisiting]
+- created: 2026-05-05
+
+Phase 1 freshness uses frontmatter `updated` / `created` dates as the upstream change marker. `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` explicitly deferred content-hash-based change detection to a later phase. Add a graph/materialization path that can detect upstream content changes even when authors forget to bump `updated:`, without replacing the current date-based convention prematurely.
+
+Scope to design first: which authored fields participate in the hash, whether hashes live in the graph only or in a sidecar manifest, how to avoid noise from formatting-only edits, and how this interacts with existing managed-artifact hash utilities.
+
+Surfaced by: EDG design § Decisions, item 5.
+
+## [t015] Cross-project freshness propagation
+- priority: P3
+- status: proposed
+- aspects: [software-development, federation, framework-design]
+- related: [hypothesis:h01-stochastic-revisiting]
+- created: 2026-05-05
+
+Extend epistemic freshness beyond a single project: a paper, dataset, workflow-run, observation, proposition, or other epistemic upstream added in a parent/child/sibling project should be able to mark downstream hypotheses, questions, propositions, inquiries, and interpretations as `needs-review` across project boundaries.
+
+This is distinct from current federation graph assembly/status. The missing design pieces are cross-project entity address syntax, resolver source of truth (live child sweep vs. federated graph snapshot), stale-graph behavior, and audit semantics when a downstream project is not locally available.
+
+Surfaced by: EDG design trajectory item 2.
+
+## [t016] Derived qualitative standing for epistemic entities
+- priority: P3
+- status: deferred
+- aspects: [software-development, framework-design, hypothesis-testing]
+- related: [hypothesis:h01-stochastic-revisiting]
+- blocked_by: [t011]
+- created: 2026-05-05
+
+Explore replacing implicit binary verdict-state with an explicit qualitative ladder such as `dormant` / `contested` / `supported` / `well-supported`, derived from evidence edges, pre-registered interpretation outcomes, and freshness/attention signals.
+
+Deliberately deferred until `[t011]` weighted sampling shows whether sampling-driven attention is sufficient or whether the data model needs a visible standing field. The implementation must stay qualitative and derived from observable graph state, not LLM-estimated probabilities.
+
+Surfaced by: EDG design trajectory item 3.
+
+## [t017] Needs-review resolution and conclusion-amendment workflow
+- priority: P2
+- status: proposed
+- aspects: [framework-design, skills, software-development]
+- related: [hypothesis:h01-stochastic-revisiting]
+- created: 2026-05-05
+
+Define the protocol for what happens after a reviewer inspects a `needs-review` epistemic entity and concludes the new upstream evidence changes its standing. Likely shape: author a new interpretation or finding, connect it with an `amends` / `supersedes` relation to the prior interpretation/finding, and then run `science-tool entity review <ref>` to record that the entity was reconsidered.
+
+Deliverables should include a small design note, command/skill prose updates, and any graph-store support needed for first-class amendment/supersession semantics. Avoid making freshness itself mutate conclusions; freshness remains a flag that prompts review.
+
+Surfaced by: EDG design trajectory item 4.
+
+## [t018] Cross-project typed blockers
+- priority: P3
+- status: proposed
+- aspects: [software-development, federation]
+- related: []
+- created: 2026-05-05
+
+Extend typed task blockers from local entity refs to cross-project refs: a task in project A blocked by an entity in project B, including parent/child/sibling project shapes.
+
+Open design questions: cross-project address syntax, resolver source (live entity-store sweep vs. federated graph snapshot), stale-graph behavior, audit semantics, and how `validate_blocker_refs` / `ReadinessResolver` grow a project-scope parameter without weakening the current strict local validation.
+
+Surfaced by: typed-entity-blockers trajectory item 1.
+
+## [t019] Auto-unblock sweep for ready blocked tasks
+- priority: P3
+- status: proposed
+- aspects: [software-development, task-management]
+- related: []
+- created: 2026-05-05
+
+Add a command that flips `status: blocked` to `status: active` for tasks whose typed blockers all report `ready`. Current behavior only nudges in display output (`all ready — run 'tasks unblock <id>'`), which was the right manual-first implementation.
+
+Design before implementation: dry-run by default, explicit `--apply`, clear audit output, no action on unresolved/forced blockers, and a policy for preserving notes about why the task had been blocked. This should land only after the manual readiness workflow has proven stable enough to automate.
+
+Surfaced by: typed-entity-blockers trajectory item 2.
