@@ -36,6 +36,7 @@ _FIELD_RE = re.compile(r"^-\s+([\w-]+):\s*(.*)$")
 _LIST_RE = re.compile(r"^\[(.+)\]$")
 _MARKDOWN_HEADING_RE = re.compile(r"^(#{1,3})\s+.+$")
 _NOTES_HEADING_RE = re.compile(r"^###\s+Notes\s*$")
+_LOCAL_PARENT_RE = re.compile(r"^task:t[0-9]{3,}$")
 
 
 def _parse_list_value(raw: str) -> list[str]:
@@ -64,6 +65,15 @@ def _parse_task_header(line: str, *, path: Path | None = None) -> tuple[str, str
 
     where = f" in {path}" if path is not None else ""
     raise ValueError(f"Invalid task header{where}: {line}")
+
+
+def _parse_parent(raw: str, *, task_id: str) -> str:
+    parent = raw.strip()
+    if not parent:
+        return ""
+    if _LOCAL_PARENT_RE.match(parent):
+        return parent
+    raise ValueError(f"parent for task {task_id} must be local task ref like task:t001")
 
 
 def _parse_task_block(lines: list[str], *, path: Path | None = None) -> Task:
@@ -101,6 +111,7 @@ def _parse_task_block(lines: list[str], *, path: Path | None = None) -> Task:
         created=created,
         description=description,
         related=_parse_list_value(fields.get("related", "")),
+        parent=_parse_parent(fields.get("parent", ""), task_id=task_id),
         blocked_by=_parse_list_value(fields.get("blocked-by", "")),
         group=fields.get("group", ""),
         completed=completed,
@@ -162,6 +173,8 @@ def render_task(task: Task) -> str:
         lines.append(f"- type: {task.type}")
     lines.append(f"- priority: {task.priority}")
     lines.append(f"- status: {task.status}")
+    if task.parent:
+        lines.append(f"- parent: {task.parent}")
     if task.aspects:
         items = ", ".join(task.aspects)
         lines.append(f"- aspects: [{items}]")

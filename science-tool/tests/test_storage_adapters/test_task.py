@@ -16,7 +16,7 @@ def test_adapter_name() -> None:
 def test_discovers_tasks_under_tasks_dir(tmp_path: Path) -> None:
     (tmp_path / "tasks").mkdir()
     (tmp_path / "tasks" / "active.md").write_text(
-        "## [t01] T01\n- type: research\n- priority: P1\n- status: active\n- created: 2026-04-20\n\nBody.\n",
+        "## [t001] T01\n- type: research\n- priority: P1\n- status: active\n- created: 2026-04-20\n\nBody.\n",
         encoding="utf-8",
     )
     refs = TaskAdapter().discover(tmp_path)
@@ -27,7 +27,7 @@ def test_discovers_tasks_under_tasks_dir(tmp_path: Path) -> None:
 def test_load_raw_produces_task_entity_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "tasks").mkdir()
     (tmp_path / "tasks" / "active.md").write_text(
-        "## [t01] T01\n- type: research\n- priority: P1\n- status: active\n- created: 2026-04-20\n\nBody prose.\n",
+        "## [t001] T01\n- type: research\n- priority: P1\n- status: active\n- created: 2026-04-20\n\nBody prose.\n",
         encoding="utf-8",
     )
     a = TaskAdapter()
@@ -35,7 +35,7 @@ def test_load_raw_produces_task_entity_shape(tmp_path: Path, monkeypatch: pytest
     monkeypatch.chdir(tmp_path)
     raw = a.load_raw(refs[0])
     assert raw["kind"] == "task"
-    assert raw["canonical_id"] == "task:t01"
+    assert raw["canonical_id"] == "task:t001"
     assert raw["title"] == "T01"
     assert raw["priority"] == "P1"
     assert raw["status"] == "active"
@@ -49,8 +49,8 @@ def test_returns_empty_when_no_tasks_dir(tmp_path: Path) -> None:
 def test_multiple_tasks_in_one_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "tasks").mkdir()
     (tmp_path / "tasks" / "active.md").write_text(
-        "## [t01] T01\n- type: research\n- priority: P1\n- status: active\n- created: 2026-04-20\n\n"
-        "## [t02] T02\n- type: research\n- priority: P2\n- status: active\n- created: 2026-04-20\n\n",
+        "## [t001] T01\n- type: research\n- priority: P1\n- status: active\n- created: 2026-04-20\n\n"
+        "## [t002] T02\n- type: research\n- priority: P2\n- status: active\n- created: 2026-04-20\n\n",
         encoding="utf-8",
     )
     refs = TaskAdapter().discover(tmp_path)
@@ -60,4 +60,25 @@ def test_multiple_tasks_in_one_file(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monkeypatch.chdir(tmp_path)
     raws = [TaskAdapter().load_raw(r) for r in refs]
     ids = {r["canonical_id"] for r in raws}
-    assert ids == {"task:t01", "task:t02"}
+    assert ids == {"task:t001", "task:t002"}
+
+
+def test_load_raw_includes_parent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "tasks").mkdir()
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t016] Follow-up\n"
+        "- type: research\n"
+        "- priority: P1\n"
+        "- status: active\n"
+        "- parent: task:t001\n"
+        "- created: 2026-05-05\n\n"
+        "Body prose.\n",
+        encoding="utf-8",
+    )
+    adapter = TaskAdapter()
+    refs = adapter.discover(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    raw = adapter.load_raw(refs[0])
+
+    assert raw["parent"] == "task:t001"

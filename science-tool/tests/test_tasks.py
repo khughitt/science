@@ -249,6 +249,60 @@ def test_render_excludes_completed_when_absent() -> None:
     assert "completed" not in rendered
 
 
+def test_parse_and_render_parent_round_trips(tmp_path: Path) -> None:
+    f = _write(
+        tmp_path / "active.md",
+        """\
+## [t016] Follow-up
+- type: dev
+- priority: P1
+- status: proposed
+- parent: task:t001
+- related: [hypothesis:h01, task:t001]
+- created: 2026-05-05
+
+Body.
+""",
+    )
+
+    task = parse_tasks(f)[0]
+    rendered = render_task(task)
+
+    assert task.parent == "task:t001"
+    assert "- parent: task:t001" in rendered
+    assert parse_tasks(_write(tmp_path / "rendered.md", rendered))[0].parent == "task:t001"
+
+
+def test_parent_must_be_local_task_ref(tmp_path: Path) -> None:
+    f = _write(
+        tmp_path / "active.md",
+        """\
+## [t016] Cross project parent
+- type: dev
+- priority: P1
+- status: proposed
+- parent: natural-systems:task:t001
+- created: 2026-05-05
+
+Body.
+""",
+    )
+
+    with pytest.raises(ValueError, match="parent for task t016 must be local task ref like task:t001"):
+        parse_tasks(f)
+
+
+def test_add_task_omits_parent_by_default(tmp_path: Path) -> None:
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+
+    task = add_task(tmp_path, tasks_dir, "Temporary smoke task", "P3", task_type="dev")
+    rendered = (tasks_dir / "active.md").read_text(encoding="utf-8")
+
+    assert task.id == "t001"
+    assert "- parent:" not in rendered
+
+
 def test_next_task_id_empty_dir(tmp_path: Path) -> None:
     tasks_dir = tmp_path / "tasks"
     tasks_dir.mkdir()

@@ -47,6 +47,7 @@ class TaskAdapter(StorageAdapter):
             "status": task.status,
             "blocked_by": task.blocked_by,
             "related": task.related,
+            "parent": task.parent,
             "group": task.group,
             "aspects": task.aspects,
             "artifacts": task.artifacts,

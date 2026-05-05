@@ -32,6 +32,7 @@ class Task(BaseModel):
     status: str = TaskStatus.PROPOSED
     blocked_by: list[str] = []
     related: list[str] = []
+    parent: str = ""
     group: str = ""
     artifacts: list[str] = Field(default_factory=list)
     findings: list[str] = Field(default_factory=list)
@@ -47,6 +48,7 @@ class TaskCreate(BaseModel):
     aspects: list[str] = Field(default_factory=list)
     priority: str = "P2"
     related: list[str] = []
+    parent: str = ""
     blocked_by: list[str] = []
     group: str = ""
     description: str = ""
@@ -62,5 +64,6 @@ class TaskUpdate(BaseModel):
     type: str | None = None
     aspects: list[str] | None = None
     related: list[str] | None = None
+    parent: str | None = None
     blocked_by: list[str] | None = None
     group: str | None = None

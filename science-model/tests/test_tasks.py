@@ -46,3 +46,20 @@ def test_task_artifacts_and_findings_default_empty():
     t = Task(id="1", title="Simple task")
     assert t.artifacts == []
     assert t.findings == []
+
+
+def test_task_parent_defaults_to_empty_string():
+    t = Task(id="t016", title="Follow-up")
+    assert t.parent == ""
+
+
+def test_task_parent_can_be_set():
+    t = Task(id="t016", title="Follow-up", parent="task:t001")
+    assert t.parent == "task:t001"
+
+
+def test_task_create_and_update_parent_fields():
+    tc = TaskCreate(title="Follow-up", parent="task:t001")
+    tu = TaskUpdate(parent="task:t002")
+    assert tc.parent == "task:t001"
+    assert tu.parent == "task:t002"
