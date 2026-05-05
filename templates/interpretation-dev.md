@@ -11,7 +11,18 @@ updated: "{{YYYY-MM-DD}}"
 input: "{{path to tooling work, PR, workflow, or commit range}}"
 workflow_run: "<workflow-run-slug>"  # optional: links to the run that exercised the tooling
 prior_interpretations: []  # optional: interpretation IDs this document extends or supersedes
+relations: []  # optional graph relations; use sci:amends or sci:supersedes for conclusion chains
 ---
+
+<!--
+Conclusion chains:
+- Use `relations:` with `predicate: "sci:amends"` when this interpretation revises,
+  narrows, qualifies, or extends an older conclusion.
+- Use `relations:` with `predicate: "sci:supersedes"` when this interpretation
+  replaces an older conclusion as the current canonical reading.
+- Keep `prior_interpretations` only as a narrative breadcrumb. The graph relation
+  is the machine-readable source of truth.
+-->
 
 # Interpretation (dev mode): {{Short Title}}
 

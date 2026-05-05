@@ -23,6 +23,13 @@ def _ds_with_bears_on(pairs: list[tuple[URIRef, URIRef]]) -> Dataset:
     return ds
 
 
+def _ds_with_relation(source: URIRef, predicate: URIRef, target: URIRef) -> Dataset:
+    ds = Dataset()
+    knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
+    knowledge.add((source, predicate, target))
+    return ds
+
+
 def _state_for(ds: Dataset, target: URIRef) -> str | None:
     knowledge = ds.graph(PROJECT_NS["graph/knowledge"])
     for _, _, o in knowledge.triples((target, SCI_NS.freshnessState, None)):
@@ -79,6 +86,42 @@ def test_freshness_needs_review_when_upstream_changed_after_last_review():
     derive_freshness(ds, entities=entities, today=date(2026, 5, 3))
     assert _state_for(ds, _u("hypothesis/h1")) == "needs-review"
     assert _triggered_by(ds, _u("hypothesis/h1")) == {str(_u("dataset/d1"))}
+
+
+def test_freshness_ignores_amends_and_supersedes_edges() -> None:
+    h = _u("hypothesis/h1")
+    old = _u("interpretation/old")
+    new = _u("interpretation/new")
+    for predicate in (SCI_NS.amends, SCI_NS.supersedes):
+        ds = _ds_with_relation(new, predicate, old)
+        entities: dict[str, EntityFreshnessInfo] = {
+            str(h): {
+                "kind_class": EntityClass.EPISTEMIC,
+                "last_reviewed": date(2026, 4, 1),
+                "created": date(2026, 3, 1),
+                "updated": date(2026, 4, 1),
+                "review_horizon_days": None,
+            },
+            str(old): {
+                "kind_class": EntityClass.EPISTEMIC,
+                "last_reviewed": date(2026, 4, 1),
+                "created": date(2026, 3, 1),
+                "updated": date(2026, 4, 1),
+                "review_horizon_days": None,
+            },
+            str(new): {
+                "kind_class": EntityClass.EPISTEMIC,
+                "last_reviewed": None,
+                "created": date(2026, 5, 1),
+                "updated": date(2026, 5, 1),
+                "review_horizon_days": None,
+            },
+        }
+
+        derive_freshness(ds, entities=entities, today=date(2026, 5, 3))
+
+        assert _state_for(ds, h) == "fresh"
+        assert _triggered_by(ds, h) == set()
 
 
 def test_freshness_falls_back_to_created_when_last_reviewed_unset():

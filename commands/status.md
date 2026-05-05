@@ -138,6 +138,11 @@ Flag:
 - **attention sample**: run `science-tool graph attention-sample --limit 5 --format json`
   to sample epistemic entities by observable graph weight. Include sampled
   `needs-review` or `stale` entities when they are relevant to the current status.
+- When a sampled entity is `needs-review`, frame it as a review workflow candidate:
+  the next action is to inspect `sci:triggeredBy` evidence, then either record an
+  unchanged review with `science-tool entity review <target-ref>` or author a new
+  conclusion linked by `sci:amends` / `sci:supersedes`. Do not describe the
+  freshness state as a conclusion that the old standing is wrong.
 - **task archive lag**: when `science-tool health --format json` shows non-zero
   `archive_lag.done_in_active` or `archive_lag.retired_in_active`, surface it as:
   > N done/retired task(s) still in `tasks/active.md`. Run `science-tool tasks archive --apply`
