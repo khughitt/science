@@ -4,21 +4,24 @@
 **Project root:** `~/d/cancer/mechanisms/evolution` (= `/mnt/ssd/Dropbox/cancer/mechanisms/evolution`)
 **Scope:** all 2 pre-regs under `doc/meta/pre-registration-*.md`
 **Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 2)
+**Migration branch:** `migration/prereg-recast-mechanisms-evolution`
 
 ---
 
 ## Summary
 
-mechanisms/evolution has 2 pre-regs, both freshly authored (May 2026) and **the cleanest, most recast-compatible pre-regs I've seen across all six projects**. Both have:
+mechanisms/evolution has 2 pre-regs, both freshly authored (May 2026) and among the cleanest, most recast-compatible pre-regs in the audit set. Both have:
 
 - Fully canonical frontmatter (`id`, `type`, `committed`, `status: committed` from canonical vocabulary).
 - Hypothesis ref (h003) AND multiple question refs (q013, q070, q071, q075) in `related:`.
 - Explicit narrow-scope verdict language separating "the t002 reading of h003" from "h003 itself" — the recast philosophy operating cleanly without explicit awareness of the recast.
 - Documented bias-audit-driven amendment trail.
 
-Both pre-regs surface a small set of **new unregistered kinds** in `related:` (`bias-audit:`, `analysis-plan:`, `meta:`). And both use a **third variant of the amendment-tracking field** (`amended:`, distinct from natural-systems' `amendments:` and mm's `amendment_history:`).
+Migration added explicit `commits_to:` lists to distinguish formal epistemic commitments from navigation/context refs. This is especially important here because the pre-regs deliberately mention broader h003/q013/q070/q071/q075 context while locking narrower verdict-bearing estimands.
 
-**Recommendation for mechanisms/evolution:** No file edits required. The pre-regs are well-formed and recast-ready. The new unregistered kinds are out of t012 scope but worth flagging.
+Both pre-regs use a third variant of the amendment-tracking field (`amended:`, distinct from natural-systems' `amendments:` and mm's `amendment_history:`). This was left unchanged because it is project-side amendment metadata, not part of the prereg commitment-target migration.
+
+**Recommendation for mechanisms/evolution:** Merge the project-side migration.
 
 ---
 
@@ -29,21 +32,35 @@ Both pre-regs surface a small set of **new unregistered kinds** in `related:` (`
 | `pre-registration-h003-t002-ecdna-selection.md` | 2026-05-03 | committed | h003 | 4 (q013, q070, q071, q075) | — | `amended:` |
 | `pre-registration-t007-tcga-ecdna-cox.md` | 2026-05-03 | committed | h003 | 4 (q013, q070, q071, q075) | discussion | `amended:`, plus new ref kinds: `analysis-plan:`, `meta:`, `bias-audit:` |
 
+### Migration decisions
+
+| File | Added `commits_to:` | Rationale |
+|---|---|---|
+| `pre-registration-h003-t002-ecdna-selection.md` | `hypothesis:h003-ecdna-segregation-variation-source`; `question:071-ecdna-copynumber-distribution-signature` | The body names h003 as the primary target, but only the t002 reading. The Bafna CN-distribution model is the direct question-level surface. q013, q070, and q075 remain broader context or explicitly out of scope. |
+| `pre-registration-t007-tcga-ecdna-cox.md` | `hypothesis:h003-ecdna-segregation-variation-source`; `question:070-ecdna-survival-penalty-cn-vs-segregation`; `question:075-ecdna-regime-vs-mode-adjudication` | The body states that Fit A is the q070 estimand and Fit B is the q075 estimand, and explicitly says the Fit A coefficient bears more directly on h003. |
+
+Notes:
+
+- No `id:`, `type:`, `committed:`, or `status:` changes were needed.
+- `amended:` remains as-is. Canonicalizing amendment history would require a separate project-side schema migration.
+- `bias-audit:`, `analysis-plan:`, and `meta:` are registered as project-local operational kinds in `knowledge/sources/local/manifest.yaml`, so they remain valid navigation/provenance context but are not commitment targets.
+- Removed the stale project-local `pre-registration` kind from `knowledge/sources/local/manifest.yaml`; `pre-registration` is now a Science core kind, and extension manifests must not shadow core kinds.
+
 ### Classification breakdown
 
 - **Pure-epistemic:** 0
 - **Pure-operational:** 0
 - **Mixed:** 2 (both)
 
-### Unregistered ref kinds in `related:`
+### Project-local ref kinds in `related:`
 
-mechanisms/evolution introduces three new unregistered kinds to track:
+mechanisms/evolution uses three project-local operational kinds:
 
 - **`bias-audit:`** — `bias-audit:h003-t002-ecdna-selection`. Used in both pre-regs. Different from cbioportal/protein-landscape's `task:bias-audit-...` shape (which uses `task:` prefix). evolution treats `bias-audit:` as its own kind prefix.
-- **`analysis-plan:`** — `analysis-plan:t007-tcga-ecdna-cox-shape-vs-mean`. Used in t007. May relate to `science:plan-analysis` skill output, but not a registered kind.
+- **`analysis-plan:`** — `analysis-plan:t007-tcga-ecdna-cox-shape-vs-mean`. Used in t007. May relate to `science:plan-analysis` skill output.
 - **`meta:`** — `meta:g1-reconnaissance-t007`. Used in t007. Project-specific.
 
-All three will be silently skipped during source loading under the recast (same as mm's `decision:` and `latent:`). **Same resolution as mm's Issue 3 — document in recast plan, recommend project-side regularization.**
+All three are registered in `knowledge/sources/local/manifest.yaml` as operational kinds. They should not become `bears_on` targets, but they are valid context refs. The broader cross-project silent-skip finding still applies to projects that use unregistered kinds without a local manifest entry.
 
 ---
 
@@ -80,23 +97,24 @@ t007 extends to the TCGA cohort with similar verdict-language discipline. Same r
 
 ## Plan-level issues surfaced
 
-### Issue 1 (recurrent, growing): unregistered kinds in `related:`
+### Issue 1 (recurrent, growing): project-local kinds in `related:`
 
-mm's audit surfaced `decision:` and `latent:`. mechanisms/evolution adds **`bias-audit:`, `analysis-plan:`, `meta:`**. All silently skipped during source loading.
+mm's audit surfaced `decision:` and `latent:`. mechanisms/evolution adds **`bias-audit:`, `analysis-plan:`, `meta:`**, but unlike the mm cases, these are registered in the project's local manifest as operational kinds.
 
-Cumulative list of unregistered kinds across cancer cluster (so far):
+Cumulative list of non-core or unregistered kinds across cancer cluster (so far):
 - `decision:` (mm)
 - `latent:` (mm)
-- `bias-audit:` (evolution)
-- `analysis-plan:` (evolution)
-- `meta:` (evolution)
+- `bias-audit:` (evolution; registered project-local operational kind)
+- `analysis-plan:` (evolution; registered project-local operational kind)
+- `meta:` (evolution; registered project-local operational kind)
 - (`rq:` was seen in mm pre-canonical pre-reg-decomposition — likely "research question" syntax)
 
-**This is a pattern worth flagging in the recast plan.** Each project introduces project-specific kinds that exist in `related:` refs but aren't registered in `_CORE_KIND_CLASSES`. The recast doesn't need to register all of them, but it should:
+**This is a pattern worth flagging in the recast plan.** Each project may introduce project-specific kinds that exist in `related:` refs but are not core kinds. The recast doesn't need to register all of them, but it should:
 
 1. Document that unregistered kinds in `related:` are silently dropped during source loading.
 2. Recommend a `science-tool` health-check command that lists unregistered ref kinds across all `related:` fields in a project — useful for projects regularizing their kind taxonomy.
-3. Note that the recast's auto-derivation rule's "unknown kinds → no `bears_on`" behavior is correct (silent-skip is the right semantics for unrecognized refs), but project-side regularization is needed for full graph coverage.
+3. Note that operational extension kinds can be registered via a local manifest, as mechanisms/evolution does here.
+4. Note that operational kinds should not become `bears_on` targets merely because they are valid refs.
 
 ### Issue 2 (recurrent): variant amendment-tracking fields
 
@@ -115,15 +133,22 @@ This is convention drift across projects. Out of t012 scope but worth flagging f
 
 ### For mechanisms/evolution
 
-1. **No file edits required for the recast itself.** Both pre-regs are well-formed and recast-ready.
-2. **Pre-existing convention drift** (out of t012 scope):
+1. Explicit `commits_to:` added for both pre-regs.
+2. Stale local `pre-registration` manifest registration removed because it shadows the core kind.
+3. Graph rebuild and validation passed.
+4. Direct commitment edges match `commits_to:`:
+   - `pre-registration:h003-t002-ecdna-selection` -> h003 and q071
+   - `pre-registration:t007-tcga-ecdna-cox` -> h003, q070, and q075
+5. Context-only question refs did not produce direct prereg edges:
+   - t002 has no direct q013/q070/q075 edges
+   - t007 has no direct q013/q071 edges
+6. No content changes recommended. The verdict-language discipline in both pre-regs is exemplary.
+7. Remaining convention drift is outside this migration:
    - `amended:` field shape — canonical alternative is `amendments:` list.
-   - `bias-audit:`, `analysis-plan:`, `meta:` ref shapes — consider whether these are meant to be project-specific kind extensions (in which case they could be registered via the `register_extension_kind` API) or convention drift to be regularized to canonical kinds.
-3. **No content changes recommended.** The verdict-language discipline in both pre-regs is exemplary; would not encourage edits.
 
 ### For the recast plan (`docs/plans/2026-05-04-prereg-recast-draft.md`)
 
-1. **Document silent-skip behavior for unregistered kinds in `related:`.** Add a paragraph to the recast plan's § "Code prerequisites" (or its successor section) explaining that unregistered kinds in `related:` are silently dropped during source loading — this is correct semantics, not a bug, and project-side regularization (via `register_extension_kind` or by adopting canonical kinds) is the resolution path.
+1. **Document silent-skip behavior for unregistered kinds in `related:`.** Add a paragraph to the recast plan's § "Code prerequisites" (or its successor section) explaining that unregistered kinds in `related:` are silently dropped during source loading — this is correct semantics, not a bug, and project-side regularization (via local manifest extension kinds or by adopting canonical kinds) is the resolution path.
 
 2. **Confirms the pattern from mm Issue 3.** No structural change.
 
@@ -131,23 +156,21 @@ This is convention drift across projects. Out of t012 scope but worth flagging f
 
 ---
 
-## Open questions for project owner
+## Remaining questions
 
-1. The `amended:` field (vs canonical `amendments:`) — intentional simplification or convention drift to regularize?
-2. The `bias-audit:`, `analysis-plan:`, `meta:` ref kinds — meant to be registered as project-specific extensions, or aliases for canonical kinds (e.g., `bias-audit:<slug>` could be a `task:bias-audit-<slug>` shape)?
-3. Are there project-specific tools that consume these ref kinds today, or are they purely human-readable annotations?
+No blocking project-owner questions remain for this migration. A later schema cleanup can decide whether to convert `amended:` to canonical `amendments:`.
 
 ---
 
-## Cross-project pattern (after natural-systems + protein-landscape + seq-feats + cancer-meta + multiple-myeloma + cbioportal + mechanisms/evolution)
+## Cross-project pattern (after all audited projects)
 
-Cumulative findings across 7 projects, **56 pre-regs reviewed** (14 + 3 + 5 + 0 + 30 + 2 + 2):
+Cumulative findings across 9 projects, **60 pre-regs reviewed** (14 + 3 + 5 + 0 + 30 + 2 + 2 + 4 + 0):
 
-- **`related:` conflation:** universal (6/6 pre-reg-using projects).
+- **`related:` conflation:** universal across pre-reg-using projects.
 - **Hypothesis-in-body-only pattern:** confirmed in 5 pre-regs across 2 projects (mm 4, cbioportal 1).
 - **Inquiry-targeting (no hypothesis):** confirmed in mm only (3 pre-regs; t494, t498, t500). Will be addressed by reclassifying `inquiry` to `EPISTEMIC` per agreed plan.
 - **Falsification-clause language:** benign as anti-bias procedural rigor.
-- **Unregistered kinds in `related:`:** growing list — `decision:`, `latent:`, `bias-audit:`, `analysis-plan:`, `meta:`, `rq:`. All silently skipped. Need a documented health-check pattern.
+- **Non-core / unregistered kinds in `related:`:** `decision:`, `latent:`, `bias-audit:`, `analysis-plan:`, `meta:`, `rq:`. mechanisms/evolution registers its custom kinds locally as operational; unregistered kinds elsewhere need documented silent-skip semantics and a health-check pattern.
 - **Variant amendment-tracking fields:** `amendments:` (canonical, ns), `amendment_history:` (mm), `amended:` (evolution). Convention drift across projects.
 - **Status-vocabulary drift:** `status: active` (non-canonical) seen in seq-feats (5/5), mm pre-canonical (4/4), cbioportal (2/2). Canonical: `draft` / `committed` / `complete`.
 - **Pure-operational pre-regs (from `related:` only):** still 0 truly pure (cbioportal's t077 looks like one but its body is epistemic-arm).
@@ -163,6 +186,4 @@ The recast plan after this audit needs:
 
 ## What's next
 
-After mechanisms/evolution sign-off, proceed to:
-- 3d-attention-bias (4 pre-regs, Science cluster — last pre-reg-using project)
-- cats (0 pre-regs, brief completeness note)
+After this migration is merged, continue with any remaining project-side migrations or the consolidated recast-plan revision.
