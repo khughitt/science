@@ -3,19 +3,24 @@
 **Audit date:** 2026-05-04
 **Project root:** `/mnt/ssd/Dropbox/seq-feats`
 **Scope:** all 5 pre-regs under `doc/meta/pre-registration-*.md` (worktree duplicates excluded)
-**Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 2)
+**Recast spec:** `docs/plans/2026-05-04-prereg-recast-draft.md` (revision 3; code prerequisites merged 2026-05-04)
 
 ---
 
 ## Summary
 
-seq-feats has 5 pre-regs, all `status: active` and all targeting `hypothesis:h01-raw-feature-embedding-informativeness` (its primary hypothesis). The audit found:
+seq-feats has 5 pre-regs, originally all `status: active` and all targeting `hypothesis:h01-raw-feature-embedding-informativeness` (its primary hypothesis). The audit found:
 
-- **All 5 pre-regs have non-canonical frontmatter** (no `id:`, no `type:`, no `committed:`; `status: active` is also non-canonical — the canonical vocabulary is `draft` / `committed` / `complete`). This is a pre-existing data-quality issue independent of the recast.
+- **All 5 pre-regs had non-canonical frontmatter** (no `id:`, no `type:`, no `committed:`; `status: active` is also non-canonical — the canonical vocabulary is `draft` / `committed` / `complete`).
 - **All 5 pre-regs are mixed** (epistemic targets + operational tasks in `related:`). The body language ranges from heavily operational (cycle1-domains: V1/V2/V3 validation tiers + C1/C2/C3/C4 confirmatory tiers + diagnostic ranges) to clean epistemic-arm (t152-bpe-nda: explicit decision criteria with three outcome buckets and a recast-spirit null-result plan).
 - **Confirms the cross-project pattern from natural-systems and protein-landscape** — pre-regs use `related:` for both commitment targets and navigation context, and the project's primary hypothesis (H01) appears in every pre-reg's `related:` regardless of whether the pre-reg actually commits to interpreting H01 or is operationally locking a procedure that incidentally tests H01.
 
-**Recommendation for seq-feats:** no file edits required. The recast handles all 5 pre-regs cleanly once the recurrent `related:` conflation issue is resolved in the recast plan. Frontmatter regularization is independent of t012 and worth queuing as a separate cleanup pass.
+**Recommendation for seq-feats:** apply a small project migration now that the recast has landed:
+
+- canonicalize all five pre-regs with `id:`, `type: pre-registration`, `status: committed`, and `committed:`;
+- add explicit `commits_to:` scoping so broad H01 context in `related:` does not automatically become the only commitment signal;
+- keep exploratory/context refs in `related:` for navigation;
+- regenerate and validate the project graph.
 
 ---
 
@@ -23,11 +28,11 @@ seq-feats has 5 pre-regs, all `status: active` and all targeting `hypothesis:h01
 
 | # | File | Status | Outcome | Epistemic targets | Operational targets | Class | Notes |
 |---|---|---|---|---|---|---|---|
-| 1 | `pre-registration-cycle1-domains.md` | active (non-canonical) | — | h01, q60, q61, q62, 2 interpretations | t127, t130, t131, t132 | mixed | Heavy V1/V2/V3 + C1/C2/C3/C4 structure; mostly operational |
-| 2 | `pre-registration-phase3b-validation.md` | active (non-canonical) | — | h01, q54, q50 | (no entity-form refs in `related:`; `source_refs:` has `task:2026-03-11-phase3b`) | mixed | Phase-gate pre-reg (Phase 3B → Phase 3+) |
-| 3 | `pre-registration-t138-cross-feature.md` | active (non-canonical) | — | h01, h04, 3 source-refs (interpretation, discussion) | t138, t124, t134 | mixed | Cross-feature robustness analysis |
-| 4 | `pre-registration-t143-contextual-kmer.md` | active (non-canonical) | — | h01, h02, interpretation | t143, t142 | mixed | k-mer context vs sequence identity |
-| 5 | `pre-registration-t152-bpe-nda.md` | active (non-canonical) | — | h01, q84 | t147 | mixed | **Cleanest epistemic-arm shape of the 5** |
+| 1 | `pre-registration-cycle1-domains.md` | committed (2026-03-12) | — | h01, q60, q61, q62, 2 interpretations | t127, t130, t131, t132 | mixed | Heavy V1/V2/V3 + C1/C2/C3/C4 structure; mostly operational |
+| 2 | `pre-registration-phase3b-validation.md` | committed (2026-03-11) | — | h01, q54, q50 | (no entity-form refs in `related:`; `source_refs:` has `task:2026-03-11-phase3b`) | mixed | Phase-gate pre-reg (Phase 3B → Phase 3+) |
+| 3 | `pre-registration-t138-cross-feature.md` | committed (2026-03-15) | — | h01, h04, 3 source-refs (interpretation, discussion) | t138, t124, t134 | mixed | Cross-feature robustness analysis |
+| 4 | `pre-registration-t143-contextual-kmer.md` | committed (2026-03-17) | — | h01, h02, interpretation | t143, t142 | mixed | k-mer context vs sequence identity |
+| 5 | `pre-registration-t152-bpe-nda.md` | committed (2026-03-22) | — | h01, q84 | t147 | mixed | **Cleanest epistemic-arm shape of the 5** |
 
 ### Classification breakdown
 
@@ -39,7 +44,7 @@ H01 appears in every pre-reg's `related:`. This is signal-by-itself: in a projec
 
 ### Frontmatter anomaly (pre-existing, not a recast issue)
 
-None of the 5 pre-regs match the canonical pre-reg shape from `docs/plans/2026-04-25-pre-registration-canonical-type.md`:
+Before migration, none of the 5 pre-regs matched the canonical pre-reg shape from `docs/plans/2026-04-25-pre-registration-canonical-type.md`:
 - Missing `id:` (canonical: `pre-registration:<slug>`)
 - Missing `type:` (canonical: `"pre-registration"`)
 - Missing `committed:` (canonical: date the criteria are locked)
@@ -47,7 +52,21 @@ None of the 5 pre-regs match the canonical pre-reg shape from `docs/plans/2026-0
 
 The `status: active` value reads as "in-progress and not yet finalized" but the bodies look like they were intended to be committed (specific thresholds, locked methods, "Decision Criteria" sections). The semantic mismatch suggests these pre-regs were authored before the canonical shape was stabilized in the 2026-04-25 design document.
 
-**This is a pre-existing data-quality issue independent of the recast.** Mentioned for awareness; resolution is out of t012 scope.
+Migration action: add canonical `id:`, `type:`, `committed:`, and `status: committed` fields to all five pre-regs. Use each file's existing `created:` date as the committed date.
+
+### `commits_to:` migration
+
+Use explicit commitment targets rather than treating all `related:` refs as equal commitment targets:
+
+| File | `commits_to:` |
+|---|---|
+| `pre-registration-cycle1-domains.md` | `hypothesis:h01-raw-feature-embedding-informativeness`; `question:q60-does-formalized-pipeline-reproduce-phase3b-results`; `question:q61-does-domain-t3-jsd-threshold-produce-appropriate-controls`; `question:q62-does-domain-t3-cross-family-design-maintain-tier-hierarchy` |
+| `pre-registration-phase3b-validation.md` | `hypothesis:h01-raw-feature-embedding-informativeness`; `question:q54-is-the-residual-regression-overfitting-with-n-770-and-v-4096` |
+| `pre-registration-t138-cross-feature.md` | `hypothesis:h01-raw-feature-embedding-informativeness`; `hypothesis:h04-cross-dataset-robustness` |
+| `pre-registration-t143-contextual-kmer.md` | `hypothesis:h01-raw-feature-embedding-informativeness`; `hypothesis:h02-phenotype-predictive-feature-discovery` |
+| `pre-registration-t152-bpe-nda.md` | `question:q84-does-nda-work-through-bpe-tokenization`; `hypothesis:h01-raw-feature-embedding-informativeness` |
+
+Leave `question:q50-do-intermediate-layers-carry-biology-that-the-last-layer-doesn-t` in `related:` only for `phase3b-validation`: its layer sweep is explicitly exploratory in the body, not a confirmatory commitment target.
 
 ---
 
@@ -122,9 +141,10 @@ The recast's `interpret-results` § 4d skill changes need to handle missing `com
 
 ### For seq-feats
 
-1. **No file edits required for the recast itself.**
-2. **Author confirmation requested** (cross-project consistency): for the four operational-leaning pre-regs (cycle1-domains, phase3b-validation, t138-cross-feature, t143-contextual-kmer), confirm whether the H01 in `related:` is a commitment target or navigation context. The audit's expectation is "context" for all four; t152-bpe-nda is the lone genuine commitment-target pre-reg.
-3. **Frontmatter regularization** (out of t012 scope): canonical-shape migration for all 5 pre-regs (`id:`, `type:`, `committed:`, `status:` from canonical vocabulary). Worth queuing as a separate cleanup task; none of these are blocking the recast.
+1. **Canonical frontmatter:** add `id:`, `type: pre-registration`, `committed:`, and `status: committed` to all five pre-regs.
+2. **Commitment scoping:** add `commits_to:` using the mapping above.
+3. **Keep context refs:** leave exploratory and navigation-only refs in `related:`; in particular, keep q50 as context for `phase3b-validation`.
+4. **Graph verification:** rebuild `knowledge/graph.trig` and confirm the expected pre-reg `bearsOn` edges are materialized.
 
 ### For the recast plan (`docs/plans/2026-05-04-prereg-recast-draft.md`)
 
@@ -136,9 +156,8 @@ The recast's `interpret-results` § 4d skill changes need to handle missing `com
 
 ## Open questions for project owner
 
-1. For each operational-leaning pre-reg (cycle1-domains, phase3b-validation, t138-cross-feature, t143-contextual-kmer): is the H01 reference in `related:` a commitment target ("we commit to interpreting this experiment as supporting/disputing H01 in this specific way") or navigation context ("this experiment touches H01, and the actual commitment is to the experiment design")?
-2. Are the 5 pre-regs' non-canonical frontmatter shapes a known pre-existing issue, and is canonical-shape migration on a roadmap somewhere?
-3. Does the project have any tooling that depends on `status: active` (non-canonical) being recognized? (None obvious in audit; please confirm.)
+1. For `phase3b-validation`: should `question:q50-do-intermediate-layers-carry-biology-that-the-last-layer-doesn-t` remain context-only, or should a future pre-reg make it a confirmatory commitment target?
+2. Does the project have any tooling that depends on `status: active` (non-canonical) being recognized? (None obvious in audit; please confirm.)
 
 ---
 
