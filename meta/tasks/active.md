@@ -291,7 +291,8 @@ Surfaced by: EDG design trajectory item 3.
 
 ## [t017] Needs-review resolution and conclusion-amendment workflow
 - priority: P2
-- status: proposed
+- status: done
+- completed: 2026-05-05
 - aspects: [framework-design, skills, software-development]
 - related: [hypothesis:h01-stochastic-revisiting]
 - created: 2026-05-05
@@ -301,6 +302,8 @@ Define the protocol for what happens after a reviewer inspects a `needs-review` 
 Deliverables should include a small design note, command/skill prose updates, and any graph-store support needed for first-class amendment/supersession semantics. Avoid making freshness itself mutate conclusions; freshness remains a flag that prompts review.
 
 Surfaced by: EDG design trajectory item 4.
+
+**COMPLETED 2026-05-05.** Added first-class `sci:amends` and conclusion-level `sci:supersedes` semantics, explicit endpoint-pair validation, source-authored relation loading, needs-review resolution prose, and tests preserving freshness/review separation.
 
 ## [t018] Cross-project typed blockers
 - priority: P3
