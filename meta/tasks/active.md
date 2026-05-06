@@ -343,9 +343,10 @@ Coordinate the post-Batch-1 work on quantitative evidence representation.
 Batch 1 showed that evidence updates need more than `supports` / `disputes` plus a scalar: they need comparison target, estimand, model family, prior, heterogeneity, bias model, study power, diagnostics, causal target population, aggregation operator, and sensitivity deltas.
 Batch 2 extends this with source behavior and pipeline provenance: source reliability, source dependence, omission semantics, missingness class, cleaning/extraction/preprocessing provenance, source population, target population, transport assumptions, prior provenance, identifiability, and validation role.
 Batch 3 extends this with causal graph construction provenance: causal model reference, observed-data link, counterfactual target, graph object type, discovery algorithm, method assumption set, prior role, constraint type, prompt and variable-proposal provenance, self-compatibility score, causal-sufficiency assumption, latent-variable risk, mediation estimand, instrument set, and graph posterior.
+Batch 4 extends this with graph-valued and integration-valued artifacts: integration objective, graph artifact type, context scope, view scope, shared-structure assumption, borrowing structure, approximation class, posterior summary role, edge inclusion probability, cluster count, feature relevance posterior, and validation role.
 
 This parent task tracks the group.
-Concrete implementation/design tasks are `[t022]` through `[t026]` plus `[t030]` through `[t034]`.
+Concrete implementation/design tasks are `[t022]` through `[t026]` plus `[t030]` through `[t035]`.
 Do not implement a schema directly from this parent; use it to keep the work visible and grouped.
 
 Surfaced by: `doc/background/papers/synthesis-2026-05-05-bayesian-evidence-synthesis.md`.
@@ -359,15 +360,15 @@ Surfaced by: `doc/background/papers/synthesis-2026-05-05-bayesian-evidence-synth
 - related: [task:t021, question:01-evidence-payload-schema, hypothesis:h01-stochastic-revisiting, topic:bayesian-methods-continuous-belief]
 - created: 2026-05-05
 
-Design the minimum structured payload required for quantitative support/dispute evidence and causal graph construction outputs.
-The schema should cover at least: source, proposition, comparison target / hypothesis set, evidence type, estimand, model family, prior, aggregation operator, heterogeneity, bias model, study power or information strength, diagnostics, sensitivity-analysis deltas, uncertainty, source reliability model, source-dependence refs, claim presence / omission state, missingness class, pipeline provenance, source population, target population, covariate coverage, transport assumptions, identifiability status, validation role, graph object type, discovery algorithm, method assumption set, prior role, constraint type, causal-sufficiency assumption, latent-variable risk, and graph-construction diagnostic status.
+Design the minimum structured payload required for quantitative support/dispute evidence, causal graph construction outputs, and graph-valued or integration-valued synthesis artifacts.
+The schema should cover at least: source, proposition, comparison target / hypothesis set, evidence type, estimand, model family, prior, aggregation operator, heterogeneity, bias model, study power or information strength, diagnostics, sensitivity-analysis deltas, uncertainty, source reliability model, source-dependence refs, claim presence / omission state, missingness class, pipeline provenance, source population, target population, covariate coverage, transport assumptions, identifiability status, validation role, graph object type, discovery algorithm, method assumption set, prior role, constraint type, causal-sufficiency assumption, latent-variable risk, graph-construction diagnostic status, integration objective, context scope, view scope, shared-structure assumption, borrowing structure, approximation class, posterior summary role, edge inclusion probability, cluster count, and feature relevance posterior.
 
-Key constraint: keep the core small enough for routine authoring, then allow typed method payloads for Bayes factors, Bayesian model averaging, Bayesian Evidence Synthesis, diagnostic-test meta-analysis, posterior-sample evidence estimation, causal synthesis, truth discovery, data cleaning, external-data transport, multi-view data integration, causal-discovery runs, LLM-assisted causal priors, mediation analysis, Mendelian randomization, and graph posterior evidence.
+Key constraint: keep the core small enough for routine authoring, then allow typed method payloads for Bayes factors, Bayesian model averaging, Bayesian Evidence Synthesis, diagnostic-test meta-analysis, posterior-sample evidence estimation, causal synthesis, truth discovery, data cleaning, external-data transport, multi-view data integration, causal-discovery runs, LLM-assisted causal priors, mediation analysis, Mendelian randomization, graph posterior evidence, integrative clustering, feature selection, module discovery, and predictive integration.
 
 Deliverables:
 - a design note in `meta/doc/plans/` or `meta/docs/` scoped to the meta-project;
 - proposed fields and strict enum values where possible;
-- examples from Batch 1, Batch 2, and Batch 3 paper summaries;
+- examples from Batch 1, Batch 2, Batch 3, and Batch 4 paper summaries;
 - migration notes for existing support/dispute evidence edges.
 
 ## [t023] Design typed synthesis nodes
@@ -397,11 +398,18 @@ At minimum distinguish:
 - mediation synthesis;
 - Mendelian-randomization graph synthesis;
 - graph-diagnostic synthesis.
+- graph-estimate synthesis;
+- graph-posterior synthesis;
+- integrative-clustering synthesis;
+- feature-selection synthesis;
+- module-discovery synthesis;
+- predictive-integration synthesis.
 
 For each synthesis type, specify required inputs, output fields, provenance, graph edges, and validation checks.
 Use Batch 1 as motivating cases: BES/PBF, RoBMA/BMA, diagnostic-test accuracy, posterior-sample evidence estimation, and causal meta-analysis.
 Use Batch 2 as motivating cases: truth discovery, MCDA, Bayesian ODE data integration, JMMLE, heterogeneous external-data regression, disease-model calibration, and Bayesian data cleaning.
 Use Batch 3 as motivating cases: causal inference roadmaps, causal data integration, hidden-variable discovery, self-compatibility diagnostics, LLM causal priors, mediation analysis, and Bayesian Mendelian-randomization graph models.
+Use Batch 4 as motivating cases: mixed graphical model integration, joint sparse graph inference, Bayesian survival integration, common/unique network decomposition, graph posterior inference, scalable Bayesian GGM structure learning, integrative clustering, and feature selection.
 
 ## [t024] Represent heterogeneity and bias as evidence-generation mechanisms
 - priority: P2
@@ -413,7 +421,7 @@ Use Batch 3 as motivating cases: causal inference roadmaps, causal data integrat
 - created: 2026-05-05
 
 Model heterogeneity and bias as explicit mechanisms that bear on evidence interpretation rather than as prose-only caveats.
-Candidate mechanism classes include publication bias, p-hacking / selection, model uncertainty, imperfect reference labels, study dependence, source copying, shared pipeline bias, extraction uncertainty, data-cleaning bias, batch effects, missing views, source-target population mismatch, prior-resolved non-identifiability, agent search bias, causal-sufficiency violations, latent-variable misspecification, prior/data conflict, prompt-induced graph bias, variable-proposal bias, self-incompatibility, and instrument invalidity.
+Candidate mechanism classes include publication bias, p-hacking / selection, model uncertainty, imperfect reference labels, study dependence, source copying, shared pipeline bias, extraction uncertainty, data-cleaning bias, batch effects, missing views, source-target population mismatch, prior-resolved non-identifiability, agent search bias, causal-sufficiency violations, latent-variable misspecification, prior/data conflict, prompt-induced graph bias, variable-proposal bias, self-incompatibility, instrument invalidity, shared-structure bias, graph-posterior uncertainty, variational-approximation risk, pseudo-likelihood risk, clustering instability, selected-feature instability, and view-scope mismatch.
 
 Deliverables:
 - propose entity kinds or payload fields for these mechanisms;
@@ -433,6 +441,7 @@ Extend H01-style revisiting beyond posterior/support magnitude by adding reason-
 Candidate reasons from Batch 1: `underpowered-evidence`, `high-heterogeneity`, `publication-bias-risk`, `model-uncertainty`, `prior-sensitive`, `imperfect-label`, `boundary-case`, `complex-hypothesis-penalty`, and `estimand-mismatch`.
 Candidate reasons from Batch 2: `source-unreliable`, `source-dependent`, `omission-ambiguous`, `missing-view`, `source-target-mismatch`, `prior-resolved-nonidentifiability`, `cleaning-unvalidated`, `repair-uncertain`, `shared-structure-assumption`, and `debiased-inference-missing`.
 Candidate reasons from Batch 3: `causal-sufficiency-assumption`, `latent-variable-risk`, `llm-prior-unvalidated`, `prior-data-disagreement`, `graph-object-ambiguous`, `self-incompatible`, `identification-missing`, `weak-prior-only`, `instrument-assumption-risk`, and `mediation-estimand-ambiguous`.
+Candidate reasons from Batch 4: `graph-posterior-uncertain`, `edge-inclusion-unstable`, `shared-structure-dependent`, `view-scope-mismatch`, `variational-approximation-risk`, `pseudo-likelihood-risk`, `clustering-unvalidated`, `selected-feature-unstable`, and `exploratory-integration-only`.
 
 Design how these reasons are recorded on evidence/synthesis artifacts and how `science-tool graph attention-sample` could incorporate them without using LLM-estimated probabilities.
 This should follow `[t022]` enough to avoid inventing a parallel schema.
@@ -637,3 +646,54 @@ Deliverables:
 - alignment notes with `[t022]`, `[t023]`, `[t025]`, and `[t026]`.
 
 Start from Batch 3 synthesis: `doc/background/papers/synthesis-2026-05-06-causal-graph-construction.md`.
+
+## [t035] Design graph-valued synthesis artifact schema
+- priority: P1
+- status: proposed
+- aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
+- parent: task:t021
+- group: evidence-payload-schema
+- related: [task:t022, task:t023, task:t024, task:t025, task:t026, task:t034, question:11-graph-valued-synthesis-artifacts, question:10-causal-graph-construction-pipeline, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting, hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening]
+- created: 2026-05-06
+
+Design how Science represents graph-valued, cluster-valued, selected-feature, module, and predictive-integration artifacts.
+
+Candidate artifact types:
+- conditional-dependence graph estimate;
+- Bayesian network DAG posterior;
+- graph posterior summary;
+- edge inclusion probability table;
+- common / context-unique graph component;
+- integrative cluster assignment;
+- selected-feature set;
+- module or pathway membership;
+- predictive integration model.
+
+Deliverables:
+- a graph/integration artifact taxonomy with strict enum candidates for `graph_artifact_type` and `integration_objective`;
+- a payload schema covering `context_scope`, `view_scope`, `matched_sample_status`, `missingness_handling`, `shared_structure_assumption`, `borrowing_structure`, `approximation_class`, `posterior_summary_role`, `edge_inclusion_probability`, `cluster_count`, `feature_relevance_posterior`, and `validation_role`;
+- rules for whether each artifact updates propositions, prioritizes attention, creates hypotheses, or merely records exploratory state;
+- H03 reason-code mapping for graph posterior uncertainty, shared-structure dependence, view-scope mismatch, approximation risk, clustering validation, and selected-feature stability;
+- H04 guardrail notes for preventing noncausal graph or clustering outputs from strengthening causal propositions without identification metadata.
+
+Start from Batch 4 synthesis: `doc/background/papers/synthesis-2026-05-06-graphical-models-multiview-integration.md`.
+
+## [t036] Follow-up literature on graph-valued and multiview synthesis artifacts
+- priority: P2
+- status: proposed
+- aspects: [research, framework-design, hypothesis-testing]
+- group: evidence-payload-schema
+- related: [task:t035, question:11-graph-valued-synthesis-artifacts, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting, hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening]
+- created: 2026-05-06
+
+Track follow-up papers needed to make `[t035]` empirically and historically grounded.
+
+Highest-value additions:
+- Danaher, Wang, and Witten on joint graphical lasso / fused graphical lasso;
+- Similarity Network Fusion and iCluster lineage papers for multiview clustering and latent-variable integration;
+- MOFA / MOFA+ papers for factor-analysis-style multi-omics integration;
+- foundational G-Wishart / Bayesian graphical-model structure-learning papers for graph prior and posterior semantics;
+- stability selection papers for graph and feature-selection uncertainty;
+- benchmark papers comparing multi-omics integration methods under external validation.
+
+Deliverable: either add PDFs and process them in a later batch, or write a topic note explaining how each family should influence `graph_artifact_type`, `integration_objective`, posterior uncertainty, validation role, and H03 reason codes.

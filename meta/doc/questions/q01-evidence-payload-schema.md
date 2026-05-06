@@ -35,12 +35,19 @@ source_refs:
 - cite:Faller2024
 - cite:Zheng2024
 - cite:Zuber2025
+- cite:Zhang2017CancerGenomics
+- cite:Zhang2021JointGraphical
+- cite:Vahabi2022
+- cite:Deleu2023
+- cite:Mohammadi2025
+- cite:Alnajjar2026
 related:
 - hypothesis:h01-stochastic-revisiting
 - hypothesis:h02-rich-evidence-payloads-improve-graph-calibration
 - hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting
 - question:03-source-and-pipeline-provenance
 - question:10-causal-graph-construction-pipeline
+- question:11-graph-valued-synthesis-artifacts
 - topic:bayesian-methods-continuous-belief
 created: '2026-05-05'
 updated: '2026-05-06'
@@ -54,7 +61,8 @@ Batch 1 shows that a quantitative evidence update is not just a scalar support v
 It depends on the proposition being tested, the alternative or comparison set, the estimand, the synthesis operator, priors, heterogeneity, bias model, diagnostics, and sensitivity to modeling assumptions.
 Batch 2 adds that evidence aggregation also depends on source behavior and the pipeline that produced the evidence.
 Batch 3 adds that causal graph construction depends on staged provenance: graph object type, discovery algorithm, method assumptions, prior role, hidden-variable assumptions, diagnostics, and identification status.
-This question asks what minimum metadata Science should require before a quantitative evidence, data-integration, truth-discovery, synthesis, or graph-construction artifact can update graph beliefs.
+Batch 4 adds that graph-valued and integration-valued artifacts depend on integration objective, context scope, view scope, shared-structure assumptions, approximation method, graph posterior uncertainty, cluster count, and feature relevance.
+This question asks what minimum metadata Science should require before a quantitative evidence, data-integration, truth-discovery, synthesis, graph-construction, or graph-valued integration artifact can update graph beliefs.
 
 ## Why It Matters
 
@@ -74,13 +82,14 @@ This question asks what minimum metadata Science should require before a quantit
 - Heterogeneous external-data regression shows that source population, target population, covariate coverage, and transport or reweighting assumptions determine whether external evidence helps or biases an update [@Dai2023].
 - Bayesian calibration and Bayesian data cleaning show that prior provenance, identifiability, automated constraints, and cleaning uncertainty can be load-bearing inputs to evidence updates [@Semochkina2025; @Han2026].
 - Causal graph construction and discovery papers show that graph outputs need method, graph-object, hidden-variable, diagnostic, and identification metadata before they can be interpreted as causal support [@Petersen2014; @Shi2022; @Dong2023; @Faller2024; @Zheng2024; @Zuber2025].
+- Graphical-model and multiview-integration papers show that graph estimates, graph posteriors, clusters, and selected-feature outputs need context scope, view scope, shared-structure assumptions, approximation provenance, and validation role [@Zhang2017CancerGenomics; @Zhang2021JointGraphical; @Vahabi2022; @Deleu2023; @Mohammadi2025; @Alnajjar2026].
 - The main conflicting pressure is authoring cost: a complete schema could become too heavy for routine paper notes and manual graph updates.
 
 ## Thoughts
 
-- Best current interpretation: Science needs a compact structured evidence payload with required fields for comparison target, evidence type, estimand, aggregation operator, source provenance, source behavior, pipeline provenance, and epistemic role, plus optional typed fields for priors, heterogeneity, bias, diagnostics, sensitivity deltas, transport, identifiability, cleaning, validation role, graph object type, discovery method, hidden-variable assumptions, and graph-construction diagnostics.
+- Best current interpretation: Science needs a compact structured evidence payload with required fields for comparison target, evidence type, estimand, aggregation operator, source provenance, source behavior, pipeline provenance, and epistemic role, plus optional typed fields for priors, heterogeneity, bias, diagnostics, sensitivity deltas, transport, identifiability, cleaning, validation role, graph object type, discovery method, hidden-variable assumptions, graph-construction diagnostics, graph artifact type, integration objective, context scope, view scope, approximation class, and posterior summary role.
 - The major remaining uncertainty is where to draw the line between required metadata and richer method-specific extensions.
-- A likely design is progressive: require a small core for all quantitative evidence, then attach typed method payloads for Bayesian model averaging, BES, diagnostic-test meta-analysis, causal synthesis, posterior-sample evidence estimation, truth discovery, data cleaning, external-data transport, causal discovery, mediation analysis, and Mendelian-randomization graph models.
+- A likely design is progressive: require a small core for all quantitative evidence, then attach typed method payloads for Bayesian model averaging, BES, diagnostic-test meta-analysis, causal synthesis, posterior-sample evidence estimation, truth discovery, data cleaning, external-data transport, causal discovery, mediation analysis, Mendelian-randomization graph models, graph posteriors, integrative clustering, feature selection, module discovery, and predictive integration.
 
 ## Connections to Project
 
@@ -91,5 +100,5 @@ This question asks what minimum metadata Science should require before a quantit
 ## Related
 
 - Topic notes: `topic:bayesian-methods-continuous-belief`.
-- Article notes: Batch 1, Batch 2, and Batch 3 paper summaries under `doc/background/papers/`.
+- Article notes: Batch 1, Batch 2, Batch 3, and Batch 4 paper summaries under `doc/background/papers/`.
 - Methods/Datasets: none yet.

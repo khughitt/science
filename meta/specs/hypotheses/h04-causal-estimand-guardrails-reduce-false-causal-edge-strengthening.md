@@ -16,10 +16,17 @@ source_refs:
 - paper:Faller2024
 - paper:Zheng2024
 - paper:Zuber2025
+- paper:Zhang2017CancerGenomics
+- paper:Zhang2021JointGraphical
+- paper:Vahabi2022
+- paper:Deleu2023
+- paper:Mohammadi2025
+- paper:Alnajjar2026
 related:
 - question:02-causal-synthesis-guardrails
 - question:01-evidence-payload-schema
 - question:10-causal-graph-construction-pipeline
+- question:11-graph-valued-synthesis-artifacts
 - hypothesis:h01-stochastic-revisiting
 - hypothesis:h02-rich-evidence-payloads-improve-graph-calibration
 - hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting
@@ -32,6 +39,7 @@ updated: '2026-05-06'
 
 Requiring causal-estimand and source-to-target metadata before evidence can strengthen causal graph edges will reduce invalid causal conclusions from synthesized or integrated evidence.
 Batch 3 extends the same conjecture to graph construction: requiring graph-object, discovery-method, prior-role, hidden-variable, diagnostic, and identification metadata before discovered or elicited graph outputs can strengthen causal propositions will reduce invalid causal conclusions at the pre-estimation stage.
+Batch 4 extends the conjecture to graph-valued and integration-valued synthesis artifacts: conditional-dependence graphs, graph posterior summaries, clusters, modules, and selected-feature sets should not strengthen causal propositions without explicit causal role and validation metadata.
 The guardrail should require at least target population, source population where relevant, causal contrast, effect measure, aggregation rule, transport or exchangeability assumptions, covariate coverage, validation role, graph object type, method assumption set, prior role, hidden-variable assumption, diagnostic status, and identification status before a synthesis or graph-construction artifact strengthens a causal proposition [@Berenfeld2026; @Dai2023; @Thijssen2017; @Majumdar2022; @Aitken2024; @Petersen2014; @Shi2022; @Dong2023; @Faller2024; @Zheng2024; @Zuber2025].
 
 ## Proposition Bundle
@@ -74,6 +82,7 @@ Early versions should likely warn or mark `needs-review` rather than hard-blocki
 
 - In audits of synthesized evidence, the guardrail will flag cases where the statistical summary does not match the causal proposition being updated.
 - In audits of causal-discovery outputs, the guardrail will flag cases where a graph object or prior is being treated as an identified causal effect.
+- In audits of graph-valued integration outputs, the guardrail will flag cases where conditional-dependence edges, clusters, selected features, or posterior graph summaries are being treated as causal evidence.
 - Guardrail-triggered cases will be enriched for non-collapsible measures, population mismatch, insufficient covariate coverage, missing aggregation rules, and unclear validation roles.
 - A warning-mode implementation will produce useful H01 reason codes such as `estimand-mismatch`, `source-target-mismatch`, `transport-assumption-missing`, `validation-role-unclear`, `graph-object-ambiguous`, `causal-sufficiency-assumption`, `latent-variable-risk`, `identification-missing`, and `weak-prior-only`.
 - The guardrail will add little in cases with direct randomized evidence, explicit target population, and a causal contrast matching the proposition.
@@ -94,6 +103,7 @@ Early versions should likely warn or mark `needs-review` rather than hard-blocki
 - `literature_evidence` - Aitken et al. reinforce that evidential support is proposition-relative, so causal support needs an explicit target proposition and alternative [@Aitken2024].
 - `literature_evidence` - Petersen and van der Laan separate causal model, observed data, counterfactual quantity, identification, statistical estimand, estimation, and interpretation [@Petersen2014].
 - `literature_evidence` - Causal discovery and graph-construction papers show that graph outputs depend on data-integration assumptions, hidden-variable assumptions, graph object type, diagnostic compatibility, and instrument or direction constraints [@Shi2022; @Dong2023; @Faller2024; @Zheng2024; @Zuber2025].
+- `literature_evidence` - Graphical-model and multiview-integration papers produce graph, cluster, selected-feature, and predictive artifacts that require scope, objective, approximation, posterior-uncertainty, and validation metadata before causal use [@Zhang2017CancerGenomics; @Zhang2021JointGraphical; @Vahabi2022; @Deleu2023; @Mohammadi2025; @Alnajjar2026].
 
 ## Disputing Evidence
 
@@ -108,6 +118,7 @@ Early versions should likely warn or mark `needs-review` rather than hard-blocki
 - Build a validation-mode prototype that flags incomplete causal updates, then measure precision and actionability of warnings.
 - Create counterexamples where a statistical synthesis appears strong but should not update a causal edge, and test whether the guardrail catches them.
 - Create counterexamples where an LLM prior, discovered adjacency, or equivalence-class feature appears edge-like but should not update an identified causal-effect proposition.
+- Create counterexamples where a conditional-dependence edge, selected feature, cluster, or graph posterior summary appears biologically meaningful but should not update a causal proposition.
 - Compare hard-block, warning, and H01-revisit implementations in a simulated or historical workflow.
 
 ## Related Work
@@ -115,5 +126,6 @@ Early versions should likely warn or mark `needs-review` rather than hard-blocki
 - `question:02-causal-synthesis-guardrails` is the direct design question.
 - `question:01-evidence-payload-schema` supplies shared evidence metadata.
 - `question:10-causal-graph-construction-pipeline` scopes guardrails for causal graph construction and discovery outputs.
+- `question:11-graph-valued-synthesis-artifacts` scopes guardrails for noncausal graph-valued and integration-valued artifacts.
 - `hypothesis:h02-rich-evidence-payloads-improve-graph-calibration` is the broader payload-calibration hypothesis.
 - `hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting` covers the attention-signal path when guardrail failures become revisit reasons.

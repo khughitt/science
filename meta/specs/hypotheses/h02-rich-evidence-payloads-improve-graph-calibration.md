@@ -19,6 +19,12 @@ source_refs:
 - paper:Faller2024
 - paper:Zheng2024
 - paper:Zuber2025
+- paper:Zhang2017CancerGenomics
+- paper:Zhang2021JointGraphical
+- paper:Vahabi2022
+- paper:Deleu2023
+- paper:Mohammadi2025
+- paper:Alnajjar2026
 related:
 - question:01-evidence-payload-schema
 - question:03-source-and-pipeline-provenance
@@ -26,6 +32,7 @@ related:
 - question:05-source-dependence-detection
 - question:07-llm-agents-as-fallible-sources
 - question:10-causal-graph-construction-pipeline
+- question:11-graph-valued-synthesis-artifacts
 - hypothesis:h01-stochastic-revisiting
 created: '2026-05-05'
 updated: '2026-05-06'
@@ -36,7 +43,7 @@ updated: '2026-05-06'
 
 A graph that stores structured evidence payloads will produce better calibrated belief updates than a graph that stores only scalar support or dispute edges.
 The load-bearing claim is not that more metadata is always better.
-It is that a small set of epistemically relevant fields - comparison target, estimand, model family, priors, heterogeneity, bias model, diagnostics, sensitivity deltas, source reliability, source dependence, pipeline provenance, population transport, identifiability, validation role, graph object type, discovery method, prior role, hidden-variable assumption, and diagnostic status - prevents the graph from treating unlike evidence operations as interchangeable [@Zhao2012; @Li2016; @Allen2017; @Thijssen2017; @Dai2023; @Semochkina2025; @Han2026; @Petersen2014; @Shi2022; @Dong2023; @Faller2024; @Zheng2024; @Zuber2025].
+It is that a small set of epistemically relevant fields - comparison target, estimand, model family, priors, heterogeneity, bias model, diagnostics, sensitivity deltas, source reliability, source dependence, pipeline provenance, population transport, identifiability, validation role, graph object type, discovery method, prior role, hidden-variable assumption, diagnostic status, integration objective, context scope, view scope, approximation class, and posterior summary role - prevents the graph from treating unlike evidence operations as interchangeable [@Zhao2012; @Li2016; @Allen2017; @Thijssen2017; @Dai2023; @Semochkina2025; @Han2026; @Petersen2014; @Shi2022; @Dong2023; @Faller2024; @Zheng2024; @Zuber2025; @Zhang2017CancerGenomics; @Zhang2021JointGraphical; @Vahabi2022; @Deleu2023; @Mohammadi2025; @Alnajjar2026].
 
 ## Proposition Bundle
 
@@ -66,12 +73,15 @@ Explicit source-to-target population metadata reduces biased strengthening from 
 **P7 (causal graph construction).**
 Explicit graph-construction payloads reduce false confidence from treating background assumptions, LLM priors, data-discovered adjacencies, equivalence-class features, latent-variable hypotheses, mediation paths, and identified causal effects as the same kind of evidence [@Petersen2014; @Dong2023; @Faller2024; @Zheng2024; @Zuber2025].
 
+**P8 (graph-valued integration).**
+Explicit graph-valued and integration-valued payloads reduce false confidence from treating graph estimates, graph posterior summaries, common/unique components, clusters, selected features, modules, and predictive-integration outputs as interchangeable support for propositions [@Zhang2017CancerGenomics; @Zhang2021JointGraphical; @Vahabi2022; @Deleu2023; @Mohammadi2025; @Alnajjar2026].
+
 ## Current Uncertainty
 
 - Current support is literature-based and architectural, not yet benchmark-based.
 - The main unresolved design issue is the minimum viable schema: too little metadata loses the calibration mechanism, while too much metadata becomes authoring friction. `question:04-authoring-cost-audit` addresses this directly.
 - The hypothesis assumes later validation outcomes can be defined well enough to score calibration. The "Calibration Ground Truth" subsection below names the candidate ground-truth signals and their failure modes; it remains an open empirical question how often any of them apply per neighborhood.
-- It is unclear whether the first implementation should store source reliability, pipeline provenance, and causal graph construction stages directly on evidence payloads, as first-class graph nodes, or both.
+- It is unclear whether the first implementation should store source reliability, pipeline provenance, causal graph construction stages, and graph-valued integration artifacts directly on evidence payloads, as first-class graph nodes, or both.
 
 ### Calibration Ground Truth
 
@@ -90,6 +100,7 @@ Calibration scoring will likely combine signals 1-3 where available, with signal
 - In replay experiments over paper-derived evidence, rich-payload aggregation will show lower Brier score or expected calibration error than scalar-edge aggregation when later evidence is held out.
 - Rich-payload aggregation will avoid strengthening claims when the apparent support comes from copied sources, shared extraction pipelines, missing views, unvalidated cleaning, or source-target mismatch.
 - Rich-payload aggregation will avoid strengthening causal claims when the apparent support is only a weak LLM prior, ambiguous graph object, hidden-variable-sensitive adjacency, self-incompatible discovery output, or unidentified estimand.
+- Rich-payload aggregation will avoid overconfident updates when the apparent support is an exploratory cluster, unstable selected-feature set, posterior-uncertain graph feature, shared-structure-dependent edge, or view-scope-mismatched integration result.
 - The benefit will be largest in heterogeneous evidence neighborhoods where studies differ in measurement role, target population, priors, bias risk, or source reliability.
 - In simple low-noise neighborhoods with direct independent measurements, the rich schema may add little beyond scalar support.
 
@@ -107,6 +118,7 @@ Calibration scoring will likely combine signals 1-3 where available, with signal
 - `literature_evidence` - External-data borrowing can improve efficiency or import bias depending on source-population and target-population assumptions [@Dai2023].
 - `literature_evidence` - Informative priors and automated cleaning constraints can materially shape posterior results, making provenance and sensitivity analysis load-bearing [@Semochkina2025; @Han2026].
 - `literature_evidence` - Causal graph construction depends on explicit causal models, observed-data links, graph object types, hidden-variable assumptions, diagnostics, and identification status, making graph-construction provenance load-bearing [@Petersen2014; @Shi2022; @Dong2023; @Faller2024; @Zheng2024; @Zuber2025].
+- `literature_evidence` - Graphical-model and multiview-integration outputs depend on context scope, view scope, shared-structure assumptions, graph posterior uncertainty, clustering assumptions, feature-selection rules, and approximation class [@Zhang2017CancerGenomics; @Zhang2021JointGraphical; @Vahabi2022; @Deleu2023; @Mohammadi2025; @Alnajjar2026].
 
 ## Disputing Evidence
 
@@ -119,6 +131,7 @@ Calibration scoring will likely combine signals 1-3 where available, with signal
 - Build a small evidence-aggregation replay benchmark: hold out later or higher-quality evidence, compare scalar-edge updates against rich-payload updates, and score calibration.
 - Implement a toy truth-discovery simulator with source sensitivity, specificity, copying, and missingness; compare scalar trust, decomposed source reliability, and full payload variants.
 - Implement a causal-graph construction audit that compares scalar causal-edge updates against role-typed graph outputs: prior, discovered adjacency, equivalence-class feature, diagnostic result, identified estimand, and effect estimate.
+- Implement a graph-valued synthesis audit that compares scalar-edge updates against typed graph/integration artifacts: graph estimate, graph posterior summary, common component, context-unique component, cluster, selected feature set, and predictive-integration model.
 - Audit existing paper summaries to see how often the proposed fields can be extracted without unreasonable manual burden.
 - Test whether schema fields improve H01 attention sampling by identifying claims that later require revision.
 
@@ -127,5 +140,6 @@ Calibration scoring will likely combine signals 1-3 where available, with signal
 - `question:01-evidence-payload-schema` asks for the minimum field set.
 - `question:03-source-and-pipeline-provenance` asks where source and pipeline metadata should live.
 - `question:10-causal-graph-construction-pipeline` asks how causal graph construction stages should be represented.
+- `question:11-graph-valued-synthesis-artifacts` asks how graph-valued and integration-valued synthesis artifacts should be represented.
 - `hypothesis:h01-stochastic-revisiting` supplies the attention/revisiting motivation.
-- Batch 1 supplies contrastive, model-based evidence semantics; Batch 2 adds source behavior and pipeline provenance; Batch 3 adds causal graph construction and discovery provenance.
+- Batch 1 supplies contrastive, model-based evidence semantics; Batch 2 adds source behavior and pipeline provenance; Batch 3 adds causal graph construction and discovery provenance; Batch 4 adds graph-valued and integration-valued synthesis artifacts.
