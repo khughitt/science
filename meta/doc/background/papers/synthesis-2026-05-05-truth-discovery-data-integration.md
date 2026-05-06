@@ -18,7 +18,10 @@ related:
   - "synthesis:bayesian-evidence-synthesis"
   - "question:01-evidence-payload-schema"
   - "question:02-causal-synthesis-guardrails"
-  - "question:03-how-should-science-represent-source-behavior-and-pipeline-provenance-in"
+  - "question:03-source-and-pipeline-provenance"
+  - "question:05-source-dependence-detection"
+  - "question:07-llm-agents-as-fallible-sources"
+  - "question:08-mcda-bayesian-interoperability"
   - "hypothesis:h01-stochastic-revisiting"
   - "hypothesis:h02-rich-evidence-payloads-improve-graph-calibration"
   - "hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting"
@@ -182,8 +185,9 @@ The Batch 1 guardrail (target population, contrast, aggregation rule) should als
 ## Known Gaps
 
 - **Convergence is qualitative.** The Batch 2 themes are corroborated across paper types (truth discovery, integration, calibration, cleaning) but no shared benchmark or replication backs them. Treat as architectural conjectures.
-- **Source-dependence detection is unmodeled.** Li2016 names copying, shared extraction, and pipeline correlations as central failure modes, but neither this batch nor the project specifies how to *detect* dependence beyond manual annotation. This is a gap for [t024] / [t025].
-- **MCDA-Bayes interoperability is unresolved.** Q6 in this synthesis ("How should MCDA-style scores interact with Bayesian belief states?") is open and not yet captured in a question file.
+- **Source-dependence detection is unmodeled.** Li2016 names copying, shared extraction, and pipeline correlations as central failure modes, but neither this batch nor the project specifies how to *detect* dependence beyond manual annotation. Captured in `question:05-source-dependence-detection`; design in `[t031]`.
+- **MCDA-Bayes interoperability is unresolved.** Open Question 6 above ("How should MCDA-style scores interact with Bayesian belief states?") is now captured in `question:08-mcda-bayesian-interoperability`.
+- **LLM agents are unmodeled as sources.** Han et al. surface LLM-generated priors and constraints as upstream evidence, but this project also uses LLM agents extensively for paper summarization, extraction, and synthesis - including this report. Captured in `question:07-llm-agents-as-fallible-sources`; design in `[t033]`.
 
 ## Post-Batch-2 Synthesis Decisions
 
@@ -195,7 +199,7 @@ Batch 2 makes the draft hypotheses mature enough to track explicitly:
 
 **New question.**
 Batch 2 also warrants a distinct representation question:
-- `question:03-how-should-science-represent-source-behavior-and-pipeline-provenance-in` asks where source reliability, source dependence, missingness, cleaning, extraction, preprocessing, and transport should live in the graph.
+- `question:03-source-and-pipeline-provenance` asks where source reliability, source dependence, missingness, cleaning, extraction, preprocessing, and transport should live in the graph.
 
 **Schema update.**
 The Batch 1 payload schema should now be extended with source and pipeline fields:

@@ -95,7 +95,7 @@ Not for the first sweep, but useful to record as candidates for later:
 
 Worth interrogating explicitly: is H01 itself the right hypothesis to test first?
 
-- If most real-world scientific error is shared-pipeline bias (the `question:01-bioinformatics-generalizability` angle), the stochastic-revisiting mechanism may help little in any regime. A hypothesis about *detecting* pipeline-level correlated error across claims might be a higher-value first test.
+- If most real-world scientific error is shared-pipeline bias (the `question:09-bioinformatics-generalizability` angle), the stochastic-revisiting mechanism may help little in any regime. A hypothesis about *detecting* pipeline-level correlated error across claims might be a higher-value first test.
 - The meta-project's design commitments (continuous beliefs, evidence-diversity weighting) are not equivalent claims. Testing only "stochastic revisiting helps" leaves diversity-weighting and calibration-auditing untested. A small rebalancing of priorities toward H02/H03 on evidence-diversity and calibration might be warranted before burning compute on H01.
 
 Record rather than decide.

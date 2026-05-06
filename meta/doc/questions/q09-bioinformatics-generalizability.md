@@ -1,5 +1,5 @@
 ---
-id: "question:01-bioinformatics-generalizability"
+id: "question:09-bioinformatics-generalizability"
 type: "question"
 title: "How well do replication-crisis findings generalize from psychology, cancer biology, and neuroimaging to bioinformatics and genomics?"
 status: "active"

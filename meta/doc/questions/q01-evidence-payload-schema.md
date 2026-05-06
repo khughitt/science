@@ -33,7 +33,7 @@ related:
 - hypothesis:h01-stochastic-revisiting
 - hypothesis:h02-rich-evidence-payloads-improve-graph-calibration
 - hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting
-- question:03-how-should-science-represent-source-behavior-and-pipeline-provenance-in
+- question:03-source-and-pipeline-provenance
 - topic:bayesian-methods-continuous-belief
 created: '2026-05-05'
 updated: '2026-05-05'

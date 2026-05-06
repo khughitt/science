@@ -15,7 +15,10 @@ source_refs:
 - paper:Han2026
 related:
 - question:01-evidence-payload-schema
-- question:03-how-should-science-represent-source-behavior-and-pipeline-provenance-in
+- question:03-source-and-pipeline-provenance
+- question:04-authoring-cost-audit
+- question:05-source-dependence-detection
+- question:07-llm-agents-as-fallible-sources
 - hypothesis:h01-stochastic-revisiting
 created: '2026-05-05'
 updated: '2026-05-05'
@@ -56,9 +59,21 @@ Explicit source-to-target population metadata reduces biased strengthening from 
 ## Current Uncertainty
 
 - Current support is literature-based and architectural, not yet benchmark-based.
-- The main unresolved design issue is the minimum viable schema: too little metadata loses the calibration mechanism, while too much metadata becomes authoring friction.
-- The hypothesis assumes later validation outcomes can be defined well enough to score calibration. Some Science graph claims may lack timely or clean ground truth.
+- The main unresolved design issue is the minimum viable schema: too little metadata loses the calibration mechanism, while too much metadata becomes authoring friction. `question:04-authoring-cost-audit` addresses this directly.
+- The hypothesis assumes later validation outcomes can be defined well enough to score calibration. The "Calibration Ground Truth" subsection below names the candidate ground-truth signals and their failure modes; it remains an open empirical question how often any of them apply per neighborhood.
 - It is unclear whether the first implementation should store source reliability and pipeline provenance directly on evidence payloads, as first-class graph nodes, or both.
+
+### Calibration Ground Truth
+
+The hypothesis predicts better calibration "against later validation outcomes." Candidate ground-truth signals, in rough order of strength:
+
+1. **Direct experimental contradiction or replication.** A subsequent registered replication or randomized experiment that targets the same proposition is the strongest signal. Failure mode: rare, slow, and biased toward replicable claim types.
+2. **Higher-quality follow-up evidence.** A subsequent meta-analysis, RCT after observational data, or larger / better-powered study supplants earlier evidence. Failure mode: "higher quality" is itself a judgment, and follow-ups can inherit upstream bias.
+3. **Adjudicated researcher labels.** Domain-expert review marks a proposition supported, disputed, or unresolved against current evidence. Failure mode: expensive; introduces annotator bias; not blind to the project's own graph state.
+4. **Structural updates from outside the graph.** Retractions, corrections, paradigm shifts, or canonical-source updates. Failure mode: late-arriving and uneven across fields.
+5. **Internal consistency over time.** Whether a proposition's posterior at time T survives later evidence at time T+k without major revision. Failure mode: weakest signal; can be confounded by anchoring and shared sources.
+
+Calibration scoring will likely combine signals 1-3 where available, with signals 4-5 as supporting evidence. The audit in `[t030]` should note which signals can be applied to existing project artifacts.
 
 ## Predictions
 
@@ -97,6 +112,6 @@ Explicit source-to-target population metadata reduces biased strengthening from 
 ## Related Work
 
 - `question:01-evidence-payload-schema` asks for the minimum field set.
-- `question:03-how-should-science-represent-source-behavior-and-pipeline-provenance-in` asks where source and pipeline metadata should live.
+- `question:03-source-and-pipeline-provenance` asks where source and pipeline metadata should live.
 - `hypothesis:h01-stochastic-revisiting` supplies the attention/revisiting motivation.
 - Batch 1 supplies contrastive, model-based evidence semantics; Batch 2 adds source behavior and pipeline provenance.

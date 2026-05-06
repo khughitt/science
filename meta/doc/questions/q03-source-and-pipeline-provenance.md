@@ -1,5 +1,5 @@
 ---
-id: question:03-how-should-science-represent-source-behavior-and-pipeline-provenance-in
+id: question:03-source-and-pipeline-provenance
 type: question
 title: How should Science represent source behavior and pipeline provenance in evidence
   aggregation?

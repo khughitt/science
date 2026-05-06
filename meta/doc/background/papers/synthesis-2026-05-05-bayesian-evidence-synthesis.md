@@ -22,10 +22,13 @@ related:
   - "synthesis:truth-discovery-data-integration"
   - "question:01-evidence-payload-schema"
   - "question:02-causal-synthesis-guardrails"
+  - "question:06-sequential-anytime-valid-evidence"
+  - "question:08-mcda-bayesian-interoperability"
   - "hypothesis:h01-stochastic-revisiting"
   - "hypothesis:h02-rich-evidence-payloads-improve-graph-calibration"
   - "hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting"
   - "hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening"
+  - "hypothesis:h05-sequential-evidence-improves-attention"
   - "topic:bayesian-methods-continuous-belief"
   - "topic:structured-scientific-knowledge"
 created: "2026-05-05"
@@ -158,9 +161,9 @@ Question 4 motivated `hypothesis:h03-reason-coded-revisiting-beats-posterior-onl
 
 ## Known Gaps
 
-- **Anytime-valid inference is not yet covered.** Sequential evidence accumulation in a research-assistance graph is closer in spirit to e-values and confidence sequences than to fixed-N Bayes factors, but no Batch 1 paper takes that view. Tracked in `[t028]` as a follow-up reading lead.
+- **Anytime-valid inference is not yet covered.** Sequential evidence accumulation in a research-assistance graph is closer in spirit to e-values and confidence sequences than to fixed-N Bayes factors, but no Batch 1 paper takes that view. Tracked in `[t028]` as a reading lead, scoped in `[t032]`, and framed conceptually in `question:06-sequential-anytime-valid-evidence` and `hypothesis:h05-sequential-evidence-improves-attention`.
 - **Single-paper claims dominate Batch 1.** Most implications above rest on one or two sources per claim. The convergence is qualitative (across themes), not replicated benchmark evidence. Treat the claims as architectural conjectures rather than validated design.
-- **Authoring-cost evidence is absent.** The "small core schema plus typed extensions" recommendation is justified on epistemic grounds, not by data on how much metadata authors or LLM agents actually populate. H02 P3 (minimality) flags this explicitly.
+- **Authoring-cost evidence is absent.** The "small core schema plus typed extensions" recommendation is justified on epistemic grounds, not by data on how much metadata authors or LLM agents actually populate. H02 P3 (minimality) flags this; `question:04-authoring-cost-audit` and `[t030]` make it measurable.
 
 ## Prioritized Follow-ups
 

@@ -4,7 +4,7 @@
 - priority: P1
 - status: done
 - aspects: [software-development, hypothesis-testing]
-- related: [hypothesis:h01-stochastic-revisiting, question:01-bioinformatics-generalizability]
+- related: [hypothesis:h01-stochastic-revisiting, question:09-bioinformatics-generalizability]
 - created: 2026-04-24
 
 Implement the engine per `specs/h01-simulator.md`: Beta-Bernoulli signal model with configurable prior and three bias modes (none / independent / shared); three policies (hard-gate, constant-revisit, Thompson); recall / Brier / regret metrics; grid sweep producing a list-column parquet (allocations + final α, β arrays); Click CLI with a benchmark gate that validates runtime against the single-digit-minute budget. Quality gates: ruff check + format-check + pyright. Plan: `doc/plans/2026-04-24-h01-simulator.md`. Running the full sweep, populating notebook figures, and writing the interpretation are deliverables of [t002].
@@ -26,7 +26,7 @@ Resolve the three engine issues flagged in `meta/doc/plans/2026-04-24-h01-engine
 - priority: P1
 - status: done
 - aspects: [hypothesis-testing, software-development]
-- related: [hypothesis:h01-stochastic-revisiting, question:01-bioinformatics-generalizability]
+- related: [hypothesis:h01-stochastic-revisiting, question:09-bioinformatics-generalizability]
 - blocked_by: [t020]
 - created: 2026-04-24
 
@@ -512,3 +512,81 @@ Concrete improvements to design and implement:
 - register `synthesis` as a graph entity kind or keep batch synthesis artifacts out of graph-audited entity scans; `hypothesis create` currently reports unknown `synthesis` kind while scanning paper-batch synthesis files.
 
 Start with a design pass before editing generated commands or skills.
+
+## [t030] Audit authoring cost of the proposed evidence-payload schema
+- priority: P1
+- status: proposed
+- aspects: [research, framework-design, hypothesis-testing]
+- parent: task:t021
+- group: evidence-payload-schema
+- blocked_by: [t022]
+- related: [task:t022, question:04-authoring-cost-audit, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration]
+- created: 2026-05-05
+
+Sample 10-20 existing paper summaries from this commit and attempt to extract the candidate t022 fields against a defined rubric.
+Record per-field success rate, ambiguity rate, inferred-vs-stated status, and rough effort cost.
+Run a second extraction pass with an LLM agent and score it against the manual pass.
+
+Deliverables:
+- a sampling plan and field-extraction rubric in `meta/doc/plans/`;
+- a per-field extractability table;
+- a short note feeding back into t022 with field-pruning recommendations (core / typed-extension / drop);
+- a note on agent-vs-manual extraction agreement that informs `[t033]`.
+
+Blocks: cannot start until t022 has a candidate field set.
+
+## [t031] Source-dependence detection design
+- priority: P2
+- status: proposed
+- aspects: [software-development, framework-design, hypothesis-testing]
+- parent: task:t021
+- group: evidence-payload-schema
+- related: [task:t024, task:t025, question:05-source-dependence-detection, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- created: 2026-05-05
+
+Stratify evidence-source dependence patterns by mechanical detectability and prototype detectors for the high-leverage cases.
+
+Mechanically detectable candidates: shared dataset identifiers, shared author lists, citation chains, shared extractor or prompt versions, near-duplicate text, shared upstream synthesis nodes.
+Annotation-required candidates: methodological convergence by independent groups, conceptual dependence through shared theoretical frameworks, prior-knowledge contamination across paper summaries.
+
+Deliverables:
+- a dependence-pattern taxonomy with detectability score per pattern;
+- prototype detectors for two or three high-leverage patterns;
+- a design note for how detected dependence attaches to evidence edges and propagates to aggregation operators;
+- alignment notes with `[t024]` (heterogeneity / bias mechanisms) and `[t025]` (reason codes).
+
+## [t032] Scope sequential / anytime-valid evidence as a graph aggregation primitive
+- priority: P2
+- status: proposed
+- aspects: [research, framework-design, hypothesis-testing]
+- group: sequential-evidence
+- related: [task:t028, question:06-sequential-anytime-valid-evidence, hypothesis:h05-sequential-evidence-improves-attention, hypothesis:h01-stochastic-revisiting, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- created: 2026-05-05
+
+Resolve t028's anytime-valid reading lead into either a topic note + simulator extension or a deferred-with-reason record.
+
+Steps:
+- ingest the e-value / test-martingale / confidence-sequence references queued in `[t028]`;
+- write a topic note `doc/background/topics/sequential-evidence.md` linking these methods to H01 / H03 attention and H02 payload state;
+- audit current and likely-future project graph state for the realized prevalence of optional stopping and unbounded revisiting;
+- propose a sequential-evidence extension to the H01 simulator: propositions receive evidence over time, attention policies compare fixed-N posterior, BMA-style, and anytime-valid evidence levels;
+- decide whether H05 graduates to an active simulation track or stays speculative pending stronger upstream evidence.
+
+## [t033] Model LLM agents as fallible evidence sources
+- priority: P2
+- status: proposed
+- aspects: [software-development, framework-design, research]
+- group: agent-source-modeling
+- related: [task:t022, task:t024, question:07-llm-agents-as-fallible-sources, question:05-source-dependence-detection, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- created: 2026-05-05
+
+Treat LLM agents (paper summarizers, claim extractors, batch synthesizers, attention samplers, curation assistants) as first-class fallible source entities and design the minimum representation.
+
+Deliverables:
+- a taxonomy of agent roles in this project, with current and planned uses;
+- a minimal agent-source schema: agent identifier, model version, prompt or system-prompt version, tool version, validation history, and dependence links to other agents;
+- a `derived_by` field design for evidence payloads, plus a `validation_status` field;
+- an alignment note with `[t031]` on shared-prompt and shared-model dependence;
+- a self-application pass: mark which existing artifacts in this project (including the Batch 1 / Batch 2 syntheses) should be retroactively annotated with agent provenance, and at what granularity.
+
+Granularity is a key design decision; expect to defend the chosen level (per-prompt, per-tool-version, per-model) against alternatives.

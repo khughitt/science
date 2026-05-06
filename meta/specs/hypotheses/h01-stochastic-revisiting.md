@@ -6,7 +6,7 @@ status: "proposed"
 source_refs: []
 related:
   - "topic:analytic-flexibility-and-replication"
-  - "question:01-bioinformatics-generalizability"
+  - "question:09-bioinformatics-generalizability"
 created: "2026-04-24"
 updated: "2026-04-24"
 ---
@@ -50,7 +50,7 @@ This is weaker than P1-P3 and could fail even if the main claim holds.
 
 - No direct empirical evidence specific to this tool context; the argument relies on transferring multi-armed bandit theory to proposition-evidence allocation, which is structurally close but not identical.
 - Classical bandit settings assume stationary reward distributions; scientific evidence is better modelled by restless or contextual bandits, which have weaker theoretical guarantees.
-- Realistic noise parameters for the "realistic regime" claim in P2 rely on cross-field generalisation of replication-crisis estimates (see `question:01-bioinformatics-generalizability`); those parameters are not tightly constrained.
+- Realistic noise parameters for the "realistic regime" claim in P2 rely on cross-field generalisation of replication-crisis estimates (see `question:09-bioinformatics-generalizability`); those parameters are not tightly constrained.
 - The simulator itself is not yet implemented, so the main test of this hypothesis is currently hypothetical rather than ongoing.
 
 ## Predictions
@@ -79,7 +79,7 @@ Results that would materially lower confidence in the core claims:
 ## Disputing Evidence
 
 - No direct disputing evidence yet identified; the closest relevant body of work would be ML systems literature on when pure exploration harms performance (e.g. contextual-bandit regret bounds under non-stationarity), which is suggestive rather than disputing per se.
-- If evidence arises that the dominant failure mode in real research workflows is *shared* pipeline bias rather than *independent* analyst noise (see `question:01-bioinformatics-generalizability`), then stochastic revisiting of any one proposition may not help, because the error is correlated across many propositions at once. This is the most plausible route to disconfirmation.
+- If evidence arises that the dominant failure mode in real research workflows is *shared* pipeline bias rather than *independent* analyst noise (see `question:09-bioinformatics-generalizability`), then stochastic revisiting of any one proposition may not help, because the error is correlated across many propositions at once. This is the most plausible route to disconfirmation.
 
 ## Evidence Needed To Shift Belief
 
@@ -90,5 +90,5 @@ Results that would materially lower confidence in the core claims:
 ## Related Work
 
 - `topic:analytic-flexibility-and-replication` — motivates the noise regime in which this hypothesis would, if true, pay off.
-- `question:01-bioinformatics-generalizability` — constrains the noise parameters used in any realistic simulation sweep, and surfaces the shared-pipeline-bias failure mode noted under *Disputing Evidence*.
+- `question:09-bioinformatics-generalizability` — constrains the noise parameters used in any realistic simulation sweep, and surfaces the shared-pipeline-bias failure mode noted under *Disputing Evidence*.
 - `topic:structured-scientific-knowledge` — weakly related: the allocation-policy layer assumed here sits above the proposition representation layer that the structured-knowledge topic concerns.

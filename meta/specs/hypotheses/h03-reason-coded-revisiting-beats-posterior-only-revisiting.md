@@ -15,7 +15,7 @@ source_refs:
 - paper:Han2026
 related:
 - question:01-evidence-payload-schema
-- question:03-how-should-science-represent-source-behavior-and-pipeline-provenance-in
+- question:03-source-and-pipeline-provenance
 - hypothesis:h01-stochastic-revisiting
 - hypothesis:h02-rich-evidence-payloads-improve-graph-calibration
 created: '2026-05-05'
@@ -98,4 +98,4 @@ Reason-coded attention can be implemented from explicit graph state and evidence
 
 - `hypothesis:h01-stochastic-revisiting` is the parent attention hypothesis.
 - `hypothesis:h02-rich-evidence-payloads-improve-graph-calibration` supplies the payload fields needed to derive reason codes.
-- `question:01-evidence-payload-schema` and `question:03-how-should-science-represent-source-behavior-and-pipeline-provenance-in` define the representation problem.
+- `question:01-evidence-payload-schema` and `question:03-source-and-pipeline-provenance` define the representation problem.

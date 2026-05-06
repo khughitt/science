@@ -41,7 +41,7 @@ The pair `(p_+, p_-)` parameterises the per-action noise level; `p_+ = 0.9, p_- 
 
 **Budget.** A total of `B` actions per simulation run, each action applied to exactly one proposition.
 
-**Bias model.** To distinguish independent analyst noise from shared-pipeline error (the H01 disputing-evidence route; see `question:01-bioinformatics-generalizability`), the signal model supports three modes:
+**Bias model.** To distinguish independent analyst noise from shared-pipeline error (the H01 disputing-evidence route; see `question:09-bioinformatics-generalizability`), the signal model supports three modes:
 
 - `none` — no bias; all propositions use the clean `(p_+, p_-)` regime.
 - `independent` — each proposition in a biased subset `C` receives an independent per-proposition offset drawn from `Normal(0, σ_bias)` at run start. Errors are biased but uncorrelated across propositions.
@@ -108,7 +108,7 @@ The spec is considered met only when the dated sweep parquet and at least one re
 ## Relationship to H01 Propositions
 
 - **P1 (existence)** — tested directly by the sweep.
-- **P2 (realistic regime)** — tested by whether the advantage appears within the defensible subset of the noise grid; requires cross-referencing `question:01-bioinformatics-generalizability` for plausibility of noise settings.
+- **P2 (realistic regime)** — tested by whether the advantage appears within the defensible subset of the noise grid; requires cross-referencing `question:09-bioinformatics-generalizability` for plausibility of noise settings.
 - **P3 (mechanism)** — tested by whether the recall gap scales monotonically with noise within the sweep.
 - **P4 (safety)** — tested by the low-noise end of the sweep.
 - **P5 (schedule)** — partially tested by comparing constant-revisit to uncertainty-scaled revisit.

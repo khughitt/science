@@ -373,7 +373,7 @@ for that kind. They infer the numeric pattern from observed ids:
 
 - natural-systems style: `question:q01-model-granularity` -> next
   `question:q102-<slug>`
-- meta style: `question:01-bioinformatics-generalizability` -> next
+- meta style: `question:09-bioinformatics-generalizability` -> next
   `question:02-<slug>`
 
 If existing siblings mix incompatible numeric prefixes for the same kind and
