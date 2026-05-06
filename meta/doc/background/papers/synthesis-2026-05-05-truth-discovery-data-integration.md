@@ -15,9 +15,14 @@ source_refs:
   - "paper:Semochkina2025"
   - "paper:Han2026"
 related:
+  - "synthesis:bayesian-evidence-synthesis"
   - "question:01-evidence-payload-schema"
   - "question:02-causal-synthesis-guardrails"
+  - "question:03-how-should-science-represent-source-behavior-and-pipeline-provenance-in"
   - "hypothesis:h01-stochastic-revisiting"
+  - "hypothesis:h02-rich-evidence-payloads-improve-graph-calibration"
+  - "hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting"
+  - "hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening"
   - "topic:structured-scientific-knowledge"
   - "topic:bayesian-methods-continuous-belief"
 created: "2026-05-05"
@@ -159,22 +164,26 @@ This allows later updates to revise many claims when a source, extractor, cleani
 
 ## Prioritized Follow-ups
 
-**P1: Extend t022 with source and pipeline fields.**
+**P1: Extend [t022] with source and pipeline fields.**
 Add source reliability, source dependence, absence semantics, missingness class, cleaning provenance, transformation provenance, source population, target population, covariate coverage, and transport assumptions to the minimum evidence payload candidate.
 
-**P2: Add a typed aggregation-output taxonomy.**
-Extend t023 so typed synthesis nodes distinguish truth labels, truth scores, Bayesian posteriors, MCDA scores, graph estimates, debiased edge tests, and validation diagnostics.
+**P2: Add a typed aggregation-output taxonomy.** ([t023])
+Extend typed synthesis nodes to distinguish truth labels, truth scores, Bayesian posteriors, MCDA scores, graph estimates, debiased edge tests, and validation diagnostics.
 
-**P3: Add H01 source/pipeline reason codes.**
-Extend t025 with reason-coded uncertainty from Batch 2: source unreliability, source dependence, ambiguous omission, missing view, source-target mismatch, prior-resolved non-identifiability, and unvalidated cleaning.
+**P3: Add H01 source/pipeline reason codes.** ([t025])
+Extend reason-coded uncertainty with Batch 2 codes: source unreliability, source dependence, ambiguous omission, missing view, source-target mismatch, prior-resolved non-identifiability, and unvalidated cleaning.
 
-**P4: Treat data cleaning and extraction as graph transformations.**
-Fold Han2026 and Allen2017 into t024 so bias and heterogeneity mechanisms include cleaning, preprocessing, extraction confidence, batch effects, and imputation.
+**P4: Treat data cleaning and extraction as graph transformations.** ([t024])
+Fold `paper:Han2026` and `paper:Allen2017` into the heterogeneity/bias mechanism set so it includes cleaning, preprocessing, extraction confidence, batch effects, and imputation.
 
-**P5: Promote H02-H04 as explicit candidate hypotheses.**
-H02 should test whether rich payloads improve calibration specifically through source reliability, source dependence, and pipeline provenance.
-H03 should include reason-coded revisiting from source/pipeline uncertainty.
-H04 should include source-to-target transport and covariate-coverage guardrails, not only causal estimands.
+**P5: Extend the causal-synthesis guardrail with transport and covariate coverage.** ([t026])
+The Batch 1 guardrail (target population, contrast, aggregation rule) should also require source population, covariate coverage, transport or exchangeability assumption, evidence role, and a separation between graph-estimate and debiased-inference outputs before any external- or integration-derived evidence can strengthen a causal edge.
+
+## Known Gaps
+
+- **Convergence is qualitative.** The Batch 2 themes are corroborated across paper types (truth discovery, integration, calibration, cleaning) but no shared benchmark or replication backs them. Treat as architectural conjectures.
+- **Source-dependence detection is unmodeled.** Li2016 names copying, shared extraction, and pipeline correlations as central failure modes, but neither this batch nor the project specifies how to *detect* dependence beyond manual annotation. This is a gap for [t024] / [t025].
+- **MCDA-Bayes interoperability is unresolved.** Q6 in this synthesis ("How should MCDA-style scores interact with Bayesian belief states?") is open and not yet captured in a question file.
 
 ## Post-Batch-2 Synthesis Decisions
 

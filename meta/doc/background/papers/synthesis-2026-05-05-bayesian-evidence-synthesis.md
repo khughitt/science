@@ -18,6 +18,16 @@ source_refs:
   - "paper:VanWonderen2024"
   - "paper:Mulder2026"
   - "paper:Berenfeld2026"
+related:
+  - "synthesis:truth-discovery-data-integration"
+  - "question:01-evidence-payload-schema"
+  - "question:02-causal-synthesis-guardrails"
+  - "hypothesis:h01-stochastic-revisiting"
+  - "hypothesis:h02-rich-evidence-payloads-improve-graph-calibration"
+  - "hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting"
+  - "hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening"
+  - "topic:bayesian-methods-continuous-belief"
+  - "topic:structured-scientific-knowledge"
 created: "2026-05-05"
 updated: "2026-05-05"
 ---
@@ -137,32 +147,49 @@ MetaBayesDTA's handling of imperfect gold standards suggests a general rule: val
 
 ## Open Questions
 
+The first three questions below are captured in `question:01-evidence-payload-schema`; question 5 is captured in `question:02-causal-synthesis-guardrails`.
+Question 4 motivated `hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting`.
+
 1. Should Science introduce a first-class `synthesis` entity subtype for Bayesian model-averaged aggregation, with posterior model probabilities and inclusion Bayes factors?
 2. Should evidence edges require a `comparison_target` field whenever the support value is Bayes-factor-like?
 3. What is the minimum evidence-payload schema that captures priors, heterogeneity, bias, estimand, diagnostics, and sensitivity without making manual authoring too heavy?
 4. Should H01's attention sampler include reason-coded uncertainty features derived from synthesis artifacts, such as prior sensitivity, heterogeneity probability, or underpowered-source flags?
 5. Should causal proposition updates be blocked unless target-population and estimand metadata are present?
 
+## Known Gaps
+
+- **Anytime-valid inference is not yet covered.** Sequential evidence accumulation in a research-assistance graph is closer in spirit to e-values and confidence sequences than to fixed-N Bayes factors, but no Batch 1 paper takes that view. Tracked in `[t028]` as a follow-up reading lead.
+- **Single-paper claims dominate Batch 1.** Most implications above rest on one or two sources per claim. The convergence is qualitative (across themes), not replicated benchmark evidence. Treat the claims as architectural conjectures rather than validated design.
+- **Authoring-cost evidence is absent.** The "small core schema plus typed extensions" recommendation is justified on epistemic grounds, not by data on how much metadata authors or LLM agents actually populate. H02 P3 (minimality) flags this explicitly.
+
 ## Prioritized Follow-ups
 
-**P1: Design an evidence-payload schema for quantitative support.**
+**P1: Design an evidence-payload schema for quantitative support.** ([t022])
 Start with fields for comparison target, model family, prior, estimand, aggregation operator, heterogeneity, bias model, diagnostics, and sensitivity-analysis deltas.
 This is the highest-leverage follow-up because it changes the graph substrate used by all later synthesis work.
 
-**P2: Add synthesis-type distinctions to the project model.**
+**P2: Add synthesis-type distinctions to the project model.** ([t023])
 Separate effect-size pooling, hypothesis-support aggregation, causal synthesis, diagnostic-test synthesis, and model comparison.
 This prevents Science from collapsing incompatible operations into one belief update.
 
-**P3: Add H01 revisit reason codes.**
+**P3: Add H01 revisit reason codes.** ([t025])
 Encode why a claim is down-weighted or uncertain, then feed those reasons into the graph attention sampler.
 The batch gives several concrete reasons that map cleanly onto H01: underpowered evidence, high heterogeneity, prior sensitivity, bias risk, and estimand mismatch.
 
-**P4: Draft a causal-synthesis guardrail.**
+**P4: Draft a causal-synthesis guardrail.** ([t026])
 Require target population, effect measure, and aggregation rule before evidence from meta-analysis strengthens a causal edge.
 This follows directly from Berenfeld et al. and the causal-modeling aspect [@Berenfeld2026].
 
+**P5: Represent heterogeneity and bias as evidence-generation mechanisms.** ([t024])
+Treat publication bias, model uncertainty, study dependence, and imperfect reference labels as explicit mechanisms attached to evidence and synthesis nodes, not as prose-only caveats.
+This is what lets P1-P3 do work; without it, the new payload fields stay descriptive.
+
 ## Relationship to Existing Hypotheses
 
-Batch 1 supports D-003's continuous-belief decision and refines H01.
+Batch 1 supports D-003's continuous-belief decision (`core/decisions.md`) and refines H01.
 The strongest refinement is that stochastic revisiting should not be driven only by low posterior support.
 It should also be driven by the diagnostic reason for low support: low power, model uncertainty, heterogeneity, publication bias, prior sensitivity, imperfect labels, and estimand mismatch are all reasons to revisit rather than discard.
+
+This refinement is the seed for `hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting`.
+The payload-quality argument seeds `hypothesis:h02-rich-evidence-payloads-improve-graph-calibration`, and the Berenfeld-driven guardrail seeds `hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening`.
+Batch 2 (`synthesis:truth-discovery-data-integration`) extends each of these with source behavior and pipeline provenance.
