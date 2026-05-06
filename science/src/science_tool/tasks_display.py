@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import date
-
-from rich.console import Console
-from rich.style import Style
 from rich.table import Table
 from rich.text import Text
 from science_model.tasks import Task
+from science_tool.styles import (
+    TASK_PRIORITY_STYLES,
+    TASK_STATUS_STYLES,
+    TASK_TYPE_STYLES,
+    age_style,
+    get_console,
+    render_entity_ref,
+)
 from science_tool.tasks_readiness import ReadinessResolver
 
 # ── Status: sort order and colors ────────────────────────────────────────
@@ -21,55 +25,6 @@ _STATUS_ORDER: dict[str, int] = {
     "done": 4,
     "retired": 5,
 }
-
-_STATUS_STYLE: dict[str, str] = {
-    "active": "bold green",
-    "blocked": "bold red",
-    "proposed": "yellow",
-    "deferred": "dim",
-    "done": "blue",
-    "retired": "dim strike",
-}
-
-# ── Type colors ──────────────────────────────────────────────────────────
-
-_TYPE_STYLE: dict[str, str] = {
-    "dev": "cyan",
-    "research": "magenta",
-    "analysis": "blue",
-    "writing": "green",
-}
-
-# ── Priority colors ─────────────────────────────────────────────────────
-
-_PRIORITY_STYLE: dict[str, str] = {
-    "P0": "bold red",
-    "P1": "red",
-    "P2": "yellow",
-    "P3": "dim",
-}
-
-# ── Created: continuous age gradient ─────────────────────────────────────
-
-
-def _age_style(created: date) -> Style:
-    """Map task age to a green→yellow→red gradient."""
-    days = (date.today() - created).days
-    # Clamp to 0–90 day range for the gradient
-    t = min(max(days, 0), 90) / 90.0
-    # Green (0,180,60) → Yellow (200,180,0) → Red (200,60,0)
-    if t < 0.5:
-        s = t * 2  # 0→1 over first half
-        r = int(60 + 140 * s)
-        g = int(180)
-        b = int(60 - 60 * s)
-    else:
-        s = (t - 0.5) * 2  # 0→1 over second half
-        r = int(200)
-        g = int(180 - 120 * s)
-        b = int(0)
-    return Style(color=f"#{r:02x}{g:02x}{b:02x}")
-
 
 # ── Sorting ──────────────────────────────────────────────────────────────
 
@@ -102,6 +57,15 @@ def render_blocker_summary(task: Task, resolver: ReadinessResolver) -> str | Non
 # ── Table rendering ──────────────────────────────────────────────────────
 
 
+def _render_related_refs(refs: list[str]) -> Text:
+    text = Text()
+    for index, ref in enumerate(refs):
+        if index:
+            text.append(", ", style="dim")
+        text.append_text(render_entity_ref(ref))
+    return text
+
+
 def render_tasks_table(tasks: list[Task], resolver: ReadinessResolver | None = None) -> None:
     """Render a colored Rich table of tasks to stdout."""
     has_groups = any(t.group for t in tasks)
@@ -122,21 +86,21 @@ def render_tasks_table(tasks: list[Task], resolver: ReadinessResolver | None = N
     for t in tasks:
         id_text = Text(t.id, style="bold")
         title_text = Text(t.title)
-        type_text = Text(t.type, style=_TYPE_STYLE.get(t.type, ""))
-        pri_text = Text(t.priority, style=_PRIORITY_STYLE.get(t.priority, ""))
-        status_text = Text(t.status, style=_STATUS_STYLE.get(t.status, ""))
-        created_text = Text(t.created.isoformat(), style=_age_style(t.created))
+        type_text = Text(t.type, style=TASK_TYPE_STYLES.get(t.type, ""))
+        pri_text = Text(t.priority, style=TASK_PRIORITY_STYLES.get(t.priority, ""))
+        status_text = Text(t.status, style=TASK_STATUS_STYLES.get(t.status, ""))
+        created_text = Text(t.created.isoformat(), style=age_style(t.created))
 
         row: list[Text] = [id_text, title_text, type_text, pri_text, status_text]
         if has_groups:
             row.append(Text(t.group, style="cyan"))
         if has_related:
-            row.append(Text(", ".join(t.related), style="dim"))
+            row.append(_render_related_refs(t.related))
         row.append(created_text)
 
         table.add_row(*row)
 
-    console = Console()
+    console = get_console()
     console.print(table)
 
     if resolver is not None:

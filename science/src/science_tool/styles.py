@@ -122,9 +122,9 @@ def get_color_policy(context: click.Context | None = None) -> ColorPolicy:
 def _new_console(policy: ColorPolicy, file: TextIO | None = None) -> Console:
     match policy:
         case ColorPolicy.NEVER:
-            return Console(file=file, force_terminal=False, color_system=None)
+            return Console(file=file, force_terminal=False, color_system=None, no_color=True)
         case ColorPolicy.ALWAYS:
-            return Console(file=file, force_terminal=True)
+            return Console(file=file, force_terminal=True, color_system="standard", no_color=False)
         case ColorPolicy.AUTO:
             return Console(file=file)
 

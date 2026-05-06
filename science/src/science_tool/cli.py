@@ -96,13 +96,23 @@ from science_tool.project_artifacts.cli import artifacts_group as _artifacts_gro
 from science_tool.prose import scan_prose
 from science_tool.refs_cli import refs_group
 from science_tool.research_package.cli import research_package_group
+from science_tool.styles import COLOR_POLICY_CHOICES, resolve_color_policy, set_color_policy
 from science_tool.verdict.cli import verdict_group
 from science_tool.skills_lint import skills_group
 
 
 @click.group()
-def main() -> None:
+@click.option(
+    "--color",
+    "color_policy",
+    type=click.Choice(COLOR_POLICY_CHOICES),
+    default=None,
+    help="Terminal color policy. Defaults to never unless FORCE_COLOR is set.",
+)
+@click.pass_context
+def main(ctx: click.Context, color_policy: str | None) -> None:
     """Science CLI tools."""
+    set_color_policy(ctx, resolve_color_policy(color_policy))
 
 
 def _parse_dataset_effects(entries: tuple[str, ...]) -> dict[str, float] | None:
