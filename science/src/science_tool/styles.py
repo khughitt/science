@@ -126,7 +126,7 @@ def _new_console(policy: ColorPolicy, file: TextIO | None = None) -> Console:
         case ColorPolicy.ALWAYS:
             return Console(file=file, force_terminal=True, color_system="standard", no_color=False)
         case ColorPolicy.AUTO:
-            return Console(file=file)
+            return Console(file=file, no_color=False)
 
 
 def get_console(*, context: click.Context | None = None, file: TextIO | None = None) -> Console:

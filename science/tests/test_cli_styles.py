@@ -74,6 +74,16 @@ def test_get_console_non_cached_for_explicit_file() -> None:
     assert first is not second
 
 
+def test_get_console_auto_policy_ignores_no_color_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NO_COLOR", "1")
+    with click.Context(click.Command("demo")) as ctx:
+        set_color_policy(ctx, ColorPolicy.AUTO)
+
+        console = get_console(context=ctx, file=io.StringIO())
+
+    assert console.no_color is False
+
+
 def test_render_entity_ref_styles_known_kind() -> None:
     rendered = render_entity_ref("question:q104-rigor-conditional-claims")
     prefix_span = next(span for span in rendered.spans if span.start == 0 and span.end == len("question"))
