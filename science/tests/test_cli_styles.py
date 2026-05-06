@@ -30,10 +30,7 @@ def test_resolve_color_policy_honors_no_color_before_force_color() -> None:
 
 
 def test_resolve_color_policy_ignores_empty_no_color() -> None:
-    assert (
-        resolve_color_policy(None, env={"NO_COLOR": "", "FORCE_COLOR": "1"})
-        == ColorPolicy.ALWAYS
-    )
+    assert resolve_color_policy(None, env={"NO_COLOR": "", "FORCE_COLOR": "1"}) == ColorPolicy.ALWAYS
 
 
 def test_resolve_color_policy_honors_force_color_without_no_color() -> None:
@@ -79,14 +76,11 @@ def test_get_console_non_cached_for_explicit_file() -> None:
 
 def test_render_entity_ref_styles_known_kind() -> None:
     rendered = render_entity_ref("question:q104-rigor-conditional-claims")
-    prefix_span = next(
-        span for span in rendered.spans if span.start == 0 and span.end == len("question")
-    )
+    prefix_span = next(span for span in rendered.spans if span.start == 0 and span.end == len("question"))
     local_part_span = next(
         span
         for span in rendered.spans
-        if span.start == len("question:")
-        and span.end == len("question:q104-rigor-conditional-claims")
+        if span.start == len("question:") and span.end == len("question:q104-rigor-conditional-claims")
     )
 
     assert isinstance(rendered, Text)

@@ -1740,9 +1740,7 @@ def add_proposition_cmd(
         "WARNING: this entry is written directly to graph.trig and will be wiped on the next "
         "`science graph build`, which rematerialises the graph from markdown sources."
     )
-    click.echo(
-        "Tip: use `science proposition create <title>` for durable source-authored project work."
-    )
+    click.echo("Tip: use `science proposition create <title>` for durable source-authored project work.")
 
 
 @graph_add.command("observation")
