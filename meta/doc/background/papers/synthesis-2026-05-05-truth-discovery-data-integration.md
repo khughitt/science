@@ -1,5 +1,6 @@
 ---
 id: "synthesis:truth-discovery-data-integration"
+title: "Synthesis: Truth Discovery and Data Integration"
 type: "synthesis"
 report_kind: "paper-batch-synthesis"
 generated_at: "2026-05-05T00:00:00-04:00"

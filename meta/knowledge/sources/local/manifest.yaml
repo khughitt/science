@@ -1,0 +1,13 @@
+name: "meta-local"
+imports: ["core"]
+strictness: "typed-extension"
+entity_kinds:
+  - name: "synthesis"
+    canonical_prefix: "synthesis"
+    layer: "layer/local"
+    entity_class: "epistemic"
+    description: >-
+      Batch synthesis of multiple background papers (e.g. paper-batch-synthesis reports
+      under doc/background/papers/synthesis-*.md). Conclusion-like artifact: distills
+      cross-paper claims, links into questions/hypotheses/topics.
+relation_kinds: []

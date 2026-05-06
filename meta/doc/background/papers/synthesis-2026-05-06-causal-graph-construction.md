@@ -1,5 +1,6 @@
 ---
 id: "synthesis:causal-graph-construction"
+title: "Synthesis: Causal Graph Construction and Discovery"
 type: "synthesis"
 report_kind: "paper-batch-synthesis"
 generated_at: "2026-05-06T00:00:00-04:00"

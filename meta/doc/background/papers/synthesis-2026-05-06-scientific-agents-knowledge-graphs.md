@@ -1,5 +1,6 @@
 ---
 id: "synthesis:scientific-agents-knowledge-graphs"
+title: "Synthesis: Scientific Agents and Knowledge Graph Infrastructure"
 type: "synthesis"
 report_kind: "paper-batch-synthesis"
 generated_at: "2026-05-06T00:00:00-04:00"
