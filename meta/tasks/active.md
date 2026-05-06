@@ -170,6 +170,12 @@ This parent task tracks the group.
 Concrete implementation/design tasks are `[t022]` through `[t026]` plus `[t030]` through `[t041]`.
 Do not implement a schema directly from this parent; use it to keep the work visible and grouped.
 
+**Architecture decision (2026-05-06):** the schema is layered — `[t022]` produces the **core** (small, mandatory) plus the **extension contract**; `[t034]`, `[t035]`, `[t037]`, `[t038]`, `[t040]` produce **typed extensions** that conform to that contract.
+Without this split, every batch silently widened the "minimum" schema (~50 fields after Batch 6) and aspect tasks competed as P1 siblings.
+Sequencing: `[t022]` first; aspect-extension tasks then drop to P2 awaiting the contract.
+`[t025]` is the canonical H03 reason-code registry — aspect tasks declare codes locally and mirror them there with batch provenance.
+Lit follow-up tasks (`[t028]`, `[t036]`, `[t039]`, `[t041]`) are P3 so they do not compete with the schema work.
+
 Surfaced by: `doc/background/papers/synthesis-2026-05-05-bayesian-evidence-synthesis.md`.
 
 ## [t022] Design minimum quantitative evidence payload schema
@@ -181,16 +187,26 @@ Surfaced by: `doc/background/papers/synthesis-2026-05-05-bayesian-evidence-synth
 - group: evidence-payload-schema
 - created: 2026-05-05
 
-Design the minimum structured payload required for quantitative support/dispute evidence, causal graph construction outputs, graph-valued or integration-valued synthesis artifacts, and robustness/reproducibility evaluation artifacts.
-The schema should cover at least: source, proposition, comparison target / hypothesis set, evidence type, estimand, model family, prior, aggregation operator, heterogeneity, bias model, study power or information strength, diagnostics, sensitivity-analysis deltas, uncertainty, source reliability model, source-dependence refs, claim presence / omission state, missingness class, pipeline provenance, source population, target population, covariate coverage, transport assumptions, identifiability status, validation role, graph object type, discovery algorithm, method assumption set, prior role, constraint type, causal-sufficiency assumption, latent-variable risk, graph-construction diagnostic status, integration objective, context scope, view scope, shared-structure assumption, borrowing structure, approximation class, posterior summary role, edge inclusion probability, cluster count, feature relevance posterior, evaluation target, robustness modifier, modifier domain, replication design, reproducibility dimension, metric family, success threshold, checklist reference, lifecycle stage, and evaluation result.
+Design the **core** evidence payload schema and the **extension contract** that aspect-specific schemas (`[t034]`, `[t035]`, `[t037]`, `[t038]`, `[t040]`) must conform to.
 
-Key constraint: keep the core small enough for routine authoring, then allow typed method payloads for Bayes factors, Bayesian model averaging, Bayesian Evidence Synthesis, diagnostic-test meta-analysis, posterior-sample evidence estimation, causal synthesis, truth discovery, data cleaning, external-data transport, multi-view data integration, causal-discovery runs, LLM-assisted causal priors, mediation analysis, Mendelian randomization, graph posterior evidence, integrative clustering, feature selection, module discovery, predictive integration, agent/tool operations, robustness tests, replication metrics, and reproducibility checklists.
+This task is the unblocker for the rest of the Evidence Payload Schema group.
+The previous version of this task accumulated ~50 fields across Batches 1-6 and was no longer "minimum".
+Reframing: the core is the small, mandatory part every payload carries; aspect extensions are typed payload sections that load only when the relevant artifact type applies.
 
-Deliverables:
-- a design note in `meta/doc/plans/` or `meta/docs/` scoped to the meta-project;
-- proposed fields and strict enum values where possible;
-- examples from Batch 1, Batch 2, Batch 3, Batch 4, Batch 5, and Batch 6 paper summaries;
-- migration notes for existing support/dispute evidence edges.
+Required deliverables:
+
+1. **Core payload schema (small).** The fields every evidence/synthesis payload must declare regardless of type. Candidates from Batches 1-2: source, proposition, comparison target / hypothesis set, evidence type, validation role, identifiability status, source reliability ref, source-dependence refs, claim presence / omission state, missingness class, pipeline provenance, source population, target population, transport assumptions, and an aggregation operator. Resist adding fields that only apply to one artifact family.
+
+2. **Extension contract.** A typed-payload-section mechanism so each aspect task can declare its own fields without expanding the core. Specify: how an extension declares its `artifact_type`, how validation rules dispatch to the right extension, and how attention/H03 reason codes inherit across core + extension.
+
+3. **Aspect-extension assignment rule.** A decision rule for which fields belong in core vs in an extension. Use the Batch 3-6 schema-update lists as test cases — most should land in extensions, not core.
+
+4. **Migration notes** for existing support/dispute evidence edges to the new core layout.
+
+5. **Worked examples** from Batches 1-6 showing one core payload + one extension load per batch.
+
+Aspect-extension design tasks should not begin formalizing fields until the core + extension contract is drafted.
+Coordinate with `[t023]` (synthesis node types), `[t024]` (heterogeneity/bias mechanisms), `[t025]` (reason-code registry), and `[t026]` (causal guardrails); these define dimensions that may live in core or in shared extensions.
 
 ## [t023] Design typed synthesis nodes
 - priority: P2
@@ -263,9 +279,12 @@ Candidate reasons from Batch 1: `underpowered-evidence`, `high-heterogeneity`, `
 Candidate reasons from Batch 2: `source-unreliable`, `source-dependent`, `omission-ambiguous`, `missing-view`, `source-target-mismatch`, `prior-resolved-nonidentifiability`, `cleaning-unvalidated`, `repair-uncertain`, `shared-structure-assumption`, and `debiased-inference-missing`.
 Candidate reasons from Batch 3: `causal-sufficiency-assumption`, `latent-variable-risk`, `llm-prior-unvalidated`, `prior-data-disagreement`, `graph-object-ambiguous`, `self-incompatible`, `identification-missing`, `weak-prior-only`, `instrument-assumption-risk`, and `mediation-estimand-ambiguous`.
 Candidate reasons from Batch 4: `graph-posterior-uncertain`, `edge-inclusion-unstable`, `shared-structure-dependent`, `view-scope-mismatch`, `variational-approximation-risk`, `pseudo-likelihood-risk`, `clustering-unvalidated`, `selected-feature-unstable`, and `exploratory-integration-only`.
+Candidate reasons from Batch 5: `agent-source-unvalidated`, `tool-chain-unvalidated`, `safety-check-missing`, `context-retrieval-uncertain`, `information-absence-undetected`, `kg-view-derived`, `graph-version-stale`, `agent-bias-risk`, and `attention-not-evidence`.
+Candidate reasons from Batch 6: `robustness-target-ambiguous`, `modifier-domain-missing`, `tolerance-unspecified`, `replication-metric-mismatch`, `reproducibility-dimension-ambiguous`, `checklist-incomplete`, `analysis-plan-missing`, `deviation-unreported`, `code-or-data-unavailable`, and `null-results-omitted`.
 
 Design how these reasons are recorded on evidence/synthesis artifacts and how `science graph attention-sample` could incorporate them without using LLM-estimated probabilities.
 This should follow `[t022]` enough to avoid inventing a parallel schema.
+Aspect-extension design tasks (`[t034]`, `[t035]`, `[t037]`, `[t038]`, `[t040]`) each declare their own H03 reason codes; this task is the canonical registry — when those tasks formalize a code, mirror it here with batch provenance.
 
 ## [t026] Causal synthesis guardrails
 - priority: P2
@@ -296,7 +315,7 @@ Special attention:
 Start from `paper:Berenfeld2026`, `paper:Dai2023`, `paper:Thijssen2017`, `paper:Majumdar2022`, `paper:Petersen2014`, `paper:Shi2022`, `paper:Dong2023`, `paper:Faller2024`, `paper:Zheng2024`, `paper:Zuber2025`, and the causal-modeling aspect.
 
 ## [t028] Follow-up literature on Bayesian synthesis, causal meta-analysis, and anytime-valid evidence
-- priority: P2
+- priority: P3
 - status: proposed
 - aspects: [research, hypothesis-testing, causal-modeling]
 - related: [question:01-evidence-payload-schema, question:02-causal-synthesis-guardrails, topic:bayesian-methods-continuous-belief]
@@ -421,7 +440,7 @@ Deliverables:
 Granularity is a key design decision; expect to defend the chosen level (per-prompt, per-tool-version, per-model) against alternatives.
 
 ## [t034] Design causal graph construction pipeline artifacts
-- priority: P1
+- priority: P2
 - status: proposed
 - parent: task:t021
 - aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
@@ -453,7 +472,7 @@ Deliverables:
 Start from Batch 3 synthesis: `doc/background/papers/synthesis-2026-05-06-causal-graph-construction.md`.
 
 ## [t035] Design graph-valued synthesis artifact schema
-- priority: P1
+- priority: P2
 - status: proposed
 - parent: task:t021
 - aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
@@ -484,7 +503,7 @@ Deliverables:
 Start from Batch 4 synthesis: `doc/background/papers/synthesis-2026-05-06-graphical-models-multiview-integration.md`.
 
 ## [t036] Follow-up literature on graph-valued and multiview synthesis artifacts
-- priority: P2
+- priority: P3
 - status: proposed
 - aspects: [research, framework-design, hypothesis-testing]
 - related: [task:t035, question:11-graph-valued-synthesis-artifacts, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting, hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening]
@@ -504,7 +523,7 @@ Highest-value additions:
 Deliverable: either add PDFs and process them in a later batch, or write a topic note explaining how each family should influence `graph_artifact_type`, `integration_objective`, posterior uncertainty, validation role, and H03 reason codes.
 
 ## [t037] Design agent/tool operations schema
-- priority: P1
+- priority: P2
 - status: proposed
 - aspects: [software-development, framework-design, research]
 - related: [task:t029, task:t033, question:07-llm-agents-as-fallible-sources, question:12-agent-tool-kg-operations, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
@@ -535,7 +554,7 @@ Deliverables:
 Start from Batch 5 synthesis: `doc/background/papers/synthesis-2026-05-06-scientific-agents-knowledge-graphs.md`.
 
 ## [t038] Design graph evolution and KG view provenance
-- priority: P1
+- priority: P2
 - status: proposed
 - aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
 - related: [task:t021, task:t035, task:t037, question:12-agent-tool-kg-operations, question:03-source-and-pipeline-provenance, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
@@ -568,7 +587,7 @@ Deliverables:
 Start from Batch 5 synthesis: `doc/background/papers/synthesis-2026-05-06-scientific-agents-knowledge-graphs.md`.
 
 ## [t039] Follow-up literature on scientific agents, tool provenance, and KG operations
-- priority: P2
+- priority: P3
 - status: proposed
 - aspects: [research, software-development, framework-design]
 - related: [task:t037, task:t038, question:12-agent-tool-kg-operations, question:07-llm-agents-as-fallible-sources, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
@@ -588,7 +607,7 @@ Highest-value additions:
 Deliverable: either add PDFs and process them in a later batch, or write a topic note explaining how each family should influence operation records, tool graphs, KG update events, evaluation competencies, safety status, and H03 reason codes.
 
 ## [t040] Design robustness/reproducibility evaluation schema
-- priority: P1
+- priority: P2
 - status: proposed
 - aspects: [software-development, framework-design, hypothesis-testing, research]
 - related: [task:t021, task:t022, task:t025, task:t030, question:13-robustness-reproducibility-evaluation, question:01-evidence-payload-schema, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting, topic:analytic-flexibility-and-replication]
@@ -616,7 +635,7 @@ Deliverables:
 Start from Batch 6 synthesis: `doc/background/papers/synthesis-2026-05-06-robustness-reproducibility-evaluation.md`.
 
 ## [t041] Follow-up literature on replication metrics, robustness, and reproducibility standards
-- priority: P2
+- priority: P3
 - status: proposed
 - aspects: [research, framework-design, hypothesis-testing]
 - related: [task:t040, question:13-robustness-reproducibility-evaluation, topic:analytic-flexibility-and-replication, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
