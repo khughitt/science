@@ -4,6 +4,7 @@ import json
 import re
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from science_tool.cli import main
@@ -31,7 +32,10 @@ def test_root_color_rejects_invalid_policy() -> None:
     assert "Invalid value for '--color'" in result.output
 
 
-def test_tasks_list_default_has_no_ansi() -> None:
+def test_tasks_list_default_has_no_ansi(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+
     runner = CliRunner()
     with runner.isolated_filesystem():
         _write_active_tasks()
