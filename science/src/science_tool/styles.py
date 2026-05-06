@@ -15,6 +15,7 @@ COLOR_POLICY_CHOICES: tuple[str, ...] = ("never", "auto", "always")
 
 _POLICY_KEY = "science_color_policy"
 _CONSOLE_KEY = "science_rich_console"
+_COLOR_ENV_KEYS = frozenset({"NO_COLOR", "FORCE_COLOR"})
 
 
 class ColorPolicy(StrEnum):
@@ -126,7 +127,8 @@ def _new_console(policy: ColorPolicy, file: TextIO | None = None) -> Console:
         case ColorPolicy.ALWAYS:
             return Console(file=file, force_terminal=True, color_system="standard", no_color=False)
         case ColorPolicy.AUTO:
-            return Console(file=file, no_color=False)
+            auto_env = {key: value for key, value in os.environ.items() if key not in _COLOR_ENV_KEYS}
+            return Console(file=file, no_color=False, _environ=auto_env)
 
 
 def get_console(*, context: click.Context | None = None, file: TextIO | None = None) -> Console:

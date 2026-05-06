@@ -59,6 +59,20 @@ def test_tasks_list_auto_has_no_ansi_under_clirunner() -> None:
     assert ANSI_RE.search(result.output) is None
 
 
+def test_tasks_list_explicit_auto_ignores_force_color_under_clirunner(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    monkeypatch.setenv("TERM", "xterm-256color")
+    with runner.isolated_filesystem():
+        _write_active_tasks()
+
+        result = runner.invoke(main, ["--color", "auto", "tasks", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert "Color task" in result.output
+    assert ANSI_RE.search(result.output) is None
+
+
 def test_tasks_list_always_emits_ansi() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
