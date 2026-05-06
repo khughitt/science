@@ -71,7 +71,7 @@ Old `sci:supports` etc. CURIEs still resolve in `_resolve_term`. We stop emittin
 ### New command: `add question`
 
 ```
-science-tool graph add question <QUESTION_ID> --text "<text>" --source <ref>
+science graph add question <QUESTION_ID> --text "<text>" --source <ref>
     [--status open|partially-resolved|resolved]
     [--maturity open|partially-resolved|resolved]
     [--related-hypothesis <HYP_ID>]  # repeatable
@@ -133,7 +133,7 @@ Commit `308e910` ("remove unused pyyaml dependency") was incorrect — `prose.py
 
 ### 2. Stale `uv` build cache
 
-`uv run --with /path/to/science-tool` caches wheel builds aggressively. After adding new commands/flags, the cached build served the old version. Neither `--reinstall-package` nor `--refresh-package` cleared it — only `uv cache prune` or `uv cache clean science-tool` worked. **Fix:** added a "Cache note" to both command files explaining the workaround.
+`uv run --with /path/to/science` caches wheel builds aggressively. After adding new commands/flags, the cached build served the old version. Neither `--reinstall-package` nor `--refresh-package` cleared it — only `uv cache prune` or `uv cache clean science` worked. **Fix:** added a "Cache note" to both command files explaining the workaround.
 
 ### 3. Prompt compliance gaps
 

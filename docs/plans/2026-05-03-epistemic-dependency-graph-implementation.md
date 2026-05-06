@@ -4,7 +4,7 @@
 
 **Goal:** Land the structural surface needed to make the project knowledge graph live: (a) explicit operational/epistemic/reference taxonomy on every registered entity kind, (b) a `bears_on` relation that captures forward-in-time epistemic dependency, auto-derived from existing typed edges and from `prov:wasDerivedFrom` provenance, with transitive closure across operational hops, and (c) a per-entity `review_state` frontmatter field plus a derived `EpistemicFreshness` flag in the materialized graph. Phase 2 (weighted sampling) is tracked as `[t011]` and is **not** in scope here.
 
-**Architecture:** Three additive layers. (1) `science-model` gains `EntityClass` + `EpistemicReviewState` and the `bears_on` `RelationKind`. (2) `science-tool/graph/entity_registry.py` gains `entity_class` registration metadata; `science-tool/graph/freshness.py` (new) implements `bears_on` derivation + closure + freshness computation, called by `materialize_graph()` after existing triple emission. (3) New `entity review`, `entity needs-review`, and `graph propagate-freshness` CLI commands; `validate.sh` checks for `bears_on` target-kind correctness and `review_state` shape. No data migration — all new fields default to backward-compatible values.
+**Architecture:** Three additive layers. (1) `science-model` gains `EntityClass` + `EpistemicReviewState` and the `bears_on` `RelationKind`. (2) `science/graph/entity_registry.py` gains `entity_class` registration metadata; `science/graph/freshness.py` (new) implements `bears_on` derivation + closure + freshness computation, called by `materialize_graph()` after existing triple emission. (3) New `entity review`, `entity needs-review`, and `graph propagate-freshness` CLI commands; `validate.sh` checks for `bears_on` target-kind correctness and `review_state` shape. No data migration — all new fields default to backward-compatible values.
 
 **Tech Stack:** Python 3.13 + Pydantic v2 (model layer), rdflib (graph), Click (CLI), pytest (tests), Bash (validate.sh).
 
@@ -38,20 +38,20 @@ Out of scope (Phase 2 / `[t011]` and `[t012]`):
 | `science-model/src/science_model/frontmatter.py` | Parse `review_state` block from frontmatter | Modify |
 | `science-model/src/science_model/profiles/core.py` | Add `bears_on` `RelationKind` | Modify |
 | `science-model/tests/test_review_state_model.py` | Unit tests for `EpistemicReviewState` and frontmatter round-trip | Create |
-| `science-tool/src/science_tool/graph/entity_registry.py` | Add `entity_class` parameter on register methods + `kind_class()` lookup | Modify |
-| `science-tool/src/science_tool/graph/freshness.py` | `bears_on` derivation + closure + freshness computation | Create |
-| `science-tool/src/science_tool/graph/store.py` | Add `bearsOn`, `freshnessState`, `triggeredBy`, `upstreamChangeAt` to the SCI predicates list | Modify |
-| `science-tool/src/science_tool/graph/materialize.py` | Call freshness derivation after existing emission | Modify |
-| `science-tool/src/science_tool/entity_review.py` | `entity review` and `entity needs-review` CLI implementations | Create |
-| `science-tool/src/science_tool/cli.py` | Register new commands; wire `graph propagate-freshness` | Modify |
-| `science-tool/tests/test_kind_class.py` | Tests for registry `entity_class` registration | Create |
-| `science-tool/tests/test_bears_on_derivation.py` | Tests for typed-edge + provenance derivation, closure, cycle protection | Create |
-| `science-tool/tests/test_freshness_derivation.py` | Tests for freshness computation against last_reviewed dates | Create |
-| `science-tool/tests/test_entity_review_cli.py` | CLI tests for `entity review` and `entity needs-review` | Create |
-| `science-tool/tests/test_graph_propagate_freshness_cli.py` | CLI tests for the read-only sweep | Create |
+| `science/src/science_tool/graph/entity_registry.py` | Add `entity_class` parameter on register methods + `kind_class()` lookup | Modify |
+| `science/src/science_tool/graph/freshness.py` | `bears_on` derivation + closure + freshness computation | Create |
+| `science/src/science_tool/graph/store.py` | Add `bearsOn`, `freshnessState`, `triggeredBy`, `upstreamChangeAt` to the SCI predicates list | Modify |
+| `science/src/science_tool/graph/materialize.py` | Call freshness derivation after existing emission | Modify |
+| `science/src/science_tool/entity_review.py` | `entity review` and `entity needs-review` CLI implementations | Create |
+| `science/src/science_tool/cli.py` | Register new commands; wire `graph propagate-freshness` | Modify |
+| `science/tests/test_kind_class.py` | Tests for registry `entity_class` registration | Create |
+| `science/tests/test_bears_on_derivation.py` | Tests for typed-edge + provenance derivation, closure, cycle protection | Create |
+| `science/tests/test_freshness_derivation.py` | Tests for freshness computation against last_reviewed dates | Create |
+| `science/tests/test_entity_review_cli.py` | CLI tests for `entity review` and `entity needs-review` | Create |
+| `science/tests/test_graph_propagate_freshness_cli.py` | CLI tests for the read-only sweep | Create |
 | `scripts/validate.sh` | `bears_on` target classification + `review_state` shape checks | Modify |
 | `meta/validate.sh` | Lockstep mirror | Modify |
-| `science-tool/tests/test_validate_script.py` | New cases for the new checks | Modify |
+| `science/tests/test_validate_script.py` | New cases for the new checks | Modify |
 | `commands/science/status.md` (or skill body) | Mention freshness in the orientation output | Modify |
 | `commands/science/next-steps.md` (or skill body) | Surface `needs-review` entities in the next-steps suggestions | Modify |
 | `docs/claim-and-evidence-model.md` | Add `bears_on` and freshness section | Modify |
@@ -441,13 +441,13 @@ git commit -m "feat(model): declare bears_on relation kind in core profile"
 ## Task 4: `EntityRegistry` accepts `entity_class` at registration
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/entity_registry.py`
-- Modify: `science-tool/tests/test_entity_registry.py` — update existing tests
-- Create: `science-tool/tests/test_kind_class.py`
+- Modify: `science/src/science_tool/graph/entity_registry.py`
+- Modify: `science/tests/test_entity_registry.py` — update existing tests
+- Create: `science/tests/test_kind_class.py`
 
 - [ ] **Step 1: Write failing tests for the new behavior**
 
-Create `science-tool/tests/test_kind_class.py`:
+Create `science/tests/test_kind_class.py`:
 
 ```python
 """Tests for EntityRegistry's entity_class classification."""
@@ -539,14 +539,14 @@ def test_register_core_kind_requires_entity_class():
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_kind_class.py -q
+uv run --frozen pytest science/tests/test_kind_class.py -q
 ```
 
 Expected: FAIL — no `kind_class` / `all_kind_classes` / `entity_class` parameter yet.
 
 - [ ] **Step 3: Modify the registry**
 
-In `science-tool/src/science_tool/graph/entity_registry.py`, replace the file content with:
+In `science/src/science_tool/graph/entity_registry.py`, replace the file content with:
 
 ```python
 """EntityRegistry — explicit kind → schema dispatch.
@@ -774,14 +774,14 @@ class EntityRegistry:
 - [ ] **Step 4: Run, verify the new tests pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_kind_class.py -q
+uv run --frozen pytest science/tests/test_kind_class.py -q
 ```
 
 Expected: PASS, 6/6.
 
 - [ ] **Step 5: Update the existing registry tests that call `register_core_kind` directly**
 
-`science-tool/tests/test_entity_registry.py` has two tests that call `register_core_kind` *outside* of `with_core_types()` and will hit `TypeError: missing keyword-only argument 'entity_class'`:
+`science/tests/test_entity_registry.py` has two tests that call `register_core_kind` *outside* of `with_core_types()` and will hit `TypeError: missing keyword-only argument 'entity_class'`:
 
 - `test_duplicate_core_registration_is_hard_error()` (line ~57): `registry.register_core_kind("task", TaskEntity)` — change to `registry.register_core_kind("task", TaskEntity, entity_class=EntityClass.OPERATIONAL)`. Add `from science_model.entities import EntityClass` at the top of the file.
 - `test_register_core_kind_rejects_non_entity_subclass` (line ~127): `registry.register_core_kind("x", NotAnEntity)` — change to `registry.register_core_kind("x", NotAnEntity, entity_class=EntityClass.OPERATIONAL)`.
@@ -793,15 +793,15 @@ Other call sites in `test_entity_registry.py` use `register_profile_kind`, `regi
 After applying the edits:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entity_registry.py -q
+uv run --frozen pytest science/tests/test_entity_registry.py -q
 ```
 
 Expected: PASS, all original tests still pass.
 
-- [ ] **Step 6: Run the full science-tool graph tests to catch downstream regressions**
+- [ ] **Step 6: Run the full science graph tests to catch downstream regressions**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entity_registry.py science-tool/tests/test_extension_registration.py science-tool/tests/test_graph_materialize.py -q
+uv run --frozen pytest science/tests/test_entity_registry.py science/tests/test_extension_registration.py science/tests/test_graph_materialize.py -q
 ```
 
 Expected: PASS.
@@ -809,7 +809,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/entity_registry.py science-tool/tests/test_kind_class.py
+git add science/src/science_tool/graph/entity_registry.py science/tests/test_kind_class.py
 git commit -m "feat(graph): classify every registered kind as epistemic/operational/reference"
 ```
 
@@ -818,14 +818,14 @@ git commit -m "feat(graph): classify every registered kind as epistemic/operatio
 ## Task 5: `freshness.py` — typed-edge `bears_on` derivation
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/freshness.py`
-- Create: `science-tool/tests/test_bears_on_derivation.py`
+- Create: `science/src/science_tool/graph/freshness.py`
+- Create: `science/tests/test_bears_on_derivation.py`
 
 The derivation engine reads triples from a materialized rdflib `Dataset` and emits `bears_on` triples into the same dataset's knowledge graph. This task implements only the typed-edge rules (rules 1–7 from the design doc); provenance and `has_participant` filtering are Task 6, closure is Task 7.
 
 - [ ] **Step 1: Write failing tests**
 
-Create `science-tool/tests/test_bears_on_derivation.py`:
+Create `science/tests/test_bears_on_derivation.py`:
 
 ```python
 """Tests for typed-edge -> bears_on derivation."""
@@ -937,16 +937,16 @@ def test_idempotent():
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_bears_on_derivation.py -q
+uv run --frozen pytest science/tests/test_bears_on_derivation.py -q
 ```
 
 Expected: FAIL — module doesn't exist yet.
 
 - [ ] **Step 3: Implement**
 
-First, ensure `bearsOn` is in the SCI namespace's predicates list. In `science-tool/src/science_tool/graph/store.py`, find the `_PROJECT_PREDICATES` (or equivalent) registration list. (Locate via `grep -n "SCI_NS\." store.py | head -50`; the predicate becomes addressable via `SCI_NS.bearsOn` automatically because rdflib's `Namespace` is open by default — no list change strictly required, but keep an eye on whether store.py has an explicit allowlist for graph-validate.)
+First, ensure `bearsOn` is in the SCI namespace's predicates list. In `science/src/science_tool/graph/store.py`, find the `_PROJECT_PREDICATES` (or equivalent) registration list. (Locate via `grep -n "SCI_NS\." store.py | head -50`; the predicate becomes addressable via `SCI_NS.bearsOn` automatically because rdflib's `Namespace` is open by default — no list change strictly required, but keep an eye on whether store.py has an explicit allowlist for graph-validate.)
 
-Create `science-tool/src/science_tool/graph/freshness.py`:
+Create `science/src/science_tool/graph/freshness.py`:
 
 ```python
 """Freshness engine — bears_on derivation and EpistemicFreshness computation.
@@ -1019,7 +1019,7 @@ def derive_bears_on_from_typed_edges(dataset: Dataset) -> None:
 - [ ] **Step 4: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_bears_on_derivation.py -q
+uv run --frozen pytest science/tests/test_bears_on_derivation.py -q
 ```
 
 Expected: PASS, 10/10.
@@ -1027,7 +1027,7 @@ Expected: PASS, 10/10.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/freshness.py science-tool/tests/test_bears_on_derivation.py
+git add science/src/science_tool/graph/freshness.py science/tests/test_bears_on_derivation.py
 git commit -m "feat(graph): typed-edge bears_on derivation in freshness module"
 ```
 
@@ -1036,12 +1036,12 @@ git commit -m "feat(graph): typed-edge bears_on derivation in freshness module"
 ## Task 6: `freshness.py` — provenance-derived `bears_on` and epistemic-only `has_participant`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/freshness.py`
-- Modify: `science-tool/tests/test_bears_on_derivation.py` — add provenance + has_participant cases
+- Modify: `science/src/science_tool/graph/freshness.py`
+- Modify: `science/tests/test_bears_on_derivation.py` — add provenance + has_participant cases
 
 - [ ] **Step 1: Add failing tests**
 
-Append to `science-tool/tests/test_bears_on_derivation.py`:
+Append to `science/tests/test_bears_on_derivation.py`:
 
 ```python
 from rdflib.namespace import PROV
@@ -1112,14 +1112,14 @@ Then change the existing test call sites from `derive_bears_on_from_typed_edges(
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_bears_on_derivation.py -q
+uv run --frozen pytest science/tests/test_bears_on_derivation.py -q
 ```
 
 Expected: FAIL — `derive_bears_on_from_provenance` doesn't exist; `derive_bears_on_from_typed_edges` doesn't accept `kind_class`.
 
 - [ ] **Step 3: Extend `freshness.py`**
 
-In `science-tool/src/science_tool/graph/freshness.py`, replace the existing `derive_bears_on_from_typed_edges` and add `derive_bears_on_from_provenance`:
+In `science/src/science_tool/graph/freshness.py`, replace the existing `derive_bears_on_from_typed_edges` and add `derive_bears_on_from_provenance`:
 
 ```python
 from rdflib.namespace import PROV
@@ -1202,7 +1202,7 @@ def derive_bears_on_from_provenance(
 - [ ] **Step 4: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_bears_on_derivation.py -q
+uv run --frozen pytest science/tests/test_bears_on_derivation.py -q
 ```
 
 Expected: PASS, 13/13.
@@ -1210,7 +1210,7 @@ Expected: PASS, 13/13.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/freshness.py science-tool/tests/test_bears_on_derivation.py
+git add science/src/science_tool/graph/freshness.py science/tests/test_bears_on_derivation.py
 git commit -m "feat(graph): provenance + has_participant bears_on derivation"
 ```
 
@@ -1219,14 +1219,14 @@ git commit -m "feat(graph): provenance + has_participant bears_on derivation"
 ## Task 7: `freshness.py` — transitive closure with cycle protection
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/freshness.py`
-- Modify: `science-tool/tests/test_bears_on_derivation.py`
+- Modify: `science/src/science_tool/graph/freshness.py`
+- Modify: `science/tests/test_bears_on_derivation.py`
 
 The closure step walks `bears_on` chains: if `A bears_on B` and `B bears_on C` and `C` is epistemic, emit `A bears_on C`. We bound the closure with a `visited` set to handle cycles through operational hops.
 
 - [ ] **Step 1: Add failing tests**
 
-Append to `science-tool/tests/test_bears_on_derivation.py`:
+Append to `science/tests/test_bears_on_derivation.py`:
 
 ```python
 from science_tool.graph.freshness import close_bears_on
@@ -1292,14 +1292,14 @@ def test_close_bears_on_does_not_create_edges_to_operational():
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_bears_on_derivation.py -q -k close
+uv run --frozen pytest science/tests/test_bears_on_derivation.py -q -k close
 ```
 
 Expected: FAIL — `close_bears_on` doesn't exist.
 
 - [ ] **Step 3: Implement**
 
-Append to `science-tool/src/science_tool/graph/freshness.py`:
+Append to `science/src/science_tool/graph/freshness.py`:
 
 ```python
 def close_bears_on(
@@ -1344,7 +1344,7 @@ def close_bears_on(
 - [ ] **Step 4: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_bears_on_derivation.py -q
+uv run --frozen pytest science/tests/test_bears_on_derivation.py -q
 ```
 
 Expected: PASS, all (16/16 with the 3 new closure tests).
@@ -1352,7 +1352,7 @@ Expected: PASS, all (16/16 with the 3 new closure tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/freshness.py science-tool/tests/test_bears_on_derivation.py
+git add science/src/science_tool/graph/freshness.py science/tests/test_bears_on_derivation.py
 git commit -m "feat(graph): bears_on transitive closure with cycle protection"
 ```
 
@@ -1361,14 +1361,14 @@ git commit -m "feat(graph): bears_on transitive closure with cycle protection"
 ## Task 8: `freshness.py` — `EpistemicFreshness` derivation
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/freshness.py`
-- Create: `science-tool/tests/test_freshness_derivation.py`
+- Modify: `science/src/science_tool/graph/freshness.py`
+- Create: `science/tests/test_freshness_derivation.py`
 
 For each epistemic entity, compare `last_reviewed` (frontmatter, falling back to `created`) against the most-recent `updated` date of any upstream `bears_on` source. Emit `sci:freshnessState`, `sci:upstreamChangeAt`, `sci:triggeredBy` triples.
 
 - [ ] **Step 1: Write failing tests**
 
-Create `science-tool/tests/test_freshness_derivation.py`:
+Create `science/tests/test_freshness_derivation.py`:
 
 ```python
 """Tests for EpistemicFreshness derivation against last_reviewed timestamps."""
@@ -1550,14 +1550,14 @@ def test_freshness_emits_upstream_change_at():
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_freshness_derivation.py -q
+uv run --frozen pytest science/tests/test_freshness_derivation.py -q
 ```
 
 Expected: FAIL — `derive_freshness` doesn't exist.
 
 - [ ] **Step 3: Implement**
 
-Append to `science-tool/src/science_tool/graph/freshness.py`:
+Append to `science/src/science_tool/graph/freshness.py`:
 
 ```python
 from datetime import date as _date
@@ -1656,7 +1656,7 @@ from rdflib.namespace import PROV, XSD
 - [ ] **Step 4: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_freshness_derivation.py -q
+uv run --frozen pytest science/tests/test_freshness_derivation.py -q
 ```
 
 Expected: PASS, 6/6.
@@ -1664,7 +1664,7 @@ Expected: PASS, 6/6.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/freshness.py science-tool/tests/test_freshness_derivation.py
+git add science/src/science_tool/graph/freshness.py science/tests/test_freshness_derivation.py
 git commit -m "feat(graph): EpistemicFreshness derivation in freshness module"
 ```
 
@@ -1673,12 +1673,12 @@ git commit -m "feat(graph): EpistemicFreshness derivation in freshness module"
 ## Task 9: Wire freshness into `materialize_graph()`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/materialize.py`
-- Create: `science-tool/tests/test_graph_freshness_integration.py`
+- Modify: `science/src/science_tool/graph/materialize.py`
+- Create: `science/tests/test_graph_freshness_integration.py`
 
 - [ ] **Step 1: Write failing integration test**
 
-Create `science-tool/tests/test_graph_freshness_integration.py`:
+Create `science/tests/test_graph_freshness_integration.py`:
 
 ```python
 """End-to-end integration: materialize_graph emits bears_on + freshness triples."""
@@ -1792,14 +1792,14 @@ def test_materialize_does_not_mutate_entity_files(tmp_path: Path):
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_graph_freshness_integration.py -q
+uv run --frozen pytest science/tests/test_graph_freshness_integration.py -q
 ```
 
 Expected: FAIL — `materialize_graph` does not call freshness derivation yet.
 
 - [ ] **Step 3: Wire in materialize.py**
 
-In `science-tool/src/science_tool/graph/materialize.py`, modify `materialize_graph()` (the existing function around line 40) to call freshness after the existing emission loops, before `save_graph_dataset`.
+In `science/src/science_tool/graph/materialize.py`, modify `materialize_graph()` (the existing function around line 40) to call freshness after the existing emission loops, before `save_graph_dataset`.
 
 Add the imports near the existing block at the top:
 
@@ -1861,7 +1861,7 @@ from science_tool.graph.entity_registry import EntityKindNotRegisteredError
 - [ ] **Step 4: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_graph_freshness_integration.py -q
+uv run --frozen pytest science/tests/test_graph_freshness_integration.py -q
 ```
 
 Expected: PASS, 3/3.
@@ -1869,7 +1869,7 @@ Expected: PASS, 3/3.
 - [ ] **Step 5: Run the full materialize test suite**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_graph_materialize.py science-tool/tests/test_graph_freshness_integration.py -q
+uv run --frozen pytest science/tests/test_graph_materialize.py science/tests/test_graph_freshness_integration.py -q
 ```
 
 Expected: All previously passing tests still pass.
@@ -1877,7 +1877,7 @@ Expected: All previously passing tests still pass.
 - [ ] **Step 6: Commit the wiring**
 
 ```bash
-git add science-tool/src/science_tool/graph/materialize.py science-tool/tests/test_graph_freshness_integration.py
+git add science/src/science_tool/graph/materialize.py science/tests/test_graph_freshness_integration.py
 git commit -m "feat(graph): wire bears_on + freshness derivation into materialize_graph"
 ```
 
@@ -1885,7 +1885,7 @@ git commit -m "feat(graph): wire bears_on + freshness derivation into materializ
 
 The auto-derivation engine only emits `bears_on` to epistemic targets by construction. The remaining hole is *hand-authored* `bears_on` edges (in a structured `relations.yaml` or equivalent), which flow through `_add_authored_relation` and currently bypass the relation-kind target-check entirely. Add a guard at materialize time.
 
-Append to `science-tool/tests/test_graph_freshness_integration.py`:
+Append to `science/tests/test_graph_freshness_integration.py`:
 
 ```python
 import pytest
@@ -1931,14 +1931,14 @@ def test_materialize_rejects_hand_authored_bears_on_to_non_epistemic_target(tmp_
 Run, verify failure:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_graph_freshness_integration.py -q -k bears_on
+uv run --frozen pytest science/tests/test_graph_freshness_integration.py -q -k bears_on
 ```
 
 Expected: FAIL — currently `_add_authored_relation` silently accepts the bad triple.
 
 - [ ] **Step 8: Implement the guard in `_add_authored_relation`**
 
-In `science-tool/src/science_tool/graph/materialize.py`, modify `_add_authored_relation` (around line 320). Add a check after the predicate is resolved and before the triple is added:
+In `science/src/science_tool/graph/materialize.py`, modify `_add_authored_relation` (around line 320). Add a check after the predicate is resolved and before the triple is added:
 
 ```python
 def _add_authored_relation(
@@ -2034,7 +2034,7 @@ def build_dataset_from_sources(sources: ProjectSources) -> Dataset:
 Run, verify pass:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_graph_freshness_integration.py -q
+uv run --frozen pytest science/tests/test_graph_freshness_integration.py -q
 ```
 
 Expected: PASS.
@@ -2042,7 +2042,7 @@ Expected: PASS.
 - [ ] **Step 9: Commit the guard**
 
 ```bash
-git add science-tool/src/science_tool/graph/materialize.py science-tool/tests/test_graph_freshness_integration.py
+git add science/src/science_tool/graph/materialize.py science/tests/test_graph_freshness_integration.py
 git commit -m "feat(graph): reject hand-authored bears_on edges to non-epistemic targets"
 ```
 
@@ -2051,13 +2051,13 @@ git commit -m "feat(graph): reject hand-authored bears_on edges to non-epistemic
 ## Task 10: `entity review` CLI command
 
 **Files:**
-- Create: `science-tool/src/science_tool/entity_review.py`
-- Modify: `science-tool/src/science_tool/cli.py` — register command
-- Create: `science-tool/tests/test_entity_review_cli.py`
+- Create: `science/src/science_tool/entity_review.py`
+- Modify: `science/src/science_tool/cli.py` — register command
+- Create: `science/tests/test_entity_review_cli.py`
 
 - [ ] **Step 1: Write failing tests**
 
-Create `science-tool/tests/test_entity_review_cli.py`:
+Create `science/tests/test_entity_review_cli.py`:
 
 ```python
 """CLI tests for `entity review`."""
@@ -2230,14 +2230,14 @@ def test_entity_review_replaces_existing_note_when_new_note_passed(tmp_path: Pat
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entity_review_cli.py -q
+uv run --frozen pytest science/tests/test_entity_review_cli.py -q
 ```
 
 Expected: FAIL — command doesn't exist.
 
 - [ ] **Step 3: Implement command body**
 
-Create `science-tool/src/science_tool/entity_review.py`:
+Create `science/src/science_tool/entity_review.py`:
 
 ```python
 """Implementation of `entity review` and `entity needs-review` commands.
@@ -2338,7 +2338,7 @@ def _upsert_review_state(text: str, *, last_reviewed: date, note: str | None) ->
 
 - [ ] **Step 4: Wire into the CLI**
 
-In `science-tool/src/science_tool/cli.py`, after the existing `entity_show` / `entity_edit` / `entity_note` commands (around line 380), add:
+In `science/src/science_tool/cli.py`, after the existing `entity_show` / `entity_edit` / `entity_note` commands (around line 380), add:
 
 ```python
 @entity_group.command("review")
@@ -2358,7 +2358,7 @@ def entity_review(ref: str, note: str | None) -> None:
 - [ ] **Step 5: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entity_review_cli.py -q
+uv run --frozen pytest science/tests/test_entity_review_cli.py -q
 ```
 
 Expected: PASS, 4/4.
@@ -2366,7 +2366,7 @@ Expected: PASS, 4/4.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/entity_review.py science-tool/src/science_tool/cli.py science-tool/tests/test_entity_review_cli.py
+git add science/src/science_tool/entity_review.py science/src/science_tool/cli.py science/tests/test_entity_review_cli.py
 git commit -m "feat(cli): add entity review command (sets last_reviewed in frontmatter)"
 ```
 
@@ -2375,15 +2375,15 @@ git commit -m "feat(cli): add entity review command (sets last_reviewed in front
 ## Task 11: `entity needs-review` CLI command
 
 **Files:**
-- Modify: `science-tool/src/science_tool/entity_review.py`
-- Modify: `science-tool/src/science_tool/cli.py`
-- Modify: `science-tool/tests/test_entity_review_cli.py`
+- Modify: `science/src/science_tool/entity_review.py`
+- Modify: `science/src/science_tool/cli.py`
+- Modify: `science/tests/test_entity_review_cli.py`
 
 `entity needs-review` reads the materialized graph, lists entities with `freshnessState = needs-review` or `stale`. Output format mirrors existing `entity list` patterns.
 
 - [ ] **Step 1: Add failing tests**
 
-Append to `science-tool/tests/test_entity_review_cli.py`:
+Append to `science/tests/test_entity_review_cli.py`:
 
 ```python
 def _setup_with_built_graph(tmp_path: Path) -> Path:
@@ -2452,14 +2452,14 @@ def test_entity_needs_review_empty_when_all_fresh(tmp_path: Path, monkeypatch):
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entity_review_cli.py -q -k needs_review
+uv run --frozen pytest science/tests/test_entity_review_cli.py -q -k needs_review
 ```
 
 Expected: FAIL — command doesn't exist.
 
 - [ ] **Step 3: Implement reader function**
 
-Append to `science-tool/src/science_tool/entity_review.py`:
+Append to `science/src/science_tool/entity_review.py`:
 
 ```python
 from rdflib import Dataset, URIRef
@@ -2496,7 +2496,7 @@ def list_needs_review(project_root: Path) -> list[dict[str, str]]:
 
 - [ ] **Step 4: Wire CLI command**
 
-In `science-tool/src/science_tool/cli.py`, after the `entity_review` command, add:
+In `science/src/science_tool/cli.py`, after the `entity_review` command, add:
 
 ```python
 @entity_group.command("needs-review")
@@ -2521,7 +2521,7 @@ def entity_needs_review(output_format: str) -> None:
 - [ ] **Step 5: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entity_review_cli.py -q
+uv run --frozen pytest science/tests/test_entity_review_cli.py -q
 ```
 
 Expected: PASS, 7/7.
@@ -2529,7 +2529,7 @@ Expected: PASS, 7/7.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/entity_review.py science-tool/src/science_tool/cli.py science-tool/tests/test_entity_review_cli.py
+git add science/src/science_tool/entity_review.py science/src/science_tool/cli.py science/tests/test_entity_review_cli.py
 git commit -m "feat(cli): add entity needs-review command"
 ```
 
@@ -2538,15 +2538,15 @@ git commit -m "feat(cli): add entity needs-review command"
 ## Task 12: `graph propagate-freshness` read-only sweep
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/freshness.py` — add a project-level convenience function
-- Modify: `science-tool/src/science_tool/cli.py`
-- Create: `science-tool/tests/test_graph_propagate_freshness_cli.py`
+- Modify: `science/src/science_tool/graph/freshness.py` — add a project-level convenience function
+- Modify: `science/src/science_tool/cli.py`
+- Create: `science/tests/test_graph_propagate_freshness_cli.py`
 
 This command does the freshness derivation in memory without writing the materialized graph. Useful in CI / pre-commit hooks that want a quick "what would change?" report.
 
 - [ ] **Step 1: Write failing test**
 
-Create `science-tool/tests/test_graph_propagate_freshness_cli.py`:
+Create `science/tests/test_graph_propagate_freshness_cli.py`:
 
 ```python
 """CLI tests for `graph propagate-freshness` — read-only sweep."""
@@ -2635,7 +2635,7 @@ def test_propagate_freshness_does_not_mutate_entity_files(tmp_path: Path, monkey
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_graph_propagate_freshness_cli.py -q
+uv run --frozen pytest science/tests/test_graph_propagate_freshness_cli.py -q
 ```
 
 Expected: FAIL — command doesn't exist.
@@ -2644,7 +2644,7 @@ Expected: FAIL — command doesn't exist.
 
 The original draft of this step replayed only `_add_relations`, missing authored relations (`_add_authored_relation`) and bindings (`_add_binding`). For projects that declare their `sci:tests` / `sci:supports` edges in structured relations files (the common case), that subset would silently disagree with `graph build`. Instead, factor a shared helper so both code paths emit the same triples.
 
-In `science-tool/src/science_tool/graph/materialize.py`, extract everything *between* the `Dataset()` construction and the `save_graph_dataset(...)` call into a new function. The result of the refactor:
+In `science/src/science_tool/graph/materialize.py`, extract everything *between* the `Dataset()` construction and the `save_graph_dataset(...)` call into a new function. The result of the refactor:
 
 ```python
 def build_dataset_from_sources(sources: ProjectSources) -> Dataset:
@@ -2760,14 +2760,14 @@ The Task 9 wiring instructions are superseded by this refactor: `materialize_gra
 Run the Task 9 integration tests to confirm the refactor is behavior-preserving:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_graph_freshness_integration.py science-tool/tests/test_graph_materialize.py -q
+uv run --frozen pytest science/tests/test_graph_freshness_integration.py science/tests/test_graph_materialize.py -q
 ```
 
 Expected: PASS.
 
 - [ ] **Step 3b: Add the `propagate_freshness_in_memory` wrapper**
 
-Append to `science-tool/src/science_tool/graph/freshness.py`:
+Append to `science/src/science_tool/graph/freshness.py`:
 
 ```python
 def propagate_freshness_in_memory(project_root: Path) -> list[dict]:
@@ -2805,7 +2805,7 @@ def propagate_freshness_in_memory(project_root: Path) -> list[dict]:
 
 - [ ] **Step 4: Wire CLI command**
 
-In `science-tool/src/science_tool/cli.py`, after the existing `graph_build` command (around line 690), add:
+In `science/src/science_tool/cli.py`, after the existing `graph_build` command (around line 690), add:
 
 ```python
 @graph.command("propagate-freshness")
@@ -2837,7 +2837,7 @@ def graph_propagate_freshness(project_root: Path, output_format: str) -> None:
 - [ ] **Step 5: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_graph_propagate_freshness_cli.py -q
+uv run --frozen pytest science/tests/test_graph_propagate_freshness_cli.py -q
 ```
 
 Expected: PASS, 3/3.
@@ -2845,7 +2845,7 @@ Expected: PASS, 3/3.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/freshness.py science-tool/src/science_tool/cli.py science-tool/tests/test_graph_propagate_freshness_cli.py
+git add science/src/science_tool/graph/freshness.py science/src/science_tool/cli.py science/tests/test_graph_propagate_freshness_cli.py
 git commit -m "feat(cli): add graph propagate-freshness read-only sweep"
 ```
 
@@ -2856,7 +2856,7 @@ git commit -m "feat(cli): add graph propagate-freshness read-only sweep"
 **Files:**
 - Modify: `scripts/validate.sh`
 - Modify: `meta/validate.sh` (lockstep)
-- Modify: `science-tool/tests/test_validate_script.py`
+- Modify: `science/tests/test_validate_script.py`
 
 A warning when `review_state.review_horizon_days` is non-positive — catches malformed frontmatter blocks at validate time rather than waiting until the next graph build picks up the Pydantic error. Consistent with surrounding validator conventions (warn, not error).
 
@@ -2864,7 +2864,7 @@ A warning when `review_state.review_horizon_days` is non-positive — catches ma
 
 - [ ] **Step 1: Write failing tests**
 
-In `science-tool/tests/test_validate_script.py`, locate where existing validator tests are added (find `def test_validate_warns_on_` patterns) and append:
+In `science/tests/test_validate_script.py`, locate where existing validator tests are added (find `def test_validate_warns_on_` patterns) and append:
 
 ```python
 def test_validate_warns_on_review_state_with_invalid_horizon(tmp_path: Path):
@@ -2895,7 +2895,7 @@ def test_validate_warns_on_review_state_with_invalid_horizon(tmp_path: Path):
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_validate_script.py -q -k review_state
+uv run --frozen pytest science/tests/test_validate_script.py -q -k review_state
 ```
 
 Expected: FAIL — validator doesn't check this yet.
@@ -2923,7 +2923,7 @@ Apply the identical block in `meta/validate.sh`. The two scripts have different 
 - [ ] **Step 5: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_validate_script.py -q
+uv run --frozen pytest science/tests/test_validate_script.py -q
 ```
 
 Expected: PASS.
@@ -2931,7 +2931,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add scripts/validate.sh meta/validate.sh science-tool/tests/test_validate_script.py
+git add scripts/validate.sh meta/validate.sh science/tests/test_validate_script.py
 git commit -m "feat(validate): warn on invalid review_state.review_horizon_days"
 ```
 
@@ -2951,7 +2951,7 @@ Phase 1 finishes by surfacing the new state to humans/agents through the skills 
 
 In `commands/science/status.md` (or wherever the skill body lives — find via `grep -rn "## science:status\|^name: status" /mnt/ssd/Dropbox/science/skills/`), add a section near "Recent activity" that explicitly mentions reading `entity needs-review` for the orientation:
 
-> Run `science-tool entity needs-review` to surface epistemic entities whose evidence base has changed since their last reviewed-as-of date. Include up to 5 of the highest-impact ones (most upstream sources flagged) in the orientation.
+> Run `science entity needs-review` to surface epistemic entities whose evidence base has changed since their last reviewed-as-of date. Include up to 5 of the highest-impact ones (most upstream sources flagged) in the orientation.
 
 (Match the file's existing structure / tone — consult adjacent sections.)
 
@@ -2959,7 +2959,7 @@ In `commands/science/status.md` (or wherever the skill body lives — find via `
 
 In `commands/science/next-steps.md`, add a paragraph explaining that needs-review entities should be considered as candidate next steps when the user is otherwise blocked:
 
-> When the backlog is unclear, list `science-tool entity needs-review` output and propose one as a candidate next step. Frame it as "you reviewed this on date X; since then upstream Y changed — worth a fresh look?" rather than as a verdict.
+> When the backlog is unclear, list `science entity needs-review` output and propose one as a candidate next step. Frame it as "you reviewed this on date X; since then upstream Y changed — worth a fresh look?" rather than as a verdict.
 
 - [ ] **Step 3: Update `docs/claim-and-evidence-model.md`**
 
@@ -3009,10 +3009,10 @@ uv run --frozen pytest science-model/tests/ -q
 
 Expected: PASS.
 
-- [ ] **Run the full science-tool test suite**
+- [ ] **Run the full science test suite**
 
 ```bash
-uv run --frozen pytest science-tool/tests/ -q
+uv run --frozen pytest science/tests/ -q
 ```
 
 Expected: PASS. (Watch for incidental fallout from the entity_registry changes — anything that called `register_extension_kind` without `entity_class` should still work via the default; any test mocking the registry may need to update.)
@@ -3027,11 +3027,11 @@ Expected: only the pre-existing duplicate-task error (`t001` vs `t001b`) — no 
 
 - [ ] **Run a graph build end-to-end on a downstream project (optional sanity check)**
 
-Pick `~/d/cancer/cancer-types/myeloma` or another downstream project that has a built graph today. Run `science-tool graph build` and confirm:
+Pick `~/d/cancer/cancer-types/myeloma` or another downstream project that has a built graph today. Run `science graph build` and confirm:
 
 - The new `sci:bearsOn`, `sci:freshnessState`, `sci:upstreamChangeAt`, `sci:triggeredBy` triples appear in `knowledge/graph.trig`.
 - No entity files are mutated by the build (`git status` shows only `knowledge/graph.trig` changed).
-- `science-tool entity needs-review` lists a sensible set of entities (ones whose upstream evidence has changed since they were created/last-reviewed).
+- `science entity needs-review` lists a sensible set of entities (ones whose upstream evidence has changed since they were created/last-reviewed).
 
 - [ ] **Update task status**
 

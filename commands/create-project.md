@@ -160,7 +160,7 @@ Minimum shape:
 
 ```toml
 [project]
-name = "<project-slug>-science-tools"
+name = "<project-slug>-sciences"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = []
@@ -169,7 +169,7 @@ dependencies = []
 dev = []
 ```
 
-Install `science-tool` into that manifest with:
+Install `science` into that manifest with:
 
 ```bash
 uv add --dev --editable "$SCIENCE_TOOL_PATH"
@@ -179,13 +179,13 @@ This applies even to non-Python repos because the manifest is for project-local 
 
 ### `.env`
 
-Populate with the **resolved absolute path** to `science-tool` so `validate.sh` and other tooling can find it:
+Populate with the **resolved absolute path** to `science` so `validate.sh` and other tooling can find it:
 
 ```env
-SCIENCE_TOOL_PATH=<absolute-path-to-science-tool>
+SCIENCE_TOOL_PATH=<absolute-path-to-science>
 ```
 
-Resolve `${CLAUDE_PLUGIN_ROOT}/science-tool` to its absolute path at creation time.
+Resolve `${CLAUDE_PLUGIN_ROOT}/science` to its absolute path at creation time.
 
 ### `.gitignore`
 
@@ -292,10 +292,10 @@ Create the canonical document taxonomy and add a minimal overview/plan starter w
 After scaffolding the project, install Science's managed `validate.sh`:
 
 ```bash
-science-tool project artifacts install validate.sh --project-root <project-path>
+science project artifacts install validate.sh --project-root <project-path>
 ```
 
-This drops the canonical `validate.sh` into the project root with the managed header. To stay current on future Science releases, run `science-tool project artifacts check validate.sh` periodically (or rely on `science-tool health` to surface drift).
+This drops the canonical `validate.sh` into the project root with the managed header. To stay current on future Science releases, run `science project artifacts check validate.sh` periodically (or rely on `science health` to surface drift).
 
 ### Prompts And Templates
 

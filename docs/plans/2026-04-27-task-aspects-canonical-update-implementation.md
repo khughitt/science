@@ -8,9 +8,9 @@
 
 ### Modify
 
-- `science-tool/src/science_tool/project_artifacts/data/validate.sh` — change `for field in type priority status created` to `for field in aspects priority status created`. Bump header `science-managed-version` and `science-managed-source-sha256`.
-- `science-tool/src/science_tool/project_artifacts/registry.yaml` — bump `version`, recompute `current_hash`, append `2026.04.26.2` to `previous_hashes`, append `byte_replace` migration .2 → .3, append changelog.
-- `science-tool/tests/test_first_version_bump.py` — update version assertions to `2026.04.26.2` (the now-previous) and `2026.04.26.3` (the new current).
+- `science/src/science_tool/project_artifacts/data/validate.sh` — change `for field in type priority status created` to `for field in aspects priority status created`. Bump header `science-managed-version` and `science-managed-source-sha256`.
+- `science/src/science_tool/project_artifacts/registry.yaml` — bump `version`, recompute `current_hash`, append `2026.04.26.2` to `previous_hashes`, append `byte_replace` migration .2 → .3, append changelog.
+- `science/tests/test_first_version_bump.py` — update version assertions to `2026.04.26.2` (the now-previous) and `2026.04.26.3` (the new current).
 - Each downstream project's installed `validate.sh` is refreshed via the `update` verb (no per-project plan files).
 
 ### Create
@@ -51,7 +51,7 @@ def test_byte_replace_migration_recorded() -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```
-uv run --project science-tool pytest science-tool/tests/test_first_version_bump.py -v
+uv run --project science pytest science/tests/test_first_version_bump.py -v
 ```
 
 Expected: 2-3 failures (version mismatch).
@@ -82,7 +82,7 @@ import re
 from science_tool.project_artifacts.hashing import body_hash
 from science_tool.project_artifacts.registry_schema import HeaderKind, HeaderProtocol
 
-p = Path("science-tool/src/science_tool/project_artifacts/data/validate.sh")
+p = Path("science/src/science_tool/project_artifacts/data/validate.sh")
 proto = HeaderProtocol(kind=HeaderKind.SHEBANG_COMMENT, comment_prefix="#")
 raw = p.read_bytes()
 new_hash = body_hash(raw, proto)
@@ -122,11 +122,11 @@ Capture the printed hash.
 - [ ] **Step 6: Run tests**
 
 ```
-uv run --project science-tool pytest \
-    science-tool/tests/test_initial_validate_sh.py \
-    science-tool/tests/test_first_version_bump.py \
-    science-tool/tests/test_validate_hook_points.py \
-    science-tool/tests/test_extensions_validate_hooks.py \
+uv run --project science pytest \
+    science/tests/test_initial_validate_sh.py \
+    science/tests/test_first_version_bump.py \
+    science/tests/test_validate_hook_points.py \
+    science/tests/test_extensions_validate_hooks.py \
     -v
 ```
 
@@ -135,13 +135,13 @@ Expected: all pass.
 - [ ] **Step 7: Quality gates + commit**
 
 ```
-uv run --project science-tool ruff check science-tool/
-uv run --project science-tool ruff format --check science-tool/
-uv run --project science-tool pyright science-tool/src/science_tool/project_artifacts/
+uv run --project science ruff check science/
+uv run --project science ruff format --check science/
+uv run --project science pyright science/src/science_tool/project_artifacts/
 
-git add science-tool/src/science_tool/project_artifacts/data/validate.sh \
-        science-tool/src/science_tool/project_artifacts/registry.yaml \
-        science-tool/tests/test_first_version_bump.py
+git add science/src/science_tool/project_artifacts/data/validate.sh \
+        science/src/science_tool/project_artifacts/registry.yaml \
+        science/tests/test_first_version_bump.py
 git commit -m "feat(project-artifacts): version bump 2026.04.26.2 -> 2026.04.26.3 (task aspects)
 
 Replaces canonical task-field check 'type' with 'aspects' per
@@ -165,8 +165,8 @@ For each of `mm30`, `cbioportal`, `natural-systems`:
 
 ```bash
 cd <project-root>
-uv run --project ~/d/science/science-tool \
-    science-tool project artifacts check validate.sh --project-root .
+uv run --project ~/d/science/science \
+    science project artifacts check validate.sh --project-root .
 ```
 
 Expected: `stale (1 version behind)`.
@@ -174,8 +174,8 @@ Expected: `stale (1 version behind)`.
 - [ ] **Step 2: Update**
 
 ```bash
-uv run --project ~/d/science/science-tool \
-    science-tool project artifacts update validate.sh \
+uv run --project ~/d/science/science \
+    science project artifacts update validate.sh \
     --project-root . --force --yes
 ```
 
@@ -184,8 +184,8 @@ Expected: a `chore(artifacts): refresh validate.sh to 2026.04.26.3` commit on th
 - [ ] **Step 3: Verify**
 
 ```bash
-uv run --project ~/d/science/science-tool \
-    science-tool project artifacts check validate.sh --project-root .
+uv run --project ~/d/science/science \
+    science project artifacts check validate.sh --project-root .
 # expected: current  (validate.sh @ 2026.04.26.3)
 
 bash validate.sh 2>&1 | tail -3
@@ -197,7 +197,7 @@ bash validate.sh 2>&1 | tail -3
 Append a "v2026.04.26.3 update" decision-log entry to each project's `doc/plans/2026-04-27-managed-artifacts-migration.md`:
 
 ```markdown
-- **2026-04-27 (later)**: updated to v2026.04.26.3 via `science-tool project artifacts update --force --yes`. Smoke-run error count dropped from N to M (mostly task-aspects errors resolved by the canonical's task-field fix).
+- **2026-04-27 (later)**: updated to v2026.04.26.3 via `science project artifacts update --force --yes`. Smoke-run error count dropped from N to M (mostly task-aspects errors resolved by the canonical's task-field fix).
 ```
 
 ---
@@ -214,7 +214,7 @@ T2's three project updates can run in any order; pick the simplest first as proo
 
 - Does not migrate `protein-landscape` — that's the next migration spec, gated on this canonical landing first.
 - Does not address `workflow/Snakefile` or `meta:` xref handling — separate decisions per the migration analysis.
-- Does not touch `science-tool health`'s legacy-`type:` flagging — that's the 2026-04-19 spec's responsibility.
+- Does not touch `science health`'s legacy-`type:` flagging — that's the 2026-04-19 spec's responsibility.
 
 ## Cross-references
 

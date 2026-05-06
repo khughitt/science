@@ -50,10 +50,11 @@ Before executing any research command:
    `${CLAUDE_PLUGIN_ROOT}/templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with ${CLAUDE_PLUGIN_ROOT}/science-tool science-tool <command>`
+   `uv run --with ${CLAUDE_PLUGIN_ROOT}/science science <command>`

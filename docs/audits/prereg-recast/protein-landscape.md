@@ -81,8 +81,8 @@ Important graph nuance: protein-landscape already has provenance and closure pat
 Commands run from the Science worktree:
 
 ```bash
-uv run --frozen science-tool graph build --project-root /mnt/ssd/Dropbox/protein-landscape/.worktrees/prereg-recast-protein-landscape
-uv run --frozen science-tool graph validate --path /mnt/ssd/Dropbox/protein-landscape/.worktrees/prereg-recast-protein-landscape/knowledge/graph.trig
+uv run --frozen science graph build --project-root /mnt/ssd/Dropbox/protein-landscape/.worktrees/prereg-recast-protein-landscape
+uv run --frozen science graph validate --path /mnt/ssd/Dropbox/protein-landscape/.worktrees/prereg-recast-protein-landscape/knowledge/graph.trig
 ```
 
 Result:

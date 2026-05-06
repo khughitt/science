@@ -17,34 +17,34 @@
 ### New files
 
 - `science-model/src/science_model/aspects.py` — canonical vocabulary + `resolve_entity_aspects`, `validate_entity_aspects`, `matches_aspect_filter`, `canonical_order`, `load_project_aspects`.
-- `science-tool/src/science_tool/aspects/__init__.py` — module marker.
-- `science-tool/src/science_tool/aspects/migrate.py` — `AspectsMigrationPlan`, `build_migration_plan`, `apply_migration_plan`.
-- `science-tool/src/science_tool/aspects/cli.py` — registers `aspects` click group with `migrate` subcommand.
-- `science-tool/tests/test_aspects_helpers.py` — unit tests for the `science_model.aspects` helpers.
-- `science-tool/tests/test_aspects_migrate.py` — unit tests for `build_migration_plan` / `apply_migration_plan`.
-- `science-tool/tests/test_aspects_cli.py` — integration tests for `science-tool aspects migrate`.
-- `science-tool/tests/fixtures/aspects/legacy_project/` — synthetic project with legacy `type: research|dev` tasks for migration tests.
-- `science-tool/tests/fixtures/big_picture/minimal_project/doc/questions/q06-software-pipeline-concern.md` — new fixture question carrying `aspects: [software-development]`.
+- `science/src/science_tool/aspects/__init__.py` — module marker.
+- `science/src/science_tool/aspects/migrate.py` — `AspectsMigrationPlan`, `build_migration_plan`, `apply_migration_plan`.
+- `science/src/science_tool/aspects/cli.py` — registers `aspects` click group with `migrate` subcommand.
+- `science/tests/test_aspects_helpers.py` — unit tests for the `science_model.aspects` helpers.
+- `science/tests/test_aspects_migrate.py` — unit tests for `build_migration_plan` / `apply_migration_plan`.
+- `science/tests/test_aspects_cli.py` — integration tests for `science aspects migrate`.
+- `science/tests/fixtures/aspects/legacy_project/` — synthetic project with legacy `type: research|dev` tasks for migration tests.
+- `science/tests/fixtures/big_picture/minimal_project/doc/questions/q06-software-pipeline-concern.md` — new fixture question carrying `aspects: [software-development]`.
 
 ### Modified files
 
 - `science-model/src/science_model/tasks.py` — add `aspects: list[str]` field to `Task`, `TaskCreate`, `TaskUpdate`.
-- `science-tool/src/science_tool/tasks.py` — parse/render inline `- aspects:` field; relax `add_task` signature.
-- `science-tool/src/science_tool/cli.py` — drop `--type` on `tasks add`/`tasks edit`/`tasks list`; add `--aspects`/`--aspect`; register `aspects_group`.
-- `science-tool/src/science_tool/big_picture/resolver.py` — add `resolved_aspects` to `ResolverOutput`; load per-question aspects.
-- `science-tool/src/science_tool/big_picture/cli.py` — unchanged logic; `resolve-questions` JSON automatically includes the new field via `asdict`.
-- `science-tool/src/science_tool/big_picture/validator.py` — orphan-count check excludes software-only questions.
-- `science-tool/tests/test_big_picture_resolver.py` — extended cases.
-- `science-tool/tests/test_big_picture_validator.py` — extended cases.
-- `science-tool/tests/fixtures/big_picture/minimal_project/science.yaml` — add `aspects: [...]`.
+- `science/src/science_tool/tasks.py` — parse/render inline `- aspects:` field; relax `add_task` signature.
+- `science/src/science_tool/cli.py` — drop `--type` on `tasks add`/`tasks edit`/`tasks list`; add `--aspects`/`--aspect`; register `aspects_group`.
+- `science/src/science_tool/big_picture/resolver.py` — add `resolved_aspects` to `ResolverOutput`; load per-question aspects.
+- `science/src/science_tool/big_picture/cli.py` — unchanged logic; `resolve-questions` JSON automatically includes the new field via `asdict`.
+- `science/src/science_tool/big_picture/validator.py` — orphan-count check excludes software-only questions.
+- `science/tests/test_big_picture_resolver.py` — extended cases.
+- `science/tests/test_big_picture_validator.py` — extended cases.
+- `science/tests/fixtures/big_picture/minimal_project/science.yaml` — add `aspects: [...]`.
 - `templates/hypothesis.md`, `templates/question.md`, `templates/interpretation.md` — add commented optional `aspects:` slot.
 - `commands/big-picture.md` — Phase 1 bundle-assembly prose updated to filter by resolved aspects.
 - `commands/tasks.md` — CLI references updated.
-- `science-tool/src/science_tool/graph/health.py` — add `legacy_task_type_field` and `invalid_entity_aspects` checks.
+- `science/src/science_tool/graph/health.py` — add `legacy_task_type_field` and `invalid_entity_aspects` checks.
 
 ### Unchanged
 
-- `science-tool/src/science_tool/big_picture/frontmatter.py` — still used by the resolver. Not consolidated with `science_model.frontmatter` in this plan; that's a separate cleanup.
+- `science/src/science_tool/big_picture/frontmatter.py` — still used by the resolver. Not consolidated with `science_model.frontmatter` in this plan; that's a separate cleanup.
 - The graph RDF layer — aspects are not propagated to triples in v1.
 
 ---
@@ -53,11 +53,11 @@
 
 **Files:**
 - Create: `science-model/src/science_model/aspects.py`
-- Test: `science-tool/tests/test_aspects_helpers.py`
+- Test: `science/tests/test_aspects_helpers.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `science-tool/tests/test_aspects_helpers.py`:
+Create `science/tests/test_aspects_helpers.py`:
 
 ```python
 from __future__ import annotations
@@ -79,7 +79,7 @@ def test_known_aspects_matches_science_yaml_schema() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_helpers.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: FAIL — `science_model.aspects` does not exist.
@@ -113,7 +113,7 @@ SOFTWARE_ASPECT: str = "software-development"
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_helpers.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: PASS.
@@ -122,7 +122,7 @@ Expected: PASS.
 
 ```bash
 cd /mnt/ssd/Dropbox/science
-git add science-model/src/science_model/aspects.py science-tool/tests/test_aspects_helpers.py
+git add science-model/src/science_model/aspects.py science/tests/test_aspects_helpers.py
 git commit -m "feat(aspects): scaffold science_model.aspects with vocabulary constant"
 ```
 
@@ -132,7 +132,7 @@ git commit -m "feat(aspects): scaffold science_model.aspects with vocabulary con
 
 **Files:**
 - Modify: `science-model/src/science_model/aspects.py`
-- Modify: `science-tool/tests/test_aspects_helpers.py`
+- Modify: `science/tests/test_aspects_helpers.py`
 
 - [ ] **Step 1: Add failing tests**
 
@@ -169,7 +169,7 @@ def test_resolve_preserves_order_of_explicit_entity_aspects() -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_helpers.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: FAIL — `resolve_entity_aspects` not defined.
@@ -198,7 +198,7 @@ def resolve_entity_aspects(
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_helpers.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: 4 tests PASS.
@@ -206,7 +206,7 @@ Expected: 4 tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-model/src/science_model/aspects.py science-tool/tests/test_aspects_helpers.py
+git add science-model/src/science_model/aspects.py science/tests/test_aspects_helpers.py
 git commit -m "feat(aspects): resolve_entity_aspects inheritance helper"
 ```
 
@@ -216,7 +216,7 @@ git commit -m "feat(aspects): resolve_entity_aspects inheritance helper"
 
 **Files:**
 - Modify: `science-model/src/science_model/aspects.py`
-- Modify: `science-tool/tests/test_aspects_helpers.py`
+- Modify: `science/tests/test_aspects_helpers.py`
 
 - [ ] **Step 1: Add failing tests**
 
@@ -253,7 +253,7 @@ def test_does_not_match_on_empty_filter_set() -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_helpers.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: 4 failures.
@@ -275,7 +275,7 @@ def matches_aspect_filter(resolved: list[str], filter_set: set[str]) -> bool:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_helpers.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: 8 total tests PASS.
@@ -283,7 +283,7 @@ Expected: 8 total tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-model/src/science_model/aspects.py science-tool/tests/test_aspects_helpers.py
+git add science-model/src/science_model/aspects.py science/tests/test_aspects_helpers.py
 git commit -m "feat(aspects): matches_aspect_filter shared predicate"
 ```
 
@@ -293,7 +293,7 @@ git commit -m "feat(aspects): matches_aspect_filter shared predicate"
 
 **Files:**
 - Modify: `science-model/src/science_model/aspects.py`
-- Modify: `science-tool/tests/test_aspects_helpers.py`
+- Modify: `science/tests/test_aspects_helpers.py`
 
 - [ ] **Step 1: Add failing tests**
 
@@ -344,7 +344,7 @@ def test_validate_rejects_aspect_not_in_vocabulary() -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_helpers.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: 6 failures (new tests) — `AspectValidationError` and `validate_entity_aspects` not defined.
@@ -398,7 +398,7 @@ def validate_entity_aspects(
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_helpers.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: 14 total tests PASS.
@@ -406,7 +406,7 @@ Expected: 14 total tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-model/src/science_model/aspects.py science-tool/tests/test_aspects_helpers.py
+git add science-model/src/science_model/aspects.py science/tests/test_aspects_helpers.py
 git commit -m "feat(aspects): validate_entity_aspects with canonical ordering"
 ```
 
@@ -416,7 +416,7 @@ git commit -m "feat(aspects): validate_entity_aspects with canonical ordering"
 
 **Files:**
 - Modify: `science-model/src/science_model/aspects.py`
-- Modify: `science-tool/tests/test_aspects_helpers.py`
+- Modify: `science/tests/test_aspects_helpers.py`
 
 - [ ] **Step 1: Add failing tests**
 
@@ -452,7 +452,7 @@ def test_load_raises_when_yaml_missing(tmp_path: Path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_helpers.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: 3 failures — `load_project_aspects` not defined.
@@ -488,7 +488,7 @@ def load_project_aspects(project_root: Path) -> list[str]:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_helpers.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: 17 total tests PASS.
@@ -496,7 +496,7 @@ Expected: 17 total tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-model/src/science_model/aspects.py science-tool/tests/test_aspects_helpers.py
+git add science-model/src/science_model/aspects.py science/tests/test_aspects_helpers.py
 git commit -m "feat(aspects): load_project_aspects from science.yaml"
 ```
 
@@ -506,11 +506,11 @@ git commit -m "feat(aspects): load_project_aspects from science.yaml"
 
 **Files:**
 - Modify: `science-model/src/science_model/tasks.py`
-- Test: `science-tool/tests/test_tasks.py` (existing file)
+- Test: `science/tests/test_tasks.py` (existing file)
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `science-tool/tests/test_tasks.py`:
+Append to `science/tests/test_tasks.py`:
 
 ```python
 from science_model.tasks import Task, TaskCreate, TaskUpdate
@@ -536,7 +536,7 @@ def test_task_create_and_update_carry_aspects() -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_tasks.py::test_task_accepts_aspects_field -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py::test_task_accepts_aspects_field -v
 ```
 
 Expected: FAIL — `aspects` is not an accepted field.
@@ -602,7 +602,7 @@ class TaskUpdate(BaseModel):
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_tasks.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py -v
 ```
 
 Expected: PASS (new tests + existing tests still pass).
@@ -610,7 +610,7 @@ Expected: PASS (new tests + existing tests still pass).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-model/src/science_model/tasks.py science-tool/tests/test_tasks.py
+git add science-model/src/science_model/tasks.py science/tests/test_tasks.py
 git commit -m "feat(aspects): add aspects field to Task/TaskCreate/TaskUpdate models"
 ```
 
@@ -619,12 +619,12 @@ git commit -m "feat(aspects): add aspects field to Task/TaskCreate/TaskUpdate mo
 ## Task 7: Task parser reads inline `- aspects:` field
 
 **Files:**
-- Modify: `science-tool/src/science_tool/tasks.py`
-- Test: `science-tool/tests/test_tasks.py`
+- Modify: `science/src/science_tool/tasks.py`
+- Test: `science/tests/test_tasks.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `science-tool/tests/test_tasks.py`:
+Append to `science/tests/test_tasks.py`:
 
 ```python
 def test_parse_task_reads_aspects_inline_field(tmp_path):
@@ -648,14 +648,14 @@ def test_parse_task_reads_aspects_inline_field(tmp_path):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_tasks.py::test_parse_task_reads_aspects_inline_field -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py::test_parse_task_reads_aspects_inline_field -v
 ```
 
 Expected: FAIL — parser doesn't populate `aspects`.
 
 - [ ] **Step 3: Extend `_parse_task_block`**
 
-Edit `science-tool/src/science_tool/tasks.py`. Locate `_parse_task_block` and extend the `Task(...)` constructor call (around line 64–76) to include the new field:
+Edit `science/src/science_tool/tasks.py`. Locate `_parse_task_block` and extend the `Task(...)` constructor call (around line 64–76) to include the new field:
 
 ```python
     return Task(
@@ -679,7 +679,7 @@ The existing `_parse_list_value` helper already handles `[a, b, c]`-bracketed li
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_tasks.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py -v
 ```
 
 Expected: all tests PASS.
@@ -687,7 +687,7 @@ Expected: all tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/tasks.py science-tool/tests/test_tasks.py
+git add science/src/science_tool/tasks.py science/tests/test_tasks.py
 git commit -m "feat(aspects): parse inline task aspects field"
 ```
 
@@ -696,12 +696,12 @@ git commit -m "feat(aspects): parse inline task aspects field"
 ## Task 8: Task renderer emits `- aspects:` line
 
 **Files:**
-- Modify: `science-tool/src/science_tool/tasks.py`
-- Test: `science-tool/tests/test_tasks.py`
+- Modify: `science/src/science_tool/tasks.py`
+- Test: `science/tests/test_tasks.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `science-tool/tests/test_tasks.py`:
+Append to `science/tests/test_tasks.py`:
 
 ```python
 def test_render_task_emits_aspects_when_nonempty() -> None:
@@ -740,14 +740,14 @@ def test_render_task_omits_aspects_when_empty() -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_tasks.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py -v
 ```
 
 Expected: first new test FAILs (renderer doesn't emit aspects); second passes incidentally.
 
 - [ ] **Step 3: Extend `render_task`**
 
-Edit `science-tool/src/science_tool/tasks.py`. In `render_task`, add an `aspects` emission after the `status` line and before `related`:
+Edit `science/src/science_tool/tasks.py`. In `render_task`, add an `aspects` emission after the `status` line and before `related`:
 
 ```python
 def render_task(task: Task) -> str:
@@ -779,7 +779,7 @@ def render_task(task: Task) -> str:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_tasks.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py -v
 ```
 
 Expected: all tests PASS.
@@ -787,7 +787,7 @@ Expected: all tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/tasks.py science-tool/tests/test_tasks.py
+git add science/src/science_tool/tasks.py science/tests/test_tasks.py
 git commit -m "feat(aspects): render aspects field in task markdown"
 ```
 
@@ -796,8 +796,8 @@ git commit -m "feat(aspects): render aspects field in task markdown"
 ## Task 9: `add_task()` accepts aspects; drop required `task_type`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/tasks.py`
-- Test: `science-tool/tests/test_tasks.py`
+- Modify: `science/src/science_tool/tasks.py`
+- Test: `science/tests/test_tasks.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -835,14 +835,14 @@ def test_add_task_without_aspects_writes_no_aspects_line(tmp_path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_tasks.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py -v
 ```
 
 Expected: FAIL — `add_task` signature requires `task_type`.
 
 - [ ] **Step 3: Relax `add_task` signature**
 
-Edit `science-tool/src/science_tool/tasks.py`. Update `add_task`:
+Edit `science/src/science_tool/tasks.py`. Update `add_task`:
 
 ```python
 def add_task(
@@ -882,7 +882,7 @@ def add_task(
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_tasks.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py -v
 ```
 
 Expected: PASS. No existing test should regress (they pass `task_type=` as a keyword, which still works).
@@ -890,7 +890,7 @@ Expected: PASS. No existing test should regress (they pass `task_type=` as a key
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/tasks.py science-tool/tests/test_tasks.py
+git add science/src/science_tool/tasks.py science/tests/test_tasks.py
 git commit -m "feat(aspects): add_task accepts aspects; task_type is optional"
 ```
 
@@ -899,12 +899,12 @@ git commit -m "feat(aspects): add_task accepts aspects; task_type is optional"
 ## Task 10: `tasks add` CLI — drop `--type`, add `--aspects`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
-- Test: `science-tool/tests/test_tasks_cli.py` (existing file)
+- Modify: `science/src/science_tool/cli.py`
+- Test: `science/tests/test_tasks_cli.py` (existing file)
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `science-tool/tests/test_tasks_cli.py`:
+Append to `science/tests/test_tasks_cli.py`:
 
 ```python
 def test_tasks_add_accepts_aspects_flag(tmp_path, monkeypatch):
@@ -960,14 +960,14 @@ def test_tasks_add_without_type_or_aspects(tmp_path, monkeypatch):
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_tasks_cli.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks_cli.py -v
 ```
 
 Expected: FAIL — `--type` is still required.
 
 - [ ] **Step 3: Update the CLI**
 
-Edit `science-tool/src/science_tool/cli.py`. Find `tasks_add` (around line 1983) and rewrite:
+Edit `science/src/science_tool/cli.py`. Find `tasks_add` (around line 1983) and rewrite:
 
 ```python
 @tasks.command("add")
@@ -1021,7 +1021,7 @@ Note: the `--type` flag is removed entirely. Callers that previously passed `--t
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_tasks_cli.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks_cli.py -v
 ```
 
 Expected: PASS.
@@ -1029,7 +1029,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/cli.py science-tool/tests/test_tasks_cli.py
+git add science/src/science_tool/cli.py science/tests/test_tasks_cli.py
 git commit -m "feat(aspects): tasks add — drop --type, add --aspects"
 ```
 
@@ -1038,8 +1038,8 @@ git commit -m "feat(aspects): tasks add — drop --type, add --aspects"
 ## Task 11: `tasks edit` CLI — drop `--type`, add `--aspects`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
-- Test: `science-tool/tests/test_tasks_cli.py`
+- Modify: `science/src/science_tool/cli.py`
+- Test: `science/tests/test_tasks_cli.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1085,14 +1085,14 @@ def test_tasks_edit_updates_aspects(tmp_path, monkeypatch):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_tasks_cli.py::test_tasks_edit_updates_aspects -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks_cli.py::test_tasks_edit_updates_aspects -v
 ```
 
 Expected: FAIL — `--aspects` not accepted.
 
 - [ ] **Step 3: Update `tasks_edit`**
 
-Edit `science-tool/src/science_tool/cli.py`. Find `tasks_edit` and:
+Edit `science/src/science_tool/cli.py`. Find `tasks_edit` and:
 - Remove the `@click.option("--type", "task_type", ...)` decorator.
 - Add `@click.option("--aspects", "aspects", multiple=True)` in its place.
 - Update the function signature: remove `task_type: str | None = None`, add `aspects: tuple[str, ...]`.
@@ -1100,7 +1100,7 @@ Edit `science-tool/src/science_tool/cli.py`. Find `tasks_edit` and:
 
 The existing `tasks_edit` calls into `science_tool.tasks.edit_task`. Update that helper too:
 
-In `science-tool/src/science_tool/tasks.py`, find `edit_task` (around line 291) and replace its `task_type` parameter with `aspects`:
+In `science/src/science_tool/tasks.py`, find `edit_task` (around line 291) and replace its `task_type` parameter with `aspects`:
 
 ```python
 def edit_task(
@@ -1192,12 +1192,12 @@ def tasks_edit(
     click.echo(f"Edited [{task.id}] {task.title}")
 ```
 
-Find any remaining callers that pass `task_type=` into `edit_task` and update them to pass `aspects=` instead. Run `grep -rn "edit_task(.*task_type" science-tool/` to check.
+Find any remaining callers that pass `task_type=` into `edit_task` and update them to pass `aspects=` instead. Run `grep -rn "edit_task(.*task_type" science/` to check.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_tasks_cli.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks_cli.py -v
 ```
 
 Expected: PASS.
@@ -1205,7 +1205,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/cli.py science-tool/src/science_tool/tasks.py science-tool/tests/test_tasks_cli.py
+git add science/src/science_tool/cli.py science/src/science_tool/tasks.py science/tests/test_tasks_cli.py
 git commit -m "feat(aspects): tasks edit — drop --type, add --aspects"
 ```
 
@@ -1214,9 +1214,9 @@ git commit -m "feat(aspects): tasks edit — drop --type, add --aspects"
 ## Task 12: `tasks list` CLI — drop `--type`, add `--aspect` filter
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
-- Modify: `science-tool/src/science_tool/tasks.py`
-- Test: `science-tool/tests/test_tasks_cli.py`
+- Modify: `science/src/science_tool/cli.py`
+- Modify: `science/src/science_tool/tasks.py`
+- Test: `science/tests/test_tasks_cli.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1262,19 +1262,19 @@ def test_tasks_list_filter_by_aspect(tmp_path, monkeypatch):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_tasks_cli.py::test_tasks_list_filter_by_aspect -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks_cli.py::test_tasks_list_filter_by_aspect -v
 ```
 
 Expected: FAIL — `--aspect` not recognized.
 
 - [ ] **Step 3: Update the CLI and filter logic**
 
-In `science-tool/src/science_tool/cli.py`, find `tasks_list` and:
+In `science/src/science_tool/cli.py`, find `tasks_list` and:
 - Remove the `--type` option.
 - Add `@click.option("--aspect", "aspects", multiple=True)`.
 - In the function body, pass `aspects` through to `list_tasks`.
 
-In `science-tool/src/science_tool/tasks.py`, update `list_tasks` to accept and apply an aspect filter. Look at its existing signature (around line 334) and add:
+In `science/src/science_tool/tasks.py`, update `list_tasks` to accept and apply an aspect filter. Look at its existing signature (around line 334) and add:
 
 ```python
 def list_tasks(
@@ -1347,7 +1347,7 @@ If the existing `list_tasks` wrapper has a different signature (e.g., accepts `t
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_tasks_cli.py tests/test_tasks.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks_cli.py tests/test_tasks.py -v
 ```
 
 Expected: PASS.
@@ -1355,7 +1355,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/cli.py science-tool/src/science_tool/tasks.py science-tool/tests/test_tasks_cli.py
+git add science/src/science_tool/cli.py science/src/science_tool/tasks.py science/tests/test_tasks_cli.py
 git commit -m "feat(aspects): tasks list — drop --type, add --aspect filter"
 ```
 
@@ -1364,13 +1364,13 @@ git commit -m "feat(aspects): tasks list — drop --type, add --aspect filter"
 ## Task 13: Aspects migration — `build_migration_plan` (pure function)
 
 **Files:**
-- Create: `science-tool/src/science_tool/aspects/__init__.py`
-- Create: `science-tool/src/science_tool/aspects/migrate.py`
-- Create: `science-tool/tests/test_aspects_migrate.py`
+- Create: `science/src/science_tool/aspects/__init__.py`
+- Create: `science/src/science_tool/aspects/migrate.py`
+- Create: `science/tests/test_aspects_migrate.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `science-tool/tests/test_aspects_migrate.py`:
+Create `science/tests/test_aspects_migrate.py`:
 
 ```python
 from __future__ import annotations
@@ -1489,21 +1489,21 @@ def test_plan_raises_when_project_has_no_aspects(tmp_path: Path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_migrate.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_migrate.py -v
 ```
 
 Expected: FAIL — module not found.
 
 - [ ] **Step 3: Create the migration module**
 
-Create `science-tool/src/science_tool/aspects/__init__.py`:
+Create `science/src/science_tool/aspects/__init__.py`:
 
 ```python
 """Aspect migration: one-shot rewrite of legacy task `type: research|dev`."""
 from __future__ import annotations
 ```
 
-Create `science-tool/src/science_tool/aspects/migrate.py`:
+Create `science/src/science_tool/aspects/migrate.py`:
 
 ```python
 """Build and apply the one-shot aspect migration for legacy task entries."""
@@ -1615,7 +1615,7 @@ def build_migration_plan(project_root: Path) -> AspectsMigrationPlan:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_migrate.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_migrate.py -v
 ```
 
 Expected: 5 PASS.
@@ -1623,7 +1623,7 @@ Expected: 5 PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/aspects/ science-tool/tests/test_aspects_migrate.py
+git add science/src/science_tool/aspects/ science/tests/test_aspects_migrate.py
 git commit -m "feat(aspects): build_migration_plan for legacy task type field"
 ```
 
@@ -1632,8 +1632,8 @@ git commit -m "feat(aspects): build_migration_plan for legacy task type field"
 ## Task 14: Aspects migration — `apply_migration_plan`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/aspects/migrate.py`
-- Modify: `science-tool/tests/test_aspects_migrate.py`
+- Modify: `science/src/science_tool/aspects/migrate.py`
+- Modify: `science/tests/test_aspects_migrate.py`
 
 - [ ] **Step 1: Add failing tests**
 
@@ -1693,14 +1693,14 @@ def test_apply_is_idempotent(tmp_path: Path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_migrate.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_migrate.py -v
 ```
 
 Expected: FAIL — `apply_migration_plan` not defined.
 
 - [ ] **Step 3: Implement `apply_migration_plan`**
 
-Append to `science-tool/src/science_tool/aspects/migrate.py`:
+Append to `science/src/science_tool/aspects/migrate.py`:
 
 ```python
 def apply_migration_plan(plan: AspectsMigrationPlan) -> None:
@@ -1730,7 +1730,7 @@ def apply_migration_plan(plan: AspectsMigrationPlan) -> None:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_migrate.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_migrate.py -v
 ```
 
 Expected: 7 PASS.
@@ -1738,22 +1738,22 @@ Expected: 7 PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/aspects/migrate.py science-tool/tests/test_aspects_migrate.py
+git add science/src/science_tool/aspects/migrate.py science/tests/test_aspects_migrate.py
 git commit -m "feat(aspects): apply_migration_plan in-place rewrite"
 ```
 
 ---
 
-## Task 15: `science-tool aspects migrate` CLI
+## Task 15: `science aspects migrate` CLI
 
 **Files:**
-- Create: `science-tool/src/science_tool/aspects/cli.py`
-- Modify: `science-tool/src/science_tool/cli.py`
-- Create: `science-tool/tests/test_aspects_cli.py`
+- Create: `science/src/science_tool/aspects/cli.py`
+- Modify: `science/src/science_tool/cli.py`
+- Create: `science/tests/test_aspects_cli.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `science-tool/tests/test_aspects_cli.py`:
+Create `science/tests/test_aspects_cli.py`:
 
 ```python
 from __future__ import annotations
@@ -1816,14 +1816,14 @@ def test_migrate_apply_rewrites_file(tmp_path: Path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_cli.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_cli.py -v
 ```
 
 Expected: FAIL — `aspects` group not registered.
 
 - [ ] **Step 3: Implement the CLI**
 
-Create `science-tool/src/science_tool/aspects/cli.py`:
+Create `science/src/science_tool/aspects/cli.py`:
 
 ```python
 from __future__ import annotations
@@ -1894,7 +1894,7 @@ def migrate_cmd(project_root: Path, apply_flag: bool) -> None:
         click.echo(f"Skipped {len(plan.conflicts)} conflict(s); resolve manually.")
 ```
 
-Register in `science-tool/src/science_tool/cli.py`. Near the other module imports (top of the file with `big_picture_group`), add:
+Register in `science/src/science_tool/cli.py`. Near the other module imports (top of the file with `big_picture_group`), add:
 
 ```python
 from science_tool.aspects.cli import aspects_group
@@ -1909,7 +1909,7 @@ main.add_command(aspects_group)
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_aspects_cli.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_cli.py -v
 ```
 
 Expected: 3 PASS.
@@ -1917,8 +1917,8 @@ Expected: 3 PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/aspects/cli.py science-tool/src/science_tool/cli.py science-tool/tests/test_aspects_cli.py
-git commit -m "feat(aspects): science-tool aspects migrate CLI"
+git add science/src/science_tool/aspects/cli.py science/src/science_tool/cli.py science/tests/test_aspects_cli.py
+git commit -m "feat(aspects): science aspects migrate CLI"
 ```
 
 ---
@@ -1926,12 +1926,12 @@ git commit -m "feat(aspects): science-tool aspects migrate CLI"
 ## Task 16: Resolver — load entity aspects per question + emit `resolved_aspects`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/resolver.py`
-- Modify: `science-tool/tests/test_big_picture_resolver.py`
+- Modify: `science/src/science_tool/big_picture/resolver.py`
+- Modify: `science/tests/test_big_picture_resolver.py`
 
 - [ ] **Step 1: Extend the fixture project with an explicitly-software-tagged question**
 
-Add `science-tool/tests/fixtures/big_picture/minimal_project/science.yaml` with aspects:
+Add `science/tests/fixtures/big_picture/minimal_project/science.yaml` with aspects:
 
 ```yaml
 name: "big-picture-minimal"
@@ -1941,7 +1941,7 @@ aspects:
   - software-development
 ```
 
-Create `science-tool/tests/fixtures/big_picture/minimal_project/doc/questions/q06-software-pipeline-concern.md`:
+Create `science/tests/fixtures/big_picture/minimal_project/doc/questions/q06-software-pipeline-concern.md`:
 
 ```markdown
 ---
@@ -1954,7 +1954,7 @@ Software-scoped question: exists but does not belong in research synthesis.
 
 - [ ] **Step 2: Write the failing tests**
 
-Append to `science-tool/tests/test_big_picture_resolver.py`:
+Append to `science/tests/test_big_picture_resolver.py`:
 
 ```python
 def test_resolved_aspects_inherits_from_project() -> None:
@@ -1987,14 +1987,14 @@ def test_resolver_raises_on_invalid_explicit_aspects(tmp_path: Path) -> None:
 - [ ] **Step 3: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_resolver.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py -v
 ```
 
 Expected: new tests FAIL — `resolved_aspects` not on `ResolverOutput`.
 
 - [ ] **Step 4: Update the resolver**
 
-Edit `science-tool/src/science_tool/big_picture/resolver.py`:
+Edit `science/src/science_tool/big_picture/resolver.py`:
 
 Add the new field to `ResolverOutput`:
 
@@ -2062,7 +2062,7 @@ Replace the old `return {qid: _finalize(matches) for qid, matches in results.ite
 - [ ] **Step 5: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_resolver.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py -v
 ```
 
 Expected: all PASS (existing tests + new tests). The existing direct/inverse/transitive tests still pass because the resolver's association logic is unchanged.
@@ -2070,7 +2070,7 @@ Expected: all PASS (existing tests + new tests). The existing direct/inverse/tra
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/resolver.py science-tool/tests/test_big_picture_resolver.py science-tool/tests/fixtures/big_picture/minimal_project/
+git add science/src/science_tool/big_picture/resolver.py science/tests/test_big_picture_resolver.py science/tests/fixtures/big_picture/minimal_project/
 git commit -m "feat(aspects): resolver emits resolved_aspects per question"
 ```
 
@@ -2079,12 +2079,12 @@ git commit -m "feat(aspects): resolver emits resolved_aspects per question"
 ## Task 17: Validator — exclude software-only questions from orphan count
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/validator.py`
-- Modify: `science-tool/tests/test_big_picture_validator.py`
+- Modify: `science/src/science_tool/big_picture/validator.py`
+- Modify: `science/tests/test_big_picture_validator.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `science-tool/tests/test_big_picture_validator.py`:
+Append to `science/tests/test_big_picture_validator.py`:
 
 ```python
 def test_orphan_count_excludes_software_only_questions() -> None:
@@ -2109,14 +2109,14 @@ def test_orphan_count_excludes_software_only_questions() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_validator.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: FAIL — `count_research_orphans` not defined.
 
 - [ ] **Step 3: Implement `count_research_orphans`**
 
-Edit `science-tool/src/science_tool/big_picture/validator.py`. Add:
+Edit `science/src/science_tool/big_picture/validator.py`. Add:
 
 ```python
 def count_research_orphans(
@@ -2170,7 +2170,7 @@ def validate_rollup_file(path: Path, project_root: Path) -> list[ValidationIssue
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_validator.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: all PASS.
@@ -2178,7 +2178,7 @@ Expected: all PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/validator.py science-tool/tests/test_big_picture_validator.py
+git add science/src/science_tool/big_picture/validator.py science/tests/test_big_picture_validator.py
 git commit -m "feat(aspects): orphan count excludes software-only questions"
 ```
 
@@ -2194,7 +2194,7 @@ git commit -m "feat(aspects): orphan count excludes software-only questions"
 Edit `commands/big-picture.md`. Find the "Phase 1: Precompute" → "For each hypothesis, assemble a bundle" section. At the top of that bullet list (before `hypothesis_path`), add a new preamble paragraph:
 
 ```markdown
-**Aspect filtering**. Before assembling bundles, load project aspects via `load_project_aspects` (or parse `science.yaml` directly). Compute `research_filter = project.aspects \ {software-development}`. Throughout bundle assembly, any entity whose resolved aspects (entity `aspects:` if set, else project `aspects:`) does NOT intersect `research_filter` is excluded from the bundle. This means software-oriented questions (e.g., ones explicitly tagged `aspects: [software-development]`) are dropped before hypothesis matching runs. If `research_filter` is empty, refuse to proceed and point the user at `science-tool big-picture` — research synthesis is undefined on a software-only project.
+**Aspect filtering**. Before assembling bundles, load project aspects via `load_project_aspects` (or parse `science.yaml` directly). Compute `research_filter = project.aspects \ {software-development}`. Throughout bundle assembly, any entity whose resolved aspects (entity `aspects:` if set, else project `aspects:`) does NOT intersect `research_filter` is excluded from the bundle. This means software-oriented questions (e.g., ones explicitly tagged `aspects: [software-development]`) are dropped before hypothesis matching runs. If `research_filter` is empty, refuse to proceed and point the user at `science big-picture` — research synthesis is undefined on a software-only project.
 ```
 
 And update the `interpretations` and `tasks` bullets to note the filter:
@@ -2307,12 +2307,12 @@ git commit -m "feat(aspects): optional aspects slot on entity templates"
 ## Task 20: Health — flag legacy `type:` and invalid `aspects:`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Modify: `science-tool/tests/test_health.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Modify: `science/tests/test_health.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `science-tool/tests/test_health.py`:
+Append to `science/tests/test_health.py`:
 
 ```python
 def test_health_flags_legacy_task_type_field(tmp_path: Path) -> None:
@@ -2352,14 +2352,14 @@ def test_health_flags_invalid_entity_aspects(tmp_path: Path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_health.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_health.py -v
 ```
 
 Expected: FAIL — functions don't exist.
 
 - [ ] **Step 3: Add the health helpers**
 
-Append to `science-tool/src/science_tool/graph/health.py`:
+Append to `science/src/science_tool/graph/health.py`:
 
 ```python
 class LegacyTaskTypeFinding(TypedDict):
@@ -2451,7 +2451,7 @@ def collect_invalid_entity_aspects(project_root: Path) -> list[InvalidEntityAspe
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_health.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_health.py -v
 ```
 
 Expected: PASS.
@@ -2459,7 +2459,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/health.py science-tool/tests/test_health.py
+git add science/src/science_tool/graph/health.py science/tests/test_health.py
 git commit -m "feat(aspects): health check for legacy type and invalid aspects"
 ```
 
@@ -2469,10 +2469,10 @@ git commit -m "feat(aspects): health check for legacy type and invalid aspects"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Run the full science-tool test suite**
+- [ ] **Step 1: Run the full science test suite**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest --tb=no 2>&1 | tail -5
+cd /mnt/ssd/Dropbox/science/science && uv run pytest --tb=no 2>&1 | tail -5
 ```
 
 Expected: all tests pass. If any pre-existing big-picture test regressed due to the resolver output-schema change or the fixture science.yaml aspect addition, fix inline.
@@ -2480,8 +2480,8 @@ Expected: all tests pass. If any pre-existing big-picture test regressed due to 
 - [ ] **Step 2: Ruff + pyright**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run --frozen ruff check src/science_tool/aspects/ src/science_tool/big_picture/ src/science_tool/tasks.py src/science_tool/cli.py tests/test_aspects_*.py tests/test_big_picture_*.py tests/test_tasks*.py 2>&1 | tail -3
-cd /mnt/ssd/Dropbox/science/science-tool && uv run --frozen pyright src/science_tool/aspects/ src/science_tool/big_picture/resolver.py src/science_tool/big_picture/validator.py 2>&1 | tail -3
+cd /mnt/ssd/Dropbox/science/science && uv run --frozen ruff check src/science_tool/aspects/ src/science_tool/big_picture/ src/science_tool/tasks.py src/science_tool/cli.py tests/test_aspects_*.py tests/test_big_picture_*.py tests/test_tasks*.py 2>&1 | tail -3
+cd /mnt/ssd/Dropbox/science/science && uv run --frozen pyright src/science_tool/aspects/ src/science_tool/big_picture/resolver.py src/science_tool/big_picture/validator.py 2>&1 | tail -3
 ```
 
 Expected: ruff clean on new files; pyright clean on new files (pre-existing errors in unrelated files are OK).
@@ -2516,7 +2516,7 @@ If `aspects:` is absent or empty, add appropriate aspects (research projects typ
 
 ```bash
 cd /mnt/ssd/Dropbox/r/mm30
-uv run science-tool aspects migrate --project-root . 2>&1 | head -50
+uv run science aspects migrate --project-root . 2>&1 | head -50
 ```
 
 Expected: lists each legacy `type:` task with its proposed `aspects:` mapping. Confirm the mapping is sensible — `type: dev` tasks map to `[software-development]`, `type: research` tasks map to the project's non-software aspects.
@@ -2524,7 +2524,7 @@ Expected: lists each legacy `type:` task with its proposed `aspects:` mapping. C
 - [ ] **Step 4: Apply migration**
 
 ```bash
-uv run science-tool aspects migrate --project-root . --apply
+uv run science aspects migrate --project-root . --apply
 ```
 
 Expected: task files rewritten. `git diff tasks/` should show `- type:` lines removed and `- aspects:` lines added. Commit the migration inside mm30 (optional; user's call).
@@ -2540,7 +2540,7 @@ In a Claude Code session at `/mnt/ssd/Dropbox/r/mm30`, invoke `/science:big-pict
 - [ ] **Step 6: Run validator**
 
 ```bash
-uv run science-tool big-picture validate --project-root .
+uv run science big-picture validate --project-root .
 ```
 
 Expected: exit 0. Any `orphan_count_mismatch` surfaces from aspect-aware counting interacting with whatever the rollup wrote; re-run big-picture if so.
@@ -2567,8 +2567,8 @@ Natural-systems is `profile: software` but has a research arm. Its `aspects:` sh
 - [ ] **Step 2: Migrate task files**
 
 ```bash
-uv run science-tool aspects migrate --project-root .
-uv run science-tool aspects migrate --project-root . --apply
+uv run science aspects migrate --project-root .
+uv run science aspects migrate --project-root . --apply
 ```
 
 - [ ] **Step 3: Classify a few software-oriented questions manually**
@@ -2581,7 +2581,7 @@ The audit flagged `question:q14-data-quality-lens-design` as software-oriented. 
 # In a fresh Claude Code session at /home/keith/d/natural-systems/:
 /science:big-picture
 # After it finishes:
-uv run science-tool big-picture validate --project-root .
+uv run science big-picture validate --project-root .
 ```
 
 Expected: orphan count drops; `q14-data-quality-lens-design` no longer appears in `_emergent-threads.md`.

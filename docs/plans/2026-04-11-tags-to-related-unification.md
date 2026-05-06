@@ -18,19 +18,19 @@
 | `science-model/src/science_model/search.py` | Modify | Remove `tags` from Filters |
 | `science-model/src/science_model/frontmatter.py` | Modify | Merge legacy `tags` → `related` during parse |
 | `science-model/src/science_model/tasks.py` | Modify | Remove `tags` from Task, TaskCreate, TaskUpdate |
-| `science-tool/src/science_tool/graph/sources.py` | Modify | Remove `tags` from SourceEntity |
-| `science-tool/src/science_tool/tasks.py` | Modify | Remove tags from parser, renderer, CRUD, filter |
-| `science-tool/src/science_tool/tasks_display.py` | Modify | Remove tags column, add related column |
-| `science-tool/src/science_tool/cli.py` | Modify | Remove `--tag`/`--tags` options, widen question `--related` |
-| `science-tool/src/science_tool/graph/store.py` | Modify | Widen `add_question()` to accept generic `--related` |
+| `science/src/science_tool/graph/sources.py` | Modify | Remove `tags` from SourceEntity |
+| `science/src/science_tool/tasks.py` | Modify | Remove tags from parser, renderer, CRUD, filter |
+| `science/src/science_tool/tasks_display.py` | Modify | Remove tags column, add related column |
+| `science/src/science_tool/cli.py` | Modify | Remove `--tag`/`--tags` options, widen question `--related` |
+| `science/src/science_tool/graph/store.py` | Modify | Widen `add_question()` to accept generic `--related` |
 | `templates/*.md` | Modify | Remove `tags:` field from all entity templates |
 | `commands/review-tasks.md` | Modify | Replace tag/group references with related |
 | `science-model/tests/test_entities.py` | Modify | Remove `tags` from test fixtures |
 | `science-model/tests/test_frontmatter.py` | Modify | Test legacy tags merge, remove tags assertions |
-| `science-tool/tests/test_tasks.py` | Modify | Remove tags tests, update fixtures |
-| `science-tool/tests/test_tasks_cli.py` | Modify | Remove --tag CLI tests |
-| `science-tool/tests/test_graph_materialize.py` | Modify | Remove `tags:` from test fixtures |
-| `science-tool/tests/test_graph_cli.py` | Modify | Update question CLI tests, remove tags from fixtures |
+| `science/tests/test_tasks.py` | Modify | Remove tags tests, update fixtures |
+| `science/tests/test_tasks_cli.py` | Modify | Remove --tag CLI tests |
+| `science/tests/test_graph_materialize.py` | Modify | Remove `tags:` from test fixtures |
+| `science/tests/test_graph_cli.py` | Modify | Update question CLI tests, remove tags from fixtures |
 
 ---
 
@@ -256,7 +256,7 @@ git commit -m "feat: merge legacy frontmatter tags into related as topic: refere
 
 **Files:**
 - Modify: `science-model/src/science_model/tasks.py:22-66`
-- Test: `science-tool/tests/test_tasks.py`
+- Test: `science/tests/test_tasks.py`
 
 - [ ] **Step 1: Write failing test — Task without tags**
 
@@ -276,7 +276,7 @@ def test_task_has_no_tags_field():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science-tool/tests/test_tasks.py::test_task_has_no_tags_field -v`
+Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_tasks.py::test_task_has_no_tags_field -v`
 Expected: FAIL — Task still has `tags`.
 
 - [ ] **Step 3: Remove `tags` from Task, TaskCreate, TaskUpdate**
@@ -288,7 +288,7 @@ In `science-model/src/science_model/tasks.py`:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science-tool/tests/test_tasks.py::test_task_has_no_tags_field -v`
+Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_tasks.py::test_task_has_no_tags_field -v`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -303,9 +303,9 @@ git commit -m "refactor: remove tags field from Task, TaskCreate, TaskUpdate"
 ### Task 4: Remove `tags` from SourceEntity
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/sources.py:59-76`
-- Modify: `science-tool/src/science_tool/graph/sources.py:242-260`
-- Test: `science-tool/tests/test_graph_materialize.py`
+- Modify: `science/src/science_tool/graph/sources.py:59-76`
+- Modify: `science/src/science_tool/graph/sources.py:242-260`
+- Test: `science/tests/test_graph_materialize.py`
 
 - [ ] **Step 1: Write failing test — SourceEntity without tags**
 
@@ -326,28 +326,28 @@ def test_source_entity_has_no_tags_field():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science-tool/tests/test_graph_materialize.py::test_source_entity_has_no_tags_field -v`
+Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_graph_materialize.py::test_source_entity_has_no_tags_field -v`
 Expected: FAIL
 
 - [ ] **Step 3: Remove `tags` from SourceEntity and markdown loading**
 
-In `science-tool/src/science_tool/graph/sources.py`:
+In `science/src/science_tool/graph/sources.py`:
 - Remove line 76: `tags: list[str] = Field(default_factory=list)` from `SourceEntity`
 - Remove line 259: `tags=[str(t) for t in (entity.tags or [])],` from the markdown entity collection
 
 - [ ] **Step 4: Update test fixtures**
 
-In `science-tool/tests/test_graph_materialize.py`, remove all `"tags: [demo]"` lines from test fixture markdown strings (approximately lines 64, 87, 112). These frontmatter files will still parse correctly — the legacy tags merge from Task 2 handles them.
+In `science/tests/test_graph_materialize.py`, remove all `"tags: [demo]"` lines from test fixture markdown strings (approximately lines 64, 87, 112). These frontmatter files will still parse correctly — the legacy tags merge from Task 2 handles them.
 
 - [ ] **Step 5: Run materialize tests**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science-tool/tests/test_graph_materialize.py -v`
+Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_graph_materialize.py -v`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/sources.py science-tool/tests/test_graph_materialize.py
+git add science/src/science_tool/graph/sources.py science/tests/test_graph_materialize.py
 git commit -m "refactor: remove tags field from SourceEntity"
 ```
 
@@ -356,8 +356,8 @@ git commit -m "refactor: remove tags field from SourceEntity"
 ### Task 5: Remove tags from task parser, renderer, and CRUD
 
 **Files:**
-- Modify: `science-tool/src/science_tool/tasks.py:33-34,74,119-121,184,199,304,319-320,349,372-373`
-- Test: `science-tool/tests/test_tasks.py`
+- Modify: `science/src/science_tool/tasks.py:33-34,74,119-121,184,199,304,319-320,349,372-373`
+- Test: `science/tests/test_tasks.py`
 
 - [ ] **Step 1: Write failing test — task roundtrip without tags**
 
@@ -374,12 +374,12 @@ def test_render_and_parse_task_without_tags(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science-tool/tests/test_tasks.py::test_render_and_parse_task_without_tags -v`
+Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_tasks.py::test_render_and_parse_task_without_tags -v`
 Expected: FAIL — `add_task` still expects `tags` parameter.
 
 - [ ] **Step 3: Remove tags from task parser, renderer, and CRUD functions**
 
-In `science-tool/src/science_tool/tasks.py`:
+In `science/src/science_tool/tasks.py`:
 
 **Parser** (`_parse_task_block`, line 64-77): Remove line 74 (`tags=_parse_list_value(fields.get("tags", "")),`). Add legacy tags→related merge:
 ```python
@@ -415,7 +415,7 @@ In `science-tool/src/science_tool/tasks.py`:
 
 - [ ] **Step 4: Update the `TestTagsAndGroups` test class**
 
-In `science-tool/tests/test_tasks.py`, update the `TestTagsAndGroups` class:
+In `science/tests/test_tasks.py`, update the `TestTagsAndGroups` class:
 - Remove or rewrite `test_parse_tags_and_group`: test that legacy `- tags: [lens-system, umap]` in markdown is merged into `related` as `["topic:lens-system", "topic:umap"]`.
 - Remove `test_add_with_tags_and_group`: tags parameter no longer exists.
 - Remove `test_edit_tags`: tags parameter no longer exists.
@@ -486,13 +486,13 @@ class TestTagsAndGroups:
 
 - [ ] **Step 5: Run task tests**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science-tool/tests/test_tasks.py -v`
+Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_tasks.py -v`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/tasks.py science-tool/tests/test_tasks.py
+git add science/src/science_tool/tasks.py science/tests/test_tasks.py
 git commit -m "refactor: remove tags from task parser, renderer, and CRUD — merge legacy tags into related"
 ```
 
@@ -501,13 +501,13 @@ git commit -m "refactor: remove tags from task parser, renderer, and CRUD — me
 ### Task 6: Remove tags from task display and CLI
 
 **Files:**
-- Modify: `science-tool/src/science_tool/tasks_display.py:86-114`
-- Modify: `science-tool/src/science_tool/cli.py:1605,1614,1628,1710,1718,1732,1749,1758,1787,1798`
-- Test: `science-tool/tests/test_tasks_cli.py`
+- Modify: `science/src/science_tool/tasks_display.py:86-114`
+- Modify: `science/src/science_tool/cli.py:1605,1614,1628,1710,1718,1732,1749,1758,1787,1798`
+- Test: `science/tests/test_tasks_cli.py`
 
 - [ ] **Step 1: Update task display — replace tags column with related column**
 
-In `science-tool/src/science_tool/tasks_display.py`, replace the tags conditional column with a related column:
+In `science/src/science_tool/tasks_display.py`, replace the tags conditional column with a related column:
 
 ```python
 def render_tasks_table(tasks: list[Task]) -> None:
@@ -550,7 +550,7 @@ def render_tasks_table(tasks: list[Task]) -> None:
 
 - [ ] **Step 2: Update task CLI — remove `--tags` and `--tag` options**
 
-In `science-tool/src/science_tool/cli.py`:
+In `science/src/science_tool/cli.py`:
 
 **`tasks add`** (around line 1605): Remove `@click.option("--tags", multiple=True)`, remove `tags` from function signature and from `add_task()` call.
 
@@ -560,17 +560,17 @@ In `science-tool/src/science_tool/cli.py`:
 
 - [ ] **Step 3: Update task CLI tests**
 
-In `science-tool/tests/test_tasks_cli.py`, remove or update any tests that use `--tags` or `--tag` CLI options. Update tests to use `--related` instead where appropriate.
+In `science/tests/test_tasks_cli.py`, remove or update any tests that use `--tags` or `--tag` CLI options. Update tests to use `--related` instead where appropriate.
 
 - [ ] **Step 4: Run CLI tests**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science-tool/tests/test_tasks_cli.py -v`
+Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_tasks_cli.py -v`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/tasks_display.py science-tool/src/science_tool/cli.py science-tool/tests/test_tasks_cli.py
+git add science/src/science_tool/tasks_display.py science/src/science_tool/cli.py science/tests/test_tasks_cli.py
 git commit -m "refactor: remove tags from task display and CLI, show related column instead"
 ```
 
@@ -579,9 +579,9 @@ git commit -m "refactor: remove tags from task display and CLI, show related col
 ### Task 7: Widen `graph add question` to accept generic `--related`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py:854-886`
-- Modify: `science-tool/src/science_tool/graph/store.py:627-656`
-- Test: `science-tool/tests/test_graph_cli.py`
+- Modify: `science/src/science_tool/cli.py:854-886`
+- Modify: `science/src/science_tool/graph/store.py:627-656`
+- Test: `science/tests/test_graph_cli.py`
 
 - [ ] **Step 1: Write failing test — add question with generic `--related`**
 
@@ -617,12 +617,12 @@ def test_graph_add_question_with_generic_related() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science-tool/tests/test_graph_cli.py::test_graph_add_question_with_generic_related -v`
+Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_graph_cli.py::test_graph_add_question_with_generic_related -v`
 Expected: FAIL — `--related` option doesn't exist yet.
 
 - [ ] **Step 3: Update `add_question` in store.py**
 
-In `science-tool/src/science_tool/graph/store.py`, modify `add_question` (lines 627-656) to accept a generic `related` parameter instead of `related_hypotheses`:
+In `science/src/science_tool/graph/store.py`, modify `add_question` (lines 627-656) to accept a generic `related` parameter instead of `related_hypotheses`:
 
 ```python
 def add_question(
@@ -660,7 +660,7 @@ def add_question(
 
 - [ ] **Step 4: Update CLI command**
 
-In `science-tool/src/science_tool/cli.py`, update `graph_add_question` (lines 854-886):
+In `science/src/science_tool/cli.py`, update `graph_add_question` (lines 854-886):
 
 Replace `--related-hypothesis` with `--related`:
 
@@ -702,17 +702,17 @@ def graph_add_question(
 
 - [ ] **Step 5: Update existing tests that use `--related-hypothesis`**
 
-In `science-tool/tests/test_graph_cli.py`, find all tests using `--related-hypothesis` and update them to use `--related`. The key test is `test_graph_add_question_with_maturity_and_related_hypothesis` (around line 3319). Update the CLI invocation from `"--related-hypothesis"` to `"--related"` and update the `add_question()` call from `related_hypotheses=` to `related=`.
+In `science/tests/test_graph_cli.py`, find all tests using `--related-hypothesis` and update them to use `--related`. The key test is `test_graph_add_question_with_maturity_and_related_hypothesis` (around line 3319). Update the CLI invocation from `"--related-hypothesis"` to `"--related"` and update the `add_question()` call from `related_hypotheses=` to `related=`.
 
 - [ ] **Step 6: Run question CLI tests**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science-tool/tests/test_graph_cli.py -k "question" -v`
+Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_graph_cli.py -k "question" -v`
 Expected: PASS
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/store.py science-tool/src/science_tool/cli.py science-tool/tests/test_graph_cli.py
+git add science/src/science_tool/graph/store.py science/src/science_tool/cli.py science/tests/test_graph_cli.py
 git commit -m "feat: widen graph add question to accept generic --related refs (replaces --related-hypothesis)"
 ```
 
@@ -721,12 +721,12 @@ git commit -m "feat: widen graph add question to accept generic --related refs (
 ### Task 8: Remove `tags:` from test fixtures and graph CLI tests
 
 **Files:**
-- Modify: `science-tool/tests/test_graph_cli.py`
+- Modify: `science/tests/test_graph_cli.py`
 - Modify: `science-model/tests/test_projects.py`
 
 - [ ] **Step 1: Update graph CLI test fixtures**
 
-In `science-tool/tests/test_graph_cli.py`, find all test fixture markdown strings that include `"tags: [demo]"` or similar and remove those lines. The legacy merge logic from Task 2 will handle any remaining `tags` in real frontmatter, but test fixtures for graph materialization should use `related` directly.
+In `science/tests/test_graph_cli.py`, find all test fixture markdown strings that include `"tags: [demo]"` or similar and remove those lines. The legacy merge logic from Task 2 will handle any remaining `tags` in real frontmatter, but test fixtures for graph materialization should use `related` directly.
 
 - [ ] **Step 2: Update project test fixtures**
 
@@ -735,13 +735,13 @@ In `science-model/tests/test_projects.py`, the `Project` model still has `tags` 
 - [ ] **Step 3: Run full test suite for both packages**
 
 Run: `cd /mnt/ssd/Dropbox/science/science-model && uv run --frozen pytest -v`
-Run: `cd /mnt/ssd/Dropbox/science/science-tool && uv run --frozen pytest -v`
+Run: `cd /mnt/ssd/Dropbox/science/science && uv run --frozen pytest -v`
 Expected: PASS for both
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add science-tool/tests/ science-model/tests/
+git add science/tests/ science-model/tests/
 git commit -m "test: update fixtures to remove tags field from entity test data"
 ```
 
@@ -822,10 +822,10 @@ with related hypotheses, tasks, or topics.
 
 ```markdown
 # Group assignments
-uv run science-tool tasks edit <id> --group=<group>
+uv run science tasks edit <id> --group=<group>
 
 # Add related entity links
-uv run science-tool tasks edit <id> --related=topic:foo --related=topic:bar
+uv run science tasks edit <id> --related=topic:foo --related=topic:bar
 ```
 
 - [ ] **Step 2: Commit**
@@ -846,15 +846,15 @@ git commit -m "docs: update review-tasks command to use related instead of tags"
 Run: `cd /mnt/ssd/Dropbox/science/science-model && uv run --frozen pytest -v`
 Expected: PASS
 
-- [ ] **Step 2: Run science-tool tests**
+- [ ] **Step 2: Run science tests**
 
-Run: `cd /mnt/ssd/Dropbox/science/science-tool && uv run --frozen pytest -v`
+Run: `cd /mnt/ssd/Dropbox/science/science && uv run --frozen pytest -v`
 Expected: PASS
 
 - [ ] **Step 3: Run type checks**
 
 Run: `cd /mnt/ssd/Dropbox/science/science-model && uv run --frozen pyright`
-Run: `cd /mnt/ssd/Dropbox/science/science-tool && uv run --frozen pyright`
+Run: `cd /mnt/ssd/Dropbox/science/science && uv run --frozen pyright`
 Expected: No new errors
 
 - [ ] **Step 4: Run linting**

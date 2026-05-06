@@ -59,13 +59,14 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with <science-plugin-root>/science-tool science-tool <command>`
+   `uv run --with <science-plugin-root>/science science <command>`
 
 Find datasets for the user input.
 If no argument is provided, derive candidate search terms from `specs/research-question.md`, active hypotheses, and inquiry variables, then ask the user to confirm the focus.
@@ -85,18 +86,18 @@ Additionally:
    - Existing `doc/datasets/` (to avoid duplicating known datasets)
 5. If an inquiry exists, check inquiry variables to understand what data the project needs:
    ```bash
-   science-tool inquiry list --format json
+   science inquiry list --format json
    ```
 
 ## Tool invocation
 
-All `science-tool` commands below use this pattern:
+All `science` commands below use this pattern:
 
 ```bash
-uv run science-tool <command>
+uv run science <command>
 ```
 
-For brevity, the examples below write just `science-tool <command>` — **always expand to `uv run science-tool <command>` when executing. See step 8 of `references/command-preamble.md` for the fallback.**
+For brevity, the examples below write just `science <command>` — **always expand to `uv run science <command>` when executing. See step 8 of `references/command-preamble.md` for the fallback.**
 
 ## Workflow
 
@@ -120,26 +121,26 @@ Using your knowledge of available datasets in the field:
 
 ### Step 3: Adapter-driven search
 
-Use `science-tool datasets search` to find datasets across repositories:
+Use `science datasets search` to find datasets across repositories:
 
 ```bash
 # Broad search across all sources
-science-tool datasets search "<query>" --format json
+science datasets search "<query>" --format json
 
 # Targeted search on specific sources
-science-tool datasets search "<query>" --source zenodo,geo --format json
+science datasets search "<query>" --source zenodo,geo --format json
 ```
 
 For each promising result, get full metadata:
 
 ```bash
-science-tool datasets metadata <source>:<id> --format json
+science datasets metadata <source>:<id> --format json
 ```
 
 And list available files:
 
 ```bash
-science-tool datasets files <source>:<id> --format json
+science datasets files <source>:<id> --format json
 ```
 
 Cross-reference LLM suggestions with search results. Note which candidates were verified and which remain unverified.
@@ -202,9 +203,9 @@ Include this mapping in a `## Variable Coverage` section of the search output.
 2. Write machine-readable search results to `doc/searches/YYYY-MM-DD-datasets-<slug>.json`.
 3. If appropriate, suggest download commands:
    ```bash
-   science-tool datasets download <source>:<id> --dest data/raw/
+   science datasets download <source>:<id> --dest data/raw/
    ```
-4. Offer to create follow-up tasks via `science-tool tasks add`:
+4. Offer to create follow-up tasks via `science tasks add`:
    - Download and inspect `Use now` datasets
    - Create `datapackage.json` for downloaded data
    - Map variables for pipeline planning
@@ -231,7 +232,7 @@ When emitting `doc/datasets/<slug>.md`:
   — the verification step corrects it.
 - The `accessions:` field carries external accession IDs (renamed from `datasets:`;
   legacy entries continue to read).
-- Do NOT emit `origin: derived` entities — those are produced by `science-tool
+- Do NOT emit `origin: derived` entities — those are produced by `science
   dataset register-run` after a workflow run.
 
 ## Output Summary
@@ -251,7 +252,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:find-datasets" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

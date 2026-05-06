@@ -4,7 +4,7 @@
 - **Status:** draft
 - **Scope:** Inquiry abstraction, 4 new commands, ontology extensions, graph store changes, validation, templates
 - **Derived from:** `docs/plan.md` (Phase 4), seq-feats exemplar (`~/d/seq-feats/doc/plans/2026-03-06-pipeline-architecture-design.md`)
-- **Depends on:** Phase 3 graph infrastructure (complete), knowledge-graph skill, `science-tool` CLI
+- **Depends on:** Phase 3 graph infrastructure (complete), knowledge-graph skill, `science` CLI
 
 ---
 
@@ -335,26 +335,26 @@ def validate_inquiry(self, slug: str) -> list[dict]:
 ### 5.2 New CLI Subcommands
 
 ```
-science-tool inquiry init <SLUG> --label <LABEL> --target <HYPOTHESIS_OR_QUESTION>
+science inquiry init <SLUG> --label <LABEL> --target <HYPOTHESIS_OR_QUESTION>
                                  [--description <TEXT>] [--status sketch]
 
-science-tool inquiry add-node <SLUG> <ENTITY> --role <BoundaryIn|BoundaryOut|interior>
+science inquiry add-node <SLUG> <ENTITY> --role <BoundaryIn|BoundaryOut|interior>
 
-science-tool inquiry add-edge <SLUG> <SUBJECT> <PREDICATE> <OBJECT>
+science inquiry add-edge <SLUG> <SUBJECT> <PREDICATE> <OBJECT>
 
-science-tool inquiry add-assumption <SLUG> <LABEL> --source <REF>
+science inquiry add-assumption <SLUG> <LABEL> --source <REF>
 
-science-tool inquiry add-transformation <SLUG> <LABEL> [--tool <TOOL>]
+science inquiry add-transformation <SLUG> <LABEL> [--tool <TOOL>]
                                         [--param <KEY> <VALUE> --param-source <TYPE>
                                          --param-ref <REF> --param-note <NOTE>]
 
-science-tool inquiry list [--format table|json]
+science inquiry list [--format table|json]
 
-science-tool inquiry show <SLUG> [--format table|json]
+science inquiry show <SLUG> [--format table|json]
 
-science-tool inquiry validate <SLUG> [--format table|json]
+science inquiry validate <SLUG> [--format table|json]
 
-science-tool inquiry viz <SLUG> [--output <FILE>]
+science inquiry viz <SLUG> [--output <FILE>]
 ```
 
 ### 5.3 Predicate Registry Updates
@@ -471,7 +471,7 @@ The inquiry doc is a **rendered view** of the subgraph — not a separate source
   14f. Target validity — inquiry target node exists as a hypothesis or question
 ```
 
-### 7.2 `science-tool inquiry validate` Checks
+### 7.2 `science inquiry validate` Checks
 
 | Check | Status threshold | Description |
 |---|---|---|

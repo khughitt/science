@@ -6,7 +6,7 @@
 
 **Architecture:** The command and Codex skill carry the semantic workflow. A narrow `science_tool.curate` Python module provides deterministic inventory JSON only; it does not decide what to edit. The agent reads inventory candidates plus targeted source artifacts, optionally applies high-confidence local edits, and writes a durable curation ledger.
 
-**Tech Stack:** Python 3.11+, click, pytest, ruff, pyright, existing `science-tool` graph/task/health helpers, Markdown command and skill docs.
+**Tech Stack:** Python 3.11+, click, pytest, ruff, pyright, existing `science` graph/task/health helpers, Markdown command and skill docs.
 
 **Spec:** `docs/specs/2026-04-21-project-curation-design.md`
 
@@ -16,21 +16,21 @@
 
 ### New files
 
-- `science-tool/src/science_tool/curate/__init__.py` - module marker.
-- `science-tool/src/science_tool/curate/inventory.py` - deterministic project corpus inventory helpers.
-- `science-tool/src/science_tool/curate/cli.py` - `science-tool curate inventory` command.
-- `science-tool/tests/test_curate_inventory.py` - unit tests for inventory collection.
-- `science-tool/tests/test_curate_cli.py` - CLI registration and JSON smoke tests.
+- `science/src/science_tool/curate/__init__.py` - module marker.
+- `science/src/science_tool/curate/inventory.py` - deterministic project corpus inventory helpers.
+- `science/src/science_tool/curate/cli.py` - `science curate inventory` command.
+- `science/tests/test_curate_inventory.py` - unit tests for inventory collection.
+- `science/tests/test_curate_cli.py` - CLI registration and JSON smoke tests.
 - `commands/curate.md` - `/science:curate` command orchestration.
 - `codex-skills/science-curate/SKILL.md` - Codex skill version of the command.
 
 ### Modified files
 
-- `science-tool/src/science_tool/cli.py` - register `curate_group`.
+- `science/src/science_tool/cli.py` - register `curate_group`.
 
 ### Explicit non-goals
 
-- Do not build automated semantic classification into `science-tool`.
+- Do not build automated semantic classification into `science`.
 - Do not add embedding search in v1.
 - Do not auto-merge hypotheses, retire tasks, or rewrite DAG evidence status.
 - Do not modify existing command semantics except to reference `/science:curate` where appropriate in future docs.
@@ -38,14 +38,14 @@
 ## Task 1: Scaffold `science_tool.curate` and register CLI group
 
 **Files:**
-- Create: `science-tool/src/science_tool/curate/__init__.py`
-- Create: `science-tool/src/science_tool/curate/cli.py`
-- Modify: `science-tool/src/science_tool/cli.py`
-- Test: `science-tool/tests/test_curate_cli.py`
+- Create: `science/src/science_tool/curate/__init__.py`
+- Create: `science/src/science_tool/curate/cli.py`
+- Modify: `science/src/science_tool/cli.py`
+- Test: `science/tests/test_curate_cli.py`
 
 - [ ] **Step 1: Write failing CLI registration test**
 
-Create `science-tool/tests/test_curate_cli.py`:
+Create `science/tests/test_curate_cli.py`:
 
 ```python
 from __future__ import annotations
@@ -65,7 +65,7 @@ def test_curate_group_registered() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_curate_cli.py -v
 ```
 
@@ -73,7 +73,7 @@ Expected: FAIL because `curate` is not registered.
 
 - [ ] **Step 3: Add module skeleton**
 
-Create `science-tool/src/science_tool/curate/__init__.py`:
+Create `science/src/science_tool/curate/__init__.py`:
 
 ```python
 """Project curation inventory helpers for /science:curate."""
@@ -81,7 +81,7 @@ Create `science-tool/src/science_tool/curate/__init__.py`:
 from __future__ import annotations
 ```
 
-Create `science-tool/src/science_tool/curate/cli.py`:
+Create `science/src/science_tool/curate/cli.py`:
 
 ```python
 from __future__ import annotations
@@ -108,12 +108,12 @@ def inventory_cmd(project_root: Path, output_format: str) -> None:
 
 - [ ] **Step 4: Register the CLI group**
 
-In `science-tool/src/science_tool/cli.py`, import and register `curate_group` using the same pattern as `big_picture_group`.
+In `science/src/science_tool/cli.py`, import and register `curate_group` using the same pattern as `big_picture_group`.
 
 - [ ] **Step 5: Run test to verify it passes**
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_curate_cli.py -v
 ```
 
@@ -122,16 +122,16 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/curate science-tool/src/science_tool/cli.py science-tool/tests/test_curate_cli.py
+git add science/src/science_tool/curate science/src/science_tool/cli.py science/tests/test_curate_cli.py
 git commit -m "feat(curate): scaffold curation inventory CLI"
 ```
 
 ## Task 2: Implement deterministic project inventory
 
 **Files:**
-- Modify: `science-tool/src/science_tool/curate/inventory.py`
-- Modify: `science-tool/src/science_tool/curate/cli.py`
-- Test: `science-tool/tests/test_curate_inventory.py`
+- Modify: `science/src/science_tool/curate/inventory.py`
+- Modify: `science/src/science_tool/curate/cli.py`
+- Test: `science/tests/test_curate_inventory.py`
 
 - [ ] **Step 1: Write failing inventory tests**
 
@@ -148,7 +148,7 @@ Assert that `collect_inventory(project_root)` returns:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_curate_inventory.py -v
 ```
 
@@ -186,12 +186,12 @@ Use existing frontmatter helpers if a suitable one exists; otherwise keep a smal
 
 - [ ] **Step 5: Wire CLI to inventory implementation**
 
-`science-tool curate inventory --project-root . --format json` should print the model as sorted JSON.
+`science curate inventory --project-root . --format json` should print the model as sorted JSON.
 
 - [ ] **Step 6: Run targeted tests**
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_curate_inventory.py tests/test_curate_cli.py -v
 ```
 
@@ -200,7 +200,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add science-tool/src/science_tool/curate science-tool/tests/test_curate_inventory.py science-tool/tests/test_curate_cli.py
+git add science/src/science_tool/curate science/tests/test_curate_inventory.py science/tests/test_curate_cli.py
 git commit -m "feat(curate): add project inventory helper"
 ```
 
@@ -288,20 +288,20 @@ git commit -m "feat(curate): add Codex curation skill"
 - Review: `docs/plans/2026-04-21-project-curation.md`
 - Review: `commands/curate.md`
 - Review: `codex-skills/science-curate/SKILL.md`
-- Review: `science-tool/src/science_tool/curate/*`
-- Review: `science-tool/tests/test_curate_*.py`
+- Review: `science/src/science_tool/curate/*`
+- Review: `science/tests/test_curate_*.py`
 
 - [ ] **Step 1: Run focused tests**
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_curate_inventory.py tests/test_curate_cli.py -v
 ```
 
 - [ ] **Step 2: Run formatting and lint**
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen ruff format .
 uv run --frozen ruff check .
 ```
@@ -309,7 +309,7 @@ uv run --frozen ruff check .
 - [ ] **Step 3: Run type check**
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pyright
 ```
 

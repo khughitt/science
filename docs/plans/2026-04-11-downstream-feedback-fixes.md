@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Fix the live downstream feedback issues by aligning command docs with centralized framework defaults, making `graph question-summary` return all rows by default, and requiring `science-tool` installation for every new or imported project.
+**Goal:** Fix the live downstream feedback issues by aligning command docs with centralized framework defaults, making `graph question-summary` return all rows by default, and requiring `science` installation for every new or imported project.
 
-**Architecture:** The work splits into three layers. Documentation contract tests protect the command/docs model. `science-tool` CLI and validation changes enforce the runtime behavior. Project-bootstrap docs define the install path for new and imported repositories, including non-Python repos that need a root tool manifest.
+**Architecture:** The work splits into three layers. Documentation contract tests protect the command/docs model. `science` CLI and validation changes enforce the runtime behavior. Project-bootstrap docs define the install path for new and imported repositories, including non-Python repos that need a root tool manifest.
 
 **Tech Stack:** Markdown command docs, Bash (`validate.sh`), Python 3.11, Click, pytest
 
@@ -15,7 +15,7 @@
 ### Task 1: Add regression tests for command-doc path resolution
 
 **Files:**
-- Create: `science-tool/tests/test_command_docs.py`
+- Create: `science/tests/test_command_docs.py`
 - Modify: `commands/add-hypothesis.md`
 - Modify: `commands/bias-audit.md`
 - Modify: `commands/compare-hypotheses.md`
@@ -31,7 +31,7 @@
 
 - [ ] **Step 1: Write the failing doc-contract tests**
 
-Create `science-tool/tests/test_command_docs.py` with checks that command docs no longer rely on project-local framework defaults. Cover at least:
+Create `science/tests/test_command_docs.py` with checks that command docs no longer rely on project-local framework defaults. Cover at least:
 
 ```python
 from pathlib import Path
@@ -87,7 +87,7 @@ def test_status_and_interpret_results_do_not_assume_project_local_model_doc() ->
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_command_docs.py -q
 ```
 
@@ -116,7 +116,7 @@ Resolve `.ai/templates/<name>.md` first; if it does not exist, use `${CLAUDE_PLU
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_command_docs.py -q
 ```
 
@@ -125,13 +125,13 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/tests/test_command_docs.py commands/*.md
+git add science/tests/test_command_docs.py commands/*.md
 git commit -m "docs: align command references with centralized framework defaults"
 ```
 
 ---
 
-### Task 2: Define and document the `science-tool` install contract for all projects
+### Task 2: Define and document the `science` install contract for all projects
 
 **Files:**
 - Modify: `commands/create-project.md`
@@ -139,7 +139,7 @@ git commit -m "docs: align command references with centralized framework default
 - Modify: `references/project-structure.md`
 - Modify: `README.md`
 - Modify: `references/command-preamble.md`
-- Modify: `science-tool/tests/test_command_docs.py`
+- Modify: `science/tests/test_command_docs.py`
 
 - [ ] **Step 1: Extend the doc-contract tests with install expectations**
 
@@ -161,7 +161,7 @@ def test_import_project_requires_science_tool_install_step() -> None:
 def test_project_structure_documents_root_tool_manifest() -> None:
     text = _read("references/project-structure.md")
     assert "pyproject.toml" in text
-    assert "science-tool" in text
+    assert "science" in text
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -169,7 +169,7 @@ def test_project_structure_documents_root_tool_manifest() -> None:
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_command_docs.py -q
 ```
 
@@ -195,7 +195,7 @@ A minimal tool-only manifest should look like:
 
 ```toml
 [project]
-name = "<project-slug>-science-tools"
+name = "<project-slug>-sciences"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = []
@@ -217,7 +217,7 @@ In `references/project-structure.md`, `README.md`, and `references/command-pream
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_command_docs.py -q
 ```
 
@@ -226,17 +226,17 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add commands/create-project.md commands/import-project.md references/project-structure.md README.md references/command-preamble.md science-tool/tests/test_command_docs.py
-git commit -m "docs: require project-local science-tool install for all projects"
+git add commands/create-project.md commands/import-project.md references/project-structure.md README.md references/command-preamble.md science/tests/test_command_docs.py
+git commit -m "docs: require project-local science install for all projects"
 ```
 
 ---
 
-### Task 3: Enforce `science-tool` availability in `validate.sh`
+### Task 3: Enforce `science` availability in `validate.sh`
 
 **Files:**
 - Modify: `scripts/validate.sh`
-- Modify: `science-tool/tests/test_validate_script.py`
+- Modify: `science/tests/test_validate_script.py`
 
 - [ ] **Step 1: Write the failing validation tests**
 
@@ -261,7 +261,7 @@ def test_validate_fails_when_science_tool_unavailable(tmp_path: Path) -> None:
     )
 
     assert result.returncode != 0
-    assert "science-tool is required" in result.stdout + result.stderr
+    assert "science is required" in result.stdout + result.stderr
 
 
 def test_validate_accepts_project_when_science_tool_on_path(tmp_path: Path) -> None:
@@ -271,7 +271,7 @@ def test_validate_accepts_project_when_science_tool_on_path(tmp_path: Path) -> N
     (tmp_path / "tests").mkdir(parents=True)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    tool = bin_dir / "science-tool"
+    tool = bin_dir / "science"
     tool.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     tool.chmod(0o755)
 
@@ -295,15 +295,15 @@ def test_validate_accepts_project_when_science_tool_on_path(tmp_path: Path) -> N
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_validate_script.py -q
 ```
 
-Expected: FAIL because `validate.sh` currently warns when `science-tool` is missing instead of failing.
+Expected: FAIL because `validate.sh` currently warns when `science` is missing instead of failing.
 
 - [ ] **Step 3: Update `validate.sh`**
 
-Change the script so `science-tool` is treated as a baseline project requirement:
+Change the script so `science` is treated as a baseline project requirement:
 
 - resolve the tool once near the top of the script:
 
@@ -314,7 +314,7 @@ SCIENCE_TOOL_CMD="$(resolve_science_tool)"
 - if empty, emit an error like:
 
 ```bash
-error "science-tool is required for task management, feedback, and graph workflows"
+error "science is required for task management, feedback, and graph workflows"
 ```
 
 - downgrade later graph-specific missing-tool branches so they do not duplicate the same error
@@ -324,7 +324,7 @@ error "science-tool is required for task management, feedback, and graph workflo
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_validate_script.py -q
 ```
 
@@ -333,8 +333,8 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/validate.sh science-tool/tests/test_validate_script.py
-git commit -m "feat(validate): require science-tool for all science projects"
+git add scripts/validate.sh science/tests/test_validate_script.py
+git commit -m "feat(validate): require science for all science projects"
 ```
 
 ---
@@ -342,9 +342,9 @@ git commit -m "feat(validate): require science-tool for all science projects"
 ### Task 4: Make `graph question-summary` return all rows by default
 
 **Files:**
-- Modify: `science-tool/tests/test_graph_cli.py`
-- Modify: `science-tool/src/science_tool/cli.py`
-- Modify: `science-tool/src/science_tool/graph/store.py`
+- Modify: `science/tests/test_graph_cli.py`
+- Modify: `science/src/science_tool/cli.py`
+- Modify: `science/src/science_tool/graph/store.py`
 - Modify: `commands/status.md`
 - Modify: `commands/interpret-results.md`
 - Modify: `README.md`
@@ -387,7 +387,7 @@ def test_graph_question_summary_returns_all_questions_by_default() -> None:
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_graph_cli.py -q -k "question_summary_returns_all_questions_by_default"
 ```
 
@@ -395,12 +395,12 @@ Expected: FAIL because the command still defaults to `--top 25`.
 
 - [ ] **Step 3: Implement the minimal CLI/store change**
 
-Update `science-tool/src/science_tool/cli.py`:
+Update `science/src/science_tool/cli.py`:
 
 - change `--top` on `graph question-summary` to default to `None`
 - update help text to clarify that `--top` is optional truncation
 
-Update `science-tool/src/science_tool/graph/store.py`:
+Update `science/src/science_tool/graph/store.py`:
 
 - accept `top: int | None`
 - return all rows when `top is None`
@@ -425,7 +425,7 @@ In `commands/status.md`, `commands/interpret-results.md`, and `README.md`:
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_graph_cli.py -q -k "question_summary"
 ```
 
@@ -434,7 +434,7 @@ Expected: PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/tests/test_graph_cli.py science-tool/src/science_tool/cli.py science-tool/src/science_tool/graph/store.py commands/status.md commands/interpret-results.md README.md
+git add science/tests/test_graph_cli.py science/src/science_tool/cli.py science/src/science_tool/graph/store.py commands/status.md commands/interpret-results.md README.md
 git commit -m "fix(graph): return all question-summary rows by default"
 ```
 
@@ -450,7 +450,7 @@ git commit -m "fix(graph): return all question-summary rows by default"
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_command_docs.py tests/test_validate_script.py tests/test_graph_cli.py -q -k "question_summary or validate or command_docs"
 ```
 
@@ -461,7 +461,7 @@ Expected: PASS
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen ruff check src tests
 ```
 
@@ -473,11 +473,11 @@ Confirm the final docs consistently distinguish:
 
 - project-local overrides in `.ai/`
 - centralized framework defaults under `${CLAUDE_PLUGIN_ROOT}`
-- project-local `science-tool` installation as the baseline expectation
+- project-local `science` installation as the baseline expectation
 
 - [ ] **Step 4: Final commit**
 
 ```bash
-git add commands README.md references scripts/validate.sh science-tool/src science-tool/tests docs/plans
+git add commands README.md references scripts/validate.sh science/src science/tests docs/plans
 git commit -m "fix: address downstream feedback on defaults, installs, and question summaries"
 ```

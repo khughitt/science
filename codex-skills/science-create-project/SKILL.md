@@ -59,13 +59,14 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with <science-plugin-root>/science-tool science-tool <command>`
+   `uv run --with <science-plugin-root>/science science <command>`
 
 You are scaffolding a brand-new Science-managed project. The steady-state model supports exactly two project profiles:
 
@@ -223,7 +224,7 @@ Minimum shape:
 
 ```toml
 [project]
-name = "<project-slug>-science-tools"
+name = "<project-slug>-sciences"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = []
@@ -232,7 +233,7 @@ dependencies = []
 dev = []
 ```
 
-Install `science-tool` into that manifest with:
+Install `science` into that manifest with:
 
 ```bash
 uv add --dev --editable "$SCIENCE_TOOL_PATH"
@@ -242,13 +243,13 @@ This applies even to non-Python repos because the manifest is for project-local 
 
 ### `.env`
 
-Populate with the **resolved absolute path** to `science-tool` so `validate.sh` and other tooling can find it:
+Populate with the **resolved absolute path** to `science` so `validate.sh` and other tooling can find it:
 
 ```env
-SCIENCE_TOOL_PATH=<absolute-path-to-science-tool>
+SCIENCE_TOOL_PATH=<absolute-path-to-science>
 ```
 
-Resolve `<science-plugin-root>/science-tool` to its absolute path at creation time.
+Resolve `<science-plugin-root>/science` to its absolute path at creation time.
 
 ### `.gitignore`
 
@@ -355,10 +356,10 @@ Create the canonical document taxonomy and add a minimal overview/plan starter w
 After scaffolding the project, install Science's managed `validate.sh`:
 
 ```bash
-science-tool project artifacts install validate.sh --project-root <project-path>
+science project artifacts install validate.sh --project-root <project-path>
 ```
 
-This drops the canonical `validate.sh` into the project root with the managed header. To stay current on future Science releases, run `science-tool project artifacts check validate.sh` periodically (or rely on `science-tool health` to surface drift).
+This drops the canonical `validate.sh` into the project root with the managed header. To stay current on future Science releases, run `science project artifacts check validate.sh` periodically (or rely on `science health` to surface drift).
 
 ### Prompts And Templates
 

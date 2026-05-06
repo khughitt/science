@@ -2,23 +2,23 @@
 
 ## Goal
 
-Define a reusable graph API owned by `science-tool` that can serve both project-local knowledge graph inspection and causal/evidence visualization in `~/d/dashboard/`.
+Define a reusable graph API owned by `science` that can serve both project-local knowledge graph inspection and causal/evidence visualization in `~/d/dashboard/`.
 
 ## Context
 
 We already have:
 
-- project TriG graphs in `science-tool`
+- project TriG graphs in `science`
 - causal export logic with enriched proposition-backed claim metadata
 - a dashboard graph route with working 2D/3D exploration and backend graph loading
 
-What is missing is a shared semantic contract. Right now, the dashboard derives a generic graph payload directly from project TriG data, while the richer causal/evidence semantics live mostly inside `science-tool` query and export paths.
+What is missing is a shared semantic contract. Right now, the dashboard derives a generic graph payload directly from project TriG data, while the richer causal/evidence semantics live mostly inside `science` query and export paths.
 
 ## Approaches Considered
 
 ### 1. Causal-Only Payload
 
-Expose a dedicated causal DAG payload from `science-tool` and leave the dashboard’s generic graph handling separate.
+Expose a dedicated causal DAG payload from `science` and leave the dashboard’s generic graph handling separate.
 
 Pros:
 
@@ -47,7 +47,7 @@ Cons:
 
 ### 3. General Graph Core Plus Typed Overlays
 
-Expose one general graph payload from `science-tool`, then attach typed overlays for specialized semantics such as causal structure and evidence framing.
+Expose one general graph payload from `science`, then attach typed overlays for specialized semantics such as causal structure and evidence framing.
 
 Pros:
 
@@ -63,7 +63,7 @@ Cons:
 
 Use **general graph core plus typed overlays**.
 
-`science-tool` becomes the semantic source of truth for graph export. The dashboard becomes the first richer consumer of that contract.
+`science` becomes the semantic source of truth for graph export. The dashboard becomes the first richer consumer of that contract.
 
 ## Contract
 
@@ -95,7 +95,7 @@ This layer should not encode causal meaning directly.
 
 #### Node IDs
 
-V1 should use the canonical graph URI string as the exported node id. We already treat URIs as the stable identity in both `science-tool` and the dashboard graph loader, so inventing a second synthetic node key would add unnecessary translation risk.
+V1 should use the canonical graph URI string as the exported node id. We already treat URIs as the stable identity in both `science` and the dashboard graph loader, so inventing a second synthetic node key would add unnecessary translation risk.
 
 #### Edge IDs
 
@@ -192,7 +192,7 @@ V1 does not need lazy loading, but it should avoid unconditional full-project ev
 
 ### Project-Local Consumer
 
-`science-tool` should provide a CLI command that emits the graph payload as JSON for inspection, scripting, and local visualization work. The CLI should allow choosing scopes and overlays rather than forcing one fixed graph view.
+`science` should provide a CLI command that emits the graph payload as JSON for inspection, scripting, and local visualization work. The CLI should allow choosing scopes and overlays rather than forcing one fixed graph view.
 
 ### Dashboard Consumer
 
@@ -202,7 +202,7 @@ The existing dashboard route at `/projects/:slug/graph` should become the first 
 - it reuses current layer controls and inspection UI
 - it lets the frontend add overlay-aware controls incrementally
 
-The dashboard should keep ownership of visual encoding and rendering behavior. `science-tool` should own graph semantics, not frontend-specific styling.
+The dashboard should keep ownership of visual encoding and rendering behavior. `science` should own graph semantics, not frontend-specific styling.
 
 ## V1 Scope
 
@@ -211,7 +211,7 @@ V1 should include:
 - base graph payload
 - `causal` overlay
 - `evidence` overlay
-- `science-tool` CLI JSON export
+- `science` CLI JSON export
 - dashboard backend adaptation to the new payload
 - dashboard frontend updates so the existing graph explorer can surface overlay metadata
 - warning emission for skipped broken evidence refs
@@ -225,7 +225,7 @@ V1 should not include:
 
 ## Architecture
 
-### `science-tool`
+### `science`
 
 - Build a typed graph export layer on top of existing TriG data.
 - Reuse current claim enrichment logic rather than re-deriving proposition semantics separately.
@@ -260,7 +260,7 @@ We should verify:
 ## Risks
 
 - overdesigning the generic contract before the first real consumer stabilizes
-- leaking dashboard-specific visualization concerns into `science-tool`
+- leaking dashboard-specific visualization concerns into `science`
 - duplicating semantics if the dashboard backend shortcuts around the shared export builder
 - breaking the dashboard mid-migration if backend and frontend contract changes land out of sync
 

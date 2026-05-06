@@ -36,7 +36,7 @@ The original `data-package` entity is split: its *data* half folds into derived 
 
 Carried forward from rev 1, extended for unification:
 
-- **The dataset entity is the authority for project-level metadata; the runtime `datapackage.yaml` is the authority for resource-level metadata.** No duplicated truth. The two surfaces share the science-pkg schema family; drift between them is a `science-tool health` warning.
+- **The dataset entity is the authority for project-level metadata; the runtime `datapackage.yaml` is the authority for resource-level metadata.** No duplicated truth. The two surfaces share the science-pkg schema family; drift between them is a `science health` warning.
 - **One schema family for both origins.** External and derived datasets validate against the same `science-pkg` JSON Schema. `origin: external | derived` is the discriminator; sibling top-level blocks (`access:` for external, `derivation:` for derived) are mutually exclusive.
 - **Access state is structured + dated** (external only). `access.verified: true|false`, `access.verification_method` (`retrieved` vs `credential-confirmed`), `access.last_reviewed`. No state machine beyond those three fields; `last_reviewed` is a soft staleness signal.
 - **Derivation state is structured + symmetric** (derived only). `derivation.workflow_run` points at a `workflow-run` entity whose `produces:` field MUST list this dataset (symmetric edge). `derivation.inputs` lists upstream `dataset:<slug>` entities and is enforced transitively by the gate.
@@ -68,21 +68,21 @@ Carried forward from rev 1, extended for unification:
 - `/science:find-datasets` — rev 1 carry-forward (one entity per artefact at distinct access level for external sources only).
 - New: workflow declares logical outputs in `templates/workflow.md`'s frontmatter (`outputs:` block).
 - New: `templates/workflow-run.md` gains `produces:` and `inputs:` fields.
-- New: `science-tool dataset register-run <workflow-run-slug>` command — emits derived dataset entities from a completed run + writes per-output `datapackage.yaml` files; idempotent.
-- New: `science-tool dataset reconcile <slug>` command — checks entity ↔ runtime drift on the narrow ownership table.
-- New: `science-tool data-package migrate <slug>` command — splits a legacy `data-package` entity into N derived `dataset` entities + 1 `research-package` entity; required for projects to migrate before strict graph-build mode succeeds.
+- New: `science dataset register-run <workflow-run-slug>` command — emits derived dataset entities from a completed run + writes per-output `datapackage.yaml` files; idempotent.
+- New: `science dataset reconcile <slug>` command — checks entity ↔ runtime drift on the narrow ownership table.
+- New: `science data-package migrate <slug>` command — splits a legacy `data-package` entity into N derived `dataset` entities + 1 `research-package` entity; required for projects to migrate before strict graph-build mode succeeds.
 - Renamed entity type: `data-package` → `research-package`. New entity location: co-located with the rendered bundle at `research/packages/<lens>/<section>/research-package.md`. First entity type to live outside `doc/`.
 - `research-package` carries `displays: [dataset:<slug>, ...]` referring to the derived datasets it renders. Provenance fields (workflow_run, inputs, etc.) are removed from `research-package` (now live on the derived datasets).
-- `science-tool health` grows twelve anomaly classes (rev 1's five plus seven new for derivation, asymmetric edges, broken input chains, origin/block mismatch, runtime stageability, research-package symmetry, unmigrated data-package).
+- `science health` grows twelve anomaly classes (rev 1's five plus seven new for derivation, asymmetric edges, broken input chains, origin/block mismatch, runtime stageability, research-package symmetry, unmigrated data-package).
 - Per-entity-type discovery rule (small precursor to Spec Y's resolver): the graph builder gains a config mapping entity type → glob pattern, used for two paths in v1 (dataset under `doc/datasets/`, research-package under `research/packages/<...>/research-package.md`).
 - Strict migration posture for the `data-package` → `research-package` rename: the graph builder fails with a descriptive error on any unmigrated `data-package` entity. No silent shim.
 
 ### Out of scope (v1)
 
 - Multi-backend entity storage (datapackage-directory backend for datasets, aggregate-json backend for lightweight entities like rare topics). This is **Spec Y**, sibling to this spec, written immediately after v1 ships.
-- Automated `science-tool dataset verify <slug>` (external verification automation). Documented as follow-on; v1 is structural-only.
-- Automated `science-tool dataset stage <slug>` (materialize runtime `datapackage.yaml` from entity for external sources). Documented as follow-on.
-- Automated `science-tool dataset migrate <slug>` (legacy flat-access → structured). Documented as follow-on.
+- Automated `science dataset verify <slug>` (external verification automation). Documented as follow-on; v1 is structural-only.
+- Automated `science dataset stage <slug>` (materialize runtime `datapackage.yaml` from entity for external sources). Documented as follow-on.
+- Automated `science dataset migrate <slug>` (legacy flat-access → structured). Documented as follow-on.
 - Automated `last_reviewed` expiry enforcement. v1 surfaces staleness; it does not block on stale reviews.
 - Per-resource SHA256 / size / format extension fields on `science-pkg`'s resource block beyond what Frictionless DataResource already provides. v1's resource shape is plain Frictionless.
 - Cross-project dataset-entity sharing. Each project carries its own `doc/datasets/` and `research/packages/`.
@@ -133,8 +133,8 @@ Two surfaces, one schema family.
 
 **Data flow:**
 
-- **External:** `find-datasets` creates a `dataset` entity (`origin: external`, `access.verified: false`). User verifies + stages. Entity flips `access.verified: true`; a future `science-tool dataset stage` materializes `data/<slug>/datapackage.yaml` from the entity. Workflow consumes from that runtime path.
-- **Derived:** Workflow rule produces output files + writes `results/<wf>/<run>/datapackage.yaml` (the run-aggregate, as today). A terminal `register_dataset_entities` rule (or `science-tool dataset register-run`) does two things: (1) emits one `dataset` entity per declared output in the workflow's `outputs:` block (each with `origin: derived` and `derivation.workflow_run` pointing back); (2) writes per-output runtime datapackages at `results/<wf>/<run>/<output-slug>/datapackage.yaml`, each containing only the resources whose `name` matches that output's `resource_names:`. The dataset entity's `datapackage:` field points at the per-output file, NOT the run-aggregate, so consumers know exactly which resources belong to them without filtering.
+- **External:** `find-datasets` creates a `dataset` entity (`origin: external`, `access.verified: false`). User verifies + stages. Entity flips `access.verified: true`; a future `science dataset stage` materializes `data/<slug>/datapackage.yaml` from the entity. Workflow consumes from that runtime path.
+- **Derived:** Workflow rule produces output files + writes `results/<wf>/<run>/datapackage.yaml` (the run-aggregate, as today). A terminal `register_dataset_entities` rule (or `science dataset register-run`) does two things: (1) emits one `dataset` entity per declared output in the workflow's `outputs:` block (each with `origin: derived` and `derivation.workflow_run` pointing back); (2) writes per-output runtime datapackages at `results/<wf>/<run>/<output-slug>/datapackage.yaml`, each containing only the resources whose `name` matches that output's `resource_names:`. The dataset entity's `datapackage:` field points at the per-output file, NOT the run-aggregate, so consumers know exactly which resources belong to them without filtering.
 
 ## The `science-pkg` Schema Family
 
@@ -161,7 +161,7 @@ The boundary is narrow and machine-checkable:
 | `name`, `description`, `resources[]` (per-resource `name`, `path`, `format`, `mediatype`, `bytes`, `hash`, `schema`) | Runtime (canonical) — entity does NOT carry | runtime surface only |
 | `datapackage:` (pointer from entity to runtime file) | Entity | entity surface only |
 
-`science-tool dataset reconcile <slug>` checks the **only** legitimate duplication channel: the cached `ontology_terms`/`license`/`update_cadence` fields if mirrored to the runtime. Drift in this narrow set is a warning. There is no per-resource drift channel because the entity does not carry `resources[]` at all.
+`science dataset reconcile <slug>` checks the **only** legitimate duplication channel: the cached `ontology_terms`/`license`/`update_cadence` fields if mirrored to the runtime. Drift in this narrow set is a warning. There is no per-resource drift channel because the entity does not carry `resources[]` at all.
 
 **Top-level science extensions (entity surface):**
 
@@ -366,7 +366,7 @@ inputs:
 
 `produces:` is the inverse of `dataset.derivation.workflow_run` and is required for symmetric-edge enforcement (state invariant #9). `inputs:` enumerates upstream datasets consumed by the run; populated by `register-run` from the workflow's actual runtime inputs.
 
-`register-run` ALSO appends `workflow-run:<slug>` to each upstream dataset's `consumed_by` list (deduplicated). This makes derived consumers visible to the same `science-tool dataset consumers <slug>` reverse-lookup that surfaces plan consumers, and gives `dataset_consumed_but_unverified` health checks the same coverage for runs as for plans.
+`register-run` ALSO appends `workflow-run:<slug>` to each upstream dataset's `consumed_by` list (deduplicated). This makes derived consumers visible to the same `science dataset consumers <slug>` reverse-lookup that surfaces plan consumers, and gives `dataset_consumed_but_unverified` health checks the same coverage for runs as for plans.
 
 ### `workflow` additions — `outputs:` block
 
@@ -388,7 +388,7 @@ Each declared output produces one derived `dataset` entity per workflow-run **an
 
 ## State Invariants
 
-The schema implies eleven machine-checkable rules. `science-tool health` surfaces violations as anomalies (severity per the table in the Health Check Additions section):
+The schema implies eleven machine-checkable rules. `science health` surfaces violations as anomalies (severity per the table in the Health Check Additions section):
 
 1. **Umbrella entities are not consumable.** An entity with a non-empty `siblings:` list (umbrella) MUST NOT appear in any other entity's `consumed_by` list. Plans consume granular siblings, never umbrellas. (Carry forward.)
 2. **`verified: true` requires method + date.** `access.verified: true` implies `access.verification_method ∈ {"retrieved", "credential-confirmed"}` and `access.last_reviewed` is a non-empty YYYY-MM-DD string. (Carry forward.)
@@ -414,13 +414,13 @@ Discovery          /science:find-datasets creates doc/datasets/<slug>.md with:
                      access.level: <best-guess>
                      consumed_by: []
     ↓
-Verification       Manually (log entry) or via future `science-tool dataset verify`:
+Verification       Manually (log entry) or via future `science dataset verify`:
                      Public:     retrieve source_url → confirm match →
                                  access.verified: true, verification_method: "retrieved"
                      Controlled: confirm DAR/DUA →
                                  access.verified: true, verification_method: "credential-confirmed"
     ↓
-Staging            Optional: `science-tool dataset stage` materializes
+Staging            Optional: `science dataset stage` materializes
                      data/<slug>/datapackage.yaml from the entity. Entity's
                      `datapackage:` field points at it. Workflows consume from
                      this runtime path, never from access.source_url.
@@ -446,7 +446,7 @@ Review             /science:review-pipeline Dim 3 verifies gate state, backlinks
 
 ### Parallel runs of the same workflow
 
-Repeated invocations of the same workflow produce **parallel** derived dataset entities — one per `(workflow, run, output-slug)` tuple. Both `dataset:wf-r1-out` and `dataset:wf-r2-out` exist as `status: "active"` entities side-by-side; neither automatically supersedes the other. Each carries its own `consumed_by` independently, so a downstream plan that referenced the older run's output continues to resolve. Supersession is a manual user action (a future `science-tool dataset supersede <slug>` follow-on may automate it). v1's invariant: a derived dataset's identity is permanent; the workflow-run that produced it never changes; `consumed_by` grows monotonically.
+Repeated invocations of the same workflow produce **parallel** derived dataset entities — one per `(workflow, run, output-slug)` tuple. Both `dataset:wf-r1-out` and `dataset:wf-r2-out` exist as `status: "active"` entities side-by-side; neither automatically supersedes the other. Each carries its own `consumed_by` independently, so a downstream plan that referenced the older run's output continues to resolve. Supersession is a manual user action (a future `science dataset supersede <slug>` follow-on may automate it). v1's invariant: a derived dataset's identity is permanent; the workflow-run that produced it never changes; `consumed_by` grows monotonically.
 
 The per-output runtime datapackage at `results/<wf>/<r1>/<output>/datapackage.yaml` is a **view** into the run-aggregate's resources at `results/<wf>/<r1>/`. Resource paths inside the per-output datapackage are kept relative to the run-aggregate root (the per-output datapackage sets `basepath: ".."`), so files stay where the workflow wrote them and the per-output datapackage acts as a slice/manifest, not a relocation. This avoids file-moves at registration time and keeps the workflow's existing on-disk layout intact.
 
@@ -457,7 +457,7 @@ Workflow run       Snakemake rule produces output files; writes the run-aggregat
                      results/<wf>/<run>/datapackage.yaml as it does today.
     ↓
 Registration       Terminal `register_dataset_entities` rule invokes:
-                     science-tool dataset register-run workflow-run:<slug>
+                     science dataset register-run workflow-run:<slug>
                    This reads the workflow's `outputs:` block and the run-aggregate
                    datapackage.yaml, then for each declared output:
                      1. Writes a per-output datapackage at
@@ -535,7 +535,7 @@ For each input data source identified in Step 2:
      with a URL alone.
    - For derived sources: halt with "no dataset entity found for
      <slug>; ensure the producing workflow has an `outputs:` block and
-     run `science-tool dataset register-run <run-slug>`."
+     run `science dataset register-run <run-slug>`."
 2. Check the gate per origin:
    - `origin: external`:
      - PASS if `access.verified: true`.
@@ -603,26 +603,26 @@ Scoring:
 
 ## CLI Affordances
 
-New `science-tool dataset` subcommands; v1 ships read-only commands plus the two write-side commands needed for the workflow integration (`register-run`, `reconcile`).
+New `science dataset` subcommands; v1 ships read-only commands plus the two write-side commands needed for the workflow integration (`register-run`, `reconcile`).
 
 **v1 read-only:**
 
 ```bash
-science-tool dataset list                              # all entities
-science-tool dataset list --origin external|derived    # NEW filter
-science-tool dataset list --unverified                 # external, access.verified: false
-science-tool dataset list --stale-review --months 12
-science-tool dataset list --level controlled
-science-tool dataset consumers <slug>                  # reverse lookup via consumed_by
-science-tool dataset show <slug>                       # full entity view
+science dataset list                              # all entities
+science dataset list --origin external|derived    # NEW filter
+science dataset list --unverified                 # external, access.verified: false
+science dataset list --stale-review --months 12
+science dataset list --level controlled
+science dataset consumers <slug>                  # reverse lookup via consumed_by
+science dataset show <slug>                       # full entity view
 ```
 
 **v1 write-side:**
 
 ```bash
-science-tool dataset register-run <workflow-run-slug>  # emit derived entities + per-output datapackages
-science-tool dataset reconcile <slug>                  # entity ↔ runtime cached-field drift check
-science-tool data-package migrate <slug>               # split legacy data-package → derived datasets + research-package
+science dataset register-run <workflow-run-slug>  # emit derived entities + per-output datapackages
+science dataset reconcile <slug>                  # entity ↔ runtime cached-field drift check
+science data-package migrate <slug>               # split legacy data-package → derived datasets + research-package
 ```
 
 `register-run` is idempotent: re-running on an already-registered run no-ops if outputs match the current state, or warns + reports drift if the run's resources have shifted. Writes:
@@ -637,14 +637,14 @@ science-tool data-package migrate <slug>               # split legacy data-packa
 **Follow-on (deferred):**
 
 ```bash
-science-tool dataset verify <slug>                     # external verification automation
-science-tool dataset stage <slug>                      # materialize runtime datapackage from external entity
-science-tool dataset migrate <slug>                    # legacy flat-access → structured
+science dataset verify <slug>                     # external verification automation
+science dataset stage <slug>                      # materialize runtime datapackage from external entity
+science dataset migrate <slug>                    # legacy flat-access → structured
 ```
 
 ## Health Check Additions
 
-`science-tool health` grows twelve anomaly classes (rev 1's five plus seven new):
+`science health` grows twelve anomaly classes (rev 1's five plus seven new):
 
 | Anomaly | Severity | Trigger |
 |---|---|---|
@@ -659,7 +659,7 @@ science-tool dataset migrate <slug>                    # legacy flat-access → 
 | `dataset_origin_block_mismatch` | error | invariant #7 or #8 violated (e.g., `access:` on derived; `derivation:` on external; `accessions:` on derived) |
 | `dataset_verified_but_unstageable` | warning | external entity has `access.verified: true` (or non-empty exception) but neither `datapackage:` nor `local_path:` is populated, OR the file each points at doesn't exist on disk. Plannable but not executable; `review-pipeline` Dim 3 escalates to FAIL |
 | `dataset_research_package_asymmetric` | error | invariant #11 violated: `research-package.displays` lists a dataset whose `consumed_by` doesn't include this research-package, OR a dataset's `consumed_by` lists a research-package whose `displays:` doesn't include the dataset |
-| `data_package_unmigrated` | error | a `data-package` entity exists in `doc/data-packages/` without `status: superseded`. Strict mode: graph build fails until `science-tool data-package migrate <slug>` is run |
+| `data_package_unmigrated` | error | a `data-package` entity exists in `doc/data-packages/` without `status: superseded`. Strict mode: graph build fails until `science data-package migrate <slug>` is run |
 
 ## Template Updates
 
@@ -683,19 +683,19 @@ entity_discovery:
 Two postures, depending on which migration path:
 
 - **Path 1 (legacy `dataset.md` → unified `dataset`):** Opt-in, additive, lazy. Existing files continue to parse via back-compat read rules. Migration is per-entity, triggered when a plan next touches the entity.
-- **Path 2 (legacy `data-package` → split into derived `dataset` + `research-package`):** **Strict, eager.** The graph builder fails on any unmigrated `data-package` entity. v1 ships `science-tool data-package migrate <slug>` to make this enforceable rather than blocking. Projects with existing data-packages MUST migrate them as a one-time pre-flight before the graph build will succeed under v1. The trade-off — upfront effort for sharply reduced code complexity — was an explicit design decision; few projects are affected.
+- **Path 2 (legacy `data-package` → split into derived `dataset` + `research-package`):** **Strict, eager.** The graph builder fails on any unmigrated `data-package` entity. v1 ships `science data-package migrate <slug>` to make this enforceable rather than blocking. Projects with existing data-packages MUST migrate them as a one-time pre-flight before the graph build will succeed under v1. The trade-off — upfront effort for sharply reduced code complexity — was an explicit design decision; few projects are affected.
 
 ### Path 1 — Legacy `dataset.md` → unified `dataset` (rev 1 carry-forward)
 
 - Flat `access: public|controlled|mixed` parses as `access.level: <value>` with all other subfields defaulting (`verified: false`, etc.). Origin defaults to `external` when not specified.
 - `datasets: [...]` aliases to `accessions: [...]`.
-- `science-tool dataset migrate <slug>` (deferred) automates rewrite.
+- `science dataset migrate <slug>` (deferred) automates rewrite.
 
 Net: legacy externals continue to function; gate halts until verified or exception added.
 
 ### Path 2 — Existing `data-package` entity → split into derived `dataset` + `research-package`
 
-`science-tool data-package migrate <slug>` is shipped in v1:
+`science data-package migrate <slug>` is shipped in v1:
 
 1. Reads `doc/data-packages/<slug>.md` and the linked `datapackage.json`.
 2. Reads the source workflow's `outputs:` block. **If absent, fails fast** with the message: `workflow:<slug> has no outputs[] block; add one (see Path 3) before migrating data-package:<slug>`. No silent fallback — granularity intent matters.
@@ -708,7 +708,7 @@ Net: legacy externals continue to function; gate halts until verified or excepti
 
 Idempotent: re-running on an already-migrated source no-ops with a one-line summary.
 
-**Strict graph-build mode:** the graph builder fails on any `data-package` entity in `doc/data-packages/` without `status: superseded`. Error: `unmigrated data-package entity '<slug>'; run 'science-tool data-package migrate <slug>' to split into derived dataset(s) + research-package`. Names every offending slug. Projects with no `data-package` entries (most pre-2026-03-30 projects) see no change.
+**Strict graph-build mode:** the graph builder fails on any `data-package` entity in `doc/data-packages/` without `status: superseded`. Error: `unmigrated data-package entity '<slug>'; run 'science data-package migrate <slug>' to split into derived dataset(s) + research-package`. Names every offending slug. Projects with no `data-package` entries (most pre-2026-03-30 projects) see no change.
 
 ### Path 3 — Existing `workflow.md` → add `outputs:` block
 
@@ -717,7 +717,7 @@ Workflows currently have no `outputs:` declaration. Adding one is opt-in.
 - Workflows without `outputs:` continue to run; their runs don't auto-register derived datasets.
 - Plans that try to consume those runs' outputs halt at the gate until the workflow gains `outputs:` AND its terminal `register_dataset_entities` rule runs.
 
-A `science-tool workflow add-outputs <slug>` helper (deferred) walks an existing workflow's most recent `datapackage.json` and offers an interactive grouping into logical outputs.
+A `science workflow add-outputs <slug>` helper (deferred) walks an existing workflow's most recent `datapackage.json` and offers an interactive grouping into logical outputs.
 
 ### Path 4 — Existing `workflow-run.md` → gains `produces:` and `inputs:`
 
@@ -728,9 +728,9 @@ Pure additive. Old workflow-run entities continue to parse with empty implicit l
 1. **Day 0** (this spec lands):
    - Projects with no `data-package` entities: no immediate action; legacy `dataset.md` entries continue to parse. Gate halts fire lazily when a new plan touches an unmigrated entity.
    - Projects with existing `data-package` entities: graph build fails until each is migrated. **One-time pre-flight required:**
-     a. `science-tool data-package list` (read-only) — enumerates unmigrated entries.
+     a. `science data-package list` (read-only) — enumerates unmigrated entries.
      b. For each source workflow: ensure `templates/workflow.md` has an `outputs:` block (Path 3). Adding the block is opt-in but a prerequisite for `data-package migrate`.
-     c. `science-tool data-package migrate <slug>` for each entry. Idempotent; safe to re-run.
+     c. `science data-package migrate <slug>` for each entry. Idempotent; safe to re-run.
 2. **As needed**: when a new plan touches a legacy external dataset, the gate halts → user migrates that one entity (verify or add exception).
 3. **As needed**: when a workflow gets a new `outputs:` block + the terminal `register_dataset_entities` rule, future runs auto-emit derived dataset entities.
 
@@ -740,7 +740,7 @@ Pure additive. Old workflow-run entities continue to parse with empty implicit l
 
 ### Unit tests
 
-`science-tool/tests/test_science_pkg_schema.py`:
+`science/tests/test_science_pkg_schema.py`:
 - Two profiles validated separately: `science-pkg-entity-1.0` and `science-pkg-runtime-1.0`.
 - All eleven invariants tested with synthetic frontmatter triggering each violation.
 - `origin: external` and `origin: derived` shapes parse; missing `origin:` defaults to `external`.
@@ -748,20 +748,20 @@ Pure additive. Old workflow-run entities continue to parse with empty implicit l
 - Entity profile rejects a top-level `resources:` field (single-source-of-truth invariant).
 - Runtime profile validates Frictionless `resources[]` and rejects entity-only blocks (`access:`, `derivation:`) at top level (advisory mirror is in a softer schema, not the runtime profile).
 
-`science-tool/tests/test_dataset_entity.py`:
+`science/tests/test_dataset_entity.py`:
 - Legacy flat `access: public` parses to `access.level: public, verified: false`.
 - Legacy `datasets:` aliases to `accessions:`.
 - New `derivation:` block parses with all fields.
 - Schema validation produces same errors at parse time as raw schema test.
 
-`science-tool/tests/test_health_dataset.py`:
+`science/tests/test_health_dataset.py`:
 - Each of the twelve anomaly classes fires for its trigger; doesn't fire when absent.
 - Transitive `dataset_derived_input_chain_broken` walks the chain and reports the breaking link by name.
 - `dataset_verified_but_unstageable` fires when external entity is verified but lacks both `datapackage:` and `local_path:` (or the referenced file is missing).
 - `dataset_research_package_asymmetric` fires in both directions of invariant #11 violation.
 - `data_package_unmigrated` fires for any non-superseded entity in `doc/data-packages/`.
 
-`science-tool/tests/test_dataset_cli.py`:
+`science/tests/test_dataset_cli.py`:
 - `dataset list --origin external|derived` filters correctly.
 - `dataset register-run <run>` emits N entities AND N per-output `datapackage.yaml` files matching the workflow's `outputs[].resource_names`; idempotent (re-run produces no diff). Symmetric edges written: `workflow-run.produces`, upstream `dataset.consumed_by`.
 - `dataset reconcile <slug>` exits non-zero ONLY on cached-field drift (`ontology_terms`, `license`, `update_cadence`); never reports per-resource drift (entity has no `resources[]`).
@@ -769,7 +769,7 @@ Pure additive. Old workflow-run entities continue to parse with empty implicit l
 - `data-package migrate <slug>` fails with a clear error when the source workflow has no `outputs:` block.
 - `data-package migrate <slug>` is idempotent; rerun no-ops with a one-line summary.
 
-`science-tool/tests/test_data_package_migration.py`:
+`science/tests/test_data_package_migration.py`:
 - `data-package migrate <slug>` produces N derived datasets + 1 research-package matching the workflow's `outputs:` declaration AND N per-output `datapackage.yaml` files.
 - Per-output datapackage's `resources[]` are exactly the resources whose `name` is in `output.resource_names`.
 - Symmetric edges written: each new dataset's `consumed_by` includes the research-package; research-package's `displays:` lists every new dataset (invariant #11).
@@ -778,34 +778,34 @@ Pure additive. Old workflow-run entities continue to parse with empty implicit l
 
 ### Integration tests
 
-`science-tool/tests/test_plan_pipeline_data_gate.py` (extends rev 1):
+`science/tests/test_plan_pipeline_data_gate.py` (extends rev 1):
 - Plan against verified external input: passes Step 2b, Step 4.5 appends backlink.
 - Plan against derived input pointing at registered run: passes.
 - Plan against derived input whose `derivation.workflow_run` doesn't exist: halts.
 - Plan against derived input with asymmetric `produces:` edge: halts with invariant violation.
 - Plan against derived input whose chain contains an unverified external: halts with broken-link path printed.
 
-`science-tool/tests/test_review_pipeline_dim3.py`:
+`science/tests/test_review_pipeline_dim3.py`:
 - Mixed-origin pipeline: PASS when each branch's gate is satisfied; FAILs surface per item.
 - WARN tier triggers (stale `last_reviewed`, missing backlink, cached-field drift).
 - Runtime stageability FAIL: a verified external dataset with neither `datapackage:` nor `local_path:` set, or with the referenced file missing on disk.
 - research-package symmetry FAIL: invariant #11 violation in either direction.
 
-`science-tool/tests/test_workflow_registration.py`:
+`science/tests/test_workflow_registration.py`:
 - End-to-end with toy workflow + `outputs:` declaration: terminal `register_dataset_entities` rule emits derived dataset entities AND per-output `datapackage.yaml` files; gate accepts a downstream plan reading from the per-output file; asymmetric edges and missing entities both detected.
 - Per-output datapackage's resource paths are relative to the per-output directory; consumer can read it without filesystem-relative path arithmetic.
 
-`science-tool/tests/test_research_package_split.py`:
+`science/tests/test_research_package_split.py`:
 - Round-trip a fixture data-package → migrate → verify research-package's `displays:` references valid derived datasets → verify rendering bundle (`cells.json`, figures, vega-lite specs) unchanged.
 - research-package entity at `research/packages/<lens>/<section>/research-package.md` is discovered by graph builder.
 
-`science-tool/tests/test_graph_build_paths.py`:
+`science/tests/test_graph_build_paths.py`:
 - Graph builder scans `doc/datasets/**/*.md` and `research/packages/**/research-package.md` per the discovery rule. (First entity type outside `doc/`.)
 - Graph builder fails with descriptive error on any unmigrated `data-package` entity.
 
 ### Test fixtures
 
-`science-tool/tests/fixtures/datasets/`:
+`science/tests/fixtures/datasets/`:
 - `external_verified_public.md`
 - `external_unverified_with_exception.md`
 - `external_legacy_flat_access.md` (back-compat)
@@ -822,7 +822,7 @@ Pure additive. Old workflow-run entities continue to parse with empty implicit l
 - **`commands/find-datasets.md`** — amended (one entity per artefact at distinct external access level; default `verified: false`).
 - **`commands/plan-pipeline.md`** — adds Step 2b and Step 4.5 (rev 1 carry-forward, extended for derived).
 - **`commands/review-pipeline.md`** — Dim 3 rewritten (rev 1 carry-forward, extended for derived).
-- **`commands/health.md`** / `science-tool health` — adds seven anomaly classes beyond rev 1.
+- **`commands/health.md`** / `science health` — adds seven anomaly classes beyond rev 1.
 - **2026-04-19 entity-aspects spec** — orthogonal. Dataset entities may eventually carry `aspects:`; v1 does not address.
 - **Spec Y (multi-backend entity resolver, sibling)** — this spec commits only to markdown-as-source for the entity surface. Spec Y will introduce the resolver and other backends. The science-pkg schema is the same regardless of backend; datasets are a candidate to promote to a datapackage-directory backend (where `data/<slug>/datapackage.yaml` IS the entity, no markdown sidecar needed) once Spec Y lands.
 
@@ -835,8 +835,8 @@ Pure additive. Old workflow-run entities continue to parse with empty implicit l
 - **research-package entity location.** Co-located with its rendered bundle at `research/packages/<lens>/<section>/research-package.md`. First entity type to live outside `doc/`. Deferring to a universal "all entities under `doc/`" rule was rejected as artificial.
 - **Per-entity-type discovery rule.** Graph builder reads a small config mapping entity type → glob pattern. Hardcoded for v1's two non-default paths; generalized in Spec Y.
 - **Granularity for derived data.** One entity per logical output of a workflow run, declared explicitly via the workflow's `outputs:` block. Per-resource auto-grouping is rejected — granularity intent matters.
-- **Workflow integration shape.** A terminal `register_dataset_entities` Snakemake rule per workflow invokes `science-tool dataset register-run`. Acceptable per-workflow overhead; matches existing project conventions for "package data" rules.
-- **Strict migration for the `data-package` rename, with migrator shipped in v1.** Graph builder fails on unmigrated entities; `science-tool data-package migrate <slug>` is shipped in v1 (not deferred) so the strict mode is actionable. Few projects affected; trades upfront effort for reduced code complexity. No silent shim.
+- **Workflow integration shape.** A terminal `register_dataset_entities` Snakemake rule per workflow invokes `science dataset register-run`. Acceptable per-workflow overhead; matches existing project conventions for "package data" rules.
+- **Strict migration for the `data-package` rename, with migrator shipped in v1.** Graph builder fails on unmigrated entities; `science data-package migrate <slug>` is shipped in v1 (not deferred) so the strict mode is actionable. Few projects affected; trades upfront effort for reduced code complexity. No silent shim.
 - **Single canonical surface for `resources[]`: runtime only.** The dataset entity does not carry `resources[]`. Per-resource information lives only in the runtime `datapackage.yaml` at `entity.datapackage`. Two surface-specific JSON Schema profiles enforce this — the entity profile rejects `resources[]`. Eliminates an entire drift channel; reduces `reconcile` to checking only the narrow set of legitimately-mirrored cached fields (`ontology_terms`, `license`, `update_cadence`).
 - **Per-output runtime datapackages alongside the run-aggregate.** `register-run` writes one `datapackage.yaml` per declared output (under `results/<wf>/<run>/<output-slug>/`) AND keeps the run-aggregate at `results/<wf>/<run>/datapackage.yaml`. Each derived dataset's `datapackage:` field points at its per-output file, so consumers don't have to filter resources by name. The aggregate remains for human inspection and debugging.
 - **Plan gate vs runtime stageability gate.** Step 2b (plan-pipeline) is a verification gate only — it permits exploratory planning against verified-but-not-yet-staged datasets. Dim 3 (review-pipeline) escalates an additional runtime stageability check to FAIL when an executable input lacks both `datapackage:` and `local_path:` (or the referenced file doesn't exist). Closes the "plannable but not executable" gap.
@@ -848,17 +848,17 @@ Pure additive. Old workflow-run entities continue to parse with empty implicit l
 
 ## Follow-on Work
 
-- **`science-tool dataset verify <slug>`.** Automates the external verification flip for public URLs (retrieve → SHA256 → flip `verified: true` with `verification_method: "retrieved"` → append log). Interactive prompt for controlled sources (records `credential-confirmed`).
-- **`science-tool dataset stage <slug>`.** Materializes the runtime `datapackage.yaml` from the entity for external sources at staging time.
-- **`science-tool dataset migrate <slug>`.** Rewrites legacy flat `access: <level>` and `datasets: [...]` fields into the structured schema.
-- **`science-tool workflow add-outputs <slug>`.** Interactive helper for adding the `outputs:` block to legacy workflows. Walks the workflow's most recent `datapackage.json` and offers an interactive grouping into logical outputs.
-- **`science-tool dataset reconcile --all`.** Project-wide drift scan; prints a table.
+- **`science dataset verify <slug>`.** Automates the external verification flip for public URLs (retrieve → SHA256 → flip `verified: true` with `verification_method: "retrieved"` → append log). Interactive prompt for controlled sources (records `credential-confirmed`).
+- **`science dataset stage <slug>`.** Materializes the runtime `datapackage.yaml` from the entity for external sources at staging time.
+- **`science dataset migrate <slug>`.** Rewrites legacy flat `access: <level>` and `datasets: [...]` fields into the structured schema.
+- **`science workflow add-outputs <slug>`.** Interactive helper for adding the `outputs:` block to legacy workflows. Walks the workflow's most recent `datapackage.json` and offers an interactive grouping into logical outputs.
+- **`science dataset reconcile --all`.** Project-wide drift scan; prints a table.
 - **`last_reviewed` expiry enforcement.** If stale-review warnings go unactioned, consider upgrading to errors with a configurable threshold.
 - **Shared cross-project dataset catalogue.** When multiple projects reference the same Li 2021 supplementary table, duplicating the entity is wasteful. A framework-level shared catalogue could let projects layer project-specific `consumed_by` onto a canonical entity. Non-trivial; defer.
 - **`science_resource` per-resource extension.** Column-level ontology, units, validation rules. Mentioned but not designed in v1.
 - **Graph-layer representation of `consumed_by` and `produces:`.** If a future query consumer wants to traverse `plan → dataset → workflow-run → upstream dataset` in the knowledge graph, these backlinks need graph edges (`sci:consumesDataset`, `sci:producesDataset`). Frontmatter-only is sufficient for v1.
-- **Datapackage drift reconciliation command.** When entity ↔ runtime drift, `science-tool dataset reconcile <slug> --apply` could rewrite the entity's cached fields from the runtime `datapackage.yaml`. Deferred until drift is observed.
-- **Dataset entity generation from datapackage.** For projects that receive a datapackage from an upstream collaborator, `science-tool dataset from-datapackage <path>` could emit a dataset entity stub. Natural fit but not required by v1.
-- **`science-tool dataset siblings regenerate <parent-slug>`.** Recomputes an umbrella entity's `siblings:` list from children's `parent_dataset`. Makes the cached view trivially re-derivable; addresses lineage drift.
+- **Datapackage drift reconciliation command.** When entity ↔ runtime drift, `science dataset reconcile <slug> --apply` could rewrite the entity's cached fields from the runtime `datapackage.yaml`. Deferred until drift is observed.
+- **Dataset entity generation from datapackage.** For projects that receive a datapackage from an upstream collaborator, `science dataset from-datapackage <path>` could emit a dataset entity stub. Natural fit but not required by v1.
+- **`science dataset siblings regenerate <parent-slug>`.** Recomputes an umbrella entity's `siblings:` list from children's `parent_dataset`. Makes the cached view trivially re-derivable; addresses lineage drift.
 - **Cross-plan consumption weights.** A richer `consumed_by` form recording which part of each plan consumes the dataset (single transformation, ancillary lookup, validation only), enabling impact queries. Not required by v1.
 - **Spec Y prerequisites.** When Spec Y lands, datasets become a candidate for promotion to a datapackage-directory backend (the `data/<slug>/datapackage.yaml` IS the entity; no markdown sidecar). The science-pkg schema is unchanged; only the storage location and reader change.

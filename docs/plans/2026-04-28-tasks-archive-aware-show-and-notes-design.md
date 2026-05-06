@@ -5,7 +5,7 @@
 
 ## Problem
 
-`science-tool tasks show <task-id>` only searches `tasks/active.md`. Once a task is completed or retired, it is moved to `tasks/done/YYYY-MM.md`, so `show` fails for canonical archived tasks with an error such as `Task t141 not found in active.md`.
+`science tasks show <task-id>` only searches `tasks/active.md`. Once a task is completed or retired, it is moved to `tasks/done/YYYY-MM.md`, so `show` fails for canonical archived tasks with an error such as `Task t141 not found in active.md`.
 
 Task descriptions also accumulate clarifications and decisions over time, but the CLI only supports replacing the description wholesale through `tasks edit --description`. That is useful for correction, but weak for project history because it does not encourage dated, append-only notes.
 
@@ -15,7 +15,7 @@ Task descriptions also accumulate clarifications and decisions over time, but th
 - Preserve the current task markdown format and archive layout.
 - Let `tasks show <id>` display active, done, and retired tasks.
 - Let safe task writes find the file that currently owns the task before updating it.
-- Add `science-tool tasks note <id> <text>` as the formal journal mechanism for dated clarifications, observations, and follow-up context.
+- Add `science tasks note <id> <text>` as the formal journal mechanism for dated clarifications, observations, and follow-up context.
 - Keep direct description editing available for deliberate replacement, not journal updates.
 
 ## Non-Goals
@@ -31,13 +31,13 @@ Task descriptions also accumulate clarifications and decisions over time, but th
 No package restructuring is required.
 
 ```text
-science-tool/src/science_tool/
+science/src/science_tool/
   tasks.py              # add location-aware task-file helpers and note append operation
   cli.py                # wire show/edit/note to location-aware operations
   tasks_archive.py      # unchanged archive planner/apply behavior
   tasks_display.py      # unchanged table rendering
 
-science-tool/tests/
+science/tests/
   test_tasks.py         # unit coverage for location-aware lookup/write and notes
   test_tasks_cli.py     # CLI coverage for show/edit/note against active and archived tasks
 ```
@@ -100,19 +100,19 @@ If duplicate task IDs exist across active/done files, active wins. If duplicates
 
 ## CLI Behavior
 
-`science-tool tasks show t141` prints the same `render_task` output regardless of whether `t141` lives in `tasks/active.md` or `tasks/done/2026-04.md`.
+`science tasks show t141` prints the same `render_task` output regardless of whether `t141` lives in `tasks/active.md` or `tasks/done/2026-04.md`.
 
-`science-tool tasks edit t141 --description "..."` rewrites the task in its current file. This is a direct replacement operation and should remain explicit.
+`science tasks edit t141 --description "..."` rewrites the task in its current file. This is a direct replacement operation and should remain explicit.
 
-`science-tool tasks edit t141 --status active` fails when `t141` is archived. This avoids reopening a task in `tasks/done/YYYY-MM.md`. Active-file status edits keep their existing behavior.
+`science tasks edit t141 --status active` fails when `t141` is archived. This avoids reopening a task in `tasks/done/YYYY-MM.md`. Active-file status edits keep their existing behavior.
 
-`science-tool tasks note t141 "Clarification..."` appends a dated note and prints:
+`science tasks note t141 "Clarification..."` appends a dated note and prints:
 
 ```text
 Added note to [t141] (2026-04-28)
 ```
 
-`science-tool tasks note t141 --date 2026-04-21 "Clarification..."` uses the supplied date.
+`science tasks note t141 --date 2026-04-21 "Clarification..."` uses the supplied date.
 
 Missing task errors should say the task was not found in `tasks/active.md` or `tasks/done/*.md`, and include the concrete archive filenames that were searched.
 
@@ -161,7 +161,7 @@ CLI tests:
 Focused verification:
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_tasks.py tests/test_tasks_cli.py -q
 uv run --frozen ruff check .
 uv run --frozen pyright

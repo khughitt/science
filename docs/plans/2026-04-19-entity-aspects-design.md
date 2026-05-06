@@ -20,7 +20,7 @@ Introduce an `aspects:` field on all primary entity types (tasks, questions, int
 
 - **One vocabulary, one resolution rule**. Entity-level and project-level aspects must use the same registry and resolve through one shared helper, not ad hoc command-specific logic.
 - **Inheritance is the default; explicit fields are only for exceptions**. Most entities should continue to inherit from `science.yaml`. Explicit entity `aspects:` exists to mark the minority case that differs from the project default.
-- **No silent fallback from invalid explicit data**. If an entity explicitly declares invalid aspects, aspect-aware commands fail with a clear error; `science-tool health` also surfaces the issue proactively.
+- **No silent fallback from invalid explicit data**. If an entity explicitly declares invalid aspects, aspect-aware commands fail with a clear error; `science health` also surfaces the issue proactively.
 - **Filtering and association are separate concerns**. Aspect filtering decides whether an entity participates in a synthesis view. Resolver/orphan logic continues to answer structural questions inside that filtered set.
 
 ## Scope
@@ -30,12 +30,12 @@ Introduce an `aspects:` field on all primary entity types (tasks, questions, int
 - Add `aspects:` to entity schemas and templates for: tasks, questions, interpretations, hypotheses.
 - Vocabulary: identical to project-level aspects (the set defined in `science.yaml`'s `aspects:`).
 - Inheritance semantics: entity's resolved aspects = `entity.aspects` if set, else `project.aspects`.
-- Introduce a shared aspect utility in `science-tool` / `science-model` for validation, resolution, and filtering predicates. Commands consume that utility rather than reimplementing aspect logic.
+- Introduce a shared aspect utility in `science` / `science-model` for validation, resolution, and filtering predicates. Commands consume that utility rather than reimplementing aspect logic.
 - Migration: one-shot mandatory migration for tasks carrying legacy `type: research | dev`. Non-task entities inherit by default; no bulk-rewrite required.
-- `science-tool aspects migrate` CLI that performs task migration with dry-run-by-default semantics.
+- `science aspects migrate` CLI that performs task migration with dry-run-by-default semantics.
 - `/science:big-picture` bundle assembly and resolver consume entity aspects; research synthesis excludes entities whose resolved aspects are `[software-development]` only.
-- `science-tool tasks add` drops `--type`, adds `--aspects`.
-- `science-tool health` flags tasks still carrying the legacy `type:` field as "migration pending".
+- `science tasks add` drops `--type`, adds `--aspects`.
+- `science health` flags tasks still carrying the legacy `type:` field as "migration pending".
 
 ### Out of scope (v1)
 
@@ -74,7 +74,7 @@ Same as `science.yaml`'s `aspects:` vocabulary, validated against the same regis
 - `computational-analysis`
 - `software-development`
 
-Entity aspects are validated against `project.aspects`: an entity may not declare an aspect the project hasn't enabled. This prevents typos and aspect drift. `science-tool health` reports violations.
+Entity aspects are validated against `project.aspects`: an entity may not declare an aspect the project hasn't enabled. This prevents typos and aspect drift. `science health` reports violations.
 
 Additional normalization rules:
 
@@ -102,7 +102,7 @@ Validation must be deterministic:
 
 - **Tool-authored writes** (`tasks add`, `aspects migrate`, future create/edit commands): hard error if an explicit aspect is not in `project.aspects`, if the list is empty, or if duplicates are present.
 - **File parsing for aspect-aware commands** (`big-picture`, `tasks list --aspect`, future aspect-aware surfaces): hard error on invalid explicit aspect metadata. Failing early is preferable to silently producing a misleading synthesis.
-- **`science-tool health`**: reports the same invalidities as structured findings so users can detect and fix them before hitting a command failure.
+- **`science health`**: reports the same invalidities as structured findings so users can detect and fix them before hitting a command failure.
 
 This resolves the ambiguity between warning-vs-error: health is the early warning surface; commands that depend on aspect semantics do not continue past invalid explicit data.
 
@@ -126,16 +126,16 @@ For `/science:big-picture` specifically:
 
 Project-level precondition:
 
-- If `project.aspects \ {software-development}` is empty, research synthesis is undefined for that project. `science-tool big-picture` should fail fast with a message explaining that v1 only supports research synthesis for projects with at least one non-software aspect. This is clearer than producing an empty or misleading report.
+- If `project.aspects \ {software-development}` is empty, research synthesis is undefined for that project. `science big-picture` should fail fast with a message explaining that v1 only supports research synthesis for projects with at least one non-software aspect. This is clearer than producing an empty or misleading report.
 
-For `science-tool tasks list`:
+For `science tasks list`:
 
 - New `--aspect <name>` flag (repeatable): include only tasks whose resolved aspects intersect the given set.
 - Default behavior (no `--aspect`): include all tasks (no filtering). Preserves current UX for listing.
 
-For `science-tool health`:
+For `science health`:
 
-- New check: flag tasks whose markdown entry still carries the legacy `type:` field (research or dev). Category: `legacy_task_type_field`. Severity: warning. Remediation hint: "Run `science-tool aspects migrate` to convert."
+- New check: flag tasks whose markdown entry still carries the legacy `type:` field (research or dev). Category: `legacy_task_type_field`. Severity: warning. Remediation hint: "Run `science aspects migrate` to convert."
 - New check: flag explicit entity `aspects:` values that are empty, contain duplicates, or are not a subset of `project.aspects`. Category: `invalid_entity_aspects`. Severity: error. Remediation hint names the file/entity and the invalid values.
 - Existing checks unaffected.
 
@@ -143,10 +143,10 @@ For `science-tool health`:
 
 ### Task migration (mandatory, one-shot)
 
-Implemented as `science-tool aspects migrate`:
+Implemented as `science aspects migrate`:
 
 ```
-science-tool aspects migrate [--apply] [--project-root <path>]
+science aspects migrate [--apply] [--project-root <path>]
 ```
 
 Behavior:
@@ -176,8 +176,8 @@ No bulk rewrite. Inheritance handles the common case automatically. Users introd
 During the window between `/science:big-picture` gaining aspect-awareness and a project running migration:
 
 - Tasks still carrying `type: dev` will incorrectly inherit research aspects and appear in research synthesis.
-- `science-tool health` flags the unmigrated state (see Filter Semantics above).
-- Users run `science-tool aspects migrate --apply` once; project is correct thereafter.
+- `science health` flags the unmigrated state (see Filter Semantics above).
+- Users run `science aspects migrate --apply` once; project is correct thereafter.
 
 The spec does **not** auto-run migration on first big-picture invocation. That would be too surprising given the destructive nature of rewriting task files. Migration is always user-initiated.
 
@@ -214,29 +214,29 @@ Tasks are not individual markdown files; they are `## [tNNN]`-headed entries ins
 - created: 2026-04-08
 ```
 
-No `templates/task.md` file exists or is introduced by this spec; task creation happens through `science-tool tasks add`, which writes the inline form. That CLI is updated as described below.
+No `templates/task.md` file exists or is introduced by this spec; task creation happens through `science tasks add`, which writes the inline form. That CLI is updated as described below.
 
 Post-migration, new tasks either declare explicit `- aspects: [...]` (when user passes `--aspects`) or omit the line (inheriting from project aspects). The old `- type: research | dev` line no longer appears.
 
 ## CLI Updates
 
-### `science-tool tasks add`
+### `science tasks add`
 
 - Remove `--type` flag.
 - Add `--aspects <name>` (repeatable). Validated against `project.aspects`.
 - Repeated flags are deduplicated and stored in canonical vocabulary order.
 - If the user supplies neither, the task is stored without an `aspects:` field (inherits from project). No interactive prompt required; the default is correct for the most common case (research tasks in a research-focused project).
 
-### `science-tool tasks list`
+### `science tasks list`
 
 - Add `--aspect <name>` (repeatable) filter as described in Filter Semantics.
 
-### `science-tool aspects migrate`
+### `science aspects migrate`
 
 - New subcommand, described in Migration above.
 - Lives in a new `science_tool.aspects` module alongside the other migration helpers (`science_tool.graph.migrate`, etc.).
 
-### `science-tool big-picture resolve-questions`
+### `science big-picture resolve-questions`
 
 - Output schema gains a `resolved_aspects` field per question:
 
@@ -267,26 +267,26 @@ Orphan-question counting:
 
 Phase 4 validator integration:
 
-- `science-tool big-picture validate` continues to work unchanged; its existing checks are aspect-agnostic.
+- `science big-picture validate` continues to work unchanged; its existing checks are aspect-agnostic.
 
 ## Testing
 
 ### Unit tests (Python)
 
-In `science-tool/tests/test_aspects_migration.py`:
+In `science/tests/test_aspects_migration.py`:
 
 - Migration correctly rewrites a sample `tasks/active.md` containing `type: research` and `type: dev` entries.
 - Dry-run emits a diff without mutating the file.
 - Idempotency: running migration twice yields no second-round changes.
 - Project with only `software-development` in its aspects: research-task migration falls back to the full project aspects.
 
-In `science-tool/tests/test_big_picture_resolver.py` (extended):
+In `science/tests/test_big_picture_resolver.py` (extended):
 
 - A question with explicit `aspects: [software-development]` still resolves structurally as usual, and its `resolved_aspects` field is `[software-development]`.
 - A question with no `aspects:` field in a research project inherits and is included.
 - Invalid explicit `aspects:` values (`[]`, duplicates, or values outside `project.aspects`) raise a clear resolver/load error.
 
-In `science-tool/tests/test_big_picture_validator.py` (extended):
+In `science/tests/test_big_picture_validator.py` (extended):
 
 - Orphan-count calculation excludes software-only questions.
 
@@ -307,12 +307,12 @@ Extend the existing minimal_project fixture at `tests/fixtures/big_picture/minim
 
 ## Resolved Decisions
 
-- **Validation strictness**: explicit invalid entity `aspects:` is a hard error for aspect-aware commands and a proactive error finding in `science-tool health`.
+- **Validation strictness**: explicit invalid entity `aspects:` is a hard error for aspect-aware commands and a proactive error finding in `science health`.
 - **Software-profile projects**: v1 does not silently repurpose `/science:big-picture` for software-only projects. If the project has no non-software aspect, research synthesis fails fast and directs the user toward future software-synthesis support.
 - **Aspects on discussions, topics, papers**: omitted from v1. Expand only after observing concrete synthesis pollution from those entity classes.
 
 ## Follow-on Work
 
 - **Propagate aspect filtering to `/science:status` and `/science:health`** if and when software-focused entities start cluttering those outputs. Not required by the current pain.
-- **`science-tool aspects audit`** — reverse of migration: surface entities whose explicit `aspects:` don't align with their content (e.g., a hypothesis file tagged `[software-development]`, which is almost certainly a mistake). Heuristic-based; deferred until patterns emerge.
+- **`science aspects audit`** — reverse of migration: surface entities whose explicit `aspects:` don't align with their content (e.g., a hypothesis file tagged `[software-development]`, which is almost certainly a mistake). Heuristic-based; deferred until patterns emerge.
 - **Big-picture `--aspects <name>` flag** — explicit user control over filter mode (research vs software vs custom subset). v1 defaults to "research synthesis" (everything except `software-development`); flag support can land alongside software-mode big-picture.

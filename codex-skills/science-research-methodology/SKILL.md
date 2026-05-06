@@ -147,8 +147,8 @@ In those cases:
 
 When `knowledge/graph.trig` exists, use the store summaries to guide effort:
 
-- `science-tool graph dashboard-summary --format json`
-- `science-tool graph neighborhood-summary --format json`
+- `science graph dashboard-summary --format json`
+- `science graph neighborhood-summary --format json`
 
 Use them to identify:
 

@@ -16,7 +16,7 @@
   - **Gap 4:** add `members:` claim subfield for grouping similar atomic sub-claims (relevant to `bimodal` rule with many homogeneous atoms)
   - **Gap 5:** strengthen claim-id registry from "advisory" to **required-but-permissive** (must exist; if it does, IDs must resolve; bootstrap helper command)
   - **Gap 6:** add a non-binding `strength:` calibration table to reduce per-author drift
-- **v1.2 (2026-04-21):** MVP implementation lands in `science-tool` (plan: `docs/plans/2026-04-21-verdict-parse-rollup-mvp.md`). Four touch-ups from dogfooding + implementation experience:
+- **v1.2 (2026-04-21):** MVP implementation lands in `science` (plan: `docs/plans/2026-04-21-verdict-parse-rollup-mvp.md`). Four touch-ups from dogfooding + implementation experience:
   - Reference the **mm30 `specs/claim-registry.yaml`** (37 canonical claims across 4 anchor types: hypothesis, DAG-edge, task, article) as the first concrete registry implementation.
   - Mark the confidence column in backfill audit TSVs as **advisory-only**, per mm30 t246 finding: overall inter-LLM agreement on backfill labels is 97.2%, but per-tier calibration is uninformative at realistic sample sizes; the per-claim `strength` field (v1.1) carries the same semantic at the right resolution.
   - Bump acceptance criterion 6 from "6 reference docs" to "9" (mm30 added t099, t240, t258 under the new schema on 2026-04-21).
@@ -49,7 +49,7 @@ queryable.
 The user is already maintaining this data project-locally in mm30 (where
 the 207-doc backfill happened) and ~/d/natural-systems (63 backfilled
 docs with similar [~]-decomposition pressure on H03/H04 mixed-finding
-docs). Lifting the schema into science-tool unlocks rollups for both
+docs). Lifting the schema into science unlocks rollups for both
 projects + every future Science project that adopts the
 `interpretation.md` template.
 
@@ -188,7 +188,7 @@ rule-derived composite. When they disagree:
 - The body composite is **authoritative** (the human-curated verdict line
   is the canonical state).
 - The rule label flags the disagreement via a `rule_disagrees_with_body`
-  field on `science-tool verdict parse` output.
+  field on `science verdict parse` output.
 - The disagreement is informational, not blocking — projects may
   intentionally use a `majority` rule with a body composite of `[~]` when
   one minority claim is load-bearing, AND the disagreement signals to
@@ -222,18 +222,18 @@ aggregate.
 - Synonyms are aliases, not precedence rules: duplicate synonyms and
   synonym/canonical-ID collisions are invalid registry entries because
   they make claim-scope rollups ambiguous.
-- The registry MUST exist for `science-tool verdict rollup --by-claim`
+- The registry MUST exist for `science verdict rollup --by-claim`
   to run. Without it, the subcommand fails loudly with a pointer to
-  `science-tool verdict registry-init`. Future claim-scoped conflict
+  `science verdict registry-init`. Future claim-scoped conflict
   tooling should use the same registry gate.
 - For projects that haven't bootstrapped a registry, basket-level
-  rollup (`science-tool verdict rollup` without `--by-claim`) still
+  rollup (`science verdict rollup` without `--by-claim`) still
   works — it doesn't depend on canonical claim IDs.
 
 **Bootstrap helper:**
 
 ```
-science-tool verdict registry-init --scan doc/interpretations/
+science verdict registry-init --scan doc/interpretations/
     Walks all interpretations with `verdict.claims:` blocks, collects
     all distinct claim IDs, and writes a stub registry.yaml with
     "definition: TBD" placeholders. Project owner curates the
@@ -261,11 +261,11 @@ types, id_pattern regex) as a starting template.
 
 **Tooling contract:**
 
-- `science-tool verdict parse <file>` warns (not errors) on first
+- `science verdict parse <file>` warns (not errors) on first
   unresolved claim ID per file when a registry is available. Allows
   authors to introduce new IDs during writing and curate the registry
   after.
-- `science-tool verdict rollup --by-claim` errors if registry is
+- `science verdict rollup --by-claim` errors if registry is
   missing; succeeds if registry exists and all referenced IDs
   resolve; warns and proceeds with opaque-string fallback if
   individual IDs don't resolve (so a partial registry is still useful).
@@ -283,31 +283,31 @@ Naming is *advisory* — the registry validates that the chosen ID is
 unique and resolves to one source artifact. Project owners pick
 conventions that fit their domain.
 
-## Parser (science-tool surface)
+## Parser (science surface)
 
 ### Implemented MVP surface
 
 ```
-science-tool verdict parse <interpretation-file>
+science verdict parse <interpretation-file>
     Parses the `## Verdict` block + frontmatter `verdict:` block.
     Validates the composite token matches the rule-derived composite.
     Output: structured JSON with composite + per-claim rows.
 
-science-tool verdict parse <interpretation-file> --registry <claim-registry.yaml>
+science verdict parse <interpretation-file> --registry <claim-registry.yaml>
     Resolves claim IDs through the registry and emits unresolved-ID
     warnings without failing the parse.
 
-science-tool verdict rollup --scope all
+science verdict rollup --scope all
     Aggregates all verdict-bearing interpretations into one verdict
     distribution.
 
-science-tool verdict rollup --scope claim
-science-tool verdict rollup --by-claim
+science verdict rollup --scope claim
+science verdict rollup --by-claim
     Aggregates verdict evidence by canonical claim ID. Requires a
     claim registry.
 
-science-tool verdict rollup --scope claim --strict
-science-tool verdict rollup --by-claim --strict
+science verdict rollup --scope claim --strict
+science verdict rollup --by-claim --strict
     Treats unresolved claim IDs as errors; mm30 exits 0 under the
     curated 37-claim registry.
 ```
@@ -315,29 +315,29 @@ science-tool verdict rollup --by-claim --strict
 ### Deferred/planned surface
 
 ```
-science-tool verdict rollup --scope hypothesis
-science-tool verdict rollup --scope question
-science-tool verdict rollup --scope edge
+science verdict rollup --scope hypothesis
+science verdict rollup --scope question
+science verdict rollup --scope edge
     Requires a cross-doc citation graph that maps interpretations to
     hypotheses, questions, and DAG edges.
 
-science-tool verdict conflicts
+science verdict conflicts
     Finds questions or hypotheses with verdicts of opposite polarity
     across their cited evidence. Surfaces research friction.
 
-science-tool verdict coverage
+science verdict coverage
     Per-hypothesis polarity distribution. Flags hypotheses with 100%
     one polarity after N≥5 evidence docs (confirmation-bias check).
 
-science-tool verdict watchlist
+science verdict watchlist
     Lists [-] verdicts that are the only refutation in their question's
     evidence basket -- vulnerable to flipping with one new study.
 
-science-tool verdict registry-init --scan doc/interpretations/
+science verdict registry-init --scan doc/interpretations/
     Bootstraps a stub `specs/claim-registry.yaml` from existing
     `verdict.claims:` blocks for owner curation.
 
-science-tool verdict reframed-trail <interpretation-id>
+science verdict reframed-trail <interpretation-id>
     Resolves `reframing_target:` chains across revised measurements.
 
 members: aggregation/resolution
@@ -345,7 +345,7 @@ members: aggregation/resolution
     IDs and aggregates per-member polarity when those members are
     themselves registered claims.
 
-science-tool verdict backfill --project <path>
+science verdict backfill --project <path>
     Same logic as the 2026-04-19 cross-project backfill: reads
     interpretation docs without `## Verdict` blocks, dispatches an LLM
     classifier with the rubric, writes audit TSV, leaves edits as a
@@ -399,7 +399,7 @@ overlapping their scope:
 2. Adopt `[⌀]` as a fifth token; revise the global template; backfill
    ~5 mm30 docs that currently use `[~]` for non-adjudicating terminals
    (t204 closure, t202 audit, etc.).
-3. Implement `science-tool verdict parse` and MVP `rollup` scopes
+3. Implement `science verdict parse` and MVP `rollup` scopes
    (`all`, `claim`, plus `--by-claim` and `--strict`).
 4. Implement deferred graph-aware verdict commands: hypothesis,
    question, and edge rollups; conflicts; coverage; watchlist.
@@ -439,7 +439,7 @@ mm30 + natural-systems interpretations:
 
 ## Implementation contract for the parser
 
-`science-tool verdict parse <file>` returns a JSON object of shape:
+`science verdict parse <file>` returns a JSON object of shape:
 
 ```json
 {
@@ -512,7 +512,7 @@ hand-written verdict prose and the structured frontmatter.
 - Continuous polarity scoring — explicitly rejected during the
   originating mm30 discussion; not revisited in any future spec
   unless new motivation surfaces.
-- UI / dashboard rendering — the science-tool parser produces
+- UI / dashboard rendering — the science parser produces
   structured JSON; rendering choices (HTML dashboard, SVG DAG
   overlays, terminal tables) are renderer-specific and belong in
   whichever interface skill consumes the data.
@@ -542,13 +542,13 @@ These were considered and rejected during the originating discussion:
 
 - [x] `[⌀]` token added to the global template with example. *(done 2026-04-19, science commit 765c3d2)*
 - [x] `verdict:` frontmatter schema documented in template. *(done 2026-04-19)*
-- [x] `science-tool verdict parse` validates a sample interpretation
+- [x] `science verdict parse` validates a sample interpretation
   end-to-end. *(done 2026-04-21 via MVP plan)*
-- [x] `science-tool verdict rollup` produces MVP verdict distribution
+- [x] `science verdict rollup` produces MVP verdict distribution
   tables for `--scope all` and registry-backed `--scope claim` /
   `--by-claim` on mm30. *(done 2026-04-21 via MVP plan; hypothesis /
   question / edge scopes remain deferred)*
-- [ ] `science-tool verdict conflicts` runs cleanly on mm30 (the project
+- [ ] `science verdict conflicts` runs cleanly on mm30 (the project
   with the most cross-doc adjudication, hence the most likely to
   surface real conflicts). *(hand-emulated on mm30 2026-04-19 per `discussion:2026-04-19-verdict-conflict-coverage-scan` — surfaced 3 actionable findings + 2 spec feedback items)*
 - [ ] `science:big-picture` consumes the rollup output (replaces or
@@ -559,10 +559,10 @@ These were considered and rejected during the originating discussion:
 
 **v1.1 additions:**
 
-- [x] `science-tool verdict parse` correctly emits `rule_disagrees_with_body: true` on the t163 reference doc (the one validation case from the dogfood). *(done 2026-04-21)*
-- [ ] `science-tool verdict registry-init --scan doc/interpretations/` bootstraps a stub `specs/claim-registry.yaml` from existing `verdict.claims:` blocks. Validate on mm30 (currently 9 docs with `verdict:` blocks).
-- [x] `science-tool verdict rollup --by-claim` runs cleanly on mm30 once the claim registry is curated; produces per-claim aggregated polarity rows. *(done 2026-04-21; `--by-claim` and `--scope claim` produce byte-identical JSON in the dogfood receipt)*
-- [ ] `science-tool verdict reframed-trail <interpretation-id>` resolves the chain of `reframing_target:` links (validate on mm30 CLR doc → t149).
+- [x] `science verdict parse` correctly emits `rule_disagrees_with_body: true` on the t163 reference doc (the one validation case from the dogfood). *(done 2026-04-21)*
+- [ ] `science verdict registry-init --scan doc/interpretations/` bootstraps a stub `specs/claim-registry.yaml` from existing `verdict.claims:` blocks. Validate on mm30 (currently 9 docs with `verdict:` blocks).
+- [x] `science verdict rollup --by-claim` runs cleanly on mm30 once the claim registry is curated; produces per-claim aggregated polarity rows. *(done 2026-04-21; `--by-claim` and `--scope claim` produce byte-identical JSON in the dogfood receipt)*
+- [ ] `science verdict reframed-trail <interpretation-id>` resolves the chain of `reframing_target:` links (validate on mm30 CLR doc → t149).
 - [x] `closure_terminal:` field is parsed (free-form string; no enum) and surfaced in `verdict parse` output. *(done 2026-04-21; covered by parser/model tests and non-adjudicating fixture)*
 - [x] `weighted-majority` rule's mechanical aggregation matches expectation when per-claim `weight:` values vary. *(done 2026-04-21; covered by rule and parser tests, including adjudicating-weight edge cases)*
 - [ ] `members:` claim subfield resolves to the listed member-claim IDs and aggregates their per-member polarity (when those members are themselves registered claims).

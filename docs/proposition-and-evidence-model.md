@@ -149,8 +149,8 @@ Treat it as an audit/validator surface first, not as a primary authoring workflo
 Run:
 
 ```bash
-uv run science-tool graph migrate --project-root <root> --format json
-uv run science-tool health --project-root <root> --format json
+uv run science graph migrate --project-root <root> --format json
+uv run science health --project-root <root> --format json
 ```
 
 `graph migrate` is dry-run by default. It previews alias rewrites and layered-claim migration
@@ -273,7 +273,7 @@ stored as `sci:freshnessState` in the materialized graph.
 and usable in synthesis — the flag only affects what `science:status` and
 `science:next-steps` surface for human attention.
 
-The flag is set and cleared via `science-tool entity review <id>` (records last-reviewed)
-and surfaced via `science-tool entity needs-review` (read-only listing). See
+The flag is set and cleared via `science entity review <id>` (records last-reviewed)
+and surfaced via `science entity needs-review` (read-only listing). See
 `docs/claim-and-evidence-model.md` for the full mechanism description and
 `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` for the design.

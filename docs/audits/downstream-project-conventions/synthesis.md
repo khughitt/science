@@ -270,7 +270,7 @@ See §3.5 for evidence. Recommendation: define a Frictionless extension profile 
 
 ### 7.2 Output-anchored sha256 descriptor sidecars — P1
 
-protein-landscape's `descriptors/<artifact>.parquet.descriptor.json` carrying `inputs[{path, sha256}]`, `outputs[{path, sha256, row_count}]`, `git_commit`, `command`, `parameters`, `notes` is the right shape for "datapackage-lite, output-anchored, sha256-sealed." cbioportal's `t128` task is the gap-acknowledgment in another project. **Recommendation:** ship as a documented optional pattern, maybe with a `science-tool data descriptor` emitter command. Add `task:<id>` and `question:<id>` fields so descriptors close the code↔entity loop (currently they only carry `git_commit`).
+protein-landscape's `descriptors/<artifact>.parquet.descriptor.json` carrying `inputs[{path, sha256}]`, `outputs[{path, sha256, row_count}]`, `git_commit`, `command`, `parameters`, `notes` is the right shape for "datapackage-lite, output-anchored, sha256-sealed." cbioportal's `t128` task is the gap-acknowledgment in another project. **Recommendation:** ship as a documented optional pattern, maybe with a `science data descriptor` emitter command. Add `task:<id>` and `question:<id>` fields so descriptors close the code↔entity loop (currently they only carry `git_commit`).
 
 ### 7.3 Dataset `access:` structured block — P2
 
@@ -294,7 +294,7 @@ Three of four projects can reproduce their public data through a documented pipe
 
 ### 8.1 Auto-archive done tasks — P1
 
-3/4 projects accumulate done entries in `tasks/active.md` (49% / 30% / 44%). cbioportal is clean; the difference is that cbioportal moves entries on done. **Recommendation:** add `science-tool tasks archive` (and surface in `science-tool health`) that moves `status: done|retired` entries from `tasks/active.md` to `tasks/done/YYYY-MM.md` with the entry's `completed:` date as the bucket.
+3/4 projects accumulate done entries in `tasks/active.md` (49% / 30% / 44%). cbioportal is clean; the difference is that cbioportal moves entries on done. **Recommendation:** add `science tasks archive` (and surface in `science health`) that moves `status: done|retired` entries from `tasks/active.md` to `tasks/done/YYYY-MM.md` with the entry's `completed:` date as the bucket.
 
 ### 8.2 Code/notebook → task back-link — P1
 
@@ -339,7 +339,7 @@ The audit is a clean validation of the in-flight `docs/plans/2026-04-25-managed-
 | Project | `validate.sh` status vs `meta/validate.sh` | MAV-relevant? |
 | --- | --- | --- |
 | natural-systems | 80 lines / ~14 content blocks drift (env sourcing, `LOCAL_PROFILE` value, ontologies→curated, error gating) | yes — generic |
-| mm30 | 84 lines drift (env early loading, science-tool exit-on-missing, stricter graph-audit error handling) | yes — generic |
+| mm30 | 84 lines drift (env early loading, science exit-on-missing, stricter graph-audit error handling) | yes — generic |
 | protein-landscape | several substantive logic changes (+ section 17 expensive-pipeline-artifacts; project-specific) | yes (generic parts) + no (section 17 stays local) |
 | cbioportal | byte-identical to `meta/validate.sh` | clean reference |
 
@@ -347,7 +347,7 @@ The audit is a clean validation of the in-flight `docs/plans/2026-04-25-managed-
 
 - **Parameterize `LOCAL_PROFILE`** — read from `science.yaml.knowledge_profiles.local` rather than hard-coding `"local"`. natural-systems uses `"project_specific"`; this single change closes the largest single piece of drift in that project.
 - **Decide on `.env` sourcing** — natural-systems and mm30 add it for `SCIENCE_TOOL_PATH`; protein-landscape removes it. Project-level toggle (or sanction `.env` sourcing canonically and let projects opt out via env-var).
-- **JSON-payload extractor** — protein-landscape adds `extract_json_payload()` Python helper because `science-tool` emits non-JSON noise on stdout/stderr. **Better fix:** `science-tool` emits clean JSON. Track as a `science-tool` bug, not a `validate.sh` change.
+- **JSON-payload extractor** — protein-landscape adds `extract_json_payload()` Python helper because `science` emits non-JSON noise on stdout/stderr. **Better fix:** `science` emits clean JSON. Track as a `science` bug, not a `validate.sh` change.
 - **Replace `ontologies` list-shape check with `knowledge_profiles.curated` check** — natural-systems' diff suggests the canonical check has shifted; confirm the right axis.
 - **Promote graph-audit unparseable to error** — both natural-systems and mm30 do this locally (mm30 with stricter error-gating around `graph.trig` presence). Probably the right canonical default.
 - **Sanction `docs/superpowers/`** in the duplicate-doc-root warning — protein-landscape patches this locally; 3/4 projects have the subtree.
@@ -372,13 +372,13 @@ natural-systems' 26-of-31 `id: doc:DATE-slug` instead of `id: report:DATE-slug` 
 
 ## 10. Tooling Recommendations
 
-### 10.1 `science-tool` candidates
+### 10.1 `science` candidates
 
-- **`science-tool tasks archive`** — moves done/retired tasks from `active.md` to `done/YYYY-MM.md`. Surface in `science-tool health` when the active backlog is dirty. P1.
-- **`science-tool data descriptor`** — emits a sha256-sealed parquet/csv descriptor sidecar (the §7.2 shape) for a given output path. P2.
-- **`science-tool project profile`** — show / set the multi-axis profile (once §2 lands). P2.
-- **`science-tool entity register`** — register a project-local entity kind in `knowledge/sources/local/manifest.yaml` (the §6.3 shape). P2.
-- **`science-tool refs lint`** — surface unresolved `concept:` / `finding:` / `task:` references against the local profile. natural-systems already has a hand-rolled version of this in `doc/meta/entity-health/`. P2.
+- **`science tasks archive`** — moves done/retired tasks from `active.md` to `done/YYYY-MM.md`. Surface in `science health` when the active backlog is dirty. P1.
+- **`science data descriptor`** — emits a sha256-sealed parquet/csv descriptor sidecar (the §7.2 shape) for a given output path. P2.
+- **`science project profile`** — show / set the multi-axis profile (once §2 lands). P2.
+- **`science entity register`** — register a project-local entity kind in `knowledge/sources/local/manifest.yaml` (the §6.3 shape). P2.
+- **`science refs lint`** — surface unresolved `concept:` / `finding:` / `task:` references against the local profile. natural-systems already has a hand-rolled version of this in `doc/meta/entity-health/`. P2.
 
 ### 10.2 Phase-1 inventory bugs `[v1-tooling]`
 
@@ -389,7 +389,7 @@ The Phase 1.5 fix landed four bug fixes mid-audit (corrected `entity_id_prefix_c
 
 ### 10.3 Audit script reuse
 
-The Phase 1.5 inventory script is reusable for periodic project-shape health checks. Consider promoting it from `scripts/audit_downstream_project_inventory.py` to `science-tool project inventory` once a stable v1 shape converges. Defer until at least one re-audit confirms the v1 fields are right.
+The Phase 1.5 inventory script is reusable for periodic project-shape health checks. Consider promoting it from `scripts/audit_downstream_project_inventory.py` to `science project inventory` once a stable v1 shape converges. Defer until at least one re-audit confirms the v1 fields are right.
 
 ---
 

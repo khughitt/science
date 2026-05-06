@@ -118,7 +118,7 @@ Examples:
 If the Claude command docs change, regenerate the Codex skill tree:
 
 ```bash
-UV_CACHE_DIR=/tmp/uv-cache uv run --project science-tool python scripts/generate_codex_skills.py
+UV_CACHE_DIR=/tmp/uv-cache uv run --project science python scripts/generate_codex_skills.py
 ```
 
 ## Verification
@@ -126,7 +126,7 @@ UV_CACHE_DIR=/tmp/uv-cache uv run --project science-tool python scripts/generate
 Run the generator tests:
 
 ```bash
-cd ~/.codex/science/science-tool
+cd ~/.codex/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --project . pytest tests/test_codex_skills.py -q
 ```
 

@@ -48,7 +48,7 @@ rule download:
         "data/raw/{accession}_data.csv"
     shell:
         """
-        uv run science-tool datasets download \
+        uv run science datasets download \
             {config[source]}:{wildcards.accession} --dest data/raw/
         """
 
@@ -296,9 +296,9 @@ snakemake --dag | dot -Tpng > dag.png
 
 ## Connecting to Science Workflow
 
-1. **Data acquisition rules** call `science-tool datasets download`
+1. **Data acquisition rules** call `science datasets download`
 2. **Config parameters** map to inquiry `AnnotatedParam` values
-3. **Validation rules** call `science-tool datasets validate`
+3. **Validation rules** call `science datasets validate`
 4. **Output** goes to `data/processed/` with its own `datapackage.json`
 5. Document each rule using the framework `workflow-step.md` template (or a project override in `.ai/templates/`)
 
@@ -374,7 +374,7 @@ For FASTA sequence files, add EDAM annotations:
 
 ## Research Package Integration
 
-Use `science-tool research-package build` as a terminal Snakemake rule to bundle
+Use `science research-package build` as a terminal Snakemake rule to bundle
 analysis results, narrative context, and execution provenance into a standardized
 research package.
 
@@ -387,7 +387,7 @@ rule build_package:
     output:
         "research/packages/{lens}/{section}/datapackage.json"
     shell:
-        "science-tool research-package build --results {input.results} --config config.yaml --output research/packages/{config[lens]}/{config[section]}/"
+        "science research-package build --results {input.results} --config config.yaml --output research/packages/{config[lens]}/{config[section]}/"
 ```
 
 ### Config structure for research packages

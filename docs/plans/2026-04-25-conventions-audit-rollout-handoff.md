@@ -66,7 +66,7 @@ These were explicitly settled by the user during the rollout. A future orchestra
 3. **Validator file targeting:** until the in-flight managed-artifact-versioning plan unifies, every validator change touches BOTH `meta/validate.sh` and `scripts/validate.sh` in lockstep. Locate insertion sites by content, not absolute line.
 4. **No legacy/compatibility layers:** validators stay silent on legacy shapes (`type: plan` pre-regs, `type: report` synthesis files, `prior_analyses:` next-steps). This is the natural consequence of additive type-conformance checks, not a permanent accepted variant. Downstream migrations are tracked as follow-on tasks.
 5. **`source_refs:` is NOT part of the canonical pre-registration template** (not in audit evidence). Projects can add it as a project-local extension.
-6. **`science-tool tasks archive --check` exits non-zero when lag is non-zero** (CI-gateable). Always emits JSON regardless of exit code.
+6. **`science tasks archive --check` exits non-zero when lag is non-zero** (CI-gateable). Always emits JSON regardless of exit code.
 7. **`docs/conventions/` is a new directory** for cross-cutting convention references; gets a seed `README.md` establishing scope. First entry is `code-task-backlinks.md` (4 sanctioned patterns).
 8. **Bucket C is deferred** to a separate user-in-the-loop design session (see "Bucket C" below).
 
@@ -93,7 +93,7 @@ If they approve: mark each plan's status in the master rollout plan from `ready-
 For each approved plan, dispatch a sub-agent using `superpowers:executing-plans` (or `superpowers:subagent-driven-development` for plans with parallelizable tasks). **Parallelization:** plans whose File Structure declarations don't overlap can run in parallel. Concretely:
 
 - **Validator-touching plans (#2, #4, #7, #10)** all modify `meta/validate.sh` and `scripts/validate.sh`. They must run **sequentially** (or be merged carefully) to avoid edit conflicts. Recommended order: #7 first (it's the addendum to MAV which is itself in flight; landing the broader validator changes early reduces rebase pain), then #2, then #4, then #10. Or batch all four into a single sub-agent if context budget allows.
-- **Plan #6 (tasks-archive)** touches `science-tool/src/science_tool/{cli.py, graph/health.py, tasks_archive.py}` and tests + `commands/{status.md, next-steps.md}`. No overlap with the validator plans — runs in parallel.
+- **Plan #6 (tasks-archive)** touches `science/src/science_tool/{cli.py, graph/health.py, tasks_archive.py}` and tests + `commands/{status.md, next-steps.md}`. No overlap with the validator plans — runs in parallel.
 - **Plan #9 (code-task back-link)** touches `docs/conventions/{README.md, code-task-backlinks.md}` (new) and `docs/project-organization-profiles.md`. No overlap with anything — runs in parallel.
 
 Each sub-agent should:
@@ -123,7 +123,7 @@ Six follow-on actions surface from the audit + plan/review passes; tracked in th
 1. **mm30 synthesis-file migration** — rename `type: report` → `type: synthesis` + `id: report:synthesis-*` → `synthesis:*`. Triggered by plan #4 landing.
 2. **protein-landscape synthesis-file migration** — rename `type: emergent-threads` → `type: synthesis` + `report_kind: emergent-threads`. Triggered by plan #4 landing.
 3. **`tasks.py` preamble bug** — `_write_active` silently drops file preamble; affects `complete_task`/`retire_task`/`add_task`/`defer_task`. Plan #6 fixes only its own writer.
-4. **`science-tool` clean-stdout fix** — `science-tool graph audit/validate/diff` and `inquiry validate` emit non-JSON noise. Triggers protein-landscape's `extract_json_payload` workaround.
+4. **`science` clean-stdout fix** — `science graph audit/validate/diff` and `inquiry validate` emit non-JSON noise. Triggers protein-landscape's `extract_json_payload` workaround.
 5. **natural-systems report-id migration** — 26/31 `doc/reports/*.md` use `id: doc:DATE-slug` instead of `report:DATE-slug`. Plan #7 Task 6 will warn on these once shipped; project can opt out via `SCIENCE_VALIDATE_SKIP_ID_PREFIX=1` while migrating.
 6. **Synthesis §3.3 evidence correction** — already applied in commit `17f21de`. No remaining action.
 
@@ -169,7 +169,7 @@ These rules were established during cross-plan review and recorded in the master
 ## Useful context for the next orchestrator
 
 - **Read-only constraint applies to downstream projects.** Do not modify anything under `/home/keith/d/r/{mm30,cbioportal}`, `/home/keith/d/{natural-systems,protein-landscape}`. Migration tasks for those projects are downstream-cycle work.
-- **Both `meta/validate.sh` and `scripts/validate.sh` exist** with different sha256 at audit time. The MAV plan (in flight) creates a third copy at `science-tool/src/science_tool/project_artifacts/data/validate.sh` that becomes the package-distributed canonical. Plan #7 (MAV addendum) handles the version bump bookkeeping.
+- **Both `meta/validate.sh` and `scripts/validate.sh` exist** with different sha256 at audit time. The MAV plan (in flight) creates a third copy at `science/src/science_tool/project_artifacts/data/validate.sh` that becomes the package-distributed canonical. Plan #7 (MAV addendum) handles the version bump bookkeeping.
 - **Six follow-on actions are NOT blockers** for the six P1 plans. Treat them as separate cycles unless the user prioritizes one.
 - **The verification reviewer's full output** is in the conversation history that produced commit `a9254b0`'s message body — fixed three small staleness issues (Plan #2 Migration Notes wording, Plan #10 test count `five`→`six`, synthesis §6.3 promotion-row count `3/4`→`2/4`). All other revisions verified `addressed` per item.
 - **The Science repo's user-global `~/.claude/CLAUDE.md`** carries a "no legacy/compatibility layers" rule that shaped decision #4 above. Honor it during implementation.

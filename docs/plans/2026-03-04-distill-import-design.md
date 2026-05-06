@@ -11,7 +11,7 @@ Pre-generate small, browseable Turtle snapshots of public knowledge graphs and i
 ## Architecture
 
 ```
-science-tool/
+science/
 ├── src/science_tool/
 │   ├── distill/
 │   │   ├── __init__.py          # Shared helpers (triples→Turtle, manifest writing)
@@ -38,8 +38,8 @@ Fetches the OpenAlex science concept hierarchy via API.
 
 **CLI:**
 ```bash
-science-tool distill openalex --level subfields     # ~282 nodes, ~600 triples
-science-tool distill openalex --level topics         # ~4800 nodes, ~10000 triples
+science distill openalex --level subfields     # ~282 nodes, ~600 triples
+science distill openalex --level topics         # ~4800 nodes, ~10000 triples
 ```
 
 **Output:** `data/snapshots/openalex-science-map.ttl` (or `openalex-topics.ttl` for full)
@@ -58,8 +58,8 @@ Generic distiller for any PyKEEN dataset. Supports budget-based distillation via
 
 **CLI:**
 ```bash
-science-tool distill pykeen PrimeKG --budget 170    # Type-stratified PageRank
-science-tool distill pykeen DBpedia50               # Take all (small dataset)
+science distill pykeen PrimeKG --budget 170    # Type-stratified PageRank
+science distill pykeen DBpedia50               # Take all (small dataset)
 ```
 
 **Output:** `data/snapshots/<dataset-slug>.ttl` (e.g., `primekg-core.ttl`, `dbpedia50.ttl`)
@@ -76,8 +76,8 @@ Loads a `.ttl` snapshot into the project's `:graph/knowledge` layer.
 
 **CLI:**
 ```bash
-science-tool graph import data/snapshots/openalex-science-map.ttl
-science-tool graph import data/snapshots/primekg-core.ttl
+science graph import data/snapshots/openalex-science-map.ttl
+science graph import data/snapshots/primekg-core.ttl
 ```
 
 ## Dependencies

@@ -444,7 +444,7 @@ function that commands can call.
   (`project`, `entity_id`, `sync_date`).
 - **`frontmatter.py`** — parse `sync_source` from frontmatter
 
-### science-tool
+### science
 
 - **`graph/sources.py`** — extend `_read_project_config` and
   `load_project_sources` to include `cross-project` in resolved profiles when
@@ -453,7 +453,7 @@ function that commands can call.
   preview without writing), `sync status`, `sync projects`, `sync rebuild`
 - **`cli.py`** — modify `graph build` to call proactive checks
 
-### New module: `science-tool/src/science_tool/registry/`
+### New module: `science/src/science_tool/registry/`
 
 ```
 registry/
@@ -496,7 +496,7 @@ registry/
   with passive nudges.
 - **Registry as source of truth** — the registry is an index, not authoritative.
   Projects own their entities. Registry can be rebuilt from scratch:
-  `science-tool sync rebuild`.
+  `science sync rebuild`.
 
 ---
 

@@ -4,9 +4,9 @@
 
 **Goal:** Unify external + workflow-derived data under one `dataset` entity (discriminated by `origin: external | derived`), backed by a `science-pkg` Frictionless DataPackage profile. Split legacy `data-package` into derived `dataset` entities + a renamed `research-package` entity. Add gate machinery and health checks across the pipeline.
 
-**Architecture:** Two surface-specific JSON Schemas (`science-pkg-entity-1.0`, `science-pkg-runtime-1.0`) share a base. Entity surface (markdown frontmatter under `doc/datasets/`) carries project-level metadata; runtime surface (`datapackage.yaml` next to staged data) carries per-resource info. Single source of truth: entity drops `resources[]` entirely. Workflow registration (`science-tool dataset register-run`) emits per-output runtime datapackages plus matching derived dataset entities with symmetric backlinks. Strict migration of legacy `data-package` entities via shipped `science-tool data-package migrate`.
+**Architecture:** Two surface-specific JSON Schemas (`science-pkg-entity-1.0`, `science-pkg-runtime-1.0`) share a base. Entity surface (markdown frontmatter under `doc/datasets/`) carries project-level metadata; runtime surface (`datapackage.yaml` next to staged data) carries per-resource info. Single source of truth: entity drops `resources[]` entirely. Workflow registration (`science dataset register-run`) emits per-output runtime datapackages plus matching derived dataset entities with symmetric backlinks. Strict migration of legacy `data-package` entities via shipped `science data-package migrate`.
 
-**Tech Stack:** Python 3.11+, uv, Pydantic, Click (CLI), pytest, ruff, pyright. Code lives across `science-model/src/science_model/` (schemas, models) and `science-tool/src/science_tool/` (CLI, graph, health). Tests under `science-tool/tests/` and `science-model/tests/`. Spec source of truth: `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` (rev 2.2).
+**Tech Stack:** Python 3.11+, uv, Pydantic, Click (CLI), pytest, ruff, pyright. Code lives across `science-model/src/science_model/` (schemas, models) and `science/src/science_tool/` (CLI, graph, health). Tests under `science/tests/` and `science-model/tests/`. Spec source of truth: `docs/specs/2026-04-19-dataset-entity-lifecycle-design.md` (rev 2.2).
 
 **Key cross-cutting invariants (read before any task):**
 
@@ -22,8 +22,8 @@
 - Existing entity model: `science-model/src/science_model/entities.py`
 - Existing frontmatter parser: `science-model/src/science_model/frontmatter.py`
 - Existing data-package schema: `science-model/src/science_model/packages/schema.py`
-- Existing health module: `science-tool/src/science_tool/graph/health.py`
-- CLI entry point: `science-tool/src/science_tool/cli.py`
+- Existing health module: `science/src/science_tool/graph/health.py`
+- CLI entry point: `science/src/science_tool/cli.py`
 - Templates: `templates/`
 - Command docs: `commands/`
 
@@ -42,8 +42,8 @@
 4. Templates
 5. Per-entity-type discovery
 6. Health anomalies (12 of them)
-7. `science-tool dataset` CLI extensions
-8. `science-tool data-package migrate` + strict mode
+7. `science dataset` CLI extensions
+8. `science data-package migrate` + strict mode
 9. Command-doc updates
 10. Integration tests
 11. Final cleanup
@@ -130,7 +130,7 @@ Create `science-model/src/science_model/schemas/science-pkg-entity-1.0.json`:
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.science-tool/science-pkg-entity-1.0.json",
+  "$id": "https://schemas.science/science-pkg-entity-1.0.json",
   "title": "science-pkg entity surface",
   "type": "object",
   "required": ["profiles", "id", "type", "title", "status", "origin", "tier"],
@@ -303,7 +303,7 @@ Create `science-model/src/science_model/schemas/science-pkg-runtime-1.0.json`:
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.science-tool/science-pkg-runtime-1.0.json",
+  "$id": "https://schemas.science/science-pkg-runtime-1.0.json",
   "title": "science-pkg runtime surface (datapackage.yaml on disk)",
   "type": "object",
   "required": ["profiles", "name", "resources"],
@@ -1195,7 +1195,7 @@ git commit -m "test(science-model): cover derived + research-package frontmatter
 
 **Files:**
 - Modify: `templates/dataset.md`
-- Test: `science-tool/tests/test_command_docs.py` (verify reference still resolves)
+- Test: `science/tests/test_command_docs.py` (verify reference still resolves)
 
 - [ ] **Step 1: Read existing template**
 
@@ -1396,7 +1396,7 @@ cat templates/workflow.md
 Edit `templates/workflow.md`. After the existing `method: "<method-slug>"` line in frontmatter, insert:
 
 ```yaml
-# Logical outputs declared by this workflow. Used by `science-tool dataset register-run`
+# Logical outputs declared by this workflow. Used by `science dataset register-run`
 # to emit one derived `dataset:<slug>` entity per output, plus a per-output runtime
 # datapackage.yaml at results/<wf>/<run>/<output-slug>/datapackage.yaml.
 outputs: []
@@ -1426,7 +1426,7 @@ git commit -m "feat(templates): add outputs[] block to workflow template"
 In `templates/workflow-run.md`, after the existing `workflow: "<workflow-slug>"` line:
 
 ```yaml
-# Symmetric edges (populated by `science-tool dataset register-run`).
+# Symmetric edges (populated by `science dataset register-run`).
 # `produces:` is the inverse of dataset.derivation.workflow_run (state invariant #9).
 # `inputs:` enumerates upstream datasets the run consumed; symmetric with each
 # upstream dataset's consumed_by listing this workflow-run.
@@ -1445,20 +1445,20 @@ git commit -m "feat(templates): add produces[]/inputs[] to workflow-run template
 
 ## Phase 5: Per-entity-type discovery rule
 
-The actual project-wide discovery callsite is **`science_tool.graph.sources._load_markdown_entities`** (see `science-tool/src/science_tool/graph/sources.py:245`). It receives a `roots: list[Path]` and iterates `root.rglob("*.md")` per root, calling `parse_entity_file` on each. The roots are assembled in `load_project_sources` (line 139).
+The actual project-wide discovery callsite is **`science_tool.graph.sources._load_markdown_entities`** (see `science/src/science_tool/graph/sources.py:245`). It receives a `roots: list[Path]` and iterates `root.rglob("*.md")` per root, calling `parse_entity_file` on each. The roots are assembled in `load_project_sources` (line 139).
 
 To surface `research-package` entities, we extend the roots assembly to include `research/packages/`. We then verify the change at every consumer boundary: project sources, health, materialize, sync.
 
 ### Task 5.1: Extend `load_project_sources` to include `research/packages/`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/sources.py`
-- Test: `science-tool/tests/test_sources_research_package.py`
+- Modify: `science/src/science_tool/graph/sources.py`
+- Test: `science/tests/test_sources_research_package.py`
 
 - [ ] **Step 1: Locate the roots assembly**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 sed -n '139,260p' src/science_tool/graph/sources.py
 ```
 
@@ -1466,7 +1466,7 @@ Identify (a) the function `load_project_sources` and (b) where `roots: list[Path
 
 - [ ] **Step 2: Write failing test**
 
-Create `science-tool/tests/test_sources_research_package.py`:
+Create `science/tests/test_sources_research_package.py`:
 
 ```python
 """Project-wide discovery surfaces research-package entities."""
@@ -1513,7 +1513,7 @@ Expected: FAIL — `research-package:rp1` not in surfaced entities.
 
 - [ ] **Step 4: Extend roots assembly**
 
-In `science-tool/src/science_tool/graph/sources.py`, locate the `roots` list construction inside `load_project_sources` (search for `roots = [` or similar). Add `research/packages/` to the list:
+In `science/src/science_tool/graph/sources.py`, locate the `roots` list construction inside `load_project_sources` (search for `roots = [` or similar). Add `research/packages/` to the list:
 
 ```python
     # Existing roots (e.g., doc/) PLUS the research-package home.
@@ -1562,7 +1562,7 @@ git commit -m "feat(graph): include research/packages/ in project-wide entity di
 ### Task 5.2: Verify discovery propagates to all consumers (health, materialize, sync)
 
 **Files:**
-- Modify: `science-tool/tests/test_sources_research_package.py` (extend with consumer-boundary tests)
+- Modify: `science/tests/test_sources_research_package.py` (extend with consumer-boundary tests)
 
 - [ ] **Step 1: Add boundary tests**
 
@@ -1642,13 +1642,13 @@ Goal: implement all twelve anomalies from spec §Health Check Additions. One tas
 ### Task 6.1: Health-check skeleton — anomaly registry
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Modify: `science-tool/tests/test_health.py` (existing)
+- Modify: `science/src/science_tool/graph/health.py`
+- Modify: `science/tests/test_health.py` (existing)
 
 - [ ] **Step 1: Inspect existing health module**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 sed -n '1,120p' src/science_tool/graph/health.py
 ```
 
@@ -1656,7 +1656,7 @@ Identify how anomalies are emitted today (likely a list of dicts or dataclass in
 
 - [ ] **Step 2: Write a registry-shape test**
 
-Append to `science-tool/tests/test_health.py`:
+Append to `science/tests/test_health.py`:
 
 ```python
 def test_dataset_anomaly_codes_registered() -> None:
@@ -1681,7 +1681,7 @@ def test_dataset_anomaly_codes_registered() -> None:
 
 - [ ] **Step 3: Add the registry constant**
 
-In `science-tool/src/science_tool/graph/health.py`, add:
+In `science/src/science_tool/graph/health.py`, add:
 
 ```python
 DATASET_ANOMALY_CODES: tuple[str, ...] = (
@@ -1713,8 +1713,8 @@ git commit -m "feat(health): register twelve dataset-related anomaly codes"
 ### Task 6.2: `dataset_origin_block_mismatch` (#7, #8)
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Modify: `science-tool/tests/test_health.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Modify: `science/tests/test_health.py`
 
 - [ ] **Step 1: Add failing test**
 
@@ -1760,7 +1760,7 @@ Expected: import error on `check_dataset_anomalies`.
 
 - [ ] **Step 3: Implement the checker**
 
-In `science-tool/src/science_tool/graph/health.py`, add:
+In `science/src/science_tool/graph/health.py`, add:
 
 ```python
 from science_model.frontmatter import parse_entity_file, parse_frontmatter
@@ -1830,8 +1830,8 @@ git commit -m "feat(health): dataset_origin_block_mismatch (#7, #8)"
 ### Task 6.3: `dataset_consumed_but_unverified` + `dataset_stale_review` + `dataset_missing_source_url`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Modify: `science-tool/tests/test_health.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Modify: `science/tests/test_health.py`
 
 - [ ] **Step 1: Add failing tests**
 
@@ -1914,8 +1914,8 @@ git commit -m "feat(health): three external-access anomalies"
 ### Task 6.4: `dataset_derived_missing_workflow_run` + `dataset_derived_asymmetric_edge` (#9)
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Modify: `science-tool/tests/test_health.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Modify: `science/tests/test_health.py`
 
 - [ ] **Step 1: Add failing tests**
 
@@ -2031,8 +2031,8 @@ git commit -m "feat(health): dataset_derived_missing_workflow_run + asymmetric_e
 ### Task 6.5: `dataset_derived_input_chain_broken` (#10) — transitive walk
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Modify: `science-tool/tests/test_health.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Modify: `science/tests/test_health.py`
 
 - [ ] **Step 1: Add failing tests**
 
@@ -2170,8 +2170,8 @@ git commit -m "feat(health): dataset_derived_input_chain_broken with cycle detec
 ### Task 6.6: `dataset_verified_but_unstageable`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Modify: `science-tool/tests/test_health.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Modify: `science/tests/test_health.py`
 
 - [ ] **Step 1: Add failing test**
 
@@ -2232,8 +2232,8 @@ git commit -m "feat(health): dataset_verified_but_unstageable"
 ### Task 6.7: `dataset_research_package_asymmetric` (#11)
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Modify: `science-tool/tests/test_health.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Modify: `science/tests/test_health.py`
 
 - [ ] **Step 1: Add failing test**
 
@@ -2353,8 +2353,8 @@ git commit -m "feat(health): dataset_research_package_asymmetric (#11)"
 ### Task 6.8: `data_package_unmigrated` (strict mode)
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Modify: `science-tool/tests/test_health.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Modify: `science/tests/test_health.py`
 
 - [ ] **Step 1: Add failing test**
 
@@ -2402,7 +2402,7 @@ After the per-entity loop in `check_dataset_anomalies`:
                     "severity": "error",
                     "entity_id": str(fm.get("id", "")),
                     "file_path": str(md),
-                    "message": "unmigrated data-package; run `science-tool data-package migrate` to split into derived dataset(s) + research-package",
+                    "message": "unmigrated data-package; run `science data-package migrate` to split into derived dataset(s) + research-package",
                 })
     return issues
 ```
@@ -2420,8 +2420,8 @@ git commit -m "feat(health): data_package_unmigrated (strict mode signal)"
 ### Task 6.9: `dataset_invariant_violation` (umbrella for #1, #4, #5, #6)
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Modify: `science-tool/tests/test_health.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Modify: `science/tests/test_health.py`
 
 - [ ] **Step 1: Add failing tests for #1 (umbrella consumed) and #5 (lineage drift)**
 
@@ -2504,8 +2504,8 @@ git commit -m "feat(health): dataset_invariant_violation for umbrella + lineage 
 ### Task 6.10: `dataset_cached_field_drift`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Modify: `science-tool/tests/test_health.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Modify: `science/tests/test_health.py`
 
 - [ ] **Step 1: Add failing test**
 
@@ -2601,11 +2601,11 @@ git commit -m "feat(health): dataset_cached_field_drift on the three legitimatel
 
 ---
 
-### Task 6.11: Wire `check_dataset_anomalies` into `science-tool health` CLI
+### Task 6.11: Wire `check_dataset_anomalies` into `science health` CLI
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/health.py` (or wherever `science-tool health` is wired — probably `cli.py` or a sub-cli)
-- Modify: `science-tool/tests/test_health.py`
+- Modify: `science/src/science_tool/graph/health.py` (or wherever `science health` is wired — probably `cli.py` or a sub-cli)
+- Modify: `science/tests/test_health.py`
 
 - [ ] **Step 1: Locate the existing CLI wiring**
 
@@ -2646,23 +2646,23 @@ In the existing project-health aggregator function, add:
 ```bash
 uv run --frozen pytest tests/test_health.py -v -k "cli_includes_dataset"
 git add src/science_tool/graph/health.py src/science_tool/cli.py tests/test_health.py
-git commit -m "feat(health): expose dataset anomalies via science-tool health"
+git commit -m "feat(health): expose dataset anomalies via science health"
 ```
 
 ---
 
-## Phase 7: `science-tool dataset` CLI extensions
+## Phase 7: `science dataset` CLI extensions
 
 ### Task 7.1: `dataset list --origin external|derived` filter
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py` (or wherever `dataset list` lives — search first)
-- Modify: `science-tool/tests/test_datasets_cli.py` (existing)
+- Modify: `science/src/science_tool/cli.py` (or wherever `dataset list` lives — search first)
+- Modify: `science/tests/test_datasets_cli.py` (existing)
 
 - [ ] **Step 1: Locate the existing `dataset list` command**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 grep -rn "@.*group\|def.*dataset\|name=\"dataset\"" src/science_tool/ | head
 ```
 
@@ -2745,15 +2745,15 @@ git commit -m "feat(dataset cli): add --origin filter to list"
 ### Task 7.2: `dataset register-run` — read inputs and write per-output datapackages
 
 **Files:**
-- Create: `science-tool/src/science_tool/datasets_register.py`
-- Test: `science-tool/tests/test_dataset_register_run.py`
+- Create: `science/src/science_tool/datasets_register.py`
+- Test: `science/tests/test_dataset_register_run.py`
 
 - [ ] **Step 1: Write failing test**
 
-Create `science-tool/tests/test_dataset_register_run.py`:
+Create `science/tests/test_dataset_register_run.py`:
 
 ```python
-"""Tests for `science-tool dataset register-run`."""
+"""Tests for `science dataset register-run`."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -2871,10 +2871,10 @@ Expected: FAIL — `register-run` subcommand doesn't exist.
 
 - [ ] **Step 3: Implement core**
 
-Create `science-tool/src/science_tool/datasets_register.py`:
+Create `science/src/science_tool/datasets_register.py`:
 
 ```python
-"""`science-tool dataset register-run` — emit derived dataset entities + per-output datapackages."""
+"""`science dataset register-run` — emit derived dataset entities + per-output datapackages."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -2997,8 +2997,8 @@ git commit -m "feat(dataset cli): register-run writes per-output datapackages"
 ### Task 7.3: `register-run` writes derived dataset entities
 
 **Files:**
-- Modify: `science-tool/src/science_tool/datasets_register.py`
-- Modify: `science-tool/tests/test_dataset_register_run.py`
+- Modify: `science/src/science_tool/datasets_register.py`
+- Modify: `science/tests/test_dataset_register_run.py`
 
 - [ ] **Step 1: Add failing test**
 
@@ -3109,8 +3109,8 @@ git commit -m "feat(dataset cli): register-run writes derived dataset entities"
 ### Task 7.4: `register-run` writes symmetric edges
 
 **Files:**
-- Modify: `science-tool/src/science_tool/datasets_register.py`
-- Modify: `science-tool/tests/test_dataset_register_run.py`
+- Modify: `science/src/science_tool/datasets_register.py`
+- Modify: `science/tests/test_dataset_register_run.py`
 
 - [ ] **Step 1: Add failing test**
 
@@ -3314,7 +3314,7 @@ git commit -m "feat(dataset cli): register-run writes symmetric edges via commen
 ### Task 7.5: `register-run` idempotency
 
 **Files:**
-- Modify: `science-tool/tests/test_dataset_register_run.py`
+- Modify: `science/tests/test_dataset_register_run.py`
 
 - [ ] **Step 1: Add idempotency test**
 
@@ -3357,7 +3357,7 @@ git commit -m "feat(dataset cli): register-run idempotent"
 ### Task 7.5b: Parallel runs of the same workflow produce coexisting datasets
 
 **Files:**
-- Modify: `science-tool/tests/test_dataset_register_run.py`
+- Modify: `science/tests/test_dataset_register_run.py`
 
 - [ ] **Step 1: Add test**
 
@@ -3419,12 +3419,12 @@ git commit -m "test: parallel workflow runs produce coexisting active datasets"
 ### Task 7.6: `dataset reconcile <slug>` — narrow cached-field drift check
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
-- Test: `science-tool/tests/test_dataset_reconcile.py`
+- Modify: `science/src/science_tool/cli.py`
+- Test: `science/tests/test_dataset_reconcile.py`
 
 - [ ] **Step 1: Write failing test**
 
-Create `science-tool/tests/test_dataset_reconcile.py`:
+Create `science/tests/test_dataset_reconcile.py`:
 
 ```python
 from pathlib import Path
@@ -3524,20 +3524,20 @@ git commit -m "feat(dataset cli): reconcile checks narrow cached-field drift"
 
 ---
 
-## Phase 8: `science-tool data-package migrate` + strict mode
+## Phase 8: `science data-package migrate` + strict mode
 
 ### Task 8.1: `data-package migrate` core split
 
 **Files:**
-- Create: `science-tool/src/science_tool/datapackage_migrate.py`
-- Test: `science-tool/tests/test_data_package_migrate.py`
+- Create: `science/src/science_tool/datapackage_migrate.py`
+- Test: `science/tests/test_data_package_migrate.py`
 
 - [ ] **Step 1: Write failing test**
 
-Create `science-tool/tests/test_data_package_migrate.py`:
+Create `science/tests/test_data_package_migrate.py`:
 
 ```python
-"""Tests for `science-tool data-package migrate <slug>`."""
+"""Tests for `science data-package migrate <slug>`."""
 from __future__ import annotations
 
 import json
@@ -3623,7 +3623,7 @@ def test_migrate_marks_old_data_package_superseded(tmp_path: Path) -> None:
 - [ ] **Step 2: Run failing test**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 uv run --frozen pytest tests/test_data_package_migrate.py -v -k "emits_derived"
 ```
 
@@ -3631,10 +3631,10 @@ Expected: FAIL — `data-package migrate` subcommand doesn't exist.
 
 - [ ] **Step 3: Implement**
 
-Create `science-tool/src/science_tool/datapackage_migrate.py`:
+Create `science/src/science_tool/datapackage_migrate.py`:
 
 ```python
-"""`science-tool data-package migrate <slug>` — split legacy data-package into derived datasets + research-package."""
+"""`science data-package migrate <slug>` — split legacy data-package into derived datasets + research-package."""
 from __future__ import annotations
 
 import json
@@ -3765,7 +3765,7 @@ git commit -m "feat(data-package cli): migrate splits legacy entity into dataset
 ### Task 8.2: `data-package migrate` fails fast when workflow lacks `outputs:`
 
 **Files:**
-- Modify: `science-tool/tests/test_data_package_migrate.py`
+- Modify: `science/tests/test_data_package_migrate.py`
 
 - [ ] **Step 1: Add failing-fast test**
 
@@ -3814,7 +3814,7 @@ git commit -m "feat(data-package cli): migrate fails fast when workflow lacks ou
 ### Task 8.3: `data-package migrate` idempotency
 
 **Files:**
-- Modify: `science-tool/tests/test_data_package_migrate.py`
+- Modify: `science/tests/test_data_package_migrate.py`
 
 - [ ] **Step 1: Add idempotency test**
 
@@ -3861,9 +3861,9 @@ git commit -m "feat(data-package cli): migrate idempotent (no-op on superseded e
 ### Task 8.3b: `data-package migrate --dry-run` and `--all` flags
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
-- Modify: `science-tool/src/science_tool/datapackage_migrate.py`
-- Modify: `science-tool/tests/test_data_package_migrate.py`
+- Modify: `science/src/science_tool/cli.py`
+- Modify: `science/src/science_tool/datapackage_migrate.py`
+- Modify: `science/tests/test_data_package_migrate.py`
 
 - [ ] **Step 1: Add failing tests**
 
@@ -4013,8 +4013,8 @@ git commit -m "feat(data-package cli): --dry-run and --all flags"
 ### Task 8.4: `data-package list` (read-only)
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
-- Modify: `science-tool/tests/test_data_package_migrate.py`
+- Modify: `science/src/science_tool/cli.py`
+- Modify: `science/tests/test_data_package_migrate.py`
 
 - [ ] **Step 1: Add failing test**
 
@@ -4061,13 +4061,13 @@ git commit -m "feat(data-package cli): list subcommand"
 ### Task 8.5: Strict graph-build mode — fail on unmigrated `data-package`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/materialize.py` (or wherever the graph build entry lives)
-- Test: `science-tool/tests/test_graph_build_strict.py`
+- Modify: `science/src/science_tool/graph/materialize.py` (or wherever the graph build entry lives)
+- Test: `science/tests/test_graph_build_strict.py`
 
 - [ ] **Step 1: Locate graph-build entry**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 grep -rn "def.*build\|create-graph" src/science_tool/graph/ | head
 ```
 
@@ -4075,7 +4075,7 @@ Identify the function that aggregates entities into the graph (`<build_fn>`).
 
 - [ ] **Step 2: Write failing test**
 
-Create `science-tool/tests/test_graph_build_strict.py`:
+Create `science/tests/test_graph_build_strict.py`:
 
 ```python
 from pathlib import Path
@@ -4135,7 +4135,7 @@ def build_graph(project_root: Path, *, strict: bool = True) -> ...:
             slugs = ", ".join(unmigrated)
             raise RuntimeError(
                 f"unmigrated data-package entities: {slugs}. "
-                f"Run `science-tool data-package migrate <slug>` to split each into "
+                f"Run `science data-package migrate <slug>` to split each into "
                 f"derived dataset(s) + research-package."
             )
     # ... existing build logic ...
@@ -4182,14 +4182,14 @@ For each input data source identified in Step 2:
      with a URL alone.
    - For derived sources: HALT with "no dataset entity found for `dataset:<slug>`;
      ensure the producing workflow has an `outputs:` block and run
-     `science-tool dataset register-run <run-slug>`."
+     `science dataset register-run <run-slug>`."
 2. Check the gate per origin:
    - `origin: external`:
      - PASS if `access.verified: true`.
      - PASS if `access.verified: false` AND `access.exception.mode != ""`.
      - HALT otherwise with Branch A/B options:
        - **Branch A** — verifiable under current credentials → run verification
-         (manual or future `science-tool dataset verify`), then re-run this step.
+         (manual or future `science dataset verify`), then re-run this step.
        - **Branch B** — requires credentials the project does not hold.
          Three sub-options:
          (a) **scope-reduce**: defer to a follow-up task; populate
@@ -4336,7 +4336,7 @@ When emitting `doc/datasets/<slug>.md`:
   — the verification step corrects it.
 - The `accessions:` field carries external accession IDs (renamed from `datasets:`;
   legacy entries continue to read).
-- Do NOT emit `origin: derived` entities — those are produced by `science-tool
+- Do NOT emit `origin: derived` entities — those are produced by `science
   dataset register-run` after a workflow run.
 ```
 
@@ -4354,7 +4354,7 @@ git commit -m "docs(commands): find-datasets emission rules (rev 2.1)"
 ### Task 10.1: End-to-end gate test (mixed origins)
 
 **Files:**
-- Create: `science-tool/tests/test_plan_pipeline_data_gate.py`
+- Create: `science/tests/test_plan_pipeline_data_gate.py`
 
 - [ ] **Step 1: Write the test**
 
@@ -4421,7 +4421,7 @@ def test_step2b_halts_on_unverified_external(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Implement `science_tool.plan_gate`**
 
-If not implemented yet (and it isn't — Phase 9 only updates docs), create `science-tool/src/science_tool/plan_gate.py`:
+If not implemented yet (and it isn't — Phase 9 only updates docs), create `science/src/science_tool/plan_gate.py`:
 
 ```python
 """Programmatic gate check used by integration tests and (in future) by `/science:plan-pipeline`."""
@@ -4490,7 +4490,7 @@ git commit -m "feat(plan): programmatic Step 2b gate check + e2e tests"
 ### Task 10.2: End-to-end registration test (toy workflow)
 
 **Files:**
-- Create: `science-tool/tests/test_workflow_registration_e2e.py`
+- Create: `science/tests/test_workflow_registration_e2e.py`
 
 - [ ] **Step 1: Write the test**
 
@@ -4569,7 +4569,7 @@ git commit -m "test: end-to-end workflow registration -> gate acceptance"
 ### Task 10.3: End-to-end migration test (legacy data-package round-trip)
 
 **Files:**
-- Create: `science-tool/tests/test_data_package_migrate_e2e.py`
+- Create: `science/tests/test_data_package_migrate_e2e.py`
 
 - [ ] **Step 1: Write the test**
 
@@ -4668,7 +4668,7 @@ cd /mnt/ssd/Dropbox/science/science-model
 uv run --frozen ruff check .
 uv run --frozen ruff format --check .
 
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 uv run --frozen ruff check .
 uv run --frozen ruff format --check .
 ```
@@ -4679,7 +4679,7 @@ Expected: no errors.
 
 ```bash
 cd /mnt/ssd/Dropbox/science/science-model && uv run --frozen pyright
-cd /mnt/ssd/Dropbox/science/science-tool && uv run --frozen pyright
+cd /mnt/ssd/Dropbox/science/science && uv run --frozen pyright
 ```
 
 Expected: no errors.
@@ -4688,7 +4688,7 @@ Expected: no errors.
 
 ```bash
 cd /mnt/ssd/Dropbox/science/science-model && uv run --frozen pytest -q
-cd /mnt/ssd/Dropbox/science/science-tool && uv run --frozen pytest -q
+cd /mnt/ssd/Dropbox/science/science && uv run --frozen pytest -q
 ```
 
 Expected: all green.

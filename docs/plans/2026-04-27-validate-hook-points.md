@@ -73,7 +73,7 @@ The project's `validate.sh` itself becomes the canonical (via `install --force-a
 
 `2026.04.26.1 → 2026.04.26.2`. `byte_replace` migration (no project-action steps). Previous hash of `2026.04.26.1` moves into `previous_hashes`. Changelog entry: "Add named hook dispatch points (`pre_validation`, `extra_checks`, `post_validation`); the hook contract is now functional end-to-end."
 
-The bump itself dogfoods the managed-artifact update workflow. Any project that has already adopted v2026.04.26.1 (none yet, but proves the path) would update via `science-tool project artifacts update validate.sh --force --yes`.
+The bump itself dogfoods the managed-artifact update workflow. Any project that has already adopted v2026.04.26.1 (none yet, but proves the path) would update via `science project artifacts update validate.sh --force --yes`.
 
 ### Acceptance criteria
 

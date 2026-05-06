@@ -73,7 +73,7 @@ Refinements remain cheap because the classification is data on each registered k
 
 **Implementation surface — taxonomy lives at the registry layer, not the profile manifest.**
 
-Originally I proposed adding `entity_class` to `EntityKind` in `science_model/profiles/schema.py`. That's wrong: `CORE_PROFILE.entity_kinds` (`science_model/profiles/core.py:9-106`) only declares 16 kinds, while `EntityRegistry.with_core_types()` (`science-tool/src/science_tool/graph/entity_registry.py:42-88`) registers 30+ — covering `dataset`, `article`, `report`, `validation-report`, `plan`, `spec`, `assumption`, `transformation`, `variable`, `search`, `curation-sweep`, etc. Putting the classification on the manifest would silently leave half the kinds unclassified, and any freshness check gated on classification would fall through to "unknown."
+Originally I proposed adding `entity_class` to `EntityKind` in `science_model/profiles/schema.py`. That's wrong: `CORE_PROFILE.entity_kinds` (`science_model/profiles/core.py:9-106`) only declares 16 kinds, while `EntityRegistry.with_core_types()` (`science/src/science_tool/graph/entity_registry.py:42-88`) registers 30+ — covering `dataset`, `article`, `report`, `validation-report`, `plan`, `spec`, `assumption`, `transformation`, `variable`, `search`, `curation-sweep`, etc. Putting the classification on the manifest would silently leave half the kinds unclassified, and any freshness check gated on classification would fall through to "unknown."
 
 Place classification at the **registry layer**, where every core kind is enumerated:
 
@@ -85,7 +85,7 @@ class EntityClass(StrEnum):
     REFERENCE = "reference"
 
 
-# science-tool/src/science_tool/graph/entity_registry.py
+# science/src/science_tool/graph/entity_registry.py
 class EntityRegistry:
     def __init__(self) -> None:
         # … existing fields …
@@ -171,7 +171,7 @@ Plus a separate **provenance-derived** rule:
 
 | Provenance source | Derived `bears_on` |
 |---|---|
-| `entity.source_refs` / `entity.evidence_refs` (already materialized as `prov:wasDerivedFrom` triples in `science-tool/src/science_tool/graph/materialize.py:159,257-287`) | source-ref-target `bears_on` entity (only when entity's kind is epistemic) |
+| `entity.source_refs` / `entity.evidence_refs` (already materialized as `prov:wasDerivedFrom` triples in `science/src/science_tool/graph/materialize.py:159,257-287`) | source-ref-target `bears_on` entity (only when entity's kind is epistemic) |
 
 This is important: it's how a paper enters the dependency graph. The core profile has no `paper supports hypothesis` edge — paper-to-claim provenance flows through `source_refs`/`evidence_refs` and is materialized as PROV.wasDerivedFrom. The `bears_on` derivation reads those triples and emits explicit `bears_on` edges into epistemic entities.
 
@@ -294,7 +294,7 @@ Phase-2 design is **out of scope for this doc** but is tracked as a task so it i
 
 ### `graph build` (a.k.a. materialize) extensions
 
-`graph build` is wired in `science-tool/src/science_tool/cli.py:618` and drives `science-tool/src/science_tool/graph/materialize.py`. New steps land there:
+`graph build` is wired in `science/src/science_tool/cli.py:618` and drives `science/src/science_tool/graph/materialize.py`. New steps land there:
 
 - Derive `bears_on` triples from existing edges per the auto-derivation table.
 - Walk `prov:wasDerivedFrom` triples (already emitted from `source_refs`/`evidence_refs` at `materialize.py:159,257-287`) and emit `bears_on` for any provenance edge whose target is an epistemic kind.
@@ -311,9 +311,9 @@ Phase-2 design is **out of scope for this doc** but is tracked as a task so it i
 
 ### New CLI commands
 
-- `science-tool entity review <id>` — sets `last_reviewed = today`, optionally records `--note`. Idempotent.
-- `science-tool entity needs-review` — lists all epistemic entities whose materialized state is `needs-review` or `stale`. Filterable by kind, age, project.
-- `science-tool graph propagate-freshness` — read-only sweep that recomputes freshness in memory and prints a report, without writing the materialized graph. Useful in CI / pre-commit hooks. (No `--apply` flag — there is no separate write step; full materialization is `graph build`.)
+- `science entity review <id>` — sets `last_reviewed = today`, optionally records `--note`. Idempotent.
+- `science entity needs-review` — lists all epistemic entities whose materialized state is `needs-review` or `stale`. Filterable by kind, age, project.
+- `science graph propagate-freshness` — read-only sweep that recomputes freshness in memory and prints a report, without writing the materialized graph. Useful in CI / pre-commit hooks. (No `--apply` flag — there is no separate write step; full materialization is `graph build`.)
 
 ### Display surface
 
@@ -342,7 +342,7 @@ Three layers, mirroring typed-entity-blockers' structure.
 - `EpistemicReviewState` model validates date parsing; rejects negative `review_horizon_days`.
 - `bears_on` `RelationKind` declared with epistemic-only `target_kinds`.
 
-### 2. `science-tool` registry + graph + freshness tests
+### 2. `science` registry + graph + freshness tests
 - `register_core_kind` requires `entity_class`; missing arg is a registration error.
 - `with_core_types()` populates classification for every registered kind (test asserts complete coverage of the registry's hard-coded kind list).
 - `kind_class("hypothesis") == EPISTEMIC`; `kind_class("dataset") == OPERATIONAL`; `kind_class("article") == REFERENCE`.
@@ -381,15 +381,15 @@ In a tmp project with one hypothesis backed by one observation, one finding (gro
 | `science-model/src/science_model/entities.py` | Add `EntityClass` enum; add `EpistemicReviewState` model; add `review_state` field on `ProjectEntity` (validated when kind is epistemic) |
 | `science-model/src/science_model/profiles/core.py` | Add `bears_on` `RelationKind` (target_kinds = epistemic kinds) |
 | `science-model/tests/test_review_state_model.py` | New |
-| `science-tool/src/science_tool/graph/entity_registry.py` | Add `entity_class` parameter to `register_core_kind` / `register_profile_kind` / `register_extension_kind`; populate on all `with_core_types()` registrations; add `kind_class()` lookup |
-| `science-tool/src/science_tool/graph/freshness.py` | New: `bears_on` auto-derivation engine (typed-edge rules + provenance walk + closure); freshness derivation per Part 3 |
-| `science-tool/src/science_tool/graph/materialize.py` | Wire freshness step into the materialize pipeline (after existing triple emission); cycle-protected closure; write `EpistemicFreshness` triples into materialized graph only |
-| `science-tool/src/science_tool/entity_review.py` | New: `entity review` / `entity needs-review` commands |
-| `science-tool/src/science_tool/cli.py` | Register new commands; `graph propagate-freshness` subcommand alongside existing graph commands at line 618 |
-| `science-tool/tests/test_kind_class.py` | New |
-| `science-tool/tests/test_bears_on_derivation.py` | New (typed-edge derivation, provenance derivation, closure, cycle protection) |
-| `science-tool/tests/test_freshness_derivation.py` | New |
-| `science-tool/tests/test_entity_review_cli.py` | New |
+| `science/src/science_tool/graph/entity_registry.py` | Add `entity_class` parameter to `register_core_kind` / `register_profile_kind` / `register_extension_kind`; populate on all `with_core_types()` registrations; add `kind_class()` lookup |
+| `science/src/science_tool/graph/freshness.py` | New: `bears_on` auto-derivation engine (typed-edge rules + provenance walk + closure); freshness derivation per Part 3 |
+| `science/src/science_tool/graph/materialize.py` | Wire freshness step into the materialize pipeline (after existing triple emission); cycle-protected closure; write `EpistemicFreshness` triples into materialized graph only |
+| `science/src/science_tool/entity_review.py` | New: `entity review` / `entity needs-review` commands |
+| `science/src/science_tool/cli.py` | Register new commands; `graph propagate-freshness` subcommand alongside existing graph commands at line 618 |
+| `science/tests/test_kind_class.py` | New |
+| `science/tests/test_bears_on_derivation.py` | New (typed-edge derivation, provenance derivation, closure, cycle protection) |
+| `science/tests/test_freshness_derivation.py` | New |
+| `science/tests/test_entity_review_cli.py` | New |
 | `scripts/validate.sh` | Add `bears_on` target-kind check (target classified epistemic); review-state frontmatter shape check |
 | `meta/validate.sh` | Mirror lockstep |
 | `docs/claim-and-evidence-model.md` | Add a section on `bears_on` and freshness; clarify pre-registration recast |

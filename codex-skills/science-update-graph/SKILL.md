@@ -59,13 +59,14 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with <science-plugin-root>/science-tool science-tool <command>`
+   `uv run --with <science-plugin-root>/science science <command>`
 
 > **Prerequisite:** Read `docs/specs/2026-03-01-knowledge-graph-design.md` and `docs/proposition-and-evidence-model.md` before starting.
 
@@ -75,13 +76,13 @@ This command updates the graph by changing canonical source files, not by editin
 
 ## Tool invocation
 
-All `science-tool` commands below use this pattern:
+All `science` commands below use this pattern:
 
 ```bash
-uv run science-tool <command>
+uv run science <command>
 ```
 
-For brevity, the examples below write just `science-tool <command>`; always expand them to `uv run science-tool <command>` when executing.
+For brevity, the examples below write just `science <command>`; always expand them to `uv run science <command>` when executing.
 
 ## Cross-Project Registry Check
 
@@ -94,7 +95,7 @@ When adding new entities as part of the update, the cross-project registry is co
 Run:
 
 ```bash
-science-tool graph diff --mode hybrid --format json
+science graph diff --mode hybrid --format json
 ```
 
 Review the output. If no files are stale, report "Graph is up to date" and stop.
@@ -128,8 +129,8 @@ references behind.
 Run:
 
 ```bash
-science-tool graph migrate --project-root . --format json
-science-tool graph audit --project-root . --format json
+science graph migrate --project-root . --format json
+science graph audit --project-root . --format json
 ```
 
 Use `graph migrate` first as a dry-run audit. It previews alias-resolvable rewrites, layered-claim
@@ -138,7 +139,7 @@ migration gaps, and projected cleanup without mutating the project.
 If the preview looks correct, re-run with:
 
 ```bash
-science-tool graph migrate --project-root . --format json --apply
+science graph migrate --project-root . --format json --apply
 ```
 
 Only `--apply` writes alias rewrites, scaffolds local-profile source files, and persists
@@ -150,9 +151,9 @@ apply pass, fix the upstream sources first. Do not build until the audit is clea
 Run:
 
 ```bash
-science-tool graph build --project-root .
-science-tool graph validate --format json
-science-tool graph stats --format json
+science graph build --project-root .
+science graph validate --format json
+science graph stats --format json
 ```
 
 ### Step 6: Record project-local migration state when needed

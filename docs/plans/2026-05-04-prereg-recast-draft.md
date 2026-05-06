@@ -51,7 +51,7 @@ Concrete edits to `commands/pre-register.md`:
    - **Epistemic target** — a hypothesis, question, proposition, inquiry, or interpretation rule. The commitment is "we will *interpret* observed Y in this way to update belief about X." Deviation does not require an amendment, because the pre-reg is not gating a procedure; it is constraining how a future result feeds the epistemic graph.
 
    Mixed targets are common (e.g., "we will run analysis A and treat H as supported if effect > 0.3"). Treat the procedure portion and the interpretation portion separately:
-   - **Operational portion:** stays as an amendment-gate check. `science:interpret-results` confirms the analysis ran as committed (or that any deviation has a corresponding `amendments:` record). No `bears_on` edge — operational targets are not `bears_on` sinks (`science-tool/.../graph/materialize.py` rejects authored `bears_on` edges to non-epistemic targets).
+   - **Operational portion:** stays as an amendment-gate check. `science:interpret-results` confirms the analysis ran as committed (or that any deviation has a corresponding `amendments:` record). No `bears_on` edge — operational targets are not `bears_on` sinks (`science/.../graph/materialize.py` rejects authored `bears_on` edges to non-epistemic targets).
    - **Epistemic portion:** materializes as a `bears_on` edge from the pre-reg into the epistemic target via the new auto-derivation rule (see § "Auto-derivation rule for pre-reg → epistemic target" below). This is the load-bearing graph change of the recast.
 
    **Sub-prompt: which `related:` entries are commitment targets vs. navigation context?** This is the load-bearing question for whether `bears_on` edges produced from this pre-reg accurately reflect the author's commitment.
@@ -108,10 +108,10 @@ Concrete edits to `commands/interpret-results.md`:
    - Locate any pre-reg with the current analysis or its hypothesis/question in its `related` set:
 
      ```bash
-     science-tool entity list --kind pre-registration --related <ref>
+     science entity list --kind pre-registration --related <ref>
      ```
 
-     `science-tool entity list --related <ref>` filters entities whose `related:` refs point to the current analysis, hypothesis, question, or other focus entity. The filter resolves aliases where possible and falls back to exact authored refs when resolution is unavailable. A direct path scan of `doc/meta/pre-registration-*.md` and `doc/pre-registrations/*.md` remains useful only for debugging malformed or pre-canonical files that fail source loading.
+     `science entity list --related <ref>` filters entities whose `related:` refs point to the current analysis, hypothesis, question, or other focus entity. The filter resolves aliases where possible and falls back to exact authored refs when resolution is unavailable. A direct path scan of `doc/meta/pre-registration-*.md` and `doc/pre-registrations/*.md` remains useful only for debugging malformed or pre-canonical files that fail source loading.
 
    - For each found pre-reg, read its `committed:` clause and its target class (derivable from each `related:` ref's registered `EntityClass`).
 
@@ -133,12 +133,12 @@ Concrete edits to `commands/interpret-results.md`:
      2. If the entity exists, emit the proposition with the pre-registration backlink, then add the evidence edge explicitly. Today this is a two-command sequence because `graph add proposition` records `sci:preRegisteredIn`, while `graph add evidence` records the `cito:supports` / `cito:disputes` edge:
 
         ```bash
-        science-tool graph add proposition "<observed result proposition>" \
+        science graph add proposition "<observed result proposition>" \
           --source <data-package-or-workflow-run-ref> \
           --pre-registration pre-registration:<slug> \
           --id <proposition-id>
 
-        science-tool graph add evidence proposition:<proposition-id> hypothesis:<target-id> \
+        science graph add evidence proposition:<proposition-id> hypothesis:<target-id> \
           --stance supports  # or disputes
         ```
 
@@ -149,7 +149,7 @@ Concrete edits to `commands/interpret-results.md`:
 
 2. **Revise § 5 "Update Proposition Support / Dispute":** add a sub-bullet noting that pre-registered evidence edges should be linked back to the pre-reg via the existing `sci:preRegisteredIn` mechanism so downstream weighting (Phase 2 sampling, `[t011]`) can boost them. Concretely:
 
-   - When emitting a `cito:supports` or `cito:disputes` proposition grounded in a pre-registered analysis, pass `--pre-registration pre-registration:<slug>` to `science-tool graph add proposition` (existing CLI flag, `cli.py:1568`). This writes a `sci:preRegisteredIn` triple in the materialized graph (`store.py:707`), readable later via `_load_proposition_pre_registrations` (`store.py:3434`) and surfaced through the causal exporters. No frontmatter change required — the link lives in the graph.
+   - When emitting a `cito:supports` or `cito:disputes` proposition grounded in a pre-registered analysis, pass `--pre-registration pre-registration:<slug>` to `science graph add proposition` (existing CLI flag, `cli.py:1568`). This writes a `sci:preRegisteredIn` triple in the materialized graph (`store.py:707`), readable later via `_load_proposition_pre_registrations` (`store.py:3434`) and surfaced through the causal exporters. No frontmatter change required — the link lives in the graph.
 
 3. **Drop kill-switch framing from § 4 "Suspiciously good results":** today's wording references "Reference the pre-registration document … and compare observed vs. expected range explicitly." That stays. But add a sentence: "For epistemic-target pre-regs, an out-of-range result is `disputes` evidence, weighted by the pre-reg's commitment — it does not invalidate the hypothesis on its own."
 
@@ -245,7 +245,7 @@ Three code changes were **required** for the recast to mean anything in the mate
 
 Two consequences as long as it's missing:
 
-- `science-tool entity list --kind pre-registration` returns nothing — source loading skips unknown kinds (`graph/sources.py`).
+- `science entity list --kind pre-registration` returns nothing — source loading skips unknown kinds (`graph/sources.py`).
 - The auto-derivation rule below has no kind to dispatch on.
 
 **Implemented:** `"pre-registration": EntityClass.OPERATIONAL` is registered in the core entity registry, with coverage asserting `kind_class("pre-registration") == OPERATIONAL`.
@@ -277,7 +277,7 @@ Tracked as `[t012b']` (companion to t012b — same PR is fine, since both are ti
 
 ### Prerequisite 3: reclassify `inquiry` from `REFERENCE` to `EPISTEMIC`
 
-`inquiry` is currently `REFERENCE` in `_CORE_KIND_CLASSES` (`science-tool/src/science_tool/graph/entity_registry.py:58`). Audit of multiple-myeloma surfaced 3 pre-regs (t494, t498, t500) that target inquiries (e.g., `inquiry:h-myc-r-direct-program`) but no formal `hypothesis:` entity. multiple-myeloma uses inquiries as **pre-hypothesis structure** — a way to organize work toward a future hypothesis without committing to one yet.
+`inquiry` is currently `REFERENCE` in `_CORE_KIND_CLASSES` (`science/src/science_tool/graph/entity_registry.py:58`). Audit of multiple-myeloma surfaced 3 pre-regs (t494, t498, t500) that target inquiries (e.g., `inquiry:h-myc-r-direct-program`) but no formal `hypothesis:` entity. multiple-myeloma uses inquiries as **pre-hypothesis structure** — a way to organize work toward a future hypothesis without committing to one yet.
 
 Under the current REFERENCE classification, the auto-derivation rule (Prerequisite 2) does not fire `bears_on` to inquiry refs. This loses the epistemic-commitment signal for any pre-reg whose work is at the inquiry stage rather than the formal-hypothesis stage.
 
@@ -287,7 +287,7 @@ Under the current REFERENCE classification, the auto-derivation rule (Prerequisi
 
 - Test 1: `kind_class("inquiry") == EPISTEMIC`.
 - Test 2: pre-reg with `related: [inquiry:I]` → `P bears_on I` derived (the auto-derivation rule from Prerequisite 2 now fires on inquiry refs).
-- Test 3: existing tests for inquiry-as-REFERENCE behavior must be updated. Audit `science-tool` tests for any that assert inquiry's REFERENCE class explicitly.
+- Test 3: existing tests for inquiry-as-REFERENCE behavior must be updated. Audit `science` tests for any that assert inquiry's REFERENCE class explicitly.
 
 **Cross-cluster impact:** this change affects all 9 audited projects, not just multiple-myeloma. Audit found inquiry refs in pre-regs across natural-systems (multiple), 3d-attention-bias (none), seq-feats (none), protein-landscape (none), multiple-myeloma (heavy use), cbioportal (none), mechanisms/evolution (none). Reclassifying inquiry as EPISTEMIC adds new `bears_on` edges in natural-systems and multiple-myeloma; the other projects are unaffected.
 
@@ -301,22 +301,22 @@ Audit surfaced 6+ unregistered kind prefixes used in `related:` across projects:
 
 Under the recast (and today), these are silently skipped during source loading per `science_tool/graph/sources.py`. **This is correct semantics, not a bug.** The auto-derivation rule has no class to dispatch on, so it cannot fire `bears_on`. Skipping is the safe behavior.
 
-Project-side resolution paths (nonblocking cleanup, now surfaced by `science-tool health`):
+Project-side resolution paths (nonblocking cleanup, now surfaced by `science health`):
 
-1. **Register the kind as a project-specific extension** via `register_extension_kind` (existing `science-tool` API), assigning the appropriate `EntityClass`. Suitable for kinds the project intends to keep (e.g., mm's `decision:` — likely `REFERENCE`; mm's `latent:` — possibly `EPISTEMIC` if latent variables are uncertain assertions about underlying constructs).
+1. **Register the kind as a project-specific extension** via `register_extension_kind` (existing `science` API), assigning the appropriate `EntityClass`. Suitable for kinds the project intends to keep (e.g., mm's `decision:` — likely `REFERENCE`; mm's `latent:` — possibly `EPISTEMIC` if latent variables are uncertain assertions about underlying constructs).
 2. **Migrate to a canonical kind.** E.g., `bias-audit:<slug>` → `task:bias-audit-<slug>` (matches an alternate convention also seen in cbioportal and protein-landscape).
 3. **Drop the ref entirely** if the entity isn't authored anywhere.
 
-**Implemented health-check pattern:** `science-tool health` now lists unregistered ref kinds in identity-bearing fields, including `related:` and `commits_to:`, so projects can audit their own kind taxonomies without inferring semantics for unknown prefixes.
+**Implemented health-check pattern:** `science health` now lists unregistered ref kinds in identity-bearing fields, including `related:` and `commits_to:`, so projects can audit their own kind taxonomies without inferring semantics for unknown prefixes.
 
 ### Federation behavior
 
-Federation umbrella projects (e.g., `cancer/meta`) build a federated graph from children. The recast's auto-derivation rules are implemented in `science-tool` and run during `graph build`. Federated builds run `science-tool graph build` at the federation root, which means **the auto-derivation rules inherit automatically** — no federation-specific configuration required.
+Federation umbrella projects (e.g., `cancer/meta`) build a federated graph from children. The recast's auto-derivation rules are implemented in `science` and run during `graph build`. Federated builds run `science graph build` at the federation root, which means **the auto-derivation rules inherit automatically** — no federation-specific configuration required.
 
 Two prerequisites for federation-level edges to materialize correctly:
 
 1. The federated graph must include children's epistemic entities (hypotheses, questions, propositions, inquiries) so pre-reg → epistemic-target edges have valid targets at the federation level. Audit confirmed this is the case for `cancer/meta/knowledge/graph.trig` (32 pre-reg identifiers from children appear in the federated graph).
-2. The federation builder must invoke the deriver. By default it does (federated build = `science-tool graph build` at federation root); confirm this hasn't been customized in a federation-specific way.
+2. The federation builder must invoke the deriver. By default it does (federated build = `science graph build` at federation root); confirm this hasn't been customized in a federation-specific way.
 
 No federation-specific code changes required. Audit recommendation: confirm with whoever maintains `cancer/meta`'s graph-build pipeline.
 
@@ -327,7 +327,7 @@ The original draft asserted that the existing closure chain `pre-reg → analysi
 - Without Prerequisite 1: the skill cannot even ask the registry whether a target is epistemic, because pre-reg isn't a registered kind.
 - Without Prerequisite 2: the prose recast is purely cosmetic — humans get new framing language, but `science:status`, `science:next-steps`, `bears_on`-derived freshness, and Phase-2 sampling weights see no new edges.
 
-**Sequencing:** circulate the draft first, then land the code prerequisites after downstream maintainers confirm that the recast and `commits_to:` shape match project intent. Once Prerequisites 1-3 land, apply the prose changes from § "Skill changes" and § "Doc changes"; at that point skill prose can safely reference `science-tool entity list --kind pre-registration` and rely on the auto-derived edges existing in the graph.
+**Sequencing:** circulate the draft first, then land the code prerequisites after downstream maintainers confirm that the recast and `commits_to:` shape match project intent. Once Prerequisites 1-3 land, apply the prose changes from § "Skill changes" and § "Doc changes"; at that point skill prose can safely reference `science entity list --kind pre-registration` and rely on the auto-derived edges existing in the graph.
 
 ---
 
@@ -352,7 +352,7 @@ The original draft asserted that the existing closure chain `pre-reg → analysi
 | multiple-myeloma | **30** | Largest project by count. Two-generation split: 4 pre-canonical (`doc/meta/`), 26 canonical (`doc/pre-registrations/`). Surfaced inquiry-targeting (3 pre-regs), unregistered kinds (`decision:`, `latent:`), hypothesis-in-body-only pattern (4 pre-regs). |
 | cbioportal | 2 | `t077-glmm-logit-pooling`: extreme hypothesis-in-body-only — H1 is in `specs/research-question.md` (a `spec:` entity), not a formal `hypothesis:` entity. Doubled `id:` prefix. |
 | mechanisms/evolution | 2 | Cleanest, most recast-compatible pre-regs across all 9 projects. Explicit narrow-scope verdict language with 4-tier outcome buckets. Three new unregistered kinds (`bias-audit:`, `analysis-plan:`, `meta:`). |
-| cancer/meta | 0 | Federation umbrella; federates 32 pre-reg identifiers from children. Inherits standard validation; the recast's deriver inherits automatically through `science-tool` (see § Code prerequisites — Federation behavior). |
+| cancer/meta | 0 | Federation umbrella; federates 32 pre-reg identifiers from children. Inherits standard validation; the recast's deriver inherits automatically through `science` (see § Code prerequisites — Federation behavior). |
 
 No pre-reg body content needed editing for the recast itself. Existing pre-regs whose `related:` field mixed commitment targets with navigation context were handled with small `commits_to:` frontmatter clarifications during migration. That clarification controls which `bears_on` edges are derived; it does not re-date, rewrite, or weaken the original pre-registration.
 
@@ -391,8 +391,8 @@ No pre-reg body content needed editing for the recast itself. Existing pre-regs 
    - Reclassified `inquiry` from `REFERENCE` to `EPISTEMIC`.
 
 3. **Completed:** added follow-up ergonomics:
-   - `[t012c]`: `science-tool entity list --related <ref>` filtering for lookup by authored or resolved `related:` refs.
-   - `[t012d]`: `science-tool health` check listing unregistered ref kinds in identity-bearing fields, especially `related:` and `commits_to:`.
+   - `[t012c]`: `science entity list --related <ref>` filtering for lookup by authored or resolved `related:` refs.
+   - `[t012d]`: `science health` check listing unregistered ref kinds in identity-bearing fields, especially `related:` and `commits_to:`.
 
 4. **Remaining, nonblocking prose work:** apply the skill edits from § "Skill changes" and the doc edit from § "Doc changes" if they have not already been applied in the downstream command files. Safe because the registry now knows about pre-regs, inquiry is properly classified, and the graph carries the new edges.
 
@@ -406,7 +406,7 @@ These are not blockers for the recast, but they are worth tracking per project a
 |---|---|---|
 | Amendment-field shape unification | Projects still use a mix of `amendments:`, `amendment_history:`, `amended:`, or body-only amendment notes. Normalizing this would make operational pre-reg deviation checks easier to automate. | Project-led cleanup, guided by each audit report. |
 | Body-only hypothesis promotion | cbioportal `t077-glmm-logit-pooling` has H1 only in `specs/research-question.md`, so full auto-derived `bears_on` benefit requires a formal `hypothesis:` entity. | cbioportal. |
-| Custom-kind registration or migration | Prefixes such as `decision:`, `latent:`, `bias-audit:`, `analysis-plan:`, and `rq:` are now visible in health. Register durable project kinds with `register_extension_kind`, migrate to canonical kinds, or move non-entity annotations to `meta:*`. | Project-led, with `science-tool health` as the inventory source. |
+| Custom-kind registration or migration | Prefixes such as `decision:`, `latent:`, `bias-audit:`, `analysis-plan:`, and `rq:` are now visible in health. Register durable project kinds with `register_extension_kind`, migrate to canonical kinds, or move non-entity annotations to `meta:*`. | Project-led, with `science health` as the inventory source. |
 | Residual frontmatter regularization | Pre-canonical files with `date:`/`status: registered` conventions or minimal frontmatter work under the recast but remain harder to query consistently. | Project-led; prioritize only where active interpretation workflows touch the files. |
 
 Total prose-edit work in step 3 is small: ~120 lines added across `commands/pre-register.md`, `commands/interpret-results.md`, and `docs/proposition-and-evidence-model.md`, plus zero edits to `docs/claim-and-evidence-model.md` (already superseded).
@@ -440,7 +440,7 @@ Revision 4 (2026-05-05, post implementation and migrations):
 
 - **Status changed from draft to implementation record.** The registry changes, `commits_to:` preservation, pre-reg commitment-target deriver, inquiry reclassification, and downstream migrations have landed.
 - **`entity list --related <ref>` documented as implemented.** The CLI now filters source-authored entities by `related:` refs and resolves aliases where possible.
-- **Unregistered ref-kind health check documented as implemented.** `science-tool health` now surfaces unregistered prefixes in identity-bearing fields, including `related:` and `commits_to:`, without inferring semantics for unknown kinds.
+- **Unregistered ref-kind health check documented as implemented.** `science health` now surfaces unregistered prefixes in identity-bearing fields, including `related:` and `commits_to:`, without inferring semantics for unknown kinds.
 - **Open questions resolved or deferred.** `commitment_weight` remains omitted; `commits_to:` is the accepted edge-scoping field; `inquiry` is `EPISTEMIC`.
 - **Project-side cleanup candidates captured.** Amendment-field unification, body-only hypothesis promotion, custom-kind registration/migration, and residual frontmatter regularization are explicitly nonblocking follow-ups.
 
@@ -470,7 +470,7 @@ Revision 3 (2026-05-04, post 9-project audit):
 Revision 2 (2026-05-04, post initial review):
 
 - **Auto-derivation rule is required, not optional.** The original draft asserted that the existing chain `pre-reg → analysis → interpretation → hypothesis` produces the right `bears_on` edge through closure. That was wrong: a pre-reg's `related:` materializes as `skos:related`, which freshness derivation does not consume. The recast has no graph effect without the explicit pre-reg → epistemic-target derivation rule. Promoted from "optional follow-up `[t012b]`" to "Prerequisite 2".
-- **Registry classification is required for the prose recast to even branch correctly.** Without `pre-registration` in `_CORE_KIND_CLASSES`, `science-tool entity list --kind pre-registration` returns nothing (source loading skips unknown kinds) and the deriver has no kind to dispatch on. Promoted from "concurrent" to "Prerequisite 1".
-- **CLI command corrected.** `science-tool entity list --type` → `--kind` (the `--kind` form is the one supported by `cli.py`). Recommended lookup is path-scan only until the registry change lands.
+- **Registry classification is required for the prose recast to even branch correctly.** Without `pre-registration` in `_CORE_KIND_CLASSES`, `science entity list --kind pre-registration` returns nothing (source loading skips unknown kinds) and the deriver has no kind to dispatch on. Promoted from "concurrent" to "Prerequisite 1".
+- **CLI command corrected.** `science entity list --type` → `--kind` (the `--kind` form is the one supported by `cli.py`). Recommended lookup is path-scan only until the registry change lands.
 - **Mixed-target language corrected.** Operational targets are not `bears_on` sinks (materialization rejects them), so a "mixed pre-reg" does not generate "both kinds of bears_on" — only the epistemic portion produces a `bears_on` edge. The operational portion stays a procedural amendment-gate check.
 - **Count corrected.** natural-systems pre-reg count was 13; correct is 14 (the original `find` command included `.worktrees/` duplicates which inflated other counts; the table number was off by one). Total of 26 was correct.

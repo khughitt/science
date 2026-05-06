@@ -4,9 +4,9 @@
 
 **Goal:** Bring the `skills/` library to a uniform structural baseline — frontmatter, naming, hubs, output conventions, cross-references, broken pointers — so it can support the planned `skills/INDEX.md` + `science-plan-analysis` workflow without further rework.
 
-**Architecture:** Twelve sequential phases, each ending in a verifying lint pass and a commit. Phase 0 builds a small `science-tool skills lint` check that becomes the "test" for documentation work. Subsequent phases use that linter to verify each structural change. Phase 11 creates the minimal index-readiness contract required by the source spec; full `science-plan-analysis` command implementation remains out of scope. Content authoring of net-new skills (causal-DAG, sample-size, meta-analysis, model-evaluation, etc.) is **out of scope** for this plan — see the Follow-up Plans section.
+**Architecture:** Twelve sequential phases, each ending in a verifying lint pass and a commit. Phase 0 builds a small `science skills lint` check that becomes the "test" for documentation work. Subsequent phases use that linter to verify each structural change. Phase 11 creates the minimal index-readiness contract required by the source spec; full `science-plan-analysis` command implementation remains out of scope. Content authoring of net-new skills (causal-DAG, sample-size, meta-analysis, model-evaluation, etc.) is **out of scope** for this plan — see the Follow-up Plans section.
 
-**Tech Stack:** Markdown skills, Python >=3.11 / `uv` / `pyright` / `ruff` / `pytest` for the linter, `science-tool` CLI extension. No code in `skills/`; this is a documentation refactor with a verification harness.
+**Tech Stack:** Markdown skills, Python >=3.11 / `uv` / `pyright` / `ruff` / `pytest` for the linter, `science` CLI extension. No code in `skills/`; this is a documentation refactor with a verification harness.
 
 **Source spec:** `docs/specs/2026-04-26-analysis-planning-and-skill-index-design.md` (the proposed `skills/INDEX.md` workflow that motivates this cleanup).
 
@@ -16,12 +16,12 @@
 
 ### Created
 
-- `science-tool/src/science_tool/skills_lint/__init__.py` — module entry point
-- `science-tool/src/science_tool/skills_lint/lint.py` — lint logic (frontmatter, cross-refs, naming, companion-skills)
-- `science-tool/src/science_tool/skills_lint/cli.py` — Click-based CLI registration
-- `science-tool/tests/skills_lint/test_cli.py` — CLI smoke tests
-- `science-tool/tests/skills_lint/test_lint.py` — unit tests for each lint rule
-- `science-tool/tests/skills_lint/fixtures/` — minimal valid + invalid skill markdown fixtures
+- `science/src/science_tool/skills_lint/__init__.py` — module entry point
+- `science/src/science_tool/skills_lint/lint.py` — lint logic (frontmatter, cross-refs, naming, companion-skills)
+- `science/src/science_tool/skills_lint/cli.py` — Click-based CLI registration
+- `science/tests/skills_lint/test_cli.py` — CLI smoke tests
+- `science/tests/skills_lint/test_lint.py` — unit tests for each lint rule
+- `science/tests/skills_lint/fixtures/` — minimal valid + invalid skill markdown fixtures
 - `skills/pipelines/SKILL.md` — new pipelines hub
 - `skills/data/genomics/SKILL.md` — new genomics hub
 - `skills/research/proposition-schema.md` — extracted Science-project schema (claim_layer, identification_strength, etc.)
@@ -83,23 +83,23 @@ These decisions are locked. If a task encounters a conflict, the task handler ra
 
 The linter is the "unit test" for every subsequent documentation change. Without it, refactor verification is manual and unreliable.
 
-### Task 0.1: Add `science-tool skills lint` scaffolding
+### Task 0.1: Add `science skills lint` scaffolding
 
 **Files:**
-- Create: `science-tool/src/science_tool/skills_lint/__init__.py`
-- Create: `science-tool/src/science_tool/skills_lint/cli.py`
-- Modify: `science-tool/src/science_tool/cli.py` (register subcommand)
-- Test: `science-tool/tests/skills_lint/test_cli.py`
+- Create: `science/src/science_tool/skills_lint/__init__.py`
+- Create: `science/src/science_tool/skills_lint/cli.py`
+- Modify: `science/src/science_tool/cli.py` (register subcommand)
+- Test: `science/tests/skills_lint/test_cli.py`
 
 - [ ] **Step 1: Locate the existing CLI entry point**
 
-Run: `rg -n "^def\s+\w+_group|@click.group|click.Command" science-tool/src/science_tool/cli.py`
+Run: `rg -n "^def\s+\w+_group|@click.group|click.Command" science/src/science_tool/cli.py`
 Expected: identifies the top-level `click.group` to register the new `skills` subcommand under.
 
 - [ ] **Step 2: Write the failing CLI smoke test**
 
 ```python
-# science-tool/tests/skills_lint/test_cli.py
+# science/tests/skills_lint/test_cli.py
 from click.testing import CliRunner
 from science_tool.cli import main
 
@@ -111,20 +111,20 @@ def test_skills_lint_help_exits_zero():
 
 - [ ] **Step 3: Run the test to verify it fails**
 
-Run: `cd science-tool && uv run --frozen pytest tests/skills_lint/test_cli.py -v`
+Run: `cd science && uv run --frozen pytest tests/skills_lint/test_cli.py -v`
 Expected: FAIL with "No such command 'skills'".
 
 - [ ] **Step 4: Implement minimal scaffold**
 
 ```python
-# science-tool/src/science_tool/skills_lint/__init__.py
+# science/src/science_tool/skills_lint/__init__.py
 from .cli import skills_group
 
 __all__ = ["skills_group"]
 ```
 
 ```python
-# science-tool/src/science_tool/skills_lint/cli.py
+# science/src/science_tool/skills_lint/cli.py
 import click
 
 @click.group(name="skills")
@@ -139,32 +139,32 @@ def lint_cmd(root: str, fmt: str) -> None:
     click.echo("skills lint: no rules registered yet")
 ```
 
-In `science-tool/src/science_tool/cli.py`, register: `main.add_command(skills_group)` (use the existing pattern in that file — match how other groups are registered).
+In `science/src/science_tool/cli.py`, register: `main.add_command(skills_group)` (use the existing pattern in that file — match how other groups are registered).
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cd science-tool && uv run --frozen pytest tests/skills_lint/test_cli.py -v`
+Run: `cd science && uv run --frozen pytest tests/skills_lint/test_cli.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Run typecheck and format**
 
-Run: `cd science-tool && uv run --frozen pyright src/science_tool/skills_lint && uv run --frozen ruff check src/science_tool/skills_lint && uv run --frozen ruff format src/science_tool/skills_lint`
+Run: `cd science && uv run --frozen pyright src/science_tool/skills_lint && uv run --frozen ruff check src/science_tool/skills_lint && uv run --frozen ruff format src/science_tool/skills_lint`
 Expected: all green.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add science-tool/src/science_tool/skills_lint/ science-tool/src/science_tool/cli.py science-tool/tests/skills_lint/
-git commit -m "feat(skills-lint): scaffold science-tool skills lint subcommand"
+git add science/src/science_tool/skills_lint/ science/src/science_tool/cli.py science/tests/skills_lint/
+git commit -m "feat(skills-lint): scaffold science skills lint subcommand"
 ```
 
 ### Task 0.2: Implement the frontmatter rule
 
 **Files:**
-- Create: `science-tool/src/science_tool/skills_lint/lint.py`
-- Modify: `science-tool/src/science_tool/skills_lint/cli.py`
-- Test: `science-tool/tests/skills_lint/test_lint.py`
-- Test fixtures: `science-tool/tests/skills_lint/fixtures/{good,bad-no-frontmatter,bad-missing-name,bad-missing-description}.md`
+- Create: `science/src/science_tool/skills_lint/lint.py`
+- Modify: `science/src/science_tool/skills_lint/cli.py`
+- Test: `science/tests/skills_lint/test_lint.py`
+- Test fixtures: `science/tests/skills_lint/fixtures/{good,bad-no-frontmatter,bad-missing-name,bad-missing-description}.md`
 
 - [ ] **Step 1: Create test fixtures**
 
@@ -206,7 +206,7 @@ name: test-missing-description
 - [ ] **Step 2: Write failing test for `check_frontmatter`**
 
 ```python
-# science-tool/tests/skills_lint/test_lint.py
+# science/tests/skills_lint/test_lint.py
 from pathlib import Path
 from science_tool.skills_lint.lint import check_frontmatter, SkillIssue
 
@@ -236,13 +236,13 @@ def test_missing_description_returns_issue():
 
 - [ ] **Step 3: Run tests to verify failure**
 
-Run: `cd science-tool && uv run --frozen pytest tests/skills_lint/test_lint.py -v`
+Run: `cd science && uv run --frozen pytest tests/skills_lint/test_lint.py -v`
 Expected: 4 errors (ImportError for `check_frontmatter`).
 
 - [ ] **Step 4: Implement `check_frontmatter`**
 
 ```python
-# science-tool/src/science_tool/skills_lint/lint.py
+# science/src/science_tool/skills_lint/lint.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -293,7 +293,7 @@ def check_frontmatter(path: Path) -> list[SkillIssue]:
 
 - [ ] **Step 5: Run tests to verify pass**
 
-Run: `cd science-tool && uv run --frozen pytest tests/skills_lint/test_lint.py -v`
+Run: `cd science && uv run --frozen pytest tests/skills_lint/test_lint.py -v`
 Expected: 4 PASS.
 
 - [ ] **Step 6: Wire `check_frontmatter` into the `lint` CLI command**
@@ -310,13 +310,13 @@ def test_lint_cli_against_fixtures(tmp_path: Path):
 
 - [ ] **Step 8: Run typecheck, format, and full test**
 
-Run: `cd science-tool && uv run --frozen pyright src/science_tool/skills_lint && uv run --frozen ruff check src/science_tool/skills_lint && uv run --frozen ruff format src/science_tool/skills_lint && uv run --frozen pytest tests/skills_lint/ -v`
+Run: `cd science && uv run --frozen pyright src/science_tool/skills_lint && uv run --frozen ruff check src/science_tool/skills_lint && uv run --frozen ruff format src/science_tool/skills_lint && uv run --frozen pytest tests/skills_lint/ -v`
 Expected: all green.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add science-tool/src/science_tool/skills_lint/ science-tool/tests/skills_lint/
+git add science/src/science_tool/skills_lint/ science/tests/skills_lint/
 git commit -m "feat(skills-lint): add frontmatter rule with name/description checks"
 ```
 
@@ -327,7 +327,7 @@ git commit -m "feat(skills-lint): add frontmatter rule with name/description che
 
 - [ ] **Step 1: Run lint against the real skills tree**
 
-Run: `cd science-tool && uv run --frozen science-tool skills lint --root ../skills --format text > ../docs/plans/2026-04-26-skills-library-refactor-baseline.txt; echo "exit=$?"`
+Run: `cd science && uv run --frozen science skills lint --root ../skills --format text > ../docs/plans/2026-04-26-skills-library-refactor-baseline.txt; echo "exit=$?"`
 Expected: exit=1, with 18 missing-frontmatter entries in the current tree.
 
 - [ ] **Step 2: Verify the failure count matches the audit**
@@ -412,7 +412,7 @@ For each file, prepend the block exactly. Do not modify any existing content (in
 
 - [ ] **Step 3: Re-run the linter; verify the baseline count drops to zero**
 
-Run: `cd science-tool && uv run --frozen science-tool skills lint --root ../skills --format text`
+Run: `cd science && uv run --frozen science skills lint --root ../skills --format text`
 Expected: exit code 0, no output.
 
 - [ ] **Step 4: Spot-check three files manually**
@@ -457,7 +457,7 @@ Three resolution paths for `knowledge-graph`. Pick exactly one based on Task 2.1
   - `Load the knowledge-graph skill for ontology reference` →
   - `Load the knowledge-graph reference at <actual-path>` (or whatever phrasing matches the surrounding command-preamble idiom).
 
-- [ ] **Path B — Skill should live in `skills/`:** create `skills/knowledge-graph.md` (or `skills/research/knowledge-graph.md` if scoped to research framing) with the locked frontmatter convention from Phase 1. The body summarizes the entity types, edge types, and `science-tool graph ...` invocations. Source material: `references/role-prompts/`, `docs/specs/2026-*-graph-*.md`, the existing references in `commands/{plan-pipeline,review-pipeline,specify-model,sketch-model,critique-approach,update-graph,create-graph,import-project}.md` and their codex-skills counterparts.
+- [ ] **Path B — Skill should live in `skills/`:** create `skills/knowledge-graph.md` (or `skills/research/knowledge-graph.md` if scoped to research framing) with the locked frontmatter convention from Phase 1. The body summarizes the entity types, edge types, and `science graph ...` invocations. Source material: `references/role-prompts/`, `docs/specs/2026-*-graph-*.md`, the existing references in `commands/{plan-pipeline,review-pipeline,specify-model,sketch-model,critique-approach,update-graph,create-graph,import-project}.md` and their codex-skills counterparts.
 
 - [ ] **Path C — Reference is stale and should be removed:** strip the `Load the knowledge-graph skill` line from each referencing file. Justify in the commit message why the prerequisite is no longer needed.
 
@@ -477,7 +477,7 @@ Expected: codex-skills regenerated; `git diff codex-skills/` shows the same edit
 
 - [ ] **Step: Verify lint still passes**
 
-Run: `cd science-tool && uv run --frozen science-tool skills lint --root ../skills --format text`
+Run: `cd science && uv run --frozen science skills lint --root ../skills --format text`
 Expected: exit 0.
 
 - [ ] **Step: Commit**
@@ -522,7 +522,7 @@ Expected: empty.
 - [ ] **Step 6: Lint + commit**
 
 ```bash
-cd science-tool && uv run --frozen science-tool skills lint --root ../skills && cd ..
+cd science && uv run --frozen science skills lint --root ../skills && cd ..
 git add skills/research/research-package-rendering.md skills/research/lab-notebook.md skills/pipelines/snakemake.md docs/specs/2026-04-26-analysis-planning-and-skill-index-design.md
 git commit -m "refactor(skills): rename research/lab-notebook to research-package-rendering"
 ```
@@ -556,7 +556,7 @@ Expected: empty.
 - [ ] **Step 6: Lint + commit**
 
 ```bash
-cd science-tool && uv run --frozen science-tool skills lint --root ../skills && cd ..
+cd science && uv run --frozen science skills lint --root ../skills && cd ..
 git add skills/research/research-package-spec.md skills/research/provenance.md skills/pipelines/snakemake.md docs/specs/2026-04-26-analysis-planning-and-skill-index-design.md
 git commit -m "refactor(skills): rename research/provenance to research-package-spec"
 ```
@@ -621,7 +621,7 @@ order; the leaves cover the mechanics.
 
 - [ ] **Step 2: Lint + commit**
 
-Run: `cd science-tool && uv run --frozen science-tool skills lint --root ../skills && cd ..`
+Run: `cd science && uv run --frozen science skills lint --root ../skills && cd ..`
 Expected: exit 0.
 
 ```bash
@@ -680,7 +680,7 @@ the existing two leaves.
 - [ ] **Step 2: Lint + commit**
 
 ```bash
-cd science-tool && uv run --frozen science-tool skills lint --root ../skills && cd ..
+cd science && uv run --frozen science skills lint --root ../skills && cd ..
 git add skills/data/genomics/SKILL.md
 git commit -m "feat(skills): add data/genomics/SKILL.md hub"
 ```
@@ -725,7 +725,7 @@ runs; document the convention chosen in the leaf.
 - [ ] **Step 3: Re-lint and commit**
 
 ```bash
-cd science-tool && uv run --frozen science-tool skills lint --root ../skills && cd ..
+cd science && uv run --frozen science skills lint --root ../skills && cd ..
 git add skills/data/SKILL.md
 git commit -m "docs(skills): document output-path convention split for QA artifacts"
 ```
@@ -770,7 +770,7 @@ Generate a `datapackage.json` for this directory; see [`../frictionless.md`](../
 - [ ] **Step 4: Re-lint and commit**
 
 ```bash
-cd science-tool && uv run --frozen science-tool skills lint --root ../skills && cd ..
+cd science && uv run --frozen science skills lint --root ../skills && cd ..
 git add skills/
 git commit -m "docs(skills): align leaf output paths with documented convention; reference frictionless.md"
 ```
@@ -782,8 +782,8 @@ git commit -m "docs(skills): align leaf output paths with documented convention;
 ### Task 6.0: Add companion-skills and relative-link lint rules
 
 **Files:**
-- Modify: `science-tool/src/science_tool/skills_lint/lint.py`
-- Modify: `science-tool/tests/skills_lint/test_lint.py`
+- Modify: `science/src/science_tool/skills_lint/lint.py`
+- Modify: `science/tests/skills_lint/test_lint.py`
 - Test fixtures: add `bad-no-companion-skills.md`, `good-with-companion.md`, `bad-broken-relative-link.md`
 
 - [ ] **Step 1: Add a fixture**
@@ -821,7 +821,7 @@ Parse markdown links with a conservative regex for `](...)`. For each non-URL, n
 - [ ] **Step 6: Commit just the linter change with the failing baseline noted in the commit message**
 
 ```bash
-git add science-tool/
+git add science/
 git commit -m "feat(skills-lint): require Companion Skills sections and valid relative links"
 ```
 
@@ -831,7 +831,7 @@ git commit -m "feat(skills-lint): require Companion Skills sections and valid re
 
 - [ ] **Step 1: Run lint to enumerate offenders**
 
-Run: `cd science-tool && uv run --frozen science-tool skills lint --root ../skills --format text | rg "Companion Skills"`
+Run: `cd science && uv run --frozen science skills lint --root ../skills --format text | rg "Companion Skills"`
 Expected: a list of paths.
 
 - [ ] **Step 2: For each offender, append a `## Companion Skills` section using these locked cross-references** (from the audit, §C):
@@ -881,12 +881,12 @@ Format for the section (copy literally, adjust relative paths and the trigger se
 
 - [ ] **Step 3: Re-run linter**
 
-Run: `cd science-tool && uv run --frozen science-tool skills lint --root ../skills --format text`
+Run: `cd science && uv run --frozen science skills lint --root ../skills --format text`
 Expected: exit 0.
 
 - [ ] **Step 4: Confirm relative-link rule covers all Companion Skills links**
 
-Run: `cd science-tool && uv run --frozen science-tool skills lint --root ../skills --format text`
+Run: `cd science && uv run --frozen science skills lint --root ../skills --format text`
 Expected: no `broken-relative-link` issues. Do not defer this to a follow-up; broken links make the future index unreliable.
 
 - [ ] **Step 5: Commit**
@@ -976,7 +976,7 @@ entity types, see [`proposition-schema.md`](./proposition-schema.md).
 - [ ] **Step 4: Lint + commit**
 
 ```bash
-cd science-tool && uv run --frozen science-tool skills lint --root ../skills && cd ..
+cd science && uv run --frozen science skills lint --root ../skills && cd ..
 git add skills/research/
 git commit -m "refactor(skills): extract proposition schema from research/SKILL.md"
 ```
@@ -1084,7 +1084,7 @@ Add a unit test that `type: deep-reference` is accepted. Add a unit test that `t
 - [ ] **Step 5: Commit**
 
 ```bash
-git add skills/statistics/replicate-count-justification.md science-tool/
+git add skills/statistics/replicate-count-justification.md science/
 git commit -m "docs(skills): add TL;DR and deep-reference type to replicate-count-justification"
 ```
 
@@ -1207,7 +1207,7 @@ Adjust the relative path per hub:
 - [ ] **Step 3: Lint + commit**
 
 ```bash
-cd science-tool && uv run --frozen science-tool skills lint --root ../skills && cd ..
+cd science && uv run --frozen science skills lint --root ../skills && cd ..
 git add skills/INDEX.md skills/data/SKILL.md skills/data/expression/SKILL.md skills/data/genomics/SKILL.md skills/statistics/SKILL.md skills/research/SKILL.md skills/writing/SKILL.md skills/pipelines/SKILL.md
 git commit -m "docs(skills): add compact analysis-planning index"
 ```
@@ -1215,8 +1215,8 @@ git commit -m "docs(skills): add compact analysis-planning index"
 ### Task 11.2: Add index-coverage lint rule
 
 **Files:**
-- Modify: `science-tool/src/science_tool/skills_lint/lint.py`
-- Modify: `science-tool/tests/skills_lint/test_lint.py`
+- Modify: `science/src/science_tool/skills_lint/lint.py`
+- Modify: `science/tests/skills_lint/test_lint.py`
 - Test fixtures: add `index/` fixture tree with one indexed skill and one unindexed skill
 
 - [ ] **Step 1: Write failing tests**
@@ -1229,13 +1229,13 @@ Read `root / "INDEX.md"`, collect all markdown links and inline code paths that 
 
 - [ ] **Step 3: Wire into CLI and verify**
 
-Run: `cd science-tool && uv run --frozen pytest tests/skills_lint/ -v && uv run --frozen science-tool skills lint --root ../skills --format text`
+Run: `cd science && uv run --frozen pytest tests/skills_lint/ -v && uv run --frozen science skills lint --root ../skills --format text`
 Expected: tests pass and real-tree lint exits 0.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add science-tool/src/science_tool/skills_lint/lint.py science-tool/tests/skills_lint/test_lint.py science-tool/tests/skills_lint/fixtures/
+git add science/src/science_tool/skills_lint/lint.py science/tests/skills_lint/test_lint.py science/tests/skills_lint/fixtures/
 git commit -m "feat(skills-lint): require skills index coverage"
 ```
 
@@ -1266,7 +1266,7 @@ git commit -m "chore(codex-skills): regenerate after skills refactor"
 
 - [ ] **Step 1: Full lint**
 
-Run: `cd science-tool && uv run --frozen science-tool skills lint --root ../skills`
+Run: `cd science && uv run --frozen science skills lint --root ../skills`
 Expected: exit 0.
 
 - [ ] **Step 2: Find any dangling internal links across the skills tree**

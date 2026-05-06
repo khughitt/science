@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans`. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Migrate the four audited downstream projects (`natural-systems`, `mm30`, `protein-landscape`, `cbioportal`) to the canonical Science conventions established by the 2026-04-25 P1 rollout, plus adopt new opt-in conventions where they fit. Drive shape migrations through `scripts/migrate_downstream_conventions.py` (one rule per migration, dry-run by default). Drive convention adoption via `science-tool` and per-project task entries.
+**Goal:** Migrate the four audited downstream projects (`natural-systems`, `mm30`, `protein-landscape`, `cbioportal`) to the canonical Science conventions established by the 2026-04-25 P1 rollout, plus adopt new opt-in conventions where they fit. Drive shape migrations through `scripts/migrate_downstream_conventions.py` (one rule per migration, dry-run by default). Drive convention adoption via `science` and per-project task entries.
 
 **Non-goals:** No upstream-Science changes. No new entity types beyond what P1 plans introduced. No re-litigation of audit findings.
 
@@ -10,7 +10,7 @@
 
 - Plan #2 (`pre-registration` canonical type) — landed.
 - Plan #4 (`synthesis` canonical type + `report_kind`) — landed.
-- Plan #6 (`science-tool tasks archive`) — in flight (resumption agent running). Migration step 5 (tasks-archive adoption) is gated on this landing.
+- Plan #6 (`science tasks archive`) — in flight (resumption agent running). Migration step 5 (tasks-archive adoption) is gated on this landing.
 - Plan #9 (`docs/conventions/code-task-backlinks.md`) — landed.
 - Plan #10 (`prior:` chain field for next-steps) — landed.
 - Plan #7 (MAV addendum incl. id-prefix table) — held until MAV merges. **Per-type id-prefix conformance landing downstream is therefore the natural enforcement gate** for migrations 2, 3, 5; running migrations earlier eliminates lag once Plan #7 ships.
@@ -30,10 +30,10 @@ Each row is one migration. "✓" = needed; "—" = not needed; "n/a" = doesn't a
 | 4 | `synthesis-type-and-id-per-hyp` (was `synthesis-report-kind-pl-hyp`) | script (Phase 2 redesign) | ✓ 4 per-hyp files (no filename-prefix gating) | ✓ 5 per-hyp files (`report:synthesis-<slug>`) | ✓ 3 per-hyp files | — | Plan #4 |
 | 5 | `pre-registration-id-and-type` (was `pre-registration-type`; generalized) | script (Phase 2 redesign) | ✓ 4 files (`id: plan:pre-registration-<slug>` third shape) | ✓ 6 files | ✓ 2 files | — | Plan #2 |
 | 6 | `natural-systems-pre-reg-frontmatter` | manual + helper | ✓ 3 files (frontmatter lacks `id:` and/or `type:`) | — | — | — | Plan #2 |
-| 7 | tasks archive lag | `science-tool tasks archive --apply` | ✓ ~114 entries | ✓ 41 entries | ✓ 44 entries | — | Plan #6 |
+| 7 | tasks archive lag | `science tasks archive --apply` | ✓ ~114 entries | ✓ 41 entries | ✓ 44 entries | — | Plan #6 |
 | 8 | next-steps `prior:` field (new files only) | per-project convention | — (no chain today) | — (already uses `prior:`) | accepted variant (`prior_analyses:` keeps working) | — (no chain today) | Plan #10 |
 | 9 | code/notebook → task back-link | per-project, opt-in | optional | optional | ✓ add `task:`/`question:` to 19 descriptors (Pattern 3) | optional (already uses Pattern 1 for 3 notebooks) | Plan #9 |
-| 10 | `validate.sh` MAV update | `science-tool project artifacts update validate.sh` | ✓ when MAV+#7 land | ✓ | ✓ | ✓ | Plan #7 (held) |
+| 10 | `validate.sh` MAV update | `science project artifacts update validate.sh` | ✓ when MAV+#7 land | ✓ | ✓ | ✓ | Plan #7 (held) |
 
 Migrations 1–6 are shape rewrites driven by the migration script. Migrations 7–9 are convention adoption (no shape rewrite). Migration 10 unlocks once the MAV plan + Plan #7 land upstream.
 
@@ -53,7 +53,7 @@ Create per-project tracking entries:
 Do not modify:
 
 - Any downstream project's source files except via the migration script (or the per-project sub-agent's explicit, scoped edits for migration #6 / #9).
-- `science-tool/`, validators, or anything in the upstream Science source tree.
+- `science/`, validators, or anything in the upstream Science source tree.
 
 ---
 
@@ -152,7 +152,7 @@ Recommended sequencing (post-investigation): **cbioportal → mm30 → PL → NS
 
 - [x] **mm30** (`/home/keith/d/r/mm30`) — **DONE 2026-04-25**. mm30 commits: `f0448f8` rollup (Q1=C atomic move verified: `orphan_question_count: 6` → threads), `74c581c` emergent-threads, `cb0e96d` per-hyp (5 files), `f05045b` pre-reg (16 files — actual count 16 vs predicted ~6, all uniform `type: plan` → `type: pre-registration`), `afd0814` task entry `[t314]`. Validator state unchanged at 160/85. Idempotence ✓. Commitlint enforcement adapted (no `--no-verify` used). Pending: 4 sparse `doc/meta/pre-registration-*.md` files need hand-fill (separate cleanup cycle); tasks-archive (Plan #6); MAV validator update (Plan #7).
 
-- [x] **protein-landscape** (`/home/keith/d/protein-landscape`) — **DONE 2026-04-25**. Required two dispatches: first halted on pre-flight (Q63 dev work in progress); user landed Q63 work; resumed cleanly. PL commits: `9bc1477` rollup (Q1=C atomic move verified: `orphan_question_count: 23` → threads; `orphan_interpretation_count` and `orphan_ids:` were already on threads file, script correctly migrated only what was on rollup), `5c882a8` emergent-threads, `33ed567` per-hyp (3 files), `c9791f0` pre-reg (2 files), `6083bfe` task entry `[t168]`. Validator state unchanged at 1/2 (1 pre-existing error from `science-tool` clean-stdout follow-on). Idempotence ✓. Commitlint enforcement adapted. Pending: tasks-archive (Plan #6); MAV validator update (Plan #7); descriptor sidecar Pattern 3 adoption (Plan #9, deferred until Bucket C / P1 #8 namespace decision).
+- [x] **protein-landscape** (`/home/keith/d/protein-landscape`) — **DONE 2026-04-25**. Required two dispatches: first halted on pre-flight (Q63 dev work in progress); user landed Q63 work; resumed cleanly. PL commits: `9bc1477` rollup (Q1=C atomic move verified: `orphan_question_count: 23` → threads; `orphan_interpretation_count` and `orphan_ids:` were already on threads file, script correctly migrated only what was on rollup), `5c882a8` emergent-threads, `33ed567` per-hyp (3 files), `c9791f0` pre-reg (2 files), `6083bfe` task entry `[t168]`. Validator state unchanged at 1/2 (1 pre-existing error from `science` clean-stdout follow-on). Idempotence ✓. Commitlint enforcement adapted. Pending: tasks-archive (Plan #6); MAV validator update (Plan #7); descriptor sidecar Pattern 3 adoption (Plan #9, deferred until Bucket C / P1 #8 namespace decision).
 
 - [x] **natural-systems** (`/home/keith/d/natural-systems`) — **DONE 2026-04-25**. Rule 1 (`report-id-prefix`) was previously applied by user (NS commit `3adeeb0e`). NS commits this cycle: `5d2fb44a` rollup (Q1=C atomic move verified: `orphan_question_count: 56` → threads), `554b79e5` emergent-threads (3 files / 82 changes — largest mention-rewrite footprint of cycle; no false positives), `ae933219` per-hyp (4 files — non-`h*`-prefixed files caught by Phase 2 glob fix), `444a3ea4` pre-reg (2 files including t214 third-shape `id: plan:pre-registration-t214` → `id: pre-registration:t214`), `67421095` task entry `[t338]`. Validator state: migration commits unchanged at 239/77; task entry added +1 of pre-existing `missing required field: type` class (236 NS tasks share the same shape; not migration-introduced). Idempotence ✓. Commitlint enforcement adapted. Pending: 3 sparse `doc/meta/pre-registration-*.md` files need hand-fill (separate cleanup cycle, suggestions available via `natural-systems-pre-reg-frontmatter --rule`); tasks-archive (Plan #6); MAV validator update (Plan #7).
 
@@ -162,13 +162,13 @@ Recommended sequencing (post-investigation): **cbioportal → mm30 → PL → NS
 
 **Files:** No script changes. Per-project commits only.
 
-Once `science-tool tasks archive` is shipped (Plan #6 merged), per-project sub-agents run:
+Once `science tasks archive` is shipped (Plan #6 merged), per-project sub-agents run:
 
-- [ ] `science-tool tasks archive --tasks-dir <project>/tasks --format json` (dry-run preview).
+- [ ] `science tasks archive --tasks-dir <project>/tasks --format json` (dry-run preview).
 - [ ] Inspect plan; confirm route-by-month destinations match `completed:` dates.
-- [ ] `science-tool tasks archive --tasks-dir <project>/tasks --apply`.
-- [ ] Commit (`chore(tasks): archive done/retired entries via science-tool tasks archive`).
-- [ ] Confirm `science-tool health --project-root <project> --format json` reports `archive_lag.done_in_active == 0` and `archive_lag.retired_in_active == 0`.
+- [ ] `science tasks archive --tasks-dir <project>/tasks --apply`.
+- [ ] Commit (`chore(tasks): archive done/retired entries via science tasks archive`).
+- [ ] Confirm `science health --project-root <project> --format json` reports `archive_lag.done_in_active == 0` and `archive_lag.retired_in_active == 0`.
 
 Expected per-project counts (from audit + plan #6 evidence):
 
@@ -185,7 +185,7 @@ Expected per-project counts (from audit + plan #6 evidence):
 
 Once the MAV plan + Plan #7 (validator addendum) land upstream:
 
-- [ ] Per project: `science-tool project artifacts update validate.sh --project-root .` (or `--check` first).
+- [ ] Per project: `science project artifacts update validate.sh --project-root .` (or `--check` first).
 - [ ] Each project's local `validate.sh` should pull the canonical version with the audit-surfaced fixes.
 - [ ] Per-project run of `bash validate.sh --verbose` to confirm green (with `SCIENCE_VALIDATE_SKIP_ID_PREFIX=1` opt-out for natural-systems while migration #1 mentions are still settling, if relevant).
 - [ ] Per-project commit (`chore(validate): update to managed validate.sh v<DATE>`).

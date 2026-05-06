@@ -6,7 +6,7 @@ import sys
 
 def main() -> None:
     repo_root = Path(__file__).resolve().parents[1]
-    sys.path.insert(0, str(repo_root / "science-tool" / "src"))
+    sys.path.insert(0, str(repo_root / "science" / "src"))
     from science_tool.codex_skills import generate_codex_skills
 
     output_root = repo_root / "codex-skills"

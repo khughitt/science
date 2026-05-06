@@ -127,7 +127,7 @@ Body sections:
 
 For claim/evidence structure (used by State and Arc sections):
 
-1. **Graph claims** — when `science-tool graph claims` surfaces proposition/claim nodes for the hypothesis. (Future state after the `.edges.yaml` import lands.)
+1. **Graph claims** — when `science graph claims` surfaces proposition/claim nodes for the hypothesis. (Future state after the `.edges.yaml` import lands.)
 2. **`.edges.yaml`** — hand-curated DAG edge files in `doc/figures/dags/*.edges.yaml`. Read directly as structured claim data (edge_status, identification, data_support, lit_support).
 3. **YAML frontmatter chains** — follow `hypothesis.related[]`, `interpretation.related[]`, `interpretation.prior_interpretations[]`, `task.related[]`.
 4. **Graph summary surfaces** — `question-summary`, `dashboard-summary`, `uncertainty`, `gaps` as complementary context.
@@ -276,7 +276,7 @@ Before merging this command for general use, a manual review of the generated `s
 
 - The command lives at `commands/big-picture.md` following the existing pattern.
 - Sub-agents dispatched via the framework's existing sub-agent pattern (see `agents/paper-researcher.md`, `agents/topic-researcher.md` for precedent).
-- Bundle assembly in the main command is synchronous file reading + graph queries — no new science-tool CLI is required in v1.
+- Bundle assembly in the main command is synchronous file reading + graph queries — no new science CLI is required in v1.
 - Section-template prompts for the Sonnet sub-agents should live in `agents/` (proposed: `agents/hypothesis-synthesizer.md`, `agents/emergent-threads-synthesizer.md`).
 - The Opus synthesizer prompt lives inline in `commands/big-picture.md` since it's main-agent-facing.
 

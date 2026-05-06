@@ -30,7 +30,7 @@ Five P1 plans implemented and merged:
 
 - **P1 #2** (pre-registration canonical type) — commits `d840e07`..`fc1cc80` (4 commits). Includes pre-dispatch refinement (commit `b1eacc7`): id-prefix conformance check removed from Plan #2's loop because Plan #7 Task 6's PREFIX_RULES table is the single canonical home.
 - **P1 #4** (synthesis-rollup frontmatter + `report_kind` discriminator) — commits `4dcd2ed`..`d1e4751` (4 commits).
-- **P1 #6** (`science-tool tasks archive` + health-report `archive_lag` surfacing) — commits `dbee325`..`c29e4b7` (6 commits). Required mid-flight intervention: a stale `git stash apply` had left conflict markers in `science-tool/tests/test_health.py`; resolved via `git checkout HEAD -- ...` after user authorization.
+- **P1 #6** (`science tasks archive` + health-report `archive_lag` surfacing) — commits `dbee325`..`c29e4b7` (6 commits). Required mid-flight intervention: a stale `git stash apply` had left conflict markers in `science/tests/test_health.py`; resolved via `git checkout HEAD -- ...` after user authorization.
 - **P1 #9** (code/notebook → task back-link convention; new `docs/conventions/` directory) — commits `2768fa2`..`4196b8f` (3 commits).
 - **P1 #10** (chained-prior `next-steps` ledger; `prior:` canonical, `prior_analyses:` accepted variant) — commits `d5aa677`..`aee533f` (4 commits).
 - **P1 #7** (MAV addendum) — **HELD**. Depends on the in-flight `2026-04-25-managed-artifact-versioning.md` plan reaching `merged`. Plan is approved (status `approved (held: MAV not merged)` in the master rollout plan).
@@ -74,7 +74,7 @@ These were settled by the user during this session. A future orchestrator should
 3. **Q2 (synthesized_from form)** — block-list canonical: `commands/big-picture.md` Phase 3 example aligned to the template's block-list form. Inline-dict (`[{...}]`) is deprecated. `[t008]` tracks the validator-strictness follow-on (warn on inline-dict).
 4. **Q3 (audit corrections)** — appendix-style: `docs/audits/downstream-project-conventions/synthesis.md` § 3.3 has a "Post-investigation correction (2026-04-25)" subsection; original prose preserved as historical record.
 5. **Q4 (rule design)** — shape-driven, not project-named. Each rule canonicalizes any matching shape regardless of which project ships it. Discriminator is the file's directory placement + filename + `type:`/`id:` field combination, not a project name.
-6. **Q5 (long-term ideal)** — articulated in conversation 2026-04-25: entity-id references become first-class citizens of the knowledge graph; `science-tool entity rename <old-id> <new-id>` becomes a primitive; migration scripts become declarative ("transition entity instances of kind K from shape S₀ to shape S₁") rather than imperative regex flailing. Phase 2's shape-driven rules are the first concrete step toward this. Bucket C work is the next major step (defines abstract entity model).
+6. **Q5 (long-term ideal)** — articulated in conversation 2026-04-25: entity-id references become first-class citizens of the knowledge graph; `science entity rename <old-id> <new-id>` becomes a primitive; migration scripts become declarative ("transition entity instances of kind K from shape S₀ to shape S₁") rather than imperative regex flailing. Phase 2's shape-driven rules are the first concrete step toward this. Bucket C work is the next major step (defines abstract entity model).
 7. **Validator severity = `warn`** (not error) for id-prefix mismatches and structural-field absences. Established across Plans #2, #4, #7, #10.
 8. **Both validators in lockstep** — every change to `meta/validate.sh` is mirrored in `scripts/validate.sh` (locate by content, not absolute line). Until MAV unifies them.
 9. **No legacy/compatibility layers** — additive type-conformance checks only. Validators stay silent on legacy shapes (e.g. `type: plan` pre-regs, `type: report` synthesis files, `prior_analyses:` next-steps). Downstream migrations are the cleanup path, not validator branches.
@@ -95,7 +95,7 @@ These were settled by the user during this session. A future orchestrator should
 
 ### 1. MAV review/merge (unblocks Plan #7 + migration Task 4)
 
-`docs/plans/2026-04-25-managed-artifact-versioning.md` exists but is not yet executed. Once MAV merges, Plan #7 (the audit-surfaced `mav-input` set addendum) can be dispatched. After Plan #7 lands, downstream projects can `science-tool project artifacts update validate.sh` to pull the canonical with the audit-surfaced fixes. This is the largest open thread that genuinely depends on prior work landing first.
+`docs/plans/2026-04-25-managed-artifact-versioning.md` exists but is not yet executed. Once MAV merges, Plan #7 (the audit-surfaced `mav-input` set addendum) can be dispatched. After Plan #7 lands, downstream projects can `science project artifacts update validate.sh` to pull the canonical with the audit-surfaced fixes. This is the largest open thread that genuinely depends on prior work landing first.
 
 > Addressed by `docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md`.
 
@@ -121,7 +121,7 @@ Workflow per file: (a) run the rule against the project to see the suggested can
 
 ### 4. Tasks-archive adoption per project (migration plan Task 3)
 
-`science-tool tasks archive` shipped upstream (`c29e4b7`). Each downstream project needs to install/update `science-tool` and run the archiver. Per-project counts (from audit + Plan #6 evidence):
+`science tasks archive` shipped upstream (`c29e4b7`). Each downstream project needs to install/update `science` and run the archiver. Per-project counts (from audit + Plan #6 evidence):
 
 - natural-systems: ~114 done entries
 - mm30: 41 entries (36 done + 5 retired)
@@ -151,13 +151,13 @@ These rules were established during cross-plan review and recorded in the master
 ## Useful context for the next orchestrator
 
 - **Read-only constraint applies to downstream projects** for any *audit* or *upstream-Science* work. Migration cycles MUTATE downstream state — but only via the script's per-rule `--apply`, with pre-flight gates and one-rule-per-commit atomicity. Never use `git stash`/`reset`/`checkout HEAD --`/`clean` in a downstream repo without explicit user authorization. The mm30 and NS projects enforce commitlint via husky; adapt commit subjects to ≤100 chars and never use `--no-verify`.
-- **Both `meta/validate.sh` and `scripts/validate.sh` exist** with different sha256 at audit time. The MAV plan (still in flight) creates a third copy at `science-tool/src/science_tool/project_artifacts/data/validate.sh` that becomes the package-distributed canonical. Plan #7 (MAV addendum) handles the version bump bookkeeping after MAV merges.
+- **Both `meta/validate.sh` and `scripts/validate.sh` exist** with different sha256 at audit time. The MAV plan (still in flight) creates a third copy at `science/src/science_tool/project_artifacts/data/validate.sh` that becomes the package-distributed canonical. Plan #7 (MAV addendum) handles the version bump bookkeeping after MAV merges.
 - **The migration script's seven rules** are: `report-id-prefix`, `synthesis-type-and-id-rollup`, `synthesis-type-and-id-emergent-threads`, `synthesis-type-and-id-per-hyp`, `pre-registration-id-and-type`, `natural-systems-pre-reg-frontmatter` (report-only), `specs-frontmatter-backfill`. All idempotent. Self-test at `--self-test` covers every observed downstream shape.
 - **Pre-flight gates** for any downstream-mutating dispatch: clean working tree, no merge/rebase/cherry-pick/bisect, stash list noted (don't touch user WIP), HEAD captured for revert reference, validator baseline captured. HALT on any unexpected state.
 - **Pre-existing baseline issues** to be aware of:
   - cbioportal: 37 `task tNNN missing required field: type` errors (de-facto schema; not migration-introduced; will resolve when Plan #7's per-type id-prefix table ships and projects either adopt `type:` or opt out via `SCIENCE_VALIDATE_SKIP_ID_PREFIX=1`).
   - natural-systems: 235+ of the same `task missing required field: type` errors (same de-facto schema, larger volume).
-  - protein-landscape: 1 pre-existing error `graph audit produced unparseable output` (the `science-tool` clean-stdout follow-on `[t<NNN>]` track).
+  - protein-landscape: 1 pre-existing error `graph audit produced unparseable output` (the `science` clean-stdout follow-on `[t<NNN>]` track).
   - These baselines are NOT migration-introduced. Treat new errors that fail to match any of these classes as real regressions.
 - **Auto-memory** is at `/home/keith/.claude/projects/-mnt-ssd-Dropbox-science/memory/`. Three project-memory entries exist (multi-project sync status, bio domain priority, natural-systems unresolved refs); none are critical for this rollout.
 - **Important user instructions surfaced this session:**

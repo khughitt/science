@@ -3,7 +3,7 @@
 ## What this is
 
 A Science project that takes the **Science toolkit itself** as its object of
-study and development. The toolkit code lives at `../science-tool/`, `../aspects/`,
+study and development. The toolkit code lives at `../science/`, `../aspects/`,
 `../skills/`, `../commands/`, `../templates/`, `../references/`. This project
 does not contain that code — it contains the research artifacts, decisions,
 hypotheses, tasks, knowledge graph, and literature review that drive it.
@@ -17,7 +17,7 @@ hypotheses, tasks, knowledge graph, and literature review that drive it.
 
 Science commands resolve the project from `science.yaml`. Always run them
 from `meta/`, or pass `--project meta` / `--project-root .` as appropriate.
-The tool lives at `../science-tool/` — `.env` points `SCIENCE_TOOL_PATH` there.
+The tool lives at `../science/` — `.env` points `SCIENCE_TOOL_PATH` there.
 
 ## Validation
 
@@ -27,7 +27,7 @@ bash validate.sh --verbose
 
 ## Conventions
 
-- Paths to tool code use `../science-tool/...` from inside `meta/`.
+- Paths to tool code use `../science/...` from inside `meta/`.
 - Hypotheses are about the tool's design and the research-workflow model it
   implements, not about an external scientific domain.
 - Literature in `doc/background/papers/` focuses on: research-agent design,

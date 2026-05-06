@@ -12,13 +12,13 @@ This command updates the graph by changing canonical source files, not by editin
 
 ## Tool invocation
 
-All `science-tool` commands below use this pattern:
+All `science` commands below use this pattern:
 
 ```bash
-uv run science-tool <command>
+uv run science <command>
 ```
 
-For brevity, the examples below write just `science-tool <command>`; always expand them to `uv run science-tool <command>` when executing.
+For brevity, the examples below write just `science <command>`; always expand them to `uv run science <command>` when executing.
 
 ## Cross-Project Registry Check
 
@@ -31,7 +31,7 @@ When adding new entities as part of the update, the cross-project registry is co
 Run:
 
 ```bash
-science-tool graph diff --mode hybrid --format json
+science graph diff --mode hybrid --format json
 ```
 
 Review the output. If no files are stale, report "Graph is up to date" and stop.
@@ -65,8 +65,8 @@ references behind.
 Run:
 
 ```bash
-science-tool graph migrate --project-root . --format json
-science-tool graph audit --project-root . --format json
+science graph migrate --project-root . --format json
+science graph audit --project-root . --format json
 ```
 
 Use `graph migrate` first as a dry-run audit. It previews alias-resolvable rewrites, layered-claim
@@ -75,7 +75,7 @@ migration gaps, and projected cleanup without mutating the project.
 If the preview looks correct, re-run with:
 
 ```bash
-science-tool graph migrate --project-root . --format json --apply
+science graph migrate --project-root . --format json --apply
 ```
 
 Only `--apply` writes alias rewrites, scaffolds local-profile source files, and persists
@@ -87,9 +87,9 @@ apply pass, fix the upstream sources first. Do not build until the audit is clea
 Run:
 
 ```bash
-science-tool graph build --project-root .
-science-tool graph validate --format json
-science-tool graph stats --format json
+science graph build --project-root .
+science graph validate --format json
+science graph stats --format json
 ```
 
 ### Step 6: Record project-local migration state when needed

@@ -153,7 +153,7 @@ output_dir.mkdir(parents=True, exist_ok=True)
 - Avoid side effects in cells (file writes should be in dedicated export cells)
 
 ### Connecting to Science workflow
-- Read inquiry variables from graph: `science-tool inquiry show <slug> --format json`
+- Read inquiry variables from graph: `science inquiry show <slug> --format json`
 - Load `datapackage.json` to understand available fields
 - Export results with provenance metadata
 - Document findings in `doc/` after exploration

@@ -2,16 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Extract the 5 ad-hoc entity loaders in `science-tool/src/science_tool/graph/sources.py` into a clean `EntityProvider` abstraction, add the missing `DatapackageDirectoryProvider` (for promoted datasets), and generalize the existing aggregate loader to support per-type aggregate files (the mm30 rare-topics case).
+**Goal:** Extract the 5 ad-hoc entity loaders in `science/src/science_tool/graph/sources.py` into a clean `EntityProvider` abstraction, add the missing `DatapackageDirectoryProvider` (for promoted datasets), and generalize the existing aggregate loader to support per-type aggregate files (the mm30 rare-topics case).
 
 **Architecture:** Three format-driven providers (`MarkdownProvider`, `DatapackageDirectoryProvider`, `AggregateProvider`) coordinated by an `EntityResolver` and an `EntityDiscoveryContext`. Specialized parsers (tasks/models/parameters) keep their direct callsites in `load_project_sources` but each sets `SourceEntity.provider` explicitly. All format-driven extraction funnels through a shared `EntityRecord` schema and `_normalize_record` helper. Behavior preservation enforced by a snapshot regression test that uses a projection excluding new fields.
 
-**Tech Stack:** Python 3.11+, uv, Pydantic, pytest, ruff, pyright. Code lives entirely in `science-tool/`. No `science-model` changes (the unchanged-shape `Entity` continues to populate the markdown provider's records).
+**Tech Stack:** Python 3.11+, uv, Pydantic, pytest, ruff, pyright. Code lives entirely in `science/`. No `science-model` changes (the unchanged-shape `Entity` continues to populate the markdown provider's records).
 
 **Reference paths used throughout:**
 - Spec: `docs/specs/2026-04-20-multi-backend-entity-resolver-design.md` (rev 1.1)
-- Existing entity-loading code: `science-tool/src/science_tool/graph/sources.py`
-- Health module (touched in step 11): `science-tool/src/science_tool/graph/health.py`
+- Existing entity-loading code: `science/src/science_tool/graph/sources.py`
+- Health module (touched in step 11): `science/src/science_tool/graph/health.py`
 - `Entity` model (read-only — used by MarkdownProvider): `science-model/src/science_model/entities.py`
 - `parse_entity_file` (read-only): `science-model/src/science_model/frontmatter.py:177`
 
@@ -26,10 +26,10 @@
 **Key cross-cutting invariants (read before any task):**
 
 - **All paths in this plan are relative to the worktree root** (`/mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/`). The worktree is set up by the executing skill before Task 1.
-- **Every commit must keep the existing test suite green.** Run `cd science-tool && uv run --frozen pytest -q` after every task before committing.
+- **Every commit must keep the existing test suite green.** Run `cd science && uv run --frozen pytest -q` after every task before committing.
 - **Snapshot regression** (`test_load_project_sources_regression.py`) uses a `_project_for_snapshot()` helper that excludes the new `provider` and `description` fields. This is the canary; it must stay green across every commit in this plan.
 - **Specialized parsers** (`parse_tasks`, `_load_model_sources`, `_load_parameter_sources`) keep their existing direct callsites — DO NOT wrap them in EntityProvider classes.
-- **Pre-existing pyright errors** in `science-tool/src/science_tool/cli.py` (CrossImpactRow + PropositionInteractionTerm invariance) and `science-tool/src/science_tool/graph/sources.py` (~19 object→typed assignment errors) are NOT to be fixed in this plan. They predate Spec Y.
+- **Pre-existing pyright errors** in `science/src/science_tool/cli.py` (CrossImpactRow + PropositionInteractionTerm invariance) and `science/src/science_tool/graph/sources.py` (~19 object→typed assignment errors) are NOT to be fixed in this plan. They predate Spec Y.
 
 **Phases:**
 1. Foundation (types module, snapshot fixture, package skeleton)
@@ -47,13 +47,13 @@
 ### Task 1.1: Create `graph/source_types.py` with shared types
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/source_types.py`
-- Modify: `science-tool/src/science_tool/graph/sources.py` (re-export from new module for back-compat)
-- Test: `science-tool/tests/test_source_types.py`
+- Create: `science/src/science_tool/graph/source_types.py`
+- Modify: `science/src/science_tool/graph/sources.py` (re-export from new module for back-compat)
+- Test: `science/tests/test_source_types.py`
 
 - [ ] **Step 1: Write failing test**
 
-Create `science-tool/tests/test_source_types.py`:
+Create `science/tests/test_source_types.py`:
 
 ```python
 """Tests for graph.source_types — the neutral home for SourceEntity, SourceRelation, etc."""
@@ -107,7 +107,7 @@ def test_entity_datapackage_invalid_error_message_includes_path_and_field() -> N
 - [ ] **Step 2: Run failing test**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science-tool
+cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science
 uv run --frozen pytest tests/test_source_types.py -v
 ```
 
@@ -123,7 +123,7 @@ You'll see `SourceEntity`, `SourceRelation`, `KnowledgeProfiles` (and `_SourceRe
 
 - [ ] **Step 4: Create `source_types.py`**
 
-Create `science-tool/src/science_tool/graph/source_types.py`:
+Create `science/src/science_tool/graph/source_types.py`:
 
 ```python
 """Shared types consumed by both graph/sources.py and the entity_providers package.
@@ -215,7 +215,7 @@ class EntityDatapackageInvalidError(ValueError):
 
 - [ ] **Step 5: Update `graph/sources.py` to re-export from `source_types`**
 
-In `science-tool/src/science_tool/graph/sources.py`, REMOVE the existing class definitions of `SourceEntity`, `SourceRelation`, `KnowledgeProfiles` (lines ~79-130), and ADD this near the top of the file (after the existing imports, before any class/function defs):
+In `science/src/science_tool/graph/sources.py`, REMOVE the existing class definitions of `SourceEntity`, `SourceRelation`, `KnowledgeProfiles` (lines ~79-130), and ADD this near the top of the file (after the existing imports, before any class/function defs):
 
 ```python
 # Re-export shared types from the neutral module for back-compat.
@@ -253,15 +253,15 @@ git commit -m "feat(graph): lift shared types into source_types.py module"
 ### Task 1.2: Snapshot regression fixture + checked-in baseline
 
 **Files:**
-- Create: `science-tool/tests/fixtures/spec_y_kitchen_sink/` (directory tree)
-- Create: `science-tool/tests/fixtures/spec_y_kitchen_sink/snapshot.json` (baseline output)
-- Create: `science-tool/tests/test_load_project_sources_regression.py`
+- Create: `science/tests/fixtures/spec_y_kitchen_sink/` (directory tree)
+- Create: `science/tests/fixtures/spec_y_kitchen_sink/snapshot.json` (baseline output)
+- Create: `science/tests/test_load_project_sources_regression.py`
 
 This task seeds the canary — the regression baseline that every subsequent commit must keep green.
 
 - [ ] **Step 1: Create the kitchen-sink fixture project**
 
-Create `science-tool/tests/fixtures/spec_y_kitchen_sink/science.yaml`:
+Create `science/tests/fixtures/spec_y_kitchen_sink/science.yaml`:
 
 ```yaml
 name: spec-y-kitchen-sink
@@ -273,7 +273,7 @@ profiles:
 Create the directory structure and files:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science-tool
+cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science
 mkdir -p tests/fixtures/spec_y_kitchen_sink/doc/hypotheses
 mkdir -p tests/fixtures/spec_y_kitchen_sink/doc/datasets
 mkdir -p tests/fixtures/spec_y_kitchen_sink/doc/topics
@@ -349,7 +349,7 @@ entities:
 
 - [ ] **Step 2: Write the regression test**
 
-Create `science-tool/tests/test_load_project_sources_regression.py`:
+Create `science/tests/test_load_project_sources_regression.py`:
 
 ```python
 """Snapshot-based regression test for load_project_sources.
@@ -405,7 +405,7 @@ def test_load_project_sources_kitchen_sink_snapshot() -> None:
 Run the helper to produce `snapshot.json` from the current (pre-refactor) behavior:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science-tool
+cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science
 uv run --frozen python -c "
 import json
 from pathlib import Path
@@ -451,20 +451,20 @@ git commit -m "test(graph): kitchen-sink snapshot regression baseline (Spec Y ca
 ### Task 1.3: `entity_providers/` package skeleton — `EntityDiscoveryContext` + `EntityProvider` ABC
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/entity_providers/__init__.py`
-- Create: `science-tool/src/science_tool/graph/entity_providers/base.py`
-- Test: `science-tool/tests/test_entity_providers/test_base.py`
+- Create: `science/src/science_tool/graph/entity_providers/__init__.py`
+- Create: `science/src/science_tool/graph/entity_providers/base.py`
+- Test: `science/tests/test_entity_providers/test_base.py`
 
 - [ ] **Step 1: Write failing test**
 
 ```bash
-mkdir -p science-tool/tests/test_entity_providers
-touch science-tool/tests/test_entity_providers/__init__.py
+mkdir -p science/tests/test_entity_providers
+touch science/tests/test_entity_providers/__init__.py
 ```
 
-Create `science-tool/tests/test_entity_providers/__init__.py` (empty file).
+Create `science/tests/test_entity_providers/__init__.py` (empty file).
 
-Create `science-tool/tests/test_entity_providers/test_base.py`:
+Create `science/tests/test_entity_providers/test_base.py`:
 
 ```python
 """Tests for EntityProvider ABC + EntityDiscoveryContext."""
@@ -531,9 +531,9 @@ Expected: ImportError (module doesn't exist).
 
 - [ ] **Step 3: Create the package**
 
-Create `science-tool/src/science_tool/graph/entity_providers/__init__.py` (empty file).
+Create `science/src/science_tool/graph/entity_providers/__init__.py` (empty file).
 
-Create `science-tool/src/science_tool/graph/entity_providers/base.py`:
+Create `science/src/science_tool/graph/entity_providers/base.py`:
 
 ```python
 """EntityDiscoveryContext + EntityProvider abstract base.
@@ -610,12 +610,12 @@ git commit -m "feat(entity-providers): add EntityProvider ABC + EntityDiscoveryC
 ### Task 1.4: `EntityRecord` schema + `_normalize_record` helper
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/entity_providers/record.py`
-- Test: `science-tool/tests/test_entity_providers/test_record.py`
+- Create: `science/src/science_tool/graph/entity_providers/record.py`
+- Test: `science/tests/test_entity_providers/test_record.py`
 
 - [ ] **Step 1: Write failing test**
 
-Create `science-tool/tests/test_entity_providers/test_record.py`:
+Create `science/tests/test_entity_providers/test_record.py`:
 
 ```python
 """Tests for EntityRecord schema + _normalize_record helper."""
@@ -728,7 +728,7 @@ Expected: ImportError on `record` module.
 
 - [ ] **Step 3: Implement**
 
-Create `science-tool/src/science_tool/graph/entity_providers/record.py`:
+Create `science/src/science_tool/graph/entity_providers/record.py`:
 
 ```python
 """EntityRecord — normalized input shape for format-driven providers.
@@ -888,12 +888,12 @@ git commit -m "feat(entity-providers): add EntityRecord schema + _normalize_reco
 ### Task 1.5: `EntityResolver` + `default_providers()`
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/entity_providers/resolver.py`
-- Test: `science-tool/tests/test_entity_providers/test_resolver.py`
+- Create: `science/src/science_tool/graph/entity_providers/resolver.py`
+- Test: `science/tests/test_entity_providers/test_resolver.py`
 
 - [ ] **Step 1: Write failing test**
 
-Create `science-tool/tests/test_entity_providers/test_resolver.py`:
+Create `science/tests/test_entity_providers/test_resolver.py`:
 
 ```python
 """Tests for EntityResolver — coordinates multiple providers, merges by canonical_id."""
@@ -992,7 +992,7 @@ Expected: ImportError on `resolver` module + `default_providers`.
 
 - [ ] **Step 3: Implement**
 
-Create `science-tool/src/science_tool/graph/entity_providers/resolver.py`:
+Create `science/src/science_tool/graph/entity_providers/resolver.py`:
 
 ```python
 """EntityResolver — coordinates a list of EntityProvider implementations.
@@ -1080,8 +1080,8 @@ git commit -m "feat(entity-providers): add EntityResolver + default_providers fa
 ### Task 2.1: `MarkdownProvider` (Path 1 — invisible behavior)
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/entity_providers/markdown.py`
-- Test: `science-tool/tests/test_entity_providers/test_markdown_provider.py`
+- Create: `science/src/science_tool/graph/entity_providers/markdown.py`
+- Test: `science/tests/test_entity_providers/test_markdown_provider.py`
 
 - [ ] **Step 1: Read the existing implementation**
 
@@ -1093,7 +1093,7 @@ You'll see `_load_markdown_entities` — the function being refactored. The prov
 
 - [ ] **Step 2: Write failing test**
 
-Create `science-tool/tests/test_entity_providers/test_markdown_provider.py`:
+Create `science/tests/test_entity_providers/test_markdown_provider.py`:
 
 ```python
 """Tests for MarkdownProvider — behavior matches existing _load_markdown_entities."""
@@ -1175,7 +1175,7 @@ Expected: ImportError on `markdown` module.
 
 - [ ] **Step 4: Implement**
 
-Create `science-tool/src/science_tool/graph/entity_providers/markdown.py`:
+Create `science/src/science_tool/graph/entity_providers/markdown.py`:
 
 ```python
 """MarkdownProvider — refactor of the existing _load_markdown_entities loader.
@@ -1273,8 +1273,8 @@ git commit -m "feat(entity-providers): add MarkdownProvider (refactor of _load_m
 ### Task 2.2: `AggregateProvider` (multi-type only — Path 2)
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/entity_providers/aggregate.py`
-- Test: `science-tool/tests/test_entity_providers/test_aggregate_provider.py`
+- Create: `science/src/science_tool/graph/entity_providers/aggregate.py`
+- Test: `science/tests/test_entity_providers/test_aggregate_provider.py`
 
 - [ ] **Step 1: Read the existing implementation**
 
@@ -1286,7 +1286,7 @@ sed -n '341,400p' src/science_tool/graph/sources.py
 
 - [ ] **Step 2: Write failing test**
 
-Create `science-tool/tests/test_entity_providers/test_aggregate_provider.py`:
+Create `science/tests/test_entity_providers/test_aggregate_provider.py`:
 
 ```python
 """Tests for AggregateProvider — multi-type aggregate (entities.yaml) for Phase 2."""
@@ -1365,7 +1365,7 @@ Expected: ImportError.
 
 - [ ] **Step 4: Implement (multi-type only — single-type added in Task 5.1)**
 
-Create `science-tool/src/science_tool/graph/entity_providers/aggregate.py`:
+Create `science/src/science_tool/graph/entity_providers/aggregate.py`:
 
 ```python
 """AggregateProvider — refactor of the existing _load_structured_entities loader.
@@ -1495,14 +1495,14 @@ git commit -m "feat(entity-providers): add AggregateProvider (multi-type entitie
 ### Task 3.1: Switch `load_project_sources` to use `EntityResolver` + global collision check
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/sources.py`
-- Test: `science-tool/tests/test_load_project_sources_global_collision.py`
+- Modify: `science/src/science_tool/graph/sources.py`
+- Test: `science/tests/test_load_project_sources_global_collision.py`
 
 This is the load-bearing change. The existing `_load_markdown_entities` and `_load_structured_entities` callsites are replaced with the resolver. Specialized parsers stay direct callsites. A new global collision check covers everything.
 
 - [ ] **Step 1: Write failing test for the global collision**
 
-Create `science-tool/tests/test_load_project_sources_global_collision.py`:
+Create `science/tests/test_load_project_sources_global_collision.py`:
 
 ```python
 """Tests for the global collision check in load_project_sources."""
@@ -1581,7 +1581,7 @@ Expected: the cross-resolver test may or may not pass (resolver-internal collisi
 
 - [ ] **Step 3: Refactor `load_project_sources`**
 
-In `science-tool/src/science_tool/graph/sources.py`, find the existing `load_project_sources` function (line 139). Locate the block around lines 158-185 that does:
+In `science/src/science_tool/graph/sources.py`, find the existing `load_project_sources` function (line 139). Locate the block around lines 158-185 that does:
 
 ```python
 entities.extend(_load_markdown_entities(project_root, [paths.doc_dir, paths.specs_dir, project_root / "research" / "packages"], ...))
@@ -1678,11 +1678,11 @@ git commit -m "feat(graph): switch load_project_sources to EntityResolver + glob
 ### Task 4.1: Add `SourceEntity.provider` field (required, no default) + update every loader
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/source_types.py`
-- Modify: `science-tool/src/science_tool/graph/entity_providers/record.py` (`_normalize_record`)
-- Modify: `science-tool/src/science_tool/graph/sources.py` (specialized parsers)
+- Modify: `science/src/science_tool/graph/source_types.py`
+- Modify: `science/src/science_tool/graph/entity_providers/record.py` (`_normalize_record`)
+- Modify: `science/src/science_tool/graph/sources.py` (specialized parsers)
 - Modify: existing tests where `SourceEntity` is constructed (likely a few — search and update)
-- Test: `science-tool/tests/test_entity_providers/test_provider_field.py`
+- Test: `science/tests/test_entity_providers/test_provider_field.py`
 
 - [ ] **Step 1: Locate every `SourceEntity(` construction site**
 
@@ -1694,7 +1694,7 @@ You'll find construction in: `_load_task_entities`, `_load_structured_entities` 
 
 - [ ] **Step 2: Write failing test**
 
-Create `science-tool/tests/test_entity_providers/test_provider_field.py`:
+Create `science/tests/test_entity_providers/test_provider_field.py`:
 
 ```python
 """Tests for the SourceEntity.provider field — every loader sets it explicitly."""
@@ -1793,7 +1793,7 @@ Expected: most tests FAIL (provider field doesn't exist yet OR loaders don't set
 
 - [ ] **Step 4: Add `provider` field to `SourceEntity`**
 
-In `science-tool/src/science_tool/graph/source_types.py`, add the field:
+In `science/src/science_tool/graph/source_types.py`, add the field:
 
 ```python
 class SourceEntity(BaseModel):
@@ -1810,7 +1810,7 @@ class SourceEntity(BaseModel):
 
 - [ ] **Step 5: Update `_normalize_record` to populate `provider`**
 
-In `science-tool/src/science_tool/graph/entity_providers/record.py`, modify `_normalize_record` to pass `provider=provider_name` into the SourceEntity construction. Update the existing return:
+In `science/src/science_tool/graph/entity_providers/record.py`, modify `_normalize_record` to pass `provider=provider_name` into the SourceEntity construction. Update the existing return:
 
 ```python
     return SourceEntity(
@@ -1829,7 +1829,7 @@ Remove the previously-added xfail decorator from `test_normalize_record_produces
 
 - [ ] **Step 6: Update specialized parsers to set `provider` explicitly**
 
-In `science-tool/src/science_tool/graph/sources.py`:
+In `science/src/science_tool/graph/sources.py`:
 
 a) `_load_task_entities` — find the `SourceEntity(...)` construction and add `provider="task"`.
 b) `_load_model_sources` — find both `SourceEntity(...)` construction sites and add `provider="model"`.
@@ -1906,15 +1906,15 @@ git commit -m "feat(graph): require explicit provider on every SourceEntity (six
 ### Task 4.2: Add `SourceEntity.description` field + per-provider sourcing
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/source_types.py`
-- Modify: `science-tool/src/science_tool/graph/entity_providers/record.py`
-- Modify: `science-tool/src/science_tool/graph/entity_providers/markdown.py`
-- Modify: `science-tool/src/science_tool/graph/sources.py` (task parser)
-- Test: `science-tool/tests/test_entity_providers/test_description_field.py`
+- Modify: `science/src/science_tool/graph/source_types.py`
+- Modify: `science/src/science_tool/graph/entity_providers/record.py`
+- Modify: `science/src/science_tool/graph/entity_providers/markdown.py`
+- Modify: `science/src/science_tool/graph/sources.py` (task parser)
+- Test: `science/tests/test_entity_providers/test_description_field.py`
 
 - [ ] **Step 1: Write failing test**
 
-Create `science-tool/tests/test_entity_providers/test_description_field.py`:
+Create `science/tests/test_entity_providers/test_description_field.py`:
 
 ```python
 """Tests for the SourceEntity.description field — per-provider prose sourcing."""
@@ -1997,7 +1997,7 @@ Expected: most FAIL (field doesn't exist yet).
 
 - [ ] **Step 3: Add `description` field to `SourceEntity`**
 
-In `science-tool/src/science_tool/graph/source_types.py`, after the `provider` field:
+In `science/src/science_tool/graph/source_types.py`, after the `provider` field:
 
 ```python
     description: str = ""  # NEW — entity prose body. Defaults empty.
@@ -2005,7 +2005,7 @@ In `science-tool/src/science_tool/graph/source_types.py`, after the `provider` f
 
 - [ ] **Step 4: Wire description through `_normalize_record`**
 
-In `science-tool/src/science_tool/graph/entity_providers/record.py`, update the `SourceEntity` construction in `_normalize_record`:
+In `science/src/science_tool/graph/entity_providers/record.py`, update the `SourceEntity` construction in `_normalize_record`:
 
 ```python
     return SourceEntity(
@@ -2018,7 +2018,7 @@ In `science-tool/src/science_tool/graph/entity_providers/record.py`, update the 
 
 - [ ] **Step 5: Wire description through `MarkdownProvider`**
 
-In `science-tool/src/science_tool/graph/entity_providers/markdown.py`, update `_extract_record` to populate description from `entity.content`:
+In `science/src/science_tool/graph/entity_providers/markdown.py`, update `_extract_record` to populate description from `entity.content`:
 
 ```python
         return EntityRecord(
@@ -2033,7 +2033,7 @@ In `science-tool/src/science_tool/graph/entity_providers/markdown.py`, update `_
 
 - [ ] **Step 6: Wire description through specialized task parser**
 
-In `science-tool/src/science_tool/graph/sources.py`, find the `_load_task_entities` function (line 306) and update its `SourceEntity(...)` call to add `description`:
+In `science/src/science_tool/graph/sources.py`, find the `_load_task_entities` function (line 306) and update its `SourceEntity(...)` call to add `description`:
 
 ```python
 SourceEntity(
@@ -2072,8 +2072,8 @@ git commit -m "feat(graph): SourceEntity.description field + per-provider prose 
 ### Task 5.1: AggregateProvider single-type aggregate (Path 3 — mm30 case)
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/entity_providers/aggregate.py`
-- Modify: `science-tool/tests/test_entity_providers/test_aggregate_provider.py`
+- Modify: `science/src/science_tool/graph/entity_providers/aggregate.py`
+- Modify: `science/tests/test_entity_providers/test_aggregate_provider.py`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -2150,7 +2150,7 @@ Expected: 4 new tests FAIL.
 
 - [ ] **Step 3: Implement single-type aggregate loader**
 
-In `science-tool/src/science_tool/graph/entity_providers/aggregate.py`, ADD `_load_single_type_aggregates` and call it from `discover`:
+In `science/src/science_tool/graph/entity_providers/aggregate.py`, ADD `_load_single_type_aggregates` and call it from `discover`:
 
 ```python
 import json
@@ -2225,12 +2225,12 @@ git commit -m "feat(entity-providers): AggregateProvider single-type convention 
 ### Task 5.2: `DatapackageDirectoryProvider` (Path 4 — dataset promotion)
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/entity_providers/datapackage_directory.py`
-- Test: `science-tool/tests/test_entity_providers/test_datapackage_directory_provider.py`
+- Create: `science/src/science_tool/graph/entity_providers/datapackage_directory.py`
+- Test: `science/tests/test_entity_providers/test_datapackage_directory_provider.py`
 
 - [ ] **Step 1: Write failing test**
 
-Create `science-tool/tests/test_entity_providers/test_datapackage_directory_provider.py`:
+Create `science/tests/test_entity_providers/test_datapackage_directory_provider.py`:
 
 ```python
 """Tests for DatapackageDirectoryProvider — entity-flavored datapackages only."""
@@ -2358,7 +2358,7 @@ Expected: ImportError.
 
 - [ ] **Step 3: Implement**
 
-Create `science-tool/src/science_tool/graph/entity_providers/datapackage_directory.py`:
+Create `science/src/science_tool/graph/entity_providers/datapackage_directory.py`:
 
 ```python
 """DatapackageDirectoryProvider — datasets promoted to live as data/<slug>/datapackage.yaml.
@@ -2473,12 +2473,12 @@ git commit -m "feat(entity-providers): DatapackageDirectoryProvider for promoted
 ### Task 6.1: Update `dataset_cached_field_drift` to skip datapackage-directory entities
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Modify: `science-tool/tests/test_health.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Modify: `science/tests/test_health.py`
 
 - [ ] **Step 1: Write failing test**
 
-Append to `science-tool/tests/test_health.py`:
+Append to `science/tests/test_health.py`:
 
 ```python
 def test_cached_field_drift_skips_datapackage_directory_entities(tmp_path: Path) -> None:
@@ -2519,7 +2519,7 @@ grep -n "dataset_cached_field_drift\|provider" src/science_tool/graph/health.py 
 
 The existing `dataset_cached_field_drift` check (from dataset-entity-lifecycle Phase 6) reads the entity's frontmatter and compares fields against the runtime datapackage. For promoted entities, the entity IS the runtime file — there's no second surface to drift against. The check should explicitly skip when `provider == "datapackage-directory"`.
 
-In `science-tool/src/science_tool/graph/health.py`, find the `dataset_cached_field_drift` block in `check_dataset_anomalies`. The current check loads `parse_frontmatter` directly — it doesn't have access to `provider` info from there. Add a guard: skip the drift check for any dataset whose source_path is a `datapackage.yaml` file (heuristic — these are the promoted entities).
+In `science/src/science_tool/graph/health.py`, find the `dataset_cached_field_drift` block in `check_dataset_anomalies`. The current check loads `parse_frontmatter` directly — it doesn't have access to `provider` info from there. Add a guard: skip the drift check for any dataset whose source_path is a `datapackage.yaml` file (heuristic — these are the promoted entities).
 
 ```python
         # Skip cached-field drift for promoted entities (datapackage IS the entity surface).
@@ -2556,13 +2556,13 @@ git commit -m "feat(health): skip cached_field_drift for datapackage-directory e
 ### Task 7.1: Migration scenario tests
 
 **Files:**
-- Create: `science-tool/tests/test_provider_migration.py`
+- Create: `science/tests/test_provider_migration.py`
 
 End-to-end scenarios for the dataset migration story (mid-migration mixed mode, bad-migration collision recovery).
 
 - [ ] **Step 1: Write tests**
 
-Create `science-tool/tests/test_provider_migration.py`:
+Create `science/tests/test_provider_migration.py`:
 
 ```python
 """End-to-end migration scenarios: mixed-mode coexistence, collision detection, recovery."""
@@ -2659,7 +2659,7 @@ git commit -m "test: end-to-end migration scenarios (mixed mode + collision reco
 - [ ] **Step 1: Lint + format**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science-tool
+cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science
 uv run --frozen ruff check . 2>&1 | tail -10
 uv run --frozen ruff format --check . 2>&1 | tail -10
 ```
@@ -2680,7 +2680,7 @@ Pre-existing pyright errors are LISTED in the plan header — confirm the count 
 
 ```bash
 # Count pre-existing on main:
-cd /mnt/ssd/Dropbox/science && git stash -u 2>&1 | head -1 ; git checkout main -- science-tool/ 2>&1 | head -1 ; cd science-tool && uv run --frozen pyright 2>&1 | tail -1 ; cd .. && git checkout HEAD -- science-tool/ ; git stash pop 2>&1 | head -1
+cd /mnt/ssd/Dropbox/science && git stash -u 2>&1 | head -1 ; git checkout main -- science/ 2>&1 | head -1 ; cd science && uv run --frozen pyright 2>&1 | tail -1 ; cd .. && git checkout HEAD -- science/ ; git stash pop 2>&1 | head -1
 # (Or alternative: just confirm the worktree's pyright count is no worse than main's.)
 ```
 
@@ -2693,14 +2693,14 @@ git add . && git commit -m "fix: address pyright errors introduced by Spec Y"
 - [ ] **Step 3: Full test sweep**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science-tool
+cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science
 uv run --frozen pytest -q 2>&1 | tail -5
 
 cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science-model
 uv run --frozen pytest -q 2>&1 | tail -5
 ```
 
-Expected: all green (188 science-model + previous-count-plus-new science-tool).
+Expected: all green (188 science-model + previous-count-plus-new science).
 
 - [ ] **Step 4: Snapshot regression sanity check**
 

@@ -121,7 +121,7 @@ Minimum shape:
 
 ```toml
 [project]
-name = "<project-slug>-science-tools"
+name = "<project-slug>-sciences"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = []
@@ -130,7 +130,7 @@ dependencies = []
 dev = []
 ```
 
-Install `science-tool` into it with:
+Install `science` into it with:
 
 ```bash
 uv add --dev --editable "$SCIENCE_TOOL_PATH"

@@ -4,7 +4,7 @@
 
 **Goal:** Replace the current multi-model entity loading architecture with one canonical entity model family, typed core project entities, an explicit kind registry, and storage adapters that load into the unified model.
 
-**Architecture:** Start in `science-model` by defining the new model family and locking field placement with tests. Then add an explicit registry and storage-adapter layer in `science-tool`, migrate current markdown/task/dataset loading onto that path, preserve source-location and collision behavior, and defer non-core legacy model/parameter concepts out of the core load path. Keep rev-2.2 dataset guarantees intact throughout.
+**Architecture:** Start in `science-model` by defining the new model family and locking field placement with tests. Then add an explicit registry and storage-adapter layer in `science`, migrate current markdown/task/dataset loading onto that path, preserve source-location and collision behavior, and defer non-core legacy model/parameter concepts out of the core load path. Keep rev-2.2 dataset guarantees intact throughout.
 
 **Tech Stack:** Python, Pydantic, pytest, uv, ruff, pyright
 
@@ -134,10 +134,10 @@ git commit -m "feat: add unified entity model hierarchy"
 
 **Files:**
 - Modify: `science-model/src/science_model/tasks.py`
-- Modify: `science-tool/src/science_tool/tasks.py`
+- Modify: `science/src/science_tool/tasks.py`
 - Modify: `science-model/tests/test_tasks.py`
-- Modify: `science-tool/tests/test_tasks.py`
-- Modify: `science-tool/tests/test_tasks_cli.py`
+- Modify: `science/tests/test_tasks.py`
+- Modify: `science/tests/test_tasks_cli.py`
 - Reference: `science-model/src/science_model/entities.py`
 
 **Step 1: Write the failing tests**
@@ -160,7 +160,7 @@ Add one CLI-level test that still exercises current task file behavior but asser
 Run:
 
 ```bash
-uv run --frozen pytest science-model/tests/test_tasks.py science-tool/tests/test_tasks.py science-tool/tests/test_tasks_cli.py -q
+uv run --frozen pytest science-model/tests/test_tasks.py science/tests/test_tasks.py science/tests/test_tasks_cli.py -q
 ```
 
 Expected: FAIL because `TaskEntity.from_task()` or equivalent conversion path does not exist.
@@ -172,7 +172,7 @@ In `science-model/src/science_model/tasks.py`:
 - either deprecate the standalone `Task` model in favor of `TaskEntity`
 - or keep `Task` as a parse-layer helper, but add an explicit conversion path into `TaskEntity`
 
-In `science-tool/src/science_tool/tasks.py`:
+In `science/src/science_tool/tasks.py`:
 
 - keep the DSL parser
 - convert parsed tasks into `TaskEntity`-compatible raw records or instances
@@ -184,7 +184,7 @@ Do not redesign the task DSL in this task.
 Run:
 
 ```bash
-uv run --frozen pytest science-model/tests/test_tasks.py science-tool/tests/test_tasks.py science-tool/tests/test_tasks_cli.py -q
+uv run --frozen pytest science-model/tests/test_tasks.py science/tests/test_tasks.py science/tests/test_tasks_cli.py -q
 ```
 
 Expected: PASS
@@ -192,22 +192,22 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add science-model/src/science_model/tasks.py science-tool/src/science_tool/tasks.py science-model/tests/test_tasks.py science-tool/tests/test_tasks.py science-tool/tests/test_tasks_cli.py
+git add science-model/src/science_model/tasks.py science/src/science_tool/tasks.py science-model/tests/test_tasks.py science/tests/test_tasks.py science/tests/test_tasks_cli.py
 git commit -m "feat: map task parsing onto task entity"
 ```
 
 ### Task 3: Add the Kind Registry
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/entity_registry.py`
-- Modify: `science-tool/src/science_tool/graph/__init__.py`
-- Modify: `science-tool/tests/test_graph_build_strict.py`
-- Create: `science-tool/tests/test_entity_registry.py`
+- Create: `science/src/science_tool/graph/entity_registry.py`
+- Modify: `science/src/science_tool/graph/__init__.py`
+- Modify: `science/tests/test_graph_build_strict.py`
+- Create: `science/tests/test_entity_registry.py`
 - Reference: `science-model/src/science_model/entities.py`
 
 **Step 1: Write the failing tests**
 
-Create `science-tool/tests/test_entity_registry.py` with tests like:
+Create `science/tests/test_entity_registry.py` with tests like:
 
 ```python
 def test_registry_resolves_core_kind() -> None:
@@ -233,7 +233,7 @@ def test_registry_rejects_extension_shadowing_core_kind() -> None:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entity_registry.py -q
+uv run --frozen pytest science/tests/test_entity_registry.py -q
 ```
 
 Expected: FAIL because `EntityRegistry` does not exist.
@@ -254,7 +254,7 @@ Register the v1 core project kinds here.
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entity_registry.py -q
+uv run --frozen pytest science/tests/test_entity_registry.py -q
 ```
 
 Expected: PASS
@@ -262,17 +262,17 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/entity_registry.py science-tool/tests/test_entity_registry.py science-tool/src/science_tool/graph/__init__.py
+git add science/src/science_tool/graph/entity_registry.py science/tests/test_entity_registry.py science/src/science_tool/graph/__init__.py
 git commit -m "feat: add explicit entity kind registry"
 ```
 
 ### Task 4: Add the Storage Adapter Base Contract
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/storage_adapters/base.py`
-- Create: `science-tool/src/science_tool/graph/storage_adapters/__init__.py`
-- Create: `science-tool/tests/test_storage_adapters_base.py`
-- Reference: `science-tool/src/science_tool/graph/sources.py`
+- Create: `science/src/science_tool/graph/storage_adapters/base.py`
+- Create: `science/src/science_tool/graph/storage_adapters/__init__.py`
+- Create: `science/tests/test_storage_adapters_base.py`
+- Reference: `science/src/science_tool/graph/sources.py`
 
 **Step 1: Write the failing tests**
 
@@ -304,7 +304,7 @@ def test_storage_adapter_protocol_can_be_implemented() -> None:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_storage_adapters_base.py -q
+uv run --frozen pytest science/tests/test_storage_adapters_base.py -q
 ```
 
 Expected: FAIL because `SourceRef` and adapter base types do not exist.
@@ -324,7 +324,7 @@ Keep the contract small.
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_storage_adapters_base.py -q
+uv run --frozen pytest science/tests/test_storage_adapters_base.py -q
 ```
 
 Expected: PASS
@@ -332,20 +332,20 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/storage_adapters/base.py science-tool/src/science_tool/graph/storage_adapters/__init__.py science-tool/tests/test_storage_adapters_base.py
+git add science/src/science_tool/graph/storage_adapters/base.py science/src/science_tool/graph/storage_adapters/__init__.py science/tests/test_storage_adapters_base.py
 git commit -m "feat: add storage adapter base contract"
 ```
 
 ### Task 5: Implement Markdown and Task Adapters on the New Path
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/storage_adapters/markdown.py`
-- Create: `science-tool/src/science_tool/graph/storage_adapters/tasks.py`
+- Create: `science/src/science_tool/graph/storage_adapters/markdown.py`
+- Create: `science/src/science_tool/graph/storage_adapters/tasks.py`
 - Modify: `science-model/src/science_model/frontmatter.py`
-- Modify: `science-tool/src/science_tool/graph/sources.py`
-- Create: `science-tool/tests/test_storage_adapter_markdown.py`
-- Create: `science-tool/tests/test_storage_adapter_tasks.py`
-- Reference: `science-tool/tests/test_sources_research_package.py`
+- Modify: `science/src/science_tool/graph/sources.py`
+- Create: `science/tests/test_storage_adapter_markdown.py`
+- Create: `science/tests/test_storage_adapter_tasks.py`
+- Reference: `science/tests/test_sources_research_package.py`
 
 **Step 1: Write the failing tests**
 
@@ -376,7 +376,7 @@ def test_task_adapter_loads_task_entity_record(project_root: Path) -> None:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_storage_adapter_markdown.py science-tool/tests/test_storage_adapter_tasks.py -q
+uv run --frozen pytest science/tests/test_storage_adapter_markdown.py science/tests/test_storage_adapter_tasks.py -q
 ```
 
 Expected: FAIL because the adapters do not exist.
@@ -404,7 +404,7 @@ Have each adapter return registry-dispatchable raw records with:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_storage_adapter_markdown.py science-tool/tests/test_storage_adapter_tasks.py -q
+uv run --frozen pytest science/tests/test_storage_adapter_markdown.py science/tests/test_storage_adapter_tasks.py -q
 ```
 
 Expected: PASS
@@ -412,21 +412,21 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/storage_adapters/markdown.py science-tool/src/science_tool/graph/storage_adapters/tasks.py science-model/src/science_model/frontmatter.py science-tool/tests/test_storage_adapter_markdown.py science-tool/tests/test_storage_adapter_tasks.py
+git add science/src/science_tool/graph/storage_adapters/markdown.py science/src/science_tool/graph/storage_adapters/tasks.py science-model/src/science_model/frontmatter.py science/tests/test_storage_adapter_markdown.py science/tests/test_storage_adapter_tasks.py
 git commit -m "feat: add markdown and task entity adapters"
 ```
 
 ### Task 6: Implement Aggregate and Datapackage Adapters
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/storage_adapters/aggregate.py`
-- Create: `science-tool/src/science_tool/graph/storage_adapters/datapackage.py`
+- Create: `science/src/science_tool/graph/storage_adapters/aggregate.py`
+- Create: `science/src/science_tool/graph/storage_adapters/datapackage.py`
 - Modify: `science-model/src/science_model/frontmatter.py`
 - Modify: `science-model/src/science_model/packages/schema.py`
-- Modify: `science-tool/tests/test_dataset_reconcile.py`
-- Create: `science-tool/tests/test_storage_adapter_aggregate.py`
-- Create: `science-tool/tests/test_storage_adapter_datapackage.py`
-- Reference: `science-tool/tests/test_dataset_register_run.py`
+- Modify: `science/tests/test_dataset_reconcile.py`
+- Create: `science/tests/test_storage_adapter_aggregate.py`
+- Create: `science/tests/test_storage_adapter_datapackage.py`
+- Reference: `science/tests/test_dataset_register_run.py`
 
 **Step 1: Write the failing tests**
 
@@ -456,7 +456,7 @@ def test_datapackage_adapter_extracts_dataset_entity_fields(project_root: Path) 
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_storage_adapter_aggregate.py science-tool/tests/test_storage_adapter_datapackage.py -q
+uv run --frozen pytest science/tests/test_storage_adapter_aggregate.py science/tests/test_storage_adapter_datapackage.py -q
 ```
 
 Expected: FAIL because the adapters do not exist.
@@ -479,7 +479,7 @@ For datapackages:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_storage_adapter_aggregate.py science-tool/tests/test_storage_adapter_datapackage.py -q
+uv run --frozen pytest science/tests/test_storage_adapter_aggregate.py science/tests/test_storage_adapter_datapackage.py -q
 ```
 
 Expected: PASS
@@ -487,19 +487,19 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/storage_adapters/aggregate.py science-tool/src/science_tool/graph/storage_adapters/datapackage.py science-model/src/science_model/packages/schema.py science-tool/tests/test_storage_adapter_aggregate.py science-tool/tests/test_storage_adapter_datapackage.py
+git add science/src/science_tool/graph/storage_adapters/aggregate.py science/src/science_tool/graph/storage_adapters/datapackage.py science-model/src/science_model/packages/schema.py science/tests/test_storage_adapter_aggregate.py science/tests/test_storage_adapter_datapackage.py
 git commit -m "feat: add aggregate and datapackage entity adapters"
 ```
 
 ### Task 7: Replace `graph/sources.py` Load Flow With Registry + Adapters
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/sources.py`
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Create: `science-tool/tests/test_sources_unified_entity_load.py`
-- Modify: `science-tool/tests/test_health.py`
-- Modify: `science-tool/tests/test_graph_materialize.py`
-- Modify: `science-tool/tests/test_sources_research_package.py`
+- Modify: `science/src/science_tool/graph/sources.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Create: `science/tests/test_sources_unified_entity_load.py`
+- Modify: `science/tests/test_health.py`
+- Modify: `science/tests/test_graph_materialize.py`
+- Modify: `science/tests/test_sources_research_package.py`
 
 **Step 1: Write the failing tests**
 
@@ -526,14 +526,14 @@ def test_load_project_sources_rejects_duplicate_canonical_id(fixture_project: Pa
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_sources_unified_entity_load.py science-tool/tests/test_graph_materialize.py science-tool/tests/test_health.py -q
+uv run --frozen pytest science/tests/test_sources_unified_entity_load.py science/tests/test_graph_materialize.py science/tests/test_health.py -q
 ```
 
 Expected: FAIL because `load_project_sources()` still uses the old loader graph.
 
 **Step 3: Write minimal implementation**
 
-In `science-tool/src/science_tool/graph/sources.py`:
+In `science/src/science_tool/graph/sources.py`:
 
 - build `EntityRegistry.with_core_types()`
 - build the active adapter list
@@ -545,7 +545,7 @@ In `science-tool/src/science_tool/graph/sources.py`:
 
 Keep source-location metadata attached to errors.
 
-In `science-tool/src/science_tool/graph/health.py`:
+In `science/src/science_tool/graph/health.py`:
 
 - update any code that assumes only markdown-sidecar dataset entities
 - preserve existing rev-2.2 semantics
@@ -555,7 +555,7 @@ In `science-tool/src/science_tool/graph/health.py`:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_sources_unified_entity_load.py science-tool/tests/test_graph_materialize.py science-tool/tests/test_health.py -q
+uv run --frozen pytest science/tests/test_sources_unified_entity_load.py science/tests/test_graph_materialize.py science/tests/test_health.py -q
 ```
 
 Expected: PASS
@@ -563,7 +563,7 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/sources.py science-tool/src/science_tool/graph/health.py science-tool/tests/test_sources_unified_entity_load.py science-tool/tests/test_graph_materialize.py science-tool/tests/test_health.py science-tool/tests/test_sources_research_package.py
+git add science/src/science_tool/graph/sources.py science/src/science_tool/graph/health.py science/tests/test_sources_unified_entity_load.py science/tests/test_graph_materialize.py science/tests/test_health.py science/tests/test_sources_research_package.py
 git commit -m "feat: switch graph sources to unified entity loading"
 ```
 
@@ -571,10 +571,10 @@ git commit -m "feat: switch graph sources to unified entity loading"
 
 **Files:**
 - Modify: `science-model/src/science_model/source_contracts.py`
-- Modify: `science-tool/src/science_tool/graph/sources.py`
-- Create: `science-tool/tests/test_entity_extensions.py`
+- Modify: `science/src/science_tool/graph/sources.py`
+- Create: `science/tests/test_entity_extensions.py`
 - Modify: `science-model/tests/test_source_contracts.py`
-- Modify: `science-tool/tests/test_graph_build_strict.py`
+- Modify: `science/tests/test_graph_build_strict.py`
 
 **Step 1: Write the failing tests**
 
@@ -597,7 +597,7 @@ Add a load-path test that asserts core `graph/sources.py` no longer hardcodes `M
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entity_extensions.py science-model/tests/test_source_contracts.py -q
+uv run --frozen pytest science/tests/test_entity_extensions.py science-model/tests/test_source_contracts.py -q
 ```
 
 Expected: FAIL because the old source-contract assumptions are still core behavior.
@@ -617,7 +617,7 @@ Do not remove code that is still needed by a project extension path in the same 
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entity_extensions.py science-model/tests/test_source_contracts.py science-tool/tests/test_graph_build_strict.py -q
+uv run --frozen pytest science/tests/test_entity_extensions.py science-model/tests/test_source_contracts.py science/tests/test_graph_build_strict.py -q
 ```
 
 Expected: PASS
@@ -625,7 +625,7 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add science-model/src/science_model/source_contracts.py science-tool/src/science_tool/graph/sources.py science-tool/tests/test_entity_extensions.py science-model/tests/test_source_contracts.py science-tool/tests/test_graph_build_strict.py
+git add science-model/src/science_model/source_contracts.py science/src/science_tool/graph/sources.py science/tests/test_entity_extensions.py science-model/tests/test_source_contracts.py science/tests/test_graph_build_strict.py
 git commit -m "refactor: move model and parameter concepts out of core entity loading"
 ```
 
@@ -645,7 +645,7 @@ No new feature test here. Add one small regression test only if a gap was discov
 Run:
 
 ```bash
-uv run --frozen pytest science-model/tests/test_entities.py science-model/tests/test_tasks.py science-model/tests/test_dataset_models.py science-tool/tests/test_tasks.py science-tool/tests/test_health.py science-tool/tests/test_graph_materialize.py science-tool/tests/test_dataset_register_run.py -q
+uv run --frozen pytest science-model/tests/test_entities.py science-model/tests/test_tasks.py science-model/tests/test_dataset_models.py science/tests/test_tasks.py science/tests/test_health.py science/tests/test_graph_materialize.py science/tests/test_dataset_register_run.py -q
 uv run --frozen ruff check .
 uv run --frozen pyright
 ```
@@ -661,7 +661,7 @@ Update stale docstrings and spec notes uncovered during verification. Keep this 
 Run:
 
 ```bash
-uv run --frozen pytest science-model/tests/test_entities.py science-model/tests/test_tasks.py science-model/tests/test_dataset_models.py science-tool/tests/test_tasks.py science-tool/tests/test_health.py science-tool/tests/test_graph_materialize.py science-tool/tests/test_dataset_register_run.py -q
+uv run --frozen pytest science-model/tests/test_entities.py science-model/tests/test_tasks.py science-model/tests/test_dataset_models.py science/tests/test_tasks.py science/tests/test_health.py science/tests/test_graph_materialize.py science/tests/test_dataset_register_run.py -q
 uv run --frozen ruff check .
 uv run --frozen pyright
 ```
@@ -688,11 +688,11 @@ git commit -m "docs: finalize unified entity model migration notes"
 
 ```bash
 uv run --frozen pytest science-model/tests/test_entities.py -q
-uv run --frozen pytest science-model/tests/test_tasks.py science-tool/tests/test_tasks.py -q
-uv run --frozen pytest science-tool/tests/test_entity_registry.py science-tool/tests/test_storage_adapters_base.py -q
-uv run --frozen pytest science-tool/tests/test_storage_adapter_markdown.py science-tool/tests/test_storage_adapter_tasks.py -q
-uv run --frozen pytest science-tool/tests/test_storage_adapter_aggregate.py science-tool/tests/test_storage_adapter_datapackage.py -q
-uv run --frozen pytest science-tool/tests/test_sources_unified_entity_load.py science-tool/tests/test_health.py science-tool/tests/test_graph_materialize.py -q
+uv run --frozen pytest science-model/tests/test_tasks.py science/tests/test_tasks.py -q
+uv run --frozen pytest science/tests/test_entity_registry.py science/tests/test_storage_adapters_base.py -q
+uv run --frozen pytest science/tests/test_storage_adapter_markdown.py science/tests/test_storage_adapter_tasks.py -q
+uv run --frozen pytest science/tests/test_storage_adapter_aggregate.py science/tests/test_storage_adapter_datapackage.py -q
+uv run --frozen pytest science/tests/test_sources_unified_entity_load.py science/tests/test_health.py science/tests/test_graph_materialize.py -q
 uv run --frozen ruff check .
 uv run --frozen pyright
 ```

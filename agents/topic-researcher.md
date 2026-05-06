@@ -36,7 +36,7 @@ When done, return a concise message (≤200 words) to the orchestrator containin
 3. Key subtopics covered (bullet list, ≤6 items).
 4. New questions added under `doc/questions/` (filenames).
 5. New references added to `papers/references.bib` (citekeys).
-6. Suggested follow-up research tasks you surfaced (≤3), so the orchestrator can decide whether to run `science-tool tasks add`.
+6. Suggested follow-up research tasks you surfaced (≤3), so the orchestrator can decide whether to run `science tasks add`.
 
 Do **not** paste the full synthesis back into your reply. The orchestrator can read the file if needed.
 

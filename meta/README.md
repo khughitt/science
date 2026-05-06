@@ -4,7 +4,7 @@ Applying the Science toolkit to itself.
 
 ## Why this exists
 
-The Science toolkit (`../science-tool/`, aspects, skills, commands, templates)
+The Science toolkit (`../science/`, aspects, skills, commands, templates)
 has grown organically through dogfooding on external research projects. It is
 now mature enough to be a **research object in its own right**: how well does
 its data model capture scientific practice? Are the causal-inference and
@@ -18,7 +18,7 @@ questions.
 
 Direct development of the toolkit: the research agent, knowledge graph,
 causal-inference tooling, aspects, skills, and commands. This is where most
-work has been and will continue to be. Tool code lives at `../science-tool/`
+work has been and will continue to be. Tool code lives at `../science/`
 and siblings — this project tracks the **design intent, hypotheses, and
 decisions** behind it.
 
@@ -48,7 +48,7 @@ literatures. Outputs land in:
 ```bash
 cd meta
 bash validate.sh --verbose
-uv run --project ../science-tool science-tool --help
+uv run --project ../science science --help
 ```
 
 Use `/science:status` from inside `meta/` for orientation.

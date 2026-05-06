@@ -51,8 +51,8 @@ If a project still mainly expresses confidence as scalar values on hypotheses or
 
 Science supports a v1.0 meta-project federation model for umbrella projects that coordinate multiple child projects
 without taking ownership of their files. A `role: meta` project declares a `children:` manifest, can validate child
-`parent:` back-references with `science-tool federation validate`, and can materialize a read-only federated graph with
-`science-tool graph build`. See [docs/federation.md](docs/federation.md) for the schema, graph behavior, status rollup,
+`parent:` back-references with `science federation validate`, and can materialize a read-only federated graph with
+`science graph build`. See [docs/federation.md](docs/federation.md) for the schema, graph behavior, status rollup,
 and deferred v1.1+ work.
 
 ## Installation
@@ -159,7 +159,7 @@ project/
 ```
 
 The root `pyproject.toml` is a tool-only manifest when the repository is not a Python project. It is where
-`science-tool` gets installed for project-local tooling such as task management, feedback, validation, and graph workflows:
+`science` gets installed for project-local tooling such as task management, feedback, validation, and graph workflows:
 
 ```bash
 uv add --dev --editable "$SCIENCE_TOOL_PATH"
@@ -380,20 +380,20 @@ Each command reads existing project state and builds on it. All artifacts are ve
 
 For knowledge-graph projects, `knowledge/graph.trig` is generated from canonical upstream sources in `specs/`, `doc/`, `tasks/`, and `knowledge/sources/`. If the graph is wrong, fix the source artifact and re-materialize; do not patch the TriG file directly.
 
-Once the graph is materialized, use the `science-tool` CLI for summaries and sync:
+Once the graph is materialized, use the `science` CLI for summaries and sync:
 
 ```bash
 # Summary stack (top-down)
-science-tool graph project-summary      # Research-level rollup (research projects only)
-science-tool graph question-summary     # Thread-level prioritization (full by default; add --top to narrow)
-science-tool graph inquiry-summary      # Inquiry-level detail
-science-tool graph dashboard-summary    # Proposition/evidence overview
-science-tool graph neighborhood-summary # Local-cluster detail
+science graph project-summary      # Research-level rollup (research projects only)
+science graph question-summary     # Thread-level prioritization (full by default; add --top to narrow)
+science graph inquiry-summary      # Inquiry-level detail
+science graph dashboard-summary    # Proposition/evidence overview
+science graph neighborhood-summary # Local-cluster detail
 
 # Cross-project sync
-science-tool sync status               # Check current sync state
-science-tool sync projects             # List registered projects
-science-tool sync run                  # Run full sync (--dry-run to preview)
+science sync status               # Check current sync state
+science sync projects             # List registered projects
+science sync run                  # Run full sync (--dry-run to preview)
 ```
 
 Use `knowledge/` for live dashboards, `doc/interpretations/` and `doc/reports/` for durable writeups, and `tasks/` for follow-up work derived from the summary outputs.
@@ -405,9 +405,9 @@ Science includes two Python packages that back the plugin commands:
 | Package | Description |
 |---|---|
 | `science-model` | Shared Pydantic data models — entities, relations, tasks, profiles, ontology catalogs, and project config |
-| `science-tool` | CLI (`science-tool`) for knowledge graph operations, cross-project sync, causal export, dataset validation, and task management |
+| `science` | Distribution for the `science` CLI — knowledge graph operations, cross-project sync, causal export, dataset validation, and task management |
 
-Both require Python >= 3.11. `science-tool` depends on `science-model` and provides optional extras for causal modeling (`pgmpy`, `ChiRho`), dataset discovery (`httpx`, `pooch`), and graph distillation (`PyKEEN`, `OpenAlex`).
+Both require Python >= 3.11. `science` depends on `science-model` and provides optional extras for causal modeling (`pgmpy`, `ChiRho`), dataset discovery (`httpx`, `pooch`), and graph distillation (`PyKEEN`, `OpenAlex`).
 
 ## Design Principles
 

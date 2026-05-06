@@ -12,13 +12,13 @@ This command provides a critical, adversarial review of a causal inquiry. The ag
 
 ## Tool invocation
 
-All `science-tool` commands below use this pattern:
+All `science` commands below use this pattern:
 
 ```bash
-uv run science-tool <command>
+uv run science <command>
 ```
 
-For brevity, examples write just `science-tool <command>` — **always expand to `uv run science-tool <command>` when executing. See command-preamble step 8 for fallback.**
+For brevity, examples write just `science <command>` — **always expand to `uv run science <command>` when executing. See command-preamble step 8 for fallback.**
 
 ## Rules
 
@@ -38,8 +38,8 @@ For brevity, examples write just `science-tool <command>` — **always expand to
 The user provides an inquiry slug (e.g., `/science:critique-approach my-dag`).
 
 ```bash
-science-tool inquiry show "<slug>" --format json
-science-tool inquiry validate "<slug>" --format json
+science inquiry show "<slug>" --format json
+science inquiry validate "<slug>" --format json
 ```
 
 Verify:
@@ -52,7 +52,7 @@ Verify:
 Export to pgmpy and analyze:
 
 ```bash
-science-tool inquiry export-pgmpy "<slug>" --output /tmp/dag_analysis.py
+science inquiry export-pgmpy "<slug>" --output /tmp/dag_analysis.py
 ```
 
 Read the generated script. Identify:
@@ -189,7 +189,7 @@ Summarize the key findings to the user:
 - Minor notes (awareness items)
 - Recommended next steps
 
-If `science-tool health --format json` surfaces proxy gaps, unsupported mechanistic narratives, or rival-model packet issues related to this inquiry, mention them explicitly in the critique summary.
+If `science health --format json` surfaces proxy gaps, unsupported mechanistic narratives, or rival-model packet issues related to this inquiry, mention them explicitly in the critique summary.
 
 ## Process Reflection
 
@@ -199,7 +199,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:critique-approach" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

@@ -1,4 +1,4 @@
-# `science-tool dag validate [--strict]` — Design
+# `science dag validate [--strict]` — Design
 
 **Date:** 2026-04-20
 **Status:** proposed
@@ -22,8 +22,8 @@ line-item listed as out-of-scope in the Phase 1 spec's §"Out of Scope
 
 ## Goal
 
-Introduce `science-tool dag validate` as the comprehensive health check for
-a project's DAG layer, and `science-tool dag schema` as the emission
+Introduce `science dag validate` as the comprehensive health check for
+a project's DAG layer, and `science dag schema` as the emission
 surface for the generated JSON Schema artifact. Together they close the
 loop that Phase 1 deferred: Phase 1 validated *shape* at load time (via
 Pydantic, inside `render`/`number`) and *ref resolution* per-entry, but
@@ -86,15 +86,15 @@ them into one coherent command and one derived artifact.
 ### Two new commands
 
 ```
-science-tool dag validate [--strict] [--dag <slug>] [--json]
-science-tool dag schema   [--output PATH]
+science dag validate [--strict] [--dag <slug>] [--json]
+science dag schema   [--output PATH]
 ```
 
 Plus one modification:
 
 ```
-science-tool dag audit [--json]   # now implicitly runs validate too
-science-tool dag audit --fix      # unchanged mutation semantics
+science dag audit [--json]   # now implicitly runs validate too
+science dag audit --fix      # unchanged mutation semantics
 ```
 
 ### Schema source-of-truth (Q1: Pydantic-generated)
@@ -104,7 +104,7 @@ the runtime SoT. `EdgesYamlFile.model_json_schema()` emits a JSON Schema
 draft-2020-12 document. That document is committed to the repository at:
 
 ```
-science-tool/src/science_tool/dag/edges.schema.json
+science/src/science_tool/dag/edges.schema.json
 ```
 
 and shipped as package data (via `importlib.resources`). Downstream
@@ -115,7 +115,7 @@ A dedicated test (`test_schema_artifact.py`) asserts the committed file
 equals `json.dumps(EdgesYamlFile.model_json_schema(), …)` under a canonical
 serialization (sorted keys, indent=2). If a Pydantic model change alters
 the generated schema and the artifact is not regenerated, the test fails
-with an error message pointing at `science-tool dag schema --output
+with an error message pointing at `science dag schema --output
 src/science_tool/dag/edges.schema.json`.
 
 The `dag schema` command exists so that (a) the test fixup is one
@@ -261,7 +261,7 @@ code and human-printer emphasis.
 ### File layout
 
 ```
-science-tool/src/science_tool/dag/
+science/src/science_tool/dag/
     validate.py              # NEW — ValidationReport, ValidationFinding, validate_project()
     schema.py                # (existing; unchanged)
     refs.py                  # (existing; unchanged)
@@ -274,7 +274,7 @@ science-tool/src/science_tool/dag/
     paths.py                 # (existing; unchanged)
     edges.schema.json        # NEW — generated artifact (committed)
 
-science-tool/tests/dag/
+science/tests/dag/
     test_validate.py              # NEW — per-check unit tests
     test_validate_cli.py          # NEW — click runner: exit codes, --json, --strict, --dag
     test_schema_artifact.py       # NEW — drift guard: committed file == Pydantic emit
@@ -294,7 +294,7 @@ science-tool/tests/dag/
 ### `jsonschema` dependency
 
 Adds `jsonschema>=4.0` as a runtime dependency. Currently absent from
-`science-tool`'s pyproject; lean in — it's a small, well-maintained
+`science`'s pyproject; lean in — it's a small, well-maintained
 package and the conformance check requires it. If future minimization
 pressure arises, the `jsonschema_conformance` check could be dropped
 (it's a tripwire, not a correctness gate) and the dependency removed.
@@ -303,13 +303,13 @@ pressure arises, the `jsonschema_conformance` check could be dropped
 
 Same pattern as Phase 1:
 
-1. Land this spec + plan in `science-tool`. No mm30 changes required
+1. Land this spec + plan in `science`. No mm30 changes required
    initially — the new command just starts working the next time mm30
-   bumps its `science-tool` pin.
-2. Add a mm30 task `tNNN` to run `science-tool dag validate` on the
+   bumps its `science` pin.
+2. Add a mm30 task `tNNN` to run `science dag validate` on the
    current YAML and fix any (presumably rare) findings that surface.
 3. Optionally, once the `identification:` backfill task lands, enable
-   `science-tool dag validate --strict` in mm30's CI.
+   `science dag validate --strict` in mm30's CI.
 4. `/science:dag-audit` skill's default invocation now surfaces
    validation findings alongside staleness; no skill changes required
    because it already emits the `dag audit --json` output verbatim.
@@ -379,14 +379,14 @@ version in `pyproject.toml` until the schema artifact story stabilizes.
 
 ## Acceptance Criteria
 
-1. `science-tool dag validate` on the current mm30 fixture exits 0
+1. `science dag validate` on the current mm30 fixture exits 0
    (shape + refs + topology + acyclicity + posterior + jsonschema all
    pass).
-2. `science-tool dag validate --strict` on the same fixture exits 1 iff
+2. `science dag validate --strict` on the same fixture exits 1 iff
    the fixture has any edge missing an explicit `identification:` (which
    the Phase 1 fixture does, per its `DeprecationWarning`-tolerant
    state).
-3. `science-tool dag schema --output /tmp/x.json` emits valid draft-
+3. `science dag schema --output /tmp/x.json` emits valid draft-
    2020-12 JSON Schema; the committed
    `src/science_tool/dag/edges.schema.json` matches the generated
    output byte-for-byte under canonical serialization.
@@ -422,11 +422,11 @@ version in `pyproject.toml` until the schema artifact story stabilizes.
 
 ## Summary
 
-`science-tool dag validate` composes existing Phase 1 shape + ref
+`science dag validate` composes existing Phase 1 shape + ref
 checks with new cross-file, acyclicity, posterior-sanity, and JSON-
 Schema-conformance checks. `--strict` gates migration-completeness
 signals (explicit identification, non-empty descriptions, no orphan
-dot nodes, cross-DAG node-name consistency). `science-tool dag schema`
+dot nodes, cross-DAG node-name consistency). `science dag schema`
 emits the generated JSON Schema for downstream consumers. `dag audit`
 absorbs validate as a precondition, so CI and the `/science:dag-audit`
 skill get validation findings for free.

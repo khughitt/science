@@ -4,7 +4,7 @@
 
 **Goal:** Land the managed-artifact long-term system per `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md`, with `validate.sh` as the first managed artifact and Plan #7's six audit-surfaced fixes as the system's first version bump.
 
-**Architecture:** A `science_tool.project_artifacts` package owns a YAML registry of capabilities matrices, a fully-rendered canonical bytes file per artifact, header parsing, drift classification, an install matrix, transaction-safe update with declarative migrations, pin/unpin, and CLI verbs (`list | check | diff | install | update | pin | unpin | exec`). Surface integration in `science-tool health`, `/status`, `/next-steps`, `commands/sync.md`. Path-convenience shims replace the existing `meta/validate.sh` and `scripts/validate.sh` bodies.
+**Architecture:** A `science_tool.project_artifacts` package owns a YAML registry of capabilities matrices, a fully-rendered canonical bytes file per artifact, header parsing, drift classification, an install matrix, transaction-safe update with declarative migrations, pin/unpin, and CLI verbs (`list | check | diff | install | update | pin | unpin | exec`). Surface integration in `science health`, `/status`, `/next-steps`, `commands/sync.md`. Path-convenience shims replace the existing `meta/validate.sh` and `scripts/validate.sh` bodies.
 
 **Tech Stack:** Python 3.11+, Click, pydantic v2, PyYAML, pytest, anyio (async tests where needed), Bash for `validate.sh` itself, Markdown for command docs. `uv` for package management.
 
@@ -14,7 +14,7 @@
 
 ### Create
 
-**Package code** (under `science-tool/src/science_tool/project_artifacts/`):
+**Package code** (under `science/src/science_tool/project_artifacts/`):
 
 - `__init__.py` — public exports: `canonical_path`, `list_artifacts`, `install`, `check`, `update`, `pin`, `unpin`, `exec_artifact`. Importing the package loads and validates the registry.
 - `registry.yaml` — declarative source of truth. One entry per managed artifact. v1 ships `validate.sh` only.
@@ -33,10 +33,10 @@
 - `migrations/bash.py` — bash step runner. Enforces YAML block-scalar at load time (rejects plain-flow `check`/`apply`); subprocess-runs with declared `working_dir`, `timeout_seconds`; captures stdout/stderr; surfaces exit code.
 - `migrations/transaction.py` — `TempCommitSnapshot` (Git, default), `ManifestSnapshot` (Git or outside Git). Both implement `take()`, `restore()`, `discard()`. `select_snapshot(repo_root, transaction_kind) -> Snapshot` factory.
 - `update.py` — `update(name, project_root, *, allow_dirty=False, no_commit=False, auto_apply=False, force=False, yes=False) -> UpdateResult`. Orchestrates worktree check → snapshot → migrations → byte-replace + `.pre-update.bak` → commit. Composes `migrations`, `worktree`, `artifacts`.
-- `health_integration.py` — exposes `health_findings(project_root, registry) -> list[ManagedArtifactFinding]` for `science-tool health` to call. Returns one finding per managed artifact with status.
-- `cli.py` — Click commands group. `science-tool project artifacts list | check | diff | install | update | pin | unpin | exec`. Each verb is a thin wrapper over `artifacts.py` / `update.py` / `pin.py`. Wired into the existing `project` group via import in `science_tool.cli`.
+- `health_integration.py` — exposes `health_findings(project_root, registry) -> list[ManagedArtifactFinding]` for `science health` to call. Returns one finding per managed artifact with status.
+- `cli.py` — Click commands group. `science project artifacts list | check | diff | install | update | pin | unpin | exec`. Each verb is a thin wrapper over `artifacts.py` / `update.py` / `pin.py`. Wired into the existing `project` group via import in `science_tool.cli`.
 
-**Tests** (under `science-tool/tests/`):
+**Tests** (under `science/tests/`):
 
 - `test_managed_registry.py` — schema strictness; per-consumer/extension valid combinations; current_hash matches body bytes; no current_hash in previous_hashes; required fields present; invalid pairings rejected with clear messages.
 - `test_header_protocol.py` — `shebang_comment` parse + author round-trip; shebang remains byte 0; header lines immediately after; body extraction correct; rejects malformed headers with clear errors.
@@ -56,13 +56,13 @@
 
 ### Modify
 
-- `science-tool/src/science_tool/cli.py` — register the `project artifacts` Click group from `science_tool.project_artifacts.cli`.
-- `science-tool/src/science_tool/graph/health.py` — call `project_artifacts.health_integration.health_findings`; include findings in the report; contribute to `total_issues` per the existing pattern.
-- `science-tool/pyproject.toml` — declare `data/` and `registry.yaml` as package data (`force-include` or `tool.uv.package-data` per the project's existing pattern). Add `pydantic >= 2.0` and `ruamel.yaml >= 0.17` to runtime deps (only if not already present).
+- `science/src/science_tool/cli.py` — register the `project artifacts` Click group from `science_tool.project_artifacts.cli`.
+- `science/src/science_tool/graph/health.py` — call `project_artifacts.health_integration.health_findings`; include findings in the report; contribute to `total_issues` per the existing pattern.
+- `science/pyproject.toml` — declare `data/` and `registry.yaml` as package data (`force-include` or `tool.uv.package-data` per the project's existing pattern). Add `pydantic >= 2.0` and `ruamel.yaml >= 0.17` to runtime deps (only if not already present).
 - `commands/status.md` — surface stale managed artifacts as a "Staleness Warnings" row.
-- `commands/next-steps.md` — recommend `science-tool project artifacts update <name>` when artifacts are stale.
+- `commands/next-steps.md` — recommend `science project artifacts update <name>` when artifacts are stale.
 - `commands/sync.md` — warn at the top of sync output if any artifact is stale or locally-modified.
-- `commands/create-project.md` — replace bare `cp scripts/validate.sh` instructions with `science-tool project artifacts install validate.sh` flow.
+- `commands/create-project.md` — replace bare `cp scripts/validate.sh` instructions with `science project artifacts install validate.sh` flow.
 - `commands/import-project.md` — same.
 - `docs/project-organization-profiles.md` — replace the "Refresh `validate.sh`" section with the managed-artifact check/update workflow.
 
@@ -103,16 +103,16 @@ Phases run sequentially; tasks within a phase may be parallelizable in subagent 
 ### Task 1: Package skeleton + dependency declaration
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/__init__.py`
-- Create: `science-tool/src/science_tool/project_artifacts/registry.yaml`
-- Create: `science-tool/src/science_tool/project_artifacts/data/.gitkeep`
-- Modify: `science-tool/pyproject.toml`
-- Test: `science-tool/tests/test_project_artifacts_skeleton.py`
+- Create: `science/src/science_tool/project_artifacts/__init__.py`
+- Create: `science/src/science_tool/project_artifacts/registry.yaml`
+- Create: `science/src/science_tool/project_artifacts/data/.gitkeep`
+- Modify: `science/pyproject.toml`
+- Test: `science/tests/test_project_artifacts_skeleton.py`
 
 - [ ] **Step 1: Write the smoke test**
 
 ```python
-# science-tool/tests/test_project_artifacts_skeleton.py
+# science/tests/test_project_artifacts_skeleton.py
 """Smoke test: package imports, ships data/, registry.yaml is readable."""
 from importlib import resources
 
@@ -135,12 +135,12 @@ def test_data_directory_is_packaged() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_project_artifacts_skeleton.py -v`
+Run: `uv run --project science pytest tests/test_project_artifacts_skeleton.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'science_tool.project_artifacts'`.
 
 - [ ] **Step 3: Create the package files**
 
-Create `science-tool/src/science_tool/project_artifacts/__init__.py`:
+Create `science/src/science_tool/project_artifacts/__init__.py`:
 
 ```python
 """Managed-artifact lifecycle for Science projects.
@@ -153,21 +153,21 @@ loads and validates the registry (see Task 3).
 __all__: list[str] = []
 ```
 
-Create `science-tool/src/science_tool/project_artifacts/registry.yaml`:
+Create `science/src/science_tool/project_artifacts/registry.yaml`:
 
 ```yaml
-# science-tool/src/science_tool/project_artifacts/registry.yaml
+# science/src/science_tool/project_artifacts/registry.yaml
 # Managed-artifact registry — capabilities matrices.
 # See docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md.
 # Initially empty; the first artifact lands in Task 28.
 artifacts: []
 ```
 
-Create `science-tool/src/science_tool/project_artifacts/data/.gitkeep` (empty file — keeps the dir under version control until the first artifact lands).
+Create `science/src/science_tool/project_artifacts/data/.gitkeep` (empty file — keeps the dir under version control until the first artifact lands).
 
 - [ ] **Step 4: Update `pyproject.toml` for dependencies and package data**
 
-Modify `science-tool/pyproject.toml` to ensure `pydantic >= 2.0` and `ruamel.yaml >= 0.17` are runtime deps, and that `project_artifacts/registry.yaml` and `project_artifacts/data/**` are packaged. Locate the `[project]` table and confirm/add the dependencies; locate `[tool.hatch.build.targets.wheel]` (or equivalent) and confirm `force-include` (or analogous) covers the new paths. If neither dep is present, add:
+Modify `science/pyproject.toml` to ensure `pydantic >= 2.0` and `ruamel.yaml >= 0.17` are runtime deps, and that `project_artifacts/registry.yaml` and `project_artifacts/data/**` are packaged. Locate the `[project]` table and confirm/add the dependencies; locate `[tool.hatch.build.targets.wheel]` (or equivalent) and confirm `force-include` (or analogous) covers the new paths. If neither dep is present, add:
 
 ```toml
 # under [project] dependencies
@@ -187,24 +187,24 @@ If the build target needs explicit data inclusion, append under the existing whe
 
 - [ ] **Step 5: Sync deps and re-run tests**
 
-Run: `uv sync --project science-tool` then `uv run --project science-tool pytest tests/test_project_artifacts_skeleton.py -v`.
+Run: `uv sync --project science` then `uv run --project science pytest tests/test_project_artifacts_skeleton.py -v`.
 Expected: 3 passed.
 
 - [ ] **Step 6: Quality gates**
 
 Run, in order:
-- `uv run --project science-tool ruff check science-tool/src/science_tool/project_artifacts science-tool/tests/test_project_artifacts_skeleton.py`
-- `uv run --project science-tool ruff format science-tool/src/science_tool/project_artifacts science-tool/tests/test_project_artifacts_skeleton.py`
-- `uv run --project science-tool pyright science-tool/src/science_tool/project_artifacts`
+- `uv run --project science ruff check science/src/science_tool/project_artifacts science/tests/test_project_artifacts_skeleton.py`
+- `uv run --project science ruff format science/src/science_tool/project_artifacts science/tests/test_project_artifacts_skeleton.py`
+- `uv run --project science pyright science/src/science_tool/project_artifacts`
 
 Expected: all clean.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/ \
-        science-tool/tests/test_project_artifacts_skeleton.py \
-        science-tool/pyproject.toml
+git add science/src/science_tool/project_artifacts/ \
+        science/tests/test_project_artifacts_skeleton.py \
+        science/pyproject.toml
 git commit -m "feat(project-artifacts): scaffold package with registry + data dir
 
 Per docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md.
@@ -217,15 +217,15 @@ Adds pydantic and ruamel.yaml runtime deps."
 ### Task 2: Capabilities-matrix pydantic schema
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/registry_schema.py`
-- Test: `science-tool/tests/test_registry_schema.py`
+- Create: `science/src/science_tool/project_artifacts/registry_schema.py`
+- Test: `science/tests/test_registry_schema.py`
 
 The schema is the single source of truth for field names, types, and consumer × extension × header-protocol validity. v1 implements all the kinds defined in the spec, but only the v1-supported combinations validate cleanly; out-of-v1 kinds parse but raise `NotImplementedError` when actually used at runtime (handled by Task 4 etc., not here).
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_registry_schema.py
+# science/tests/test_registry_schema.py
 """Schema-strictness for the managed-artifact registry."""
 import pytest
 from pydantic import ValidationError
@@ -323,12 +323,12 @@ def test_extension_protocol_none_allowed_with_rationale() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_registry_schema.py -v`
+Run: `uv run --project science pytest tests/test_registry_schema.py -v`
 Expected: FAIL — `ImportError: cannot import name 'Artifact' from 'science_tool.project_artifacts.registry_schema'`.
 
 - [ ] **Step 3: Implement the schema**
 
-Create `science-tool/src/science_tool/project_artifacts/registry_schema.py`:
+Create `science/src/science_tool/project_artifacts/registry_schema.py`:
 
 ```python
 """Pydantic schema for the managed-artifact registry capabilities matrix."""
@@ -535,23 +535,23 @@ class Registry(BaseModel):
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_registry_schema.py -v`
+Run: `uv run --project science pytest tests/test_registry_schema.py -v`
 Expected: 7 passed.
 
 - [ ] **Step 5: Quality gates**
 
 Run:
-- `uv run --project science-tool ruff check science-tool/src/science_tool/project_artifacts/registry_schema.py science-tool/tests/test_registry_schema.py`
-- `uv run --project science-tool ruff format science-tool/src/science_tool/project_artifacts/registry_schema.py science-tool/tests/test_registry_schema.py`
-- `uv run --project science-tool pyright science-tool/src/science_tool/project_artifacts/registry_schema.py`
+- `uv run --project science ruff check science/src/science_tool/project_artifacts/registry_schema.py science/tests/test_registry_schema.py`
+- `uv run --project science ruff format science/src/science_tool/project_artifacts/registry_schema.py science/tests/test_registry_schema.py`
+- `uv run --project science pyright science/src/science_tool/project_artifacts/registry_schema.py`
 
 Expected: all clean.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/registry_schema.py \
-        science-tool/tests/test_registry_schema.py
+git add science/src/science_tool/project_artifacts/registry_schema.py \
+        science/tests/test_registry_schema.py
 git commit -m "feat(project-artifacts): pydantic schema for capabilities matrix
 
 Strict validation: consumer × extension pairings, hash format,
@@ -565,14 +565,14 @@ has no steps, project_action requires steps. Per spec
 ### Task 3: Registry YAML loader
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/loader.py`
-- Modify: `science-tool/src/science_tool/project_artifacts/__init__.py`
-- Test: `science-tool/tests/test_registry_loader.py`
+- Create: `science/src/science_tool/project_artifacts/loader.py`
+- Modify: `science/src/science_tool/project_artifacts/__init__.py`
+- Test: `science/tests/test_registry_loader.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_registry_loader.py
+# science/tests/test_registry_loader.py
 """Registry YAML loader: parses, schema-validates, surfaces errors with paths."""
 from pathlib import Path
 
@@ -627,12 +627,12 @@ def test_package_default_registry_is_loadable() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_registry_loader.py -v`
+Run: `uv run --project science pytest tests/test_registry_loader.py -v`
 Expected: FAIL — `ImportError: cannot import name 'load_registry'`.
 
 - [ ] **Step 3: Implement the loader**
 
-Create `science-tool/src/science_tool/project_artifacts/loader.py`:
+Create `science/src/science_tool/project_artifacts/loader.py`:
 
 ```python
 """YAML loader for the managed-artifact registry."""
@@ -685,7 +685,7 @@ def load_packaged_registry() -> Registry:
         return load_registry(p)
 ```
 
-Modify `science-tool/src/science_tool/project_artifacts/__init__.py`:
+Modify `science/src/science_tool/project_artifacts/__init__.py`:
 
 ```python
 """Managed-artifact lifecycle for Science projects.
@@ -715,24 +715,24 @@ __all__ = [
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_registry_loader.py -v`
+Run: `uv run --project science pytest tests/test_registry_loader.py -v`
 Expected: 4 passed.
 
 - [ ] **Step 5: Quality gates**
 
 Run:
-- `uv run --project science-tool ruff check science-tool/src/science_tool/project_artifacts/loader.py science-tool/src/science_tool/project_artifacts/__init__.py science-tool/tests/test_registry_loader.py`
-- `uv run --project science-tool ruff format` (same paths)
-- `uv run --project science-tool pyright science-tool/src/science_tool/project_artifacts/`
+- `uv run --project science ruff check science/src/science_tool/project_artifacts/loader.py science/src/science_tool/project_artifacts/__init__.py science/tests/test_registry_loader.py`
+- `uv run --project science ruff format` (same paths)
+- `uv run --project science pyright science/src/science_tool/project_artifacts/`
 
 Expected: all clean.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/loader.py \
-        science-tool/src/science_tool/project_artifacts/__init__.py \
-        science-tool/tests/test_registry_loader.py
+git add science/src/science_tool/project_artifacts/loader.py \
+        science/src/science_tool/project_artifacts/__init__.py \
+        science/tests/test_registry_loader.py
 git commit -m "feat(project-artifacts): registry YAML loader with schema-strict errors
 
 load_registry parses YAML and validates against the pydantic
@@ -745,13 +745,13 @@ packaged registry.yaml. Per spec 'Registry as data, not code'."
 ### Task 4: Header protocol parse/write (`shebang_comment`)
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/header.py`
-- Test: `science-tool/tests/test_header_protocol.py`
+- Create: `science/src/science_tool/project_artifacts/header.py`
+- Test: `science/tests/test_header_protocol.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_header_protocol.py
+# science/tests/test_header_protocol.py
 """Header protocol parse/write for shebang_comment."""
 import pytest
 
@@ -830,13 +830,13 @@ def test_unsupported_kinds_raise_not_implemented() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_header_protocol.py -v`
+Run: `uv run --project science pytest tests/test_header_protocol.py -v`
 Expected: FAIL — `ImportError: cannot import name 'parse_header'`.
 
 - [ ] **Step 3: Implement `header.py`**
 
 ```python
-# science-tool/src/science_tool/project_artifacts/header.py
+# science/src/science_tool/project_artifacts/header.py
 """Per-artifact header protocol parse/write.
 
 v1 supports shebang_comment only. Other kinds parse-validate at the
@@ -916,23 +916,23 @@ def header_bytes(name: str, version: str, hash_: str, protocol: HeaderProtocol) 
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_header_protocol.py -v`
+Run: `uv run --project science pytest tests/test_header_protocol.py -v`
 Expected: 7 passed.
 
 - [ ] **Step 5: Quality gates**
 
 Run:
-- `uv run --project science-tool ruff check science-tool/src/science_tool/project_artifacts/header.py science-tool/tests/test_header_protocol.py`
-- `uv run --project science-tool ruff format` (same paths)
-- `uv run --project science-tool pyright science-tool/src/science_tool/project_artifacts/header.py`
+- `uv run --project science ruff check science/src/science_tool/project_artifacts/header.py science/tests/test_header_protocol.py`
+- `uv run --project science ruff format` (same paths)
+- `uv run --project science pyright science/src/science_tool/project_artifacts/header.py`
 
 Expected: all clean.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/header.py \
-        science-tool/tests/test_header_protocol.py
+git add science/src/science_tool/project_artifacts/header.py \
+        science/tests/test_header_protocol.py
 git commit -m "feat(project-artifacts): shebang_comment header parse/write
 
 parse_header returns ParsedHeader or None; preserves shebang at byte 0;
@@ -945,13 +945,13 @@ raise NotImplementedError. Per spec 'Header protocol (per-artifact)'."
 ### Task 5: Body hash
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/hashing.py`
-- Test: `science-tool/tests/test_hashing.py`
+- Create: `science/src/science_tool/project_artifacts/hashing.py`
+- Test: `science/tests/test_hashing.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_hashing.py
+# science/tests/test_hashing.py
 """Body hash computation: header-aware, deterministic."""
 import hashlib
 
@@ -1004,13 +1004,13 @@ def test_body_hash_when_no_header_uses_full_bytes() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_hashing.py -v`
+Run: `uv run --project science pytest tests/test_hashing.py -v`
 Expected: FAIL — `ImportError: cannot import name 'body_hash'`.
 
 - [ ] **Step 3: Implement `hashing.py`**
 
 ```python
-# science-tool/src/science_tool/project_artifacts/hashing.py
+# science/src/science_tool/project_artifacts/hashing.py
 """Body hash for managed artifacts: SHA256 of bytes after the header."""
 from __future__ import annotations
 
@@ -1051,7 +1051,7 @@ def body_hash(file_bytes: bytes, protocol: HeaderProtocol) -> str:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_hashing.py -v`
+Run: `uv run --project science pytest tests/test_hashing.py -v`
 Expected: 5 passed.
 
 - [ ] **Step 5: Quality gates**
@@ -1062,8 +1062,8 @@ Expected: all clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/hashing.py \
-        science-tool/tests/test_hashing.py
+git add science/src/science_tool/project_artifacts/hashing.py \
+        science/tests/test_hashing.py
 git commit -m "feat(project-artifacts): header-aware body hash
 
 body_hash strips the header before hashing; falls back to full-bytes
@@ -1076,13 +1076,13 @@ files). Pure function. Per spec 'Versioning and hash history'."
 ### Task 6: Status classifier
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/status.py`
-- Test: `science-tool/tests/test_status.py`
+- Create: `science/src/science_tool/project_artifacts/status.py`
+- Test: `science/tests/test_status.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_status.py
+# science/tests/test_status.py
 """Drift classification: 7 states across (header?, hash known?, pin?)."""
 from pathlib import Path
 
@@ -1202,13 +1202,13 @@ def test_pinned_but_locally_modified(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_status.py -v`
+Run: `uv run --project science pytest tests/test_status.py -v`
 Expected: FAIL — `ImportError: cannot import name 'Status'`.
 
 - [ ] **Step 3: Implement `status.py`**
 
 ```python
-# science-tool/src/science_tool/project_artifacts/status.py
+# science/src/science_tool/project_artifacts/status.py
 """Drift classification for installed managed artifacts."""
 from __future__ import annotations
 
@@ -1282,7 +1282,7 @@ def classify_full(install_target: Path, artifact: Artifact, pins: list[Pin]) -> 
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_status.py -v`
+Run: `uv run --project science pytest tests/test_status.py -v`
 Expected: 7 passed.
 
 - [ ] **Step 5: Quality gates**
@@ -1293,8 +1293,8 @@ Expected: all clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/status.py \
-        science-tool/tests/test_status.py
+git add science/src/science_tool/project_artifacts/status.py \
+        science/tests/test_status.py
 git commit -m "feat(project-artifacts): drift classifier (7 statuses)
 
 classify() returns Status enum; classify_full() returns ClassifyResult
@@ -1307,17 +1307,17 @@ Per spec 'Versioning and hash history'."
 ### Task 7: CLI scaffolding + `list` verb + `canonical_path`
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/paths.py`
-- Create: `science-tool/src/science_tool/project_artifacts/cli.py`
-- Modify: `science-tool/src/science_tool/cli.py`
-- Modify: `science-tool/src/science_tool/project_artifacts/__init__.py`
-- Test: `science-tool/tests/test_cli_artifacts_list.py`
+- Create: `science/src/science_tool/project_artifacts/paths.py`
+- Create: `science/src/science_tool/project_artifacts/cli.py`
+- Modify: `science/src/science_tool/cli.py`
+- Modify: `science/src/science_tool/project_artifacts/__init__.py`
+- Test: `science/tests/test_cli_artifacts_list.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_cli_artifacts_list.py
-"""`science-tool project artifacts list` verb."""
+# science/tests/test_cli_artifacts_list.py
+"""`science project artifacts list` verb."""
 from click.testing import CliRunner
 
 from science_tool.cli import main
@@ -1350,12 +1350,12 @@ def test_canonical_path_resolves_packaged_artifact(tmp_path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_list.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_list.py -v`
 Expected: FAIL — `ImportError` or `Click` group missing.
 
 - [ ] **Step 3: Implement `paths.py` and `cli.py`**
 
-Create `science-tool/src/science_tool/project_artifacts/paths.py`:
+Create `science/src/science_tool/project_artifacts/paths.py`:
 
 ```python
 """Path resolution for managed artifacts."""
@@ -1384,10 +1384,10 @@ def canonical_path(name: str) -> Path:
         return Path(p)
 ```
 
-Create `science-tool/src/science_tool/project_artifacts/cli.py`:
+Create `science/src/science_tool/project_artifacts/cli.py`:
 
 ```python
-"""Click commands for `science-tool project artifacts ...`."""
+"""Click commands for `science project artifacts ...`."""
 from __future__ import annotations
 
 import click
@@ -1429,7 +1429,7 @@ def list_cmd(check: bool, project_root: str) -> None:
             click.echo(f"{art.name}\t{art.version}")
 ```
 
-Update `science-tool/src/science_tool/project_artifacts/__init__.py`:
+Update `science/src/science_tool/project_artifacts/__init__.py`:
 
 ```python
 """Managed-artifact lifecycle for Science projects."""
@@ -1456,7 +1456,7 @@ __all__ = [
 ]
 ```
 
-Modify `science-tool/src/science_tool/cli.py` — locate the existing `@main.group()` for `project` (around line 2305 per `grep`); add this import near the top:
+Modify `science/src/science_tool/cli.py` — locate the existing `@main.group()` for `project` (around line 2305 per `grep`); add this import near the top:
 
 ```python
 from science_tool.project_artifacts.cli import artifacts_group as _artifacts_group
@@ -1472,7 +1472,7 @@ If the `project` group has no other subcommands, the registration call goes imme
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_list.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_list.py -v`
 Expected: 3 passed.
 
 - [ ] **Step 5: Quality gates**
@@ -1483,14 +1483,14 @@ Expected: all clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/paths.py \
-        science-tool/src/science_tool/project_artifacts/cli.py \
-        science-tool/src/science_tool/project_artifacts/__init__.py \
-        science-tool/src/science_tool/cli.py \
-        science-tool/tests/test_cli_artifacts_list.py
+git add science/src/science_tool/project_artifacts/paths.py \
+        science/src/science_tool/project_artifacts/cli.py \
+        science/src/science_tool/project_artifacts/__init__.py \
+        science/src/science_tool/cli.py \
+        science/tests/test_cli_artifacts_list.py
 git commit -m "feat(project-artifacts): list verb and canonical_path
 
-Wires science-tool project artifacts list under the existing project
+Wires science project artifacts list under the existing project
 group; canonical_path resolves registry names to on-disk bytes files.
 Empty registry → friendly message. Per spec 'Components' + Data flow."
 ```
@@ -1500,14 +1500,14 @@ Empty registry → friendly message. Per spec 'Components' + Data flow."
 ### Task 8: `check` verb
 
 **Files:**
-- Modify: `science-tool/src/science_tool/project_artifacts/cli.py`
-- Test: `science-tool/tests/test_cli_artifacts_check.py`
+- Modify: `science/src/science_tool/project_artifacts/cli.py`
+- Test: `science/tests/test_cli_artifacts_check.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_cli_artifacts_check.py
-"""`science-tool project artifacts check <name>` verb."""
+# science/tests/test_cli_artifacts_check.py
+"""`science project artifacts check <name>` verb."""
 import json
 from pathlib import Path
 
@@ -1556,12 +1556,12 @@ def test_check_json_output(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_check.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_check.py -v`
 Expected: FAIL — `check` not yet a verb.
 
 - [ ] **Step 3: Add the `check` verb**
 
-Append to `science-tool/src/science_tool/project_artifacts/cli.py`:
+Append to `science/src/science_tool/project_artifacts/cli.py`:
 
 ```python
 @artifacts_group.command("check")
@@ -1608,7 +1608,7 @@ def check_cmd(name: str, project_root: str, as_json: bool) -> None:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_check.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_check.py -v`
 Expected: 3 passed (some skipped until Task 28 lands).
 
 - [ ] **Step 5: Quality gates**
@@ -1619,11 +1619,11 @@ Expected: all clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/cli.py \
-        science-tool/tests/test_cli_artifacts_check.py
+git add science/src/science_tool/project_artifacts/cli.py \
+        science/tests/test_cli_artifacts_check.py
 git commit -m "feat(project-artifacts): check verb (human + --json output)
 
-science-tool project artifacts check <name> classifies an installed
+science project artifacts check <name> classifies an installed
 artifact and emits status; --json for machine-readable. Per spec
 Data flow 'check'."
 ```
@@ -1633,14 +1633,14 @@ Data flow 'check'."
 ### Task 9: `diff` verb
 
 **Files:**
-- Modify: `science-tool/src/science_tool/project_artifacts/cli.py`
-- Test: `science-tool/tests/test_cli_artifacts_diff.py`
+- Modify: `science/src/science_tool/project_artifacts/cli.py`
+- Test: `science/tests/test_cli_artifacts_diff.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_cli_artifacts_diff.py
-"""`science-tool project artifacts diff <name>` verb."""
+# science/tests/test_cli_artifacts_diff.py
+"""`science project artifacts diff <name>` verb."""
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -1687,12 +1687,12 @@ def test_diff_identical_returns_empty(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_diff.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_diff.py -v`
 Expected: FAIL — `diff` not yet a verb.
 
 - [ ] **Step 3: Add the `diff` verb**
 
-Append to `science-tool/src/science_tool/project_artifacts/cli.py`:
+Append to `science/src/science_tool/project_artifacts/cli.py`:
 
 ```python
 @artifacts_group.command("diff")
@@ -1734,7 +1734,7 @@ def diff_cmd(name: str, project_root: str) -> None:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_diff.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_diff.py -v`
 Expected: 3 passed (some skipped until Task 28).
 
 - [ ] **Step 5: Quality gates**
@@ -1745,11 +1745,11 @@ Expected: all clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/cli.py \
-        science-tool/tests/test_cli_artifacts_diff.py
+git add science/src/science_tool/project_artifacts/cli.py \
+        science/tests/test_cli_artifacts_diff.py
 git commit -m "feat(project-artifacts): diff verb (unified diff vs canonical)
 
-science-tool project artifacts diff <name> shows installed-vs-canonical
+science project artifacts diff <name> shows installed-vs-canonical
 unified diff; identical → empty; missing target → clear error. Per spec
 Data flow 'diff'."
 ```
@@ -1759,14 +1759,14 @@ Data flow 'diff'."
 ### Task 10: `exec` verb
 
 **Files:**
-- Modify: `science-tool/src/science_tool/project_artifacts/cli.py`
-- Test: `science-tool/tests/test_cli_artifacts_exec.py`
+- Modify: `science/src/science_tool/project_artifacts/cli.py`
+- Test: `science/tests/test_cli_artifacts_exec.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_cli_artifacts_exec.py
-"""`science-tool project artifacts exec <name>` verb."""
+# science/tests/test_cli_artifacts_exec.py
+"""`science project artifacts exec <name>` verb."""
 import subprocess
 import sys
 
@@ -1800,12 +1800,12 @@ def test_exec_invokes_canonical_with_passed_args() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_exec.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_exec.py -v`
 Expected: FAIL — `exec` not yet a verb.
 
 - [ ] **Step 3: Add the `exec` verb**
 
-Append to `science-tool/src/science_tool/project_artifacts/cli.py`:
+Append to `science/src/science_tool/project_artifacts/cli.py`:
 
 ```python
 @artifacts_group.command(
@@ -1834,7 +1834,7 @@ def exec_cmd(name: str, args: tuple[str, ...]) -> None:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_exec.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_exec.py -v`
 Expected: 2 passed.
 
 - [ ] **Step 5: Quality gates**
@@ -1845,11 +1845,11 @@ Expected: all clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/cli.py \
-        science-tool/tests/test_cli_artifacts_exec.py
+git add science/src/science_tool/project_artifacts/cli.py \
+        science/tests/test_cli_artifacts_exec.py
 git commit -m "feat(project-artifacts): exec verb (replaces process with canonical)
 
-science-tool project artifacts exec <name> -- <args...> resolves
+science project artifacts exec <name> -- <args...> resolves
 canonical bytes path and execvs it. Powers path-convenience shims.
 Per spec 'Components' + 'Resolved during design / exec is a first-class CLI verb'."
 ```
@@ -1859,13 +1859,13 @@ Per spec 'Components' + 'Resolved during design / exec is a first-class CLI verb
 ### Task 11: `install_matrix.py` decision table
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/install_matrix.py`
-- Test: `science-tool/tests/test_install_matrix.py`
+- Create: `science/src/science_tool/project_artifacts/install_matrix.py`
+- Test: `science/tests/test_install_matrix.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_install_matrix.py
+# science/tests/test_install_matrix.py
 """Install-matrix decision table — every row of the spec's install matrix."""
 import pytest
 
@@ -1914,13 +1914,13 @@ def test_install_matrix_rows(
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_install_matrix.py -v`
+Run: `uv run --project science pytest tests/test_install_matrix.py -v`
 Expected: FAIL — `ImportError`.
 
 - [ ] **Step 3: Implement the matrix**
 
 ```python
-# science-tool/src/science_tool/project_artifacts/install_matrix.py
+# science/src/science_tool/project_artifacts/install_matrix.py
 """Install-matrix decision table.
 
 Pure logic: maps (Status, header presence, hash known, flags) to an Action.
@@ -2020,7 +2020,7 @@ def decide(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_install_matrix.py -v`
+Run: `uv run --project science pytest tests/test_install_matrix.py -v`
 Expected: 9 passed.
 
 - [ ] **Step 5: Quality gates**
@@ -2031,8 +2031,8 @@ Expected: all clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/install_matrix.py \
-        science-tool/tests/test_install_matrix.py
+git add science/src/science_tool/project_artifacts/install_matrix.py \
+        science/tests/test_install_matrix.py
 git commit -m "feat(project-artifacts): install-matrix decision table
 
 decide() maps (Status, header_present, hash_known, flags) → Action.
@@ -2045,13 +2045,13 @@ install matrix."
 ### Task 12: Install primitives
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/artifacts.py`
-- Test: `science-tool/tests/test_install_primitives.py`
+- Create: `science/src/science_tool/project_artifacts/artifacts.py`
+- Test: `science/tests/test_install_primitives.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_install_primitives.py
+# science/tests/test_install_primitives.py
 """Install primitives: byte-copy + chmod + parent-dir mkdir."""
 import os
 from pathlib import Path
@@ -2134,13 +2134,13 @@ def test_install_creates_parent_directory(tmp_path, monkeypatch) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_install_primitives.py -v`
+Run: `uv run --project science pytest tests/test_install_primitives.py -v`
 Expected: FAIL — `ImportError`.
 
 - [ ] **Step 3: Implement `artifacts.py`**
 
 ```python
-# science-tool/src/science_tool/project_artifacts/artifacts.py
+# science/src/science_tool/project_artifacts/artifacts.py
 """High-level operations: install / check / diff (CLI-orchestration layer).
 
 Functions here compose loader + status + install_matrix + worktree primitives
@@ -2254,7 +2254,7 @@ def install_artifact(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_install_primitives.py -v`
+Run: `uv run --project science pytest tests/test_install_primitives.py -v`
 Expected: 2 passed.
 
 - [ ] **Step 5: Quality gates**
@@ -2265,8 +2265,8 @@ Expected: all clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/artifacts.py \
-        science-tool/tests/test_install_primitives.py
+git add science/src/science_tool/project_artifacts/artifacts.py \
+        science/tests/test_install_primitives.py
 git commit -m "feat(project-artifacts): install primitives + InstallResult
 
 install_artifact() composes classify + decide + side effects.
@@ -2279,13 +2279,13 @@ REFUSE_* actions raise InstallError. Per spec Data flow 'install'."
 ### Task 13: `install` CLI verb
 
 **Files:**
-- Modify: `science-tool/src/science_tool/project_artifacts/cli.py`
-- Test: `science-tool/tests/test_cli_artifacts_install.py`
+- Modify: `science/src/science_tool/project_artifacts/cli.py`
+- Test: `science/tests/test_cli_artifacts_install.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_cli_artifacts_install.py
+# science/tests/test_cli_artifacts_install.py
 """End-to-end install CLI: every install-matrix row exercised through the verb."""
 import hashlib
 from pathlib import Path
@@ -2381,12 +2381,12 @@ def test_install_refuses_locally_modified(project_with_registry: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_install.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_install.py -v`
 Expected: FAIL — `install` not yet a verb.
 
 - [ ] **Step 3: Add the `install` verb**
 
-Append to `science-tool/src/science_tool/project_artifacts/cli.py`:
+Append to `science/src/science_tool/project_artifacts/cli.py`:
 
 ```python
 @artifacts_group.command("install")
@@ -2423,7 +2423,7 @@ def install_cmd(name: str, project_root: str, adopt: bool, force_adopt: bool) ->
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_install.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_install.py -v`
 Expected: 3 passed.
 
 - [ ] **Step 5: Quality gates**
@@ -2434,11 +2434,11 @@ Expected: all clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/cli.py \
-        science-tool/tests/test_cli_artifacts_install.py
+git add science/src/science_tool/project_artifacts/cli.py \
+        science/tests/test_cli_artifacts_install.py
 git commit -m "feat(project-artifacts): install verb (matrix-driven)
 
-science-tool project artifacts install <name> [--adopt] [--force-adopt]
+science project artifacts install <name> [--adopt] [--force-adopt]
 wires install_matrix + install_artifact. REFUSE_* surfaces as ClickException.
 Per spec Data flow 'install'."
 ```
@@ -2448,13 +2448,13 @@ Per spec Data flow 'install'."
 ### Task 14: Worktree primitives
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/worktree.py`
-- Test: `science-tool/tests/test_worktree.py`
+- Create: `science/src/science_tool/project_artifacts/worktree.py`
+- Test: `science/tests/test_worktree.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_worktree.py
+# science/tests/test_worktree.py
 """Worktree state primitives: clean check, dirty paths, conflict detection."""
 import subprocess
 from pathlib import Path
@@ -2519,13 +2519,13 @@ def test_paths_intersect_glob() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_worktree.py -v`
+Run: `uv run --project science pytest tests/test_worktree.py -v`
 Expected: FAIL — `ImportError`.
 
 - [ ] **Step 3: Implement `worktree.py`**
 
 ```python
-# science-tool/src/science_tool/project_artifacts/worktree.py
+# science/src/science_tool/project_artifacts/worktree.py
 """Worktree state primitives: clean check, dirty paths, conflict detection."""
 from __future__ import annotations
 
@@ -2588,7 +2588,7 @@ def paths_intersect(touched_globs: list[str], dirty: set[Path]) -> set[Path]:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_worktree.py -v`
+Run: `uv run --project science pytest tests/test_worktree.py -v`
 Expected: 7 passed.
 
 - [ ] **Step 5: Quality gates**
@@ -2599,8 +2599,8 @@ Expected: all clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/worktree.py \
-        science-tool/tests/test_worktree.py
+git add science/src/science_tool/project_artifacts/worktree.py \
+        science/tests/test_worktree.py
 git commit -m "feat(project-artifacts): worktree primitives
 
 is_clean, dirty_paths, paths_intersect (literal + fnmatch globs),
@@ -2613,14 +2613,14 @@ Per spec 'Dirty-worktree and transaction safety'."
 ### Task 15: `TempCommitSnapshot`
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/migrations/__init__.py`
-- Create: `science-tool/src/science_tool/project_artifacts/migrations/transaction.py`
-- Test: `science-tool/tests/test_transaction_temp_commit.py`
+- Create: `science/src/science_tool/project_artifacts/migrations/__init__.py`
+- Create: `science/src/science_tool/project_artifacts/migrations/transaction.py`
+- Test: `science/tests/test_transaction_temp_commit.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_transaction_temp_commit.py
+# science/tests/test_transaction_temp_commit.py
 """TempCommitSnapshot: take + restore returns to pre-state; discard finalizes."""
 import subprocess
 from pathlib import Path
@@ -2701,12 +2701,12 @@ def test_restore_is_idempotent(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_transaction_temp_commit.py -v`
+Run: `uv run --project science pytest tests/test_transaction_temp_commit.py -v`
 Expected: FAIL — `ImportError`.
 
 - [ ] **Step 3: Implement transaction snapshots (skeleton + TempCommit)**
 
-Create `science-tool/src/science_tool/project_artifacts/migrations/__init__.py`:
+Create `science/src/science_tool/project_artifacts/migrations/__init__.py`:
 
 ```python
 """Migration framework: step protocol, runner, transaction snapshots."""
@@ -2718,7 +2718,7 @@ from science_tool.project_artifacts.migrations.transaction import (
 __all__ = ["TempCommitSnapshot", "ManifestSnapshot"]
 ```
 
-Create `science-tool/src/science_tool/project_artifacts/migrations/transaction.py`:
+Create `science/src/science_tool/project_artifacts/migrations/transaction.py`:
 
 ```python
 """Transaction snapshots for managed-artifact mutations."""
@@ -2817,7 +2817,7 @@ class ManifestSnapshot:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_transaction_temp_commit.py -v`
+Run: `uv run --project science pytest tests/test_transaction_temp_commit.py -v`
 Expected: 4 passed.
 
 - [ ] **Step 5: Quality gates**
@@ -2828,8 +2828,8 @@ Expected: all clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/migrations/ \
-        science-tool/tests/test_transaction_temp_commit.py
+git add science/src/science_tool/project_artifacts/migrations/ \
+        science/tests/test_transaction_temp_commit.py
 git commit -m "feat(project-artifacts): TempCommitSnapshot transaction
 
 take/restore/discard round-trip via temp commit; restore returns to
@@ -2842,13 +2842,13 @@ canonical commit message. Per spec 'Dirty-worktree and transaction safety'."
 ### Task 16: `ManifestSnapshot`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/project_artifacts/migrations/transaction.py`
-- Test: `science-tool/tests/test_transaction_manifest.py`
+- Modify: `science/src/science_tool/project_artifacts/migrations/transaction.py`
+- Test: `science/tests/test_transaction_manifest.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_transaction_manifest.py
+# science/tests/test_transaction_manifest.py
 """ManifestSnapshot: take/restore for declared paths, no Git required."""
 from pathlib import Path
 
@@ -2910,12 +2910,12 @@ def test_discard_is_noop(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_transaction_manifest.py -v`
+Run: `uv run --project science pytest tests/test_transaction_manifest.py -v`
 Expected: FAIL — `NotImplementedError("ManifestSnapshot lands in Task 16")`.
 
 - [ ] **Step 3: Implement `ManifestSnapshot`**
 
-Replace the `ManifestSnapshot` class in `science-tool/src/science_tool/project_artifacts/migrations/transaction.py`:
+Replace the `ManifestSnapshot` class in `science/src/science_tool/project_artifacts/migrations/transaction.py`:
 
 ```python
 class ManifestSnapshot:
@@ -2970,7 +2970,7 @@ class ManifestSnapshot:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_transaction_manifest.py -v`
+Run: `uv run --project science pytest tests/test_transaction_manifest.py -v`
 Expected: 4 passed.
 
 - [ ] **Step 5: Quality gates**
@@ -2981,8 +2981,8 @@ Expected: all clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/migrations/transaction.py \
-        science-tool/tests/test_transaction_manifest.py
+git add science/src/science_tool/project_artifacts/migrations/transaction.py \
+        science/tests/test_transaction_manifest.py
 git commit -m "feat(project-artifacts): ManifestSnapshot transaction
 
 Copy-into-tempdir snapshot for declared paths; works outside Git.
@@ -2995,14 +2995,14 @@ Per spec 'Dirty-worktree and transaction safety'."
 ### Task 17: `update.py` byte-replace path
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/update.py`
-- Modify: `science-tool/src/science_tool/project_artifacts/cli.py`
-- Test: `science-tool/tests/test_update_no_migration.py`
+- Create: `science/src/science_tool/project_artifacts/update.py`
+- Modify: `science/src/science_tool/project_artifacts/cli.py`
+- Test: `science/tests/test_update_no_migration.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_update_no_migration.py
+# science/tests/test_update_no_migration.py
 """Update verb (no-migration path): byte-replace + .pre-update.bak + commit."""
 import hashlib
 import subprocess
@@ -3141,13 +3141,13 @@ def test_locally_modified_refuses_without_force(tmp_path, monkeypatch) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_update_no_migration.py -v`
+Run: `uv run --project science pytest tests/test_update_no_migration.py -v`
 Expected: FAIL — `ImportError`.
 
 - [ ] **Step 3: Implement `update.py` (no-migration path)**
 
 ```python
-# science-tool/src/science_tool/project_artifacts/update.py
+# science/src/science_tool/project_artifacts/update.py
 """Update verb: refresh installed managed artifact to current canonical."""
 from __future__ import annotations
 
@@ -3280,7 +3280,7 @@ def update_artifact(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_update_no_migration.py -v`
+Run: `uv run --project science pytest tests/test_update_no_migration.py -v`
 Expected: 3 passed.
 
 - [ ] **Step 5: Quality gates**
@@ -3291,8 +3291,8 @@ Expected: all clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/update.py \
-        science-tool/tests/test_update_no_migration.py
+git add science/src/science_tool/project_artifacts/update.py \
+        science/tests/test_update_no_migration.py
 git commit -m "feat(project-artifacts): update verb (no-migration path)
 
 update_artifact() with worktree + locally-modified gates;
@@ -3305,15 +3305,15 @@ Per spec Data flow 'update (no migration)'."
 ### Task 18: `update` CLI verb + `--allow-dirty` semantics
 
 **Files:**
-- Modify: `science-tool/src/science_tool/project_artifacts/cli.py`
-- Test: `science-tool/tests/test_cli_artifacts_update.py`
+- Modify: `science/src/science_tool/project_artifacts/cli.py`
+- Test: `science/tests/test_cli_artifacts_update.py`
 
 The path-conflict logic is already inside `update_artifact()` (Task 17). This task adds the CLI verb and an integration test that exercises `--allow-dirty` via the CLI.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_cli_artifacts_update.py
+# science/tests/test_cli_artifacts_update.py
 """CLI update verb: flags wire into update_artifact correctly."""
 import hashlib
 import subprocess
@@ -3428,12 +3428,12 @@ def test_update_allow_dirty_refuses_on_conflict(project_with_stale_install: Path
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_update.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_update.py -v`
 Expected: FAIL — `update` not yet a verb.
 
 - [ ] **Step 3: Add the `update` CLI verb**
 
-Append to `science-tool/src/science_tool/project_artifacts/cli.py`:
+Append to `science/src/science_tool/project_artifacts/cli.py`:
 
 ```python
 @artifacts_group.command("update")
@@ -3481,7 +3481,7 @@ def update_cmd(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_update.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_update.py -v`
 Expected: 4 passed.
 
 - [ ] **Step 5: Quality gates**
@@ -3492,11 +3492,11 @@ Expected: all clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/cli.py \
-        science-tool/tests/test_cli_artifacts_update.py
+git add science/src/science_tool/project_artifacts/cli.py \
+        science/tests/test_cli_artifacts_update.py
 git commit -m "feat(project-artifacts): update CLI verb (--allow-dirty path-conflict)
 
-science-tool project artifacts update <name> [--allow-dirty]
+science project artifacts update <name> [--allow-dirty]
 [--no-commit] [--force --yes]. Path-conflict check on --allow-dirty
 delegates to update_artifact(). Per spec 'Dirty-worktree and transaction safety'."
 ```
@@ -3506,13 +3506,13 @@ delegates to update_artifact(). Per spec 'Dirty-worktree and transaction safety'
 ### Task 19: `--no-commit` semantics — explicit verification
 
 **Files:**
-- Modify: `science-tool/tests/test_cli_artifacts_update.py` (extend with `--no-commit` cases)
+- Modify: `science/tests/test_cli_artifacts_update.py` (extend with `--no-commit` cases)
 
 The `--no-commit` flag was wired in Task 18. This task adds focused tests asserting the orthogonal-flag invariants from the spec.
 
 - [ ] **Step 1: Write the additional failing test cases**
 
-Append to `science-tool/tests/test_cli_artifacts_update.py`:
+Append to `science/tests/test_cli_artifacts_update.py`:
 
 ```python
 def test_no_commit_alone_still_refuses_dirty(project_with_stale_install: Path) -> None:
@@ -3564,7 +3564,7 @@ def test_no_commit_with_allow_dirty_no_conflict(project_with_stale_install: Path
 
 - [ ] **Step 2: Run tests to verify the new ones fail (or pass if Task 17/18 already covered them)**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_update.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_update.py -v`
 Expected: 3 new tests pass on first run because Task 17's implementation already encoded the orthogonal-flag invariants. If any fail, fix `update.py` accordingly.
 
 - [ ] **Step 3: If tests pass on first run (no-op for code), commit the test additions only**
@@ -3572,7 +3572,7 @@ Expected: 3 new tests pass on first run because Task 17's implementation already
 If `update.py` needed any fix to satisfy these tests, commit it together. Otherwise:
 
 ```bash
-git add science-tool/tests/test_cli_artifacts_update.py
+git add science/tests/test_cli_artifacts_update.py
 git commit -m "test(project-artifacts): orthogonal --no-commit / --allow-dirty invariants
 
 Three explicit cases per spec: --no-commit alone still refuses dirty;
@@ -3586,14 +3586,14 @@ spec's orthogonal-flag rule into the test suite."
 ### Task 20: Python migration step protocol
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/migrations/python.py`
-- Create: `science-tool/tests/_fixtures/migration_add_phase.py` (test fixture module)
-- Test: `science-tool/tests/test_migration_python.py`
+- Create: `science/src/science_tool/project_artifacts/migrations/python.py`
+- Create: `science/tests/_fixtures/migration_add_phase.py` (test fixture module)
+- Test: `science/tests/test_migration_python.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_migration_python.py
+# science/tests/test_migration_python.py
 """Python migration step adapter: loads dotted module, dispatches check/apply/unapply."""
 from pathlib import Path
 
@@ -3630,8 +3630,8 @@ def test_python_step_check_apply_check(tmp_path: Path) -> None:
 - [ ] **Step 2: Create the fixture module**
 
 ```python
-# science-tool/tests/_fixtures/__init__.py  (empty file if absent)
-# science-tool/tests/_fixtures/migration_add_phase.py
+# science/tests/_fixtures/__init__.py  (empty file if absent)
+# science/tests/_fixtures/migration_add_phase.py
 """Test-only migration step: ensure phase: line in specs/*.md."""
 from pathlib import Path
 
@@ -3665,13 +3665,13 @@ def unapply(project_root: Path, applied: dict) -> None:
 
 - [ ] **Step 3: Run test to verify it fails (no PythonStepAdapter yet)**
 
-Run: `uv run --project science-tool pytest tests/test_migration_python.py -v`
+Run: `uv run --project science pytest tests/test_migration_python.py -v`
 Expected: FAIL — `ImportError: PythonStepAdapter`.
 
 - [ ] **Step 4: Implement `migrations/python.py`**
 
 ```python
-# science-tool/src/science_tool/project_artifacts/migrations/python.py
+# science/src/science_tool/project_artifacts/migrations/python.py
 """Python migration step adapter: import-and-dispatch."""
 from __future__ import annotations
 
@@ -3710,19 +3710,19 @@ class PythonStepAdapter:
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_migration_python.py -v`
+Run: `uv run --project science pytest tests/test_migration_python.py -v`
 Expected: 1 passed.
 
 - [ ] **Step 6: Quality gates + commit**
 
 ```bash
-uv run --project science-tool ruff check science-tool/src/science_tool/project_artifacts/migrations/python.py science-tool/tests/_fixtures/ science-tool/tests/test_migration_python.py
-uv run --project science-tool ruff format science-tool/src/science_tool/project_artifacts/migrations/python.py science-tool/tests/_fixtures/ science-tool/tests/test_migration_python.py
-uv run --project science-tool pyright science-tool/src/science_tool/project_artifacts/migrations/python.py
+uv run --project science ruff check science/src/science_tool/project_artifacts/migrations/python.py science/tests/_fixtures/ science/tests/test_migration_python.py
+uv run --project science ruff format science/src/science_tool/project_artifacts/migrations/python.py science/tests/_fixtures/ science/tests/test_migration_python.py
+uv run --project science pyright science/src/science_tool/project_artifacts/migrations/python.py
 
-git add science-tool/src/science_tool/project_artifacts/migrations/python.py \
-        science-tool/tests/_fixtures/ \
-        science-tool/tests/test_migration_python.py
+git add science/src/science_tool/project_artifacts/migrations/python.py \
+        science/tests/_fixtures/ \
+        science/tests/test_migration_python.py
 git commit -m "feat(project-artifacts): Python migration step adapter
 
 PythonStepAdapter loads dotted-module step impls and dispatches
@@ -3734,16 +3734,16 @@ check/apply/unapply. Per spec 'Declarative migrations / Step shape'."
 ### Task 21: Bash migration step runner with safety constraints
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/migrations/bash.py`
-- Modify: `science-tool/src/science_tool/project_artifacts/registry_schema.py` (add block-scalar enforcement)
-- Test: `science-tool/tests/test_migration_bash.py`
+- Create: `science/src/science_tool/project_artifacts/migrations/bash.py`
+- Modify: `science/src/science_tool/project_artifacts/registry_schema.py` (add block-scalar enforcement)
+- Test: `science/tests/test_migration_bash.py`
 
 The block-scalar check requires custom YAML loading; pydantic alone can't see node style. We'll add a separate `validate_bash_block_scalars(raw_yaml_text)` helper that the loader (Task 3) will gain in Step 4.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_migration_bash.py
+# science/tests/test_migration_bash.py
 """Bash migration step runner: block-scalar requirement, working_dir, timeout."""
 import pytest
 
@@ -3829,13 +3829,13 @@ def test_bash_step_runs_with_working_dir_and_timeout(tmp_path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_migration_bash.py -v`
+Run: `uv run --project science pytest tests/test_migration_bash.py -v`
 Expected: FAIL — `ImportError: BashStepAdapter`; also block-scalar check missing.
 
 - [ ] **Step 3: Implement `migrations/bash.py`**
 
 ```python
-# science-tool/src/science_tool/project_artifacts/migrations/bash.py
+# science/src/science_tool/project_artifacts/migrations/bash.py
 """Bash migration step runner with declared working_dir + timeout."""
 from __future__ import annotations
 
@@ -3889,7 +3889,7 @@ class BashStepAdapter:
 
 - [ ] **Step 4: Add block-scalar enforcement to the loader**
 
-Modify `science-tool/src/science_tool/project_artifacts/loader.py` — replace the body of `load_registry` to use ruamel's round-trip mode (which preserves node styles) and walk the parse tree before pydantic validation:
+Modify `science/src/science_tool/project_artifacts/loader.py` — replace the body of `load_registry` to use ruamel's round-trip mode (which preserves node styles) and walk the parse tree before pydantic validation:
 
 ```python
 def load_registry(path: Path) -> Registry:
@@ -3948,19 +3948,19 @@ def _enforce_block_scalars(data, path: Path) -> None:
 
 - [ ] **Step 5: Run tests**
 
-Run: `uv run --project science-tool pytest tests/test_migration_bash.py tests/test_registry_loader.py -v`
+Run: `uv run --project science pytest tests/test_migration_bash.py tests/test_registry_loader.py -v`
 Expected: all green (3 in bash + 4 in loader; loader tests still pass because the block-scalar check is bash-specific).
 
 - [ ] **Step 6: Quality gates + commit**
 
 ```bash
-uv run --project science-tool ruff check science-tool/src/science_tool/project_artifacts/migrations/bash.py science-tool/src/science_tool/project_artifacts/loader.py science-tool/tests/test_migration_bash.py
-uv run --project science-tool ruff format <same paths>
-uv run --project science-tool pyright science-tool/src/science_tool/project_artifacts/migrations/bash.py
+uv run --project science ruff check science/src/science_tool/project_artifacts/migrations/bash.py science/src/science_tool/project_artifacts/loader.py science/tests/test_migration_bash.py
+uv run --project science ruff format <same paths>
+uv run --project science pyright science/src/science_tool/project_artifacts/migrations/bash.py
 
-git add science-tool/src/science_tool/project_artifacts/migrations/bash.py \
-        science-tool/src/science_tool/project_artifacts/loader.py \
-        science-tool/tests/test_migration_bash.py
+git add science/src/science_tool/project_artifacts/migrations/bash.py \
+        science/src/science_tool/project_artifacts/loader.py \
+        science/tests/test_migration_bash.py
 git commit -m "feat(project-artifacts): bash migration step runner + block-scalar enforcement
 
 BashStepAdapter runs check/apply with declared working_dir + timeout.
@@ -3973,13 +3973,13 @@ Per spec 'Declarative migrations / Step shape'."
 ### Task 22: Ordered migration runner
 
 **Files:**
-- Modify: `science-tool/src/science_tool/project_artifacts/migrations/__init__.py`
-- Test: `science-tool/tests/test_migration_runner.py`
+- Modify: `science/src/science_tool/project_artifacts/migrations/__init__.py`
+- Test: `science/tests/test_migration_runner.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_migration_runner.py
+# science/tests/test_migration_runner.py
 """Ordered migration runner: walk steps; on failure, abort + restore snapshot."""
 import subprocess
 from pathlib import Path
@@ -4054,12 +4054,12 @@ def test_failure_mid_run_restores_snapshot(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_migration_runner.py -v`
+Run: `uv run --project science pytest tests/test_migration_runner.py -v`
 Expected: FAIL — `ImportError: run_migration`.
 
 - [ ] **Step 3: Implement the runner**
 
-Replace `science-tool/src/science_tool/project_artifacts/migrations/__init__.py`:
+Replace `science/src/science_tool/project_artifacts/migrations/__init__.py`:
 
 ```python
 """Migration framework: step protocol, runner, transaction snapshots."""
@@ -4156,18 +4156,18 @@ def run_migration(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_migration_runner.py -v`
+Run: `uv run --project science pytest tests/test_migration_runner.py -v`
 Expected: 3 passed.
 
 - [ ] **Step 5: Quality gates + commit**
 
 ```bash
-uv run --project science-tool ruff check science-tool/src/science_tool/project_artifacts/migrations/__init__.py science-tool/tests/test_migration_runner.py
-uv run --project science-tool ruff format <same>
-uv run --project science-tool pyright science-tool/src/science_tool/project_artifacts/migrations/__init__.py
+uv run --project science ruff check science/src/science_tool/project_artifacts/migrations/__init__.py science/tests/test_migration_runner.py
+uv run --project science ruff format <same>
+uv run --project science pyright science/src/science_tool/project_artifacts/migrations/__init__.py
 
-git add science-tool/src/science_tool/project_artifacts/migrations/__init__.py \
-        science-tool/tests/test_migration_runner.py
+git add science/src/science_tool/project_artifacts/migrations/__init__.py \
+        science/tests/test_migration_runner.py
 git commit -m "feat(project-artifacts): ordered migration runner
 
 run_migration() walks steps with check → apply → re-check; on any
@@ -4180,13 +4180,13 @@ Per spec 'Declarative migrations / Update walk'."
 ### Task 23: `update` with-migration path
 
 **Files:**
-- Modify: `science-tool/src/science_tool/project_artifacts/update.py`
-- Test: `science-tool/tests/test_update_with_migration.py`
+- Modify: `science/src/science_tool/project_artifacts/update.py`
+- Test: `science/tests/test_update_with_migration.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_update_with_migration.py
+# science/tests/test_update_with_migration.py
 """Update with project_action migration: success applies + commits + lists steps;
 failure restores snapshot + leaves artifact at old version."""
 import hashlib
@@ -4278,7 +4278,7 @@ def test_failed_migration_restores_snapshot(tmp_path, monkeypatch) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_update_with_migration.py -v`
+Run: `uv run --project science pytest tests/test_update_with_migration.py -v`
 Expected: FAIL — current `update.py` does not handle `project_action`.
 
 - [ ] **Step 3: Extend `update.py` for migrations**
@@ -4355,18 +4355,18 @@ Locate the `try:` block in `update_artifact()` (Task 17) and replace it with the
 
 - [ ] **Step 4: Run tests**
 
-Run: `uv run --project science-tool pytest tests/test_update_no_migration.py tests/test_update_with_migration.py -v`
+Run: `uv run --project science pytest tests/test_update_no_migration.py tests/test_update_with_migration.py -v`
 Expected: all green.
 
 - [ ] **Step 5: Quality gates + commit**
 
 ```bash
-uv run --project science-tool ruff check science-tool/src/science_tool/project_artifacts/update.py science-tool/tests/test_update_with_migration.py
-uv run --project science-tool ruff format <same>
-uv run --project science-tool pyright science-tool/src/science_tool/project_artifacts/update.py
+uv run --project science ruff check science/src/science_tool/project_artifacts/update.py science/tests/test_update_with_migration.py
+uv run --project science ruff format <same>
+uv run --project science pyright science/src/science_tool/project_artifacts/update.py
 
-git add science-tool/src/science_tool/project_artifacts/update.py \
-        science-tool/tests/test_update_with_migration.py
+git add science/src/science_tool/project_artifacts/update.py \
+        science/tests/test_update_with_migration.py
 git commit -m "feat(project-artifacts): update path for project_action migrations
 
 update_artifact() walks migration steps before byte-replace via the
@@ -4382,13 +4382,13 @@ Per spec 'Update walk'."
 ### Task 24: `science.yaml` `managed_artifacts.pins` schema + reader/writer
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/pin.py`
-- Test: `science-tool/tests/test_pin_io.py`
+- Create: `science/src/science_tool/project_artifacts/pin.py`
+- Test: `science/tests/test_pin_io.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_pin_io.py
+# science/tests/test_pin_io.py
 """Pin reader/writer: round-trip preserves science.yaml unrelated keys + comments."""
 from pathlib import Path
 
@@ -4451,13 +4451,13 @@ def test_remove_pin_not_found(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_pin_io.py -v`
+Run: `uv run --project science pytest tests/test_pin_io.py -v`
 Expected: FAIL — `ImportError`.
 
 - [ ] **Step 3: Implement `pin.py`**
 
 ```python
-# science-tool/src/science_tool/project_artifacts/pin.py
+# science/src/science_tool/project_artifacts/pin.py
 """Pin reader/writer: round-trips science.yaml's managed_artifacts.pins."""
 from __future__ import annotations
 
@@ -4518,18 +4518,18 @@ def remove_pin(project_root: Path, name: str) -> None:
 
 - [ ] **Step 4: Run tests**
 
-Run: `uv run --project science-tool pytest tests/test_pin_io.py -v`
+Run: `uv run --project science pytest tests/test_pin_io.py -v`
 Expected: 5 passed.
 
 - [ ] **Step 5: Quality gates + commit**
 
 ```bash
-uv run --project science-tool ruff check science-tool/src/science_tool/project_artifacts/pin.py science-tool/tests/test_pin_io.py
-uv run --project science-tool ruff format <same>
-uv run --project science-tool pyright science-tool/src/science_tool/project_artifacts/pin.py
+uv run --project science ruff check science/src/science_tool/project_artifacts/pin.py science/tests/test_pin_io.py
+uv run --project science ruff format <same>
+uv run --project science pyright science/src/science_tool/project_artifacts/pin.py
 
-git add science-tool/src/science_tool/project_artifacts/pin.py \
-        science-tool/tests/test_pin_io.py
+git add science/src/science_tool/project_artifacts/pin.py \
+        science/tests/test_pin_io.py
 git commit -m "feat(project-artifacts): pin reader/writer (round-trip science.yaml)
 
 read_pins/add_pin/remove_pin manipulate managed_artifacts.pins under
@@ -4542,13 +4542,13 @@ Per spec 'No legacy / compatibility layers' (pin example)."
 ### Task 25: `pin` CLI verb
 
 **Files:**
-- Modify: `science-tool/src/science_tool/project_artifacts/cli.py`
-- Test: `science-tool/tests/test_cli_artifacts_pin.py`
+- Modify: `science/src/science_tool/project_artifacts/cli.py`
+- Test: `science/tests/test_cli_artifacts_pin.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_cli_artifacts_pin.py
+# science/tests/test_cli_artifacts_pin.py
 """pin CLI verb: writes pin entry with computed hash; refuses on duplicate."""
 import hashlib
 import subprocess
@@ -4629,12 +4629,12 @@ def test_pin_refuses_when_already_pinned(project_with_installed_artifact: Path) 
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_pin.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_pin.py -v`
 Expected: FAIL — `pin` not yet a verb.
 
 - [ ] **Step 3: Add the `pin` verb**
 
-Append to `science-tool/src/science_tool/project_artifacts/cli.py`:
+Append to `science/src/science_tool/project_artifacts/cli.py`:
 
 ```python
 @artifacts_group.command("pin")
@@ -4714,21 +4714,21 @@ def pin_cmd(
 
 - [ ] **Step 4: Run tests**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_pin.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_pin.py -v`
 Expected: 2 passed.
 
 - [ ] **Step 5: Quality gates + commit**
 
 ```bash
-uv run --project science-tool ruff check science-tool/src/science_tool/project_artifacts/cli.py science-tool/tests/test_cli_artifacts_pin.py
-uv run --project science-tool ruff format <same>
-uv run --project science-tool pyright science-tool/src/science_tool/project_artifacts/cli.py
+uv run --project science ruff check science/src/science_tool/project_artifacts/cli.py science/tests/test_cli_artifacts_pin.py
+uv run --project science ruff format <same>
+uv run --project science pyright science/src/science_tool/project_artifacts/cli.py
 
-git add science-tool/src/science_tool/project_artifacts/cli.py \
-        science-tool/tests/test_cli_artifacts_pin.py
+git add science/src/science_tool/project_artifacts/cli.py \
+        science/tests/test_cli_artifacts_pin.py
 git commit -m "feat(project-artifacts): pin CLI verb
 
-science-tool project artifacts pin <name> --rationale <r> --revisit-by <date>
+science project artifacts pin <name> --rationale <r> --revisit-by <date>
 captures installed hash inline; commits unless --no-commit; --allow-dirty
 applies path-conflict logic to science.yaml. Per spec pin entry shape."
 ```
@@ -4738,13 +4738,13 @@ applies path-conflict logic to science.yaml. Per spec pin entry shape."
 ### Task 26: `unpin` CLI verb
 
 **Files:**
-- Modify: `science-tool/src/science_tool/project_artifacts/cli.py`
-- Test: `science-tool/tests/test_cli_artifacts_unpin.py`
+- Modify: `science/src/science_tool/project_artifacts/cli.py`
+- Test: `science/tests/test_cli_artifacts_unpin.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_cli_artifacts_unpin.py
+# science/tests/test_cli_artifacts_unpin.py
 """unpin CLI verb: removes the matching pin; refuses if absent."""
 import hashlib
 import subprocess
@@ -4823,12 +4823,12 @@ def test_unpin_refuses_if_no_pin(project_with_pin: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_unpin.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_unpin.py -v`
 Expected: FAIL — `unpin` not yet a verb.
 
 - [ ] **Step 3: Add the `unpin` verb**
 
-Append to `science-tool/src/science_tool/project_artifacts/cli.py`:
+Append to `science/src/science_tool/project_artifacts/cli.py`:
 
 ```python
 @artifacts_group.command("unpin")
@@ -4875,21 +4875,21 @@ def unpin_cmd(name: str, project_root: str, allow_dirty: bool, no_commit: bool) 
 
 - [ ] **Step 4: Run tests**
 
-Run: `uv run --project science-tool pytest tests/test_cli_artifacts_unpin.py -v`
+Run: `uv run --project science pytest tests/test_cli_artifacts_unpin.py -v`
 Expected: 2 passed.
 
 - [ ] **Step 5: Quality gates + commit**
 
 ```bash
-uv run --project science-tool ruff check science-tool/src/science_tool/project_artifacts/cli.py science-tool/tests/test_cli_artifacts_unpin.py
-uv run --project science-tool ruff format <same>
-uv run --project science-tool pyright science-tool/src/science_tool/project_artifacts/cli.py
+uv run --project science ruff check science/src/science_tool/project_artifacts/cli.py science/tests/test_cli_artifacts_unpin.py
+uv run --project science ruff format <same>
+uv run --project science pyright science/src/science_tool/project_artifacts/cli.py
 
-git add science-tool/src/science_tool/project_artifacts/cli.py \
-        science-tool/tests/test_cli_artifacts_unpin.py
+git add science/src/science_tool/project_artifacts/cli.py \
+        science/tests/test_cli_artifacts_unpin.py
 git commit -m "feat(project-artifacts): unpin CLI verb
 
-science-tool project artifacts unpin <name> removes the matching pin;
+science project artifacts unpin <name> removes the matching pin;
 refuses if absent; commits unless --no-commit. Per spec pin/unpin
 data flow."
 ```
@@ -4898,7 +4898,7 @@ data flow."
 
 - **T24: science.yaml `managed_artifacts.pins` schema + reader.** Extend (or define) `pin.py`. `read_pins(project_root) -> list[Pin]` reads `science.yaml`'s `managed_artifacts.pins` list with `ruamel.yaml` round-trip preservation. Tests: read empty list; read populated list; ignore unrelated keys; round-trip preserves comments.
 
-- **T25: `pin` CLI verb.** Implement `science-tool project artifacts pin <name> --rationale <r> --revisit-by <date>`. Computes installed hash, writes `{name, pinned_to, pinned_hash, rationale, revisit_by}` into `managed_artifacts.pins`. Verifies clean worktree (or `--allow-dirty` for `science.yaml` only). Refuses if pin already exists for name. Test: writes correctly; preserves unrelated science.yaml content; refuses on duplicate.
+- **T25: `pin` CLI verb.** Implement `science project artifacts pin <name> --rationale <r> --revisit-by <date>`. Computes installed hash, writes `{name, pinned_to, pinned_hash, rationale, revisit_by}` into `managed_artifacts.pins`. Verifies clean worktree (or `--allow-dirty` for `science.yaml` only). Refuses if pin already exists for name. Test: writes correctly; preserves unrelated science.yaml content; refuses on duplicate.
 
 - **T26: `unpin` CLI verb.** Inverse of pin. Removes the matching entry; commits unless `--no-commit`. Tests: removes; refuses if no pin exists for name.
 
@@ -4909,14 +4909,14 @@ data flow."
 This task builds and tests the hook infrastructure in isolation against a fixture canonical, before Task 28 wires it into the real `data/validate.sh`. The infrastructure is shell, not Python.
 
 **Files:**
-- Create: `science-tool/tests/_fixtures/validate_hooks_canonical.sh` (test-only fixture canonical)
-- Test: `science-tool/tests/test_extensions_validate_hooks.py`
+- Create: `science/tests/_fixtures/validate_hooks_canonical.sh` (test-only fixture canonical)
+- Test: `science/tests/test_extensions_validate_hooks.py`
 - (No production code yet; the snippet lives only in the fixture until T28.)
 
 - [ ] **Step 1: Write the fixture canonical**
 
 ```bash
-# science-tool/tests/_fixtures/validate_hooks_canonical.sh
+# science/tests/_fixtures/validate_hooks_canonical.sh
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
 # science-managed-version: 2026.04.26
@@ -4963,7 +4963,7 @@ dispatch_hook "final_summary"
 - [ ] **Step 2: Write the failing test**
 
 ```python
-# science-tool/tests/test_extensions_validate_hooks.py
+# science/tests/test_extensions_validate_hooks.py
 """Hook contract: register_validation_hook + dispatch in canonical."""
 import shutil
 import subprocess
@@ -5016,14 +5016,14 @@ def test_multiple_hooks_dispatch_in_registration_order(tmp_path: Path) -> None:
 
 - [ ] **Step 3: Run test to verify it passes**
 
-Run: `uv run --project science-tool pytest tests/test_extensions_validate_hooks.py -v`
+Run: `uv run --project science pytest tests/test_extensions_validate_hooks.py -v`
 Expected: 3 passed (the fixture is already in place).
 
 - [ ] **Step 4: Quality gates + commit**
 
 ```bash
-git add science-tool/tests/_fixtures/validate_hooks_canonical.sh \
-        science-tool/tests/test_extensions_validate_hooks.py
+git add science/tests/_fixtures/validate_hooks_canonical.sh \
+        science/tests/test_extensions_validate_hooks.py
 git commit -m "test(project-artifacts): hook contract fixture + tests
 
 SCIENCE_VALIDATE_HOOKS associative array, register_validation_hook,
@@ -5039,14 +5039,14 @@ Per spec 'sourced_sidecar hook contract (v1)'."
 This task ports the existing `scripts/validate.sh` (942 lines) into the package as the first canonical, adds the managed header and hook infrastructure, and registers the entry. The port is mechanical; the verification is rigorous.
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/data/validate.sh`
-- Modify: `science-tool/src/science_tool/project_artifacts/registry.yaml`
-- Test: `science-tool/tests/test_initial_validate_sh.py`
+- Create: `science/src/science_tool/project_artifacts/data/validate.sh`
+- Modify: `science/src/science_tool/project_artifacts/registry.yaml`
+- Test: `science/tests/test_initial_validate_sh.py`
 
 - [ ] **Step 1: Write the failing test (acceptance gate for the port)**
 
 ```python
-# science-tool/tests/test_initial_validate_sh.py
+# science/tests/test_initial_validate_sh.py
 """data/validate.sh: header valid, hook infra present, behavior preserved."""
 import hashlib
 import subprocess
@@ -5119,7 +5119,7 @@ def test_canonical_runs_against_minimal_project(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_initial_validate_sh.py -v`
+Run: `uv run --project science pytest tests/test_initial_validate_sh.py -v`
 Expected: FAIL — `data/validate.sh` not yet present; registry empty.
 
 - [ ] **Step 3: Port `scripts/validate.sh` into the package with header + hook infra**
@@ -5127,7 +5127,7 @@ Expected: FAIL — `data/validate.sh` not yet present; registry empty.
 Operations (run from repo root):
 
 1. Read the current `scripts/validate.sh` content. This is the canonical body source (it's already ahead of `meta/validate.sh` by the 9-line hypothesis-phase block per the 2026-04-26 review).
-2. Create `science-tool/src/science_tool/project_artifacts/data/validate.sh` with this layout:
+2. Create `science/src/science_tool/project_artifacts/data/validate.sh` with this layout:
    - Line 1: `#!/usr/bin/env bash`
    - Lines 2-4: managed header (placeholder hash for now; computed in Step 4):
      ```
@@ -5148,7 +5148,7 @@ from pathlib import Path
 
 repo = Path(".").resolve()
 src = repo / "scripts" / "validate.sh"
-dst = repo / "science-tool" / "src" / "science_tool" / "project_artifacts" / "data" / "validate.sh"
+dst = repo / "science" / "src" / "science_tool" / "project_artifacts" / "data" / "validate.sh"
 dst.parent.mkdir(parents=True, exist_ok=True)
 
 src_text = src.read_text(encoding="utf-8")
@@ -5206,7 +5206,7 @@ import hashlib
 from science_tool.project_artifacts.hashing import body_hash
 from science_tool.project_artifacts.registry_schema import HeaderKind, HeaderProtocol
 
-p = Path("science-tool/src/science_tool/project_artifacts/data/validate.sh")
+p = Path("science/src/science_tool/project_artifacts/data/validate.sh")
 proto = HeaderProtocol(kind=HeaderKind.SHEBANG_COMMENT, comment_prefix="#")
 raw = p.read_bytes()
 real_hash = body_hash(raw, proto)
@@ -5221,7 +5221,7 @@ p.write_bytes(new)
 PY
 ```
 
-Then update `science-tool/src/science_tool/project_artifacts/registry.yaml`:
+Then update `science/src/science_tool/project_artifacts/registry.yaml`:
 
 ```yaml
 artifacts:
@@ -5260,18 +5260,18 @@ Replace `<REPLACE WITH HASH FROM STEP 4>` with the value printed by the script.
 
 - [ ] **Step 5: Run tests**
 
-Run: `uv run --project science-tool pytest tests/test_initial_validate_sh.py tests/test_registry_loader.py tests/test_cli_artifacts_list.py -v`
+Run: `uv run --project science pytest tests/test_initial_validate_sh.py tests/test_registry_loader.py tests/test_cli_artifacts_list.py -v`
 Expected: all pass.
 
 - [ ] **Step 6: Quality gates + commit**
 
 ```bash
-uv run --project science-tool ruff check science-tool/tests/test_initial_validate_sh.py
-uv run --project science-tool ruff format <same>
+uv run --project science ruff check science/tests/test_initial_validate_sh.py
+uv run --project science ruff format <same>
 
-git add science-tool/src/science_tool/project_artifacts/data/validate.sh \
-        science-tool/src/science_tool/project_artifacts/registry.yaml \
-        science-tool/tests/test_initial_validate_sh.py
+git add science/src/science_tool/project_artifacts/data/validate.sh \
+        science/src/science_tool/project_artifacts/registry.yaml \
+        science/tests/test_initial_validate_sh.py
 git commit -m "feat(project-artifacts): land validate.sh as first managed artifact
 
 Ports scripts/validate.sh (canonical winner over meta/'s pre-P1 drift),
@@ -5287,14 +5287,14 @@ Per spec Phase 11 / Task 28."
 Plan #7 (`docs/plans/2026-04-25-mav-audit-addendum.md`) lists six audit-surfaced validator fixes. This task applies them to `data/validate.sh`, bumps the version, moves the previous hash into `previous_hashes`, and adds the migration + changelog entries — exercising the version-bump workflow end-to-end.
 
 **Files:**
-- Modify: `science-tool/src/science_tool/project_artifacts/data/validate.sh`
-- Modify: `science-tool/src/science_tool/project_artifacts/registry.yaml`
-- Test: `science-tool/tests/test_first_version_bump.py`
+- Modify: `science/src/science_tool/project_artifacts/data/validate.sh`
+- Modify: `science/src/science_tool/project_artifacts/registry.yaml`
+- Test: `science/tests/test_first_version_bump.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_first_version_bump.py
+# science/tests/test_first_version_bump.py
 """After Plan #7 fixes: registry shows two versions; old install classifies as STALE."""
 import hashlib
 import subprocess
@@ -5347,12 +5347,12 @@ def test_old_install_classifies_as_stale(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_first_version_bump.py -v`
+Run: `uv run --project science pytest tests/test_first_version_bump.py -v`
 Expected: FAIL — registry only has version `2026.04.26`.
 
 - [ ] **Step 3: Apply Plan #7's six fixes to `data/validate.sh`**
 
-Per `docs/plans/2026-04-25-mav-audit-addendum.md`, apply each of the six audit-surfaced fixes to `science-tool/src/science_tool/project_artifacts/data/validate.sh`. The implementing agent should read Plan #7's task descriptions and apply them. Each fix is a small, scoped edit (a few lines each in most cases). Fixes are described in Plan #7's Tasks 1-6.
+Per `docs/plans/2026-04-25-mav-audit-addendum.md`, apply each of the six audit-surfaced fixes to `science/src/science_tool/project_artifacts/data/validate.sh`. The implementing agent should read Plan #7's task descriptions and apply them. Each fix is a small, scoped edit (a few lines each in most cases). Fixes are described in Plan #7's Tasks 1-6.
 
 After the edits, recompute the body hash:
 
@@ -5362,7 +5362,7 @@ from pathlib import Path
 from science_tool.project_artifacts.hashing import body_hash
 from science_tool.project_artifacts.registry_schema import HeaderKind, HeaderProtocol
 
-p = Path("science-tool/src/science_tool/project_artifacts/data/validate.sh")
+p = Path("science/src/science_tool/project_artifacts/data/validate.sh")
 proto = HeaderProtocol(kind=HeaderKind.SHEBANG_COMMENT, comment_prefix="#")
 raw = p.read_bytes()
 new_hash = body_hash(raw, proto)
@@ -5384,7 +5384,7 @@ PY
 
 - [ ] **Step 4: Update `registry.yaml` for the bump**
 
-Edit `science-tool/src/science_tool/project_artifacts/registry.yaml`:
+Edit `science/src/science_tool/project_artifacts/registry.yaml`:
 
 - Move the existing `current_hash` value into a new `previous_hashes` entry: `{version: '2026.04.26', hash: <previous>}`.
 - Set `current_hash` to the new hash from Step 3.
@@ -5404,17 +5404,17 @@ Edit `science-tool/src/science_tool/project_artifacts/registry.yaml`:
 
 - [ ] **Step 5: Run tests**
 
-Run: `uv run --project science-tool pytest tests/test_first_version_bump.py tests/test_initial_validate_sh.py -v`
+Run: `uv run --project science pytest tests/test_first_version_bump.py tests/test_initial_validate_sh.py -v`
 Expected: 2 of 3 first-version-bump tests pass; the third (`test_old_install_classifies_as_stale`) is the placeholder mentioned in the test (real assertion in T37). `test_initial_validate_sh.py` still all green.
 
 - [ ] **Step 6: Quality gates + commit**
 
 ```bash
-uv run --project science-tool pytest tests -v  # full suite green
+uv run --project science pytest tests -v  # full suite green
 
-git add science-tool/src/science_tool/project_artifacts/data/validate.sh \
-        science-tool/src/science_tool/project_artifacts/registry.yaml \
-        science-tool/tests/test_first_version_bump.py
+git add science/src/science_tool/project_artifacts/data/validate.sh \
+        science/src/science_tool/project_artifacts/registry.yaml \
+        science/tests/test_first_version_bump.py
 git commit -m "feat(project-artifacts): version bump 2026.04.26 -> 2026.04.26.1 (Plan #7)
 
 Applies Plan #7's six audit-surfaced validator fixes to canonical;
@@ -5429,12 +5429,12 @@ Per spec Phase 11 / Task 29."
 
 **Files:**
 - Replace: `meta/validate.sh`
-- Test: `science-tool/tests/test_shims.py`
+- Test: `science/tests/test_shims.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_shims.py
+# science/tests/test_shims.py
 """meta/validate.sh and scripts/validate.sh are byte-identical 5-line shims."""
 import subprocess
 from pathlib import Path
@@ -5448,8 +5448,8 @@ EXPECTED_SHIM = (
     "#!/usr/bin/env bash\n"
     "# science-managed: shim for validate.sh (path convenience; not a managed artifact)\n"
     'here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\n'
-    'exec uv run --project "$here/../science-tool" \\\n'
-    '     science-tool project artifacts exec validate.sh -- "$@"\n'
+    'exec uv run --project "$here/../science" \\\n'
+    '     science project artifacts exec validate.sh -- "$@"\n'
 )
 
 
@@ -5490,7 +5490,7 @@ def test_meta_shim_smoke_runs(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_shims.py -v`
+Run: `uv run --project science pytest tests/test_shims.py -v`
 Expected: FAIL — current `meta/validate.sh` is 934 lines, not the shim.
 
 - [ ] **Step 3: Replace `meta/validate.sh`**
@@ -5499,17 +5499,17 @@ Replace the entire content of `meta/validate.sh` with the exact `EXPECTED_SHIM` 
 
 - [ ] **Step 4: Run tests**
 
-Run: `uv run --project science-tool pytest tests/test_shims.py::test_shim_is_exact tests/test_shims.py::test_shim_is_executable -v`
+Run: `uv run --project science pytest tests/test_shims.py::test_shim_is_exact tests/test_shims.py::test_shim_is_executable -v`
 Expected: 1/2 of `test_shim_is_exact` passes (meta), 1/2 of `test_shim_is_executable` passes (meta). The scripts/ versions still fail; Task 31 fixes them.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add meta/validate.sh science-tool/tests/test_shims.py
+git add meta/validate.sh science/tests/test_shims.py
 git commit -m "feat(meta): replace validate.sh with path-convenience shim
 
-5-line shim that execs canonical via uv run --project ../science-tool
-science-tool project artifacts exec validate.sh. NOT a managed install.
+5-line shim that execs canonical via uv run --project ../science
+science project artifacts exec validate.sh. NOT a managed install.
 Per spec 'One physical canonical, packaged' point 2."
 ```
 
@@ -5527,7 +5527,7 @@ Run from repo root:
 rg -n 'scripts/validate\.sh' --glob '!docs/**' --glob '!**/CHANGELOG*' --glob '!.git/**'
 ```
 
-Any reference that depends on `scripts/validate.sh` being the FULL canonical body (not just an invocation) is a problem. Invocations (`bash scripts/validate.sh ...`, `./scripts/validate.sh ...`) are fine; the shim execs the canonical. References to `scripts/validate.sh` as a file to grep/sed/etc. need to be retargeted at `science-tool/src/science_tool/project_artifacts/data/validate.sh` (the canonical) or rewritten.
+Any reference that depends on `scripts/validate.sh` being the FULL canonical body (not just an invocation) is a problem. Invocations (`bash scripts/validate.sh ...`, `./scripts/validate.sh ...`) are fine; the shim execs the canonical. References to `scripts/validate.sh` as a file to grep/sed/etc. need to be retargeted at `science/src/science_tool/project_artifacts/data/validate.sh` (the canonical) or rewritten.
 
 Surface any such references for resolution before continuing. If no problematic references, proceed.
 
@@ -5537,7 +5537,7 @@ Replace the entire content of `scripts/validate.sh` with the exact `EXPECTED_SHI
 
 - [ ] **Step 3: Run tests**
 
-Run: `uv run --project science-tool pytest tests/test_shims.py -v`
+Run: `uv run --project science pytest tests/test_shims.py -v`
 Expected: 5 passed (both shim-exact, both shim-executable, smoke test).
 
 - [ ] **Step 4: Commit**
@@ -5558,14 +5558,14 @@ to work via exec to the canonical. Per spec 'One physical canonical, packaged'."
 ### Task 32: `health.py` integration
 
 **Files:**
-- Create: `science-tool/src/science_tool/project_artifacts/health_integration.py`
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Test: `science-tool/tests/test_health_managed_artifacts.py`
+- Create: `science/src/science_tool/project_artifacts/health_integration.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Test: `science/tests/test_health_managed_artifacts.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# science-tool/tests/test_health_managed_artifacts.py
+# science/tests/test_health_managed_artifacts.py
 """Health report integration: managed-artifact rows + total_issues contribution."""
 import hashlib
 from pathlib import Path
@@ -5606,13 +5606,13 @@ def test_current_artifact_does_not_count(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --project science-tool pytest tests/test_health_managed_artifacts.py -v`
+Run: `uv run --project science pytest tests/test_health_managed_artifacts.py -v`
 Expected: FAIL — `managed_artifacts` key absent from report.
 
 - [ ] **Step 3: Implement `health_integration.py`**
 
 ```python
-# science-tool/src/science_tool/project_artifacts/health_integration.py
+# science/src/science_tool/project_artifacts/health_integration.py
 """Health-report integration: collect managed-artifact findings."""
 from __future__ import annotations
 
@@ -5668,7 +5668,7 @@ def health_findings(project_root: Path) -> list[ManagedArtifactFinding]:
     return out
 ```
 
-- [ ] **Step 4: Wire into `science-tool/src/science_tool/graph/health.py`**
+- [ ] **Step 4: Wire into `science/src/science_tool/graph/health.py`**
 
 In `health.py`, locate `build_health_report()` (around line 219). After the existing finding gathering and before the final `HealthReport` construction, add:
 
@@ -5701,19 +5701,19 @@ In the `HealthReport` construction at the end of `build_health_report`, include:
 
 - [ ] **Step 5: Run tests**
 
-Run: `uv run --project science-tool pytest tests/test_health_managed_artifacts.py -v`
+Run: `uv run --project science pytest tests/test_health_managed_artifacts.py -v`
 Expected: 3 passed.
 
 - [ ] **Step 6: Quality gates + commit**
 
 ```bash
-uv run --project science-tool ruff check science-tool/src/science_tool/project_artifacts/health_integration.py science-tool/src/science_tool/graph/health.py science-tool/tests/test_health_managed_artifacts.py
-uv run --project science-tool ruff format <same>
-uv run --project science-tool pyright science-tool/src/science_tool/project_artifacts/health_integration.py science-tool/src/science_tool/graph/health.py
+uv run --project science ruff check science/src/science_tool/project_artifacts/health_integration.py science/src/science_tool/graph/health.py science/tests/test_health_managed_artifacts.py
+uv run --project science ruff format <same>
+uv run --project science pyright science/src/science_tool/project_artifacts/health_integration.py science/src/science_tool/graph/health.py
 
-git add science-tool/src/science_tool/project_artifacts/health_integration.py \
-        science-tool/src/science_tool/graph/health.py \
-        science-tool/tests/test_health_managed_artifacts.py
+git add science/src/science_tool/project_artifacts/health_integration.py \
+        science/src/science_tool/graph/health.py \
+        science/tests/test_health_managed_artifacts.py
 git commit -m "feat(project-artifacts): health.py integration
 
 health_findings() returns one ManagedArtifactFinding per registered
@@ -5729,7 +5729,7 @@ stale/locally_modified/missing/pinned-but-modified. Per spec
 **Files:**
 - Modify: `commands/status.md`
 
-- [ ] **Step 1: Locate the "Staleness Warnings" section in `commands/status.md`** (around line 114 per earlier grep). Add a "Managed Artifacts" row that surfaces non-`current` managed artifacts via `science-tool health` output.
+- [ ] **Step 1: Locate the "Staleness Warnings" section in `commands/status.md`** (around line 114 per earlier grep). Add a "Managed Artifacts" row that surfaces non-`current` managed artifacts via `science health` output.
 
 - [ ] **Step 2: Edit `commands/status.md`**
 
@@ -5738,12 +5738,12 @@ Insert a new subsection under "Staleness Warnings":
 ```markdown
 ### Managed artifacts
 
-If `science-tool health` reports any managed artifact whose status is not `current` (or `pinned`), surface it:
+If `science health` reports any managed artifact whose status is not `current` (or `pinned`), surface it:
 
 - `<artifact-name>: <status>` — `<detail>`
-  - For `stale`: "Run `science-tool project artifacts update <name>` to refresh."
-  - For `locally_modified`: "Run `science-tool project artifacts diff <name>` to inspect; `update --force --yes` to overwrite."
-  - For `missing`: "Run `science-tool project artifacts install <name>` to install."
+  - For `stale`: "Run `science project artifacts update <name>` to refresh."
+  - For `locally_modified`: "Run `science project artifacts diff <name>` to inspect; `update --force --yes` to overwrite."
+  - For `missing`: "Run `science project artifacts install <name>` to install."
   - For `pinned_but_locally_modified`: "Pin no longer protects what was pinned. Run `diff` then either `update --force --yes` or `unpin`."
 
 The list comes from the `managed_artifacts` field of the health report.
@@ -5773,12 +5773,12 @@ Add a new recommendation entry that fires when any artifact is stale. Locate the
 ```markdown
 ### Managed artifact updates
 
-If `science-tool health` shows any managed artifact with status `stale`, surface as a next-step:
+If `science health` shows any managed artifact with status `stale`, surface as a next-step:
 
 > Update `<artifact-name>` from version `<from>` → `<to>`. Run:
 >
 > ```bash
-> science-tool project artifacts update <artifact-name>
+> science project artifacts update <artifact-name>
 > ```
 >
 > If a migration step ships with the bump, the CLI will surface it interactively.
@@ -5810,12 +5810,12 @@ Locate the section that runs at the top of sync output. Add a pre-sync warning s
 ```markdown
 ### Pre-sync managed-artifact check
 
-Before performing project sync operations, query `science-tool health` for any managed artifact whose status is not `current` or `pinned`. If any are found, surface a warning at the top of sync output:
+Before performing project sync operations, query `science health` for any managed artifact whose status is not `current` or `pinned`. If any are found, surface a warning at the top of sync output:
 
 > ⚠️  N managed artifact(s) require attention:
 > - `<artifact-name>`: `<status>` — `<detail>`
 >
-> Sync proceeds; consider `science-tool project artifacts update` after sync completes.
+> Sync proceeds; consider `science project artifacts update` after sync completes.
 
 The warning does NOT block sync; it surfaces alongside other top-of-sync warnings.
 ```
@@ -5849,10 +5849,10 @@ Replace any bare `cp scripts/validate.sh <project>/` (or equivalent) instruction
 After scaffolding the project, install Science's managed `validate.sh`:
 
 \```bash
-science-tool project artifacts install validate.sh --project-root <project-path>
+science project artifacts install validate.sh --project-root <project-path>
 \```
 
-This drops the canonical `validate.sh` into the project root with the managed header. To stay current on future Science releases, run `science-tool project artifacts check validate.sh` periodically (or rely on `science-tool health` to surface drift).
+This drops the canonical `validate.sh` into the project root with the managed header. To stay current on future Science releases, run `science project artifacts check validate.sh` periodically (or rely on `science health` to surface drift).
 ```
 
 - [ ] **Step 2: Edit `commands/import-project.md`** (around lines 203-248)
@@ -5863,7 +5863,7 @@ Same replacement pattern. Add an "adopt existing validate.sh" note for projects 
 If the project already has a `validate.sh` from a pre-managed-system era, adopt it:
 
 \```bash
-science-tool project artifacts install validate.sh --adopt --project-root <project-path>
+science project artifacts install validate.sh --adopt --project-root <project-path>
 \```
 
 `--adopt` rewrites the managed header in place if the body matches a known historical version. If the body diverges from every known version, use `--force-adopt` instead (writes a `.pre-install.bak`).
@@ -5879,9 +5879,9 @@ Replace the existing "Refresh `validate.sh`" subsection with:
 `validate.sh` is a managed Science artifact (per `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md`). To check for updates:
 
 \```bash
-science-tool project artifacts check validate.sh
-science-tool project artifacts diff validate.sh   # inspect changes
-science-tool project artifacts update validate.sh # apply
+science project artifacts check validate.sh
+science project artifacts diff validate.sh   # inspect changes
+science project artifacts update validate.sh # apply
 \```
 
 Updates may carry migration steps; the CLI surfaces them interactively.
@@ -5894,34 +5894,34 @@ git add commands/create-project.md commands/import-project.md docs/project-organ
 git commit -m "docs: project create/import/profiles use managed-artifact CLI
 
 Replaces bare cp / 'refresh validate.sh' instructions with the
-science-tool project artifacts install/check/diff/update workflow.
+science project artifacts install/check/diff/update workflow.
 --adopt path documented for legacy hand-copies. Per spec
 'Components / Modifications to existing files'."
 ```
 
 ### Phase 13 — Surface integration
 
-- **T32: `health.py` integration.** Implement `health_integration.health_findings(project_root, registry)`. Call from `science-tool/src/science_tool/graph/health.py` after the existing finding gathering; include managed-artifact rows in the report; contribute to `total_issues` for `stale | locally_modified | missing | pinned_but_locally_modified` (not `current` or `pinned`). Test: synthetic project with stale artifact appears in report; `total_issues` increments correctly.
+- **T32: `health.py` integration.** Implement `health_integration.health_findings(project_root, registry)`. Call from `science/src/science_tool/graph/health.py` after the existing finding gathering; include managed-artifact rows in the report; contribute to `total_issues` for `stale | locally_modified | missing | pinned_but_locally_modified` (not `current` or `pinned`). Test: synthetic project with stale artifact appears in report; `total_issues` increments correctly.
 
 - **T33: `commands/status.md` integration.** Add a "Managed Artifacts" row under "Staleness Warnings" that surfaces non-`current` managed artifacts. Format consistent with surrounding rows.
 
-- **T34: `commands/next-steps.md` integration.** Add a "Managed artifacts updates" recommendation entry that fires when any artifact is stale; tells user to run `science-tool project artifacts update <name>`.
+- **T34: `commands/next-steps.md` integration.** Add a "Managed artifacts updates" recommendation entry that fires when any artifact is stale; tells user to run `science project artifacts update <name>`.
 
 - **T35: `commands/sync.md` integration.** Warn at the top of sync output if any managed artifact is stale or locally-modified. Format consistent with existing top-of-sync warnings.
 
-- **T36: Project-creation/import doc updates.** Update `commands/create-project.md`, `commands/import-project.md`, and `docs/project-organization-profiles.md` to use `science-tool project artifacts install validate.sh` (and the canonical update flow) instead of bare-copy or "Refresh `validate.sh`" instructions.
+- **T36: Project-creation/import doc updates.** Update `commands/create-project.md`, `commands/import-project.md`, and `docs/project-organization-profiles.md` to use `science project artifacts install validate.sh` (and the canonical update flow) instead of bare-copy or "Refresh `validate.sh`" instructions.
 
 ### Phase 14 — Acceptance gate
 
 ### Task 37: End-to-end acceptance test
 
 **Files:**
-- Create: `science-tool/tests/test_acceptance_managed_artifacts.py`
+- Create: `science/tests/test_acceptance_managed_artifacts.py`
 
 - [ ] **Step 1: Write the acceptance test (begins as the failing test)**
 
 ```python
-# science-tool/tests/test_acceptance_managed_artifacts.py
+# science/tests/test_acceptance_managed_artifacts.py
 """End-to-end acceptance: install → check → modify → update → pin → unpin → exec."""
 import json
 import subprocess
@@ -6027,7 +6027,7 @@ def test_full_lifecycle(tmp_path: Path) -> None:
 
 
 def test_health_surfaces_managed_artifact_status(tmp_path: Path) -> None:
-    """End-to-end via science-tool health: managed_artifacts present, total_issues right."""
+    """End-to-end via science health: managed_artifacts present, total_issues right."""
     from science_tool.graph.health import build_health_report
 
     project = tmp_path / "health"
@@ -6055,7 +6055,7 @@ def test_shim_invocation_matches_direct_canonical(tmp_path: Path) -> None:
         cwd=project, capture_output=True, text=True, check=False,
     )
     via_canonical = subprocess.run(
-        ["bash", str(repo / "science-tool" / "src" / "science_tool" /
+        ["bash", str(repo / "science" / "src" / "science_tool" /
                      "project_artifacts" / "data" / "validate.sh")],
         cwd=project, capture_output=True, text=True, check=False,
     )
@@ -6065,12 +6065,12 @@ def test_shim_invocation_matches_direct_canonical(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run the test**
 
-Run: `uv run --project science-tool pytest tests/test_acceptance_managed_artifacts.py -v`
+Run: `uv run --project science pytest tests/test_acceptance_managed_artifacts.py -v`
 Expected: 3 passed (full lifecycle + health surfacing + shim equivalence). If any fails, that's a real defect in the prior tasks — diagnose before declaring acceptance.
 
 - [ ] **Step 3: Run the entire test suite**
 
-Run: `uv run --project science-tool pytest tests/ -v`
+Run: `uv run --project science pytest tests/ -v`
 Expected: full green; no warnings about test discovery or missing fixtures.
 
 - [ ] **Step 4: Final quality-gate sweep**
@@ -6078,9 +6078,9 @@ Expected: full green; no warnings about test discovery or missing fixtures.
 Run, in order, against the entire `project_artifacts/` package and tests:
 
 ```bash
-uv run --project science-tool ruff check science-tool/src/science_tool/project_artifacts/ science-tool/tests/
-uv run --project science-tool ruff format science-tool/src/science_tool/project_artifacts/ science-tool/tests/
-uv run --project science-tool pyright science-tool/src/science_tool/project_artifacts/
+uv run --project science ruff check science/src/science_tool/project_artifacts/ science/tests/
+uv run --project science ruff format science/src/science_tool/project_artifacts/ science/tests/
+uv run --project science pyright science/src/science_tool/project_artifacts/
 ```
 
 Expected: all clean.
@@ -6099,7 +6099,7 @@ Per the spec's "What this displaces" section and this plan's "What this displace
 - [ ] **Step 6: Commit (acceptance + cross-references)**
 
 ```bash
-git add science-tool/tests/test_acceptance_managed_artifacts.py \
+git add science/tests/test_acceptance_managed_artifacts.py \
         docs/plans/2026-04-25-managed-artifact-versioning.md \
         docs/plans/2026-04-25-mav-audit-addendum.md \
         docs/plans/2026-04-25-conventions-audit-p1-rollout.md \
@@ -6115,10 +6115,10 @@ MAV/Plan #7 documents and notes on the rollout handoff."
 - [ ] **Step 7: Final verification — full suite + lint + format + types**
 
 ```bash
-uv run --project science-tool pytest tests/ -v
-uv run --project science-tool ruff check .
-uv run --project science-tool ruff format --check .
-uv run --project science-tool pyright
+uv run --project science pytest tests/ -v
+uv run --project science ruff check .
+uv run --project science ruff format --check .
+uv run --project science pyright
 ```
 
 All green ⇒ implementation complete.
@@ -6135,7 +6135,7 @@ These apply across all tasks; the second pass will surface them in step content 
 - **No legacy-compat code.** The implementation does not introduce "support both old and new shapes" branches. If a task surfaces a downstream that was depending on the old `scripts/validate.sh` body directly, file a follow-on task in `meta/tasks/active.md` and proceed.
 - **Validator severity.** Anything the system warns about uses `warn`, not `error`, matching the cross-plan rule established by the P1 cycle.
 - **Type hints required.** Per the project's CLAUDE.md Python standards. Modern type hints only (`X | None` not `Optional[X]`; `list[X]` not `List[X]`).
-- **`uv run --project science-tool` from repo root** for any test/lint/format invocation; commands are written that way in the second-pass step content.
+- **`uv run --project science` from repo root** for any test/lint/format invocation; commands are written that way in the second-pass step content.
 
 ---
 

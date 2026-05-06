@@ -16,19 +16,19 @@
 
 ### New files
 
-- `science-tool/src/science_tool/refs_migrate.py` — pure-function rewrite core: per-file rewrite, per-project scan, counts + diffs.
-- `science-tool/src/science_tool/refs_cli.py` — click `refs` group with the `migrate-paper` subcommand; registered by top-level `cli.py`.
-- `science-tool/src/science_tool/big_picture/literature_prefix.py` — canonicalization helper: `canonical_paper_id(raw_id)` maps `article:<X>` → `paper:<X>`. Consumed by knowledge-gaps and any future external-lit consumer.
-- `science-tool/tests/test_refs_migrate_paper.py` — unit tests for the rewrite core.
-- `science-tool/tests/test_refs_migrate_cli.py` — integration tests for the CLI.
-- `science-tool/tests/test_literature_prefix.py` — unit tests for the canonicalization helper.
-- `science-tool/tests/fixtures/refs/legacy_project/` — fixture: a minimal project with `article:<X>` references across `doc/`, `specs/`, and `tasks/`.
+- `science/src/science_tool/refs_migrate.py` — pure-function rewrite core: per-file rewrite, per-project scan, counts + diffs.
+- `science/src/science_tool/refs_cli.py` — click `refs` group with the `migrate-paper` subcommand; registered by top-level `cli.py`.
+- `science/src/science_tool/big_picture/literature_prefix.py` — canonicalization helper: `canonical_paper_id(raw_id)` maps `article:<X>` → `paper:<X>`. Consumed by knowledge-gaps and any future external-lit consumer.
+- `science/tests/test_refs_migrate_paper.py` — unit tests for the rewrite core.
+- `science/tests/test_refs_migrate_cli.py` — integration tests for the CLI.
+- `science/tests/test_literature_prefix.py` — unit tests for the canonicalization helper.
+- `science/tests/fixtures/refs/legacy_project/` — fixture: a minimal project with `article:<X>` references across `doc/`, `specs/`, and `tasks/`.
 
 ### Modified files
 
 - `templates/paper.md` → renamed to `templates/manuscript.md` (frontmatter `id:`/`type:` updated).
 - `templates/paper-summary.md` → renamed to `templates/paper.md` (frontmatter `id:`/`type:` updated).
-- `science-tool/src/science_tool/cli.py` — register `refs_cli.refs_group`; rewrite `"article"` user-facing strings.
+- `science/src/science_tool/cli.py` — register `refs_cli.refs_group`; rewrite `"article"` user-facing strings.
 - `commands/research-papers.md`, `commands/search-literature.md`, `commands/bias-audit.md`, `commands/compare-hypotheses.md`, `commands/next-steps.md`, `commands/research-topic.md` — update template path names and example IDs.
 - `references/role-prompts/research-assistant.md`, `references/project-structure.md` — update example IDs.
 - `docs/specs/2026-03-02-agent-capabilities-design.md` — update filename references.
@@ -46,12 +46,12 @@
 ## Task 1: Scaffold `refs_migrate` module with canonical rewrite rules as constants
 
 **Files:**
-- Create: `science-tool/src/science_tool/refs_migrate.py`
-- Test: `science-tool/tests/test_refs_migrate_paper.py`
+- Create: `science/src/science_tool/refs_migrate.py`
+- Test: `science/tests/test_refs_migrate_paper.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `science-tool/tests/test_refs_migrate_paper.py`:
+Create `science/tests/test_refs_migrate_paper.py`:
 
 ```python
 from __future__ import annotations
@@ -84,12 +84,12 @@ def test_prose_rewrite_rule_uses_word_boundary() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science-tool/tests/test_refs_migrate_paper.py -v`
+Run: `uv run --frozen pytest science/tests/test_refs_migrate_paper.py -v`
 Expected: FAIL with `ModuleNotFoundError: No module named 'science_tool.refs_migrate'`.
 
 - [ ] **Step 3: Create the module with rewrite rules**
 
-Create `science-tool/src/science_tool/refs_migrate.py`:
+Create `science/src/science_tool/refs_migrate.py`:
 
 ```python
 """Pure-function core for migrating legacy ``article:`` IDs to ``paper:``.
@@ -134,13 +134,13 @@ PROSE_REWRITE_RULE: tuple[re.Pattern[str], str] = (
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science-tool/tests/test_refs_migrate_paper.py -v`
+Run: `uv run --frozen pytest science/tests/test_refs_migrate_paper.py -v`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/refs_migrate.py science-tool/tests/test_refs_migrate_paper.py
+git add science/src/science_tool/refs_migrate.py science/tests/test_refs_migrate_paper.py
 git commit -m "feat(refs_migrate): scaffold module with rewrite-rule constants"
 ```
 
@@ -149,12 +149,12 @@ git commit -m "feat(refs_migrate): scaffold module with rewrite-rule constants"
 ## Task 2: Implement `rewrite_text` — apply all rules to a single string
 
 **Files:**
-- Modify: `science-tool/src/science_tool/refs_migrate.py`
-- Test: `science-tool/tests/test_refs_migrate_paper.py`
+- Modify: `science/src/science_tool/refs_migrate.py`
+- Test: `science/tests/test_refs_migrate_paper.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `science-tool/tests/test_refs_migrate_paper.py`:
+Append to `science/tests/test_refs_migrate_paper.py`:
 
 ```python
 from science_tool.refs_migrate import rewrite_text
@@ -214,12 +214,12 @@ def test_migrate_idempotent() -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run --frozen pytest science-tool/tests/test_refs_migrate_paper.py -v`
+Run: `uv run --frozen pytest science/tests/test_refs_migrate_paper.py -v`
 Expected: 7 new tests FAIL with `ImportError: cannot import name 'rewrite_text'`.
 
 - [ ] **Step 3: Implement `rewrite_text`**
 
-Append to `science-tool/src/science_tool/refs_migrate.py`:
+Append to `science/src/science_tool/refs_migrate.py`:
 
 ```python
 def rewrite_text(text: str) -> tuple[str, int]:
@@ -255,13 +255,13 @@ def rewrite_text(text: str) -> tuple[str, int]:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run --frozen pytest science-tool/tests/test_refs_migrate_paper.py -v`
+Run: `uv run --frozen pytest science/tests/test_refs_migrate_paper.py -v`
 Expected: PASS (all 10 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/refs_migrate.py science-tool/tests/test_refs_migrate_paper.py
+git add science/src/science_tool/refs_migrate.py science/tests/test_refs_migrate_paper.py
 git commit -m "feat(refs_migrate): implement rewrite_text with full rule set"
 ```
 
@@ -270,11 +270,11 @@ git commit -m "feat(refs_migrate): implement rewrite_text with full rule set"
 ## Task 3: Build the legacy-project fixture
 
 **Files:**
-- Create: `science-tool/tests/fixtures/refs/legacy_project/doc/questions/q01-example.md`
-- Create: `science-tool/tests/fixtures/refs/legacy_project/doc/papers/Smith2024.md`
-- Create: `science-tool/tests/fixtures/refs/legacy_project/doc/topics/t01-example.md`
-- Create: `science-tool/tests/fixtures/refs/legacy_project/doc/interpretations/i01-example.md`
-- Create: `science-tool/tests/fixtures/refs/legacy_project/science.yaml`
+- Create: `science/tests/fixtures/refs/legacy_project/doc/questions/q01-example.md`
+- Create: `science/tests/fixtures/refs/legacy_project/doc/papers/Smith2024.md`
+- Create: `science/tests/fixtures/refs/legacy_project/doc/topics/t01-example.md`
+- Create: `science/tests/fixtures/refs/legacy_project/doc/interpretations/i01-example.md`
+- Create: `science/tests/fixtures/refs/legacy_project/science.yaml`
 
 - [ ] **Step 1: Write `q01-example.md`**
 
@@ -353,7 +353,7 @@ aspects:
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/tests/fixtures/refs/legacy_project
+git add science/tests/fixtures/refs/legacy_project
 git commit -m "test(refs_migrate): add legacy_project fixture"
 ```
 
@@ -362,12 +362,12 @@ git commit -m "test(refs_migrate): add legacy_project fixture"
 ## Task 4: Implement `scan_project` — walk markdown files, compute rewrites
 
 **Files:**
-- Modify: `science-tool/src/science_tool/refs_migrate.py`
-- Test: `science-tool/tests/test_refs_migrate_paper.py`
+- Modify: `science/src/science_tool/refs_migrate.py`
+- Test: `science/tests/test_refs_migrate_paper.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `science-tool/tests/test_refs_migrate_paper.py`:
+Append to `science/tests/test_refs_migrate_paper.py`:
 
 ```python
 from pathlib import Path
@@ -406,12 +406,12 @@ def test_scan_project_counts_are_accurate() -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run --frozen pytest science-tool/tests/test_refs_migrate_paper.py -v`
+Run: `uv run --frozen pytest science/tests/test_refs_migrate_paper.py -v`
 Expected: 3 new tests FAIL with `ImportError: cannot import name 'scan_project'`.
 
 - [ ] **Step 3: Implement `scan_project` and `FileRewrite`**
 
-Append to `science-tool/src/science_tool/refs_migrate.py`:
+Append to `science/src/science_tool/refs_migrate.py`:
 
 ```python
 # Directories to scan, relative to project root. Matches the conventions used
@@ -463,13 +463,13 @@ def _iter_markdown_files(project_root: Path):
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run --frozen pytest science-tool/tests/test_refs_migrate_paper.py -v`
+Run: `uv run --frozen pytest science/tests/test_refs_migrate_paper.py -v`
 Expected: PASS (all 13 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/refs_migrate.py science-tool/tests/test_refs_migrate_paper.py
+git add science/src/science_tool/refs_migrate.py science/tests/test_refs_migrate_paper.py
 git commit -m "feat(refs_migrate): add scan_project walker"
 ```
 
@@ -478,12 +478,12 @@ git commit -m "feat(refs_migrate): add scan_project walker"
 ## Task 5: Implement `apply_rewrites` — atomic per-file write
 
 **Files:**
-- Modify: `science-tool/src/science_tool/refs_migrate.py`
-- Test: `science-tool/tests/test_refs_migrate_paper.py`
+- Modify: `science/src/science_tool/refs_migrate.py`
+- Test: `science/tests/test_refs_migrate_paper.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `science-tool/tests/test_refs_migrate_paper.py`:
+Append to `science/tests/test_refs_migrate_paper.py`:
 
 ```python
 def test_apply_rewrites_writes_files(tmp_path: Path) -> None:
@@ -518,12 +518,12 @@ def test_apply_rewrites_preserves_other_files(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run --frozen pytest science-tool/tests/test_refs_migrate_paper.py -v`
+Run: `uv run --frozen pytest science/tests/test_refs_migrate_paper.py -v`
 Expected: 2 new tests FAIL with `ImportError: cannot import name 'apply_rewrites'`.
 
 - [ ] **Step 3: Implement `apply_rewrites`**
 
-Append to `science-tool/src/science_tool/refs_migrate.py`:
+Append to `science/src/science_tool/refs_migrate.py`:
 
 ```python
 import os
@@ -554,13 +554,13 @@ def _atomic_write(path: Path, text: str) -> None:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run --frozen pytest science-tool/tests/test_refs_migrate_paper.py -v`
+Run: `uv run --frozen pytest science/tests/test_refs_migrate_paper.py -v`
 Expected: PASS (all 15 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/refs_migrate.py science-tool/tests/test_refs_migrate_paper.py
+git add science/src/science_tool/refs_migrate.py science/tests/test_refs_migrate_paper.py
 git commit -m "feat(refs_migrate): add apply_rewrites atomic writer"
 ```
 
@@ -569,12 +569,12 @@ git commit -m "feat(refs_migrate): add apply_rewrites atomic writer"
 ## Task 6: Add unified-diff emission helper
 
 **Files:**
-- Modify: `science-tool/src/science_tool/refs_migrate.py`
-- Test: `science-tool/tests/test_refs_migrate_paper.py`
+- Modify: `science/src/science_tool/refs_migrate.py`
+- Test: `science/tests/test_refs_migrate_paper.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `science-tool/tests/test_refs_migrate_paper.py`:
+Append to `science/tests/test_refs_migrate_paper.py`:
 
 ```python
 def test_render_diff_emits_unified_diff() -> None:
@@ -614,7 +614,7 @@ Expected: 2 new tests FAIL.
 
 - [ ] **Step 3: Implement `render_diff`**
 
-Append to `science-tool/src/science_tool/refs_migrate.py`:
+Append to `science/src/science_tool/refs_migrate.py`:
 
 ```python
 import difflib
@@ -654,7 +654,7 @@ Expected: PASS (all 17 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/refs_migrate.py science-tool/tests/test_refs_migrate_paper.py
+git add science/src/science_tool/refs_migrate.py science/tests/test_refs_migrate_paper.py
 git commit -m "feat(refs_migrate): add render_diff helper"
 ```
 
@@ -663,12 +663,12 @@ git commit -m "feat(refs_migrate): add render_diff helper"
 ## Task 7: Add `check_git_clean` helper
 
 **Files:**
-- Modify: `science-tool/src/science_tool/refs_migrate.py`
-- Test: `science-tool/tests/test_refs_migrate_paper.py`
+- Modify: `science/src/science_tool/refs_migrate.py`
+- Test: `science/tests/test_refs_migrate_paper.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `science-tool/tests/test_refs_migrate_paper.py`:
+Append to `science/tests/test_refs_migrate_paper.py`:
 
 ```python
 import subprocess
@@ -704,7 +704,7 @@ Expected: 3 new tests FAIL.
 
 - [ ] **Step 3: Implement `check_git_clean`**
 
-Append to `science-tool/src/science_tool/refs_migrate.py`:
+Append to `science/src/science_tool/refs_migrate.py`:
 
 ```python
 import subprocess
@@ -738,7 +738,7 @@ Expected: PASS (all 20 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/refs_migrate.py science-tool/tests/test_refs_migrate_paper.py
+git add science/src/science_tool/refs_migrate.py science/tests/test_refs_migrate_paper.py
 git commit -m "feat(refs_migrate): add check_git_clean guard"
 ```
 
@@ -747,12 +747,12 @@ git commit -m "feat(refs_migrate): add check_git_clean guard"
 ## Task 8: Create `refs_cli.py` with empty click group
 
 **Files:**
-- Create: `science-tool/src/science_tool/refs_cli.py`
-- Test: `science-tool/tests/test_refs_migrate_cli.py`
+- Create: `science/src/science_tool/refs_cli.py`
+- Test: `science/tests/test_refs_migrate_cli.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `science-tool/tests/test_refs_migrate_cli.py`:
+Create `science/tests/test_refs_migrate_cli.py`:
 
 ```python
 from __future__ import annotations
@@ -775,7 +775,7 @@ Expected: FAIL with `ModuleNotFoundError`.
 
 - [ ] **Step 3: Create `refs_cli.py`**
 
-Create `science-tool/src/science_tool/refs_cli.py`:
+Create `science/src/science_tool/refs_cli.py`:
 
 ```python
 """Click CLI group for the ``refs`` subcommands."""
@@ -835,19 +835,19 @@ def migrate_paper(project_root: Path, apply: bool, force: bool, verbose: bool) -
     total = sum(r.match_count for r in rewrites)
     click.echo(
         f"Rewrote {total} legacy paper references in {len(rewrites)} files. "
-        "Run `science-tool refs check --root <project-root>` to verify."
+        "Run `science refs check --root <project-root>` to verify."
     )
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run --frozen pytest science-tool/tests/test_refs_migrate_cli.py -v`
+Run: `uv run --frozen pytest science/tests/test_refs_migrate_cli.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/refs_cli.py science-tool/tests/test_refs_migrate_cli.py
+git add science/src/science_tool/refs_cli.py science/tests/test_refs_migrate_cli.py
 git commit -m "feat(refs_cli): add refs group with migrate-paper subcommand"
 ```
 
@@ -856,12 +856,12 @@ git commit -m "feat(refs_cli): add refs group with migrate-paper subcommand"
 ## Task 9: Register `refs_group` in top-level CLI
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
-- Test: `science-tool/tests/test_refs_migrate_cli.py`
+- Modify: `science/src/science_tool/cli.py`
+- Test: `science/tests/test_refs_migrate_cli.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `science-tool/tests/test_refs_migrate_cli.py`:
+Append to `science/tests/test_refs_migrate_cli.py`:
 
 ```python
 from science_tool.cli import main as top_level_cli
@@ -880,7 +880,7 @@ Expected: FAIL with `No such command 'refs'`.
 
 - [ ] **Step 3: Register the group**
 
-In `science-tool/src/science_tool/cli.py`, find the section where click groups are added (search for `add_command` near the bottom of the file). Add:
+In `science/src/science_tool/cli.py`, find the section where click groups are added (search for `add_command` near the bottom of the file). Add:
 
 ```python
 from science_tool.refs_cli import refs_group
@@ -897,7 +897,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/cli.py
+git add science/src/science_tool/cli.py
 git commit -m "feat(cli): register refs group"
 ```
 
@@ -906,11 +906,11 @@ git commit -m "feat(cli): register refs group"
 ## Task 10: End-to-end integration test on the fixture
 
 **Files:**
-- Test: `science-tool/tests/test_refs_migrate_cli.py`
+- Test: `science/tests/test_refs_migrate_cli.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `science-tool/tests/test_refs_migrate_cli.py`:
+Append to `science/tests/test_refs_migrate_cli.py`:
 
 ```python
 import shutil
@@ -972,13 +972,13 @@ def test_migrate_paper_blocks_when_dirty(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run tests and verify they pass**
 
-Run: `uv run --frozen pytest science-tool/tests/test_refs_migrate_cli.py -v`
+Run: `uv run --frozen pytest science/tests/test_refs_migrate_cli.py -v`
 Expected: PASS (4 new tests).
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add science-tool/tests/test_refs_migrate_cli.py
+git add science/tests/test_refs_migrate_cli.py
 git commit -m "test(refs_cli): add end-to-end migrate-paper tests"
 ```
 
@@ -987,12 +987,12 @@ git commit -m "test(refs_cli): add end-to-end migrate-paper tests"
 ## Task 11: Build the transition-window canonicalization helper
 
 **Files:**
-- Create: `science-tool/src/science_tool/big_picture/literature_prefix.py`
-- Test: `science-tool/tests/test_literature_prefix.py`
+- Create: `science/src/science_tool/big_picture/literature_prefix.py`
+- Test: `science/tests/test_literature_prefix.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `science-tool/tests/test_literature_prefix.py`:
+Create `science/tests/test_literature_prefix.py`:
 
 ```python
 from __future__ import annotations
@@ -1030,7 +1030,7 @@ Expected: FAIL with `ModuleNotFoundError`.
 
 - [ ] **Step 3: Implement the helper**
 
-Create `science-tool/src/science_tool/big_picture/literature_prefix.py`:
+Create `science/src/science_tool/big_picture/literature_prefix.py`:
 
 ```python
 """Transition-window canonicalization for external-literature entity IDs.
@@ -1075,7 +1075,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/literature_prefix.py science-tool/tests/test_literature_prefix.py
+git add science/src/science_tool/big_picture/literature_prefix.py science/tests/test_literature_prefix.py
 git commit -m "feat(big_picture): add literature_prefix canonicalization helper"
 ```
 
@@ -1164,11 +1164,11 @@ git commit -m "refactor(templates): rename paper-summary.md to paper.md (externa
 ## Task 14: Cosmetic rewrite of `article` in top-level `cli.py`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
+- Modify: `science/src/science_tool/cli.py`
 
 - [ ] **Step 1: Find the occurrence**
 
-Run: `grep -n "Added article" science-tool/src/science_tool/cli.py`
+Run: `grep -n "Added article" science/src/science_tool/cli.py`
 Expected: one match around line 1004.
 
 - [ ] **Step 2: Rewrite**
@@ -1177,7 +1177,7 @@ Change `click.echo(f"Added article: {uri}")` → `click.echo(f"Added paper: {uri
 
 - [ ] **Step 3: Grep for other user-facing `article` strings**
 
-Run: `grep -nE '\barticle\b' science-tool/src/science_tool/cli.py`
+Run: `grep -nE '\barticle\b' science/src/science_tool/cli.py`
 
 For each match, decide:
 - **User-facing string referring to the entity concept** → rewrite to `paper`.
@@ -1185,13 +1185,13 @@ For each match, decide:
 
 - [ ] **Step 4: Run existing tests**
 
-Run: `uv run --frozen pytest science-tool/tests/test_cli.py -v` (or the appropriate CLI test module for this repo).
+Run: `uv run --frozen pytest science/tests/test_cli.py -v` (or the appropriate CLI test module for this repo).
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/cli.py
+git add science/src/science_tool/cli.py
 git commit -m "refactor(cli): rewrite user-facing article → paper"
 ```
 
@@ -1201,19 +1201,19 @@ git commit -m "refactor(cli): rewrite user-facing article → paper"
 
 **Files:**
 - Audit + potentially modify:
-  - `science-tool/tests/test_paper_model.py`
-  - `science-tool/tests/test_graph_cli.py`
-  - `science-tool/tests/test_inquiry_cli.py`
-  - `science-tool/tests/test_cross_impact.py`
-  - `science-tool/tests/test_layered_claim_migration.py`
-  - `science-tool/tests/test_graph_export.py`
-  - `science-tool/tests/test_causal.py`
-  - `science-tool/tests/test_project_model_migration.py`
-  - `science-tool/tests/test_causal_cli.py`
+  - `science/tests/test_paper_model.py`
+  - `science/tests/test_graph_cli.py`
+  - `science/tests/test_inquiry_cli.py`
+  - `science/tests/test_cross_impact.py`
+  - `science/tests/test_layered_claim_migration.py`
+  - `science/tests/test_graph_export.py`
+  - `science/tests/test_causal.py`
+  - `science/tests/test_project_model_migration.py`
+  - `science/tests/test_causal_cli.py`
 
 - [ ] **Step 1: List current matches**
 
-Run: `grep -n "article:" science-tool/tests/test_*.py`
+Run: `grep -n "article:" science/tests/test_*.py`
 
 - [ ] **Step 2: Triage each match**
 
@@ -1227,13 +1227,13 @@ For each file, make the edits. Err on the side of rewriting; only preserve `arti
 
 - [ ] **Step 3: Run all tests**
 
-Run: `uv run --frozen pytest science-tool/tests/ -v`
+Run: `uv run --frozen pytest science/tests/ -v`
 Expected: PASS. Any failure means a test expects the pre-rename prefix — re-read the test; if the assertion was on canonical output, keep the rewrite and update the expected value.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add science-tool/tests
+git add science/tests
 git commit -m "test: triage article: literals across test suite for rename"
 ```
 
@@ -1300,17 +1300,17 @@ git commit -m "docs(references): rewrite references for rename"
 
 ---
 
-## Task 18: Grep `science-tool/src/` for hardcoded template filenames
+## Task 18: Grep `science/src/` for hardcoded template filenames
 
 **Files:**
-- Audit: `science-tool/src/` (read-only scan first, then targeted edits)
+- Audit: `science/src/` (read-only scan first, then targeted edits)
 
 - [ ] **Step 1: Grep**
 
 Run:
 
 ```bash
-grep -rn "paper-summary.md\|\"paper.md\"\|'paper.md'" science-tool/src/
+grep -rn "paper-summary.md\|\"paper.md\"\|'paper.md'" science/src/
 ```
 
 - [ ] **Step 2: Triage**
@@ -1326,13 +1326,13 @@ Make the rewrites.
 
 - [ ] **Step 4: Run tests**
 
-Run: `uv run --frozen pytest science-tool/tests/ -v`
+Run: `uv run --frozen pytest science/tests/ -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/
+git add science/src/
 git commit -m "refactor: rewrite hardcoded template paths for rename"
 ```
 
@@ -1350,12 +1350,12 @@ Expected: clean. If not, commit or stash any in-progress work first.
 
 - [ ] **Step 2: Dry-run on the repo root**
 
-Run: `uv run --frozen science-tool refs migrate-paper --project-root .`
+Run: `uv run --frozen science refs migrate-paper --project-root .`
 Review the emitted diff. Every hit should be an expected `article:<X>` → `paper:<X>` rewrite in non-spec documentation or example fixtures.
 
 - [ ] **Step 3: Apply**
 
-Run: `uv run --frozen science-tool refs migrate-paper --project-root . --apply`
+Run: `uv run --frozen science refs migrate-paper --project-root . --apply`
 Expected: `Rewrote N legacy paper references in K files.`
 
 - [ ] **Step 4: Verify**
@@ -1381,9 +1381,9 @@ git commit -m "refactor: migrate article: → paper: across framework docs"
 
 ```bash
 cd ~/d/mm30   # or wherever mm30 lives
-uv run science-tool refs migrate-paper --project-root .
-uv run science-tool refs migrate-paper --project-root . --apply
-uv run science-tool refs check --root .
+uv run science refs migrate-paper --project-root .
+uv run science refs migrate-paper --project-root . --apply
+uv run science refs check --root .
 ```
 
 Expected: the dry-run shows plausible hits; `--apply` rewrites them; `refs check` reports no new dangling references.

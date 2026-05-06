@@ -20,17 +20,17 @@ Parse `$ARGUMENTS` for:
 
 ## Phase 1: Precompute
 
-Run these from the project root. All `science-tool` invocations use `uv run science-tool …` so they resolve against the project's editable install (`pyproject.toml` has `science-tool` as a dev dependency in every Science project) and work regardless of whether `science-tool` is on `$PATH`:
+Run these from the project root. All `science` invocations use `uv run science …` so they resolve against the project's editable install (`pyproject.toml` has `science` as a dev dependency in every Science project) and work regardless of whether `science` is on `$PATH`:
 
 ```bash
-uv run science-tool graph project-summary --format json
-uv run science-tool graph question-summary --format json
-uv run science-tool graph inquiry-summary --format json
-uv run science-tool graph attention-sample --limit 8 --format json
-uv run science-tool graph dashboard-summary --format json
-uv run science-tool graph uncertainty --format json
-uv run science-tool graph neighborhood-summary --format json
-uv run science-tool big-picture resolve-questions --project-root .
+uv run science graph project-summary --format json
+uv run science graph question-summary --format json
+uv run science graph inquiry-summary --format json
+uv run science graph attention-sample --limit 8 --format json
+uv run science graph dashboard-summary --format json
+uv run science graph uncertainty --format json
+uv run science graph neighborhood-summary --format json
+uv run science big-picture resolve-questions --project-root .
 ```
 
 All graph summary commands default to `--path knowledge/graph.trig` (the Science convention), so no flag is needed when run from the project root.
@@ -46,7 +46,7 @@ Enumerate hypotheses from `specs/hypotheses/*.md`.
 
 For each hypothesis, assemble a bundle. The bundle is a dictionary you construct in-memory — it is NOT persisted to disk:
 
-**Aspect filtering**. Before assembling bundles, load project aspects via `load_project_aspects` (or parse `science.yaml` directly). Compute `research_filter = project.aspects \ {software-development}`. Throughout bundle assembly, any entity whose resolved aspects (entity `aspects:` if set, else project `aspects:`) does NOT intersect `research_filter` is excluded from the bundle. This means software-oriented questions (e.g., ones explicitly tagged `aspects: [software-development]`) are dropped before hypothesis matching runs. If `research_filter` is empty, refuse to proceed and point the user at `science-tool big-picture` — research synthesis is undefined on a software-only project.
+**Aspect filtering**. Before assembling bundles, load project aspects via `load_project_aspects` (or parse `science.yaml` directly). Compute `research_filter = project.aspects \ {software-development}`. Throughout bundle assembly, any entity whose resolved aspects (entity `aspects:` if set, else project `aspects:`) does NOT intersect `research_filter` is excluded from the bundle. This means software-oriented questions (e.g., ones explicitly tagged `aspects: [software-development]`) are dropped before hypothesis matching runs. If `research_filter` is empty, refuse to proceed and point the user at `science big-picture` — research synthesis is undefined on a software-only project.
 
 - `hypothesis_path`: path to the `specs/hypotheses/<id>.md` file.
 - `phase`: read `phase:` from the hypothesis frontmatter; default to `active` if absent.
@@ -56,7 +56,7 @@ For each hypothesis, assemble a bundle. The bundle is a dictionary you construct
 - `interpretations`: glob `doc/interpretations/*.md`; parse frontmatter; include entries that either (a) directly reference this hypothesis in `related:`, (b) reference a question whose **primary** hypothesis (per resolver output) is this hypothesis, or (c) appear by `interpretation:...` ID in this hypothesis spec's own `related:` frontmatter. Do NOT include interpretations that only reach this hypothesis via transitive-only questions (questions whose primary_hypothesis is a different hypothesis). This tightens transitive pull-in and prevents early work that is really "central to H<other>" from flooding this hypothesis's bundle. Rule (c) is the escape hatch for `weakened`/`proposed`/`candidate` hypotheses that have no resolved questions and that the hypothesis author has explicitly bound to specific interpretations — without it, weakened hypotheses can end up with bundles too sparse to synthesize against. For each included interpretation, parse its frontmatter `id:` field and pass both `path` and canonical `id:` in the bundle entry, so sub-agents can cite by canonical ID without falling back to filename inference. Apply the same `research_filter` aspect check.
 - `edges_yaml`: glob `doc/figures/dags/*.edges.yaml`; include any whose filename stem starts with this hypothesis ID. While assembling, build a set of interpretation IDs cited at the edge level (any `evidence:` or `anchor:` interpretation references inside each edge's metadata). Pass this set to the sub-agent as `edge_cited_interpretation_ids`: when an interpretation in the bundle is also covered by an `.edges.yaml` edge, the sub-agent should cite it through the edge (preserving the structural provenance) and treat its omission from the prose-level interpretation list as expected — not as a "bundle-unused" gap.
 - `uncertainty_slice`: filter the global uncertainty output to entries referring to this hypothesis or its resolved questions.
-- `gaps_slice`: run `uv run science-tool graph gaps "hypothesis:<id>" --format json` for this hypothesis. Skip (empty slice) if the call errors because the hypothesis has no graph neighborhood yet.
+- `gaps_slice`: run `uv run science graph gaps "hypothesis:<id>" --format json` for this hypothesis. Skip (empty slice) if the call errors because the hypothesis has no graph neighborhood yet.
 - `topic_gaps`: see below.
 
 **Topic gaps** — in a single call before slicing per hypothesis:
@@ -238,7 +238,7 @@ If `--since <date>` is set:
 
 After all phases:
 
-- Run the validator automatically: `uv run science-tool big-picture validate --project-root .`. Show the output verbatim. If `nonexistent_reference` issues surface, treat them as real signals — the sub-agents wrote IDs that do not resolve to any entity in the project. Before reporting success, either (a) re-dispatch the relevant per-hypothesis sub-agent with the failed IDs listed as "do not cite; use verified IDs from the bundle", or (b) list the issues for the user to resolve manually. Do NOT silently declare success while citation errors exist.
+- Run the validator automatically: `uv run science big-picture validate --project-root .`. Show the output verbatim. If `nonexistent_reference` issues surface, treat them as real signals — the sub-agents wrote IDs that do not resolve to any entity in the project. Before reporting success, either (a) re-dispatch the relevant per-hypothesis sub-agent with the failed IDs listed as "do not cite; use verified IDs from the bundle", or (b) list the issues for the user to resolve manually. Do NOT silently declare success while citation errors exist.
 - Show the list of files written.
 - Show any staleness warnings.
 - Show any sub-agent "unused in synthesis" reports — these are candidates for future bundle improvements.

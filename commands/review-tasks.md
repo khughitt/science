@@ -13,14 +13,14 @@ Structured review of the project task backlog. Validates statuses against actual
 ### 1. Load current state
 
 ```bash
-uv run science-tool tasks list --format=json
-uv run science-tool tasks summary
+uv run science tasks list --format=json
+uv run science tasks summary
 ```
 
 If `knowledge/graph.trig` exists, also run:
 
 ```bash
-uv run science-tool graph attention-sample --limit 8 --format json
+uv run science graph attention-sample --limit 8 --format json
 ```
 
 Read `tasks/active.md` for full task descriptions. Note the total count and distribution.
@@ -110,20 +110,20 @@ After user confirmation, apply changes using:
 
 ```bash
 # Status corrections
-uv run science-tool tasks done <id> --note="<evidence>"
-uv run science-tool tasks retire <id> --reason="<reason>"
+uv run science tasks done <id> --note="<evidence>"
+uv run science tasks retire <id> --reason="<reason>"
 
 # Priority changes
-uv run science-tool tasks edit <id> --priority=<new>
+uv run science tasks edit <id> --priority=<new>
 
 # Group assignments
-uv run science-tool tasks edit <id> --group=<group>
+uv run science tasks edit <id> --group=<group>
 
 # Related entity links (replaces old --tags flag)
-uv run science-tool tasks edit <id> --related=topic:foo --related=topic:bar
+uv run science tasks edit <id> --related=topic:foo --related=topic:bar
 
 # New tasks
-uv run science-tool tasks add "<title>" --type=<type> --priority=<priority> [--group=<group>] [--related=<ref>...]
+uv run science tasks add "<title>" --type=<type> --priority=<priority> [--group=<group>] [--related=<ref>...]
 ```
 
 ### 9. Commit

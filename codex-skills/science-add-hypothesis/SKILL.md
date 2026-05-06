@@ -59,13 +59,14 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with <science-plugin-root>/science-tool science-tool <command>`
+   `uv run --with <science-plugin-root>/science science <command>`
 
 Develop a structured hypothesis from the user's input in the user input.
 
@@ -127,10 +128,10 @@ If the hypothesis has genuinely competing structural readings, note the likely r
 
 ## Writing
 
-After the conversation, create the hypothesis with `science-tool hypothesis create`. The tool assigns the next sequential `hNN` ID, places the file under `specs/hypotheses/`, and writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`). It also runs prospective validation against the project's audit rules — unresolved references emit warnings, structural problems block.
+After the conversation, create the hypothesis with `science hypothesis create`. The tool assigns the next sequential `hNN` ID, places the file under `specs/hypotheses/`, and writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`). It also runs prospective validation against the project's audit rules — unresolved references emit warnings, structural problems block.
 
 ```bash
-uv run science-tool hypothesis create "<short title>" \
+uv run science hypothesis create "<short title>" \
   --related <question:qNN-...> \
   --related <hypothesis:hMM-...> \
   --source-ref <paper-or-package-ref>
@@ -138,7 +139,7 @@ uv run science-tool hypothesis create "<short title>" \
 
 The command prints the chosen ID (e.g. `hypothesis:h03-short-title`) and the file path. Do NOT pre-write the file or hand-pick the ID — let the tool sequence and validate. If the user wants a specific slug, pass `--slug <slug>`; if they need a literal ID, pass `--id hypothesis:<local-part>`.
 
-After the file is created, open it and fill in the body using `.ai/templates/hypothesis.md` first, then `templates/hypothesis.md` as the writing reference. Preserve the frontmatter `science-tool` produced; only edit the body. Use `science-tool hypothesis edit <ref>` (or `science-tool entity edit <ref>`) for later metadata changes — both run prospective validation and update `updated` automatically.
+After the file is created, open it and fill in the body using `.ai/templates/hypothesis.md` first, then `templates/hypothesis.md` as the writing reference. Preserve the frontmatter `science` produced; only edit the body. Use `science hypothesis edit <ref>` (or `science entity edit <ref>`) for later metadata changes — both run prospective validation and update `updated` automatically.
 
 Write the hypothesis as:
 - one organizing conjecture
@@ -149,13 +150,13 @@ Do not frame a single paper or result as proving the hypothesis.
 
 ### Naming Conventions
 
-- **Filename:** lowercase `h` prefix: `h01-short-title.md`, `h02-short-title.md`, etc. (assigned by `science-tool hypothesis create`).
+- **Filename:** lowercase `h` prefix: `h01-short-title.md`, `h02-short-title.md`, etc. (assigned by `science hypothesis create`).
 - **Frontmatter `id`:** matches the filename stem: `"hypothesis:h01-short-title"`.
 - **Prose references:** uppercase `H` prefix: `H01`, `H02`, etc.
 
 ### Body And Optional Frontmatter
 
-`science-tool hypothesis create` defaults `status` to `proposed`. The supported life-cycle values are `proposed`, `under-investigation`, `partially-supported`, `supported`, `weakened`, and `refuted`. Use `--status under-investigation` only if active testing is already underway. Avoid `supported`, `weakened`, or `refuted` as the default outcome of authoring a new hypothesis — those are evidence-based exit states.
+`science hypothesis create` defaults `status` to `proposed`. The supported life-cycle values are `proposed`, `under-investigation`, `partially-supported`, `supported`, `weakened`, and `refuted`. Use `--status under-investigation` only if active testing is already underway. Avoid `supported`, `weakened`, or `refuted` as the default outcome of authoring a new hypothesis — those are evidence-based exit states.
 
 Use optional layered-claim fields only when they reduce ambiguity, by editing the file body and frontmatter after creation:
 - `claim_layer`
@@ -166,7 +167,7 @@ Use optional layered-claim fields only when they reduce ambiguity, by editing th
 
 ## After Writing
 
-1. If the hypothesis addresses an open question, link it via `science-tool entity edit <question-ref> --related hypothesis:h<NN>-<short-title>`. (Or update the question body in place if it needs prose changes.)
+1. If the hypothesis addresses an open question, link it via `science entity edit <question-ref> --related hypothesis:h<NN>-<short-title>`. (Or update the question body in place if it needs prose changes.)
 2. If the hypothesis naturally decomposes into graph-native propositions, note the likely propositions the user may want to formalize later.
 3. Suggest 2-3 papers that may be relevant to testing this hypothesis.
 Source-check titles and authors via web search before presenting them.
@@ -182,7 +183,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:add-hypothesis" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

@@ -4,7 +4,7 @@
 
 **Goal:** Add research provenance support to the science framework — entity types, data package schema, CLI commands, and skills — so any science project can produce standardized, reproducible research packages.
 
-**Architecture:** New entity kinds (`data-package`, `artifact`) and relations (`derived_from`, `produced_by`) added to science-model's core profile. A `packages` module in science-model provides Pydantic schemas and validation. A `research-package` command group in science-tool provides `init`/`validate`/`build` CLI commands. Three skills document the patterns.
+**Architecture:** New entity kinds (`data-package`, `artifact`) and relations (`derived_from`, `produced_by`) added to science-model's core profile. A `packages` module in science-model provides Pydantic schemas and validation. A `research-package` command group in science provides `init`/`validate`/`build` CLI commands. Three skills document the patterns.
 
 **Tech Stack:** Python 3.11+, Pydantic v2, Click, rdflib, pytest
 
@@ -35,7 +35,7 @@ src/science_model/profiles/core.py  # Add 2 entity kinds + 2 relation kinds
 src/science_model/__init__.py    # Re-export new types
 ```
 
-### science-tool — New files
+### science — New files
 
 ```
 src/science_tool/research_package/
@@ -48,7 +48,7 @@ tests/
   test_research_package_cli.py   # CLI integration tests
 ```
 
-### science-tool — Modified files
+### science — Modified files
 
 ```
 src/science_tool/cli.py          # Register research-package command group
@@ -1041,12 +1041,12 @@ git commit -m "feat(model): wire packages module into science-model exports"
 ## Task 6: Graph Store — Entity Prefixes and add_* Functions
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/store.py`
-- Test: `science-tool/tests/test_graph_cli.py` (or new test file)
+- Modify: `science/src/science_tool/graph/store.py`
+- Test: `science/tests/test_graph_cli.py` (or new test file)
 
 - [ ] **Step 1: Add to PROJECT_ENTITY_PREFIXES**
 
-In `science-tool/src/science_tool/graph/store.py`, add to the `PROJECT_ENTITY_PREFIXES` set (around line 143-154):
+In `science/src/science_tool/graph/store.py`, add to the `PROJECT_ENTITY_PREFIXES` set (around line 143-154):
 
 ```python
     "data-package",
@@ -1114,13 +1114,13 @@ def add_artifact(
 
 - [ ] **Step 4: Run existing graph tests**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_graph_cli.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_graph_cli.py -v`
 Expected: All existing tests PASS (no regressions)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd ~/d/science/science-tool
+cd ~/d/science/science
 git add src/science_tool/graph/store.py
 git commit -m "feat(tool): add data-package and artifact to graph store"
 ```
@@ -1130,21 +1130,21 @@ git commit -m "feat(tool): add data-package and artifact to graph store"
 ## Task 7: research-package CLI Module
 
 **Files:**
-- Create: `science-tool/src/science_tool/research_package/__init__.py`
-- Create: `science-tool/src/science_tool/research_package/init_package.py`
-- Create: `science-tool/src/science_tool/research_package/build_package.py`
-- Create: `science-tool/src/science_tool/research_package/cli.py`
-- Test: `science-tool/tests/test_research_package_cli.py`
+- Create: `science/src/science_tool/research_package/__init__.py`
+- Create: `science/src/science_tool/research_package/init_package.py`
+- Create: `science/src/science_tool/research_package/build_package.py`
+- Create: `science/src/science_tool/research_package/cli.py`
+- Test: `science/tests/test_research_package_cli.py`
 
 This is a large task. The implementer should read the existing `datasets` module and CLI pattern for reference. Key files to study:
 - `src/science_tool/datasets/__init__.py` — module structure
 - `src/science_tool/cli.py` lines 1212-1361 — datasets CLI pattern
-- The spec Section 3 (science-tool Commands) for exact command signatures
+- The spec Section 3 (science Commands) for exact command signatures
 
 - [ ] **Step 1: Create init_package.py**
 
 ```python
-# science-tool/src/science_tool/research_package/init_package.py
+# science/src/science_tool/research_package/init_package.py
 """Scaffold a new research package directory."""
 
 from __future__ import annotations
@@ -1233,7 +1233,7 @@ def init_research_package(
 - [ ] **Step 2: Create build_package.py**
 
 ```python
-# science-tool/src/science_tool/research_package/build_package.py
+# science/src/science_tool/research_package/build_package.py
 """Assemble a research package from workflow results."""
 
 from __future__ import annotations
@@ -1442,7 +1442,7 @@ def build_research_package(
 - [ ] **Step 3: Create CLI module**
 
 ```python
-# science-tool/src/science_tool/research_package/cli.py
+# science/src/science_tool/research_package/cli.py
 """Click commands for the research-package command group."""
 
 from __future__ import annotations
@@ -1577,7 +1577,7 @@ def build_cmd(results: Path, config: Path, output: Path) -> None:
 - [ ] **Step 4: Create __init__.py**
 
 ```python
-# science-tool/src/science_tool/research_package/__init__.py
+# science/src/science_tool/research_package/__init__.py
 """Research package management — init, validate, build."""
 
 from .build_package import build_research_package
@@ -1588,7 +1588,7 @@ __all__ = ["build_research_package", "init_research_package"]
 
 - [ ] **Step 5: Write CLI tests**
 
-Create `science-tool/tests/test_research_package_cli.py`:
+Create `science/tests/test_research_package_cli.py`:
 
 ```python
 """Tests for research-package CLI commands."""
@@ -1711,12 +1711,12 @@ class TestResearchPackageValidate:
 
 - [ ] **Step 6: Run tests to verify they fail**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_research_package_cli.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_research_package_cli.py -v`
 Expected: FAIL — command group not registered
 
 - [ ] **Step 7: Register command group in cli.py**
 
-In `science-tool/src/science_tool/cli.py`, add the import and registration.
+In `science/src/science_tool/cli.py`, add the import and registration.
 
 At the top, add:
 
@@ -1732,18 +1732,18 @@ main.add_command(research_package_group)
 
 - [ ] **Step 8: Run tests to verify they pass**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_research_package_cli.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_research_package_cli.py -v`
 Expected: All tests PASS
 
 - [ ] **Step 9: Run full test suite**
 
-Run: `cd ~/d/science/science-tool && uv run pytest -v`
+Run: `cd ~/d/science/science && uv run pytest -v`
 Expected: All tests PASS
 
 - [ ] **Step 10: Commit**
 
 ```bash
-cd ~/d/science/science-tool
+cd ~/d/science/science
 git add src/science_tool/research_package/ src/science_tool/cli.py tests/test_research_package_cli.py
 git commit -m "feat(tool): add research-package command group (init, validate, build)"
 ```
@@ -1763,7 +1763,7 @@ Read `~/d/science/skills/pipelines/snakemake.md` to find the right insertion poi
 
 Append a new section before the final tips/notes. The section should cover:
 
-- Terminal rule pattern: `rule build_package` calling `science-tool research-package build --results results/ --config config.yaml --output research/packages/{lens}/{section}/`
+- Terminal rule pattern: `rule build_package` calling `science research-package build --results results/ --config config.yaml --output research/packages/{lens}/{section}/`
 - Workflow config structure for research packages: `prose_dir`, `cells_file`, `provenance_inputs`, `scripts`, `code_excerpts`, `repository`
 - Example Snakemake rule:
 
@@ -1774,7 +1774,7 @@ rule build_package:
     output:
         descriptor="research/packages/{config[lens]}/{config[section]}/datapackage.json",
     shell:
-        "science-tool research-package build --results {input.results} --config config.yaml --output research/packages/{config[lens]}/{config[section]}/"
+        "science research-package build --results {input.results} --config config.yaml --output research/packages/{config[lens]}/{config[section]}/"
 ```
 
 - Note that `workflow-step` entities should carry a `script_path` property for traceability
@@ -1803,7 +1803,7 @@ Create `~/d/science/skills/research/research-package-spec.md` with these section
 2. **Package structure**: Directory layout (`datapackage.json`, `cells.json`, `data/`, `figures/`, `prose/`, `excerpts/`)
 3. **Schema reference**: Key fields in `datapackage.json` — `resources`, `research.cells`, `research.figures`, `research.vegalite_specs`, `research.code_excerpts`, `research.provenance`
 4. **Cell types**: narrative (file path to .md), data-table (resource name + optional columns/caption), figure (ref to figures[]), vegalite (ref to vegalite_specs[]), code-reference (ref to code_excerpts[]), provenance (auto-rendered)
-5. **CLI commands**: `science-tool research-package init`, `validate`, `build` with usage examples
+5. **CLI commands**: `science research-package init`, `validate`, `build` with usage examples
 6. **Workflow integration**: How Snakemake workflows produce packages — terminal `build_package` rule, config.yaml structure, prose + cells alongside the Snakefile
 7. **KG integration**: `data-package` and `artifact` entity types, `workflow-run` linkage via `produced_by`, `artifact` linkage via `derived_from`
 8. **Provenance model**: Input SHA-256 hashing, git commit pinning, freshness checking via `--check-freshness`

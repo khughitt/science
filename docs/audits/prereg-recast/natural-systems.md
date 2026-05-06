@@ -87,8 +87,8 @@ Representative generated graph excerpts:
 Commands run from the Science worktree:
 
 ```bash
-uv run --frozen science-tool graph build --project-root /mnt/ssd/Dropbox/natural-systems/.worktrees/prereg-recast-natural-systems
-uv run --frozen science-tool graph validate --path /mnt/ssd/Dropbox/natural-systems/.worktrees/prereg-recast-natural-systems/knowledge/graph.trig
+uv run --frozen science graph build --project-root /mnt/ssd/Dropbox/natural-systems/.worktrees/prereg-recast-natural-systems
+uv run --frozen science graph validate --path /mnt/ssd/Dropbox/natural-systems/.worktrees/prereg-recast-natural-systems/knowledge/graph.trig
 ```
 
 Result:

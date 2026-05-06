@@ -42,16 +42,16 @@ When causal mode is not active:
 
 ## Tool Invocation
 
-All `science-tool` commands below use this pattern:
+All `science` commands below use this pattern:
 
 ```bash
-uv run science-tool <command>
+uv run science <command>
 ```
 
 ## Rules
 
-- **MUST** initialize the graph if it does not exist (`science-tool graph init`)
-- **MUST** create the inquiry before adding nodes or edges (`science-tool inquiry init`)
+- **MUST** initialize the graph if it does not exist (`science graph init`)
+- **MUST** create the inquiry before adding nodes or edges (`science inquiry init`)
 - **MUST** add entities to the knowledge graph and to the inquiry
 - **SHOULD** name candidate `relation_claim`s explicitly in notes or prose when the user proposes a real scientific relationship
 - **MUST NOT** treat sketch edges as validated
@@ -72,7 +72,7 @@ Read these project files if they exist:
 If no graph exists:
 
 ```bash
-science-tool graph init
+science graph init
 ```
 
 ### Step 2: Interactive Conversation
@@ -115,7 +115,7 @@ If the sketch is mostly formal or architectural rather than empirical, say so ex
 1. **Create the inquiry**
 
 ```bash
-science-tool inquiry init "<slug>" \
+science inquiry init "<slug>" \
   --label "<descriptive label>" \
   --target "<hypothesis:hNN or question:qNN>"
 ```
@@ -123,7 +123,7 @@ science-tool inquiry init "<slug>" \
 If causal mode:
 
 ```bash
-science-tool inquiry init "<slug>" \
+science inquiry init "<slug>" \
   --label "<descriptive label>" \
   --target "<hypothesis:hNN or question:qNN>" \
   --type causal
@@ -132,15 +132,15 @@ science-tool inquiry init "<slug>" \
 2. **Add entities to the knowledge graph**
 
 ```bash
-science-tool graph add concept "<variable name>" --type sci:Variable
-science-tool graph add concept "<unknown factor>" --type sci:Unknown
+science graph add concept "<variable name>" --type sci:Variable
+science graph add concept "<unknown factor>" --type sci:Unknown
 ```
 
 3. **Add nodes to the inquiry**
 
 ```bash
-science-tool inquiry add-node "<slug>" "concept:<entity>" --role BoundaryIn
-science-tool inquiry add-node "<slug>" "concept:<entity>" --role BoundaryOut
+science inquiry add-node "<slug>" "concept:<entity>" --role BoundaryIn
+science inquiry add-node "<slug>" "concept:<entity>" --role BoundaryOut
 ```
 
 4. **Add tentative edges**
@@ -148,13 +148,13 @@ science-tool inquiry add-node "<slug>" "concept:<entity>" --role BoundaryOut
 For flow or processing structure:
 
 ```bash
-science-tool inquiry add-edge "<slug>" "concept:<from>" "sci:feedsInto" "concept:<to>"
+science inquiry add-edge "<slug>" "concept:<from>" "sci:feedsInto" "concept:<to>"
 ```
 
 For candidate causal structure:
 
 ```bash
-science-tool inquiry add-edge "<slug>" "concept:<from>" "scic:causes" "concept:<to>"
+science inquiry add-edge "<slug>" "concept:<from>" "scic:causes" "concept:<to>"
 ```
 
 Do not imply that this edge is proven.
@@ -163,14 +163,14 @@ Instead, record in the inquiry summary which candidate `relation_claim`s likely 
 5. **Set the estimand when relevant**
 
 ```bash
-science-tool inquiry set-estimand "<slug>" --treatment "concept/<treatment>" --outcome "concept/<outcome>"
+science inquiry set-estimand "<slug>" --treatment "concept/<treatment>" --outcome "concept/<outcome>"
 ```
 
 ### Step 4: Visualize And Summarize
 
 ```bash
-science-tool inquiry show "<slug>" --format table
-science-tool inquiry validate "<slug>" --format json
+science inquiry show "<slug>" --format table
+science inquiry validate "<slug>" --format json
 ```
 
 Save the inquiry document to `doc/inquiries/<slug>.md`.
@@ -184,7 +184,7 @@ The summary should explicitly note:
 ### Step 5: Finalize
 
 ```bash
-science-tool graph stamp-revision
+science graph stamp-revision
 ```
 
 Suggest next steps:
@@ -208,7 +208,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:sketch-model" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

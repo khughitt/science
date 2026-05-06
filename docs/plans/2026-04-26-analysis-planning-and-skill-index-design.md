@@ -66,7 +66,7 @@ Cons:
 - adds a new command surface,
 - risks overlap with `plan-pipeline` unless boundaries are explicit.
 
-### 2. Add `science-tool skills list/search` first
+### 2. Add `science skills list/search` first
 
 Extend the CLI with skill listing and search, then update key commands to call
 or mention the search command.
@@ -434,7 +434,7 @@ The command emits exactly one readiness state:
 |---|---|
 | `ready` | Analysis may proceed to pre-registration, pipeline planning, or implementation. |
 | `ready-with-caveats` | Caveats must be listed in a `Known Limitations To Carry Forward` section. `pre-register` ingests this section verbatim when linked. |
-| `not-ready` | Halt before pre-registration. Create one task per blocking check with `science-tool tasks add` when task tooling is available; otherwise list exact task text in the plan. |
+| `not-ready` | Halt before pre-registration. Create one task per blocking check with `science tasks add` when task tooling is available; otherwise list exact task text in the plan. |
 
 Blocking checks should be small and executable: "inspect `.X` scale and raw
 count layer for GSE...", not "do better QA."
@@ -498,11 +498,11 @@ If implemented, the CLI should use `skills/catalog.yaml` rather than parsing
 arbitrary markdown heuristically:
 
 ```bash
-uv run science-tool skills list
-uv run science-tool skills search "single-cell pseudobulk power"
+uv run science skills list
+uv run science skills search "single-cell pseudobulk power"
 ```
 
-Future `science-tool skills recommend --project .` can inspect `science.yaml`,
+Future `science skills recommend --project .` can inspect `science.yaml`,
 active aspects, file layout, and named task context. It should remain advisory:
 it suggests candidate leaves, and the command still records which leaves were
 actually loaded and why.
@@ -578,7 +578,7 @@ merged plan.
 
 Out of scope for both initial steps:
 
-- `science-tool skills search`,
+- `science skills search`,
 - structured `skills/catalog.yaml`,
 - converting all leaves into installable Codex skills,
 - automatic modality detection from data files,
@@ -678,7 +678,7 @@ other Science commands:
 - Did any loaded skill provide too much or too little guidance?
 - Should the skill index or leaf-selection rubric be updated?
 
-When `science-tool feedback add` is available, write the reflection there;
+When `science feedback add` is available, write the reflection there;
 otherwise include it in the saved plan.
 
 ## Resolved Questions

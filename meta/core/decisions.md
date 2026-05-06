@@ -25,7 +25,7 @@ ties meta-project history to tool history.
 - Sibling repo — clean separation, but meta commits drift from tool commits
   and cross-repo `../` references become fragile.
 - Root-level scaffold — maximum collision with existing tool dirs.
-- Modify science-tool to support out-of-root `science.yaml` — doable but
+- Modify science to support out-of-root `science.yaml` — doable but
   only worth it if subdir layout hits a real limit. Start subdir; revisit
   if blocked.
 
@@ -38,7 +38,7 @@ ties meta-project history to tool history.
 
 **Revisit if:**
 - Tool operations against a nested `science.yaml` hit a path-resolution bug.
-- science-tool gets split into its own repo (meta goes with it or sibling).
+- science gets split into its own repo (meta goes with it or sibling).
 
 ---
 

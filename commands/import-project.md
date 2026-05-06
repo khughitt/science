@@ -158,7 +158,7 @@ Minimum shape:
 
 ```toml
 [project]
-name = "<project-slug>-science-tools"
+name = "<project-slug>-sciences"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = []
@@ -167,7 +167,7 @@ dependencies = []
 dev = []
 ```
 
-Install `science-tool` into the manifest with:
+Install `science` into the manifest with:
 
 ```bash
 uv add --dev --editable "$SCIENCE_TOOL_PATH"
@@ -175,13 +175,13 @@ uv add --dev --editable "$SCIENCE_TOOL_PATH"
 
 ### `.env`
 
-Create or update `.env` with the **resolved absolute path** to `science-tool`:
+Create or update `.env` with the **resolved absolute path** to `science`:
 
 ```env
-SCIENCE_TOOL_PATH=<absolute-path-to-science-tool>
+SCIENCE_TOOL_PATH=<absolute-path-to-science>
 ```
 
-Resolve `${CLAUDE_PLUGIN_ROOT}/science-tool` to its absolute path at creation time. Ensure `.env` is in `.gitignore`.
+Resolve `${CLAUDE_PLUGIN_ROOT}/science` to its absolute path at creation time. Ensure `.env` is in `.gitignore`.
 
 ### `AGENTS.md`
 
@@ -217,15 +217,15 @@ collapse `CLAUDE.md` to the single `@AGENTS.md` pointer.
 Install Science's managed `validate.sh`:
 
 ```bash
-science-tool project artifacts install validate.sh --project-root <project-path>
+science project artifacts install validate.sh --project-root <project-path>
 ```
 
-This drops the canonical `validate.sh` into the project root with the managed header. To stay current on future Science releases, run `science-tool project artifacts check validate.sh` periodically (or rely on `science-tool health` to surface drift).
+This drops the canonical `validate.sh` into the project root with the managed header. To stay current on future Science releases, run `science project artifacts check validate.sh` periodically (or rely on `science health` to surface drift).
 
 If the project already has a `validate.sh` from a pre-managed-system era, adopt it:
 
 ```bash
-science-tool project artifacts install validate.sh --adopt --project-root <project-path>
+science project artifacts install validate.sh --adopt --project-root <project-path>
 ```
 
 `--adopt` rewrites the managed header in place if the body matches a known historical version. If the body diverges from every known version, use `--force-adopt` instead (writes a `.pre-install.bak`).

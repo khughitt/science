@@ -13,7 +13,7 @@ Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-a
 Additionally:
 1. Read `.ai/templates/pre-registration.md` first; if not found, read `${CLAUDE_PLUGIN_ROOT}/templates/pre-registration.md`.
 2. Read active hypotheses in `specs/hypotheses/`.
-3. Read existing inquiries: run `science-tool inquiry list` (if available).
+3. Read existing inquiries: run `science inquiry list` (if available).
 4. Read existing pipeline plans in `doc/plans/` (if any).
 5. Read existing pre-registrations in `doc/meta/pre-registration-*.md` to avoid duplication.
 6. Read linked analysis plans in `doc/plans/*-analysis-plan.md` when the user or context references `analysis-plan:<slug>`.
@@ -120,7 +120,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:pre-register" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

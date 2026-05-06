@@ -24,7 +24,7 @@ model should contain, literature grounding, explicit decisions with recorded
 ## Current state
 
 - Project just scaffolded (2026-04-23). No hypotheses, tasks, or graph yet.
-- Tool code at `../science-tool/`, aspects at `../aspects/`, skills at
+- Tool code at `../science/`, aspects at `../aspects/`, skills at
   `../skills/`, templates at `../templates/`, references at `../references/`.
 - Recent tool work (see parent repo `git log`): entity identity model,
   ontology consumption, registry identity collision warnings, multi-project
@@ -47,7 +47,7 @@ model should contain, literature grounding, explicit decisions with recorded
   sibling. `science.yaml` at `meta/science.yaml` roots the project there;
   `resolve_paths()` hangs everything off that location with no tool changes.
 - The toolkit is not imported as a Python package here — it is invoked via
-  `uv run --project ../science-tool science-tool ...`, driven by
+  `uv run --project ../science science ...`, driven by
   `SCIENCE_TOOL_PATH` in `.env`.
 - `meta/src/` exists only to satisfy software-profile validation and is
   currently empty.

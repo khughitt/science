@@ -18,7 +18,7 @@ Files modified:
 - `scripts/validate.sh` — extend the existing pre-registration body-section sweep (located by content; `for f in "$DOC_DIR/meta/pre-registration-"*.md`) so it (a) also iterates `$DOC_DIR/pre-registrations/*.md` and (b) when `type: pre-registration`, warns on missing `committed:` / `spec:` frontmatter fields. **Does not** add an id-prefix check — that lives in Plan #7 Task 6's PREFIX_RULES table.
 - `meta/validate.sh` — mirror the same change (the two scripts have different sha256 at audit time but are kept in lockstep until managed-artifact-versioning unifies them; locate the equivalent insertion site by content, not line number).
 - `commands/pre-register.md` — update the "Naming" and "After Writing" sections so the agent writes the new frontmatter, and accept `doc/pre-registrations/<slug>.md` placement (per audit §3.2 mm30 canonical) as well as the existing `doc/meta/pre-registration-<slug>.md`.
-- `science-tool/tests/test_validate_script.py` — add tests for the new validator behavior.
+- `science/tests/test_validate_script.py` — add tests for the new validator behavior.
 - `README.md` — if the canonical-types or commands list calls out per-type id prefixes, append `pre-registration` to it; otherwise no change. (Verify in Task 5.)
 - `docs/project-organization-profiles.md` — same: if the canonical-layout text enumerates entity types, append `pre-registration`; otherwise no change. (Verify in Task 5.)
 
@@ -80,9 +80,9 @@ git commit -m "feat(templates): pre-registration uses canonical type and id shap
 ## Task 2: Add failing tests for `pre-registration` validation
 
 **Files:**
-- Modify: `science-tool/tests/test_validate_script.py`
+- Modify: `science/tests/test_validate_script.py`
 
-The existing test file already has `_write_minimal_research_project` and `_write_common_files` helpers (verified at `science-tool/tests/test_validate_script.py:1-110`). The new tests drop pre-registration files at `doc/meta/pre-registration-<slug>.md` (the location the validator already inspects) and assert on validator output.
+The existing test file already has `_write_minimal_research_project` and `_write_common_files` helpers (verified at `science/tests/test_validate_script.py:1-110`). The new tests drop pre-registration files at `doc/meta/pre-registration-<slug>.md` (the location the validator already inspects) and assert on validator output.
 
 - [x] **Step 1: Append a helper that writes a pre-registration file**
 
@@ -219,14 +219,14 @@ def test_validate_warns_when_pre_registration_missing_spec(tmp_path: Path) -> No
 
 Run:
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_validate_script.py -k "pre_registration" -v
+cd science && uv run --frozen pytest tests/test_validate_script.py -k "pre_registration" -v
 ```
 Expected: `test_validate_warns_when_pre_registration_missing_committed` and `test_validate_warns_when_pre_registration_missing_spec` FAIL (the validator does not yet check these). The two no-warn / legacy-silence cases pass trivially.
 
 - [x] **Step 4: Commit failing tests**
 
 ```bash
-git add science-tool/tests/test_validate_script.py
+git add science/tests/test_validate_script.py
 git commit -m "test(validate): pre-registration canonical type checks"
 ```
 
@@ -321,7 +321,7 @@ Expected: both files show the new `$DOC_DIR/pre-registrations/` glob entry and t
 
 Run:
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_validate_script.py -k "pre_registration" -v
+cd science && uv run --frozen pytest tests/test_validate_script.py -k "pre_registration" -v
 ```
 Expected: all four pre-registration tests (canonical-acceptance, legacy-silence, missing-committed warn, missing-spec warn) pass.
 
@@ -329,7 +329,7 @@ Expected: all four pre-registration tests (canonical-acceptance, legacy-silence,
 
 Run:
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_validate_script.py -v
+cd science && uv run --frozen pytest tests/test_validate_script.py -v
 ```
 Expected: all tests pass.
 
@@ -431,11 +431,11 @@ cd meta && bash validate.sh --verbose 2>&1 | tail -20
 ```
 Expected: no new errors or warnings introduced by these changes.
 
-- [x] **Step 4: Run full science-tool test suite**
+- [x] **Step 4: Run full science test suite**
 
 Run:
 ```bash
-cd science-tool && uv run --frozen pytest -x
+cd science && uv run --frozen pytest -x
 ```
 Expected: all tests pass.
 

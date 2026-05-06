@@ -4,7 +4,7 @@
 
 **Goal:** Stop AGENTS.md from `@`-injecting `core/overview.md` + `core/decisions.md`, replace with a managed one-line "load-bearing constraints" digest refreshed by `/science:curate`.
 
-**Architecture:** AGENTS.md becomes a standalone operational guide with a small managed digest section between explicit markers. A new helper in `science-tool/src/science_tool/curate/agents_md.py` parses both `core/decisions.md` (active decisions only) and AGENTS.md (digest IDs, markers, legacy `@core/*` directives) plus CLAUDE.md (shape check), exposes the result on `CurationInventory`, and `/science:curate` consumes the signals to propose edits. Doc/template/Codex-skill artifacts are updated to reflect the new convention; `meta/AGENTS.md` is rewritten as the worked example.
+**Architecture:** AGENTS.md becomes a standalone operational guide with a small managed digest section between explicit markers. A new helper in `science/src/science_tool/curate/agents_md.py` parses both `core/decisions.md` (active decisions only) and AGENTS.md (digest IDs, markers, legacy `@core/*` directives) plus CLAUDE.md (shape check), exposes the result on `CurationInventory`, and `/science:curate` consumes the signals to propose edits. Doc/template/Codex-skill artifacts are updated to reflect the new convention; `meta/AGENTS.md` is rewritten as the worked example.
 
 **Tech Stack:** Python 3.11+, Pydantic, pytest, uv. Markdown templates and slash-command docs.
 
@@ -16,16 +16,16 @@
 
 **New files:**
 - `templates/agents-md.md` — canonical AGENTS.md scaffold for new projects.
-- `science-tool/src/science_tool/curate/agents_md.py` — drift-detection helper.
-- `science-tool/tests/test_curate_agents_md.py` — unit tests for the helper.
+- `science/src/science_tool/curate/agents_md.py` — drift-detection helper.
+- `science/tests/test_curate_agents_md.py` — unit tests for the helper.
 
 **Modified files:**
 - `commands/create-project.md` — point at the new template; drop `@core/*` injection instruction.
 - `commands/import-project.md` — same; add explicit removal guidance for legacy directives.
 - `references/project-structure.md` — update `core/` and top-level-files sections.
 - `commands/curate.md` — document the `agents-md` theme.
-- `science-tool/src/science_tool/curate/inventory.py` — extend `CurationInventory` with `agents_md` field; call helper from `collect_inventory()`.
-- `science-tool/tests/test_curate_inventory.py` — extend integration test to cover the new field.
+- `science/src/science_tool/curate/inventory.py` — extend `CurationInventory` with `agents_md` field; call helper from `collect_inventory()`.
+- `science/tests/test_curate_inventory.py` — extend integration test to cover the new field.
 - `meta/AGENTS.md` — rewrite to new shape (live example).
 - Generated under `codex-skills/` — regenerated via `scripts/generate_codex_skills.py`.
 
@@ -342,12 +342,12 @@ git commit -m "docs(references): describe AGENTS.md managed digest, drop @core/ 
 ## Task 5: Add `AgentsMdDigestState` model + `core/decisions.md` active-ID parser (TDD)
 
 **Files:**
-- Create: `science-tool/src/science_tool/curate/agents_md.py`
-- Create: `science-tool/tests/test_curate_agents_md.py`
+- Create: `science/src/science_tool/curate/agents_md.py`
+- Create: `science/tests/test_curate_agents_md.py`
 
 - [ ] **Step 1: Write the failing test for the active-decision parser**
 
-Create `science-tool/tests/test_curate_agents_md.py`:
+Create `science/tests/test_curate_agents_md.py`:
 
 ```python
 from __future__ import annotations
@@ -430,12 +430,12 @@ def test_parse_active_decision_ids_handles_no_status_line(tmp_path: Path) -> Non
 
 - [ ] **Step 2: Run the test and confirm it fails**
 
-Run: `cd science-tool && uv run pytest tests/test_curate_agents_md.py -v`
+Run: `cd science && uv run pytest tests/test_curate_agents_md.py -v`
 Expected: ImportError or ModuleNotFoundError on `parse_active_decision_ids`.
 
 - [ ] **Step 3: Implement the parser**
 
-Create `science-tool/src/science_tool/curate/agents_md.py`:
+Create `science/src/science_tool/curate/agents_md.py`:
 
 ```python
 """Drift-detection helper for AGENTS.md and core/decisions.md.
@@ -488,13 +488,13 @@ def _split_decision_sections(text: str) -> list[tuple[str, str]]:
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `cd science-tool && uv run pytest tests/test_curate_agents_md.py -v`
+Run: `cd science && uv run pytest tests/test_curate_agents_md.py -v`
 Expected: 3 passed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/curate/agents_md.py science-tool/tests/test_curate_agents_md.py
+git add science/src/science_tool/curate/agents_md.py science/tests/test_curate_agents_md.py
 git commit -m "feat(curate): parse active decision IDs from core/decisions.md"
 ```
 
@@ -503,12 +503,12 @@ git commit -m "feat(curate): parse active decision IDs from core/decisions.md"
 ## Task 6: Add the AGENTS.md digest-IDs + markers parser (TDD)
 
 **Files:**
-- Modify: `science-tool/src/science_tool/curate/agents_md.py`
-- Modify: `science-tool/tests/test_curate_agents_md.py`
+- Modify: `science/src/science_tool/curate/agents_md.py`
+- Modify: `science/tests/test_curate_agents_md.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `science-tool/tests/test_curate_agents_md.py`:
+Append to `science/tests/test_curate_agents_md.py`:
 
 ```python
 from science_tool.curate.agents_md import (
@@ -581,12 +581,12 @@ def test_parse_digest_ids_returns_empty_when_file_missing(tmp_path: Path) -> Non
 
 - [ ] **Step 2: Run the tests and confirm they fail**
 
-Run: `cd science-tool && uv run pytest tests/test_curate_agents_md.py -v`
+Run: `cd science && uv run pytest tests/test_curate_agents_md.py -v`
 Expected: ImportError on `BEGIN_MARKER`, `END_MARKER`, `parse_digest_ids`, `parse_marker_state`.
 
 - [ ] **Step 3: Implement marker constants and parsers**
 
-Append to `science-tool/src/science_tool/curate/agents_md.py`:
+Append to `science/src/science_tool/curate/agents_md.py`:
 
 ```python
 BEGIN_MARKER = "<!-- BEGIN: load-bearing-constraints (managed by /science:curate; edit core/decisions.md instead) -->"
@@ -618,13 +618,13 @@ def parse_digest_ids(agents_md: Path) -> list[str]:
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `cd science-tool && uv run pytest tests/test_curate_agents_md.py -v`
+Run: `cd science && uv run pytest tests/test_curate_agents_md.py -v`
 Expected: all tests pass (3 prior + 5 new = 8).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/curate/agents_md.py science-tool/tests/test_curate_agents_md.py
+git add science/src/science_tool/curate/agents_md.py science/tests/test_curate_agents_md.py
 git commit -m "feat(curate): parse digest IDs and marker presence from AGENTS.md"
 ```
 
@@ -633,12 +633,12 @@ git commit -m "feat(curate): parse digest IDs and marker presence from AGENTS.md
 ## Task 7: Add legacy `@core/*` directive detection + CLAUDE.md shape check (TDD)
 
 **Files:**
-- Modify: `science-tool/src/science_tool/curate/agents_md.py`
-- Modify: `science-tool/tests/test_curate_agents_md.py`
+- Modify: `science/src/science_tool/curate/agents_md.py`
+- Modify: `science/tests/test_curate_agents_md.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `science-tool/tests/test_curate_agents_md.py`:
+Append to `science/tests/test_curate_agents_md.py`:
 
 ```python
 from science_tool.curate.agents_md import (
@@ -748,12 +748,12 @@ def test_is_claude_md_normalizable_returns_false_for_missing(tmp_path: Path) -> 
 
 - [ ] **Step 2: Run the tests and confirm they fail**
 
-Run: `cd science-tool && uv run pytest tests/test_curate_agents_md.py -v`
+Run: `cd science && uv run pytest tests/test_curate_agents_md.py -v`
 Expected: ImportError on `detect_legacy_at_includes`, `is_claude_md_normalizable`.
 
 - [ ] **Step 3: Implement the detectors**
 
-Append to `science-tool/src/science_tool/curate/agents_md.py`:
+Append to `science/src/science_tool/curate/agents_md.py`:
 
 ```python
 _AT_INCLUDE_LINE = re.compile(r"^@(\S+)\s*$")
@@ -810,13 +810,13 @@ def is_claude_md_normalizable(claude_md: Path) -> bool:
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `cd science-tool && uv run pytest tests/test_curate_agents_md.py -v`
+Run: `cd science && uv run pytest tests/test_curate_agents_md.py -v`
 Expected: 16 passed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/curate/agents_md.py science-tool/tests/test_curate_agents_md.py
+git add science/src/science_tool/curate/agents_md.py science/tests/test_curate_agents_md.py
 git commit -m "feat(curate): detect legacy @core/* directives and CLAUDE.md normalizability"
 ```
 
@@ -825,12 +825,12 @@ git commit -m "feat(curate): detect legacy @core/* directives and CLAUDE.md norm
 ## Task 8: Compose `collect_agents_md_state()` with drift signals (TDD)
 
 **Files:**
-- Modify: `science-tool/src/science_tool/curate/agents_md.py`
-- Modify: `science-tool/tests/test_curate_agents_md.py`
+- Modify: `science/src/science_tool/curate/agents_md.py`
+- Modify: `science/tests/test_curate_agents_md.py`
 
 - [ ] **Step 1: Write the failing test for the composed collector**
 
-Append to `science-tool/tests/test_curate_agents_md.py`:
+Append to `science/tests/test_curate_agents_md.py`:
 
 ```python
 import os
@@ -994,12 +994,12 @@ def test_collect_agents_md_state_claude_md_with_extra_content_not_normalizable(t
 
 - [ ] **Step 2: Run the tests and confirm they fail**
 
-Run: `cd science-tool && uv run pytest tests/test_curate_agents_md.py -v`
+Run: `cd science && uv run pytest tests/test_curate_agents_md.py -v`
 Expected: ImportError on `AgentsMdDigestState`, `collect_agents_md_state`.
 
 - [ ] **Step 3: Implement the model and collector**
 
-Prepend the imports and append the model + collector to `science-tool/src/science_tool/curate/agents_md.py`:
+Prepend the imports and append the model + collector to `science/src/science_tool/curate/agents_md.py`:
 
 At the top, add to the existing imports:
 
@@ -1077,21 +1077,21 @@ def _compute_drift_signals(state: AgentsMdDigestState) -> list[str]:
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `cd science-tool && uv run pytest tests/test_curate_agents_md.py -v`
+Run: `cd science && uv run pytest tests/test_curate_agents_md.py -v`
 Expected: 21 passed.
 
 - [ ] **Step 5: Run ruff and pyright**
 
-Run: `cd science-tool && uv run ruff check src/science_tool/curate/agents_md.py tests/test_curate_agents_md.py`
+Run: `cd science && uv run ruff check src/science_tool/curate/agents_md.py tests/test_curate_agents_md.py`
 Expected: no errors.
 
-Run: `cd science-tool && uv run pyright src/science_tool/curate/agents_md.py`
+Run: `cd science && uv run pyright src/science_tool/curate/agents_md.py`
 Expected: no errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/curate/agents_md.py science-tool/tests/test_curate_agents_md.py
+git add science/src/science_tool/curate/agents_md.py science/tests/test_curate_agents_md.py
 git commit -m "feat(curate): collect AGENTS.md drift signals via collect_agents_md_state"
 ```
 
@@ -1100,12 +1100,12 @@ git commit -m "feat(curate): collect AGENTS.md drift signals via collect_agents_
 ## Task 9: Wire `agents_md` into `CurationInventory`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/curate/inventory.py`
-- Modify: `science-tool/tests/test_curate_inventory.py`
+- Modify: `science/src/science_tool/curate/inventory.py`
+- Modify: `science/tests/test_curate_inventory.py`
 
 - [ ] **Step 1: Write the failing test extension**
 
-In `science-tool/tests/test_curate_inventory.py`, after the existing `test_collect_inventory_tracks_counts_and_candidate_signals` test, append a new test:
+In `science/tests/test_curate_inventory.py`, after the existing `test_collect_inventory_tracks_counts_and_candidate_signals` test, append a new test:
 
 ```python
 def test_collect_inventory_includes_agents_md_state(curated_project: Path) -> None:
@@ -1141,12 +1141,12 @@ def test_collect_inventory_surfaces_agents_md_drift(curated_project: Path) -> No
 
 - [ ] **Step 2: Run the tests and confirm they fail**
 
-Run: `cd science-tool && uv run pytest tests/test_curate_inventory.py -v`
+Run: `cd science && uv run pytest tests/test_curate_inventory.py -v`
 Expected: AttributeError on `inventory.agents_md` for both new tests.
 
 - [ ] **Step 3: Add the field and call site**
 
-In `science-tool/src/science_tool/curate/inventory.py`:
+In `science/src/science_tool/curate/inventory.py`:
 
 After the existing `from science_tool.tasks import parse_tasks` import line, add:
 
@@ -1185,18 +1185,18 @@ Update the return:
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `cd science-tool && uv run pytest tests/test_curate_inventory.py -v`
+Run: `cd science && uv run pytest tests/test_curate_inventory.py -v`
 Expected: all tests pass (existing + 2 new).
 
 - [ ] **Step 5: Run ruff and pyright**
 
-Run: `cd science-tool && uv run ruff check src/science_tool/curate/inventory.py tests/test_curate_inventory.py`
+Run: `cd science && uv run ruff check src/science_tool/curate/inventory.py tests/test_curate_inventory.py`
 Expected: no errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/curate/inventory.py science-tool/tests/test_curate_inventory.py
+git add science/src/science_tool/curate/inventory.py science/tests/test_curate_inventory.py
 git commit -m "feat(curate): include AGENTS.md drift state in CurationInventory output"
 ```
 
@@ -1273,7 +1273,7 @@ Use the Write tool to overwrite `meta/AGENTS.md` with the following content (dro
 ## What this is
 
 A Science project that takes the **Science toolkit itself** as its object of
-study and development. The toolkit code lives at `../science-tool/`, `../aspects/`,
+study and development. The toolkit code lives at `../science/`, `../aspects/`,
 `../skills/`, `../commands/`, `../templates/`, `../references/`. This project
 does not contain that code — it contains the research artifacts, decisions,
 hypotheses, tasks, knowledge graph, and literature review that drive it.
@@ -1287,7 +1287,7 @@ hypotheses, tasks, knowledge graph, and literature review that drive it.
 
 Science commands resolve the project from `science.yaml`. Always run them
 from `meta/`, or pass `--project meta` / `--project-root .` as appropriate.
-The tool lives at `../science-tool/` — `.env` points `SCIENCE_TOOL_PATH` there.
+The tool lives at `../science/` — `.env` points `SCIENCE_TOOL_PATH` there.
 
 ## Validation
 
@@ -1297,7 +1297,7 @@ bash validate.sh --verbose
 
 ## Conventions
 
-- Paths to tool code use `../science-tool/...` from inside `meta/`.
+- Paths to tool code use `../science/...` from inside `meta/`.
 - Hypotheses are about the tool's design and the research-workflow model it
   implements, not about an external scientific domain.
 - Literature in `doc/background/papers/` focuses on: research-agent design,
@@ -1350,7 +1350,7 @@ Expected: no output.
 Run from repo root:
 
 ```bash
-cd science-tool && uv run python -c "
+cd science && uv run python -c "
 from pathlib import Path
 from science_tool.curate.agents_md import collect_agents_md_state
 state = collect_agents_md_state(Path('../meta'))
@@ -1381,14 +1381,14 @@ git commit -m "docs(meta): rewrite meta/AGENTS.md as worked example of new shape
 
 **Files:**
 - Modify (regenerated): `codex-skills/**/SKILL.md`
-- Modify: `science-tool/tests/test_codex_skills.py` (or create a new smoke test if no equivalent exists)
+- Modify: `science/tests/test_codex_skills.py` (or create a new smoke test if no equivalent exists)
 
 - [ ] **Step 1: Regenerate the codex-skills**
 
 Run from the repo root:
 
 ```bash
-UV_CACHE_DIR=/tmp/uv-cache uv run --project science-tool python scripts/generate_codex_skills.py
+UV_CACHE_DIR=/tmp/uv-cache uv run --project science python scripts/generate_codex_skills.py
 ```
 
 Expected: `Generated Codex skills in /mnt/ssd/Dropbox/science/codex-skills`
@@ -1405,9 +1405,9 @@ Expected: no output.
 
 - [ ] **Step 3: Find or create a codex-skills test file**
 
-Run: `ls science-tool/tests/ | grep -i codex`
+Run: `ls science/tests/ | grep -i codex`
 
-If a test file exists, append the smoke test below to it. If none exists, create `science-tool/tests/test_codex_skills_no_core_includes.py`:
+If a test file exists, append the smoke test below to it. If none exists, create `science/tests/test_codex_skills_no_core_includes.py`:
 
 ```python
 """Smoke test: generated Codex skills do not reference @core/*.md includes."""
@@ -1437,7 +1437,7 @@ def test_no_generated_skill_references_at_core_includes() -> None:
 
 - [ ] **Step 4: Run the smoke test**
 
-Run: `cd science-tool && uv run pytest tests/test_codex_skills_no_core_includes.py -v`
+Run: `cd science && uv run pytest tests/test_codex_skills_no_core_includes.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Add a complementary smoke test for the template**
@@ -1452,13 +1452,13 @@ def test_agents_md_template_has_no_at_core_includes() -> None:
     assert "@core/decisions.md" not in text
 ```
 
-Run it: `cd science-tool && uv run pytest tests/test_codex_skills_no_core_includes.py -v`
+Run it: `cd science && uv run pytest tests/test_codex_skills_no_core_includes.py -v`
 Expected: 2 passed.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add codex-skills/ science-tool/tests/test_codex_skills_no_core_includes.py
+git add codex-skills/ science/tests/test_codex_skills_no_core_includes.py
 git commit -m "build(codex-skills): regenerate without @core includes; add smoke tests"
 ```
 
@@ -1468,15 +1468,15 @@ git commit -m "build(codex-skills): regenerate without @core includes; add smoke
 
 - [ ] **Step 1: Run the full test suite**
 
-Run: `cd science-tool && uv run pytest -q`
+Run: `cd science && uv run pytest -q`
 Expected: all tests pass.
 
 - [ ] **Step 2: Run ruff and pyright on touched modules**
 
-Run: `cd science-tool && uv run ruff check src/science_tool/curate/ tests/test_curate_*.py tests/test_codex_skills_no_core_includes.py`
+Run: `cd science && uv run ruff check src/science_tool/curate/ tests/test_curate_*.py tests/test_codex_skills_no_core_includes.py`
 Expected: no errors.
 
-Run: `cd science-tool && uv run pyright src/science_tool/curate/`
+Run: `cd science && uv run pyright src/science_tool/curate/`
 Expected: no errors.
 
 - [ ] **Step 3: Run `meta` validation**
@@ -1489,7 +1489,7 @@ Expected: no new errors. Pre-existing warnings are acceptable.
 Run from repo root:
 
 ```bash
-cd science-tool && uv run python -c "
+cd science && uv run python -c "
 from pathlib import Path
 from science_tool.curate.inventory import collect_inventory
 inv = collect_inventory(Path('../meta'))

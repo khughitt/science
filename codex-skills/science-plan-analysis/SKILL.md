@@ -59,13 +59,14 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with <science-plugin-root>/science-tool science-tool <command>`
+   `uv run --with <science-plugin-root>/science science <command>`
 
 > **Prerequisites:**
 > - Follow the Science Codex Command Preamble before executing this skill. Use the `research-assistant` role prompt.
@@ -182,7 +183,7 @@ Reflect on the **template**, **skill index**, and **workflow** used above.
 If you have feedback, report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:plan-analysis" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

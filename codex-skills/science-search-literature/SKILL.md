@@ -59,13 +59,14 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with <science-plugin-root>/science-tool science-tool <command>`
+   `uv run --with <science-plugin-root>/science science <command>`
 
 Search literature for the user input.
 If no argument is provided, derive candidate search foci from `specs/research-question.md` and `doc/questions/`, then ask the user to confirm the focus.
@@ -193,7 +194,7 @@ Include the normalized candidate list, dedupe keys, source provenance, and rank/
 
 ## After Search
 
-1. Offer to create tasks for the top `Core now` papers via `science-tool tasks add`.
+1. Offer to create tasks for the top `Core now` papers via `science tasks add`.
 2. For selected high-priority papers, run `science-research-papers` (or create a task for later).
 3. For `Core now` items, create a **stub-only** note at `doc/papers/<citekey>.md` using `.ai/templates/paper.md` first, then `templates/paper.md`. The stub must contain:
    - Template frontmatter filled from search metadata only (title, authors, year, identifiers).
@@ -221,7 +222,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:search-literature" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

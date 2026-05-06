@@ -117,7 +117,7 @@ Save to `doc/meta/bias-audit-<slug>.md`.
 2. If HARKing risk is detected and no pre-registration exists, suggest `/science:pre-register`.
 3. If confirmation bias is detected, suggest `/science:compare-hypotheses` to force consideration of alternatives.
 4. If confounding is detected and no causal DAG exists, suggest `/science:sketch-model`.
-5. Offer to create tasks for the recommended mitigations via `science-tool tasks add`.
+5. Offer to create tasks for the recommended mitigations via `science tasks add`.
 6. Commit: `git add -A && git commit -m "doc: bias audit <slug>"`
 
 ## Process Reflection
@@ -128,7 +128,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:bias-audit" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

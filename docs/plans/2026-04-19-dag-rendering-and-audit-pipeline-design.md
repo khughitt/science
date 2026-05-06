@@ -13,7 +13,7 @@
 ## Goal
 
 Lift mm30's **evidence-curated DAG rendering + audit machinery** into
-`science-tool` so any `research`-profile project gets:
+`science` so any `research`-profile project gets:
 
 1. YAML-driven visual DAG rendering with honest two-axis evidence encoding
    (replication strength × identification strength).
@@ -62,15 +62,15 @@ stack from scratch.
 
 ## Scope — What Lifts
 
-### Upstream (`science-tool dag` subcommand family)
+### Upstream (`science dag` subcommand family)
 
 ```
-science-tool dag render    [--dag <slug>] [--project <path>]
-science-tool dag number    [--dag <slug>] [--force-stubs]
-science-tool dag staleness [--stale-days 28] [--recent-days 28] [--json]
-science-tool dag audit     [--json]                           # READ-ONLY by default
-science-tool dag audit     --fix                              # opens review tasks, proposes YAML edits
-science-tool dag init      <slug> --label <LABEL>             # scaffolds .dot + empty edges.yaml
+science dag render    [--dag <slug>] [--project <path>]
+science dag number    [--dag <slug>] [--force-stubs]
+science dag staleness [--stale-days 28] [--recent-days 28] [--json]
+science dag audit     [--json]                           # READ-ONLY by default
+science dag audit     --fix                              # opens review tasks, proposes YAML edits
+science dag init      <slug> --label <LABEL>             # scaffolds .dot + empty edges.yaml
 ```
 
 `dag render` / `dag number` / `dag staleness` each wrap an
@@ -203,7 +203,7 @@ also honest; both require very different reactions from the reader.
 `caveats` is a free-form structured field (list of strings); the
 rendering layer optionally surfaces them as edge-label footnotes.
 `eliminated_by` is required iff `edge_status == eliminated`; every
-entry must resolve via `science-tool refs check` (see §"Reference
+entry must resolve via `science refs check` (see §"Reference
 schema" below).
 
 **4. Default policy for missing axes.**
@@ -254,7 +254,7 @@ exactly one "kind" tag (the ref type) plus a required `description`:
 - Exactly one kind tag per entry. Zero tags or multiple tags → error.
 - `description` is required on every entry.
 - Internal refs (task / interpretation / discussion / proposition) must
-  resolve via `science-tool refs check`:
+  resolve via `science refs check`:
   - `task:` → exists in `tasks/active.md` or `tasks/done/*.md`.
   - `interpretation:` / `discussion:` → exists in the corresponding
     `doc/` subdirectory.
@@ -306,7 +306,7 @@ Legend subgraph auto-injected into every `<slug>-auto.png`.
 ### Staleness audit
 
 ```bash
-science-tool dag staleness [--recent-days 28] [--json]
+science dag staleness [--recent-days 28] [--json]
 ```
 
 Reads `tasks/done/*.md` + `tasks/active.md` (frontmatter headers
@@ -405,7 +405,7 @@ description: Audit causal DAG freshness — run staleness check, re-render
 ```
 
 Workflow:
-1. Run `science-tool dag audit --json` — read-only structured report.
+1. Run `science dag audit --json` — read-only structured report.
 2. Present the four finding classes separately:
    - **Drifted edges** (evidence freshness) — new evidence has landed
      since the edge's newest cited task.
@@ -419,9 +419,9 @@ Workflow:
 3. For each drifted edge, the skill checks if the candidate drift
    task(s) cite the source/target/hypothesis in a way that supports a
    concrete YAML update. If yes: propose the edit. If unclear: propose
-   a review task. The skill does NOT call `science-tool dag audit
+   a review task. The skill does NOT call `science dag audit
    --fix` without explicit user confirmation.
-4. On user approval, invoke `science-tool dag audit --fix` (or the
+4. On user approval, invoke `science dag audit --fix` (or the
    individual mutation commands — `tasks add`, YAML edits) and
    commit with `doc: refresh DAGs (<slug> + <slug> + ...)`.
 
@@ -441,14 +441,14 @@ doc/inquiries/<slug>.md         # narrative description (authoritative)
          ↓  (manual)
 doc/figures/dags/<slug>.dot     # topology                      ─┐
 doc/figures/dags/<slug>.edges.yaml  # evidence annotations      ─┤  project-local
-         ↓  (science-tool dag render)                            ├  render layer
+         ↓  (science dag render)                            ├  render layer
 doc/figures/dags/<slug>-auto.png                                ─┘
-         ↕  (science-tool graph sync-dag — future)
+         ↕  (science graph sync-dag — future)
 knowledge/graph.trig            # canonical triples (phase4b)     upstream SoT
 ```
 
 Phase 1+3 of this spec stays at the "render layer" side. A future
-`science-tool graph sync-dag` bridges the two (reading edge_status
+`science graph sync-dag` bridges the two (reading edge_status
 / identification / posterior / eliminated_by from the triples and
 emitting edges.yaml, or vice versa). That bridging is the natural
 consumer of the Phase 2 JSON-schema.
@@ -476,14 +476,14 @@ dag:
 
 **Update `doc/figures/dags/README.md`:**
 - Replace the "Regenerate" section's three `uv run ... python <script>.py`
-  commands with `science-tool dag render`.
-- Replace the "Staleness audit" section with `science-tool dag staleness`.
+  commands with `science dag render`.
+- Replace the "Staleness audit" section with `science dag staleness`.
 - Keep the `.dot` and `.edges.yaml` files unchanged (they are now the
   upstream-consumed data).
 
 ### Behavioural invariant
 
-Running `science-tool dag render` on the current mm30 state MUST
+Running `science dag render` on the current mm30 state MUST
 produce byte-identical `<slug>-auto.dot` output to the current local
 scripts for all 4 DAGs. `<slug>-auto.png` output must render without
 error and pass the structural invariants defined in §"Acceptance
@@ -492,15 +492,15 @@ but is NOT required to be byte-identical across graphviz versions.
 
 ### Rollout
 
-1. Land Phase 1 (CLI subcommands) in `science-tool` with the mm30
-   DAGs as the fixture in `science-tool/tests/dag/fixtures/`.
+1. Land Phase 1 (CLI subcommands) in `science` with the mm30
+   DAGs as the fixture in `science/tests/dag/fixtures/`.
 2. Run the acceptance test: `.dot` byte-identity + `.png` structural
    invariants + ref-schema fail-fast checks.
 3. Open mm30 PR that deletes the three local scripts, adds the `dag:`
    block to `science.yaml`, and backfills explicit `identification:
    none` on edges where the axis was previously absent.
-4. Land Phase 3 (skill + cadence) in `science-tool` + `science/skills`.
-5. Announce in `science-tool`'s changelog + link from `references/`
+4. Land Phase 3 (skill + cadence) in `science` + `science/skills`.
+5. Announce in `science`'s changelog + link from `references/`
    (see next section).
 
 ## Documentation
@@ -522,13 +522,13 @@ explaining:
 ## Out of Scope (Phase 2 follow-ups)
 
 - JSON-schema validation of the edges.yaml file
-  (`science-tool dag validate`).
-- `science-tool graph sync-dag` — bidirectional bridge between graph
+  (`science dag validate`).
+- `science graph sync-dag` — bidirectional bridge between graph
   triples and edges.yaml.
 - HTML / pyvis / cytoscape.js interactive rendering
-  (`science-tool dag render --html`).
+  (`science dag render --html`).
 - Mermaid / d2 alternative renderers.
-- `science-tool dag init` advanced scaffolding (more than dot + empty
+- `science dag init` advanced scaffolding (more than dot + empty
   yaml stubs).
 
 ## Out of Scope (Phase 4 follow-ups)
@@ -562,7 +562,7 @@ deterministic signal.
 ## Acceptance Criteria
 
 1. **`.dot` byte-identity + `.png` structural invariants.**
-   `science-tool dag render` on the mm30 fixture set produces
+   `science dag render` on the mm30 fixture set produces
    byte-identical `-auto.dot` output vs the local `_render_styled.py`
    (text is deterministic). The `-auto.png` output is NOT required
    to be byte-identical (PNG bytes depend on graphviz version,
@@ -577,7 +577,7 @@ deterministic signal.
    - Optional: perceptual-diff comparison against a reference PNG
      with a tolerance threshold; only required if the test container
      pins the graphviz version.
-2. `science-tool dag staleness --json` on the mm30 repo produces a
+2. `science dag staleness --json` on the mm30 repo produces a
    JSON report whose `drifted_edges` + `unpropagated_tasks` sections
    match the expected structure (schema-validated). Exact count
    equivalence is NOT required vs the local `_dag_staleness.py` —
@@ -607,7 +607,7 @@ deterministic signal.
 
 Resolved in this revision (no longer open):
 - ~~`eliminated_by` ref shape~~ — resolved in §"Reference schema"
-  (tagged one-kind-per-entry; `science-tool refs check` validates).
+  (tagged one-kind-per-entry; `science refs check` validates).
 - ~~`identification` default value~~ — resolved to `none`, not
   `observational`, to avoid converting missing curation into a
   positive evidentiary claim.
@@ -638,7 +638,7 @@ Still open:
 ## Implementation Sketch
 
 ```
-science-tool/src/science_tool/dag/
+science/src/science_tool/dag/
     __init__.py
     cli.py              # click subcommand group
     render.py           # lift from mm30 _render_styled.py
@@ -647,7 +647,7 @@ science-tool/src/science_tool/dag/
     schema.py           # Pydantic models (narrow v1; expand in Phase 2)
     paths.py            # science.yaml → dag_dir / tasks_dir discovery
 
-science-tool/tests/dag/
+science/tests/dag/
     fixtures/
         mm30-h1-prognosis.dot
         mm30-h1-prognosis.edges.yaml
@@ -665,7 +665,7 @@ well-factored, so most of the lift is moving files and updating paths.
 
 ## Summary
 
-This spec lifts mm30's proven render + audit stack into `science-tool`
+This spec lifts mm30's proven render + audit stack into `science`
 as a `dag` subcommand group, amends the existing 2026-04-17 edge-status
 spec to add `eliminated` as a fifth enum value (with graph-layer storage
 deferred to Phase 2 `sync-dag`), adds the `identification` sibling axis
@@ -686,7 +686,7 @@ maintenance.
   across graphviz versions.
 - **Tagged-ref schema** formalizes `data_support` / `lit_support` /
   `eliminated_by` entries; all internal refs validated by
-  `science-tool refs check`.
+  `science refs check`.
 - **`--json` output is v1** for `dag staleness` / `dag audit`, not a
   follow-up.
 

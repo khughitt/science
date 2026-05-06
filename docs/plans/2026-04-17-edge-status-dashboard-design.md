@@ -9,8 +9,8 @@ storage for `eliminated` (the `sci:eliminatedBy` predicate) and for the sibling
 `identification` axis introduced by the 2026-04-19 spec is **deferred to Phase 2
 `sync-dag`**. Until then, `--edge-status-distribution` and `--edge-status-trend`
 may show 0 for `eliminated` on projects that haven't yet run `sync-dag`; the YAML
-layer is authoritative during that window (see `science-tool dag render` /
-`science-tool dag staleness` for YAML-backed equivalents).
+layer is authoritative during that window (see `science dag render` /
+`science dag staleness` for YAML-backed equivalents).
 
 ## Problem
 
@@ -22,11 +22,11 @@ distribution over time would show whether evidence is moving uphill
 (`tentative → supported`) or whether new speculation is accumulating faster
 than old speculation is resolved.
 
-`science-tool graph dashboard-summary` does not surface this today, even
+`science graph dashboard-summary` does not surface this today, even
 though much of the source data is already in the graph (the rest is blocked
 on the user's "partially migrated" claim-evidence state).
 
-The status enum itself looks broadly reusable — if science-tool adopts it
+The status enum itself looks broadly reusable — if science adopts it
 as a convention, other projects get the dashboard for free.
 
 ## Status enum
@@ -58,7 +58,7 @@ only after a confirmation pass.
 
 ## Surface
 
-Extend `science-tool graph dashboard-summary` with three new sections, each
+Extend `science graph dashboard-summary` with three new sections, each
 opt-in via flags so existing callers are unaffected:
 
 ### `--edge-status-distribution`

@@ -12,19 +12,19 @@
 
 ### Create
 
-- `science-tool/tests/test_validate_hook_points.py` — exercises each hook point fires once, in order, and that `post_validation` fires on both success and failure paths.
+- `science/tests/test_validate_hook_points.py` — exercises each hook point fires once, in order, and that `post_validation` fires on both success and failure paths.
 
 ### Modify
 
-- `science-tool/src/science_tool/project_artifacts/data/validate.sh` — insert three dispatch points; pre-validation right before section 1; extra-checks right before the summary banner; post-validation via `trap '...' EXIT` set after the sidecar source.
-- `science-tool/src/science_tool/project_artifacts/registry.yaml` — bump `version`, recompute `current_hash`, move old hash into `previous_hashes`, append `migrations` entry, append changelog entry, update `extension_protocol.contract` enumerating the three hook points.
+- `science/src/science_tool/project_artifacts/data/validate.sh` — insert three dispatch points; pre-validation right before section 1; extra-checks right before the summary banner; post-validation via `trap '...' EXIT` set after the sidecar source.
+- `science/src/science_tool/project_artifacts/registry.yaml` — bump `version`, recompute `current_hash`, move old hash into `previous_hashes`, append `migrations` entry, append changelog entry, update `extension_protocol.contract` enumerating the three hook points.
 
 ### Tests already in place that must continue passing
 
-- `science-tool/tests/test_initial_validate_sh.py` — header + body integrity.
-- `science-tool/tests/test_first_version_bump.py` — registry shape (must update assertion for new version).
-- `science-tool/tests/test_extensions_validate_hooks.py` — Task 27 hook-infrastructure tests.
-- `science-tool/tests/test_acceptance_managed_artifacts.py` — full lifecycle + shim equivalence.
+- `science/tests/test_initial_validate_sh.py` — header + body integrity.
+- `science/tests/test_first_version_bump.py` — registry shape (must update assertion for new version).
+- `science/tests/test_extensions_validate_hooks.py` — Task 27 hook-infrastructure tests.
+- `science/tests/test_acceptance_managed_artifacts.py` — full lifecycle + shim equivalence.
 
 ---
 
@@ -48,7 +48,7 @@ Phases run sequentially. Each ends in commits and a passing test suite.
 ### Task 1: Insert three hook dispatch points
 
 **Files:**
-- Modify: `science-tool/src/science_tool/project_artifacts/data/validate.sh`
+- Modify: `science/src/science_tool/project_artifacts/data/validate.sh`
 
 This task does NOT bump the version yet (Task 2 does that, after the new body hash is computable). For the duration of this task the registry's `current_hash` will mismatch the canonical body hash; that's expected and acknowledged by the test in Step 5 below.
 
@@ -62,16 +62,16 @@ The canonical's structure is stable enough to locate by markers:
 Verify each marker is unique (the script only has one banner, one summary, one sidecar-source block):
 
 ```bash
-grep -n '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' science-tool/src/science_tool/project_artifacts/data/validate.sh
-grep -n '# ─── Summary' science-tool/src/science_tool/project_artifacts/data/validate.sh
-grep -n 'source "validate.local.sh"' science-tool/src/science_tool/project_artifacts/data/validate.sh
+grep -n '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' science/src/science_tool/project_artifacts/data/validate.sh
+grep -n '# ─── Summary' science/src/science_tool/project_artifacts/data/validate.sh
+grep -n 'source "validate.local.sh"' science/src/science_tool/project_artifacts/data/validate.sh
 ```
 
 Each should return either one match or a small fixed number that the patch script disambiguates by surrounding context.
 
 - [ ] **Step 2: Write the failing test**
 
-Create `science-tool/tests/test_validate_hook_points.py`:
+Create `science/tests/test_validate_hook_points.py`:
 
 ```python
 """Hook dispatch points exist in the canonical and fire in the documented order."""
@@ -135,14 +135,14 @@ def test_post_validation_trap_set_after_sidecar_source() -> None:
 - [ ] **Step 3: Run test to verify it fails**
 
 ```
-uv run --project science-tool pytest science-tool/tests/test_validate_hook_points.py -v
+uv run --project science pytest science/tests/test_validate_hook_points.py -v
 ```
 
 Expected: 6 failures (the dispatch sites and trap don't exist yet).
 
 - [ ] **Step 4: Apply the three insertions**
 
-Edit `science-tool/src/science_tool/project_artifacts/data/validate.sh` to add:
+Edit `science/src/science_tool/project_artifacts/data/validate.sh` to add:
 
 **(a) After the sidecar-source block, before `# === canonical body ===`:**
 
@@ -174,7 +174,7 @@ dispatch_hook "extra_checks"
 - [ ] **Step 5: Run the new test to verify it passes**
 
 ```
-uv run --project science-tool pytest science-tool/tests/test_validate_hook_points.py -v
+uv run --project science pytest science/tests/test_validate_hook_points.py -v
 ```
 
 Expected: 6 passed.
@@ -184,8 +184,8 @@ The body-hash-mismatch test in `test_initial_validate_sh.py::test_current_hash_m
 - [ ] **Step 6: Quality gates (no commit yet — Task 2 commits both phases together)**
 
 ```
-uv run --project science-tool ruff check science-tool/tests/test_validate_hook_points.py
-uv run --project science-tool ruff format science-tool/tests/test_validate_hook_points.py
+uv run --project science ruff check science/tests/test_validate_hook_points.py
+uv run --project science ruff format science/tests/test_validate_hook_points.py
 ```
 
 Expected: clean.
@@ -212,7 +212,7 @@ touch AGENTS.md CLAUDE.md
 mkdir -p doc specs tasks knowledge src
 echo "<!-- tasks -->" > tasks/active.md
 
-bash /mnt/ssd/Dropbox/science/science-tool/src/science_tool/project_artifacts/data/validate.sh
+bash /mnt/ssd/Dropbox/science/science/src/science_tool/project_artifacts/data/validate.sh
 echo "exit code: $?"
 ```
 
@@ -225,9 +225,9 @@ Expected: a normal validate.sh run (may emit warnings on a minimal project — t
 ### Task 2: Bump version 2026.04.26.1 → 2026.04.26.2
 
 **Files:**
-- Modify: `science-tool/src/science_tool/project_artifacts/data/validate.sh` (header version + hash)
-- Modify: `science-tool/src/science_tool/project_artifacts/registry.yaml`
-- Modify: `science-tool/tests/test_first_version_bump.py` (assertion update for new version)
+- Modify: `science/src/science_tool/project_artifacts/data/validate.sh` (header version + hash)
+- Modify: `science/src/science_tool/project_artifacts/registry.yaml`
+- Modify: `science/tests/test_first_version_bump.py` (assertion update for new version)
 
 This task is the dogfood: the registry workflow itself is exercised on its own canonical.
 
@@ -241,7 +241,7 @@ import re
 from science_tool.project_artifacts.hashing import body_hash
 from science_tool.project_artifacts.registry_schema import HeaderKind, HeaderProtocol
 
-p = Path("science-tool/src/science_tool/project_artifacts/data/validate.sh")
+p = Path("science/src/science_tool/project_artifacts/data/validate.sh")
 proto = HeaderProtocol(kind=HeaderKind.SHEBANG_COMMENT, comment_prefix="#")
 raw = p.read_bytes()
 new_hash = body_hash(raw, proto)
@@ -267,7 +267,7 @@ Capture the printed hash; you'll paste it into the registry next.
 
 - [ ] **Step 2: Update `registry.yaml`**
 
-Edit `science-tool/src/science_tool/project_artifacts/registry.yaml`:
+Edit `science/src/science_tool/project_artifacts/registry.yaml`:
 
 - Move the existing `current_hash` (the v2026.04.26.1 hash, currently `31ca36b395f4714842b2263844fe924f73ce1bb922bc3fb002ee6dc25d5ed8f4`) into a new entry in `previous_hashes`:
 
@@ -341,12 +341,12 @@ def test_byte_replace_migration_recorded() -> None:
 - [ ] **Step 4: Run all version-related and integrity tests**
 
 ```
-uv run --project science-tool pytest \
-  science-tool/tests/test_initial_validate_sh.py \
-  science-tool/tests/test_first_version_bump.py \
-  science-tool/tests/test_validate_hook_points.py \
-  science-tool/tests/test_extensions_validate_hooks.py \
-  science-tool/tests/test_registry_loader.py \
+uv run --project science pytest \
+  science/tests/test_initial_validate_sh.py \
+  science/tests/test_first_version_bump.py \
+  science/tests/test_validate_hook_points.py \
+  science/tests/test_extensions_validate_hooks.py \
+  science/tests/test_registry_loader.py \
   -v
 ```
 
@@ -355,9 +355,9 @@ Expected: all green.
 - [ ] **Step 5: Quality gates**
 
 ```
-uv run --project science-tool ruff check science-tool/
-uv run --project science-tool ruff format science-tool/
-uv run --project science-tool pyright science-tool/src/science_tool/project_artifacts/
+uv run --project science ruff check science/
+uv run --project science ruff format science/
+uv run --project science pyright science/src/science_tool/project_artifacts/
 ```
 
 Expected: clean.
@@ -365,10 +365,10 @@ Expected: clean.
 - [ ] **Step 6: Commit (Task 1 + Task 2 together; the two are atomically meaningful)**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/data/validate.sh \
-        science-tool/src/science_tool/project_artifacts/registry.yaml \
-        science-tool/tests/test_validate_hook_points.py \
-        science-tool/tests/test_first_version_bump.py
+git add science/src/science_tool/project_artifacts/data/validate.sh \
+        science/src/science_tool/project_artifacts/registry.yaml \
+        science/tests/test_validate_hook_points.py \
+        science/tests/test_first_version_bump.py
 git commit -m "feat(project-artifacts): version bump 2026.04.26.1 -> 2026.04.26.2 (hook dispatch)
 
 Adds three named hook dispatch points to the canonical:
@@ -391,7 +391,7 @@ Per docs/superpowers/specs/2026-04-27-validate-hook-points.md."
 ### Task 3: End-to-end hook lifecycle test
 
 **Files:**
-- Create / extend: `science-tool/tests/test_validate_hook_points.py` (the file from Task 1; this task adds the integration test).
+- Create / extend: `science/tests/test_validate_hook_points.py` (the file from Task 1; this task adds the integration test).
 
 This task executes the canonical against a synthetic project with a sidecar that registers one hook per dispatch point and proves all three fire, in order, including on failure paths.
 
@@ -523,7 +523,7 @@ def test_multiple_hooks_per_point_dispatch_in_registration_order(tmp_path: Path)
 - [ ] **Step 2: Run the new tests**
 
 ```
-uv run --project science-tool pytest science-tool/tests/test_validate_hook_points.py -v
+uv run --project science pytest science/tests/test_validate_hook_points.py -v
 ```
 
 Expected: 9 passed (6 from Task 1 + 3 new integration tests).
@@ -531,7 +531,7 @@ Expected: 9 passed (6 from Task 1 + 3 new integration tests).
 - [ ] **Step 3: Run the entire suite**
 
 ```
-uv run --project science-tool pytest --ignore=meta/tests 2>&1 | tail -10
+uv run --project science pytest --ignore=meta/tests 2>&1 | tail -10
 ```
 
 Expected: prior baseline (5 pre-existing failures) + new tests passing. No new failures.
@@ -539,10 +539,10 @@ Expected: prior baseline (5 pre-existing failures) + new tests passing. No new f
 - [ ] **Step 4: Quality gates + commit**
 
 ```bash
-uv run --project science-tool ruff check science-tool/tests/test_validate_hook_points.py
-uv run --project science-tool ruff format science-tool/tests/test_validate_hook_points.py
+uv run --project science ruff check science/tests/test_validate_hook_points.py
+uv run --project science ruff format science/tests/test_validate_hook_points.py
 
-git add science-tool/tests/test_validate_hook_points.py
+git add science/tests/test_validate_hook_points.py
 git commit -m "test(project-artifacts): end-to-end hook dispatch contract
 
 Exercises the three hook points (pre_validation / extra_checks /
@@ -598,7 +598,7 @@ managed-artifacts implementation."
 - **Quality gates.** `ruff check` + `ruff format` + `pyright` clean before each commit.
 - **No legacy compat.** No "support both old and new" branches; the canonical body simply gains three lines and one trap.
 - **Type hints required** on Python; modern style (`X | None`, `list[X]`).
-- **`uv run --project science-tool`** from repo root for all Python invocations.
+- **`uv run --project science`** from repo root for all Python invocations.
 
 ---
 

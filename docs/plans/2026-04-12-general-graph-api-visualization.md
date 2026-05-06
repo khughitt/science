@@ -2,20 +2,20 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Build a reusable `science-tool` JSON graph export with typed `causal` and `evidence` overlays, then make the existing dashboard graph explorer consume that shared contract.
+**Goal:** Build a reusable `science` JSON graph export with typed `causal` and `evidence` overlays, then make the existing dashboard graph explorer consume that shared contract.
 
-**Architecture:** `science-tool` owns the base graph payload and overlay semantics. The dashboard reuses that payload on its existing project graph route and keeps ownership of renderer-specific visual encoding and interaction behavior.
+**Architecture:** `science` owns the base graph payload and overlay semantics. The dashboard reuses that payload on its existing project graph route and keeps ownership of renderer-specific visual encoding and interaction behavior.
 
 **Tech Stack:** Python, Click, rdflib, FastAPI, Pydantic, React 19, TypeScript, Vite
 
 ---
 
-### Task 1: Define Shared Export Types And Fixture Strategy In `science-tool`
+### Task 1: Define Shared Export Types And Fixture Strategy In `science`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/__init__.py`
-- Create: `science-tool/src/science_tool/graph/export_types.py`
-- Test: `science-tool/tests/test_graph_export.py`
+- Modify: `science/src/science_tool/graph/__init__.py`
+- Create: `science/src/science_tool/graph/export_types.py`
+- Test: `science/tests/test_graph_export.py`
 
 **Step 1: Write the failing test**
 
@@ -63,15 +63,15 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/export_types.py science-tool/src/science_tool/graph/__init__.py science-tool/tests/test_graph_export.py
+git add science/src/science_tool/graph/export_types.py science/src/science_tool/graph/__init__.py science/tests/test_graph_export.py
 git commit -m "feat: add graph export payload types"
 ```
 
 ### Task 2: Lock Stable ID And Scope Semantics
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/export_types.py`
-- Test: `science-tool/tests/test_graph_export.py`
+- Modify: `science/src/science_tool/graph/export_types.py`
+- Test: `science/tests/test_graph_export.py`
 
 **Step 1: Write the failing tests**
 
@@ -117,15 +117,15 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/export_types.py science-tool/tests/test_graph_export.py
+git add science/src/science_tool/graph/export_types.py science/tests/test_graph_export.py
 git commit -m "feat: define stable graph export ids and scopes"
 ```
 
 ### Task 3: Export Base Graph Nodes, Edges, Layers, And Scopes
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/store.py`
-- Test: `science-tool/tests/test_graph_export.py`
+- Modify: `science/src/science_tool/graph/store.py`
+- Test: `science/tests/test_graph_export.py`
 
 **Step 1: Write the failing test**
 
@@ -165,15 +165,15 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/store.py science-tool/tests/test_graph_export.py
+git add science/src/science_tool/graph/store.py science/tests/test_graph_export.py
 git commit -m "feat: add base graph export payload"
 ```
 
 ### Task 4: Add `causal` Overlay Export
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/store.py`
-- Test: `science-tool/tests/test_graph_export.py`
+- Modify: `science/src/science_tool/graph/store.py`
+- Test: `science/tests/test_graph_export.py`
 
 **Step 1: Write the failing test**
 
@@ -213,15 +213,15 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/store.py science-tool/tests/test_graph_export.py
+git add science/src/science_tool/graph/store.py science/tests/test_graph_export.py
 git commit -m "feat: add causal overlay to graph export"
 ```
 
 ### Task 5: Add Edge-Centric `evidence` Overlay Export
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/store.py`
-- Test: `science-tool/tests/test_graph_export.py`
+- Modify: `science/src/science_tool/graph/store.py`
+- Test: `science/tests/test_graph_export.py`
 
 **Step 1: Write the failing test**
 
@@ -270,15 +270,15 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/store.py science-tool/tests/test_graph_export.py
+git add science/src/science_tool/graph/store.py science/tests/test_graph_export.py
 git commit -m "feat: add evidence overlay to graph export"
 ```
 
-### Task 6: Add JSON CLI Export In `science-tool`
+### Task 6: Add JSON CLI Export In `science`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
-- Test: `science-tool/tests/test_graph_cli.py`
+- Modify: `science/src/science_tool/cli.py`
+- Test: `science/tests/test_graph_cli.py`
 
 **Step 1: Write the failing test**
 
@@ -318,7 +318,7 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/cli.py science-tool/tests/test_graph_cli.py
+git add science/src/science_tool/cli.py science/tests/test_graph_cli.py
 git commit -m "feat: add graph json export command"
 ```
 
@@ -349,7 +349,7 @@ Expected: FAIL because the backend still returns the old payload shape and does 
 **Step 3: Write minimal implementation**
 
 - Replace or wrap dashboard-local graph loading so it emits the shared payload shape.
-- Prefer importing the shared builder from `science-tool` rather than re-implementing semantics.
+- Prefer importing the shared builder from `science` rather than re-implementing semantics.
 - Preserve dashboard-local `lod`, `lens_values`, `style_values`, `encoding_metadata`, and `reference_date` handling as a post-processing step.
 - Keep the dashboard response additive: shared graph payload plus dashboard-owned visual fields.
 - Do not change the dashboard route in a way that requires the frontend to be updated in a separate broken commit.
@@ -417,7 +417,7 @@ git commit -m "test: cover dashboard graph migration regressions"
 
 **Files:**
 - Modify: `../dashboard/tests/test_store.py`
-- Modify: `science-tool/tests/test_graph_export.py`
+- Modify: `science/tests/test_graph_export.py`
 
 **Step 1: Write the failing integration test**
 
@@ -449,7 +449,7 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add ../dashboard/tests/test_store.py science-tool/tests/test_graph_export.py
+git add ../dashboard/tests/test_store.py science/tests/test_graph_export.py
 git commit -m "test: add shared graph export integration coverage"
 ```
 
@@ -596,8 +596,8 @@ git commit -m "feat: add typed evidence details to graph explorer"
 ### Task 13: Run End-To-End Verification And Clean Up
 
 **Files:**
-- Modify: `science-tool/tests/test_graph_export.py`
-- Modify: `science-tool/tests/test_graph_cli.py`
+- Modify: `science/tests/test_graph_export.py`
+- Modify: `science/tests/test_graph_cli.py`
 - Modify: `../dashboard/tests/test_api_projects.py`
 - Modify: `../dashboard/tests/test_store.py`
 
@@ -607,12 +607,12 @@ git commit -m "feat: add typed evidence details to graph explorer"
 - Keep tests focused on contract shape and critical semantics.
 - Ensure at least one test covers skipped broken claim refs and one covers inquiry-keyed causal overlay semantics.
 
-**Step 2: Run Python verification in `science-tool`**
+**Step 2: Run Python verification in `science`**
 
 Run:
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_graph_export.py tests/test_graph_cli.py tests/test_causal.py -q
 uv run --frozen ruff check src/science_tool/graph/store.py src/science_tool/graph/export_types.py src/science_tool/cli.py tests/test_graph_export.py tests/test_graph_cli.py tests/test_causal.py
 uv run --frozen ruff format --check src/science_tool/graph/store.py src/science_tool/graph/export_types.py src/science_tool/cli.py tests/test_graph_export.py tests/test_graph_cli.py tests/test_causal.py
@@ -656,12 +656,12 @@ Manual:
 During execution, keep `dashboard` backend and frontend contract changes in one coordinated local slice. Do not create a commit that breaks `dashboard/main` between backend and frontend updates.
 
 ```bash
-git add science-tool/src/science_tool/graph/export_types.py
-git add science-tool/src/science_tool/graph/store.py
-git add science-tool/src/science_tool/cli.py
-git add science-tool/tests/test_graph_export.py
-git add science-tool/tests/test_graph_cli.py
-git add science-tool/tests/test_causal.py
+git add science/src/science_tool/graph/export_types.py
+git add science/src/science_tool/graph/store.py
+git add science/src/science_tool/cli.py
+git add science/tests/test_graph_export.py
+git add science/tests/test_graph_cli.py
+git add science/tests/test_causal.py
 git add ../dashboard/backend/graph.py
 git add ../dashboard/backend/store.py
 git add ../dashboard/backend/routes/projects.py

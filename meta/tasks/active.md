@@ -41,7 +41,7 @@ The inline-dict form (`synthesized_from: [{hypothesis: "...", file: "...", sha: 
 
 Extend the validator (both `meta/validate.sh` and `scripts/validate.sh` per the lockstep convention) to warn (not error) when `synthesized_from:` items are inline-dict shape on a `report_kind: synthesis-rollup` file. Use the warn severity (matches surrounding validator conventions per the master rollout plan).
 
-Add a regression test in `science-tool/tests/test_validate_script.py` covering the inline-dict warn case + the block-list silent case + the absent-field skip case.
+Add a regression test in `science/tests/test_validate_script.py` covering the inline-dict warn case + the block-list silent case + the absent-field skip case.
 
 Surfaced by: `docs/audits/downstream-project-conventions/synthesis-shape-investigation-2026-04-25.md` Q2 resolution.
 
@@ -53,7 +53,7 @@ Surfaced by: `docs/audits/downstream-project-conventions/synthesis-shape-investi
 
 Land the long-term ideal articulated as Q5 in the 2026-04-25 synthesis-shape investigation: entity-id references become first-class citizens of the knowledge graph, and migrations become **declarative** rather than imperative. Concrete deliverables to scope when this lands:
 
-- `science-tool entity rename <old-id> <new-id>` as a primitive that rewrites every reference graph-wide (not regex-driven; uses the actual reference index).
+- `science entity rename <old-id> <new-id>` as a primitive that rewrites every reference graph-wide (not regex-driven; uses the actual reference index).
 - A declarative migration shape: "transition entity instances of kind K from shape S₀ to shape S₁" — a registry-like description that the tool can plan, dry-run, and apply, rather than ad-hoc Python scripts.
 - Composes WITH the managed-artifact system (per `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md` — to be written): managed-artifact version bumps that need entity-shape changes ride into the same declarative migration channel. The managed-artifact system is one delivery surface; entity-rename / declarative migrations are the other.
 
@@ -264,7 +264,7 @@ Candidate reasons from Batch 2: `source-unreliable`, `source-dependent`, `omissi
 Candidate reasons from Batch 3: `causal-sufficiency-assumption`, `latent-variable-risk`, `llm-prior-unvalidated`, `prior-data-disagreement`, `graph-object-ambiguous`, `self-incompatible`, `identification-missing`, `weak-prior-only`, `instrument-assumption-risk`, and `mediation-estimand-ambiguous`.
 Candidate reasons from Batch 4: `graph-posterior-uncertain`, `edge-inclusion-unstable`, `shared-structure-dependent`, `view-scope-mismatch`, `variational-approximation-risk`, `pseudo-likelihood-risk`, `clustering-unvalidated`, `selected-feature-unstable`, and `exploratory-integration-only`.
 
-Design how these reasons are recorded on evidence/synthesis artifacts and how `science-tool graph attention-sample` could incorporate them without using LLM-estimated probabilities.
+Design how these reasons are recorded on evidence/synthesis artifacts and how `science graph attention-sample` could incorporate them without using LLM-estimated probabilities.
 This should follow `[t022]` enough to avoid inventing a parallel schema.
 
 ## [t026] Causal synthesis guardrails

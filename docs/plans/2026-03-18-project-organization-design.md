@@ -446,7 +446,7 @@ The `science` repository should be updated so every layer agrees on the same mod
 - `commands/create-project.md`
 - `commands/import-project.md` or replacement migration command
 - `scripts/validate.sh`
-- `science-tool` path and structure assumptions
+- `science` path and structure assumptions
 - tests covering scaffolding, validation, and graph tooling
 - framework prompt/template resolution so defaults are referenced centrally and project `.ai/` directories are override-only
 

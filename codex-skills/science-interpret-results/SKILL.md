@@ -59,13 +59,14 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with <science-plugin-root>/science-tool science-tool <command>`
+   `uv run --with <science-plugin-root>/science science <command>`
 
 Interpret the results specified by the user input and update the project in a proposition/evidence-centric way.
 
@@ -86,7 +87,7 @@ Additionally:
 6. If an inquiry slug is involved, load it:
 
 ```bash
-uv run science-tool inquiry show "<slug>" --format json
+uv run science inquiry show "<slug>" --format json
 ```
 
 ## Input
@@ -231,7 +232,7 @@ Hypothesis-level summaries can be updated later as a secondary reflection of und
 After drafting the interpretation, run:
 
 ```bash
-science-tool health --project-root . --format json
+science health --project-root . --format json
 ```
 
 Call out any remaining:
@@ -244,21 +245,21 @@ Call out any remaining:
 After analyzing results, create structured entities in addition to the prose document:
 
 1. For each concrete empirical fact:
-   `science-tool graph add observation "<description>" --data-source <data-package-ref> --metric <what> --value <value>`
+   `science graph add observation "<description>" --data-source <data-package-ref> --metric <what> --value <value>`
 
 2. For each interpretive proposition:
-   `science-tool graph add proposition "<text>" --source <data-package-ref> --confidence <0-1>`
+   `science graph add proposition "<text>" --source <data-package-ref> --confidence <0-1>`
 
 3. For each observation that bears on a proposition:
-   `science-tool graph add evidence <observation-ref> <proposition-ref> --stance supports|disputes --strength strong|moderate|weak`
+   `science graph add evidence <observation-ref> <proposition-ref> --stance supports|disputes --strength strong|moderate|weak`
 
 4. Bundle into a finding:
-   `science-tool graph add finding "<summary>" --confidence moderate --proposition <ref> --observation <ref> --source <data-package-ref>`
+   `science graph add finding "<summary>" --confidence moderate --proposition <ref> --observation <ref> --source <data-package-ref>`
 
 5. Create the interpretation as a source-authored entity:
-   `science-tool interpretation create "<summary>" --input <data-package-ref> --related <finding-or-proposition-ref>`
+   `science interpretation create "<summary>" --input <data-package-ref> --related <finding-or-proposition-ref>`
 
-   This places the file under `doc/interpretations/<today>-<slug>.md` with canonical frontmatter and runs prospective validation. Prefer this over the older `science-tool graph add interpretation`, which still works but does not produce a durable source document.
+   This places the file under `doc/interpretations/<today>-<slug>.md` with canonical frontmatter and runs prospective validation. Prefer this over the older `science graph add interpretation`, which still works but does not produce a durable source document.
 
 ### 6. Surface New Questions
 
@@ -281,11 +282,11 @@ Propose changes to the task queue:
 When `knowledge/graph.trig` exists, prefer using:
 
 ```bash
-science-tool graph project-summary --format json
-science-tool graph question-summary --format json  # full by default; add --top to narrow
-science-tool graph inquiry-summary --format json
-science-tool graph dashboard-summary --format json
-science-tool graph neighborhood-summary --format json
+science graph project-summary --format json
+science graph question-summary --format json  # full by default; add --top to narrow
+science graph inquiry-summary --format json
+science graph dashboard-summary --format json
+science graph neighborhood-summary --format json
 ```
 
 to anchor the prioritization section, especially for:
@@ -313,10 +314,10 @@ Pick the template that matches the mode:
 
 If the project uses open questions rather than formal hypotheses, adapt section headers in the output document accordingly — e.g., "Question-Level Implications" instead of "Hypothesis-Level Implications". Evaluate against questions in `doc/questions/` rather than hypothesis files in `specs/hypotheses/`.
 
-Create the interpretation file with `science-tool interpretation create`:
+Create the interpretation file with `science interpretation create`:
 
 ```bash
-uv run science-tool interpretation create "<short title>" \
+uv run science interpretation create "<short title>" \
   --input <data-package-or-run-ref> \
   --related <hypothesis:hNN-...|question:qNN-...>
 ```
@@ -325,9 +326,9 @@ The tool builds the canonical `interpretation:<today>-<slug>` ID, places the fil
 
 ## After Writing
 
-1. Update relevant hypothesis documents with new support/dispute and uncertainty notes. For metadata changes use `science-tool hypothesis edit <ref> --status ...`; for body changes edit the file in place. Do not mechanically flip statuses to `supported` or `rejected`.
-2. **New questions surfaced:** create them with `science-tool question create "<text>" [--related <ref>] [--source-ref <ref>]`. To attach the new question to the interpretation, run `science-tool entity edit <interpretation-ref> --related <question-ref>`.
-3. Update tasks via `science-tool tasks`.
+1. Update relevant hypothesis documents with new support/dispute and uncertainty notes. For metadata changes use `science hypothesis edit <ref> --status ...`; for body changes edit the file in place. Do not mechanically flip statuses to `supported` or `rejected`.
+2. **New questions surfaced:** create them with `science question create "<text>" [--related <ref>] [--source-ref <ref>]`. To attach the new question to the interpretation, run `science entity edit <interpretation-ref> --related <question-ref>`.
+3. Update tasks via `science tasks`.
 Write durable result interpretations under `doc/interpretations/`, and when the findings change the project-level narrative or current state substantially, summarize that in `doc/reports/` as well.
 4. If graph updates were proposed, point the user to the exact proposition or evidence updates to make.
 5. If the project still lacks proposition-backed evidence summaries, say that it appears partially migrated and that interpretation quality is constrained by that gap.
@@ -345,7 +346,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:interpret-results" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

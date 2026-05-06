@@ -34,7 +34,7 @@ domain objects, and project-specific domain objects. These entities are usually
 authored as markdown/frontmatter or structured source records and then
 materialized into `knowledge/graph.trig`.
 
-There is already a `science-tool graph add ...` command family, but those
+There is already a `science graph add ...` command family, but those
 commands mutate the materialized graph directly. They are useful for graph-level
 experiments and legacy workflows, but they are not the right surface for routine
 project-source authoring because the durable source of truth is the project
@@ -46,7 +46,7 @@ entities.
 
 ## Goals
 
-- Add a generic `science-tool entity` CLI for source-authored project entities.
+- Add a generic `science entity` CLI for source-authored project entities.
 - Keep `knowledge/graph.trig` as a materialized artifact, not the write target
   for `entity create`.
 - Support a broader initial set of high-use authored entities:
@@ -59,10 +59,10 @@ entities.
   - `entity list`
   - `entity neighbors`
 - Add thin typed wrappers where they improve ergonomics:
-  - `science-tool question create ...`
-  - `science-tool hypothesis create ...`
-  - `science-tool discussion create ...`
-  - `science-tool interpretation create ...`
+  - `science question create ...`
+  - `science hypothesis create ...`
+  - `science discussion create ...`
+  - `science interpretation create ...`
 - Explicitly distinguish three entity classes:
   1. Science project/meta entities.
   2. Science domain entities.
@@ -87,7 +87,7 @@ entities.
 
 Current relevant pieces:
 
-- `science-tool graph add ...` has graph-level commands for concepts,
+- `science graph add ...` has graph-level commands for concepts,
   hypotheses, questions, propositions, findings, interpretations, discussions,
   stories, mechanisms, papers, and inquiry objects.
 - Those commands write RDF triples through `science_tool.graph.store`.
@@ -145,7 +145,7 @@ existing ontology/catalog term, the CLI should prefer linking/registering the
 existing authority rather than inventing a local `concept:*`.
 
 The first increment should reject `entity create concept ...` with guidance to
-use `science-tool graph add concept ...` for graph-level experiments or the
+use `science graph add concept ...` for graph-level experiments or the
 entity creation cookbook for source-authoring decisions. Full authority
 search/import is deferred.
 
@@ -175,23 +175,23 @@ structure and relations that require specialized writers.
 Generic commands:
 
 ```bash
-science-tool entity create <kind> <title> \
+science entity create <kind> <title> \
   [--id <kind:slug>] [--slug <slug>] [--path <path>] \
   [--status <status>] [--related <ref>] [--source-ref <ref>]
-science-tool entity show <ref> [--format table|json]
-science-tool entity edit <ref> [--title ...] [--status ...] [--related ...] [--source-ref ...]
-science-tool entity note <ref> <note> [--date YYYY-MM-DD]
-science-tool entity list [--kind <kind>] [--status <status>] [--format table|json]
-science-tool entity neighbors <ref> [--hops 1] [--format table|json]
+science entity show <ref> [--format table|json]
+science entity edit <ref> [--title ...] [--status ...] [--related ...] [--source-ref ...]
+science entity note <ref> <note> [--date YYYY-MM-DD]
+science entity list [--kind <kind>] [--status <status>] [--format table|json]
+science entity neighbors <ref> [--hops 1] [--format table|json]
 ```
 
 Typed wrappers:
 
 ```bash
-science-tool question create "<question text>" [--id question:q102-slug] [--slug slug] [--related hypothesis:h01]
-science-tool hypothesis create "<title>" [--id hypothesis:h08-slug] [--slug slug]
-science-tool discussion create "<title>" [--slug slug] [--focus question:q102-slug]
-science-tool interpretation create "<title>" [--slug slug] [--input results/path]
+science question create "<question text>" [--id question:q102-slug] [--slug slug] [--related hypothesis:h01]
+science hypothesis create "<title>" [--id hypothesis:h08-slug] [--slug slug]
+science discussion create "<title>" [--slug slug] [--focus question:q102-slug]
+science interpretation create "<title>" [--slug slug] [--input results/path]
 ```
 
 Typed wrappers call the same generic core. They should not duplicate writers or
@@ -213,10 +213,10 @@ rules in the validation section.
 Example round trip:
 
 ```bash
-science-tool question create "What explains model family overlap?"
-science-tool entity edit question:q102-what-explains-model-family-overlap --status open --related hypothesis:h01
-science-tool entity note question:q102-what-explains-model-family-overlap "This also touches the morphism taxonomy."
-science-tool entity show question:q102-what-explains-model-family-overlap
+science question create "What explains model family overlap?"
+science entity edit question:q102-what-explains-model-family-overlap --status open --related hypothesis:h01
+science entity note question:q102-what-explains-model-family-overlap "This also touches the morphism taxonomy."
+science entity show question:q102-what-explains-model-family-overlap
 ```
 
 Resulting file, assuming the next observed project question id is `q102`:
@@ -340,7 +340,7 @@ references.
 - destination path must not already exist
 
 For source-authored CLI commands, science domain `concept` creation is rejected
-in the MVP. Users should use `science-tool graph add concept ...` for
+in the MVP. Users should use `science graph add concept ...` for
 graph-level concept experiments, or wait for the deferred ontology-authority
 lookup/import path for durable source-authored domain entities.
 
@@ -671,7 +671,7 @@ for source authoring, not graph patching.
 For kinds now covered by source-authoring wrappers (`question`, `hypothesis`,
 `discussion`, `interpretation`), overlapping `graph add ...` commands become
 soft-deprecated: they still run, but their help text and success output should
-recommend `science-tool entity create ...` for durable source-authored project
+recommend `science entity create ...` for durable source-authored project
 work.
 
 Graph-only RDF records that already exist are not migrated in this increment.

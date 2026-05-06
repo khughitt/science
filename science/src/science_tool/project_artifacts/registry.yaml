@@ -1,0 +1,133 @@
+# science/src/science_tool/project_artifacts/registry.yaml
+# Managed-artifact registry — capabilities matrices.
+# See docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md.
+artifacts:
+  - name: validate.sh
+    source: data/validate.sh
+    install_target: validate.sh
+    description: Structural validation for Science research projects.
+    content_type: text
+    newline: lf
+    mode: '0755'
+    consumer: direct_execute
+    header_protocol:
+      kind: shebang_comment
+      comment_prefix: '#'
+    extension_protocol:
+      kind: sourced_sidecar
+      sidecar_path: validate.local.sh
+      hook_namespace: SCIENCE_VALIDATE_HOOKS
+      contract: |
+        Sidecar registers hooks via `register_validation_hook <hook> <fn>`.
+        Canonical sources sidecar BEFORE validation runs, then dispatches at:
+          - pre_validation: after helpers + banner, before section 1.
+          - extra_checks: after all canonical sections, before the summary.
+          - post_validation: at process exit (trap EXIT), regardless of pass/fail.
+        Hooks see all helpers and globals (PROFILE, ERRORS, WARNINGS).
+        See docs/superpowers/specs/2026-04-27-validate-hook-points.md.
+    mutation_policy:
+      requires_clean_worktree: true
+      commit_default: true
+      transaction_kind: temp_commit
+    version: '2026.05.06.1'
+    current_hash: 307203d98f48a4e5876a00446b7a94f5ac9bfb2283cd84a8fa87caca65967c21
+    previous_hashes:
+      - version: '2026.05.05.3'
+        hash: 0dda97dadb97646cc65e93efc198cd15c5bcc0ca0e3b1ef58c7ef4ce031461f1
+      - version: '2026.05.05.2'
+        hash: 2c1eb72eeeb2677d467063deeeb94f090b14f00502823b9da97d4fc66add39f7
+      - version: '2026.05.05.1'
+        hash: 10cb445c83844c0d76ffa7ed9afc8c0cbcae4a7439efaf3c13b395894eb2988b
+      - version: '2026.04.26'
+        hash: f4596de3e9b2696066097621d5aef5606f247d144c5530409433427949c830d1
+      - version: '2026.04.26.1'
+        hash: 31ca36b395f4714842b2263844fe924f73ce1bb922bc3fb002ee6dc25d5ed8f4
+      - version: '2026.04.26.2'
+        hash: 9d6a34869403411d42cefd0fb7f6a2e433320329d2e8f2da244c2171878eb136
+      - version: '2026.04.26.3'
+        hash: 37aaefd4a45a70987d663f261bc82f4b8714088999a3a2ef30a27af95b2d499a
+      - version: '2026.04.26.4'
+        hash: 79d1d8ae81457ac67f9fe3a588332630db9d589612d4888bf115395a6ffd4d4c
+      - version: '2026.04.26.5'
+        hash: 87b571ea042e804dee44fce39a1b3336e6c50be041d07ddc3c5c0a0c5389d2df
+      - version: '2026.05.03.1'
+        hash: a4f191308ca95899e096792a800b46f5d6df30f869728c31b30243d07b4a3ecf
+      - version: '2026.05.03.2'
+        hash: c0cf78f20e7f71b9c066fbb3d14cedcabf337e8351f774e39f5eb66370feefcd
+      - version: '2026.05.03.3'
+        hash: 80d6063276fcc8f511c9b0a08ef84d15761366246136ea31f09ab65d4270c5fd
+    migrations:
+      - from: '2026.04.26'
+        to: '2026.04.26.1'
+        kind: byte_replace
+        summary: 'Audit-surfaced six-fix batch (Plan #7).'
+        steps: []
+      - from: '2026.04.26.1'
+        to: '2026.04.26.2'
+        kind: byte_replace
+        summary: 'Add named hook dispatch points (pre_validation / extra_checks / post_validation).'
+        steps: []
+      - from: '2026.04.26.2'
+        to: '2026.04.26.3'
+        kind: byte_replace
+        summary: 'Task field check: type -> aspects (per 2026-04-19-entity-aspects-design.md).'
+        steps: []
+      - from: '2026.04.26.3'
+        to: '2026.04.26.4'
+        kind: byte_replace
+        summary: 'Keep xref warning counts in the parent shell.'
+        steps: []
+      - from: '2026.04.26.4'
+        to: '2026.04.26.5'
+        kind: byte_replace
+        summary: 'Resolve frontmatter cross-references against all root specs.'
+        steps: []
+      - from: '2026.04.26.5'
+        to: '2026.05.03.1'
+        kind: byte_replace
+        summary: 'Add Section 0 tooling-scaffold check (pyproject.toml, .env, uv-run smoke test).'
+        steps: []
+      - from: '2026.05.03.1'
+        to: '2026.05.03.2'
+        kind: byte_replace
+        summary: 'Add Section 5a: warn when review_state.review_horizon_days <= 0.'
+        steps: []
+      - from: '2026.05.03.2'
+        to: '2026.05.03.3'
+        kind: byte_replace
+        summary: 'Anchor Section 5a awk to YAML frontmatter; tab-tolerant exit pattern eliminates body-text false positives and tab-indented field skips.'
+        steps: []
+      - from: '2026.05.03.3'
+        to: '2026.05.05.1'
+        kind: byte_replace
+        summary: 'Strict task IDs, local task parent validation, and namespace-first cross-project reference checks.'
+        steps: []
+      - from: '2026.05.05.1'
+        to: '2026.05.05.2'
+        kind: byte_replace
+        summary: 'Add --strict / --help / proper arg parsing; strict_warn helper; extra ../../../science/science search candidate.'
+        steps: []
+      - from: '2026.05.05.2'
+        to: '2026.05.05.3'
+        kind: byte_replace
+        summary: 'Ignore task-like substrings inside non-task typed refs during task queue validation.'
+        steps: []
+      - from: '2026.05.05.3'
+        to: '2026.05.06.1'
+        kind: byte_replace
+        summary: 'Rename CLI binary `science` -> `science`; update resolver invocation, search candidates, and smoke test.'
+        steps: []
+    changelog:
+      '2026.04.26': Initial managed artifact (port of scripts/validate.sh + hook infrastructure).
+      '2026.04.26.1': 'Audit-surfaced six-fix batch (Plan #7 of conventions audit).'
+      '2026.04.26.2': 'Add named hook dispatch points; the sourced_sidecar extension protocol is now functional end-to-end.'
+      '2026.04.26.3': 'Replace deprecated `type:` task-field check with `aspects:` per 2026-04-19-entity-aspects-design.md.'
+      '2026.04.26.4': 'Keep frontmatter cross-reference warning counts in the parent shell.'
+      '2026.04.26.5': 'Resolve frontmatter cross-references against root specs as well as hypothesis specs.'
+      '2026.05.03.1': 'Add Section 0 tooling-scaffold check: warns when pyproject.toml is missing, lacks the science dev dep, or .env lacks SCIENCE_TOOL_PATH; runs a `uv run science --help` smoke test when uv is available.'
+      '2026.05.03.2': 'Add Section 5a: warn when review_state.review_horizon_days is present and <= 0 (Pydantic rejects at parse time; this surfaces the error earlier in the edit/validate loop).'
+      '2026.05.03.3': 'Harden Section 5a awk: anchor parsing to YAML frontmatter delimiters to prevent body-text false positives; extend exit pattern to match tab-indented lines so tab-indented fields are no longer silently skipped.'
+      '2026.05.05.1': 'Strict task IDs, local task parent validation, and namespace-first cross-project reference checks.'
+      '2026.05.05.2': 'Add --strict and --help flags with proper argument parsing (replaces positional VERBOSE="${1:-}"); introduces strict_warn helper for advisory checks (no callers yet — opt-in in follow-up); adds ../../../science/science search candidate for nested-repo layouts.'
+      '2026.05.05.3': 'Ignore task-like substrings inside non-task typed refs during task queue validation; task:* typed refs remain checked.'
+      '2026.05.06.1': 'Rename CLI binary from `science` to `science`. Resolver now invokes `uv run --project <path> science`, searches for `./science`, `../science`, etc., and the smoke test runs `uv run science --help`.'

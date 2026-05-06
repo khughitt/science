@@ -38,7 +38,7 @@ Completed in `managed-artifacts-followups`:
 
 2. **Whether `meta:` should be a canonical xref-skip prefix.** protein-landscape uses `meta:` as a project-level semantic-category prefix (e.g., `meta:methodological`, `meta:purity`). Canonical's xref check doesn't recognize it. Decision needed: (a) add `meta:` to canonical's skip list (treats it as a recognized framework concept) OR (b) leave canonical alone and have protein-landscape drop the convention OR (c) add a project-side xref-allowlist mechanism in the sidecar (would require a new hook point or a config knob in `science.yaml`). Recommend: discuss whether `meta:` is broadly useful as a framework concept before deciding.
 
-3. **`science-tool health` legacy-`type:` flag.** `docs/specs/2026-04-19-entity-aspects-design.md` says `science-tool health` should flag tasks still carrying legacy `type:` as "migration pending." Not implemented yet. None of the 4 reference projects have any `type:` tasks left, so no urgency, but the spec line is unfilled.
+3. **`science health` legacy-`type:` flag.** `docs/specs/2026-04-19-entity-aspects-design.md` says `science health` should flag tasks still carrying legacy `type:` as "migration pending." Not implemented yet. None of the 4 reference projects have any `type:` tasks left, so no urgency, but the spec line is unfilled.
 
 4. **TempCommitSnapshot's plan literal vs. shipped version.** The implementation plan `docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md` has example code for `TempCommitSnapshot.restore()` and `.discard()` that does not pass the plan's own tests. The shipped version (commit `5b5eeb5`, refined further by `fb9c1cd` for idempotency) is correct. Plan should be updated to match shipped behavior so future readers don't re-litigate. Pure documentation fix.
 
@@ -57,7 +57,7 @@ Each is the project's call. The migration was deliberately scoped to NOT fix the
 9. **natural-systems** — 5 errors / 82 warnings, plus a "Duplicate document roots" warning (has both `doc/` and `docs/`). Decide which is canonical and consolidate.
 
 10. **protein-landscape** — 1 error / 10+ warnings:
-    - **Real ERROR**: `graph audit produced unparseable output`. The pre-migration `extract_json_payload` workaround was masking this. Triage: probably science-tool's graph-audit emitting deprecation warnings before JSON. Either fix science-tool's stdout cleanliness (framework-side, would benefit all projects) OR re-add a defensive parser as a hook (project-side workaround).
+    - **Real ERROR**: `graph audit produced unparseable output`. The pre-migration `extract_json_payload` workaround was masking this. Triage: probably science's graph-audit emitting deprecation warnings before JSON. Either fix science's stdout cleanliness (framework-side, would benefit all projects) OR re-add a defensive parser as a hook (project-side workaround).
     - **`meta:` xref decision** (~224 warns, see follow-up 2 above).
     - **`workflow/Snakefile` decision**: framework convention says collapse `workflow/` into `code/`. Either restructure to `code/workflow/Snakefile` (clean, follows convention) or accept the warn (legitimate Snakemake convention divergence).
 
@@ -75,7 +75,7 @@ If picking up later, suggested priority:
 
 1. **(7)** mm30 lint cleanup — smallest project, exercises post-migration lint-fixing flow.
 2. **(1)** Fix `warn`-in-subshell counter loss — cheap, broadly impactful (every project's summary becomes accurate).
-3. **(10a)** Investigate and fix the science-tool graph-audit dirty-JSON issue — protein-landscape's only real ERROR; likely benefits all projects.
+3. **(10a)** Investigate and fix the science graph-audit dirty-JSON issue — protein-landscape's only real ERROR; likely benefits all projects.
 4. **(2)** Decide on `meta:` xref handling.
 5. **(8, 9, 10b, 10c)** Other project-side lint cleanup, on each project's own schedule.
 6. **(4, 5, 6, 11)** Documentation and convention follow-ups; low-priority polish.

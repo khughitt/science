@@ -17,7 +17,7 @@ Files modified:
 - `templates/hypothesis.md` — add `phase: "active"` to frontmatter; insert "Promotion criteria" section between "Falsifiability" and "Supporting Evidence".
 - `scripts/validate.sh` — add a phase-value check to the existing hypothesis loop (around line 290-310).
 - `commands/big-picture.md` — update Phase 1 (note that bundle includes phase), Phase 3 (add "Candidate frames" body section to rollup, partition the Arc/Research-fronts).
-- `science-tool/tests/test_validate_script.py` — add tests for the new phase rule.
+- `science/tests/test_validate_script.py` — add tests for the new phase rule.
 
 No new files. No file splits. No restructuring.
 
@@ -100,13 +100,13 @@ git commit -m "feat(templates): add phase field and Promotion criteria section t
 ## Task 2: Write failing test for `phase:` validation
 
 **Files:**
-- Modify: `science-tool/tests/test_validate_script.py`
+- Modify: `science/tests/test_validate_script.py`
 
 The bash validator is exercised end-to-end via `subprocess.run(["bash", validate.sh])` in this file. We add tests that build a minimal research-profile project, drop a hypothesis file with various `phase:` values into `specs/hypotheses/`, run the validator, and assert on the warning output.
 
 - [ ] **Step 1: Read the bottom of the test file to see existing fixture patterns**
 
-Run: `tail -100 science-tool/tests/test_validate_script.py`
+Run: `tail -100 science/tests/test_validate_script.py`
 Expected: see existing tests that use `_write_common_files`, `_write_python3_stub`, `_write_science_tool_stub` to set up a tmp_path project, then `subprocess.run` the script.
 
 - [ ] **Step 2: Add helper for writing a hypothesis file**
@@ -253,14 +253,14 @@ def test_validate_warns_on_invalid_phase_value(tmp_path: Path) -> None:
 
 Run:
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_validate_script.py -k "phase" -v
+cd science && uv run --frozen pytest tests/test_validate_script.py -k "phase" -v
 ```
 Expected: `test_validate_warns_on_invalid_phase_value` FAILS (the validator does not yet check `phase:`, so no "invalid phase" message appears). The three accept-* tests should PASS already (the absence of a warning is trivially true today). Confirm at least the failing case fails for the right reason ("invalid phase" not in output).
 
 - [ ] **Step 5: Commit the failing test**
 
 ```bash
-git add science-tool/tests/test_validate_script.py
+git add science/tests/test_validate_script.py
 git commit -m "test(validate): add tests for hypothesis phase frontmatter validation"
 ```
 
@@ -314,7 +314,7 @@ fi
 
 Run:
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_validate_script.py -k "phase" -v
+cd science && uv run --frozen pytest tests/test_validate_script.py -k "phase" -v
 ```
 Expected: all four `*phase*` tests PASS — the warning fires only when an invalid value is present, never when the value is `active`, `candidate`, or absent.
 
@@ -322,7 +322,7 @@ Expected: all four `*phase*` tests PASS — the warning fires only when an inval
 
 Run:
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_validate_script.py -v
+cd science && uv run --frozen pytest tests/test_validate_script.py -v
 ```
 Expected: all tests pass.
 
@@ -420,11 +420,11 @@ bash scripts/validate.sh --verbose 2>&1 | tail -40
 ```
 Expected: no new errors or warnings introduced by these changes. The bottom-line summary should be unchanged from a pre-change run modulo new informational lines.
 
-- [ ] **Step 2: Run the full science-tool test suite**
+- [ ] **Step 2: Run the full science test suite**
 
 Run:
 ```bash
-cd science-tool && uv run --frozen pytest -x
+cd science && uv run --frozen pytest -x
 ```
 Expected: all tests pass.
 

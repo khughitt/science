@@ -224,7 +224,7 @@ Add tests for the new ontology:
 - `test_<ontology>_curie_prefixes` — key entity types have non-empty
   `curie_prefixes` lists
 
-**Modify:** `science-tool/tests/test_ontology_suggest.py`
+**Modify:** `science/tests/test_ontology_suggest.py`
 
 Add tests for the new ontology's suggestion triggers:
 - `test_suggests_<ontology>_for_curie_prefixes` — entity with a domain-specific
@@ -234,7 +234,7 @@ Add tests for the new ontology's suggestion triggers:
 - `test_no_suggestions_when_<ontology>_declared` — no suggestion fires when
   ontology is declared in `science.yaml`
 
-**Gate:** `uv run --frozen pytest science-model/tests/test_ontologies.py science-tool/tests/test_ontology_suggest.py -v`
+**Gate:** `uv run --frozen pytest science-model/tests/test_ontologies.py science/tests/test_ontology_suggest.py -v`
 
 All tests pass.
 
@@ -252,7 +252,7 @@ knowledge_profiles:
 
 Create a few test entities using the new ontology's entity types and verify:
 
-1. `science-tool graph build` completes without error
+1. `science graph build` completes without error
 2. Entities with ontology-typed kinds get `profile: "<ontology>"`
 3. No "unknown kind" warnings for declared ontology types
 4. Suggestion mechanism fires correctly for undeclared usage (remove the
@@ -288,10 +288,10 @@ Create a few test entities using the new ontology's entity types and verify:
 | Ontology registry | `science-model/src/science_model/ontologies/registry.yaml` |
 | Biology catalog (example) | `science-model/src/science_model/ontologies/biology/catalog.yaml` |
 | Biology extraction script (example) | `scripts/extract_biology_catalog.py` |
-| Entity source loading & profile routing | `science-tool/src/science_tool/graph/sources.py` |
-| Ontology suggestion mechanism | `science-tool/src/science_tool/graph/suggest.py` |
-| Graph materialization | `science-tool/src/science_tool/graph/materialize.py` |
+| Entity source loading & profile routing | `science/src/science_tool/graph/sources.py` |
+| Ontology suggestion mechanism | `science/src/science_tool/graph/suggest.py` |
+| Graph materialization | `science/src/science_tool/graph/materialize.py` |
 | Ontology tests | `science-model/tests/test_ontologies.py` |
-| Suggestion tests | `science-tool/tests/test_ontology_suggest.py` |
+| Suggestion tests | `science/tests/test_ontology_suggest.py` |
 | Project manifest schema | `references/science-yaml-schema.md` |
 | Design spec (biology, example) | `docs/specs/2026-03-24-ontology-consumption-design.md` |

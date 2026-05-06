@@ -144,7 +144,7 @@ local `kind:slug` after the project namespace.
 Existing two-part federation examples such as `cbioportal:q014`,
 `multiple-myeloma:h003`, and `evolution:t012` are legacy shorthand and must be
 audited/migrated during implementation. Checked-in examples in
-`docs/federation.md` and `science-tool/tests/test_addressing.py` should either
+`docs/federation.md` and `science/tests/test_addressing.py` should either
 move to the three-part entity form or be explicitly labeled as legacy artifact
 addresses.
 
@@ -214,7 +214,7 @@ The migration should be explicit and small. Do not add a legacy alias layer for
 
 ## Implementation Surface
 
-- `science-tool/src/science_tool/tasks.py`
+- `science/src/science_tool/tasks.py`
   - Make task header parsing strict, using one anchored source of truth for
     task headers.
   - Replace `next_task_id()`'s loose `_TASK_ID_RE` scan with strict header
@@ -288,5 +288,5 @@ Legacy cross-project ref 'cbioportal:q014' is missing an entity kind. Use 'cbiop
 - `meta/validate.sh --verbose` no longer fails on duplicate `t001`.
 - The meta task queue contains no semantic task-ID suffixes.
 - Cross-project task refs have a documented canonical shape.
-- `science-tool tasks add` still produces `## [tNNN] Title` with no `parent:`
+- `science tasks add` still produces `## [tNNN] Title` with no `parent:`
   line by default.

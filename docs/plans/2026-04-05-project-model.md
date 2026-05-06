@@ -4,7 +4,7 @@
 
 **Goal:** Implement the Project Model redesign — replacing claim/relation_claim/evidence entities with proposition/observation/evidence-as-relation, retiring artifact into data_package, and renaming paper→article for literature references.
 
-**Architecture:** The changes flow through three packages: `science-model` (entity types, profiles), `science-tool` (graph store, materialization, CLI), and project-level files (skills, templates, docs). Each task targets a specific layer, with tests validating each change before moving to the next.
+**Architecture:** The changes flow through three packages: `science-model` (entity types, profiles), `science` (graph store, materialization, CLI), and project-level files (skills, templates, docs). Each task targets a specific layer, with tests validating each change before moving to the next.
 
 **Tech Stack:** Python 3.11+, Pydantic v2, rdflib, Click, pytest
 
@@ -610,13 +610,13 @@ git commit -m "fix: update remaining tests for Project Model entity types"
 ### Task 5: Update Graph Store — Proposition Operations
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/store.py`
-- Test: `science-tool/tests/test_graph_cli.py`
+- Modify: `science/src/science_tool/graph/store.py`
+- Test: `science/tests/test_graph_cli.py`
 
 - [ ] **Step 1: Write failing test for add_proposition**
 
 ```python
-# Add to science-tool/tests/test_graph_cli.py or a new test_graph_store.py
+# Add to science/tests/test_graph_cli.py or a new test_graph_store.py
 
 def test_add_proposition(tmp_graph):
     """add_proposition creates a Proposition node with text and provenance."""
@@ -638,12 +638,12 @@ def test_add_proposition(tmp_graph):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science-tool && uv run --frozen pytest tests/test_graph_cli.py::test_add_proposition -v`
+Run: `cd science && uv run --frozen pytest tests/test_graph_cli.py::test_add_proposition -v`
 Expected: FAIL — `add_proposition` does not exist.
 
 - [ ] **Step 3: Implement add_proposition**
 
-Add to `science-tool/src/science_tool/graph/store.py` (after the existing `add_claim` function, which will be removed later):
+Add to `science/src/science_tool/graph/store.py` (after the existing `add_claim` function, which will be removed later):
 
 ```python
 def add_proposition(
@@ -700,13 +700,13 @@ Note: `SCI_NS.propSubject`/`propPredicate`/`propObject` replace the former `clai
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd science-tool && uv run --frozen pytest tests/test_graph_cli.py::test_add_proposition -v`
+Run: `cd science && uv run --frozen pytest tests/test_graph_cli.py::test_add_proposition -v`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd science-tool && git add src/science_tool/graph/store.py tests/
+cd science && git add src/science_tool/graph/store.py tests/
 git commit -m "feat: add add_proposition to graph store
 
 Replaces add_claim and add_relation_claim. Supports optional S-P-O
@@ -718,8 +718,8 @@ structured form via subject/predicate/obj parameters."
 ### Task 6: Update Graph Store — Observation + Evidence Edges
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/store.py`
-- Test: `science-tool/tests/test_graph_cli.py`
+- Modify: `science/src/science_tool/graph/store.py`
+- Test: `science/tests/test_graph_cli.py`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -774,7 +774,7 @@ def test_add_evidence_edge(tmp_graph):
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd science-tool && uv run --frozen pytest tests/test_graph_cli.py -v -k "add_observation or add_evidence_edge"`
+Run: `cd science && uv run --frozen pytest tests/test_graph_cli.py -v -k "add_observation or add_evidence_edge"`
 Expected: FAIL
 
 - [ ] **Step 3: Implement add_observation**
@@ -869,13 +869,13 @@ def add_evidence_edge(
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd science-tool && uv run --frozen pytest tests/test_graph_cli.py -v -k "add_observation or add_evidence_edge"`
+Run: `cd science && uv run --frozen pytest tests/test_graph_cli.py -v -k "add_observation or add_evidence_edge"`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd science-tool && git add src/science_tool/graph/store.py tests/
+cd science && git add src/science_tool/graph/store.py tests/
 git commit -m "feat: add observation and evidence-as-relation to graph store
 
 add_observation creates concrete empirical facts anchored to data.
@@ -888,7 +888,7 @@ annotations (strength, caveats, method) in the provenance layer."
 ### Task 7: Update Graph Store — Rename and Remove Old Operations
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/store.py`
+- Modify: `science/src/science_tool/graph/store.py`
 
 - [ ] **Step 1: Rename add_paper to add_article**
 
@@ -953,13 +953,13 @@ STRUCTURED_PROPOSITION_PREDICATES: frozenset[URIRef] = frozenset(
 
 - [ ] **Step 5: Run existing tests to check for breakage**
 
-Run: `cd science-tool && uv run --frozen pytest tests/ -v --tb=short 2>&1 | head -100`
+Run: `cd science && uv run --frozen pytest tests/ -v --tb=short 2>&1 | head -100`
 Expected: Some failures from tests referencing `add_claim`, `add_paper`, etc. — these will be fixed in Task 10.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd science-tool && git add src/science_tool/graph/store.py
+cd science && git add src/science_tool/graph/store.py
 git commit -m "refactor: rename add_paper→add_article, remove add_claim/add_relation_claim/add_artifact
 
 Old operations replaced by add_proposition (Task 5) and add_evidence_edge (Task 6).
@@ -971,7 +971,7 @@ Update PROJECT_ENTITY_PREFIXES to match new entity types."
 ### Task 8: Update CLI Commands
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
+- Modify: `science/src/science_tool/cli.py`
 
 - [ ] **Step 1: Replace `graph add claim` with `graph add proposition`**
 
@@ -1072,7 +1072,7 @@ Remove imports of: `add_claim`, `add_relation_claim`, `add_paper`, `add_artifact
 - [ ] **Step 7: Search for remaining references to old functions in cli.py**
 
 ```bash
-cd science-tool && grep -n "add_claim\|add_relation_claim\|add_paper\|add_artifact\|EVIDENCE_TYPES" src/science_tool/cli.py
+cd science && grep -n "add_claim\|add_relation_claim\|add_paper\|add_artifact\|EVIDENCE_TYPES" src/science_tool/cli.py
 ```
 
 Update or remove any remaining references.
@@ -1080,7 +1080,7 @@ Update or remove any remaining references.
 - [ ] **Step 8: Commit**
 
 ```bash
-cd science-tool && git add src/science_tool/cli.py
+cd science && git add src/science_tool/cli.py
 git commit -m "refactor: update CLI commands for Project Model
 
 - graph add proposition (replaces claim + relation-claim)
@@ -1147,14 +1147,14 @@ Closes the traceability loop: task → artifacts → observations → findings �
 ### Task 10: Update Source Loading
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/sources.py`
+- Modify: `science/src/science_tool/graph/sources.py`
 
 - [ ] **Step 1: Update _CORE_KINDS cache**
 
 The `_CORE_KINDS` frozenset is computed at import time from `CORE_PROFILE.entity_kinds`. Since we updated the core profile in Task 2, this automatically picks up the new kinds. Verify:
 
 ```bash
-cd science-tool && uv run python -c "from science_tool.graph.sources import _CORE_KINDS; print(sorted(_CORE_KINDS))"
+cd science && uv run python -c "from science_tool.graph.sources import _CORE_KINDS; print(sorted(_CORE_KINDS))"
 ```
 
 Expected: Should include `proposition`, `observation`, `finding`, `story`, `paper` and NOT include `claim`, `relation_claim`, `evidence`, `artifact`.
@@ -1168,7 +1168,7 @@ No code changes needed in sources.py for this — the `kind` field is a string, 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd science-tool && git add src/science_tool/graph/sources.py
+cd science && git add src/science_tool/graph/sources.py
 git commit -m "verify: source loading compatible with new entity types"
 ```
 
@@ -1177,14 +1177,14 @@ git commit -m "verify: source loading compatible with new entity types"
 ### Task 11: Update Materialization
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/materialize.py`
+- Modify: `science/src/science_tool/graph/materialize.py`
 
 - [ ] **Step 1: Verify _kind_class_name handles new types**
 
 The `_kind_class_name` function converts kind strings to PascalCase for RDF types. Verify it handles the new kinds:
 
 ```bash
-cd science-tool && uv run python -c "
+cd science && uv run python -c "
 from science_tool.graph.materialize import _kind_class_name
 for kind in ['proposition', 'observation', 'finding', 'story', 'paper', 'interpretation']:
     print(f'{kind} -> {_kind_class_name(kind)}')"
@@ -1210,17 +1210,17 @@ For now, evidence edges will be added via `sources.relations` (authored relation
 
 ---
 
-### Task 12: Update science-tool Tests
+### Task 12: Update science Tests
 
 **Files:**
-- Modify: `science-tool/tests/test_graph_cli.py`
-- Modify: `science-tool/tests/test_graph_materialize.py`
+- Modify: `science/tests/test_graph_cli.py`
+- Modify: `science/tests/test_graph_materialize.py`
 - Modify: Any other test files referencing old entity types
 
 - [ ] **Step 1: Find all references to old entity types in tests**
 
 ```bash
-cd science-tool && grep -rn "add_claim\|add_relation_claim\|add_paper\|add_artifact\|\"claim\"\|\"relation_claim\"\|\"evidence\"\|\"artifact\"" tests/
+cd science && grep -rn "add_claim\|add_relation_claim\|add_paper\|add_artifact\|\"claim\"\|\"relation_claim\"\|\"evidence\"\|\"artifact\"" tests/
 ```
 
 - [ ] **Step 2: Update test references**
@@ -1234,19 +1234,19 @@ For each occurrence:
 
 - [ ] **Step 3: Run full test suite**
 
-Run: `cd science-tool && uv run --frozen pytest -v`
+Run: `cd science && uv run --frozen pytest -v`
 Expected: All PASS
 
 - [ ] **Step 4: Run linting**
 
-Run: `cd science-tool && uv run --frozen ruff check . && uv run --frozen ruff format --check .`
+Run: `cd science && uv run --frozen ruff check . && uv run --frozen ruff format --check .`
 Expected: Clean
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd science-tool && git add tests/
-git commit -m "fix: update science-tool tests for Project Model entity types"
+cd science && git add tests/
+git commit -m "fix: update science tests for Project Model entity types"
 ```
 
 ---
@@ -1254,7 +1254,7 @@ git commit -m "fix: update science-tool tests for Project Model entity types"
 ### Task 13: Update Predicate Registry
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/store.py` (PREDICATE_REGISTRY section)
+- Modify: `science/src/science_tool/graph/store.py` (PREDICATE_REGISTRY section)
 
 - [ ] **Step 1: Update PREDICATE_REGISTRY entries**
 
@@ -1279,7 +1279,7 @@ Find the `PREDICATE_REGISTRY` list (around line 1585) and update:
 - [ ] **Step 2: Commit**
 
 ```bash
-cd science-tool && git add src/science_tool/graph/store.py
+cd science && git add src/science_tool/graph/store.py
 git commit -m "refactor: update predicate registry for Project Model relations"
 ```
 
@@ -1400,13 +1400,13 @@ claims, evidence is now a relation, observations anchor empirical facts."
 ### Task 16: Migration Script
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/project_model_migration.py`
-- Test: `science-tool/tests/test_project_model_migration.py`
+- Create: `science/src/science_tool/graph/project_model_migration.py`
+- Test: `science/tests/test_project_model_migration.py`
 
 - [ ] **Step 1: Write failing test for entity type migration**
 
 ```python
-# science-tool/tests/test_project_model_migration.py
+# science/tests/test_project_model_migration.py
 
 import yaml
 from pathlib import Path
@@ -1482,13 +1482,13 @@ def test_migrate_updates_cross_references(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd science-tool && uv run --frozen pytest tests/test_project_model_migration.py -v`
+Run: `cd science && uv run --frozen pytest tests/test_project_model_migration.py -v`
 Expected: FAIL — module does not exist.
 
 - [ ] **Step 3: Implement migration script**
 
 ```python
-# science-tool/src/science_tool/graph/project_model_migration.py
+# science/src/science_tool/graph/project_model_migration.py
 """Migration script: convert project sources from old entity model to Project Model."""
 
 from __future__ import annotations
@@ -1640,7 +1640,7 @@ def _rename_ref(ref: str) -> str:
 
 - [ ] **Step 4: Run migration tests**
 
-Run: `cd science-tool && uv run --frozen pytest tests/test_project_model_migration.py -v`
+Run: `cd science && uv run --frozen pytest tests/test_project_model_migration.py -v`
 Expected: All PASS
 
 - [ ] **Step 5: Add CLI command for migration**
@@ -1664,7 +1664,7 @@ def migrate_model_cmd(ctx):
 - [ ] **Step 6: Commit**
 
 ```bash
-cd science-tool && git add src/science_tool/graph/project_model_migration.py tests/test_project_model_migration.py src/science_tool/cli.py
+cd science && git add src/science_tool/graph/project_model_migration.py tests/test_project_model_migration.py src/science_tool/cli.py
 git commit -m "feat: add Project Model migration script
 
 Automated migration of entity source files:
@@ -1673,7 +1673,7 @@ Automated migration of entity source files:
 - paper (literature) → article
 - artifact → data-package
 - Updates cross-references in related/source_refs fields
-CLI: science-tool graph migrate-model"
+CLI: science graph migrate-model"
 ```
 
 ---
@@ -1681,12 +1681,12 @@ CLI: science-tool graph migrate-model"
 ### Task 17: Integration Test — Full Round Trip
 
 **Files:**
-- Test: `science-tool/tests/test_project_model_integration.py`
+- Test: `science/tests/test_project_model_integration.py`
 
 - [ ] **Step 1: Write integration test**
 
 ```python
-# science-tool/tests/test_project_model_integration.py
+# science/tests/test_project_model_integration.py
 """Integration test: create project sources with new entity types, materialize, and verify graph."""
 
 from pathlib import Path
@@ -1741,13 +1741,13 @@ def test_materialize_with_proposition_and_observation(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run integration test**
 
-Run: `cd science-tool && uv run --frozen pytest tests/test_project_model_integration.py -v`
+Run: `cd science && uv run --frozen pytest tests/test_project_model_integration.py -v`
 Expected: PASS
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd science-tool && git add tests/test_project_model_integration.py
+cd science && git add tests/test_project_model_integration.py
 git commit -m "test: add integration test for Project Model round trip"
 ```
 
@@ -1760,16 +1760,16 @@ git commit -m "test: add integration test for Project Model round trip"
 Run: `cd science-model && uv run --frozen pytest -v`
 Expected: All PASS
 
-- [ ] **Step 2: Run full science-tool test suite**
+- [ ] **Step 2: Run full science test suite**
 
-Run: `cd science-tool && uv run --frozen pytest -v`
+Run: `cd science && uv run --frozen pytest -v`
 Expected: All PASS
 
 - [ ] **Step 3: Run linting on both packages**
 
 ```bash
 cd science-model && uv run --frozen ruff check . && uv run --frozen ruff format --check .
-cd science-tool && uv run --frozen ruff check . && uv run --frozen ruff format --check .
+cd science && uv run --frozen ruff check . && uv run --frozen ruff format --check .
 ```
 Expected: Clean
 
@@ -1777,7 +1777,7 @@ Expected: Clean
 
 ```bash
 cd science-model && uv run --frozen pyright
-cd science-tool && uv run --frozen pyright
+cd science && uv run --frozen pyright
 ```
 Expected: No new errors
 

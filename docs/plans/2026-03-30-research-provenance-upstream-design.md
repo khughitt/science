@@ -17,14 +17,14 @@ Two-layer design:
 1. **Reproducible workflow layer** (universal) — Entity types, data package schema, CLI commands, and skills for producing standardized research packages from Snakemake workflows.
 2. **Lab notebook layer** (web-app projects) — Skills and patterns for rendering research packages as notebook-like views in web applications.
 
-Schema definitions live in science-model. CLI commands live in science-tool. Skills provide guidance for both layers.
+Schema definitions live in science-model. CLI commands live in science. Skills provide guidance for both layers.
 
 ## Decisions
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Layering | Layer 1 (reproducible workflow) + Layer 2 (lab notebook) | Separates universal concern from web-specific UI |
-| Schema location | science-model (Pydantic), commands in science-tool | Matches existing architecture split |
+| Schema location | science-model (Pydantic), commands in science | Matches existing architecture split |
 | Profile placement | All new types in core profile | Universal research concepts; no opt-in needed |
 | Artifact generalization | Minimal `artifact` type with open `artifact_type` string | Flexible for web routes, figures, reports, notebooks |
 | Data package format | Frictionless with `science-research-package` profile | Extensible standard, validated in natural-systems |
@@ -313,14 +313,14 @@ from .validation import validate_package, check_freshness, ValidationResult
 
 ---
 
-## 4. science-tool Commands
+## 4. science Commands
 
 ### New command group: `research-package`
 
 #### `init`
 
 ```
-science-tool research-package init \
+science research-package init \
   --name <package-name> \
   --title <human-readable-title> \
   [--workflow <workflow-dir>] \
@@ -336,7 +336,7 @@ Scaffolds a package directory:
 #### `validate`
 
 ```
-science-tool research-package validate <package-dir-or-parent> [--check-freshness] [--project-root PATH] [--json]
+science research-package validate <package-dir-or-parent> [--check-freshness] [--project-root PATH] [--json]
 ```
 
 Runs `validate_package()` from science-model. If given a parent directory, validates all packages found recursively (any directory containing `datapackage.json` with `profile: "science-research-package"`).
@@ -345,7 +345,7 @@ Runs `validate_package()` from science-model. If given a parent directory, valid
 - `--json` outputs `ValidationResult.to_dict()` as JSON (one object per package, or array for recursive)
 - Exits with code 0 if all packages are valid, code 1 if any errors
 
-Default (non-JSON) output follows the existing science-tool CLI style:
+Default (non-JSON) output follows the existing science CLI style:
 
 ```
 ✓ research/packages/theme/instability-bifurcation (6 resources, 7 cells)
@@ -356,7 +356,7 @@ Default (non-JSON) output follows the existing science-tool CLI style:
 #### `build`
 
 ```
-science-tool research-package build \
+science research-package build \
   --results <results-dir> \
   --config <workflow-config-yaml> \
   --output <package-dir>
@@ -384,7 +384,7 @@ The science framework materializes the knowledge graph deterministically from au
 
 ### Authored sources
 
-Research packages (`research/packages/{name}/datapackage.json`) are the primary authored source. They are committed artifacts produced by `science-tool research-package build`.
+Research packages (`research/packages/{name}/datapackage.json`) are the primary authored source. They are committed artifacts produced by `science research-package build`.
 
 ### Export to canonical source files
 
@@ -423,11 +423,11 @@ Each YAML file follows the existing source format used by `load_project_sources(
 ```
 research/packages/*/datapackage.json   (committed authored source)
   → export script generates YAML source files
-    → science-tool graph build reads sources via load_project_sources()
+    → science graph build reads sources via load_project_sources()
       → materialize_graph() emits triples into graph.trig
 ```
 
-This is the architectural path. The `add_*` store functions described below exist as convenience for interactive use (e.g., `science-tool graph add data-package ...` from the CLI) but are not the primary materialization mechanism.
+This is the architectural path. The `add_*` store functions described below exist as convenience for interactive use (e.g., `science graph add data-package ...` from the CLI) but are not the primary materialization mechanism.
 
 ### Graph store convenience functions
 
@@ -479,7 +479,7 @@ Add to the set in `store.py`:
 ### Update: `skills/pipelines/snakemake.md`
 
 Add a new section on research package integration:
-- Terminal rule pattern: `rule build_package` that calls `science-tool research-package build`
+- Terminal rule pattern: `rule build_package` that calls `science research-package build`
 - Config structure for code excerpts, prose, provenance inputs
 - Link to the research provenance skill for full schema documentation
 - Example `onsuccess` handler as alternative to a terminal rule
@@ -524,8 +524,8 @@ After the upstream changes land:
 
 1. Update `datapackage.json` profile from `natural-systems-research-package` to `science-research-package`
 2. Keep Zod schemas in `src/research/types.ts` for runtime validation in the TypeScript app, but align field names and types to the canonical Pydantic schema
-3. Replace `generate-research-packages.ts` validation logic with calls to `science-tool research-package validate`
-4. Replace `workflows/common/scripts/build_package.py` with `science-tool research-package build`
+3. Replace `generate-research-packages.ts` validation logic with calls to `science research-package validate`
+4. Replace `workflows/common/scripts/build_package.py` with `science research-package build`
 5. Update `scripts/export_kg_model_sources.py` to use canonical `data-package` prefix (not `data_package`) and link to `workflow-run` entities
 6. Add `vegalite` cell type support to the React cell renderer (optional, when interactive charts are ready)
 
@@ -537,9 +537,9 @@ After the upstream changes land:
 
 1. science-model: 2 entity kinds + 2 relation kinds in core profile + `EntityType` enum additions
 2. science-model: `packages/` module (schema, cells, validation with `ValidationResult`)
-3. science-tool: `research-package` command group (`init`, `validate`, `build`)
-4. science-tool: `add_data_package`, `add_artifact` graph store convenience functions
-5. science-tool: `PROJECT_ENTITY_PREFIXES` updates
+3. science: `research-package` command group (`init`, `validate`, `build`)
+4. science: `add_data_package`, `add_artifact` graph store convenience functions
+5. science: `PROJECT_ENTITY_PREFIXES` updates
 6. skills: Update `pipelines/snakemake.md`
 7. skills: New `research/research-package-spec.md` (layer 1)
 8. skills: New `research/research-package-rendering.md` (layer 2)
@@ -547,10 +547,10 @@ After the upstream changes land:
 
 ### Out of scope
 
-- Automated Snakemake execution from science-tool
+- Automated Snakemake execution from science
 - Vega-Lite rendering implementation in any specific project
 - CI/CD integration for package freshness
-- `science-tool research-package publish` for cross-project sharing
+- `science research-package publish` for cross-project sharing
 - Shared Vega-Lite theme/styling
 
 ### Non-goals

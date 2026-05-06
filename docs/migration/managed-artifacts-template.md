@@ -13,9 +13,9 @@ This template guides converting a project's standalone `validate.sh` into a mana
 Before starting:
 
 - [ ] **Framework checkout up to date.** Your science framework checkout (typically at `~/d/science`) is at `main` HEAD with the managed-artifacts implementation merged (commit `a7439e3` or later) and the hook-points version bump landed (commit `90cd0e3` or later, putting the canonical at v2026.04.26.2).
-- [ ] **`science-tool` is invocable.** From the project directory: `science-tool --help` succeeds. (If not, `cd <framework>/science-tool && uv sync` and ensure `science-tool` is on PATH, or use `uv run --project <framework>/science-tool science-tool ...`.)
+- [ ] **`science` is invocable.** From the project directory: `science --help` succeeds. (If not, `cd <framework>/science && uv sync` and ensure `science` is on PATH, or use `uv run --project <framework>/science science ...`.)
 - [ ] **Project working tree is clean.** `git status --short` is empty, OR you've decided to use `--allow-dirty` and have read its semantics. (Recommended: clean tree. If non-clean, the migration commits will entangle with your in-progress work.)
-- [ ] **Drift survey done.** You've run `science-tool project artifacts check validate.sh --project-root . --json` and captured the output. Initial classification will be `untracked`.
+- [ ] **Drift survey done.** You've run `science project artifacts check validate.sh --project-root . --json` and captured the output. Initial classification will be `untracked`.
 - [ ] **Customization analysis done.** You've diffed your project's `validate.sh` against the canonical and bucketed each customization into one of:
   - **drop** — already in canonical (e.g., `.env` sourcing post Plan #7 Fix 2)
   - **config** — settable via `science.yaml` (e.g., `knowledge_profiles.local`)
@@ -37,16 +37,16 @@ cd <project-root>
 sha256sum validate.sh
 
 # Drift status
-science-tool project artifacts check validate.sh --project-root . --json
+science project artifacts check validate.sh --project-root . --json
 
 # Diff against canonical
 diff -u validate.sh \
-    ~/d/science/science-tool/src/science_tool/project_artifacts/data/validate.sh \
+    ~/d/science/science/src/science_tool/project_artifacts/data/validate.sh \
     | head -200
 
 # Quick triage: what's in your file but not in the canonical
 diff validate.sh \
-    ~/d/science/science-tool/src/science_tool/project_artifacts/data/validate.sh \
+    ~/d/science/science/src/science_tool/project_artifacts/data/validate.sh \
     | grep '^<' | head -40
 ```
 
@@ -70,10 +70,10 @@ git status --short
 git rm validate.sh
 
 # 3. Install the canonical.
-science-tool project artifacts install validate.sh --project-root .
+science project artifacts install validate.sh --project-root .
 
 # 4. Verify status is now `current`.
-science-tool project artifacts check validate.sh --project-root .
+science project artifacts check validate.sh --project-root .
 # expected: current  (validate.sh @ 2026.04.26.2)
 
 # 5. Smoke-run the new validate.sh.
@@ -86,7 +86,7 @@ git add validate.sh
 git commit -m "chore(framework): migrate validate.sh to managed artifact v2026.04.26.2
 
 Replaces standalone validate.sh body with the canonical from the
-science-tool managed-artifact registry. No project-specific behavior
+science managed-artifact registry. No project-specific behavior
 to preserve — pure-lag migration. New checks may surface findings;
 addressing those is follow-up work, not part of this migration."
 ```
@@ -127,10 +127,10 @@ chmod 0644 validate.local.sh
 
 # 3. Remove old validate.sh and install the canonical.
 git rm validate.sh
-science-tool project artifacts install validate.sh --project-root .
+science project artifacts install validate.sh --project-root .
 
 # 4. Verify status.
-science-tool project artifacts check validate.sh --project-root .
+science project artifacts check validate.sh --project-root .
 # expected: current
 
 # 5. Smoke-run.
@@ -187,14 +187,14 @@ register_validation_hook extra_checks    my_extra_structural_check
 register_validation_hook post_validation my_post_cleanup
 ```
 
-Then proceed with `git rm validate.sh` and `science-tool project artifacts install validate.sh --project-root .` as in Path 2.
+Then proceed with `git rm validate.sh` and `science project artifacts install validate.sh --project-root .` as in Path 2.
 
 ### Path 4 — You're not ready / you need to defer
 
-Pin the artifact to its currently-installed (untracked) state so the framework's loud-signal surfaces (`science-tool health`, `/status`, `/sync`) stop nagging:
+Pin the artifact to its currently-installed (untracked) state so the framework's loud-signal surfaces (`science health`, `/status`, `/sync`) stop nagging:
 
 ```bash
-science-tool project artifacts pin validate.sh \
+science project artifacts pin validate.sh \
     --project-root . \
     --rationale "Migration scheduled for <YYYY-MM-DD>; project is in active <experiment>." \
     --revisit-by <YYYY-MM-DD>
@@ -212,11 +212,11 @@ Run all of these. Each must pass.
 cd <project-root>
 
 # 1. check shows current.
-science-tool project artifacts check validate.sh --project-root .
+science project artifacts check validate.sh --project-root .
 # expected: current  (validate.sh @ 2026.04.26.2)
 
 # 2. JSON form for scripting.
-science-tool project artifacts check validate.sh --project-root . --json
+science project artifacts check validate.sh --project-root . --json
 # expected: {"name": "validate.sh", "version": "2026.04.26.2", "status": "current", ...}
 
 # 3. The canonical runs and returns sensibly.
@@ -230,12 +230,12 @@ echo "exit: $?"
 # bash validate.sh; observe the info lines; remove the temporary lines.
 
 # 5. health.py picks it up.
-science-tool health 2>&1 | grep -i validate.sh
+science health 2>&1 | grep -i validate.sh
 # expected: a row showing `current`, no warnings.
 
 # 6. Confirm shim parity (sanity).
 diff <(bash validate.sh 2>&1 | head -3) \
-     <(bash ~/d/science/science-tool/src/science_tool/project_artifacts/data/validate.sh 2>&1 | head -3)
+     <(bash ~/d/science/science/src/science_tool/project_artifacts/data/validate.sh 2>&1 | head -3)
 # expected: identical output (modulo project-specific hook contributions).
 ```
 
@@ -255,7 +255,7 @@ cp validate.sh.pre-install.bak validate.sh
 git checkout HEAD -- validate.sh
 
 # Verify rollback.
-science-tool project artifacts check validate.sh --project-root .
+science project artifacts check validate.sh --project-root .
 # expected: untracked (back to pre-migration state).
 ```
 

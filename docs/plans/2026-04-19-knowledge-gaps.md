@@ -4,7 +4,7 @@
 
 **Goal:** Add a topic-coverage gap metric to `/science:big-picture` output, exposing topics where the project's questions demand more literature than the project has read. Render at two scales — a per-hypothesis Knowledge Gaps sub-bullet inside Research Fronts, and a project-rollup Knowledge Gaps section between Research Fronts and Emergent Threads.
 
-**Architecture:** New module `science_tool.big_picture.knowledge_gaps` with a pure `compute_topic_gaps` function and `TopicGap` dataclass. Caller (the Opus orchestrator in Phase 1 of `commands/big-picture.md`) invokes it once per run, slicing the result per hypothesis for bundle assembly and reusing the full list for the Phase 3 rollup. A new `science-tool big-picture knowledge-gaps` CLI subcommand emits the full `TopicGap` list as JSON for inspection/debugging. The big-picture validator is extended to recognize `topic:<id>` references. The transition-window canonicalization helper from the sibling rename spec is consumed at comparison boundaries.
+**Architecture:** New module `science_tool.big_picture.knowledge_gaps` with a pure `compute_topic_gaps` function and `TopicGap` dataclass. Caller (the Opus orchestrator in Phase 1 of `commands/big-picture.md`) invokes it once per run, slicing the result per hypothesis for bundle assembly and reusing the full list for the Phase 3 rollup. A new `science big-picture knowledge-gaps` CLI subcommand emits the full `TopicGap` list as JSON for inspection/debugging. The big-picture validator is extended to recognize `topic:<id>` references. The transition-window canonicalization helper from the sibling rename spec is consumed at comparison boundaries.
 
 **Tech Stack:** Python 3.11+, pydantic v2 (existing), click (existing), pytest, PyYAML. No new runtime dependencies.
 
@@ -18,24 +18,24 @@
 
 ### New files
 
-- `science-tool/src/science_tool/big_picture/knowledge_gaps.py` — `TopicGap`, `compute_topic_gaps`, internal loaders.
-- `science-tool/tests/test_knowledge_gaps.py` — unit tests for `compute_topic_gaps`.
-- `science-tool/tests/test_knowledge_gaps_cli.py` — integration tests for the CLI subcommand.
-- `science-tool/tests/fixtures/big_picture/minimal_project/doc/background/topics/t01-covered.md`
-- `science-tool/tests/fixtures/big_picture/minimal_project/doc/background/topics/t02-thin.md`
-- `science-tool/tests/fixtures/big_picture/minimal_project/doc/background/topics/t03-bibtex-covered.md`
-- `science-tool/tests/fixtures/big_picture/minimal_project/doc/background/topics/t04-legacy-covered.md`
-- `science-tool/tests/fixtures/big_picture/minimal_project/doc/papers/p01-example.md`
-- `science-tool/tests/fixtures/big_picture/minimal_project/doc/papers/p02-legacy-article.md`
+- `science/src/science_tool/big_picture/knowledge_gaps.py` — `TopicGap`, `compute_topic_gaps`, internal loaders.
+- `science/tests/test_knowledge_gaps.py` — unit tests for `compute_topic_gaps`.
+- `science/tests/test_knowledge_gaps_cli.py` — integration tests for the CLI subcommand.
+- `science/tests/fixtures/big_picture/minimal_project/doc/background/topics/t01-covered.md`
+- `science/tests/fixtures/big_picture/minimal_project/doc/background/topics/t02-thin.md`
+- `science/tests/fixtures/big_picture/minimal_project/doc/background/topics/t03-bibtex-covered.md`
+- `science/tests/fixtures/big_picture/minimal_project/doc/background/topics/t04-legacy-covered.md`
+- `science/tests/fixtures/big_picture/minimal_project/doc/papers/p01-example.md`
+- `science/tests/fixtures/big_picture/minimal_project/doc/papers/p02-legacy-article.md`
 
 ### Modified files
 
-- `science-tool/src/science_tool/big_picture/cli.py` — register `knowledge-gaps` subcommand.
-- `science-tool/src/science_tool/big_picture/validator.py` — extend `REFERENCE_PATTERN` with `topic`; extend `_collect_project_ids` to scan topic directories.
-- `science-tool/tests/fixtures/big_picture/minimal_project/doc/questions/q01-direct-to-h1.md` — add topic refs.
-- `science-tool/tests/fixtures/big_picture/minimal_project/doc/questions/q02-inverse-via-h1.md` — add topic refs.
+- `science/src/science_tool/big_picture/cli.py` — register `knowledge-gaps` subcommand.
+- `science/src/science_tool/big_picture/validator.py` — extend `REFERENCE_PATTERN` with `topic`; extend `_collect_project_ids` to scan topic directories.
+- `science/tests/fixtures/big_picture/minimal_project/doc/questions/q01-direct-to-h1.md` — add topic refs.
+- `science/tests/fixtures/big_picture/minimal_project/doc/questions/q02-inverse-via-h1.md` — add topic refs.
 - `commands/big-picture.md` — Phase 1 bundle-assembly prose; Phase 3 rollup prose.
-- `science-tool/tests/test_big_picture_validator.py` — cover topic reference recognition.
+- `science/tests/test_big_picture_validator.py` — cover topic reference recognition.
 
 ### Unchanged
 
@@ -47,12 +47,12 @@
 ## Task 1: Scaffold `knowledge_gaps` module with `TopicGap` dataclass
 
 **Files:**
-- Create: `science-tool/src/science_tool/big_picture/knowledge_gaps.py`
-- Test: `science-tool/tests/test_knowledge_gaps.py`
+- Create: `science/src/science_tool/big_picture/knowledge_gaps.py`
+- Test: `science/tests/test_knowledge_gaps.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `science-tool/tests/test_knowledge_gaps.py`:
+Create `science/tests/test_knowledge_gaps.py`:
 
 ```python
 from __future__ import annotations
@@ -78,12 +78,12 @@ def test_topic_gap_is_frozen_dataclass() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run --frozen pytest science-tool/tests/test_knowledge_gaps.py -v`
+Run: `uv run --frozen pytest science/tests/test_knowledge_gaps.py -v`
 Expected: FAIL with `ModuleNotFoundError`.
 
 - [ ] **Step 3: Create the module**
 
-Create `science-tool/src/science_tool/big_picture/knowledge_gaps.py`:
+Create `science/src/science_tool/big_picture/knowledge_gaps.py`:
 
 ```python
 """Knowledge-gap computation for `/science:big-picture` synthesis.
@@ -136,7 +136,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/knowledge_gaps.py science-tool/tests/test_knowledge_gaps.py
+git add science/src/science_tool/big_picture/knowledge_gaps.py science/tests/test_knowledge_gaps.py
 git commit -m "feat(knowledge_gaps): scaffold TopicGap dataclass"
 ```
 
@@ -145,7 +145,7 @@ git commit -m "feat(knowledge_gaps): scaffold TopicGap dataclass"
 ## Task 2: Extend the minimal_project fixture with topic + paper files
 
 **Files:**
-- Create: `science-tool/tests/fixtures/big_picture/minimal_project/doc/background/topics/t01-covered.md`
+- Create: `science/tests/fixtures/big_picture/minimal_project/doc/background/topics/t01-covered.md`
 - Create: `.../topics/t02-thin.md`
 - Create: `.../topics/t03-bibtex-covered.md`
 - Create: `.../topics/t04-legacy-covered.md`
@@ -272,7 +272,7 @@ These seed the expected counts:
 - [ ] **Step 4: Commit**
 
 ```bash
-git add science-tool/tests/fixtures/big_picture/minimal_project
+git add science/tests/fixtures/big_picture/minimal_project
 git commit -m "test(knowledge_gaps): extend minimal_project fixture with topics + papers"
 ```
 
@@ -281,12 +281,12 @@ git commit -m "test(knowledge_gaps): extend minimal_project fixture with topics 
 ## Task 3: Implement topic and paper loaders with duplicate-ID detection
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/knowledge_gaps.py`
-- Test: `science-tool/tests/test_knowledge_gaps.py`
+- Modify: `science/src/science_tool/big_picture/knowledge_gaps.py`
+- Test: `science/tests/test_knowledge_gaps.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `science-tool/tests/test_knowledge_gaps.py`:
+Append to `science/tests/test_knowledge_gaps.py`:
 
 ```python
 from pathlib import Path
@@ -346,7 +346,7 @@ Expected: FAIL with `ImportError`.
 
 - [ ] **Step 3: Implement loaders**
 
-Append to `science-tool/src/science_tool/big_picture/knowledge_gaps.py`:
+Append to `science/src/science_tool/big_picture/knowledge_gaps.py`:
 
 ```python
 from pathlib import Path
@@ -423,7 +423,7 @@ Expected: PASS (4 new tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/knowledge_gaps.py science-tool/tests/test_knowledge_gaps.py
+git add science/src/science_tool/big_picture/knowledge_gaps.py science/tests/test_knowledge_gaps.py
 git commit -m "feat(knowledge_gaps): add topic/paper loaders with dup-ID detection"
 ```
 
@@ -432,12 +432,12 @@ git commit -m "feat(knowledge_gaps): add topic/paper loaders with dup-ID detecti
 ## Task 4: Implement per-topic coverage computation
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/knowledge_gaps.py`
-- Test: `science-tool/tests/test_knowledge_gaps.py`
+- Modify: `science/src/science_tool/big_picture/knowledge_gaps.py`
+- Test: `science/tests/test_knowledge_gaps.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `science-tool/tests/test_knowledge_gaps.py`:
+Append to `science/tests/test_knowledge_gaps.py`:
 
 ```python
 from science_tool.big_picture.knowledge_gaps import _compute_coverage
@@ -496,7 +496,7 @@ Expected: FAIL with `ImportError`.
 
 - [ ] **Step 3: Implement `_compute_coverage`**
 
-Append to `science-tool/src/science_tool/big_picture/knowledge_gaps.py`:
+Append to `science/src/science_tool/big_picture/knowledge_gaps.py`:
 
 ```python
 def _bibkey_of(entity_id: str) -> str | None:
@@ -554,7 +554,7 @@ Expected: PASS (5 new tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/knowledge_gaps.py science-tool/tests/test_knowledge_gaps.py
+git add science/src/science_tool/big_picture/knowledge_gaps.py science/tests/test_knowledge_gaps.py
 git commit -m "feat(knowledge_gaps): implement coverage computation with bibkey dedup"
 ```
 
@@ -563,12 +563,12 @@ git commit -m "feat(knowledge_gaps): implement coverage computation with bibkey 
 ## Task 5: Implement demand computation from resolved questions
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/knowledge_gaps.py`
-- Test: `science-tool/tests/test_knowledge_gaps.py`
+- Modify: `science/src/science_tool/big_picture/knowledge_gaps.py`
+- Test: `science/tests/test_knowledge_gaps.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `science-tool/tests/test_knowledge_gaps.py`:
+Append to `science/tests/test_knowledge_gaps.py`:
 
 ```python
 from science_tool.big_picture.knowledge_gaps import _compute_demand
@@ -613,7 +613,7 @@ Expected: FAIL with `ImportError`.
 
 - [ ] **Step 3: Implement `_compute_demand`**
 
-Append to `science-tool/src/science_tool/big_picture/knowledge_gaps.py`:
+Append to `science/src/science_tool/big_picture/knowledge_gaps.py`:
 
 ```python
 import logging
@@ -655,7 +655,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/knowledge_gaps.py science-tool/tests/test_knowledge_gaps.py
+git add science/src/science_tool/big_picture/knowledge_gaps.py science/tests/test_knowledge_gaps.py
 git commit -m "feat(knowledge_gaps): implement demand computation"
 ```
 
@@ -664,12 +664,12 @@ git commit -m "feat(knowledge_gaps): implement demand computation"
 ## Task 6: Wire `compute_topic_gaps` (public entry point)
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/knowledge_gaps.py`
-- Test: `science-tool/tests/test_knowledge_gaps.py`
+- Modify: `science/src/science_tool/big_picture/knowledge_gaps.py`
+- Test: `science/tests/test_knowledge_gaps.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `science-tool/tests/test_knowledge_gaps.py`:
+Append to `science/tests/test_knowledge_gaps.py`:
 
 ```python
 from science_tool.big_picture.knowledge_gaps import compute_topic_gaps
@@ -739,7 +739,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement `compute_topic_gaps`**
 
-Append to `science-tool/src/science_tool/big_picture/knowledge_gaps.py`:
+Append to `science/src/science_tool/big_picture/knowledge_gaps.py`:
 
 ```python
 from science_tool.big_picture.resolver import ResolverOutput
@@ -807,7 +807,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/knowledge_gaps.py science-tool/tests/test_knowledge_gaps.py
+git add science/src/science_tool/big_picture/knowledge_gaps.py science/tests/test_knowledge_gaps.py
 git commit -m "feat(knowledge_gaps): wire compute_topic_gaps entry point"
 ```
 
@@ -816,12 +816,12 @@ git commit -m "feat(knowledge_gaps): wire compute_topic_gaps entry point"
 ## Task 7: Add warning logs for dangling refs and malformed source_refs
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/knowledge_gaps.py`
-- Test: `science-tool/tests/test_knowledge_gaps.py`
+- Modify: `science/src/science_tool/big_picture/knowledge_gaps.py`
+- Test: `science/tests/test_knowledge_gaps.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `science-tool/tests/test_knowledge_gaps.py`:
+Append to `science/tests/test_knowledge_gaps.py`:
 
 ```python
 def test_dangling_topic_ref_logs_warning(tmp_path: Path, caplog) -> None:
@@ -869,7 +869,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Add warning emission**
 
-In `science-tool/src/science_tool/big_picture/knowledge_gaps.py`, modify `_compute_coverage` to warn on malformed `source_refs:` entries:
+In `science/src/science_tool/big_picture/knowledge_gaps.py`, modify `_compute_coverage` to warn on malformed `source_refs:` entries:
 
 ```python
 # Inside _compute_coverage, replace the source_refs loop:
@@ -946,7 +946,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/knowledge_gaps.py science-tool/tests/test_knowledge_gaps.py
+git add science/src/science_tool/big_picture/knowledge_gaps.py science/tests/test_knowledge_gaps.py
 git commit -m "feat(knowledge_gaps): warn on dangling topic refs + malformed source_refs"
 ```
 
@@ -955,12 +955,12 @@ git commit -m "feat(knowledge_gaps): warn on dangling topic refs + malformed sou
 ## Task 8: Register `knowledge-gaps` CLI subcommand
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/cli.py`
-- Create: `science-tool/tests/test_knowledge_gaps_cli.py`
+- Modify: `science/src/science_tool/big_picture/cli.py`
+- Create: `science/tests/test_knowledge_gaps_cli.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `science-tool/tests/test_knowledge_gaps_cli.py`:
+Create `science/tests/test_knowledge_gaps_cli.py`:
 
 ```python
 from __future__ import annotations
@@ -1015,7 +1015,7 @@ Expected: FAIL with `No such command 'knowledge-gaps'`.
 
 - [ ] **Step 3: Register the subcommand**
 
-Append to `science-tool/src/science_tool/big_picture/cli.py`:
+Append to `science/src/science_tool/big_picture/cli.py`:
 
 ```python
 from dataclasses import asdict
@@ -1060,13 +1060,13 @@ If the exact `matches_aspect_filter` signature differs in this codebase, adapt t
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run --frozen pytest science-tool/tests/test_knowledge_gaps_cli.py -v`
+Run: `uv run --frozen pytest science/tests/test_knowledge_gaps_cli.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/cli.py science-tool/tests/test_knowledge_gaps_cli.py
+git add science/src/science_tool/big_picture/cli.py science/tests/test_knowledge_gaps_cli.py
 git commit -m "feat(big_picture): add knowledge-gaps CLI subcommand"
 ```
 
@@ -1075,12 +1075,12 @@ git commit -m "feat(big_picture): add knowledge-gaps CLI subcommand"
 ## Task 9: Extend validator with `topic` REFERENCE_PATTERN + topic-dir scanning
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/validator.py`
-- Modify: `science-tool/tests/test_big_picture_validator.py` (or create if absent)
+- Modify: `science/src/science_tool/big_picture/validator.py`
+- Modify: `science/tests/test_big_picture_validator.py` (or create if absent)
 
 - [ ] **Step 1: Write the failing tests**
 
-Create (or extend) `science-tool/tests/test_big_picture_validator.py`:
+Create (or extend) `science/tests/test_big_picture_validator.py`:
 
 ```python
 from pathlib import Path
@@ -1108,7 +1108,7 @@ Expected: FAIL — the current pattern lacks `topic`, and `_collect_project_ids`
 
 - [ ] **Step 3: Extend the validator**
 
-In `science-tool/src/science_tool/big_picture/validator.py`:
+In `science/src/science_tool/big_picture/validator.py`:
 
 Change `REFERENCE_PATTERN`:
 
@@ -1148,7 +1148,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/validator.py science-tool/tests/test_big_picture_validator.py
+git add science/src/science_tool/big_picture/validator.py science/tests/test_big_picture_validator.py
 git commit -m "feat(big_picture/validator): recognize topic: references and scan topic dirs"
 ```
 
@@ -1239,7 +1239,7 @@ git commit -m "docs(big-picture): instruct hypothesis-synthesizer agent to rende
 
 ```bash
 cd ~/d/mm30
-uv run science-tool big-picture knowledge-gaps --project-root .
+uv run science big-picture knowledge-gaps --project-root .
 ```
 
 Expected: JSON with topics where reading lags. Check for plausibility — topics with heavy bibtex coverage should NOT appear; topics with many questions and thin `source_refs` SHOULD appear.
@@ -1248,7 +1248,7 @@ Expected: JSON with topics where reading lags. Check for plausibility — topics
 
 ```bash
 cd ~/d/natural-systems
-uv run science-tool big-picture knowledge-gaps --project-root .
+uv run science big-picture knowledge-gaps --project-root .
 ```
 
 Expected: per-paper-entity coverage dominates the metric (natural-systems has per-paper files and sparse bibtex).
@@ -1258,7 +1258,7 @@ Expected: per-paper-entity coverage dominates the metric (natural-systems has pe
 In one of the two projects, run the full big-picture synthesis. Verify:
 - A new Knowledge Gaps section appears between Research Fronts and Emergent Threads in `synthesis.md`.
 - Per-hypothesis files have a Knowledge Gaps sub-bullet inside Research Fronts (when gaps exist).
-- The validator passes (`science-tool big-picture validate --project-root .`).
+- The validator passes (`science big-picture validate --project-root .`).
 
 ---
 

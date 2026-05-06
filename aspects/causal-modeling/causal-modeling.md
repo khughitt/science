@@ -19,13 +19,13 @@ If a causal inquiry exists:
 - Do results suggest missing variables or edges?
 - Should any edges be removed or reversed?
 - Do effect sizes inform parameter estimates?
-- Propose specific graph updates but do not execute them — list the `science-tool` commands that would make the changes.
+- Propose specific graph updates but do not execute them — list the `science` commands that would make the changes.
 
 If no causal model exists yet, note whether results suggest building one.
 
 ### Additional workflow
 
-After evaluating findings against open questions, assess the causal model using the guidance above. Present proposed graph changes to the user before executing any `science-tool` commands.
+After evaluating findings against open questions, assess the causal model using the guidance above. Present proposed graph changes to the user before executing any `science` commands.
 
 ## discuss
 

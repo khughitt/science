@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement Phase 2a of the DAG pipeline: a new `science-tool dag validate [--strict]` command that composes the existing Phase 1 Pydantic + ref-resolution checks with new cross-file (.dot↔YAML), acyclicity, posterior-sanity, and JSON-schema-conformance checks, plus a `science-tool dag schema` command that emits the generated JSON Schema artifact. Integrate validation into `dag audit` as a precondition.
+**Goal:** Implement Phase 2a of the DAG pipeline: a new `science dag validate [--strict]` command that composes the existing Phase 1 Pydantic + ref-resolution checks with new cross-file (.dot↔YAML), acyclicity, posterior-sanity, and JSON-schema-conformance checks, plus a `science dag schema` command that emits the generated JSON Schema artifact. Integrate validation into `dag audit` as a precondition.
 
 **Architecture:** New `science_tool.dag.validate` module owns a `validate_project(paths, *, strict)` entry point returning a `ValidationReport` of `ValidationFinding` records. Pydantic models in `schema.py` remain the runtime source of truth; `EdgesYamlFile.model_json_schema()` is emitted to a committed `edges.schema.json` artifact with a drift-guard test. `.dot` parsing uses a regex-based helper (following the style of the existing `number.py`) — no new heavy dependencies like `pydot`. `--strict` gates four additional migration-completeness checks (explicit `identification:`, non-empty descriptions, no orphan .dot nodes, cross-DAG node-name consistency). `dag audit` runs `validate_project()` as a precondition; `dag audit --fix` blocks on validation failure with a clear message.
 
@@ -19,7 +19,7 @@
 
 ## File Structure
 
-### New files (upstream, `science-tool/`)
+### New files (upstream, `science/`)
 
 - `src/science_tool/dag/validate.py` — the `validate_project` entry point, `ValidationFinding` / `ValidationReport` dataclasses, all per-rule check functions, and the internal `.dot` topology parser. ~300 LOC when complete.
 - `src/science_tool/dag/edges.schema.json` — generated JSON Schema artifact, committed.
@@ -59,14 +59,14 @@
 ## Task 1: Add `jsonschema` dependency and scaffold test file
 
 **Files:**
-- Modify: `science-tool/pyproject.toml`
-- Create: `science-tool/tests/dag/test_validate.py` (empty scaffold)
-- Create: `science-tool/tests/dag/test_validate_cli.py` (empty scaffold)
-- Create: `science-tool/tests/dag/test_schema_artifact.py` (empty scaffold)
+- Modify: `science/pyproject.toml`
+- Create: `science/tests/dag/test_validate.py` (empty scaffold)
+- Create: `science/tests/dag/test_validate_cli.py` (empty scaffold)
+- Create: `science/tests/dag/test_schema_artifact.py` (empty scaffold)
 
 - [ ] **Step 1: Add jsonschema to dependencies**
 
-Edit `science-tool/pyproject.toml`:
+Edit `science/pyproject.toml`:
 
 ```toml
 [project]
@@ -85,14 +85,14 @@ dependencies = [
 - [ ] **Step 2: Sync the lockfile**
 
 ```bash
-cd science-tool && uv sync
+cd science && uv sync
 ```
 
 Expected: `jsonschema` appears in `uv.lock`; no other changes.
 
 - [ ] **Step 3: Create empty test files**
 
-Create `science-tool/tests/dag/test_validate.py` with:
+Create `science/tests/dag/test_validate.py` with:
 
 ```python
 """Unit tests for science_tool.dag.validate."""
@@ -100,15 +100,15 @@ Create `science-tool/tests/dag/test_validate.py` with:
 from __future__ import annotations
 ```
 
-Create `science-tool/tests/dag/test_validate_cli.py` with:
+Create `science/tests/dag/test_validate_cli.py` with:
 
 ```python
-"""Click-runner tests for `science-tool dag validate` + `dag schema`."""
+"""Click-runner tests for `science dag validate` + `dag schema`."""
 
 from __future__ import annotations
 ```
 
-Create `science-tool/tests/dag/test_schema_artifact.py` with:
+Create `science/tests/dag/test_schema_artifact.py` with:
 
 ```python
 """Drift guard: committed edges.schema.json == Pydantic model_json_schema output."""
@@ -119,7 +119,7 @@ from __future__ import annotations
 - [ ] **Step 4: Confirm existing tests still pass**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/ -q
+cd science && uv run pytest tests/dag/ -q
 ```
 
 Expected: 86 passed (unchanged).
@@ -127,7 +127,7 @@ Expected: 86 passed (unchanged).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd science-tool
+cd science
 git add pyproject.toml uv.lock tests/dag/test_validate.py tests/dag/test_validate_cli.py tests/dag/test_schema_artifact.py
 git commit -m "feat(dag): add jsonschema dep + scaffold validate test files"
 ```
@@ -137,19 +137,19 @@ git commit -m "feat(dag): add jsonschema dep + scaffold validate test files"
 ## Task 2: `ValidationFinding` / `ValidationReport` dataclasses + `validate_project()` composing Phase 1 shape + refs
 
 **Files:**
-- Create: `science-tool/src/science_tool/dag/validate.py`
-- Test: `science-tool/tests/dag/test_validate.py`
-- Create fixture: `science-tool/tests/dag/fixtures/minimal/clean/`
+- Create: `science/src/science_tool/dag/validate.py`
+- Test: `science/tests/dag/test_validate.py`
+- Create fixture: `science/tests/dag/fixtures/minimal/clean/`
 
 - [ ] **Step 1: Create the `clean/` minimal fixture**
 
-Create `science-tool/tests/dag/fixtures/minimal/clean/science.yaml`:
+Create `science/tests/dag/fixtures/minimal/clean/science.yaml`:
 
 ```yaml
 profile: research
 ```
 
-Create `science-tool/tests/dag/fixtures/minimal/clean/doc/figures/dags/toy.dot`:
+Create `science/tests/dag/fixtures/minimal/clean/doc/figures/dags/toy.dot`:
 
 ```
 digraph toy {
@@ -157,7 +157,7 @@ digraph toy {
 }
 ```
 
-Create `science-tool/tests/dag/fixtures/minimal/clean/doc/figures/dags/toy.edges.yaml`:
+Create `science/tests/dag/fixtures/minimal/clean/doc/figures/dags/toy.edges.yaml`:
 
 ```yaml
 dag: toy
@@ -171,7 +171,7 @@ edges:
     description: toy structural edge
 ```
 
-Create empty `science-tool/tests/dag/fixtures/minimal/clean/tasks/active.md`:
+Create empty `science/tests/dag/fixtures/minimal/clean/tasks/active.md`:
 
 ```markdown
 # Active Tasks
@@ -179,7 +179,7 @@ Create empty `science-tool/tests/dag/fixtures/minimal/clean/tasks/active.md`:
 
 - [ ] **Step 2: Write failing tests**
 
-Add to `science-tool/tests/dag/test_validate.py`:
+Add to `science/tests/dag/test_validate.py`:
 
 ```python
 from datetime import date
@@ -237,14 +237,14 @@ def test_validation_finding_severity_literal() -> None:
 - [ ] **Step 3: Run tests to verify they fail**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_validate.py -v
+cd science && uv run pytest tests/dag/test_validate.py -v
 ```
 
 Expected: all three tests FAIL with `ImportError: cannot import name 'validate_project'`.
 
 - [ ] **Step 4: Implement the module scaffold**
 
-Create `science-tool/src/science_tool/dag/validate.py`:
+Create `science/src/science_tool/dag/validate.py`:
 
 ```python
 """Comprehensive validation for the DAG YAML + .dot layer.
@@ -408,7 +408,7 @@ def validate_project(
 - [ ] **Step 5: Run the tests to confirm they pass**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_validate.py -v
+cd science && uv run pytest tests/dag/test_validate.py -v
 ```
 
 Expected: all three tests PASS.
@@ -416,7 +416,7 @@ Expected: all three tests PASS.
 - [ ] **Step 6: Confirm existing tests still pass**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/ -q
+cd science && uv run pytest tests/dag/ -q
 ```
 
 Expected: 89 passed (86 existing + 3 new).
@@ -424,7 +424,7 @@ Expected: 89 passed (86 existing + 3 new).
 - [ ] **Step 7: Commit**
 
 ```bash
-cd science-tool
+cd science
 git add src/science_tool/dag/validate.py tests/dag/test_validate.py \
         tests/dag/fixtures/minimal/clean/
 git commit -m "feat(dag): ValidationReport + validate_project (shape + refs)"
@@ -435,12 +435,12 @@ git commit -m "feat(dag): ValidationReport + validate_project (shape + refs)"
 ## Task 3: Posterior-sanity checks (finite, HDI order, prob_sign range)
 
 **Files:**
-- Modify: `science-tool/src/science_tool/dag/validate.py`
-- Modify: `science-tool/tests/dag/test_validate.py`
+- Modify: `science/src/science_tool/dag/validate.py`
+- Modify: `science/tests/dag/test_validate.py`
 - Create fixtures:
-  - `science-tool/tests/dag/fixtures/minimal/bad-posterior-infinite/`
-  - `science-tool/tests/dag/fixtures/minimal/bad-posterior-hdi-order/`
-  - `science-tool/tests/dag/fixtures/minimal/bad-posterior-prob-sign/`
+  - `science/tests/dag/fixtures/minimal/bad-posterior-infinite/`
+  - `science/tests/dag/fixtures/minimal/bad-posterior-hdi-order/`
+  - `science/tests/dag/fixtures/minimal/bad-posterior-prob-sign/`
 
 - [ ] **Step 1: Create the three broken-posterior fixtures**
 
@@ -532,7 +532,7 @@ def test_posterior_prob_sign_must_be_in_unit_interval() -> None:
 - [ ] **Step 3: Run the tests to verify they fail**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_validate.py::test_posterior_beta_must_be_finite -v
+cd science && uv run pytest tests/dag/test_validate.py::test_posterior_beta_must_be_finite -v
 ```
 
 Expected: FAIL — the current `validate_project` runs only shape+refs, so the posterior checks have not been added; `posterior_finite` does not appear in findings and `report.ok` is True.
@@ -626,7 +626,7 @@ Wire it into `validate_project`. Replace the loop body:
 - [ ] **Step 5: Run the tests to confirm they pass**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_validate.py -v
+cd science && uv run pytest tests/dag/test_validate.py -v
 ```
 
 Expected: all 6 tests PASS.
@@ -634,7 +634,7 @@ Expected: all 6 tests PASS.
 - [ ] **Step 6: Run the full suite**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/ -q
+cd science && uv run pytest tests/dag/ -q
 ```
 
 Expected: 92 passed (86 Phase 1 + 6 new).
@@ -642,7 +642,7 @@ Expected: 92 passed (86 Phase 1 + 6 new).
 - [ ] **Step 7: Commit**
 
 ```bash
-cd science-tool
+cd science
 git add src/science_tool/dag/validate.py tests/dag/test_validate.py \
         tests/dag/fixtures/minimal/bad-posterior-infinite/ \
         tests/dag/fixtures/minimal/bad-posterior-hdi-order/ \
@@ -655,9 +655,9 @@ git commit -m "feat(dag): posterior sanity checks (finite/hdi-ordered/prob-sign-
 ## Task 4: `.dot` topology parser + YAML↔.dot consistency checks
 
 **Files:**
-- Modify: `science-tool/src/science_tool/dag/validate.py`
-- Modify: `science-tool/tests/dag/test_validate.py`
-- Create fixture: `science-tool/tests/dag/fixtures/minimal/yaml-dot-mismatch/`
+- Modify: `science/src/science_tool/dag/validate.py`
+- Modify: `science/tests/dag/test_validate.py`
+- Create fixture: `science/tests/dag/fixtures/minimal/yaml-dot-mismatch/`
 
 - [ ] **Step 1: Create the mismatch fixture**
 
@@ -729,7 +729,7 @@ def test_clean_fixture_has_no_topology_findings() -> None:
 - [ ] **Step 3: Run tests to verify they fail**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_validate.py -v -k topology
+cd science && uv run pytest tests/dag/test_validate.py -v -k topology
 ```
 
 Expected: the three new tests FAIL — topology rules do not yet appear in findings.
@@ -878,7 +878,7 @@ Wire it in. Add the call after `_check_posterior_sanity`:
 - [ ] **Step 5: Run tests to confirm they pass**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_validate.py -v
+cd science && uv run pytest tests/dag/test_validate.py -v
 ```
 
 Expected: 9 tests PASS.
@@ -886,7 +886,7 @@ Expected: 9 tests PASS.
 - [ ] **Step 6: Run the full suite to confirm no regression**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/ -q
+cd science && uv run pytest tests/dag/ -q
 ```
 
 Expected: 95 passed.
@@ -894,7 +894,7 @@ Expected: 95 passed.
 - [ ] **Step 7: Sanity-check against mm30 fixture**
 
 ```bash
-cd science-tool && uv run python -c "
+cd science && uv run python -c "
 from science_tool.dag.paths import load_dag_paths
 from science_tool.dag.validate import validate_project
 from pathlib import Path
@@ -912,7 +912,7 @@ Expected: `ok: True`. If any findings surface on mm30, they are bugs either in t
 - [ ] **Step 8: Commit**
 
 ```bash
-cd science-tool
+cd science
 git add src/science_tool/dag/validate.py tests/dag/test_validate.py \
         tests/dag/fixtures/minimal/yaml-dot-mismatch/
 git commit -m "feat(dag): .dot topology parser + YAML↔.dot consistency checks"
@@ -923,9 +923,9 @@ git commit -m "feat(dag): .dot topology parser + YAML↔.dot consistency checks"
 ## Task 5: Acyclicity check
 
 **Files:**
-- Modify: `science-tool/src/science_tool/dag/validate.py`
-- Modify: `science-tool/tests/dag/test_validate.py`
-- Create fixture: `science-tool/tests/dag/fixtures/minimal/cyclic/`
+- Modify: `science/src/science_tool/dag/validate.py`
+- Modify: `science/tests/dag/test_validate.py`
+- Create fixture: `science/tests/dag/fixtures/minimal/cyclic/`
 
 - [ ] **Step 1: Create the cyclic fixture**
 
@@ -991,7 +991,7 @@ def test_acyclicity_passes_on_clean() -> None:
 - [ ] **Step 3: Run tests to verify the first fails**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_validate.py::test_acyclicity_flags_cycle -v
+cd science && uv run pytest tests/dag/test_validate.py::test_acyclicity_flags_cycle -v
 ```
 
 Expected: FAIL — no `acyclicity` rule is emitted yet.
@@ -1095,7 +1095,7 @@ Split `_check_topology` so the parsing happens once. Rename the existing body to
 - [ ] **Step 5: Run tests to confirm they pass**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_validate.py -v
+cd science && uv run pytest tests/dag/test_validate.py -v
 ```
 
 Expected: 11 tests PASS.
@@ -1103,7 +1103,7 @@ Expected: 11 tests PASS.
 - [ ] **Step 6: Run the full suite**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/ -q
+cd science && uv run pytest tests/dag/ -q
 ```
 
 Expected: 97 passed.
@@ -1111,7 +1111,7 @@ Expected: 97 passed.
 - [ ] **Step 7: Sanity-check mm30 fixture**
 
 ```bash
-cd science-tool && uv run python -c "
+cd science && uv run python -c "
 from science_tool.dag.paths import load_dag_paths
 from science_tool.dag.validate import validate_project
 from pathlib import Path
@@ -1125,7 +1125,7 @@ Expected: `ok: True`. If mm30's DAGs legitimately have a cycle, the check has ca
 - [ ] **Step 8: Commit**
 
 ```bash
-cd science-tool
+cd science
 git add src/science_tool/dag/validate.py tests/dag/test_validate.py \
         tests/dag/fixtures/minimal/cyclic/
 git commit -m "feat(dag): DFS-based acyclicity check"
@@ -1136,11 +1136,11 @@ git commit -m "feat(dag): DFS-based acyclicity check"
 ## Task 6: `dag schema` CLI command + committed `edges.schema.json` artifact + drift-guard test
 
 **Files:**
-- Modify: `science-tool/src/science_tool/dag/cli.py`
-- Create: `science-tool/src/science_tool/dag/edges.schema.json` (generated)
-- Modify: `science-tool/tests/dag/test_schema_artifact.py`
-- Modify: `science-tool/tests/dag/test_validate_cli.py`
-- Modify: `science-tool/pyproject.toml` (include package data)
+- Modify: `science/src/science_tool/dag/cli.py`
+- Create: `science/src/science_tool/dag/edges.schema.json` (generated)
+- Modify: `science/tests/dag/test_schema_artifact.py`
+- Modify: `science/tests/dag/test_validate_cli.py`
+- Modify: `science/pyproject.toml` (include package data)
 
 - [ ] **Step 1: Write the drift-guard test**
 
@@ -1174,7 +1174,7 @@ def test_committed_schema_matches_pydantic_emit() -> None:
     actual = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     assert actual == emitted, (
         f"Committed {SCHEMA_PATH.name} is out of sync with Pydantic. "
-        f"Regenerate: `science-tool dag schema --output {SCHEMA_PATH}`"
+        f"Regenerate: `science dag schema --output {SCHEMA_PATH}`"
     )
 
 
@@ -1186,14 +1186,14 @@ def test_committed_schema_canonical_formatted() -> None:
     emitted = EdgesYamlFile.model_json_schema()
     assert text == _canonical(emitted), (
         "Committed schema is not in canonical form. "
-        f"Regenerate: `science-tool dag schema --output {SCHEMA_PATH}`"
+        f"Regenerate: `science dag schema --output {SCHEMA_PATH}`"
     )
 ```
 
 - [ ] **Step 2: Run the test; expect both to fail**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_schema_artifact.py -v
+cd science && uv run pytest tests/dag/test_schema_artifact.py -v
 ```
 
 Expected: both tests FAIL — the file does not yet exist.
@@ -1230,14 +1230,14 @@ def schema_cmd(output_path: Path | None) -> None:
 - [ ] **Step 4: Generate the committed artifact**
 
 ```bash
-cd science-tool && uv run science-tool dag schema --output src/science_tool/dag/edges.schema.json
+cd science && uv run science dag schema --output src/science_tool/dag/edges.schema.json
 ```
 
 Expected: prints `Wrote src/science_tool/dag/edges.schema.json`.
 
 - [ ] **Step 5: Ensure `edges.schema.json` ships with the package**
 
-Edit `science-tool/pyproject.toml`, extend the hatch build target:
+Edit `science/pyproject.toml`, extend the hatch build target:
 
 ```toml
 [tool.hatch.build.targets.wheel]
@@ -1283,7 +1283,7 @@ def test_schema_write_to_file(tmp_path: Path) -> None:
 - [ ] **Step 7: Run all tests**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/ -q
+cd science && uv run pytest tests/dag/ -q
 ```
 
 Expected: 101 passed (97 + 2 drift-guard + 2 CLI).
@@ -1291,7 +1291,7 @@ Expected: 101 passed (97 + 2 drift-guard + 2 CLI).
 - [ ] **Step 8: Commit**
 
 ```bash
-cd science-tool
+cd science
 git add src/science_tool/dag/cli.py \
         src/science_tool/dag/edges.schema.json \
         tests/dag/test_schema_artifact.py \
@@ -1305,8 +1305,8 @@ git commit -m "feat(dag): dag schema command + committed edges.schema.json + dri
 ## Task 7: `jsonschema_conformance` check
 
 **Files:**
-- Modify: `science-tool/src/science_tool/dag/validate.py`
-- Modify: `science-tool/tests/dag/test_validate.py`
+- Modify: `science/src/science_tool/dag/validate.py`
+- Modify: `science/tests/dag/test_validate.py`
 
 - [ ] **Step 1: Write the test**
 
@@ -1337,7 +1337,7 @@ def test_jsonschema_conformance_runs_on_mm30_fixture() -> None:
 - [ ] **Step 2: Run the tests; expect the mm30 one may fail silently (not yet run) — confirm both fail first**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_validate.py::test_jsonschema_conformance_passes_on_clean -v
+cd science && uv run pytest tests/dag/test_validate.py::test_jsonschema_conformance_passes_on_clean -v
 ```
 
 The first test will pass because no `jsonschema_conformance` rule exists yet so nothing false-positives. The second test will also pass for the same reason. **This is a shape-of-assertion limitation; Step 3 adds a deliberate drift test that exercises the path.**
@@ -1370,7 +1370,7 @@ def test_jsonschema_conformance_catches_drift(tmp_path: Path, monkeypatch) -> No
 - [ ] **Step 4: Run the drift test; expect it to fail before implementation**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_validate.py::test_jsonschema_conformance_catches_drift -v
+cd science && uv run pytest tests/dag/test_validate.py::test_jsonschema_conformance_catches_drift -v
 ```
 
 Expected: FAIL with `AttributeError: module ... has no attribute '_SCHEMA_PATH'`.
@@ -1419,7 +1419,7 @@ def _check_jsonschema_conformance(
                 severity="error",
                 message=(
                     f"edges.schema.json not found at {_SCHEMA_PATH}; "
-                    "regenerate with `science-tool dag schema --output ...`"
+                    "regenerate with `science dag schema --output ...`"
                 ),
                 location=yaml_path.name,
             )
@@ -1461,7 +1461,7 @@ Wire it into `validate_project`. Add immediately after shape+refs:
 - [ ] **Step 6: Run all tests**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/ -q
+cd science && uv run pytest tests/dag/ -q
 ```
 
 Expected: 104 passed (101 + 3 new).
@@ -1469,7 +1469,7 @@ Expected: 104 passed (101 + 3 new).
 - [ ] **Step 7: Sanity-check mm30**
 
 ```bash
-cd science-tool && uv run python -c "
+cd science && uv run python -c "
 from science_tool.dag.paths import load_dag_paths
 from science_tool.dag.validate import validate_project
 from pathlib import Path
@@ -1485,7 +1485,7 @@ Expected: `ok: True`.
 - [ ] **Step 8: Commit**
 
 ```bash
-cd science-tool
+cd science
 git add src/science_tool/dag/validate.py tests/dag/test_validate.py
 git commit -m "feat(dag): jsonschema_conformance drift-tripwire check"
 ```
@@ -1495,13 +1495,13 @@ git commit -m "feat(dag): jsonschema_conformance drift-tripwire check"
 ## Task 8: Strict-only checks (identification_missing, description_nonempty, dot_nodes_unused, cross_dag_node_consistency)
 
 **Files:**
-- Modify: `science-tool/src/science_tool/dag/validate.py`
-- Modify: `science-tool/tests/dag/test_validate.py`
+- Modify: `science/src/science_tool/dag/validate.py`
+- Modify: `science/tests/dag/test_validate.py`
 - Create fixtures:
-  - `science-tool/tests/dag/fixtures/minimal/missing-identification/`
-  - `science-tool/tests/dag/fixtures/minimal/empty-description/`
-  - `science-tool/tests/dag/fixtures/minimal/orphan-dot-node/`
-  - `science-tool/tests/dag/fixtures/minimal/cross-dag-inconsistent/`
+  - `science/tests/dag/fixtures/minimal/missing-identification/`
+  - `science/tests/dag/fixtures/minimal/empty-description/`
+  - `science/tests/dag/fixtures/minimal/orphan-dot-node/`
+  - `science/tests/dag/fixtures/minimal/cross-dag-inconsistent/`
 
 - [ ] **Step 1: Create fixtures**
 
@@ -1666,7 +1666,7 @@ def test_non_strict_does_not_emit_strict_errors_as_blocking() -> None:
 - [ ] **Step 3: Run tests to confirm they fail**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_validate.py -v -k strict
+cd science && uv run pytest tests/dag/test_validate.py -v -k strict
 ```
 
 Expected: all four new tests FAIL.
@@ -1846,7 +1846,7 @@ Wire these into `validate_project`. Track `per_dag_nodes` across the loop and ru
 - [ ] **Step 5: Run tests to confirm they pass**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_validate.py -v
+cd science && uv run pytest tests/dag/test_validate.py -v
 ```
 
 Expected: 16 tests PASS.
@@ -1854,7 +1854,7 @@ Expected: 16 tests PASS.
 - [ ] **Step 6: Run the full suite**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/ -q
+cd science && uv run pytest tests/dag/ -q
 ```
 
 Expected: 109 passed.
@@ -1862,7 +1862,7 @@ Expected: 109 passed.
 - [ ] **Step 7: Sanity-check mm30 under `--strict`**
 
 ```bash
-cd science-tool && uv run python -c "
+cd science && uv run python -c "
 from science_tool.dag.paths import load_dag_paths
 from science_tool.dag.validate import validate_project
 from pathlib import Path
@@ -1879,7 +1879,7 @@ Expected: `ok: True` (mm30's fixtures are fully backfilled with `identification:
 - [ ] **Step 8: Commit**
 
 ```bash
-cd science-tool
+cd science
 git add src/science_tool/dag/validate.py tests/dag/test_validate.py \
         tests/dag/fixtures/minimal/missing-identification/ \
         tests/dag/fixtures/minimal/empty-description/ \
@@ -1893,8 +1893,8 @@ git commit -m "feat(dag): strict-only checks (identification/desc/orphan/case)"
 ## Task 9: `dag validate` CLI command
 
 **Files:**
-- Modify: `science-tool/src/science_tool/dag/cli.py`
-- Modify: `science-tool/tests/dag/test_validate_cli.py`
+- Modify: `science/src/science_tool/dag/cli.py`
+- Modify: `science/tests/dag/test_validate_cli.py`
 
 - [ ] **Step 1: Write failing CLI tests**
 
@@ -1993,7 +1993,7 @@ def test_validate_dag_scope() -> None:
 - [ ] **Step 2: Run tests to confirm they fail**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_validate_cli.py -v
+cd science && uv run pytest tests/dag/test_validate_cli.py -v
 ```
 
 Expected: 6 new tests FAIL — the `validate` subcommand is not registered.
@@ -2064,7 +2064,7 @@ def validate_cmd(
 - [ ] **Step 4: Run tests to confirm pass**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_validate_cli.py -v
+cd science && uv run pytest tests/dag/test_validate_cli.py -v
 ```
 
 Expected: all CLI tests PASS (including the two earlier `schema` tests).
@@ -2072,7 +2072,7 @@ Expected: all CLI tests PASS (including the two earlier `schema` tests).
 - [ ] **Step 5: Run the full suite**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/ -q
+cd science && uv run pytest tests/dag/ -q
 ```
 
 Expected: 115 passed.
@@ -2080,7 +2080,7 @@ Expected: 115 passed.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd science-tool
+cd science
 git add src/science_tool/dag/cli.py tests/dag/test_validate_cli.py
 git commit -m "feat(dag): dag validate CLI command (--strict/--dag/--json)"
 ```
@@ -2090,10 +2090,10 @@ git commit -m "feat(dag): dag validate CLI command (--strict/--dag/--json)"
 ## Task 10: Integrate `validate_project` into `dag audit`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/dag/audit.py`
-- Modify: `science-tool/src/science_tool/dag/cli.py`
-- Modify: `science-tool/tests/dag/test_audit.py`
-- Modify: `science-tool/tests/dag/test_validate_cli.py`
+- Modify: `science/src/science_tool/dag/audit.py`
+- Modify: `science/src/science_tool/dag/cli.py`
+- Modify: `science/tests/dag/test_audit.py`
+- Modify: `science/tests/dag/test_validate_cli.py`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -2151,7 +2151,7 @@ def test_audit_json_includes_validation() -> None:
 - [ ] **Step 2: Run tests to confirm they fail**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/test_audit.py tests/dag/test_validate_cli.py::test_audit_json_includes_validation -v
+cd science && uv run pytest tests/dag/test_audit.py tests/dag/test_validate_cli.py::test_audit_json_includes_validation -v
 ```
 
 Expected: 4 new tests FAIL.
@@ -2213,7 +2213,7 @@ def run_audit(
         blocking = [f for f in validation.findings if validation._blocks(f)]
         raise RuntimeError(
             "dag audit --fix refused: validation failed with "
-            f"{len(blocking)} blocking finding(s). Run `science-tool dag validate` "
+            f"{len(blocking)} blocking finding(s). Run `science dag validate` "
             "and address errors before retrying."
         )
 
@@ -2270,7 +2270,7 @@ Pass `strict=strict` into `run_audit(...)`.
 - [ ] **Step 5: Run tests to confirm they pass**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/ -q
+cd science && uv run pytest tests/dag/ -q
 ```
 
 Expected: 119 passed.
@@ -2278,7 +2278,7 @@ Expected: 119 passed.
 - [ ] **Step 6: Sanity-check mm30**
 
 ```bash
-cd science-tool && uv run python -c "
+cd science && uv run python -c "
 from science_tool.dag.paths import load_dag_paths
 from science_tool.dag.audit import run_audit
 from pathlib import Path
@@ -2293,7 +2293,7 @@ Expected: `validation.ok: True`.
 - [ ] **Step 7: Commit**
 
 ```bash
-cd science-tool
+cd science
 git add src/science_tool/dag/audit.py src/science_tool/dag/cli.py \
         tests/dag/test_audit.py tests/dag/test_validate_cli.py
 git commit -m "feat(dag): audit runs validate as precondition; --fix gated on validation"
@@ -2304,8 +2304,8 @@ git commit -m "feat(dag): audit runs validate as precondition; --fix gated on va
 ## Task 11: Update `__init__.py` exports + mm30-fixture acceptance sanity
 
 **Files:**
-- Modify: `science-tool/src/science_tool/dag/__init__.py`
-- Modify: `science-tool/tests/dag/test_validate.py` (add mm30 end-to-end test)
+- Modify: `science/src/science_tool/dag/__init__.py`
+- Modify: `science/tests/dag/test_validate.py` (add mm30 end-to-end test)
 
 - [ ] **Step 1: Add exports to `__init__.py`**
 
@@ -2352,7 +2352,7 @@ def test_mm30_fixture_validates_strict() -> None:
 - [ ] **Step 3: Run the full suite**
 
 ```bash
-cd science-tool && uv run pytest tests/dag/ -q
+cd science && uv run pytest tests/dag/ -q
 ```
 
 Expected: 121 passed.
@@ -2360,16 +2360,16 @@ Expected: 121 passed.
 - [ ] **Step 4: Run lint + format**
 
 ```bash
-cd science-tool && uv run ruff check src/science_tool/dag/ tests/dag/ \
+cd science && uv run ruff check src/science_tool/dag/ tests/dag/ \
   && uv run ruff format --check src/science_tool/dag/ tests/dag/
 ```
 
 Expected: no findings. If ruff fails, address the violations before proceeding.
 
-- [ ] **Step 5: Confirm `science-tool dag --help` shows both new commands**
+- [ ] **Step 5: Confirm `science dag --help` shows both new commands**
 
 ```bash
-cd science-tool && uv run science-tool dag --help
+cd science && uv run science dag --help
 ```
 
 Expected output contains:
@@ -2387,7 +2387,7 @@ Expected output contains:
 - [ ] **Step 6: Commit**
 
 ```bash
-cd science-tool
+cd science
 git add src/science_tool/dag/__init__.py tests/dag/test_validate.py
 git commit -m "feat(dag): export validate_project + mm30-fixture acceptance tests"
 ```
@@ -2398,9 +2398,9 @@ git commit -m "feat(dag): export validate_project + mm30-fixture acceptance test
 
 Before opening the PR:
 
-- [ ] `science-tool dag validate` on the mm30 fixture exits 0 (Acceptance Criterion 1).
-- [ ] `science-tool dag validate --strict` on the mm30 fixture exits 0 (all edges already backfilled). The adjusted Acceptance Criterion 2 is: `--strict` on the synthetic `missing-identification/` fixture exits 1.
-- [ ] `science-tool dag schema` emits valid draft-2020-12 JSON; the committed `edges.schema.json` equals Pydantic emit under canonical serialization (test_schema_artifact).
+- [ ] `science dag validate` on the mm30 fixture exits 0 (Acceptance Criterion 1).
+- [ ] `science dag validate --strict` on the mm30 fixture exits 0 (all edges already backfilled). The adjusted Acceptance Criterion 2 is: `--strict` on the synthetic `missing-identification/` fixture exits 1.
+- [ ] `science dag schema` emits valid draft-2020-12 JSON; the committed `edges.schema.json` equals Pydantic emit under canonical serialization (test_schema_artifact).
 - [ ] `dag audit` JSON output includes a `validation` section alongside `staleness`; exit code reflects the union.
 - [ ] All existing Phase 1 tests remain green (the 86 baseline).
 - [ ] Synthetic fixtures for cycle, YAML/dot mismatch, `beta: inf`, `hdi_low > hdi_high`, `prob_sign: 1.7` each exit 1 with the expected `rule`.

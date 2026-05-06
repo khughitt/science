@@ -372,7 +372,7 @@ science-model/src/science_model/ontologies/registry.yaml  # built-in registry
 science-model/src/science_model/ontologies/biolink/       # biolink catalog
   catalog.yaml
 science-model/tests/test_ontologies.py                    # ontology loading tests
-science-tool/tests/test_ontology_suggest.py               # suggestion tests
+science/tests/test_ontology_suggest.py               # suggestion tests
 ```
 
 ### Deleted files
@@ -389,10 +389,10 @@ science-model/src/science_model/profiles/schema.py       # no changes (keep "cur
 science-model/src/science_model/__init__.py              # update exports
 science-model/tests/test_profile_manifests.py            # remove bio tests, add ontology tests
 
-science-tool/src/science_tool/graph/sources.py           # remove curated, add ontologies, refactor known_kinds, dynamic external_prefixes
-science-tool/src/science_tool/graph/materialize.py       # update _external_profile to use ontology catalogs
-science-tool/src/science_tool/graph/store.py             # no named graph changes (entities stay in graph/knowledge)
-science-tool/src/science_tool/cli.py                     # add suggestion output in graph build
+science/src/science_tool/graph/sources.py           # remove curated, add ontologies, refactor known_kinds, dynamic external_prefixes
+science/src/science_tool/graph/materialize.py       # update _external_profile to use ontology catalogs
+science/src/science_tool/graph/store.py             # no named graph changes (entities stay in graph/knowledge)
+science/src/science_tool/cli.py                     # add suggestion output in graph build
 
 commands/create-project.md                               # update science.yaml template
 commands/create-graph.md                                 # update for ontologies
@@ -404,7 +404,7 @@ commands/next-steps.md                                   # add ontology suggesti
 
 For each of `seq-feats`, `3d-attention-bias`, `natural-systems`, `cats`:
 1. Update `science.yaml`: remove `curated`, add `ontologies` where appropriate
-2. Rebuild graph with `science-tool graph build`
+2. Rebuild graph with `science graph build`
 
 ---
 

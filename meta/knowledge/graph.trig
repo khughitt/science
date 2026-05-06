@@ -663,7 +663,7 @@
     <http://example.org/project/task/t003> sci:profile "core" ;
         sci:projectStatus "done" ;
         a sci:Task ;
-        skos:prefLabel "Decide hierarchical task ID convention for science-tool" ;
+        skos:prefLabel "Decide hierarchical task ID convention for science" ;
         skos:related <http://example.org/project/task/t020> ;
         schema:identifier "task:t003" .
     <http://example.org/project/task/t004> sci:profile "core" ;

@@ -204,8 +204,8 @@ surface for human attention.
 
 Two CLI commands consume the flag:
 
-- `science-tool entity review <id>` records `last_reviewed = today` on the entity's frontmatter (preserving sibling `review_state` fields).
-- `science-tool entity needs-review` lists currently-flagged entities from the materialized graph.
-- `science-tool graph propagate-freshness` runs the freshness derivation in memory without writing the graph file (useful in CI or pre-commit hooks).
+- `science entity review <id>` records `last_reviewed = today` on the entity's frontmatter (preserving sibling `review_state` fields).
+- `science entity needs-review` lists currently-flagged entities from the materialized graph.
+- `science graph propagate-freshness` runs the freshness derivation in memory without writing the graph file (useful in CI or pre-commit hooks).
 
 See `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` for the full design.

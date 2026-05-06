@@ -4,7 +4,7 @@
 
 **Context:** addresses P1 #9 from the downstream conventions audit synthesis (`docs/audits/downstream-project-conventions/synthesis.md` §6.4 brief; §8.2 in full). All four audited projects show weak code-side linkage to tasks/questions/hypotheses (forward direction `entity → code` is fine in plan/interpretation prose; reverse direction is filename-dependent at best). The synthesis is explicit: case-by-case rather than universal sidecar.
 
-**Scope:** documentation only. No validator rules. No `science-tool` commands. No mandatory adoption.
+**Scope:** documentation only. No validator rules. No `science` commands. No mandatory adoption.
 
 ---
 
@@ -26,7 +26,7 @@ Two further projects confirm the same gap without yet shipping a fix:
 
 ## File Structure
 
-Files modified (no code, no new files in `templates/`, `scripts/`, or `science-tool/`):
+Files modified (no code, no new files in `templates/`, `scripts/`, or `science/`):
 
 - `docs/project-organization-profiles.md` — add a new section "Code → task back-link" near the existing "Research Analysis Naming" section.
 - `docs/conventions/README.md` — *new*, ~10-15 line scope doc establishing `docs/conventions/` as the home for cross-cutting convention references (one short doc per recurring pattern, written for both human readers and adopting agents). Sets the bar so the directory does not become a graveyard of one-off files.
@@ -115,7 +115,7 @@ Acceptance: section present; renders; links to `docs/conventions/code-task-backl
 ## Out of Scope
 
 - Validator rules for any of the three patterns. (`scripts/validate.sh` is unchanged.)
-- A `science-tool` command to emit/lint back-links.
+- A `science` command to emit/lint back-links.
 - Migrating existing downstream projects to the convention. (Adoption is opt-in; downstream cycles are separate.)
 - Defining the full descriptor schema. (Bucket C / P1 #8.)
 - The mm30-suggested `scripts/hypotheses/<h>/manifest.yaml` `produces:` / `consumes:` shape — flagged in `mm30.md` §6 as project-grown and hypothesis-specific; not promoted to a Science-wide pattern by this plan. Revisit if a second project shows the same shape.

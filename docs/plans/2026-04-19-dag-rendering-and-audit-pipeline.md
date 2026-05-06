@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Lift mm30's three proven DAG-maintenance scripts (`_render_styled.py`, `_number_edges.py`, `_dag_staleness.py`) into `science-tool` as a `dag` subcommand group, with pinned contracts for `identification` axis defaulting to `none`, drift-based (not age-based) staleness, read-only-by-default `dag audit`, a tagged-ref schema validated via `science-tool refs check`, and `--json` machine-readable output in v1. Add a `/science:dag-audit` skill for cadenced maintenance. Amend the 2026-04-17 edge-status dashboard spec to recognize `eliminated` as a fifth enum value (graph-layer storage deferred to Phase 2).
+**Goal:** Lift mm30's three proven DAG-maintenance scripts (`_render_styled.py`, `_number_edges.py`, `_dag_staleness.py`) into `science` as a `dag` subcommand group, with pinned contracts for `identification` axis defaulting to `none`, drift-based (not age-based) staleness, read-only-by-default `dag audit`, a tagged-ref schema validated via `science refs check`, and `--json` machine-readable output in v1. Add a `/science:dag-audit` skill for cadenced maintenance. Amend the 2026-04-17 edge-status dashboard spec to recognize `eliminated` as a fifth enum value (graph-layer storage deferred to Phase 2).
 
 **Architecture:** A new `science_tool.dag` package owns rendering, numbering, staleness, audit orchestration, schema validation, and path discovery. Path discovery reads a `dag:` block from `science.yaml` (dag_dir, tasks_dir, optional dags whitelist), falling back to `research`-profile defaults. Schema validation uses narrow Pydantic v2 models in `schema.py` (NOT a full JSON-schema — that's Phase 2). Ref-schema validation integrates with the existing `science_tool.refs.check_refs` API. The rendering module preserves the mm30 visual contract (two-axis styling, precedence matrix) and adds `eliminated` as a fifth edge status. The staleness module is a drift-based rewrite (not a direct lift) that reads `tasks/done/*.md` + `tasks/active.md` frontmatter and emits separate "evidence freshness" vs "curation freshness" sections. `dag audit` composes render + staleness read-only; `dag audit --fix` performs mutations (opens review tasks, proposes YAML edits). The `/science:dag-audit` skill runs read-only by default and prompts for `--fix` only on explicit user approval.
 
-**Tech Stack:** Python 3.11+, pydantic v2 (existing `science-tool` pattern), click (existing CLI), PyYAML, graphviz (`dot` CLI, already in test environments), pytest. No new runtime dependencies.
+**Tech Stack:** Python 3.11+, pydantic v2 (existing `science` pattern), click (existing CLI), PyYAML, graphviz (`dot` CLI, already in test environments), pytest. No new runtime dependencies.
 
 **Spec:** `docs/specs/2026-04-19-dag-rendering-and-audit-pipeline-design.md`
 
@@ -23,7 +23,7 @@
 
 ### New files
 
-**Upstream — `science-tool/src/science_tool/dag/`:**
+**Upstream — `science/src/science_tool/dag/`:**
 
 - `__init__.py` — module marker; re-exports public API (`render_all`, `check_staleness`, `DagError`, `SchemaError`).
 - `cli.py` — registers `dag` click group and the `render` / `number` / `staleness` / `audit` / `init` subcommands.
@@ -38,14 +38,14 @@
 
 **Upstream — tests:**
 
-- `science-tool/tests/dag/__init__.py` — marker.
-- `science-tool/tests/dag/test_schema.py` — unit tests for Pydantic models + ref-schema validation.
-- `science-tool/tests/dag/test_paths.py` — `science.yaml → DagPaths` discovery.
-- `science-tool/tests/dag/test_render.py` — byte-identical `.dot` + PNG structural-invariants + `eliminated` visual contract.
-- `science-tool/tests/dag/test_staleness.py` — drift detection, `last_reviewed` reset, under-reviewed, unpropagated orphans.
-- `science-tool/tests/dag/test_audit.py` — read-only default + `--fix` mutation path.
-- `science-tool/tests/dag/test_cli.py` — click integration.
-- `science-tool/tests/dag/fixtures/mm30/` — imported from mm30 as-of the commit that created this plan:
+- `science/tests/dag/__init__.py` — marker.
+- `science/tests/dag/test_schema.py` — unit tests for Pydantic models + ref-schema validation.
+- `science/tests/dag/test_paths.py` — `science.yaml → DagPaths` discovery.
+- `science/tests/dag/test_render.py` — byte-identical `.dot` + PNG structural-invariants + `eliminated` visual contract.
+- `science/tests/dag/test_staleness.py` — drift detection, `last_reviewed` reset, under-reviewed, unpropagated orphans.
+- `science/tests/dag/test_audit.py` — read-only default + `--fix` mutation path.
+- `science/tests/dag/test_cli.py` — click integration.
+- `science/tests/dag/fixtures/mm30/` — imported from mm30 as-of the commit that created this plan:
   - `h1-prognosis.dot`, `h1-prognosis.edges.yaml`
   - `h1-progression.dot`, `h1-progression.edges.yaml`
   - `h2-subtype-architecture.dot`, `h2-subtype-architecture.edges.yaml`
@@ -53,7 +53,7 @@
   - `h1-prognosis-auto.dot.reference` — expected output from the lifted renderer.
   - `tasks/active.md`, `tasks/done/2026-04.md` — subset sufficient for staleness cross-refs.
   - `science.yaml` — minimal research-profile config with the `dag:` block.
-- `science-tool/tests/dag/fixtures/minimal/` — synthetic 2-edge DAG for unit tests that don't need mm30's breadth.
+- `science/tests/dag/fixtures/minimal/` — synthetic 2-edge DAG for unit tests that don't need mm30's breadth.
 
 **Upstream — skills and references:**
 
@@ -62,14 +62,14 @@
 
 ### Modified files
 
-- `science-tool/src/science_tool/cli.py` — register `dag_group` under `main`; add `from science_tool.dag.cli import dag_group` and `main.add_command(dag_group)`.
+- `science/src/science_tool/cli.py` — register `dag_group` under `main`; add `from science_tool.dag.cli import dag_group` and `main.add_command(dag_group)`.
 - `docs/specs/2026-04-17-edge-status-dashboard-design.md` — amend the enum table: add `eliminated`. Mark the amendment as "storage deferred to Phase 2 sync-dag."
-- `commands/big-picture.md` — Phase 3 rollup adds a read-only call to `science-tool dag staleness --json` so the synthesis report includes DAG freshness without mutating.
+- `commands/big-picture.md` — Phase 3 rollup adds a read-only call to `science dag staleness --json` so the synthesis report includes DAG freshness without mutating.
 
 ### Modified files in mm30 (migration PR, separate from upstream PR)
 
 - `science.yaml` — add 4-line `dag:` block.
-- `doc/figures/dags/README.md` — replace `uv run python _render_styled.py` commands with `science-tool dag render` equivalents.
+- `doc/figures/dags/README.md` — replace `uv run python _render_styled.py` commands with `science dag render` equivalents.
 - `doc/figures/dags/h{1,2}-*.edges.yaml` — backfill explicit `identification: none` or the correct axis value where it was previously absent. Net effect on rendered output should be zero modulo the new field presence.
 - `doc/figures/dags/_render_styled.py` — **delete**.
 - `doc/figures/dags/_number_edges.py` — **delete**.
@@ -77,9 +77,9 @@
 
 ### Unchanged
 
-- `science-tool/src/science_tool/refs.py` / `refs_cli.py` — consumed as-is via `check_refs()`.
-- `science-tool/src/science_tool/causal/` — unrelated runtime-inference exports (chirho, pgmpy); untouched.
-- `science-tool/src/science_tool/graph/` — triple-layer code; untouched in Phase 1.
+- `science/src/science_tool/refs.py` / `refs_cli.py` — consumed as-is via `check_refs()`.
+- `science/src/science_tool/causal/` — unrelated runtime-inference exports (chirho, pgmpy); untouched.
+- `science/src/science_tool/graph/` — triple-layer code; untouched in Phase 1.
 - mm30's `.dot` + `.edges.yaml` content (topology + evidence); only the `identification` default backfill touches content, and only additively.
 
 ---
@@ -87,9 +87,9 @@
 ## Task 1: Scaffold `science_tool.dag` package with `DagPaths` discovery
 
 **Files:**
-- Create: `science-tool/src/science_tool/dag/__init__.py`, `science-tool/src/science_tool/dag/paths.py`
-- Test: `science-tool/tests/dag/test_paths.py`
-- Fixture: `science-tool/tests/dag/fixtures/minimal/science.yaml`
+- Create: `science/src/science_tool/dag/__init__.py`, `science/src/science_tool/dag/paths.py`
+- Test: `science/tests/dag/test_paths.py`
+- Fixture: `science/tests/dag/fixtures/minimal/science.yaml`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -178,9 +178,9 @@ def load_dag_paths(project_root: Path) -> DagPaths:
 ## Task 2: Pydantic v2 schema models with fail-fast validators
 
 **Files:**
-- Create: `science-tool/src/science_tool/dag/schema.py`
-- Test: `science-tool/tests/dag/test_schema.py`
-- Fixture: `science-tool/tests/dag/fixtures/minimal/edges-valid.yaml`, `edges-invalid-*.yaml`
+- Create: `science/src/science_tool/dag/schema.py`
+- Test: `science/tests/dag/test_schema.py`
+- Fixture: `science/tests/dag/fixtures/minimal/edges-valid.yaml`, `edges-invalid-*.yaml`
 
 - [ ] **Step 1: Write failing tests for each fail-fast rule**
 
@@ -284,8 +284,8 @@ class SchemaError(ValueError):
 ## Task 3: Ref validation wrapper over `science_tool.refs.check_refs`
 
 **Files:**
-- Create: `science-tool/src/science_tool/dag/refs.py`
-- Test: `science-tool/tests/dag/test_refs_validation.py`
+- Create: `science/src/science_tool/dag/refs.py`
+- Test: `science/tests/dag/test_refs_validation.py`
 
 - [ ] **Step 1: Write failing tests.**
 
@@ -353,9 +353,9 @@ def validate_ref_entry(entry: RefEntry, project_root: Path) -> None:
 ## Task 4: Import mm30 DAG fixtures
 
 **Files:**
-- Copy: `doc/figures/dags/*.{dot,edges.yaml}` from mm30 → `science-tool/tests/dag/fixtures/mm30/`
+- Copy: `doc/figures/dags/*.{dot,edges.yaml}` from mm30 → `science/tests/dag/fixtures/mm30/`
 - Copy: `tasks/active.md`, `tasks/done/2026-04.md` from mm30 → fixture (subset OK; strip tasks that don't appear in any edges.yaml or staleness test case).
-- Create: `science-tool/tests/dag/fixtures/mm30/science.yaml` (minimal; just `profile: research`).
+- Create: `science/tests/dag/fixtures/mm30/science.yaml` (minimal; just `profile: research`).
 - Generate: `<slug>-auto.dot.reference` for all 4 DAGs by running the current mm30 `_render_styled.py` against the fixture.
 
 - [ ] **Step 1: Identify the mm30 commit** from which fixtures are sourced. Record the commit SHA in `fixtures/mm30/SOURCE.md` for reproducibility.
@@ -369,8 +369,8 @@ def validate_ref_entry(entry: RefEntry, project_root: Path) -> None:
 ## Task 5: Lift `render.py` with precedence matrix and `eliminated` support
 
 **Files:**
-- Create: `science-tool/src/science_tool/dag/render.py`
-- Test: `science-tool/tests/dag/test_render.py`
+- Create: `science/src/science_tool/dag/render.py`
+- Test: `science/tests/dag/test_render.py`
 
 - [ ] **Step 1: Write failing tests.**
 
@@ -437,8 +437,8 @@ def test_precedence_eliminated_over_posterior(minimal_fixture: Path) -> None:
 ## Task 6: Lift `number.py`
 
 **Files:**
-- Create: `science-tool/src/science_tool/dag/number.py`
-- Test: `science-tool/tests/dag/test_number.py`
+- Create: `science/src/science_tool/dag/number.py`
+- Test: `science/tests/dag/test_number.py`
 
 - [ ] **Step 1: Write tests** — idempotency, `--force-stubs` resets curation, EDGE_RE handling of multi-line attrs.
 
@@ -455,8 +455,8 @@ def test_precedence_eliminated_over_posterior(minimal_fixture: Path) -> None:
 ## Task 7: Drift-based `staleness.py` with separate evidence/curation finding classes
 
 **Files:**
-- Create: `science-tool/src/science_tool/dag/staleness.py`
-- Test: `science-tool/tests/dag/test_staleness.py`
+- Create: `science/src/science_tool/dag/staleness.py`
+- Test: `science/tests/dag/test_staleness.py`
 
 > **Note:** This is a rewrite, not a lift. mm30's `_dag_staleness.py` uses the age-based rule (signal A) that the spec supersedes. Do NOT copy its `report_stale_edges` function.
 
@@ -569,8 +569,8 @@ def test_eliminated_edges_are_frozen(mm30_fixture_root: Path) -> None:
 ## Task 8: Audit orchestrator with read-only default + `--fix` mutation path
 
 **Files:**
-- Create: `science-tool/src/science_tool/dag/audit.py`
-- Test: `science-tool/tests/dag/test_audit.py`
+- Create: `science/src/science_tool/dag/audit.py`
+- Test: `science/tests/dag/test_audit.py`
 
 - [ ] **Step 1: Write tests.**
 
@@ -584,7 +584,7 @@ def test_audit_read_only_does_not_mutate(mm30_fixture_root: Path) -> None:
     assert not report.mutations
 
 def test_audit_fix_opens_review_tasks(mm30_fixture_root: Path, monkeypatch) -> None:
-    # Simulate a drifted edge; audit --fix should call science-tool tasks add.
+    # Simulate a drifted edge; audit --fix should call science tasks add.
     calls = []
     monkeypatch.setattr("science_tool.dag.audit.tasks_add", lambda **kw: calls.append(kw))
     report = run_audit(load_dag_paths(mm30_fixture_root), fix=True)
@@ -618,12 +618,12 @@ def run_audit(paths: DagPaths, *, fix: bool = False) -> AuditReport:
 
 ---
 
-## Task 9: CLI wiring — `science-tool dag {render,number,staleness,audit,init}`
+## Task 9: CLI wiring — `science dag {render,number,staleness,audit,init}`
 
 **Files:**
-- Create: `science-tool/src/science_tool/dag/cli.py`, `science-tool/src/science_tool/dag/init.py`
-- Modify: `science-tool/src/science_tool/cli.py` (register `dag_group`)
-- Test: `science-tool/tests/dag/test_cli.py`
+- Create: `science/src/science_tool/dag/cli.py`, `science/src/science_tool/dag/init.py`
+- Modify: `science/src/science_tool/cli.py` (register `dag_group`)
+- Test: `science/tests/dag/test_cli.py`
 
 - [ ] **Step 1: Write CLI integration tests** using `click.testing.CliRunner`:
   - `dag render` exits 0, writes `-auto.dot` + `-auto.png`.
@@ -672,7 +672,7 @@ description: Audit causal DAG freshness — run drift detection read-only, surfa
 ```
 
 - [ ] **Step 2: Write the skill body.** Model on the workflow in the spec's §`/science:dag-audit` skill section. Structure:
-  - Step 1: run `science-tool dag audit --json`.
+  - Step 1: run `science dag audit --json`.
   - Step 2: present the four finding classes separately (drift / under-reviewed / unresolved refs / unpropagated).
   - Step 3: for each finding, propose a concrete action; do NOT call `--fix` without user approval.
   - Step 4: on approval, invoke `dag audit --fix` (or narrower `tasks add` / YAML edit sequences) and commit.
@@ -704,7 +704,7 @@ description: Audit causal DAG freshness — run drift detection read-only, surfa
 
 **Files:** all of Tasks 1–12.
 
-- [ ] **Step 1: Open PR in science-tool repo** titled `feat: dag subcommand group + /science:dag-audit skill (Phase 1+3)`.
+- [ ] **Step 1: Open PR in science repo** titled `feat: dag subcommand group + /science:dag-audit skill (Phase 1+3)`.
 - [ ] **Step 2: Body references** `docs/specs/2026-04-19-dag-rendering-and-audit-pipeline-design.md` + this plan.
 - [ ] **Step 3: CI green.**
 - [ ] **Step 4: Reviewer sign-off.**
@@ -719,17 +719,17 @@ description: Audit causal DAG freshness — run drift detection read-only, surfa
 - Delete: `doc/figures/dags/_number_edges.py`
 - Delete: `doc/figures/dags/_dag_staleness.py`
 - Modify: `science.yaml` — add `dag:` block
-- Modify: `doc/figures/dags/README.md` — swap script invocations for `science-tool dag …`
-- Modify: `doc/figures/dags/*.edges.yaml` — backfill explicit `identification: none` on edges where absent (can be scripted via `science-tool dag render` + a one-line YAML sweep, but the file-level diff must be reviewed).
+- Modify: `doc/figures/dags/README.md` — swap script invocations for `science dag …`
+- Modify: `doc/figures/dags/*.edges.yaml` — backfill explicit `identification: none` on edges where absent (can be scripted via `science dag render` + a one-line YAML sweep, but the file-level diff must be reviewed).
 
-- [ ] **Step 1: Upgrade mm30's `science-tool` pin** to the version that landed Task 13.
-- [ ] **Step 2: Run `science-tool dag render`** once on mm30; confirm the `-auto.dot` outputs are byte-identical to what's currently in `main`.
+- [ ] **Step 1: Upgrade mm30's `science` pin** to the version that landed Task 13.
+- [ ] **Step 2: Run `science dag render`** once on mm30; confirm the `-auto.dot` outputs are byte-identical to what's currently in `main`.
 - [ ] **Step 3: Backfill `identification: none`** via a scripted pass (or PR reviewer confirms the defaults are already correct and no backfill is necessary). Visual output unchanged.
 - [ ] **Step 4: Delete the three local scripts.**
-- [ ] **Step 5: Update README** to reference `science-tool dag render` / `science-tool dag staleness` / `science-tool dag audit`.
+- [ ] **Step 5: Update README** to reference `science dag render` / `science dag staleness` / `science dag audit`.
 - [ ] **Step 6: Update `science.yaml`** with the `dag:` block.
-- [ ] **Step 7: Run `science-tool dag audit`** on mm30 — confirm findings match expectations (drift edges from recent t-IDs; unpropagated tasks list ≈ the 40 mm30 currently surfaces).
-- [ ] **Step 8: Open mm30 PR** titled `chore: migrate doc/figures/dags/ scripts to science-tool dag subcommand`.
+- [ ] **Step 7: Run `science dag audit`** on mm30 — confirm findings match expectations (drift edges from recent t-IDs; unpropagated tasks list ≈ the 40 mm30 currently surfaces).
+- [ ] **Step 8: Open mm30 PR** titled `chore: migrate doc/figures/dags/ scripts to science dag subcommand`.
 - [ ] **Step 9: Merge.**
 
 ---
@@ -745,7 +745,7 @@ Before opening the upstream PR:
 - [ ] `identification` default is `none` in `schema.py` and in the test fixtures; grep confirms no lazy `observational` default anywhere.
 - [ ] `--json` output for `dag staleness` and `dag audit` matches the spec's output contract byte-for-byte.
 - [ ] Fail-fast tests exist for: missing id, duplicate edges, illegal enums, malformed posterior, eliminated without eliminated_by, zero-tag refs, multi-tag refs.
-- [ ] `science-tool refs check` integration tested: task/interpretation/discussion/proposition/paper resolve; doi warns but doesn't fail.
+- [ ] `science refs check` integration tested: task/interpretation/discussion/proposition/paper resolve; doi warns but doesn't fail.
 - [ ] Precedence matrix tested: eliminated > structural-structural > posterior > HDI-crosses-zero > default.
 - [ ] Spec open-question #3 (doi fail-fast vs warn) settled in code matches the doc's "lean warn-only" default.
 - [ ] mm30 migration PR verified locally against the upstream HEAD before pushing.
@@ -753,7 +753,7 @@ Before opening the upstream PR:
 ## Out of scope (explicitly deferred)
 
 - JSON-schema validation (`dag validate --strict`). Phase 2.
-- `science-tool graph sync-dag` bidirectional bridge. Phase 2.
+- `science graph sync-dag` bidirectional bridge. Phase 2.
 - HTML / pyvis / cytoscape.js interactive rendering. Phase 4.
 - Mermaid / d2 alternative renderers. Phase 4.
 - mm30 t254 visual extensions (arrow-head shape for identification, persistent footer legend). Phase 4.
@@ -763,5 +763,5 @@ Before opening the upstream PR:
 
 - **`.dot` byte-identity fails on Task 5.** Most likely cause: non-deterministic YAML iteration order or legend-insertion-ordering divergence. Mitigation: reuse the exact ordering from mm30's `_render_styled.py` line-by-line; if drift persists, pin the test to a structural-equivalence check (parse both `.dot` files into a canonical AST and compare) rather than byte-identity.
 - **mm30 staleness report counts differ from the current local script's output.** Expected: the new drift-based rule will surface a smaller and different set. This is a CORRECT behavior change, not a regression. Migration PR description must call this out explicitly.
-- **Ref validation requires `science-tool refs check` to be reliable across project layouts.** The existing `check_refs` is research-profile-focused; if mm30's fixtures exercise paths `check_refs` doesn't currently handle, lift only the specific resolvers we need into `dag/refs.py` rather than calling `check_refs` wholesale.
+- **Ref validation requires `science refs check` to be reliable across project layouts.** The existing `check_refs` is research-profile-focused; if mm30's fixtures exercise paths `check_refs` doesn't currently handle, lift only the specific resolvers we need into `dag/refs.py` rather than calling `check_refs` wholesale.
 - **Task 10 (amend edge-status dashboard spec) touches a file owned by the 2026-04-17 spec author.** If that spec is still in active revision, coordinate the amendment through a PR comment rather than a direct edit.

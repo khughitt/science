@@ -59,13 +59,14 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with <science-plugin-root>/science-tool science-tool <command>`
+   `uv run --with <science-plugin-root>/science science <command>`
 
 Manage the project task queue in `tasks/active.md`.
 the user input specifies the action (add, done, defer, retire, list, show, summary) and any parameters.
@@ -90,13 +91,13 @@ Read `tasks/active.md` if it exists. If `tasks/` directory doesn't exist, create
 Show active tasks sorted by priority (P0 first). Use:
 
 ```bash
-uv run science-tool tasks list
+uv run science tasks list
 ```
 
 Filter by related entity or group:
 
 ```bash
-uv run science-tool tasks list --related=topic:lens --group=visualization
+uv run science tasks list --related=topic:lens --group=visualization
 ```
 
 ### "add <description>"
@@ -110,7 +111,7 @@ Interactively create a task. Ask the user for:
 Then run:
 
 ```bash
-uv run science-tool tasks add "<title>" --type=<type> --priority=<priority> [--related=<ref>...] [--group=<group>]
+uv run science tasks add "<title>" --type=<type> --priority=<priority> [--related=<ref>...] [--group=<group>]
 ```
 
 ### "done <task_id>"
@@ -118,7 +119,7 @@ uv run science-tool tasks add "<title>" --type=<type> --priority=<priority> [--r
 Mark a task complete. Optionally ask for a completion note.
 
 ```bash
-uv run science-tool tasks done <task_id> [--note="<note>"]
+uv run science tasks done <task_id> [--note="<note>"]
 ```
 
 ### "defer <task_id>"
@@ -126,7 +127,7 @@ uv run science-tool tasks done <task_id> [--note="<note>"]
 Defer a task. Ask for a reason.
 
 ```bash
-uv run science-tool tasks defer <task_id> [--reason="<reason>"]
+uv run science tasks defer <task_id> [--reason="<reason>"]
 ```
 
 ### "retire <task_id>"
@@ -134,7 +135,7 @@ uv run science-tool tasks defer <task_id> [--reason="<reason>"]
 Close a task that is no longer a priority (not completed, just abandoned). Moves to done/ archive with `retired` status.
 
 ```bash
-uv run science-tool tasks retire <task_id> [--reason="<reason>"]
+uv run science tasks retire <task_id> [--reason="<reason>"]
 ```
 
 ### "block <task_id> --by <typed-ref> [--by <typed-ref>...]"
@@ -144,9 +145,9 @@ Refs must resolve to known local entities. Repeatable.
 
 - `--force` records the ref even if the entity is not yet known (e.g.
   you plan to create the dataset shortly). The unresolved reference will
-  be flagged by `science-tool graph audit`.
+  be flagged by `science graph audit`.
 - Blockers are validated at write time. Untyped strings (legacy form) are
-  rejected. Use `science-tool tasks fix-blockers` to retype existing
+  rejected. Use `science tasks fix-blockers` to retype existing
   legacy blockers.
 
 ### "blockers <task_id>"
@@ -176,10 +177,10 @@ Show task counts by status, type, priority, and group.
 
 ### Other actions
 
-Pass through to `science-tool tasks`:
+Pass through to `science tasks`:
 
 ```bash
-uv run science-tool tasks <action> [args...]
+uv run science tasks <action> [args...]
 ```
 
 ## Task Statuses
@@ -199,7 +200,7 @@ When working through tasks, follow these principles:
 
 - **Respect typed blocker dependencies.** Don't start a blocked task until its blockers are ready. Use `tasks blockers <task_id>` to inspect per-blocker readiness (e.g., embargoed datasets, incomplete workflow runs). Run `science-tasks list --status=active` to see what's actionable overall.
 - **Don't parallelize tasks that share environment state.** Tasks that install/change packages, modify shared config, or compete for GPU memory must run sequentially. Only parallelize truly independent work (e.g., two literature reviews).
-- **Log failures into the task.** If a task fails, update its description with what went wrong: `science-tool tasks edit <id> --status=blocked`. This prevents repeating the same failed approach.
+- **Log failures into the task.** If a task fails, update its description with what went wrong: `science tasks edit <id> --status=blocked`. This prevents repeating the same failed approach.
 - **Check `AGENTS.md` before executing.** The project's operational guide may document known issues, environment constraints, or workarounds discovered in previous sessions.
 - **Mark progress as you go.** Set tasks to `active` when starting, `done` when complete. Don't leave tasks in ambiguous states.
 - **Retire rather than delete.** When a task is no longer relevant, use `retire` instead of deleting. This preserves the decision record.

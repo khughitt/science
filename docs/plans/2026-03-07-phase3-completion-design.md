@@ -69,23 +69,23 @@ Expected graph characteristics:
 ### Step 4: Generate and import OpenAlex snapshot
 
 **Infrastructure work (in science repo):**
-1. Run `science-tool distill openalex --level subfields` with real API call
+1. Run `science distill openalex --level subfields` with real API call
 2. Commit resulting `data/snapshots/openalex-science-map.ttl` + `manifest.ttl` to science repo
 
 **In exemplar project:**
-3. Run `science-tool graph import <path-to-snapshot>`
+3. Run `science graph import <path-to-snapshot>`
 4. Verify import with `graph stats`
 
 ### Step 5: Validate and capture evidence
 
 Run in exemplar project:
 ```bash
-science-tool graph stats --format json
-science-tool graph validate --format json
-science-tool graph diff --mode hybrid --format json
-science-tool graph neighborhood "DNABERT-2" --hops 2 --format json
-science-tool graph claims --format json
-science-tool graph coverage --format json
+science graph stats --format json
+science graph validate --format json
+science graph diff --mode hybrid --format json
+science graph neighborhood "DNABERT-2" --hops 2 --format json
+science graph claims --format json
+science graph coverage --format json
 validate.sh
 ```
 

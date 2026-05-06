@@ -168,14 +168,14 @@ Adapters self-register at import time.
 
 ### CLI Surface
 
-New command group `datasets` under `science-tool`:
+New command group `datasets` under `science`:
 
 ```
-science-tool datasets search <query> [--source zenodo,geo,...] [--max N] [--format table|json]
-science-tool datasets metadata <source>:<id> [--format table|json]
-science-tool datasets files <source>:<id> [--format table|json]
-science-tool datasets download <source>:<id> [--file PATTERN] [--dest data/raw/]
-science-tool datasets sources                    # list available adapters
+science datasets search <query> [--source zenodo,geo,...] [--max N] [--format table|json]
+science datasets metadata <source>:<id> [--format table|json]
+science datasets files <source>:<id> [--format table|json]
+science datasets download <source>:<id> [--file PATTERN] [--dest data/raw/]
+science datasets sources                    # list available adapters
 ```
 
 The `<source>:<id>` convention (e.g. `zenodo:12345`, `geo:GSE12345`, `dryad:doi:10.5061/dryad.abc123`) keeps addressing unambiguous.
@@ -209,7 +209,7 @@ The agent uses project context (research question, hypotheses, inquiry variables
 1. **Setup** — Follow command preamble (role: `research-assistant`). Load `skills/data/SKILL.md` and `skills/data/frictionless.md`.
 2. **Context gathering** — Read `specs/research-question.md`, active hypotheses, inquiry variables (if any inquiry exists). Identify what data the project needs.
 3. **LLM candidate generation** — Based on context, suggest 5-10 candidate datasets with rationale. Include known accessions/DOIs where possible.
-4. **Adapter-driven search** — Run `science-tool datasets search` across relevant sources to find matching datasets. Cross-reference LLM suggestions with actual search results.
+4. **Adapter-driven search** — Run `science datasets search` across relevant sources to find matching datasets. Cross-reference LLM suggestions with actual search results.
 5. **Ranking** — Rank candidates by: relevance to project variables, data quality signals, accessibility (license, format), sample size, recency.
 6. **Documentation** — For top candidates, create dataset notes in `doc/datasets/` using `templates/dataset.md`. Update `science.yaml` data sources.
 7. **Variable mapping** — If an inquiry exists, map dataset variables to inquiry variables and flag gaps (datasets that don't cover needed variables, or variables with no dataset coverage).
@@ -227,7 +227,7 @@ The agent uses project context (research question, hypotheses, inquiry variables
 
 ### Frictionless Data Package Checks
 
-Add a `science-tool datasets validate` command that checks:
+Add a `science datasets validate` command that checks:
 
 1. **Schema presence** — `data/raw/datapackage.json` and `data/processed/datapackage.json` exist
 2. **Schema validity** — Each `datapackage.json` is valid per Frictionless spec (uses `frictionless` Python library)
@@ -235,17 +235,17 @@ Add a `science-tool datasets validate` command that checks:
 4. **Field type conformance** — Tabular resources match their declared schema (column names, types)
 
 ```
-science-tool datasets validate [--path data/] [--format table|json]
+science datasets validate [--path data/] [--format table|json]
 ```
 
-This integrates with `validate.sh` — the script can call `science-tool datasets validate` as an additional check.
+This integrates with `validate.sh` — the script can call `science datasets validate` as an additional check.
 
 ### Dataset-Variable Mapping
 
 When an inquiry exists, validate that declared datasets cover the inquiry's variables:
 
 ```
-science-tool datasets check-coverage <inquiry-slug> [--format table|json]
+science datasets check-coverage <inquiry-slug> [--format table|json]
 ```
 
 This reads:
@@ -289,7 +289,7 @@ Teaches the agent how to:
 - Write rules that consume `data/raw/` and produce `data/processed/`
 - Use config files for parameters (connect to inquiry AnnotatedParams)
 - Handle conda/container environments per rule
-- Integrate with `science-tool datasets download` for data acquisition rules
+- Integrate with `science datasets download` for data acquisition rules
 - Run and debug Snakemake workflows
 - Best practices: rule naming, wildcards, checkpoints, benchmarks
 
@@ -331,12 +331,12 @@ Documentation template for a computational experiment:
 ### Tier 1 (this implementation)
 - Dataset adapter system with Zenodo, Dryad, GEO, Semantic Scholar
 - `/science:find-datasets` command
-- `science-tool datasets` CLI group (search, metadata, files, download, sources, validate)
+- `science datasets` CLI group (search, metadata, files, download, sources, validate)
 - `skills/data/frictionless.md`
 - `skills/pipelines/snakemake.md`
 - `skills/pipelines/marimo.md`
 - `templates/pipeline-step.md`, `templates/experiment.md`
-- Frictionless validation in `science-tool datasets validate`
+- Frictionless validation in `science datasets validate`
 - Dataset-variable coverage check
 
 ### Tier 2 (future)
@@ -361,9 +361,9 @@ Research Question
     ↓
 doc/datasets/*.md  +  data/raw/datapackage.json
     ↓
-science-tool datasets validate   ← Frictionless checks
+science datasets validate   ← Frictionless checks
     ↓
-science-tool datasets check-coverage <inquiry>  ← variable mapping
+science datasets check-coverage <inquiry>  ← variable mapping
     ↓
 /science:plan-pipeline  ← generates Snakefile structure
     ↓

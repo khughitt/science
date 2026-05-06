@@ -176,6 +176,6 @@ Key path mappings:
 | `references/command-preamble.md` | Add path resolution step (propagates to all commands) |
 | `references/project-structure.md` | Document imported project layouts |
 | `references/science-yaml-schema.md` | Add `paths:` section to schema |
-| `science-tool/src/science_tool/cli.py` | Resolve paths from science.yaml config |
-| `science-tool/src/science_tool/store.py` | Resolve graph path from config |
+| `science/src/science_tool/cli.py` | Resolve paths from science.yaml config |
+| `science/src/science_tool/store.py` | Resolve graph path from config |
 | `commands/create-project.md` | Cross-reference import-project |

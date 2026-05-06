@@ -6,7 +6,7 @@
 
 **Goal:** Add explicit version, drift-check, diff, and update support for copied Science-managed artifacts, starting with `validate.sh`.
 
-**Architecture:** Add a small `science_tool.project_artifacts` module that owns the artifact registry, status classification, canonical content rendering, and update operations. Expose it through `science-tool project artifacts check|diff|update`, then update project creation/import docs to use the managed artifact path. Keep project-owned files, generated files, runtime-resolved commands/skills/templates, and package dependencies outside this updater.
+**Architecture:** Add a small `science_tool.project_artifacts` module that owns the artifact registry, status classification, canonical content rendering, and update operations. Expose it through `science project artifacts check|diff|update`, then update project creation/import docs to use the managed artifact path. Keep project-owned files, generated files, runtime-resolved commands/skills/templates, and package dependencies outside this updater.
 
 **Tech Stack:** Python >=3.11, Click, pathlib, dataclasses, pytest, Bash for `validate.sh`, Markdown docs.
 
@@ -16,24 +16,24 @@
 
 Create:
 
-- `science-tool/src/science_tool/project_artifacts/__init__.py` — public exports for artifact status/check/update helpers.
-- `science-tool/src/science_tool/project_artifacts/artifacts.py` — artifact definitions, canonical content loading, hash calculation, and status classification.
-- `science-tool/src/science_tool/project_artifacts/data/validate.sh` — packaged canonical managed validator content.
-- `science-tool/tests/test_project_artifacts.py` — unit tests for status classification, diff output, JSON payloads, update refusal, and canonical source sync.
+- `science/src/science_tool/project_artifacts/__init__.py` — public exports for artifact status/check/update helpers.
+- `science/src/science_tool/project_artifacts/artifacts.py` — artifact definitions, canonical content loading, hash calculation, and status classification.
+- `science/src/science_tool/project_artifacts/data/validate.sh` — packaged canonical managed validator content.
+- `science/tests/test_project_artifacts.py` — unit tests for status classification, diff output, JSON payloads, update refusal, and canonical source sync.
 
 Modify:
 
-- `science-tool/src/science_tool/cli.py` — add `science-tool project artifacts check|diff|update` commands under the existing `project` group.
-- `science-tool/src/science_tool/graph/health.py` — include managed artifact status in `science-tool health` reports.
-- `science-tool/tests/test_health.py` — health-report integration test for managed artifact drift.
+- `science/src/science_tool/cli.py` — add `science project artifacts check|diff|update` commands under the existing `project` group.
+- `science/src/science_tool/graph/health.py` — include managed artifact status in `science health` reports.
+- `science/tests/test_health.py` — health-report integration test for managed artifact drift.
 - `scripts/validate.sh` — add the managed artifact header.
 - `commands/create-project.md` — replace bare copy instructions with managed artifact install/update instructions.
 - `commands/import-project.md` — same managed artifact instruction update.
-- `commands/status.md` — surface stale managed artifacts from `science-tool health` output.
-- `commands/next-steps.md` — recommend managed artifact update when `science-tool health` reports stale artifacts.
+- `commands/status.md` — surface stale managed artifacts from `science health` output.
+- `commands/next-steps.md` — recommend managed artifact update when `science health` reports stale artifacts.
 - `README.md` — mention copied managed artifact checks in project validation/versioning guidance.
 - `docs/project-organization-profiles.md` — replace "Refresh `validate.sh`" with the explicit managed-artifact check/update workflow.
-- `science-tool/pyproject.toml` — include packaged artifact data if package data is not already included broadly.
+- `science/pyproject.toml` — include packaged artifact data if package data is not already included broadly.
 
 Do not modify project-owned files such as `science.yaml`, `AGENTS.md`, `.ai/**`, `doc/**`, `specs/**`, `tasks/**`, or `knowledge/sources/**` in this implementation.
 
@@ -53,11 +53,11 @@ Edit `scripts/validate.sh` so the top of the file is:
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
 # science-managed-version: 2026.04.25
-# science-managed-source-sha256: computed-by-science-tool
+# science-managed-source-sha256: computed-by-science
 # validate.sh — Structural validation for Science research projects
 ```
 
-The sentinel value `computed-by-science-tool` is intentional in the canonical file body; `science-tool` computes the real content hash while ignoring the hash line.
+The sentinel value `computed-by-science` is intentional in the canonical file body; `science` computes the real content hash while ignoring the hash line.
 
 - [ ] **Step 2: Verify the script still parses**
 
@@ -74,7 +74,7 @@ Expected: exit code `0`, no output.
 Run:
 
 ```bash
-rg -n "validate\\.sh|Structural validation|shebang|line 1|first comment" science-tool/tests/test_validate_script.py
+rg -n "validate\\.sh|Structural validation|shebang|line 1|first comment" science/tests/test_validate_script.py
 ```
 
 Expected: no assertions that depend on the old top-of-file comment layout. Existing tests should execute the script behaviorally through `subprocess.run`.
@@ -92,16 +92,16 @@ git commit -m "feat(project-artifacts): mark validator as managed"
 
 **Files:**
 
-- Create: `science-tool/src/science_tool/project_artifacts/__init__.py`
-- Create: `science-tool/src/science_tool/project_artifacts/data/validate.sh`
-- Modify: `science-tool/pyproject.toml`
+- Create: `science/src/science_tool/project_artifacts/__init__.py`
+- Create: `science/src/science_tool/project_artifacts/data/validate.sh`
+- Modify: `science/pyproject.toml`
 
 - [ ] **Step 1: Create the package directory**
 
 Run:
 
 ```bash
-mkdir -p science-tool/src/science_tool/project_artifacts/data
+mkdir -p science/src/science_tool/project_artifacts/data
 ```
 
 - [ ] **Step 2: Copy the canonical validator into package data**
@@ -109,12 +109,12 @@ mkdir -p science-tool/src/science_tool/project_artifacts/data
 Run:
 
 ```bash
-cp scripts/validate.sh science-tool/src/science_tool/project_artifacts/data/validate.sh
+cp scripts/validate.sh science/src/science_tool/project_artifacts/data/validate.sh
 ```
 
 - [ ] **Step 3: Add module marker**
 
-Create `science-tool/src/science_tool/project_artifacts/__init__.py`:
+Create `science/src/science_tool/project_artifacts/__init__.py`:
 
 ```python
 """Managed copied artifacts for Science projects."""
@@ -142,7 +142,7 @@ __all__ = [
 
 - [ ] **Step 4: Ensure package data is included**
 
-Add the managed validator package-data entry under the existing `[tool.hatch.build.targets.wheel.force-include]` table in `science-tool/pyproject.toml`:
+Add the managed validator package-data entry under the existing `[tool.hatch.build.targets.wheel.force-include]` table in `science/pyproject.toml`:
 
 ```toml
 [tool.hatch.build.targets.wheel.force-include]
@@ -157,7 +157,7 @@ The existing `edges.schema.json` line must remain.
 Run:
 
 ```bash
-test -f science-tool/src/science_tool/project_artifacts/data/validate.sh
+test -f science/src/science_tool/project_artifacts/data/validate.sh
 ```
 
 Expected: exit code `0`.
@@ -165,7 +165,7 @@ Expected: exit code `0`.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts science-tool/pyproject.toml
+git add science/src/science_tool/project_artifacts science/pyproject.toml
 git commit -m "feat(project-artifacts): package canonical validator"
 ```
 
@@ -175,12 +175,12 @@ git commit -m "feat(project-artifacts): package canonical validator"
 
 **Files:**
 
-- Create: `science-tool/src/science_tool/project_artifacts/artifacts.py`
-- Test: `science-tool/tests/test_project_artifacts.py`
+- Create: `science/src/science_tool/project_artifacts/artifacts.py`
+- Test: `science/tests/test_project_artifacts.py`
 
 - [ ] **Step 1: Write failing tests**
 
-Create `science-tool/tests/test_project_artifacts.py`:
+Create `science/tests/test_project_artifacts.py`:
 
 ```python
 from __future__ import annotations
@@ -367,14 +367,14 @@ def test_next_backup_path_uses_numeric_suffix(tmp_path: Path) -> None:
 Run:
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_project_artifacts.py -q
+cd science && uv run --frozen pytest tests/test_project_artifacts.py -q
 ```
 
 Expected: collection/import failure because `science_tool.project_artifacts.artifacts` does not exist yet.
 
 - [ ] **Step 3: Implement artifact models and status checks**
 
-Create `science-tool/src/science_tool/project_artifacts/artifacts.py`:
+Create `science/src/science_tool/project_artifacts/artifacts.py`:
 
 ```python
 from __future__ import annotations
@@ -592,7 +592,7 @@ copies will be reported as `locally_modified` instead of `outdated`.
 Run:
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_project_artifacts.py -q
+cd science && uv run --frozen pytest tests/test_project_artifacts.py -q
 ```
 
 Expected: all tests pass.
@@ -600,7 +600,7 @@ Expected: all tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/artifacts.py science-tool/tests/test_project_artifacts.py
+git add science/src/science_tool/project_artifacts/artifacts.py science/tests/test_project_artifacts.py
 git commit -m "feat(project-artifacts): classify managed artifact drift"
 ```
 
@@ -610,12 +610,12 @@ git commit -m "feat(project-artifacts): classify managed artifact drift"
 
 **Files:**
 
-- Modify: `science-tool/src/science_tool/cli.py`
-- Test: `science-tool/tests/test_project_artifacts.py`
+- Modify: `science/src/science_tool/cli.py`
+- Test: `science/tests/test_project_artifacts.py`
 
 - [ ] **Step 1: Add CLI tests**
 
-Append to `science-tool/tests/test_project_artifacts.py`:
+Append to `science/tests/test_project_artifacts.py`:
 
 ```python
 from click.testing import CliRunner
@@ -717,14 +717,14 @@ def test_project_artifacts_force_update_writes_backup(tmp_path: Path) -> None:
 Run:
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_project_artifacts.py -q
+cd science && uv run --frozen pytest tests/test_project_artifacts.py -q
 ```
 
 Expected: CLI tests fail because `project artifacts` commands do not exist yet.
 
 - [ ] **Step 3: Add `project artifacts` CLI group**
 
-In `science-tool/src/science_tool/cli.py`, below the existing `project_index` command and before `health_command`, add:
+In `science/src/science_tool/cli.py`, below the existing `project_index` command and before `health_command`, add:
 
 ```python
 @project.group("artifacts")
@@ -860,7 +860,7 @@ def project_artifacts_update(
 Run:
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_project_artifacts.py -q
+cd science && uv run --frozen pytest tests/test_project_artifacts.py -q
 ```
 
 Expected: all project artifact tests pass.
@@ -868,7 +868,7 @@ Expected: all project artifact tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/cli.py science-tool/tests/test_project_artifacts.py
+git add science/src/science_tool/cli.py science/tests/test_project_artifacts.py
 git commit -m "feat(project-artifacts): add artifact check and update CLI"
 ```
 
@@ -878,7 +878,7 @@ git commit -m "feat(project-artifacts): add artifact check and update CLI"
 
 **Files:**
 
-- Modify: `science-tool/tests/test_project_artifacts.py`
+- Modify: `science/tests/test_project_artifacts.py`
 
 - [ ] **Step 1: Add sync test**
 
@@ -897,7 +897,7 @@ def test_packaged_validator_matches_root_validator() -> None:
 Run:
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_project_artifacts.py::test_packaged_validator_matches_root_validator -q
+cd science && uv run --frozen pytest tests/test_project_artifacts.py::test_packaged_validator_matches_root_validator -q
 ```
 
 Expected: pass.
@@ -905,7 +905,7 @@ Expected: pass.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add science-tool/tests/test_project_artifacts.py
+git add science/tests/test_project_artifacts.py
 git commit -m "test(project-artifacts): guard packaged validator drift"
 ```
 
@@ -915,15 +915,15 @@ git commit -m "test(project-artifacts): guard packaged validator drift"
 
 **Files:**
 
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Modify: `science-tool/src/science_tool/cli.py`
-- Modify: `science-tool/tests/test_health.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Modify: `science/src/science_tool/cli.py`
+- Modify: `science/tests/test_health.py`
 - Modify: `commands/status.md`
 - Modify: `commands/next-steps.md`
 
 - [ ] **Step 1: Add a health-report test for stale managed artifacts**
 
-Append to `science-tool/tests/test_health.py` near the existing `TestBuildHealthReport` tests. Existing tests in that class already verify `build_health_report(tmp_path)` works with a minimal project containing only `science.yaml`, so this fixture follows the current health-test style rather than inventing a separate scaffold.
+Append to `science/tests/test_health.py` near the existing `TestBuildHealthReport` tests. Existing tests in that class already verify `build_health_report(tmp_path)` works with a minimal project containing only `science.yaml`, so this fixture follows the current health-test style rather than inventing a separate scaffold.
 
 ```python
 def test_project_health_reports_non_current_managed_artifacts(tmp_path: Path) -> None:
@@ -956,14 +956,14 @@ def test_project_health_reports_non_current_managed_artifacts(tmp_path: Path) ->
 Run:
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_health.py::TestBuildHealthReport::test_project_health_reports_non_current_managed_artifacts -q
+cd science && uv run --frozen pytest tests/test_health.py::TestBuildHealthReport::test_project_health_reports_non_current_managed_artifacts -q
 ```
 
 Expected: fail because `managed_artifacts` is not yet in the health report.
 
 - [ ] **Step 3: Extend health report types and builder**
 
-In `science-tool/src/science_tool/graph/health.py`, add this typed dict near the other health finding types:
+In `science/src/science_tool/graph/health.py`, add this typed dict near the other health finding types:
 
 ```python
 class ManagedArtifactFinding(TypedDict):
@@ -1002,7 +1002,7 @@ Add `"managed_artifacts": managed_artifacts,` to the returned dict.
 
 - [ ] **Step 4: Render managed artifact findings in table output**
 
-In `science-tool/src/science_tool/cli.py`, update `health_command`:
+In `science/src/science_tool/cli.py`, update `health_command`:
 
 1. Include managed artifacts in `total_issues`, directly after the existing `dataset_anomalies` term:
 
@@ -1031,8 +1031,8 @@ In `science-tool/src/science_tool/cli.py`, update `health_command`:
             )
         console.print(table)
         console.print(
-            "\n[bold]Next:[/bold] run [cyan]science-tool project artifacts diff <name>[/cyan] "
-            "then [cyan]science-tool project artifacts update <name>[/cyan]."
+            "\n[bold]Next:[/bold] run [cyan]science project artifacts diff <name>[/cyan] "
+            "then [cyan]science project artifacts update <name>[/cyan]."
         )
 ```
 
@@ -1041,7 +1041,7 @@ In `science-tool/src/science_tool/cli.py`, update `health_command`:
 In `commands/status.md`, add this bullet under "Staleness Warnings":
 
 ```markdown
-- managed copied artifacts reported by `science-tool health` as `missing`, `outdated`, `untracked`, or `locally_modified`
+- managed copied artifacts reported by `science health` as `missing`, `outdated`, `untracked`, or `locally_modified`
 ```
 
 - [ ] **Step 6: Update `/science:next-steps` command guidance**
@@ -1054,7 +1054,7 @@ In `commands/next-steps.md`, after the `## Cross-Project Sync Check` section and
 Run:
 
 ```bash
-science-tool health --project-root . --format json
+science health --project-root . --format json
 ```
 
 If `managed_artifacts` contains any rows, include a Recommended Next Action to review the diff and update the managed artifact. For `untracked` or `locally_modified`, say that the user should inspect the diff before adopting the Science-managed copy.
@@ -1065,7 +1065,7 @@ If `managed_artifacts` contains any rows, include a Recommended Next Action to r
 Run:
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_health.py::TestBuildHealthReport::test_project_health_reports_non_current_managed_artifacts -q
+cd science && uv run --frozen pytest tests/test_health.py::TestBuildHealthReport::test_project_health_reports_non_current_managed_artifacts -q
 ```
 
 Expected: pass.
@@ -1073,7 +1073,7 @@ Expected: pass.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/health.py science-tool/src/science_tool/cli.py science-tool/tests/test_health.py commands/status.md commands/next-steps.md
+git add science/src/science_tool/graph/health.py science/src/science_tool/cli.py science/tests/test_health.py commands/status.md commands/next-steps.md
 git commit -m "feat(project-artifacts): surface managed artifact drift in health"
 ```
 
@@ -1102,10 +1102,10 @@ with:
 Install the managed validator artifact:
 
 ```bash
-science-tool project artifacts update validate.sh --project-root .
+science project artifacts update validate.sh --project-root .
 ```
 
-If `science-tool` is not available yet during bootstrap, copy `${CLAUDE_PLUGIN_ROOT}/scripts/validate.sh` as a fallback; the copied file must retain its `science-managed-*` header so future artifact checks can update it.
+If `science` is not available yet during bootstrap, copy `${CLAUDE_PLUGIN_ROOT}/scripts/validate.sh` as a fallback; the copied file must retain its `science-managed-*` header so future artifact checks can update it.
 
 Managed artifact updates write backups next to the artifact as `*.pre-update*.bak`; these backups are ignored by default, and users may remove or commit them manually after reviewing an update.
 ````
@@ -1124,10 +1124,10 @@ with:
 Install or refresh the managed validator artifact:
 
 ```bash
-science-tool project artifacts update validate.sh --project-root .
+science project artifacts update validate.sh --project-root .
 ```
 
-If the existing project already has a custom `validate.sh`, run `science-tool project artifacts check --project-root .` first. Do not overwrite an untracked or locally modified validator unless the user explicitly wants to adopt the Science-managed copy.
+If the existing project already has a custom `validate.sh`, run `science project artifacts check --project-root .` first. Do not overwrite an untracked or locally modified validator unless the user explicitly wants to adopt the Science-managed copy.
 
 Managed artifact updates write backups next to the artifact as `*.pre-update*.bak`; these backups are ignored by default. If a project wants to retain a backup in git, add it explicitly with `git add -f`.
 ````
@@ -1157,7 +1157,7 @@ In `docs/project-organization-profiles.md`, replace:
 with:
 
 ````markdown
-5. Run `science-tool project artifacts check --project-root .` and update managed copied artifacts such as `validate.sh` when they are outdated.
+5. Run `science project artifacts check --project-root .` and update managed copied artifacts such as `validate.sh` when they are outdated.
 ````
 
 - [ ] **Step 5: Add README note**
@@ -1168,13 +1168,13 @@ In `README.md`, after the paragraph that says all artifacts are version-controll
 Copied framework artifacts such as `validate.sh` are managed explicitly:
 
 ```bash
-science-tool project artifacts check --project-root .
-science-tool project artifacts update validate.sh --project-root .
+science project artifacts check --project-root .
+science project artifacts update validate.sh --project-root .
 ```
 
 Commands, skills, and framework templates are resolved centrally and are not copied into projects unless a project intentionally creates an override under `.ai/`.
 
-When forced updates replace an existing managed artifact, `science-tool` writes a sibling `*.pre-update*.bak` file first. Project scaffolds ignore these backups by default; remove or commit them deliberately after reviewing the update.
+When forced updates replace an existing managed artifact, `science` writes a sibling `*.pre-update*.bak` file first. Project scaffolds ignore these backups by default; remove or commit them deliberately after reviewing the update.
 ````
 
 - [ ] **Step 6: Run Markdown search verification**
@@ -1209,7 +1209,7 @@ This task is user-local verification for Keith's workstation. Other operators sh
 Run:
 
 ```bash
-uv run --project science-tool science-tool project artifacts check --project-root /home/keith/d/r/mm30
+uv run --project science science project artifacts check --project-root /home/keith/d/r/mm30
 ```
 
 Expected before adoption: `validate.sh` reports `untracked` because the existing file predates the managed header. This confirms the checker finds the real drift case without assuming it is safe to overwrite.
@@ -1219,7 +1219,7 @@ Expected before adoption: `validate.sh` reports `untracked` because the existing
 Run:
 
 ```bash
-uv run --project science-tool science-tool project artifacts diff validate.sh --project-root /home/keith/d/r/mm30
+uv run --project science science project artifacts diff validate.sh --project-root /home/keith/d/r/mm30
 ```
 
 Expected: unified diff shows the current `mm30/validate.sh` versus the canonical managed validator. Review whether local project-specific validator logic exists.
@@ -1229,7 +1229,7 @@ Expected: unified diff shows the current `mm30/validate.sh` versus the canonical
 If the user wants `mm30` to adopt the Science-managed validator, run:
 
 ```bash
-uv run --project science-tool science-tool project artifacts update validate.sh --project-root /home/keith/d/r/mm30 --force --yes
+uv run --project science science project artifacts update validate.sh --project-root /home/keith/d/r/mm30 --force --yes
 ```
 
 Expected:
@@ -1245,7 +1245,7 @@ If the user does not want to adopt the managed validator yet, stop after the dif
 If Step 3 adopted the managed validator, run:
 
 ```bash
-uv run --project science-tool science-tool project artifacts check --project-root /home/keith/d/r/mm30 --strict
+uv run --project science science project artifacts check --project-root /home/keith/d/r/mm30 --strict
 ```
 
 Expected: exit code `0`, `validate.sh` reports `current`.
@@ -1253,7 +1253,7 @@ Expected: exit code `0`, `validate.sh` reports `current`.
 If Step 3 did not adopt it, run the same command without `--strict`:
 
 ```bash
-uv run --project science-tool science-tool project artifacts check --project-root /home/keith/d/r/mm30
+uv run --project science science project artifacts check --project-root /home/keith/d/r/mm30
 ```
 
 Expected: exit code `0`, `validate.sh` reports `untracked`.
@@ -1292,7 +1292,7 @@ Only include the backup in the downstream commit if the project wants to retain 
 Run:
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_project_artifacts.py tests/test_validate_script.py -q
+cd science && uv run --frozen pytest tests/test_project_artifacts.py tests/test_validate_script.py -q
 ```
 
 Expected: all tests pass.
@@ -1302,7 +1302,7 @@ Expected: all tests pass.
 Run:
 
 ```bash
-uv run --frozen ruff format science-tool/src/science_tool/project_artifacts science-tool/tests/test_project_artifacts.py science-tool/src/science_tool/cli.py
+uv run --frozen ruff format science/src/science_tool/project_artifacts science/tests/test_project_artifacts.py science/src/science_tool/cli.py
 ```
 
 Expected: files formatted.
@@ -1312,7 +1312,7 @@ Expected: files formatted.
 Run:
 
 ```bash
-uv run --frozen ruff check science-tool/src/science_tool/project_artifacts science-tool/tests/test_project_artifacts.py science-tool/src/science_tool/cli.py
+uv run --frozen ruff check science/src/science_tool/project_artifacts science/tests/test_project_artifacts.py science/src/science_tool/cli.py
 ```
 
 Expected: no lint errors.
@@ -1334,9 +1334,9 @@ Run:
 ```bash
 tmpdir="$(mktemp -d)"
 printf 'name: smoke\nprofile: software\nlayout_version: 2\n' > "$tmpdir/science.yaml"
-uv run --project science-tool science-tool project artifacts check --project-root "$tmpdir"
-uv run --project science-tool science-tool project artifacts update validate.sh --project-root "$tmpdir"
-uv run --project science-tool science-tool project artifacts check --project-root "$tmpdir"
+uv run --project science science project artifacts check --project-root "$tmpdir"
+uv run --project science science project artifacts update validate.sh --project-root "$tmpdir"
+uv run --project science science project artifacts check --project-root "$tmpdir"
 test -x "$tmpdir/validate.sh"
 ```
 
@@ -1350,7 +1350,7 @@ Expected:
 - [ ] **Step 6: Final commit if verification changed formatting**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts science-tool/tests/test_project_artifacts.py science-tool/src/science_tool/cli.py
+git add science/src/science_tool/project_artifacts science/tests/test_project_artifacts.py science/src/science_tool/cli.py
 git commit -m "chore(project-artifacts): format managed artifact implementation"
 ```
 
@@ -1364,5 +1364,5 @@ Skip this commit if there are no formatting changes.
 - Replacement safety: `untracked` and `locally_modified` refuse overwrite without `--force --yes`, and any non-current overwrite writes a `.pre-update.bak` backup.
 - Drift guard: packaged validator and root `scripts/validate.sh` are hash-compared in tests.
 - Bootstrap path: project creation/import docs retain a fallback for direct copy but require managed headers.
-- Health/status closure: `science-tool health`, `/science:status`, `/science:next-steps`, and the downstream `mm30` verification are included.
+- Health/status closure: `science health`, `/science:status`, `/science:next-steps`, and the downstream `mm30` verification are included.
 - Scope discipline: no migrations for `science.yaml`, docs, tasks, entities, graph files, commands, skills, or templates are included in this plan.

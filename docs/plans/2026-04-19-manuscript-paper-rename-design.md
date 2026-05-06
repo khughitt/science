@@ -38,10 +38,10 @@ After the rename, template filenames, directory conventions, and entity prefixes
 
 - Rename `templates/paper.md` → `templates/manuscript.md`. Update its frontmatter `id:` line from `paper:<paper_id>` to `manuscript:<manuscript_id>`.
 - Rename `templates/paper-summary.md` → `templates/paper.md`. Update its frontmatter `id:` line from `article:<bibtex_key>` to `paper:<bibtex_key>`.
-- New CLI subcommand `science-tool refs migrate-paper` that rewrites `article:<X>` to `paper:<X>` across an existing project's markdown files (frontmatter `id:`, `related:` lists, `source_refs:`, prose mentions). Dry-run default, `--apply` to write.
+- New CLI subcommand `science refs migrate-paper` that rewrites `article:<X>` to `paper:<X>` across an existing project's markdown files (frontmatter `id:`, `related:` lists, `source_refs:`, prose mentions). Dry-run default, `--apply` to write.
 - Update command docs that name the old template paths (`commands/research-papers.md`, `commands/search-literature.md`, any command docs that mention `paper-summary.md`) so agent workflows point at the renamed files in the same release.
 - Update all `commands/*.md` and `references/*.md` that mention `article:<X>` as an example entity ID. Flat find-and-replace of the prefix.
-- Cosmetic updates to `science-tool/src/science_tool/cli.py` user-facing strings that say "article" where they should now say "paper".
+- Cosmetic updates to `science/src/science_tool/cli.py` user-facing strings that say "article" where they should now say "paper".
 - Transition-window dual-prefix acceptance: downstream consumers that compare or count external-literature entity IDs continue to accept `article:<X>` as a valid legacy spelling alongside `paper:<X>` for one release cycle.
 - Unit tests: migration tool correctness, idempotency, transition-window dual-acceptance.
 
@@ -58,7 +58,7 @@ After the rename, template filenames, directory conventions, and entity prefixes
 | Before | After | Notes |
 |---|---|---|
 | `paper:<id>` (authoring) | `manuscript:<id>` | Framework-only; no existing project entities to migrate. |
-| `article:<bibkey>` (external lit) | `paper:<bibkey>` | Project-wide rename via `science-tool refs migrate-paper`. |
+| `article:<bibkey>` (external lit) | `paper:<bibkey>` | Project-wide rename via `science refs migrate-paper`. |
 | `cite:<bibkey>` (bibtex ref) | unchanged | Separate concept; no change. |
 
 ### Canonical bibkey extraction
@@ -120,12 +120,12 @@ All other fields (`source_refs`, `related`, `ontology_terms`, `datasets`, etc.) 
 
 ## Migration Tool
 
-### CLI: `science-tool refs migrate-paper`
+### CLI: `science refs migrate-paper`
 
 Invocation:
 
 ```
-science-tool refs migrate-paper [--apply] [--project-root <path>] [--force] [--verbose]
+science refs migrate-paper [--apply] [--project-root <path>] [--force] [--verbose]
 ```
 
 Behavior:
@@ -137,7 +137,7 @@ Behavior:
    - Any other occurrence of `article:<X>` in markdown body or YAML values → `paper:<X>`. The regex is anchored on the literal prefix `article:` followed by a valid entity-ID character class.
 3. Before `--apply`: verify the project git working tree is clean by shelling out to `git status --porcelain` (run in `--project-root`). If non-empty, refuse to proceed unless `--force` is passed. Rationale: the migration produces a wide mechanical rewrite; mixing it with unrelated uncommitted work muddies the audit trail.
 4. Without `--apply`: emit a unified diff (`difflib.unified_diff`) of every pending rewrite followed by a trailing per-file match-count summary, then exit 0 without writing. By default, cap diff output at the first 200 lines plus `"... N more files with changes"`; `--verbose` removes the cap. Users review the diff, then re-run with `--apply`.
-5. With `--apply`: rewrite files in place using temp-file + atomic replace per file. Preserve all other formatting (indentation, whitespace, line endings). Exit 0 on success with a summary: `"Rewrote N legacy paper references in K files. Run `science-tool refs check --root <project-root>` to verify."`
+5. With `--apply`: rewrite files in place using temp-file + atomic replace per file. Preserve all other formatting (indentation, whitespace, line endings). Exit 0 on success with a summary: `"Rewrote N legacy paper references in K files. Run `science refs check --root <project-root>` to verify."`
 
 Idempotency: if a project has no remaining `article:` references, the command exits 0 with "No `article:` references found; project is migrated." Re-running on a migrated project is a no-op.
 
@@ -149,13 +149,13 @@ No project-side migration is needed for the authoring rename, because tracked pr
 
 Recommended layout:
 
-- `science-tool/src/science_tool/refs_migrate.py` — pure-function core for scanning and rewriting legacy `article:` IDs.
-- `science-tool/src/science_tool/cli.py` — add a small `@main.group()` named `refs`, then register a `migrate-paper` subcommand there.
+- `science/src/science_tool/refs_migrate.py` — pure-function core for scanning and rewriting legacy `article:` IDs.
+- `science/src/science_tool/cli.py` — add a small `@main.group()` named `refs`, then register a `migrate-paper` subcommand there.
 
 Alternative acceptable layout:
 
-- `science-tool/src/science_tool/refs_cli.py` — click group only.
-- `science-tool/src/science_tool/refs_migrate.py` — pure-function core.
+- `science/src/science_tool/refs_cli.py` — click group only.
+- `science/src/science_tool/refs_migrate.py` — pure-function core.
 
 Constraint: no new package named `science_tool.refs`.
 
@@ -207,11 +207,11 @@ All in the same PR as the rename:
 - `references/project-structure.md` — update if it mentions either prefix.
 - `docs/specs/2026-03-02-agent-capabilities-design.md` and any other spec docs that reference `templates/paper-summary.md` or `templates/paper.md` by filename — update to the new names so historical design docs do not point implementers at deleted templates.
 - Any `templates/*.md` with example `article:<X>` references in body — rewrite to `paper:<X>`.
-- Grep `science-tool/src/` for hardcoded template path strings (`"paper-summary.md"`, `"paper.md"`) to catch any code that resolves templates dynamically rather than by entity type. Known call sites: template-loader helpers in `cli.py` and any `templates/` path-join helpers. Rewrite filename literals and add a one-line rename comment where it aids future reviewers.
+- Grep `science/src/` for hardcoded template path strings (`"paper-summary.md"`, `"paper.md"`) to catch any code that resolves templates dynamically rather than by entity type. Known call sites: template-loader helpers in `cli.py` and any `templates/` path-join helpers. Rewrite filename literals and add a one-line rename comment where it aids future reviewers.
 
 ## Python CLI Updates
 
-`science-tool/src/science_tool/cli.py`:
+`science/src/science_tool/cli.py`:
 
 - Line ~1004: `click.echo(f"Added article: {uri}")` → `click.echo(f"Added paper: {uri}")`.
 - Line ~1493 help text: `"Evidence source (e.g. paper:doi_...)"` — already correct under new vocabulary; no change.
@@ -223,15 +223,15 @@ Search `cli.py` for additional `article` occurrences and rewrite to `paper` wher
 
 Beyond `cli.py`, nine test modules currently contain `article:` string literals (as of 2026-04-19):
 
-- `science-tool/tests/test_paper_model.py`
-- `science-tool/tests/test_graph_cli.py`
-- `science-tool/tests/test_inquiry_cli.py`
-- `science-tool/tests/test_cross_impact.py`
-- `science-tool/tests/test_layered_claim_migration.py`
-- `science-tool/tests/test_graph_export.py`
-- `science-tool/tests/test_causal.py`
-- `science-tool/tests/test_project_model_migration.py`
-- `science-tool/tests/test_causal_cli.py`
+- `science/tests/test_paper_model.py`
+- `science/tests/test_graph_cli.py`
+- `science/tests/test_inquiry_cli.py`
+- `science/tests/test_cross_impact.py`
+- `science/tests/test_layered_claim_migration.py`
+- `science/tests/test_graph_export.py`
+- `science/tests/test_causal.py`
+- `science/tests/test_project_model_migration.py`
+- `science/tests/test_causal_cli.py`
 
 Triage each match against this rule:
 
@@ -239,13 +239,13 @@ Triage each match against this rule:
 - **Regression fixture intentionally exercising the legacy prefix via the transition-window alias path**: keep as `article:` and add a one-line `# deliberate: legacy alias` comment so readers know it's intentional.
 - **Dead fixture with no assertion on the prefix**: rewrite mechanically.
 
-This audit is an explicit step in the implementation plan and is NOT a side effect of `science-tool refs migrate-paper` (which touches markdown only).
+This audit is an explicit step in the implementation plan and is NOT a side effect of `science refs migrate-paper` (which touches markdown only).
 
 ## Testing
 
 ### Unit tests: migration tool
 
-In `science-tool/tests/test_refs_migrate_paper.py`:
+In `science/tests/test_refs_migrate_paper.py`:
 
 - `test_migrate_rewrites_id_field` — single file with `id: article:Smith2024` becomes `id: paper:Smith2024`.
 - `test_migrate_rewrites_related_list_inline` — `related: [article:Smith2024, article:Jones2023]` becomes `related: [paper:Smith2024, paper:Jones2023]`.
@@ -259,19 +259,19 @@ In `science-tool/tests/test_refs_migrate_paper.py`:
 
 ### Unit tests: transition-window acceptance
 
-In `science-tool/tests/test_refs_migrate_paper.py` or a small dedicated normalization test module:
+In `science/tests/test_refs_migrate_paper.py` or a small dedicated normalization test module:
 
 - `test_external_paper_prefix_normalization_accepts_article_and_paper` — canonicalization helper maps both `article:Smith2024` and `paper:Smith2024` to the same canonical key.
 - `test_external_paper_prefix_normalization_preserves_non_paper_ids` — `question:q01`, `cite:Smith2024`, `manuscript:m01` are unchanged.
 
 ### Integration tests
 
-- `test_refs_cli_dry_run` — `science-tool refs migrate-paper --project-root <fixture>` emits the summary without writing.
+- `test_refs_cli_dry_run` — `science refs migrate-paper --project-root <fixture>` emits the summary without writing.
 - `test_refs_cli_apply` — `--apply` rewrites a fixture project correctly; re-running is a no-op.
 
 ### Fixture
 
-Extend the existing `science-tool/tests/fixtures/big_picture/minimal_project/` or add a dedicated fixture under `science-tool/tests/fixtures/refs/legacy_project/`:
+Extend the existing `science/tests/fixtures/big_picture/minimal_project/` or add a dedicated fixture under `science/tests/fixtures/refs/legacy_project/`:
 
 - A question file with `related: [article:Smith2024]`.
 - A paper file at `doc/papers/Smith2024.md` with `id: article:Smith2024`.
@@ -280,12 +280,12 @@ Extend the existing `science-tool/tests/fixtures/big_picture/minimal_project/` o
 
 ## Sequencing with Other Specs
 
-1. **This spec lands first.** Template renames + `science-tool refs migrate-paper` CLI + transition-window dual-acceptance in consumers that already exist.
+1. **This spec lands first.** Template renames + `science refs migrate-paper` CLI + transition-window dual-acceptance in consumers that already exist.
 2. **User runs migration** on tracked projects (mm30, natural-systems) — one-time manual step:
    ```
-   uv run science-tool refs migrate-paper --project-root .               # dry-run, review diff
-   uv run science-tool refs migrate-paper --project-root . --apply       # perform rewrite
-   uv run science-tool refs check --root .                               # verify no dangling refs
+   uv run science refs migrate-paper --project-root .               # dry-run, review diff
+   uv run science refs migrate-paper --project-root . --apply       # perform rewrite
+   uv run science refs check --root .                               # verify no dangling refs
    ```
    The `check` step catches any mid-migration half-states (e.g., an `article:` reference that the regex missed because the entity ID used an unusual character) before the change is committed.
 3. **Knowledge-gaps spec lands next.** Its coverage metric uses `paper:` as canonical; the dual-acceptance defined here covers any projects not yet migrated.
@@ -301,7 +301,7 @@ Extend the existing `science-tool/tests/fixtures/big_picture/minimal_project/` o
 
 - **Removal of dual-prefix acceptance**: a follow-on spec removes the `article:` fallback one release cycle after this spec's migration tool ships. Requires confirming all tracked projects are migrated before removing.
 - **Manuscript authoring workflow features**: any features that use the new `manuscript:` prefix (e.g., `/science:draft-section`, `/science:manuscripts list`) are separate specs, not part of this rename.
-- **Cross-project migration auditing**: a tool that inspects external projects and reports migration status (e.g., `science-tool refs audit`). Not needed for v1 — the migration tool itself reports unmigrated references.
+- **Cross-project migration auditing**: a tool that inspects external projects and reports migration status (e.g., `science refs audit`). Not needed for v1 — the migration tool itself reports unmigrated references.
 - **Renaming `doc/background/papers/` → `doc/papers/`**: some projects use the longer path; harmonization is cosmetic and can wait.
 
 ## Open Decisions (resolve during implementation)

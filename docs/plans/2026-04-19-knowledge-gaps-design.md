@@ -31,7 +31,7 @@ Add a topic-coverage gap metric to `/science:big-picture` output, at two scales:
 ### In scope (v1)
 
 - New module `science_tool.big_picture.knowledge_gaps` with `compute_topic_gaps`, `TopicGap` dataclass.
-- New `science-tool big-picture knowledge-gaps` CLI subcommand emitting JSON for inspection.
+- New `science big-picture knowledge-gaps` CLI subcommand emitting JSON for inspection.
 - Per-hypothesis bundle assembly gains a `topic_gaps` slice; hypothesis-synthesizer agent renders it in Research Fronts.
 - Project rollup gains a Knowledge Gaps section; Opus orchestrator computes and renders it.
 - Coverage metric: inclusive (union of entity-linked papers + bibtex `source_refs:` citekeys), deduplicated by bibkey where determinable.
@@ -157,7 +157,7 @@ Question detail is available in per-hypothesis files; the rollup table stays com
 
 ### Module layout
 
-New module `science-tool/src/science_tool/big_picture/knowledge_gaps.py`:
+New module `science/src/science_tool/big_picture/knowledge_gaps.py`:
 
 ```python
 from dataclasses import dataclass
@@ -234,7 +234,7 @@ The hypothesis-synthesizer agent prompt gains one new instruction: "If the bundl
 New subcommand in the existing `big-picture` click group:
 
 ```
-science-tool big-picture knowledge-gaps [--project-root <path>] [--limit N]
+science big-picture knowledge-gaps [--project-root <path>] [--limit N]
 ```
 
 Emits JSON of all `TopicGap` entries, sorted by `gap_score` descending. `--limit N` caps the JSON list to the top N entries (useful when a project has many topics and the caller just wants the worst offenders). Default is no limit — emits all gap-flagged topics. The rollup markdown render in Phase 3 applies its own fixed cap of 10 regardless of the CLI flag, keeping the synthesis table compact.
@@ -265,7 +265,7 @@ Topics themselves do not gain an `aspects:` field in this spec. If a need emerge
 
 ### Fixture extension
 
-Extend `science-tool/tests/fixtures/big_picture/minimal_project/`:
+Extend `science/tests/fixtures/big_picture/minimal_project/`:
 
 - Add `doc/background/topics/t01-covered.md` — `aspects:` inherited, `related: [paper:p01-example]`.
 - Add `doc/background/topics/t02-thin.md` — `related: []`, `source_refs: []`. No coverage.
@@ -279,7 +279,7 @@ Extend `science-tool/tests/fixtures/big_picture/minimal_project/`:
   - `t03-bibtex-covered`: demand=1, coverage=1 (no gap)
   - `t04-legacy-covered`: demand=1, coverage=1 via `article:p02-legacy-article` (no gap; transition-window alias counts)
 
-### Unit tests (`science-tool/tests/test_knowledge_gaps.py`)
+### Unit tests (`science/tests/test_knowledge_gaps.py`)
 
 - `test_topic_with_zero_demand_excluded` — topic referenced by no question, any coverage, not in output.
 - `test_topic_with_coverage_equal_demand_no_gap` — demand=2, coverage=2, not flagged.
@@ -296,14 +296,14 @@ Extend `science-tool/tests/fixtures/big_picture/minimal_project/`:
 
 ### Integration tests
 
-- `test_knowledge_gaps_cli_emits_json` — `science-tool big-picture knowledge-gaps --project-root <fixture>` returns valid JSON with expected fields.
+- `test_knowledge_gaps_cli_emits_json` — `science big-picture knowledge-gaps --project-root <fixture>` returns valid JSON with expected fields.
 - `test_knowledge_gaps_empty_project` — project with no topics emits an empty list and exits 0.
 
 ### Manual smoke tests
 
 Per the `big-picture` pattern, a mm30 + natural-systems smoke run after the sibling manuscript migration lands:
 
-- `science-tool big-picture knowledge-gaps --project-root .` on mm30 — expect topics with heavy bibtex coverage to show as non-gaps, topics with many questions and thin source_refs to surface.
+- `science big-picture knowledge-gaps --project-root .` on mm30 — expect topics with heavy bibtex coverage to show as non-gaps, topics with many questions and thin source_refs to surface.
 - Same on natural-systems — expect per-paper-entity coverage to dominate the metric since natural-systems has per-paper files and sparse bibtex.
 
 ## Relationship to Existing Specs

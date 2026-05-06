@@ -30,21 +30,21 @@ The spec covers schema/profile declarations, relation loading/materialization, f
     the new typed field does not conflict with existing data. After this lands,
     malformed `relations:` blocks should fail entity parsing instead of being
     silently ignored.
-- `science-tool/src/science_tool/graph/sources.py`
+- `science/src/science_tool/graph/sources.py`
   - Convert markdown entity `relations:` blocks into `SourceRelation` records.
-- `science-tool/src/science_tool/graph/materialize.py`
+- `science/src/science_tool/graph/materialize.py`
   - Validate declared authored relation endpoints with profile constraints.
   - Reject self-reference and cycles in `sci:amends` / `sci:supersedes`.
   - Emit valid `sci:amends` / conclusion `sci:supersedes` triples.
-- `science-tool/src/science_tool/graph/store.py`
+- `science/src/science_tool/graph/store.py`
   - Keep graph-add warning logic consistent with `allowed_kind_pairs`.
-- `science-tool/tests/test_graph_materialize.py`
+- `science/tests/test_graph_materialize.py`
   - Add end-to-end materialization tests for source-authored relations, valid endpoints, invalid endpoints, and cycles.
 - `science-model/tests/test_profile_manifests.py`
   - Add schema/profile tests.
-- `science-tool/tests/test_freshness_derivation.py`
+- `science/tests/test_freshness_derivation.py`
   - Add a freshness invariant test proving `amends` / `supersedes` do not drive `needs-review`.
-- `science-tool/tests/test_command_docs.py`
+- `science/tests/test_command_docs.py`
   - Add command/template prose coverage.
 - `commands/interpret-results.md`
   - Add the needs-review resolution decision tree.
@@ -339,12 +339,12 @@ git commit -m "feat(model): add explicit relation endpoint pairs"
 
 **Files:**
 - Modify: `science-model/src/science_model/entities.py`
-- Modify: `science-tool/src/science_tool/graph/sources.py`
-- Test: `science-tool/tests/test_graph_materialize.py`
+- Modify: `science/src/science_tool/graph/sources.py`
+- Test: `science/tests/test_graph_materialize.py`
 
 - [ ] **Step 1: Write failing materialization test for markdown entity relations**
 
-Add this test near `test_materialize_graph_applies_structured_relations_with_internal_targets()` in `science-tool/tests/test_graph_materialize.py`:
+Add this test near `test_materialize_graph_applies_structured_relations_with_internal_targets()` in `science/tests/test_graph_materialize.py`:
 
 ```python
 def test_materialize_graph_applies_source_entity_relations(tmp_path: Path) -> None:
@@ -410,7 +410,7 @@ def test_materialize_graph_applies_source_entity_relations(tmp_path: Path) -> No
 Run:
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_graph_materialize.py::test_materialize_graph_applies_source_entity_relations -v
+uv run --frozen --directory science pytest tests/test_graph_materialize.py::test_materialize_graph_applies_source_entity_relations -v
 ```
 
 Expected: FAIL because `Entity` currently ignores source-authored `relations:` blocks.
@@ -433,7 +433,7 @@ Add this field to `class Entity` immediately after `related: list[str]`:
 
 - [ ] **Step 4: Normalize missing `relations` during source loading**
 
-Modify `_enrich_raw()` in `science-tool/src/science_tool/graph/sources.py`.
+Modify `_enrich_raw()` in `science/src/science_tool/graph/sources.py`.
 
 Add this line immediately after `raw.setdefault("related", [])`:
 
@@ -443,7 +443,7 @@ Add this line immediately after `raw.setdefault("related", [])`:
 
 - [ ] **Step 5: Convert entity relation blocks into `SourceRelation` records**
 
-Add this helper below `_legacy_nested_relations()` in `science-tool/src/science_tool/graph/sources.py`:
+Add this helper below `_legacy_nested_relations()` in `science/src/science_tool/graph/sources.py`:
 
 ```python
 def _entity_nested_relations(entities: list[Entity]) -> list[SourceRelation]:
@@ -481,7 +481,7 @@ add:
 Run:
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_graph_materialize.py::test_materialize_graph_applies_source_entity_relations -v
+uv run --frozen --directory science pytest tests/test_graph_materialize.py::test_materialize_graph_applies_source_entity_relations -v
 ```
 
 Expected: PASS.
@@ -491,7 +491,7 @@ Expected: PASS.
 Run:
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_graph_materialize.py -k "structured_relations or source_entity_relations" -v
+uv run --frozen --directory science pytest tests/test_graph_materialize.py -k "structured_relations or source_entity_relations" -v
 ```
 
 Expected: PASS.
@@ -501,7 +501,7 @@ Expected: PASS.
 Run:
 
 ```bash
-git add science-model/src/science_model/entities.py science-tool/src/science_tool/graph/sources.py science-tool/tests/test_graph_materialize.py
+git add science-model/src/science_model/entities.py science/src/science_tool/graph/sources.py science/tests/test_graph_materialize.py
 git commit -m "feat(graph): load source-authored entity relations"
 ```
 
@@ -510,12 +510,12 @@ git commit -m "feat(graph): load source-authored entity relations"
 ### Task 3: Authored Relation Endpoint Validation And Cycles
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/materialize.py`
-- Test: `science-tool/tests/test_graph_materialize.py`
+- Modify: `science/src/science_tool/graph/materialize.py`
+- Test: `science/tests/test_graph_materialize.py`
 
 - [ ] **Step 1: Write failing tests for valid and invalid endpoints**
 
-Add these helper functions near the existing test helpers in `science-tool/tests/test_graph_materialize.py`:
+Add these helper functions near the existing test helpers in `science/tests/test_graph_materialize.py`:
 
 ```python
 def _write_minimal_entity(path: Path, canonical_id: str, kind: str, title: str, extra_frontmatter: list[str] | None = None) -> None:
@@ -725,14 +725,14 @@ def test_materialize_graph_rejects_mixed_amends_supersedes_cycle(tmp_path: Path)
 Run:
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_graph_materialize.py -k "amends or supersedes or amendment_cycle" -v
+uv run --frozen --directory science pytest tests/test_graph_materialize.py -k "amends or supersedes or amendment_cycle" -v
 ```
 
 Expected: FAIL because materialization does not validate endpoints or cycles yet.
 
 - [ ] **Step 4: Import profile helpers in materialize**
 
-Modify imports in `science-tool/src/science_tool/graph/materialize.py`.
+Modify imports in `science/src/science_tool/graph/materialize.py`.
 
 Add:
 
@@ -759,7 +759,7 @@ from science_tool.graph.store import (
 
 - [ ] **Step 5: Add relation validation helpers**
 
-Add these helpers below `_add_authored_relation()` in `science-tool/src/science_tool/graph/materialize.py`:
+Add these helpers below `_add_authored_relation()` in `science/src/science_tool/graph/materialize.py`:
 
 ```python
 _AMENDMENT_RELATION_PREDICATES = frozenset({SCI_NS.amends, SCI_NS.supersedes})
@@ -862,7 +862,7 @@ def _validate_no_amendment_cycles(dataset: Dataset) -> None:
 
 - [ ] **Step 6: Replace `_add_authored_relation` with validated version**
 
-Replace `_add_authored_relation()` in `science-tool/src/science_tool/graph/materialize.py` with:
+Replace `_add_authored_relation()` in `science/src/science_tool/graph/materialize.py` with:
 
 ```python
 def _add_authored_relation(
@@ -918,7 +918,7 @@ non-knowledge layer cannot escape cycle validation.
 Run:
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_graph_materialize.py -k "amends or supersedes or amendment_cycle" -v
+uv run --frozen --directory science pytest tests/test_graph_materialize.py -k "amends or supersedes or amendment_cycle" -v
 ```
 
 Expected: PASS.
@@ -928,7 +928,7 @@ Expected: PASS.
 Run:
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_graph_freshness_integration.py::test_materialize_rejects_hand_authored_bears_on_to_non_epistemic_target -v
+uv run --frozen --directory science pytest tests/test_graph_freshness_integration.py::test_materialize_rejects_hand_authored_bears_on_to_non_epistemic_target -v
 ```
 
 Expected: PASS.
@@ -938,7 +938,7 @@ Expected: PASS.
 Run:
 
 ```bash
-git add science-tool/src/science_tool/graph/materialize.py science-tool/tests/test_graph_materialize.py
+git add science/src/science_tool/graph/materialize.py science/tests/test_graph_materialize.py
 git commit -m "feat(graph): validate authored relation endpoints"
 ```
 
@@ -947,12 +947,12 @@ git commit -m "feat(graph): validate authored relation endpoints"
 ### Task 4: Graph-Add Warning Consistency
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/store.py`
-- Test: `science-tool/tests/test_graph_cli.py`
+- Modify: `science/src/science_tool/graph/store.py`
+- Test: `science/tests/test_graph_cli.py`
 
 - [ ] **Step 1: Write failing warning test for non-Cartesian `supersedes`**
 
-Add this test after `test_graph_add_edge_warns_on_reversed_addresses_direction()` in `science-tool/tests/test_graph_cli.py`:
+Add this test after `test_graph_add_edge_warns_on_reversed_addresses_direction()` in `science/tests/test_graph_cli.py`:
 
 ```python
 def test_graph_add_edge_warns_on_invalid_supersedes_kind_pair() -> None:
@@ -975,14 +975,14 @@ def test_graph_add_edge_warns_on_invalid_supersedes_kind_pair() -> None:
 Run:
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_graph_cli.py::test_graph_add_edge_warns_on_invalid_supersedes_kind_pair -v
+uv run --frozen --directory science pytest tests/test_graph_cli.py::test_graph_add_edge_warns_on_invalid_supersedes_kind_pair -v
 ```
 
 Expected: FAIL because `_RELATION_KIND_BY_PREDICATE` only stores Cartesian source/target sets.
 
 - [ ] **Step 3: Update store warning constraints to use `RelationKind`**
 
-Modify `science-tool/src/science_tool/graph/store.py`.
+Modify `science/src/science_tool/graph/store.py`.
 
 Add this import:
 
@@ -1038,7 +1038,7 @@ Replace the two kind checks and warning messages with:
 Run:
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_graph_cli.py -k "warns_on_reversed_addresses_direction or warns_on_invalid_supersedes_kind_pair" -v
+uv run --frozen --directory science pytest tests/test_graph_cli.py -k "warns_on_reversed_addresses_direction or warns_on_invalid_supersedes_kind_pair" -v
 ```
 
 Expected: PASS.
@@ -1048,7 +1048,7 @@ Expected: PASS.
 Run:
 
 ```bash
-git add science-tool/src/science_tool/graph/store.py science-tool/tests/test_graph_cli.py
+git add science/src/science_tool/graph/store.py science/tests/test_graph_cli.py
 git commit -m "fix(graph): respect explicit relation pairs in warnings"
 ```
 
@@ -1057,8 +1057,8 @@ git commit -m "fix(graph): respect explicit relation pairs in warnings"
 ### Task 5: Freshness Invariant And Workflow Prose
 
 **Files:**
-- Modify: `science-tool/tests/test_freshness_derivation.py`
-- Modify: `science-tool/tests/test_command_docs.py`
+- Modify: `science/tests/test_freshness_derivation.py`
+- Modify: `science/tests/test_command_docs.py`
 - Modify: `commands/interpret-results.md`
 - Modify: `commands/next-steps.md`
 - Modify: `commands/status.md`
@@ -1070,7 +1070,7 @@ git commit -m "fix(graph): respect explicit relation pairs in warnings"
 
 - [ ] **Step 1: Write failing freshness invariant test**
 
-Add this helper to `science-tool/tests/test_freshness_derivation.py` below `_ds_with_bears_on()`:
+Add this helper to `science/tests/test_freshness_derivation.py` below `_ds_with_bears_on()`:
 
 ```python
 def _ds_with_relation(source: URIRef, predicate: URIRef, target: URIRef) -> Dataset:
@@ -1121,7 +1121,7 @@ def test_freshness_ignores_amends_and_supersedes_edges() -> None:
 
 - [ ] **Step 2: Write failing command/template prose tests**
 
-Add this test to `science-tool/tests/test_command_docs.py` after `test_plan_analysis_is_integrated_with_neighbor_commands()`:
+Add this test to `science/tests/test_command_docs.py` after `test_plan_analysis_is_integrated_with_neighbor_commands()`:
 
 ```python
 def test_needs_review_resolution_docs_cover_amendment_workflow() -> None:
@@ -1185,7 +1185,7 @@ def test_needs_review_resolution_docs_cover_amendment_workflow() -> None:
 Run:
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_freshness_derivation.py::test_freshness_ignores_amends_and_supersedes_edges tests/test_command_docs.py::test_needs_review_resolution_docs_cover_amendment_workflow -v
+uv run --frozen --directory science pytest tests/test_freshness_derivation.py::test_freshness_ignores_amends_and_supersedes_edges tests/test_command_docs.py::test_needs_review_resolution_docs_cover_amendment_workflow -v
 ```
 
 Expected: command docs test FAIL because prose/templates do not contain the new workflow. The freshness test should PASS unless freshness has drifted; keep it as an invariant.
@@ -1288,10 +1288,10 @@ When a result is being interpreted because an epistemic entity was flagged
 1. Inspect the flagged entity, its `sci:triggeredBy` upstream sources, and nearby
    prior conclusions.
 2. If standing is unchanged, run
-   `science-tool entity review <target-ref> --note "Reviewed against <source>; no standing change."`
+   `science entity review <target-ref> --note "Reviewed against <source>; no standing change."`
 3. If standing changes, author the new interpretation or finding, add
    `sci:amends` or `sci:supersedes`, and only then run
-   `science-tool entity review <target-ref> --note "Reconsidered; see interpretation:<new>."`
+   `science entity review <target-ref> --note "Reconsidered; see interpretation:<new>."`
 
 `<target-ref>` is the flagged entity, not the newly authored conclusion.
 Freshness remains a review prompt; it does not mutate standing.
@@ -1316,7 +1316,7 @@ Treat the sample as a revisiting queue, not a ranked verdict. Frame
 prior conclusion is wrong.
 
 When recommending work on a `needs-review` entity, name the resolution path:
-unchanged review (`science-tool entity review <target-ref>`), amendment
+unchanged review (`science entity review <target-ref>`), amendment
 (`sci:amends` from a new conclusion to the old conclusion), or replacement
 (`sci:supersedes` plus `status: superseded` on the old conclusion). Propose one
 as a candidate next step and add a corresponding task if accepted.
@@ -1329,7 +1329,7 @@ Under "Staleness Warnings" in `commands/status.md`, add this paragraph after the
 ```markdown
 When a sampled entity is `needs-review`, frame it as a review workflow candidate:
 the next action is to inspect `sci:triggeredBy` evidence, then either record an
-unchanged review with `science-tool entity review <target-ref>` or author a new
+unchanged review with `science entity review <target-ref>` or author a new
 conclusion linked by `sci:amends` / `sci:supersedes`. Do not describe the
 freshness state as a conclusion that the old standing is wrong.
 ```
@@ -1367,7 +1367,7 @@ conclusions in the synthesis and keep superseded conclusions as provenance.
 Run:
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_freshness_derivation.py::test_freshness_ignores_amends_and_supersedes_edges tests/test_command_docs.py::test_needs_review_resolution_docs_cover_amendment_workflow -v
+uv run --frozen --directory science pytest tests/test_freshness_derivation.py::test_freshness_ignores_amends_and_supersedes_edges tests/test_command_docs.py::test_needs_review_resolution_docs_cover_amendment_workflow -v
 ```
 
 Expected: PASS.
@@ -1377,7 +1377,7 @@ Expected: PASS.
 Run:
 
 ```bash
-git add science-tool/tests/test_freshness_derivation.py science-tool/tests/test_command_docs.py commands/interpret-results.md commands/next-steps.md commands/status.md commands/big-picture.md templates/interpretation.md templates/interpretation-dev.md science-model/src/science_model/templates/interpretation.md science-model/src/science_model/templates/interpretation-dev.md
+git add science/tests/test_freshness_derivation.py science/tests/test_command_docs.py commands/interpret-results.md commands/next-steps.md commands/status.md commands/big-picture.md templates/interpretation.md templates/interpretation-dev.md science-model/src/science_model/templates/interpretation.md science-model/src/science_model/templates/interpretation-dev.md
 git commit -m "docs: document needs-review resolution workflow"
 ```
 
@@ -1394,11 +1394,11 @@ Run:
 
 ```bash
 uv run --frozen --directory science-model pytest tests/test_profile_manifests.py -v
-uv run --frozen --directory science-tool pytest tests/test_graph_materialize.py tests/test_graph_freshness_integration.py tests/test_freshness_derivation.py tests/test_command_docs.py -v
-uv run --frozen --directory science-tool pytest tests/test_graph_cli.py -k "warns_on_reversed_addresses_direction or warns_on_invalid_supersedes_kind_pair" -v
+uv run --frozen --directory science pytest tests/test_graph_materialize.py tests/test_graph_freshness_integration.py tests/test_freshness_derivation.py tests/test_command_docs.py -v
+uv run --frozen --directory science pytest tests/test_graph_cli.py -k "warns_on_reversed_addresses_direction or warns_on_invalid_supersedes_kind_pair" -v
 uv run --frozen --directory science-model ruff check src tests
-uv run --frozen --directory science-tool ruff check src tests
-uv run --frozen --directory science-tool pyright
+uv run --frozen --directory science ruff check src tests
+uv run --frozen --directory science pyright
 ```
 
 Expected: all commands PASS.
@@ -1411,7 +1411,7 @@ Run:
 meta/validate.sh
 ```
 
-Expected: PASS. If it prints the existing non-blocking warning `meta/pyproject.toml does not reference science-tool`, leave that warning unchanged.
+Expected: PASS. If it prints the existing non-blocking warning `meta/pyproject.toml does not reference science`, leave that warning unchanged.
 
 - [ ] **Step 3: Mark `t017` complete**
 
@@ -1439,7 +1439,7 @@ Append this sentence after the existing `t017` body:
 Run:
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_tasks.py -v
+uv run --frozen --directory science pytest tests/test_tasks.py -v
 meta/validate.sh
 ```
 

@@ -147,22 +147,22 @@ The local `validate.sh` is 931 lines (canonical `meta/validate.sh` is similar). 
 
 - **Local modifications to `validate.sh`:**
   - **Removed** `.env`-sourcing block (lines 12-19 of canonical) — the project relies on the run environment to set `SCIENCE_TOOL_PATH` rather than auto-loading `.env`.
-  - **Added** `extract_json_payload()` Python helper (~30 lines) that finds and isolates the first valid JSON object in mixed stdout — needed because `science-tool graph audit/validate` apparently emits non-JSON noise on stderr/stdout in this project's environment. Used to wrap every `science-tool` JSON call.
+  - **Added** `extract_json_payload()` Python helper (~30 lines) that finds and isolates the first valid JSON object in mixed stdout — needed because `science graph audit/validate` apparently emits non-JSON noise on stderr/stdout in this project's environment. Used to wrap every `science` JSON call.
   - **Changed** "duplicate document roots" warning to suppress when `docs/` only contains `docs/superpowers/*` (`find docs -type f ! -path 'docs/superpowers/*' -print -quit`).
   - **Changed** the legacy-execution-root check to allow `workflow/` if it contains a `Snakefile` (effectively whitelisting a research-pipeline layout that the canonical validator flags).
   - **Promoted** "graph audit produced unparseable output" warning to error.
-  - **Changed** graph-validate / inquiry-validate flow to emit a `warn` ("science-tool unavailable; skipping graph source audit and graph validation") rather than failing when `SCIENCE_TOOL` is unset.
+  - **Changed** graph-validate / inquiry-validate flow to emit a `warn` ("science unavailable; skipping graph source audit and graph validation") rather than failing when `SCIENCE_TOOL` is unset.
   - **Added** section 17 (Expensive pipeline artifacts) — calls `code/scripts/check_expensive_artifacts.py` which validates that GPU-embedded outputs are present (warning, not error).
 - **Project-specific environment assumptions:**
-  - Resolves `SCIENCE_TOOL` via `SCIENCE_TOOL_PATH` env var (not via PATH lookup of installed `science-tool`) — needed because the project pulls `science-tool` from a local Science checkout via `uv run --project ${SCIENCE_TOOL_PATH}`.
+  - Resolves `SCIENCE_TOOL` via `SCIENCE_TOOL_PATH` env var (not via PATH lookup of installed `science`) — needed because the project pulls `science` from a local Science checkout via `uv run --project ${SCIENCE_TOOL_PATH}`.
   - Assumes `uv` is on PATH for section 17.
 - **Checks that likely belong upstream:** `mav-input`
-  - The `extract_json_payload` JSON-extractor is a workaround for a `science-tool` output-cleanliness issue. **Properly fixed by science-tool emitting clean JSON to stdout.** Tag: `mav-input`.
+  - The `extract_json_payload` JSON-extractor is a workaround for a `science` output-cleanliness issue. **Properly fixed by science emitting clean JSON to stdout.** Tag: `mav-input`.
   - The `docs/`-vs-`doc/` warning's special-case for `docs/superpowers/*` is a sign that the upstream `docs/` policy is too coarse. Either: (a) Science explicitly recognizes `docs/superpowers/` as a sanctioned agent-plans subtree, or (b) the duplicate-doc-root rule is rephrased to allow well-known agent subdirectories. Tag: `mav-input` — the validator change is what `mav` would ship.
   - The `workflow/`-as-Snakefile-root whitelist is also `mav-input`: if Science's profile model recognizes `pipeline` aspects, the legacy-root check shouldn't blanket-warn on `workflow/`.
 - **Checks that are correctly project-specific:** Section 17 (expensive-pipeline-artifacts) is genuinely project-specific (it depends on a `code/scripts/check_expensive_artifacts.py` that knows what GPU outputs the project needs).
 - **Drift solvable by managed artifact versioning:** `mav-input`
-  - The 3 hardening changes (extract_json_payload + science-tool-unavailable handling + graph-audit-error promotion) are all candidates for upstream merging into `meta/validate.sh`. Once upstream and the project's local copy converge, MAV would keep them in sync. Tag: `mav-input`.
+  - The 3 hardening changes (extract_json_payload + science-unavailable handling + graph-audit-error promotion) are all candidates for upstream merging into `meta/validate.sh`. Once upstream and the project's local copy converge, MAV would keep them in sync. Tag: `mav-input`.
   - The `.env`-sourcing removal is a *project-specific* divergence that MAV cannot merge upstream — it would need to be expressed as a profile or an env-loading toggle. Tag: `mav-input` only insofar as MAV needs to surface the divergence so it isn't silently overwritten.
 - **Drift NOT solvable by MAV (missing profile / schema / entity model):**
   - The `docs/superpowers/` exemption needs an explicit profile/aspect concept ("agent-authored plan subtree") in Science's project model — MAV can't add the exemption without that.
@@ -203,8 +203,8 @@ The local `validate.sh` is 931 lines (canonical `meta/validate.sh` is similar). 
 | `task` ↔ `produces` / `result_of` structured back-links | `tasks/active.md` t034: free-text "workflow/scripts/map_taxonomy.py implemented..."; no machine-readable `produces:` field. Forward links are one-way (entity → `task:tNNN`) | recurring | medium | low | Pairs with the descriptor-entity-linkage candidate above. |
 | Recognize `docs/superpowers/` (or generalized agent-plans subtree) in profile model | `validate.sh` is locally patched to suppress the duplicate-doc-root warning when `docs/` only contains `docs/superpowers/*` | recurring | low | low | mav-input — fix in `meta/validate.sh` after Science blesses the convention. |
 | Allow `workflow/` as a sanctioned execution root | `validate.sh` is locally patched to allow `workflow/` when `Snakefile` is present | recurring | medium | low | mav-input — depends on Science recognizing a `pipeline`-flavored aspect. |
-| Move `tasks/active.md` done-entry archival into a tooling step | 44/101 entries in `tasks/active.md` are `status: done` but never moved to `tasks/done/2026-04.md` | recurring | low | low | A `science-tool tasks archive` command would solve this. |
-| `validate.sh` JSON-payload extractor (`extract_json_payload`) belongs upstream | Local diff against `meta/validate.sh` adds ~30 lines of Python to defend against `science-tool` mixed-stream output | upstream | medium | low | mav-input — but the better fix is `science-tool` emitting clean stdout. |
+| Move `tasks/active.md` done-entry archival into a tooling step | 44/101 entries in `tasks/active.md` are `status: done` but never moved to `tasks/done/2026-04.md` | recurring | low | low | A `science tasks archive` command would solve this. |
+| `validate.sh` JSON-payload extractor (`extract_json_payload`) belongs upstream | Local diff against `meta/validate.sh` adds ~30 lines of Python to defend against `science` mixed-stream output | upstream | medium | low | mav-input — but the better fix is `science` emitting clean stdout. |
 | Hypothesis `status` enum needs review | observed: `under-investigation, partially-addressed, disputed` in addition to the canonical set | recurring | low | low | Cross-check peer projects; possibly subsume into `phase` (per hypothesis-phase plan) and `status` separately. |
 | `question` id format: bare-number vs slug | `question:q01..q22` use `qNN`; `q23+` use `qNN-slug`; same file family | project-specific | low | medium | Decide canonical form; rewriting old ids breaks back-links. |
 | `descriptors/` top-level directory placement | 19 files at repo root; alternative placements would be `data/descriptors/` or `results/descriptors/` | project-specific | low | low | Cosmetic; flag for synthesis only. |

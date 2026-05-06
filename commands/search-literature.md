@@ -130,7 +130,7 @@ Include the normalized candidate list, dedupe keys, source provenance, and rank/
 
 ## After Search
 
-1. Offer to create tasks for the top `Core now` papers via `science-tool tasks add`.
+1. Offer to create tasks for the top `Core now` papers via `science tasks add`.
 2. For selected high-priority papers, run `/science:research-papers` (or create a task for later).
 3. For `Core now` items, create a **stub-only** note at `doc/papers/<citekey>.md` using `.ai/templates/paper.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/paper.md`. The stub must contain:
    - Template frontmatter filled from search metadata only (title, authors, year, identifiers).
@@ -158,7 +158,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:search-literature" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

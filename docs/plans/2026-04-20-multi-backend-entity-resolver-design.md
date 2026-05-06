@@ -831,7 +831,7 @@ remain as follow-ups:
 
 1. **Full `model` / `parameter` demotion to the extension path.** The current
    code routes these through a `_load_legacy_records()` helper in
-   `science-tool/src/science_tool/graph/sources.py`, which still registers
+   `science/src/science_tool/graph/sources.py`, which still registers
    them against `ProjectEntity`. Per spec §Implication for current model /
    parameter, they should not be core kinds at all — projects that want them
    should register via `EntityRegistry.register_extension_kind()`. This is a

@@ -41,7 +41,7 @@ Status updated as each P1 progresses through the workflow.
 | --- | --- | --- | --- | --- | --- |
 | P1 #2 | Promote `pre-registration` to canonical type | `docs/plans/2026-04-25-pre-registration-canonical-type.md` | merged | merged (`d840e07`..`fc1cc80`) | APPROVE |
 | P1 #4 | Synthesis-rollup frontmatter convention | `docs/plans/2026-04-25-synthesis-rollup-frontmatter.md` | merged | merged (`4dcd2ed`..`d1e4751`) | APPROVE |
-| P1 #6 | Auto-archive done tasks (`science-tool tasks archive`) | `docs/plans/2026-04-25-tasks-auto-archive.md` | merged | merged (`dbee325`..`c29e4b7`) | APPROVE-WITH-FIXES |
+| P1 #6 | Auto-archive done tasks (`science tasks archive`) | `docs/plans/2026-04-25-tasks-auto-archive.md` | merged | merged (`dbee325`..`c29e4b7`) | APPROVE-WITH-FIXES |
 | P1 #10 | Chained-prior `next-steps` ledger | `docs/plans/2026-04-25-next-steps-chained-prior.md` | merged | merged (`d5aa677`..`aee533f`) | APPROVE |
 
 ### Bucket B — small / additive (dispatched 2026-04-25)
@@ -79,7 +79,7 @@ Final spot-read before user approval surfaced one cross-plan duplication:
 ### Cross-plan consistency rules established
 
 - **Validator severity:** id-prefix mismatches and structural-field absences are `warn`, not `error`. Established in Plan #7 Task 6 and applied retroactively to Plan #2.
-- **Validator targeting:** all validator-touching plans modify both `meta/validate.sh` and `scripts/validate.sh` until MAV unifies. Locate insertion sites by content, not absolute line. **Obsolete after Task 28 of `docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md` lands** — the canonical body lives at `science-tool/src/science_tool/project_artifacts/data/validate.sh` and `meta/validate.sh` / `scripts/validate.sh` are path-convenience shims; future validator changes edit the canonical only.
+- **Validator targeting:** all validator-touching plans modify both `meta/validate.sh` and `scripts/validate.sh` until MAV unifies. Locate insertion sites by content, not absolute line. **Obsolete after Task 28 of `docs/superpowers/plans/2026-04-26-managed-artifacts-implementation.md` lands** — the canonical body lives at `science/src/science_tool/project_artifacts/data/validate.sh` and `meta/validate.sh` / `scripts/validate.sh` are path-convenience shims; future validator changes edit the canonical only.
 - **Type promotion + id-prefix table coordination:** Plan #7 Task 6's id-prefix table includes rows for both `pre-registration` (canonized by Plan #2) and `synthesis` (canonized by Plan #4). These rows are forward-compatible — they activate when each canonical type lands downstream.
 - **No legacy/compatibility layers** (per the user's global rule). Validators stay silent on legacy shapes (`type: plan` pre-regs, `type: report` synthesis files) — this is the natural consequence of additive type-conformance checks, not a permanent accepted variant. Downstream migrations are tracked as follow-on tasks.
 
@@ -90,7 +90,7 @@ These surface from the audit + plan/review passes but are out of scope for the s
 1. **mm30 synthesis-file migration** — rename `type: report` → `type: synthesis` and `id: report:synthesis-*` → `id: synthesis:*` across `doc/reports/synthesis/h{1..6}*.md`, `doc/reports/synthesis.md`, and `_emergent-threads.md`. Triggered by Plan #4 landing.
 2. **protein-landscape synthesis-file migration** — rename `type: emergent-threads` → `type: synthesis` + add `report_kind: emergent-threads` on `doc/reports/synthesis/_emergent-threads.md`. Add `report_kind: hypothesis-synthesis` to existing `type: synthesis` per-hypothesis files. Triggered by Plan #4 landing.
 3. **`tasks.py` preamble bug** — `_write_active` (called by `complete_task`, `retire_task`, `add_task`, `defer_task`) silently drops file preamble. Plan #6's archiver fixes its own writes; the bug remains for the other four callers. File a Science task to apply preamble-preserving rewrite consistently.
-4. **`science-tool` clean-stdout fix** — protein-landscape's `extract_json_payload` workaround in `validate.sh` exists because `science-tool graph audit/validate/diff` and `science-tool inquiry validate` emit non-JSON noise on stdout. The proper fix is upstream (`science-tool` emits clean JSON). File as a `science-tool` task; Plan #7 explicitly defers this rather than absorbing it as a `validate.sh` workaround.
+4. **`science` clean-stdout fix** — protein-landscape's `extract_json_payload` workaround in `validate.sh` exists because `science graph audit/validate/diff` and `science inquiry validate` emit non-JSON noise on stdout. The proper fix is upstream (`science` emits clean JSON). File as a `science` task; Plan #7 explicitly defers this rather than absorbing it as a `validate.sh` workaround.
 5. **natural-systems report-id migration** — 26 of 31 `doc/reports/*.md` files use `id: doc:DATE-slug` instead of `id: report:DATE-slug`. Plan #7 Task 6 will warn on these once shipped; natural-systems can opt out via `SCIENCE_VALIDATE_SKIP_ID_PREFIX=1` while migrating.
 6. **Synthesis §3.3 evidence correction** — applied directly to `docs/audits/downstream-project-conventions/synthesis.md`. The original "3/4 ship rollups in some form" overclaim is now a precise "2/4 with type-naming divergence" account; Top P1 candidate table entry updated; Appendix threshold-application notes updated.
 
@@ -138,7 +138,7 @@ These four become design sessions (with the user) once Bucket A+B lands. Output 
 - [x] Dispatch code-review sub-agents per implementation; mark `merged` after green. (All five APPROVE / APPROVE-WITH-FIXES; Plan #6's one actionable nit filed as `meta/tasks/active.md` `[t007]`.)
 - [x] Execute downstream conventions migration per `docs/plans/2026-04-25-downstream-conventions-migration.md` Phase 2 + Task 2. (All four downstream projects migrated 2026-04-25: cbioportal `[t140]`, mm30 `[t314]`, PL `[t168]`, NS `[t338]`. Q1=C orphan-count atomic moves verified end-to-end across mm30, PL, and NS rollups.)
 - [ ] Land Plan #7 once MAV merges (currently held).
-- [ ] Tasks-archive adoption per project (Migration plan Task 3 — gated on Plan #6 reaching downstream projects; `science-tool tasks archive` shipped upstream `c29e4b7`, downstream needs to install/update).
+- [ ] Tasks-archive adoption per project (Migration plan Task 3 — gated on Plan #6 reaching downstream projects; `science tasks archive` shipped upstream `c29e4b7`, downstream needs to install/update).
 - [ ] MAV validator update per project (Migration plan Task 4 — gated on MAV + Plan #7 landing).
 - [ ] Hand-fill canonical FM on 7 sparse pre-reg files (Migration cycle follow-on: 3 in NS, 4 in mm30; values for `committed:` / `spec:` cannot be derived mechanically — needs user input).
 - [ ] Schedule a Bucket C design session with the user (P1 #1, #3, #5, #8 — design-pass items).

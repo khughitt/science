@@ -1,6 +1,6 @@
 ---
 name: science-health
-description: "Run the science-tool health check and triage findings interactively. Use when the user says \"check project health\", \"find issues\", \"what's broken\", or after running migrations."
+description: "Run the science health check and triage findings interactively. Use when the user says \"check project health\", \"find issues\", \"what's broken\", or after running migrations."
 ---
 
 # Health Triage
@@ -59,13 +59,14 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with <science-plugin-root>/science-tool science-tool <command>`
+   `uv run --with <science-plugin-root>/science science <command>`
 
 Aggregate project health diagnostics and walk the user through cluster-level cleanup.
 
@@ -76,7 +77,7 @@ the user input optionally specifies the project root (default: current directory
 ### 1. Run the health command
 
 ```bash
-uv run science-tool health --project-root <root> --format=json
+uv run science health --project-root <root> --format=json
 ```
 
 Parse the JSON output. Fields:
@@ -148,19 +149,19 @@ For each cluster, propose ONE action covering the whole cluster, not per-ref dec
 > "8 refs look like operational markers (phase, cycle, milestone): topic:phase3b, topic:cycle1, ... Rewrite as meta: refs (preserved as metadata, excluded from KG)?"
 
 **Lingering tags cluster:**
-> "M files still have `tags:` lines (residual from old templates). Run `science-tool graph migrate-tags --apply` to clean them up?"
+> "M files still have `tags:` lines (residual from old templates). Run `science graph migrate-tags --apply` to clean them up?"
 
 ### 5. Apply chosen actions
 
 For each cluster the user approves, use the appropriate CLI to apply:
 - Rewriting refs: edit frontmatter or task markdown directly (find files via the `sources` field of each ref)
 - Creating topic stubs: write minimal entity files matching the existing template structure
-- Migrating tags: `science-tool graph migrate-tags --apply` (default meta:)
-- Migrating tags as topics: `science-tool graph migrate-tags --apply --as-topic`
+- Migrating tags: `science graph migrate-tags --apply` (default meta:)
+- Migrating tags as topics: `science graph migrate-tags --apply --as-topic`
 
 ### 6. Verify
 
-Re-run `science-tool health` after applying actions to confirm the issue counts dropped. Show the user the delta.
+Re-run `science health` after applying actions to confirm the issue counts dropped. Show the user the delta.
 
 ### 7. Commit
 

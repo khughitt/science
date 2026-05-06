@@ -28,18 +28,18 @@ Follow the standard Science command preamble.
 Then gather deterministic evidence:
 
 ```bash
-uv run science-tool curate inventory --project-root . --format json
-uv run science-tool health --project-root . --format json
-uv run science-tool tasks list --format json
-uv run science-tool big-picture resolve-questions --project-root .
-uv run science-tool sync status
+uv run science curate inventory --project-root . --format json
+uv run science health --project-root . --format json
+uv run science tasks list --format json
+uv run science big-picture resolve-questions --project-root .
+uv run science sync status
 git log --oneline -30 --format="%h %s (%cr)"
 ```
 
 If `knowledge/graph.trig` exists, also run:
 
 ```bash
-uv run science-tool graph attention-sample --limit 8 --format json
+uv run science graph attention-sample --limit 8 --format json
 ```
 
 ### Carry-over from prior sweeps
@@ -58,7 +58,7 @@ should be re-evaluated, not blindly carried.
 If DAG tooling is present and the project has DAGs:
 
 ```bash
-uv run science-tool dag audit --json
+uv run science dag audit --json
 ```
 
 The inventory helper should return compact facts only:
@@ -175,7 +175,7 @@ After edits:
 uv run --frozen ruff format .
 uv run --frozen ruff check .
 uv run --frozen pyright
-uv run science-tool graph audit --project-root . --format json
+uv run science graph audit --project-root . --format json
 ```
 
 If the run is docs-only and no Python files changed, note that format/type checks were skipped. If metadata links changed, still run the graph/source audit.

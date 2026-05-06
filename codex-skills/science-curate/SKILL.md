@@ -59,13 +59,14 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with <science-plugin-root>/science-tool science-tool <command>`
+   `uv run --with <science-plugin-root>/science science <command>`
 
 Run an agent-led curation pass across the project corpus. The CLI helpers are evidence-gathering tools; the agent performs semantic judgement and decides what, if anything, should change.
 
@@ -91,11 +92,11 @@ Follow the standard Science command preamble.
 Then gather deterministic evidence:
 
 ```bash
-uv run science-tool curate inventory --project-root . --format json
-uv run science-tool health --project-root . --format json
-uv run science-tool tasks list --format json
-uv run science-tool big-picture resolve-questions --project-root .
-uv run science-tool sync status
+uv run science curate inventory --project-root . --format json
+uv run science health --project-root . --format json
+uv run science tasks list --format json
+uv run science big-picture resolve-questions --project-root .
+uv run science sync status
 git log --oneline -30 --format="%h %s (%cr)"
 ```
 
@@ -115,7 +116,7 @@ should be re-evaluated, not blindly carried.
 If DAG tooling is present and the project has DAGs:
 
 ```bash
-uv run science-tool dag audit --json
+uv run science dag audit --json
 ```
 
 The inventory helper should return compact facts only:
@@ -229,7 +230,7 @@ After edits:
 uv run --frozen ruff format .
 uv run --frozen ruff check .
 uv run --frozen pyright
-uv run science-tool graph audit --project-root . --format json
+uv run science graph audit --project-root . --format json
 ```
 
 If the run is docs-only and no Python files changed, note that format/type checks were skipped. If metadata links changed, still run the graph/source audit.

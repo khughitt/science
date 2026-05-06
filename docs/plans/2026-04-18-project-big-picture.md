@@ -6,7 +6,7 @@
 
 **Architecture:** The algorithmic core (question→hypothesis resolver, output validator) lives in a new `science_tool.big_picture` Python module with unit tests. Orchestration, bundle assembly, and narrative generation live in a new markdown command (`commands/big-picture.md`) that dispatches two sub-agent prompts (`agents/hypothesis-synthesizer.md`, `agents/emergent-threads-synthesizer.md`). Fixture tests exercise the Python core against synthetic projects; smoke tests exercise end-to-end generation against pinned SHAs of mm30 and natural-systems.
 
-**Tech Stack:** Python 3.11+, click, PyYAML, pytest (for `science-tool`). Markdown prompts for the command and sub-agents. Existing `science-tool graph …` CLI surfaces are reused, not replaced.
+**Tech Stack:** Python 3.11+, click, PyYAML, pytest (for `science`). Markdown prompts for the command and sub-agents. Existing `science graph …` CLI surfaces are reused, not replaced.
 
 **Spec:** `docs/specs/2026-04-18-project-big-picture-design.md`
 
@@ -16,23 +16,23 @@
 
 ### New files
 
-- `science-tool/src/science_tool/big_picture/__init__.py` — module marker, exposes public types
-- `science-tool/src/science_tool/big_picture/frontmatter.py` — tiny YAML-frontmatter parser (`read_frontmatter(path) -> dict | None`)
-- `science-tool/src/science_tool/big_picture/resolver.py` — question→hypothesis resolver (many-to-many)
-- `science-tool/src/science_tool/big_picture/validator.py` — validates generated synthesis files against spec's acceptance criteria
-- `science-tool/src/science_tool/big_picture/cli.py` — registers a `big-picture` click group with `resolve-questions` and `validate` subcommands
-- `science-tool/tests/fixtures/big_picture/minimal_project/` — synthetic test project (tiny hypothesis/question/interpretation set)
-- `science-tool/tests/test_big_picture_frontmatter.py`
-- `science-tool/tests/test_big_picture_resolver.py`
-- `science-tool/tests/test_big_picture_validator.py`
-- `science-tool/tests/test_big_picture_cli.py`
+- `science/src/science_tool/big_picture/__init__.py` — module marker, exposes public types
+- `science/src/science_tool/big_picture/frontmatter.py` — tiny YAML-frontmatter parser (`read_frontmatter(path) -> dict | None`)
+- `science/src/science_tool/big_picture/resolver.py` — question→hypothesis resolver (many-to-many)
+- `science/src/science_tool/big_picture/validator.py` — validates generated synthesis files against spec's acceptance criteria
+- `science/src/science_tool/big_picture/cli.py` — registers a `big-picture` click group with `resolve-questions` and `validate` subcommands
+- `science/tests/fixtures/big_picture/minimal_project/` — synthetic test project (tiny hypothesis/question/interpretation set)
+- `science/tests/test_big_picture_frontmatter.py`
+- `science/tests/test_big_picture_resolver.py`
+- `science/tests/test_big_picture_validator.py`
+- `science/tests/test_big_picture_cli.py`
 - `agents/hypothesis-synthesizer.md` — per-hypothesis sub-agent prompt
 - `agents/emergent-threads-synthesizer.md` — emergent-threads sub-agent prompt
 - `commands/big-picture.md` — main command orchestration
 
 ### Modified files
 
-- `science-tool/src/science_tool/cli.py` — register the `big_picture` group onto `main`
+- `science/src/science_tool/cli.py` — register the `big_picture` group onto `main`
 
 ### Not changed
 
@@ -53,14 +53,14 @@
 ## Task 1: Scaffold `big_picture` module and wire into CLI
 
 **Files:**
-- Create: `science-tool/src/science_tool/big_picture/__init__.py`
-- Create: `science-tool/src/science_tool/big_picture/cli.py`
-- Modify: `science-tool/src/science_tool/cli.py`
-- Test: `science-tool/tests/test_big_picture_cli.py`
+- Create: `science/src/science_tool/big_picture/__init__.py`
+- Create: `science/src/science_tool/big_picture/cli.py`
+- Modify: `science/src/science_tool/cli.py`
+- Test: `science/tests/test_big_picture_cli.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `science-tool/tests/test_big_picture_cli.py`:
+Create `science/tests/test_big_picture_cli.py`:
 
 ```python
 from __future__ import annotations
@@ -81,21 +81,21 @@ def test_big_picture_group_registered() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_cli.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_cli.py -v
 ```
 
 Expected: FAIL (the `big-picture` group doesn't exist yet).
 
 - [ ] **Step 3: Create the module skeleton**
 
-Create `science-tool/src/science_tool/big_picture/__init__.py`:
+Create `science/src/science_tool/big_picture/__init__.py`:
 
 ```python
 """Big-picture synthesis: question→hypothesis resolver and output validator."""
 from __future__ import annotations
 ```
 
-Create `science-tool/src/science_tool/big_picture/cli.py`:
+Create `science/src/science_tool/big_picture/cli.py`:
 
 ```python
 from __future__ import annotations
@@ -122,7 +122,7 @@ def validate_cmd() -> None:
 
 - [ ] **Step 4: Register the group in the main CLI**
 
-Edit `science-tool/src/science_tool/cli.py`. Near the top (with other module imports around lines 1–70), add:
+Edit `science/src/science_tool/cli.py`. Near the top (with other module imports around lines 1–70), add:
 
 ```python
 from science_tool.big_picture.cli import big_picture_group
@@ -133,7 +133,7 @@ At the bottom of the file (after all other `main.add_command(...)` calls, if any
 - [ ] **Step 5: Run test to verify it passes**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_cli.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_cli.py -v
 ```
 
 Expected: PASS.
@@ -141,7 +141,7 @@ Expected: PASS.
 - [ ] **Step 6: Verify the CLI end-to-end**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run science-tool big-picture --help
+cd /mnt/ssd/Dropbox/science/science && uv run science big-picture --help
 ```
 
 Expected output includes `resolve-questions` and `validate` as subcommands.
@@ -149,7 +149,7 @@ Expected output includes `resolve-questions` and `validate` as subcommands.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/ science-tool/src/science_tool/cli.py science-tool/tests/test_big_picture_cli.py
+git add science/src/science_tool/big_picture/ science/src/science_tool/cli.py science/tests/test_big_picture_cli.py
 git commit -m "feat(big-picture): scaffold module and register CLI group"
 ```
 
@@ -158,12 +158,12 @@ git commit -m "feat(big-picture): scaffold module and register CLI group"
 ## Task 2: Frontmatter parser utility
 
 **Files:**
-- Create: `science-tool/src/science_tool/big_picture/frontmatter.py`
-- Test: `science-tool/tests/test_big_picture_frontmatter.py`
+- Create: `science/src/science_tool/big_picture/frontmatter.py`
+- Test: `science/tests/test_big_picture_frontmatter.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `science-tool/tests/test_big_picture_frontmatter.py`:
+Create `science/tests/test_big_picture_frontmatter.py`:
 
 ```python
 from __future__ import annotations
@@ -208,14 +208,14 @@ def test_returns_none_on_invalid_yaml(tmp_path: Path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_frontmatter.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_frontmatter.py -v
 ```
 
 Expected: FAIL (module not found).
 
 - [ ] **Step 3: Implement the parser**
 
-Create `science-tool/src/science_tool/big_picture/frontmatter.py`:
+Create `science/src/science_tool/big_picture/frontmatter.py`:
 
 ```python
 """YAML frontmatter parser for Science project markdown files."""
@@ -255,7 +255,7 @@ def read_frontmatter(path: Path) -> dict[str, Any] | None:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_frontmatter.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_frontmatter.py -v
 ```
 
 Expected: 5 tests PASS.
@@ -263,7 +263,7 @@ Expected: 5 tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/frontmatter.py science-tool/tests/test_big_picture_frontmatter.py
+git add science/src/science_tool/big_picture/frontmatter.py science/tests/test_big_picture_frontmatter.py
 git commit -m "feat(big-picture): frontmatter parser utility"
 ```
 
@@ -272,20 +272,20 @@ git commit -m "feat(big-picture): frontmatter parser utility"
 ## Task 3: Build synthetic test fixture project
 
 **Files:**
-- Create: `science-tool/tests/fixtures/big_picture/minimal_project/specs/hypotheses/h1-alpha.md`
-- Create: `science-tool/tests/fixtures/big_picture/minimal_project/specs/hypotheses/h2-beta.md`
-- Create: `science-tool/tests/fixtures/big_picture/minimal_project/doc/questions/q01-direct-to-h1.md`
-- Create: `science-tool/tests/fixtures/big_picture/minimal_project/doc/questions/q02-inverse-via-h1.md`
-- Create: `science-tool/tests/fixtures/big_picture/minimal_project/doc/questions/q03-transitive-via-interp.md`
-- Create: `science-tool/tests/fixtures/big_picture/minimal_project/doc/questions/q04-cross-cutting.md`
-- Create: `science-tool/tests/fixtures/big_picture/minimal_project/doc/questions/q05-orphan.md`
-- Create: `science-tool/tests/fixtures/big_picture/minimal_project/doc/interpretations/i01-h1-q03.md`
-- Create: `science-tool/tests/fixtures/big_picture/minimal_project/doc/interpretations/i02-h1-h2-q04.md`
-- Create: `science-tool/tests/fixtures/big_picture/minimal_project/science.yaml`
+- Create: `science/tests/fixtures/big_picture/minimal_project/specs/hypotheses/h1-alpha.md`
+- Create: `science/tests/fixtures/big_picture/minimal_project/specs/hypotheses/h2-beta.md`
+- Create: `science/tests/fixtures/big_picture/minimal_project/doc/questions/q01-direct-to-h1.md`
+- Create: `science/tests/fixtures/big_picture/minimal_project/doc/questions/q02-inverse-via-h1.md`
+- Create: `science/tests/fixtures/big_picture/minimal_project/doc/questions/q03-transitive-via-interp.md`
+- Create: `science/tests/fixtures/big_picture/minimal_project/doc/questions/q04-cross-cutting.md`
+- Create: `science/tests/fixtures/big_picture/minimal_project/doc/questions/q05-orphan.md`
+- Create: `science/tests/fixtures/big_picture/minimal_project/doc/interpretations/i01-h1-q03.md`
+- Create: `science/tests/fixtures/big_picture/minimal_project/doc/interpretations/i02-h1-h2-q04.md`
+- Create: `science/tests/fixtures/big_picture/minimal_project/science.yaml`
 
 - [ ] **Step 1: Create project manifest**
 
-Create `science-tool/tests/fixtures/big_picture/minimal_project/science.yaml`:
+Create `science/tests/fixtures/big_picture/minimal_project/science.yaml`:
 
 ```yaml
 name: "big-picture-minimal"
@@ -412,7 +412,7 @@ Interpretation confirming q04 spans both hypotheses.
 - [ ] **Step 5: Verify fixture with a quick sanity check**
 
 ```bash
-find /mnt/ssd/Dropbox/science/science-tool/tests/fixtures/big_picture/minimal_project -type f | sort
+find /mnt/ssd/Dropbox/science/science/tests/fixtures/big_picture/minimal_project -type f | sort
 ```
 
 Expected: 11 files (science.yaml + 2 hypotheses + 5 questions + 2 interpretations + verify the parent dirs exist).
@@ -420,7 +420,7 @@ Expected: 11 files (science.yaml + 2 hypotheses + 5 questions + 2 interpretation
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/tests/fixtures/big_picture/
+git add science/tests/fixtures/big_picture/
 git commit -m "test(big-picture): synthetic fixture project for resolver tests"
 ```
 
@@ -429,12 +429,12 @@ git commit -m "test(big-picture): synthetic fixture project for resolver tests"
 ## Task 4: Resolver — direct-match fallback
 
 **Files:**
-- Create: `science-tool/src/science_tool/big_picture/resolver.py`
-- Test: `science-tool/tests/test_big_picture_resolver.py`
+- Create: `science/src/science_tool/big_picture/resolver.py`
+- Test: `science/tests/test_big_picture_resolver.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `science-tool/tests/test_big_picture_resolver.py`:
+Create `science/tests/test_big_picture_resolver.py`:
 
 ```python
 from __future__ import annotations
@@ -461,14 +461,14 @@ def test_direct_match() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_resolver.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py -v
 ```
 
 Expected: FAIL (module not found).
 
 - [ ] **Step 3: Implement the minimal resolver**
 
-Create `science-tool/src/science_tool/big_picture/resolver.py`:
+Create `science/src/science_tool/big_picture/resolver.py`:
 
 ```python
 """Question→hypothesis resolver.
@@ -553,7 +553,7 @@ def _conf_rank(c: Confidence) -> int:
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_resolver.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py -v
 ```
 
 Expected: PASS.
@@ -561,7 +561,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/resolver.py science-tool/tests/test_big_picture_resolver.py
+git add science/src/science_tool/big_picture/resolver.py science/tests/test_big_picture_resolver.py
 git commit -m "feat(big-picture): resolver — direct-match fallback"
 ```
 
@@ -570,12 +570,12 @@ git commit -m "feat(big-picture): resolver — direct-match fallback"
 ## Task 5: Resolver — inverse-top-down fallback
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/resolver.py`
-- Test: `science-tool/tests/test_big_picture_resolver.py`
+- Modify: `science/src/science_tool/big_picture/resolver.py`
+- Test: `science/tests/test_big_picture_resolver.py`
 
 - [ ] **Step 1: Add the failing test**
 
-Append to `science-tool/tests/test_big_picture_resolver.py`:
+Append to `science/tests/test_big_picture_resolver.py`:
 
 ```python
 def test_inverse_match() -> None:
@@ -589,7 +589,7 @@ def test_inverse_match() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_resolver.py::test_inverse_match -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py::test_inverse_match -v
 ```
 
 Expected: FAIL (q02 has no match yet).
@@ -609,7 +609,7 @@ In `resolver.py`, in the `resolve_questions` function, after the "Direct" loop a
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_resolver.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py -v
 ```
 
 Expected: both tests PASS.
@@ -617,7 +617,7 @@ Expected: both tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/resolver.py science-tool/tests/test_big_picture_resolver.py
+git add science/src/science_tool/big_picture/resolver.py science/tests/test_big_picture_resolver.py
 git commit -m "feat(big-picture): resolver — inverse-top-down fallback"
 ```
 
@@ -626,8 +626,8 @@ git commit -m "feat(big-picture): resolver — inverse-top-down fallback"
 ## Task 6: Resolver — transitive-via-interpretation fallback
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/resolver.py`
-- Test: `science-tool/tests/test_big_picture_resolver.py`
+- Modify: `science/src/science_tool/big_picture/resolver.py`
+- Test: `science/tests/test_big_picture_resolver.py`
 
 - [ ] **Step 1: Add the failing test**
 
@@ -645,7 +645,7 @@ def test_transitive_match() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_resolver.py::test_transitive_match -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py::test_transitive_match -v
 ```
 
 Expected: FAIL.
@@ -670,7 +670,7 @@ In `resolver.py`, after the inverse loop, add:
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_resolver.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py -v
 ```
 
 Expected: 3 tests PASS.
@@ -678,7 +678,7 @@ Expected: 3 tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/resolver.py science-tool/tests/test_big_picture_resolver.py
+git add science/src/science_tool/big_picture/resolver.py science/tests/test_big_picture_resolver.py
 git commit -m "feat(big-picture): resolver — transitive-via-interpretation fallback"
 ```
 
@@ -687,7 +687,7 @@ git commit -m "feat(big-picture): resolver — transitive-via-interpretation fal
 ## Task 7: Resolver — cross-cutting and orphan cases
 
 **Files:**
-- Test: `science-tool/tests/test_big_picture_resolver.py`
+- Test: `science/tests/test_big_picture_resolver.py`
 
 - [ ] **Step 1: Add failing tests for cross-cutting + orphan**
 
@@ -721,7 +721,7 @@ def test_primary_prefers_higher_confidence() -> None:
 - [ ] **Step 2: Run tests to verify status**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_resolver.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py -v
 ```
 
 Expected: all 6 tests PASS. (The resolver logic from Tasks 4–6 already handles many-to-many and orphan naturally; this task verifies it.)
@@ -736,17 +736,17 @@ The existing logic should cover these cases. If a test fails, inspect the failur
 - [ ] **Step 4: Commit**
 
 ```bash
-git add science-tool/tests/test_big_picture_resolver.py
+git add science/tests/test_big_picture_resolver.py
 git commit -m "test(big-picture): resolver — cross-cutting + orphan cases"
 ```
 
 ---
 
-## Task 8: Resolver CLI — `science-tool big-picture resolve-questions`
+## Task 8: Resolver CLI — `science big-picture resolve-questions`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/cli.py`
-- Test: `science-tool/tests/test_big_picture_cli.py`
+- Modify: `science/src/science_tool/big_picture/cli.py`
+- Test: `science/tests/test_big_picture_cli.py`
 
 - [ ] **Step 1: Add the failing test**
 
@@ -779,14 +779,14 @@ def test_resolve_questions_emits_json() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_cli.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_cli.py -v
 ```
 
 Expected: FAIL (the stub raises ClickException).
 
 - [ ] **Step 3: Implement the CLI subcommand**
 
-Replace the `resolve_questions_cmd` stub in `science-tool/src/science_tool/big_picture/cli.py` with:
+Replace the `resolve_questions_cmd` stub in `science/src/science_tool/big_picture/cli.py` with:
 
 ```python
 import json
@@ -841,7 +841,7 @@ Leave the `validate` stub as-is for now; Task 12 replaces it.
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_cli.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_cli.py -v
 ```
 
 Expected: 2 tests PASS (the help test from Task 1 + the resolver JSON test).
@@ -849,7 +849,7 @@ Expected: 2 tests PASS (the help test from Task 1 + the resolver JSON test).
 - [ ] **Step 5: Verify the CLI end-to-end**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run science-tool big-picture resolve-questions --project-root tests/fixtures/big_picture/minimal_project | head -30
+cd /mnt/ssd/Dropbox/science/science && uv run science big-picture resolve-questions --project-root tests/fixtures/big_picture/minimal_project | head -30
 ```
 
 Expected: JSON with 5 questions, each showing hypotheses + primary_hypothesis.
@@ -857,7 +857,7 @@ Expected: JSON with 5 questions, each showing hypotheses + primary_hypothesis.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/cli.py science-tool/tests/test_big_picture_cli.py
+git add science/src/science_tool/big_picture/cli.py science/tests/test_big_picture_cli.py
 git commit -m "feat(big-picture): CLI — resolve-questions subcommand"
 ```
 
@@ -866,12 +866,12 @@ git commit -m "feat(big-picture): CLI — resolve-questions subcommand"
 ## Task 9: Validator — citation ID existence check
 
 **Files:**
-- Create: `science-tool/src/science_tool/big_picture/validator.py`
-- Test: `science-tool/tests/test_big_picture_validator.py`
+- Create: `science/src/science_tool/big_picture/validator.py`
+- Test: `science/tests/test_big_picture_validator.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `science-tool/tests/test_big_picture_validator.py`:
+Create `science/tests/test_big_picture_validator.py`:
 
 ```python
 from __future__ import annotations
@@ -935,14 +935,14 @@ The investigation built on interpretation:i01-h1-q03.
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_validator.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: FAIL (module not found).
 
 - [ ] **Step 3: Implement the validator**
 
-Create `science-tool/src/science_tool/big_picture/validator.py`:
+Create `science/src/science_tool/big_picture/validator.py`:
 
 ```python
 """Post-hoc validator for generated big-picture synthesis files."""
@@ -1010,7 +1010,7 @@ def _collect_project_ids(project_root: Path) -> set[str]:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_validator.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: 2 tests PASS.
@@ -1018,7 +1018,7 @@ Expected: 2 tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/validator.py science-tool/tests/test_big_picture_validator.py
+git add science/src/science_tool/big_picture/validator.py science/tests/test_big_picture_validator.py
 git commit -m "feat(big-picture): validator — nonexistent reference detection"
 ```
 
@@ -1027,8 +1027,8 @@ git commit -m "feat(big-picture): validator — nonexistent reference detection"
 ## Task 10: Validator — orphan-question count reconciliation
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/validator.py`
-- Test: `science-tool/tests/test_big_picture_validator.py`
+- Modify: `science/src/science_tool/big_picture/validator.py`
+- Test: `science/tests/test_big_picture_validator.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1074,14 +1074,14 @@ synthesized_from: []
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_validator.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: FAIL (`validate_rollup_file` not defined).
 
 - [ ] **Step 3: Implement the rollup validator**
 
-Edit `science-tool/src/science_tool/big_picture/validator.py`. Add `orphan_count_mismatch` to the `IssueKind` literal:
+Edit `science/src/science_tool/big_picture/validator.py`. Add `orphan_count_mismatch` to the `IssueKind` literal:
 
 ```python
 IssueKind = Literal[
@@ -1125,7 +1125,7 @@ def validate_rollup_file(path: Path, project_root: Path) -> list[ValidationIssue
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_validator.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: 4 tests PASS.
@@ -1133,7 +1133,7 @@ Expected: 4 tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/validator.py science-tool/tests/test_big_picture_validator.py
+git add science/src/science_tool/big_picture/validator.py science/tests/test_big_picture_validator.py
 git commit -m "feat(big-picture): validator — orphan count reconciliation"
 ```
 
@@ -1142,8 +1142,8 @@ git commit -m "feat(big-picture): validator — orphan count reconciliation"
 ## Task 11: Validator — thin-coverage marker consistency
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/validator.py`
-- Test: `science-tool/tests/test_big_picture_validator.py`
+- Modify: `science/src/science_tool/big_picture/validator.py`
+- Test: `science/tests/test_big_picture_validator.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1196,7 +1196,7 @@ Arc reconstruction is limited because no prior_interpretations chains exist.
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_validator.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: FAIL.
@@ -1247,7 +1247,7 @@ def _extract_section(text: str, heading: str) -> str:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_validator.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: 6 tests PASS.
@@ -1255,17 +1255,17 @@ Expected: 6 tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/validator.py science-tool/tests/test_big_picture_validator.py
+git add science/src/science_tool/big_picture/validator.py science/tests/test_big_picture_validator.py
 git commit -m "feat(big-picture): validator — thin-coverage Arc length check"
 ```
 
 ---
 
-## Task 12: Validator CLI — `science-tool big-picture validate`
+## Task 12: Validator CLI — `science big-picture validate`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/cli.py`
-- Test: `science-tool/tests/test_big_picture_cli.py`
+- Modify: `science/src/science_tool/big_picture/cli.py`
+- Test: `science/tests/test_big_picture_cli.py`
 
 - [ ] **Step 1: Add the failing test**
 
@@ -1323,7 +1323,7 @@ def test_validate_passes_on_clean_project(tmp_path: Path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_cli.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_cli.py -v
 ```
 
 Expected: FAIL (validate is still stubbed).
@@ -1368,7 +1368,7 @@ def validate_cmd(project_root: Path) -> None:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest tests/test_big_picture_cli.py -v
+cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_cli.py -v
 ```
 
 Expected: 4 tests PASS.
@@ -1376,7 +1376,7 @@ Expected: 4 tests PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/cli.py science-tool/tests/test_big_picture_cli.py
+git add science/src/science_tool/big_picture/cli.py science/tests/test_big_picture_cli.py
 git commit -m "feat(big-picture): CLI — validate subcommand"
 ```
 
@@ -1619,14 +1619,14 @@ Parse `$ARGUMENTS` for:
 Run these in the project root:
 
 ```bash
-science-tool graph project-summary --format json
-science-tool graph question-summary --format json
-science-tool graph inquiry-summary --format json
-science-tool graph dashboard-summary --format json
-science-tool graph uncertainty --format json
-science-tool graph gaps --format json
-science-tool graph neighborhood-summary --format json
-science-tool big-picture resolve-questions --project-root .
+science graph project-summary --format json
+science graph question-summary --format json
+science graph inquiry-summary --format json
+science graph dashboard-summary --format json
+science graph uncertainty --format json
+science graph gaps --format json
+science graph neighborhood-summary --format json
+science big-picture resolve-questions --project-root .
 ```
 
 For `software` profile projects, skip `graph project-summary` (follows `/science:status` precedent).
@@ -1854,7 +1854,7 @@ After all phases:
 - Show the list of files written.
 - Show any staleness warnings.
 - Show any sub-agent "unused in synthesis" reports — these are candidates for future bundle improvements.
-- Suggest running `science-tool big-picture validate --project-root .` to sanity-check the output.
+- Suggest running `science big-picture validate --project-root .` to sanity-check the output.
 ```
 
 - [ ] **Step 2: Final read-through of the command file**
@@ -1880,10 +1880,10 @@ git commit -m "feat(big-picture): write phase, flag handling, staleness warning"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Run the full science-tool test suite**
+- [ ] **Step 1: Run the full science test suite**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run pytest
+cd /mnt/ssd/Dropbox/science/science && uv run pytest
 ```
 
 Expected: all tests pass, including the new big-picture ones.
@@ -1891,7 +1891,7 @@ Expected: all tests pass, including the new big-picture ones.
 - [ ] **Step 2: Run type checks if present**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool && uv run --frozen ruff check . && uv run --frozen pyright 2>/dev/null || echo "pyright not configured — skipping"
+cd /mnt/ssd/Dropbox/science/science && uv run --frozen ruff check . && uv run --frozen pyright 2>/dev/null || echo "pyright not configured — skipping"
 ```
 
 Expected: ruff passes; pyright passes or is not configured.
@@ -1940,7 +1940,7 @@ Let it complete. Record elapsed time.
 
 ```bash
 cd /home/keith/d/natural-systems
-science-tool big-picture validate --project-root .
+science big-picture validate --project-root .
 ```
 
 Expected: exit 0 (no issues). If issues found, read each carefully — they may reflect real bugs in the command or agent prompts. Record in notes.
@@ -2002,7 +2002,7 @@ Record elapsed time.
 
 ```bash
 cd /home/keith/d/r/mm30
-science-tool big-picture validate --project-root .
+science big-picture validate --project-root .
 ```
 
 Expected: exit 0.
@@ -2052,5 +2052,5 @@ After the plan lands (this is for the plan author, to run before declaring done)
 
 **Type / name consistency**:
 - `HypothesisMatch`, `ResolverOutput`, `resolve_questions`, `ValidationIssue`, `validate_synthesis_file`, `validate_rollup_file`, `big_picture_group`, `read_frontmatter` — each name is introduced once and used consistently.
-- File paths: `science-tool/src/science_tool/big_picture/…` throughout; no inconsistent capitalization.
-- Command name `/science:big-picture` → file `commands/big-picture.md` → CLI `science-tool big-picture` — matches conventions.
+- File paths: `science/src/science_tool/big_picture/…` throughout; no inconsistent capitalization.
+- Command name `/science:big-picture` → file `commands/big-picture.md` → CLI `science big-picture` — matches conventions.

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build source-authored `science-tool entity` commands plus typed wrappers for questions, hypotheses, discussions, and interpretations.
+**Goal:** Build source-authored `science entity` commands plus typed wrappers for questions, hypotheses, discussions, and interpretations.
 
 **Architecture:** Add `science_tool/entities.py` as the domain module for source entity authoring. Keep source validation on the existing registry/adapters path by adding virtual markdown overrides to the markdown loader, then wire Click commands in `science_tool/cli.py`. The first increment writes markdown/frontmatter sources only; graph mutation remains under `graph add`.
 
@@ -12,34 +12,34 @@
 
 ## File Structure
 
-- Create `science-tool/src/science_tool/entities.py`
+- Create `science/src/science_tool/entities.py`
   - Path policy, slug/id generation, frontmatter/body rendering, source lookup, create/edit/note/list/neighbors helpers, and validation.
-- Modify `science-tool/src/science_tool/graph/storage_adapters/markdown.py`
+- Modify `science/src/science_tool/graph/storage_adapters/markdown.py`
   - Add optional virtual markdown file overrides and parse-from-text helper.
   - Ignore non-`.md` staging files by relying on the current `*.md` glob.
-- Modify `science-tool/src/science_tool/graph/sources.py`
+- Modify `science/src/science_tool/graph/sources.py`
   - Add optional `markdown_overrides: dict[str, str] | None = None` parameter to `load_project_sources`.
   - Pass overrides into `MarkdownAdapter`.
-- Modify `science-tool/src/science_tool/cli.py`
+- Modify `science/src/science_tool/cli.py`
   - Import entity helpers.
   - Add `entity`, `question`, `hypothesis`, `discussion`, and `interpretation` groups.
   - Add soft-deprecation guidance to overlapping `graph add` commands.
-- Create `science-tool/tests/test_entities.py`
+- Create `science/tests/test_entities.py`
   - Unit tests for core policy, slug/id generation, rendering, editing, note insertion, validation, and reference resolution.
-- Create `science-tool/tests/test_entities_cli.py`
+- Create `science/tests/test_entities_cli.py`
   - CLI tests for create/show/edit/note/list/neighbors and typed wrappers.
-- Create `science-tool/tests/_fixtures/entity_helpers.py`
+- Create `science/tests/_fixtures/entity_helpers.py`
   - Shared project seeding and markdown entity helpers for entity tests.
-- Modify `science-tool/tests/test_storage_adapters/test_markdown.py`
+- Modify `science/tests/test_storage_adapters/test_markdown.py`
   - Tests for virtual overrides and `.md.tmp` non-discovery.
-- Modify `science-tool/tests/test_graph_materialize.py`
+- Modify `science/tests/test_graph_materialize.py`
   - Smoke coverage that source-authored and graph-only entities do not double-count after materialization.
 
 ## Shared Test Fixtures
 
-Create `science-tool/tests/_fixtures/entity_helpers.py` and import these helpers from
-both `science-tool/tests/test_entities.py` and
-`science-tool/tests/test_entities_cli.py`.
+Create `science/tests/_fixtures/entity_helpers.py` and import these helpers from
+both `science/tests/test_entities.py` and
+`science/tests/test_entities_cli.py`.
 
 ```python
 from pathlib import Path
@@ -67,13 +67,13 @@ def write_markdown_entity(root: Path, rel_path: str, frontmatter: dict[str, obje
 ### Task 1: Markdown Virtual Overrides
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/storage_adapters/markdown.py`
-- Modify: `science-tool/src/science_tool/graph/sources.py`
-- Test: `science-tool/tests/test_storage_adapters/test_markdown.py`
+- Modify: `science/src/science_tool/graph/storage_adapters/markdown.py`
+- Modify: `science/src/science_tool/graph/sources.py`
+- Test: `science/tests/test_storage_adapters/test_markdown.py`
 
 - [ ] **Step 1: Write failing markdown override tests**
 
-Add these tests to `science-tool/tests/test_storage_adapters/test_markdown.py`.
+Add these tests to `science/tests/test_storage_adapters/test_markdown.py`.
 
 ```python
 def test_virtual_markdown_override_is_discovered_and_loaded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -125,14 +125,14 @@ def test_md_tmp_files_are_not_discovered(tmp_path: Path) -> None:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_storage_adapters/test_markdown.py -q
+uv run --frozen pytest science/tests/test_storage_adapters/test_markdown.py -q
 ```
 
 Expected: FAIL because `MarkdownAdapter.__init__` has no `virtual_files` parameter.
 
 - [ ] **Step 3: Implement virtual overrides**
 
-In `science-tool/src/science_tool/graph/storage_adapters/markdown.py`, update the adapter shape like this.
+In `science/src/science_tool/graph/storage_adapters/markdown.py`, update the adapter shape like this.
 
 ```python
 class MarkdownAdapter(StorageAdapter):
@@ -201,7 +201,7 @@ def _parse_markdown_text(text: str) -> tuple[dict[str, Any], str]:
     return (fm, body.lstrip("\n"))
 ```
 
-In `science-tool/src/science_tool/graph/sources.py`, change the function signature to:
+In `science/src/science_tool/graph/sources.py`, change the function signature to:
 
 ```python
 def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] | None = None) -> ProjectSources:
@@ -215,7 +215,7 @@ Then change only the markdown adapter entry in the existing `adapters` list to
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_storage_adapters/test_markdown.py science-tool/tests/test_load_project_sources_unified.py -q
+uv run --frozen pytest science/tests/test_storage_adapters/test_markdown.py science/tests/test_load_project_sources_unified.py -q
 ```
 
 Expected: PASS.
@@ -223,23 +223,23 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/storage_adapters/markdown.py science-tool/src/science_tool/graph/sources.py science-tool/tests/test_storage_adapters/test_markdown.py
+git add science/src/science_tool/graph/storage_adapters/markdown.py science/src/science_tool/graph/sources.py science/tests/test_storage_adapters/test_markdown.py
 git commit -m "feat(entities): support virtual markdown source validation"
 ```
 
 ### Task 2: Entity Core Policies, Slugs, IDs, And Rendering
 
 **Files:**
-- Create: `science-tool/src/science_tool/entities.py`
-- Create: `science-tool/tests/_fixtures/entity_helpers.py`
-- Create: `science-tool/tests/test_entities.py`
+- Create: `science/src/science_tool/entities.py`
+- Create: `science/tests/_fixtures/entity_helpers.py`
+- Create: `science/tests/test_entities.py`
 
 - [ ] **Step 1: Write failing core tests**
 
-Create `science-tool/tests/_fixtures/entity_helpers.py` with the shared helper code from
+Create `science/tests/_fixtures/entity_helpers.py` with the shared helper code from
 the "Shared Test Fixtures" section.
 
-Create `science-tool/tests/test_entities.py` with these tests.
+Create `science/tests/test_entities.py` with these tests.
 
 ```python
 from __future__ import annotations
@@ -413,14 +413,14 @@ def test_append_note_to_body_inserts_before_next_peer_heading() -> None:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities.py -q
+uv run --frozen pytest science/tests/test_entities.py -q
 ```
 
 Expected: FAIL because `science_tool.entities` does not exist.
 
 - [ ] **Step 3: Implement core module**
 
-Create `science-tool/src/science_tool/entities.py` with these public names and behavior.
+Create `science/src/science_tool/entities.py` with these public names and behavior.
 
 ```python
 from __future__ import annotations
@@ -486,7 +486,7 @@ For `build_entity_markdown`, assert frontmatter by parsing the emitted YAML in t
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities.py -q
+uv run --frozen pytest science/tests/test_entities.py -q
 ```
 
 Expected: PASS.
@@ -494,19 +494,19 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/entities.py science-tool/tests/_fixtures/entity_helpers.py science-tool/tests/test_entities.py
+git add science/src/science_tool/entities.py science/tests/_fixtures/entity_helpers.py science/tests/test_entities.py
 git commit -m "feat(entities): add source entity core policies"
 ```
 
 ### Task 3: Create With Prospective Validation
 
 **Files:**
-- Modify: `science-tool/src/science_tool/entities.py`
-- Modify: `science-tool/tests/test_entities.py`
+- Modify: `science/src/science_tool/entities.py`
+- Modify: `science/tests/test_entities.py`
 
 - [ ] **Step 1: Add failing create tests**
 
-Append these tests to `science-tool/tests/test_entities.py`.
+Append these tests to `science/tests/test_entities.py`.
 
 ```python
 from science_tool.entities import create_entity
@@ -677,7 +677,7 @@ def test_create_entity_reports_preexisting_audit_failures_as_warnings(
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities.py -q
+uv run --frozen pytest science/tests/test_entities.py -q
 ```
 
 Expected: FAIL because `create_entity` is missing.
@@ -728,7 +728,7 @@ Implementation requirements:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities.py science-tool/tests/test_load_project_sources_unified.py -q
+uv run --frozen pytest science/tests/test_entities.py science/tests/test_load_project_sources_unified.py -q
 ```
 
 Expected: PASS.
@@ -736,19 +736,19 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/entities.py science-tool/tests/test_entities.py
+git add science/src/science_tool/entities.py science/tests/test_entities.py
 git commit -m "feat(entities): create source-authored markdown entities"
 ```
 
 ### Task 4: Lookup, Edit, Note, And List Core
 
 **Files:**
-- Modify: `science-tool/src/science_tool/entities.py`
-- Modify: `science-tool/tests/test_entities.py`
+- Modify: `science/src/science_tool/entities.py`
+- Modify: `science/tests/test_entities.py`
 
 - [ ] **Step 1: Add failing operation tests**
 
-Append these tests to `science-tool/tests/test_entities.py`.
+Append these tests to `science/tests/test_entities.py`.
 
 ```python
 from science_tool.entities import (
@@ -938,7 +938,7 @@ def test_list_entities_orders_by_canonical_id(tmp_path: Path) -> None:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities.py -q
+uv run --frozen pytest science/tests/test_entities.py -q
 ```
 
 Expected: FAIL because lookup/edit/note/list helpers are missing.
@@ -987,7 +987,7 @@ Parsing and writing rules:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities.py -q
+uv run --frozen pytest science/tests/test_entities.py -q
 ```
 
 Expected: PASS.
@@ -995,19 +995,19 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/entities.py science-tool/tests/test_entities.py
+git add science/src/science_tool/entities.py science/tests/test_entities.py
 git commit -m "feat(entities): edit list and note source entities"
 ```
 
 ### Task 5: Generic Entity CLI
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
-- Create: `science-tool/tests/test_entities_cli.py`
+- Modify: `science/src/science_tool/cli.py`
+- Create: `science/tests/test_entities_cli.py`
 
 - [ ] **Step 1: Write failing CLI tests**
 
-Create `science-tool/tests/test_entities_cli.py` with these tests.
+Create `science/tests/test_entities_cli.py` with these tests.
 
 ```python
 from __future__ import annotations
@@ -1154,14 +1154,14 @@ def test_entity_list_filters_exact_status() -> None:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities_cli.py -q
+uv run --frozen pytest science/tests/test_entities_cli.py -q
 ```
 
 Expected: FAIL because `entity` command group is missing.
 
 - [ ] **Step 3: Implement CLI group**
 
-In `science-tool/src/science_tool/cli.py`, import helpers.
+In `science/src/science_tool/cli.py`, import helpers.
 
 ```python
 from science_tool.entities import (
@@ -1198,7 +1198,7 @@ Catch `EntityCommandError` and re-raise `click.ClickException(str(exc))`. Print 
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities.py science-tool/tests/test_entities_cli.py -q
+uv run --frozen pytest science/tests/test_entities.py science/tests/test_entities_cli.py -q
 ```
 
 Expected: PASS.
@@ -1206,19 +1206,19 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/cli.py science-tool/tests/test_entities_cli.py
+git add science/src/science_tool/cli.py science/tests/test_entities_cli.py
 git commit -m "feat(entities): add generic entity CLI"
 ```
 
 ### Task 6: Typed Wrappers And Graph Add Guidance
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
-- Modify: `science-tool/tests/test_entities_cli.py`
+- Modify: `science/src/science_tool/cli.py`
+- Modify: `science/tests/test_entities_cli.py`
 
 - [ ] **Step 1: Add failing wrapper tests**
 
-Append these tests to `science-tool/tests/test_entities_cli.py`.
+Append these tests to `science/tests/test_entities_cli.py`.
 
 ```python
 def test_question_create_wrapper_delegates_to_entity_create() -> None:
@@ -1296,7 +1296,7 @@ def test_graph_add_question_mentions_entity_create() -> None:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities_cli.py -q
+uv run --frozen pytest science/tests/test_entities_cli.py -q
 ```
 
 Expected: FAIL because typed wrapper groups and graph guidance are missing.
@@ -1323,7 +1323,7 @@ Add output line `Created <id> at <path>`.
 For `graph_add_question`, `graph_add_hypothesis`, `graph_add_discussion`, and `graph_add_interpretation`, append one extra `click.echo` line after the existing success output:
 
 ```python
-click.echo("Tip: use `science-tool entity create question <title>` for durable source-authored project work.")
+click.echo("Tip: use `science entity create question <title>` for durable source-authored project work.")
 ```
 
 Use the matching kind name in each message.
@@ -1333,7 +1333,7 @@ Use the matching kind name in each message.
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities_cli.py -q
+uv run --frozen pytest science/tests/test_entities_cli.py -q
 ```
 
 Expected: PASS.
@@ -1341,21 +1341,21 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/cli.py science-tool/tests/test_entities_cli.py
+git add science/src/science_tool/cli.py science/tests/test_entities_cli.py
 git commit -m "feat(entities): add typed source entity wrappers"
 ```
 
 ### Task 7: Entity Neighbors And Staleness
 
 **Files:**
-- Modify: `science-tool/src/science_tool/entities.py`
-- Modify: `science-tool/src/science_tool/cli.py`
-- Modify: `science-tool/tests/test_entities.py`
-- Modify: `science-tool/tests/test_entities_cli.py`
+- Modify: `science/src/science_tool/entities.py`
+- Modify: `science/src/science_tool/cli.py`
+- Modify: `science/tests/test_entities.py`
+- Modify: `science/tests/test_entities_cli.py`
 
 - [ ] **Step 1: Add failing staleness and neighbor tests**
 
-Append to `science-tool/tests/test_entities.py`.
+Append to `science/tests/test_entities.py`.
 
 ```python
 import os
@@ -1374,7 +1374,7 @@ def test_graph_is_stale_when_source_newer_than_graph(tmp_path: Path) -> None:
     assert graph_is_stale(tmp_path, graph_path) is True
 ```
 
-Append to `science-tool/tests/test_entities_cli.py`.
+Append to `science/tests/test_entities_cli.py`.
 
 ```python
 def test_entity_neighbors_source_only_warns_and_returns_no_rows() -> None:
@@ -1414,14 +1414,14 @@ def test_entity_neighbors_missing_graph_fails_cleanly() -> None:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities.py science-tool/tests/test_entities_cli.py -q
+uv run --frozen pytest science/tests/test_entities.py science/tests/test_entities_cli.py -q
 ```
 
 Expected: FAIL because `graph_is_stale` and `entity neighbors` are missing.
 
 - [ ] **Step 3: Implement staleness helper**
 
-In `science-tool/src/science_tool/entities.py`, add:
+In `science/src/science_tool/entities.py`, add:
 
 ```python
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
@@ -1444,7 +1444,7 @@ def graph_is_stale(project_root: Path, graph_path: Path) -> bool:
 
 - [ ] **Step 4: Implement CLI neighbors**
 
-In `science-tool/src/science_tool/cli.py`, `entity neighbors` should:
+In `science/src/science_tool/cli.py`, `entity neighbors` should:
 
 - Resolve the entity with `find_entity` first.
 - If `graph_is_stale(Path.cwd(), DEFAULT_GRAPH_PATH)`, emit `WARNING: graph materialization may be stale; results below could miss recent edits.`
@@ -1458,7 +1458,7 @@ In `science-tool/src/science_tool/cli.py`, `entity neighbors` should:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities.py science-tool/tests/test_entities_cli.py -q
+uv run --frozen pytest science/tests/test_entities.py science/tests/test_entities_cli.py -q
 ```
 
 Expected: PASS.
@@ -1466,20 +1466,20 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/entities.py science-tool/src/science_tool/cli.py science-tool/tests/test_entities.py science-tool/tests/test_entities_cli.py
+git add science/src/science_tool/entities.py science/src/science_tool/cli.py science/tests/test_entities.py science/tests/test_entities_cli.py
 git commit -m "feat(entities): show graph neighbors with staleness warnings"
 ```
 
 ### Task 8: Materialization Integration And Final Verification
 
 **Files:**
-- Modify: `science-tool/tests/test_graph_materialize.py`
-- Review: `science-tool/src/science_tool/entities.py`
-- Review: `science-tool/src/science_tool/cli.py`
+- Modify: `science/tests/test_graph_materialize.py`
+- Review: `science/src/science_tool/entities.py`
+- Review: `science/src/science_tool/cli.py`
 
 - [ ] **Step 1: Add materialization integration test**
 
-Add a focused test to `science-tool/tests/test_graph_materialize.py`.
+Add a focused test to `science/tests/test_graph_materialize.py`.
 
 Add imports if they are not already present in the file:
 
@@ -1526,7 +1526,7 @@ def test_source_authored_hypothesis_and_graph_added_hypothesis_do_not_double_cou
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_graph_materialize.py science-tool/tests/test_entities.py science-tool/tests/test_entities_cli.py -q
+uv run --frozen pytest science/tests/test_graph_materialize.py science/tests/test_entities.py science/tests/test_entities_cli.py -q
 ```
 
 Expected: PASS.
@@ -1536,7 +1536,7 @@ Expected: PASS.
 Run:
 
 ```bash
-uv run --frozen ruff format science-tool/src/science_tool/entities.py science-tool/src/science_tool/cli.py science-tool/src/science_tool/graph/storage_adapters/markdown.py science-tool/src/science_tool/graph/sources.py science-tool/tests/_entity_helpers.py science-tool/tests/test_entities.py science-tool/tests/test_entities_cli.py science-tool/tests/test_storage_adapters/test_markdown.py science-tool/tests/test_graph_materialize.py
+uv run --frozen ruff format science/src/science_tool/entities.py science/src/science_tool/cli.py science/src/science_tool/graph/storage_adapters/markdown.py science/src/science_tool/graph/sources.py science/tests/_entity_helpers.py science/tests/test_entities.py science/tests/test_entities_cli.py science/tests/test_storage_adapters/test_markdown.py science/tests/test_graph_materialize.py
 uv run --frozen ruff check .
 uv run --frozen pyright
 ```
@@ -1548,7 +1548,7 @@ Expected: all commands exit 0.
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities.py science-tool/tests/test_entities_cli.py science-tool/tests/test_storage_adapters/test_markdown.py science-tool/tests/test_load_project_sources_unified.py science-tool/tests/test_graph_materialize.py -q
+uv run --frozen pytest science/tests/test_entities.py science/tests/test_entities_cli.py science/tests/test_storage_adapters/test_markdown.py science/tests/test_load_project_sources_unified.py science/tests/test_graph_materialize.py -q
 ```
 
 Expected: PASS.
@@ -1564,9 +1564,9 @@ cd "$tmpdir"
 printf 'name: smoke\nknowledge_profiles: {local: local}\n' > science.yaml
 mkdir -p doc/questions
 printf '%s\n' '---' 'id: "question:q01-existing"' 'type: "question"' 'title: "Existing"' 'status: "open"' '---' '# Existing' > doc/questions/q01-existing.md
-uv run --project "$repo/science-tool" --frozen science-tool entity create question "What explains model family overlap?"
-uv run --project "$repo/science-tool" --frozen science-tool entity note q02 "Clarified scope." --date 2026-04-28
-uv run --project "$repo/science-tool" --frozen science-tool entity show q02
+uv run --project "$repo/science" --frozen science entity create question "What explains model family overlap?"
+uv run --project "$repo/science" --frozen science entity note q02 "Clarified scope." --date 2026-04-28
+uv run --project "$repo/science" --frozen science entity show q02
 ```
 
 Expected output includes `question:q02-what-explains-model-family-overlap` and `- 2026-04-28: Clarified scope.`
@@ -1574,7 +1574,7 @@ Expected output includes `question:q02-what-explains-model-family-overlap` and `
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/tests/test_graph_materialize.py
+git add science/tests/test_graph_materialize.py
 git commit -m "test(entities): cover source entity materialization"
 ```
 
@@ -1583,7 +1583,7 @@ git commit -m "test(entities): cover source entity materialization"
 - [ ] Run focused tests:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities.py science-tool/tests/test_entities_cli.py science-tool/tests/test_storage_adapters/test_markdown.py science-tool/tests/test_load_project_sources_unified.py science-tool/tests/test_graph_materialize.py -q
+uv run --frozen pytest science/tests/test_entities.py science/tests/test_entities_cli.py science/tests/test_storage_adapters/test_markdown.py science/tests/test_load_project_sources_unified.py science/tests/test_graph_materialize.py -q
 ```
 
 - [ ] Run project quality checks:

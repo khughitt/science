@@ -11,7 +11,7 @@
 
 ### Gate condition
 
-Graph checks only run if `knowledge/graph.trig` exists. When it does, `science-tool` must be on PATH — error if not found.
+Graph checks only run if `knowledge/graph.trig` exists. When it does, `science` must be on PATH — error if not found.
 
 ### Checks
 
@@ -35,6 +35,6 @@ Scan `graph/knowledge` for all entities that have an `rdf:type` triple but no ot
 
 ### Changes
 
-1. `science-tool/src/science_tool/graph/store.py` — add orphaned node check to `validate_graph()`
-2. `science-tool/tests/test_graph_cli.py` — add test for orphaned node detection
+1. `science/src/science_tool/graph/store.py` — add orphaned node check to `validate_graph()`
+2. `science/tests/test_graph_cli.py` — add test for orphaned node detection
 3. `scripts/validate.sh` — add section 13 (graph checks)

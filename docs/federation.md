@@ -29,7 +29,7 @@ role: data-source
 parent: ~/d/cancer/meta
 ```
 
-`id` is the stable project identifier used in cross-project references. If omitted, `science-tool` defaults it to the
+`id` is the stable project identifier used in cross-project references. If omitted, `science` defaults it to the
 project directory name. `role` defaults to `standalone`. `parent` is optional and points from a child back to its meta
 project.
 
@@ -71,7 +71,7 @@ children:
     role: data-source
 ```
 
-At use sites, `science-tool` resolves paths with `Path.expanduser().resolve()` before comparison. This makes symlink forms
+At use sites, `science` resolves paths with `Path.expanduser().resolve()` before comparison. This makes symlink forms
 such as `~/d/cancer/...`, `/home/keith/d/cancer/...`, and `/mnt/ssd/Dropbox/cancer/...` comparable without storing
 machine-specific physical paths in manifests.
 
@@ -117,7 +117,7 @@ Graph URI form is:
 
 ## Federated Graphs
 
-For `role: meta`, `science-tool graph build` runs two phases:
+For `role: meta`, `science graph build` runs two phases:
 
 1. Standard local graph materialization for the meta project.
 2. Federation assembly that re-reads meta's local `knowledge/graph.trig`, reads each child's `knowledge/graph.trig`, and
@@ -139,16 +139,16 @@ Federation is read-only. It does not write into child projects, push meta triple
 Validate a meta project's child manifest against child back-references:
 
 ```bash
-science-tool federation validate
+science federation validate
 ```
 
 Render a simple umbrella rollup:
 
 ```bash
-science-tool federation status
+science federation status
 ```
 
-`/science:status` dispatches to `science-tool federation status` when the current project declares `role: meta`. Non-meta
+`/science:status` dispatches to `science federation status` when the current project declares `role: meta`. Non-meta
 projects keep the existing per-project status flow.
 
 ## Deferred

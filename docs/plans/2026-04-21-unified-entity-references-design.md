@@ -642,7 +642,7 @@ part.
 ## Testing strategy
 
 Each change gets its own test module under
-`science-tool/tests/graph/references/`:
+`science/tests/graph/references/`:
 
 - `test_cross_kind_slug_resolution.py` — bare slug lookup, ambiguity
   detection, `same_as` identity collapse.

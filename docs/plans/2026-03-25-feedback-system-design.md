@@ -11,7 +11,7 @@ This approach doesn't scale: cross-project deduplication is manual, there's no s
 
 ## Goal
 
-Replace per-project markdown feedback files with a centralized, structured feedback system integrated into `science-tool`. Entries are stored as individual YAML files in `~/.config/science/feedback/`, queryable via CLI, and triageable by LLM agents.
+Replace per-project markdown feedback files with a centralized, structured feedback system integrated into `science`. Entries are stored as individual YAML files in `~/.config/science/feedback/`, queryable via CLI, and triageable by LLM agents.
 
 ## Design
 
@@ -75,17 +75,17 @@ The target field is a free-form string. These conventions are documented but not
 | `command:` | `command:interpret-results`, `command:next-steps` |
 | `template:` | `template:interpretation`, `template:discussion` |
 | `skill:` | `skill:data-management`, `skill:knowledge-graph` |
-| `tool:` | `tool:science-tool`, `tool:graph-build` |
+| `tool:` | `tool:science`, `tool:graph-build` |
 | `workflow:` | `workflow:triage`, `workflow:process-reflection` |
 
 ### 2. CLI Commands
 
-New `feedback` command group under `science-tool` with 5 subcommands.
+New `feedback` command group under `science` with 5 subcommands.
 
-#### `science-tool feedback add`
+#### `science feedback add`
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:interpret-results" \
   --category suggestion \
   --summary "Add User Questions section to template" \
@@ -100,15 +100,15 @@ science-tool feedback add \
 - Generates the next available ID for today's date
 - **Deduplication check:** Before creating, scans open entries with the same target. If either summary is a substring of the other (bidirectional check), in non-interactive mode auto-increments recurrence on the existing entry and adds a `related` link. In interactive mode, prompts: "Similar open entry exists: fb-2026-03-19-002. Increment recurrence instead? [Y/n]"
 
-#### `science-tool feedback list`
+#### `science feedback list`
 
 ```bash
-science-tool feedback list                              # all open entries
-science-tool feedback list --status open                # explicit status filter
-science-tool feedback list --target "command:interpret-results"  # by target
-science-tool feedback list --category friction           # by category
-science-tool feedback list --project seq-feats           # by project
-science-tool feedback list --format table|json            # output format
+science feedback list                              # all open entries
+science feedback list --status open                # explicit status filter
+science feedback list --target "command:interpret-results"  # by target
+science feedback list --category friction           # by category
+science feedback list --project seq-feats           # by project
+science feedback list --format table|json            # output format
 ```
 
 - Default: `--status open`, `--format table`
@@ -117,10 +117,10 @@ science-tool feedback list --format table|json            # output format
 - Table output columns: id, date, project, target, category, summary, recurrence
 - Sorted by recurrence (descending), then date
 
-#### `science-tool feedback update`
+#### `science feedback update`
 
 ```bash
-science-tool feedback update fb-2026-03-25-001 \
+science feedback update fb-2026-03-25-001 \
   --status addressed \
   --resolution "commit:86e4f5a — added descriptive signal category"
 ```
@@ -128,11 +128,11 @@ science-tool feedback update fb-2026-03-25-001 \
 - Updates any mutable field: `status`, `resolution`, `related`, `category`, `summary`, `detail`
 - When setting status to `addressed`/`deferred`/`wontfix`, `--resolution` is required
 
-#### `science-tool feedback triage`
+#### `science feedback triage`
 
 ```bash
-science-tool feedback triage                            # all open, grouped
-science-tool feedback triage --target "command:*"       # filter by target (fnmatch glob)
+science feedback triage                            # all open, grouped
+science feedback triage --target "command:*"       # filter by target (fnmatch glob)
 ```
 
 - Displays open entries grouped by target, sorted by recurrence within each group
@@ -140,12 +140,12 @@ science-tool feedback triage --target "command:*"       # filter by target (fnma
 - Non-interactive: outputs a structured table for LLM agent consumption
 - The agent then calls `feedback update` for each item it addresses
 
-#### `science-tool feedback report`
+#### `science feedback report`
 
 ```bash
-science-tool feedback report                            # all entries, markdown
-science-tool feedback report --project seq-feats        # single project
-science-tool feedback report --status addressed         # filter
+science feedback report                            # all entries, markdown
+science feedback report --project seq-feats        # single project
+science feedback report --status addressed         # filter
 ```
 
 - Generates human-readable markdown output (replacement for the old `doc/meta/skill-feedback.md`)
@@ -161,7 +161,7 @@ After completing the task above, reflect on the template and workflow.
 If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
-    science-tool feedback add \
+    science feedback add \
       --target "command:<this-command>" \
       --category <friction|gap|guidance|suggestion|positive> \
       --summary "<one-line summary>" \
@@ -199,7 +199,7 @@ Note: existing commands have two variants of the process reflection block — a 
 
 **In scope:**
 
-1. **New module:** `science-tool/src/science_tool/feedback.py` — YAML read/write, deduplication, filtering, grouping, report rendering
+1. **New module:** `science/src/science_tool/feedback.py` — YAML read/write, deduplication, filtering, grouping, report rendering
 2. **CLI commands:** Added to `cli.py` as a new `@click.group()` — `add`, `list`, `update`, `triage`, `report`
 3. **Process reflection update:** Update all 16 commands that have process reflection sections
 4. **Tests:** Unit tests for `feedback.py` (CRUD, dedup, filtering, ID generation, report rendering)
@@ -221,9 +221,9 @@ Note: existing commands have two variants of the process reflection block — a 
 
 | File | Action |
 |---|---|
-| `science-tool/src/science_tool/feedback.py` | Create |
-| `science-tool/src/science_tool/cli.py` | Modify (add feedback command group) |
-| `science-tool/tests/test_feedback.py` | Create |
+| `science/src/science_tool/feedback.py` | Create |
+| `science/src/science_tool/cli.py` | Modify (add feedback command group) |
+| `science/tests/test_feedback.py` | Create |
 | `commands/interpret-results.md` | Modify (process reflection) |
 | `commands/next-steps.md` | Modify (process reflection) |
 | `commands/discuss.md` | Modify (process reflection) |

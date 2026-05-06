@@ -13,7 +13,7 @@ A lightweight, file-based task management system with:
 
 1. Structured markdown task entries in `tasks/active.md`
 2. Monthly archival of completed tasks in `tasks/done/YYYY-MM.md`
-3. A `science-tool tasks` CLI for programmatic task operations
+3. A `science tasks` CLI for programmatic task operations
 4. A `/science:tasks` command for interactive task management
 5. A `/science:next-steps` command replacing `/science:review-tasks`
 
@@ -65,27 +65,27 @@ Tasks use a generic `related` field with typed references (`kind:slug`). This is
 
 Simple incrementing integers: `t001`, `t002`, etc. The next ID is determined by scanning active + done files. No nested task hierarchy — use bullet points in the description for sub-steps.
 
-## `science-tool tasks` CLI
+## `science tasks` CLI
 
-Subcommand on the existing `science-tool` Python CLI.
+Subcommand on the existing `science` Python CLI.
 
 ```
-science-tool tasks add "Description" --type=dev --priority=P1 [--related=hypothesis:h01] [--blocked-by=t003]
-science-tool tasks done t001 [--note="completed with X approach"]
-science-tool tasks defer t001 [--reason="waiting on dataset"]
-science-tool tasks block t001 --by=t003
-science-tool tasks unblock t001
-science-tool tasks edit t001 --priority=P0 --status=active
-science-tool tasks list [--type=dev] [--priority=P1] [--status=active] [--related=h01]
-science-tool tasks show t001
-science-tool tasks summary
+science tasks add "Description" --type=dev --priority=P1 [--related=hypothesis:h01] [--blocked-by=t003]
+science tasks done t001 [--note="completed with X approach"]
+science tasks defer t001 [--reason="waiting on dataset"]
+science tasks block t001 --by=t003
+science tasks unblock t001
+science tasks edit t001 --priority=P0 --status=active
+science tasks list [--type=dev] [--priority=P1] [--status=active] [--related=h01]
+science tasks show t001
+science tasks summary
 ```
 
 ## Science Commands
 
 ### `/science:tasks` (NEW)
 
-Interactive task management. Thin wrapper around `science-tool tasks` with conversational UX for filling in metadata when adding tasks.
+Interactive task management. Thin wrapper around `science tasks` with conversational UX for filling in metadata when adding tasks.
 
 ### `/science:next-steps` (NEW, replaces `/science:review-tasks`)
 
@@ -126,7 +126,7 @@ Replaced by `/science:next-steps`.
 
 ## Integration with Other Commands
 
-Commands that produce actionable items (`research-gaps`, `interpret-results`, `research-topic`) prompt the user: "Create tasks from these findings?" and use `science-tool tasks add` if accepted.
+Commands that produce actionable items (`research-gaps`, `interpret-results`, `research-topic`) prompt the user: "Create tasks from these findings?" and use `science tasks add` if accepted.
 
 ## Validation
 

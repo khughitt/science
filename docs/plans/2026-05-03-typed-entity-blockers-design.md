@@ -46,7 +46,7 @@ class ProjectEntity(Entity):
 ```
 
 ```python
-# science-tool: tasks_readiness.py
+# science: tasks_readiness.py
 
 class ReadinessResolver:
     """Looks up entities by id and tracks the visited set for cycle protection.
@@ -122,7 +122,7 @@ class AccessBlock(BaseModel):
 
 This spec is **single-project**. A task can be blocked by entities in the same project; it cannot be blocked by entities in a sibling/parent/child project.
 
-Rationale: cross-project resolution is explicitly deferred per `docs/federation.md:99`. The current `_audit_reference` path (`science-tool/src/science_tool/graph/migrate.py:316`) is called without `allow_cross_project_address`, and the resolver (`science-tool/src/science_tool/graph/reference_resolution.py:30`) only knows aliases for loaded local entities. Designing cross-project blockers properly requires settling the cross-project address syntax, the resolver source (live entity-store sweep vs. federated graph snapshot), stale-graph behavior, and audit semantics — all of which belong to the federation workstream rather than this spec.
+Rationale: cross-project resolution is explicitly deferred per `docs/federation.md:99`. The current `_audit_reference` path (`science/src/science_tool/graph/migrate.py:316`) is called without `allow_cross_project_address`, and the resolver (`science/src/science_tool/graph/reference_resolution.py:30`) only knows aliases for loaded local entities. Designing cross-project blockers properly requires settling the cross-project address syntax, the resolver source (live entity-store sweep vs. federated graph snapshot), stale-graph behavior, and audit semantics — all of which belong to the federation workstream rather than this spec.
 
 Cross-project blockers move to the trajectory section, conditional on cross-project entity resolution landing first.
 
@@ -132,7 +132,7 @@ Cross-project blockers move to the trajectory section, conditional on cross-proj
 
 ### Block command
 
-`science-tool tasks block <task_id> --by <typed-ref>`:
+`science tasks block <task_id> --by <typed-ref>`:
 
 - **Strict typing.** Rejects untyped strings: `--by some-string` → error `"blocker must be typed: <kind>:<local-id> (e.g. dataset:foo, task:t007)"`.
 - **Strict resolution.** Validates the ref resolves to a known project entity in the local project (cross-project refs and domain/catalog entities are out of scope; see trajectory item 1). If not: error with create-stub hint: `"unknown entity dataset:foo. Create the entity first (for datasets, add doc/datasets/foo.md or use the appropriate dataset workflow)."`
@@ -178,16 +178,16 @@ This is a nudge, not enforcement; it gives the auto-unblock value without commit
 
 ### New introspection command
 
-`science-tool tasks blockers <task_id>`:
+`science tasks blockers <task_id>`:
 
 - Default: prints per-blocker readiness as a table.
 - `--format=json`: machine-readable output, **always includes per-blocker readiness** (`ref`, `ready`, `state`, `detail`, `unresolved` flag). Useful for scripting and for the future auto-unblock sweep.
 
-`science-tool tasks list --format=json` likewise includes a `blocked_by_readiness` array per blocked task inside each row in the existing `{"rows": [...], "meta": {...}}` payload, so scripted callers don't have to issue per-task follow-up calls.
+`science tasks list --format=json` likewise includes a `blocked_by_readiness` array per blocked task inside each row in the existing `{"rows": [...], "meta": {...}}` payload, so scripted callers don't have to issue per-task follow-up calls.
 
 ### Legacy migration command
 
-`science-tool tasks fix-blockers`:
+`science tasks fix-blockers`:
 
 - Interactive sweep of all tasks with stored untyped blockers.
 - For each, prompts the user to either retype (e.g., `cleanup-old-data` → `task:t017`) or `--force`-keep with a note.
@@ -201,7 +201,7 @@ This is a nudge, not enforcement; it gives the auto-unblock value without commit
 A single task-layer helper owns ref validation; CLI `block`/`add`/`edit` all route through it:
 
 ```python
-# science-tool/src/science_tool/tasks_blockers.py
+# science/src/science_tool/tasks_blockers.py
 
 def validate_blocker_refs(
     project_root: Path,
@@ -220,7 +220,7 @@ def validate_blocker_refs(
 
 ### Updated function signatures
 
-`block_task`, `edit_task`, and `add_task` (in `science-tool/src/science_tool/tasks.py`) gain a `project_root: Path` parameter so they can call `validate_blocker_refs`. The CLI commands already have `project_root` available as `Path.cwd()` in the current task command group; threading it down is a small change.
+`block_task`, `edit_task`, and `add_task` (in `science/src/science_tool/tasks.py`) gain a `project_root: Path` parameter so they can call `validate_blocker_refs`. The CLI commands already have `project_root` available as `Path.cwd()` in the current task command group; threading it down is a small change.
 
 ### Read path
 
@@ -243,7 +243,7 @@ def validate_blocker_refs(
 
 **Schema.** `AccessBlock.availability` defaults to `"available"`; existing dataset entities continue to validate without edits.
 
-**Data.** No automatic rewrite of existing `tasks/active.md` files. Read-path warnings surface legacy untyped blockers; `science-tool tasks fix-blockers` provides an interactive retype flow.
+**Data.** No automatic rewrite of existing `tasks/active.md` files. Read-path warnings surface legacy untyped blockers; `science tasks fix-blockers` provides an interactive retype flow.
 
 ---
 
@@ -266,7 +266,7 @@ Three layers, in TDD execution order.
 - `WorkflowRunEntity.readiness()`: ready iff `status == "complete"`; otherwise echoes status.
 - `AccessBlock` validator rejects `available_after` set without `availability=embargoed`.
 
-### 2. `science-tool` task layer + resolver tests (`tests/test_tasks_blockers.py`, `tests/test_readiness_resolver.py`)
+### 2. `science` task layer + resolver tests (`tests/test_tasks_blockers.py`, `tests/test_readiness_resolver.py`)
 
 - `validate_blocker_refs` rejects untyped string (always; `--force` does not bypass).
 - `validate_blocker_refs` rejects unknown typed ref; `force=True` returns the ref with no error.
@@ -300,16 +300,16 @@ In a tmp project with one task and one embargoed dataset: `block` → `show` →
 | `science-model/src/science_model/entities.py` | Add `Readiness` model; default `readiness(resolver=None)` on `ProjectEntity`; overrides on `DatasetEntity` and `WorkflowRunEntity` |
 | `science-model/src/science_model/packages/schema.py` | Extend `AccessBlock` with `availability` + `available_after` + validator |
 | `science-model/tests/test_readiness.py` | New |
-| `science-tool/src/science_tool/tasks.py` | Thread `project_root` into `block_task` / `edit_task` / `add_task`; route blocker writes through `validate_blocker_refs`; add `parse_tasks_for_cli` wrapper. `parse_tasks` itself stays clean |
-| `science-tool/src/science_tool/tasks_blockers.py` | New: `validate_blocker_refs`, `BlockerValidationError` |
-| `science-tool/src/science_tool/tasks_readiness.py` | New: `ReadinessResolver` |
-| `science-tool/src/science_tool/entities.py` | Add `load_local_entity_ids()` and `load_local_entity_index()` helpers backed by `load_project_sources()` and filtered to `ProjectEntity` |
-| `science-tool/src/science_tool/cli.py` | Repeatable `--by`, `--force`; new `tasks blockers` and `tasks fix-blockers` commands; CLI commands call `parse_tasks_for_cli` |
-| `science-tool/src/science_tool/tasks_display.py` | Construct `ReadinessResolver`, resolve and render readiness, add nudge |
-| `science-tool/tests/test_tasks_blockers.py` | New |
-| `science-tool/tests/test_readiness_resolver.py` | New |
-| `science-tool/tests/test_tasks_cli.py` | Extend |
-| `science-tool/tests/test_tasks_display.py` | Extend |
+| `science/src/science_tool/tasks.py` | Thread `project_root` into `block_task` / `edit_task` / `add_task`; route blocker writes through `validate_blocker_refs`; add `parse_tasks_for_cli` wrapper. `parse_tasks` itself stays clean |
+| `science/src/science_tool/tasks_blockers.py` | New: `validate_blocker_refs`, `BlockerValidationError` |
+| `science/src/science_tool/tasks_readiness.py` | New: `ReadinessResolver` |
+| `science/src/science_tool/entities.py` | Add `load_local_entity_ids()` and `load_local_entity_index()` helpers backed by `load_project_sources()` and filtered to `ProjectEntity` |
+| `science/src/science_tool/cli.py` | Repeatable `--by`, `--force`; new `tasks blockers` and `tasks fix-blockers` commands; CLI commands call `parse_tasks_for_cli` |
+| `science/src/science_tool/tasks_display.py` | Construct `ReadinessResolver`, resolve and render readiness, add nudge |
+| `science/tests/test_tasks_blockers.py` | New |
+| `science/tests/test_readiness_resolver.py` | New |
+| `science/tests/test_tasks_cli.py` | Extend |
+| `science/tests/test_tasks_display.py` | Extend |
 | `commands/tasks.md` | Document typed-ref convention; mention `--force` and `fix-blockers` |
 | active tasks skill, if present (find with `rg -l "Manage the project task queue" skills .codex 2>/dev/null`) | Same |
 | `templates/dataset.md` (if it exists) | Add `availability` field with default and HTML hint |
@@ -325,7 +325,7 @@ These are named so the future direction is documented. **None are built in this 
 3. **Generalized graph operations primitives** — subgraph extraction, fold/aggregate over a subgraph, registered per-entity properties. Extract when a second concrete consumer (uncertainty diffusion, dependency-graph planning, knowledge-gap detection) appears, not before.
 4. **Graph substrate unification** — single conceptual schema with project-local lazy materialization plus explicit federated build. Significant design surface (especially the strict-vs-tolerant materialization-failure question). Justified when consumers beyond blockers (inquiries, knowledge-gap detection, uncertainty diffusion) accumulate.
 5. **Typed cross-project edge vocabulary** — `depends-on`, `cites-as-context`, `conditions-on`, `boundary-condition`, `ambient-influence`. Blockers are the first concrete `depends-on` instance; the broader vocabulary lands when a second intent class needs to be expressed.
-6. **Federation-status discovery tooling** — `science-tool federation status` showing parent/peer updates relative to local state.
+6. **Federation-status discovery tooling** — `science federation status` showing parent/peer updates relative to local state.
 7. **Lateral `peers:` topology** for DAG-of-projects shapes (cancer ↔ circadian ↔ immune). Today's `parent` / `children` is tree-shaped; an additive `peers:` arrives when cross-cutting projects exist in your portfolio.
 8. **`Readiness.detail` enrichment beyond datasets.** Workflow-runs surfacing "failed at step X"; tasks surfacing "in-progress, last touched N days ago". Add as needs arise.
 
@@ -581,7 +581,7 @@ class Readiness(BaseModel):
 
 
 class ReadinessResolverProtocol(Protocol):
-    """Structural protocol implemented by science-tool's ReadinessResolver."""
+    """Structural protocol implemented by science's ReadinessResolver."""
 
     def resolve_ref(self, ref: str) -> Readiness: ...
 ```
@@ -853,17 +853,17 @@ git commit -m "feat(model): DatasetEntity readiness from access block + derivati
 
 ---
 
-## Task 4: `ReadinessResolver` in `science-tool`
+## Task 4: `ReadinessResolver` in `science`
 
 Implements the resolver and tests both resolver-internal behavior (cycle, cache, unresolved) and the integration with derived datasets.
 
 **Files:**
-- Create: `science-tool/src/science_tool/tasks_readiness.py`
-- Create: `science-tool/tests/test_readiness_resolver.py`
+- Create: `science/src/science_tool/tasks_readiness.py`
+- Create: `science/tests/test_readiness_resolver.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `science-tool/tests/test_readiness_resolver.py`:
+Create `science/tests/test_readiness_resolver.py`:
 
 ```python
 """Tests for ReadinessResolver."""
@@ -972,14 +972,14 @@ def test_resolver_drives_derived_dataset_workflow_run_not_yet_complete():
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_readiness_resolver.py -q
+uv run --frozen pytest science/tests/test_readiness_resolver.py -q
 ```
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'science_tool.tasks_readiness'`.
 
 - [ ] **Step 3: Implement**
 
-Create `science-tool/src/science_tool/tasks_readiness.py`:
+Create `science/src/science_tool/tasks_readiness.py`:
 
 ```python
 """ReadinessResolver: tool-layer entity-lookup + cycle-guarded readiness resolution.
@@ -1028,7 +1028,7 @@ class ReadinessResolver:
 - [ ] **Step 4: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_readiness_resolver.py -q
+uv run --frozen pytest science/tests/test_readiness_resolver.py -q
 ```
 
 Expected: PASS.
@@ -1036,7 +1036,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/tasks_readiness.py science-tool/tests/test_readiness_resolver.py
+git add science/src/science_tool/tasks_readiness.py science/tests/test_readiness_resolver.py
 git commit -m "feat(tool): add ReadinessResolver with cycle protection + caching"
 ```
 
@@ -1045,13 +1045,13 @@ git commit -m "feat(tool): add ReadinessResolver with cycle protection + caching
 ## Task 5: Local entity lookup helpers + `validate_blocker_refs`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/entities.py` — add `load_local_entity_ids()` and `load_local_entity_index()`
-- Create: `science-tool/src/science_tool/tasks_blockers.py`
-- Create: `science-tool/tests/test_tasks_blockers.py`
+- Modify: `science/src/science_tool/entities.py` — add `load_local_entity_ids()` and `load_local_entity_index()`
+- Create: `science/src/science_tool/tasks_blockers.py`
+- Create: `science/tests/test_tasks_blockers.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `science-tool/tests/test_tasks_blockers.py`:
+Create `science/tests/test_tasks_blockers.py`:
 
 ```python
 """Tests for blocker ref validation."""
@@ -1138,14 +1138,14 @@ def test_validate_multiple_refs_reports_first_failure(tmp_path: Path):
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks_blockers.py -q
+uv run --frozen pytest science/tests/test_tasks_blockers.py -q
 ```
 
 Expected: FAIL with import errors for missing `load_local_entity_ids`, `load_local_entity_index`, and `science_tool.tasks_blockers`.
 
 - [ ] **Step 3: Implement**
 
-First, add local project-entity lookup helpers to `science-tool/src/science_tool/entities.py` near `list_entities()`:
+First, add local project-entity lookup helpers to `science/src/science_tool/entities.py` near `list_entities()`:
 
 ```python
 from science_model.entities import ProjectEntity
@@ -1170,7 +1170,7 @@ def load_local_entity_ids(project_root: Path) -> set[str]:
     return set(load_local_entity_index(project_root))
 ```
 
-Then create `science-tool/src/science_tool/tasks_blockers.py`:
+Then create `science/src/science_tool/tasks_blockers.py`:
 
 ```python
 """Validation helpers for typed blocker refs on tasks."""
@@ -1227,7 +1227,7 @@ def validate_blocker_refs(
 - [ ] **Step 4: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks_blockers.py -q
+uv run --frozen pytest science/tests/test_tasks_blockers.py -q
 ```
 
 Expected: PASS.
@@ -1235,7 +1235,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/entities.py science-tool/src/science_tool/tasks_blockers.py science-tool/tests/test_tasks_blockers.py
+git add science/src/science_tool/entities.py science/src/science_tool/tasks_blockers.py science/tests/test_tasks_blockers.py
 git commit -m "feat(tool): add local entity lookup + typed blocker validation"
 ```
 
@@ -1246,12 +1246,12 @@ git commit -m "feat(tool): add local entity lookup + typed blocker validation"
 Keeps `parse_tasks` pure (no warnings) and adds a CLI-only wrapper that surfaces legacy untyped-blocker warnings.
 
 **Files:**
-- Modify: `science-tool/src/science_tool/tasks.py`
-- Create: `science-tool/tests/test_tasks_parse_for_cli.py`
+- Modify: `science/src/science_tool/tasks.py`
+- Create: `science/tests/test_tasks_parse_for_cli.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `science-tool/tests/test_tasks_parse_for_cli.py`:
+Create `science/tests/test_tasks_parse_for_cli.py`:
 
 ```python
 """Tests for the CLI-only parse wrapper that surfaces legacy-blocker warnings."""
@@ -1314,14 +1314,14 @@ Body.
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks_parse_for_cli.py -q
+uv run --frozen pytest science/tests/test_tasks_parse_for_cli.py -q
 ```
 
 Expected: FAIL with `ImportError: cannot import name 'parse_tasks_for_cli'`.
 
 - [ ] **Step 3: Implement**
 
-Add to `science-tool/src/science_tool/tasks.py` (alongside `parse_tasks`):
+Add to `science/src/science_tool/tasks.py` (alongside `parse_tasks`):
 
 ```python
 import re
@@ -1342,7 +1342,7 @@ def parse_tasks_for_cli(path: Path) -> tuple[list[Task], list[str]]:
             if not _TYPED_REF_RE.match(ref):
                 warnings.append(
                     f"task {task.id}: legacy untyped blocker {ref!r} — "
-                    f"run 'science-tool tasks fix-blockers' to retype"
+                    f"run 'science tasks fix-blockers' to retype"
                 )
     return tasks, warnings
 ```
@@ -1352,19 +1352,19 @@ Add `parse_tasks_for_cli` to the module's `__all__` list.
 - [ ] **Step 4: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks_parse_for_cli.py -q
+uv run --frozen pytest science/tests/test_tasks_parse_for_cli.py -q
 ```
 
 Expected: PASS. Re-run `parse_tasks` tests to confirm no regression:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks.py -q
+uv run --frozen pytest science/tests/test_tasks.py -q
 ```
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/tasks.py science-tool/tests/test_tasks_parse_for_cli.py
+git add science/src/science_tool/tasks.py science/tests/test_tasks_parse_for_cli.py
 git commit -m "feat(tool): add parse_tasks_for_cli wrapper for legacy-blocker warnings"
 ```
 
@@ -1375,12 +1375,12 @@ git commit -m "feat(tool): add parse_tasks_for_cli wrapper for legacy-blocker wa
 Thread `project_root` through and route blocker writes through `validate_blocker_refs`.
 
 **Files:**
-- Modify: `science-tool/src/science_tool/tasks.py` — `block_task`, `edit_task`, `add_task`
-- Modify: `science-tool/tests/test_tasks.py` — extend with validation cases
+- Modify: `science/src/science_tool/tasks.py` — `block_task`, `edit_task`, `add_task`
+- Modify: `science/tests/test_tasks.py` — extend with validation cases
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `science-tool/tests/test_tasks.py` (or wherever `block_task` is tested):
+Add to `science/tests/test_tasks.py` (or wherever `block_task` is tested):
 
 ```python
 import pytest
@@ -1491,14 +1491,14 @@ def test_block_task_multiple_blockers(tmp_path: Path):
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks.py -q -k blocker
+uv run --frozen pytest science/tests/test_tasks.py -q -k blocker
 ```
 
 Expected: FAIL — `block_task` doesn't accept `project_root` / `force`, and accepts a single `blocked_by: str`, not a list.
 
 - [ ] **Step 3: Implement**
 
-In `science-tool/src/science_tool/tasks.py`, modify `block_task`:
+In `science/src/science_tool/tasks.py`, modify `block_task`:
 
 ```python
 from science_tool.tasks_blockers import validate_blocker_refs
@@ -1592,7 +1592,7 @@ def edit_task(
 - [ ] **Step 4: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks.py -q
+uv run --frozen pytest science/tests/test_tasks.py -q
 ```
 
 Expected: PASS. Update any pre-existing tests that call `block_task` with the old single-string signature or `add_task` / `edit_task` without `project_root`; the test failures will name them precisely.
@@ -1600,7 +1600,7 @@ Expected: PASS. Update any pre-existing tests that call `block_task` with the ol
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/tasks.py science-tool/tests/test_tasks.py
+git add science/src/science_tool/tasks.py science/tests/test_tasks.py
 git commit -m "feat(tool): require typed blockers in block/add/edit task"
 ```
 
@@ -1609,12 +1609,12 @@ git commit -m "feat(tool): require typed blockers in block/add/edit task"
 ## Task 8: CLI — `tasks block` repeatable + `--force`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py` — `tasks_block` command (around line 2473)
-- Modify: `science-tool/tests/test_tasks_cli.py` — add CLI cases
+- Modify: `science/src/science_tool/cli.py` — `tasks_block` command (around line 2473)
+- Modify: `science/tests/test_tasks_cli.py` — add CLI cases
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `science-tool/tests/test_tasks_cli.py`:
+Add to `science/tests/test_tasks_cli.py`:
 
 ```python
 from click.testing import CliRunner
@@ -1692,14 +1692,14 @@ def test_tasks_block_force_accepts_unknown(tmp_path, monkeypatch):
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks_cli.py -q -k block
+uv run --frozen pytest science/tests/test_tasks_cli.py -q -k block
 ```
 
 Expected: FAIL — `--by` is not `multiple`; no `--force` flag exists.
 
 - [ ] **Step 3: Implement**
 
-In `science-tool/src/science_tool/cli.py`, replace the existing `tasks_block` command:
+In `science/src/science_tool/cli.py`, replace the existing `tasks_block` command:
 
 ```python
 @tasks.command("block")
@@ -1747,7 +1747,7 @@ Apply the same `--force` flag to `tasks_add` and `tasks_edit`'s `--blocked-by` h
 - [ ] **Step 4: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks_cli.py -q
+uv run --frozen pytest science/tests/test_tasks_cli.py -q
 ```
 
 Expected: PASS.
@@ -1755,7 +1755,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/cli.py science-tool/tests/test_tasks_cli.py
+git add science/src/science_tool/cli.py science/tests/test_tasks_cli.py
 git commit -m "feat(cli): tasks block accepts repeatable --by + --force"
 ```
 
@@ -1766,12 +1766,12 @@ git commit -m "feat(cli): tasks block accepts repeatable --by + --force"
 Adds a new command that reports per-blocker readiness, used both interactively and as the JSON source for the future auto-unblock sweep.
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
-- Modify: `science-tool/tests/test_tasks_cli.py`
+- Modify: `science/src/science_tool/cli.py`
+- Modify: `science/tests/test_tasks_cli.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `science-tool/tests/test_tasks_cli.py`:
+Add to `science/tests/test_tasks_cli.py`:
 
 ```python
 import json
@@ -1820,14 +1820,14 @@ def test_tasks_blockers_json_unresolved(tmp_path, monkeypatch):
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks_cli.py -q -k blockers
+uv run --frozen pytest science/tests/test_tasks_cli.py -q -k blockers
 ```
 
 Expected: FAIL with `Error: No such command 'blockers'`.
 
 - [ ] **Step 3: Implement**
 
-In `science-tool/src/science_tool/cli.py`, add the `tasks_blockers` command:
+In `science/src/science_tool/cli.py`, add the `tasks_blockers` command:
 
 ```python
 @tasks.command("blockers")
@@ -1883,7 +1883,7 @@ def tasks_blockers(task_id: str, fmt: str) -> None:
 - [ ] **Step 4: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks_cli.py -q
+uv run --frozen pytest science/tests/test_tasks_cli.py -q
 ```
 
 Expected: PASS.
@@ -1891,7 +1891,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/cli.py science-tool/src/science_tool/entities.py science-tool/tests/test_tasks_cli.py
+git add science/src/science_tool/cli.py science/src/science_tool/entities.py science/tests/test_tasks_cli.py
 git commit -m "feat(cli): add tasks blockers command (table + json)"
 ```
 
@@ -1900,12 +1900,12 @@ git commit -m "feat(cli): add tasks blockers command (table + json)"
 ## Task 10: CLI — `tasks fix-blockers` migration command
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
-- Modify: `science-tool/tests/test_tasks_cli.py`
+- Modify: `science/src/science_tool/cli.py`
+- Modify: `science/tests/test_tasks_cli.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `science-tool/tests/test_tasks_cli.py`:
+Add to `science/tests/test_tasks_cli.py`:
 
 ```python
 def test_tasks_fix_blockers_lists_legacy(tmp_path, monkeypatch):
@@ -1972,14 +1972,14 @@ def test_tasks_fix_blockers_retypes_with_input(tmp_path, monkeypatch):
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks_cli.py -q -k fix_blockers
+uv run --frozen pytest science/tests/test_tasks_cli.py -q -k fix_blockers
 ```
 
 Expected: FAIL with `Error: No such command 'fix-blockers'`.
 
 - [ ] **Step 3: Implement**
 
-In `science-tool/src/science_tool/cli.py`:
+In `science/src/science_tool/cli.py`:
 
 ```python
 @tasks.command("fix-blockers")
@@ -2042,7 +2042,7 @@ def tasks_fix_blockers(dry_run: bool) -> None:
 - [ ] **Step 4: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks_cli.py -q
+uv run --frozen pytest science/tests/test_tasks_cli.py -q
 ```
 
 Expected: PASS.
@@ -2050,7 +2050,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/cli.py science-tool/tests/test_tasks_cli.py
+git add science/src/science_tool/cli.py science/tests/test_tasks_cli.py
 git commit -m "feat(cli): add tasks fix-blockers interactive migration"
 ```
 
@@ -2059,13 +2059,13 @@ git commit -m "feat(cli): add tasks fix-blockers interactive migration"
 ## Task 11: Display — `tasks list` summary line, JSON readiness, "all-ready" nudge
 
 **Files:**
-- Modify: `science-tool/src/science_tool/tasks_display.py`
-- Modify: `science-tool/src/science_tool/cli.py` — `tasks_list` (call site)
-- Modify: `science-tool/tests/test_tasks_display.py` (or test_tasks_cli.py if list is tested there)
+- Modify: `science/src/science_tool/tasks_display.py`
+- Modify: `science/src/science_tool/cli.py` — `tasks_list` (call site)
+- Modify: `science/tests/test_tasks_display.py` (or test_tasks_cli.py if list is tested there)
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `science-tool/tests/test_tasks_cli.py`:
+Add to `science/tests/test_tasks_cli.py`:
 
 ```python
 def test_tasks_list_shows_blocker_summary(tmp_path, monkeypatch):
@@ -2145,14 +2145,14 @@ def test_tasks_list_json_includes_blocker_readiness(tmp_path, monkeypatch):
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks_cli.py -q -k list
+uv run --frozen pytest science/tests/test_tasks_cli.py -q -k list
 ```
 
 Expected: FAIL — current display does not surface blocker counts/states; JSON output lacks `blocked_by_readiness`.
 
 - [ ] **Step 3: Implement**
 
-In `science-tool/src/science_tool/tasks_display.py`, extend the rendering helpers. The exact integration depends on the current shape of `render_tasks_table`; the contract:
+In `science/src/science_tool/tasks_display.py`, extend the rendering helpers. The exact integration depends on the current shape of `render_tasks_table`; the contract:
 
 ```python
 def render_blocker_summary(task: Task, resolver: ReadinessResolver) -> str | None:
@@ -2179,8 +2179,8 @@ Also wire `tasks list` (and any other CLI command that reads the active task lis
 - [ ] **Step 4: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks_cli.py -q
-uv run --frozen pytest science-tool/tests/test_tasks_display.py -q
+uv run --frozen pytest science/tests/test_tasks_cli.py -q
+uv run --frozen pytest science/tests/test_tasks_display.py -q
 ```
 
 Expected: PASS.
@@ -2188,7 +2188,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/tasks_display.py science-tool/src/science_tool/cli.py science-tool/tests/test_tasks_cli.py science-tool/tests/test_tasks_display.py
+git add science/src/science_tool/tasks_display.py science/src/science_tool/cli.py science/tests/test_tasks_cli.py science/tests/test_tasks_display.py
 git commit -m "feat(cli): tasks list surfaces blocker readiness + all-ready nudge"
 ```
 
@@ -2197,12 +2197,12 @@ git commit -m "feat(cli): tasks list surfaces blocker readiness + all-ready nudg
 ## Task 12: Display — `tasks show` per-blocker readiness
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py` — `tasks_show` command
-- Modify: `science-tool/tests/test_tasks_cli.py`
+- Modify: `science/src/science_tool/cli.py` — `tasks_show` command
+- Modify: `science/tests/test_tasks_cli.py`
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `science-tool/tests/test_tasks_cli.py`:
+Add to `science/tests/test_tasks_cli.py`:
 
 ```python
 def test_tasks_show_renders_per_blocker_readiness(tmp_path, monkeypatch):
@@ -2238,14 +2238,14 @@ def test_tasks_show_renders_per_blocker_readiness(tmp_path, monkeypatch):
 - [ ] **Step 2: Run, verify failure**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks_cli.py -q -k tasks_show_renders_per_blocker
+uv run --frozen pytest science/tests/test_tasks_cli.py -q -k tasks_show_renders_per_blocker
 ```
 
 Expected: FAIL — current `tasks show` lists blockers as raw ids only, no readiness state, no `available_after` window.
 
 - [ ] **Step 3: Implement**
 
-In `science-tool/src/science_tool/cli.py`, modify `tasks_show` to construct a `ReadinessResolver` and render each blocker with state/detail. After the existing per-field output, replace any line that prints `blocked_by` raw with:
+In `science/src/science_tool/cli.py`, modify `tasks_show` to construct a `ReadinessResolver` and render each blocker with state/detail. After the existing per-field output, replace any line that prints `blocked_by` raw with:
 
 ```python
 if task.blocked_by:
@@ -2263,7 +2263,7 @@ The `resolver` is built the same way as in Task 9 (`load_local_entity_index` + `
 - [ ] **Step 4: Run, verify pass**
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks_cli.py -q
+uv run --frozen pytest science/tests/test_tasks_cli.py -q
 ```
 
 Expected: PASS.
@@ -2271,7 +2271,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/cli.py science-tool/tests/test_tasks_cli.py
+git add science/src/science_tool/cli.py science/tests/test_tasks_cli.py
 git commit -m "feat(cli): tasks show renders per-blocker readiness"
 ```
 
@@ -2305,9 +2305,9 @@ Refs must resolve to known local entities. Repeatable.
 
 - `--force` records the ref even if the entity is not yet known (e.g.
   you plan to create the dataset shortly). The unresolved reference will
-  be flagged by `science-tool graph audit`.
+  be flagged by `science graph audit`.
 - Blockers are validated at write time. Untyped strings (legacy form) are
-  rejected. Use `science-tool tasks fix-blockers` to retype existing
+  rejected. Use `science tasks fix-blockers` to retype existing
   legacy blockers.
 
 ### "blockers <task_id>"
@@ -2350,7 +2350,7 @@ Expected: no diff (per the existing test `test_root_and_packaged_migrated_templa
 - [ ] **Step 5: Run all tests one more time**
 
 ```bash
-uv run --frozen pytest science-model/tests/ science-tool/tests/ -q
+uv run --frozen pytest science-model/tests/ science/tests/ -q
 ```
 
 Expected: PASS across the board. Investigate and fix any failures before committing.
@@ -2358,8 +2358,8 @@ Expected: PASS across the board. Investigate and fix any failures before committ
 - [ ] **Step 6: Static checks**
 
 ```bash
-uv run --frozen ruff check science-model/src/science_model science-tool/src/science_tool
-uv run --frozen pyright science-model/src/science_model science-tool/src/science_tool
+uv run --frozen ruff check science-model/src/science_model science/src/science_tool
+uv run --frozen pyright science-model/src/science_model science/src/science_tool
 ```
 
 Expected: PASS. Common issues: unused imports in the CLI module, or a resolver annotation that names the concrete tool-layer class instead of the `ReadinessResolverProtocol`.
@@ -2396,10 +2396,10 @@ access:
 EOF
 (
   cd "$tmpdir"
-  uv run --project /mnt/ssd/Dropbox/science/science-tool science-tool tasks add "Use embargoed data" --priority P1
-  uv run --project /mnt/ssd/Dropbox/science/science-tool science-tool tasks block t001 --by dataset:embargoed
-  uv run --project /mnt/ssd/Dropbox/science/science-tool science-tool tasks show t001
-  uv run --project /mnt/ssd/Dropbox/science/science-tool science-tool tasks blockers t001 --format json
+  uv run --project /mnt/ssd/Dropbox/science/science science tasks add "Use embargoed data" --priority P1
+  uv run --project /mnt/ssd/Dropbox/science/science science tasks block t001 --by dataset:embargoed
+  uv run --project /mnt/ssd/Dropbox/science/science science tasks show t001
+  uv run --project /mnt/ssd/Dropbox/science/science science tasks blockers t001 --format json
 )
 ```
 

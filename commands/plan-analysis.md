@@ -119,7 +119,7 @@ Reflect on the **template**, **skill index**, and **workflow** used above.
 If you have feedback, report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:plan-analysis" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

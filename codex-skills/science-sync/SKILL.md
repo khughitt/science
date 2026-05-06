@@ -59,13 +59,14 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with <science-plugin-root>/science-tool science-tool <command>`
+   `uv run --with <science-plugin-root>/science science <command>`
 
 Run a cross-project sync to align the registry — a shared index of entities across
 all registered science projects. The registry enables cross-project awareness (e.g.,
@@ -75,17 +76,17 @@ between projects.
 ## Setup
 
 1. Read `science.yaml` for the current project context.
-2. Run `science-tool sync status` to check current sync state.
-3. Run `science-tool sync projects` to list registered projects.
+2. Run `science sync status` to check current sync state.
+3. Run `science sync projects` to list registered projects.
 
 ### Pre-sync managed-artifact check
 
-Before performing project sync operations, query `science-tool health` for any managed artifact whose status is not `current` or `pinned`. If any are found, surface a warning at the top of sync output:
+Before performing project sync operations, query `science health` for any managed artifact whose status is not `current` or `pinned`. If any are found, surface a warning at the top of sync output:
 
 > ⚠️  N managed artifact(s) require attention:
 > - `<artifact-name>`: `<status>` — `<detail>`
 >
-> Sync proceeds; consider `science-tool project artifacts update` after sync completes.
+> Sync proceeds; consider `science project artifacts update` after sync completes.
 
 The warning does NOT block sync; it surfaces alongside other top-of-sync warnings.
 
@@ -94,13 +95,13 @@ The warning does NOT block sync; it surfaces alongside other top-of-sync warning
 Run the sync:
 
 ```bash
-science-tool sync run
+science sync run
 ```
 
 If the user wants to preview without writing changes:
 
 ```bash
-science-tool sync run --dry-run
+science sync run --dry-run
 ```
 
 ## Presenting Results
@@ -124,12 +125,12 @@ After sync completes, present the report:
 
 Suggest the user:
 1. Resolve any drift warnings by updating entity metadata
-2. Run `science-tool graph build` if entity metadata changed
+2. Run `science graph build` if entity metadata changed
 
 ## Rebuild
 
 If the user wants to rebuild the registry from scratch:
 
 ```bash
-science-tool sync rebuild
+science sync rebuild
 ```

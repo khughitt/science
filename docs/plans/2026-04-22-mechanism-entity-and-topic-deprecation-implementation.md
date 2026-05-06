@@ -4,7 +4,7 @@
 
 **Goal:** Add a strict `mechanism` entity to the Science model and tooling, replace topic-stub guidance with semantic triage, and isolate legacy `topic` support to migration-only surfaces.
 
-**Architecture:** Land this in two layers. First, define a typed `mechanism` contract in `science-model` and thread it through unified loading/materialization so projects can represent named explanatory structures without using `topic`. Second, update authoring and audit surfaces in `science-tool` so unresolved refs are triaged into semantic homes instead of producing more `topic` debt. Keep legacy `topic` loading only where existing projects still need migration visibility.
+**Architecture:** Land this in two layers. First, define a typed `mechanism` contract in `science-model` and thread it through unified loading/materialization so projects can represent named explanatory structures without using `topic`. Second, update authoring and audit surfaces in `science` so unresolved refs are triaged into semantic homes instead of producing more `topic` debt. Keep legacy `topic` loading only where existing projects still need migration visibility.
 
 **Tech Stack:** Python 3.12, Pydantic models, rdflib graph materialization, Click CLI, pytest, ruff, pyright
 
@@ -76,8 +76,8 @@ git commit -m "docs: define mechanism and deprecate topic fallback"
 **Files:**
 - Modify: `science-model/tests/test_entities.py`
 - Modify: `science-model/tests/test_frontmatter.py`
-- Modify: `science-tool/tests/test_entity_registry.py`
-- Modify: `science-tool/tests/test_graph_materialize.py`
+- Modify: `science/tests/test_entity_registry.py`
+- Modify: `science/tests/test_graph_materialize.py`
 
 **Step 1: Write the failing entity-model tests**
 
@@ -149,14 +149,14 @@ assert (mechanism_uri, SCI_NS.hasProposition, proposition_uri) in knowledge
 
 **Step 4: Run the targeted tests to verify they fail**
 
-Run: `uv run --frozen pytest science-model/tests/test_entities.py science-model/tests/test_frontmatter.py science-tool/tests/test_entity_registry.py science-tool/tests/test_graph_materialize.py -q`
+Run: `uv run --frozen pytest science-model/tests/test_entities.py science-model/tests/test_frontmatter.py science/tests/test_entity_registry.py science/tests/test_graph_materialize.py -q`
 
 Expected: failures mentioning missing `MECHANISM` type, missing registry entry, or absent materialization predicates.
 
 **Step 5: Commit**
 
 ```bash
-git add science-model/tests/test_entities.py science-model/tests/test_frontmatter.py science-tool/tests/test_entity_registry.py science-tool/tests/test_graph_materialize.py
+git add science-model/tests/test_entities.py science-model/tests/test_frontmatter.py science/tests/test_entity_registry.py science/tests/test_graph_materialize.py
 git commit -m "test: lock mechanism entity behavior"
 ```
 
@@ -264,12 +264,12 @@ git commit -m "feat: add mechanism entity to science model"
 ### Task 4: Wire `mechanism` Through Unified Loading And Materialization
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/entity_registry.py`
-- Modify: `science-tool/src/science_tool/graph/materialize.py`
-- Modify: `science-tool/src/science_tool/graph/store.py`
-- Modify: `science-tool/tests/test_load_project_sources_unified.py`
-- Modify: `science-tool/tests/test_entity_registry.py`
-- Modify: `science-tool/tests/test_graph_materialize.py`
+- Modify: `science/src/science_tool/graph/entity_registry.py`
+- Modify: `science/src/science_tool/graph/materialize.py`
+- Modify: `science/src/science_tool/graph/store.py`
+- Modify: `science/tests/test_load_project_sources_unified.py`
+- Modify: `science/tests/test_entity_registry.py`
+- Modify: `science/tests/test_graph_materialize.py`
 
 **Step 1: Register the typed class**
 
@@ -322,25 +322,25 @@ Assert that `load_project_sources()` yields `MechanismEntity`.
 
 **Step 5: Run the targeted tool tests**
 
-Run: `uv run --frozen pytest science-tool/tests/test_load_project_sources_unified.py science-tool/tests/test_entity_registry.py science-tool/tests/test_graph_materialize.py -q`
+Run: `uv run --frozen pytest science/tests/test_load_project_sources_unified.py science/tests/test_entity_registry.py science/tests/test_graph_materialize.py -q`
 
 Expected: PASS.
 
 **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/entity_registry.py science-tool/src/science_tool/graph/materialize.py science-tool/src/science_tool/graph/store.py science-tool/tests/test_load_project_sources_unified.py science-tool/tests/test_entity_registry.py science-tool/tests/test_graph_materialize.py
+git add science/src/science_tool/graph/entity_registry.py science/src/science_tool/graph/materialize.py science/src/science_tool/graph/store.py science/tests/test_load_project_sources_unified.py science/tests/test_entity_registry.py science/tests/test_graph_materialize.py
 git commit -m "feat: materialize mechanism entities"
 ```
 
 ### Task 5: Replace Topic-Stub Guidance With Semantic Triage
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Modify: `science-tool/tests/test_health.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Modify: `science/tests/test_health.py`
 - Modify: `codex-skills/science-health/SKILL.md`
-- Modify: `science-tool/src/science_tool/cli.py`
-- Modify: `science-tool/src/science_tool/graph/tags_migration.py`
+- Modify: `science/src/science_tool/cli.py`
+- Modify: `science/src/science_tool/graph/tags_migration.py`
 
 **Step 1: Write the failing health tests**
 
@@ -372,28 +372,28 @@ Use --as-topic only for legacy migrations you have already audited.
 
 **Step 4: Run the health and migration tests**
 
-Run: `uv run --frozen pytest science-tool/tests/test_health.py science-tool/tests/test_graph_migrate.py -q`
+Run: `uv run --frozen pytest science/tests/test_health.py science/tests/test_graph_migrate.py -q`
 
 Expected: PASS, with no tests still asserting "need entity stubs" for semantic labels.
 
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/health.py science-tool/tests/test_health.py codex-skills/science-health/SKILL.md science-tool/src/science_tool/cli.py science-tool/src/science_tool/graph/tags_migration.py
+git add science/src/science_tool/graph/health.py science/tests/test_health.py codex-skills/science-health/SKILL.md science/src/science_tool/cli.py science/src/science_tool/graph/tags_migration.py
 git commit -m "feat: replace topic stub guidance with semantic triage"
 ```
 
 ### Task 6: Fence Off Other Legacy Topic Surfaces
 
 **Files:**
-- Modify: `science-tool/src/science_tool/curate/inventory.py`
-- Modify: `science-tool/src/science_tool/graph/storage_adapters/aggregate.py`
+- Modify: `science/src/science_tool/curate/inventory.py`
+- Modify: `science/src/science_tool/graph/storage_adapters/aggregate.py`
 - Modify: `codex-skills/science-review-tasks/SKILL.md`
 - Modify: other semantic-guidance skills under `codex-skills/` found by `rg -n "topic:" codex-skills`
 
 **Step 1: Audit the remaining topic-aware surfaces**
 
-Run: `rg -n "topic|doc/topics|topic:" science-tool/src/science_tool/curate/inventory.py science-tool/src/science_tool/graph/storage_adapters/aggregate.py codex-skills`
+Run: `rg -n "topic|doc/topics|topic:" science/src/science_tool/curate/inventory.py science/src/science_tool/graph/storage_adapters/aggregate.py codex-skills`
 
 Expected: a concrete list of legacy-only topic surfaces outside health/big-picture.
 
@@ -408,24 +408,24 @@ Expected: a concrete list of legacy-only topic surfaces outside health/big-pictu
 
 **Step 3: Run the targeted tests**
 
-Run: `uv run --frozen pytest science-tool/tests/test_curate_inventory.py science-tool/tests/test_storage_adapters/test_aggregate.py -q`
+Run: `uv run --frozen pytest science/tests/test_curate_inventory.py science/tests/test_storage_adapters/test_aggregate.py -q`
 
 Expected: PASS.
 
 **Step 4: Commit**
 
 ```bash
-git add science-tool/src/science_tool/curate/inventory.py science-tool/src/science_tool/graph/storage_adapters/aggregate.py codex-skills
+git add science/src/science_tool/curate/inventory.py science/src/science_tool/graph/storage_adapters/aggregate.py codex-skills
 git commit -m "docs: mark legacy topic surfaces as migration-only"
 ```
 
 ### Task 7: Fence Off Legacy Topic-Coupled Big-Picture Logic
 
 **Files:**
-- Modify: `science-tool/src/science_tool/big_picture/knowledge_gaps.py`
-- Modify: `science-tool/tests/test_knowledge_gaps_cli.py`
-- Modify: `science-tool/tests/test_big_picture_validator.py`
-- Modify: `science-tool/tests/fixtures/big_picture/minimal_project/...` as needed
+- Modify: `science/src/science_tool/big_picture/knowledge_gaps.py`
+- Modify: `science/tests/test_knowledge_gaps_cli.py`
+- Modify: `science/tests/test_big_picture_validator.py`
+- Modify: `science/tests/fixtures/big_picture/minimal_project/...` as needed
 
 **Step 1: Write the failing behavior test**
 
@@ -449,24 +449,24 @@ and docs must frame them as migration input rather than recommended modeling.
 
 **Step 4: Run the big-picture tests**
 
-Run: `uv run --frozen pytest science-tool/tests/test_knowledge_gaps_cli.py science-tool/tests/test_big_picture_validator.py science-tool/tests/test_big_picture_resolver.py -q`
+Run: `uv run --frozen pytest science/tests/test_knowledge_gaps_cli.py science/tests/test_big_picture_validator.py science/tests/test_big_picture_resolver.py -q`
 
 Expected: PASS.
 
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/big_picture/knowledge_gaps.py science-tool/tests/test_knowledge_gaps_cli.py science-tool/tests/test_big_picture_validator.py science-tool/tests/test_big_picture_resolver.py
+git add science/src/science_tool/big_picture/knowledge_gaps.py science/tests/test_knowledge_gaps_cli.py science/tests/test_big_picture_validator.py science/tests/test_big_picture_resolver.py
 git commit -m "refactor: isolate legacy topic coverage in big picture"
 ```
 
 ### Task 8: Add Minimal Authoring Ergonomics For `mechanism`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/store.py`
-- Modify: `science-tool/src/science_tool/cli.py`
-- Modify: `science-tool/tests/test_graph_export.py`
-- Add or Modify: `science-tool/tests/test_graph_cli.py`
+- Modify: `science/src/science_tool/graph/store.py`
+- Modify: `science/src/science_tool/cli.py`
+- Modify: `science/tests/test_graph_export.py`
+- Add or Modify: `science/tests/test_graph_cli.py`
 
 **Step 1: Write the failing CLI/store test**
 
@@ -513,14 +513,14 @@ Match the existing CLI/store pattern for custom IDs:
 
 **Step 3: Run the CLI tests**
 
-Run: `uv run --frozen pytest science-tool/tests/test_graph_cli.py science-tool/tests/test_graph_export.py -q`
+Run: `uv run --frozen pytest science/tests/test_graph_cli.py science/tests/test_graph_export.py -q`
 
 Expected: PASS.
 
 **Step 4: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/store.py science-tool/src/science_tool/cli.py science-tool/tests/test_graph_cli.py science-tool/tests/test_graph_export.py
+git add science/src/science_tool/graph/store.py science/src/science_tool/cli.py science/tests/test_graph_cli.py science/tests/test_graph_export.py
 git commit -m "feat: add graph CLI support for mechanisms"
 ```
 

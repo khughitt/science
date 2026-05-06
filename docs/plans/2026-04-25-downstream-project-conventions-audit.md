@@ -29,7 +29,7 @@ Use these terms consistently across inventories, project reports, and the synthe
 
 This audit runs alongside two concurrent plans and must coordinate, not duplicate:
 
-- `docs/plans/2026-04-25-managed-artifact-versioning.md` — implements `science-tool project artifacts check|diff|update` and ships before this audit completes. Section 8 ("Validation And Managed Artifacts") of each project report should *describe what managed artifact versioning would or would not solve* for that project; it must not propose an alternate validator-update mechanism. Audit findings tagged `mav-input` flow back as candidate additions to the MAV artifact list.
+- `docs/plans/2026-04-25-managed-artifact-versioning.md` — implements `science project artifacts check|diff|update` and ships before this audit completes. Section 8 ("Validation And Managed Artifacts") of each project report should *describe what managed artifact versioning would or would not solve* for that project; it must not propose an alternate validator-update mechanism. Audit findings tagged `mav-input` flow back as candidate additions to the MAV artifact list.
 - `docs/plans/2026-04-25-hypothesis-phase.md` — adds `phase: candidate | active` to hypothesis frontmatter. Treat hypothesis `phase` as an existing field during the audit; do not propose alternate naming.
 
 The audit is read-only with respect to both plans: it informs follow-on design but does not block their merge.
@@ -76,7 +76,7 @@ Record these in each relevant project report rather than re-deriving them. Add t
 - Do not normalize metadata, move files, or update validators as part of the audit.
 - Do not decide final upstream schema migrations in project reports.
 - Do not treat every divergence as a defect.
-- Do not build a full `science-tool project audit` command before the manual audit has identified what is worth formalizing.
+- Do not build a full `science project audit` command before the manual audit has identified what is worth formalizing.
 - Do not read every file in full. Use inventories, targeted samples, and representative artifacts.
 
 ## Workflow
@@ -349,7 +349,7 @@ Required sections:
 7. **Data And Result Handling Recommendations** - data storage, datapackages, descriptors, symlinks, `.gitignore`, provenance, protected data.
 8. **Planning And Task Recommendations** - planning docs, pre-registrations, task lifecycle, decision records, code/result linkages.
 9. **Validation And Managed Artifact Recommendations** - what managed artifacts solve and what needs separate modeling.
-10. **Tooling Recommendations** - candidates for `science-tool` inventory, health, migration, or project-profile commands.
+10. **Tooling Recommendations** - candidates for `science` inventory, health, migration, or project-profile commands.
 11. **Deferred Questions** - decisions that need a design doc before implementation.
 
 Use a priority ladder:

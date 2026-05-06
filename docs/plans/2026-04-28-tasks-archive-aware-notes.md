@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `science-tool tasks` locate active and archived tasks, safely edit archived tasks, and append dated task notes through the CLI.
+**Goal:** Make `science tasks` locate active and archived tasks, safely edit archived tasks, and append dated task notes through the CLI.
 
 **Architecture:** Keep the existing markdown task store. Add location-aware helpers to `science_tool.tasks` that search `tasks/active.md` first and `tasks/done/*.md` newest-first, then rewrite the owning file through the existing parser/renderer. Add `tasks note` as a thin Click command over the library note appender.
 
@@ -14,10 +14,10 @@
 
 Modify:
 
-- `science-tool/src/science_tool/tasks.py` — owns task parsing/rendering and task mutations; add `TaskLocation`, archive-aware lookup/write, archived-status guard, and note append helpers.
-- `science-tool/src/science_tool/cli.py` — wire `tasks show`, `tasks edit`, and new `tasks note` command to archive-aware helpers.
-- `science-tool/tests/test_tasks.py` — unit tests for lookup order, duplicate warnings, archived edit guard, note grammar, and round-trip stability.
-- `science-tool/tests/test_tasks_cli.py` — CLI tests for archived show/edit, note output/date handling, and rejected inputs.
+- `science/src/science_tool/tasks.py` — owns task parsing/rendering and task mutations; add `TaskLocation`, archive-aware lookup/write, archived-status guard, and note append helpers.
+- `science/src/science_tool/cli.py` — wire `tasks show`, `tasks edit`, and new `tasks note` command to archive-aware helpers.
+- `science/tests/test_tasks.py` — unit tests for lookup order, duplicate warnings, archived edit guard, note grammar, and round-trip stability.
+- `science/tests/test_tasks_cli.py` — CLI tests for archived show/edit, note output/date handling, and rejected inputs.
 
 Create: no new source or test files.
 
@@ -28,12 +28,12 @@ Remove: no files.
 ### Task 1: Location-Aware Lookup
 
 **Files:**
-- Modify: `science-tool/tests/test_tasks.py`
-- Modify: `science-tool/src/science_tool/tasks.py`
+- Modify: `science/tests/test_tasks.py`
+- Modify: `science/src/science_tool/tasks.py`
 
 - [ ] **Step 1: Write failing lookup tests**
 
-Append these tests after `TestEditTask` in `science-tool/tests/test_tasks.py`:
+Append these tests after `TestEditTask` in `science/tests/test_tasks.py`:
 
 ```python
 class TestTaskLocation:
@@ -136,7 +136,7 @@ Also add `find_task_location` to the import list from `science_tool.tasks`.
 Run:
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_tasks.py::TestTaskLocation -q
 ```
 
@@ -144,7 +144,7 @@ Expected: FAIL because `find_task_location` is not imported or not defined.
 
 - [ ] **Step 3: Implement location helpers**
 
-In `science-tool/src/science_tool/tasks.py`, add `dataclass` import:
+In `science/src/science_tool/tasks.py`, add `dataclass` import:
 
 ```python
 from dataclasses import dataclass
@@ -207,7 +207,7 @@ Update `__all__` to include `TaskLocation`, `find_task_location`, and `write_tas
 Run:
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_tasks.py::TestTaskLocation -q
 ```
 
@@ -218,7 +218,7 @@ Expected: PASS.
 Run:
 
 ```bash
-git add science-tool/src/science_tool/tasks.py science-tool/tests/test_tasks.py
+git add science/src/science_tool/tasks.py science/tests/test_tasks.py
 git commit -m "feat(tasks): locate tasks across active and archives"
 ```
 
@@ -227,14 +227,14 @@ git commit -m "feat(tasks): locate tasks across active and archives"
 ### Task 2: Archive-Aware Edit And Show
 
 **Files:**
-- Modify: `science-tool/tests/test_tasks.py`
-- Modify: `science-tool/tests/test_tasks_cli.py`
-- Modify: `science-tool/src/science_tool/tasks.py`
-- Modify: `science-tool/src/science_tool/cli.py`
+- Modify: `science/tests/test_tasks.py`
+- Modify: `science/tests/test_tasks_cli.py`
+- Modify: `science/src/science_tool/tasks.py`
+- Modify: `science/src/science_tool/cli.py`
 
 - [ ] **Step 1: Write failing unit tests for archived edit**
 
-Append to `TestTaskLocation` in `science-tool/tests/test_tasks.py`:
+Append to `TestTaskLocation` in `science/tests/test_tasks.py`:
 
 ```python
     def test_edit_task_rewrites_archived_owner_file(self, tmp_path: Path) -> None:
@@ -260,7 +260,7 @@ Append to `TestTaskLocation` in `science-tool/tests/test_tasks.py`:
 
 - [ ] **Step 2: Write failing CLI tests for archived show/edit**
 
-Add to `TestTasksShow` in `science-tool/tests/test_tasks_cli.py`:
+Add to `TestTasksShow` in `science/tests/test_tasks_cli.py`:
 
 ```python
     def test_show_displays_archived_task(self, runner: CliRunner) -> None:
@@ -358,7 +358,7 @@ Add to `TestTasksEdit`:
 Run:
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_tasks.py::TestTaskLocation tests/test_tasks_cli.py::TestTasksShow tests/test_tasks_cli.py::TestTasksEdit -q
 ```
 
@@ -366,7 +366,7 @@ Expected: FAIL because `edit_task` and `tasks show` still use active-only lookup
 
 - [ ] **Step 4: Implement archive-aware edit**
 
-In `science-tool/src/science_tool/tasks.py`, add:
+In `science/src/science_tool/tasks.py`, add:
 
 ```python
 _CLOSED_STATUS_VALUES = {TaskStatus.DONE.value, TaskStatus.RETIRED.value}
@@ -422,7 +422,7 @@ Keep `_find_task` and active-only lifecycle commands unchanged.
 
 - [ ] **Step 5: Implement archive-aware CLI show and ValueError handling**
 
-In `science-tool/src/science_tool/cli.py`, update `tasks_edit` exception handling:
+In `science/src/science_tool/cli.py`, update `tasks_edit` exception handling:
 
 ```python
     except (KeyError, ValueError) as e:
@@ -450,7 +450,7 @@ def tasks_show(task_id: str) -> None:
 Run:
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_tasks.py::TestTaskLocation tests/test_tasks_cli.py::TestTasksShow tests/test_tasks_cli.py::TestTasksEdit -q
 ```
 
@@ -461,7 +461,7 @@ Expected: PASS.
 Run:
 
 ```bash
-git add science-tool/src/science_tool/tasks.py science-tool/src/science_tool/cli.py science-tool/tests/test_tasks.py science-tool/tests/test_tasks_cli.py
+git add science/src/science_tool/tasks.py science/src/science_tool/cli.py science/tests/test_tasks.py science/tests/test_tasks_cli.py
 git commit -m "feat(tasks): show and edit archived tasks safely"
 ```
 
@@ -470,12 +470,12 @@ git commit -m "feat(tasks): show and edit archived tasks safely"
 ### Task 3: Dated Note Append
 
 **Files:**
-- Modify: `science-tool/tests/test_tasks.py`
-- Modify: `science-tool/src/science_tool/tasks.py`
+- Modify: `science/tests/test_tasks.py`
+- Modify: `science/src/science_tool/tasks.py`
 
 - [ ] **Step 1: Write failing note unit tests**
 
-Append to `TestTaskLocation` in `science-tool/tests/test_tasks.py`:
+Append to `TestTaskLocation` in `science/tests/test_tasks.py`:
 
 ```python
     def test_append_task_note_creates_notes_section(self, tmp_path: Path) -> None:
@@ -622,7 +622,7 @@ Also add `append_task_note` to the import list from `science_tool.tasks`.
 Run:
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_tasks.py::TestTaskLocation -q
 ```
 
@@ -630,7 +630,7 @@ Expected: FAIL because `append_task_note` is not imported or not defined.
 
 - [ ] **Step 3: Implement note append helpers**
 
-In `science-tool/src/science_tool/tasks.py`, add regexes near the existing regex constants:
+In `science/src/science_tool/tasks.py`, add regexes near the existing regex constants:
 
 ```python
 _NOTES_HEADING_RE = re.compile(r"^###\s+Notes\s*$")
@@ -701,7 +701,7 @@ Update `__all__` to include `append_task_note`.
 Run:
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_tasks.py::TestTaskLocation -q
 ```
 
@@ -712,7 +712,7 @@ Expected: PASS.
 Run:
 
 ```bash
-git add science-tool/src/science_tool/tasks.py science-tool/tests/test_tasks.py
+git add science/src/science_tool/tasks.py science/tests/test_tasks.py
 git commit -m "feat(tasks): append dated task notes"
 ```
 
@@ -721,12 +721,12 @@ git commit -m "feat(tasks): append dated task notes"
 ### Task 4: Notes CLI
 
 **Files:**
-- Modify: `science-tool/tests/test_tasks_cli.py`
-- Modify: `science-tool/src/science_tool/cli.py`
+- Modify: `science/tests/test_tasks_cli.py`
+- Modify: `science/src/science_tool/cli.py`
 
 - [ ] **Step 1: Write failing notes CLI tests**
 
-Add this class after `TestTasksEdit` in `science-tool/tests/test_tasks_cli.py`:
+Add this class after `TestTasksEdit` in `science/tests/test_tasks_cli.py`:
 
 ```python
 class TestTasksNote:
@@ -790,7 +790,7 @@ class TestTasksNote:
 Run:
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_tasks_cli.py::TestTasksNote -q
 ```
 
@@ -798,7 +798,7 @@ Expected: FAIL because `tasks note` does not exist.
 
 - [ ] **Step 3: Implement `tasks note` CLI**
 
-In `science-tool/src/science_tool/cli.py`, add after `tasks_edit`:
+In `science/src/science_tool/cli.py`, add after `tasks_edit`:
 
 ```python
 @tasks.command("note")
@@ -830,7 +830,7 @@ def tasks_note(task_id: str, note: str, note_date_raw: str | None) -> None:
 Run:
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_tasks_cli.py::TestTasksNote -q
 ```
 
@@ -841,7 +841,7 @@ Expected: PASS.
 Run:
 
 ```bash
-git add science-tool/src/science_tool/cli.py science-tool/tests/test_tasks_cli.py
+git add science/src/science_tool/cli.py science/tests/test_tasks_cli.py
 git commit -m "feat(tasks): add dated note command"
 ```
 
@@ -856,7 +856,7 @@ git commit -m "feat(tasks): add dated note command"
 Run:
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_tasks.py tests/test_tasks_cli.py -q
 ```
 
@@ -867,7 +867,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pytest tests/test_tasks.py tests/test_tasks_cli.py tests/test_tasks_archive.py tests/test_health.py -q
 ```
 
@@ -878,7 +878,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen ruff format .
 ```
 
@@ -889,7 +889,7 @@ Expected: command completes successfully. If files change, inspect and commit th
 Run:
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen ruff check .
 ```
 
@@ -900,7 +900,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cd science-tool
+cd science
 uv run --frozen pyright
 ```
 
@@ -911,14 +911,14 @@ Expected: PASS or only pre-existing unrelated errors. Any new errors from this w
 Run:
 
 ```bash
-cd science-tool
+cd science
 tmpdir="$(mktemp -d)"
 cd "$tmpdir"
-science-tool tasks add "Smoke task" --priority P1
-science-tool tasks done t001 --note "Initial completion."
-science-tool tasks show t001
-science-tool tasks note t001 "Post-completion clarification." --date 2026-04-28
-science-tool tasks show t001
+science tasks add "Smoke task" --priority P1
+science tasks done t001 --note "Initial completion."
+science tasks show t001
+science tasks note t001 "Post-completion clarification." --date 2026-04-28
+science tasks show t001
 ```
 
 Expected:
@@ -931,7 +931,7 @@ Expected:
 If `ruff format` changed files, run:
 
 ```bash
-git add science-tool/src/science_tool/tasks.py science-tool/src/science_tool/cli.py science-tool/tests/test_tasks.py science-tool/tests/test_tasks_cli.py
+git add science/src/science_tool/tasks.py science/src/science_tool/cli.py science/tests/test_tasks.py science/tests/test_tasks_cli.py
 git commit -m "chore(tasks): format archive-aware notes changes"
 ```
 

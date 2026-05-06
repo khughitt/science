@@ -122,7 +122,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:compare-hypotheses" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

@@ -112,7 +112,7 @@ Cumulative list of non-core or unregistered kinds across cancer cluster (so far)
 **This is a pattern worth flagging in the recast plan.** Each project may introduce project-specific kinds that exist in `related:` refs but are not core kinds. The recast doesn't need to register all of them, but it should:
 
 1. Document that unregistered kinds in `related:` are silently dropped during source loading.
-2. Recommend a `science-tool` health-check command that lists unregistered ref kinds across all `related:` fields in a project — useful for projects regularizing their kind taxonomy.
+2. Recommend a `science` health-check command that lists unregistered ref kinds across all `related:` fields in a project — useful for projects regularizing their kind taxonomy.
 3. Note that operational extension kinds can be registered via a local manifest, as mechanisms/evolution does here.
 4. Note that operational kinds should not become `bears_on` targets merely because they are valid refs.
 

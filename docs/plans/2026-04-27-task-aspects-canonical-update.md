@@ -14,7 +14,7 @@ This is canonical lag, not project-side legacy shape. Fix: update the canonical'
 
 ## Solution
 
-In `science-tool/src/science_tool/project_artifacts/data/validate.sh` (around line 844), replace:
+In `science/src/science_tool/project_artifacts/data/validate.sh` (around line 844), replace:
 
 ```bash
 for field in type priority status created; do
@@ -34,7 +34,7 @@ for field in aspects priority status created; do
 done
 ```
 
-One word changed. No new logic; no legacy-`type:`-detection branch (the 2026-04-19 spec assigns that responsibility to `science-tool health`, not `validate.sh`).
+One word changed. No new logic; no legacy-`type:`-detection branch (the 2026-04-19 spec assigns that responsibility to `science health`, not `validate.sh`).
 
 ## Versioning
 
@@ -44,7 +44,7 @@ Changelog: "Replace deprecated `type:` task-field check with `aspects:` per docs
 
 ## Cross-project propagation
 
-The three projects already at v2026.04.26.2 (`mm30`, `cbioportal`, `natural-systems`) become `stale` after this bump. Each runs `science-tool project artifacts update validate.sh --force --yes --project-root .` to refresh. Expected outcome: each project's error count drops by ~the number of tasks it has (no more spurious "missing type:" errors).
+The three projects already at v2026.04.26.2 (`mm30`, `cbioportal`, `natural-systems`) become `stale` after this bump. Each runs `science project artifacts update validate.sh --force --yes --project-root .` to refresh. Expected outcome: each project's error count drops by ~the number of tasks it has (no more spurious "missing type:" errors).
 
 This dogfoods the *update* workflow end-to-end across multiple projects — until now we'd only exercised *install*. Useful proof point.
 
@@ -60,7 +60,7 @@ This dogfoods the *update* workflow end-to-end across multiple projects — unti
 
 ## What this does NOT do
 
-- Does not add legacy-`type:` migration-pending detection (that's `science-tool health`'s job per the 2026-04-19 spec).
+- Does not add legacy-`type:` migration-pending detection (that's `science health`'s job per the 2026-04-19 spec).
 - Does not change the `priority`, `status`, `created` requirements.
 - Does not touch `workflow/Snakefile` or `meta:` xref handling — those are separate questions per the migration analysis.
 

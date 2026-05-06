@@ -30,8 +30,8 @@ The command should behave like a careful research librarian and project maintain
 - New Codex skill `science-curate`.
 - Agent-led workflow that reads targeted source artifacts and writes a curation ledger.
 - Optional high-confidence, small curation edits after explicit user approval or an explicit apply flag.
-- A narrow `science-tool curate inventory` helper for deterministic corpus inventory and candidate collection.
-- Reuse of existing helpers: `science-tool health`, graph summaries, `big-picture resolve-questions`, task listing, DAG staleness/audit surfaces, sync status, and git history.
+- A narrow `science curate inventory` helper for deterministic corpus inventory and candidate collection.
+- Reuse of existing helpers: `science health`, graph summaries, `big-picture resolve-questions`, task listing, DAG staleness/audit surfaces, sync status, and git history.
 - Curation ledger under `doc/meta/curation/curation-sweep-YYYY-MM-DD.md`.
 - End-of-run self-reflection section that captures possible improvements to the curation command, skill, prompts, or CLI helpers.
 
@@ -148,18 +148,18 @@ Suggested body:
 Follow the standard Science command preamble. Then run deterministic inventory and context commands:
 
 ```bash
-uv run science-tool curate inventory --project-root . --format json
-uv run science-tool health --project-root . --format json
-uv run science-tool tasks list --format json
-uv run science-tool big-picture resolve-questions --project-root .
-uv run science-tool sync status
+uv run science curate inventory --project-root . --format json
+uv run science health --project-root . --format json
+uv run science tasks list --format json
+uv run science big-picture resolve-questions --project-root .
+uv run science sync status
 git log --oneline -30 --format="%h %s (%cr)"
 ```
 
 If DAG tooling is present and the project has DAGs:
 
 ```bash
-uv run science-tool dag audit --json
+uv run science dag audit --json
 ```
 
 The inventory helper should not decide what to change. It should return compact facts:
@@ -212,7 +212,7 @@ After any edits, run:
 uv run --frozen ruff format .
 uv run --frozen ruff check .
 uv run --frozen pyright
-uv run science-tool graph audit --project-root . --format json
+uv run science graph audit --project-root . --format json
 ```
 
 For docs-only edits where Python files are untouched, the agent may skip Python format/type checks but must say so. It should always run the graph/source audit if metadata links changed.
@@ -250,6 +250,6 @@ The response belongs in the ledger's **Self-Reflection** section. It should be o
 
 - Add embedding-backed semantic retrieval for older notes and paper summaries.
 - Add a machine-readable curation ledger companion file for trend analysis across sweeps.
-- Add a `science-tool curate diff` helper to compare two curation ledgers.
+- Add a `science curate diff` helper to compare two curation ledgers.
 - Add project-level recurring curation cadence reminders.
 - Feed high-quality forgotten-insight findings into `/science:big-picture` bundle assembly.

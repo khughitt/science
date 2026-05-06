@@ -20,10 +20,10 @@ The goal is not to convert every edge into a fact. The goal is to convert vague 
 
 ## Tool Invocation
 
-All `science-tool` commands below use:
+All `science` commands below use:
 
 ```bash
-uv run science-tool <command>
+uv run science <command>
 ```
 
 ## Rules
@@ -45,8 +45,8 @@ uv run science-tool <command>
 If `$ARGUMENTS` contains a slug:
 
 ```bash
-science-tool inquiry show "<slug>" --format table
-science-tool inquiry validate "<slug>" --format json
+science inquiry show "<slug>" --format table
+science inquiry validate "<slug>" --format json
 ```
 
 Identify:
@@ -75,7 +75,7 @@ For each important variable:
 Use commands like:
 
 ```bash
-science-tool graph add concept "<name>" --type <CURIE> --definition "<definition>"
+science graph add concept "<name>" --type <CURIE> --definition "<definition>"
 ```
 
 ### Step 3: Convert Scientific Edges Into Explicit Claims
@@ -90,7 +90,7 @@ For each non-trivial scientific relation in the inquiry:
 2. Create a `relation_claim`
 
 ```bash
-science-tool graph add relation-claim \
+science graph add relation-claim \
   "concept:<subject>" \
   "<predicate>" \
   "concept:<object>" \
@@ -102,7 +102,7 @@ science-tool graph add relation-claim \
 3. Attach the claim to the inquiry edge when the edge should remain in the model
 
 ```bash
-science-tool inquiry add-edge "<slug>" "concept:<subject>" "<predicate>" "concept:<object>" \
+science inquiry add-edge "<slug>" "concept:<subject>" "<predicate>" "concept:<object>" \
   --claim "relation_claim:<id>"
 ```
 
@@ -128,8 +128,8 @@ For each important claim, ask:
 When the project has concrete supporting or disputing project claims, represent them explicitly:
 
 ```bash
-science-tool graph add claim "<supporting or disputing statement>" --source "<ref>" --confidence <0-1>
-science-tool graph add relation-claim \
+science graph add claim "<supporting or disputing statement>" --source "<ref>" --confidence <0-1>
+science graph add relation-claim \
   "claim:<supporting-claim>" \
   "cito:supports" \
   "relation_claim:<target>" \
@@ -154,7 +154,7 @@ For each assumption:
 ### Step 6: Validate And Finalize
 
 ```bash
-science-tool inquiry validate "<slug>" --format json
+science inquiry validate "<slug>" --format json
 ```
 
 Update the inquiry status to `specified` only when:
@@ -166,7 +166,7 @@ Update the inquiry status to `specified` only when:
 Then:
 
 ```bash
-science-tool graph stamp-revision
+science graph stamp-revision
 ```
 
 ### Step 7: Suggest Next Steps
@@ -189,7 +189,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:specify-model" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

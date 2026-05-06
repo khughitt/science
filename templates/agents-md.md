@@ -33,26 +33,26 @@ bash validate.sh --verbose
 
 ## Task execution
 
-- Tasks live in `tasks/active.md`, managed by `science-tool tasks` (or
+- Tasks live in `tasks/active.md`, managed by `science tasks` (or
   the `/science:tasks` slash command). Completed/retired tasks archive
   to `tasks/done/YYYY-MM.md`.
 - **Do not use Claude Code's built-in `TaskCreate` / `TaskUpdate` /
   `TaskList` tools.** They create a parallel task store outside the
   repo, invisible to other agents and to fresh clones, and they fight
-  the science task system. Use `science-tool tasks` exclusively for
+  the science task system. Use `science tasks` exclusively for
   task management on this project.
 - Common invocations (run from the project root):
 
   ```bash
-  uv run science-tool tasks list
-  uv run science-tool tasks add "TITLE" --priority P2 --description "..."
-  uv run science-tool tasks done <task_id> --note "..."
+  uv run science tasks list
+  uv run science tasks add "TITLE" --priority P2 --description "..."
+  uv run science tasks done <task_id> --note "..."
   ```
 
-  The bare `uv run science-tool ...` form requires the project's root
-  `pyproject.toml` to list `science-tool` as a dev dependency (see the
+  The bare `uv run science ...` form requires the project's root
+  `pyproject.toml` to list `science` as a dev dependency (see the
   create-project / import-project commands). If that fails, run
-  `uv run science-tool health` — it surfaces missing scaffold pieces
+  `uv run science health` — it surfaces missing scaffold pieces
   with concrete fix commands.
 - <other bullets — how tasks are run, where commits go, etc.>
 

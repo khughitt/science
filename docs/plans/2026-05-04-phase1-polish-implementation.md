@@ -6,7 +6,7 @@
 
 **Architecture:** All work is additive to existing modules — no new top-level subsystems. Touches:
 - `science-model`: `Entity.review_state` validator, `bears_on` `target_kinds` expansion.
-- `science-tool`: registry threading through `ProjectSources`, audit gate parity, two new derivation triples (`sci:lastReviewed`, `sci:bearsOnDepth`), `freshness.enabled` opt-out, `entity review` epistemic gate.
+- `science`: registry threading through `ProjectSources`, audit gate parity, two new derivation triples (`sci:lastReviewed`, `sci:bearsOnDepth`), `freshness.enabled` opt-out, `entity review` epistemic gate.
 - Tests: integration coverage gaps, boundary tests for `derive_freshness`.
 
 **Tech Stack:** Pydantic v2, rdflib, click, pytest. TDD via `uv run --frozen --directory <pkg> pytest <args>`.
@@ -21,12 +21,12 @@
 | science-model | `src/science_model/profiles/core.py` | Expanded `bears_on.target_kinds` |
 | science-model | `tests/test_review_state_model.py` | Validator boundary tests |
 | science-model | `tests/test_bears_on_relation.py` | Reconciliation assertion |
-| science-tool | `src/science_tool/graph/sources.py` | Build + expose registry on `ProjectSources` |
-| science-tool | `src/science_tool/graph/materialize.py` | Consume `sources.registry` in `_classify_entities`; emit prep triples |
-| science-tool | `src/science_tool/graph/freshness.py` | `sci:lastReviewed`, `sci:bearsOnDepth` emission; closure depth tracking; opt-out gate |
-| science-tool | `src/science_tool/entity_review.py` | Reject non-epistemic targets at CLI |
-| science-tool | `src/science_tool/cli.py` | Pass `kind_class` to `review_entity`; route `ReviewError` |
-| science-tool | tests | New + boundary tests |
+| science | `src/science_tool/graph/sources.py` | Build + expose registry on `ProjectSources` |
+| science | `src/science_tool/graph/materialize.py` | Consume `sources.registry` in `_classify_entities`; emit prep triples |
+| science | `src/science_tool/graph/freshness.py` | `sci:lastReviewed`, `sci:bearsOnDepth` emission; closure depth tracking; opt-out gate |
+| science | `src/science_tool/entity_review.py` | Reject non-epistemic targets at CLI |
+| science | `src/science_tool/cli.py` | Pass `kind_class` to `review_entity`; route `ReviewError` |
+| science | tests | New + boundary tests |
 
 ---
 
@@ -46,7 +46,7 @@ All six map to `EntityClass.OPERATIONAL`. Other operational kinds (`workflow`, `
 
 Today the relation declares 9 targets; the runtime classifies 4 more as `EntityClass.EPISTEMIC`. The implementer must:
 
-1. Read `_CORE_KIND_CLASSES` in `science-tool/src/science_tool/graph/entity_registry.py`.
+1. Read `_CORE_KIND_CLASSES` in `science/src/science_tool/graph/entity_registry.py`.
 2. For each kind classified `EPISTEMIC`, ensure it appears in `bears_on.target_kinds`.
 3. Expected additions: `assumption`, `report`, `validation-report`. (`model` is **not** in `_CORE_KIND_CLASSES` — the reviewer's note included it incorrectly. Do not add it.)
 
@@ -232,10 +232,10 @@ def test_bears_on_targets_match_target_kinds_exactly() -> None:
 
 ```bash
 uv run --frozen --directory science-model pytest -q
-uv run --frozen --directory science-tool pytest -q
+uv run --frozen --directory science pytest -q
 ```
 
-Expected: all pass. The science-tool side already classifies these as EPISTEMIC, so derivation already accepts them — we're only making the relation declaration honest.
+Expected: all pass. The science side already classifies these as EPISTEMIC, so derivation already accepts them — we're only making the relation declaration honest.
 
 - [ ] **Step 5: Commit**
 
@@ -249,9 +249,9 @@ git commit -m "fix(model): expand bears_on.target_kinds to match EPISTEMIC class
 ## Task 3: `entity review` rejects non-epistemic targets at CLI
 
 **Files:**
-- Modify: `science-tool/src/science_tool/entity_review.py`
-- Modify: `science-tool/src/science_tool/cli.py` (the `entity review` click command)
-- Modify: `science-tool/tests/test_entity_review_cli.py`
+- Modify: `science/src/science_tool/entity_review.py`
+- Modify: `science/src/science_tool/cli.py` (the `entity review` click command)
+- Modify: `science/tests/test_entity_review_cli.py`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -293,7 +293,7 @@ def test_entity_review_rejects_non_epistemic_target(tmp_path: Path, monkeypatch)
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_entity_review_cli.py::test_entity_review_rejects_non_epistemic_target -v
+uv run --frozen --directory science pytest tests/test_entity_review_cli.py::test_entity_review_rejects_non_epistemic_target -v
 ```
 
 Expected: FAIL — `entity review dataset:demo` succeeds today.
@@ -329,7 +329,7 @@ If `location.entity` doesn't expose `.kind` directly, derive from `location.fron
 - [ ] **Step 4: Run the failing test again**
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_entity_review_cli.py -v
+uv run --frozen --directory science pytest tests/test_entity_review_cli.py -v
 ```
 
 Expected: PASS for the new test; the existing happy-path tests still pass (they use epistemic kinds).
@@ -337,7 +337,7 @@ Expected: PASS for the new test; the existing happy-path tests still pass (they 
 - [ ] **Step 5: Run the full suite**
 
 ```bash
-uv run --frozen --directory science-tool pytest -q
+uv run --frozen --directory science pytest -q
 ```
 
 Expected: all pass.
@@ -345,7 +345,7 @@ Expected: all pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/entity_review.py science-tool/tests/test_entity_review_cli.py
+git add science/src/science_tool/entity_review.py science/tests/test_entity_review_cli.py
 git commit -m "feat(cli): entity review rejects non-epistemic targets"
 ```
 
@@ -356,13 +356,13 @@ git commit -m "feat(cli): entity review rejects non-epistemic targets"
 **Why:** Today `_classify_entities` builds a fresh `EntityRegistry.with_core_types()` per call, so profile/catalog/extension kinds always default to `OPERATIONAL`. Threading the registry built in `load_project_sources` (which knows about profile, catalog, and extension kinds) makes per-project classification correct.
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/sources.py` (add field on `ProjectSources`; populate at end of `load_project_sources`)
-- Modify: `science-tool/src/science_tool/graph/materialize.py` (`_classify_entities` consumes `sources.registry`)
-- Modify: `science-tool/tests/test_kind_class.py` or a new test file
+- Modify: `science/src/science_tool/graph/sources.py` (add field on `ProjectSources`; populate at end of `load_project_sources`)
+- Modify: `science/src/science_tool/graph/materialize.py` (`_classify_entities` consumes `sources.registry`)
+- Modify: `science/tests/test_kind_class.py` or a new test file
 
 - [ ] **Step 1: Write the failing integration test**
 
-Create `science-tool/tests/test_extension_kind_classification.py`:
+Create `science/tests/test_extension_kind_classification.py`:
 
 ```python
 """Verify that extension kinds with declared epistemic class flow through
@@ -392,19 +392,19 @@ def test_project_sources_registry_classifies_extension_kinds(tmp_path: Path) -> 
     assert sources.registry.kind_class("custom-belief") == EntityClass.EPISTEMIC
 ```
 
-The fixture builder `_build_extension_project` should reuse existing helpers if any (`grep -rn "register_extension_kind\|entity_class:" science-tool/tests/`); otherwise implement it directly with `Path.write_text`. Keep it minimal — one entity, one extension kind.
+The fixture builder `_build_extension_project` should reuse existing helpers if any (`grep -rn "register_extension_kind\|entity_class:" science/tests/`); otherwise implement it directly with `Path.write_text`. Keep it minimal — one entity, one extension kind.
 
 - [ ] **Step 2: Run to verify it fails**
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_extension_kind_classification.py -v
+uv run --frozen --directory science pytest tests/test_extension_kind_classification.py -v
 ```
 
 Expected: FAIL — `ProjectSources` has no `registry` field today.
 
 - [ ] **Step 3: Add `registry` field to `ProjectSources`**
 
-In `science-tool/src/science_tool/graph/sources.py`:
+In `science/src/science_tool/graph/sources.py`:
 
 1. Add the import (it's already imported as `EntityRegistry` — confirm).
 2. Add to the `ProjectSources` class body:
@@ -433,7 +433,7 @@ If the manifest currently has no `entity_class` field, add it as optional `Entit
 
 - [ ] **Step 4: Update `_classify_entities` to consume `sources.registry`**
 
-In `science-tool/src/science_tool/graph/materialize.py`:
+In `science/src/science_tool/graph/materialize.py`:
 
 ```python
 def _classify_entities(sources: ProjectSources) -> dict[str, EntityClass]:
@@ -457,8 +457,8 @@ Remove the now-unused `EntityRegistry.with_core_types()` import line if it was o
 - [ ] **Step 5: Run the failing test + suite**
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_extension_kind_classification.py -v
-uv run --frozen --directory science-tool pytest -q
+uv run --frozen --directory science pytest tests/test_extension_kind_classification.py -v
+uv run --frozen --directory science pytest -q
 ```
 
 Expected: all pass.
@@ -466,7 +466,7 @@ Expected: all pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/sources.py science-tool/src/science_tool/graph/materialize.py science-tool/tests/test_extension_kind_classification.py
+git add science/src/science_tool/graph/sources.py science/src/science_tool/graph/materialize.py science/tests/test_extension_kind_classification.py
 git commit -m "feat(graph): thread project registry through ProjectSources for kind classification"
 ```
 
@@ -481,12 +481,12 @@ git commit -m "feat(graph): thread project registry through ProjectSources for k
 **Decision:** Share the gate. `propagate-freshness` is read-only on the filesystem but should be honest about completeness — running it on a project with broken refs should raise the same `ValueError` so the user fixes the refs first.
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/freshness.py` (`propagate_freshness_in_memory`)
-- Modify: `science-tool/tests/test_graph_propagate_freshness_cli.py`
+- Modify: `science/src/science_tool/graph/freshness.py` (`propagate_freshness_in_memory`)
+- Modify: `science/tests/test_graph_propagate_freshness_cli.py`
 
 - [ ] **Step 1: Write the failing test**
 
-In `science-tool/tests/test_graph_propagate_freshness_cli.py`, append:
+In `science/tests/test_graph_propagate_freshness_cli.py`, append:
 
 ```python
 def test_propagate_freshness_raises_on_unresolved_refs(tmp_path: Path) -> None:
@@ -503,14 +503,14 @@ def test_propagate_freshness_raises_on_unresolved_refs(tmp_path: Path) -> None:
 - [ ] **Step 2: Run to verify it fails**
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_graph_propagate_freshness_cli.py::test_propagate_freshness_raises_on_unresolved_refs -v
+uv run --frozen --directory science pytest tests/test_graph_propagate_freshness_cli.py::test_propagate_freshness_raises_on_unresolved_refs -v
 ```
 
 Expected: FAIL — currently produces an empty rows list silently.
 
 - [ ] **Step 3: Add the gate**
 
-In `science-tool/src/science_tool/graph/freshness.py`, modify `propagate_freshness_in_memory`:
+In `science/src/science_tool/graph/freshness.py`, modify `propagate_freshness_in_memory`:
 
 ```python
 def propagate_freshness_in_memory(project_root: Path) -> list[dict]:
@@ -538,8 +538,8 @@ def propagate_freshness_in_memory(project_root: Path) -> list[dict]:
 - [ ] **Step 4: Run tests**
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_graph_propagate_freshness_cli.py -v
-uv run --frozen --directory science-tool pytest -q
+uv run --frozen --directory science pytest tests/test_graph_propagate_freshness_cli.py -v
+uv run --frozen --directory science pytest -q
 ```
 
 Expected: all pass.
@@ -547,7 +547,7 @@ Expected: all pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/freshness.py science-tool/tests/test_graph_propagate_freshness_cli.py
+git add science/src/science_tool/graph/freshness.py science/tests/test_graph_propagate_freshness_cli.py
 git commit -m "fix(graph): propagate-freshness reuses materialize_graph's audit gate"
 ```
 
@@ -558,12 +558,12 @@ git commit -m "fix(graph): propagate-freshness reuses materialize_graph's audit 
 **Why:** Phase 2 sampling will weight by review age. Today that requires re-parsing markdown frontmatter; emitting the triple in Phase 1 is ~3 lines and zero-cost.
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/freshness.py` (`derive_freshness`)
-- Modify: `science-tool/tests/test_freshness_derivation.py`
+- Modify: `science/src/science_tool/graph/freshness.py` (`derive_freshness`)
+- Modify: `science/tests/test_freshness_derivation.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `science-tool/tests/test_freshness_derivation.py`:
+Append to `science/tests/test_freshness_derivation.py`:
 
 ```python
 def test_derive_freshness_emits_last_reviewed_triple() -> None:
@@ -619,14 +619,14 @@ def test_derive_freshness_no_last_reviewed_triple_when_unset() -> None:
 - [ ] **Step 2: Run to verify they fail**
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_freshness_derivation.py -k last_reviewed -v
+uv run --frozen --directory science pytest tests/test_freshness_derivation.py -k last_reviewed -v
 ```
 
 Expected: 2 FAIL.
 
 - [ ] **Step 3: Emit the triple**
 
-In `science-tool/src/science_tool/graph/freshness.py`, inside the `derive_freshness` per-entity loop, after the existing `freshnessState` triple emission:
+In `science/src/science_tool/graph/freshness.py`, inside the `derive_freshness` per-entity loop, after the existing `freshnessState` triple emission:
 
 ```python
         # Phase 2 prep: emit last_reviewed when set so sampling can read it
@@ -645,8 +645,8 @@ Place it after the `freshnessState` emission and before the `triggeredBy` loop.
 - [ ] **Step 4: Run tests**
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_freshness_derivation.py -v
-uv run --frozen --directory science-tool pytest -q
+uv run --frozen --directory science pytest tests/test_freshness_derivation.py -v
+uv run --frozen --directory science pytest -q
 ```
 
 Expected: all pass.
@@ -654,7 +654,7 @@ Expected: all pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/freshness.py science-tool/tests/test_freshness_derivation.py
+git add science/src/science_tool/graph/freshness.py science/tests/test_freshness_derivation.py
 git commit -m "feat(graph): emit sci:lastReviewed for Phase 2 sampling"
 ```
 
@@ -667,8 +667,8 @@ git commit -m "feat(graph): emit sci:lastReviewed for Phase 2 sampling"
 **Decision:** Emit `sci:bearsOnDepth` as a separate triple keyed on `(source, target)` carrying the **minimum** depth across all paths. Direct edges (typed/provenance) are depth 1; closure edges are depth 2+.
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/freshness.py` (`close_bears_on`; also annotate the direct edges in `derive_bears_on_from_typed_edges` and `derive_bears_on_from_provenance` with depth 1)
-- Modify: `science-tool/tests/test_bears_on_derivation.py`
+- Modify: `science/src/science_tool/graph/freshness.py` (`close_bears_on`; also annotate the direct edges in `derive_bears_on_from_typed_edges` and `derive_bears_on_from_provenance` with depth 1)
+- Modify: `science/tests/test_bears_on_derivation.py`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -758,8 +758,8 @@ In `close_bears_on`, the existing DFS already tracks the path implicitly (stack 
 - [ ] **Step 5: Run tests**
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_bears_on_derivation.py -v
-uv run --frozen --directory science-tool pytest -q
+uv run --frozen --directory science pytest tests/test_bears_on_derivation.py -v
+uv run --frozen --directory science pytest -q
 ```
 
 Expected: all pass.
@@ -767,7 +767,7 @@ Expected: all pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/freshness.py science-tool/tests/test_bears_on_derivation.py
+git add science/src/science_tool/graph/freshness.py science/tests/test_bears_on_derivation.py
 git commit -m "feat(graph): track bears_on edge depth (Phase 2 sampling prep)"
 ```
 
@@ -778,14 +778,14 @@ git commit -m "feat(graph): track bears_on edge depth (Phase 2 sampling prep)"
 **Why:** The design promised this but Phase 1 didn't ship it. First `graph build` on existing downstream projects will flag many entities as `needs-review` because `last_reviewed=None` everywhere. Projects need a way to disable freshness during migration.
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/sources.py` (read `freshness.enabled` from `science.yaml` config; expose on `ProjectSources`)
-- Modify: `science-tool/src/science_tool/graph/materialize.py` (`_derive_epistemic_layer` skipped when disabled)
-- Modify: `science-tool/src/science_tool/graph/freshness.py` (`propagate_freshness_in_memory` returns empty list when disabled)
+- Modify: `science/src/science_tool/graph/sources.py` (read `freshness.enabled` from `science.yaml` config; expose on `ProjectSources`)
+- Modify: `science/src/science_tool/graph/materialize.py` (`_derive_epistemic_layer` skipped when disabled)
+- Modify: `science/src/science_tool/graph/freshness.py` (`propagate_freshness_in_memory` returns empty list when disabled)
 - Modify: tests
 
 - [ ] **Step 1: Write the failing test**
 
-Create `science-tool/tests/test_freshness_opt_out.py`:
+Create `science/tests/test_freshness_opt_out.py`:
 
 ```python
 """freshness.enabled: false opt-out for downstream projects mid-migration."""
@@ -829,14 +829,14 @@ Implementer: stand up minimal `_build_project_with_freshness_disabled` and `_bui
 - [ ] **Step 2: Run to verify they fail**
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_freshness_opt_out.py -v
+uv run --frozen --directory science pytest tests/test_freshness_opt_out.py -v
 ```
 
 Expected: FAIL — config field doesn't exist; freshness always runs.
 
 - [ ] **Step 3: Add the config field on `ProjectSources`**
 
-In `science-tool/src/science_tool/graph/sources.py`:
+In `science/src/science_tool/graph/sources.py`:
 
 1. Add field `freshness_enabled: bool = True` to `ProjectSources`.
 2. In `load_project_sources`, read from `config`:
@@ -850,7 +850,7 @@ In `science-tool/src/science_tool/graph/sources.py`:
 
 - [ ] **Step 4: Skip the layer when disabled**
 
-In `science-tool/src/science_tool/graph/materialize.py`, in `_build_dataset_from_sources` (or whichever helper calls `_derive_epistemic_layer`):
+In `science/src/science_tool/graph/materialize.py`, in `_build_dataset_from_sources` (or whichever helper calls `_derive_epistemic_layer`):
 
 ```python
     if sources.freshness_enabled:
@@ -869,8 +869,8 @@ In `propagate_freshness_in_memory`:
 - [ ] **Step 5: Run tests**
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_freshness_opt_out.py -v
-uv run --frozen --directory science-tool pytest -q
+uv run --frozen --directory science pytest tests/test_freshness_opt_out.py -v
+uv run --frozen --directory science pytest -q
 ```
 
 Expected: all pass.
@@ -886,7 +886,7 @@ In `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` § Migration, re
 - [ ] **Step 7: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/sources.py science-tool/src/science_tool/graph/materialize.py science-tool/src/science_tool/graph/freshness.py science-tool/tests/test_freshness_opt_out.py docs/plans/2026-05-03-epistemic-dependency-graph-design.md
+git add science/src/science_tool/graph/sources.py science/src/science_tool/graph/materialize.py science/src/science_tool/graph/freshness.py science/tests/test_freshness_opt_out.py docs/plans/2026-05-03-epistemic-dependency-graph-design.md
 git commit -m "feat(graph): freshness.enabled: false opt-out for downstream migration"
 ```
 
@@ -895,7 +895,7 @@ git commit -m "feat(graph): freshness.enabled: false opt-out for downstream migr
 ## Task 9: `derive_freshness` boundary tests
 
 **Files:**
-- Modify: `science-tool/tests/test_freshness_derivation.py`
+- Modify: `science/tests/test_freshness_derivation.py`
 
 - [ ] **Step 1: Write the boundary tests**
 
@@ -991,7 +991,7 @@ def test_horizon_one_day_minimum() -> None:
 - [ ] **Step 2: Run tests**
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_freshness_derivation.py -v
+uv run --frozen --directory science pytest tests/test_freshness_derivation.py -v
 ```
 
 Expected: all pass (current logic is `>`, so the boundary cases match).
@@ -999,7 +999,7 @@ Expected: all pass (current logic is `>`, so the boundary cases match).
 - [ ] **Step 3: Commit**
 
 ```bash
-git add science-tool/tests/test_freshness_derivation.py
+git add science/tests/test_freshness_derivation.py
 git commit -m "test(graph): lock derive_freshness horizon boundary semantics"
 ```
 
@@ -1008,7 +1008,7 @@ git commit -m "test(graph): lock derive_freshness horizon boundary semantics"
 ## Task 10: Integration test gaps
 
 **Files:**
-- Modify or create: `science-tool/tests/test_graph_freshness_integration.py`
+- Modify or create: `science/tests/test_graph_freshness_integration.py`
 
 Each sub-task is independent.
 
@@ -1051,8 +1051,8 @@ def test_propagate_and_materialize_agree(tmp_path: Path) -> None:
 - [ ] **Step 3: Run all integration tests**
 
 ```bash
-uv run --frozen --directory science-tool pytest tests/test_graph_freshness_integration.py -v
-uv run --frozen --directory science-tool pytest -q
+uv run --frozen --directory science pytest tests/test_graph_freshness_integration.py -v
+uv run --frozen --directory science pytest -q
 ```
 
 Expected: all pass.
@@ -1060,7 +1060,7 @@ Expected: all pass.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add science-tool/tests/test_graph_freshness_integration.py
+git add science/tests/test_graph_freshness_integration.py
 git commit -m "test(graph): cover provenance+closure and propagate/materialize parity"
 ```
 
@@ -1104,10 +1104,10 @@ After all tasks complete:
 
 ```bash
 uv run --frozen --directory science-model pytest -q
-uv run --frozen --directory science-tool pytest -q
+uv run --frozen --directory science pytest -q
 ```
 
-Expected: science-model 283 + 13 (T1) + 0 (T2 replaces) ≈ 296 passing; science-tool 1724 + new tests ≈ 1750+ passing.
+Expected: science-model 283 + 13 (T1) + 0 (T2 replaces) ≈ 296 passing; science 1724 + new tests ≈ 1750+ passing.
 
 - [ ] **Run `validate.sh`**
 

@@ -11,12 +11,12 @@ posteriors (β, HDI, P(sign)) — only in prose. As a result:
 
 - DAG renderers cannot color or weight edges by posterior magnitude/sign.
 - A change in a refit's β is not a structured diff.
-- `science-tool graph` has no way to surface "edges with no posterior fit yet"
+- `science graph` has no way to surface "edges with no posterior fit yet"
   as a first-class gap.
 
 The user is already maintaining this data project-locally in
 `doc/figures/dags/*.edges.yaml` (~85 edges, ~15 with fitted posteriors). If
-science-tool adopted it as a first-class field, it would compose with
+science adopted it as a first-class field, it would compose with
 `export-pgmpy` / `export-chirho` and unlock several diagnostics for free.
 
 ## Proposed schema
@@ -66,18 +66,18 @@ one for visualization; the history is queryable.
 Three new query paths, each behind a flag-gated extension to existing output
 schemas (no breaking changes):
 
-1. **`science-tool inquiry show <slug> --posteriors`**
+1. **`science inquiry show <slug> --posteriors`**
    - Adds a `posteriors:` block to each edge in the JSON output.
    - Marks edges with no posterior as `posterior: null`.
 
-2. **`science-tool inquiry uncertainty --type=posterior`**
+2. **`science inquiry uncertainty --type=posterior`**
    - New subtype of an existing uncertainty command.
    - Lists edges with wide HDIs (e.g. `width(hdi) > threshold`) and edges
      whose HDI crosses zero (`prob_sign < 0.95`).
    - Default thresholds: HDI width > 0.4, prob_sign < 0.95.
    - `--threshold-hdi-width`, `--threshold-prob-sign` flags for tuning.
 
-3. **`science-tool graph neighborhood-summary`** (existing command)
+3. **`science graph neighborhood-summary`** (existing command)
    - When an edge has a posterior block, include `beta`, `hdi_low`, `hdi_high`,
      `prob_sign`, `fit_task` columns. Empty for edges without posteriors.
 
@@ -96,7 +96,7 @@ This is opt-in per renderer; the data being structured is the prerequisite.
 
 - `refs validate` should treat `fit_task` as a task-ID reference and confirm
   it resolves (covered by the existing task-ID check after fb-2026-04-13-007).
-- `science-tool graph` must not silently drop posterior nodes during the
+- `science graph` must not silently drop posterior nodes during the
   layered-claim migration — extend the migration audit to count
   `sci:Posterior` nodes pre/post.
 - `export-pgmpy` and `export-chirho` should emit the posterior as the prior /
@@ -108,8 +108,8 @@ Ship in two PRs:
 
 1. **PR 1: schema + storage + read.**
    - Define `sci:Posterior` and the seven fields in `SCHEMA_PREDICATES`.
-   - Add `add_posterior_to_edge(...)` in `science-tool/src/science_tool/graph/store.py`.
-   - Add CLI: `science-tool inquiry add-posterior <inquiry/edge> --beta ... ...`.
+   - Add `add_posterior_to_edge(...)` in `science/src/science_tool/graph/store.py`.
+   - Add CLI: `science inquiry add-posterior <inquiry/edge> --beta ... ...`.
    - Tests: write/read round-trip, multiple posteriors per edge.
 
 2. **PR 2: surface + queries.**
@@ -128,7 +128,7 @@ demand surfaces naturally.
   rather than overloading `sci:Posterior`.
 - Per-fit dataset *details* (which sample IDs, which preprocessing) — those
   belong to the `fit_task`'s data package, linked through `fit_task`.
-- Renderer code — graph viz lives outside science-tool's CLI surface.
+- Renderer code — graph viz lives outside science's CLI surface.
 
 ## Non-goals
 

@@ -43,9 +43,9 @@ The type is a lightweight property, not a heavyweight type system. Enforcement o
 ### New CLI Subcommands
 
 ```
-science-tool inquiry init <SLUG> --type causal --label <LABEL> --target <HYPOTHESIS>
-science-tool inquiry export-pgmpy <SLUG> [--output <FILE>]
-science-tool inquiry export-chirho <SLUG> [--output <FILE>]
+science inquiry init <SLUG> --type causal --label <LABEL> --target <HYPOTHESIS>
+science inquiry export-pgmpy <SLUG> [--output <FILE>]
+science inquiry export-chirho <SLUG> [--output <FILE>]
 ```
 
 `--type` on `inquiry init` is new (defaults to `general`). Export commands are type-gated — they error if the inquiry type isn't `causal`.

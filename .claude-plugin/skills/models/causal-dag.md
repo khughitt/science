@@ -60,10 +60,10 @@ Every `scic:causes` edge should have an associated claim:
 
 ```bash
 # Add the causal edge
-science-tool graph add edge "concept/smoking" "scic:causes" "concept/lung_cancer" --graph graph/causal
+science graph add edge "concept/smoking" "scic:causes" "concept/lung_cancer" --graph graph/causal
 
 # Add a supporting claim with provenance
-science-tool graph add claim "Smoking causes lung cancer via carcinogenic tar compounds" \
+science graph add claim "Smoking causes lung cancer via carcinogenic tar compounds" \
   --source "paper:doi_10.xxxx/yyyy" --confidence 0.95
 ```
 
@@ -91,28 +91,28 @@ Confidence scores reflect evidence strength:
 
 ```bash
 # Initialize causal inquiry
-science-tool inquiry init "my-dag" --type causal --label "Treatment Effect" \
+science inquiry init "my-dag" --type causal --label "Treatment Effect" \
   --target "hypothesis:h01"
 
 # Add variables as boundary nodes
-science-tool inquiry add-node "my-dag" "concept/treatment" --role BoundaryIn
-science-tool inquiry add-node "my-dag" "concept/outcome" --role BoundaryOut
-science-tool inquiry add-node "my-dag" "concept/confounder" --role BoundaryIn
+science inquiry add-node "my-dag" "concept/treatment" --role BoundaryIn
+science inquiry add-node "my-dag" "concept/outcome" --role BoundaryOut
+science inquiry add-node "my-dag" "concept/confounder" --role BoundaryIn
 
 # Set the estimand (treatment → outcome)
-science-tool inquiry set-estimand "my-dag" \
+science inquiry set-estimand "my-dag" \
   --treatment "concept/treatment" --outcome "concept/outcome"
 
 # Add causal edges to graph/causal
-science-tool graph add edge "concept/treatment" "scic:causes" "concept/outcome" --graph graph/causal
-science-tool graph add edge "concept/confounder" "scic:causes" "concept/treatment" --graph graph/causal
-science-tool graph add edge "concept/confounder" "scic:causes" "concept/outcome" --graph graph/causal
+science graph add edge "concept/treatment" "scic:causes" "concept/outcome" --graph graph/causal
+science graph add edge "concept/confounder" "scic:causes" "concept/treatment" --graph graph/causal
+science graph add edge "concept/confounder" "scic:causes" "concept/outcome" --graph graph/causal
 ```
 
 ### Validation
 
 ```bash
-science-tool inquiry validate "my-dag" --format json
+science inquiry validate "my-dag" --format json
 ```
 
 Causal inquiries get additional checks:
@@ -122,10 +122,10 @@ Causal inquiries get additional checks:
 
 ```bash
 # pgmpy — graph-theoretic analysis (d-separation, adjustment sets)
-science-tool inquiry export-pgmpy "my-dag" --output code/causal/dag.py
+science inquiry export-pgmpy "my-dag" --output code/causal/dag.py
 
 # ChiRho/Pyro — probabilistic causal inference (do-calculus, counterfactuals)
-science-tool inquiry export-chirho "my-dag" --output code/causal/model.py
+science inquiry export-chirho "my-dag" --output code/causal/model.py
 ```
 
 ## When to Use pgmpy vs. ChiRho

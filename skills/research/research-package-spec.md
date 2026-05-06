@@ -54,17 +54,17 @@ Each provenance input has a `sha256` hash for freshness checking.
 
 ### Initialize a package
 ```bash
-science-tool research-package init --name <slug> --title <title> [--workflow <dir>] --output <dir>
+science research-package init --name <slug> --title <title> [--workflow <dir>] --output <dir>
 ```
 
 ### Validate packages
 ```bash
-science-tool research-package validate <dir> [--check-freshness --project-root <root>] [--json]
+science research-package validate <dir> [--check-freshness --project-root <root>] [--json]
 ```
 
 ### Build from workflow results
 ```bash
-science-tool research-package build --results <dir> --config <yaml> --output <dir>
+science research-package build --results <dir> --config <yaml> --output <dir>
 ```
 
 ## Workflow Integration
@@ -75,7 +75,7 @@ Terminal Snakemake rule:
 rule build_package:
     input: results=directory("results")
     output: "research/packages/{lens}/{section}/datapackage.json"
-    shell: "science-tool research-package build --results {input.results} --config config.yaml --output research/packages/{config[lens]}/{config[section]}/"
+    shell: "science research-package build --results {input.results} --config config.yaml --output research/packages/{config[lens]}/{config[section]}/"
 ```
 
 ## Knowledge Graph Integration
@@ -94,7 +94,7 @@ Relations:
 - Input files tracked via SHA-256 hashes
 - Git commit pinned at build time
 - GitHub permalinks generated when repository URL is configured (empty string for non-GitHub repos)
-- Freshness checking: `science-tool research-package validate --check-freshness` compares stored hashes against current files
+- Freshness checking: `science research-package validate --check-freshness` compares stored hashes against current files
 
 ## Vega-Lite Support
 

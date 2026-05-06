@@ -76,7 +76,7 @@ Use these Frictionless types:
 
 ```bash
 # Validate a data package (built-in lightweight checks)
-science-tool datasets validate --path data/raw/
+science datasets validate --path data/raw/
 
 # For deeper validation, install frictionless CLI separately: uv add frictionless
 frictionless validate data/raw/datapackage.json
@@ -124,7 +124,7 @@ Add a `sources` field to track where data came from:
   "name": "processed-data",
   "sources": [
     {"title": "GEO GSE12345", "path": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE12345"},
-    {"title": "Downloaded via science-tool", "path": "science-tool datasets download geo:GSE12345"}
+    {"title": "Downloaded via science", "path": "science datasets download geo:GSE12345"}
   ],
   "resources": [...]
 }

@@ -117,7 +117,7 @@ This is a real plan-level issue: **the recast's classification rule is blind to 
 
 **Resolution options:**
 - (a) **Project-side:** mm migrates the 4 older pre-regs to canonical shape, adding hypothesis refs to `related:`. Out of t012 scope.
-- (b) **Recast-side, prose only:** `interpret-results` § 4d notes that for older pre-regs lacking hypothesis refs in `related:`, the interpreter should manually identify body-level hypothesis labels and emit `bears_on` edges by hand (or by `science-tool graph add proposition --pre-registration <ref>`).
+- (b) **Recast-side, prose only:** `interpret-results` § 4d notes that for older pre-regs lacking hypothesis refs in `related:`, the interpreter should manually identify body-level hypothesis labels and emit `bears_on` edges by hand (or by `science graph add proposition --pre-registration <ref>`).
 - (c) **Recast-side, code:** add a body parser that extracts `H<N>` patterns and resolves them to hypothesis refs. **Bad idea** — too brittle and project-specific.
 
 **Recommendation: (a) + (b).** Project does the cleanup migration on its own timeline; recast adds the prose to handle the transition period.

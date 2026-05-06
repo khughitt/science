@@ -59,13 +59,14 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with <science-plugin-root>/science-tool science-tool <command>`
+   `uv run --with <science-plugin-root>/science science <command>`
 
 Formalize the user's expectations, decision criteria, and null-result plans before analysis begins.
 
@@ -76,7 +77,7 @@ Follow the Science Codex Command Preamble before executing this skill. Use the `
 Additionally:
 1. Read `.ai/templates/pre-registration.md` first; if not found, read `templates/pre-registration.md`.
 2. Read active hypotheses in `specs/hypotheses/`.
-3. Read existing inquiries: run `science-tool inquiry list` (if available).
+3. Read existing inquiries: run `science inquiry list` (if available).
 4. Read existing pipeline plans in `doc/plans/` (if any).
 5. Read existing pre-registrations in `doc/meta/pre-registration-*.md` to avoid duplication.
 6. Read linked analysis plans in `doc/plans/*-analysis-plan.md` when the user or context references `analysis-plan:<slug>`.
@@ -183,7 +184,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:pre-register" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

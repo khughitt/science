@@ -77,7 +77,7 @@ current value when read with the amendment.
 
 ### 3. Review State Remains Outcome-Neutral
 
-`science-tool entity review <ref>` continues to do one thing:
+`science entity review <ref>` continues to do one thing:
 
 ```text
 review_state.last_reviewed = today
@@ -200,14 +200,14 @@ transaction command once the semantics have proven stable.
 
 The normal `needs-review` resolution flow is:
 
-1. Run `science-tool entity needs-review`, or encounter a sampled
+1. Run `science entity needs-review`, or encounter a sampled
    `needs-review` entity in `science:status` or `science:next-steps`.
 2. Inspect the flagged entity, its `sci:triggeredBy` upstream sources, and
    nearby conclusion entities.
 3. If the new evidence does not change standing, run:
 
    ```bash
-   science-tool entity review <target-ref> --note "Reviewed against <source>; no standing change."
+   science entity review <target-ref> --note "Reviewed against <source>; no standing change."
    ```
 
 4. If the new evidence changes standing, author a new `interpretation` or
@@ -219,7 +219,7 @@ The normal `needs-review` resolution flow is:
 7. Run this on the flagged entity, not on the newly authored conclusion:
 
    ```bash
-   science-tool entity review <target-ref> --note "Reconsidered; see interpretation:new."
+   science entity review <target-ref> --note "Reconsidered; see interpretation:new."
    ```
 
 8. Rebuild the graph so freshness clears if no upstream source remains newer

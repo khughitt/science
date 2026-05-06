@@ -14,9 +14,9 @@
 - Spec: `docs/specs/2026-04-20-multi-backend-entity-resolver-design.md` (replacement)
 - Existing `Entity`: `science-model/src/science_model/entities.py`
 - Existing `Task`: `science-model/src/science_model/tasks.py`
-- Existing `SourceEntity` + resolver (to delete): `science-tool/src/science_tool/graph/source_types.py`, `science-tool/src/science_tool/graph/entity_providers/`
-- Existing `load_project_sources`: `science-tool/src/science_tool/graph/sources.py`
-- Regression canary: `science-tool/tests/test_load_project_sources_regression.py` + `science-tool/tests/fixtures/spec_y_kitchen_sink/snapshot.json`
+- Existing `SourceEntity` + resolver (to delete): `science/src/science_tool/graph/source_types.py`, `science/src/science_tool/graph/entity_providers/`
+- Existing `load_project_sources`: `science/src/science_tool/graph/sources.py`
+- Regression canary: `science/tests/test_load_project_sources_regression.py` + `science/tests/fixtures/spec_y_kitchen_sink/snapshot.json`
 
 **Conventions (from project CLAUDE.md):**
 - All Python invocations: `uv run --frozen <command>`
@@ -29,10 +29,10 @@
 **Key invariants (read before any task):**
 
 - **All work happens in an isolated git worktree.** The executing skill sets up `.worktrees/unified-entity-model/` before Task 1.
-- **Every commit must keep the existing test suite green.** Run `cd science-tool && uv run --frozen pytest -q` after every task.
+- **Every commit must keep the existing test suite green.** Run `cd science && uv run --frozen pytest -q` after every task.
 - **The regression snapshot canary** (`test_load_project_sources_regression.py`) stays green until Task 10 (cutover). Task 10 regenerates `snapshot.json` because the entity class structure changes — the regeneration commit documents the structural diff and is reviewed specifically. After Task 10 the canary catches drift from the new baseline going forward.
 - **The kitchen-sink fixture** (`tests/fixtures/spec_y_kitchen_sink/`) is storage, not model — it does NOT change during this plan.
-- **Pre-existing pyright errors** in `science-tool/src/science_tool/cli.py` and similar legacy files (listed as out-of-scope in Spec Y's plan header) remain out-of-scope here.
+- **Pre-existing pyright errors** in `science/src/science_tool/cli.py` and similar legacy files (listed as out-of-scope in Spec Y's plan header) remain out-of-scope here.
 - **Spec non-goals apply:** no graph-store redesign, no RDF materialization change, no new query API, no caching.
 
 **Phases:**
@@ -496,9 +496,9 @@ git commit -m "feat(entities): add typed core entities (Task/Dataset/WorkflowRun
 
 **Files:**
 - Create: `science-model/src/science_model/source_ref.py`
-- Create: `science-tool/src/science_tool/graph/errors.py`
+- Create: `science/src/science_tool/graph/errors.py`
 - Test: `science-model/tests/test_source_ref.py`
-- Test: `science-tool/tests/test_entity_errors.py`
+- Test: `science/tests/test_entity_errors.py`
 
 - [ ] **Step 1: Write failing test (science-model side)**
 
@@ -531,9 +531,9 @@ def test_source_ref_str_is_actionable_in_errors() -> None:
     assert "7" in s
 ```
 
-- [ ] **Step 2: Write failing test (science-tool side)**
+- [ ] **Step 2: Write failing test (science side)**
 
-Create `science-tool/tests/test_entity_errors.py`:
+Create `science/tests/test_entity_errors.py`:
 
 ```python
 """Tests for EntityIdentityCollisionError — global identity-table violations."""
@@ -566,7 +566,7 @@ def test_collision_is_valueerror_subclass() -> None:
 - [ ] **Step 3: Run failing tests**
 
 ```bash
-uv run --frozen pytest science-model/tests/test_source_ref.py science-tool/tests/test_entity_errors.py -v
+uv run --frozen pytest science-model/tests/test_source_ref.py science/tests/test_entity_errors.py -v
 ```
 
 Expected: ImportError on both.
@@ -603,7 +603,7 @@ class SourceRef(BaseModel):
 
 - [ ] **Step 5: Implement `EntityIdentityCollisionError`**
 
-Create `science-tool/src/science_tool/graph/errors.py`:
+Create `science/src/science_tool/graph/errors.py`:
 
 ```python
 """Load-path errors for the unified entity model."""
@@ -631,14 +631,14 @@ class EntityIdentityCollisionError(ValueError):
 - [ ] **Step 6: Verify**
 
 ```bash
-uv run --frozen pytest science-model/tests/test_source_ref.py science-tool/tests/test_entity_errors.py -v
+uv run --frozen pytest science-model/tests/test_source_ref.py science/tests/test_entity_errors.py -v
 ```
 
 - [ ] **Step 7: Commit**
 
 ```bash
-uv run --frozen ruff format science-model/src/science_model/source_ref.py science-tool/src/science_tool/graph/errors.py science-model/tests/test_source_ref.py science-tool/tests/test_entity_errors.py
-git add science-model/src/science_model/source_ref.py science-tool/src/science_tool/graph/errors.py science-model/tests/test_source_ref.py science-tool/tests/test_entity_errors.py
+uv run --frozen ruff format science-model/src/science_model/source_ref.py science/src/science_tool/graph/errors.py science-model/tests/test_source_ref.py science/tests/test_entity_errors.py
+git add science-model/src/science_model/source_ref.py science/src/science_tool/graph/errors.py science-model/tests/test_source_ref.py science/tests/test_entity_errors.py
 git commit -m "feat: add SourceRef + EntityIdentityCollisionError for unified load path"
 ```
 
@@ -649,12 +649,12 @@ git commit -m "feat: add SourceRef + EntityIdentityCollisionError for unified lo
 ### Task 4: `EntityRegistry` with core + extension registration
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/entity_registry.py`
-- Test: `science-tool/tests/test_entity_registry.py`
+- Create: `science/src/science_tool/graph/entity_registry.py`
+- Test: `science/tests/test_entity_registry.py`
 
 - [ ] **Step 1: Write failing test**
 
-Create `science-tool/tests/test_entity_registry.py`:
+Create `science/tests/test_entity_registry.py`:
 
 ```python
 """Tests for EntityRegistry — kind → schema dispatch per spec §Model Registry."""
@@ -756,7 +756,7 @@ Expected: ImportError.
 
 - [ ] **Step 3: Implement the registry**
 
-Create `science-tool/src/science_tool/graph/entity_registry.py`:
+Create `science/src/science_tool/graph/entity_registry.py`:
 
 ```python
 """EntityRegistry — explicit kind → schema dispatch.
@@ -872,15 +872,15 @@ git commit -m "feat(graph): EntityRegistry with core + extension registration"
 ### Task 5: `StorageAdapter` Protocol + package skeleton
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/storage_adapters/__init__.py`
-- Create: `science-tool/src/science_tool/graph/storage_adapters/base.py`
-- Test: `science-tool/tests/test_storage_adapters/test_base.py`
+- Create: `science/src/science_tool/graph/storage_adapters/__init__.py`
+- Create: `science/src/science_tool/graph/storage_adapters/base.py`
+- Test: `science/tests/test_storage_adapters/test_base.py`
 
 - [ ] **Step 1: Write failing test**
 
-Create `science-tool/tests/test_storage_adapters/__init__.py` (empty).
+Create `science/tests/test_storage_adapters/__init__.py` (empty).
 
-Create `science-tool/tests/test_storage_adapters/test_base.py`:
+Create `science/tests/test_storage_adapters/test_base.py`:
 
 ```python
 """Tests for StorageAdapter Protocol — persistence-only contract."""
@@ -927,9 +927,9 @@ Expected: ImportError.
 
 - [ ] **Step 3: Implement the base**
 
-Create `science-tool/src/science_tool/graph/storage_adapters/__init__.py` (empty).
+Create `science/src/science_tool/graph/storage_adapters/__init__.py` (empty).
 
-Create `science-tool/src/science_tool/graph/storage_adapters/base.py`:
+Create `science/src/science_tool/graph/storage_adapters/base.py`:
 
 ```python
 """StorageAdapter base — persistence-only contract.
@@ -1007,12 +1007,12 @@ git commit -m "feat(storage-adapters): add StorageAdapter base contract"
 ### Task 6: `MarkdownAdapter` (single-entity storage)
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/storage_adapters/markdown.py`
-- Test: `science-tool/tests/test_storage_adapters/test_markdown.py`
+- Create: `science/src/science_tool/graph/storage_adapters/markdown.py`
+- Test: `science/tests/test_storage_adapters/test_markdown.py`
 
 - [ ] **Step 1: Write failing test**
 
-Create `science-tool/tests/test_storage_adapters/test_markdown.py`:
+Create `science/tests/test_storage_adapters/test_markdown.py`:
 
 ```python
 """Tests for MarkdownAdapter — single-entity markdown + YAML frontmatter."""
@@ -1085,7 +1085,7 @@ Expected: ImportError.
 
 - [ ] **Step 3: Implement**
 
-Create `science-tool/src/science_tool/graph/storage_adapters/markdown.py`:
+Create `science/src/science_tool/graph/storage_adapters/markdown.py`:
 
 ```python
 """MarkdownAdapter — single-entity markdown with YAML frontmatter."""
@@ -1189,12 +1189,12 @@ git commit -m "feat(storage-adapters): add MarkdownAdapter (single-entity)"
 ### Task 7: `AggregateAdapter` (multi-entity + single-type storage)
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/storage_adapters/aggregate.py`
-- Test: `science-tool/tests/test_storage_adapters/test_aggregate.py`
+- Create: `science/src/science_tool/graph/storage_adapters/aggregate.py`
+- Test: `science/tests/test_storage_adapters/test_aggregate.py`
 
 - [ ] **Step 1: Write failing test**
 
-Create `science-tool/tests/test_storage_adapters/test_aggregate.py`:
+Create `science/tests/test_storage_adapters/test_aggregate.py`:
 
 ```python
 """Tests for AggregateAdapter — multi-entity and single-type (kind-from-filename) storage."""
@@ -1278,7 +1278,7 @@ def test_source_ref_line_present_for_multi_entity_entries(tmp_path: Path) -> Non
 
 - [ ] **Step 3: Implement**
 
-Create `science-tool/src/science_tool/graph/storage_adapters/aggregate.py`:
+Create `science/src/science_tool/graph/storage_adapters/aggregate.py`:
 
 ```python
 """AggregateAdapter — multi-entity (entities.yaml) and single-type aggregate storage."""
@@ -1434,12 +1434,12 @@ git commit -m "feat(storage-adapters): add AggregateAdapter (multi-entity + sing
 ### Task 8: `DatapackageAdapter` (datapackage-backed storage)
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/storage_adapters/datapackage.py`
-- Test: `science-tool/tests/test_storage_adapters/test_datapackage.py`
+- Create: `science/src/science_tool/graph/storage_adapters/datapackage.py`
+- Test: `science/tests/test_storage_adapters/test_datapackage.py`
 
 - [ ] **Step 1: Write failing test**
 
-Create `science-tool/tests/test_storage_adapters/test_datapackage.py`:
+Create `science/tests/test_storage_adapters/test_datapackage.py`:
 
 ```python
 """Tests for DatapackageAdapter — promoted datasets (datapackage.yaml IS the entity)."""
@@ -1540,7 +1540,7 @@ def test_malformed_yaml_silently_skipped(tmp_path: Path) -> None:
 
 - [ ] **Step 3: Implement**
 
-Create `science-tool/src/science_tool/graph/storage_adapters/datapackage.py`:
+Create `science/src/science_tool/graph/storage_adapters/datapackage.py`:
 
 ```python
 """DatapackageAdapter — datasets promoted to live as <dir>/datapackage.yaml."""
@@ -1635,12 +1635,12 @@ git commit -m "feat(storage-adapters): add DatapackageAdapter (promoted-dataset 
 ### Task 9: `TaskAdapter` (task-DSL storage)
 
 **Files:**
-- Create: `science-tool/src/science_tool/graph/storage_adapters/task.py`
-- Test: `science-tool/tests/test_storage_adapters/test_task.py`
+- Create: `science/src/science_tool/graph/storage_adapters/task.py`
+- Test: `science/tests/test_storage_adapters/test_task.py`
 
 - [ ] **Step 1: Write failing test**
 
-Create `science-tool/tests/test_storage_adapters/test_task.py`:
+Create `science/tests/test_storage_adapters/test_task.py`:
 
 ```python
 """Tests for TaskAdapter — wraps the existing task DSL parser."""
@@ -1687,7 +1687,7 @@ def test_load_raw_produces_task_entity_shape(tmp_path: Path) -> None:
 
 - [ ] **Step 3: Implement**
 
-Create `science-tool/src/science_tool/graph/storage_adapters/task.py`:
+Create `science/src/science_tool/graph/storage_adapters/task.py`:
 
 ```python
 """TaskAdapter — wraps the existing task DSL parser and emits TaskEntity raw records."""
@@ -1772,16 +1772,16 @@ git commit -m "feat(storage-adapters): add TaskAdapter wrapping task DSL parser"
 ### Task 10: Cut over `load_project_sources` to registry + adapters + identity table
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/sources.py`
-- Modify: `science-tool/tests/test_load_project_sources_regression.py` (projection helper)
-- Modify: `science-tool/tests/fixtures/spec_y_kitchen_sink/snapshot.json` (regenerate)
-- Test: `science-tool/tests/test_load_project_sources_unified.py` (new)
+- Modify: `science/src/science_tool/graph/sources.py`
+- Modify: `science/tests/test_load_project_sources_regression.py` (projection helper)
+- Modify: `science/tests/fixtures/spec_y_kitchen_sink/snapshot.json` (regenerate)
+- Test: `science/tests/test_load_project_sources_unified.py` (new)
 
 This is the LOAD-BEARING change. The old flow (SourceEntity + EntityResolver + providers) is replaced with the new flow (Entity + EntityRegistry + StorageAdapters + global identity table).
 
 - [ ] **Step 1: Write the new end-to-end test**
 
-Create `science-tool/tests/test_load_project_sources_unified.py`:
+Create `science/tests/test_load_project_sources_unified.py`:
 
 ```python
 """End-to-end tests for the unified load flow (registry + adapters)."""
@@ -1883,7 +1883,7 @@ def test_all_entities_inherit_from_entity(tmp_path: Path) -> None:
 
 - [ ] **Step 3: Rewrite `load_project_sources`**
 
-In `science-tool/src/science_tool/graph/sources.py`:
+In `science/src/science_tool/graph/sources.py`:
 
 a) Replace the existing `load_project_sources` body with:
 
@@ -2007,7 +2007,7 @@ def _project_for_snapshot(entities: list) -> list[dict]:
 Regenerate `tests/fixtures/spec_y_kitchen_sink/snapshot.json`:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/unified-entity-model/science-tool
+cd /mnt/ssd/Dropbox/science/.worktrees/unified-entity-model/science
 uv run --frozen python -c "
 import json
 from pathlib import Path
@@ -2067,19 +2067,19 @@ Many tests still reference SourceEntity — migrated in Task 11."
 ### Task 11: Delete Spec Y artifacts + migrate downstream consumers
 
 **Files:**
-- Delete: `science-tool/src/science_tool/graph/entity_providers/` (whole directory)
-- Delete: `science-tool/src/science_tool/graph/source_types.py`
+- Delete: `science/src/science_tool/graph/entity_providers/` (whole directory)
+- Delete: `science/src/science_tool/graph/source_types.py`
 - Modify: many callers that reference `SourceEntity`
-- Delete: `science-tool/tests/test_entity_providers/` (whole directory — obsoleted by storage-adapter tests)
-- Delete: `science-tool/tests/test_provider_migration.py`, `test_load_project_sources_global_collision.py` (replaced by unified tests)
-- Delete: `science-tool/tests/test_source_types.py`
-- Modify: `science-tool/tests/test_load_project_sources_regression.py`, any test constructing SourceEntity directly
+- Delete: `science/tests/test_entity_providers/` (whole directory — obsoleted by storage-adapter tests)
+- Delete: `science/tests/test_provider_migration.py`, `test_load_project_sources_global_collision.py` (replaced by unified tests)
+- Delete: `science/tests/test_source_types.py`
+- Modify: `science/tests/test_load_project_sources_regression.py`, any test constructing SourceEntity directly
 
 - [ ] **Step 1: Find all SourceEntity references**
 
 ```bash
 cd /mnt/ssd/Dropbox/science/.worktrees/unified-entity-model
-grep -rn "SourceEntity\|entity_providers\|EntityProvider\|EntityResolver\|EntityRecord\|_normalize_record\|source_types" science-tool/src/ science-tool/tests/ | grep -v __pycache__ > /tmp/sources-entity-refs.txt
+grep -rn "SourceEntity\|entity_providers\|EntityProvider\|EntityResolver\|EntityRecord\|_normalize_record\|source_types" science/src/ science/tests/ | grep -v __pycache__ > /tmp/sources-entity-refs.txt
 wc -l /tmp/sources-entity-refs.txt
 head -30 /tmp/sources-entity-refs.txt
 ```
@@ -2090,7 +2090,7 @@ Expected: significant list (Task 4.1 of Spec Y reported 17+ files touched `Sourc
 
 For each non-test file referencing `SourceEntity` (grep output above), replace with `Entity` (import from `science_model.entities`). The Spec Y `SourceEntity.provider` field is gone; callers that read `.provider` must be updated to read `SourceRef.adapter_name` via identity-table lookup OR the field is removed from their code (if not load-bearing).
 
-Likely touched: `science-tool/src/science_tool/graph/health.py`, `science-tool/src/science_tool/graph/store.py`, `science-tool/src/science_tool/cli.py`, possibly others. For each:
+Likely touched: `science/src/science_tool/graph/health.py`, `science/src/science_tool/graph/store.py`, `science/src/science_tool/cli.py`, possibly others. For each:
 - Replace `SourceEntity` with `Entity` in type hints.
 - Remove references to `entity.provider` — the caller never actually needed provider attribution in v1, or it did and we thread it via a separate identity-table param.
 
@@ -2120,12 +2120,12 @@ def _entity(cid: str) -> ProjectEntity:
 - [ ] **Step 4: Delete obsolete files**
 
 ```bash
-rm -rf science-tool/src/science_tool/graph/entity_providers/
-rm science-tool/src/science_tool/graph/source_types.py
-rm -rf science-tool/tests/test_entity_providers/
-rm science-tool/tests/test_provider_migration.py
-rm science-tool/tests/test_load_project_sources_global_collision.py
-rm science-tool/tests/test_source_types.py
+rm -rf science/src/science_tool/graph/entity_providers/
+rm science/src/science_tool/graph/source_types.py
+rm -rf science/tests/test_entity_providers/
+rm science/tests/test_provider_migration.py
+rm science/tests/test_load_project_sources_global_collision.py
+rm science/tests/test_source_types.py
 ```
 
 - [ ] **Step 5: Verify**
@@ -2160,15 +2160,15 @@ entity field to SourceRef from the identity table."
 ### Task 12: Remove `model` / `parameter` from core; add extension path example
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/sources.py` (delete `_load_model_sources`, `_load_parameter_sources`)
-- Modify: `science-tool/src/science_tool/graph/entity_registry.py` (remove `"model"` / `"parameter"` from core kinds)
+- Modify: `science/src/science_tool/graph/sources.py` (delete `_load_model_sources`, `_load_parameter_sources`)
+- Modify: `science/src/science_tool/graph/entity_registry.py` (remove `"model"` / `"parameter"` from core kinds)
 - Modify: `science-model/src/science_model/source_contracts.py` (keep for now; add deprecation note)
-- Create: `science-tool/tests/test_extension_registration.py` (demonstrates extension path)
+- Create: `science/tests/test_extension_registration.py` (demonstrates extension path)
 - Delete or move tests that depend on core model/parameter loading
 
 - [ ] **Step 1: Write failing test for extension path**
 
-Create `science-tool/tests/test_extension_registration.py`:
+Create `science/tests/test_extension_registration.py`:
 
 ```python
 """Demonstrate and test the project-extension registration path for custom kinds."""
@@ -2227,9 +2227,9 @@ def test_extension_kind_load_path_round_trip() -> None:
 
 - [ ] **Step 3: Remove model/parameter from core**
 
-a) In `science-tool/src/science_tool/graph/entity_registry.py` `with_core_types()`, remove `"model"` and `"parameter"` from the generic kinds list.
+a) In `science/src/science_tool/graph/entity_registry.py` `with_core_types()`, remove `"model"` and `"parameter"` from the generic kinds list.
 
-b) In `science-tool/src/science_tool/graph/sources.py`, delete the `_load_model_sources` and `_load_parameter_sources` calls and the helper functions themselves. Remove related imports (`ModelSource`, `ParameterSource`).
+b) In `science/src/science_tool/graph/sources.py`, delete the `_load_model_sources` and `_load_parameter_sources` calls and the helper functions themselves. Remove related imports (`ModelSource`, `ParameterSource`).
 
 c) Any tests that depended on core model/parameter loading (`tests/test_graph_build_strict.py` or similar): migrate them to register `model`/`parameter` as extension kinds in a local test registry, OR mark them as "extension-path demonstrations" and route them through `register_extension_kind`. If a test was purely verifying the OLD core behavior and is no longer meaningful, delete it.
 
@@ -2269,7 +2269,7 @@ as an extension-layer helper but is no longer imported from graph/sources.py."
 - [ ] **Step 1: Ruff**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/unified-entity-model/science-tool
+cd /mnt/ssd/Dropbox/science/.worktrees/unified-entity-model/science
 uv run --frozen ruff check . --fix
 uv run --frozen ruff format .
 cd ../science-model
@@ -2288,7 +2288,7 @@ git commit -m "chore: ruff autofix + format after unified entity model migration
 - [ ] **Step 2: Pyright**
 
 ```bash
-cd science-tool && uv run --frozen pyright 2>&1 | tail -3
+cd science && uv run --frozen pyright 2>&1 | tail -3
 cd ../science-model && uv run --frozen pyright 2>&1 | tail -3
 ```
 
@@ -2297,7 +2297,7 @@ Compare to main's pre-migration count. New errors introduced by this plan must b
 - [ ] **Step 3: Full test sweep**
 
 ```bash
-cd science-tool && uv run --frozen pytest -q
+cd science && uv run --frozen pytest -q
 cd ../science-model && uv run --frozen pytest -q
 ```
 
@@ -2306,7 +2306,7 @@ Expected: all green.
 - [ ] **Step 4: Regression snapshot sanity check**
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_load_project_sources_regression.py -v
+cd science && uv run --frozen pytest tests/test_load_project_sources_regression.py -v
 ```
 
 Expected: PASS. The snapshot was regenerated in Task 10 and has been stable through Tasks 11 and 12.

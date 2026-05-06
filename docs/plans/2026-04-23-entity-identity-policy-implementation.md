@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Implement the entity identity and creation policy across `science-model`, `science-tool`, and curator-facing guidance so entity authoring, loading, health checks, and cross-project sync all enforce the same rules.
+**Goal:** Implement the entity identity and creation policy across `science-model`, `science`, and curator-facing guidance so entity authoring, loading, health checks, and cross-project sync all enforce the same rules.
 
-**Architecture:** Add a small typed identity layer to the core entity model, hydrate it from markdown and structured sources, then enforce it through `science-tool health` and sync-time registry checks. Keep internal `canonical_id` separate from external authority identifiers, avoid compatibility shims, and stage rollout so schema and loader work lands before health/sync enforcement and curator guidance.
+**Architecture:** Add a small typed identity layer to the core entity model, hydrate it from markdown and structured sources, then enforce it through `science health` and sync-time registry checks. Keep internal `canonical_id` separate from external authority identifiers, avoid compatibility shims, and stage rollout so schema and loader work lands before health/sync enforcement and curator guidance.
 
 **Tech Stack:** Python 3.13, Pydantic v2, Click, PyYAML, `uv`, `pytest`, `ruff`, `pyright`
 
@@ -284,9 +284,9 @@ git commit -m "feat: parse entity identity frontmatter"
 ### Task 3: Hydrate Identity Fields In Unified Project Loading
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/sources.py`
-- Test: `science-tool/tests/test_load_project_sources_unified.py`
-- Test: `science-tool/tests/test_load_project_sources_regression.py`
+- Modify: `science/src/science_tool/graph/sources.py`
+- Test: `science/tests/test_load_project_sources_unified.py`
+- Test: `science/tests/test_load_project_sources_regression.py`
 
 **Step 1: Write the failing tests**
 
@@ -310,7 +310,7 @@ Add a regression that structured source rows with `deprecated_ids` and `replaced
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 uv run --frozen pytest tests/test_load_project_sources_unified.py tests/test_load_project_sources_regression.py -q
 ```
 
@@ -338,7 +338,7 @@ Do not add alias derivation from `deprecated_ids`; keep deprecation explicit.
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 uv run --frozen pytest tests/test_load_project_sources_unified.py tests/test_load_project_sources_regression.py -q
 uv run --frozen ruff check src/science_tool/graph/sources.py tests/test_load_project_sources_unified.py tests/test_load_project_sources_regression.py
 ```
@@ -348,18 +348,18 @@ Expected: PASS.
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/sources.py \
-        science-tool/tests/test_load_project_sources_unified.py \
-        science-tool/tests/test_load_project_sources_regression.py
+git add science/src/science_tool/graph/sources.py \
+        science/tests/test_load_project_sources_unified.py \
+        science/tests/test_load_project_sources_regression.py
 git commit -m "feat: preserve entity identity metadata during source loading"
 ```
 
-### Task 4: Add Single-Project Identity Lints To `science-tool health`
+### Task 4: Add Single-Project Identity Lints To `science health`
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/health.py`
-- Modify: `science-tool/src/science_tool/cli.py`
-- Test: `science-tool/tests/test_health.py`
+- Modify: `science/src/science_tool/graph/health.py`
+- Modify: `science/src/science_tool/cli.py`
+- Test: `science/tests/test_health.py`
 
 **Step 1: Write the failing tests**
 
@@ -396,7 +396,7 @@ Cover JSON and table output so the new section is visible to both humans and age
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 uv run --frozen pytest tests/test_health.py -q
 ```
 
@@ -434,7 +434,7 @@ Expose a concise CLI section in `science_tool.cli.health_command()` and JSON out
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 uv run --frozen pytest tests/test_health.py -q
 uv run --frozen ruff check src/science_tool/graph/health.py src/science_tool/cli.py tests/test_health.py
 ```
@@ -444,20 +444,20 @@ Expected: PASS.
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/graph/health.py \
-        science-tool/src/science_tool/cli.py \
-        science-tool/tests/test_health.py
+git add science/src/science_tool/graph/health.py \
+        science/src/science_tool/cli.py \
+        science/tests/test_health.py
 git commit -m "feat: add entity identity health lints"
 ```
 
 ### Task 5: Add Cross-Project Identity Checks To Registry Sync
 
 **Files:**
-- Modify: `science-tool/src/science_tool/registry/index.py`
-- Modify: `science-tool/src/science_tool/registry/sync.py`
-- Test: `science-tool/tests/test_registry_index.py`
-- Test: `science-tool/tests/test_registry_sync.py`
-- Test: `science-tool/tests/test_sync_cli.py`
+- Modify: `science/src/science_tool/registry/index.py`
+- Modify: `science/src/science_tool/registry/sync.py`
+- Test: `science/tests/test_registry_index.py`
+- Test: `science/tests/test_registry_sync.py`
+- Test: `science/tests/test_sync_cli.py`
 
 **Step 1: Write the failing tests**
 
@@ -489,7 +489,7 @@ Add one test that a project-scoped collision remains namespaced and warned, rath
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 uv run --frozen pytest tests/test_registry_index.py tests/test_registry_sync.py tests/test_sync_cli.py -q
 ```
 
@@ -524,7 +524,7 @@ Thread these warnings through `SyncReport.drift_warnings` and the CLI.
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 uv run --frozen pytest tests/test_registry_index.py tests/test_registry_sync.py tests/test_sync_cli.py -q
 uv run --frozen ruff check src/science_tool/registry/index.py src/science_tool/registry/sync.py tests/test_registry_index.py tests/test_registry_sync.py tests/test_sync_cli.py
 ```
@@ -534,11 +534,11 @@ Expected: PASS.
 **Step 5: Commit**
 
 ```bash
-git add science-tool/src/science_tool/registry/index.py \
-        science-tool/src/science_tool/registry/sync.py \
-        science-tool/tests/test_registry_index.py \
-        science-tool/tests/test_registry_sync.py \
-        science-tool/tests/test_sync_cli.py
+git add science/src/science_tool/registry/index.py \
+        science/src/science_tool/registry/sync.py \
+        science/tests/test_registry_index.py \
+        science/tests/test_registry_sync.py \
+        science/tests/test_sync_cli.py
 git commit -m "feat: enforce entity identity rules during sync"
 ```
 
@@ -550,8 +550,8 @@ git commit -m "feat: enforce entity identity rules during sync"
 - Modify: `codex-skills/science-create-graph/SKILL.md`
 - Modify: `codex-skills/science-update-graph/SKILL.md`
 - Modify: `codex-skills/science-sync/SKILL.md`
-- Test: `science-tool/tests/test_command_docs.py`
-- Test: `science-tool/tests/test_codex_skills.py`
+- Test: `science/tests/test_command_docs.py`
+- Test: `science/tests/test_codex_skills.py`
 
 **Step 1: Write the failing tests**
 
@@ -587,7 +587,7 @@ The cookbook should include both positive and negative examples:
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 uv run --frozen pytest tests/test_command_docs.py tests/test_codex_skills.py -q
 ```
 
@@ -614,7 +614,7 @@ Required guidance changes:
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 uv run --frozen pytest tests/test_command_docs.py tests/test_codex_skills.py -q
 ```
 
@@ -628,8 +628,8 @@ git add docs/process/entity-creation-cookbook.md \
         codex-skills/science-create-graph/SKILL.md \
         codex-skills/science-update-graph/SKILL.md \
         codex-skills/science-sync/SKILL.md \
-        science-tool/tests/test_command_docs.py \
-        science-tool/tests/test_codex_skills.py
+        science/tests/test_command_docs.py \
+        science/tests/test_codex_skills.py
 git commit -m "docs: publish entity creation cookbook and skill guidance"
 ```
 
@@ -652,7 +652,7 @@ uv run --frozen ruff check .
 uv run --frozen pyright
 uv run --frozen pytest
 
-cd /mnt/ssd/Dropbox/science/science-tool
+cd /mnt/ssd/Dropbox/science/science
 uv run --frozen ruff check .
 uv run --frozen pyright
 uv run --frozen pytest
@@ -685,7 +685,7 @@ git commit -m "docs: record entity identity implementation verification"
 
 - `Entity` instances can carry typed external identity, scope, lifecycle, and taxon metadata.
 - Markdown and structured loaders preserve those fields consistently.
-- `science-tool health` reports identity-policy violations directly.
+- `science health` reports identity-policy violations directly.
 - Cross-project sync warns on shared-id and primary-external-id collisions.
 - Curators get a concrete cookbook and skill guidance aligned with the same policy.
 
@@ -709,4 +709,4 @@ git commit -m "docs: record entity identity implementation verification"
 - No scope reductions were taken. The only deferred work remains what the plan already marked out of scope: broad legacy backfill, global synonym unification, and attribute/observation-model redesign.
 - Final verification on the completed branch:
   - `science-model`: `uv run --frozen ruff check .`, `uv run --frozen pyright`, `uv run --frozen pytest` -> pass
-  - `science-tool`: `uv run --frozen ruff check .`, `uv run --frozen pyright`, `uv run --frozen pytest` -> pass
+  - `science`: `uv run --frozen ruff check .`, `uv run --frozen pyright`, `uv run --frozen pytest` -> pass

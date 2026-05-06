@@ -1,5 +1,5 @@
 ---
-description: Run the science-tool health check and triage findings interactively. Use when the user says "check project health", "find issues", "what's broken", or after running migrations.
+description: Run the science health check and triage findings interactively. Use when the user says "check project health", "find issues", "what's broken", or after running migrations.
 ---
 
 # Health Triage
@@ -13,7 +13,7 @@ Aggregate project health diagnostics and walk the user through cluster-level cle
 ### 1. Run the health command
 
 ```bash
-uv run science-tool health --project-root <root> --format=json
+uv run science health --project-root <root> --format=json
 ```
 
 Parse the JSON output. Fields:
@@ -85,19 +85,19 @@ For each cluster, propose ONE action covering the whole cluster, not per-ref dec
 > "8 refs look like operational markers (phase, cycle, milestone): topic:phase3b, topic:cycle1, ... Rewrite as meta: refs (preserved as metadata, excluded from KG)?"
 
 **Lingering tags cluster:**
-> "M files still have `tags:` lines (residual from old templates). Run `science-tool graph migrate-tags --apply` to clean them up?"
+> "M files still have `tags:` lines (residual from old templates). Run `science graph migrate-tags --apply` to clean them up?"
 
 ### 5. Apply chosen actions
 
 For each cluster the user approves, use the appropriate CLI to apply:
 - Rewriting refs: edit frontmatter or task markdown directly (find files via the `sources` field of each ref)
 - Creating topic stubs: write minimal entity files matching the existing template structure
-- Migrating tags: `science-tool graph migrate-tags --apply` (default meta:)
-- Migrating tags as topics: `science-tool graph migrate-tags --apply --as-topic`
+- Migrating tags: `science graph migrate-tags --apply` (default meta:)
+- Migrating tags as topics: `science graph migrate-tags --apply --as-topic`
 
 ### 6. Verify
 
-Re-run `science-tool health` after applying actions to confirm the issue counts dropped. Show the user the delta.
+Re-run `science health` after applying actions to confirm the issue counts dropped. Show the user the delta.
 
 ### 7. Commit
 

@@ -59,13 +59,14 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with <science-plugin-root>/science-tool science-tool <command>`
+   `uv run --with <science-plugin-root>/science science <command>`
 
 Run a structured discussion on the user input.
 If no argument is provided, sample a discussion focus from `doc/questions/`, `specs/hypotheses/`, or active tasks in `tasks/active.md`.
@@ -114,17 +115,17 @@ Use when the user asks for independent reasoning before synthesis.
 
 ## Writing Output
 
-Create the discussion with `science-tool discussion create`. The tool builds the canonical `discussion:<today>-<slug>` ID, places the file under `doc/discussions/`, writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`), and runs prospective validation.
+Create the discussion with `science discussion create`. The tool builds the canonical `discussion:<today>-<slug>` ID, places the file under `doc/discussions/`, writes canonical frontmatter (`id`, `type`, `title`, `status`, `related`, `source_refs`, `created`, `updated`), and runs prospective validation.
 
 ```bash
-uv run science-tool discussion create "<short title>" \
+uv run science discussion create "<short title>" \
   --focus <hypothesis:hNN-...|question:qNN-...|topic:...> \
   --source-ref <paper-or-package-ref>
 ```
 
 `--focus` is repeatable and maps to `related`. `--source-ref` is repeatable. The command prints the chosen ID (e.g. `discussion:2026-04-28-<slug>`) and the file path. After creation, open the file and fill in the body sections below; preserve the frontmatter the tool produced.
 
-The default `status` is `active`. Switch to `complete` once the discussion is wrapped up via `science-tool discussion edit <ref> --status complete` (or `science-tool entity edit`); use `superseded` if a later discussion replaces this one. Add `focus_type`, `focus_ref`, or `mode` fields by editing the frontmatter directly — these are project-specific and survive the audit.
+The default `status` is `active`. Switch to `complete` once the discussion is wrapped up via `science discussion edit <ref> --status complete` (or `science entity edit`); use `superseded` if a later discussion replaces this one. Add `focus_type`, `focus_ref`, or `mode` fields by editing the frontmatter directly — these are project-specific and survive the audit.
 
 Sections (in the body):
 
@@ -139,10 +140,10 @@ Use `.ai/templates/discussion.md` first, then `templates/discussion.md` as the w
 
 ## After Discussion
 
-1. **New questions surfaced:** create them with `science-tool question create "<text>" [--related <ref>] [--source-ref <ref>]`. To attach a question to an existing discussion or hypothesis, use `science-tool entity edit <question-ref> --related <other-ref>` (additive — preserves existing related entries).
-2. **Existing question updates:** if the discussion changes the framing of an existing question, edit its body in place; for metadata, use `science-tool question edit <ref>` / `science-tool entity edit <ref>`.
-3. Offer to create follow-up tasks via `science-tool tasks add` with appropriate priority and related entities.
-4. **Hypothesis wording changes:** for metadata (status, related), use `science-tool hypothesis edit <ref> --status ...`. For body changes, edit the file in place.
+1. **New questions surfaced:** create them with `science question create "<text>" [--related <ref>] [--source-ref <ref>]`. To attach a question to an existing discussion or hypothesis, use `science entity edit <question-ref> --related <other-ref>` (additive — preserves existing related entries).
+2. **Existing question updates:** if the discussion changes the framing of an existing question, edit its body in place; for metadata, use `science question edit <ref>` / `science entity edit <ref>`.
+3. Offer to create follow-up tasks via `science tasks add` with appropriate priority and related entities.
+4. **Hypothesis wording changes:** for metadata (status, related), use `science hypothesis edit <ref> --status ...`. For body changes, edit the file in place.
 5. **Task reframing check:** Review whether the discussion reframes the meaning of any existing tasks. If a task's purpose or scope has changed, update its description in `tasks/active.md` to reflect the new framing.
 6. Commit: `git add -A && git commit -m "doc: discuss <slug> and update priorities"`
 7. **Actionable recommendations:** If the discussion produced a concrete, low-cost design change or implementation recommendation (something testable in under an hour), it should be flagged with `[actionable now]` in the Prioritized Follow-Ups table. Offer to implement it immediately rather than creating a task for later. This prevents useful small changes from being buried in discussion documents.
@@ -155,7 +156,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:discuss" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

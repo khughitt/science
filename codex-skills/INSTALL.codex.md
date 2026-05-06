@@ -49,7 +49,7 @@ If the repo's `commands/` docs change:
 
 ```bash
 cd ~/.codex/science
-UV_CACHE_DIR=/tmp/uv-cache uv run --project science-tool python scripts/generate_codex_skills.py
+UV_CACHE_DIR=/tmp/uv-cache uv run --project science python scripts/generate_codex_skills.py
 ```
 
 ## Uninstall

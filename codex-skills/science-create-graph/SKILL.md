@@ -59,13 +59,14 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with <science-plugin-root>/science-tool science-tool <command>`
+   `uv run --with <science-plugin-root>/science science <command>`
 
 > **Prerequisite:** Read `docs/specs/2026-03-01-knowledge-graph-design.md` and `docs/proposition-and-evidence-model.md` before starting.
 
@@ -75,13 +76,13 @@ This command does **not** author triples directly. It organizes project knowledg
 
 ## Tool invocation
 
-All `science-tool` commands below use this pattern:
+All `science` commands below use this pattern:
 
 ```bash
-uv run science-tool <command>
+uv run science <command>
 ```
 
-For brevity, the examples below write just `science-tool <command>`; always expand them to `uv run science-tool <command>` when executing.
+For brevity, the examples below write just `science <command>`; always expand them to `uv run science <command>` when executing.
 
 ## Rules
 
@@ -89,12 +90,12 @@ For brevity, the examples below write just `science-tool <command>`; always expa
 - **MUST** define `knowledge_profiles` in `science.yaml` before building the graph.
 - **MUST** treat markdown docs, task files, and `knowledge/sources/` files as the canonical graph inputs.
 - **MUST** add project-local entities and aliases under `knowledge/sources/<local-profile>/`, not as ad hoc triples.
-- **MUST** run `science-tool graph audit` before `science-tool graph build`.
+- **MUST** run `science graph audit` before `science graph build`.
 - **MUST** keep tasks as graph entities; do not treat them as out-of-band metadata.
 
 ## Cross-Project Registry Check
 
-Before adding new entities, check the cross-project registry for existing definitions. Run `science-tool sync status` to see if the registry is populated. If it is, new entities added during graph creation will be checked against the registry during `graph build` to detect potential duplicates across projects. If a match is found, prefer reusing the existing canonical ID and aliases rather than creating a new entity.
+Before adding new entities, check the cross-project registry for existing definitions. Run `science sync status` to see if the registry is populated. If it is, new entities added during graph creation will be checked against the registry during `graph build` to detect potential duplicates across projects. If a match is found, prefer reusing the existing canonical ID and aliases rather than creating a new entity.
 
 For every new entity, read `docs/process/entity-creation-cookbook.md` and
 check shared kinds before creating project-local entries. If no shared identity fits,
@@ -159,7 +160,7 @@ entities:
 Run:
 
 ```bash
-science-tool graph audit --project-root . --format json
+science graph audit --project-root . --format json
 ```
 
 Fix every unresolved reference in the canonical sources before building:
@@ -175,12 +176,12 @@ Fix every unresolved reference in the canonical sources before building:
 Once audit is clean:
 
 ```bash
-science-tool graph build --project-root .
-science-tool graph validate --format json
-science-tool graph stats --format json
+science graph build --project-root .
+science graph validate --format json
+science graph stats --format json
 ```
 
-`science-tool graph build` generates `knowledge/graph.trig` deterministically from the upstream sources. That file is a view over the canonical inputs, not the place to curate knowledge manually.
+`science graph build` generates `knowledge/graph.trig` deterministically from the upstream sources. That file is a view over the canonical inputs, not the place to curate knowledge manually.
 
 ## Output
 

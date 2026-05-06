@@ -2,12 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship a minimum-viable `science-tool verdict` sub-command
+**Goal:** Ship a minimum-viable `science verdict` sub-command
 family that parses interpretation docs' `verdict:` frontmatter
 blocks, validates rule-derived composites against body tokens,
 resolves claim IDs through the project-local registry, and
 aggregates verdicts across an entire project — enough to run
-`science-tool verdict rollup --scope claim` (also spelled
+`science verdict rollup --scope claim` (also spelled
 `--by-claim`) on the mm30 corpus as the acceptance harness.
 
 **Architecture:** New `src/science_tool/verdict/` sub-package with a
@@ -60,23 +60,23 @@ rich ≥ 13 for CLI output, pytest ≥ 9.
 following all pass on the mm30 corpus (9 existing atomic-
 decomposition docs + 37-claim `specs/claim-registry.yaml`):
 
-- `science-tool verdict parse <file>` on each of mm30's 9
+- `science verdict parse <file>` on each of mm30's 9
   atomic-decomposition docs returns the JSON shape from the spec's
   "Implementation contract for the parser" section, and emits
   `rule_disagrees_with_body: true` on exactly one doc: t163
   (`2026-04-12-t163-prolif-adjusted-tf-edges.md`).
-- `science-tool verdict parse <file> --registry <mm30-registry>`
+- `science verdict parse <file> --registry <mm30-registry>`
   reports zero unresolved claim IDs for every mm30 atomic-
   decomposition doc (the registry covers the 37 canonical IDs + all
   recorded synonyms).
-- `science-tool verdict rollup --scope all` on mm30 produces a
+- `science verdict rollup --scope all` on mm30 produces a
   token-distribution tally that sums to the count of verdict-bearing
   interpretations walked.
-- `science-tool verdict rollup --scope claim` (equivalently
+- `science verdict rollup --scope claim` (equivalently
   `--by-claim`) on mm30 (with the registry auto-discovered at
   `mm30/specs/claim-registry.yaml`) aggregates evidence from
   multiple citing interpretations under each canonical claim ID.
-- `science-tool verdict rollup --scope claim --strict` on mm30
+- `science verdict rollup --scope claim --strict` on mm30
   exits with status 0 (every claim ID resolves). An intentionally
   broken fixture in the test suite verifies that `--strict` exits
   non-zero on unresolved IDs.
@@ -86,7 +86,7 @@ decomposition docs + 37-claim `specs/claim-registry.yaml`):
 
 ## File Structure
 
-### New files (all under `~/d/science/science-tool/`)
+### New files (all under `~/d/science/science/`)
 
 | Path | Responsibility |
 |------|---------------|
@@ -179,7 +179,7 @@ def test_parse_body_verdict_takes_first_match() -> None:
 
 - [ ] **Step 1.2: Run test to verify it fails**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_tokens.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_tokens.py -v`
 Expected: collection error / `ImportError: No module named 'science_tool.verdict'`.
 
 - [ ] **Step 1.3: Create the package + minimum implementation**
@@ -257,13 +257,13 @@ def parse_body_verdict(markdown: str) -> tuple[Token, str] | None:
 
 - [ ] **Step 1.4: Run test to verify it passes**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_tokens.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_tokens.py -v`
 Expected: 5 passed.
 
 - [ ] **Step 1.5: Commit**
 
 ```bash
-cd ~/d/science/science-tool
+cd ~/d/science/science
 git add src/science_tool/verdict/__init__.py src/science_tool/verdict/tokens.py tests/test_verdict_tokens.py
 git commit -m "feat(verdict): scaffold verdict sub-package with Token enum + body parser"
 ```
@@ -361,7 +361,7 @@ def test_parse_result_surfaces_closure_terminal_and_reframing_fields() -> None:
 
 - [ ] **Step 2.2: Run test to verify it fails**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_models.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_models.py -v`
 Expected: `ImportError: No module named 'science_tool.verdict.models'`.
 
 - [ ] **Step 2.3: Write the implementation**
@@ -448,7 +448,7 @@ class ParseResult:
 
     `closure_terminal`, `reframing_target`, `reframing_reason` are
     surfaced at the top level (not nested inside the original
-    VerdictBlock) so `science-tool verdict parse` output includes
+    VerdictBlock) so `science verdict parse` output includes
     them directly, per spec v1.1 acceptance criteria.
     """
 
@@ -468,13 +468,13 @@ class ParseResult:
 
 - [ ] **Step 2.4: Run tests to verify they pass**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_models.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_models.py -v`
 Expected: 3 passed.
 
 - [ ] **Step 2.5: Commit**
 
 ```bash
-cd ~/d/science/science-tool
+cd ~/d/science/science
 git add src/science_tool/verdict/models.py tests/test_verdict_models.py
 git commit -m "feat(verdict): dataclass models for VerdictBlock, Claim, Context, ParseResult"
 ```
@@ -589,7 +589,7 @@ def test_unknown_rule_raises() -> None:
 
 - [ ] **Step 3.2: Run test to verify it fails**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_rules.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_rules.py -v`
 Expected: `ImportError: No module named 'science_tool.verdict.rules'`.
 
 - [ ] **Step 3.3: Write the implementation (and/or/majority only — weighted-majority/bimodal/non-adjudicating/reframed come in Task 4)**
@@ -662,13 +662,13 @@ def rule_disagrees_with_body(rule_composite: Token, body_composite: Token) -> bo
 
 - [ ] **Step 3.4: Run tests to verify they pass**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_rules.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_rules.py -v`
 Expected: 14 passed.
 
 - [ ] **Step 3.5: Commit**
 
 ```bash
-cd ~/d/science/science-tool
+cd ~/d/science/science
 git add src/science_tool/verdict/rules.py tests/test_verdict_rules.py
 git commit -m "feat(verdict): and/or/majority aggregation rules + disagreement detector"
 ```
@@ -754,7 +754,7 @@ def test_reframed_always_yields_mixed() -> None:
 
 - [ ] **Step 4.2: Run tests to verify the new cases fail**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_rules.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_rules.py -v`
 Expected: 8 new failures with `ValueError: Unknown aggregation rule`.
 
 - [ ] **Step 4.3: Extend the rules module**
@@ -807,13 +807,13 @@ def _rule_weighted_majority(claims: list[Claim]) -> Token:
 
 - [ ] **Step 4.4: Run all rule tests**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_rules.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_rules.py -v`
 Expected: 22 passed (14 from Task 3 + 8 new from Task 4).
 
 - [ ] **Step 4.5: Commit**
 
 ```bash
-cd ~/d/science/science-tool
+cd ~/d/science/science
 git add src/science_tool/verdict/rules.py tests/test_verdict_rules.py
 git commit -m "feat(verdict): add weighted-majority, bimodal, non-adjudicating, reframed rules"
 ```
@@ -1138,7 +1138,7 @@ verdict:
 - [ ] **Step 5.10: Commit**
 
 ```bash
-cd ~/d/science/science-tool
+cd ~/d/science/science
 git add tests/fixtures/verdict/
 git commit -m "test(verdict): add 6 happy-path fixtures + 2 extras + minimal claim registry"
 ```
@@ -1308,7 +1308,7 @@ def test_parse_without_registry_leaves_unresolved_empty() -> None:
 
 - [ ] **Step 6.2: Run tests to verify they fail**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_parser.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_parser.py -v`
 Expected: `ImportError: cannot import name 'parse_file' from 'science_tool.verdict.parser'` (module does not yet exist).
 
 - [ ] **Step 6.3: Write the parser implementation**
@@ -1467,13 +1467,13 @@ def _hydrate_claim(data: dict[str, Any], path: Path | str) -> Claim:
 
 - [ ] **Step 6.4: Run tests to verify they pass**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_parser.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_parser.py -v`
 Expected: 14 passed.
 
 - [ ] **Step 6.5: Commit**
 
 ```bash
-cd ~/d/science/science-tool
+cd ~/d/science/science
 git add src/science_tool/verdict/parser.py tests/test_verdict_parser.py
 git commit -m "feat(verdict): parse_file — hydration + disagreement + registry resolution + narrow error subclass"
 ```
@@ -1535,7 +1535,7 @@ def test_has_registry_false_when_missing(tmp_path: Path) -> None:
 
 - [ ] **Step 7.2: Run tests to verify they fail**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_registry.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_registry.py -v`
 Expected: `ImportError: No module named 'science_tool.verdict.registry'`.
 
 - [ ] **Step 7.3: Write the registry implementation**
@@ -1632,13 +1632,13 @@ def has_registry(
 
 - [ ] **Step 7.4: Run tests to verify they pass**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_registry.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_registry.py -v`
 Expected: 6 passed.
 
 - [ ] **Step 7.5: Commit**
 
 ```bash
-cd ~/d/science/science-tool
+cd ~/d/science/science
 git add src/science_tool/verdict/registry.py tests/test_verdict_registry.py
 git commit -m "feat(verdict): claim-registry loader + synonym resolution"
 ```
@@ -1741,7 +1741,7 @@ def test_tally_polarities_counts_composites() -> None:
 
 - [ ] **Step 8.2: Run tests to verify they fail**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_rollup.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_rollup.py -v`
 Expected: ImportError.
 
 - [ ] **Step 8.3: Write the rollup implementation**
@@ -1866,13 +1866,13 @@ def tally_polarities(results: Iterable[ParseResult]) -> dict[Token, int]:
 
 - [ ] **Step 8.4: Run tests to verify they pass**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_rollup.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_rollup.py -v`
 Expected: 8 passed.
 
 - [ ] **Step 8.5: Commit**
 
 ```bash
-cd ~/d/science/science-tool
+cd ~/d/science/science
 git add src/science_tool/verdict/rollup.py tests/test_verdict_rollup.py
 git commit -m "feat(verdict): rollup engine — walk, group-by all/claim, polarity tally"
 ```
@@ -2099,7 +2099,7 @@ def test_verdict_rollup_without_strict_emits_advisory_warning(tmp_path: Path) ->
 
 - [ ] **Step 9.2: Run tests to verify they fail**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_cli.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_cli.py -v`
 Expected: ImportError on `science_tool.verdict.cli`.
 
 - [ ] **Step 9.3: Write the CLI implementation**
@@ -2251,7 +2251,7 @@ def rollup_cmd(
                 raise click.ClickException(
                     "scope=claim requires a claim registry. Provide --registry, "
                     "place a registry at <root>/specs/claim-registry.yaml, or run "
-                    "`science-tool verdict registry-init` to bootstrap one."
+                    "`science verdict registry-init` to bootstrap one."
                 )
         else:
             registry_obj = load_registry(registry)
@@ -2322,13 +2322,13 @@ def _serialize_parse_result(result: object) -> dict[str, Any]:
 
 - [ ] **Step 9.4: Run tests to verify they pass**
 
-Run: `cd ~/d/science/science-tool && uv run pytest tests/test_verdict_cli.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_verdict_cli.py -v`
 Expected: 10 passed.
 
 - [ ] **Step 9.5: Commit**
 
 ```bash
-cd ~/d/science/science-tool
+cd ~/d/science/science
 git add src/science_tool/verdict/cli.py tests/test_verdict_cli.py
 git commit -m "feat(verdict): CLI — parse (with registry), rollup (scope+by-claim+strict)"
 ```
@@ -2361,14 +2361,14 @@ main.add_command(verdict_group)
 Run:
 
 ```bash
-cd ~/d/science/science-tool
-uv run science-tool verdict --help
+cd ~/d/science/science
+uv run science verdict --help
 ```
 
 Expected stdout contains:
 
 ```
-Usage: science-tool verdict [OPTIONS] COMMAND [ARGS]...
+Usage: science verdict [OPTIONS] COMMAND [ARGS]...
 
   Parse and roll up verdict-token + atomic-claim frontmatter.
 
@@ -2379,15 +2379,15 @@ Commands:
 
 - [ ] **Step 10.3: Run the full test suite to confirm no regressions**
 
-Run: `cd ~/d/science/science-tool && uv run pytest -q`
+Run: `cd ~/d/science/science && uv run pytest -q`
 Expected: all tests pass (~30+ new verdict tests + existing tests unchanged).
 
 - [ ] **Step 10.4: Commit**
 
 ```bash
-cd ~/d/science/science-tool
+cd ~/d/science/science
 git add src/science_tool/cli.py
-git commit -m "feat(cli): register verdict subgroup in top-level science-tool CLI"
+git commit -m "feat(cli): register verdict subgroup in top-level science CLI"
 ```
 
 ---
@@ -2399,10 +2399,10 @@ git commit -m "feat(cli): register verdict subgroup in top-level science-tool CL
 
 - [ ] **Step 11.1: Parse each of the 9 mm30 atomic-decomposition docs and confirm behavior**
 
-Run (from `~/d/science/science-tool`):
+Run (from `~/d/science/science`):
 
 ```bash
-cd ~/d/science/science-tool
+cd ~/d/science/science
 for f in \
   /mnt/ssd/Dropbox/r/mm30/doc/interpretations/2026-04-19-t221-literature-gene-lookups.md \
   /mnt/ssd/Dropbox/r/mm30/doc/interpretations/2026-04-14-t197-gse155135-ezh2i-replication.md \
@@ -2414,7 +2414,7 @@ for f in \
   /mnt/ssd/Dropbox/r/mm30/doc/interpretations/2026-04-21-t240-misund-phf19-trajectory.md \
   /mnt/ssd/Dropbox/r/mm30/doc/interpretations/2026-04-21-t258-phf19-pathway-specificity.md; do
     echo "=== $f ==="
-    uv run science-tool verdict parse "$f" | python -c "import sys, json; d = json.load(sys.stdin); print(f\"composite={d['composite_token']} derived={d['rule_derived_composite']} disagrees={d['rule_disagrees_with_body']}\")"
+    uv run science verdict parse "$f" | python -c "import sys, json; d = json.load(sys.stdin); print(f\"composite={d['composite_token']} derived={d['rule_derived_composite']} disagrees={d['rule_disagrees_with_body']}\")"
 done
 ```
 
@@ -2448,8 +2448,8 @@ This is the acceptance harness: exactly one disagreement, on t163.
 Run:
 
 ```bash
-cd ~/d/science/science-tool
-uv run science-tool verdict rollup \
+cd ~/d/science/science
+uv run science verdict rollup \
   --scope claim \
   --root /mnt/ssd/Dropbox/r/mm30/doc/interpretations \
   --registry /mnt/ssd/Dropbox/r/mm30/specs/claim-registry.yaml \
@@ -2471,14 +2471,14 @@ t240#phf19-log2fc-correlates-with-pi-change
 Run:
 
 ```bash
-cd ~/d/science/science-tool
-uv run science-tool verdict rollup \
+cd ~/d/science/science
+uv run science verdict rollup \
   --by-claim \
   --root /mnt/ssd/Dropbox/r/mm30/doc/interpretations \
   --registry /mnt/ssd/Dropbox/r/mm30/specs/claim-registry.yaml \
   --output json > /tmp/rollup_by_claim.json
 
-uv run science-tool verdict rollup \
+uv run science verdict rollup \
   --scope claim \
   --root /mnt/ssd/Dropbox/r/mm30/doc/interpretations \
   --registry /mnt/ssd/Dropbox/r/mm30/specs/claim-registry.yaml \
@@ -2494,8 +2494,8 @@ Expected: `diff` produces no output (the two JSON payloads are identical).
 Run:
 
 ```bash
-cd ~/d/science/science-tool
-uv run science-tool verdict rollup \
+cd ~/d/science/science
+uv run science verdict rollup \
   --scope claim \
   --strict \
   --root /mnt/ssd/Dropbox/r/mm30/doc/interpretations \
@@ -2513,8 +2513,8 @@ docs resolves via the 37-claim registry, directly or through a
 Run:
 
 ```bash
-cd ~/d/science/science-tool
-uv run science-tool verdict rollup \
+cd ~/d/science/science
+uv run science verdict rollup \
   --scope all \
   --root /mnt/ssd/Dropbox/r/mm30/doc/interpretations \
   --output table
@@ -2529,7 +2529,7 @@ Create a short receipt file `tests/dogfood_mm30_receipt.md` documenting what was
 ```markdown
 # mm30 dogfood receipt — 2026-04-21
 
-`science-tool verdict parse` + `verdict rollup` pass the
+`science verdict parse` + `verdict rollup` pass the
 acceptance harness on the mm30 corpus:
 
 - 9/9 atomic-decomposition docs parse cleanly (Step 11.1).
@@ -2548,7 +2548,7 @@ See commit for reproduction commands.
 Commit:
 
 ```bash
-cd ~/d/science/science-tool
+cd ~/d/science/science
 git add tests/dogfood_mm30_receipt.md
 git commit -m "test(verdict): mm30 dogfood pass — 9/9 parse, t163 lone disagreement, strict clean"
 ```
@@ -2571,11 +2571,11 @@ before proceeding.
 Run:
 
 ```bash
-test -f ~/d/science/science-tool/tests/dogfood_mm30_receipt.md && \
+test -f ~/d/science/science/tests/dogfood_mm30_receipt.md && \
   grep -q "9/9 atomic-decomposition docs parse cleanly" \
-    ~/d/science/science-tool/tests/dogfood_mm30_receipt.md && \
+    ~/d/science/science/tests/dogfood_mm30_receipt.md && \
   grep -q "rule_disagrees_with_body.*t163" \
-    ~/d/science/science-tool/tests/dogfood_mm30_receipt.md && \
+    ~/d/science/science/tests/dogfood_mm30_receipt.md && \
   echo "OK: Task 11 receipt present; proceeding with Task 12"
 ```
 
@@ -2588,7 +2588,7 @@ and finish Task 11 first.
 Open `docs/specs/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md`. Find the "Revision history" section near the top and add a new entry after the v1.1 entry:
 
 ```markdown
-- **v1.2 (2026-04-21):** MVP implementation lands in `science-tool`
+- **v1.2 (2026-04-21):** MVP implementation lands in `science`
   (plan: `docs/plans/2026-04-21-verdict-parse-rollup-mvp.md`).
   Four touch-ups from dogfooding + implementation experience:
   - Reference the **mm30 `specs/claim-registry.yaml`** (37 canonical
@@ -2647,14 +2647,14 @@ to:
 Also under v1.0 original acceptance criteria, flip the `verdict parse / verdict rollup` boxes to checked:
 
 ```markdown
-- [x] `science-tool verdict parse` validates a sample interpretation end-to-end. *(done 2026-04-21 via MVP plan)*
-- [x] `science-tool verdict rollup` produces a per-hypothesis verdict distribution table on mm30. *(done 2026-04-21 via MVP plan — per-claim rollup scope)*
+- [x] `science verdict parse` validates a sample interpretation end-to-end. *(done 2026-04-21 via MVP plan)*
+- [x] `science verdict rollup` produces a per-hypothesis verdict distribution table on mm30. *(done 2026-04-21 via MVP plan — per-claim rollup scope)*
 ```
 
 Under v1.1 additions, flip the following box to checked:
 
 ```markdown
-- [x] `science-tool verdict parse` correctly emits `rule_disagrees_with_body: true` on the t163 reference doc (the one validation case from the dogfood). *(done 2026-04-21)*
+- [x] `science verdict parse` correctly emits `rule_disagrees_with_body: true` on the t163 reference doc (the one validation case from the dogfood). *(done 2026-04-21)*
 ```
 
 - [ ] **Step 12.3: Add the mm30-registry reference paragraph**
@@ -2862,7 +2862,7 @@ like going forward.
 API-key auth layer) or subagent dispatch via a Claude-Code-style
 runner? (b) If LLM API: Anthropic SDK calls with prompt caching for
 the rubric; ~6-9 cents per doc at claude-haiku-4-5 pricing. (c)
-Per-project `~/.science-tool/backfill/config.yaml` with rubric +
+Per-project `~/.science/backfill/config.yaml` with rubric +
 model choice. (d) Based on the t246 finding (confidence column is
 advisory-only), consider removing the `confidence` column from the
 output TSV or renaming it to `subagent_self_report_confidence` to

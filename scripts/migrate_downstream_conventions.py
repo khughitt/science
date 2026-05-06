@@ -122,7 +122,7 @@ Rules (selected with `--rule`):
   out of scope. Unmapped drift values are left in place and surfaced as
   errors so new drift shapes are not silently masked. Per the recurring
   drift class observed across natural-systems (t324 ``completed``, t328
-  ``completed``, t338 ``in-progress``); ``science-tool tasks list`` warns
+  ``completed``, t338 ``in-progress``); ``science tasks list`` warns
   on these but does not auto-correct.
 
 - ``specs-frontmatter-backfill``: Add minimal canonical frontmatter to

@@ -50,9 +50,9 @@ A knowledge graph layer for the science agent that serves as a **shared knowledg
 | Artifact | Type | Purpose |
 |---|---|---|
 | `science` plugin | Markdown/bash Claude Code plugin | Commands, skills, templates — tells the agent *what* to do |
-| `science-tool` package | Python library (uv-managed) | Computational layer — graph storage, query, causal export, distillation, visualization |
+| `science` package | Python library (uv-managed) | Computational layer — graph storage, query, causal export, distillation, visualization |
 
-The plugin invokes `science-tool` via CLI commands (`uv run science-tool ...`) or the agent imports it in generated code.
+The plugin invokes `science` via CLI commands (`uv run science ...`) or the agent imports it in generated code.
 
 ### 2.2 Named graph layers
 
@@ -90,7 +90,7 @@ All project knowledge lives in a single TriG file (`knowledge/graph.trig`) parti
                  └──────┬───────┘
                         │
               ┌─────────▼──────────┐
-              │   science-tool API   │
+              │   science API   │
               │  (Python library)  │
               └────┬─────────┬─────┘
                    │         │
@@ -392,7 +392,7 @@ WHERE {
 ### 4.3 Pipeline structure
 
 ```
-science-tool/
+science/
 ├── src/science_tool/distill/
 │   ├── __init__.py
 │   ├── openalex.py      # Fetch hierarchy via API → Turtle
@@ -407,9 +407,9 @@ science-tool/
 CLI:
 
 ```bash
-uv run science-tool distill openalex --level subfields    # compact
-uv run science-tool distill openalex --level topics        # full
-uv run science-tool distill primekg --budget 170
+uv run science distill openalex --level subfields    # compact
+uv run science distill openalex --level topics        # full
+uv run science distill primekg --budget 170
 ```
 
 ### 4.4 Manifest
@@ -581,14 +581,14 @@ Before DAG export is treated as "model-ready", run these checks:
 - **Confounder handling:** each `scic:confounds` edge is expanded into an explicit latent variable in generated code.
 - **Provenance completeness:** every causal edge has a linked source claim or is marked as hypothesis-only.
 
-If any check fails, `science-tool dag export` should fail early and emit actionable errors.
+If any check fails, `science dag export` should fail early and emit actionable errors.
 
 ## 6. Package Specification
 
-### 6.1 `science-tool` Python package
+### 6.1 `science` Python package
 
 ```
-science-tool/
+science/
 ├── pyproject.toml
 ├── src/
 │   └── science_tool/
@@ -639,7 +639,7 @@ science-tool/
 
 ```toml
 [project]
-name = "science-tool"
+name = "science"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -663,7 +663,7 @@ ml = [
 ]
 
 [project.scripts]
-science-tool = "science_tool.cli:main"
+science = "science_tool.cli:main"
 ```
 
 ### 6.3 CLI commands
@@ -672,67 +672,67 @@ science-tool = "science_tool.cli:main"
 # --- Phase 3: Graph Foundation ---
 
 # Graph management
-science-tool graph init                                    # Initialize knowledge/graph.trig
-science-tool graph stats                                   # Counts per named graph, entity types
+science graph init                                    # Initialize knowledge/graph.trig
+science graph stats                                   # Counts per named graph, entity types
 
 # Entity authoring
-science-tool graph add concept "BRCA1" --type biolink:Gene --ontology-id NCBIGene:672
-science-tool graph add concept "DNABERT-2" --note "12 layers" --property hasArchitecture "BERT" --status selected-primary --source paper:doi_10_1234
-science-tool graph add paper --doi "10.1038/s41586-023-06957-x"
-science-tool graph add claim "X causes Y" --source paper:doi_10_1234 --confidence 0.8
-science-tool graph add hypothesis H3 --text "..." --source paper:ref --status active
-science-tool graph add question Q01 --text "..." --source paper:ref --maturity open --related-hypothesis hypothesis/h3
-science-tool graph add edge <subject> <predicate> <object> --graph <layer>
+science graph add concept "BRCA1" --type biolink:Gene --ontology-id NCBIGene:672
+science graph add concept "DNABERT-2" --note "12 layers" --property hasArchitecture "BERT" --status selected-primary --source paper:doi_10_1234
+science graph add paper --doi "10.1038/s41586-023-06957-x"
+science graph add claim "X causes Y" --source paper:doi_10_1234 --confidence 0.8
+science graph add hypothesis H3 --text "..." --source paper:ref --status active
+science graph add question Q01 --text "..." --source paper:ref --maturity open --related-hypothesis hypothesis/h3
+science graph add edge <subject> <predicate> <object> --graph <layer>
 
 # Use-case-driven queries (see agent query presets below)
-science-tool graph neighborhood "BRCA1" --hops 2           # Entities and edges near a concept
-science-tool graph claims --about "BRCA1"                  # Claims mentioning an entity
-science-tool graph evidence H3                             # Evidence for/against a hypothesis
-science-tool graph coverage                                # Variables with/without dataset links
-science-tool graph gaps --center "BRCA1" --hops 2          # Low-coverage areas in neighborhood
-science-tool graph uncertainty --top 10                    # Highest-uncertainty claims/entities
+science graph neighborhood "BRCA1" --hops 2           # Entities and edges near a concept
+science graph claims --about "BRCA1"                  # Claims mentioning an entity
+science graph evidence H3                             # Evidence for/against a hypothesis
+science graph coverage                                # Variables with/without dataset links
+science graph gaps --center "BRCA1" --hops 2          # Low-coverage areas in neighborhood
+science graph uncertainty --top 10                    # Highest-uncertainty claims/entities
 
 # Predicate reference
-science-tool graph predicates                              # List all supported predicates with descriptions
+science graph predicates                              # List all supported predicates with descriptions
 
 # Change detection and validation
-science-tool graph diff --mode hybrid                      # Hybrid mtime + content-hash staleness checks
-science-tool graph stamp-revision                          # Update revision metadata
-science-tool graph validate                                # Structural checks on graph.trig
+science graph diff --mode hybrid                      # Hybrid mtime + content-hash staleness checks
+science graph stamp-revision                          # Update revision metadata
+science graph validate                                # Structural checks on graph.trig
 
 # Prose scanning
-science-tool graph scan-prose doc/                         # Scan markdown for ontology annotations
+science graph scan-prose doc/                         # Scan markdown for ontology annotations
 
 # Visualization
-science-tool graph viz --center "BRCA1" --hops 2           # Render subgraph neighborhood
-science-tool graph viz --layer knowledge --limit 200       # Render named graph subset
+science graph viz --center "BRCA1" --hops 2           # Render subgraph neighborhood
+science graph viz --layer knowledge --limit 200       # Render named graph subset
 
 # DOI lookup
-science-tool doi lookup 10.1038/s41586-023-06957-x         # Fetch metadata for validation
+science doi lookup 10.1038/s41586-023-06957-x         # Fetch metadata for validation
 
 # Ontology caching (groundwork for future entity matching)
-science-tool ontology cache biolink                        # Download and cache vocabulary
-science-tool ontology list                                 # List cached vocabularies
+science ontology cache biolink                        # Download and cache vocabulary
+science ontology list                                 # List cached vocabularies
 
 # Distillation
-science-tool distill openalex --level subfields
-science-tool distill openalex --level topics
-science-tool distill primekg --budget 170
+science distill openalex --level subfields
+science distill openalex --level topics
+science distill primekg --budget 170
 
 # Snapshot import
-science-tool graph import openalex-science-map             # Load snapshot into :graph/knowledge
-science-tool graph import primekg-core
+science graph import openalex-science-map             # Load snapshot into :graph/knowledge
+science graph import primekg-core
 
 # --- Phase 4: Causal DAG ---
 
-science-tool dag add-variable "X" --observed --distribution Normal
-science-tool dag add-edge "X" "Y" --type causes --form linear
-science-tool dag add-edge "X" "Y" --type confounds
-science-tool dag show                                      # Render DAG inline (kitty) or save SVG
-science-tool dag validate                                  # Check acyclicity, identification
-science-tool dag export --format pymc --output code/models/model.py
-science-tool dag export --format pyro --output code/models/model.py
-science-tool dag export --format pgmpy
+science dag add-variable "X" --observed --distribution Normal
+science dag add-edge "X" "Y" --type causes --form linear
+science dag add-edge "X" "Y" --type confounds
+science dag show                                      # Render DAG inline (kitty) or save SVG
+science dag validate                                  # Check acyclicity, identification
+science dag export --format pymc --output code/models/model.py
+science dag export --format pyro --output code/models/model.py
+science dag export --format pgmpy
 ```
 
 **Implementation status snapshot (2026-03-05)**
@@ -826,10 +826,10 @@ Also missing from the design spec (§6.1):
 ### 6.5 Phase 3 verification gate (must pass before "done")
 
 ```bash
-uv run --frozen pytest science-tool/tests -q
-uv run --frozen ruff check science-tool
-uv run --frozen pyright science-tool
-uv run science-tool graph validate
+uv run --frozen pytest science/tests -q
+uv run --frozen ruff check science
+uv run --frozen pyright science
+uv run science graph validate
 ./validate.sh
 ```
 
@@ -936,7 +936,7 @@ The `skills/models/knowledge-graph.md` skill guides the agent on which entity ty
 | No literature search in CLI | Agent-driven via LLM knowledge + web search | API-based lit search adds complexity with limited marginal value; agents already handle this well |
 | Use-case-driven query presets | Named CLI commands, not raw SPARQL | Agent is the primary CLI consumer; presets map directly to research questions |
 | Prose annotations as graph bridge | Frontmatter `ontology_terms:` + inline CURIEs | Anchors linking narrative text to graph entities; enables future automated entity matching |
-| Graph revision tracking | Revision stamp (timestamp + hash) in `knowledge/graph.trig` | `science-tool graph diff` runs hybrid checks (mtime + content hash) against graph revision metadata |
+| Graph revision tracking | Revision stamp (timestamp + hash) in `knowledge/graph.trig` | `science graph diff` runs hybrid checks (mtime + content hash) against graph revision metadata |
 | DBpedia distillation deferred | OpenAlex + PrimeKG are Phase 3 priority | Less immediately useful than domain-specific sources; design retained for future |
 
 ## 9. Future Considerations

@@ -24,7 +24,7 @@ Files modified:
 - `commands/next-steps.md` — extend "Setup" / "Mode Detection" / "Writing" sections so the skill (a) emits canonical frontmatter (`id`, `type: meta`, `created`, `prior`), and (b) auto-populates `prior:` by globbing `doc/meta/next-steps-*.md`, sorting by date in the filename, and selecting the most recent predecessor that pre-dates today's file at write time.
 - `meta/validate.sh` — extend section 9 ("Research gap analysis conformance") with a new sub-check: for each `doc/meta/next-steps-*.md` carrying `prior:`, resolve the referenced file/id and `warn` (not error) if missing. Skip silently when `prior:` is absent. Treat `prior_analyses:` as an accepted-variant — present-and-resolvable is fine; do not warn on the field name itself.
 - `scripts/validate.sh` — same change as `meta/validate.sh` (the two scripts are kept in lockstep for now; managed-artifact-versioning is the longer-term plan).
-- `science-tool/tests/test_validate_script.py` — add tests for the new chain-resolution check (resolvable id, resolvable path, broken link warns, absent field is silent, accepted-variant `prior_analyses:` does not warn).
+- `science/tests/test_validate_script.py` — add tests for the new chain-resolution check (resolvable id, resolvable path, broken link warns, absent field is silent, accepted-variant `prior_analyses:` does not warn).
 
 Files created:
 
@@ -85,7 +85,7 @@ Current behavior: the "Writing" section shows a body-only template with no front
 ## Task 3: Write failing tests for the chain-resolution validator check
 
 **Files:**
-- Modify: `science-tool/tests/test_validate_script.py`
+- Modify: `science/tests/test_validate_script.py`
 
 Tests use the existing `_write_common_files` / `subprocess.run` fixture pattern. Each test sets up a minimal project, drops one or more `doc/meta/next-steps-*.md` files with crafted `prior:` values, runs the validator, and asserts on the warning output.
 
@@ -147,7 +147,7 @@ Tests use the existing `_write_common_files` / `subprocess.run` fixture pattern.
 
 **Files:** none modified.
 
-- [x] **Step 1:** Run `cd science-tool && uv run --frozen pytest tests/test_validate_script.py -v` — expect all tests pass (existing + six new).
+- [x] **Step 1:** Run `cd science && uv run --frozen pytest tests/test_validate_script.py -v` — expect all tests pass (existing + six new).
 
 - [x] **Step 2:** Run `bash meta/validate.sh --verbose` and `bash scripts/validate.sh --verbose`. Bottom-line summary should be unchanged from a pre-change baseline modulo informational lines.
 

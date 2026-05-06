@@ -16,33 +16,33 @@
   - Add `Task.parent: str = ""`, `TaskCreate.parent: str = ""`, and `TaskUpdate.parent: str | None = None`.
 - Modify `science-model/tests/test_tasks.py`
   - Lock model defaults and explicit parent values.
-- Modify `science-tool/src/science_tool/tasks.py`
+- Modify `science/src/science_tool/tasks.py`
   - Replace loose task header parsing with one anchored strict regex.
   - Parse/render `parent:`.
   - Validate `parent:` is local task syntax only.
   - Make `next_task_id()` scan strict headers only.
-- Modify `science-tool/tests/test_tasks.py`
+- Modify `science/tests/test_tasks.py`
   - Add strict header, `t1000`, malformed header, parent round-trip, parent-locality, and `next_task_id()` regression tests.
-- Modify `science-tool/src/science_tool/graph/storage_adapters/task.py`
+- Modify `science/src/science_tool/graph/storage_adapters/task.py`
   - Expose `parent` on raw task records without emitting graph predicates.
-- Modify `science-tool/tests/test_storage_adapters/test_task.py`
+- Modify `science/tests/test_storage_adapters/test_task.py`
   - Assert raw task records include `parent`.
-- Modify `science-tool/src/science_tool/addressing.py`
+- Modify `science/src/science_tool/addressing.py`
   - Keep artifact address helpers, and add entity-reference classification helpers.
-- Modify `science-tool/tests/test_addressing.py`
+- Modify `science/tests/test_addressing.py`
   - Update legacy two-part address expectations and add entity-reference classifier coverage.
-- Modify `science-tool/src/science_tool/refs.py`
+- Modify `science/src/science_tool/refs.py`
   - Load project IDs from `science.yaml`.
   - Use address/reference classification for authored refs in frontmatter.
   - Report unknown namespaces and legacy two-part project shorthand.
-- Modify `science-tool/tests/test_refs.py`
+- Modify `science/tests/test_refs.py`
   - Add project-aware reference validation tests.
-- Modify `science-tool/src/science_tool/project_artifacts/data/validate.sh`
+- Modify `science/src/science_tool/project_artifacts/data/validate.sh`
   - Replace Section 15 task queue regex logic with strict task-header validation and task-reference scanning.
   - Extend Section 16 frontmatter cross-reference validation to understand namespace-first refs and legacy project shorthand.
-- Modify `science-tool/src/science_tool/project_artifacts/registry.yaml`
+- Modify `science/src/science_tool/project_artifacts/registry.yaml`
   - Bump `validate.sh` managed-artifact version and hash.
-- Modify `science-tool/tests/test_validate_script.py`
+- Modify `science/tests/test_validate_script.py`
   - Add validator regression tests for invalid task IDs, stale task refs, parent locality, namespace refs, and legacy shorthand.
 - Modify `commands/tasks.md`
   - Document flat IDs, local `parent:`, local refs, and namespace-first cross-project refs.
@@ -54,8 +54,8 @@
 ## Task 1: Strict Task Header Parser
 
 **Files:**
-- Modify: `science-tool/src/science_tool/tasks.py`
-- Modify: `science-tool/tests/test_tasks.py`
+- Modify: `science/src/science_tool/tasks.py`
+- Modify: `science/tests/test_tasks.py`
 
 - [ ] **Step 0: Audit existing task header widths before tightening**
 
@@ -69,7 +69,7 @@ Expected: no output, or only fixtures that must be updated in the same task as t
 
 - [ ] **Step 1: Write failing strict-header tests**
 
-Add these tests near the existing parser tests in `science-tool/tests/test_tasks.py`:
+Add these tests near the existing parser tests in `science/tests/test_tasks.py`:
 
 ```python
 def test_parse_accepts_three_and_four_digit_task_ids(tmp_path: Path) -> None:
@@ -152,14 +152,14 @@ Body.
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks.py::test_parse_accepts_three_and_four_digit_task_ids science-tool/tests/test_tasks.py::test_parse_rejects_suffix_task_id_without_partial_parse science-tool/tests/test_tasks.py::test_next_task_id_ignores_invalid_suffix_header -q
+uv run --frozen pytest science/tests/test_tasks.py::test_parse_accepts_three_and_four_digit_task_ids science/tests/test_tasks.py::test_parse_rejects_suffix_task_id_without_partial_parse science/tests/test_tasks.py::test_next_task_id_ignores_invalid_suffix_header -q
 ```
 
 Expected: the invalid suffix test fails because `_HEADER_RE` currently accepts `t001b`, and `next_task_id()` currently extracts `010` from `[t010b]`.
 
 - [ ] **Step 3: Add strict task header helpers**
 
-In `science-tool/src/science_tool/tasks.py`, replace the current `_HEADER_RE` and `_TASK_ID_RE` declarations with:
+In `science/src/science_tool/tasks.py`, replace the current `_HEADER_RE` and `_TASK_ID_RE` declarations with:
 
 ```python
 _TASK_ID_PATTERN = r"t[0-9]{3,}"
@@ -259,7 +259,7 @@ def next_task_id(tasks_dir: Path) -> str:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks.py::test_parse_accepts_three_and_four_digit_task_ids science-tool/tests/test_tasks.py::test_parse_rejects_suffix_task_id_without_partial_parse science-tool/tests/test_tasks.py::test_next_task_id_ignores_invalid_suffix_header -q
+uv run --frozen pytest science/tests/test_tasks.py::test_parse_accepts_three_and_four_digit_task_ids science/tests/test_tasks.py::test_parse_rejects_suffix_task_id_without_partial_parse science/tests/test_tasks.py::test_next_task_id_ignores_invalid_suffix_header -q
 ```
 
 Expected: all three tests pass.
@@ -269,7 +269,7 @@ Expected: all three tests pass.
 Before committing, complete Task 7's file edit for `meta/tasks/active.md` so the strict parser and the checked-in meta queue stay consistent in the same commit. Do not leave an intermediate commit where `parse_tasks(meta/tasks/active.md)` raises on `[t001b]`.
 
 ```bash
-git add science-tool/src/science_tool/tasks.py science-tool/tests/test_tasks.py meta/tasks/active.md
+git add science/src/science_tool/tasks.py science/tests/test_tasks.py meta/tasks/active.md
 git commit -m "fix: validate flat task ids strictly"
 ```
 
@@ -278,10 +278,10 @@ git commit -m "fix: validate flat task ids strictly"
 **Files:**
 - Modify: `science-model/src/science_model/tasks.py`
 - Modify: `science-model/tests/test_tasks.py`
-- Modify: `science-tool/src/science_tool/tasks.py`
-- Modify: `science-tool/tests/test_tasks.py`
-- Modify: `science-tool/src/science_tool/graph/storage_adapters/task.py`
-- Modify: `science-tool/tests/test_storage_adapters/test_task.py`
+- Modify: `science/src/science_tool/tasks.py`
+- Modify: `science/tests/test_tasks.py`
+- Modify: `science/src/science_tool/graph/storage_adapters/task.py`
+- Modify: `science/tests/test_storage_adapters/test_task.py`
 
 - [ ] **Step 1: Write failing model tests**
 
@@ -343,7 +343,7 @@ Expected: all three tests pass.
 
 - [ ] **Step 5: Write failing parser, renderer, and adapter tests**
 
-Add to `science-tool/tests/test_tasks.py`:
+Add to `science/tests/test_tasks.py`:
 
 ```python
 def test_parse_and_render_parent_round_trips(tmp_path: Path) -> None:
@@ -400,7 +400,7 @@ def test_add_task_omits_parent_by_default(tmp_path: Path) -> None:
     assert "- parent:" not in rendered
 ```
 
-Add to `science-tool/tests/test_storage_adapters/test_task.py`:
+Add to `science/tests/test_storage_adapters/test_task.py`:
 
 ```python
 def test_load_raw_includes_parent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -429,14 +429,14 @@ def test_load_raw_includes_parent(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks.py::test_parse_and_render_parent_round_trips science-tool/tests/test_tasks.py::test_parent_must_be_local_task_ref science-tool/tests/test_tasks.py::test_add_task_omits_parent_by_default science-tool/tests/test_storage_adapters/test_task.py::test_load_raw_includes_parent -q
+uv run --frozen pytest science/tests/test_tasks.py::test_parse_and_render_parent_round_trips science/tests/test_tasks.py::test_parent_must_be_local_task_ref science/tests/test_tasks.py::test_add_task_omits_parent_by_default science/tests/test_storage_adapters/test_task.py::test_load_raw_includes_parent -q
 ```
 
 Expected: parent is missing from parsed/rendered tasks and raw adapter output.
 
 - [ ] **Step 7: Parse and render parent**
 
-In `science-tool/src/science_tool/tasks.py`, add a local parent validator near `_parse_task_header`:
+In `science/src/science_tool/tasks.py`, add a local parent validator near `_parse_task_header`:
 
 ```python
 _LOCAL_PARENT_RE = re.compile(r"^task:t[0-9]{3,}$")
@@ -466,7 +466,7 @@ In `render_task()`, emit parent after status and before relationship lists:
 
 - [ ] **Step 8: Expose parent in raw task records**
 
-In `science-tool/src/science_tool/graph/storage_adapters/task.py`, add this key near `"related": task.related`:
+In `science/src/science_tool/graph/storage_adapters/task.py`, add this key near `"related": task.related`:
 
 ```python
             "parent": task.parent,
@@ -477,7 +477,7 @@ In `science-tool/src/science_tool/graph/storage_adapters/task.py`, add this key 
 Run:
 
 ```bash
-uv run --frozen pytest science-model/tests/test_tasks.py science-tool/tests/test_tasks.py::test_parse_and_render_parent_round_trips science-tool/tests/test_tasks.py::test_parent_must_be_local_task_ref science-tool/tests/test_tasks.py::test_add_task_omits_parent_by_default science-tool/tests/test_storage_adapters/test_task.py::test_load_raw_includes_parent -q
+uv run --frozen pytest science-model/tests/test_tasks.py science/tests/test_tasks.py::test_parse_and_render_parent_round_trips science/tests/test_tasks.py::test_parent_must_be_local_task_ref science/tests/test_tasks.py::test_add_task_omits_parent_by_default science/tests/test_storage_adapters/test_task.py::test_load_raw_includes_parent -q
 ```
 
 Expected: all selected tests pass.
@@ -485,19 +485,19 @@ Expected: all selected tests pass.
 - [ ] **Step 10: Commit parent support**
 
 ```bash
-git add science-model/src/science_model/tasks.py science-model/tests/test_tasks.py science-tool/src/science_tool/tasks.py science-tool/tests/test_tasks.py science-tool/src/science_tool/graph/storage_adapters/task.py science-tool/tests/test_storage_adapters/test_task.py
+git add science-model/src/science_model/tasks.py science-model/tests/test_tasks.py science/src/science_tool/tasks.py science/tests/test_tasks.py science/src/science_tool/graph/storage_adapters/task.py science/tests/test_storage_adapters/test_task.py
 git commit -m "feat: add local parent field to tasks"
 ```
 
 ## Task 3: Namespace-First Entity Reference Parser
 
 **Files:**
-- Modify: `science-tool/src/science_tool/addressing.py`
-- Modify: `science-tool/tests/test_addressing.py`
+- Modify: `science/src/science_tool/addressing.py`
+- Modify: `science/tests/test_addressing.py`
 
 - [ ] **Step 1: Write failing addressing tests**
 
-Replace the existing `science-tool/tests/test_addressing.py` contents with:
+Replace the existing `science/tests/test_addressing.py` contents with:
 
 ```python
 import pytest
@@ -604,14 +604,14 @@ def test_classifies_unknown_three_part_namespace() -> None:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_addressing.py -q
+uv run --frozen pytest science/tests/test_addressing.py -q
 ```
 
 Expected: fails because `RefShape` and `classify_entity_ref()` do not exist, and old tests still treated `cbioportal:q014` as canonical.
 
 - [ ] **Step 3: Add entity-reference classifier**
 
-In `science-tool/src/science_tool/addressing.py`, keep the artifact `Address` API and add:
+In `science/src/science_tool/addressing.py`, keep the artifact `Address` API and add:
 
 ```python
 _BARE_TASK_RE = re.compile(r"^t[0-9]{3,}$")
@@ -671,7 +671,7 @@ def classify_entity_ref(
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_addressing.py -q
+uv run --frozen pytest science/tests/test_addressing.py -q
 ```
 
 Expected: all addressing tests pass.
@@ -679,19 +679,19 @@ Expected: all addressing tests pass.
 - [ ] **Step 5: Commit reference classifier**
 
 ```bash
-git add science-tool/src/science_tool/addressing.py science-tool/tests/test_addressing.py
+git add science/src/science_tool/addressing.py science/tests/test_addressing.py
 git commit -m "feat: classify namespace-first entity refs"
 ```
 
 ## Task 4: Project-Aware Reference Validation
 
 **Files:**
-- Modify: `science-tool/src/science_tool/refs.py`
-- Modify: `science-tool/tests/test_refs.py`
+- Modify: `science/src/science_tool/refs.py`
+- Modify: `science/tests/test_refs.py`
 
 - [ ] **Step 1: Write failing reference validation tests**
 
-Add to `science-tool/tests/test_refs.py`:
+Add to `science/tests/test_refs.py`:
 
 ```python
 def test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared() -> None:
@@ -791,14 +791,14 @@ def test_legacy_two_part_cross_project_ref_reports_suggestion() -> None:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_refs.py::test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared science-tool/tests/test_refs.py::test_unknown_namespace_is_reported science-tool/tests/test_refs.py::test_legacy_two_part_cross_project_ref_reports_suggestion -q
+uv run --frozen pytest science/tests/test_refs.py::test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared science/tests/test_refs.py::test_unknown_namespace_is_reported science/tests/test_refs.py::test_legacy_two_part_cross_project_ref_reports_suggestion -q
 ```
 
 Expected: fails because `check_refs()` does not inspect frontmatter entity refs with federation metadata.
 
 - [ ] **Step 3: Load project IDs and frontmatter refs**
 
-In `science-tool/src/science_tool/refs.py`, import the new classifier and project config:
+In `science/src/science_tool/refs.py`, import the new classifier and project config:
 
 ```python
 from science_tool.addressing import classify_entity_ref
@@ -942,7 +942,7 @@ Then, inside the existing `for line_num, line in enumerate(lines, start=1):` sca
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_refs.py::test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared science-tool/tests/test_refs.py::test_unknown_namespace_is_reported science-tool/tests/test_refs.py::test_legacy_two_part_cross_project_ref_reports_suggestion -q
+uv run --frozen pytest science/tests/test_refs.py::test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared science/tests/test_refs.py::test_unknown_namespace_is_reported science/tests/test_refs.py::test_legacy_two_part_cross_project_ref_reports_suggestion -q
 ```
 
 Expected: all three tests pass.
@@ -950,21 +950,21 @@ Expected: all three tests pass.
 - [ ] **Step 6: Commit reference validation**
 
 ```bash
-git add science-tool/src/science_tool/refs.py science-tool/tests/test_refs.py
+git add science/src/science_tool/refs.py science/tests/test_refs.py
 git commit -m "feat: validate namespace-first refs"
 ```
 
 ## Task 5: Managed Validator Task And Frontmatter Checks
 
 **Files:**
-- Modify: `science-tool/src/science_tool/project_artifacts/data/validate.sh`
-- Modify: `science-tool/src/science_tool/project_artifacts/registry.yaml`
-- Modify: `science-tool/tests/test_validate_script.py`
-- Modify: `science-tool/tests/test_initial_validate_sh.py`
+- Modify: `science/src/science_tool/project_artifacts/data/validate.sh`
+- Modify: `science/src/science_tool/project_artifacts/registry.yaml`
+- Modify: `science/tests/test_validate_script.py`
+- Modify: `science/tests/test_initial_validate_sh.py`
 
 - [ ] **Step 1: Write failing validate.sh tests**
 
-Add to `science-tool/tests/test_validate_script.py`:
+Add to `science/tests/test_validate_script.py`:
 
 ```python
 def test_validate_rejects_invalid_task_id_suffix(tmp_path: Path) -> None:
@@ -1211,14 +1211,14 @@ def test_validate_reports_legacy_two_part_cross_project_ref(tmp_path: Path) -> N
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_validate_script.py::test_validate_rejects_invalid_task_id_suffix science-tool/tests/test_validate_script.py::test_validate_rejects_cross_project_parent science-tool/tests/test_validate_script.py::test_validate_catches_stale_task_ref_after_migration science-tool/tests/test_validate_script.py::test_validate_accepts_namespace_first_ref_for_declared_child science-tool/tests/test_validate_script.py::test_validate_reports_unknown_namespace_with_raw_ref science-tool/tests/test_validate_script.py::test_validate_reports_legacy_two_part_cross_project_ref -q
+uv run --frozen pytest science/tests/test_validate_script.py::test_validate_rejects_invalid_task_id_suffix science/tests/test_validate_script.py::test_validate_rejects_cross_project_parent science/tests/test_validate_script.py::test_validate_catches_stale_task_ref_after_migration science/tests/test_validate_script.py::test_validate_accepts_namespace_first_ref_for_declared_child science/tests/test_validate_script.py::test_validate_reports_unknown_namespace_with_raw_ref science/tests/test_validate_script.py::test_validate_reports_legacy_two_part_cross_project_ref -q
 ```
 
 Expected: fails because Section 15 still partially parses invalid task headers and Section 16 treats namespace-first refs as broken local refs.
 
 - [ ] **Step 3: Replace validate.sh Section 15 task queue logic**
 
-In `science-tool/src/science_tool/project_artifacts/data/validate.sh`, replace the body under `if [ ! -f "$TASKS_DIR/active.md" ]; then ... else ... fi` in Section 15 with a Python-backed check:
+In `science/src/science_tool/project_artifacts/data/validate.sh`, replace the body under `if [ ! -f "$TASKS_DIR/active.md" ]; then ... else ... fi` in Section 15 with a Python-backed check:
 
 ```bash
     task_check_result=$(XREF_TASKS="$TASKS_DIR" python3 <<'PYEOF'
@@ -1465,12 +1465,12 @@ Use shell variable names that match the final `read` command:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_initial_validate_sh.py::test_current_hash_matches_body -q
+uv run --frozen pytest science/tests/test_initial_validate_sh.py::test_current_hash_matches_body -q
 ```
 
 Expected: fails with the new computed body hash in the assertion output.
 
-Copy that expected hash into `science-tool/src/science_tool/project_artifacts/registry.yaml`, set `version: '2026.05.05.1'`, move the previous current hash into `previous_hashes`, and add:
+Copy that expected hash into `science/src/science_tool/project_artifacts/registry.yaml`, set `version: '2026.05.05.1'`, move the previous current hash into `previous_hashes`, and add:
 
 ```yaml
       - from: '2026.05.03.3'
@@ -1491,7 +1491,7 @@ Add to `changelog`:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_validate_script.py::test_validate_rejects_invalid_task_id_suffix science-tool/tests/test_validate_script.py::test_validate_rejects_cross_project_parent science-tool/tests/test_validate_script.py::test_validate_catches_stale_task_ref_after_migration science-tool/tests/test_validate_script.py::test_validate_accepts_namespace_first_ref_for_declared_child science-tool/tests/test_validate_script.py::test_validate_reports_unknown_namespace_with_raw_ref science-tool/tests/test_validate_script.py::test_validate_reports_legacy_two_part_cross_project_ref science-tool/tests/test_initial_validate_sh.py::test_current_hash_matches_body -q
+uv run --frozen pytest science/tests/test_validate_script.py::test_validate_rejects_invalid_task_id_suffix science/tests/test_validate_script.py::test_validate_rejects_cross_project_parent science/tests/test_validate_script.py::test_validate_catches_stale_task_ref_after_migration science/tests/test_validate_script.py::test_validate_accepts_namespace_first_ref_for_declared_child science/tests/test_validate_script.py::test_validate_reports_unknown_namespace_with_raw_ref science/tests/test_validate_script.py::test_validate_reports_legacy_two_part_cross_project_ref science/tests/test_initial_validate_sh.py::test_current_hash_matches_body -q
 ```
 
 Expected: all selected tests pass.
@@ -1499,7 +1499,7 @@ Expected: all selected tests pass.
 - [ ] **Step 7: Commit managed validator changes**
 
 ```bash
-git add science-tool/src/science_tool/project_artifacts/data/validate.sh science-tool/src/science_tool/project_artifacts/registry.yaml science-tool/tests/test_validate_script.py science-tool/tests/test_initial_validate_sh.py
+git add science/src/science_tool/project_artifacts/data/validate.sh science/src/science_tool/project_artifacts/registry.yaml science/tests/test_validate_script.py science/tests/test_initial_validate_sh.py
 git commit -m "feat: validate flat task ids and namespaced refs"
 ```
 
@@ -1508,11 +1508,11 @@ git commit -m "feat: validate flat task ids and namespaced refs"
 **Files:**
 - Modify: `commands/tasks.md`
 - Modify: `docs/federation.md`
-- Modify: `science-tool/tests/test_command_docs.py`
+- Modify: `science/tests/test_command_docs.py`
 
 - [ ] **Step 1: Write failing documentation tests**
 
-Add to `science-tool/tests/test_command_docs.py`:
+Add to `science/tests/test_command_docs.py`:
 
 ```python
 def test_tasks_command_documents_flat_ids_parent_and_namespace_refs() -> None:
@@ -1549,7 +1549,7 @@ def test_federation_docs_document_canonical_entity_refs_and_artifact_addresses()
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_command_docs.py::test_tasks_command_documents_flat_ids_parent_and_namespace_refs science-tool/tests/test_command_docs.py::test_federation_docs_document_canonical_entity_refs_and_artifact_addresses -q
+uv run --frozen pytest science/tests/test_command_docs.py::test_tasks_command_documents_flat_ids_parent_and_namespace_refs science/tests/test_command_docs.py::test_federation_docs_document_canonical_entity_refs_and_artifact_addresses -q
 ```
 
 Expected: fails because current docs still describe the old addressing convention and do not document `parent:`.
@@ -1618,7 +1618,7 @@ Graph URI form for artifact addresses remains:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_command_docs.py::test_tasks_command_documents_flat_ids_parent_and_namespace_refs science-tool/tests/test_command_docs.py::test_federation_docs_document_canonical_entity_refs_and_artifact_addresses -q
+uv run --frozen pytest science/tests/test_command_docs.py::test_tasks_command_documents_flat_ids_parent_and_namespace_refs science/tests/test_command_docs.py::test_federation_docs_document_canonical_entity_refs_and_artifact_addresses -q
 ```
 
 Expected: both tests pass.
@@ -1626,7 +1626,7 @@ Expected: both tests pass.
 - [ ] **Step 6: Commit documentation changes**
 
 ```bash
-git add commands/tasks.md docs/federation.md science-tool/tests/test_command_docs.py
+git add commands/tasks.md docs/federation.md science/tests/test_command_docs.py
 git commit -m "docs: define flat task ids and namespace refs"
 ```
 
@@ -1710,10 +1710,10 @@ Expected: `meta/tasks/active.md` is staged together with Task 1's parser and par
 
 **Files:**
 - Verify: `science-model/src/science_model/tasks.py`
-- Verify: `science-tool/src/science_tool/tasks.py`
-- Verify: `science-tool/src/science_tool/addressing.py`
-- Verify: `science-tool/src/science_tool/refs.py`
-- Verify: `science-tool/src/science_tool/project_artifacts/data/validate.sh`
+- Verify: `science/src/science_tool/tasks.py`
+- Verify: `science/src/science_tool/addressing.py`
+- Verify: `science/src/science_tool/refs.py`
+- Verify: `science/src/science_tool/project_artifacts/data/validate.sh`
 - Verify: `commands/tasks.md`
 - Verify: `docs/federation.md`
 - Verify: `meta/tasks/active.md`
@@ -1723,7 +1723,7 @@ Expected: `meta/tasks/active.md` is staged together with Task 1's parser and par
 Run:
 
 ```bash
-uv run --frozen pytest science-model/tests/test_tasks.py science-tool/tests/test_tasks.py science-tool/tests/test_storage_adapters/test_task.py science-tool/tests/test_addressing.py science-tool/tests/test_refs.py science-tool/tests/test_validate_script.py science-tool/tests/test_initial_validate_sh.py science-tool/tests/test_command_docs.py -q
+uv run --frozen pytest science-model/tests/test_tasks.py science/tests/test_tasks.py science/tests/test_storage_adapters/test_task.py science/tests/test_addressing.py science/tests/test_refs.py science/tests/test_validate_script.py science/tests/test_initial_validate_sh.py science/tests/test_command_docs.py -q
 ```
 
 Expected: all selected tests pass.
@@ -1733,7 +1733,7 @@ Expected: all selected tests pass.
 Run:
 
 ```bash
-uv run --frozen ruff check science-model/src science-model/tests science-tool/src science-tool/tests
+uv run --frozen ruff check science-model/src science-model/tests science/src science/tests
 ```
 
 Expected: `All checks passed!`
@@ -1743,7 +1743,7 @@ Expected: `All checks passed!`
 Run:
 
 ```bash
-uv run --frozen pyright science-model/src science-tool/src
+uv run --frozen pyright science-model/src science/src
 ```
 
 Expected: no type errors.
@@ -1763,17 +1763,17 @@ Expected: validation exits 0. It must not report duplicate `t001`, invalid `t001
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_tasks.py::test_add_task_omits_parent_by_default -q
+uv run --frozen pytest science/tests/test_tasks.py::test_add_task_omits_parent_by_default -q
 ```
 
-Expected: the pytest tmp project creates `tasks/active.md`, emits a flat task ID, and writes no `parent:` line. Do not verify this by running `science-tool tasks add` in the user's repo root.
+Expected: the pytest tmp project creates `tasks/active.md`, emits a flat task ID, and writes no `parent:` line. Do not verify this by running `science tasks add` in the user's repo root.
 
 - [ ] **Step 6: Commit verification fixes**
 
 If verification required edits, commit them:
 
 ```bash
-git add science-model science-tool commands docs meta/tasks/active.md
+git add science-model science commands docs meta/tasks/active.md
 git commit -m "test: verify task ids and cross-project refs"
 ```
 

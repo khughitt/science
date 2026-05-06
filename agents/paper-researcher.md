@@ -15,12 +15,12 @@ The canonical workflow lives in `${CLAUDE_PLUGIN_ROOT}/commands/research-papers.
 
 You are operating inside a Science project. The command preamble at `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` tells you how to resolve the project profile, the `research-assistant` role prompt, templates, and aspects. Execute it in full; do not skip steps to save tokens.
 
-## Access strategy — use `science-tool paper-fetch` first
+## Access strategy — use `science paper-fetch` first
 
 Before doing any web fetches yourself, run:
 
 ```bash
-uv run science-tool paper-fetch --doi <doi>
+uv run science paper-fetch --doi <doi>
 # Or, depending on what the user supplied:
 #   --pmid <pmid>      (PubMed ID — resolved via Europe PMC)
 #   --pmcid <pmcid>    (e.g. PMC12934989 — resolved via Europe PMC)
@@ -50,12 +50,12 @@ Direct `WebFetch` is permitted only for:
 
 Everything else goes through `paper-fetch`.
 
-## Creating new questions — use `science-tool question reserve`
+## Creating new questions — use `science question reserve`
 
 When the "After Writing" step calls for adding new questions to `doc/questions/`, **always** create them via:
 
 ```bash
-uv run science-tool question reserve \
+uv run science question reserve \
   --slug "<short-kebab-slug>" \
   --title "<question title>" \
   --source-refs "<this paper's citekey>" \

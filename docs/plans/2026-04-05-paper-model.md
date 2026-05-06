@@ -17,13 +17,13 @@
 ### Task 1: Graph Store — Finding Operations
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/store.py`
-- Test: `science-tool/tests/test_paper_model.py`
+- Modify: `science/src/science_tool/graph/store.py`
+- Test: `science/tests/test_paper_model.py`
 
 - [ ] **Step 1: Write failing test for add_finding**
 
 ```python
-# science-tool/tests/test_paper_model.py
+# science/tests/test_paper_model.py
 
 from pathlib import Path
 from rdflib.namespace import RDF
@@ -80,12 +80,12 @@ def test_add_finding(tmp_graph: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science-tool && uv run --frozen pytest tests/test_paper_model.py::test_add_finding -v`
+Run: `cd science && uv run --frozen pytest tests/test_paper_model.py::test_add_finding -v`
 Expected: FAIL — `add_finding` does not exist.
 
 - [ ] **Step 3: Implement add_finding**
 
-Add to `science-tool/src/science_tool/graph/store.py`:
+Add to `science/src/science_tool/graph/store.py`:
 
 ```python
 def add_finding(
@@ -130,13 +130,13 @@ def add_finding(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd science-tool && uv run --frozen pytest tests/test_paper_model.py::test_add_finding -v`
+Run: `cd science && uv run --frozen pytest tests/test_paper_model.py::test_add_finding -v`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd science-tool && git add src/science_tool/graph/store.py tests/test_paper_model.py
+cd science && git add src/science_tool/graph/store.py tests/test_paper_model.py
 git commit -m "feat: add add_finding to graph store
 
 Finding bundles propositions + observations with traceability to
@@ -148,13 +148,13 @@ the data-package/workflow-run that produced them."
 ### Task 2: Graph Store — Interpretation Operations
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/store.py`
-- Test: `science-tool/tests/test_paper_model.py`
+- Modify: `science/src/science_tool/graph/store.py`
+- Test: `science/tests/test_paper_model.py`
 
 - [ ] **Step 1: Write failing test**
 
 ```python
-# Append to science-tool/tests/test_paper_model.py
+# Append to science/tests/test_paper_model.py
 
 def test_add_interpretation(tmp_graph: Path) -> None:
     """add_interpretation creates an Interpretation linked to findings."""
@@ -187,7 +187,7 @@ def test_add_interpretation(tmp_graph: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd science-tool && uv run --frozen pytest tests/test_paper_model.py::test_add_interpretation -v`
+Run: `cd science && uv run --frozen pytest tests/test_paper_model.py::test_add_interpretation -v`
 Expected: FAIL
 
 - [ ] **Step 3: Implement add_interpretation**
@@ -232,13 +232,13 @@ def add_interpretation(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd science-tool && uv run --frozen pytest tests/test_paper_model.py::test_add_interpretation -v`
+Run: `cd science && uv run --frozen pytest tests/test_paper_model.py::test_add_interpretation -v`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd science-tool && git add src/science_tool/graph/store.py tests/test_paper_model.py
+cd science && git add src/science_tool/graph/store.py tests/test_paper_model.py
 git commit -m "feat: add add_interpretation to graph store"
 ```
 
@@ -247,13 +247,13 @@ git commit -m "feat: add add_interpretation to graph store"
 ### Task 3: Graph Store — Story and Paper Operations
 
 **Files:**
-- Modify: `science-tool/src/science_tool/graph/store.py`
-- Test: `science-tool/tests/test_paper_model.py`
+- Modify: `science/src/science_tool/graph/store.py`
+- Test: `science/tests/test_paper_model.py`
 
 - [ ] **Step 1: Write failing tests**
 
 ```python
-# Append to science-tool/tests/test_paper_model.py
+# Append to science/tests/test_paper_model.py
 
 def test_add_story(tmp_graph: Path) -> None:
     from science_tool.graph.store import add_story
@@ -292,7 +292,7 @@ def test_add_paper(tmp_graph: Path) -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd science-tool && uv run --frozen pytest tests/test_paper_model.py -v -k "add_story or add_paper"`
+Run: `cd science && uv run --frozen pytest tests/test_paper_model.py -v -k "add_story or add_paper"`
 Expected: FAIL
 
 - [ ] **Step 3: Implement add_story**
@@ -377,13 +377,13 @@ def add_paper_entity(
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd science-tool && uv run --frozen pytest tests/test_paper_model.py -v -k "add_story or add_paper"`
+Run: `cd science && uv run --frozen pytest tests/test_paper_model.py -v -k "add_story or add_paper"`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd science-tool && git add src/science_tool/graph/store.py tests/test_paper_model.py
+cd science && git add src/science_tool/graph/store.py tests/test_paper_model.py
 git commit -m "feat: add story and paper operations to graph store
 
 add_story creates narrative arcs organized by question/hypothesis.
@@ -395,7 +395,7 @@ add_paper_entity composes stories into communicable documents."
 ### Task 4: CLI Commands — Compositional Entities
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
+- Modify: `science/src/science_tool/cli.py`
 
 - [ ] **Step 1: Add `graph add finding` command**
 
@@ -482,7 +482,7 @@ from science_tool.graph.store import (
 - [ ] **Step 6: Commit**
 
 ```bash
-cd science-tool && git add src/science_tool/cli.py
+cd science && git add src/science_tool/cli.py
 git commit -m "feat: add CLI commands for compositional entities
 
 graph add finding/interpretation/story/paper commands enable
@@ -521,19 +521,19 @@ Key additions to the skill:
 After analyzing results, create structured entities in addition to the prose document:
 
 1. For each concrete empirical fact:
-   `science-tool graph add observation "<description>" --data-source <data-package-ref> --metric <what> --value <value>`
+   `science graph add observation "<description>" --data-source <data-package-ref> --metric <what> --value <value>`
 
 2. For each interpretive claim:
-   `science-tool graph add proposition "<text>" --source <data-package-ref> --confidence <0-1>`
+   `science graph add proposition "<text>" --source <data-package-ref> --confidence <0-1>`
 
 3. For each observation that bears on a proposition:
-   `science-tool graph add evidence <observation-ref> <proposition-ref> --stance supports|disputes --strength strong|moderate|weak`
+   `science graph add evidence <observation-ref> <proposition-ref> --stance supports|disputes --strength strong|moderate|weak`
 
 4. Bundle into a finding:
-   `science-tool graph add finding "<summary>" --confidence moderate --proposition <ref> --observation <ref> --source <data-package-ref>`
+   `science graph add finding "<summary>" --confidence moderate --proposition <ref> --observation <ref> --source <data-package-ref>`
 
 5. Create the interpretation:
-   `science-tool graph add interpretation "<summary>" --finding <ref> --context "<what prompted this>"`
+   `science graph add interpretation "<summary>" --finding <ref> --context "<what prompted this>"`
 ```
 
 - [ ] **Step 3: Commit**
@@ -713,12 +713,12 @@ Templates for compositional entities in the Paper Model."
 ### Task 7: Integration Test — Full Composition Chain
 
 **Files:**
-- Test: `science-tool/tests/test_paper_model.py`
+- Test: `science/tests/test_paper_model.py`
 
 - [ ] **Step 1: Write integration test for full composition chain**
 
 ```python
-# Append to science-tool/tests/test_paper_model.py
+# Append to science/tests/test_paper_model.py
 
 def test_full_composition_chain(tmp_graph: Path) -> None:
     """Test: observation → proposition → finding → interpretation → story → paper."""
@@ -782,13 +782,13 @@ def test_full_composition_chain(tmp_graph: Path) -> None:
 
 - [ ] **Step 2: Run integration test**
 
-Run: `cd science-tool && uv run --frozen pytest tests/test_paper_model.py::test_full_composition_chain -v`
+Run: `cd science && uv run --frozen pytest tests/test_paper_model.py::test_full_composition_chain -v`
 Expected: PASS
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd science-tool && git add tests/test_paper_model.py
+cd science && git add tests/test_paper_model.py
 git commit -m "test: add full composition chain integration test
 
 Verifies observation → proposition → finding → interpretation → story → paper
@@ -803,7 +803,7 @@ chain with all relations in the knowledge graph."
 
 ```bash
 cd science-model && uv run --frozen pytest -v
-cd science-tool && uv run --frozen pytest -v
+cd science && uv run --frozen pytest -v
 ```
 Expected: All PASS
 
@@ -811,7 +811,7 @@ Expected: All PASS
 
 ```bash
 cd science-model && uv run --frozen ruff check . && uv run --frozen ruff format --check .
-cd science-tool && uv run --frozen ruff check . && uv run --frozen ruff format --check .
+cd science && uv run --frozen ruff check . && uv run --frozen ruff format --check .
 ```
 Expected: Clean
 
@@ -819,7 +819,7 @@ Expected: Clean
 
 ```bash
 cd science-model && uv run --frozen pyright
-cd science-tool && uv run --frozen pyright
+cd science && uv run --frozen pyright
 ```
 Expected: No new errors
 

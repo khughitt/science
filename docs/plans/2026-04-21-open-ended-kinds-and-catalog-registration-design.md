@@ -543,9 +543,9 @@ The implementation should add coverage for:
 Suggested test modules:
 
 - `science-model/tests/test_entities.py` or a new focused model contract test
-- `science-tool/tests/test_entity_registry.py`
-- `science-tool/tests/test_load_project_sources_unified.py`
-- `science-tool/tests/test_registry_sync.py`
+- `science/tests/test_entity_registry.py`
+- `science/tests/test_load_project_sources_unified.py`
+- `science/tests/test_registry_sync.py`
 
 ## Implementation Order
 

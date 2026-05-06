@@ -59,13 +59,14 @@ Before executing any research command:
    `templates/<name>.md`. If neither exists, warn the
    user and proceed without a template — the command's Writing section provides
    sufficient structure.
-8. **Resolve science-tool invocation:** When a command says to run `science-tool`,
-   prefer the project-local install path: `uv run science-tool <command>`.
-   This assumes the root `pyproject.toml` includes `science-tool` as a dev
-   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`.
-   If that fails (no root `pyproject.toml` or science-tool not in dependencies),
+8. **Resolve science CLI invocation:** When a command says to run `science`,
+   prefer the project-local install path: `uv run science <command>`.
+   This assumes the root `pyproject.toml` includes `science` as a dev
+   dependency installed via `uv add --dev --editable "$SCIENCE_TOOL_PATH"`
+   (the distribution is `science`; the entry point it installs is `science`).
+   If that fails (no root `pyproject.toml` or science not in dependencies),
    fall back to:
-   `uv run --with <science-plugin-root>/science-tool science-tool <command>`
+   `uv run --with <science-plugin-root>/science science <command>`
 
 You are migrating an existing repository into the canonical Science model.
 
@@ -221,7 +222,7 @@ Minimum shape:
 
 ```toml
 [project]
-name = "<project-slug>-science-tools"
+name = "<project-slug>-sciences"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = []
@@ -230,7 +231,7 @@ dependencies = []
 dev = []
 ```
 
-Install `science-tool` into the manifest with:
+Install `science` into the manifest with:
 
 ```bash
 uv add --dev --editable "$SCIENCE_TOOL_PATH"
@@ -238,13 +239,13 @@ uv add --dev --editable "$SCIENCE_TOOL_PATH"
 
 ### `.env`
 
-Create or update `.env` with the **resolved absolute path** to `science-tool`:
+Create or update `.env` with the **resolved absolute path** to `science`:
 
 ```env
-SCIENCE_TOOL_PATH=<absolute-path-to-science-tool>
+SCIENCE_TOOL_PATH=<absolute-path-to-science>
 ```
 
-Resolve `<science-plugin-root>/science-tool` to its absolute path at creation time. Ensure `.env` is in `.gitignore`.
+Resolve `<science-plugin-root>/science` to its absolute path at creation time. Ensure `.env` is in `.gitignore`.
 
 ### `AGENTS.md`
 
@@ -280,15 +281,15 @@ collapse `CLAUDE.md` to the single `@AGENTS.md` pointer.
 Install Science's managed `validate.sh`:
 
 ```bash
-science-tool project artifacts install validate.sh --project-root <project-path>
+science project artifacts install validate.sh --project-root <project-path>
 ```
 
-This drops the canonical `validate.sh` into the project root with the managed header. To stay current on future Science releases, run `science-tool project artifacts check validate.sh` periodically (or rely on `science-tool health` to surface drift).
+This drops the canonical `validate.sh` into the project root with the managed header. To stay current on future Science releases, run `science project artifacts check validate.sh` periodically (or rely on `science health` to surface drift).
 
 If the project already has a `validate.sh` from a pre-managed-system era, adopt it:
 
 ```bash
-science-tool project artifacts install validate.sh --adopt --project-root <project-path>
+science project artifacts install validate.sh --adopt --project-root <project-path>
 ```
 
 `--adopt` rewrites the managed header in place if the body matches a known historical version. If the body diverges from every known version, use `--force-adopt` instead (writes a `.pre-install.bak`).

@@ -81,7 +81,7 @@ Hand-authored YAML following the standard `OntologyCatalog` schema:
 ontology: physics
 version: "1.0.0"
 prefix: "physics"
-prefix_uri: "https://science-tool.dev/ontologies/physics/"
+prefix_uri: "https://science.dev/ontologies/physics/"
 entity_types: [...]
 predicates: [...]
 ```
@@ -447,7 +447,7 @@ scripts/extract_qudt_catalog.py                       # QUDT extraction script
 ```
 science-model/src/science_model/ontologies/registry.yaml  # add physics + qudt entries
 science-model/tests/test_ontologies.py                     # add physics + qudt tests
-science-tool/tests/test_ontology_suggest.py                # add suggestion tests
+science/tests/test_ontology_suggest.py                # add suggestion tests
 references/science-yaml-schema.md                          # list new ontologies
 commands/create-project.md                                 # update available ontologies
 ```

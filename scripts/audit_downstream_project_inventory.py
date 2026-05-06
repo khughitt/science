@@ -18,7 +18,7 @@ Usage (the script declares its dependencies via PEP 723; use `uv run`):
 
 The plan also references `uv run python scripts/...` — that form requires a
 project venv that already has click+pyyaml available (e.g. run it from
-`science-tool/`). The plain `uv run script.py` form is preferred because it
+`science/`). The plain `uv run script.py` form is preferred because it
 honours the PEP 723 inline metadata block above and is self-contained.
 
 Outputs (paths inside the Science repo):

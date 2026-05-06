@@ -14,7 +14,7 @@ Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role: `research-a
 Additionally, read (skip any that don't exist):
 1. `tasks/active.md`
 2. Recent completed tasks: scan `tasks/done/` for the most recent file
-3. **Hypothesis and question status:** run `science-tool project index --format json` to get a compact index of all hypotheses and questions with their titles and statuses. Only read individual files when you need full detail (e.g., to assess evidence quality for a specific hypothesis).
+3. **Hypothesis and question status:** run `science project index --format json` to get a compact index of all hypotheses and questions with their titles and statuses. Only read individual files when you need full detail (e.g., to assess evidence quality for a specific hypothesis).
 4. `specs/scope-boundaries.md` — project scope
 5. `doc/topics/` or equivalent topic coverage files in the doc directory
 6. `doc/papers/` — paper coverage
@@ -107,20 +107,20 @@ pre-registering a data analysis, add a recommended next action to run
 `/science:plan-analysis`. Check `doc/plans/*-analysis-plan.md` before
 recommending a new one.
 
-**Archive lag.** Run `science-tool health --format json` and inspect `archive_lag`. When `archive_lag.done_in_active` or `archive_lag.retired_in_active` is non-zero, add a Recommended Next Action:
+**Archive lag.** Run `science health --format json` and inspect `archive_lag`. When `archive_lag.done_in_active` or `archive_lag.retired_in_active` is non-zero, add a Recommended Next Action:
 
-> Preview with `science-tool tasks archive`, then run `science-tool tasks archive --apply` to move the N done/retired entries from `tasks/active.md` to `tasks/done/YYYY-MM.md`.
+> Preview with `science tasks archive`, then run `science tasks archive --apply` to move the N done/retired entries from `tasks/active.md` to `tasks/done/YYYY-MM.md`.
 
 If `archive_lag.missing_completed` is non-zero, call those entries out separately so the user backfills `completed:` first — otherwise they route to the current month rather than the month they were actually closed.
 
 ### Managed artifact updates
 
-If `science-tool health` shows any managed artifact with status `stale`, surface as a next-step:
+If `science health` shows any managed artifact with status `stale`, surface as a next-step:
 
 > Update `<artifact-name>` from version `<from>` → `<to>`. Run:
 >
 > ```bash
-> science-tool project artifacts update <artifact-name>
+> science project artifacts update <artifact-name>
 > ```
 >
 > If a migration step ships with the bump, the CLI will surface it interactively.
@@ -160,7 +160,7 @@ When the backlog is sparse or the user is otherwise blocked and `knowledge/graph
 exists, run:
 
 ```bash
-science-tool graph attention-sample --limit 5 --format json
+science graph attention-sample --limit 5 --format json
 ```
 
 This samples epistemic entities using graph-derived attention weights:
@@ -170,7 +170,7 @@ verdict. Frame `needs-review` or `stale` rows as a review prompt rather than as
 evidence that a prior conclusion is wrong.
 
 When recommending work on a `needs-review` entity, name the resolution path:
-unchanged review (`science-tool entity review <target-ref>`), amendment
+unchanged review (`science entity review <target-ref>`), amendment
 (`sci:amends` from a new conclusion to the old conclusion), or replacement
 (`sci:supersedes` plus `status: superseded` on the old conclusion). Propose one
 as a candidate next step and add a corresponding task if accepted.
@@ -183,7 +183,7 @@ Recommend 3-5 actions based on:
 - Highest-priority active tasks without recent commits
 - Stale tasks (active but no related activity in >7 days)
 - Open high-priority questions that could become tasks
-- Weighted attention sample rows from `science-tool graph attention-sample --limit 5 --format json` (when backlog is unclear)
+- Weighted attention sample rows from `science graph attention-sample --limit 5 --format json` (when backlog is unclear)
 
 For each suggestion, include:
 - The task ID (if it exists) or "new task" if suggesting something not yet tracked
@@ -255,7 +255,7 @@ Display the output in the terminal using rich formatting:
 
 ## Cross-Project Sync Check
 
-Before writing, run `science-tool sync status` to check cross-project sync staleness.
+Before writing, run `science sync status` to check cross-project sync staleness.
 If sync is stale, include a note in the Recommended Next Actions table:
 
 | Priority | Action | Rationale | Command |
@@ -276,7 +276,7 @@ Projects that historically use `prior_analyses: [...]` (e.g. protein-landscape) 
 
 1. Save to `doc/meta/next-steps-<YYYY-MM-DD>.md`. In delta mode, append to the existing file rather than creating a new one — git tracks history, so overwriting the date-stamped file is acceptable.
 2. Offer to create tasks from recommended items: "Create tasks from these suggestions?"
-   - If accepted, run `science-tool tasks add` for each recommended task with appropriate priority, type, and related entities
+   - If accepted, run `science tasks add` for each recommended task with appropriate priority, type, and related entities
 3. Cross-link relevant items in `doc/questions/`.
 4. Commit: `git add -A && git commit -m "doc: next steps and gap analysis <date>"`
 
@@ -288,7 +288,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:next-steps" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

@@ -16,13 +16,13 @@ The plan bridges the evidence-driven model and code. Every transformation traces
 
 ## Tool invocation
 
-All `science-tool` commands below use this pattern:
+All `science` commands below use this pattern:
 
 ```bash
-uv run science-tool <command>
+uv run science <command>
 ```
 
-For brevity, the examples below write just `science-tool <command>` — **always expand to `uv run science-tool <command>` when executing.** See command-preamble step 8 for fallback if science-tool is not a project dependency.
+For brevity, the examples below write just `science <command>` — **always expand to `uv run science <command>` when executing.** See command-preamble step 8 for fallback if science is not a project dependency.
 
 ## Rules
 
@@ -56,15 +56,15 @@ the pipeline plan; focus on execution.
 Skip this step in Task mode — proceed directly to Step 2.
 
 ```bash
-science-tool inquiry show "<slug>" --format table
-science-tool inquiry validate "<slug>" --format json
+science inquiry show "<slug>" --format table
+science inquiry validate "<slug>" --format json
 ```
 
 Verify status is `specified`. If it's `sketch`, warn the user and suggest `/science:specify-model` first.
 
 If status is `specified` but not `critiqued`, warn: "This inquiry hasn't been through critique yet. Consider running `/science:critique-approach <slug>` first. Proceeding anyway."
 
-**Fallback:** If `science-tool inquiry show` fails or times out, read the inquiry document directly from `doc/inquiries/<slug>.md`.
+**Fallback:** If `science inquiry show` fails or times out, read the inquiry document directly from `doc/inquiries/<slug>.md`.
 
 ### Step 2: Identify computational requirements
 
@@ -114,14 +114,14 @@ For each input data source identified in Step 2:
      with a URL alone.
    - For derived sources: HALT with "no dataset entity found for `dataset:<slug>`;
      ensure the producing workflow has an `outputs:` block and run
-     `science-tool dataset register-run <run-slug>`."
+     `science dataset register-run <run-slug>`."
 2. Check the gate per origin:
    - `origin: external`:
      - PASS if `access.verified: true`.
      - PASS if `access.verified: false` AND `access.exception.mode != ""`.
      - HALT otherwise with Branch A/B options:
        - **Branch A** — verifiable under current credentials → run verification
-         (manual or future `science-tool dataset verify`), then re-run this step.
+         (manual or future `science dataset verify`), then re-run this step.
        - **Branch B** — requires credentials the project does not hold.
          Three sub-options:
          (a) **scope-reduce**: defer to a follow-up task; populate
@@ -149,20 +149,20 @@ For each identified step:
 
 ```bash
 # Add transformation to knowledge graph and inquiry
-science-tool graph add concept "<step name>" --type sci:Transformation \
+science graph add concept "<step name>" --type sci:Transformation \
   --note "<what this step does>"
 
-science-tool inquiry add-node "<slug>" "concept:<step>" --role BoundaryIn
+science inquiry add-node "<slug>" "concept:<step>" --role BoundaryIn
 # or no --role for interior nodes (just add edges)
 
 # Connect in the data flow
-science-tool inquiry add-edge "<slug>" "concept:<input>" "sci:feedsInto" "concept:<step>"
-science-tool inquiry add-edge "<slug>" "concept:<step>" "sci:produces" "concept:<output>"
+science inquiry add-edge "<slug>" "concept:<input>" "sci:feedsInto" "concept:<step>"
+science inquiry add-edge "<slug>" "concept:<step>" "sci:produces" "concept:<output>"
 
 # Add validation criterion
-science-tool graph add concept "<check name>" --type sci:ValidationCheck \
+science graph add concept "<check name>" --type sci:ValidationCheck \
   --note "<what to check>"
-science-tool inquiry add-edge "<slug>" "concept:<step>" "sci:validatedBy" "concept:<check>"
+science inquiry add-edge "<slug>" "concept:<step>" "sci:validatedBy" "concept:<check>"
 ```
 
 #### Register Workflow Entity
@@ -229,12 +229,12 @@ Skip this step in Task mode.
 Update the inquiry status to `planned`. Regenerate `doc/inquiries/<slug>.md`.
 
 ```bash
-science-tool graph stamp-revision
+science graph stamp-revision
 ```
 
 ### Step 6: Suggest next steps
 
-1. **Track plan tasks:** For each task in the plan that doesn't have a corresponding entry in `tasks/active.md`, offer to create one via `science-tool tasks add`. Implementation tasks buried in plan docs should be surfaced as trackable tasks.
+1. **Track plan tasks:** For each task in the plan that doesn't have a corresponding entry in `tasks/active.md`, offer to create one via `science tasks add`. Implementation tasks buried in plan docs should be surfaced as trackable tasks.
 2. If no pre-registration exists for the target hypothesis, suggest: `/science:pre-register` — to formalize expectations before running the analysis
 3. `/science:review-pipeline <slug>` — get critical review before implementation
 4. Execute the plan using `superpowers:executing-plans`
@@ -247,7 +247,7 @@ science-tool graph stamp-revision
 - **Pilot first.** For complex pipelines, suggest a pilot phase with reduced scope.
 - **Validation criteria are mandatory.** Every transformation must have a way to verify it worked.
 - **The inquiry is the source of truth.** The plan document is a rendering of the inquiry's computational layer.
-- **When science-tool is unavailable:** If `science-tool` commands fail or time out (>15s), proceed with the plan document directly. Read inquiry and graph data from markdown files in `doc/inquiries/` instead. Graph annotations are secondary — the plan document is the primary deliverable. Note which graph commands were skipped so they can be run later.
+- **When science is unavailable:** If `science` commands fail or time out (>15s), proceed with the plan document directly. Read inquiry and graph data from markdown files in `doc/inquiries/` instead. Graph annotations are secondary — the plan document is the primary deliverable. Note which graph commands were skipped so they can be run later.
 
 ## Process Reflection
 
@@ -257,7 +257,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:plan-pipeline" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

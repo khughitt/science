@@ -123,9 +123,9 @@ When migrating an existing project:
 `validate.sh` is a managed Science artifact (per `docs/superpowers/specs/2026-04-26-managed-artifacts-long-term-design.md`). To check for updates:
 
 ```bash
-science-tool project artifacts check validate.sh
-science-tool project artifacts diff validate.sh   # inspect changes
-science-tool project artifacts update validate.sh # apply
+science project artifacts check validate.sh
+science project artifacts diff validate.sh   # inspect changes
+science project artifacts update validate.sh # apply
 ```
 
 Updates may carry migration steps; the CLI surfaces them interactively.

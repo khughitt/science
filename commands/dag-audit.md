@@ -18,7 +18,7 @@ Follow `${CLAUDE_PLUGIN_ROOT}/references/command-preamble.md` (role:
 `research-assistant`).
 
 Additionally:
-1. Check that `science-tool dag --help` runs — if not, the upstream `dag`
+1. Check that `science dag --help` runs — if not, the upstream `dag`
    subcommand group is not installed; tell the user and stop.
 2. Confirm the project has a valid `science.yaml` with either a `dag:` block
    or `profile: research` (which triggers research-profile defaults).
@@ -28,7 +28,7 @@ Additionally:
 ### 1. Run the audit read-only
 
 ```
-science-tool dag audit --json
+science dag audit --json
 ```
 
 This re-renders every DAG (idempotent) and runs drift-based staleness detection.
@@ -68,7 +68,7 @@ concrete YAML update:
   caveat (e.g., "perturbation-mechanism-dependent"). Propose extending
   `caveats[]`.
 - **Unclear** — the task's relationship to the edge is ambiguous. Propose
-  opening a review task (`science-tool tasks add --priority P2 --group dag-refresh
+  opening a review task (`science tasks add --priority P2 --group dag-refresh
   --title "Review {dag}#{id}: drift candidate {task_id}"`).
 
 For unpropagated tasks: read the task's own `related:` field and propose
@@ -81,17 +81,17 @@ fixing the ID or removing the stale ref.
 
 ### 4. Await user approval before mutating
 
-Do NOT call `science-tool dag audit --fix` without explicit user confirmation.
+Do NOT call `science dag audit --fix` without explicit user confirmation.
 Present the proposal summary, then ask:
 
 > "Apply all proposed changes, apply selectively, or stop here?"
 
 On approval:
 - For YAML edits: edit the `<dag>.edges.yaml` file directly with the proposed
-  changes. Run `science-tool dag render --project <project>` afterwards to
+  changes. Run `science dag render --project <project>` afterwards to
   refresh the `-auto.dot` / `-auto.png` artifacts.
-- For new review tasks: call `science-tool tasks add` (or
-  `science-tool dag audit --fix` which routes through the same API).
+- For new review tasks: call `science tasks add` (or
+  `science dag audit --fix` which routes through the same API).
 - For ref fixes: edit the `<dag>.edges.yaml` directly.
 
 ### 5. Commit

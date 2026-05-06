@@ -18,7 +18,7 @@ rules, missing new checks, or producing confusing validation output.
 
 The immediate example is `mm30/validate.sh`: it is older than the canonical
 `science/scripts/validate.sh`, so it lacks newer behavior around `.env`
-loading, `science-tool` availability, hypothesis `phase:` validation, and graph
+loading, `science` availability, hypothesis `phase:` validation, and graph
 audit handling. This is not a project-specific mistake; it is a lifecycle gap
 for copied Science artifacts.
 
@@ -88,8 +88,8 @@ Potential future artifacts:
 Versioning behavior:
 
 - Each managed copy includes a machine-readable artifact header.
-- `science-tool` can check whether the copy matches the canonical artifact.
-- `science-tool` can update the copy when it is unchanged or safely
+- `science` can check whether the copy matches the canonical artifact.
+- `science` can update the copy when it is unchanged or safely
   replaceable.
 - If the project copy has local edits, the tool reports `locally_modified` and
   refuses to overwrite unless an explicit force flag is used.
@@ -145,7 +145,7 @@ These are versioned by the language/package ecosystem.
 
 Examples:
 
-- `science-tool`
+- `science`
 - `science-model`
 - `uv.lock`
 - Python package dependencies
@@ -154,7 +154,7 @@ Examples:
 Versioning behavior:
 
 - Use `uv` and normal package lock/update semantics.
-- The project artifact checker may report the active `science-tool` version or
+- The project artifact checker may report the active `science` version or
   path, but should not update dependencies itself.
 
 ## Managed Artifact Header
@@ -175,7 +175,7 @@ Rules:
   `science-managed-source-sha256` line.
 - No other normalization is performed. Trailing whitespace, byte order marks,
   and all non-hash header content remain significant.
-- The artifact name must match a known artifact in the `science-tool` artifact
+- The artifact name must match a known artifact in the `science` artifact
   registry.
 - Absence of the header means `untracked`, not automatically outdated.
 
@@ -185,7 +185,7 @@ suffix such as `2026.04.25.2`.
 
 ## Canonical Artifact Registry
 
-`science-tool` owns a small internal registry of managed artifacts.
+`science` owns a small internal registry of managed artifacts.
 
 For each artifact, the registry records:
 
@@ -209,7 +209,7 @@ artifacts:
     replacement_policy: managed-copy
 ```
 
-The canonical `validate.sh` source should be available to `science-tool` as
+The canonical `validate.sh` source should be available to `science` as
 package data. `scripts/validate.sh` remains the framework-visible source used by
 Claude plugin commands, but tests must ensure the packaged artifact and
 `scripts/validate.sh` stay hash-equivalent under `managed_content_hash`.
@@ -219,9 +219,9 @@ rather than relying on shell-script assumptions.
 
 Direct bootstrap copying is supported. If a command copies
 `${CLAUDE_PLUGIN_ROOT}/scripts/validate.sh` into a project before
-`science-tool` is available, the file may contain the literal sentinel hash line
+`science` is available, the file may contain the literal sentinel hash line
 from the canonical source. Because the managed hash elides the hash-line value,
-that direct copy still checks as `current` once `science-tool` is installed.
+that direct copy still checks as `current` once `science` is installed.
 
 ### Bumping A Managed Artifact
 
@@ -237,19 +237,19 @@ outdated path for existing projects:
    copy and verify it reports `outdated`, not `locally_modified`.
 
 This manual checklist is v1. A future helper command,
-`science-tool project artifacts release validate.sh`, can automate the old-hash
+`science project artifacts release validate.sh`, can automate the old-hash
 capture from git history if the process becomes repetitive.
 
 ## CLI Design
 
-Add a `science-tool project artifacts` command group.
+Add a `science project artifacts` command group.
 
 ### Check
 
 ```bash
-science-tool project artifacts check --project-root .
-science-tool project artifacts check --project-root . --format json
-science-tool project artifacts check --project-root . --strict
+science project artifacts check --project-root .
+science project artifacts check --project-root . --format json
+science project artifacts check --project-root . --strict
 ```
 
 For each known artifact, report:
@@ -274,9 +274,9 @@ making interactive checks noisy.
 ### Update
 
 ```bash
-science-tool project artifacts update validate.sh --project-root .
-science-tool project artifacts update --all --project-root .
-science-tool project artifacts update validate.sh --project-root . --force --yes
+science project artifacts update validate.sh --project-root .
+science project artifacts update --all --project-root .
+science project artifacts update validate.sh --project-root . --force --yes
 ```
 
 Update behavior:
@@ -310,7 +310,7 @@ instead of stopping at the first failure and hiding the remaining statuses.
 ### Diff
 
 ```bash
-science-tool project artifacts diff validate.sh --project-root .
+science project artifacts diff validate.sh --project-root .
 ```
 
 Diff behavior:
@@ -331,7 +331,7 @@ artifact, not perform ad hoc file copying without version metadata.
 
 Validation should not self-update. Running `bash validate.sh` may report that it
 is outdated if the checker is available, but it must not mutate project files.
-The mutation path belongs to `science-tool project artifacts update`.
+The mutation path belongs to `science project artifacts update`.
 
 ### `create-project` And `import-project`
 
@@ -339,10 +339,10 @@ The command docs should stop saying "copy `scripts/validate.sh`" as a bare file
 operation. They should instruct agents to install the managed artifact:
 
 ```bash
-science-tool project artifacts update validate.sh --project-root .
+science project artifacts update validate.sh --project-root .
 ```
 
-For bootstrap cases where `science-tool` is not installed yet, commands may copy
+For bootstrap cases where `science` is not installed yet, commands may copy
 the framework artifact directly, but the copied file must include the managed
 header so future checks work.
 
@@ -353,13 +353,13 @@ them automatically.
 
 Recommended behavior:
 
-- `science-tool health` includes managed artifact status.
+- `science health` includes managed artifact status.
 - `/science:status` may summarize "1 managed artifact outdated:
   `validate.sh`".
 - `/science:next-steps` may recommend running the update command when artifacts
   are stale.
 
-v1 implements `science-tool health` integration directly. Slash-command
+v1 implements `science health` integration directly. Slash-command
 docs can consume that health output in a follow-up; they must not gain a second
 independent artifact classifier.
 
@@ -368,7 +368,7 @@ independent artifact classifier.
 | Artifact class | Examples | Managed by version check? | Update mechanism |
 |---|---|---:|---|
 | Runtime-resolved framework | `commands/`, `skills/`, `templates/`, `codex-skills/` | No | Update Science framework |
-| Copied managed framework | `validate.sh` | Yes | `science-tool project artifacts update` |
+| Copied managed framework | `validate.sh` | Yes | `science project artifacts update` |
 | Project manifest/schema | `science.yaml`, `layout_version` | No | Explicit migrations |
 | Agent guides | `AGENTS.md`, `CLAUDE.md` | No in v1 | Import/migration guidance only |
 | Project AI overrides | `.ai/prompts/`, `.ai/templates/` | No | Project-owned edits |
@@ -376,7 +376,7 @@ independent artifact classifier.
 | Knowledge sources | `knowledge/sources/**` | No | Entity/schema migrations |
 | Generated graph | `knowledge/graph.trig` | No | Rebuild/update graph |
 | DAG generated outputs | DOT/PNG/reference outputs | No | DAG render/number/audit commands |
-| Packages/dependencies | `science-tool`, `science-model`, `uv.lock` | No | `uv` dependency management |
+| Packages/dependencies | `science`, `science-model`, `uv.lock` | No | `uv` dependency management |
 
 ## Migration Strategy
 
@@ -406,7 +406,7 @@ backup before replacement. The project can keep the custom file if it wants.
 
 ### Risk: canonical artifact duplication
 
-If `scripts/validate.sh` and packaged `science-tool` artifact data diverge, the
+If `scripts/validate.sh` and packaged `science` artifact data diverge, the
 updater becomes another source of drift. Add a test that compares them. If this
 continues to be awkward, move the canonical source fully into package data and
 generate `scripts/validate.sh` from it.
@@ -435,7 +435,7 @@ uses migrations, rebuilds, or package management.
 
 Recommendation: defer. Start with explicit `project artifacts check` and
 project health integration. Self-reporting requires the script to locate
-`science-tool` and compare itself on every validation run, which may add noise
+`science` and compare itself on every validation run, which may add noise
 and failure modes to the validator.
 
 ### Should `AGENTS.md` become a managed artifact?

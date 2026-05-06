@@ -108,9 +108,9 @@ Ship adapters in the priority order above. Each PR should:
 1. Add the adapter file under `science_tool/datasets/<name>.py` matching the
    existing `DatasetAdapter` protocol.
 2. Register it in `science_tool/datasets/__init__.py`.
-3. Add tests under `science-tool/tests/test_datasets.py` using the same
+3. Add tests under `science/tests/test_datasets.py` using the same
    mock-based pattern as the Zenodo tests.
-4. Document the source in `science-tool/src/science_tool/datasets/sources.md`
+4. Document the source in `science/src/science_tool/datasets/sources.md`
    (create if needed) with entry-point URLs and query semantics.
 5. Update `commands/find-datasets.md` only if the new adapter changes usage.
 
@@ -130,4 +130,4 @@ benefit — do not expand adapter surface ahead of demand.
 - Replacing portal-native download tools. These adapters are for discovery
   and metadata extraction, not large downloads.
 - Building a unified biomedical ontology mapping inside the adapters. Keep
-  ontology normalization in `science-tool graph` consumers, not here.
+  ontology normalization in `science graph` consumers, not here.

@@ -36,7 +36,7 @@ The `/src` route should be more specific than the parent route in the router con
 ## Manifest Pattern
 
 A prebuild script:
-1. Validates packages via `science-tool research-package validate`
+1. Validates packages via `science research-package validate`
 2. Copies valid packages to the public/static assets directory
 3. Generates a `manifest.json` mapping route keys to package metadata
 4. The manifest is loaded once at app startup to determine which routes have research sources

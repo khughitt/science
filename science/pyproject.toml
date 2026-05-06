@@ -1,0 +1,74 @@
+[project]
+name = "science"
+version = "0.2.0"
+description = "Science knowledge graph tooling"
+requires-python = ">=3.11"
+dependencies = [
+  "click>=8.1",
+  "httpx>=0.27",
+  "rich>=13.0",
+  "rdflib>=7.0",
+  "pyyaml>=6.0",
+  "jsonschema>=4.0",
+  "pydantic>=2.0",
+  "ruamel.yaml>=0.17",
+  "science-model",
+  "ruff>=0.15.6",
+]
+
+[project.scripts]
+science = "science_tool.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.pyright]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/science_tool"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/science_tool/dag/edges.schema.json" = "science_tool/dag/edges.schema.json"
+"src/science_tool/project_artifacts/registry.yaml" = "science_tool/project_artifacts/registry.yaml"
+"src/science_tool/project_artifacts/data" = "science_tool/project_artifacts/data"
+
+[tool.uv.sources]
+science-model = { path = "../science-model", editable = true }
+
+[dependency-groups]
+dev = [
+    "networkx>=3.2",
+    "numpy>=2.4.2",
+    "pytest>=9.0.2",
+    "ruff>=0.15.6",
+    "scipy>=1.17.1",
+]
+
+[project.optional-dependencies]
+distill = [
+    "pykeen",
+    "networkx>=3.2",
+    "httpx",
+]
+causal = [
+    "pgmpy>=0.1.25",
+    "chirho>=0.2.0",
+    "pyro-ppl>=1.9.0",
+    "torch>=2.0",
+]
+datasets = [
+    "httpx>=0.27",
+    "pooch>=1.8",
+]

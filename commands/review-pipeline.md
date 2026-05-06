@@ -17,10 +17,10 @@ The review is NOT a rubber stamp. It should surface problems the user hasn't con
 
 ## Tool invocation
 
-All `science-tool` commands below use this pattern:
+All `science` commands below use this pattern:
 
 ```bash
-uv run science-tool <command>
+uv run science <command>
 ```
 
 ## Rules
@@ -38,8 +38,8 @@ uv run science-tool <command>
 ### Step 1: Load inquiry and plan
 
 ```bash
-science-tool inquiry show "<slug>" --format table
-science-tool inquiry validate "<slug>" --format json
+science inquiry show "<slug>" --format table
+science inquiry validate "<slug>" --format json
 ```
 
 Also read:
@@ -228,7 +228,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:review-pipeline" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

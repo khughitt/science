@@ -11,7 +11,7 @@
 
 cats is a `profile: software` project (a "biological sequence visualization, annotation, and analysis CLI tool") with **0 pre-regs**. The audit is included for completeness across the surveyed cluster.
 
-cats is a software-aspect project rather than a research-aspect project. It uses the same `science-tool` infrastructure but does not author hypothesis tests or pre-registrations. The recast has **no impact** on cats today.
+cats is a software-aspect project rather than a research-aspect project. It uses the same `science` infrastructure but does not author hypothesis tests or pre-registrations. The recast has **no impact** on cats today.
 
 **Recommendation for cats:** No action needed.
 
@@ -29,7 +29,7 @@ If cats ever grows hypothesis-driven research components (e.g., empirical claims
 
 ## Federation status
 
-cats is **not** part of the cancer federation (it's a Science cluster project, not a cancer cluster project). It uses `profile: software` rather than `profile: research`, which signals to `science-tool` that some research-oriented validations don't apply. Pre-reg conventions don't apply either.
+cats is **not** part of the cancer federation (it's a Science cluster project, not a cancer cluster project). It uses `profile: software` rather than `profile: research`, which signals to `science` that some research-oriented validations don't apply. Pre-reg conventions don't apply either.
 
 ---
 

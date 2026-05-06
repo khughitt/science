@@ -10,7 +10,7 @@
 
 ## Summary
 
-A managed artifact is a contract: Science owns the bytes, guarantees a stable extension protocol, and downstream projects consume by installing, customize via the protocol, and stay current via update. The system has one canonical bytes file per artifact (inside the `science-tool` Python package), one declarative registry of capabilities matrices, a per-artifact header protocol, a per-artifact extension protocol whose options are constrained by consumer class, date-based versions with full hash history, declarative migrations with transaction-safe rollback, and loud-signaling-with-manual-mutation propagation. No legacy/compatibility layers; `meta/validate.sh` and `scripts/validate.sh` become one-line `exec` shims.
+A managed artifact is a contract: Science owns the bytes, guarantees a stable extension protocol, and downstream projects consume by installing, customize via the protocol, and stay current via update. The system has one canonical bytes file per artifact (inside the `science` Python package), one declarative registry of capabilities matrices, a per-artifact header protocol, a per-artifact extension protocol whose options are constrained by consumer class, date-based versions with full hash history, declarative migrations with transaction-safe rollback, and loud-signaling-with-manual-mutation propagation. No legacy/compatibility layers; `meta/validate.sh` and `scripts/validate.sh` become one-line `exec` shims.
 
 ## Mental model
 
@@ -26,8 +26,8 @@ The system rhymes with how OS package managers handle distributed config: a regi
 - A sidecar-based extension protocol (no inline marker editing).
 - Date-based versioning with full hash history (uncapped).
 - Declarative migration steps paired to version bumps (when a bump requires the project to do something beyond byte-replace).
-- CLI verbs: `science-tool project artifacts list | check | diff | install | update | pin | unpin`.
-- Status surfaced in `science-tool health`, `/status`, `/next-steps`, `science-tool sync`.
+- CLI verbs: `science project artifacts list | check | diff | install | update | pin | unpin`.
+- Status surfaced in `science health`, `/status`, `/next-steps`, `science sync`.
 - Pre-update `.pre-update.bak`; reversible commits.
 - Test gates: per-artifact hash matches version field; registry round-trips; every artifact declares a sidecar protocol or explicitly opts out.
 
@@ -43,7 +43,7 @@ The system rhymes with how OS package managers handle distributed config: a regi
 
 ### Registry as data, not code
 
-A single declarative file `science-tool/src/science_tool/project_artifacts/registry.yaml` lists every managed artifact. Each entry is a **capabilities matrix** that bundles content metadata, header protocol, install behavior, consumer type, extension protocol, mutation policy, version, history, and migrations.
+A single declarative file `science/src/science_tool/project_artifacts/registry.yaml` lists every managed artifact. Each entry is a **capabilities matrix** that bundles content metadata, header protocol, install behavior, consumer type, extension protocol, mutation policy, version, history, and migrations.
 
 #### Per-artifact capabilities matrix
 
@@ -110,7 +110,7 @@ The remaining subsections of Architecture define each capability area in detail.
 
 ### One physical canonical, packaged
 
-`science-tool/src/science_tool/project_artifacts/data/<artifact>` is the only **canonical bytes** file upstream. Three points need explicit treatment:
+`science/src/science_tool/project_artifacts/data/<artifact>` is the only **canonical bytes** file upstream. Three points need explicit treatment:
 
 **1. The package data IS the fully-rendered managed artifact** — header included.
 
@@ -128,17 +128,17 @@ Both files exist today and are reached by muscle memory and tooling. They become
 #!/usr/bin/env bash
 # science-managed: shim for validate.sh (path convenience; not a managed artifact)
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec uv run --project "$here/../science-tool" \
-     science-tool project artifacts exec validate.sh -- "$@"
+exec uv run --project "$here/../science" \
+     science project artifacts exec validate.sh -- "$@"
 ```
 
-The `science-tool project artifacts exec <name>` verb is part of the v1 CLI surface — it resolves the canonical bytes file path and execs it. The shim form above is repo-position-relative (`$here/..` reaches the repo root from either `meta/` or `scripts/`), so both shims are byte-identical and a single test asserts the spec'd string against both.
+The `science project artifacts exec <name>` verb is part of the v1 CLI surface — it resolves the canonical bytes file path and execs it. The shim form above is repo-position-relative (`$here/..` reaches the repo root from either `meta/` or `scripts/`), so both shims are byte-identical and a single test asserts the spec'd string against both.
 
 These shims are NOT managed artifacts (no header registered for them, no version, no registry entry). They are NOT installed copies. They are pure path conveniences explicitly excluded from "no second canonical bytes file" checks.
 
 **3. Self-installation under the same system.**
 
-`meta/` IS a Science-managed project (it has its own `science.yaml`) but it does NOT need to install `validate.sh` — it consumes via the shim, which reaches the canonical via the package every time. This avoids the "edit canonical → re-install in meta → commit" dance during dev. Downstream projects (`mm30`, `cbioportal`, etc.) DO install — they're independent repos and need a checked-in copy so their own tooling/CI can read it without depending on `science-tool` being importable.
+`meta/` IS a Science-managed project (it has its own `science.yaml`) but it does NOT need to install `validate.sh` — it consumes via the shim, which reaches the canonical via the package every time. This avoids the "edit canonical → re-install in meta → commit" dance during dev. Downstream projects (`mm30`, `cbioportal`, etc.) DO install — they're independent repos and need a checked-in copy so their own tooling/CI can read it without depending on `science` being importable.
 
 This resolves the apparent contradiction "single canonical AND meta/ self-validates": canonical lives in the package, downstream copies are installed, the upstream repo (including `meta/`) reaches canonical via shim and never copies.
 
@@ -150,7 +150,7 @@ The right extension mechanism depends entirely on **who reads the file**. The re
 
 - **`science_loader`** — the file is read by Science's own loader (which can be made aware of sidecars). Extension via `merged_sidecar` works only because every reader is the package's loader, not a raw parser.
 
-- **`native_tool`** — the file is read by an external tool (Git reads `.gitignore`; editors read `.editorconfig`; CI runners read their config). External tools are not aware of sidecars. The only safe pattern is **`generated_effective_file`**: the canonical is treated as a *source*, the project owns the *effective file*, and a Science-tool verb regenerates the effective file from canonical + project-local fragments. The effective file IS NOT a managed artifact (its hash will diverge by design); the canonical input IS.
+- **`native_tool`** — the file is read by an external tool (Git reads `.gitignore`; editors read `.editorconfig`; CI runners read their config). External tools are not aware of sidecars. The only safe pattern is **`generated_effective_file`**: the canonical is treated as a *source*, the project owns the *effective file*, and a science verb regenerates the effective file from canonical + project-local fragments. The effective file IS NOT a managed artifact (its hash will diverge by design); the canonical input IS.
 
 ### Extension protocols
 
@@ -318,10 +318,10 @@ Because these are user-invoked CLI verbs (not autonomous agent actions), the saf
 ### Propagation: loud signaling, manual mutation
 
 Status is surfaced in **all four** of:
-- `science-tool health` — one row per managed artifact (status, current, latest, brief drift summary).
+- `science health` — one row per managed artifact (status, current, latest, brief drift summary).
 - `/status` (the slash command) — loud row when any artifact is stale or locally-modified.
-- `/next-steps` — action item when stale: "run `science-tool project artifacts update <name>`."
-- `science-tool sync` — warns at the top of sync output if stale artifacts exist.
+- `/next-steps` — action item when stale: "run `science project artifacts update <name>`."
+- `science sync` — warns at the top of sync output if stale artifacts exist.
 
 The mutation is always a typed human verb. There is no auto-update. Pre-update writes `<artifact>.pre-update.bak` for one-step rollback. The update commit message carries old → new version + the registry's `changelog` entry for that bump.
 
@@ -355,7 +355,7 @@ Pinned artifacts surface in `health` with a different status (`pinned`) and don'
   - Missing `header_protocol`, `consumer`, `mode`, `content_type`, `mutation_policy` (all required).
 - **Every artifact declares an extension protocol.** Either a real protocol valid for its consumer or a deliberate `extension_protocol: { kind: none, rationale: "..." }`. No silent absence.
 - **Path-convenience shims are byte-correct.** Test asserts `meta/validate.sh` and (if present) `scripts/validate.sh` match the spec'd shim string exactly. Drift in the shim is itself a defect.
-- **Self-installation works.** A test runs `science-tool project artifacts install validate.sh` against a temp project (outside the upstream repo) and asserts: installed bytes are byte-equal to the canonical bytes file (no install-time mutation), file mode equals `0755`, and the file is directly executable.
+- **Self-installation works.** A test runs `science project artifacts install validate.sh` against a temp project (outside the upstream repo) and asserts: installed bytes are byte-equal to the canonical bytes file (no install-time mutation), file mode equals `0755`, and the file is directly executable.
 - **Hook contract works (per-artifact).** For `validate.sh`: a test creates a synthetic project, drops a `validate.local.sh` that registers a hook, runs `validate.sh`, asserts the registered function ran at the expected point.
 - **Migration step round-trip.** Each step's `check`→`apply`→`check` cycle is exercised in isolation; `reversible: true` steps also exercise `unapply`. Bash-step YAML rejected if not block-scalar.
 - **Transaction safety.** A test triggers a deliberately-failing migration step and asserts: artifact remains at old version, project files restored to pre-update state, `.pre-update.bak` not created, no commit emitted, exit code non-zero.
@@ -364,7 +364,7 @@ Pinned artifacts surface in `health` with a different status (`pinned`) and don'
 ## Components
 
 ```
-science-tool/src/science_tool/project_artifacts/
+science/src/science_tool/project_artifacts/
 ├── __init__.py                # public exports: canonical_path, install, check, update, list_artifacts, migrations API
 ├── registry.yaml              # declarative source of truth (see Architecture)
 ├── registry_schema.py         # pydantic / JSON-Schema model for strict validation
@@ -379,7 +379,7 @@ science-tool/src/science_tool/project_artifacts/
 ├── cli.py                     # Click commands; integrated into the existing `project` group
 └── health.py                  # health-report integration
 
-science-tool/tests/
+science/tests/
 ├── test_project_artifacts.py  # status, diff, install, update primitives
 ├── test_managed_registry.py   # schema-strict validation, hash-version match, all required fields
 ├── test_header_protocol.py    # per-kind parse/write, including shebang_comment byte-0 invariant
@@ -391,12 +391,12 @@ science-tool/tests/
 ```
 
 Modifications to existing files:
-- `science-tool/src/science_tool/cli.py` — wire `project artifacts ...` into the existing `project` group.
-- `science-tool/src/science_tool/graph/health.py` — managed-artifacts table + total-issues contribution.
+- `science/src/science_tool/cli.py` — wire `project artifacts ...` into the existing `project` group.
+- `science/src/science_tool/graph/health.py` — managed-artifacts table + total-issues contribution.
 - `commands/status.md` — surface stale artifacts.
 - `commands/next-steps.md` — recommend update on stale.
-- `commands/sync.md` (or `science-tool sync` invocation site) — warn on stale at top of sync output.
-- `commands/create-project.md` — replace bare-copy instructions with `science-tool project artifacts install`.
+- `commands/sync.md` (or `science sync` invocation site) — warn on stale at top of sync output.
+- `commands/create-project.md` — replace bare-copy instructions with `science project artifacts install`.
 - `commands/import-project.md` — same.
 - `docs/project-organization-profiles.md` — replace "Refresh `validate.sh`" with the canonical workflow.
 - `pyproject.toml` — package data inclusion for `data/` and `registry.yaml`; mark `registry.yaml` as importable resource.
@@ -492,7 +492,7 @@ This design redirects in-flight work. The implementation plan must sequence care
    - The `pin` / `unpin` / `exec` verbs.
    - The install matrix for the existing-file cases.
 3. **Plan #7** (`docs/plans/2026-04-25-mav-audit-addendum.md`) — its six audit-surfaced validator fixes become the **first version bump** under this system: `2026.04.25` → `<implementation date>`. The bump's migration entry is `kind: byte_replace` for most fixes; one or two of the six (id-prefix-table introduction; pre-registration row activation) may carry `project_action` migration steps that warn projects about new prefix-conformance warnings.
-4. **Implementation of this design** unblocks: per-project `science-tool project artifacts update validate.sh` (migration plan Task 4); plan-#7 bump landing.
+4. **Implementation of this design** unblocks: per-project `science project artifacts update validate.sh` (migration plan Task 4); plan-#7 bump landing.
 5. **`[t009]`** is downstream of this; consumes the same migration-step shape for entity rename and declarative entity migrations.
 
 ## Resolved during design
@@ -501,8 +501,8 @@ The 2026-04-26 review passes settled the following in the body above; left here 
 
 - **Header strategy** → per-artifact `header_protocol` field with kinds `shebang_comment` / `comment` / `sidecar_metadata` / `none_with_registry_hash_only`. Shell scripts use `shebang_comment` with header inserted *after* the shebang line.
 - **Canonical-bytes ownership** → the package's `data/<artifact>` file IS the fully-rendered managed artifact (header included). Install is byte-copy + chmod. Drift detection re-parses the header from any installed file. No install-time header rewrite.
-- **`meta/validate.sh` and `scripts/validate.sh`** → become byte-identical, repo-position-relative shims that exec the canonical via `uv run --project ../science-tool science-tool project artifacts exec validate.sh`. NOT managed installs. NOT canonicals. Path conveniences only.
-- **`exec` is a first-class CLI verb** → `science-tool project artifacts exec <name> -- <args...>` resolves the canonical bytes path and execs it. Used by the path-convenience shims and available for any direct-invocation use.
+- **`meta/validate.sh` and `scripts/validate.sh`** → become byte-identical, repo-position-relative shims that exec the canonical via `uv run --project ../science science project artifacts exec validate.sh`. NOT managed installs. NOT canonicals. Path conveniences only.
+- **`exec` is a first-class CLI verb** → `science project artifacts exec <name> -- <args...>` resolves the canonical bytes path and execs it. Used by the path-convenience shims and available for any direct-invocation use.
 - **Sidecar semantics for native consumers** → consumer taxonomy (`direct_execute` / `science_loader` / `native_tool`); v1 ships only `direct_execute + sourced_sidecar`; other combinations defined in the registry schema but not delivered until a real artifact requires them.
 - **`sourced_sidecar` execution timing** → sidecar is sourced during canonical init (BEFORE validation runs); canonical defines named hook points and a `register_validation_hook` primitive; sidecar registers callbacks.
 - **Migration step DSL** → Python module reference is the default; bash is allowed only with declared `working_dir` + `timeout_seconds` + `touched_paths` and YAML block scalars (`|` / `>`) for `check`/`apply` (plain-flow rejected).
@@ -518,17 +518,17 @@ These remain truly open and need a call during planning or implementation:
 
 - **Initial managed-artifact membership beyond `validate.sh`.** v1 ships `validate.sh` alone (per the v1-scope note in "Extension protocols"). When the second artifact is introduced, what is it? A managed `.editorconfig` (would force `consumer: native_tool` + `generated_effective_file` to be delivered, exercising that path). A managed shell snippet for a common script preamble (stays in `direct_execute`, low risk, but limited new value). Recommendation lean: don't pre-decide; introduce v1.1's second artifact when a real need surfaces, and let that need drive which consumer/protocol path becomes load-bearing first.
 - **Registry loader location.** Parse YAML at runtime (recommended; small file, easy to evolve, error messages cite the YAML directly) versus pre-bake at package build time. Likely just parse at runtime.
-- **`science-tool sync` integration shape.** `sync` already does several things; how to surface stale-artifact warnings without crowding existing output. Detail call during plan-writing.
+- **`science sync` integration shape.** `sync` already does several things; how to surface stale-artifact warnings without crowding existing output. Detail call during plan-writing.
 
 ## Acceptance criteria
 
 A reasonable implementation of this design satisfies all of:
 
-1. **Single canonical bytes file.** Exactly one physical bytes file per managed artifact, inside the `science-tool` package. `meta/validate.sh` and `scripts/validate.sh` are one-line `exec` shims, byte-identical to the spec'd shim string. No other `validate.sh` in the upstream tree.
+1. **Single canonical bytes file.** Exactly one physical bytes file per managed artifact, inside the `science` package. `meta/validate.sh` and `scripts/validate.sh` are one-line `exec` shims, byte-identical to the spec'd shim string. No other `validate.sh` in the upstream tree.
 2. **Registry strict-validates.** A test loads `registry.yaml` against the schema and asserts: required fields present, consumer/extension/header-protocol combinations are valid, all hashes are well-formed SHA256, no `current_hash` appears in `previous_hashes`.
 3. **Per-artifact `current_hash` matches body bytes.** Test recomputes from the bytes file (per `header_protocol`) and asserts equality.
-4. **CLI verbs land:** `science-tool project artifacts list | check | diff | install | update | pin | unpin | exec`. Each has `--help` text and at least one happy-path test. `install` covers every row of the install matrix.
-5. **Status surfacing in all four:** `health`, `/status`, `/next-steps`, `science-tool sync`.
+4. **CLI verbs land:** `science project artifacts list | check | diff | install | update | pin | unpin | exec`. Each has `--help` text and at least one happy-path test. `install` covers every row of the install matrix.
+5. **Status surfacing in all four:** `health`, `/status`, `/next-steps`, `science sync`.
 6. **Update is reversible.** Every update writes `.pre-update.bak`; commit is single, named, and revertable.
 7. **Transaction safety on migration failure.** Deliberately-failing migration step test asserts: artifact and project files restored; no `.pre-update.bak`; no commit; non-zero exit.
 8. **Dirty-worktree refusal works.** Default-refuse, `--no-commit`, `--allow-dirty` (with path-conflict check) all behave as specified.

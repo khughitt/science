@@ -23,20 +23,20 @@
 - `commands/pre-register.md` - read linked analysis plans and recommend plan-analysis when assumptions are missing.
 - `commands/status.md` - surface plan-analysis as a next step when analysis-facing work lacks an analysis plan.
 - `commands/next-steps.md` - detect analysis-plan tracking gaps.
-- `science-tool/tests/test_command_docs.py` - command behavior coverage.
-- `science-tool/tests/test_codex_skills.py` - generated skill coverage.
+- `science/tests/test_command_docs.py` - command behavior coverage.
+- `science/tests/test_codex_skills.py` - generated skill coverage.
 
 ### Out of Scope
 
-- `science-tool plan-analysis` CLI.
-- `science-tool skills search`.
+- `science plan-analysis` CLI.
+- `science skills search`.
 - `skills/catalog.yaml`.
 - Automatic modality detection from data files.
 
 ## Task 1: Add Command-Doc Tests For `plan-analysis`
 
 **Files:**
-- Modify: `science-tool/tests/test_command_docs.py`
+- Modify: `science/tests/test_command_docs.py`
 
 - [ ] **Step 1: Add a failing test for the new command source**
 
@@ -54,7 +54,7 @@ def test_plan_analysis_command_defines_methodology_readiness_workflow() -> None:
         "skills_loaded:",
         "Readiness Decision",
         "ready-with-caveats",
-        "science-tool feedback add",
+        "science feedback add",
         "--target \"command:plan-analysis\"",
     )
     for expected in expected_strings:
@@ -88,7 +88,7 @@ def test_plan_analysis_command_covers_pressure_scenarios() -> None:
 Run:
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_command_docs.py::test_plan_analysis_command_defines_methodology_readiness_workflow tests/test_command_docs.py::test_plan_analysis_command_covers_pressure_scenarios -v
+cd science && uv run --frozen pytest tests/test_command_docs.py::test_plan_analysis_command_defines_methodology_readiness_workflow tests/test_command_docs.py::test_plan_analysis_command_covers_pressure_scenarios -v
 ```
 
 Expected: FAIL because `commands/plan-analysis.md` does not exist.
@@ -224,7 +224,7 @@ Reflect on the **template**, **skill index**, and **workflow** used above.
 If you have feedback, report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:plan-analysis" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \
@@ -239,7 +239,7 @@ Skip if everything worked smoothly.
 Run:
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_command_docs.py::test_plan_analysis_command_defines_methodology_readiness_workflow tests/test_command_docs.py::test_plan_analysis_command_covers_pressure_scenarios -v
+cd science && uv run --frozen pytest tests/test_command_docs.py::test_plan_analysis_command_defines_methodology_readiness_workflow tests/test_command_docs.py::test_plan_analysis_command_covers_pressure_scenarios -v
 ```
 
 Expected: PASS.
@@ -247,7 +247,7 @@ Expected: PASS.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add commands/plan-analysis.md science-tool/tests/test_command_docs.py
+git add commands/plan-analysis.md science/tests/test_command_docs.py
 git commit -m "feat(commands): add science plan-analysis command"
 ```
 
@@ -258,11 +258,11 @@ git commit -m "feat(commands): add science plan-analysis command"
 - Modify: `commands/pre-register.md`
 - Modify: `commands/status.md`
 - Modify: `commands/next-steps.md`
-- Modify: `science-tool/tests/test_command_docs.py`
+- Modify: `science/tests/test_command_docs.py`
 
 - [ ] **Step 1: Add failing integration test**
 
-Append this test to `science-tool/tests/test_command_docs.py`:
+Append this test to `science/tests/test_command_docs.py`:
 
 ```python
 def test_plan_analysis_is_integrated_with_neighbor_commands() -> None:
@@ -298,7 +298,7 @@ def test_plan_analysis_is_integrated_with_neighbor_commands() -> None:
 Run:
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_command_docs.py::test_plan_analysis_is_integrated_with_neighbor_commands -v
+cd science && uv run --frozen pytest tests/test_command_docs.py::test_plan_analysis_is_integrated_with_neighbor_commands -v
 ```
 
 Expected: FAIL on at least one missing integration string.
@@ -364,7 +364,7 @@ recommending a new one.
 Run:
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_command_docs.py::test_plan_analysis_is_integrated_with_neighbor_commands -v
+cd science && uv run --frozen pytest tests/test_command_docs.py::test_plan_analysis_is_integrated_with_neighbor_commands -v
 ```
 
 Expected: PASS.
@@ -372,7 +372,7 @@ Expected: PASS.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add commands/plan-pipeline.md commands/pre-register.md commands/status.md commands/next-steps.md science-tool/tests/test_command_docs.py
+git add commands/plan-pipeline.md commands/pre-register.md commands/status.md commands/next-steps.md science/tests/test_command_docs.py
 git commit -m "docs(commands): route analysis readiness gaps to plan-analysis"
 ```
 
@@ -380,11 +380,11 @@ git commit -m "docs(commands): route analysis readiness gaps to plan-analysis"
 
 **Files:**
 - Create: `codex-skills/science-plan-analysis/SKILL.md`
-- Modify: `science-tool/tests/test_codex_skills.py`
+- Modify: `science/tests/test_codex_skills.py`
 
 - [ ] **Step 1: Add failing generated-skill test**
 
-Append this test to `science-tool/tests/test_codex_skills.py`:
+Append this test to `science/tests/test_codex_skills.py`:
 
 ```python
 def test_plan_analysis_generated_skill_mentions_index_and_readiness() -> None:
@@ -395,7 +395,7 @@ def test_plan_analysis_generated_skill_mentions_index_and_readiness() -> None:
         "skills/INDEX.md",
         "doc/plans/YYYY-MM-DD-<slug>-analysis-plan.md",
         "Readiness Decision",
-        "science-tool feedback add",
+        "science feedback add",
     )
     for expected in expected_strings:
         assert expected in text
@@ -406,7 +406,7 @@ def test_plan_analysis_generated_skill_mentions_index_and_readiness() -> None:
 Run:
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_codex_skills.py::test_plan_analysis_generated_skill_mentions_index_and_readiness -v
+cd science && uv run --frozen pytest tests/test_codex_skills.py::test_plan_analysis_generated_skill_mentions_index_and_readiness -v
 ```
 
 Expected: FAIL because `codex-skills/science-plan-analysis/SKILL.md` does not exist.
@@ -426,7 +426,7 @@ Expected: creates `codex-skills/science-plan-analysis/SKILL.md`.
 Run:
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_codex_skills.py::test_plan_analysis_generated_skill_mentions_index_and_readiness -v
+cd science && uv run --frozen pytest tests/test_codex_skills.py::test_plan_analysis_generated_skill_mentions_index_and_readiness -v
 ```
 
 Expected: PASS.
@@ -434,7 +434,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add codex-skills/science-plan-analysis/SKILL.md science-tool/tests/test_codex_skills.py
+git add codex-skills/science-plan-analysis/SKILL.md science/tests/test_codex_skills.py
 git commit -m "chore(codex-skills): generate plan-analysis skill"
 ```
 
@@ -448,7 +448,7 @@ git commit -m "chore(codex-skills): generate plan-analysis skill"
 Run:
 
 ```bash
-cd science-tool && uv run --frozen pytest tests/test_command_docs.py tests/test_codex_skills.py -v
+cd science && uv run --frozen pytest tests/test_command_docs.py tests/test_codex_skills.py -v
 ```
 
 Expected: existing baseline failures in `tests/test_codex_skills.py` and `tests/test_command_docs.py` may remain; the new plan-analysis tests must pass. If a new plan-analysis test fails, fix it before continuing.
@@ -458,7 +458,7 @@ Expected: existing baseline failures in `tests/test_codex_skills.py` and `tests/
 Run:
 
 ```bash
-cd science-tool && uv run --frozen science-tool skills lint --root ../skills --format text
+cd science && uv run --frozen science skills lint --root ../skills --format text
 ```
 
 Expected: exit 0.

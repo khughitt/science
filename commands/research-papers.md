@@ -24,7 +24,7 @@ This command runs in two roles. Determine which you are before proceeding.
 
 1. **Parse** `$ARGUMENTS` into a list of paper references. Let `N` be the count.
 2. **Pre-dispatch check:** For each paper, look at `doc/papers/` for an existing summary (fuzzy match on title/author/DOI). If any may exist, ask the user whether to overwrite, skip, or supplement — resolve per-paper, then carry each decision into that paper's subagent prompt.
-3. **Dispatch** the `paper-researcher` subagent *once per paper*. When `N > 1`, issue all Agent calls **in parallel** (multiple tool uses in a single message) so they overlap — the shared rate limiter in `science-tool paper-fetch` keeps per-host traffic polite automatically.
+3. **Dispatch** the `paper-researcher` subagent *once per paper*. When `N > 1`, issue all Agent calls **in parallel** (multiple tool uses in a single message) so they overlap — the shared rate limiter in `science paper-fetch` keeps per-host traffic polite automatically.
    - `subagent_type: paper-researcher`
    - `description`: a short identifier for that paper
    - `prompt`: the single paper's reference + its overwrite decision + any project-specific context the subagent would not otherwise discover
@@ -45,7 +45,7 @@ Additionally:
 
 ## Source Strategy
 
-Retrieval is centralized through `science-tool paper-fetch`, which handles tiered source probing (Crossref → Unpaywall → arXiv → bioRxiv/medRxiv → Europe PMC → direct OA PDF) with cross-process rate limiting. This avoids open-ended scavenging and keeps parallel subagents polite to the same servers.
+Retrieval is centralized through `science paper-fetch`, which handles tiered source probing (Crossref → Unpaywall → arXiv → bioRxiv/medRxiv → Europe PMC → direct OA PDF) with cross-process rate limiting. This avoids open-ended scavenging and keeps parallel subagents polite to the same servers.
 
 ### Picking the right identifier flag
 
@@ -113,13 +113,13 @@ Follow `.ai/templates/paper.md` first, then `${CLAUDE_PLUGIN_ROOT}/templates/pap
 
 1. Add/update the BibTeX entry in `papers/references.bib` (create file with header if missing).
 2. Link relevance to existing hypotheses in `specs/hypotheses/`.
-3. Add new questions via `science-tool question reserve`. **Do not** create files under `doc/questions/` directly — parallel subagents racing on the next q-number cause silent collisions. The CLI uses `O_CREAT|O_EXCL` to atomically claim the next slot, even with multiple subagents writing concurrently.
+3. Add new questions via `science question reserve`. **Do not** create files under `doc/questions/` directly — parallel subagents racing on the next q-number cause silent collisions. The CLI uses `O_CREAT|O_EXCL` to atomically claim the next slot, even with multiple subagents writing concurrently.
    Read `.ai/templates/question.md` first; if not found, read
    `${CLAUDE_PLUGIN_ROOT}/templates/question.md` before drafting question bodies.
 
    For each new question:
    ```bash
-   uv run science-tool question reserve \
+   uv run science question reserve \
      --slug "<short-kebab-slug>" \
      --title "<question title>" \
      --source-refs "<this paper's citekey>" \
@@ -158,7 +158,7 @@ If you have feedback (friction, gaps, suggestions, or things that worked well),
 report each item via:
 
 ```bash
-science-tool feedback add \
+science feedback add \
   --target "command:research-papers" \
   --category <friction|gap|guidance|suggestion|positive> \
   --summary "<one-line summary>" \

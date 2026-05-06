@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the shipped Markdown templates the single source of truth for source-authored entity shells created by `science-tool hypothesis create`, `science-tool question create`, `science-tool interpretation create`, and `science-tool discussion create`.
+**Goal:** Make the shipped Markdown templates the single source of truth for source-authored entity shells created by `science hypothesis create`, `science question create`, `science interpretation create`, and `science discussion create`.
 
-**Architecture:** Keep repo-root `templates/` as the canonical source for commands, skills, and plugin packaging. Add a packaged copy under `science-model/src/science_model/templates/` for installed CLI use, with tests that compare the two copies for the migrated kinds. Keep `science-tool` responsible for CLI argument collection, ID/path policy, project writes, and validation; it calls the renderer for migrated kinds and keeps the generic Summary/Notes shell for non-migrated kinds.
+**Architecture:** Keep repo-root `templates/` as the canonical source for commands, skills, and plugin packaging. Add a packaged copy under `science-model/src/science_model/templates/` for installed CLI use, with tests that compare the two copies for the migrated kinds. Keep `science` responsible for CLI argument collection, ID/path policy, project writes, and validation; it calls the renderer for migrated kinds and keeps the generic Summary/Notes shell for non-migrated kinds.
 
 **Tech Stack:** Python 3.11, Click, Pydantic v2, PyYAML, `importlib.resources`, pytest, Hatchling package data.
 
@@ -12,7 +12,7 @@
 
 ## Context
 
-`science-tool/src/science_tool/entities.py::build_entity_markdown` currently creates generic shells for most kinds and a hard-coded discussion body for fb-2026-04-30-001. That fixed `/science:discuss` drift temporarily, but it created a second source of truth beside `templates/discussion.md`.
+`science/src/science_tool/entities.py::build_entity_markdown` currently creates generic shells for most kinds and a hard-coded discussion body for fb-2026-04-30-001. That fixed `/science:discuss` drift temporarily, but it created a second source of truth beside `templates/discussion.md`.
 
 The durable fix is to render entity bodies from `templates/<kind>.md`. The four Phase 1 migrated kinds are:
 
@@ -29,10 +29,10 @@ For those migrated kinds, a missing `_template:` metadata block is a hard config
 - Create packaged copies in: `science-model/src/science_model/templates/`
 - Create: `science-model/src/science_model/templates.py`
 - Create: `science-model/tests/test_templates.py`
-- Modify: `science-tool/src/science_tool/entities.py`
-- Modify: `science-tool/src/science_tool/cli.py`
-- Modify: `science-tool/tests/test_entities.py`
-- Modify: `science-tool/tests/test_entities_cli.py`
+- Modify: `science/src/science_tool/entities.py`
+- Modify: `science/src/science_tool/cli.py`
+- Modify: `science/tests/test_entities.py`
+- Modify: `science/tests/test_entities_cli.py`
 - Review only if package-data verification fails: `science-model/pyproject.toml`
 
 ## Data Contract
@@ -94,7 +94,7 @@ Run:
 
 ```bash
 rg -n "CLAUDE_PLUGIN_ROOT.*/templates|templates/.*\\.md|\\.ai/templates" \
-  commands skills codex-skills references science-tool/tests/test_command_docs.py
+  commands skills codex-skills references science/tests/test_command_docs.py
 ```
 
 Expected: output includes command and skill consumers such as `commands/add-hypothesis.md`, `commands/discuss.md`, `commands/find-datasets.md`, `commands/pre-register.md`, `commands/research-papers.md`, `commands/search-literature.md`, `commands/research-topic.md`, `commands/big-picture.md`, `skills/pipelines/snakemake.md`, and generated `codex-skills/` references. This confirms root `templates/` must remain a real directory for plugin packaging.
@@ -709,8 +709,8 @@ git commit -m "feat: render entity shells from templates"
 ## Task 5: Wire Renderer Into Entity Creation
 
 **Files:**
-- Modify: `science-tool/src/science_tool/entities.py`
-- Modify: `science-tool/tests/test_entities.py`
+- Modify: `science/src/science_tool/entities.py`
+- Modify: `science/tests/test_entities.py`
 
 - [ ] **Step 1: Extend `build_entity_markdown` arguments**
 
@@ -772,7 +772,7 @@ This path must still call `_validate_prospective_write` after rendering template
 
 - [ ] **Step 3: Update entity tests**
 
-In `science-tool/tests/test_entities.py`, update `test_build_entity_markdown_uses_canonical_frontmatter_and_body` so `kind="question"` expects template sections:
+In `science/tests/test_entities.py`, update `test_build_entity_markdown_uses_canonical_frontmatter_and_body` so `kind="question"` expects template sections:
 
 ```python
 assert "## Why It Matters" in text
@@ -843,7 +843,7 @@ def test_template_driven_create_entity_passes_prospective_audit_for_all_migrated
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities.py -q
+uv run --frozen pytest science/tests/test_entities.py -q
 ```
 
 Expected: PASS.
@@ -853,15 +853,15 @@ Expected: PASS.
 Run:
 
 ```bash
-git add science-tool/src/science_tool/entities.py science-tool/tests/test_entities.py
+git add science/src/science_tool/entities.py science/tests/test_entities.py
 git commit -m "feat: use templates for source entity shells"
 ```
 
 ## Task 6: Add CLI Flags and Section Listing
 
 **Files:**
-- Modify: `science-tool/src/science_tool/cli.py`
-- Modify: `science-tool/tests/test_entities_cli.py`
+- Modify: `science/src/science_tool/cli.py`
+- Modify: `science/tests/test_entities_cli.py`
 
 - [ ] **Step 1: Add shared create options**
 
@@ -908,11 +908,11 @@ def entity_sections(kind: str) -> None:
     )
 ```
 
-`emit_query_rows` is already imported and used in `science-tool/src/science_tool/cli.py`; no new output helper is required.
+`emit_query_rows` is already imported and used in `science/src/science_tool/cli.py`; no new output helper is required.
 
 - [ ] **Step 3: Add CLI tests**
 
-In `science-tool/tests/test_entities_cli.py`, add tests that invoke:
+In `science/tests/test_entities_cli.py`, add tests that invoke:
 
 ```python
 runner.invoke(main, ["discussion", "create", "Test discussion", "--with", "double-blind-addendum"])
@@ -933,7 +933,7 @@ Assert:
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities_cli.py -q
+uv run --frozen pytest science/tests/test_entities_cli.py -q
 ```
 
 Expected: PASS.
@@ -943,7 +943,7 @@ Expected: PASS.
 Run:
 
 ```bash
-git add science-tool/src/science_tool/cli.py science-tool/tests/test_entities_cli.py
+git add science/src/science_tool/cli.py science/tests/test_entities_cli.py
 git commit -m "feat: expose template section controls in CLI"
 ```
 
@@ -986,7 +986,7 @@ Run:
 ```bash
 test -d templates
 test ! -L templates
-rg -n "CLAUDE_PLUGIN_ROOT.*/templates|templates/.*\\.md|\\.ai/templates" commands skills references science-tool/tests/test_command_docs.py
+rg -n "CLAUDE_PLUGIN_ROOT.*/templates|templates/.*\\.md|\\.ai/templates" commands skills references science/tests/test_command_docs.py
 ```
 
 Expected: `templates/` is a real directory, not a symlink, and the grep still shows command/skill consumers that resolve through that path.
@@ -996,7 +996,7 @@ Expected: `templates/` is a real directory, not a symlink, and the grep still sh
 Run:
 
 ```bash
-uv run --frozen pytest science-tool/tests/test_entities.py::test_template_driven_create_entity_passes_prospective_audit_for_all_migrated_kinds -q
+uv run --frozen pytest science/tests/test_entities.py::test_template_driven_create_entity_passes_prospective_audit_for_all_migrated_kinds -q
 ```
 
 Expected: PASS. This verifies the new template frontmatter fields do not introduce blocking `_validate_prospective_write` audit rows.
@@ -1006,7 +1006,7 @@ Expected: PASS. This verifies the new template frontmatter fields do not introdu
 Run:
 
 ```bash
-uv run --frozen pytest science-model/tests/test_templates.py science-tool/tests/test_entities.py science-tool/tests/test_entities_cli.py -q
+uv run --frozen pytest science-model/tests/test_templates.py science/tests/test_entities.py science/tests/test_entities_cli.py -q
 ```
 
 Expected: PASS.
@@ -1016,8 +1016,8 @@ Expected: PASS.
 Run:
 
 ```bash
-uv run --frozen ruff check science-model/src/science_model/templates.py science-model/tests/test_templates.py science-tool/src/science_tool/entities.py science-tool/src/science_tool/cli.py science-tool/tests/test_entities.py science-tool/tests/test_entities_cli.py
-uv run --frozen pyright science-model/src/science_model science-tool/src/science_tool
+uv run --frozen ruff check science-model/src/science_model/templates.py science-model/tests/test_templates.py science/src/science_tool/entities.py science/src/science_tool/cli.py science/tests/test_entities.py science/tests/test_entities_cli.py
+uv run --frozen pyright science-model/src/science_model science/src/science_tool
 ```
 
 Expected: both commands PASS.
@@ -1027,7 +1027,7 @@ Expected: both commands PASS.
 Run:
 
 ```bash
-rg -n "_DISCUSSION_BODY_SECTIONS|kind == \"discussion\"|Summary\\n\\n\\n## Notes" science-tool/src/science_tool/entities.py
+rg -n "_DISCUSSION_BODY_SECTIONS|kind == \"discussion\"|Summary\\n\\n\\n## Notes" science/src/science_tool/entities.py
 ```
 
 Expected: no matches.
@@ -1070,10 +1070,10 @@ status: "active"
 EOF
 (
   cd "$tmpdir"
-  uv run --project /mnt/ssd/Dropbox/science/science-tool science-tool question create "What should we test next?"
-  uv run --project /mnt/ssd/Dropbox/science/science-tool science-tool hypothesis create "Template shell hypothesis" --id hypothesis:h01-template-shell
-  uv run --project /mnt/ssd/Dropbox/science/science-tool science-tool discussion create "Template shell discussion" --with double-blind-addendum
-  uv run --project /mnt/ssd/Dropbox/science/science-tool science-tool interpretation create "Template shell interpretation"
+  uv run --project /mnt/ssd/Dropbox/science/science science question create "What should we test next?"
+  uv run --project /mnt/ssd/Dropbox/science/science science hypothesis create "Template shell hypothesis" --id hypothesis:h01-template-shell
+  uv run --project /mnt/ssd/Dropbox/science/science science discussion create "Template shell discussion" --with double-blind-addendum
+  uv run --project /mnt/ssd/Dropbox/science/science science interpretation create "Template shell interpretation"
 )
 ```
 
@@ -1087,8 +1087,8 @@ Run:
 tmpdir="$(cat /tmp/science-template-shells-tmpdir)"
 (
   cd "$tmpdir"
-  uv run --project /mnt/ssd/Dropbox/science/science-tool science-tool entity list
-  uv run --project /mnt/ssd/Dropbox/science/science-tool science-tool graph audit --project-root "$tmpdir"
+  uv run --project /mnt/ssd/Dropbox/science/science science entity list
+  uv run --project /mnt/ssd/Dropbox/science/science science graph audit --project-root "$tmpdir"
 )
 ```
 
@@ -1099,8 +1099,8 @@ Expected: `entity list` output includes the four created entities; `graph audit`
 Run:
 
 ```bash
-uv run --frozen pytest science-model/tests/test_templates.py science-tool/tests/test_entities.py science-tool/tests/test_entities_cli.py -q
-uv run --frozen ruff check science-model/src/science_model/templates.py science-model/tests/test_templates.py science-tool/src/science_tool/entities.py science-tool/src/science_tool/cli.py science-tool/tests/test_entities.py science-tool/tests/test_entities_cli.py
+uv run --frozen pytest science-model/tests/test_templates.py science/tests/test_entities.py science/tests/test_entities_cli.py -q
+uv run --frozen ruff check science-model/src/science_model/templates.py science-model/tests/test_templates.py science/src/science_tool/entities.py science/src/science_tool/cli.py science/tests/test_entities.py science/tests/test_entities_cli.py
 ```
 
 Expected: all commands PASS.
@@ -1111,7 +1111,7 @@ Run:
 
 ```bash
 git status --short
-git add docs/plans/2026-05-03-template-driven-entity-shells-design.md science-model science-tool templates
+git add docs/plans/2026-05-03-template-driven-entity-shells-design.md science-model science templates
 git commit -m "feat: template-driven source entity shells"
 ```
 
@@ -1122,7 +1122,7 @@ Expected: the staged diff contains template metadata in both template locations,
 - **Template metadata becomes load-bearing.** Mitigation: `science-model/tests/test_templates.py` renders all migrated templates and checks declared section names against real headings.
 - **Root and packaged templates drift.** Mitigation: `test_root_and_packaged_migrated_templates_match` compares both copies for all migrated kinds.
 - **Plugin template consumers break if `templates/` is not a real directory.** Mitigation: root `templates/` remains canonical; Task 1 enumerates `${CLAUDE_PLUGIN_ROOT}/templates/...` consumers, and Task 7 verifies `templates/` is not a symlink.
-- **Downstream graph consumers see more frontmatter fields.** Mitigation: the prospective-audit regression creates all four migrated kinds through `create_entity` and expects no warnings; Task 8 also runs `science-tool graph audit`.
+- **Downstream graph consumers see more frontmatter fields.** Mitigation: the prospective-audit regression creates all four migrated kinds through `create_entity` and expects no warnings; Task 8 also runs `science graph audit`.
 - **Unknown placeholders appear in authored comments.** Mitigation: renderer substitutes only the closed canonical vocabulary and preserves unknown `{{...}}` text.
 - **CLI options are added inconsistently across create paths.** Mitigation: Task 6 wires the same options through generic `entity create` and all four typed create commands.
 
@@ -1130,4 +1130,4 @@ Expected: the staged diff contains template metadata in both template locations,
 
 - Spec coverage: the plan covers canonical root templates plus packaged copies, `_template` metadata, renderer API, CLI `--with` / `--without` / `--no-hints`, `entity sections`, migrated-kind hard errors, optional discussion addendum handling, package-data verification, prospective audit verification, and end-to-end graph audit smoke checks.
 - Placeholder scan: product placeholders are limited to documented template syntax; there are no unresolved implementation placeholders in task instructions.
-- Type consistency: renderer field names in template metadata match the field dict assembled in `science-tool/src/science_tool/entities.py`; CLI option names map to `with_sections`, `without_sections`, and `no_hints` through all create paths.
+- Type consistency: renderer field names in template metadata match the field dict assembled in `science/src/science_tool/entities.py`; CLI option names map to `with_sections`, `without_sections`, and `no_hints` through all create paths.

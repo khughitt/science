@@ -22,7 +22,7 @@ If `science.yaml` declares `role: meta`, the rest of this skill's per-project
 flow is replaced by:
 
 ```bash
-science-tool federation status
+science federation status
 ```
 
 Print the result and stop. Do not attempt to read individual children's project
@@ -67,14 +67,14 @@ When `knowledge/graph.trig` exists:
 1. Run:
 
 ```bash
-science-tool graph project-summary --format json
-science-tool graph question-summary --format json
-science-tool graph inquiry-summary --format json
-science-tool graph attention-sample --limit 5 --format json
-science-tool graph dashboard-summary --format json
-science-tool graph neighborhood-summary --format json
-science-tool graph uncertainty --format json
-science-tool graph gaps --format json
+science graph project-summary --format json
+science graph question-summary --format json
+science graph inquiry-summary --format json
+science graph attention-sample --limit 5 --format json
+science graph dashboard-summary --format json
+science graph neighborhood-summary --format json
+science graph uncertainty --format json
+science graph gaps --format json
 ```
 
 For `software` projects, skip `project-summary` for now and start from `question-summary` / `inquiry-summary`.
@@ -103,7 +103,7 @@ For `software` projects, skip `project-summary` for now and start from `question
 Also run:
 
 ```bash
-science-tool health --project-root . --format json
+science health --project-root . --format json
 ```
 
 Surface, at minimum:
@@ -114,7 +114,7 @@ Surface, at minimum:
 - proxy-mediated propositions still missing `measurement_model`,
 - rival-model packets missing discriminating predictions or overstating a `current_working_model` without real adjudication evidence.
 
-Treat `science-tool graph migrate` as an audit-first command. Reach for `--apply` only after the
+Treat `science graph migrate` as an audit-first command. Reach for `--apply` only after the
 preview confirms that the proposed rewrites and local-source scaffolding are actually wanted.
 
 If high-impact claims still carry only one visible `independence_group`, call that out explicitly as a fragility note even if the project has not yet promoted it into a first-class dashboard metric.
@@ -135,36 +135,36 @@ Flag:
 - stale tasks
 - old untouched hypotheses
 - graph/doc drift if the graph changed but interpretation/docs did not
-- **attention sample**: run `science-tool graph attention-sample --limit 5 --format json`
+- **attention sample**: run `science graph attention-sample --limit 5 --format json`
   to sample epistemic entities by observable graph weight. Include sampled
   `needs-review` or `stale` entities when they are relevant to the current status.
 - When a sampled entity is `needs-review`, frame it as a review workflow candidate:
   the next action is to inspect `sci:triggeredBy` evidence, then either record an
-  unchanged review with `science-tool entity review <target-ref>` or author a new
+  unchanged review with `science entity review <target-ref>` or author a new
   conclusion linked by `sci:amends` / `sci:supersedes`. Do not describe the
   freshness state as a conclusion that the old standing is wrong.
-- **task archive lag**: when `science-tool health --format json` shows non-zero
+- **task archive lag**: when `science health --format json` shows non-zero
   `archive_lag.done_in_active` or `archive_lag.retired_in_active`, surface it as:
-  > N done/retired task(s) still in `tasks/active.md`. Run `science-tool tasks archive --apply`
+  > N done/retired task(s) still in `tasks/active.md`. Run `science tasks archive --apply`
   > to move them to `tasks/done/YYYY-MM.md`.
   If `archive_lag.missing_completed` is non-zero, call out that those entries need a
   `completed:` date backfilled before archiving so they route to the correct month.
 
 ### Managed artifacts
 
-If `science-tool health` reports any managed artifact whose status is not `current` (or `pinned`), surface it:
+If `science health` reports any managed artifact whose status is not `current` (or `pinned`), surface it:
 
 - `<artifact-name>: <status>` — `<detail>`
-  - For `stale`: "Run `science-tool project artifacts update <name>` to refresh."
-  - For `locally_modified`: "Run `science-tool project artifacts diff <name>` to inspect; `update --force --yes` to overwrite."
-  - For `missing`: "Run `science-tool project artifacts install <name>` to install."
+  - For `stale`: "Run `science project artifacts update <name>` to refresh."
+  - For `locally_modified`: "Run `science project artifacts diff <name>` to inspect; `update --force --yes` to overwrite."
+  - For `missing`: "Run `science project artifacts install <name>` to install."
   - For `pinned_but_locally_modified`: "Pin no longer protects what was pinned. Run `diff` then either `update --force --yes` or `unpin`."
 
 The list comes from the `managed_artifacts` field of the health report.
 
 **Cross-project sync staleness:**
 
-Run `science-tool sync status` to check when the last cross-project sync was performed.
+Run `science sync status` to check when the last cross-project sync was performed.
 If sync is stale (over the configured threshold), mention it:
 
 > Cross-project sync is N days stale. Run `/science:sync` to align with N other registered projects.

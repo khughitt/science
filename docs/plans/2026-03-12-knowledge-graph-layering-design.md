@@ -23,7 +23,7 @@ In `seq-feats`, for example, the graph currently splits into a literature/concep
 3. Support project-local extensions with the same structural rules as curated profiles.
 4. Allow explicit cross-layer relations and on-demand union graphs.
 5. Eliminate document/RDF/UI identity drift.
-6. Make `science-tool`, `science-web`, commands, and skills operate against the same formal model.
+6. Make `science`, `science-web`, commands, and skills operate against the same formal model.
 
 ## Non-Goals
 
@@ -78,7 +78,7 @@ Each profile must declare:
 7. Bridge and mapping rules to `core` and other enabled profiles
 8. Domain assignment rules for UI-facing summaries and graph coloring
 
-This profile system is the main contract that tooling consumes. `science-tool`, `science-web`, project validation, and skills should stop hardcoding entity semantics and instead resolve them through `science-model`.
+This profile system is the main contract that tooling consumes. `science`, `science-web`, project validation, and skills should stop hardcoding entity semantics and instead resolve them through `science-model`.
 
 ## Core Model
 
@@ -316,7 +316,7 @@ bindings:
     source_path: knowledge/sources/project_specific/bindings.yaml
 ```
 
-These contracts are the long-term inputs that `science-tool graph build` should read directly.
+These contracts are the long-term inputs that `science graph build` should read directly.
 
 ### Canonical Sources Vs Application Internals
 
@@ -327,10 +327,10 @@ They may be used as migration/import inputs, but only through explicit importers
 This boundary matters for projects like `natural-systems-guide`, where the current model layer lives in app-specific files. The correct end state is:
 
 1. canonical source files become the source of truth for model-layer knowledge
-2. `science-tool` materializes RDF from those canonical source files
+2. `science` materializes RDF from those canonical source files
 3. project applications either read those canonical files directly or regenerate their own internal artifacts from them
 
-`science-tool` should not permanently depend on project-specific TypeScript or generated JSON layouts to build the KG.
+`science` should not permanently depend on project-specific TypeScript or generated JSON layouts to build the KG.
 
 Implementation reminder:
 After the typed canonical source contracts are implemented, return to `natural-systems-guide` and complete the model-layer cutover by replacing the remaining app-internal KG inputs with generated canonical source files.
@@ -348,7 +348,7 @@ Owns:
 5. Graph payload structures shared by other systems
 6. The shared distinction between `profile`, `graph_layer`, and `domain`
 
-### `science-tool`
+### `science`
 
 Owns:
 
@@ -424,7 +424,7 @@ After the typed model-layer source contracts and project migrations are in place
 Migration should be staged:
 
 1. Define the profile system and canonical IDs in `science-model`
-2. Update `science-tool` to materialize graphs from canonical upstream sources
+2. Update `science` to materialize graphs from canonical upstream sources
 3. Update `science-web` to consume model/profile metadata and include tasks as graph entities
 4. Migrate `seq-feats` to `core + bio + project_specific`
 5. Define typed canonical source contracts for richer project-local semantics such as models, parameters, and bindings
@@ -482,4 +482,4 @@ These are implementation details to resolve in the plan, not open architecture q
 5. Promotion workflow for moving stable project-local semantics into curated profiles
 6. Exact upstream precedence rules for assigning `domain` (for example explicit source field, curated mapping, otherwise `None`)
 7. Exact contract for project-level domain summaries such as `top_domains`
-8. Whether typed source contracts live in a dedicated `science-model` module or remain schema-validated within `science-tool`
+8. Whether typed source contracts live in a dedicated `science-model` module or remain schema-validated within `science`
