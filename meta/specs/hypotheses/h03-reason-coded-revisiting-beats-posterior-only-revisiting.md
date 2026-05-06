@@ -13,13 +13,19 @@ source_refs:
 - paper:VanWonderen2024
 - paper:Semochkina2025
 - paper:Han2026
+- paper:Dong2023
+- paper:Faller2024
+- paper:Jiralerspong2024
+- paper:Liu2024HiddenWorld
+- paper:Zheng2024
 related:
 - question:01-evidence-payload-schema
 - question:03-source-and-pipeline-provenance
+- question:10-causal-graph-construction-pipeline
 - hypothesis:h01-stochastic-revisiting
 - hypothesis:h02-rich-evidence-payloads-improve-graph-calibration
 created: '2026-05-05'
-updated: '2026-05-05'
+updated: '2026-05-06'
 ---
 # Hypothesis H03: Reason-coded revisiting beats posterior-only revisiting
 
@@ -27,7 +33,7 @@ updated: '2026-05-05'
 
 An attention policy that revisits uncertain propositions using reason-coded uncertainty signals will outperform a policy that revisits based only on posterior magnitude or scalar support.
 The key claim is that "low confidence" is not one state.
-A proposition down-weighted because evidence is underpowered, prior-sensitive, heterogeneous, source-dependent, missing a view, cleaned by an unvalidated pipeline, or mismatched to the target population should be sampled differently from a proposition down-weighted by strong independent counterevidence [@Maier2022; @Volker2023; @VanWonderen2024; @Zhao2012; @Li2016; @Semochkina2025; @Han2026].
+A proposition down-weighted because evidence is underpowered, prior-sensitive, heterogeneous, source-dependent, missing a view, cleaned by an unvalidated pipeline, mismatched to the target population, hidden-variable-sensitive, self-incompatible, or supported only by weak LLM priors should be sampled differently from a proposition down-weighted by strong independent counterevidence [@Maier2022; @Volker2023; @VanWonderen2024; @Zhao2012; @Li2016; @Semochkina2025; @Han2026; @Dong2023; @Faller2024; @Jiralerspong2024; @Liu2024HiddenWorld].
 
 ## Proposition Bundle
 
@@ -51,7 +57,10 @@ Underpowered evidence, high heterogeneity, publication-bias risk, prior sensitiv
 **P5 (Batch 2 reasons).**
 Source unreliability, source dependence, ambiguous omission, missing view, source-target mismatch, prior-resolved non-identifiability, unvalidated cleaning, repair uncertainty, shared-structure assumptions, and missing debiased inference are useful attention features.
 
-**P6 (observable-state constraint).**
+**P6 (Batch 3 reasons).**
+Causal-sufficiency assumptions, latent-variable risk, unvalidated LLM priors, prior/data disagreement, ambiguous graph objects, self-incompatible discovery outputs, missing identification, and weak-prior-only support are useful attention features.
+
+**P7 (observable-state constraint).**
 Reason-coded attention can be implemented from explicit graph state and evidence payload fields without relying on LLM-estimated probabilities.
 
 ## Current Uncertainty
@@ -60,12 +69,14 @@ Reason-coded attention can be implemented from explicit graph state and evidence
 - The value of reason codes depends on whether the payload schema captures them consistently enough.
 - The right objective function is unresolved: recall of true propositions, calibration, correction of stale conclusions, discovery of contradictions, or researcher-time efficiency.
 - Some reasons may overlap heavily. For example, source dependence and shared pipeline bias may require one representation, not two.
+- Batch 3 adds a stronger granularity problem: graph-object ambiguity, prior/data disagreement, and identification-missing may be separate reasons or different severities of one causal-discovery guardrail failure.
 
 ## Predictions
 
 - At equal review budget, reason-coded policies will recover more initially down-weighted true propositions than posterior-only policies in settings with heterogeneous failure modes.
 - Reason-coded policies will spend less effort rechecking claims whose low support came from strong independent counterevidence.
 - When shared pipeline bias or source copying is present, reason-coded policies will prioritize independent provenance checks more often than posterior-only policies.
+- When causal-discovery outputs are present, reason-coded policies will prioritize hidden-variable checks, self-compatibility diagnostics, identification review, and independent validation more often than posterior-only policies.
 - The gain over posterior-only revisiting will shrink in simple simulations where all uncertainty comes from identical independent noise.
 
 ## Falsifiability
@@ -73,13 +84,14 @@ Reason-coded attention can be implemented from explicit graph state and evidence
 - **P1 disconfirmed:** reason-coded policies fail to improve recall, calibration, or contradiction detection over posterior-only revisiting in realistic heterogeneous simulations.
 - **P2 disconfirmed:** reason codes do not reliably map to different useful actions.
 - **P3 disconfirmed:** posterior magnitude already captures the relevant expected value of review once evidence count and freshness are included.
-- **P6 disconfirmed:** the necessary reason codes cannot be derived from explicit graph state and require subjective LLM judgment.
+- **P7 disconfirmed:** the necessary reason codes cannot be derived from explicit graph state and require subjective LLM judgment.
 
 ## Supporting Evidence
 
 - `simulation_evidence` - H01's existing simulator shows that exploration-based policies beat hard-gating when early evidence is noisy, motivating richer attention rules.
 - `literature_evidence` - Batch 1 papers show multiple non-equivalent reasons for uncertain or misleading evidence, including heterogeneity, publication bias, prior sensitivity, low power, and estimand mismatch [@Maier2022; @Volker2023; @VanWonderen2024].
 - `literature_evidence` - Batch 2 papers add source and pipeline reasons: source reliability, source dependence, omissions, missing views, non-identifiability, and cleaning provenance [@Zhao2012; @Li2016; @Allen2017; @Semochkina2025; @Han2026].
+- `literature_evidence` - Batch 3 papers add causal-graph-construction reasons: hidden-variable sensitivity, self-incompatibility, ambiguous graph object type, unvalidated LLM priors, prior/data disagreement, and missing identification [@Dong2023; @Faller2024; @Jiralerspong2024; @Liu2024HiddenWorld; @Zheng2024].
 
 ## Disputing Evidence
 
@@ -89,7 +101,7 @@ Reason-coded attention can be implemented from explicit graph state and evidence
 
 ## Evidence Needed To Shift Belief
 
-- Extend the H01 simulator with heterogeneous failure modes: low power, shared source copying, publication bias, missingness, source-target mismatch, and prior sensitivity.
+- Extend the H01 simulator with heterogeneous failure modes: low power, shared source copying, publication bias, missingness, source-target mismatch, prior sensitivity, hidden-variable risk, weak-prior-only support, self-incompatible graph output, and missing identification.
 - Compare posterior-only, freshness-weighted, and reason-coded attention policies at equal review budget.
 - Run an annotation audit over existing paper summaries to test whether reason codes can be assigned consistently from documented evidence fields.
 - Measure whether reason-coded sampling produces different and better next actions in real curation sessions.
@@ -98,4 +110,4 @@ Reason-coded attention can be implemented from explicit graph state and evidence
 
 - `hypothesis:h01-stochastic-revisiting` is the parent attention hypothesis.
 - `hypothesis:h02-rich-evidence-payloads-improve-graph-calibration` supplies the payload fields needed to derive reason codes.
-- `question:01-evidence-payload-schema` and `question:03-source-and-pipeline-provenance` define the representation problem.
+- `question:01-evidence-payload-schema`, `question:03-source-and-pipeline-provenance`, and `question:10-causal-graph-construction-pipeline` define the representation problem.
