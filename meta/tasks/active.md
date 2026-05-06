@@ -172,41 +172,14 @@ Do not implement a schema directly from this parent; use it to keep the work vis
 
 **Architecture decision (2026-05-06):** the schema is layered — `[t022]` produces the **core** (small, mandatory) plus the **extension contract**; `[t034]`, `[t035]`, `[t037]`, `[t038]`, `[t040]` produce **typed extensions** that conform to that contract.
 Without this split, every batch silently widened the "minimum" schema (~50 fields after Batch 6) and aspect tasks competed as P1 siblings.
-Sequencing: `[t022]` first; aspect-extension tasks then drop to P2 awaiting the contract.
 `[t025]` is the canonical H03 reason-code registry — aspect tasks declare codes locally and mirror them there with batch provenance.
 Lit follow-up tasks (`[t028]`, `[t036]`, `[t039]`, `[t041]`) are P3 so they do not compete with the schema work.
 
+**State (2026-05-06):** `[t022]` v2 draft shipped (`meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md`); marked done.
+Next P1 is `[t030]` — the authoring-cost audit on real summaries; it validates the contract's structural claims before aspect extensions commit.
+Aspect extensions (`[t034]`, `[t035]`, `[t037]`, `[t038]`, `[t040]`) remain P2 until `[t030]` either confirms or revises the contract; they then move to P1.
+
 Surfaced by: `doc/background/papers/synthesis-2026-05-05-bayesian-evidence-synthesis.md`.
-
-## [t022] Design minimum quantitative evidence payload schema
-- priority: P1
-- status: proposed
-- parent: task:t021
-- aspects: [software-development, framework-design, hypothesis-testing]
-- related: [task:t021, question:01-evidence-payload-schema, hypothesis:h01-stochastic-revisiting, topic:bayesian-methods-continuous-belief]
-- group: evidence-payload-schema
-- created: 2026-05-05
-
-Design the **core** evidence payload schema and the **extension contract** that aspect-specific schemas (`[t034]`, `[t035]`, `[t037]`, `[t038]`, `[t040]`) must conform to.
-
-This task is the unblocker for the rest of the Evidence Payload Schema group.
-The previous version of this task accumulated ~50 fields across Batches 1-6 and was no longer "minimum".
-Reframing: the core is the small, mandatory part every payload carries; aspect extensions are typed payload sections that load only when the relevant artifact type applies.
-
-Required deliverables:
-
-1. **Core payload schema (small).** The fields every evidence/synthesis payload must declare regardless of type. Candidates from Batches 1-2: source, proposition, comparison target / hypothesis set, evidence type, validation role, identifiability status, source reliability ref, source-dependence refs, claim presence / omission state, missingness class, pipeline provenance, source population, target population, transport assumptions, and an aggregation operator. Resist adding fields that only apply to one artifact family.
-
-2. **Extension contract.** A typed-payload-section mechanism so each aspect task can declare its own fields without expanding the core. Specify: how an extension declares its `artifact_type`, how validation rules dispatch to the right extension, and how attention/H03 reason codes inherit across core + extension.
-
-3. **Aspect-extension assignment rule.** A decision rule for which fields belong in core vs in an extension. Use the Batch 3-6 schema-update lists as test cases — most should land in extensions, not core.
-
-4. **Migration notes** for existing support/dispute evidence edges to the new core layout.
-
-5. **Worked examples** from Batches 1-6 showing one core payload + one extension load per batch.
-
-Aspect-extension design tasks should not begin formalizing fields until the core + extension contract is drafted.
-Coordinate with `[t023]` (synthesis node types), `[t024]` (heterogeneity/bias mechanisms), `[t025]` (reason-code registry), and `[t026]` (causal guardrails); these define dimensions that may live in core or in shared extensions.
 
 ## [t023] Design typed synthesis nodes
 - priority: P2
@@ -281,6 +254,7 @@ Candidate reasons from Batch 3: `causal-sufficiency-assumption`, `latent-variabl
 Candidate reasons from Batch 4: `graph-posterior-uncertain`, `edge-inclusion-unstable`, `shared-structure-dependent`, `view-scope-mismatch`, `variational-approximation-risk`, `pseudo-likelihood-risk`, `clustering-unvalidated`, `selected-feature-unstable`, and `exploratory-integration-only`.
 Candidate reasons from Batch 5: `agent-source-unvalidated`, `tool-chain-unvalidated`, `safety-check-missing`, `context-retrieval-uncertain`, `information-absence-undetected`, `kg-view-derived`, `graph-version-stale`, `agent-bias-risk`, and `attention-not-evidence`.
 Candidate reasons from Batch 6: `robustness-target-ambiguous`, `modifier-domain-missing`, `tolerance-unspecified`, `replication-metric-mismatch`, `reproducibility-dimension-ambiguous`, `checklist-incomplete`, `analysis-plan-missing`, `deviation-unreported`, `code-or-data-unavailable`, and `null-results-omitted`.
+Generic evidence-quality codes (added 2026-05-06 from `[t030]` narrow audit; not extension-specific): `single-source-evidence`, `simulated-data-only`, `peer-reviewed-only`, `self-validated-method`, and `legacy-unverified-payload`. These arise on paper-extracted-claim payloads regardless of aspect; mark `peer-reviewed-only` non-blocking, `legacy-unverified-payload` blocking (per v2.1 migration spec), and the others non-blocking-by-default with extension override allowed.
 
 Design how these reasons are recorded on evidence/synthesis artifacts and how `science graph attention-sample` could incorporate them without using LLM-estimated probabilities.
 This should follow `[t022]` enough to avoid inventing a parallel schema.
@@ -380,6 +354,8 @@ Deliverables:
 - a note on agent-vs-manual extraction agreement that informs `[t033]`.
 
 Blocks: cannot start until t022 has a candidate field set.
+
+**State (2026-05-06):** narrow first pass run on 4 papers; audit at `meta/doc/plans/2026-05-06-t030-narrow-authoring-cost-audit.md`. Findings produced four v2.1 patches to `[t022]` (added `claim_source_ref`, out-of-scope section, validation_status pitfall note, generic evidence-quality reason codes). The full deliverables in this task (sampling plan, per-field extractability table, LLM-vs-manual agreement, field-pruning recommendation) remain TODO and are the next step before locking enum sets.
 
 ## [t031] Source-dependence detection design
 - priority: P2
