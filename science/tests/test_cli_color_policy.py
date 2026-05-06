@@ -82,3 +82,18 @@ def test_tasks_list_json_has_no_ansi_even_when_color_forced() -> None:
     assert ANSI_RE.search(result.output) is None
     payload = json.loads(result.output)
     assert payload["rows"][0]["title"] == "Color task"
+
+
+def test_emit_query_rows_default_has_no_ansi(capsys) -> None:
+    from science_tool.output import emit_query_rows
+
+    emit_query_rows(
+        output_format="table",
+        title="Rows",
+        columns=[("id", "ID"), ("title", "Title")],
+        rows=[{"id": "question:q001-demo", "title": "Demo"}],
+    )
+
+    captured = capsys.readouterr()
+    assert "question:q001-demo" in captured.out
+    assert ANSI_RE.search(captured.out) is None

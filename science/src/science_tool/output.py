@@ -5,8 +5,9 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 import click
-from rich.console import Console
 from rich.table import Table
+
+from science_tool.styles import get_console
 
 OUTPUT_FORMATS: tuple[str, str] = ("table", "json")
 
@@ -33,5 +34,5 @@ def emit_query_rows(
     for row in rows:
         table.add_row(*(str(row.get(key, "")) for key, _ in columns))
 
-    console = Console(file=click.get_text_stream("stdout"), force_terminal=False, color_system=None)
+    console = get_console(file=click.get_text_stream("stdout"))
     console.print(table)

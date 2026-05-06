@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Any, cast
 
 import click
-from rich.console import Console
 from rich.table import Table
 
+from science_tool.styles import get_console
 from science_tool.verdict.models import ParseResult
 from science_tool.verdict.parser import parse_file
 from science_tool.verdict.registry import IndexedClaimRegistry, load_registry
@@ -247,7 +247,7 @@ def _emit_rollup_table(groups: dict[str, Any]) -> None:
             *(str(tally[token.value]) for token in Token),
         )
 
-    console = Console(file=click.get_text_stream("stdout"), force_terminal=False, color_system=None)
+    console = get_console(file=click.get_text_stream("stdout"))
     console.print(table)
 
 
