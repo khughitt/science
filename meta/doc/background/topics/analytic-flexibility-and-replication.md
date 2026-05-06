@@ -4,10 +4,14 @@ type: "topic"
 title: "Analytic Flexibility and the Replication Crisis"
 status: "active"
 ontology_terms: []
-source_refs: []
-related: []
+source_refs:
+  - "cite:Freiesleben2023"
+  - "cite:Heyard2025"
+  - "cite:Banzi2026"
+related:
+  - "question:13-robustness-reproducibility-evaluation"
 created: "2026-04-24"
-updated: "2026-04-24"
+updated: "2026-05-06"
 ---
 
 # Analytic Flexibility and the Replication Crisis
@@ -58,6 +62,12 @@ McElreath and Smaldino [@McElreath2015] model the corpus of findings as a popula
 **Proposed remedies.**
 Munafò et al.'s manifesto [@Munafo2017] synthesises reforms across the system — pre-registration, registered reports, replication incentives, reporting standards, and infrastructural investment in reproducibility tooling — most of which depend on collective rather than individual adoption.
 
+**Evaluation semantics.**
+Batch 6 adds three useful clarifications.
+First, robustness claims need target, modifier, modifier domain, and tolerance rather than a bare "robust" label [@Freiesleben2023].
+Second, reproducibility metrics answer different questions; significance agreement, effect-size agreement, Bayes-factor replication metrics, checklists, prediction markets, and algorithmic scores should not be treated as interchangeable [@Heyard2025].
+Third, reproducibility is partly a lifecycle checklist covering planning, methods, data/analysis, and dissemination, not only a post-publication replication result [@Banzi2026].
+
 **Field-scale dynamics.**
 Chu and Evans [@Chu2021] argue that in large scientific fields, the sheer volume of published work can paradoxically slow canonical progress by preventing consensus on any single line of work — a finding relevant to tooling that aims to aggregate evidence across a field.
 
@@ -89,6 +99,7 @@ This topic supplies the motivating premises on which several of `science-meta`'s
    A tool that represents a project's evidence graph as if the analyst path were neutral is implicitly claiming this literature is wrong; the project should instead treat analyst-path variability as a first-class source of uncertainty.
 3. The population-dynamics framing [@McElreath2015] supports the tooling premise that replication behaviour is *modellable*, not merely lamentable — a premise that enables simulation-testable hypotheses (for example, H-stochastic-revisit: whether stochastic revisiting of down-weighted claims improves convergence to ground truth vs. hard gating at equal evidence budget).
 4. Field-scale dynamics [@Chu2021] motivate the longer-range bet about forkable, shareable project packages: if the sheer volume of published work slows consensus, tooling that makes evidence composable across researchers targets a plausible mechanism rather than a speculative one.
+5. Robustness/reproducibility evaluation semantics [@Freiesleben2023; @Heyard2025; @Banzi2026] provide concrete fields for Science's calibration and attention layers: evaluation target, modifier or replication design, metric family, success tolerance, checklist state, and lifecycle stage.
 
 A caveat to record: the evidence base skews heavily toward psychology, preclinical biomedicine, and neuroimaging.
 Translation to genomics or bioinformatics — the background of the project's primary user — is itself an open question worth making explicit as a separate document under `doc/questions/`.
@@ -100,3 +111,6 @@ Translation to genomics or bioinformatics — the background of the project's pr
 - Silberzahn et al. (2018) and Botvinik-Nezer et al. (2020) — many-analysts designs in psychology and neuroimaging [@Silberzahn2018; @BotvinikNezer2020]
 - McElreath & Smaldino (2015) — population-dynamics model of the finding corpus [@McElreath2015]
 - Munafò et al. (2017) — systems-level reform manifesto [@Munafo2017]
+- Freiesleben and Grote (2023) — target/modifier/tolerance theory of robustness [@Freiesleben2023]
+- Heyard et al. (2025) — scoping review of reproducibility metrics [@Heyard2025]
+- Banzi et al. (2026) — OSIRIS Delphi core reproducibility items [@Banzi2026]

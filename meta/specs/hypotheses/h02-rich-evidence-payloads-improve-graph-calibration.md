@@ -29,6 +29,9 @@ source_refs:
 - paper:Jin2025
 - paper:Si2025
 - paper:Yu2026
+- paper:Freiesleben2023
+- paper:Heyard2025
+- paper:Banzi2026
 related:
 - question:01-evidence-payload-schema
 - question:03-source-and-pipeline-provenance
@@ -38,6 +41,7 @@ related:
 - question:10-causal-graph-construction-pipeline
 - question:11-graph-valued-synthesis-artifacts
 - question:12-agent-tool-kg-operations
+- question:13-robustness-reproducibility-evaluation
 - hypothesis:h01-stochastic-revisiting
 created: '2026-05-05'
 updated: '2026-05-06'
@@ -48,7 +52,7 @@ updated: '2026-05-06'
 
 A graph that stores structured evidence payloads will produce better calibrated belief updates than a graph that stores only scalar support or dispute edges.
 The load-bearing claim is not that more metadata is always better.
-It is that a small set of epistemically relevant fields - comparison target, estimand, model family, priors, heterogeneity, bias model, diagnostics, sensitivity deltas, source reliability, source dependence, pipeline provenance, population transport, identifiability, validation role, graph object type, discovery method, prior role, hidden-variable assumption, diagnostic status, integration objective, context scope, view scope, approximation class, posterior summary role, agent role, tool-chain provenance, graph version, and agent evaluation status - prevents the graph from treating unlike evidence operations as interchangeable [@Zhao2012; @Li2016; @Allen2017; @Thijssen2017; @Dai2023; @Semochkina2025; @Han2026; @Petersen2014; @Shi2022; @Dong2023; @Faller2024; @Zheng2024; @Zuber2025; @Zhang2017CancerGenomics; @Zhang2021JointGraphical; @Vahabi2022; @Deleu2023; @Mohammadi2025; @Alnajjar2026; @Ding2025; @Jin2025; @Si2025; @Yu2026].
+It is that a small set of epistemically relevant fields - comparison target, estimand, model family, priors, heterogeneity, bias model, diagnostics, sensitivity deltas, source reliability, source dependence, pipeline provenance, population transport, identifiability, validation role, graph object type, discovery method, prior role, hidden-variable assumption, diagnostic status, integration objective, context scope, view scope, approximation class, posterior summary role, agent role, tool-chain provenance, graph version, agent evaluation status, robustness target/modifier/tolerance, replication design, reproducibility metric, and lifecycle checklist state - prevents the graph from treating unlike evidence operations as interchangeable [@Zhao2012; @Li2016; @Allen2017; @Thijssen2017; @Dai2023; @Semochkina2025; @Han2026; @Petersen2014; @Shi2022; @Dong2023; @Faller2024; @Zheng2024; @Zuber2025; @Zhang2017CancerGenomics; @Zhang2021JointGraphical; @Vahabi2022; @Deleu2023; @Mohammadi2025; @Alnajjar2026; @Ding2025; @Jin2025; @Si2025; @Yu2026; @Freiesleben2023; @Heyard2025; @Banzi2026].
 
 ## Proposition Bundle
 
@@ -84,6 +88,9 @@ Explicit graph-valued and integration-valued payloads reduce false confidence fr
 **P9 (agent/tool operations).**
 Explicit agent, tool-chain, KG-view, graph-version, and evaluation provenance reduces false confidence from treating automated summaries, graph updates, tool outputs, retrieved contexts, and derived KG views as transparent evidence [@Ding2025; @Jin2025; @Si2025; @Yu2026].
 
+**P10 (robustness/reproducibility evaluations).**
+Explicit robustness target/modifier/tolerance, replication design, metric-question alignment, and checklist lifecycle state reduce false confidence from treating "robust", "replicated", and "reproducible" labels as interchangeable validation outcomes [@Freiesleben2023; @Heyard2025; @Banzi2026].
+
 ## Current Uncertainty
 
 - Current support is literature-based and architectural, not yet benchmark-based.
@@ -110,6 +117,7 @@ Calibration scoring will likely combine signals 1-3 where available, with signal
 - Rich-payload aggregation will avoid strengthening causal claims when the apparent support is only a weak LLM prior, ambiguous graph object, hidden-variable-sensitive adjacency, self-incompatible discovery output, or unidentified estimand.
 - Rich-payload aggregation will avoid overconfident updates when the apparent support is an exploratory cluster, unstable selected-feature set, posterior-uncertain graph feature, shared-structure-dependent edge, or view-scope-mismatched integration result.
 - Rich-payload aggregation will avoid overconfident updates when the apparent support comes from an unvalidated agent, unrecorded tool chain, stale graph version, task-conditioned KG view, failed abstention, or unsafe tool execution.
+- Rich-payload aggregation will avoid overconfident updates when validation evidence uses an underspecified robustness claim, a mismatched replication metric, an ambiguous reproducibility dimension, or an incomplete reproducibility checklist.
 - The benefit will be largest in heterogeneous evidence neighborhoods where studies differ in measurement role, target population, priors, bias risk, or source reliability.
 - In simple low-noise neighborhoods with direct independent measurements, the rich schema may add little beyond scalar support.
 
@@ -129,6 +137,7 @@ Calibration scoring will likely combine signals 1-3 where available, with signal
 - `literature_evidence` - Causal graph construction depends on explicit causal models, observed-data links, graph object types, hidden-variable assumptions, diagnostics, and identification status, making graph-construction provenance load-bearing [@Petersen2014; @Shi2022; @Dong2023; @Faller2024; @Zheng2024; @Zuber2025].
 - `literature_evidence` - Graphical-model and multiview-integration outputs depend on context scope, view scope, shared-structure assumptions, graph posterior uncertainty, clustering assumptions, feature-selection rules, and approximation class [@Zhang2017CancerGenomics; @Zhang2021JointGraphical; @Vahabi2022; @Deleu2023; @Mohammadi2025; @Alnajjar2026].
 - `literature_evidence` - Scientific agent and KG infrastructure papers show that tool dependencies, execution traces, KG evolution, derived KG views, model bias evaluation, and scientific context-understanding benchmarks are load-bearing provenance [@Ding2025; @Jin2025; @Si2025; @Yu2026].
+- `literature_evidence` - Robustness and reproducibility evaluation papers show that validation claims require target/modifier/tolerance semantics, metric-question alignment, and lifecycle checklist state [@Freiesleben2023; @Heyard2025; @Banzi2026].
 
 ## Disputing Evidence
 
@@ -142,6 +151,7 @@ Calibration scoring will likely combine signals 1-3 where available, with signal
 - Implement a toy truth-discovery simulator with source sensitivity, specificity, copying, and missingness; compare scalar trust, decomposed source reliability, and full payload variants.
 - Implement a causal-graph construction audit that compares scalar causal-edge updates against role-typed graph outputs: prior, discovered adjacency, equivalence-class feature, diagnostic result, identified estimand, and effect estimate.
 - Implement a graph-valued synthesis audit that compares scalar-edge updates against typed graph/integration artifacts: graph estimate, graph posterior summary, common component, context-unique component, cluster, selected feature set, and predictive-integration model.
+- Implement a robustness/reproducibility evaluation audit that compares binary validation labels against typed evaluation artifacts: robustness test, replication metric, reproducibility checklist, and lifecycle-stage audit.
 - Audit existing paper summaries to see how often the proposed fields can be extracted without unreasonable manual burden.
 - Test whether schema fields improve H01 attention sampling by identifying claims that later require revision.
 
@@ -152,5 +162,6 @@ Calibration scoring will likely combine signals 1-3 where available, with signal
 - `question:10-causal-graph-construction-pipeline` asks how causal graph construction stages should be represented.
 - `question:11-graph-valued-synthesis-artifacts` asks how graph-valued and integration-valued synthesis artifacts should be represented.
 - `question:12-agent-tool-kg-operations` asks how agent operations, tool graphs, KG transformations, and graph evolution events should be represented.
+- `question:13-robustness-reproducibility-evaluation` asks how robustness, reproducibility, and replication evaluation claims should be represented.
 - `hypothesis:h01-stochastic-revisiting` supplies the attention/revisiting motivation.
-- Batch 1 supplies contrastive, model-based evidence semantics; Batch 2 adds source behavior and pipeline provenance; Batch 3 adds causal graph construction and discovery provenance; Batch 4 adds graph-valued and integration-valued synthesis artifacts; Batch 5 adds agent/tool/KG operational provenance.
+- Batch 1 supplies contrastive, model-based evidence semantics; Batch 2 adds source behavior and pipeline provenance; Batch 3 adds causal graph construction and discovery provenance; Batch 4 adds graph-valued and integration-valued synthesis artifacts; Batch 5 adds agent/tool/KG operational provenance; Batch 6 adds robustness/reproducibility evaluation semantics.

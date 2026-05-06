@@ -45,6 +45,9 @@ source_refs:
 - cite:Jin2025
 - cite:Si2025
 - cite:Yu2026
+- cite:Freiesleben2023
+- cite:Heyard2025
+- cite:Banzi2026
 related:
 - hypothesis:h01-stochastic-revisiting
 - hypothesis:h02-rich-evidence-payloads-improve-graph-calibration
@@ -53,6 +56,7 @@ related:
 - question:10-causal-graph-construction-pipeline
 - question:11-graph-valued-synthesis-artifacts
 - question:12-agent-tool-kg-operations
+- question:13-robustness-reproducibility-evaluation
 - topic:bayesian-methods-continuous-belief
 created: '2026-05-05'
 updated: '2026-05-06'
@@ -68,7 +72,8 @@ Batch 2 adds that evidence aggregation also depends on source behavior and the p
 Batch 3 adds that causal graph construction depends on staged provenance: graph object type, discovery algorithm, method assumptions, prior role, hidden-variable assumptions, diagnostics, and identification status.
 Batch 4 adds that graph-valued and integration-valued artifacts depend on integration objective, context scope, view scope, shared-structure assumptions, approximation method, graph posterior uncertainty, cluster count, and feature relevance.
 Batch 5 adds that agent/tool/KG operations depend on agent role, model version, prompt/workflow, tool chain, execution trace, KG view, graph version, safety policy, validation status, abstention behavior, and evaluation protocol.
-This question asks what minimum metadata Science should require before a quantitative evidence, data-integration, truth-discovery, synthesis, graph-construction, graph-valued integration, or agent-generated operation artifact can update graph beliefs.
+Batch 6 adds that robustness/reproducibility evaluations depend on evaluation target, robustness modifier, modifier domain, target tolerance, replication design, reproducibility dimension, metric family, metric question, checklist reference, lifecycle stage, and evaluation result.
+This question asks what minimum metadata Science should require before a quantitative evidence, data-integration, truth-discovery, synthesis, graph-construction, graph-valued integration, agent-generated operation, or robustness/reproducibility evaluation artifact can update graph beliefs.
 
 ## Why It Matters
 
@@ -90,13 +95,14 @@ This question asks what minimum metadata Science should require before a quantit
 - Causal graph construction and discovery papers show that graph outputs need method, graph-object, hidden-variable, diagnostic, and identification metadata before they can be interpreted as causal support [@Petersen2014; @Shi2022; @Dong2023; @Faller2024; @Zheng2024; @Zuber2025].
 - Graphical-model and multiview-integration papers show that graph estimates, graph posteriors, clusters, and selected-feature outputs need context scope, view scope, shared-structure assumptions, approximation provenance, and validation role [@Zhang2017CancerGenomics; @Zhang2021JointGraphical; @Vahabi2022; @Deleu2023; @Mohammadi2025; @Alnajjar2026].
 - Scientific-agent and KG infrastructure papers show that tool chains, graph updates, derived KG views, agent evaluations, and context-understanding failures need operation provenance and validation state [@Ding2025; @Jin2025; @Si2025; @Yu2026].
+- Robustness and reproducibility papers show that evaluation claims need target/modifier/tolerance metadata, metric-question alignment, replication-design metadata, and checklist lifecycle stage [@Freiesleben2023; @Heyard2025; @Banzi2026].
 - The main conflicting pressure is authoring cost: a complete schema could become too heavy for routine paper notes and manual graph updates.
 
 ## Thoughts
 
-- Best current interpretation: Science needs a compact structured evidence payload with required fields for comparison target, evidence type, estimand, aggregation operator, source provenance, source behavior, pipeline provenance, and epistemic role, plus optional typed fields for priors, heterogeneity, bias, diagnostics, sensitivity deltas, transport, identifiability, cleaning, validation role, graph object type, discovery method, hidden-variable assumptions, graph-construction diagnostics, graph artifact type, integration objective, context scope, view scope, approximation class, posterior summary role, agent role, tool-chain provenance, graph version, KG view, and agent evaluation status.
+- Best current interpretation: Science needs a compact structured evidence payload with required fields for comparison target, evidence type, estimand, aggregation operator, source provenance, source behavior, pipeline provenance, and epistemic role, plus optional typed fields for priors, heterogeneity, bias, diagnostics, sensitivity deltas, transport, identifiability, cleaning, validation role, graph object type, discovery method, hidden-variable assumptions, graph-construction diagnostics, graph artifact type, integration objective, context scope, view scope, approximation class, posterior summary role, agent role, tool-chain provenance, graph version, KG view, agent evaluation status, robustness target/modifier/tolerance, replication design, metric family, and reproducibility checklist status.
 - The major remaining uncertainty is where to draw the line between required metadata and richer method-specific extensions.
-- A likely design is progressive: require a small core for all quantitative evidence, then attach typed method payloads for Bayesian model averaging, BES, diagnostic-test meta-analysis, causal synthesis, posterior-sample evidence estimation, truth discovery, data cleaning, external-data transport, causal discovery, mediation analysis, Mendelian-randomization graph models, graph posteriors, integrative clustering, feature selection, module discovery, predictive integration, and agent/tool operations.
+- A likely design is progressive: require a small core for all quantitative evidence, then attach typed method payloads for Bayesian model averaging, BES, diagnostic-test meta-analysis, causal synthesis, posterior-sample evidence estimation, truth discovery, data cleaning, external-data transport, causal discovery, mediation analysis, Mendelian-randomization graph models, graph posteriors, integrative clustering, feature selection, module discovery, predictive integration, agent/tool operations, and robustness/reproducibility evaluations.
 
 ## Connections to Project
 
@@ -107,5 +113,5 @@ This question asks what minimum metadata Science should require before a quantit
 ## Related
 
 - Topic notes: `topic:bayesian-methods-continuous-belief`.
-- Article notes: Batch 1, Batch 2, Batch 3, Batch 4, and Batch 5 paper summaries under `doc/background/papers/`.
+- Article notes: Batch 1, Batch 2, Batch 3, Batch 4, Batch 5, and Batch 6 paper summaries under `doc/background/papers/`.
 - Methods/Datasets: none yet.
