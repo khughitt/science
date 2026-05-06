@@ -344,9 +344,10 @@ Batch 1 showed that evidence updates need more than `supports` / `disputes` plus
 Batch 2 extends this with source behavior and pipeline provenance: source reliability, source dependence, omission semantics, missingness class, cleaning/extraction/preprocessing provenance, source population, target population, transport assumptions, prior provenance, identifiability, and validation role.
 Batch 3 extends this with causal graph construction provenance: causal model reference, observed-data link, counterfactual target, graph object type, discovery algorithm, method assumption set, prior role, constraint type, prompt and variable-proposal provenance, self-compatibility score, causal-sufficiency assumption, latent-variable risk, mediation estimand, instrument set, and graph posterior.
 Batch 4 extends this with graph-valued and integration-valued artifacts: integration objective, graph artifact type, context scope, view scope, shared-structure assumption, borrowing structure, approximation class, posterior summary role, edge inclusion probability, cluster count, feature relevance posterior, and validation role.
+Batch 5 extends this with agent/tool/KG operational provenance: agent role, model version, prompt/workflow reference, tool-chain reference, tool I/O contract, safety policy, execution trace, KG view, KG filter objective, subgraph selection method, graph update event type, graph version, validation status, abstention reason, agent evaluation protocol, and Bayes-factor evidence.
 
 This parent task tracks the group.
-Concrete implementation/design tasks are `[t022]` through `[t026]` plus `[t030]` through `[t035]`.
+Concrete implementation/design tasks are `[t022]` through `[t026]` plus `[t030]` through `[t039]`.
 Do not implement a schema directly from this parent; use it to keep the work visible and grouped.
 
 Surfaced by: `doc/background/papers/synthesis-2026-05-05-bayesian-evidence-synthesis.md`.
@@ -538,6 +539,9 @@ Concrete improvements to design and implement:
 - add a post-batch prompt that proposes questions, hypotheses, task groups, and command improvements;
 - record `[UNVERIFIED]` counts in the orchestrator report.
 - register `synthesis` as a graph entity kind or keep batch synthesis artifacts out of graph-audited entity scans; `hypothesis create` currently reports unknown `synthesis` kind while scanning paper-batch synthesis files.
+- add agent/workflow provenance frontmatter to generated summaries and syntheses;
+- record explicit `abstention` / `insufficient-context` cases when a PDF does not support a requested claim;
+- add a command/skill registry graph with capabilities, expected inputs/outputs, safety constraints, and validation commands.
 
 Start with a design pass before editing generated commands or skills.
 
@@ -701,3 +705,87 @@ Highest-value additions:
 - benchmark papers comparing multi-omics integration methods under external validation.
 
 Deliverable: either add PDFs and process them in a later batch, or write a topic note explaining how each family should influence `graph_artifact_type`, `integration_objective`, posterior uncertainty, validation role, and H03 reason codes.
+
+## [t037] Design agent/tool operations schema
+- priority: P1
+- status: proposed
+- aspects: [software-development, framework-design, research]
+- group: agent-source-modeling
+- related: [task:t029, task:t033, question:07-llm-agents-as-fallible-sources, question:12-agent-tool-kg-operations, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- created: 2026-05-06
+
+Design a Science operations schema for agents, tools, commands, skills, and tool chains.
+
+Candidate entities:
+- `agent`;
+- `agent_role`;
+- `tool`;
+- `skill`;
+- `command`;
+- `tool_chain`;
+- `execution_trace`;
+- `safety_policy`;
+- `validation_protocol`;
+- `operation_record`.
+
+Deliverables:
+- a tool/skill graph schema with capability descriptions, expected inputs/outputs, dependency edges, safety constraints, and validation commands;
+- an operation-record schema covering `agent_role`, `agent_model_version`, `prompt_or_workflow_ref`, `tool_chain_ref`, `tool_io_contract`, `safety_policy_ref`, `execution_trace_ref`, `validation_status`, `abstention_reason`, and `agent_evaluation_protocol`;
+- mapping of operation records to evidence payloads, paper summaries, syntheses, graph updates, and task edits;
+- H03 reason-code mapping for `agent-source-unvalidated`, `tool-chain-unvalidated`, `safety-check-missing`, `context-retrieval-uncertain`, `information-absence-undetected`, and `agent-bias-risk`;
+- alignment with `[t033]` so LLM agents are represented as both fallible sources and graph-governed operators.
+
+Start from Batch 5 synthesis: `doc/background/papers/synthesis-2026-05-06-scientific-agents-knowledge-graphs.md`.
+
+## [t038] Design graph evolution and KG view provenance
+- priority: P1
+- status: proposed
+- aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
+- group: evidence-payload-schema
+- related: [task:t021, task:t035, task:t037, question:12-agent-tool-kg-operations, question:03-source-and-pipeline-provenance, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- created: 2026-05-06
+
+Design how Science records graph evolution, graph versions, KG filtering, derived KG views, and replayable graph update events.
+
+Candidate event types:
+- entity creation;
+- evidence edge creation;
+- graph edge creation;
+- rename;
+- merge;
+- split;
+- deprecation;
+- validation;
+- contradiction;
+- derived-view generation;
+- embedding-view generation;
+- rollback or replay.
+
+Deliverables:
+- a `graph_update_event` taxonomy with strict enum candidates;
+- a versioning model for graph state, derived KG views, embedding views, and batch-generated updates;
+- provenance fields for `kg_view_ref`, `source_graph_ref`, `kg_filter_objective`, `subgraph_selection_method`, `removed_edge_policy`, `graph_version`, `graph_update_event_type`, `validation_status`, and `replay_command`;
+- guidance for representing RAG contexts, task-conditioned subgraphs, correlation-discovery outputs, and KG diffusion/denoising views;
+- H03 reason-code mapping for `kg-view-derived`, `graph-version-stale`, `attention-not-evidence`, and `context-retrieval-uncertain`.
+
+Start from Batch 5 synthesis: `doc/background/papers/synthesis-2026-05-06-scientific-agents-knowledge-graphs.md`.
+
+## [t039] Follow-up literature on scientific agents, tool provenance, and KG operations
+- priority: P2
+- status: proposed
+- aspects: [research, software-development, framework-design]
+- group: agent-source-modeling
+- related: [task:t037, task:t038, question:12-agent-tool-kg-operations, question:07-llm-agents-as-fallible-sources, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- created: 2026-05-06
+
+Track follow-up papers and standards needed to ground the Batch 5 agent/tool/KG operations layer.
+
+Highest-value additions:
+- Toolformer / ReAct / Reflexion / Voyager-style agent papers for tool use, replanning, memory, and self-correction patterns;
+- RAG evaluation papers on retrieval provenance, faithfulness, answer grounding, and abstention;
+- W3C PROV and workflow provenance systems for durable operation-record semantics;
+- Galaxy, Snakemake, Nextflow, and CWL papers/docs for scientific workflow provenance and reproducibility;
+- SHACL, KG validation, and constraint-checking papers for graph-evolution safety;
+- agent safety and dual-use risk papers for scientific tool execution.
+
+Deliverable: either add PDFs and process them in a later batch, or write a topic note explaining how each family should influence operation records, tool graphs, KG update events, evaluation competencies, safety status, and H03 reason codes.

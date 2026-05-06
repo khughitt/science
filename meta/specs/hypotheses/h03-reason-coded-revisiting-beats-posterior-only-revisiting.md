@@ -23,11 +23,16 @@ source_refs:
 - paper:Deleu2023
 - paper:Mohammadi2025
 - paper:Alnajjar2026
+- paper:Ding2025
+- paper:Jin2025
+- paper:Si2025
+- paper:Yu2026
 related:
 - question:01-evidence-payload-schema
 - question:03-source-and-pipeline-provenance
 - question:10-causal-graph-construction-pipeline
 - question:11-graph-valued-synthesis-artifacts
+- question:12-agent-tool-kg-operations
 - hypothesis:h01-stochastic-revisiting
 - hypothesis:h02-rich-evidence-payloads-improve-graph-calibration
 created: '2026-05-05'
@@ -69,7 +74,10 @@ Causal-sufficiency assumptions, latent-variable risk, unvalidated LLM priors, pr
 **P7 (Batch 4 reasons).**
 Graph posterior uncertainty, unstable edge inclusion, shared-structure dependence, view-scope mismatch, approximation risk, unvalidated clustering, selected-feature instability, and exploratory-integration-only status are useful attention features.
 
-**P8 (observable-state constraint).**
+**P8 (Batch 5 reasons).**
+Unvalidated agent sources, unvalidated tool chains, missing safety checks, uncertain context retrieval, undetected information absence, derived KG views, stale graph versions, agent bias risk, and attention-not-evidence status are useful attention features.
+
+**P9 (observable-state constraint).**
 Reason-coded attention can be implemented from explicit graph state and evidence payload fields without relying on LLM-estimated probabilities.
 
 ## Current Uncertainty
@@ -95,7 +103,7 @@ Reason-coded attention can be implemented from explicit graph state and evidence
 - **P1 disconfirmed:** reason-coded policies fail to improve recall, calibration, or contradiction detection over posterior-only revisiting in realistic heterogeneous simulations.
 - **P2 disconfirmed:** reason codes do not reliably map to different useful actions.
 - **P3 disconfirmed:** posterior magnitude already captures the relevant expected value of review once evidence count and freshness are included.
-- **P8 disconfirmed:** the necessary reason codes cannot be derived from explicit graph state and require subjective LLM judgment.
+- **P9 disconfirmed:** the necessary reason codes cannot be derived from explicit graph state and require subjective LLM judgment.
 
 ## Supporting Evidence
 
@@ -104,6 +112,7 @@ Reason-coded attention can be implemented from explicit graph state and evidence
 - `literature_evidence` - Batch 2 papers add source and pipeline reasons: source reliability, source dependence, omissions, missing views, non-identifiability, and cleaning provenance [@Zhao2012; @Li2016; @Allen2017; @Semochkina2025; @Han2026].
 - `literature_evidence` - Batch 3 papers add causal-graph-construction reasons: hidden-variable sensitivity, self-incompatibility, ambiguous graph object type, unvalidated LLM priors, prior/data disagreement, and missing identification [@Dong2023; @Faller2024; @Jiralerspong2024; @Liu2024HiddenWorld; @Zheng2024].
 - `literature_evidence` - Batch 4 papers add graph-valued integration reasons: graph posterior uncertainty, edge inclusion instability, shared-structure dependence, view-scope mismatch, approximation risk, unvalidated clustering, and unstable selected features [@Zhang2021JointGraphical; @Vahabi2022; @Deleu2023; @Mohammadi2025; @Alnajjar2026].
+- `literature_evidence` - Batch 5 papers add operational reasons: unvalidated agent/tool chains, missing safety checks, context retrieval uncertainty, information-absence failures, derived KG views, stale graph versions, and agent bias risk [@Ding2025; @Jin2025; @Si2025; @Yu2026].
 
 ## Disputing Evidence
 
@@ -113,7 +122,7 @@ Reason-coded attention can be implemented from explicit graph state and evidence
 
 ## Evidence Needed To Shift Belief
 
-- Extend the H01 simulator with heterogeneous failure modes: low power, shared source copying, publication bias, missingness, source-target mismatch, prior sensitivity, hidden-variable risk, weak-prior-only support, self-incompatible graph output, missing identification, graph posterior uncertainty, view-scope mismatch, clustering instability, and selected-feature instability.
+- Extend the H01 simulator with heterogeneous failure modes: low power, shared source copying, publication bias, missingness, source-target mismatch, prior sensitivity, hidden-variable risk, weak-prior-only support, self-incompatible graph output, missing identification, graph posterior uncertainty, view-scope mismatch, clustering instability, selected-feature instability, stale graph versions, unvalidated agents, and failed abstention.
 - Compare posterior-only, freshness-weighted, and reason-coded attention policies at equal review budget.
 - Run an annotation audit over existing paper summaries to test whether reason codes can be assigned consistently from documented evidence fields.
 - Measure whether reason-coded sampling produces different and better next actions in real curation sessions.
@@ -122,4 +131,4 @@ Reason-coded attention can be implemented from explicit graph state and evidence
 
 - `hypothesis:h01-stochastic-revisiting` is the parent attention hypothesis.
 - `hypothesis:h02-rich-evidence-payloads-improve-graph-calibration` supplies the payload fields needed to derive reason codes.
-- `question:01-evidence-payload-schema`, `question:03-source-and-pipeline-provenance`, `question:10-causal-graph-construction-pipeline`, and `question:11-graph-valued-synthesis-artifacts` define the representation problem.
+- `question:01-evidence-payload-schema`, `question:03-source-and-pipeline-provenance`, `question:10-causal-graph-construction-pipeline`, `question:11-graph-valued-synthesis-artifacts`, and `question:12-agent-tool-kg-operations` define the representation problem.
