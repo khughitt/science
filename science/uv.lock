@@ -1450,28 +1450,6 @@ wheels = [
 ]
 
 [[package]]
-name = "science-model"
-version = "0.1.0"
-source = { editable = "../science-model" }
-dependencies = [
-    { name = "pydantic" },
-    { name = "pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "pydantic", specifier = ">=2.0" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "jsonschema", specifier = ">=4.26.0" },
-    { name = "pytest", specifier = ">=9.0" },
-    { name = "ruff", specifier = ">=0.15.7" },
-]
-
-[[package]]
 name = "science"
 version = "0.2.0"
 source = { editable = "." }
@@ -1533,7 +1511,7 @@ requires-dist = [
     { name = "rich", specifier = ">=13.0" },
     { name = "ruamel-yaml", specifier = ">=0.17" },
     { name = "ruff", specifier = ">=0.15.6" },
-    { name = "science-model", editable = "../science-model" },
+    { name = "science-model", editable = "model" },
     { name = "torch", marker = "extra == 'causal'", specifier = ">=2.0" },
 ]
 provides-extras = ["distill", "causal", "datasets"]
@@ -1545,6 +1523,28 @@ dev = [
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "ruff", specifier = ">=0.15.6" },
     { name = "scipy", specifier = ">=1.17.1" },
+]
+
+[[package]]
+name = "science-model"
+version = "0.1.0"
+source = { editable = "model" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "jsonschema", specifier = ">=4.26.0" },
+    { name = "pytest", specifier = ">=9.0" },
+    { name = "ruff", specifier = ">=0.15.7" },
 ]
 
 [[package]]

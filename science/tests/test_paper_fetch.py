@@ -144,6 +144,8 @@ class TestFetchPaperBranches:
                 )
             if req.url.host == "www.ncbi.nlm.nih.gov":
                 return httpx.Response(200, json={"records": []})
+            if req.url.host == "www.ebi.ac.uk":
+                return httpx.Response(200, json={"resultList": {"result": []}})
             # bioRxiv / arXiv DOIs won't match; the direct PDF fetch will be the last attempt.
             return httpx.Response(403)
 
@@ -151,6 +153,45 @@ class TestFetchPaperBranches:
         assert result.status == "blocked_but_oa"
         assert "Unpaywall lists an OA copy" in (result.access_hint or "")
         assert result.metadata["oa_pdf_url"] == "https://paywall.example/q.pdf"
+        assert "europepmc:abstract" in result.tiers_attempted
+        assert "abstract" not in result.metadata
+
+    def test_blocked_but_oa_surfaces_europepmc_abstract_when_available(self, tmp_path: Path) -> None:
+        """fb-2026-04-19-005: surface Europe PMC abstract on blocked-but-OA so callers have something to work with."""
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == "api.crossref.org":
+                return httpx.Response(200, json={"message": {"DOI": "10.1101/2024.01.02.r", "title": ["R"]}})
+            if req.url.host == "api.unpaywall.org":
+                return httpx.Response(
+                    200,
+                    json={
+                        "is_oa": True,
+                        "best_oa_location": {"url_for_pdf": "https://www.biorxiv.org/r.pdf"},
+                    },
+                )
+            if req.url.host == "www.ebi.ac.uk":
+                return httpx.Response(
+                    200,
+                    json={
+                        "resultList": {
+                            "result": [
+                                {
+                                    "doi": "10.1101/2024.01.02.r",
+                                    "abstractText": "We characterize the relevant phenomenon.",
+                                }
+                            ]
+                        }
+                    },
+                )
+            return httpx.Response(403)
+
+        result = fetch_paper(doi="10.1101/2024.01.02.r", cfg=_cfg(tmp_path), http=_make_client(handler))
+        assert result.status == "blocked_but_oa"
+        assert result.metadata.get("abstract") == "We characterize the relevant phenomenon."
+        assert result.metadata.get("abstract_source") == "europepmc"
+        assert "Europe PMC abstract is available" in (result.access_hint or "")
+        assert "europepmc:abstract" in result.tiers_attempted
 
     def test_not_found_when_both_apis_404(self, tmp_path: Path) -> None:
         def handler(req: httpx.Request) -> httpx.Response:
@@ -462,6 +503,65 @@ class TestIdentifierResolution:
         result = fetch_paper(cfg=_cfg(tmp_path), http=_make_client(handler))
         assert result.status == "not_found"
         assert "PMID/PMCID/arXiv/URL" in result.errors[0]
+
+    def test_aacr_url_resolves_doi_via_html_meta(self, tmp_path: Path) -> None:
+        """fb-2026-05-02-001: AACR URLs carry an internal article ID; resolve via citation_doi meta tag."""
+        aacr_html = (
+            "<html><head>"
+            '<meta name="citation_doi" content="10.1158/0008-5472.CAN-09-3017"/>'
+            '<meta name="citation_title" content="Demo"/>'
+            "</head></html>"
+        )
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == "aacrjournals.org":
+                return httpx.Response(200, text=aacr_html)
+            if req.url.host == "api.crossref.org":
+                return httpx.Response(
+                    200,
+                    json={"message": {"DOI": "10.1158/0008-5472.CAN-09-3017", "title": ["Demo"]}},
+                )
+            if req.url.host == "api.unpaywall.org":
+                return httpx.Response(200, json={"is_oa": False})
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        result = fetch_paper(
+            url="https://aacrjournals.org/cancerres/article/70/3/859/561120",
+            cfg=_cfg(tmp_path),
+            http=_make_client(handler),
+        )
+        assert result.status == "paywalled"
+        # Crossref response carries the canonical-cased DOI; the HTML-meta-derived DOI is
+        # lowercased and threaded through Crossref, which returns its own casing.
+        assert (result.metadata.get("doi") or "").lower() == "10.1158/0008-5472.can-09-3017"
+        assert "html-meta:url->doi" in result.tiers_attempted
+
+    def test_html_meta_fallback_skipped_for_unlisted_hosts(self, tmp_path: Path) -> None:
+        """Unrecognized hosts must not trigger an HTTP fetch (no implicit roundtrips)."""
+
+        def handler(_req: httpx.Request) -> httpx.Response:  # pragma: no cover
+            raise AssertionError("no HTTP should be issued for arbitrary hosts")
+
+        result = fetch_paper(
+            url="https://example.com/paper", cfg=_cfg(tmp_path), http=_make_client(handler)
+        )
+        assert result.status == "not_found"
+
+    def test_html_meta_fallback_returns_not_found_when_no_doi_in_html(self, tmp_path: Path) -> None:
+        """Allowlisted host but page has no citation_doi meta tag → not_found, not crash."""
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.url.host == "aacrjournals.org":
+                return httpx.Response(200, text="<html><head><title>x</title></head></html>")
+            raise AssertionError(f"unexpected host {req.url.host}")
+
+        result = fetch_paper(
+            url="https://aacrjournals.org/cancerres/article/70/3/859/561120",
+            cfg=_cfg(tmp_path),
+            http=_make_client(handler),
+        )
+        assert result.status == "not_found"
+        assert "html-meta:url->doi" in result.tiers_attempted
 
 
 class TestIdentifierMismatch:

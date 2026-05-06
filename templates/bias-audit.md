@@ -94,6 +94,14 @@ MED severity + INFEASIBLE → acknowledge as limitation.
   positive results. Mark "not applicable" if the project doesn't involve
   literature review. -->
 
+### Corpus Independence (Closure Check)
+
+- **Rating:** not detected / possible / likely / not applicable
+- **Artifacts under audit:** <!-- list the artifacts being audited together -->
+- **Shared corpus:** <!-- the papers / datasets / prior runs that all of the above depend on -->
+- **Independent evidence sources:** <!-- benchmarks, datasets, or literature outside the shared corpus that could disconfirm any artifact -->
+- **Verdict:** <!-- Mark HIGH-severity if no independent evidence source exists: the audit can ratify but not falsify by construction. Mitigations: introduce an out-of-corpus benchmark, split into single-artifact passes, or downgrade the audit verdict from "validated" to "internally consistent". -->
+
 ## Summary
 
 - **Overall threat level:** low / moderate / elevated / high

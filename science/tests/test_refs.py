@@ -402,3 +402,92 @@ def test_legacy_two_part_cross_project_ref_reports_suggestion() -> None:
             "Legacy cross-project ref 'cbioportal:q014' is missing an entity kind. "
             "Use 'cbioportal:question:q014' or another explicit <project-id>:<kind>:<slug> ref."
         )
+
+
+# --- DOI / PMID validation (fb-2026-04-13-007) ---
+
+
+def _scaffold_with_bib(root: Path, bib_body: str) -> None:
+    _scaffold(root)
+    (root / "papers" / "references.bib").write_text(bib_body)
+
+
+def test_valid_doi_in_prose_is_accepted() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold_with_bib(
+            root,
+            "@article{Smith2024,\n  title={X},\n  doi={10.1038/s41586-024-00001-1},\n}\n",
+        )
+        (root / "doc" / "background" / "topics" / "x.md").write_text(
+            "# X\nSee 10.1038/s41586-024-00001-1 for the full result.\n"
+        )
+        issues = check_refs(root)
+        assert [i for i in issues if i.ref_type == "doi"] == []
+
+
+def test_unknown_doi_in_prose_is_flagged() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold_with_bib(
+            root,
+            "@article{Smith2024,\n  title={X},\n  doi={10.1038/s41586-024-00001-1},\n}\n",
+        )
+        (root / "doc" / "background" / "topics" / "x.md").write_text(
+            "# X\nSee https://doi.org/10.9999/fake.123 for the full result.\n"
+        )
+        issues = check_refs(root)
+        doi_issues = [i for i in issues if i.ref_type == "doi"]
+        assert len(doi_issues) == 1
+        assert doi_issues[0].ref_value == "10.9999/fake.123"
+
+
+def test_doi_check_skipped_in_doc_papers() -> None:
+    """Paper notes are corpus contributors, not consumers — don't flag DOIs there."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold_with_bib(
+            root,
+            "@article{Smith2024,\n  title={X},\n  doi={10.1038/s41586-024-00001-1},\n}\n",
+        )
+        (root / "doc" / "papers").mkdir(parents=True, exist_ok=True)
+        (root / "doc" / "papers" / "Smith2024.md").write_text(
+            "# Smith 2024\n- DOI: 10.1038/s41586-024-00001-1\n- Newly added not yet in bib: 10.1234/new.5678\n"
+        )
+        issues = check_refs(root)
+        assert [i for i in issues if i.ref_type == "doi"] == []
+
+
+def test_doi_check_silent_when_no_bib_or_paper_notes() -> None:
+    """No corpus → no DOI claims to validate against → no false positives."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        # remove the auto-scaffolded bib
+        (root / "papers" / "references.bib").unlink()
+        (root / "doc" / "background" / "topics" / "x.md").write_text(
+            "# X\nDOI: 10.1234/anything.goes here\n"
+        )
+        issues = check_refs(root)
+        assert [i for i in issues if i.ref_type == "doi"] == []
+
+
+def test_unknown_pmid_in_prose_is_flagged() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold_with_bib(
+            root,
+            "@article{Smith2024,\n  title={X},\n  pmid={12345678},\n}\n",
+        )
+        (root / "doc" / "background" / "topics" / "x.md").write_text(
+            "# X\nSee PMID: 99999999 for the missing reference, and PMID: 12345678 for the known one.\n"
+        )
+        issues = check_refs(root)
+        pmid_issues = [i for i in issues if i.ref_type == "pmid"]
+        assert len(pmid_issues) == 1
+        assert pmid_issues[0].ref_value == "PMID:99999999"

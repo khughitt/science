@@ -35,6 +35,18 @@ _CITATION_RE = re.compile(r"\[@([^\]]+)\]")
 _LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 _UNVERIFIED_RE = re.compile(r"\[UNVERIFIED\]")
 _NEEDS_CITATION_RE = re.compile(r"\[NEEDS CITATION\]")
+# DOIs in prose: ``10.<registrant>/<suffix>``, optionally preceded by ``doi:`` or
+# a ``https://doi.org/`` URL prefix. The character class for the suffix follows
+# Crossref's spec (``[-._;()/:A-Z0-9]`` plus letters); we trim trailing
+# punctuation that is almost certainly sentence-final.
+_DOI_RE = re.compile(r"\b(?:doi:\s*|https?://(?:dx\.)?doi\.org/)?(10\.\d{4,9}/[^\s)\]]+)", re.IGNORECASE)
+# PMIDs in prose: ``PMID: 12345`` / ``PMID 12345``. The bare-number form
+# (``12345``) without context is too ambiguous to flag, so we require the
+# ``PMID`` prefix.
+_PMID_REF_RE = re.compile(r"\bPMID[:\s]+(\d{6,9})\b", re.IGNORECASE)
+# BibTeX field values: ``doi = {…}`` / ``doi = "…"`` (whitespace tolerant).
+_BIB_DOI_FIELD_RE = re.compile(r"^\s*doi\s*=\s*[{\"]([^}\"]+)[}\"]", re.IGNORECASE | re.MULTILINE)
+_BIB_PMID_FIELD_RE = re.compile(r"^\s*pmid\s*=\s*[{\"]?(\d+)[}\"]?", re.IGNORECASE | re.MULTILINE)
 # Task IDs — `tNN` or `tNNN`, optionally inside square brackets. Anchored on
 # word boundaries so adjacent letters do not produce false positives.
 _TASK_ID_RE = re.compile(r"\bt(\d{2,})\b")
@@ -202,6 +214,65 @@ def _load_bib_keys(root: Path) -> set[str]:
     return keys
 
 
+def _normalize_doi_token(value: str) -> str:
+    """Trim trailing punctuation/quotes/whitespace and lowercase a DOI token."""
+    cleaned = value.strip().rstrip(".,;:'\"`)>]}")
+    return cleaned.lower()
+
+
+def _load_doi_corpus(root: Path) -> set[str]:
+    """DOIs declared in the project bibliography or paper notes.
+
+    Sources (in order of authority):
+    - ``papers/references.bib`` — the canonical citation database; DOIs appear
+      in the ``doi = {…}`` field.
+    - ``doc/papers/*.md`` — per-paper note files often record the DOI in
+      free-text ``DOI: 10.…`` lines (per the paper template).
+    """
+    dois: set[str] = set()
+    bib_path = root / "papers" / "references.bib"
+    if bib_path.is_file():
+        try:
+            text = bib_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            text = ""
+        for m in _BIB_DOI_FIELD_RE.finditer(text):
+            dois.add(_normalize_doi_token(m.group(1)))
+    papers_dir = root / "doc" / "papers"
+    if papers_dir.is_dir():
+        for path in papers_dir.rglob("*.md"):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            for m in _DOI_RE.finditer(text):
+                dois.add(_normalize_doi_token(m.group(1)))
+    return dois
+
+
+def _load_pmid_corpus(root: Path) -> set[str]:
+    """PMIDs declared in the bibliography or paper notes."""
+    pmids: set[str] = set()
+    bib_path = root / "papers" / "references.bib"
+    if bib_path.is_file():
+        try:
+            text = bib_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            text = ""
+        for m in _BIB_PMID_FIELD_RE.finditer(text):
+            pmids.add(m.group(1))
+    papers_dir = root / "doc" / "papers"
+    if papers_dir.is_dir():
+        for path in papers_dir.rglob("*.md"):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            for m in _PMID_REF_RE.finditer(text):
+                pmids.add(m.group(1))
+    return pmids
+
+
 def _is_heading_line(line: str) -> bool:
     """Check if a line is a markdown heading."""
     return line.lstrip().startswith("#")
@@ -264,6 +335,8 @@ def check_refs(root: Path) -> list[RefIssue]:
     bib_keys = _load_bib_keys(root)
     task_ids = _load_task_ids(root)
     project_ids = _load_project_ids(root)
+    doi_corpus = _load_doi_corpus(root)
+    pmid_corpus = _load_pmid_corpus(root)
 
     for file_path in files:
         rel_path = str(file_path.relative_to(root))
@@ -322,6 +395,11 @@ def check_refs(root: Path) -> list[RefIssue]:
         # Files inside tasks/ legitimately reference their own and other task
         # IDs in headers — declarations are not "broken refs". Skip those.
         skip_task_check = skip_task_check or rel_path.startswith("tasks/")
+        # DOI/PMID corpus is built FROM doc/papers/ — checking it against
+        # itself would flag every newly added paper note before its bib entry
+        # exists. The bibliography is the source of truth; paper notes are
+        # corpus contributors, not consumers.
+        skip_doi_pmid_check = rel_path.startswith("doc/papers/")
 
         for line_num, line in enumerate(lines, start=1):
             if line_num in frontmatter_lines:
@@ -344,6 +422,39 @@ def check_refs(root: Path) -> list[RefIssue]:
                             ref_type="task",
                             ref_value=f"t{task_num}",
                             message=f"t{task_num} — no matching declaration in tasks/active.md or tasks/done/*.md",
+                        )
+                    )
+
+            # --- DOI references ---
+            if not skip_doi_pmid_check and doi_corpus:
+                for m in _DOI_RE.finditer(line):
+                    doi = _normalize_doi_token(m.group(1))
+                    if doi in doi_corpus:
+                        continue
+                    issues.append(
+                        RefIssue(
+                            file=rel_path,
+                            line=line_num,
+                            ref_type="doi",
+                            ref_value=doi,
+                            message=f"DOI {doi} not declared in papers/references.bib or doc/papers/",
+                            suggestion="Add the entry to references.bib (with `doi = {…}`) or create a doc/papers/<key>.md note.",
+                        )
+                    )
+
+            # --- PMID references ---
+            if not skip_doi_pmid_check and pmid_corpus:
+                for m in _PMID_REF_RE.finditer(line):
+                    pmid = m.group(1)
+                    if pmid in pmid_corpus:
+                        continue
+                    issues.append(
+                        RefIssue(
+                            file=rel_path,
+                            line=line_num,
+                            ref_type="pmid",
+                            ref_value=f"PMID:{pmid}",
+                            message=f"PMID {pmid} not declared in papers/references.bib or doc/papers/",
                         )
                     )
 

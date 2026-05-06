@@ -66,6 +66,25 @@ _HOST_USER_AGENTS: dict[str, str] = {
     "www.medrxiv.org": _BROWSERLIKE_UA,
 }
 
+# Academic publisher hosts where the URL itself does not embed a DOI but the
+# landing page does, via Highwire-Press-style ``<meta name="citation_doi">``
+# tags (a Google Scholar indexing requirement, so coverage is wide). Triggers
+# a single HTML fetch + meta-tag scrape; restricted to this allowlist so that
+# arbitrary unrecognized URLs do not silently issue HTTP requests.
+_HTML_META_DOI_HOSTS: frozenset[str] = frozenset(
+    {
+        "aacrjournals.org",
+        "www.sciencedirect.com",
+        "linkinghub.elsevier.com",
+        "ascopubs.org",
+        "journals.asm.org",
+        "www.cell.com",
+        "www.thelancet.com",
+        "jamanetwork.com",
+        "www.nejm.org",
+    }
+)
+
 
 @dataclass(frozen=True)
 class FetchResult:
@@ -501,6 +520,37 @@ def _europepmc_lookup(
     return None, None
 
 
+def _try_europepmc_abstract(
+    doi: str, client: httpx.Client, limiter: RateLimiter, cfg: FetchConfig
+) -> tuple[str | None, str | None]:
+    """Last-resort abstract lookup for blocked-but-OA papers.
+
+    bioRxiv/medRxiv and several OA-but-rate-limiting publishers regularly 403
+    direct fetches. Europe PMC mirrors abstract metadata for nearly every
+    indexed paper and is reliably reachable; surfacing the abstract gives the
+    caller something to summarize from instead of forcing an immediate stop.
+    """
+    _ = cfg
+    data, err = _get_json(
+        client,
+        limiter,
+        "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+        "www.ebi.ac.uk",
+        params={"query": f'DOI:"{doi}"', "format": "json", "resultType": "core", "pageSize": "1"},
+    )
+    if not data:
+        return None, err
+    results = data.get("resultList")
+    if not isinstance(results, dict):
+        return None, None
+    items = results.get("result") or []
+    if items and isinstance(items[0], dict):
+        abstract = items[0].get("abstractText")
+        if isinstance(abstract, str) and abstract.strip():
+            return abstract.strip(), None
+    return None, None
+
+
 def _resolve_pmcid(
     doi: str, client: httpx.Client, limiter: RateLimiter, cfg: FetchConfig
 ) -> tuple[str | None, str | None]:
@@ -532,6 +582,55 @@ def _resolve_doi_from_pmcid(
         return None, err
     doi = record.get("doi")
     return (normalize_doi(doi) if isinstance(doi, str) else None), None
+
+
+_CITATION_DOI_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"<meta[^>]+name=[\"']citation_doi[\"'][^>]+content=[\"']([^\"']+)[\"']",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"<meta[^>]+content=[\"']([^\"']+)[\"'][^>]+name=[\"']citation_doi[\"']",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"<meta[^>]+name=[\"']dc\.identifier[\"'][^>]+content=[\"']doi:([^\"']+)[\"']",
+        re.IGNORECASE,
+    ),
+)
+
+
+def _resolve_doi_from_html_meta(
+    url: str, client: httpx.Client, limiter: RateLimiter
+) -> tuple[str | None, str | None]:
+    """Fetch a publisher landing page and pull DOI from its citation meta tags.
+
+    Used only for hosts in ``_HTML_META_DOI_HOSTS`` whose URLs carry a
+    publisher-internal article ID rather than a DOI (AACR, Elsevier-PII, etc.).
+    """
+    host = _host_of(url)
+    if not host:
+        return None, None
+    limiter.acquire(host)
+    headers = _host_headers(host) or {
+        "User-Agent": _BROWSERLIKE_UA,
+        "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+    }
+    try:
+        resp = client.get(url, follow_redirects=True, headers=headers)
+    except httpx.HTTPError as exc:
+        return None, f"{host}: {exc}"
+    if resp.status_code >= 400:
+        return None, f"{host}: HTTP {resp.status_code}"
+    html = resp.text[:200_000]
+    for pattern in _CITATION_DOI_PATTERNS:
+        m = pattern.search(html)
+        if m:
+            doi = normalize_doi(m.group(1))
+            if doi:
+                return doi, None
+    return None, None
 
 
 def _verify_doi_matches(
@@ -647,6 +746,18 @@ def _fetch(
     if not doi and pmcid:
         tiers.append("europepmc:pmcid->doi")
         resolved, err = _resolve_doi_from_pmcid(pmcid, client, limiter, cfg)
+        if err:
+            errors.append(err)
+        if resolved:
+            doi = resolved
+
+    # Last-resort URL → DOI: scrape Highwire-Press meta tags from publisher
+    # landing pages whose URL only carries an internal article ID. Restricted
+    # to a known-publisher allowlist so arbitrary URLs don't trigger network
+    # I/O.
+    if not doi and url and _host_of(url).lower() in _HTML_META_DOI_HOSTS:
+        tiers.append("html-meta:url->doi")
+        resolved, err = _resolve_doi_from_html_meta(url, client, limiter)
         if err:
             errors.append(err)
         if resolved:
@@ -852,8 +963,26 @@ def _fetch(
                 ),
             )
 
-    # OA per Unpaywall but we couldn't grab it — stop and tell the orchestrator to ask the user.
+    # OA per Unpaywall but we couldn't grab the full text. Before stopping,
+    # pull the Europe PMC abstract so callers have something concrete to
+    # summarize from rather than blocking entirely on a missing PDF.
     if is_oa:
+        tiers.append("europepmc:abstract")
+        abstract, err = _try_europepmc_abstract(doi, client, limiter, cfg)
+        if err:
+            errors.append(err)
+        if abstract:
+            metadata["abstract"] = abstract
+            metadata["abstract_source"] = "europepmc"
+        access_hint = (
+            "Unpaywall lists an OA copy but every agent-accessible tier failed. "
+            "A user browser can likely retrieve it — ask for a PDF path."
+        )
+        if abstract:
+            access_hint = (
+                f"{access_hint} Europe PMC abstract is available in metadata.abstract; "
+                "use it for partial summarization while waiting for the PDF."
+            )
         return _write_and_return(
             papers_dir,
             slug,
@@ -863,10 +992,7 @@ def _fetch(
                 metadata=metadata,
                 tiers_attempted=tiers,
                 errors=errors,
-                access_hint=(
-                    "Unpaywall lists an OA copy but every agent-accessible tier failed. "
-                    "A user browser can likely retrieve it — ask for a PDF path."
-                ),
+                access_hint=access_hint,
             ),
         )
 

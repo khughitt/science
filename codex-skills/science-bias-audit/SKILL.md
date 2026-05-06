@@ -163,6 +163,17 @@ This makes mitigation recommendations actionable — HIGH severity + EASY to fix
 - Are null-result papers included in the review?
 - For in-progress experimental projects (not systematic literature review), focus on whether background literature searches for context/methods may be biased. Mark "not applicable" if no systematic literature review was conducted.
 
+**Corpus independence (closure check):**
+
+When the audit covers multiple artifacts at once — e.g. a hypothesis, an analysis, and an evaluation set — verify that the *audit corpus* is not a subset of the *audited corpus*. If the evidence under review derives its standard from one of the artifacts being audited, the audit can only ratify, never falsify.
+
+For each artifact under audit, answer:
+- What corpus (papers, datasets, prior runs, gold answers) does it depend on?
+- Does any other artifact in the same audit derive its evidence from that same corpus?
+- Is there at least one source — a held-out dataset, an external benchmark, an independent literature search — outside the artifacts' shared corpus?
+
+If the answer to the third question is **no**, mark this as a HIGH-severity finding regardless of the other bias categories: the audit cannot generate disconfirming evidence by construction. Recommended mitigations: (a) introduce an out-of-corpus benchmark; (b) split the multi-artifact audit into single-artifact passes with independent evidence; (c) explicitly downgrade the audit's verdict from "validated" to "internally consistent."
+
 ### 4. Synthesize
 
 - Rate each bias: not detected / possible / likely
