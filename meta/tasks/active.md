@@ -573,12 +573,12 @@ Blocks: cannot start until t022 has a candidate field set.
 - aspects: [software-development, framework-design, hypothesis-testing]
 - parent: task:t021
 - group: evidence-payload-schema
-- related: [task:t024, task:t025, task:t035, question:03-source-and-pipeline-provenance, question:05-source-dependence-detection, question:11-graph-valued-synthesis-artifacts, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- related: [task:t024, task:t025, task:t033, task:t035, task:t037, task:t038, question:03-source-and-pipeline-provenance, question:05-source-dependence-detection, question:07-llm-agents-as-fallible-sources, question:11-graph-valued-synthesis-artifacts, question:12-agent-tool-kg-operations, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
 - created: 2026-05-05
 
 Stratify evidence-source dependence patterns by mechanical detectability and prototype detectors for the high-leverage cases.
 
-Mechanically detectable candidates: shared dataset identifiers, shared author lists, citation chains, shared extractor or prompt versions, near-duplicate text, shared upstream synthesis nodes, joint-model shared-structure dependence (when multiple condition-, subtype-, view-, or platform-specific outputs come from a single estimator with group lasso, common/unique component decomposition, correlated priors across groups, or shared sparsity), and shared posterior sampler / approximation runs (when multiple graph-feature claims are read from the same posterior chain or variational fit).
+Mechanically detectable candidates: shared dataset identifiers, shared author lists, citation chains, shared extractor or prompt versions, near-duplicate text, shared upstream synthesis nodes, joint-model shared-structure dependence (when multiple condition-, subtype-, view-, or platform-specific outputs come from a single estimator with group lasso, common/unique component decomposition, correlated priors across groups, or shared sparsity), shared posterior sampler / approximation runs (when multiple graph-feature claims are read from the same posterior chain or variational fit), joint-operator dependence (when multiple evidence items are produced by the same agent, model version, prompt or system-prompt version, or tool chain), and shared-KG-view dependence (when multiple downstream claims are derived from the same task-conditioned subgraph, RAG retrieval context, correlation graph, or KG-diffusion view, even when the ostensibly underlying source graph differs).
 Annotation-required candidates: methodological convergence by independent groups, conceptual dependence through shared theoretical frameworks, prior-knowledge contamination across paper summaries.
 
 Deliverables:
@@ -604,22 +604,24 @@ Steps:
 - propose a sequential-evidence extension to the H01 simulator: propositions receive evidence over time, attention policies compare fixed-N posterior, BMA-style, and anytime-valid evidence levels;
 - decide whether H05 graduates to an active simulation track or stays speculative pending stronger upstream evidence.
 
-## [t033] Model LLM agents as fallible evidence sources
+## [t033] Model LLM agents as fallible evidence sources and graph-governed operators
 - priority: P2
 - status: proposed
 - aspects: [software-development, framework-design, research]
 - group: agent-source-modeling
-- related: [task:t022, task:t024, question:07-llm-agents-as-fallible-sources, question:05-source-dependence-detection, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- related: [task:t022, task:t024, task:t031, task:t037, task:t038, question:07-llm-agents-as-fallible-sources, question:05-source-dependence-detection, question:12-agent-tool-kg-operations, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
 - created: 2026-05-05
 
-Treat LLM agents (paper summarizers, claim extractors, batch synthesizers, attention samplers, curation assistants) as first-class fallible source entities and design the minimum representation.
+Treat LLM agents (paper summarizers, claim extractors, batch synthesizers, attention samplers, curation assistants, tool-using science agents) as first-class fallible source entities AND as graph-governed operators, and design the minimum representation.
 
 Deliverables:
-- a taxonomy of agent roles in this project, with current and planned uses;
+- a taxonomy of agent roles in this project, with current and planned uses (source-side: summarizer, extractor, synthesizer, sampler; operator-side: planner, tool executor, KG mutator, retriever, evaluator);
 - a minimal agent-source schema: agent identifier, model version, prompt or system-prompt version, tool version, validation history, and dependence links to other agents;
+- an operator-side extension covering `tool_chain_ref`, `tool_io_contract`, `execution_trace_ref`, `safety_policy_ref`, `abstention_reason`, `agent_evaluation_protocol`, and Bayes-factor-style evaluation history (per Si2025) that distinguishes "no evidence of bias" from "evidence of no bias";
 - a `derived_by` field design for evidence payloads, plus a `validation_status` field;
-- an alignment note with `[t031]` on shared-prompt and shared-model dependence;
-- a self-application pass: mark which existing artifacts in this project (including the Batch 1 / Batch 2 syntheses) should be retroactively annotated with agent provenance, and at what granularity.
+- an alignment note with `[t031]` on shared-prompt, shared-model, shared-tool-chain, and shared-KG-view dependence;
+- alignment with `[t037]` (operations schema) so the source-side agent record links to operator-side records via shared identifiers rather than duplicating fields;
+- a self-application pass: mark which existing artifacts in this project (including the Batch 1, Batch 2, Batch 3, Batch 4, and Batch 5 syntheses) should be retroactively annotated with agent provenance, and at what granularity.
 
 Granularity is a key design decision; expect to defend the chosen level (per-prompt, per-tool-version, per-model) against alternatives.
 

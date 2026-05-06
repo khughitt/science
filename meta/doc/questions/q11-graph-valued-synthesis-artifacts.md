@@ -15,11 +15,15 @@ source_refs:
 - cite:Deleu2023
 - cite:Mohammadi2025
 - cite:Alnajjar2026
+- cite:Dai2024GraphAttention
+- cite:Gong2024
+- cite:Jiang2024
 related:
 - question:01-evidence-payload-schema
 - question:02-causal-synthesis-guardrails
 - question:03-source-and-pipeline-provenance
 - question:10-causal-graph-construction-pipeline
+- question:12-agent-tool-kg-operations
 - hypothesis:h02-rich-evidence-payloads-improve-graph-calibration
 - hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting
 - hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening
@@ -33,6 +37,7 @@ updated: '2026-05-06'
 
 Batch 4 shows that many scientific synthesis outputs are not scalar support/dispute values.
 They are graph estimates, graph posterior distributions, common/unique network components, clusters, modules, selected-feature sets, or predictive integration models.
+Batch 5 expands the family further: causal graph attention weights, correlation graphs from spatio-temporal alignment, and task-conditioned filtered subgraphs are also graph-valued artifacts whose meaning depends on selection objective and not just structural shape [@Dai2024GraphAttention; @Gong2024; @Jiang2024].
 This question asks how Science should represent those artifacts so that graph belief updates, attention policies, and causal guardrails know what kind of evidence they are consuming.
 
 ## Why It Matters
@@ -53,6 +58,9 @@ This question asks how Science should represent those artifacts so that graph be
 - Vahabi and Michailidis provide a taxonomy of multi-omics integration objectives: clustering, biomarker discovery, module discovery, network/pathway analysis, and related data-ensemble/model-ensemble strategies [@Vahabi2022].
 - Deleu et al. and Mohammadi et al. target posterior graph uncertainty, reinforcing that graph posterior mass should survive ingestion rather than collapse to a point estimate [@Deleu2023; @Mohammadi2025].
 - Alnajjar et al. show that integrative clustering and feature selection produce subtype and selected-feature artifacts with variational posterior uncertainty [@Alnajjar2026].
+- Dai's causal graph attention work shows that attention weights are a derived graph artifact distinct from causal structure or evidence support; a separate `attention-not-evidence` reason code is warranted [@Dai2024GraphAttention].
+- Gong et al. (Nexus) show that correlation graphs produced by spatio-temporal alignment are derived graph artifacts whose edges depend on alignment, missingness handling, and interestingness filtering, so they should not be merged with measured evidence edges [@Gong2024].
+- Jiang et al. (DiffKG) show that task-specific KG filtering produces a derived KG view whose edges have been removed or reweighted to serve a downstream objective; the view is a first-class artifact with source-graph and selection-method provenance [@Jiang2024].
 
 ## Thoughts
 
@@ -72,5 +80,5 @@ This question asks how Science should represent those artifacts so that graph be
 ## Related
 
 - Topic notes: `topic:structured-scientific-knowledge`, `topic:bayesian-methods-continuous-belief`.
-- Article notes: Batch 4 summaries under `doc/background/papers/`.
-- Methods/Datasets: graphical models, Bayesian network structure learning, Gaussian graphical models, multi-omics integration, integrative clustering, feature selection, pan-cancer survival prediction.
+- Article notes: Batch 4 and Batch 5 summaries under `doc/background/papers/`.
+- Methods/Datasets: graphical models, Bayesian network structure learning, Gaussian graphical models, multi-omics integration, integrative clustering, feature selection, pan-cancer survival prediction, causal graph attention, correlation discovery, and KG filtering / diffusion.
