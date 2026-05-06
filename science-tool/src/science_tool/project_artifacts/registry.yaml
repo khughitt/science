@@ -29,9 +29,11 @@ artifacts:
       requires_clean_worktree: true
       commit_default: true
       transaction_kind: temp_commit
-    version: '2026.05.05.2'
-    current_hash: 2c1eb72eeeb2677d467063deeeb94f090b14f00502823b9da97d4fc66add39f7
+    version: '2026.05.05.3'
+    current_hash: 0dda97dadb97646cc65e93efc198cd15c5bcc0ca0e3b1ef58c7ef4ce031461f1
     previous_hashes:
+      - version: '2026.05.05.2'
+        hash: 2c1eb72eeeb2677d467063deeeb94f090b14f00502823b9da97d4fc66add39f7
       - version: '2026.05.05.1'
         hash: 10cb445c83844c0d76ffa7ed9afc8c0cbcae4a7439efaf3c13b395894eb2988b
       - version: '2026.04.26'
@@ -103,6 +105,11 @@ artifacts:
         kind: byte_replace
         summary: 'Add --strict / --help / proper arg parsing; strict_warn helper; extra ../../../science/science-tool search candidate.'
         steps: []
+      - from: '2026.05.05.2'
+        to: '2026.05.05.3'
+        kind: byte_replace
+        summary: 'Ignore task-like substrings inside non-task typed refs during task queue validation.'
+        steps: []
     changelog:
       '2026.04.26': Initial managed artifact (port of scripts/validate.sh + hook infrastructure).
       '2026.04.26.1': 'Audit-surfaced six-fix batch (Plan #7 of conventions audit).'
@@ -115,3 +122,4 @@ artifacts:
       '2026.05.03.3': 'Harden Section 5a awk: anchor parsing to YAML frontmatter delimiters to prevent body-text false positives; extend exit pattern to match tab-indented lines so tab-indented fields are no longer silently skipped.'
       '2026.05.05.1': 'Strict task IDs, local task parent validation, and namespace-first cross-project reference checks.'
       '2026.05.05.2': 'Add --strict and --help flags with proper argument parsing (replaces positional VERBOSE="${1:-}"); introduces strict_warn helper for advisory checks (no callers yet — opt-in in follow-up); adds ../../../science/science-tool search candidate for nested-repo layouts.'
+      '2026.05.05.3': 'Ignore task-like substrings inside non-task typed refs during task queue validation; task:* typed refs remain checked.'

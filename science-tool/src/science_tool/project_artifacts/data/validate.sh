@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.05.03.2
-# science-managed-source-sha256: c0cf78f20e7f71b9c066fbb3d14cedcabf337e8351f774e39f5eb66370feefcd
+# science-managed-version: 2026.05.05.3
+# science-managed-source-sha256: 0dda97dadb97646cc65e93efc198cd15c5bcc0ca0e3b1ef58c7ef4ce031461f1
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -1001,8 +1001,10 @@ for block in blocks:
         for value in split_list_value(fields.get(field_name, "")):
             refs_to_check.append(value)
     for raw_ref in refs_to_check:
-        if raw_ref.count(":") == 2:
-            continue
+        if ":" in raw_ref:
+            if not raw_ref.startswith("task:"):
+                continue
+            raw_ref = raw_ref.split(":", 1)[1]
         for match in task_ref.finditer(raw_ref):
             raw = match.group(0)
             if raw in declared:

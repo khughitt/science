@@ -1228,6 +1228,37 @@ def test_validate_catches_stale_task_ref_after_migration(tmp_path: Path) -> None
     assert "stale task ref 't001'" not in combined
 
 
+def test_validate_ignores_task_like_substrings_inside_non_task_typed_refs(tmp_path: Path) -> None:
+    _write_common_files(tmp_path, "software")
+    _write_python3_stub(tmp_path / "bin")
+    _write_science_tool_stub(tmp_path / "bin")
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "src").mkdir(parents=True)
+    (tmp_path / "tests").mkdir(parents=True)
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t001] Parent task\n"
+        "- aspects: [software-development]\n"
+        "- priority: P1\n"
+        "- status: done\n"
+        "- related: [interpretation:2026-04-13-t001a-result]\n"
+        "- created: 2026-05-04\n\n"
+        "Parent body.\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    combined = result.stdout + result.stderr
+    assert "stale or invalid task ref 't001a'" not in combined
+
+
 def test_validate_accepts_namespace_first_ref_for_declared_child(tmp_path: Path) -> None:
     _write_common_files(tmp_path, "software")
     _write_python3_stub(tmp_path / "bin")
