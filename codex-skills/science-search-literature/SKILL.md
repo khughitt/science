@@ -212,7 +212,7 @@ Include the normalized candidate list, dedupe keys, source provenance, and rank/
    % Use keys in the format: FirstAuthorLastNameYear (e.g., Smith2024)
    ```
 7. If substantial gaps remain, run `science-next-steps` focused on the searched scope.
-8. Commit: `git add -A && git commit -m "papers: search literature <slug>"`
+8. Commit: `git add -A && git commit -m "docs(papers): search literature <slug>"` (use `papers:` only if your project's commitlint config explicitly allows that type).
 
 ## Process Reflection
 

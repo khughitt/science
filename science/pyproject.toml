@@ -45,7 +45,7 @@ packages = ["src/science_tool"]
 "src/science_tool/project_artifacts/data" = "science_tool/project_artifacts/data"
 
 [tool.uv.sources]
-science-model = { path = "../science-model", editable = true }
+science-model = { path = "model", editable = true }
 
 [dependency-groups]
 dev = [
