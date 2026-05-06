@@ -175,9 +175,8 @@ Without this split, every batch silently widened the "minimum" schema (~50 field
 `[t025]` is the canonical H03 reason-code registry — aspect tasks declare codes locally and mirror them there with batch provenance.
 Lit follow-up tasks (`[t028]`, `[t036]`, `[t039]`, `[t041]`) are P3 so they do not compete with the schema work.
 
-**State (2026-05-06):** `[t022]` v2 draft shipped (`meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md`); marked done.
-Next P1 is `[t030]` — the authoring-cost audit on real summaries; it validates the contract's structural claims before aspect extensions commit.
-Aspect extensions (`[t034]`, `[t035]`, `[t037]`, `[t038]`, `[t040]`) remain P2 until `[t030]` either confirms or revises the contract; they then move to P1.
+**State (2026-05-06):** `[t022]` shipped at v2.2 (`meta/doc/plans/2026-05-06-evidence-payload-core-and-extension-contract.md`) with structural claims validated by `[t030]`. Both tasks done. Aspect extensions (`[t034]`, `[t035]`, `[t037]`, `[t038]`, `[t040]`) are now unblocked and move to P1.
+Carry-forwards: each aspect extension declaring an evaluation/audit/operation type now owns its own `target_artifact_ref` (no longer in core); enums have `methods-paper`/`framework-paper`/`benchmark-or-dataset-paper`, `method-set`, `framework-proposal` available; `uncertainty_summary` is `[opt]` and may be qualitative.
 
 Surfaced by: `doc/background/papers/synthesis-2026-05-05-bayesian-evidence-synthesis.md`.
 
@@ -334,29 +333,6 @@ Concrete improvements to design and implement:
 
 Start with a design pass before editing generated commands or skills.
 
-## [t030] Audit authoring cost of the proposed evidence-payload schema
-- priority: P1
-- status: proposed
-- parent: task:t021
-- aspects: [research, framework-design, hypothesis-testing]
-- related: [task:t022, question:04-authoring-cost-audit, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration]
-- group: evidence-payload-schema
-- created: 2026-05-05
-
-Sample 10-20 existing paper summaries from this commit and attempt to extract the candidate t022 fields against a defined rubric.
-Record per-field success rate, ambiguity rate, inferred-vs-stated status, and rough effort cost.
-Run a second extraction pass with an LLM agent and score it against the manual pass.
-
-Deliverables:
-- a sampling plan and field-extraction rubric in `meta/doc/plans/`;
-- a per-field extractability table;
-- a short note feeding back into t022 with field-pruning recommendations (core / typed-extension / drop);
-- a note on agent-vs-manual extraction agreement that informs `[t033]`.
-
-Blocks: cannot start until t022 has a candidate field set.
-
-**State (2026-05-06):** narrow first pass run on 4 papers; audit at `meta/doc/plans/2026-05-06-t030-narrow-authoring-cost-audit.md`. Findings produced four v2.1 patches to `[t022]` (added `claim_source_ref`, out-of-scope section, validation_status pitfall note, generic evidence-quality reason codes). The full deliverables in this task (sampling plan, per-field extractability table, LLM-vs-manual agreement, field-pruning recommendation) remain TODO and are the next step before locking enum sets.
-
 ## [t031] Source-dependence detection design
 - priority: P2
 - status: proposed
@@ -415,8 +391,10 @@ Deliverables:
 
 Granularity is a key design decision; expect to defend the chosen level (per-prompt, per-tool-version, per-model) against alternatives.
 
+**Inputs from `[t030]` D4 (2026-05-06)** at `meta/doc/plans/2026-05-06-t030-full-audit-results.md`: two verbatim-identical blind-LLM extraction passes disagreed within-1 on ~25–40% of rubric-ambiguous fields, with systematic pass-1-higher-than-pass-2 calibration drift (17/25 cases). Implications for this task: (a) per-extraction confidence and per-call agent identity are needed in agent-source records; (b) ensemble-of-N or repeated-extraction-with-disagreement-flagging should be considered for high-stakes fields; (c) the deferred full-context-manual-vs-blind-LLM signal is required to fully ground this task and should be obtained via a fresh audit before agent-source modeling commits.
+
 ## [t034] Design causal graph construction pipeline artifacts
-- priority: P2
+- priority: P1
 - status: proposed
 - parent: task:t021
 - aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
@@ -448,7 +426,7 @@ Deliverables:
 Start from Batch 3 synthesis: `doc/background/papers/synthesis-2026-05-06-causal-graph-construction.md`.
 
 ## [t035] Design graph-valued synthesis artifact schema
-- priority: P2
+- priority: P1
 - status: proposed
 - parent: task:t021
 - aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
@@ -499,7 +477,7 @@ Highest-value additions:
 Deliverable: either add PDFs and process them in a later batch, or write a topic note explaining how each family should influence `graph_artifact_type`, `integration_objective`, posterior uncertainty, validation role, and H03 reason codes.
 
 ## [t037] Design agent/tool operations schema
-- priority: P2
+- priority: P1
 - status: proposed
 - aspects: [software-development, framework-design, research]
 - related: [task:t029, task:t033, question:07-llm-agents-as-fallible-sources, question:12-agent-tool-kg-operations, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
@@ -530,7 +508,7 @@ Deliverables:
 Start from Batch 5 synthesis: `doc/background/papers/synthesis-2026-05-06-scientific-agents-knowledge-graphs.md`.
 
 ## [t038] Design graph evolution and KG view provenance
-- priority: P2
+- priority: P1
 - status: proposed
 - aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
 - related: [task:t021, task:t035, task:t037, question:12-agent-tool-kg-operations, question:03-source-and-pipeline-provenance, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
@@ -583,7 +561,7 @@ Highest-value additions:
 Deliverable: either add PDFs and process them in a later batch, or write a topic note explaining how each family should influence operation records, tool graphs, KG update events, evaluation competencies, safety status, and H03 reason codes.
 
 ## [t040] Design robustness/reproducibility evaluation schema
-- priority: P2
+- priority: P1
 - status: proposed
 - aspects: [software-development, framework-design, hypothesis-testing, research]
 - related: [task:t021, task:t022, task:t025, task:t030, question:13-robustness-reproducibility-evaluation, question:01-evidence-payload-schema, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting, topic:analytic-flexibility-and-replication]

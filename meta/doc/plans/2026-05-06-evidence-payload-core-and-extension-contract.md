@@ -1,6 +1,8 @@
-# Evidence Payload — Core Schema and Extension Contract (t022 draft v2.1)
+# Evidence Payload — Core Schema and Extension Contract (t022 draft v2.2)
 
-> **Status:** Updated for v2.1 (2026-05-06). v2.1 patches from the narrow `[t030]` audit (`meta/doc/plans/2026-05-06-t030-narrow-authoring-cost-audit.md`): added `claim_source_ref` core field for paper-extracted claims, added explicit "What does NOT live in t022" section, added validation_status pitfall note, generic evidence-quality reason codes mirrored to `[t025]`. Structural decisions (core/extension split, multi-extension dispatch, reason-code inheritance) unchanged. Enum-sizing decisions deferred to full `[t030]`.
+> **Status:** Updated for v2.2 (2026-05-06). v2.2 patches from the full `[t030]` audit (`meta/doc/plans/2026-05-06-t030-full-audit-results.md`): removed `target_artifact_ref` from core (applicability 0.167 — moved to evaluation/audit/operation extensions); extended `artifact_type` enum with `methods-paper` / `framework-paper` / `benchmark-or-dataset-paper`; extended `comparison_target` enum with `method-set`; extended `support_direction` enum with `framework-proposal`; loosened `uncertainty_summary` from required to optional with allowed qualitative form; added `proposition_refs` cardinality rule (one per finding-cluster). Field count 18 → 17 (12 required, 5 optional). Structural decisions (core/extension split, multi-extension dispatch, reason-code inheritance) remain unchanged through v2.2.
+>
+> v2.1 (prior) patches from the narrow `[t030]` audit (`meta/doc/plans/2026-05-06-t030-narrow-authoring-cost-audit.md`): added `claim_source_ref` core field for paper-extracted claims, added explicit "What does NOT live in t022" section, added validation_status pitfall note, generic evidence-quality reason codes mirrored to `[t025]`.
 
 **Goal:** Produce the **core** evidence payload schema and the **extension contract** that aspect-specific schemas (`[t034]`, `[t035]`, `[t037]`, `[t038]`, `[t040]`) must conform to. Without a layered split, every batch silently widened the "minimum" payload (~50 fields after Batch 6) and the aspect tasks collapse into ad-hoc accretion.
 
@@ -32,7 +34,7 @@ Every evidence/synthesis/evaluation/operation payload carries these fields. **Re
 core:
   # Identity
   payload_id: str                    # unique within project
-  artifact_type: enum                # primary type; dispatches to the primary extension
+  artifact_type: enum                # primary type; dispatches to the primary extension. v2.2 enum includes synthesis-derived types (bayesian-meta-analysis, truth-discovery-result, causal-discovery-run, graph-posterior-synthesis), operation/evaluation types (agent-tool-operation, reproducibility-checklist-audit), and paper-extracted-claim types (methods-paper, framework-paper, benchmark-or-dataset-paper).
   extensions: [str]                  # all loaded extension names, primary first; validates against registry
   created_at: datetime
   source_commit: str           [opt] # the commit of source content the payload was extracted from
@@ -45,24 +47,27 @@ core:
   pipeline_provenance_ref: ref [opt] # the actual run/execution record (extraction run, synthesis run, audit run)
 
   # Attachment
-  proposition_refs: [ref]            # propositions this is evidence about; empty for evaluation/operation artifacts
-  target_artifact_ref: ref     [opt] # for evaluation/operation artifacts: the artifact this payload audits or operates on
-  comparison_target: enum            # null-vs-alternative / hypothesis-set / model-set / artifact-target / n-a
+  proposition_refs: [ref]            # propositions this is evidence about; empty for evaluation/operation artifacts. Cardinality rule: one entry per finding-cluster (don't synthesize a catch-all).
+  comparison_target: enum            # null-vs-alternative / hypothesis-set / model-set / method-set / artifact-target / n-a
 
   # Epistemic semantics
-  support_direction: enum            # supports / disputes / qualifies / methodological-input / quality-record / operation-record
+  support_direction: enum            # supports / disputes / qualifies / methodological-input / framework-proposal / quality-record / operation-record
   validation_role: enum              # PERMISSION: strengthen-belief / prioritize-attention / gate-update / quality-record-only / record-only
   validation_status: enum            # STATE: validated / pending / failed / not-applicable / unknown
-  uncertainty_summary: str           # short canonical form: "BF10=0.115" / "CPDAG, 12 edges" / "checklist 24/32"; full uncertainty in extensions
+  uncertainty_summary: str     [opt] # short canonical form OR short qualitative form: "BF10=0.115" / "CPDAG, 12 edges" / "supports method under stated conditions"; detailed numeric uncertainty in extensions
 
   # Quality flags
   reason_codes: [enum]               # H03 codes from t025; declared on this payload (does not include inherited codes — see inheritance section); may be empty
   abstention_reason: enum      [opt] # if the payload is "we can't say" rather than "we say X"
 ```
 
-**Field count: 18** (12 required, 6 optional) after v2.1 added `claim_source_ref`. v1 listed ~50 fields under the "minimum" schema; v2 moved family-specific fields into extensions.
+**Field count: 17** (12 required, 5 optional) after v2.2 removed `target_artifact_ref` from core and made `uncertainty_summary` optional.
 
 **Pitfall — `validation_status` is the payload's state, not the source's.** A common authoring error is to set `validation_status: validated` because the source paper (in `claim_source_ref`) is peer-reviewed. That conflates two things. `validation_status` describes whether *this payload* (its extraction, its content, its application) has been audited; default `pending` for newly-authored payloads. Source-quality signals belong in reason codes (e.g., `peer-reviewed-only`, `single-source-evidence`).
+
+**Authoring rule — `proposition_refs` cardinality.** When a paper carries multiple distinct findings, author one `proposition_refs` entry per finding-cluster — do not synthesize a catch-all proposition. The synthesis layer (`[t023]`) re-aggregates if needed.
+
+**Authoring rule — `reason_codes` empty list.** When no reason codes apply, score / store the field as an explicit empty list `[]` (a positive declaration of "no concerns"), not as missing. Validators should treat absent `reason_codes` as a payload error.
 
 ### What does NOT live in t022 (added v2.1)
 
@@ -319,7 +324,6 @@ core:
   agent_ref: agent:bayes-ggm-runner
   pipeline_provenance_ref: pipeline:joint-ggm-mcmc-v1
   proposition_refs: []                                    # graph-valued; edges propose propositions, don't update existing ones
-  target_artifact_ref: ~
   comparison_target: hypothesis-set
   support_direction: methodological-input
   validation_role: prioritize-attention
@@ -363,7 +367,6 @@ core:
   agent_ref: agent:scitool-runner
   pipeline_provenance_ref: pipeline:scitool-orchestrator-v2
   proposition_refs: []                                    # operation-record; no proposition target
-  target_artifact_ref: hypothesis:novel-egfr-binding-pocket
   comparison_target: n-a
   support_direction: operation-record
   validation_role: record-only
@@ -372,6 +375,7 @@ core:
   reason_codes: [agent-source-unvalidated]
 
 extension/agent-tool-operation:
+  target_artifact_ref: hypothesis:novel-egfr-binding-pocket   # v2.2: target lives in the operation extension
   agent_role: hypothesis-generator
   agent_model_version: scitool-v0.4
   prompt_or_workflow_ref: workflow:hypothesis-from-target-v3
@@ -382,7 +386,7 @@ extension/agent-tool-operation:
   abstention_supported: false
 ```
 
-Key points: `support_direction: operation-record`, `validation_role: record-only`. The operation produces a *target_artifact* (a candidate hypothesis), but does not itself update belief. A *separate* downstream payload would evaluate the candidate hypothesis and could carry `strengthen-belief` permission.
+Key points: `support_direction: operation-record`, `validation_role: record-only`. The operation produces a *target_artifact* (a candidate hypothesis, now in the extension after v2.2's move), but does not itself update belief. A *separate* downstream payload would evaluate the candidate hypothesis and could carry `strengthen-belief` permission.
 
 ### Example 6 — Batch 6, OSIRIS reproducibility checklist audit (Banzi-style)
 
@@ -397,7 +401,6 @@ core:
   agent_ref: agent:reproducibility-auditor
   pipeline_provenance_ref: ~
   proposition_refs: []
-  target_artifact_ref: study:dishonesty-19lab             # what is being audited
   comparison_target: artifact-target
   support_direction: quality-record
   validation_role: quality-record-only
@@ -406,6 +409,7 @@ core:
   reason_codes: [code-or-data-unavailable]
 
 extension/reproducibility-checklist-audit:
+  target_artifact_ref: study:dishonesty-19lab             # v2.2: audit target lives in the audit extension
   checklist_ref: checklist:OSIRIS-32
   lifecycle_stage: [planning, methods, data-analysis, dissemination]
   items_present: [hypothesis-declared, sap-preregistered, null-results-reported]   # ... abridged
@@ -436,9 +440,9 @@ The `legacy-weighted` extension exists only to host migrated edges and should be
 
 ## Open questions
 
-1. **Should `proposition_refs: []` and `target_artifact_ref` be a tagged union?** Operation/audit/graph-posterior payloads have empty propositions and present target. Statistical/causal payloads have present propositions and may or may not have a target. Constraint: at least one must be non-empty. Encoded as a validator rule for now; tagged-union syntax pending.
+1. **~~Should `proposition_refs: []` and `target_artifact_ref` be a tagged union?~~** **Resolved in v2.2.** `target_artifact_ref` left core (full `[t030]` audit found applicability 0.167 in payload-bearing papers). Each evaluation/audit/operation extension owns its own `target_artifact_ref`-equivalent field. `proposition_refs: []` remains a valid empty list for those extension types. No core-level constraint needed.
 
-2. **What is the canonical-form rule for `uncertainty_summary`?** Currently free-text. Options: (a) free-text — flexible, hard to query; (b) constrained DSL — queryable, brittle; (c) structured + rendered — best-of-both, more cost. Defer to `[t030]` empirical pass.
+2. **~~What is the canonical-form rule for `uncertainty_summary`?~~** **Resolved in v2.2.** Full `[t030]` found ambiguous-rate 0.583 — most paper summaries are prose and forced numeric short-form was the source of ambiguity. v2.2 marks the field `[opt]` and explicitly allows a short qualitative form (e.g., "supports method under stated conditions"). Detailed numeric uncertainty lives in extensions.
 
 3. **Should `agent_ref` become required?** Even human-authored payloads have a human-as-agent record. Forcing it surfaces unowned legacy payloads. Probably required after migration; default to `agent:human:<email>` for manual extraction.
 
