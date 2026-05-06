@@ -97,3 +97,61 @@ def test_emit_query_rows_default_has_no_ansi(capsys) -> None:
     captured = capsys.readouterr()
     assert "question:q001-demo" in captured.out
     assert ANSI_RE.search(captured.out) is None
+
+
+def _health_report_with_archive_lag() -> dict:
+    return {
+        "archive_lag": {
+            "done_in_active": 1,
+            "retired_in_active": 0,
+            "missing_completed": 0,
+        },
+        "managed_artifacts": [],
+        "tooling_scaffold": [],
+        "unregistered_ref_kinds": [],
+        "unresolved_refs": [],
+        "lingering_tags_lines": [],
+        "identity_policy": [],
+        "legacy_structured_literature_prefixes": [],
+        "dataset_anomalies": [],
+        "layered_claims": {
+            "migration_issues": [],
+            "rival_model_packets_missing_discriminating_predictions": [],
+            "proposition_claim_layer_coverage": {
+                "numerator": 0,
+                "denominator": 0,
+                "fraction": 1.0,
+            },
+            "causal_leaning_identification_coverage": {
+                "numerator": 0,
+                "denominator": 0,
+                "fraction": 1.0,
+            },
+        },
+    }
+
+
+def test_health_never_strips_markup_and_ansi(monkeypatch) -> None:
+    from science_tool.graph import health as health_module
+
+    monkeypatch.setattr(health_module, "build_health_report", lambda _root: _health_report_with_archive_lag())
+
+    result = CliRunner().invoke(main, ["--color", "never", "health"])
+
+    assert result.exit_code == 0, result.output
+    assert "Next:" in result.output
+    assert "science tasks archive" in result.output
+    assert "[cyan]" not in result.output
+    assert ANSI_RE.search(result.output) is None
+
+
+def test_health_always_emits_ansi(monkeypatch) -> None:
+    from science_tool.graph import health as health_module
+
+    monkeypatch.setattr(health_module, "build_health_report", lambda _root: _health_report_with_archive_lag())
+
+    result = CliRunner().invoke(main, ["--color", "always", "health"])
+
+    assert result.exit_code == 0, result.output
+    assert "science tasks archive" in result.output
+    assert ANSI_RE.search(result.output) is not None

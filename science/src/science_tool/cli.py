@@ -3305,10 +3305,10 @@ def health_command(project_root: Path, output_format: str) -> None:
     """Aggregate diagnostics for the project: unresolved refs, lingering tags, etc."""
     import json as _json
 
-    from rich.console import Console
     from rich.table import Table
 
     from science_tool.graph.health import build_health_report
+    from science_tool.styles import get_console
 
     project_root = project_root.resolve()
     report = build_health_report(project_root)
@@ -3357,7 +3357,7 @@ def health_command(project_root: Path, output_format: str) -> None:
         click.echo("Project is clean — no issues found.")
         return
 
-    console = Console()
+    console = get_console()
 
     if archive_lag_total:
         lag_table = Table(title="Tasks Archive Lag")
