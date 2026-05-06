@@ -73,8 +73,8 @@ def test_dag_validate_accepts_format_json(cli_project: Path) -> None:
 
     result = runner.invoke(main, ["dag", "validate", "--project", str(cli_project), "--format", "json"])
 
-    assert result.exit_code in {0, 1}
-    payload = json.loads(result.output)
+    assert result.exit_code in {0, 1}, result.output
+    payload = json.loads(result.stdout)
     assert "findings" in payload
 
 
@@ -83,8 +83,8 @@ def test_dag_staleness_accepts_format_json(cli_project: Path) -> None:
 
     result = runner.invoke(main, ["dag", "staleness", "--project", str(cli_project), "--format", "json"])
 
-    assert result.exit_code in {0, 1}
-    payload = json.loads(result.output)
+    assert result.exit_code in {0, 1}, result.output
+    payload = json.loads(result.stdout)
     assert "drifted_edges" in payload
 
 
@@ -93,8 +93,8 @@ def test_dag_audit_accepts_format_json(cli_project: Path) -> None:
 
     result = runner.invoke(main, ["dag", "audit", "--project", str(cli_project), "--format", "json"])
 
-    assert result.exit_code in {0, 1}
-    payload = json.loads(result.output)
+    assert result.exit_code in {0, 1}, result.output
+    payload = json.loads(result.stdout)
     assert "staleness" in payload
 
 
