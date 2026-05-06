@@ -110,7 +110,7 @@ They should strengthen causal propositions only through H04 guardrails and expli
 2. What is the minimum graph-object taxonomy for noncausal graph artifacts: conditional-dependence graph, Bayesian-network DAG, graph posterior, edge inclusion summary, common component, unique component, module, and cluster-feature map?
 3. How should graph posterior uncertainty be represented so it can drive H01/H03 attention without pretending to be a causal posterior?
 4. When does a selected feature or cluster label become evidence for a proposition rather than a prioritization artifact?
-5. How should shared-structure assumptions be represented as source dependence across multiple downstream claims?
+5. How should shared-structure assumptions (group lasso across data types, common/unique component decomposition, correlated priors across groups) be represented as source dependence across multiple downstream claims? Tracked into `[t031]` as a mechanically detectable joint-model dependence pattern.
 
 ## Prioritized Follow-ups
 

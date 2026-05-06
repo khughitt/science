@@ -17,6 +17,7 @@ source_refs:
 - cite:Alnajjar2026
 related:
 - question:01-evidence-payload-schema
+- question:02-causal-synthesis-guardrails
 - question:03-source-and-pipeline-provenance
 - question:10-causal-graph-construction-pipeline
 - hypothesis:h02-rich-evidence-payloads-improve-graph-calibration

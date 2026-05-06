@@ -23,6 +23,7 @@ related:
 - hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening
 - question:01-evidence-payload-schema
 - question:10-causal-graph-construction-pipeline
+- question:11-graph-valued-synthesis-artifacts
 created: '2026-05-05'
 updated: '2026-05-06'
 ---

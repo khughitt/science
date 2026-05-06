@@ -529,8 +529,12 @@ Concrete improvements to design and implement:
 - resolve software-profile research-layer summaries to `doc/background/papers/`, not `doc/papers/`;
 - make `question reserve --source-refs` normalize bare BibTeX keys to `cite:<key>` or reject them early with a clear error;
 - add real batch mode where workers write only paper summaries and the orchestrator owns `references.bib`, questions, and synthesis to avoid races;
-- add a dedicated batch-synthesis template/location so validation does not treat synthesis files as paper summaries;
+- add a dedicated batch-synthesis template/location so validation does not treat synthesis files as paper summaries, and silence "paper-summary-only required sections" warnings on synthesis-shape files;
 - add an "Implications" section to paper summaries for graph implications, evidence-schema implications, H01/revisiting implications, and command/skill feedback;
+- add an `Artifact Semantics` section to the paper-summary template covering output object type (graph estimate, graph posterior, cluster, module, selected feature, predictive model), context/view scope, shared-structure assumptions, approximation class, and validation role (surfaced by Batch 4 methods papers where the artifact type and its causal-use restrictions are load-bearing);
+- prompt the orchestrator to propose typed synthesis nodes and reason codes automatically when a batch contains methods papers (graph-estimation, graph-posterior, integrative-clustering, feature-selection, module-discovery, predictive-integration);
+- emit a machine-readable batch manifest at end of run with paper keys, local PDF paths, synthesis file path, related question IDs, related task IDs, `[UNVERIFIED]` counts, and citation keys added;
+- emit a "remaining PDFs by likely topic" report after each batch to support batch selection for the next run;
 - add a post-batch prompt that proposes questions, hypotheses, task groups, and command improvements;
 - record `[UNVERIFIED]` counts in the orchestrator report.
 - register `synthesis` as a graph entity kind or keep batch synthesis artifacts out of graph-audited entity scans; `hypothesis create` currently reports unknown `synthesis` kind while scanning paper-batch synthesis files.
@@ -565,12 +569,12 @@ Blocks: cannot start until t022 has a candidate field set.
 - aspects: [software-development, framework-design, hypothesis-testing]
 - parent: task:t021
 - group: evidence-payload-schema
-- related: [task:t024, task:t025, question:05-source-dependence-detection, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- related: [task:t024, task:t025, task:t035, question:03-source-and-pipeline-provenance, question:05-source-dependence-detection, question:11-graph-valued-synthesis-artifacts, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
 - created: 2026-05-05
 
 Stratify evidence-source dependence patterns by mechanical detectability and prototype detectors for the high-leverage cases.
 
-Mechanically detectable candidates: shared dataset identifiers, shared author lists, citation chains, shared extractor or prompt versions, near-duplicate text, shared upstream synthesis nodes.
+Mechanically detectable candidates: shared dataset identifiers, shared author lists, citation chains, shared extractor or prompt versions, near-duplicate text, shared upstream synthesis nodes, joint-model shared-structure dependence (when multiple condition-, subtype-, view-, or platform-specific outputs come from a single estimator with group lasso, common/unique component decomposition, correlated priors across groups, or shared sparsity), and shared posterior sampler / approximation runs (when multiple graph-feature claims are read from the same posterior chain or variational fit).
 Annotation-required candidates: methodological convergence by independent groups, conceptual dependence through shared theoretical frameworks, prior-knowledge contamination across paper summaries.
 
 Deliverables:

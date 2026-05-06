@@ -27,6 +27,7 @@ related:
 - question:01-evidence-payload-schema
 - question:02-causal-synthesis-guardrails
 - question:07-llm-agents-as-fallible-sources
+- question:11-graph-valued-synthesis-artifacts
 - hypothesis:h02-rich-evidence-payloads-improve-graph-calibration
 - hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting
 - hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening
