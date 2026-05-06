@@ -155,3 +155,41 @@ def test_health_always_emits_ansi(monkeypatch) -> None:
     assert result.exit_code == 0, result.output
     assert "science tasks archive" in result.output
     assert ANSI_RE.search(result.output) is not None
+
+
+def test_force_color_enables_color_when_flag_omitted(monkeypatch) -> None:
+    runner = CliRunner()
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    with runner.isolated_filesystem():
+        _write_active_tasks()
+
+        result = runner.invoke(main, ["tasks", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert ANSI_RE.search(result.output) is not None
+
+
+def test_no_color_beats_force_color_when_flag_omitted(monkeypatch) -> None:
+    runner = CliRunner()
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    monkeypatch.setenv("NO_COLOR", "1")
+    with runner.isolated_filesystem():
+        _write_active_tasks()
+
+        result = runner.invoke(main, ["tasks", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert ANSI_RE.search(result.output) is None
+
+
+def test_explicit_color_beats_no_color(monkeypatch) -> None:
+    runner = CliRunner()
+    monkeypatch.setenv("NO_COLOR", "1")
+    with runner.isolated_filesystem():
+        _write_active_tasks()
+
+        result = runner.invoke(main, ["--color", "always", "tasks", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert ANSI_RE.search(result.output) is not None
