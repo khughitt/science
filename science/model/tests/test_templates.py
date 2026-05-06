@@ -174,6 +174,6 @@ Body.
 
 @pytest.mark.parametrize("kind", ["hypothesis", "question", "interpretation", "discussion", "theme"])
 def test_root_and_packaged_migrated_templates_match(kind: str) -> None:
-    root_template = Path(__file__).parents[2] / "templates" / f"{kind}.md"
+    root_template = Path(__file__).parents[3] / "templates" / f"{kind}.md"
     packaged_template = Path(__file__).parents[1] / "src" / "science_model" / "templates" / f"{kind}.md"
     assert packaged_template.read_text(encoding="utf-8") == root_template.read_text(encoding="utf-8")

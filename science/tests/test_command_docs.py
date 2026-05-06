@@ -239,12 +239,12 @@ def test_needs_review_resolution_docs_cover_amendment_workflow() -> None:
             "sci:amends",
             "sci:supersedes",
         ),
-        "science-model/src/science_model/templates/interpretation.md": (
+        "science/model/src/science_model/templates/interpretation.md": (
             "relations:",
             "sci:amends",
             "sci:supersedes",
         ),
-        "science-model/src/science_model/templates/interpretation-dev.md": (
+        "science/model/src/science_model/templates/interpretation-dev.md": (
             "relations:",
             "sci:amends",
             "sci:supersedes",

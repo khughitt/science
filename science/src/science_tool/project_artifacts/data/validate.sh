@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
 # science-managed-version: 2026.05.06.1
-# science-managed-source-sha256: 307203d98f48a4e5876a00446b7a94f5ac9bfb2283cd84a8fa87caca65967c21
+# science-managed-source-sha256: f66137dd05b07e36728936dd8e0be86df5cc315fef3797c4c5216f6deb3cd63c
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 

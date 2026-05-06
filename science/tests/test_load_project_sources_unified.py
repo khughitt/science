@@ -41,13 +41,13 @@ def test_load_produces_typed_entity_instances(tmp_path: Path) -> None:
     )
     (tmp_path / "tasks").mkdir()
     (tmp_path / "tasks" / "active.md").write_text(
-        "## [t01] T01\n- type: research\n- priority: P1\n- status: active\n- created: 2026-04-20\n",
+        "## [t001] T001\n- type: research\n- priority: P1\n- status: active\n- created: 2026-04-20\n",
         encoding="utf-8",
     )
     sources = load_project_sources(tmp_path)
     by_id = {e.canonical_id: e for e in sources.entities}
     assert isinstance(by_id["hypothesis:h1"], ProjectEntity)
-    assert isinstance(by_id["task:t01"], TaskEntity)
+    assert isinstance(by_id["task:t001"], TaskEntity)
 
 
 def test_load_produces_dataset_entity_for_datapackage(tmp_path: Path) -> None:

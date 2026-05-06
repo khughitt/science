@@ -30,14 +30,8 @@ artifacts:
       commit_default: true
       transaction_kind: temp_commit
     version: '2026.05.06.1'
-    current_hash: 307203d98f48a4e5876a00446b7a94f5ac9bfb2283cd84a8fa87caca65967c21
+    current_hash: f66137dd05b07e36728936dd8e0be86df5cc315fef3797c4c5216f6deb3cd63c
     previous_hashes:
-      - version: '2026.05.05.3'
-        hash: 0dda97dadb97646cc65e93efc198cd15c5bcc0ca0e3b1ef58c7ef4ce031461f1
-      - version: '2026.05.05.2'
-        hash: 2c1eb72eeeb2677d467063deeeb94f090b14f00502823b9da97d4fc66add39f7
-      - version: '2026.05.05.1'
-        hash: 10cb445c83844c0d76ffa7ed9afc8c0cbcae4a7439efaf3c13b395894eb2988b
       - version: '2026.04.26'
         hash: f4596de3e9b2696066097621d5aef5606f247d144c5530409433427949c830d1
       - version: '2026.04.26.1'
@@ -56,6 +50,12 @@ artifacts:
         hash: c0cf78f20e7f71b9c066fbb3d14cedcabf337e8351f774e39f5eb66370feefcd
       - version: '2026.05.03.3'
         hash: 80d6063276fcc8f511c9b0a08ef84d15761366246136ea31f09ab65d4270c5fd
+      - version: '2026.05.05.1'
+        hash: 10cb445c83844c0d76ffa7ed9afc8c0cbcae4a7439efaf3c13b395894eb2988b
+      - version: '2026.05.05.2'
+        hash: 2c1eb72eeeb2677d467063deeeb94f090b14f00502823b9da97d4fc66add39f7
+      - version: '2026.05.05.3'
+        hash: 0dda97dadb97646cc65e93efc198cd15c5bcc0ca0e3b1ef58c7ef4ce031461f1
     migrations:
       - from: '2026.04.26'
         to: '2026.04.26.1'
@@ -115,7 +115,7 @@ artifacts:
       - from: '2026.05.05.3'
         to: '2026.05.06.1'
         kind: byte_replace
-        summary: 'Rename CLI binary `science` -> `science`; update resolver invocation, search candidates, and smoke test.'
+        summary: 'Rename CLI binary `science-tool` -> `science`; update resolver invocation, search candidates, and smoke test.'
         steps: []
     changelog:
       '2026.04.26': Initial managed artifact (port of scripts/validate.sh + hook infrastructure).
@@ -130,4 +130,4 @@ artifacts:
       '2026.05.05.1': 'Strict task IDs, local task parent validation, and namespace-first cross-project reference checks.'
       '2026.05.05.2': 'Add --strict and --help flags with proper argument parsing (replaces positional VERBOSE="${1:-}"); introduces strict_warn helper for advisory checks (no callers yet — opt-in in follow-up); adds ../../../science/science search candidate for nested-repo layouts.'
       '2026.05.05.3': 'Ignore task-like substrings inside non-task typed refs during task queue validation; task:* typed refs remain checked.'
-      '2026.05.06.1': 'Rename CLI binary from `science` to `science`. Resolver now invokes `uv run --project <path> science`, searches for `./science`, `../science`, etc., and the smoke test runs `uv run science --help`.'
+      '2026.05.06.1': 'Rename CLI binary from `science-tool` to `science`. Resolver now invokes `uv run --project <path> science`, searches for `./science`, `../science`, etc., and the smoke test runs `uv run science --help`.'
