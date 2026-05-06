@@ -18,6 +18,13 @@ The default is `never`. Human users who want color can opt in with
 `--color=auto` or `--color=always`, including through shell aliases. Agent-facing
 commands and documentation should prefer JSON output where available.
 
+The default is intentionally stricter than the common CLI default of `auto`.
+`auto` protects ordinary stdout capture, but some agent harnesses allocate a PTY
+while still parsing output programmatically. Those harnesses can receive ANSI
+sequences from auto-coloring tools. Defaulting to `never` keeps the base command
+agent-safe even in PTY-backed execution, while still leaving humans a single
+alias away from colored output.
+
 For machine-readable output, `--format json` is the canonical convention for
 read/query/report commands. Existing `--json` flags can remain as compatibility
 or convenience aliases, but new broad CLI work should prefer `--format`.
@@ -59,8 +66,10 @@ kind counts:
 1   topic
 ```
 
-These common kinds should be covered by the initial semantic style map. The map
-should also cover known core registry kinds so future output has stable defaults.
+These counts are one project sample, not a universal distribution. They should
+seed the initial semantic style map because they reflect real heavy CLI use. The
+map should also cover known core registry kinds so other projects and future
+output have stable defaults.
 
 ## Goals
 
@@ -105,13 +114,27 @@ command groups can access it without adding a `--color` option to every command.
 Commands outside the main `cli.py` module, such as DAG, verdict, aspects, or
 project artifacts commands, should access the same context helper.
 
+Environment variable precedence:
+
+1. An explicit `--color` value wins.
+2. If `--color` is omitted and `NO_COLOR` is set to a non-empty value, use
+   `never`.
+3. If `--color` is omitted, `NO_COLOR` is unset, and `FORCE_COLOR` is set to a
+   non-empty value other than `0`, use `always`.
+4. Otherwise use the default effective policy, `never`.
+
+If both `NO_COLOR` and `FORCE_COLOR` are set and `--color` is omitted,
+`NO_COLOR` wins. This matches the fail-closed default for agent-safe output.
+
 ## Style Registry
 
 Add `science_tool.styles` with a small public surface:
 
 - A `ColorPolicy` enum or literal type.
-- A `make_console()` helper that returns a Rich `Console` configured from the
-  active policy.
+- A `get_console()` helper that returns a Rich `Console` configured from the
+  active policy and cached for the current Click invocation. Avoid a module-level
+  singleton because tests and nested CLI invocations need independent policy
+  state.
 - Semantic style constants or helpers for:
   - entity kind
   - entity ID prefix versus local part
@@ -127,6 +150,12 @@ Add `science_tool.styles` with a small public surface:
 The style registry should fail early for invalid explicit policies. Unknown
 entity kinds should use a muted fallback style rather than inventing ad hoc
 colors at call sites.
+
+Typed-reference styling should visually distinguish the entity kind prefix from
+the local part when color is enabled. The exact palette can be chosen during
+implementation, but the convention is stable: kind prefixes carry the entity-kind
+style, local parts use a lighter or less-emphasized variant, and `--color=never`
+renders the original plain reference string.
 
 Initial entity-kind styles should tune the common kinds from the natural-systems
 sweep:
@@ -160,9 +189,10 @@ The first implementation should update the current style hot spots:
 color is enabled, but produce plain table text with no ANSI sequences when color
 is disabled.
 
-`tasks show` currently emits markdown. The initial implementation can keep that
-shape. If color is added there, it should only happen through the style registry
-and should preserve a no-color default.
+`tasks show` currently emits plain markdown with `click.echo(render_task(task))`,
+not Rich-rendered markdown. The initial implementation should keep that shape and
+should not add color there. A later colorized `tasks show` path would need to use
+the style registry and preserve the no-color default.
 
 ## JSON Output Convention
 
@@ -175,9 +205,11 @@ Commands that already follow this convention include many `entity`, `graph`,
 `health` paths.
 
 Some commands currently use `--json`, including DAG commands and selected
-artifact/package commands. These can remain supported. When those commands are
-touched, they may add `--format json` as the canonical spelling while preserving
-`--json` as an alias if doing so does not create ambiguous Click behavior.
+artifact/package commands. The long-term policy is permanent dual spelling for
+existing commands that already expose `--json`: `--format json` is canonical for
+new and broadly touched read/query/report commands, while `--json` remains a
+supported convenience spelling where it exists. There is no planned deprecation
+or version-boundary removal for `--json`.
 
 Agent-facing command docs, skills, and AGENTS instructions should prefer
 `--format json` where available. Existing docs already frequently use JSON
@@ -205,8 +237,13 @@ errors. The initial design does not require JSON-encoded errors globally, becaus
 that would change Click exception behavior across the whole CLI.
 
 Human-readable warnings should avoid color unless the active color policy allows
-it. JSON paths should put warnings in structured fields where the command already
-has a payload shape; otherwise warnings may remain on stderr.
+it. New JSON additions should include warnings in the JSON payload, usually as a
+top-level `warnings` list. Commands with a single natural result object may use
+`{"result": ..., "warnings": [...]}`; row-oriented commands may keep their
+existing `{"format": "json", "rows": ..., "meta": ...}` shape and add
+`"warnings": [...]` when needed. Existing JSON commands do not need to be
+reshaped solely for this change, but newly touched JSON paths should avoid
+emitting warnings only on stderr when stdout is intended to be parsed as JSON.
 
 ## Testing
 
@@ -214,12 +251,14 @@ Add focused tests for the implementation slice:
 
 1. Root `--color` accepts only `never`, `auto`, and `always`.
 2. Default CLI output from a colorized command contains no ANSI escape sequences.
-3. `--color=always` enables ANSI style output for at least one representative
+3. `--color=auto` with non-TTY output produces no ANSI escape sequences.
+4. `--color=always` enables ANSI style output for at least one representative
    command, such as `tasks list`.
-4. `--color=never` suppresses Rich markup and ANSI output from `health`.
-5. JSON output from commands touched by the style work remains unchanged in
+5. `--color=never` suppresses Rich markup and ANSI output from `health`.
+6. `NO_COLOR` and `FORCE_COLOR` affect the policy only when `--color` is omitted.
+7. JSON output from commands touched by the style work remains unchanged in
    structure and contains no ANSI escape sequences.
-6. Entity-reference style helpers render unknown kinds without raising.
+8. Entity-reference style helpers render unknown kinds without raising.
 
 Existing tests for DAG Graphviz colors should not be rewritten for terminal
 style policy.
