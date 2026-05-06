@@ -90,6 +90,7 @@ Run these from the project root. All `science` invocations use `uv run science �
 uv run science graph project-summary --format json
 uv run science graph question-summary --format json
 uv run science graph inquiry-summary --format json
+uv run science graph attention-sample --limit 8 --format json
 uv run science graph dashboard-summary --format json
 uv run science graph uncertainty --format json
 uv run science graph neighborhood-summary --format json
@@ -99,6 +100,9 @@ uv run science big-picture resolve-questions --project-root .
 All graph summary commands default to `--path knowledge/graph.trig` (the Science convention), so no flag is needed when run from the project root.
 
 For `software` profile projects, skip `graph project-summary` (follows `science-status` precedent).
+Use `graph attention-sample` to choose which epistemic entities receive close
+reading in this synthesis pass. Do not narrow the synthesis solely by
+deterministic top-N priority rows.
 
 **Note on `graph gaps`**: unlike the other summaries, `graph gaps` requires a `CENTER` argument (the node to analyze around). It is **not** called globally in this phase. Per-hypothesis `gaps_slice` is computed during bundle assembly below, centered on each hypothesis ID.
 
@@ -132,9 +136,17 @@ Then for each hypothesis bundle, filter `all_gaps` to topics whose `hypotheses` 
 `included_question_ids` is the exact set already computed earlier in Phase 1 for aspect filtering — DO NOT recompute it here.
 
 Compute `provenance_coverage` per hypothesis:
-- `high` if ≥1 `.edges.yaml` is present OR ≥1 graph claim surfaces AND ≥60% of related interpretations have `prior_interpretations` chains.
-- `partial` if neither of those but ≥30% of related interpretations have `prior_interpretations`.
+- `high` if >=1 `.edges.yaml` is present OR >=1 graph claim surfaces AND >=60% of
+  related interpretations participate in materialized `sci:amends` /
+  `sci:supersedes` conclusion chains.
+- `partial` if neither of those but >=30% of related interpretations participate
+  in materialized `sci:amends` / `sci:supersedes` chains.
 - `thin` otherwise.
+
+`prior_interpretations` is a narrative breadcrumb, not the machine-readable chain.
+Use materialized `sci:amends` and `sci:supersedes` edges for arc
+reconstruction. When a replacement chain exists, prefer non-superseded current
+conclusions in the synthesis and keep superseded conclusions as provenance.
 
 Record the project-level `source_commit`:
 

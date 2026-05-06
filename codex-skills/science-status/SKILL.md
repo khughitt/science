@@ -132,8 +132,9 @@ When `knowledge/graph.trig` exists:
 
 ```bash
 science graph project-summary --format json
-science graph question-summary --format json  # full by default; add --top to narrow
+science graph question-summary --format json
 science graph inquiry-summary --format json
+science graph attention-sample --limit 5 --format json
 science graph dashboard-summary --format json
 science graph neighborhood-summary --format json
 science graph uncertainty --format json
@@ -146,6 +147,7 @@ For `software` projects, skip `project-summary` for now and start from `question
 - research project summary
 - high-priority questions from the full question rollup
 - high-priority inquiries
+- weighted attention sample rows as a stochastic revisiting queue
 - contested claims
 - single-source claims
 - claims lacking empirical data evidence
@@ -155,7 +157,7 @@ For `software` projects, skip `project-summary` for now and start from `question
 
 3. Prefer the higher-level drill path:
 - `project-summary` for the top-level rollup on `research` projects only
-- `question-summary` for the full question rollup; add `--top` to narrow it
+- `question-summary` for the full question rollup; use `attention-sample` to narrow what gets close reading
 - `inquiry-summary` for research-thread prioritization
 - `dashboard-summary` and `neighborhood-summary` for exact weak points
 - `uncertainty` and `gaps` as secondary support views rather than the main dashboard
@@ -197,10 +199,14 @@ Flag:
 - stale tasks
 - old untouched hypotheses
 - graph/doc drift if the graph changed but interpretation/docs did not
-- **needs-review entities**: run `science entity needs-review` to list epistemic
-  entities whose upstream evidence has changed since their last reviewed-as-of date
-  (the materialized graph carries this state via `sci:freshnessState`). Include up to 5
-  of the highest-impact ones — these are entities the user should consider revisiting.
+- **attention sample**: run `science graph attention-sample --limit 5 --format json`
+  to sample epistemic entities by observable graph weight. Include sampled
+  `needs-review` or `stale` entities when they are relevant to the current status.
+- When a sampled entity is `needs-review`, frame it as a review workflow candidate:
+  the next action is to inspect `sci:triggeredBy` evidence, then either record an
+  unchanged review with `science entity review <target-ref>` or author a new
+  conclusion linked by `sci:amends` / `sci:supersedes`. Do not describe the
+  freshness state as a conclusion that the old standing is wrong.
 - **task archive lag**: when `science health --format json` shows non-zero
   `archive_lag.done_in_active` or `archive_lag.retired_in_active`, surface it as:
   > N done/retired task(s) still in `tasks/active.md`. Run `science tasks archive --apply`

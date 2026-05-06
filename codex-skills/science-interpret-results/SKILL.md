@@ -119,12 +119,52 @@ Always note the mode at the top of the output when not in standard write mode.
 
 ### Cross-Referencing Prior Interpretations
 
-When interpreting multiple tasks jointly or building on a prior interpretation, list which earlier interpretation documents this one extends or supersedes using the `prior_interpretations` frontmatter field.
+When interpreting multiple tasks jointly or building on a prior interpretation,
+list earlier interpretation documents in `prior_interpretations` as a narrative
+breadcrumb. This field is not the machine-readable conclusion chain.
 
-- **Combined interpretations:** When interpreting 2+ tasks as a single arc, list any prior single-task interpretations that this combined document supersedes. The prior documents remain for provenance; the combined one is canonical for downstream reference.
-- **Update mode:** When updating an existing interpretation with new evidence, reference the prior version's ID.
+For needs-review resolution, use first-class graph relations:
 
-This creates a provenance chain across interpretation documents.
+- `sci:amends` when the new conclusion revises, narrows, qualifies, or extends
+  an older conclusion without replacing it.
+- `sci:supersedes` when the new conclusion replaces the older conclusion as the
+  current canonical reading. In this case, also mark the old conclusion
+  `status: superseded`.
+
+Do not use `sci:supersedesClaim` for conclusion replacement. That predicate is
+reserved for falsification records.
+
+Example frontmatter on the new interpretation:
+
+```yaml
+relations:
+  - predicate: "sci:amends"
+    target: "interpretation:old"
+```
+
+or:
+
+```yaml
+relations:
+  - predicate: "sci:supersedes"
+    target: "interpretation:old"
+```
+
+### Needs-Review Resolution
+
+When a result is being interpreted because an epistemic entity was flagged
+`needs-review`, keep the review timestamp separate from the conclusion change:
+
+1. Inspect the flagged entity, its `sci:triggeredBy` upstream sources, and nearby
+   prior conclusions.
+2. If standing is unchanged, run
+   `science entity review <target-ref> --note "Reviewed against <source>; no standing change."`
+3. If standing changes, author the new interpretation or finding, add
+   `sci:amends` or `sci:supersedes`, and only then run
+   `science entity review <target-ref> --note "Reconsidered; see interpretation:<new>."`
+
+`<target-ref>` is the flagged entity, not the newly authored conclusion.
+Freshness remains a review prompt; it does not mutate standing.
 
 ## Workflow
 

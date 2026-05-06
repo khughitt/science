@@ -84,6 +84,12 @@ the user input specifies the action (add, done, defer, retire, list, show, summa
 
 Read `tasks/active.md` if it exists. If `tasks/` directory doesn't exist, create it.
 
+## Task IDs And References
+
+Task IDs are flat local identifiers in the form `tNNN`: `t001`, `t016`, `t335`, `t1000`. Do not encode hierarchy, revisions, or follow-up fragments in the ID. Use `parent: task:t001` for a local structural parent, and include the parent in `related` when it should remain visible in graph/search surfaces.
+
+Bare `t123` always means a local task. `task:t123` is the canonical local task reference. Cross-project task and entity refs use namespace-first form: `natural-systems:task:t335`, `multiple-myeloma:hypothesis:h01`, `cbioportal:question:q006-ch-priority-gene-completeness`.
+
 ## Actions
 
 ### No arguments or "list"
@@ -105,7 +111,7 @@ uv run science tasks list --related=topic:lens --group=visualization
 Interactively create a task. Ask the user for:
 - **Type:** research or dev
 - **Priority:** P0-P3
-- **Related entities:** (optional) typed refs for hypotheses, themes, methods, questions, etc. — e.g. hypothesis:h01, theme:protein-folding-generalization, method:umap
+- **Related entities:** (optional) typed refs for hypotheses, themes, methods, questions, tasks, etc. Local refs use `<kind>:<slug>` such as `hypothesis:h01` or `task:t016`; cross-project refs use `<project-id>:<kind>:<slug>` such as `natural-systems:task:t335`.
 - **Group:** (optional) single group label for thematic clustering
 
 Then run:

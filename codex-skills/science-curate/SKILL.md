@@ -100,6 +100,12 @@ uv run science sync status
 git log --oneline -30 --format="%h %s (%cr)"
 ```
 
+If `knowledge/graph.trig` exists, also run:
+
+```bash
+uv run science graph attention-sample --limit 8 --format json
+```
+
 ### Carry-over from prior sweeps
 
 Before running new analysis, read the most recent prior ledger at
@@ -130,7 +136,10 @@ The inventory helper should return compact facts only:
 
 ## Phase 2: Candidate triage
 
-Group findings into curation themes and choose a bounded reading set. Read targeted source artifacts, not the entire corpus.
+Group findings into curation themes and choose a bounded reading set. Use the
+weighted attention sample as the default way to choose epistemic entities for
+close reading; do not collapse the pass to deterministic top-N priority rows.
+Read targeted source artifacts, not the entire corpus.
 
 Prefer source documents over generated summaries when deciding whether a metadata edit is warranted.
 
