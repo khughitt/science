@@ -68,6 +68,36 @@ def test_cli_dag_staleness_json_schema(cli_project: Path) -> None:
     } <= set(data.keys())
 
 
+def test_dag_validate_accepts_format_json(cli_project: Path) -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(main, ["dag", "validate", "--project", str(cli_project), "--format", "json"])
+
+    assert result.exit_code in {0, 1}
+    payload = json.loads(result.output)
+    assert "findings" in payload
+
+
+def test_dag_staleness_accepts_format_json(cli_project: Path) -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(main, ["dag", "staleness", "--project", str(cli_project), "--format", "json"])
+
+    assert result.exit_code in {0, 1}
+    payload = json.loads(result.output)
+    assert "drifted_edges" in payload
+
+
+def test_dag_audit_accepts_format_json(cli_project: Path) -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(main, ["dag", "audit", "--project", str(cli_project), "--format", "json"])
+
+    assert result.exit_code in {0, 1}
+    payload = json.loads(result.output)
+    assert "staleness" in payload
+
+
 def test_cli_dag_staleness_exit_code_on_clean_project(tmp_path: Path) -> None:
     """Empty project with no edges → staleness exits 0."""
     project = tmp_path / "project"

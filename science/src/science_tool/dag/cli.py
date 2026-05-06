@@ -23,6 +23,10 @@ def dag_group() -> None:
     """DAG rendering, numbering, staleness, and audit tools."""
 
 
+def _wants_json(*, as_json: bool, output_format: str) -> bool:
+    return as_json or output_format == "json"
+
+
 # ---------------------------------------------------------------------------
 # render
 # ---------------------------------------------------------------------------
@@ -125,6 +129,14 @@ def number_cmd(slug: str | None, force_stubs: bool, project_path: Path | None) -
     help="Emit machine-readable JSON to stdout.",
 )
 @click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
+@click.option(
     "--project",
     "project_path",
     default=None,
@@ -132,7 +144,13 @@ def number_cmd(slug: str | None, force_stubs: bool, project_path: Path | None) -
     help="Project root (default: current working directory).",
 )
 @click.pass_context
-def staleness_cmd(ctx: click.Context, recent_days: int, as_json: bool, project_path: Path | None) -> None:
+def staleness_cmd(
+    ctx: click.Context,
+    recent_days: int,
+    as_json: bool,
+    output_format: str,
+    project_path: Path | None,
+) -> None:
     """Report drift, under-reviewed edges, and unpropagated tasks."""
     project = (project_path or Path.cwd()).resolve()
     try:
@@ -142,7 +160,7 @@ def staleness_cmd(ctx: click.Context, recent_days: int, as_json: bool, project_p
 
     report = check_staleness(paths, recent_days=recent_days)
 
-    if as_json:
+    if _wants_json(as_json=as_json, output_format=output_format):
         click.echo(json.dumps(report.to_json(), indent=2))
     else:
         _print_staleness_summary(report)
@@ -182,6 +200,14 @@ def staleness_cmd(ctx: click.Context, recent_days: int, as_json: bool, project_p
     help="Emit machine-readable JSON to stdout.",
 )
 @click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
+@click.option(
     "--project",
     "project_path",
     default=None,
@@ -195,6 +221,7 @@ def audit_cmd(
     strict: bool,
     recent_days: int,
     as_json: bool,
+    output_format: str,
     project_path: Path | None,
 ) -> None:
     """Run full DAG audit (validate + re-render + staleness). Use --fix to open tasks."""
@@ -206,7 +233,7 @@ def audit_cmd(
 
     audit = run_audit(paths, recent_days=recent_days, fix=fix, strict=strict)
 
-    if as_json:
+    if _wants_json(as_json=as_json, output_format=output_format):
         click.echo(json.dumps(audit.to_json(), indent=2))
     else:
         _print_staleness_summary(audit.staleness)
@@ -299,13 +326,27 @@ def schema_cmd(output_path: Path | None) -> None:
 )
 @click.option("--json", "as_json", is_flag=True, default=False, help="Emit machine-readable JSON.")
 @click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
+@click.option(
     "--project",
     "project_path",
     default=None,
     type=click.Path(file_okay=False, path_type=Path),
     help="Project root (default: current working directory).",
 )
-def validate_cmd(strict: bool, slug: str | None, as_json: bool, project_path: Path | None) -> None:
+def validate_cmd(
+    strict: bool,
+    slug: str | None,
+    as_json: bool,
+    output_format: str,
+    project_path: Path | None,
+) -> None:
     """Validate DAG YAML + .dot files for schema, topology, and curation."""
     project = (project_path or Path.cwd()).resolve()
     try:
@@ -323,7 +364,7 @@ def validate_cmd(strict: bool, slug: str | None, as_json: bool, project_path: Pa
 
     report = validate_project(paths, strict=strict)
 
-    if as_json:
+    if _wants_json(as_json=as_json, output_format=output_format):
         click.echo(json.dumps(report.to_json(), indent=2, sort_keys=True))
     else:
         if report.ok:
