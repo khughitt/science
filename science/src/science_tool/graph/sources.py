@@ -234,9 +234,17 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
                     entity = schema.model_validate(raw)
                 except ValidationError as exc:
                     details = _format_missing_fields(exc)
-                    raise ValueError(
-                        f"schema validation failed for registered entity kind {kind!r} at {ref.path}: {details}"
-                    ) from exc
+                    if registry.is_core_kind(kind):
+                        raise ValueError(
+                            f"schema validation failed for registered entity kind {kind!r} at {ref.path}: {details}"
+                        ) from exc
+                    logger.warning(
+                        "skipping %s: schema validation failed for registered profile kind %r (%s)",
+                        ref.path,
+                        kind,
+                        details,
+                    )
+                    continue
                 existing = identity_table.get(entity.canonical_id)
                 if existing is not None:
                     raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)

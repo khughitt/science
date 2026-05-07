@@ -533,6 +533,51 @@ def test_load_project_sources_reads_repo_local_profile_manifest(tmp_path: Path) 
     assert by_id["meta:next-steps"].profile == "cbioportal"
 
 
+def test_load_project_sources_skips_invalid_repo_local_profile_entity(tmp_path: Path) -> None:
+    (tmp_path / "science.yaml").write_text(
+        "name: unified\nprofile: research\nknowledge_profiles:\n  local: cbioportal\n",
+        encoding="utf-8",
+    )
+    local_sources = tmp_path / "knowledge" / "sources" / "cbioportal"
+    local_sources.mkdir(parents=True)
+    (local_sources / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "cbioportal-local",
+                "imports": ["core"],
+                "strictness": "typed-extension",
+                "entity_kinds": [
+                    {
+                        "name": "synthesis",
+                        "canonical_prefix": "synthesis",
+                        "layer": "layer/local",
+                        "description": "Project-local synthesis document kind.",
+                    }
+                ],
+                "relation_kinds": [],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "doc" / "reports").mkdir(parents=True)
+    (tmp_path / "doc" / "reports" / "synthesis.md").write_text(
+        '---\nid: "synthesis:rollup"\ntype: "synthesis"\n---\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "doc" / "hypotheses").mkdir(parents=True)
+    (tmp_path / "doc" / "hypotheses" / "h1.md").write_text(
+        '---\nid: "hypothesis:h1"\ntype: "hypothesis"\ntitle: "H1"\n---\n',
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(tmp_path)
+    by_id = {entity.canonical_id: entity for entity in sources.entities}
+
+    assert "hypothesis:h1" in by_id
+    assert "synthesis:rollup" not in by_id
+
+
 def test_load_project_sources_raises_when_repo_local_manifest_shadows_catalog_kind(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text(
         "name: unified\nprofile: research\nknowledge_profiles:\n  local: cbioportal\nontologies: [biology]\n",

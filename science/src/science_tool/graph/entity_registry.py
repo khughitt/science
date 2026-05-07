@@ -225,6 +225,9 @@ class EntityRegistry:
             return self._extensions[kind]
         raise EntityKindNotRegisteredError(f"no schema registered for kind {kind!r}")
 
+    def is_core_kind(self, kind: str) -> bool:
+        return kind in self._core
+
     def kind_class(self, kind: str) -> EntityClass:
         if kind not in self._kind_class:
             raise EntityKindNotRegisteredError(f"no classification registered for kind {kind!r}")
