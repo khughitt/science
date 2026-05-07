@@ -166,7 +166,16 @@ def _load_project_ids(root: Path) -> set[str]:
         cfg = load_project_config(root)
     except Exception:
         return set()
-    ids = {child.id for child in cfg.children}
+    # Phase A: union legacy children (for back-compat during migration window)
+    # with new peers via the resolver. Phase B drops the children union when
+    # the field is removed from ProjectConfig.
+    ids: set[str] = {child.id for child in cfg.children}
+    try:
+        from science_tool.peers import make_local_resolver  # noqa: PLC0415
+
+        ids.update(make_local_resolver(root).known_ids())
+    except Exception:  # noqa: BLE001
+        pass
     if cfg.id:
         ids.add(cfg.id)
     return ids

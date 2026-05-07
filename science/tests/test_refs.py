@@ -343,6 +343,40 @@ def test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared(
         assert [issue for issue in issues if issue.ref_type == "task" and issue.ref_value == "t335"] == []
 
 
+def test_load_project_ids_includes_peers(tmp_path: Path) -> None:
+    """`_load_project_ids` should pick up peers via the resolver."""
+    from science_tool.refs import _load_project_ids
+
+    peer = tmp_path / "peer"
+    peer.mkdir()
+    (peer / "science.yaml").write_text(
+        """
+name: peer
+id: peer
+profile: research
+research_question: "..."
+""",
+        encoding="utf-8",
+    )
+    host = tmp_path / "host"
+    host.mkdir()
+    (host / "science.yaml").write_text(
+        f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: peer
+    path: {peer}
+""",
+        encoding="utf-8",
+    )
+    ids = _load_project_ids(host)
+    assert "host" in ids
+    assert "peer" in ids
+
+
 def test_unknown_namespace_is_reported() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:
