@@ -44,3 +44,20 @@ def test_check_json_output(tmp_path: Path) -> None:
     payload = json.loads(result.output)
     assert payload["name"] == name
     assert "status" in payload
+
+
+def test_check_accepts_format_json(tmp_path: Path) -> None:
+    from science_tool.project_artifacts import default_registry
+
+    if not default_registry().artifacts:
+        return
+    runner = CliRunner()
+    name = default_registry().artifacts[0].name
+    result = runner.invoke(
+        main,
+        ["project", "artifacts", "check", name, "--project-root", str(tmp_path), "--format", "json"],
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["name"] == name
+    assert "status" in payload

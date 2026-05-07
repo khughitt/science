@@ -909,3 +909,50 @@ def test_tasks_show_renders_per_blocker_readiness(tmp_path, monkeypatch):
     assert "dataset:embargoed" in result.output
     assert "embargoed" in result.output
     assert "2026-Q3" in result.output
+
+
+def test_tasks_show_accepts_format_json(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    seed_project(tmp_path)
+    write_markdown_entity(
+        tmp_path,
+        "doc/datasets/embargoed.md",
+        {
+            "id": "dataset:embargoed",
+            "type": "dataset",
+            "title": "E",
+            "status": "active",
+            "origin": "external",
+            "access": {
+                "level": "controlled",
+                "verified": False,
+                "availability": "embargoed",
+                "available_after": "2026-Q3",
+            },
+        },
+    )
+    runner = CliRunner()
+    runner.invoke(main, ["tasks", "add", "T", "--priority", "P2"])
+    runner.invoke(main, ["tasks", "block", "t001", "--by", "dataset:embargoed"])
+
+    result = runner.invoke(main, ["tasks", "show", "t001", "--format", "json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["id"] == "t001"
+    assert payload["title"] == "T"
+    assert payload["blocked_by_readiness"][0]["ref"] == "dataset:embargoed"
+    assert payload["blocked_by_readiness"][0]["state"] == "embargoed"
+
+
+def test_tasks_summary_accepts_format_json(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = _setup(tmp_path)
+
+    result = runner.invoke(main, ["tasks", "summary", "--format", "json"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["total"] == 1
+    assert payload["by_status"]["proposed"] == 1
+    assert payload["by_priority"]["P2"] == 1

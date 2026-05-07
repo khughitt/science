@@ -107,6 +107,16 @@ class TestResearchPackageValidate:
         result = runner.invoke(main, ["research-package", "validate", str(pkg_dir)])
         assert result.exit_code == 0, result.output
 
+    def test_validate_accepts_format_json(self, runner: CliRunner, tmp_path: Path) -> None:
+        pkg_dir = tmp_path / "pkg"
+        self._make_valid_package(pkg_dir)
+
+        result = runner.invoke(main, ["research-package", "validate", str(pkg_dir), "--format", "json"])
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert payload[0]["ok"] is True
+
     def test_validate_invalid_package(self, runner: CliRunner, tmp_path: Path) -> None:
         pkg_dir = tmp_path / "pkg"
         pkg_dir.mkdir()

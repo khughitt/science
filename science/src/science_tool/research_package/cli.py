@@ -9,6 +9,8 @@ import click
 
 from science_model.packages.validation import check_freshness, validate_package
 
+from science_tool.output import OUTPUT_FORMATS
+
 from .build_package import build_research_package
 from .init_package import init_research_package
 
@@ -49,7 +51,21 @@ def init_cmd(name: str, title: str, workflow: Path | None, output: Path) -> None
     help="Project root for freshness check",
 )
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def validate_cmd(path: Path, check_freshness_flag: bool, project_root: Path | None, as_json: bool) -> None:
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
+def validate_cmd(
+    path: Path,
+    check_freshness_flag: bool,
+    project_root: Path | None,
+    as_json: bool,
+    output_format: str,
+) -> None:
     """Validate research package(s)."""
     packages: list[Path] = []
     if (path / "datapackage.json").is_file():
@@ -80,7 +96,7 @@ def validate_cmd(path: Path, check_freshness_flag: bool, project_root: Path | No
         if not result.ok:
             has_errors = True
 
-    if as_json:
+    if as_json or output_format == "json":
         click.echo(json.dumps([r.to_dict() for r in results], indent=2))
     else:
         for result in results:

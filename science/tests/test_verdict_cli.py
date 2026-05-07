@@ -87,6 +87,18 @@ def test_rollup_all_json_emits_single_group_with_tally() -> None:
     assert "interpretation_ids" not in payload["groups"]["all"]
 
 
+def test_rollup_accepts_format_json() -> None:
+    result = CliRunner().invoke(
+        verdict_group,
+        ["rollup", "--scope", "all", "--root", str(FIXTURE_DIR), "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["scope"] == "all"
+    assert payload["n_documents"] == 6
+
+
 def test_rollup_defaults_root_to_current_working_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     shutil.copy(FIXTURE_DIR / "doc_and.md", tmp_path / "doc_and.md")
     monkeypatch.chdir(tmp_path)
