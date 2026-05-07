@@ -229,6 +229,24 @@ def _add_relations(
 ) -> None:
     entity_uri = _entity_uri(entity.canonical_id)
 
+    if entity.kind == "structural-chain":
+        _add_chain_relations(
+            chain_uri=entity_uri,
+            entity=entity,
+            entity_index=entity_index,
+            resolver=resolver,
+            knowledge=knowledge,
+        )
+
+    if entity.kind == "chain-audit":
+        _add_chain_audit_relations(
+            audit_uri=entity_uri,
+            entity=entity,
+            entity_index=entity_index,
+            resolver=resolver,
+            knowledge=knowledge,
+        )
+
     for raw_target in sorted(getattr(entity, "participants", []) or []):
         if is_metadata_reference(raw_target):
             continue
@@ -273,7 +291,6 @@ def _add_relations(
             SCI_NS.tests if entity.kind == "task" and target.kind in {"hypothesis", "question"} else SKOS.related
         )
         knowledge.add((entity_uri, predicate, target_uri))
-
 
     # `blocked_by` lives on ProjectEntity; defensive getattr for bare Entity instances.
     for raw_target in sorted(getattr(entity, "blocked_by", []) or []):
@@ -339,6 +356,83 @@ def _add_relations(
         if _is_cross_project_address(raw_target):
             provenance.add((entity_uri, PROV.wasDerivedFrom, _address_uri(raw_target)))
             continue
+
+
+def _add_chain_relations(
+    *,
+    chain_uri: URIRef,
+    entity: Entity,
+    entity_index: dict[str, Entity],
+    resolver: ReferenceResolver,
+    knowledge,
+) -> None:
+    link_entities = [
+        _canonical_entity(raw_ref, entity_index=entity_index, resolver=resolver)
+        for raw_ref in (getattr(entity, "chain", None) or [])
+    ]
+    if not link_entities:
+        return
+
+    relation_kind = _profile_relation_for_predicate(SCI_NS.hasLink)
+    for raw_ref, link_entity in zip(getattr(entity, "chain", None) or [], link_entities, strict=True):
+        relation = SourceRelation(
+            subject=entity.canonical_id,
+            predicate="sci:hasLink",
+            object=raw_ref,
+            source_path=entity.file_path,
+        )
+        _validate_authored_relation_endpoint(
+            relation,
+            relation_kind=relation_kind,
+            subject_entity=entity,
+            object_entity=link_entity,
+        )
+
+    link_uris = [_entity_uri(link_entity.canonical_id) for link_entity in link_entities]
+    for link_uri in link_uris:
+        knowledge.add((chain_uri, SCI_NS.hasLink, link_uri))
+
+    sequence_nodes = [_chain_sequence_uri(entity.canonical_id, index) for index in range(len(link_uris))]
+    head = sequence_nodes[0]
+    knowledge.add((chain_uri, SCI_NS.linkSequence, head))
+    for index, link_uri in enumerate(link_uris):
+        node = sequence_nodes[index]
+        rest = RDF.nil if index == len(link_uris) - 1 else sequence_nodes[index + 1]
+        knowledge.add((node, RDF.first, link_uri))
+        knowledge.add((node, RDF.rest, rest))
+
+
+def _add_chain_audit_relations(
+    *,
+    audit_uri: URIRef,
+    entity: Entity,
+    entity_index: dict[str, Entity],
+    resolver: ReferenceResolver,
+    knowledge,
+) -> None:
+    raw_chain = getattr(entity, "audits", None)
+    if raw_chain is None:
+        return
+    chain_entity = _canonical_entity(raw_chain, entity_index=entity_index, resolver=resolver)
+    relation = SourceRelation(
+        subject=entity.canonical_id,
+        predicate="sci:audits",
+        object=raw_chain,
+        source_path=entity.file_path,
+    )
+    _validate_authored_relation_endpoint(
+        relation,
+        relation_kind=_profile_relation_for_predicate(SCI_NS.audits),
+        subject_entity=entity,
+        object_entity=chain_entity,
+    )
+    chain_uri = _entity_uri(chain_entity.canonical_id)
+    knowledge.add((audit_uri, SCI_NS.audits, chain_uri))
+
+
+def _chain_sequence_uri(canonical_id: str, index: int) -> URIRef:
+    kind, slug = canonical_id.split(":", 1)
+    return URIRef(PROJECT_NS[f"{kind}/{slug.lower()}/link-sequence/{index}"])
 
 
 def _pre_registration_commitment_targets(
