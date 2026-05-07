@@ -62,6 +62,20 @@ def test_ensure_registered_idempotent(tmp_path):
     assert len(cfg.projects) == 1
 
 
+def test_ensure_registered_omitted_parent_preserves_explicit_none_clears(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    project_root = Path("/home/user/proj-a")
+    ensure_registered(project_root, "proj-a", config_path, parent="legacy-parent")
+
+    ensure_registered(project_root, "proj-a", config_path)
+    cfg = load_global_config(config_path)
+    assert cfg.projects[0].parent == "legacy-parent"
+
+    ensure_registered(project_root, "proj-a", config_path, parent=None)
+    cfg = load_global_config(config_path)
+    assert cfg.projects[0].parent is None
+
+
 def test_ensure_registered_multiple_projects(tmp_path):
     config_path = tmp_path / "config.yaml"
     ensure_registered(Path("/home/user/proj-a"), "proj-a", config_path)

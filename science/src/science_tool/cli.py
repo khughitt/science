@@ -720,10 +720,10 @@ def graph_init(graph_path: Path) -> None:
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
 )
 def graph_build(project_root: Path) -> None:
-    """Materialize graph.trig from structured upstream project sources."""
-    from science_tool.graph.federation import assemble_federated_graph
-    from science_tool.project_config import ProjectRole
-    from science_tool.project_config import load_project_config, resolve_parent_path
+    """Materialize graph.trig and composite.trig from structured project sources."""
+    from science_tool.graph.composite import assemble_composite_graph
+    from science_tool.peers import PeerNotFound, PeerUnresolved
+    from science_tool.project_config import load_project_config
     from science_tool.registry.config import ensure_registered
 
     _project_root = Path.cwd() if str(project_root) == "." else project_root
@@ -736,35 +736,27 @@ def graph_build(project_root: Path) -> None:
             _cfg.name,
             project_id=_cfg.id,
             role=str(_cfg.role),
-            parent=_cfg.parent,
+            parent=None,
         )
-        if _cfg.parent is not None:
-            _parent_path = resolve_parent_path(_cfg.parent)
-            if _parent_path is not None and (_parent_path / "science.yaml").is_file():
-                _parent_cfg = load_project_config(_parent_path)
-                ensure_registered(
-                    _parent_path,
-                    _parent_cfg.name,
-                    project_id=_parent_cfg.id,
-                    role=str(_parent_cfg.role),
-                    parent=_parent_cfg.parent,
-                )
-
-    if _cfg is not None and _cfg.role == ProjectRole.META:
-        try:
-            local_trig_path = materialize_graph(_project_root)
-        except ValueError as exc:
-            raise click.ClickException(str(exc)) from exc
-        click.echo(f"Materialized meta local graph at {local_trig_path}")
-        federated_path = assemble_federated_graph(_project_root)
-        click.echo(f"Materialized federated graph at {federated_path}")
-        return
 
     try:
-        trig_path = materialize_graph(_project_root)
+        local_path = materialize_graph(_project_root)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(f"Materialized graph at {trig_path}")
+    click.echo(f"Materialized local graph at {local_path}")
+
+    stale_composite_path = _project_root / "knowledge" / "composite.trig"
+    if _cfg is not None and _cfg.peers:
+        if stale_composite_path.exists():
+            stale_composite_path.unlink()
+        try:
+            composite_path = assemble_composite_graph(_project_root)
+        except (PeerNotFound, PeerUnresolved, ValueError) as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo(f"Materialized composite graph at {composite_path}")
+    else:
+        if stale_composite_path.exists():
+            stale_composite_path.unlink()
 
     # Non-blocking ontology suggestions
     from science_tool.graph.sources import load_project_sources

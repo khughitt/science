@@ -4,12 +4,15 @@ from pathlib import Path
 
 import pytest
 import rdflib
+from click.testing import CliRunner
 from rdflib import Dataset, URIRef
 from rdflib.namespace import PROV, RDF
 
+from science_tool.cli import main
 from science_tool.graph.composite import assemble_composite_graph
 from science_tool.graph.io import read_revision_manifest
 from science_tool.peers import PeerUnresolved
+from science_tool.registry.config import ensure_registered, load_global_config
 
 
 def _write_project(root: Path, project_id: str, peers: list[tuple[str, Path]] | None = None) -> None:
@@ -224,3 +227,100 @@ def test_composite_bidirectional_peering_does_not_recurse(tmp_path: Path) -> Non
     assert "https://example.org/b-claim" in _subjects(dataset_a, "cancer://b")
     assert "https://example.org/b-claim" in _subjects(dataset_b, "cancer://b")
     assert "https://example.org/a-claim" in _subjects(dataset_b, "cancer://a")
+
+
+def test_graph_build_writes_composite_when_peers_present(tmp_path: Path) -> None:
+    host = tmp_path / "host"
+    peer = tmp_path / "peer"
+    _write_project(host, "host", [("peer", peer)])
+    _write_project(peer, "peer")
+    _write_local_graph(peer, "peer")
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "build", "--project-root", str(host)])
+
+    assert result.exit_code == 0, result.output
+    assert (host / "knowledge" / "graph.trig").is_file()
+    assert (host / "knowledge" / "composite.trig").is_file()
+
+
+def test_graph_build_no_peers_no_composite(tmp_path: Path) -> None:
+    host = tmp_path / "host"
+    _write_project(host, "host")
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "build", "--project-root", str(host)])
+
+    assert result.exit_code == 0, result.output
+    assert (host / "knowledge" / "graph.trig").is_file()
+    assert not (host / "knowledge" / "composite.trig").exists()
+
+
+def test_graph_build_clears_stale_registry_parent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config_dir = tmp_path / "config"
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(config_dir))
+    host = tmp_path / "host"
+    _write_project(host, "host")
+    ensure_registered(host, "host", project_id="host", role="standalone", parent="legacy-parent")
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "build", "--project-root", str(host)])
+
+    assert result.exit_code == 0, result.output
+    cfg = load_global_config()
+    entry = next(project for project in cfg.projects if project.path == str(host.resolve()))
+    assert entry.parent is None
+
+
+def test_graph_build_no_peers_removes_stale_composite(tmp_path: Path) -> None:
+    host = tmp_path / "host"
+    _write_project(host, "host")
+    _write_composite_only(host, "host")
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "build", "--project-root", str(host)])
+
+    assert result.exit_code == 0, result.output
+    assert (host / "knowledge" / "graph.trig").is_file()
+    assert not (host / "knowledge" / "composite.trig").exists()
+
+
+def test_graph_build_no_config_removes_stale_composite(tmp_path: Path) -> None:
+    host = tmp_path / "host"
+    host.mkdir()
+    _write_composite_only(host, "host")
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "build", "--project-root", str(host)])
+
+    assert result.exit_code == 0, result.output
+    assert (host / "knowledge" / "graph.trig").is_file()
+    assert not (host / "knowledge" / "composite.trig").exists()
+
+
+def test_graph_build_missing_peer_reports_click_error(tmp_path: Path) -> None:
+    host = tmp_path / "host"
+    missing_peer = tmp_path / "missing-peer"
+    _write_project(host, "host", [("missing-peer", missing_peer)])
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "build", "--project-root", str(host)])
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "missing-peer" in result.output
+
+
+def test_graph_build_missing_peer_removes_stale_composite(tmp_path: Path) -> None:
+    host = tmp_path / "host"
+    missing_peer = tmp_path / "missing-peer"
+    _write_project(host, "host", [("missing-peer", missing_peer)])
+    _write_composite_only(host, "host")
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "build", "--project-root", str(host)])
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert "missing-peer" in result.output
+    assert not (host / "knowledge" / "composite.trig").exists()
