@@ -1,6 +1,8 @@
 # Causal Graph Construction — Extension Design (t034 draft v1)
 
-> **Status:** v1.2 draft (2026-05-06). v1.2 patches from the pilot extraction (`meta/doc/plans/2026-05-06-t034-pilot-extraction.md`) on three Batch-3 papers (Faller2024, Zuber2025, Dugourd2021): (P-pilot-1) added `extracted-from-summary-only` reason code with conditional-required-field rules on `graph-diagnostic.audited_graph_payload_ref`, `mr-graph-model.instrument_set` / `summary_statistic_provenance`, `mechanistic-hypothesis-bundle.prior_knowledge_network_ref` / `coherent_subnetwork_size`; (P-pilot-2) added `pleiotropy_model: unspecified` enum value plus new non-blocking `pleiotropy-unspecified` code (distinct from blocking `pleiotropy-untested` for the explicit `none-assumed` case); (P-pilot-3) `compatibility_notion` shape: enum → list-of-enum; (P-pilot-4) `result` enum extended with `correlative`; (P-pilot-7) `reverse-causation-assumed` rule refined: declared only when direction-constraint is not biologically inherent (new `instrument_validity_assumptions` value `direction-inherent-from-iv-class`); (P-pilot-8) added "Method-paper vs applied-payload routing" doc section. Targets 9 v1.2 mechanical patches from the pilot. Reason-code count: 7 → 9 (two new: `extracted-from-summary-only`, `pleiotropy-unspecified`). Built against v2.3 of the t022 contract.
+> **Status:** v1.3 draft (2026-05-06). v1.3 patches from the second validator-prototype slice (`meta/doc/plans/2026-05-06-t034-mr-graph-model-validator-findings.md`): (P1.3-a) `graph-posterior` payloads must store edges externally (in `graph_artifact_path`) and never enumerate posterior-summary edges in the YAML — closes the `graph-posterior` permitted-edge-roles ambiguity surfaced by slice 1; (P1.3-b) reason-code authoring rules of the form "declared when X" are read biconditionally — over-declaration is as much an error as under-declaration, because reason codes encode falsifiable claims about payload state; (P1.3-c) extension contributions described as "always when extension loaded" are *auto-injected* by the validator's contribution-merging step rather than authored by hand — authors write only the conditional codes. Reason-code count unchanged. Built against v2.3 of the t022 contract.
+>
+> **v1.2 (prior, superseded):** v1.2 patches from the pilot extraction (`meta/doc/plans/2026-05-06-t034-pilot-extraction.md`) on three Batch-3 papers (Faller2024, Zuber2025, Dugourd2021): (P-pilot-1) added `extracted-from-summary-only` reason code with conditional-required-field rules on `graph-diagnostic.audited_graph_payload_ref`, `mr-graph-model.instrument_set` / `summary_statistic_provenance`, `mechanistic-hypothesis-bundle.prior_knowledge_network_ref` / `coherent_subnetwork_size`; (P-pilot-2) added `pleiotropy_model: unspecified` enum value plus new non-blocking `pleiotropy-unspecified` code (distinct from blocking `pleiotropy-untested` for the explicit `none-assumed` case); (P-pilot-3) `compatibility_notion` shape: enum → list-of-enum; (P-pilot-4) `result` enum extended with `correlative`; (P-pilot-7) `reverse-causation-assumed` rule refined: declared only when direction-constraint is not biologically inherent (new `instrument_validity_assumptions` value `direction-inherent-from-iv-class`); (P-pilot-8) added "Method-paper vs applied-payload routing" doc section. Reason-code count: 7 → 9 (two new: `extracted-from-summary-only`, `pleiotropy-unspecified`).
 >
 > **v1.1 (prior, superseded):** v1.1 patches addressed review findings: F1 invalid `validation_role: methodological-input` (not a role per v2.2 enum) corrected; F2 `mechanistic` graph-object-type dropped in favor of `candidate-graph` + `epistemic_role: mechanistic_hypothesis`; F3 `causal-sufficiency-assumption` removed from causal-discovery-run propagation list (non-blocking, doesn't propagate under `propagate-blocking`); F4 MR lifecycle made explicit: two stages — graph-construction (`mr-graph-model` primary) and effect-estimate (`causal-effect-estimate` + new `mr-analysis` extension); F5 identified-edge promotion carrier clarified — promotion is recorded by the existence of a `causal-identification` payload referencing (graph, edge), not by edge-role rewrite; F6 graph-object/edge-role mismatches promoted from non-blocking reason code to validation error; F7 reason-code count fixed.
 >
@@ -77,6 +79,8 @@ Used by `causal-graph`, `mr-graph-model`, and `mechanistic-hypothesis-bundle` ex
 
 **Authoring rule.** A `graph-posterior` payload's `proposition_refs` must be `[]` per `[t022]` Example 4 — graph posteriors propose, not update.
 
+**Authoring rule (added v1.3, P1.3-a).** A `graph-posterior` payload must store edges externally — in `graph_artifact_path` (an MCMC-sample table, edge-inclusion-probability table, or VI-posterior dump) — and never enumerate posterior-summary edges in the `causal-graph` extension's `edges` list. The Edge-Role Taxonomy table reflects this: `graph-posterior` permits `llm_prior_edge` (carried in via prior) but no posterior-summary role, because there is no payload-level role for "an edge whose posterior probability is X." Consumers wanting per-edge probabilities read `graph_artifact_path`. This convention closes the slice-1 ambiguity (`meta/doc/plans/2026-05-06-t034-validator-prototype-findings.md`) and matches the actual usage in Example T34-6.
+
 ---
 
 ## Edge-role taxonomy (`epistemic_role` strict enum, on each edge)
@@ -140,6 +144,25 @@ A paper that *introduces* a method (e.g., Faller2024 self-compatibility, Peterse
 Authors should consciously decide *which* of these two payload candidates is being authored at any given time. A paper-summary that names the worked application but lacks reproducible detail typically supports (1) cleanly and (2) only sparsely; the v1.2 conditional-required-field rules (P-pilot-1) make the latter case authorable without lying. A pipeline run produces (2) directly, and authors should *not* declare `extracted-from-summary-only` in that case.
 
 This routing is the underlying source of the pilot extraction's `[t034]` ✗-rates: applying a paper-summary against an applied-payload schema is a known impedance mismatch. Authoring (1) instead of (2) when the source is summary-only is often the right call.
+
+## Reason-code authoring conventions (added v1.3)
+
+Two cross-cutting conventions govern how this document's per-extension `Reason-code contributions` sections are read. They were tacit through v1.2 and made explicit in v1.3 after the second validator-prototype slice (`meta/doc/plans/2026-05-06-t034-mr-graph-model-validator-findings.md`) needed unambiguous semantics.
+
+**Biconditional reading (P1.3-b).** A contribution rule of the form *"<code> declared when X"* is read biconditionally: `<code>` must appear in `core.reason_codes` if and only if `X` holds. Over-declaration (declaring `<code>` when `¬X`) is as much a validation error as under-declaration (omitting `<code>` when `X`). The reason: reason codes encode *falsifiable claims* about a payload's epistemic state, not free-form authorial notes. Declaring `pleiotropy-untested` on a payload with `pleiotropy_model: mr-egger` (pleiotropy IS handled) is a category error, not a defensive caveat. The validator rejects both directions.
+
+**Auto-injected always-on contributions (P1.3-c).** A contribution rule of the form *"<code> always when extension loaded"* (or *"always — the bundle's defining property"*) describes a code the validator's contribution-merging step *injects automatically* into `effective_codes`. Authors do **not** write these into `core.reason_codes` by hand. The five always-on contributions are:
+
+| Extension | Auto-injected code(s) |
+|---|---|
+| `causal-discovery-run` | `identification-missing` (default — runs are not identified by virtue of being runs) |
+| `mr-graph-model` | `instrument-assumption-risk` |
+| `mr-analysis` | `instrument-assumption-risk` |
+| `mechanistic-hypothesis-bundle` | `mechanism-hypothesis-only`, `prior-network-dependent` |
+
+Conditional codes (those that depend on field values, not just on extension presence) remain author-written subject to the biconditional rule above. The injected codes participate in `effective_codes` and propagation exactly as if they had been authored — they are merely sourced from the extension's contribution table rather than the YAML. This (a) keeps payloads visually clean, (b) prevents the "the author forgot the obvious code" failure mode at extract-time, and (c) gives the validator one canonical place to update if a contribution rule changes.
+
+`effective_codes` is therefore: declared codes (from `core.reason_codes`) ∪ auto-injected always-on contributions (from each loaded extension's contribution table) ∪ codes propagated from upstream payloads via `input_artifact_refs` (per each contributing extension's propagation policy).
 
 ## Extension specs
 
@@ -206,7 +229,7 @@ extension/causal-discovery-run:
 
 **Uncertainty-summary contract.** Render as `"<graph_object_type>, <n_edges> edges, <algorithm>, <key-assumption-summary>"` — e.g., `"CPDAG, 12 edges, PC, assumes causal sufficiency"`.
 
-**Reason-code contributions.** Declares: `causal-sufficiency-assumption` (whenever `causal_sufficiency_assumption: true`); `latent-variable-risk` (whenever `hidden_variable_handling: none` AND domain has plausible unobserved confounders); `identification-missing` (default — no run is identified by virtue of being a run).
+**Reason-code contributions.** Declares: `causal-sufficiency-assumption` (whenever `causal_sufficiency_assumption: true`); `latent-variable-risk` (whenever `hidden_variable_handling: none` AND domain has plausible unobserved confounders); `identification-missing` *[auto-injected per v1.3]* (default — no run is identified by virtue of being a run).
 
 **Propagation policy.** `propagate-blocking`. Of the codes this extension declares, only `identification-missing` is blocking, so only `identification-missing` propagates into downstream `causal-identification` / `causal-effect-estimate`. `causal-sufficiency-assumption` and `latent-variable-risk` are non-blocking and remain on this payload only (consumers can still inspect them via the origin chain, but they do not enter `effective_codes` at the consumer).
 
@@ -369,7 +392,7 @@ extension/mr-graph-model:
 **Uncertainty-summary contract.** Render as `"MR <graph_object_type>, <n_exposures> exposures × <n_outcomes> outcomes, <pleiotropy_model>"`.
 
 **Reason-code contributions (v1.2).** Declares:
-- `instrument-assumption-risk` (always when extension loaded — instruments are never self-validating);
+- `instrument-assumption-risk` *[auto-injected per v1.3]* (always when extension loaded — instruments are never self-validating);
 - `pleiotropy-untested` (blocking; declared when `pleiotropy_model ∈ {none-assumed, not-modelled}` — i.e., the author *chose* to not model pleiotropy);
 - `pleiotropy-unspecified` (NEW v1.2; non-blocking; declared when `pleiotropy_model: unspecified` — i.e., the value is unknown to the extractor, typically for paper-summary-only extractions where the source is silent on pleiotropy treatment);
 - `reverse-causation-assumed` (declared when `direction_constraint: exposures-to-outcomes-only` AND `instrument_validity_assumptions` does NOT include `direction-inherent-from-iv-class` — v1.2 carve-out: germline genetic instruments biologically constrain direction, so declaring the assumption is over-flagging in that case).
@@ -399,7 +422,7 @@ extension/mr-analysis:
 
 **Uncertainty-summary contract.** Render as `"MR <estimator_method> for <exposure> → <outcome>, <pleiotropy_handling>"`.
 
-**Reason-code contributions.** Declares: `instrument-assumption-risk` (always when extension loaded); `mr-heterogeneity-untested` (when `heterogeneity_test: none` or `heterogeneity_test_passed: false`).
+**Reason-code contributions.** Declares: `instrument-assumption-risk` *[auto-injected per v1.3]* (always when extension loaded); `mr-heterogeneity-untested` (when `heterogeneity_test: none` or `heterogeneity_test_passed: false`).
 
 **Propagation policy.** `propagate-blocking`.
 
@@ -456,7 +479,7 @@ extension/mechanistic-hypothesis-bundle:
 
 **Uncertainty-summary contract.** Render as `"mechanistic hypothesis: <coherent_subnetwork_size> nodes across <n_omics_layers> layers"`.
 
-**Reason-code contributions.** Declares: `mechanism-hypothesis-only` (always — the bundle's defining property); `prior-network-dependent` (always — output is conditional on prior network).
+**Reason-code contributions.** Declares: `mechanism-hypothesis-only` *[auto-injected per v1.3]* (always — the bundle's defining property); `prior-network-dependent` *[auto-injected per v1.3]* (always — output is conditional on prior network).
 
 **Propagation policy.** `propagate-blocking`.
 
@@ -518,7 +541,7 @@ core:
   validation_role: prioritize-attention
   validation_status: pending
   uncertainty_summary: "CPDAG, 12 edges, PC, assumes causal sufficiency"
-  reason_codes: [causal-sufficiency-assumption, identification-missing]
+  reason_codes: [causal-sufficiency-assumption]   # identification-missing auto-injected per v1.3
 
 extension/causal-discovery-run:
   observed_data_link: dataset:covid-vaccine-obs-cohort
@@ -722,7 +745,7 @@ core:
   validation_role: prioritize-attention
   validation_status: pending
   uncertainty_summary: "MR graph-posterior, 8 exposures × 4 outcomes, MR-Egger pleiotropy"
-  reason_codes: [instrument-assumption-risk, reverse-causation-assumed]
+  reason_codes: [reverse-causation-assumed]   # instrument-assumption-risk auto-injected per v1.3
 
 extension/mr-graph-model:
   exposure_set: [var:ldl, var:hdl, var:tg, var:bmi, ...]
@@ -826,7 +849,7 @@ core:
   validation_role: prioritize-attention
   validation_status: pending
   uncertainty_summary: "mechanistic hypothesis: 47 nodes across 3 omics layers"
-  reason_codes: [mechanism-hypothesis-only, prior-network-dependent]
+  reason_codes: []   # mechanism-hypothesis-only and prior-network-dependent auto-injected per v1.3
 
 extension/mechanistic-hypothesis-bundle:
   prior_knowledge_network_ref: kg:omnipath-2025
