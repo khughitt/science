@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+from click.testing import CliRunner
 from rdflib import Dataset, URIRef
 
+from science_tool.cli import main
 from science_tool.graph.materialize import materialize_graph
+from science_tool.graph.migrate import audit_project_sources
+from science_tool.graph.sources import load_project_sources
 from science_tool.graph.store import PROJECT_NS, SCI_NS
 
 
@@ -126,3 +131,69 @@ def test_audit_needs_review_when_link_updates_after_review(tmp_path: Path) -> No
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
     triggered_uris = {str(o) for _, _, o in knowledge.triples((audit_uri, SCI_NS.triggeredBy, None))}
     assert str(PROJECT_NS["mechanism/b"]) in triggered_uris
+
+
+def test_validate_passes_on_well_formed_chain_audit(tmp_path: Path, monkeypatch) -> None:
+    project = _project_with_chain_audit(tmp_path, fp_updated="2026-05-01", audit_reviewed="2026-05-02")
+    materialize_graph(project)
+
+    runner = CliRunner()
+    monkeypatch.chdir(project)
+    result = runner.invoke(
+        main,
+        ["graph", "validate", "--format", "json", "--path", str(project / "knowledge" / "graph.trig")],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert all(row["status"] == "pass" for row in payload["rows"])
+
+
+def test_validate_flags_dangling_chain_link(tmp_path: Path) -> None:
+    """`audit_project_sources` is the public audit surface consulted before graph build."""
+    _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
+    _write(
+        tmp_path,
+        "doc/mechanisms/a.md",
+        """---
+id: mechanism:a
+kind: mechanism
+title: "A"
+project: test
+summary: "A summary."
+ontology_terms: []
+related: []
+source_refs: []
+participants:
+  - meta:participant-1
+  - meta:participant-2
+propositions:
+  - meta:proposition
+---
+""",
+    )
+    _write(
+        tmp_path,
+        "doc/chains/ab.md",
+        """---
+id: chain:ab
+kind: structural-chain
+title: "AB"
+project: test
+ontology_terms: []
+related: []
+source_refs: []
+chain:
+  - mechanism:a
+  - mechanism:b
+---
+""",
+    )
+    rows, has_failures = audit_project_sources(load_project_sources(tmp_path))
+    assert has_failures is True
+    assert any(
+        row["status"] == "fail"
+        and row["source"] == "chain:ab"
+        and row["field"] == "chain"
+        and row["target"] == "mechanism:b"
+        for row in rows
+    )
