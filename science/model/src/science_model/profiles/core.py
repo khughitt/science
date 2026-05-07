@@ -302,6 +302,29 @@ CORE_PROFILE = ProfileManifest(
             description="A data package was produced by a specific workflow run.",
         ),
         RelationKind(
+            name="has_link",
+            predicate="sci:hasLink",
+            source_kinds=["structural-chain"],
+            target_kinds=["mechanism", "model", "proposition", "observation", "finding"],
+            layer="layer/core",
+            description=(
+                "Ordered structural-chain link. Targets are restricted to the "
+                "structural building blocks. Order is carried in the materialized "
+                "graph by sci:linkSequence (RDF list)."
+            ),
+        ),
+        RelationKind(
+            name="audits",
+            predicate="sci:audits",
+            source_kinds=["chain-audit"],
+            target_kinds=["structural-chain"],
+            layer="layer/core",
+            description=(
+                "A chain-audit asserts a verdict over a structural-chain. "
+                "Mirrors the shape of `tests` (single target by convention)."
+            ),
+        ),
+        RelationKind(
             name="bears_on",
             predicate="sci:bearsOn",
             source_kinds=[],
