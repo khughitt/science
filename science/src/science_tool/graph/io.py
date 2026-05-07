@@ -282,7 +282,7 @@ def build_input_manifest(graph_path: Path) -> dict[str, dict[str, int | str]]:
 
 
 def project_root_from_graph_path(graph_path: Path) -> Path:
-    if graph_path.name == "graph.trig" and graph_path.parent.name == "knowledge":
+    if graph_path.name in {"graph.trig", "composite.trig"} and graph_path.parent.name == "knowledge":
         return graph_path.parent.parent
     return graph_path.parent
 
