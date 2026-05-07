@@ -222,3 +222,93 @@ verdict:
 
     with pytest.raises(ValueError, match="audits|sci:audits"):
         materialize_graph(project)
+
+
+def _project_with_chain_order(tmp_path: Path, order: list[str]) -> Path:
+    _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
+    for slug in ("a", "b", "c"):
+        _write(
+            tmp_path,
+            f"doc/mechanisms/{slug}.md",
+            f"""---
+id: mechanism:{slug}
+kind: mechanism
+title: "Mechanism {slug}"
+project: test
+summary: "Mechanism {slug} summary."
+ontology_terms: []
+related: []
+source_refs: []
+participants:
+  - meta:participant-1
+  - meta:participant-2
+propositions:
+  - meta:proposition
+created: 2026-05-01
+updated: 2026-05-01
+---
+""",
+        )
+    chain_yaml = "\n".join(f"  - {ref}" for ref in order)
+    _write(
+        tmp_path,
+        "doc/chains/abc.md",
+        f"""---
+id: chain:abc
+kind: structural-chain
+title: "ABC chain"
+project: test
+ontology_terms: []
+related: []
+source_refs: []
+created: 2026-05-01
+updated: 2026-05-01
+chain:
+{chain_yaml}
+---
+""",
+    )
+    return tmp_path
+
+
+def _ordered_links(dataset: Dataset, chain_uri: URIRef) -> list[str]:
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    head = next(knowledge.triples((chain_uri, SCI_NS.linkSequence, None)))[2]
+    out = []
+    cur = head
+    while cur != RDF.nil:
+        out.append(str(next(knowledge.triples((cur, RDF.first, None)))[2]))
+        cur = next(knowledge.triples((cur, RDF.rest, None)))[2]
+    return out
+
+
+def test_reorder_same_links_changes_link_sequence(tmp_path: Path) -> None:
+    """Reordering the same link set without bumping `updated` changes materialized order."""
+    chain_uri = URIRef(PROJECT_NS["chain/abc"])
+
+    dataset_abc = _load_dataset(
+        _project_with_chain_order(
+            tmp_path / "abc",
+            ["mechanism:a", "mechanism:b", "mechanism:c"],
+        )
+    )
+    dataset_cba = _load_dataset(
+        _project_with_chain_order(
+            tmp_path / "cba",
+            ["mechanism:c", "mechanism:b", "mechanism:a"],
+        )
+    )
+
+    abc_order = _ordered_links(dataset_abc, chain_uri)
+    cba_order = _ordered_links(dataset_cba, chain_uri)
+    assert abc_order != cba_order
+    assert abc_order == [
+        str(PROJECT_NS["mechanism/a"]),
+        str(PROJECT_NS["mechanism/b"]),
+        str(PROJECT_NS["mechanism/c"]),
+    ]
+    assert cba_order == [
+        str(PROJECT_NS["mechanism/c"]),
+        str(PROJECT_NS["mechanism/b"]),
+        str(PROJECT_NS["mechanism/a"]),
+    ]
