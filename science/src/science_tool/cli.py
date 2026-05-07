@@ -2772,7 +2772,10 @@ def tasks_blockers(task_id: str, fmt: str) -> None:
     except KeyError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    resolver = make_local_resolver()
+    try:
+        resolver = make_local_resolver()
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     rows = []
     for ref in task.blocked_by:
@@ -3095,7 +3098,10 @@ def tasks_list(
     )
     matched = sort_tasks(matched)
 
-    resolver = make_local_resolver()
+    try:
+        resolver = make_local_resolver()
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     if output_format == "json":
         columns: list[tuple[str, str]] = [
@@ -3180,7 +3186,10 @@ def tasks_show(task_id: str, output_format: str) -> None:
     except KeyError as exc:
         raise click.ClickException(str(exc)) from exc
     task = location.task
-    resolver = make_local_resolver() if task.blocked_by else None
+    try:
+        resolver = make_local_resolver() if task.blocked_by else None
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
     readiness_rows = []
     if resolver is not None:
         for ref in task.blocked_by:

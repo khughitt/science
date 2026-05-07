@@ -341,6 +341,34 @@ class TestTasksList:
             assert "Done task" in result.output
             assert "Open task" not in result.output
 
+    def test_list_reports_duplicate_entity_ids_without_traceback(self, runner: CliRunner) -> None:
+        with runner.isolated_filesystem():
+            from pathlib import Path
+
+            tasks_dir = Path("tasks")
+            done_dir = tasks_dir / "done"
+            done_dir.mkdir(parents=True)
+            (tasks_dir / "active.md").write_text(
+                "## [t001] Active task\n"
+                "- priority: P1\n"
+                "- status: proposed\n"
+                "- created: 2026-05-07\n\n"
+                "Active.\n"
+            )
+            (done_dir / "2026-05.md").write_text(
+                "## [t001] Archived duplicate\n"
+                "- priority: P2\n"
+                "- status: done\n"
+                "- created: 2026-05-06\n"
+                "- completed: 2026-05-06\n\n"
+                "Done.\n"
+            )
+
+            result = runner.invoke(main, ["tasks", "list"])
+            assert result.exit_code != 0
+            assert "entity 'task:t001' produced by multiple sources" in result.output
+            assert "Traceback" not in result.output
+
     def test_list_json_format(self, runner: CliRunner) -> None:
         with runner.isolated_filesystem():
             runner.invoke(main, ["tasks", "add", "JSON task", "--priority", "P1"])
