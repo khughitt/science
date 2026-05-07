@@ -208,4 +208,28 @@ Two CLI commands consume the flag:
 - `science entity needs-review` lists currently-flagged entities from the materialized graph.
 - `science graph propagate-freshness` runs the freshness derivation in memory without writing the graph file (useful in CI or pre-commit hooks).
 
+## Chain-shaped audit verdicts
+
+Some findings are verdicts over an *ordered structural decomposition* -- e.g.,
+"particle-advection -> Fokker-Planck -> heat-equation" -- rather than over a flat
+proposition. The framework supports this via two EPISTEMIC kinds:
+
+- **`structural-chain`** holds an ordered list of >=2 entity refs (mechanism, model,
+  proposition, observation, or finding). The chain is a first-class entity so it
+  can be reused across multiple verdicts and over time.
+- **`chain-audit`** carries a verdict over a chain, with both a `verdict:` block
+  (compatible with the project's existing `verdict/parser.py` rollup surface) and
+  a `bayes_factor_evidence:` block. The validator enforces consistency between
+  `verdict.composite` and `bayes_factor_evidence.interpretation` per a fixed
+  mapping (`evidence-for` -> `[+]`, `evidence-against` -> `[-]`, `mixed` -> `[~]`,
+  `inconclusive` -> `[?]`).
+
+Freshness propagation is automatic: when any chain link's underlying entity
+updates, or when the structural-chain entity's `updated` date reflects links
+being added, removed, or reordered (order is preserved as an RDF list under
+`sci:linkSequence`), the chain-audit goes `needs-review` on the next
+`graph build`.
+
+See the [full design](plans/2026-05-07-chain-audit-verdict-design.md).
+
 See `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` for the full design.
