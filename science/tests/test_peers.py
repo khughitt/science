@@ -346,3 +346,68 @@ peers:
                 with resolver.enter("peer"):
                     pass
         assert resolver.in_flight() == frozenset()
+
+
+class TestLoadPeerEntityIndex:
+    def test_load_peer_entity_index_returns_peer_entities(
+        self, tmp_path: Path
+    ) -> None:
+        from science_tool.peers import load_peer_entity_index, make_local_resolver
+
+        host = tmp_path / "host"
+        peer = tmp_path / "peer"
+        peer.mkdir()
+        (peer / "science.yaml").write_text(
+            """
+name: peer
+id: peer
+profile: research
+research_question: "..."
+""",
+            encoding="utf-8",
+        )
+        # Place a minimal hypothesis entity in the peer so the index isn't empty.
+        (peer / "specs" / "hypotheses").mkdir(parents=True)
+        (peer / "specs" / "hypotheses" / "h01-test.md").write_text(
+            """---
+id: hypothesis:h01-test
+kind: hypothesis
+title: Test
+---
+
+A hypothesis for testing.
+""",
+            encoding="utf-8",
+        )
+        host.mkdir()
+        (host / "science.yaml").write_text(
+            f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: peer
+    path: {peer}
+""",
+            encoding="utf-8",
+        )
+
+        resolver = make_local_resolver(host)
+        index = load_peer_entity_index(resolver, "peer")
+        assert "hypothesis:h01-test" in index
+
+    def test_load_peer_entity_index_unknown_peer_raises(
+        self, tmp_path: Path
+    ) -> None:
+        from science_tool.peers import (
+            PeerNotFound,
+            load_peer_entity_index,
+            make_local_resolver,
+        )
+
+        host = tmp_path / "host"
+        _write_minimal_science_yaml(host, "host")
+        resolver = make_local_resolver(host)
+        with pytest.raises(PeerNotFound):
+            load_peer_entity_index(resolver, "ghost")

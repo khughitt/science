@@ -142,3 +142,18 @@ class LocalPeerResolver:
 def make_local_resolver(project_root: Path) -> PeerResolver:
     """Return a fresh LocalPeerResolver for `project_root`."""
     return LocalPeerResolver(project_root)
+
+
+def load_peer_entity_index(resolver: PeerResolver, peer_id: str):
+    """Load a peer's entity index using the existing local-load machinery.
+
+    Raises PeerNotFound or PeerUnresolved on resolver failure (propagated from
+    `resolver.resolve()`). Raises FileNotFoundError if the peer's science.yaml
+    or entity files are missing.
+
+    Returns dict[str, ProjectEntity] (same shape as load_local_entity_index).
+    """
+    from science_tool.entities import load_local_entity_index  # noqa: PLC0415
+
+    peer = resolver.resolve(peer_id)
+    return load_local_entity_index(peer.path)
