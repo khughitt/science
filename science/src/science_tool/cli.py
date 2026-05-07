@@ -367,7 +367,8 @@ def entity_list(kind: str | None, status: str | None, related: str | None, outpu
 
 @entity_group.command("sections")
 @click.argument("kind")
-def entity_sections(kind: str) -> None:
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def entity_sections(kind: str, output_format: str) -> None:
     """List template sections for a source-authored entity kind."""
 
     from science_model.templates import EntityTemplateError, Renderer
@@ -386,7 +387,7 @@ def entity_sections(kind: str) -> None:
         for section in sections
     ]
     emit_query_rows(
-        output_format="table",
+        output_format=output_format,
         title=f"{kind} Template Sections",
         columns=[("key", "KEY"), ("required", "REQ?"), ("name", "NAME"), ("hint", "HINT")],
         rows=rows,
@@ -405,7 +406,7 @@ def entity_neighbors(ref: str, hops: int, output_format: str) -> None:
     except EntityCommandError as exc:
         raise click.ClickException(str(exc)) from exc
     if graph_is_stale(Path.cwd(), DEFAULT_GRAPH_PATH):
-        click.echo("WARNING: graph materialization may be stale; results below could miss recent edits.")
+        click.echo("WARNING: graph materialization may be stale; results below could miss recent edits.", err=True)
     rows = query_neighborhood(
         graph_path=DEFAULT_GRAPH_PATH,
         center=location.entity_id,
@@ -3168,7 +3169,8 @@ def tasks_list(
 
 @tasks.command("show")
 @click.argument("task_id")
-def tasks_show(task_id: str) -> None:
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def tasks_show(task_id: str, output_format: str) -> None:
     """Show full details of a task."""
     from science_tool.tasks import find_task_location, render_task
     from science_tool.tasks_readiness import make_local_resolver
@@ -3178,6 +3180,26 @@ def tasks_show(task_id: str) -> None:
     except KeyError as exc:
         raise click.ClickException(str(exc)) from exc
     task = location.task
+    resolver = make_local_resolver() if task.blocked_by else None
+    readiness_rows = []
+    if resolver is not None:
+        for ref in task.blocked_by:
+            readiness = resolver.resolve_ref(ref)
+            readiness_rows.append(
+                {
+                    "ref": ref,
+                    "state": readiness.state,
+                    "ready": readiness.ready,
+                    "detail": readiness.detail,
+                }
+            )
+
+    if output_format == "json":
+        payload = task.model_dump(mode="json")
+        payload["blocked_by_readiness"] = readiness_rows
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+
     click.echo(render_task(task))
 
     # Append a resolver-enriched readiness section. render_task() already
@@ -3185,18 +3207,17 @@ def tasks_show(task_id: str) -> None:
     # render_task to a resolver, but render_task is also the on-disk
     # serializer and must stay pure.
     if task.blocked_by:
-        resolver = make_local_resolver()
         click.echo("\nBlocker readiness:")
-        for ref in task.blocked_by:
-            readiness = resolver.resolve_ref(ref)
-            line = f"  - {ref:40s}  {readiness.state}"
-            if readiness.detail:
-                line += f"  ({readiness.detail})"
+        for readiness in readiness_rows:
+            line = f"  - {readiness['ref']:40s}  {readiness['state']}"
+            if readiness["detail"]:
+                line += f"  ({readiness['detail']})"
             click.echo(line)
 
 
 @tasks.command("summary")
-def tasks_summary() -> None:
+@click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
+def tasks_summary(output_format: str) -> None:
     """Print summary counts by status, type, priority, and group."""
     from collections import Counter
 
@@ -3204,6 +3225,11 @@ def tasks_summary() -> None:
 
     active = parse_tasks(DEFAULT_TASKS_DIR / "active.md")
     if not active:
+        if output_format == "json":
+            click.echo(
+                json.dumps({"total": 0, "by_status": {}, "by_type": {}, "by_priority": {}, "by_group": {}}, indent=2)
+            )
+            return
         click.echo("No active tasks.")
         return
 
@@ -3213,6 +3239,22 @@ def tasks_summary() -> None:
     by_type = Counter(t.type for t in active)
     by_priority = Counter(t.priority for t in active)
     by_group = Counter(t.group for t in active if t.group)
+
+    if output_format == "json":
+        click.echo(
+            json.dumps(
+                {
+                    "total": len(active),
+                    "by_status": dict(sorted(by_status.items())),
+                    "by_type": dict(sorted(by_type.items())),
+                    "by_priority": dict(sorted(by_priority.items())),
+                    "by_group": dict(sorted(by_group.items())),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
 
     click.echo(f"Total: {len(active)}")
     click.echo("By status:   " + ", ".join(f"{k}: {v}" for k, v in sorted(by_status.items())))
@@ -3657,6 +3699,14 @@ def _split_csv(value: str | None) -> list[str]:
     help="Override body template (file content used verbatim, with {title} substituted)",
 )
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
 def question_reserve_cmd(
     slug: str,
     title: str | None,
@@ -3667,6 +3717,7 @@ def question_reserve_cmd(
     questions_dir: Path,
     template: Path | None,
     as_json: bool,
+    output_format: str,
 ) -> None:
     """Atomically reserve the next q-number and write a stub question file.
 
@@ -3690,7 +3741,7 @@ def question_reserve_cmd(
         datasets=_split_csv(datasets),
         template_body=template_body,
     )
-    if as_json:
+    if as_json or output_format == "json":
         click.echo(
             _json.dumps(
                 {

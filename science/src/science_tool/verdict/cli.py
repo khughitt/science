@@ -77,6 +77,13 @@ def parse_cmd(file: Path, registry_path: Path | None) -> None:
     help="Output format.",
 )
 @click.option(
+    "--format",
+    "format_alias",
+    type=click.Choice(["json", "table"]),
+    default=None,
+    help="Output format. Canonical alias for --output.",
+)
+@click.option(
     "--strict",
     is_flag=True,
     help="Treat unresolved claim IDs and validation warnings as errors.",
@@ -87,9 +94,11 @@ def rollup_cmd(
     root: Path,
     registry_path: Path | None,
     output_format: str,
+    format_alias: str | None,
     strict: bool,
 ) -> None:
     """Roll up parsed verdict interpretations by scope."""
+    output_format = format_alias or output_format
     resolved_scope = _resolve_scope(scope, by_claim)
     registry = _load_registry_for_rollup(root, registry_path)
     if resolved_scope == "claim" and registry is None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import click
 
+from science_tool.output import OUTPUT_FORMATS
 from science_tool.project_artifacts import default_registry
 
 
@@ -51,7 +52,15 @@ def list_cmd(check: bool, project_root: str) -> None:
     default=".",
 )
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
-def check_cmd(name: str, project_root: str, as_json: bool) -> None:
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+    help="Output format. `--json` is kept as a convenience alias.",
+)
+def check_cmd(name: str, project_root: str, as_json: bool, output_format: str) -> None:
     """Check the installed status of NAME against PROJECT_ROOT."""
     import json as _json
     from pathlib import Path
@@ -69,7 +78,7 @@ def check_cmd(name: str, project_root: str, as_json: bool) -> None:
     pins = read_pins(project) if (project / "science.yaml").exists() else []
     result = classify_full(target, art, pins)
 
-    if as_json:
+    if as_json or output_format == "json":
         click.echo(
             _json.dumps(
                 {

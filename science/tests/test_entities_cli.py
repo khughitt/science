@@ -492,8 +492,10 @@ def test_entity_neighbors_source_only_warns_and_returns_no_rows() -> None:
         result = runner.invoke(main, ["entity", "neighbors", "question:q01-alpha", "--format", "json"])
 
         assert result.exit_code == 0, result.output
-        assert "WARNING" in result.output
-        assert "[]" in result.output
+        payload = json.loads(result.stdout)
+        assert payload["rows"] == []
+        assert "WARNING" in result.stderr
+        assert "WARNING" not in result.stdout
 
 
 def test_entity_neighbors_missing_graph_fails_cleanly() -> None:
@@ -590,6 +592,16 @@ def test_entity_sections_lists_template_sections() -> None:
         assert result.exit_code == 0, result.output
         assert "double-blind-addendum" in result.output
         assert "optional" in result.output
+
+
+def test_entity_sections_accepts_format_json() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(main, ["entity", "sections", "discussion", "--format", "json"])
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        keys = {row["key"] for row in payload["rows"]}
+        assert "double-blind-addendum" in keys
 
 
 def test_discussion_create_unknown_section_key_errors() -> None:

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 import yaml
+from click.testing import CliRunner
 
+from science_tool.cli import main
 from science_tool.questions import Reservation, reserve_question, slugify
 
 
@@ -163,3 +166,26 @@ class TestReserveQuestion:
         (tmp_path / "Q07-uppercase.md").write_text("# wrong case\n")
         result = reserve_question(tmp_path, "x")
         assert result.number == 1  # nothing matched the pattern
+
+
+def test_question_reserve_accepts_format_json(tmp_path: Path) -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        [
+            "question",
+            "reserve",
+            "--slug",
+            "why-things",
+            "--questions-dir",
+            str(tmp_path),
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["id"] == "question:01-why-things"
+    assert payload["slug"] == "why-things"
