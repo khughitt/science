@@ -129,7 +129,8 @@ Save to `doc/meta/bias-audit-<slug>.md`.
 3. If confirmation bias is detected, suggest `/science:compare-hypotheses` to force consideration of alternatives.
 4. If confounding is detected and no causal DAG exists, suggest `/science:sketch-model`.
 5. Offer to create tasks for the recommended mitigations via `science tasks add`.
-6. Commit: `git add -A && git commit -m "doc: bias audit <slug>"`
+6. Only commit if the user explicitly requested a commit or the session has commit approval.
+   Otherwise, report the changed files and leave the workspace uncommitted.
 
 ## Process Reflection
 

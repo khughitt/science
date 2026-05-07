@@ -55,6 +55,12 @@ def test_inquiry_kind_is_epistemic() -> None:
     assert registry.kind_class("inquiry") == EntityClass.EPISTEMIC
 
 
+def test_research_question_kind_registered() -> None:
+    registry = EntityRegistry.with_core_types()
+    assert registry.resolve("research-question") is ProjectEntity
+    assert registry.kind_class("research-question") == EntityClass.EPISTEMIC
+
+
 def test_mechanism_kind_resolves_to_typed_entity() -> None:
     registry = EntityRegistry.with_core_types()
     assert registry.resolve("mechanism") is MechanismEntity

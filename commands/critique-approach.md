@@ -47,6 +47,26 @@ Verify:
 - Structural validation passes (or note failures)
 - Treatment and outcome are set
 
+### Pre-DAG Critique Mode
+
+Use this degraded mode when the target is a Markdown-only or sketch-stage inquiry
+that is not yet registered as a graph-backed causal inquiry.
+
+- Read the inquiry document and any linked hypotheses, questions, discussions,
+  datasets, and plans.
+- Record `Validation unavailable` in the critique report because
+  `science inquiry validate` and `science inquiry export-pgmpy` cannot run.
+- Produce a pre-DAG critique focused on candidate variables, missing
+  confounders, temporal ordering, measurement/proxy problems, and identifiability
+  threats that should shape the future DAG.
+- Do not claim formal adjustment-set review, back-door validation, or pgmpy
+  identifiability analysis.
+- Save the report to `doc/inquiries/<slug>-critique.md` and label it
+  "pre-DAG critique" in the title or reviewed-status line.
+
+Skip Step 2 for pre-DAG mode; resume at Step 3 using the candidate relationships
+described in the Markdown inquiry.
+
 ### Step 2: Graph-theoretic analysis
 
 Export to pgmpy and analyze:

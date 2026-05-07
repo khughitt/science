@@ -1,6 +1,6 @@
 ---
-id: "task:{{slug}}"
-type: "task"
+id: "report:bias-audit-{{slug}}"
+type: "report"
 title: "Bias Audit: {{Short Title}}"
 status: "proposed"
 source_refs: []

@@ -112,6 +112,37 @@ def test_all_entities_inherit_from_entity(tmp_path: Path) -> None:
     assert all(isinstance(e, Entity) for e in sources.entities)
 
 
+def test_load_project_sources_includes_research_question_with_rq_prefix(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    (tmp_path / "specs").mkdir()
+    (tmp_path / "specs" / "research-question.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "rq:test"',
+                'type: "research-question"',
+                'title: "Master research question"',
+                'related: ["hypothesis:h1"]',
+                "source_refs: []",
+                "---",
+                "",
+                "# Master research question",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    sources = load_project_sources(tmp_path)
+    by_id = {entity.canonical_id: entity for entity in sources.entities}
+    entity = by_id["rq:test"]
+
+    assert isinstance(entity, ProjectEntity)
+    assert entity.kind == "research-question"
+    assert entity.type is None
+    assert entity.related == ["hypothesis:h1"]
+
+
 def test_load_project_sources_reads_lightweight_terms_yaml(tmp_path: Path) -> None:
     _seed(tmp_path)
     local_sources = tmp_path / "knowledge" / "sources" / "local"

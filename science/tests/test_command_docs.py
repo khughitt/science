@@ -472,3 +472,44 @@ def test_federation_docs_document_canonical_entity_refs_and_artifact_addresses()
     )
     for expected in expected_strings:
         assert expected in text
+
+
+def test_bias_audit_templates_emit_report_not_task() -> None:
+    for path in ("templates/bias-audit.md", "science/model/src/science_model/templates/bias-audit.md"):
+        text = _read(path)
+        assert 'id: "report:bias-audit-{{slug}}"' in text
+        assert 'type: "report"' in text
+        assert 'id: "task:{{slug}}"' not in text
+        assert 'type: "task"' not in text
+
+
+def test_bias_audit_commit_step_is_conditional() -> None:
+    text = _read("commands/bias-audit.md")
+    assert "Only commit if the user explicitly requested a commit or the session has commit approval." in text
+    assert "Otherwise, report the changed files and leave the workspace uncommitted." in text
+    assert 'Commit: `git add -A && git commit -m "doc: bias audit <slug>"`' not in text
+
+
+def test_sketch_model_documents_existing_inquiry_upgrade() -> None:
+    text = _read("commands/sketch-model.md")
+    expected_strings = (
+        "Existing Inquiry Upgrade",
+        "doc/inquiries/<slug>.md",
+        "preserve its existing slug and frontmatter",
+        "Register the existing inquiry before adding graph nodes or edges",
+    )
+    for expected in expected_strings:
+        assert expected in text
+
+
+def test_critique_approach_documents_pre_dag_mode() -> None:
+    text = _read("commands/critique-approach.md")
+    expected_strings = (
+        "Pre-DAG Critique Mode",
+        "Markdown-only or sketch-stage inquiry",
+        "Validation unavailable",
+        "Do not claim formal adjustment-set review",
+        "pre-DAG critique",
+    )
+    for expected in expected_strings:
+        assert expected in text

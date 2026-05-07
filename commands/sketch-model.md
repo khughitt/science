@@ -75,6 +75,20 @@ If no graph exists:
 science graph init
 ```
 
+### Existing Inquiry Upgrade
+
+If `$ARGUMENTS` names an existing Markdown inquiry at `doc/inquiries/<slug>.md`,
+upgrade that document instead of creating a duplicate inquiry identity.
+
+- Read `doc/inquiries/<slug>.md` and preserve its existing slug and frontmatter.
+- If the file already has an `id:` or `type:`/`kind:` value, keep it unless it
+  conflicts with the graph command you are about to run.
+- Register the existing inquiry before adding graph nodes or edges. Use the
+  existing slug in `science inquiry init` or the nearest available registration
+  command, then continue with node and edge additions.
+- In the final summary, state that this was an upgrade of an existing inquiry,
+  not a new inquiry.
+
 ### Step 2: Interactive Conversation
 
 Have a natural, adaptive conversation.
