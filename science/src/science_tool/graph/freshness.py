@@ -6,6 +6,7 @@ project's typed relations and provenance triples by `materialize_graph()`.
 
 Public surface:
     derive_bears_on_from_typed_edges(dataset)
+    derive_bears_on_from_chain_links(dataset)
     derive_bears_on_from_pre_registrations(dataset, *, pre_registration_targets, kind_class)
     derive_bears_on_from_provenance(dataset, *, kind_class)
     close_bears_on(dataset, *, kind_class)
@@ -122,6 +123,23 @@ def derive_bears_on_from_typed_edges(
         if kind_class.get(str(o)) == EntityClass.EPISTEMIC:
             knowledge.add((o, SCI_NS.bearsOn, s))
             _emit_bears_on_edge(knowledge, o, s, 1)
+
+
+def derive_bears_on_from_chain_links(dataset: Dataset) -> None:
+    """Emit `bears_on` triples from sci:hasLink (inverse).
+
+    Rule: `?c sci:hasLink ?x` -> `?x bears_on ?c` (chain link bears on its chain).
+
+    Source kind discipline (chain must be a structural-chain) is enforced at
+    materialize-time by `relation_allows_kinds`; this deriver assumes any
+    `sci:hasLink` triple already passed validation.
+    """
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    for s, _, o in knowledge.triples((None, SCI_NS.hasLink, None)):
+        if not isinstance(s, URIRef) or not isinstance(o, URIRef):
+            continue
+        knowledge.add((o, SCI_NS.bearsOn, s))
+        _emit_bears_on_edge(knowledge, o, s, 1)
 
 
 def derive_bears_on_from_pre_registrations(
