@@ -5,6 +5,8 @@ See docs/superpowers/specs/2026-05-05-project-peers-design.md.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -62,6 +64,12 @@ class PeerResolver(Protocol):
         """All peer IDs visible to this resolver. Excludes the host project's own id."""
         ...
 
+    def in_flight(self) -> frozenset[str]:
+        ...
+
+    def enter(self, peer_id: str) -> AbstractContextManager[None]:
+        ...
+
     def resolve(self, peer_id: str) -> ResolvedPeer:
         """Return the resolved peer or raise PeerNotFound / PeerUnresolved."""
         ...
@@ -74,6 +82,7 @@ class LocalPeerResolver:
         from science_tool.project_config import load_project_config  # noqa: PLC0415
 
         self._project_root = project_root
+        self._in_flight: set[str] = set()
         cfg = load_project_config(project_root)
         self._entries: dict[str, PeerEntry] = {}
         for entry in cfg.peers:
@@ -88,6 +97,27 @@ class LocalPeerResolver:
 
     def known_ids(self) -> frozenset[str]:
         return frozenset(self._entries.keys())
+
+    def in_flight(self) -> frozenset[str]:
+        return frozenset(self._in_flight)
+
+    @contextmanager
+    def enter(self, peer_id: str) -> Iterator[None]:
+        """Track in-flight peer resolution; raise on cycle.
+
+        Use this around recursive peer-traversal blocks to prevent infinite
+        loops when peer A peers B and B peers A.
+        """
+        if peer_id in self._in_flight:
+            raise RuntimeError(
+                f"resolver cycle detected on peer id {peer_id!r}: "
+                f"already in-flight (currently resolving {sorted(self._in_flight)})"
+            )
+        self._in_flight.add(peer_id)
+        try:
+            yield
+        finally:
+            self._in_flight.discard(peer_id)
 
     def resolve(self, peer_id: str) -> ResolvedPeer:
         entry = self._entries.get(peer_id)

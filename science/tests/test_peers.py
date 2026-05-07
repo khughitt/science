@@ -296,3 +296,53 @@ peers:
         assert r1 is not r2
         assert r1.known_ids() == frozenset()
         assert r2.known_ids() == frozenset({"peer"})
+
+
+class TestResolverCycleProtection:
+    def test_recursive_resolution_with_cycle_does_not_infinite_loop(
+        self, tmp_path: Path
+    ) -> None:
+        """A resolver tracks in-flight peer IDs in a visited set.
+
+        We exercise the protection by simulating a consumer that calls back
+        into the resolver while resolving a peer.
+        """
+        from science_tool.peers import make_local_resolver
+
+        host = tmp_path / "host"
+        peer = tmp_path / "peer"
+        peer.mkdir()
+        (peer / "science.yaml").write_text(
+            f"""
+name: peer
+id: peer
+profile: research
+research_question: "..."
+peers:
+  - id: host
+    path: {host}
+""",
+            encoding="utf-8",
+        )
+        host.mkdir()
+        (host / "science.yaml").write_text(
+            f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: peer
+    path: {peer}
+""",
+            encoding="utf-8",
+        )
+
+        resolver = make_local_resolver(host)
+
+        with resolver.enter("peer"):
+            assert "peer" in resolver.in_flight()
+            with pytest.raises(RuntimeError, match="cycle"):
+                with resolver.enter("peer"):
+                    pass
+        assert resolver.in_flight() == frozenset()
