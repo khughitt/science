@@ -24,6 +24,38 @@ from science_model.source_contracts import AuthoredTargetedRelation
 from science_model.sync import SyncSource
 
 
+class ChainAuditInterpretation(StrEnum):
+    EVIDENCE_FOR = "evidence-for"
+    EVIDENCE_AGAINST = "evidence-against"
+    MIXED = "mixed"
+    INCONCLUSIVE = "inconclusive"
+
+
+class BayesFactorEvidence(BaseModel):
+    """Bayes-factor-style evidence carried by a chain-audit.
+
+    `interpretation` is the load-bearing field; `bf10` is optional because
+    many chain audits are categorical (no numeric BF available).
+    """
+
+    hypothesis_ref: str
+    null_baseline: str
+    interpretation: ChainAuditInterpretation
+    bf10: float | None = None
+
+    @model_validator(mode="after")
+    def _validate_bf10_positive(self) -> "BayesFactorEvidence":
+        if self.bf10 is not None and self.bf10 <= 0:
+            raise ValueError("bf10 must be a positive number when set")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_null_baseline_nonempty(self) -> "BayesFactorEvidence":
+        if not self.null_baseline.strip():
+            raise ValueError("null_baseline must be non-empty")
+        return self
+
+
 class EntityType(StrEnum):
     """Known entity types across Science projects."""
 

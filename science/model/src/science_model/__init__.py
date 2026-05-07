@@ -2,7 +2,14 @@
 
 from science_model.activity import ActivityItem
 from science_model.config import ConfigUpdate, DashboardConfig, LodWeights
-from science_model.entities import Entity, EntityType, EntityUpdate, MechanismEntity
+from science_model.entities import (
+    BayesFactorEvidence,
+    ChainAuditInterpretation,
+    Entity,
+    EntityType,
+    EntityUpdate,
+    MechanismEntity,
+)
 from science_model.graph import GraphData, GraphEdge, GraphNode, GraphSummary
 from science_model.identity import EntityScope, ExternalId
 from science_model.ids import CanonicalId, normalize_alias
@@ -35,7 +42,9 @@ from science_model.tasks import Task, TaskCreate, TaskStatus, TaskUpdate
 
 __all__ = [
     "ActivityItem",
+    "BayesFactorEvidence",
     "CanonicalId",
+    "ChainAuditInterpretation",
     "ConfigUpdate",
     "DashboardConfig",
     "ClaimLayer",
