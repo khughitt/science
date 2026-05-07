@@ -453,6 +453,132 @@ research_question: "..."
     assert "no peers declared" in result.output.lower()
 
 
+def test_peers_show(tmp_path: Path) -> None:
+    peer = tmp_path / "mm30-dir"
+    peer.mkdir()
+    _write_yaml(
+        peer,
+        """
+name: multiple-myeloma-30
+id: mm30
+role: cancer-type
+profile: research
+research_question: "..."
+""",
+    )
+    host = tmp_path / "host"
+    host.mkdir()
+    _write_yaml(
+        host,
+        f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: mm30
+    path: {peer}
+""",
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["peers", "show", "mm30", "--project-root", str(host)])
+    assert result.exit_code == 0
+    assert "declared_id: mm30" in result.output
+    assert "project_id:  mm30" in result.output
+    assert "multiple-myeloma-30" in result.output
+    assert "cancer-type" in result.output
+
+
+def test_peers_show_duplicate_peer_id_fails_cleanly(tmp_path: Path) -> None:
+    first = tmp_path / "first"
+    first.mkdir()
+    _write_yaml(
+        first,
+        """
+name: first
+id: dup
+profile: research
+research_question: "..."
+""",
+    )
+    second = tmp_path / "second"
+    second.mkdir()
+    _write_yaml(
+        second,
+        """
+name: second
+id: dup
+profile: research
+research_question: "..."
+""",
+    )
+    host = tmp_path / "host"
+    host.mkdir()
+    _write_yaml(
+        host,
+        f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: dup
+    path: {first}
+  - id: dup
+    path: {second}
+""",
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["peers", "show", "dup", "--project-root", str(host)])
+    assert result.exit_code != 0
+    assert isinstance(result.exception, SystemExit)
+    assert "error:" in result.output.lower()
+    assert "duplicate peer id" in result.output.lower()
+    assert "dup" in result.output
+
+
+def test_peers_show_unresolved_peer_fails_with_context(tmp_path: Path) -> None:
+    peer = tmp_path / "peer-without-config"
+    peer.mkdir()
+    host = tmp_path / "host"
+    host.mkdir()
+    _write_yaml(
+        host,
+        f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: broken
+    path: {peer}
+""",
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["peers", "show", "broken", "--project-root", str(host)])
+    assert result.exit_code != 0
+    assert "broken" in result.output
+    assert "no science.yaml" in result.output.lower()
+
+
+def test_peers_show_unknown_fails(tmp_path: Path) -> None:
+    host = tmp_path / "host"
+    host.mkdir()
+    _write_yaml(
+        host,
+        """
+name: host
+id: host
+profile: research
+research_question: "..."
+""",
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["peers", "show", "ghost", "--project-root", str(host)])
+    assert result.exit_code != 0
+    assert "ghost" in result.output.lower()
+
+
 def test_peers_check_clean(tmp_path: Path) -> None:
     peer = tmp_path / "peer"
     peer.mkdir()

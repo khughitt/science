@@ -9,7 +9,7 @@ from typing import TypedDict
 import click
 import yaml
 
-from science_tool.peers import resolve_peer_path
+from science_tool.peers import PeerNotFound, PeerUnresolved, make_local_resolver, resolve_peer_path
 from science_tool.peers_validate import PeerIssue, PeerIssueKind, validate_peers
 from science_tool.project_config import ProjectConfig, load_project_config
 
@@ -89,6 +89,33 @@ def peers_check(project_root: Path, fmt: str, strict: bool) -> None:
 
     if should_fail:
         raise click.exceptions.Exit(1)
+
+
+@peers_group.command("show")
+@click.argument("peer_id")
+@click.option(
+    "--project-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=".",
+    show_default=True,
+)
+def peers_show(peer_id: str, project_root: Path) -> None:
+    """Show details for a single peer."""
+    project_root = Path.cwd() if str(project_root) == "." else project_root
+    try:
+        resolver = make_local_resolver(project_root)
+        resolved = resolver.resolve(peer_id)
+    except PeerNotFound as exc:
+        raise click.ClickException(str(exc)) from exc
+    except PeerUnresolved as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    peer_cfg = load_project_config(resolved.path)
+    click.echo(f"declared_id: {resolved.id}")
+    click.echo(f"project_id:  {peer_cfg.id}")
+    click.echo(f"name:        {peer_cfg.name}")
+    click.echo(f"role:        {peer_cfg.role}")
+    click.echo(f"path:        {resolved.path}")
 
 
 def _peer_rows(project_root: Path, cfg: ProjectConfig) -> list[PeerRow]:
