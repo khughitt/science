@@ -124,6 +124,18 @@ CORE_PROFILE = ProfileManifest(
             layer="layer/core",
             description="Frictionless research package containing analysis results, prose, and provenance metadata.",
         ),
+        EntityKind(
+            name="structural-chain",
+            canonical_prefix="chain",
+            layer="layer/core",
+            description="Ordered structural decomposition: >=2 entity refs forming a chain whose verdicts are carried by chain-audit.",
+        ),
+        EntityKind(
+            name="chain-audit",
+            canonical_prefix="chain-audit",
+            layer="layer/core",
+            description="Verdict over a structural-chain. Carries verdict+bayes_factor_evidence with enforced consistency.",
+        ),
     ],
     relation_kinds=[
         RelationKind(

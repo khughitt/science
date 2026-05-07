@@ -13,12 +13,14 @@ needs-review state.
 from __future__ import annotations
 
 from science_model.entities import (
+    ChainAuditEntity,
     DatasetEntity,
     Entity,
     EntityClass,
     MechanismEntity,
     ProjectEntity,
     ResearchPackageEntity,
+    StructuralChainEntity,
     TaskEntity,
     ThemeEntity,
     WorkflowRunEntity,
@@ -47,6 +49,8 @@ _CORE_KIND_CLASSES: dict[str, EntityClass] = {
     "research-package": EntityClass.OPERATIONAL,
     "mechanism": EntityClass.EPISTEMIC,
     "theme": EntityClass.EPISTEMIC,
+    "structural-chain": EntityClass.EPISTEMIC,
+    "chain-audit": EntityClass.EPISTEMIC,
     # Generic project kinds (alphabetized)
     "article": EntityClass.REFERENCE,
     "assumption": EntityClass.EPISTEMIC,
@@ -103,6 +107,16 @@ class EntityRegistry:
         )
         r.register_core_kind("mechanism", MechanismEntity, entity_class=_CORE_KIND_CLASSES["mechanism"])
         r.register_core_kind("theme", ThemeEntity, entity_class=_CORE_KIND_CLASSES["theme"])
+        r.register_core_kind(
+            "structural-chain",
+            StructuralChainEntity,
+            entity_class=_CORE_KIND_CLASSES["structural-chain"],
+        )
+        r.register_core_kind(
+            "chain-audit",
+            ChainAuditEntity,
+            entity_class=_CORE_KIND_CLASSES["chain-audit"],
+        )
         # Generic project kinds → ProjectEntity.
         for kind in (
             "concept",
