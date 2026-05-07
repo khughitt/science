@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-_ADDRESS_RE = re.compile(r"^(?P<project>[a-z][a-z0-9-]{1,63}):(?P<artifact>\S+)$")
+_ADDRESS_RE = re.compile(r"^(?P<project>[a-z][a-z0-9-]{1,63}):(?P<artifact>[^@\s]+)$")
 _BARE_TASK_RE = re.compile(r"^t[0-9]{3,}$")
 _URI_SCHEME = "cancer"
 
@@ -54,6 +54,8 @@ def classify_entity_ref(
     parts = value.split(":")
     if len(parts) == 2:
         first, slug = parts
+        if "@" in slug:
+            return RefShape(raw=value, shape="non-entity")
         if first in local_kinds:
             return RefShape(raw=value, shape="local-entity", kind=first, slug=slug)
         if first in project_ids:
@@ -62,6 +64,8 @@ def classify_entity_ref(
 
     if len(parts) == 3:
         project_id, kind, slug = parts
+        if "@" in slug:
+            return RefShape(raw=value, shape="non-entity")
         if project_id in project_ids:
             return RefShape(
                 raw=value,

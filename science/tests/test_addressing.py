@@ -40,6 +40,10 @@ def test_is_address_negative() -> None:
     assert is_address(":x") is False
 
 
+def test_is_address_rejects_at_in_artifact() -> None:
+    assert is_address("cbioportal:q014@v2") is False
+
+
 def test_parse_invalid_address_raises() -> None:
     with pytest.raises(ValueError):
         parse_address("not an address")
@@ -95,3 +99,20 @@ def test_classifies_unknown_three_part_namespace() -> None:
         kind="task",
         slug="t001",
     )
+
+
+def test_classify_entity_ref_rejects_at_in_artifact() -> None:
+    """`@` in the artifact position must not classify as any entity ref shape.
+
+    Rationale: Decision 1 of the project-peers design reserves `@<version>` as
+    a future suffix; allowing it in slugs today would conflict with the future
+    versioning grammar.
+    """
+    from science_tool.addressing import classify_entity_ref
+
+    result = classify_entity_ref(
+        "task:t001@v2",
+        local_kinds={"task"},
+        project_ids=frozenset(),
+    )
+    assert result.shape == "non-entity"
