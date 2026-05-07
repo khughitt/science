@@ -375,6 +375,17 @@ def _add_chain_relations(
     if not link_entities:
         return
 
+    seen_canonical_links: dict[str, str] = {}
+    for raw_ref, link_entity in zip(getattr(entity, "chain", None) or [], link_entities, strict=True):
+        previous_raw_ref = seen_canonical_links.get(link_entity.canonical_id)
+        if previous_raw_ref is not None:
+            raise ValueError(
+                "duplicate canonical chain link: "
+                f"{previous_raw_ref!r} and {raw_ref!r} both resolve to {link_entity.canonical_id} "
+                f"in {entity.file_path}"
+            )
+        seen_canonical_links[link_entity.canonical_id] = raw_ref
+
     relation_kind = _profile_relation_for_predicate(SCI_NS.hasLink)
     for raw_ref, link_entity in zip(getattr(entity, "chain", None) or [], link_entities, strict=True):
         relation = SourceRelation(

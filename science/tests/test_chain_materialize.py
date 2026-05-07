@@ -224,6 +224,44 @@ verdict:
         materialize_graph(project)
 
 
+def test_registered_chain_audit_schema_error_fails_materialize(tmp_path: Path) -> None:
+    project = _minimal_project(tmp_path)
+    _write(
+        project,
+        "doc/audits/abc-2026-05.md",
+        """---
+id: chain-audit:abc-2026-05
+kind: chain-audit
+title: "ABC audit"
+project: test
+ontology_terms: []
+related: []
+source_refs: []
+created: 2026-05-01
+updated: 2026-05-01
+audits: chain:abc
+proposition_refs: []
+bayes_factor_evidence:
+  hypothesis_ref: hypothesis:abc-coupling
+  null_baseline: "uniform"
+  interpretation: evidence-against
+verdict:
+  composite: "[+]"
+  rule: single-claim
+  claims:
+    - id: claim:abc
+      polarity: "[+]"
+---
+""",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="schema validation failed.*chain-audit.*doc/audits/abc-2026-05.md.*verdict.composite.*inconsistent",
+    ):
+        materialize_graph(project)
+
+
 def _project_with_chain_order(tmp_path: Path, order: list[str]) -> Path:
     _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
     for slug in ("a", "b", "c"):
@@ -312,3 +350,20 @@ def test_reorder_same_links_changes_link_sequence(tmp_path: Path) -> None:
         str(PROJECT_NS["mechanism/b"]),
         str(PROJECT_NS["mechanism/a"]),
     ]
+
+
+def test_chain_rejects_duplicate_canonical_links_after_alias_resolution(tmp_path: Path) -> None:
+    project = _project_with_chain_order(
+        tmp_path,
+        ["mechanism:a", "alias:a", "mechanism:b"],
+    )
+    _write(
+        project,
+        "knowledge/sources/local/mappings.yaml",
+        """aliases:
+  alias:a: mechanism:a
+""",
+    )
+
+    with pytest.raises(ValueError, match="duplicate canonical chain link.*mechanism:a"):
+        materialize_graph(project)

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from science_tool.graph.materialize import materialization_audit
 from science_tool.graph.migrate import audit_project_sources
 from science_tool.graph.sources import load_project_sources
 
@@ -74,6 +77,31 @@ def test_dangling_chain_link_surfaces_in_audit(tmp_path: Path) -> None:
         and row["target"] == "mechanism:b"
     ]
     assert dangling, f"expected dangling-ref row for mechanism:b, got {rows!r}"
+
+
+def test_registered_chain_schema_error_fails_audit(tmp_path: Path) -> None:
+    _write(tmp_path, "science.yaml", "name: test\nknowledge_profiles:\n  local: local\n")
+    _write(
+        tmp_path,
+        "doc/chains/a.md",
+        """---
+id: chain:a
+kind: structural-chain
+title: "Invalid one-link chain"
+project: test
+ontology_terms: []
+related: []
+source_refs: []
+chain:
+  - mechanism:a
+---
+""",
+    )
+
+    with pytest.raises(
+        ValueError, match="schema validation failed.*structural-chain.*doc/chains/a.md.*at least two links"
+    ):
+        materialization_audit(tmp_path)
 
 
 def test_dangling_audits_ref_surfaces(tmp_path: Path) -> None:
