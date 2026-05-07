@@ -81,3 +81,218 @@ class TestResolvePeerPath:
         entry = PeerEntry(id="x", path=str(link))
         result = resolve_peer_path(tmp_path / "host", entry)
         assert result == real.resolve()
+
+
+class TestLocalPeerResolver:
+    def test_duplicate_non_self_peer_ids_raise_peer_unresolved(
+        self, tmp_path: Path
+    ) -> None:
+        from science_tool.peers import PeerUnresolved, make_local_resolver
+
+        host = tmp_path / "host"
+        peer_a = tmp_path / "peer-a"
+        peer_b = tmp_path / "peer-b"
+        _write_minimal_science_yaml(peer_a, "peer-a")
+        _write_minimal_science_yaml(peer_b, "peer-b")
+        host.mkdir()
+        (host / "science.yaml").write_text(
+            f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: peer
+    path: {peer_a}
+  - id: peer
+    path: {peer_b}
+""",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(PeerUnresolved, match="peer"):
+            make_local_resolver(host)
+
+    def test_known_ids_excludes_self_peer_entry(self, tmp_path: Path) -> None:
+        from science_tool.peers import make_local_resolver
+
+        host = tmp_path / "host"
+        peer = tmp_path / "peer"
+        _write_minimal_science_yaml(peer, "peer")
+        host.mkdir()
+        (host / "science.yaml").write_text(
+            f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: host
+    path: .
+  - id: peer
+    path: {peer}
+""",
+            encoding="utf-8",
+        )
+
+        resolver = make_local_resolver(host)
+        assert resolver.known_ids() == frozenset({"peer"})
+
+    def test_resolve_self_peer_entry_raises_peer_not_found(
+        self, tmp_path: Path
+    ) -> None:
+        from science_tool.peers import PeerNotFound, make_local_resolver
+
+        host = tmp_path / "host"
+        host.mkdir()
+        (host / "science.yaml").write_text(
+            """
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: host
+    path: .
+""",
+            encoding="utf-8",
+        )
+
+        resolver = make_local_resolver(host)
+        with pytest.raises(PeerNotFound, match="host"):
+            resolver.resolve("host")
+
+    def test_known_ids_excludes_host_and_includes_peers(self, tmp_path: Path) -> None:
+        from science_tool.peers import make_local_resolver
+
+        host = tmp_path / "host"
+        peer_a = tmp_path / "peer-a"
+        peer_b = tmp_path / "peer-b"
+        _write_minimal_science_yaml(peer_a, "peer-a")
+        _write_minimal_science_yaml(peer_b, "peer-b")
+        host.mkdir()
+        (host / "science.yaml").write_text(
+            f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: peer-a
+    path: {peer_a}
+  - id: peer-b
+    path: {peer_b}
+""",
+            encoding="utf-8",
+        )
+
+        resolver = make_local_resolver(host)
+        assert resolver.known_ids() == frozenset({"peer-a", "peer-b"})
+
+    def test_resolve_returns_resolved_peer(self, tmp_path: Path) -> None:
+        from science_tool.peers import make_local_resolver
+
+        host = tmp_path / "host"
+        peer = tmp_path / "peer"
+        _write_minimal_science_yaml(peer, "peer")
+        host.mkdir()
+        (host / "science.yaml").write_text(
+            f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: peer
+    path: {peer}
+""",
+            encoding="utf-8",
+        )
+
+        resolver = make_local_resolver(host)
+        resolved = resolver.resolve("peer")
+        assert resolved.id == "peer"
+        assert resolved.path == peer.resolve()
+        assert resolved.entry.id == "peer"
+        assert resolved.entry.path == str(peer)
+
+    def test_resolve_unknown_raises_peer_not_found(self, tmp_path: Path) -> None:
+        from science_tool.peers import PeerNotFound, make_local_resolver
+
+        host = tmp_path / "host"
+        _write_minimal_science_yaml(host, "host")
+        resolver = make_local_resolver(host)
+        with pytest.raises(PeerNotFound, match="ghost"):
+            resolver.resolve("ghost")
+
+    def test_resolve_missing_path_raises_peer_unresolved(self, tmp_path: Path) -> None:
+        from science_tool.peers import PeerUnresolved, make_local_resolver
+
+        host = tmp_path / "host"
+        host.mkdir()
+        (host / "science.yaml").write_text(
+            """
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: ghost
+    path: ../does-not-exist
+""",
+            encoding="utf-8",
+        )
+        resolver = make_local_resolver(host)
+        with pytest.raises(PeerUnresolved, match="ghost"):
+            resolver.resolve("ghost")
+
+    def test_resolve_path_exists_but_no_science_yaml_raises(
+        self, tmp_path: Path
+    ) -> None:
+        from science_tool.peers import PeerUnresolved, make_local_resolver
+
+        host = tmp_path / "host"
+        not_a_project = tmp_path / "junk"
+        not_a_project.mkdir()
+        host.mkdir()
+        (host / "science.yaml").write_text(
+            f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: junk
+    path: {not_a_project}
+""",
+            encoding="utf-8",
+        )
+        resolver = make_local_resolver(host)
+        with pytest.raises(PeerUnresolved, match="science.yaml"):
+            resolver.resolve("junk")
+
+    def test_resolver_is_per_invocation_not_module_cached(self, tmp_path: Path) -> None:
+        """Two calls to make_local_resolver return distinct resolver objects."""
+        from science_tool.peers import make_local_resolver
+
+        host = tmp_path / "host"
+        peer = tmp_path / "peer"
+        _write_minimal_science_yaml(peer, "peer")
+        _write_minimal_science_yaml(host, "host")
+        r1 = make_local_resolver(host)
+        (host / "science.yaml").write_text(
+            f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: peer
+    path: {peer}
+""",
+            encoding="utf-8",
+        )
+        r2 = make_local_resolver(host)
+        assert r1 is not r2
+        assert r1.known_ids() == frozenset()
+        assert r2.known_ids() == frozenset({"peer"})
