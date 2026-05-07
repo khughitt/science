@@ -350,6 +350,43 @@ def _audit_entity(
                 allow_cross_project_address=True,
             )
         )
+    for target in getattr(entity, "chain", None) or []:
+        rows.extend(
+            _audit_reference(
+                entity,
+                "chain",
+                target,
+                resolver,
+                ext_prefixes=ext_prefixes,
+                allow_cross_kind_fallback=False,
+                allow_tag=False,
+            )
+        )
+    audits_target = getattr(entity, "audits", None)
+    if audits_target:
+        rows.extend(
+            _audit_reference(
+                entity,
+                "audits",
+                audits_target,
+                resolver,
+                ext_prefixes=ext_prefixes,
+                allow_cross_kind_fallback=False,
+                allow_tag=False,
+            )
+        )
+    for target in getattr(entity, "proposition_refs", None) or []:
+        rows.extend(
+            _audit_reference(
+                entity,
+                "proposition_refs",
+                target,
+                resolver,
+                ext_prefixes=ext_prefixes,
+                allow_cross_kind_fallback=False,
+                allow_tag=False,
+            )
+        )
     for target in entity.same_as:
         rows.extend(_audit_reference(entity, "same_as", target, resolver, ext_prefixes=ext_prefixes))
     return rows
