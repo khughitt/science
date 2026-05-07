@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from rdflib import Dataset, URIRef
 
-from science_tool.graph.freshness import derive_bears_on_from_chain_links
+from science_tool.graph.freshness import (
+    derive_bears_on_from_audits,
+    derive_bears_on_from_chain_links,
+)
 from science_tool.graph.store import PROJECT_NS, SCI_NS
 
 
@@ -47,3 +50,11 @@ def test_three_link_chain_emits_three_bears_on() -> None:
     assert (str(_u("mechanism/a")), str(chain)) in pairs
     assert (str(_u("mechanism/b")), str(chain)) in pairs
     assert (str(_u("mechanism/c")), str(chain)) in pairs
+
+
+def test_audits_emits_bears_on() -> None:
+    """chain-audit sci:audits chain -> chain bears_on chain-audit."""
+    ds = _make_dataset_with([(_u("chain-audit/x"), SCI_NS.audits, _u("chain/abc"))])
+    derive_bears_on_from_audits(ds)
+    pairs = _bears_on_pairs(ds)
+    assert (str(_u("chain/abc")), str(_u("chain-audit/x"))) in pairs

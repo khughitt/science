@@ -7,6 +7,7 @@ project's typed relations and provenance triples by `materialize_graph()`.
 Public surface:
     derive_bears_on_from_typed_edges(dataset)
     derive_bears_on_from_chain_links(dataset)
+    derive_bears_on_from_audits(dataset)
     derive_bears_on_from_pre_registrations(dataset, *, pre_registration_targets, kind_class)
     derive_bears_on_from_provenance(dataset, *, kind_class)
     close_bears_on(dataset, *, kind_class)
@@ -136,6 +137,20 @@ def derive_bears_on_from_chain_links(dataset: Dataset) -> None:
     """
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
     for s, _, o in knowledge.triples((None, SCI_NS.hasLink, None)):
+        if not isinstance(s, URIRef) or not isinstance(o, URIRef):
+            continue
+        knowledge.add((o, SCI_NS.bearsOn, s))
+        _emit_bears_on_edge(knowledge, o, s, 1)
+
+
+def derive_bears_on_from_audits(dataset: Dataset) -> None:
+    """Emit `bears_on` triples from sci:audits.
+
+    Rule: `?a sci:audits ?c` -> `?c bears_on ?a` (chain bears on the audit
+    that asserts a verdict over it). Mirrors the `tests` predicate's shape.
+    """
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    for s, _, o in knowledge.triples((None, SCI_NS.audits, None)):
         if not isinstance(s, URIRef) or not isinstance(o, URIRef):
             continue
         knowledge.add((o, SCI_NS.bearsOn, s))

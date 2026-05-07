@@ -21,6 +21,8 @@ from science_tool.addressing import is_address, parse_address
 from science_tool.graph.freshness import (
     EntityFreshnessInfo,
     close_bears_on,
+    derive_bears_on_from_audits,
+    derive_bears_on_from_chain_links,
     derive_bears_on_from_pre_registrations,
     derive_bears_on_from_provenance,
     derive_bears_on_from_typed_edges,
@@ -866,6 +868,8 @@ def _derive_bears_on_layer(
     independently useful for dependency queries and are not part of freshness.
     """
     derive_bears_on_from_typed_edges(dataset, kind_class=kind_class)
+    derive_bears_on_from_chain_links(dataset)
+    derive_bears_on_from_audits(dataset)
     derive_bears_on_from_pre_registrations(
         dataset,
         pre_registration_targets=pre_registration_targets,
