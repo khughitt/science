@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from science_model.entities import BayesFactorEvidence, ChainAuditInterpretation
+from science_model.entities import BayesFactorEvidence, ChainAuditInterpretation, StructuralChainEntity
 
 
 class TestBayesFactorEvidence:
@@ -107,3 +107,54 @@ class TestBayesFactorEvidence:
                 null_baseline=null_baseline,
                 interpretation=ChainAuditInterpretation.EVIDENCE_FOR,
             )
+
+
+def _chain_kwargs(**overrides):
+    """Common required fields for a structural-chain instance."""
+    base = dict(
+        id="chain:fp",
+        canonical_id="natural-systems/chain:fp",
+        kind="structural-chain",
+        title="FP chain",
+        project="natural-systems",
+        ontology_terms=[],
+        related=[],
+        source_refs=[],
+        content_preview="",
+        file_path="core/chains/fp.md",
+        chain=["mechanism:a", "mechanism:b", "mechanism:c"],
+    )
+    base.update(overrides)
+    return base
+
+
+class TestStructuralChainEntity:
+    def test_minimal_three_link(self):
+        entity = StructuralChainEntity(**_chain_kwargs())
+        assert entity.kind == "structural-chain"
+        assert len(entity.chain) == 3
+
+    def test_two_links_minimum_accepted(self):
+        entity = StructuralChainEntity(**_chain_kwargs(chain=["mechanism:a", "mechanism:b"]))
+        assert len(entity.chain) == 2
+
+    def test_rejects_single_link(self):
+        with pytest.raises(ValidationError):
+            StructuralChainEntity(**_chain_kwargs(chain=["mechanism:a"]))
+
+    def test_rejects_empty_chain(self):
+        with pytest.raises(ValidationError):
+            StructuralChainEntity(**_chain_kwargs(chain=[]))
+
+    def test_rejects_duplicate_links(self):
+        with pytest.raises(ValidationError):
+            StructuralChainEntity(
+                **_chain_kwargs(chain=["mechanism:a", "mechanism:b", "mechanism:a"])
+            )
+
+    def test_title_required(self):
+        # Entity.title is required at the base class; missing it should ValidationError.
+        kwargs = _chain_kwargs()
+        del kwargs["title"]
+        with pytest.raises(ValidationError):
+            StructuralChainEntity(**kwargs)

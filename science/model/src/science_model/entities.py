@@ -373,6 +373,26 @@ class DomainEntity(Entity):
     pass
 
 
+class StructuralChainEntity(Entity):
+    """A first-class structural decomposition: an ordered chain of >=2 entity refs.
+
+    Chain links are restricted at the relation-kind layer to mechanism, model,
+    proposition, observation, or finding. Link-kind enforcement happens at
+    materialize-time via `relation_allows_kinds(has_link, ...)` -- this model
+    only enforces shape (length, no duplicates).
+    """
+
+    chain: list[str]
+
+    @model_validator(mode="after")
+    def _validate_chain_shape(self) -> "StructuralChainEntity":
+        if len(self.chain) < 2:
+            raise ValueError("structural-chain requires at least two links")
+        if len(set(self.chain)) != len(self.chain):
+            raise ValueError("structural-chain links must be distinct (no duplicates)")
+        return self
+
+
 class MechanismEntity(ProjectEntity):
     """Structured explanatory bundle with explicit participants and propositions."""
 
