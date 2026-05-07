@@ -45,6 +45,29 @@ class ChildEntry(BaseModel):
     role: RoleField = ProjectRole.STANDALONE
 
 
+class PeerEntry(BaseModel):
+    """Declares another project this one references.
+
+    `id` must match the peer project's own self-declared `id:` (validated by
+    `validate_peers()` at use time, not at parse time, so configs with
+    transient inconsistencies still load).
+
+    `path` is a local filesystem path. Three accepted shapes:
+      - absolute (`/...`)
+      - `~`-anchored (`~/d/...`)
+      - relative to this project's root (`../mm30`)
+
+    Reserved fields (`git`, `repo`, `url`, `doi`, `ref`, `version`) are
+    accepted at parse time (extra="allow") but flagged by `validate_peers()`
+    until their respective specs ship. See project-peers design Decision 2.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str
+    path: str
+
+
 class ProjectConfig(BaseModel):
     """Typed view of science.yaml. Non-listed fields are preserved as-is."""
 
@@ -55,6 +78,7 @@ class ProjectConfig(BaseModel):
     role: RoleField = ProjectRole.STANDALONE
     parent: str | None = None
     children: list[ChildEntry] = Field(default_factory=list)
+    peers: list[PeerEntry] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _children_only_on_meta(self) -> ProjectConfig:

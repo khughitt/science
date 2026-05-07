@@ -117,3 +117,67 @@ children:
     (tmp_path / "science.yaml").write_text(yaml_text)
     with pytest.raises(ValidationError, match="duplicate.*id"):
         load_project_config(tmp_path)
+
+
+def test_project_config_accepts_peers(tmp_path: Path) -> None:
+    """`peers:` is a list of {id, path}; loaded as PeerEntry objects."""
+    project_root = tmp_path / "host"
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text(
+        """
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: mm30
+    path: ~/d/cancer/mm30
+  - id: lit-explore
+    path: ../../r/lit-explore
+""",
+        encoding="utf-8",
+    )
+    cfg = load_project_config(project_root)
+    assert len(cfg.peers) == 2
+    assert cfg.peers[0].id == "mm30"
+    assert cfg.peers[0].path == "~/d/cancer/mm30"
+    assert cfg.peers[1].id == "lit-explore"
+    assert cfg.peers[1].path == "../../r/lit-explore"
+
+
+def test_project_config_peers_default_empty(tmp_path: Path) -> None:
+    """A config without peers: gets an empty list."""
+    project_root = tmp_path / "host"
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text(
+        """
+name: host
+id: host
+profile: research
+research_question: "..."
+""",
+        encoding="utf-8",
+    )
+    cfg = load_project_config(project_root)
+    assert cfg.peers == []
+
+
+def test_peer_entry_accepts_unknown_fields_for_forward_compat(tmp_path: Path) -> None:
+    """Reserved fields (git, url, etc.) parse without raising; surfaced by validator."""
+    project_root = tmp_path / "host"
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text(
+        """
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: future-peer
+    path: ./somewhere
+    git: https://github.com/example/future-peer
+""",
+        encoding="utf-8",
+    )
+    cfg = load_project_config(project_root)
+    assert cfg.peers[0].id == "future-peer"
