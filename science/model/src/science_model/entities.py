@@ -393,6 +393,45 @@ class StructuralChainEntity(Entity):
         return self
 
 
+_INTERPRETATION_TO_COMPOSITE: dict[ChainAuditInterpretation, str] = {
+    ChainAuditInterpretation.EVIDENCE_FOR: "[+]",
+    ChainAuditInterpretation.EVIDENCE_AGAINST: "[-]",
+    ChainAuditInterpretation.MIXED: "[~]",
+    ChainAuditInterpretation.INCONCLUSIVE: "[?]",
+}
+
+
+class ChainAuditEntity(Entity):
+    """A verdict over a structural-chain.
+
+    Carries both a `verdict:` block (compatible with verdict/parser.py) and a
+    `bayes_factor_evidence:` block. The validator enforces consistency
+    between `verdict.composite` and `bayes_factor_evidence.interpretation`
+    via the documented mapping table.
+    """
+
+    audits: str
+    proposition_refs: list[str] = Field(default_factory=list)
+    bayes_factor_evidence: BayesFactorEvidence
+    verdict: dict
+    rationale: str = ""
+
+    @model_validator(mode="after")
+    def _validate_verdict_consistency(self) -> "ChainAuditEntity":
+        composite = self.verdict.get("composite")
+        if composite is None:
+            raise ValueError("verdict.composite is required on chain-audit")
+        expected = _INTERPRETATION_TO_COMPOSITE[self.bayes_factor_evidence.interpretation]
+        if composite != expected:
+            raise ValueError(
+                f"verdict.composite ({composite!r}) inconsistent with "
+                f"bayes_factor_evidence.interpretation "
+                f"({self.bayes_factor_evidence.interpretation.value!r}); "
+                f"expected composite {expected!r}"
+            )
+        return self
+
+
 class MechanismEntity(ProjectEntity):
     """Structured explanatory bundle with explicit participants and propositions."""
 

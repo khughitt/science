@@ -4,11 +4,13 @@ from science_model.activity import ActivityItem
 from science_model.config import ConfigUpdate, DashboardConfig, LodWeights
 from science_model.entities import (
     BayesFactorEvidence,
+    ChainAuditEntity,
     ChainAuditInterpretation,
     Entity,
     EntityType,
     EntityUpdate,
     MechanismEntity,
+    StructuralChainEntity,
 )
 from science_model.graph import GraphData, GraphEdge, GraphNode, GraphSummary
 from science_model.identity import EntityScope, ExternalId
@@ -44,6 +46,7 @@ __all__ = [
     "ActivityItem",
     "BayesFactorEvidence",
     "CanonicalId",
+    "ChainAuditEntity",
     "ChainAuditInterpretation",
     "ConfigUpdate",
     "DashboardConfig",
@@ -80,6 +83,7 @@ __all__ = [
     "SearchResult",
     "SupportScope",
     "SyncSource",
+    "StructuralChainEntity",
     "ExternalId",
     "Task",
     "TaskCreate",
