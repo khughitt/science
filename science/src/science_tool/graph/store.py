@@ -412,6 +412,12 @@ PROJECT_ENTITY_PREFIXES: set[str] = {
     "article",
     "falsification",
     "pre-registration",
+    "chain",
+    "chain-audit",
+}
+PROJECT_ENTITY_PREFIX_KINDS: dict[str, str] = {
+    **{prefix: prefix for prefix in PROJECT_ENTITY_PREFIXES},
+    "chain": "structural-chain",
 }
 
 # Lookup of `predicate URI -> relation kind`,
@@ -435,7 +441,7 @@ def _entity_kind_from_uri(uri: URIRef) -> str | None:
         return None
     suffix = raw[len(str(PROJECT_NS)) :]
     head = suffix.split("/", 1)[0]
-    return head if head in PROJECT_ENTITY_PREFIXES else None
+    return PROJECT_ENTITY_PREFIX_KINDS.get(head)
 
 
 def canonical_id_from_entity_uri(uri: str) -> str | None:
@@ -4648,9 +4654,9 @@ def _resolve_term(value: str) -> URIRef:
         namespace = CURIE_PREFIXES.get(prefix)
         if namespace is not None:
             return URIRef(namespace[suffix])
-        if prefix in PROJECT_ENTITY_PREFIXES:
+        if prefix in PROJECT_ENTITY_PREFIX_KINDS:
             return URIRef(PROJECT_NS[f"{prefix}/{suffix}"])
-        supported_prefixes = sorted([*CURIE_PREFIXES.keys(), *PROJECT_ENTITY_PREFIXES])
+        supported_prefixes = sorted([*CURIE_PREFIXES.keys(), *PROJECT_ENTITY_PREFIX_KINDS])
         raise click.ClickException(
             f"Unknown CURIE prefix '{prefix}'. Supported prefixes: {', '.join(supported_prefixes)}"
         )

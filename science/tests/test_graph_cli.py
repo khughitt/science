@@ -3414,6 +3414,22 @@ def test_graph_add_edge_warns_on_invalid_supersedes_kind_pair() -> None:
         assert "interpretation -> workflow-run" in result.output
 
 
+def test_graph_add_edge_accepts_chain_audit_prefixes() -> None:
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        assert runner.invoke(main, ["graph", "init"]).exit_code == 0
+
+        result = runner.invoke(
+            main,
+            ["graph", "add", "edge", "chain-audit:abc-review", "sci:audits", "chain:abc"],
+        )
+
+        assert result.exit_code == 0
+        assert "Unknown CURIE prefix" not in result.output
+        assert "unexpected kinds" not in result.output
+
+
 def test_graph_project_summary_rolls_up_research_profile() -> None:
     runner = CliRunner()
 
