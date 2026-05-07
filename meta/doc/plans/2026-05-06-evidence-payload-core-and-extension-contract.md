@@ -1,6 +1,8 @@
-# Evidence Payload — Core Schema and Extension Contract (t022 draft v2.2)
+# Evidence Payload — Core Schema and Extension Contract (t022 draft v2.3)
 
-> **Status:** Updated for v2.2 (2026-05-06). v2.2 patches from the full `[t030]` audit (`meta/doc/plans/2026-05-06-t030-full-audit-results.md`): removed `target_artifact_ref` from core (applicability 0.167 — moved to evaluation/audit/operation extensions); extended `artifact_type` enum with `methods-paper` / `framework-paper` / `benchmark-or-dataset-paper`; extended `comparison_target` enum with `method-set`; extended `support_direction` enum with `framework-proposal`; loosened `uncertainty_summary` from required to optional with allowed qualitative form; added `proposition_refs` cardinality rule (one per finding-cluster). Field count 18 → 17 (12 required, 5 optional). Structural decisions (core/extension split, multi-extension dispatch, reason-code inheritance) remain unchanged through v2.2.
+> **Status:** Updated for v2.3 (2026-05-06). v2.3 patches from the `[t034]` v1.1 pilot extraction (`meta/doc/plans/2026-05-06-t034-pilot-extraction.md`): added `partial_fields` optional core field with associated authoring convention for partially-enumerated multi-element list fields (P-pilot-6); added complementary `proposition_refs` authoring rule for the intertwined-vs-independent disambiguation (P-pilot-5); added `uncertainty_summary` authoring guidance to leave the field empty rather than synthesize prose for purely-qualitative content (P-pilot-9). Field count 17 → 18 (12 required, 6 optional). Structural decisions unchanged through v2.3.
+>
+> v2.2 (prior) patches from the full `[t030]` audit (`meta/doc/plans/2026-05-06-t030-full-audit-results.md`): removed `target_artifact_ref` from core (applicability 0.167 — moved to evaluation/audit/operation extensions); extended `artifact_type` enum with `methods-paper` / `framework-paper` / `benchmark-or-dataset-paper`; extended `comparison_target` enum with `method-set`; extended `support_direction` enum with `framework-proposal`; loosened `uncertainty_summary` from required to optional with allowed qualitative form; added `proposition_refs` cardinality rule (one per finding-cluster). Field count 18 → 17 (12 required, 5 optional). Structural decisions (core/extension split, multi-extension dispatch, reason-code inheritance) remain unchanged through v2.2.
 >
 > v2.1 (prior) patches from the narrow `[t030]` audit (`meta/doc/plans/2026-05-06-t030-narrow-authoring-cost-audit.md`): added `claim_source_ref` core field for paper-extracted claims, added explicit "What does NOT live in t022" section, added validation_status pitfall note, generic evidence-quality reason codes mirrored to `[t025]`.
 
@@ -59,15 +61,22 @@ core:
   # Quality flags
   reason_codes: [enum]               # H03 codes from t025; declared on this payload (does not include inherited codes — see inheritance section); may be empty
   abstention_reason: enum      [opt] # if the payload is "we can't say" rather than "we say X"
+
+  # Partial-extraction flag (v2.3)
+  partial_fields: [str]        [opt] # field paths in this payload (core or extension) whose multi-element list value is partial (e.g., "extension/mr-graph-model.exposure_set"). Listed here, the field's enumerated values are a subset of the true set. Validators must not treat a listed field's count as authoritative.
 ```
 
-**Field count: 17** (12 required, 5 optional) after v2.2 removed `target_artifact_ref` from core and made `uncertainty_summary` optional.
+**Field count: 18** (12 required, 6 optional) after v2.3 added optional `partial_fields`.
 
 **Pitfall — `validation_status` is the payload's state, not the source's.** A common authoring error is to set `validation_status: validated` because the source paper (in `claim_source_ref`) is peer-reviewed. That conflates two things. `validation_status` describes whether *this payload* (its extraction, its content, its application) has been audited; default `pending` for newly-authored payloads. Source-quality signals belong in reason codes (e.g., `peer-reviewed-only`, `single-source-evidence`).
 
-**Authoring rule — `proposition_refs` cardinality.** When a paper carries multiple distinct findings, author one `proposition_refs` entry per finding-cluster — do not synthesize a catch-all proposition. The synthesis layer (`[t023]`) re-aggregates if needed.
+**Authoring rule — `proposition_refs` cardinality (two-sided).** When a paper carries multiple distinct findings, author one `proposition_refs` entry per finding-cluster — do not synthesize a catch-all proposition. *Conversely* (added v2.3 from `[t034]` pilot extraction F-pilot-7): when a paper presents multiple intertwined patterns within a single mechanism story (e.g., Dugourd2021's hypoxia + inflammatory + oncogenic patterns recovered as one ccRCC mechanism cluster), author one proposition, not several. Heuristic: if the patterns *share* the paper's central causal/mechanistic story, one proposition; if they make independent claims that could survive each other failing, separate propositions. The synthesis layer (`[t023]`) re-aggregates if the call turns out wrong.
 
 **Authoring rule — `reason_codes` empty list.** When no reason codes apply, score / store the field as an explicit empty list `[]` (a positive declaration of "no concerns"), not as missing. Validators should treat absent `reason_codes` as a payload error.
+
+**Authoring rule — `uncertainty_summary` for purely-qualitative content (added v2.3).** When the paper-summary or pipeline output is purely qualitative and has no canonical short-form rendering, leave `uncertainty_summary` empty rather than synthesizing prose. Synthesized prose tends to over-claim precision (e.g., turning "supports method under stated conditions" into "BF≈moderate"). The field is `[opt]` in v2.2 specifically to permit empty values; consumers expecting a summary fall back to extension-level uncertainty fields.
+
+**Authoring rule — `partial_fields` convention (added v2.3).** When a multi-element list field (e.g., `extension/mr-graph-model.exposure_set`, `extension/mediation-analysis.mediator_set`, `extension/mechanistic-hypothesis-bundle.omics_layer_set`) is partially enumerated — the author lists what the source names but cannot enumerate the rest — list the field's full path in `core.partial_fields`. Validators must not treat that field's element count as authoritative; downstream synthesis must treat the listed values as a subset, not the totality. Default behavior: absent from `core.partial_fields` ⇒ the list is complete. This pattern propagates to all aspect extensions; field-level `<field>_complete: bool` flags are *not* added on the extension side — `core.partial_fields` is the single source of truth.
 
 ### What does NOT live in t022 (added v2.1)
 
