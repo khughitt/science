@@ -135,9 +135,7 @@ peers:
     issues = validate_peers(root)
 
     assert any(issue.kind is PeerIssueKind.DUPLICATE_PEER_ID for issue in issues)
-    dup = next(
-        issue for issue in issues if issue.kind is PeerIssueKind.DUPLICATE_PEER_ID
-    )
+    dup = next(issue for issue in issues if issue.kind is PeerIssueKind.DUPLICATE_PEER_ID)
     assert dup.severity == "error"
 
 
@@ -187,10 +185,41 @@ peers:
 
     issues = validate_peers(root)
 
-    assert any(
-        issue.kind is PeerIssueKind.RESERVED_FIELD and "git" in issue.detail
-        for issue in issues
+    assert any(issue.kind is PeerIssueKind.RESERVED_FIELD and "git" in issue.detail for issue in issues)
+
+
+def test_reserved_field_issues_are_sorted_by_field_name(tmp_path: Path) -> None:
+    from science_tool.peers_validate import PeerIssueKind, validate_peers
+
+    peer = tmp_path / "peer"
+    _write_minimal_science_yaml(peer, "peer")
+    root = tmp_path / "host"
+    root.mkdir()
+    (root / "science.yaml").write_text(
+        f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: peer
+    path: {peer}
+    zeta: unsupported
+    git: https://github.com/example/peer
+    alpha: unsupported
+    doi: 10.0000/example
+""",
+        encoding="utf-8",
     )
+
+    reserved_issues = [issue for issue in validate_peers(root) if issue.kind is PeerIssueKind.RESERVED_FIELD]
+
+    assert [issue.detail for issue in reserved_issues] == [
+        "unknown peer field 'alpha' is not supported",
+        "reserved peer field 'doi' is not yet supported",
+        "reserved peer field 'git' is not yet supported",
+        "unknown peer field 'zeta' is not supported",
+    ]
 
 
 def test_local_graph_missing_warning(tmp_path: Path) -> None:

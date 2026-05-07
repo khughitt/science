@@ -93,6 +93,7 @@ from science_tool.dag.cli import dag_group
 from science_tool.federation_cli import federation_group
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows
 from science_tool.project_artifacts.cli import artifacts_group as _artifacts_group
+from science_tool.peers_cli import peers_group
 from science_tool.prose import scan_prose
 from science_tool.refs_cli import refs_group
 from science_tool.research_package.cli import research_package_group
@@ -201,6 +202,7 @@ main.add_command(big_picture_group)
 main.add_command(refs_group)
 main.add_command(skills_group)
 main.add_command(federation_group)
+main.add_command(peers_group)
 
 
 @main.group("entity")

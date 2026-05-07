@@ -32,6 +32,7 @@ class PeerIssue:
     peer_id: str
     detail: str
     severity: Literal["error", "warning"]
+    entry_index: int | None = None
 
 
 _SEVERITIES: dict[PeerIssueKind, Literal["error", "warning"]] = {
@@ -45,12 +46,18 @@ _SEVERITIES: dict[PeerIssueKind, Literal["error", "warning"]] = {
 }
 
 
-def _issue(kind: PeerIssueKind, peer_id: str, detail: str) -> PeerIssue:
+def _issue(
+    kind: PeerIssueKind,
+    peer_id: str,
+    detail: str,
+    entry_index: int | None = None,
+) -> PeerIssue:
     return PeerIssue(
         kind=kind,
         peer_id=peer_id,
         detail=detail,
         severity=_SEVERITIES[kind],
+        entry_index=entry_index,
     )
 
 
@@ -76,7 +83,7 @@ def validate_peers(project_root: Path) -> list[PeerIssue]:
     issues: list[PeerIssue] = []
     seen_ids: set[str] = set()
 
-    for raw_entry in raw_peers:
+    for entry_index, raw_entry in enumerate(raw_peers):
         if not isinstance(raw_entry, dict):
             continue
 
@@ -97,17 +104,18 @@ def validate_peers(project_root: Path) -> list[PeerIssue]:
                     PeerIssueKind.SELF_PEER,
                     peer_id,
                     f"project {own_id!r} lists itself as a peer",
+                    entry_index=entry_index,
                 )
             )
 
-        for field in raw_entry.keys() - _KNOWN_PEER_FIELDS:
-            issues.append(_reserved_field_issue(peer_id, field))
+        for field in sorted(raw_entry.keys() - _KNOWN_PEER_FIELDS, key=str):
+            issues.append(_reserved_field_issue(peer_id, field, entry_index))
 
         path = raw_entry.get("path")
         if not isinstance(path, str):
             continue
 
-        _validate_peer_path(project_root, PeerEntry(id=peer_id, path=path), issues)
+        _validate_peer_path(project_root, PeerEntry(id=peer_id, path=path), issues, entry_index)
 
     return issues
 
@@ -119,18 +127,19 @@ def _peer_id(raw_entry: dict[Any, Any]) -> str:
     return "<unknown>"
 
 
-def _reserved_field_issue(peer_id: str, field: Any) -> PeerIssue:
+def _reserved_field_issue(peer_id: str, field: Any, entry_index: int) -> PeerIssue:
     if field in _RESERVED_PEER_FIELDS:
         detail = f"reserved peer field {field!r} is not yet supported"
     else:
         detail = f"unknown peer field {field!r} is not supported"
-    return _issue(PeerIssueKind.RESERVED_FIELD, peer_id, detail)
+    return _issue(PeerIssueKind.RESERVED_FIELD, peer_id, detail, entry_index=entry_index)
 
 
 def _validate_peer_path(
     project_root: Path,
     entry: PeerEntry,
     issues: list[PeerIssue],
+    entry_index: int,
 ) -> None:
     resolved = resolve_peer_path(project_root, entry)
     if not resolved.exists():
@@ -139,6 +148,7 @@ def _validate_peer_path(
                 PeerIssueKind.PATH_MISSING,
                 entry.id,
                 f"declared path {entry.path!r} resolves to {resolved}, which does not exist",
+                entry_index=entry_index,
             )
         )
         return
@@ -150,12 +160,13 @@ def _validate_peer_path(
                 PeerIssueKind.NOT_A_PROJECT,
                 entry.id,
                 f"path {resolved} exists but contains no science.yaml",
+                entry_index=entry_index,
             )
         )
         return
 
-    _validate_peer_id(entry, peer_yaml, resolved, issues)
-    _validate_local_graph(entry.id, resolved, issues)
+    _validate_peer_id(entry, peer_yaml, resolved, issues, entry_index)
+    _validate_local_graph(entry.id, resolved, issues, entry_index)
 
 
 def _validate_peer_id(
@@ -163,6 +174,7 @@ def _validate_peer_id(
     peer_yaml: Path,
     resolved: Path,
     issues: list[PeerIssue],
+    entry_index: int,
 ) -> None:
     try:
         peer_raw = yaml.safe_load(peer_yaml.read_text(encoding="utf-8")) or {}
@@ -179,6 +191,7 @@ def _validate_peer_id(
                 PeerIssueKind.ID_MISMATCH,
                 entry.id,
                 f"declared id {entry.id!r}, peer's science.yaml says {peer_self_id!r}",
+                entry_index=entry_index,
             )
         )
 
@@ -187,15 +200,15 @@ def _validate_local_graph(
     peer_id: str,
     resolved: Path,
     issues: list[PeerIssue],
+    entry_index: int,
 ) -> None:
     knowledge_dir = resolved / "knowledge"
-    if (knowledge_dir / "composite.trig").is_file() and not (
-        knowledge_dir / "graph.trig"
-    ).is_file():
+    if (knowledge_dir / "composite.trig").is_file() and not (knowledge_dir / "graph.trig").is_file():
         issues.append(
             _issue(
                 PeerIssueKind.LOCAL_GRAPH_MISSING,
                 peer_id,
                 f"peer has composite.trig but no graph.trig at {knowledge_dir}",
+                entry_index=entry_index,
             )
         )
