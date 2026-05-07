@@ -10,6 +10,8 @@
 
 ---
 
+**CLI executable note:** this repo's `science/pyproject.toml` exposes the console script as `science`, not `science-tool`. Implementation commands in this plan use `uv run science ...`; user-facing docs may still discuss the product as `science-tool` where that wording is intentional.
+
 ## Spec
 
 `docs/superpowers/specs/2026-05-05-project-peers-design.md`. Refer to **Decisions 1–10** by number throughout this plan.
@@ -20,7 +22,7 @@
 
 | File | Responsibility |
 |---|---|
-| `peers.py` | `PeerEntry`, `ResolvedPeer`, `PeerNotFound`, `PeerUnresolved`, `PeerResolver` Protocol, `LocalPeerResolver`, `make_local_resolver`, `resolve_peer_path`, `load_peer_entity_index`. |
+| `peers.py` | `ResolvedPeer`, `PeerNotFound`, `PeerUnresolved`, `PeerResolver` Protocol, `LocalPeerResolver`, `make_local_resolver`, `resolve_peer_path`, `load_peer_entity_index`. `PeerEntry` lives in `project_config.py` because it is part of the `science.yaml` schema. |
 | `peers_validate.py` | `PeerIssueKind`, `PeerIssue`, `validate_peers()` (reads raw YAML; produces structured issue list). |
 | `peers_migrate.py` | Pure migration logic: read raw YAML → emit migrated YAML. Idempotent, dry-run-aware. |
 | `peers_cli.py` | Click subcommand group for `science-tool peers list / check / show / migrate`. |
@@ -45,9 +47,9 @@
 **Deleted files (Phase B):**
 
 - `federation.py`, `federation_cli.py`, `federation_status.py`, `graph/federation.py` and the `science-tool federation` CLI registration.
-- `tests/test_federation_cli.py`, `tests/test_federation_validation.py`, `tests/test_federation_integration.py`, `tests/test_federation_status_cli.py`, `tests/test_graph_build_parent_register.py`.
+- `tests/test_federation_cli.py`, `tests/test_federation_validation.py`, `tests/test_federation_integration.py`, `tests/test_federation_status_cli.py`, `tests/test_graph_federation.py`, `tests/test_graph_build_federated.py`, `tests/test_graph_build_parent_register.py`.
 
-**Migrated data:** every `science.yaml` in this monorepo currently using `parent:` or `children:` — covered by Task 14 (`peers migrate --all`).
+**Migrated data:** any `science.yaml` in this monorepo currently using top-level `parent:` or `children:` — covered by Task 14 (`peers migrate --all`). The implementation must run the inventory first; if the current repo has no live legacy project configs, Task 14 is a documented no-op rather than a failure.
 
 **Documentation:** `docs/federation.md`, `docs/superpowers/specs/2026-05-05-task-ids-and-cross-project-references-design.md`, plus any `commands/` / `skills/` content mentioning federation.
 
@@ -1573,7 +1575,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from science_tool.cli import main
@@ -1713,7 +1714,6 @@ Create `science/src/science_tool/peers_cli.py`:
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import click
@@ -1732,8 +1732,8 @@ def peers_group() -> None:
 @click.option(
     "--project-root",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
-    default=Path.cwd,
-    show_default="cwd",
+    default=".",
+    show_default=True,
 )
 @click.option(
     "--format",
@@ -1743,6 +1743,7 @@ def peers_group() -> None:
 )
 def peers_list(project_root: Path, fmt: str) -> None:
     """List declared peers and their status."""
+    project_root = Path.cwd() if str(project_root) == "." else project_root
     cfg = load_project_config(project_root)
     issues_by_id: dict[str, list[str]] = {}
     for issue in validate_peers(project_root):
@@ -1882,10 +1883,10 @@ peers:
 def test_peers_check_error_exits_nonzero(tmp_path: Path) -> None:
     a = tmp_path / "a"
     b = tmp_path / "b"
-    _write_yaml(a, "name: a\nid: dup\nprofile: research\nresearch_question: \"...\"\n")
     a.mkdir(exist_ok=True)
-    _write_yaml(b, "name: b\nid: dup\nprofile: research\nresearch_question: \"...\"\n")
+    _write_yaml(a, "name: a\nid: dup\nprofile: research\nresearch_question: \"...\"\n")
     b.mkdir(exist_ok=True)
+    _write_yaml(b, "name: b\nid: dup\nprofile: research\nresearch_question: \"...\"\n")
     host = tmp_path / "host"
     host.mkdir()
     _write_yaml(
@@ -1929,7 +1930,7 @@ peers:
     assert result.exit_code != 0
 ```
 
-(Fix the test fixtures above so that `_write_yaml` is called *after* the directory is created — i.e., `a.mkdir()` then `_write_yaml(a, ...)`. The duplicate-id test fixture above writes BEFORE mkdir; correct that order.)
+The duplicate-id fixture intentionally creates each directory before `_write_yaml(...)`; keep that ordering when editing the test.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -1941,15 +1942,15 @@ Expected: FAIL — `peers check` not implemented.
 
 - [ ] **Step 3: Implement `peers check`**
 
-Append to `science/src/science_tool/peers_cli.py`:
+Add `import sys` near the top of `science/src/science_tool/peers_cli.py`, then append:
 
 ```python
 @peers_group.command("check")
 @click.option(
     "--project-root",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
-    default=Path.cwd,
-    show_default="cwd",
+    default=".",
+    show_default=True,
 )
 @click.option(
     "--format",
@@ -1960,6 +1961,7 @@ Append to `science/src/science_tool/peers_cli.py`:
 @click.option("--strict", is_flag=True, help="Treat warnings as errors.")
 def peers_check(project_root: Path, fmt: str, strict: bool) -> None:
     """Validate the peer graph; exit non-zero on errors (or warnings with --strict)."""
+    project_root = Path.cwd() if str(project_root) == "." else project_root
     issues = validate_peers(project_root)
 
     if fmt == "json":
@@ -2094,13 +2096,14 @@ Append to `science/src/science_tool/peers_cli.py`:
 @click.option(
     "--project-root",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
-    default=Path.cwd,
-    show_default="cwd",
+    default=".",
+    show_default=True,
 )
 def peers_show(peer_id: str, project_root: Path) -> None:
     """Show details for a single peer."""
     from science_tool.peers import PeerNotFound, PeerUnresolved, make_local_resolver  # noqa: PLC0415
 
+    project_root = Path.cwd() if str(project_root) == "." else project_root
     resolver = make_local_resolver(project_root)
     try:
         resolved = resolver.resolve(peer_id)
@@ -2579,8 +2582,8 @@ Append to `science/src/science_tool/peers_cli.py`:
 @click.option(
     "--project-root",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
-    default=Path.cwd,
-    show_default="cwd",
+    default=".",
+    show_default=True,
 )
 @click.option("--dry-run", is_flag=True, help="Print what would change without writing.")
 @click.option(
@@ -2594,6 +2597,7 @@ def peers_migrate_cli(project_root: Path, dry_run: bool, migrate_all: bool) -> N
     from science_tool.peers_migrate import MigrationError, migrate_project  # noqa: PLC0415
     import yaml as _yaml  # noqa: PLC0415
 
+    project_root = Path.cwd() if str(project_root) == "." else project_root
     targets: list[Path] = [project_root]
     if migrate_all:
         # Walk the legacy children: in the host's raw YAML BEFORE migrating it.
@@ -2652,7 +2656,7 @@ EOF
 ### Task 14: Run migration on this monorepo
 
 **Files:**
-- Modify: `meta/science.yaml` (and any project under `meta/children:` mentioned)
+- Modify: any live `science.yaml` files reported by the pre-check (often none in the current monorepo; historical fixtures are handled by tests)
 - Test: existing test suite (no new tests; this is a data migration)
 
 **Pre-check command (run BEFORE migrating):**
@@ -2661,12 +2665,12 @@ EOF
 grep -rln "^parent:\|^children:" --include="science.yaml" .
 ```
 
-Note the file list. Expected to include at least `meta/science.yaml` plus the children listed in its `children:` manifest.
+Note the file list. If it is empty, record that no live monorepo configs need migration and skip Steps 1-2 and Step 6. Do not create an empty commit.
 
 - [ ] **Step 1: Dry-run the migration**
 
 ```bash
-cd meta && uv run science-tool peers migrate --all --dry-run
+cd meta && uv run science peers migrate --all --dry-run
 ```
 
 Expected: prints "would migrate: <path>" for each affected science.yaml.
@@ -2674,7 +2678,7 @@ Expected: prints "would migrate: <path>" for each affected science.yaml.
 - [ ] **Step 2: Apply the migration**
 
 ```bash
-cd meta && uv run science-tool peers migrate --all
+cd meta && uv run science peers migrate --all
 ```
 
 Expected: prints "migrated: <path>" for each.
@@ -2685,12 +2689,12 @@ Expected: prints "migrated: <path>" for each.
 grep -l "^parent:\|^children:" $(grep -rl "" --include="science.yaml" .) 2>/dev/null
 ```
 
-Expected: no output (no remaining `parent:` or `children:` keys).
+Expected: no output for live project configs (no remaining top-level `parent:` or `children:` keys). Historical test fixtures may still contain legacy YAML until Task 17.
 
 - [ ] **Step 4: Run validate to confirm clean state**
 
 ```bash
-cd meta && uv run science-tool peers check
+cd meta && uv run science peers check
 ```
 
 Expected: 0 errors. Some `path-missing` warnings are acceptable for projects whose paths are outside the monorepo.
@@ -3158,7 +3162,7 @@ Also delete the `from science_tool.graph.federation import assemble_federated_gr
 cd science && uv run pytest tests/test_graph_composite.py tests/test_graph_federation.py -v
 ```
 
-Expected: new composite tests pass. Existing federation tests may fail — that's OK; they're deleted in Task 20.
+Expected: new composite tests pass. Existing federation tests may fail — that's OK; they're deleted in Task 19.
 
 - [ ] **Step 5: Commit**
 
@@ -3185,10 +3189,11 @@ EOF
 **Files:**
 - Modify: `science/tests/test_project_config.py`
 - Modify: `science/tests/test_validate_script.py`
-- Modify: `science/tests/test_graph_federation.py` (will be deleted in Task 20, but updating now keeps the suite green throughout)
-- Modify: `science/tests/test_federation_*.py` (also slated for deletion; leave as-is — they'll be deleted in Task 20)
+- Modify: `science/tests/test_graph_federation.py` (will be deleted in Task 19, but updating now keeps the suite green throughout)
+- Modify: `science/tests/test_graph_build_federated.py` (also slated for deletion; leave as-is unless it blocks intermediate verification)
+- Modify: `science/tests/test_federation_*.py` (also slated for deletion; leave as-is — they'll be deleted in Task 19)
 
-The goal: tests that we're KEEPING should not depend on `children:` or `parent:`. Tests slated for deletion can stay until Task 20.
+The goal: tests that we're KEEPING should not depend on `children:` or `parent:`. Tests slated for deletion can stay until Task 19.
 
 - [ ] **Step 1: Identify tests to keep that touch legacy fields**
 
@@ -3205,6 +3210,7 @@ In `science/tests/test_project_config.py`:
 - Locate `assert cfg.parent is None` and `assert cfg.children == []` assertions in `test_loads_minimal_existing_yaml`. Replace with `assert cfg.peers == []` (and remove the parent/children asserts).
 - Locate any test using `children:` in fixture YAML. Either rewrite to use `peers:` form, or move the test to `test_peers_migrate.py` (if it's actually about migration).
 - Locate any test using `parent:` in fixture YAML. Rewrite to `peers:`.
+- Delete or replace tests whose only purpose was legacy schema behavior (`children` only on meta, duplicate child IDs). Duplicate peer IDs and self-peers now belong to `test_peers_validate.py`; legacy-field rejection is added in Task 18.
 
 Concretely, search and replace fixture blocks like:
 
@@ -3375,7 +3381,7 @@ def _load_project_ids(root: Path) -> set[str]:
 - [ ] **Step 7: Run the suite again, isolating non-federation tests**
 
 ```bash
-cd science && uv run pytest --ignore=tests/test_federation_cli.py --ignore=tests/test_federation_validation.py --ignore=tests/test_federation_integration.py --ignore=tests/test_federation_status_cli.py --ignore=tests/test_graph_federation.py --ignore=tests/test_graph_build_parent_register.py -q
+cd science && uv run pytest --ignore=tests/test_federation_cli.py --ignore=tests/test_federation_validation.py --ignore=tests/test_federation_integration.py --ignore=tests/test_federation_status_cli.py --ignore=tests/test_graph_federation.py --ignore=tests/test_graph_build_federated.py --ignore=tests/test_graph_build_parent_register.py -q
 ```
 
 Expected: all green.
@@ -3415,6 +3421,7 @@ EOF
 - `science/tests/test_federation_integration.py`
 - `science/tests/test_federation_status_cli.py`
 - `science/tests/test_graph_federation.py`
+- `science/tests/test_graph_build_federated.py`
 - `science/tests/test_graph_build_parent_register.py`
 
 **Files (modify to remove federation references):**
@@ -3446,6 +3453,7 @@ rm science/tests/test_federation_validation.py
 rm science/tests/test_federation_integration.py
 rm science/tests/test_federation_status_cli.py
 rm science/tests/test_graph_federation.py
+rm science/tests/test_graph_build_federated.py
 rm science/tests/test_graph_build_parent_register.py
 ```
 
@@ -3498,9 +3506,34 @@ EOF
 - Modify: `science/src/science_tool/project_artifacts/registry.yaml` (bump version)
 - Modify: `science/tests/test_validate_script.py` (re-check expectations)
 
-The validate.sh template's error message at line ~1298 still says "use children:". Update.
+The validate.sh template still derives known project namespaces from `children:` and its error message still says "use children:". Update both the logic and the message.
 
-- [ ] **Step 1: Update validate.sh error messages**
+- [ ] **Step 1: Update validate.sh project namespace loading**
+
+In `science/src/science_tool/project_artifacts/data/validate.sh`, replace the Python helper's `load_project_ids()` logic that reads `children = data.get("children")` with `peers = data.get("peers")`:
+
+```python
+def load_project_ids(path):
+    if yaml is None or not os.path.isfile(path):
+        return set()
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+    except Exception:
+        return set()
+    ids = set()
+    project_id = data.get("id")
+    if isinstance(project_id, str) and project_id:
+        ids.add(project_id)
+    peers = data.get("peers")
+    if isinstance(peers, list):
+        for peer in peers:
+            if isinstance(peer, dict) and isinstance(peer.get("id"), str):
+                ids.add(peer["id"])
+    return ids
+```
+
+- [ ] **Step 2: Update validate.sh error messages**
 
 In `science/src/science_tool/project_artifacts/data/validate.sh`, find the line:
 
@@ -3514,7 +3547,7 @@ and any nearby reference to `children:`. Update messages that mention `children:
 warn "Unknown project namespace '${ns}' in ref '${raw}'. Add it to science.yaml peers: or use a local ref."
 ```
 
-- [ ] **Step 2: Bump artifact version**
+- [ ] **Step 3: Bump artifact version**
 
 In `science/src/science_tool/project_artifacts/registry.yaml`, find the version entry referencing `2026.05.05.1` (or the latest) and add a new entry like:
 
@@ -3524,7 +3557,7 @@ In `science/src/science_tool/project_artifacts/registry.yaml`, find the version 
 
 Also update the `summary:` field on the artifact's main entry to reflect the change.
 
-- [ ] **Step 3: Update or delete project-init scaffold templates**
+- [ ] **Step 4: Update or delete project-init scaffold templates**
 
 ```bash
 grep -rn "children:\|^parent:" science/src/science_tool/project_artifacts/ 2>/dev/null
@@ -3532,7 +3565,9 @@ grep -rn "children:\|^parent:" science/src/science_tool/project_artifacts/ 2>/de
 
 Replace any scaffold template's `children:` / `parent:` fixtures with `peers:` form.
 
-- [ ] **Step 4: Update `test_validate_script.py` error-message assertion**
+- [ ] **Step 5: Update `test_validate_script.py` namespace fixtures and assertion**
+
+Update the fixture YAML that previously declared known project IDs via `children:` so it declares them via `peers:` instead. Then update the error-message assertion.
 
 The assertion at line 1339 of `science/tests/test_validate_script.py` reads:
 
@@ -3546,9 +3581,9 @@ Update it to:
 "Add it to science.yaml peers: or use a local ref."
 ```
 
-(matching the new validate.sh wording from Step 1).
+(matching the new validate.sh wording from Step 2).
 
-- [ ] **Step 5: Run validate-script tests**
+- [ ] **Step 6: Run validate-script tests**
 
 ```bash
 cd science && uv run pytest tests/test_validate_script.py -v
@@ -3556,7 +3591,7 @@ cd science && uv run pytest tests/test_validate_script.py -v
 
 Expected: all green — the validate.sh template now emits the peers: wording and the test asserts the same.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add science/src/science_tool/project_artifacts/ science/tests/test_validate_script.py
@@ -3653,34 +3688,42 @@ EOF
 ### Task 22: Add follow-up task group `project-peers` for trajectory items
 
 **Files:**
-- Modify: `meta/tasks/active.md` (via `science-tool tasks add`)
+- Modify: `meta/tasks/active.md` (via `science tasks add`)
 
-Per Decision 13 (Trajectory) and the user's request: track the deferred items as tasks under group `project-peers`.
+Per the Trajectory section and the user's request: track the deferred items as tasks under group `project-peers`.
 
-- [ ] **Step 1: Add trajectory tasks**
-
-```bash
-cd meta && uv run science-tool tasks add "Cross-project blockers spec" --type=research --priority=P1 --group=project-peers --related=topic:cross-project
-cd meta && uv run science-tool tasks add "Workspace registry design" --type=research --priority=P2 --group=project-peers
-cd meta && uv run science-tool tasks add "Remote peers via cloneable repos" --type=research --priority=P3 --group=project-peers
-cd meta && uv run science-tool tasks add "Versioned entity references" --type=research --priority=P3 --group=project-peers
-cd meta && uv run science-tool tasks add "L2 caching & freshness" --type=research --priority=P3 --group=project-peers
-cd meta && uv run science-tool tasks add "Composite graph policy controls (compose: opt-in)" --type=research --priority=P2 --group=project-peers
-cd meta && uv run science-tool tasks add "Service / capability exchange (Layer 3)" --type=research --priority=P2 --group=project-peers
-cd meta && uv run science-tool tasks add "Multi-user identity scoping" --type=research --priority=P3 --group=project-peers
-cd meta && uv run science-tool tasks add "Auto-unblock / change notification" --type=research --priority=P3 --group=project-peers
-cd meta && uv run science-tool tasks add "Symmetry tooling (peers check --symmetric)" --type=dev --priority=P3 --group=project-peers
-```
-
-- [ ] **Step 2: Verify**
+- [ ] **Step 1: Inventory existing related tasks to avoid duplicates**
 
 ```bash
-cd meta && uv run science-tool tasks list --group=project-peers
+grep -n "Cross-project freshness\|Cross-project typed blockers\|project-peers\|workspace registry\|remote peers\|versioned entity" meta/tasks/active.md
 ```
 
-Expected: 10 tasks listed.
+Expected: existing cross-project freshness / typed-blockers tasks may already exist. If a trajectory item is already represented, update that task's `group:` / `aspects:` / description manually instead of adding a duplicate task.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 2: Add missing trajectory tasks**
+
+```bash
+cd meta && uv run science tasks add "Cross-project blockers spec" --priority=P1 --group=project-peers --related=topic:cross-project --aspects=software-development --aspects=federation
+cd meta && uv run science tasks add "Workspace registry design" --priority=P2 --group=project-peers --aspects=software-development
+cd meta && uv run science tasks add "Remote peers via cloneable repos" --priority=P3 --group=project-peers --aspects=software-development
+cd meta && uv run science tasks add "Versioned entity references" --priority=P3 --group=project-peers --aspects=software-development
+cd meta && uv run science tasks add "L2 caching & freshness" --priority=P3 --group=project-peers --aspects=software-development
+cd meta && uv run science tasks add "Composite graph policy controls (compose: opt-in)" --priority=P2 --group=project-peers --aspects=software-development
+cd meta && uv run science tasks add "Service / capability exchange (Layer 3)" --priority=P2 --group=project-peers --aspects=software-development
+cd meta && uv run science tasks add "Multi-user identity scoping" --priority=P3 --group=project-peers --aspects=software-development
+cd meta && uv run science tasks add "Auto-unblock / change notification" --priority=P3 --group=project-peers --aspects=software-development
+cd meta && uv run science tasks add "Symmetry tooling (peers check --symmetric)" --priority=P3 --group=project-peers --aspects=software-development
+```
+
+- [ ] **Step 3: Verify**
+
+```bash
+cd meta && uv run science tasks list --group=project-peers
+```
+
+Expected: every trajectory item is represented exactly once, either by an existing updated task or by a newly added task.
+
+- [ ] **Step 4: Commit**
 
 ```bash
 git add meta/tasks/
@@ -3713,16 +3756,16 @@ grep -rn "ChildEntry\|cfg\.children\|cfg\.parent\|assemble_federated_graph" scie
 grep -rln "children:\|^parent:" docs/ commands/ skills/ 2>/dev/null | grep -v "audits/\|migration/\|2026-05-05-project-peers\|2026-05-05-task-ids" && echo "FAIL" || echo "clean"
 
 # 4. Migration is idempotent
-cd meta && uv run science-tool peers migrate --all
+cd meta && uv run science peers migrate --all
 # Expected: "skipped: <path> — No legacy fields found; nothing to migrate." for each.
 
 # 5. Peers commands work end-to-end
-cd meta && uv run science-tool peers list
-cd meta && uv run science-tool peers check
-cd meta && uv run science-tool peers show <some-peer-id>
+cd meta && uv run science peers list
+cd meta && uv run science peers check
+cd meta && uv run science peers show <some-peer-id>
 
 # 6. Composite graph builds for meta
-cd meta && uv run science-tool graph build
+cd meta && uv run science graph build
 # Expected: writes both knowledge/graph.trig and knowledge/composite.trig.
 ```
 
