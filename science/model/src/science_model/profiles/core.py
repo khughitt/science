@@ -330,6 +330,7 @@ CORE_PROFILE = ProfileManifest(
             source_kinds=[],
             target_kinds=[
                 "assumption",
+                "chain-audit",
                 "discussion",
                 "finding",
                 "hypothesis",
@@ -340,6 +341,7 @@ CORE_PROFILE = ProfileManifest(
                 "question",
                 "report",
                 "story",
+                "structural-chain",
                 "theme",
                 "validation-report",
             ],
