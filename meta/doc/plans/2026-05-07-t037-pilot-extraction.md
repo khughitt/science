@@ -20,6 +20,8 @@
 | x | Not present in source and not authoring-stage; would require external lookup or a real run trace. |
 | A | Authoring/mechanical field. |
 
+**Scoring discipline.** Match t034's strict rubric: a registry ref counts as "in source" only when the source content itself names the specific ref (or names a concrete artifact the ref unambiguously denotes). When the source describes the *concept* but the specific ref label is invented by the author, score `x` rather than `1`/`A`. Picking among multiple plausible values that the source mentions in parallel is `0`, not `1`. This is the discipline that drove t034's 25–41% per-case ✗-rates and is what makes the pilot's signal honest about authoring impedance.
+
 ## Extraction 1 - Ding2025 -> agent-tool-operation
 
 Ding2025 describes SciToolAgent as an LLM-powered scientific agent that uses SciToolKG for tool selection, tool orchestration, and safety checking. The summary supports an operation-record sketch for a SciToolAgent-style tool-chain run, but it does not describe one concrete project run or registry row. The extraction therefore treats the chain, trace, policy, and KG-view refs as author-created refs.
@@ -67,18 +69,20 @@ extension/agent-tool-operation:
 | Field | Score | Note |
 |---|---:|---|
 | core.artifact_type | 2 | `agent-tool-operation` follows from the design. |
-| core.input_artifact_refs | 1 | KG context is described, exact view ref is author-created. |
-| core.method_ref | 0 | The paper defines the architecture, but the concrete workflow is not in the summary. |
+| core.input_artifact_refs | x | KG context is described conceptually; the specific `kg-view:scitoolkg-task-context` ref is invented because no such registry view exists in the project. Production authoring would require a real materialized KG view. |
+| core.method_ref | x | The paper describes SciToolAgent's architecture, but the concrete project workflow ref `~` is absent because no Science workflow runs SciToolAgent. |
 | core.support_direction | 2 | `operation-record` by extension rule. |
 | core.validation_role | 2 | `record-only` by extension rule. |
-| core.reason_codes | 1 | Depends on inferred validation/safety state. |
-| extension/agent-tool-operation.agent_role | 1 | Planner/executor/summarizer roles are named, exact primary role depends on chosen operation. |
-| extension/agent-tool-operation.tool_chain_ref | A | Author-created registry ref. |
-| extension/agent-tool-operation.context_ref_set | 1 | SciToolKG context explicit; exact kg-view ref absent. |
-| extension/agent-tool-operation.safety_check_status | 1 | Safety module explicit; exact check result not given. |
-| extension/agent-tool-operation.validation_status_detail | 1 | Benchmark exists, this exact operation unvalidated. |
+| core.reason_codes | 1 | The four codes follow inferably from the unvalidated/unknown-safety/non-abstaining state, given the schema's biconditional rules. |
+| extension/agent-tool-operation.agent_role | 0 | The paper names planner, executor, and summarizer roles in parallel; choosing `hypothesis-generator` as the *primary* role is one of multiple plausible readings. |
+| extension/agent-tool-operation.tool_chain_ref | x | The paper describes the orchestration shape but does not specify a concrete chain. The ref `chain:scitoolkg-retrieve-plan-execute-summarize` is invented; no registry chain exists. |
+| extension/agent-tool-operation.context_ref_set | x | Same situation as `core.input_artifact_refs` — the kg-view ref is invented. |
+| extension/agent-tool-operation.safety_check_status | x | The paper says a safety module exists but does not state the per-run check result. `unknown` is a defensive default, not a value the source gives. |
+| extension/agent-tool-operation.validation_status_detail | 1 | Inferable: a paper-summary-only operation cannot have passed Science-side validation, so `unvalidated` is uncontroversial. |
 
-**Friction.** The v1.1 field set is usable, but two authoring conventions need tightening. First, `method_ref` should be allowed to point to a workflow or be absent when a paper describes the general architecture but not the exact operation protocol. Second, `safety-check-missing` is decidable only through the registry-resolved view; when the payload names a policy and the status is `unknown`, the code should be required even if the paper says a safety module exists.
+Per-case score histogram: 2×3, 1×2, 0×1, x×5, A×0. ✗-rate: 5/11 ≈ **45%**.
+
+**Friction.** The 45% ✗-rate is concentrated in registry refs (chain, kg-view, safety state). The schema fields exist; the source doesn't supply the values. Two authoring conventions need tightening. First, `method_ref` should be allowed to point to a workflow or be absent when a paper describes the general architecture but not the exact operation protocol. Second, `safety-check-missing` is decidable only through the registry-resolved view; when the payload names a policy and the status is `unknown`, the code should be required even if the paper says a safety module exists. The high ✗-rate is exactly the signal that motivates P-pilot-1: production validation must resolve provisional refs against a real registry, but pilot/design extraction cannot meet that bar.
 
 ## Extraction 2 - Yu2026 -> agent-evaluation
 
@@ -119,15 +123,17 @@ extension/agent-evaluation:
 | Field | Score | Note |
 |---|---:|---|
 | core.artifact_type | 2 | `agent-evaluation` follows from the benchmark use. |
-| core.input_artifact_refs | 1 | The dataset is explicit, exact local registry ref is author-created. |
-| core.method_ref | 2 | Yu2026 is the protocol source. |
+| core.input_artifact_refs | x | SciCUEval is explicit conceptually; the local registry ref `dataset:scicueval` is invented because no Science-side dataset entry exists. |
+| core.method_ref | 2 | `paper:Yu2026` resolves to a real summary in the repo, so this ref is source-grounded. |
 | core.support_direction | 2 | `quality-record` by extension rule. |
 | core.validation_role | 2 | `quality-record-only` by extension rule. |
-| core.reason_codes | 2 | No `information-absence-undetected` when result is inconclusive rather than fail/partial. |
+| core.reason_codes | 2 | No `information-absence-undetected` when result is inconclusive rather than fail/partial — schema-determined. |
 | extension/agent-evaluation.evaluation_competency | 2 | Information-absence detection is explicit. |
 | extension/agent-evaluation.result | x | The summary says evaluations exist but gives no result for a specific model/role. |
 | extension/agent-evaluation.metric_set | x | Fine-grained analysis is named, values are absent. |
 | extension/agent-evaluation.evaluated_operation_refs | 2 | Empty list means dataset/protocol-level coverage by v1.1 rule. |
+
+Per-case score histogram: 2×7, 1×0, 0×0, x×3, A×0. ✗-rate: 3/10 = **30%**.
 
 **Friction.** `evaluated_agent_ref` and `evaluated_role` are required even when the summary only supports a benchmark-level artifact. v1.2 should add an authoring convention for evaluation scope: dataset/protocol-level evaluations may use class-level agent refs and role refs, but that choice must not retire codes for concrete operations unless those operations are explicitly listed or gated through registry state.
 
@@ -174,15 +180,17 @@ extension/agent-evaluation:
 | Field | Score | Note |
 |---|---:|---|
 | core.artifact_type | 2 | Bias testing is an `agent-evaluation`. |
-| core.input_artifact_refs | 1 | Datasets are named; exact project registry refs are author-created. |
-| core.method_ref | 2 | Si2025 is the protocol source. |
+| core.input_artifact_refs | x | The benchmarks (BBQ, CrowS-Pairs, WinoGender) are named conceptually; the project-side `dataset:bbq` etc. refs are invented because no Science-side dataset entries exist. |
+| core.method_ref | 2 | `paper:Si2025` resolves to a real summary in the repo. |
 | core.support_direction | 2 | `quality-record` by extension rule. |
 | core.validation_role | 2 | `quality-record-only`; direct `strengthen-belief` remains forbidden. |
-| core.reason_codes | 2 | `agent-bias-risk` follows from partial/fail or evidence-for-risk. |
+| core.reason_codes | 2 | `agent-bias-risk` follows from `evidence-for-risk` interpretation by the v1.2 P-pilot-4 priority rule. |
 | extension/agent-evaluation.evaluation_competency | 2 | Bias detection is explicit. |
-| extension/agent-evaluation.bayes_factor_evidence | 2 | Bayes-factor semantics are explicit, but numeric BF is not in the summary. |
-| extension/agent-evaluation.result | 1 | Broadly consistent bias behavior supports partial/risk, but per-model results are absent. |
-| extension/agent-evaluation.metric_set | 1 | Bernoulli binary-choice model is explicit; benchmark metrics are absent. |
+| extension/agent-evaluation.bayes_factor_evidence | 1 | The interpretation field (`evidence-for-risk`) is inferable from the paper's framing; the numeric `bf10` is `~` because the summary gives no value. Net: structurally inferable, partially populated. |
+| extension/agent-evaluation.result | 1 | Broadly consistent bias behavior supports partial/risk, but per-model results are absent — inferable, not stated. |
+| extension/agent-evaluation.metric_set | 1 | Bernoulli binary-choice model is explicit; benchmark metrics are absent — inferable structure, missing values. |
+
+Per-case score histogram: 2×6, 1×3, 0×0, x×1, A×0. ✗-rate: 1/10 = **10%**.
 
 **Friction.** The design handles the key Bayes-factor distinction, but the result/Bayes-factor biconditional needs one more explicit priority rule. If `bayes_factor_evidence.interpretation: evidence-for-risk`, `agent-bias-risk` must be declared regardless of whether the coarse `result` is `partial` or `inconclusive`.
 
@@ -236,11 +244,14 @@ extension/agent-tool-operation:
 
 ## Cross-case findings
 
-1. **Registry refs are the dominant authoring burden.** Ding2025 is semantically about a tool-chain operation, but almost every durable object is an author-created registry ref. The schema should acknowledge "summary-derived provisional refs" as acceptable during design extraction and require later registry resolution before production validation.
+**✗-rate roll-up across the three completed extractions:** 9/31 ≈ **29%** (Ding 45%, Yu 30%, Si 10%). The project-local attempt was deliberately abandoned at ~46% authorability, which is the same impedance signal expressed differently. The roll-up sits inside t034's 25–41% per-case band and the per-case spread reveals the structural cause: `agent-tool-operation` payloads against architecture papers (Ding) carry more registry-ref invention than `agent-evaluation` payloads against benchmark papers (Yu, Si), because the latter are semantically dense — the protocol *is* the paper. Si's 10% is the floor; Ding's 45% is the ceiling. Future operation-record pilots against architecture-but-not-implementation papers should expect ≥40% ✗-rates.
+
+1. **Registry refs are the dominant authoring burden.** Ding2025 is semantically about a tool-chain operation, but almost every durable object is an author-created registry ref. Of Ding's 5 ✗ scores, all 5 are registry refs (input_artifact_refs, method_ref, tool_chain_ref, context_ref_set, safety_check_status). The schema should acknowledge "summary-derived provisional refs" as acceptable during design extraction and require later registry resolution before production validation.
 2. **Evaluation scope needs an explicit convention.** Yu2026 and Si2025 are dataset/protocol-level evaluations. `evaluated_operation_refs: []` is clear, but authors still need a sanctioned way to use class-level `evaluated_agent_ref` values without pretending a specific Science agent/version was tested.
 3. **Safety status must stay registry-resolved.** Ding2025 names a safety module but not the check result. The author can set `unknown`; whether `safety-check-missing` fires depends on the resolved applicable policy.
 4. **Bayes-factor semantics need priority over coarse result labels.** Si2025 motivates `agent-bias-risk` whenever the BF interpretation is evidence-for-risk, even if result labels differ by benchmark convention.
 5. **Project-local operation records need trace capture.** Current synthesis frontmatter does not expose enough agent/tool-operation state to author a real operation record after the fact.
+6. **Methods-paper vs applied-payload routing applies to t037 too.** The same routing principle t034 added in v1.2 (P-pilot-8) is the right framing for what Ding-style papers look like in t037: a *methods-paper* core-only claim about SciToolAgent-the-method (no extension loaded, low ✗-rate) is cleanly authorable; an *applied-payload* `agent-tool-operation` re-encoding requires either a real Science run or accepting the ~45% ✗-rate. The pilot evidence supports adopting the same routing convention in t037 v1.3.
 
 ### Cross-case check - context refs vs input refs
 
@@ -259,6 +270,14 @@ Ambiguity remains for paper-derived method descriptions. A method paper such as 
 3. **P-pilot-3 - Add evaluation-scope convention.** In `agent-evaluation`, state that `evaluated_operation_refs: []` plus class-level agent or role refs records dataset/protocol-level coverage and does not retire or gate concrete operation codes unless wired through registry gating state.
 4. **P-pilot-4 - Strengthen Bayes-factor priority for `agent-bias-risk`.** In `agent-evaluation` and H03 text, make `bayes_factor_evidence.interpretation: evidence-for-risk` sufficient for `agent-bias-risk` even when the coarse `result` label is not fail/partial.
 5. **P-pilot-5 - Add project-local trace authoring requirement.** In operation mapping or validation candidates, state that after-the-fact project-local operation records require a trace/provenance sidecar or frontmatter sufficient to resolve agent/workflow/chain state; otherwise authors must record the attempt as unauthorable rather than fabricate missing refs.
+
+## Re-scored 2026-05-07: additional patch candidates
+
+The strict-rubric re-score (2026-05-07) raised the per-case ✗-rates from a soft 0–20% to a stricter 10–45%, putting t037 in the same impedance band as t034. The re-score surfaced one new patch candidate not caught by the original soft scoring:
+
+6. **P-pilot-6 - Methods-paper vs applied-payload routing for t037 (mirrors t034 P-pilot-8).** Add a section to the design doc stating that a paper introducing an *agent/tool method* (Ding2025 SciToolAgent, Yu2026 SciCUEval, Si2025 Bayesian-bias-test) produces two distinct payload candidates: (1) a `methods-paper` core-only paper-extracted-claim with no t037 extension loaded; (2) zero-or-more applied-payload re-encodings (`agent-tool-operation` for tool-chain runs, `agent-evaluation` for benchmark runs) that declare an `extracted-from-summary-only`-equivalent code if the source is a paper-summary rather than a real run. Authors should consciously choose which they're authoring; the strict-rubric ✗-rate is the operational signal for when (1) is the right call.
+
+P-pilot-6 was not present in the v1.2 design bump (the soft scoring obscured it). Track it as a v1.4 candidate alongside whatever v1.3 finalized.
 
 ## Residual audit prompts
 
