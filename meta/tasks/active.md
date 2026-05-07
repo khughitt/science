@@ -182,10 +182,10 @@ Surfaced by: `doc/background/papers/synthesis-2026-05-05-bayesian-evidence-synth
 
 ## [t023] Design typed synthesis nodes
 - priority: P2
-- status: proposed
+- status: active
 - parent: task:t021
 - aspects: [software-development, framework-design, hypothesis-testing]
-- related: [task:t021, question:01-evidence-payload-schema, topic:bayesian-methods-continuous-belief]
+- related: [task:t021, task:t042, question:01-evidence-payload-schema, topic:bayesian-methods-continuous-belief]
 - group: evidence-payload-schema
 - created: 2026-05-05
 
@@ -219,6 +219,8 @@ Use Batch 1 as motivating cases: BES/PBF, RoBMA/BMA, diagnostic-test accuracy, p
 Use Batch 2 as motivating cases: truth discovery, MCDA, Bayesian ODE data integration, JMMLE, heterogeneous external-data regression, disease-model calibration, and Bayesian data cleaning.
 Use Batch 3 as motivating cases: causal inference roadmaps, causal data integration, hidden-variable discovery, self-compatibility diagnostics, LLM causal priors, mediation analysis, and Bayesian Mendelian-randomization graph models.
 Use Batch 4 as motivating cases: mixed graphical model integration, joint sparse graph inference, Bayesian survival integration, common/unique network decomposition, graph posterior inference, scalable Bayesian GGM structure learning, integrative clustering, and feature selection.
+
+Design draft: `doc/plans/2026-05-07-t023-typed-synthesis-nodes-design.md`.
 
 ## [t024] Represent heterogeneity and bias as evidence-generation mechanisms
 - priority: P2
@@ -608,3 +610,13 @@ Highest-value additions:
 - WILDS, distribution-shift, and robustness-benchmark papers for ML robustness evaluation.
 
 Deliverable: either add PDFs and process them in a later batch, or write a topic note explaining how each family should influence evaluation artifacts, metric-family enums, checklist fields, H02 validation outcomes, and H03 reason codes.
+
+## [t042] Design synthesis artifact lifecycle and output-artifact model
+- priority: P2
+- status: proposed
+- aspects: [software-development, hypothesis-testing]
+- related: [task:t023, task:t038, question:01-evidence-payload-schema]
+- group: evidence-payload-schema
+- created: 2026-05-07
+
+Define how synthesis nodes, output artifacts, propositions, validation runs, and downstream syntheses form a derivation DAG. Cover replay, invalidation, supersession, reason-code propagation, artifact reuse, and the decision rule for first-class output artifacts versus embedded output fields.
