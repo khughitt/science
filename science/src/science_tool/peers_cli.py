@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TypedDict
 
 import click
+import yaml
 
 from science_tool.peers import resolve_peer_path
 from science_tool.peers_validate import PeerIssue, PeerIssueKind, validate_peers
@@ -17,6 +18,10 @@ class PeerIssueRow(TypedDict):
     kind: str
     severity: str
     detail: str
+
+
+class PeerCheckIssueRow(PeerIssueRow):
+    peer_id: str
 
 
 class PeerRow(TypedDict):
@@ -56,6 +61,36 @@ def peers_list(project_root: Path, fmt: str) -> None:
     _emit_table(rows)
 
 
+@peers_group.command("check")
+@click.option(
+    "--project-root",
+    default=".",
+    show_default=True,
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+)
+@click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", show_default=True)
+@click.option("--strict", is_flag=True, help="Treat warnings as errors.")
+def peers_check(project_root: Path, fmt: str, strict: bool) -> None:
+    """Validate declared peers."""
+    issues = validate_peers(project_root)
+    rows = [_check_issue_row(issue) for issue in issues]
+    peer_count = _raw_peer_count(project_root)
+    warning_count = sum(1 for issue in issues if issue.severity == "warning")
+    error_count = sum(1 for issue in issues if issue.severity == "error")
+    should_fail = error_count > 0 or (strict and warning_count > 0)
+
+    if fmt == "json":
+        click.echo(json.dumps(rows, indent=2))
+    else:
+        for issue in issues:
+            click.echo(f"{issue.severity.upper()} [{issue.peer_id}] {issue.kind.value}: {issue.detail}")
+        summary_label = "failed" if should_fail else "ok"
+        click.echo(f"{summary_label}: {peer_count} peers, {warning_count} warning, {error_count} error")
+
+    if should_fail:
+        raise click.exceptions.Exit(1)
+
+
 def _peer_rows(project_root: Path, cfg: ProjectConfig) -> list[PeerRow]:
     issues_by_entry = _issues_by_entry(project_root, cfg)
 
@@ -73,6 +108,21 @@ def _peer_rows(project_root: Path, cfg: ProjectConfig) -> list[PeerRow]:
             }
         )
     return rows
+
+
+def _raw_peer_count(project_root: Path) -> int:
+    yaml_path = project_root / "science.yaml"
+    if not yaml_path.is_file():
+        return 0
+
+    raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        return 0
+
+    peers = raw.get("peers")
+    if not isinstance(peers, list):
+        return 0
+    return len(peers)
 
 
 def _issues_by_entry(project_root: Path, cfg: ProjectConfig) -> list[list[PeerIssueRow]]:
@@ -114,6 +164,15 @@ def _issue_row(issue: PeerIssue) -> PeerIssueRow:
         "kind": issue.kind.value,
         "severity": issue.severity,
         "detail": issue.detail,
+    }
+
+
+def _check_issue_row(issue: PeerIssue) -> PeerCheckIssueRow:
+    return {
+        "kind": issue.kind.value,
+        "peer_id": issue.peer_id,
+        "detail": issue.detail,
+        "severity": issue.severity,
     }
 
 

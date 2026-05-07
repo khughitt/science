@@ -451,3 +451,211 @@ research_question: "..."
     result = runner.invoke(main, ["peers", "list", "--project-root", str(host)])
     assert result.exit_code == 0
     assert "no peers declared" in result.output.lower()
+
+
+def test_peers_check_clean(tmp_path: Path) -> None:
+    peer = tmp_path / "peer"
+    peer.mkdir()
+    _write_yaml(peer, 'name: peer\nid: peer\nprofile: research\nresearch_question: "..."\n')
+    host = tmp_path / "host"
+    host.mkdir()
+    _write_yaml(
+        host,
+        f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: peer
+    path: {peer}
+""",
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["peers", "check", "--project-root", str(host)])
+    assert result.exit_code == 0
+    assert "ok" in result.output.lower()
+
+
+def test_peers_check_warning_does_not_fail(tmp_path: Path) -> None:
+    host = tmp_path / "host"
+    host.mkdir()
+    _write_yaml(
+        host,
+        """
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: ghost
+    path: ../missing
+""",
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["peers", "check", "--project-root", str(host)])
+    assert result.exit_code == 0
+    assert "path_missing" in result.output or "path-missing" in result.output
+
+
+def test_peers_check_does_not_require_full_project_config_validation(tmp_path: Path) -> None:
+    host = tmp_path / "host"
+    host.mkdir()
+    _write_yaml(
+        host,
+        """
+name: host
+id: host
+role: standalone
+children:
+  - id: unrelated
+    path: ../unrelated
+peers:
+  - id: ghost
+    path: ../missing
+""",
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["peers", "check", "--project-root", str(host)])
+    assert result.exit_code == 0, result.output
+    assert "path_missing" in result.output
+    assert "1 peers" in result.output
+
+
+def test_peers_check_warning_json_outputs_issue_fields(tmp_path: Path) -> None:
+    host = tmp_path / "host"
+    host.mkdir()
+    _write_yaml(
+        host,
+        """
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: ghost
+    path: ../missing
+""",
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["peers", "check", "--project-root", str(host), "--format=json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert len(payload) == 1
+    assert set(payload[0]) == {"kind", "peer_id", "detail", "severity"}
+    assert payload[0]["kind"] == "path_missing"
+    assert payload[0]["peer_id"] == "ghost"
+    assert payload[0]["severity"] == "warning"
+    assert "../missing" in payload[0]["detail"]
+
+
+def test_peers_check_error_exits_nonzero(tmp_path: Path) -> None:
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    a.mkdir(exist_ok=True)
+    _write_yaml(a, 'name: a\nid: dup\nprofile: research\nresearch_question: "..."\n')
+    b.mkdir(exist_ok=True)
+    _write_yaml(b, 'name: b\nid: dup\nprofile: research\nresearch_question: "..."\n')
+    host = tmp_path / "host"
+    host.mkdir()
+    _write_yaml(
+        host,
+        f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: dup
+    path: {a}
+  - id: dup
+    path: {b}
+""",
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["peers", "check", "--project-root", str(host)])
+    assert result.exit_code != 0
+    assert "ok:" not in result.output
+    assert "failed:" in result.output
+
+
+def test_peers_check_error_json_outputs_issue_before_nonzero(tmp_path: Path) -> None:
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    a.mkdir(exist_ok=True)
+    _write_yaml(a, 'name: a\nid: dup\nprofile: research\nresearch_question: "..."\n')
+    b.mkdir(exist_ok=True)
+    _write_yaml(b, 'name: b\nid: dup\nprofile: research\nresearch_question: "..."\n')
+    host = tmp_path / "host"
+    host.mkdir()
+    _write_yaml(
+        host,
+        f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: dup
+    path: {a}
+  - id: dup
+    path: {b}
+""",
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["peers", "check", "--project-root", str(host), "--format=json"])
+    assert result.exit_code != 0
+    payload = json.loads(result.output)
+    assert any(
+        issue["kind"] == "duplicate_peer_id" and issue["peer_id"] == "dup" and issue["severity"] == "error"
+        for issue in payload
+    )
+
+
+def test_peers_check_strict_treats_warnings_as_errors(tmp_path: Path) -> None:
+    host = tmp_path / "host"
+    host.mkdir()
+    _write_yaml(
+        host,
+        """
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: ghost
+    path: ../missing
+""",
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["peers", "check", "--project-root", str(host), "--strict"])
+    assert result.exit_code != 0
+    assert "ok:" not in result.output
+    assert "failed:" in result.output
+
+
+def test_peers_check_strict_warning_json_outputs_issue_before_nonzero(tmp_path: Path) -> None:
+    host = tmp_path / "host"
+    host.mkdir()
+    _write_yaml(
+        host,
+        """
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: ghost
+    path: ../missing
+""",
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["peers", "check", "--project-root", str(host), "--format=json", "--strict"],
+    )
+    assert result.exit_code != 0
+    payload = json.loads(result.output)
+    assert payload[0]["kind"] == "path_missing"
+    assert payload[0]["peer_id"] == "ghost"
+    assert payload[0]["severity"] == "warning"
