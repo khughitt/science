@@ -249,3 +249,65 @@ def validate_synthesis_payload(payload: EvidencePayload, registry: EvidencePaylo
     active_registry = registry or build_synthesis_registry()
     active_registry.validate_payload(payload)
     SynthesisOperation.model_validate(payload.extension_sections[SYNTHESIS_OPERATION_EXTENSION])
+
+
+SynthesisDerivationEdge = tuple[str, str, str]
+
+
+_ROUTE_ALIASES: dict[str, str] = {
+    "bayesian-model-averaging": "bayesian-model-comparison",
+    "bayes-factor-model-set": "bayesian-model-comparison",
+    "posterior-model-probability": "bayesian-model-comparison",
+    "pooled-effect-estimate": "effect-size-pooling",
+    "meta-analysis-effect-size": "effect-size-pooling",
+    "direct-hypothesis-support": "hypothesis-support-synthesis",
+    "diagnostic-test-accuracy": "diagnostic-test-synthesis",
+    "truth-label-estimation": "truth-discovery",
+    "source-reliability-estimation": "truth-discovery",
+    "data-cleaning": "data-cleaning-repair",
+    "repair-uncertainty": "data-cleaning-repair",
+    "causal-meta-analysis": "causal-meta-analysis",
+    "causal-discovery-run": "causal-discovery-synthesis",
+    "llm-causal-prior": "llm-prior-constraint-synthesis",
+    "mechanistic-network": "mechanistic-network-synthesis",
+    "mediation-analysis": "mediation-synthesis",
+    "mendelian-randomization-graph": "mendelian-randomization-graph-synthesis",
+    "graph-diagnostic": "graph-diagnostic-synthesis",
+    "conditional-dependence-graph": "graph-estimate-synthesis",
+    "graph-estimate": "graph-estimate-synthesis",
+    "graph-posterior": "graph-posterior-synthesis",
+    "integrative-clustering": "integrative-clustering-synthesis",
+    "feature-selection": "feature-selection-synthesis",
+    "module-discovery": "module-discovery-synthesis",
+    "predictive-integration": "predictive-integration-synthesis",
+}
+
+
+def route_synthesis_family(operator: str) -> str:
+    """Return the canonical synthesis family for a known operator/output route key."""
+
+    try:
+        return _ROUTE_ALIASES[operator]
+    except KeyError as exc:
+        raise PayloadValidationError(f"no synthesis-family route for operator {operator!r}") from exc
+
+
+def derivation_edges(payload: EvidencePayload) -> list[SynthesisDerivationEdge]:
+    """Return t023 derivation edges implied by a synthesis payload."""
+
+    operation = SynthesisOperation.model_validate(payload.extension_sections[SYNTHESIS_OPERATION_EXTENSION])
+    source = payload.core.payload_id
+    edges: list[SynthesisDerivationEdge] = []
+
+    for ref in payload.core.input_artifact_refs:
+        edges.append((source, "consumes", ref))
+    if payload.core.method_ref is not None:
+        edges.append((source, "uses-method", payload.core.method_ref))
+    if payload.core.agent_ref is not None:
+        edges.append((source, "performed-by", payload.core.agent_ref))
+    for ref in payload.core.proposition_refs:
+        edges.append((source, "targets-proposition", ref))
+    for ref in operation.output_artifact_refs:
+        edges.append((source, "produced", ref))
+        edges.append((ref, "derived-from-synthesis", source))
+    return edges

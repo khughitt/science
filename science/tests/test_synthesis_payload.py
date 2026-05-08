@@ -10,6 +10,8 @@ from science_tool.synthesis_payload import (
     SYNTHESIS_PRIMARY_EXTENSION_NAMES,
     SynthesisOperation,
     build_synthesis_registry,
+    derivation_edges,
+    route_synthesis_family,
     validate_synthesis_payload,
 )
 
@@ -107,3 +109,59 @@ def test_family_permission_ceiling_blocks_strengthen_belief_for_feature_selectio
 
     with pytest.raises(PayloadValidationError, match="exceeds max permission"):
         validate_synthesis_payload(payload)
+
+
+def test_route_synthesis_family_sends_bma_to_model_comparison() -> None:
+    assert route_synthesis_family("bayesian-model-averaging") == "bayesian-model-comparison"
+    assert route_synthesis_family("bayes-factor-model-set") == "bayesian-model-comparison"
+
+
+def test_route_synthesis_family_prefers_effect_pooling_for_pooled_effects() -> None:
+    assert route_synthesis_family("pooled-effect-estimate") == "effect-size-pooling"
+    assert route_synthesis_family("meta-analysis-effect-size") == "effect-size-pooling"
+
+
+def test_route_synthesis_family_distinguishes_graph_posterior_from_graph_estimate() -> None:
+    assert route_synthesis_family("graph-posterior") == "graph-posterior-synthesis"
+    assert route_synthesis_family("conditional-dependence-graph") == "graph-estimate-synthesis"
+
+
+def test_route_synthesis_family_rejects_unknown_operator() -> None:
+    with pytest.raises(PayloadValidationError, match="no synthesis-family route"):
+        route_synthesis_family("ambiguous-literature-summary")
+
+
+def test_derivation_edges_emit_inputs_outputs_propositions_method_and_agent() -> None:
+    payload = _synthesis_payload("syn-2026-bma")
+
+    edges = derivation_edges(payload)
+
+    assert edges == [
+        ("syn-2026-bma", "consumes", "study:gronau-input"),
+        ("syn-2026-bma", "uses-method", "paper:Gronau2021"),
+        ("syn-2026-bma", "performed-by", "agent:synthesis-runner"),
+        ("syn-2026-bma", "targets-proposition", "prop:model-a-over-null"),
+        ("syn-2026-bma", "produced", "payload:bma-model-summary"),
+        ("payload:bma-model-summary", "derived-from-synthesis", "syn-2026-bma"),
+    ]
+
+
+def test_derivation_edges_skip_empty_proposition_refs() -> None:
+    payload = _synthesis_payload(
+        "syn-2026-graph",
+        core={
+            "artifact_type": "graph-posterior-synthesis",
+            "extensions": ["graph-posterior-synthesis", "synthesis-operation"],
+            "proposition_refs": [],
+            "comparison_target": "n-a",
+            "support_direction": "methodological-input",
+            "validation_role": "prioritize-attention",
+            "uncertainty_summary": "edge inclusion table: 102 rows",
+        },
+        extension_sections={"graph-posterior-synthesis": {}},
+    )
+
+    edges = derivation_edges(payload)
+
+    assert not any(edge[1] == "targets-proposition" for edge in edges)
+    assert ("syn-2026-graph", "produced", "payload:bma-model-summary") in edges
