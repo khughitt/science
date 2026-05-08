@@ -224,6 +224,47 @@ def test_cli_refs_check_clean() -> None:
         assert result.exit_code == 0
 
 
+def test_cli_refs_check_reports_peer_config_error() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        peer_a = root / "peer-a"
+        peer_b = root / "peer-b"
+        for peer, project_id in ((peer_a, "peer-a"), (peer_b, "peer-b")):
+            peer.mkdir()
+            (peer / "science.yaml").write_text(
+                f"""
+name: {project_id}
+id: {project_id}
+profile: research
+research_question: "..."
+""",
+                encoding="utf-8",
+            )
+        (root / "science.yaml").write_text(
+            f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: peer
+    path: {peer_a}
+  - id: peer
+    path: {peer_b}
+""",
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["refs", "check"])
+
+        assert result.exit_code == 1
+        assert "Error:" in result.output
+        assert "duplicate_peer_id [peer]" in result.output
+        assert result.exception is not None
+
+
 def test_multiple_citations_in_one_bracket() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:
