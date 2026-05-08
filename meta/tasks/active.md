@@ -180,48 +180,6 @@ Carry-forwards: each aspect extension declaring an evaluation/audit/operation ty
 
 Surfaced by: `doc/background/papers/synthesis-2026-05-05-bayesian-evidence-synthesis.md`.
 
-## [t023] Design typed synthesis nodes
-- priority: P2
-- status: active
-- parent: task:t021
-- aspects: [software-development, framework-design, hypothesis-testing]
-- related: [task:t021, task:t042, question:01-evidence-payload-schema, topic:bayesian-methods-continuous-belief]
-- group: evidence-payload-schema
-- created: 2026-05-05
-
-Design first-class synthesis node types so Science does not collapse incompatible aggregation operations into one belief update.
-At minimum distinguish:
-- effect-size pooling;
-- hypothesis-support synthesis;
-- causal synthesis;
-- diagnostic-test synthesis;
-- model-comparison synthesis;
-- Bayesian model-averaged synthesis.
-- truth-discovery synthesis;
-- data-cleaning / repair synthesis;
-- multi-view data-integration synthesis;
-- graph-estimation versus debiased edge-inference synthesis.
-- LLM-prior / constraint synthesis;
-- causal-discovery-run synthesis;
-- mechanistic-network synthesis;
-- mediation synthesis;
-- Mendelian-randomization graph synthesis;
-- graph-diagnostic synthesis.
-- graph-estimate synthesis;
-- graph-posterior synthesis;
-- integrative-clustering synthesis;
-- feature-selection synthesis;
-- module-discovery synthesis;
-- predictive-integration synthesis.
-
-For each synthesis type, specify required inputs, output fields, provenance, graph edges, and validation checks.
-Use Batch 1 as motivating cases: BES/PBF, RoBMA/BMA, diagnostic-test accuracy, posterior-sample evidence estimation, and causal meta-analysis.
-Use Batch 2 as motivating cases: truth discovery, MCDA, Bayesian ODE data integration, JMMLE, heterogeneous external-data regression, disease-model calibration, and Bayesian data cleaning.
-Use Batch 3 as motivating cases: causal inference roadmaps, causal data integration, hidden-variable discovery, self-compatibility diagnostics, LLM causal priors, mediation analysis, and Bayesian Mendelian-randomization graph models.
-Use Batch 4 as motivating cases: mixed graphical model integration, joint sparse graph inference, Bayesian survival integration, common/unique network decomposition, graph posterior inference, scalable Bayesian GGM structure learning, integrative clustering, and feature selection.
-
-Design draft: `doc/plans/2026-05-07-t023-typed-synthesis-nodes-design.md`.
-
 ## [t024] Represent heterogeneity and bias as evidence-generation mechanisms
 - priority: P2
 - status: proposed
