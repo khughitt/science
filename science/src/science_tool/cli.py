@@ -90,7 +90,6 @@ from science_tool.aspects.cli import aspects_group
 from science_tool.big_picture.cli import big_picture_group
 from science_tool.curate.cli import curate_group
 from science_tool.dag.cli import dag_group
-from science_tool.federation_cli import federation_group
 from science_tool.output import OUTPUT_FORMATS, emit_query_rows
 from science_tool.project_artifacts.cli import artifacts_group as _artifacts_group
 from science_tool.peers_cli import peers_group
@@ -201,7 +200,6 @@ main.add_command(verdict_group)
 main.add_command(big_picture_group)
 main.add_command(refs_group)
 main.add_command(skills_group)
-main.add_command(federation_group)
 main.add_command(peers_group)
 
 
