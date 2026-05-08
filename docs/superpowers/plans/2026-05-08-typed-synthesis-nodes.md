@@ -68,7 +68,7 @@ def test_payload_accepts_create_hypothesis_validation_role() -> None:
 Run:
 
 ```bash
-uv run --project science pytest tests/test_evidence_payload_contract.py::test_payload_accepts_create_hypothesis_validation_role -q
+uv run --project science pytest science/tests/test_evidence_payload_contract.py::test_payload_accepts_create_hypothesis_validation_role -q
 ```
 
 Expected: FAIL with a Pydantic literal validation error because `create-hypothesis` is not in `ValidationRole`.
@@ -99,7 +99,7 @@ ValidationRole = Literal[
 Run:
 
 ```bash
-uv run --project science pytest tests/test_evidence_payload_contract.py::test_payload_accepts_create_hypothesis_validation_role -q
+uv run --project science pytest science/tests/test_evidence_payload_contract.py::test_payload_accepts_create_hypothesis_validation_role -q
 ```
 
 Expected: PASS.
@@ -109,7 +109,7 @@ Expected: PASS.
 Run:
 
 ```bash
-uv run --project science pytest tests/test_evidence_payload_contract.py -q
+uv run --project science pytest science/tests/test_evidence_payload_contract.py -q
 ```
 
 Expected: all tests in `test_evidence_payload_contract.py` pass.
@@ -250,7 +250,7 @@ def test_family_permission_ceiling_blocks_strengthen_belief_for_feature_selectio
 Run:
 
 ```bash
-uv run --project science pytest tests/test_synthesis_payload.py -q
+uv run --project science pytest science/tests/test_synthesis_payload.py -q
 ```
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'science_tool.synthesis_payload'`.
@@ -519,7 +519,7 @@ def validate_synthesis_payload(payload: EvidencePayload, registry: EvidencePaylo
 Run:
 
 ```bash
-uv run --project science pytest tests/test_synthesis_payload.py -q
+uv run --project science pytest science/tests/test_synthesis_payload.py -q
 ```
 
 Expected: PASS.
@@ -529,7 +529,7 @@ Expected: PASS.
 Run:
 
 ```bash
-uv run --project science pytest tests/test_evidence_payload_contract.py tests/test_synthesis_payload.py -q
+uv run --project science pytest science/tests/test_evidence_payload_contract.py science/tests/test_synthesis_payload.py -q
 ```
 
 Expected: all tests in both files pass.
@@ -630,7 +630,7 @@ def test_derivation_edges_skip_empty_proposition_refs() -> None:
 Run:
 
 ```bash
-uv run --project science pytest tests/test_synthesis_payload.py -k "route_synthesis_family or derivation_edges" -q
+uv run --project science pytest science/tests/test_synthesis_payload.py -k "route_synthesis_family or derivation_edges" -q
 ```
 
 Expected: FAIL because `route_synthesis_family` and `derivation_edges` do not exist.
@@ -707,7 +707,7 @@ def derivation_edges(payload: EvidencePayload) -> list[SynthesisDerivationEdge]:
 Run:
 
 ```bash
-uv run --project science pytest tests/test_synthesis_payload.py -k "route_synthesis_family or derivation_edges" -q
+uv run --project science pytest science/tests/test_synthesis_payload.py -k "route_synthesis_family or derivation_edges" -q
 ```
 
 Expected: PASS.
@@ -717,7 +717,7 @@ Expected: PASS.
 Run:
 
 ```bash
-uv run --project science pytest tests/test_synthesis_payload.py -q
+uv run --project science pytest science/tests/test_synthesis_payload.py -q
 ```
 
 Expected: PASS.
@@ -777,7 +777,7 @@ def test_typed_synthesis_docs_list_every_family() -> None:
 Run:
 
 ```bash
-uv run --project science pytest tests/test_synthesis_payload.py::test_typed_synthesis_docs_list_every_family -q
+uv run --project science pytest science/tests/test_synthesis_payload.py::test_typed_synthesis_docs_list_every_family -q
 ```
 
 Expected: FAIL with `FileNotFoundError` because `science/docs/typed-synthesis-nodes.md` does not exist.
@@ -854,7 +854,7 @@ Effective reason codes are computed views. Source-authored payloads store only `
 Run:
 
 ```bash
-uv run --project science pytest tests/test_synthesis_payload.py::test_typed_synthesis_docs_list_every_family -q
+uv run --project science pytest science/tests/test_synthesis_payload.py::test_typed_synthesis_docs_list_every_family -q
 ```
 
 Expected: PASS.
@@ -864,7 +864,7 @@ Expected: PASS.
 Run:
 
 ```bash
-uv run --project science pytest tests/test_evidence_payload_contract.py tests/test_synthesis_payload.py -q
+uv run --project science pytest science/tests/test_evidence_payload_contract.py science/tests/test_synthesis_payload.py -q
 ```
 
 Expected: PASS.
@@ -874,9 +874,9 @@ Expected: PASS.
 Run:
 
 ```bash
-uv run --project science ruff format src/science_tool/evidence_payload.py src/science_tool/synthesis_payload.py tests/test_evidence_payload_contract.py tests/test_synthesis_payload.py
-uv run --project science ruff check src/science_tool/evidence_payload.py src/science_tool/synthesis_payload.py tests/test_evidence_payload_contract.py tests/test_synthesis_payload.py
-uv run --project science pyright src/science_tool/evidence_payload.py src/science_tool/synthesis_payload.py
+uv run --project science ruff format science/src/science_tool/evidence_payload.py science/src/science_tool/synthesis_payload.py science/tests/test_evidence_payload_contract.py science/tests/test_synthesis_payload.py
+uv run --project science ruff check science/src/science_tool/evidence_payload.py science/src/science_tool/synthesis_payload.py science/tests/test_evidence_payload_contract.py science/tests/test_synthesis_payload.py
+uv run --project science pyright science/src/science_tool/evidence_payload.py science/src/science_tool/synthesis_payload.py
 ```
 
 Expected:
