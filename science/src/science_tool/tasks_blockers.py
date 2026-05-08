@@ -8,8 +8,8 @@ from pathlib import Path
 from science_tool.entities import load_local_entity_ids
 
 # Format: <kind>:<local-id> where kind is lowercase letters/digits/hyphens
-# and local-id is anything non-empty without whitespace.
-_TYPED_REF_RE = re.compile(r"^[a-z][a-z0-9-]*:\S+$")
+# and local-id is anything non-empty without whitespace or @.
+_TYPED_REF_RE = re.compile(r"^[a-z][a-z0-9-]*:[^@\s]+$")
 
 
 def is_typed_ref(ref: str) -> bool:

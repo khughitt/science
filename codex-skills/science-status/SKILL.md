@@ -80,21 +80,21 @@ Output goes to the terminal unless the user input contains `--save`.
 
 ## Setup
 
-## Federation handling
+## Peer Context
 
-If `science.yaml` declares `role: meta`, the rest of this skill's per-project
-flow is replaced by:
+If `science.yaml` declares `peers:`, include a brief cross-project context
+before the per-project flow:
 
 ```bash
-science federation status
+science peers list
 ```
 
-Print the result and stop. Do not attempt to read individual children's project
-files yourself — the CLI does that consistently and is the single source of
-truth for cross-project rollups.
+Print the peer list, then continue with the existing per-project status flow
+below. Do not attempt to read peer project files yourself; the CLI resolves peer
+paths and statuses consistently.
 
-For non-meta projects (the default), proceed with the existing per-project
-status flow below.
+For projects without `peers:`, proceed directly with the per-project status
+flow below.
 
 1. Read `specs/research-question.md`.
 2. Read `science.yaml`.

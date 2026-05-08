@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.05.06.1
-# science-managed-source-sha256: f66137dd05b07e36728936dd8e0be86df5cc315fef3797c4c5216f6deb3cd63c
+# science-managed-version: 2026.05.07.4
+# science-managed-source-sha256: 517199d70d40317733c4974162cbd0fdf635377ab6129000896b178c78a6584a
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -782,6 +782,18 @@ echo "Checking knowledge graph..."
 # block below is skipped — so promoting "unparseable output" from warn to error
 # below cannot fire spuriously on environments without the tool installed.
 if [ -n "$SCIENCE_TOOL" ]; then
+    peer_output=$($SCIENCE_TOOL peers check --project-root . 2>&1)
+    peer_status=$?
+    if [ "$peer_status" -eq 0 ]; then
+        info "peer check: declared peers valid"
+    else
+        while IFS= read -r line; do
+            if [ -n "$line" ]; then
+                error "peer check failed: ${line}"
+            fi
+        done < <(printf "%s\n" "$peer_output")
+    fi
+
     audit_output=$($SCIENCE_TOOL graph audit --project-root . --format json 2>/dev/null) || true
     if printf "%s" "$audit_output" | python3 -c "import sys,json; json.load(sys.stdin)" &>/dev/null; then
         audit_rows=$(printf "%s" "$audit_output" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['rows']))")
@@ -1226,11 +1238,11 @@ def load_project_ids(path):
     project_id = data.get("id")
     if isinstance(project_id, str) and project_id:
         ids.add(project_id)
-    children = data.get("children")
-    if isinstance(children, list):
-        for child in children:
-            if isinstance(child, dict) and isinstance(child.get("id"), str):
-                ids.add(child["id"])
+    peers = data.get("peers")
+    if isinstance(peers, list):
+        for peer in peers:
+            if isinstance(peer, dict) and isinstance(peer.get("id"), str):
+                ids.add(peer["id"])
     return ids
 
 
@@ -1332,7 +1344,7 @@ else
             ref="$project_id"
             warn "Broken reference in $filename: related ID '$ref' not found"
         elif [ "$status" = "UNKNOWN_NAMESPACE" ]; then
-            error "Unknown project namespace '${project_id}' in ref '${raw}'. Add it to science.yaml children: or use a local ref."
+            error "Unknown project namespace '${project_id}' in ref '${raw}'. Add it to science.yaml peers: or use a local ref."
         elif [ "$status" = "LEGACY_PROJECT_REF" ]; then
             warn "Legacy cross-project ref '${raw}' is missing an entity kind. Use '${project_id}:question:${slug}' or another explicit <project-id>:<kind>:<slug> ref."
         fi

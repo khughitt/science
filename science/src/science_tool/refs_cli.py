@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from science_tool.output import OUTPUT_FORMATS
+from science_tool.peers import PeerUnresolved
 from science_tool.refs import check_refs
 from science_tool.refs_migrate import (
     apply_rewrites,
@@ -28,7 +29,10 @@ def refs_group() -> None:
 def check(root_path: Path, output_format: str, strict: bool) -> None:
     """Scan project documents for broken cross-references."""
 
-    issues = check_refs(root_path.resolve())
+    try:
+        issues = check_refs(root_path.resolve())
+    except PeerUnresolved as exc:
+        raise click.ClickException(str(exc)) from exc
 
     broken = [i for i in issues if i.ref_type != "marker"]
     markers = [i for i in issues if i.ref_type == "marker"]

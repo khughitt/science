@@ -164,9 +164,12 @@ def _load_task_ids(root: Path) -> set[str]:
 def _load_project_ids(root: Path) -> set[str]:
     try:
         cfg = load_project_config(root)
-    except Exception:
+    except FileNotFoundError:
         return set()
-    ids = {child.id for child in cfg.children}
+    ids: set[str] = set()
+    from science_tool.peers import make_local_resolver  # noqa: PLC0415
+
+    ids.update(make_local_resolver(root).known_ids())
     if cfg.id:
         ids.add(cfg.id)
     return ids
@@ -358,7 +361,7 @@ def check_refs(root: Path) -> list[RefIssue]:
                         ref_value=raw_ref,
                         message=(
                             f"Unknown project namespace '{parsed_ref.project_id}' in ref '{raw_ref}'. "
-                            "Add it to science.yaml children: or use a local ref."
+                            "Add it to science.yaml peers: or use a local ref."
                         ),
                     )
                 )

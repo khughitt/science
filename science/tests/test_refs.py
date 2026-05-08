@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
+from pydantic import ValidationError
 
 from science_tool.cli import main
 from science_tool.refs import check_refs
@@ -222,6 +224,47 @@ def test_cli_refs_check_clean() -> None:
         assert result.exit_code == 0
 
 
+def test_cli_refs_check_reports_peer_config_error() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        peer_a = root / "peer-a"
+        peer_b = root / "peer-b"
+        for peer, project_id in ((peer_a, "peer-a"), (peer_b, "peer-b")):
+            peer.mkdir()
+            (peer / "science.yaml").write_text(
+                f"""
+name: {project_id}
+id: {project_id}
+profile: research
+research_question: "..."
+""",
+                encoding="utf-8",
+            )
+        (root / "science.yaml").write_text(
+            f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: peer
+    path: {peer_a}
+  - id: peer
+    path: {peer_b}
+""",
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["refs", "check"])
+
+        assert result.exit_code == 1
+        assert "Error:" in result.output
+        assert "duplicate_peer_id [peer]" in result.output
+        assert result.exception is not None
+
+
 def test_multiple_citations_in_one_bracket() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:
@@ -312,7 +355,7 @@ def test_task_ref_resolves_when_declaration_is_not_first_header_in_tasks_file() 
         assert task_issues == []
 
 
-def test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared() -> None:
+def test_namespace_first_cross_project_task_ref_is_accepted_when_peer_declared() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:
         root = Path(td)
@@ -321,19 +364,13 @@ def test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared(
             "name: meta\n"
             "id: meta\n"
             "role: meta\n"
-            "children:\n"
+            "peers:\n"
             "  - id: natural-systems\n"
-            f"    path: {root / 'natural-systems'}\n"
-            "    role: data-source\n",
+            f"    path: {root / 'natural-systems'}\n",
             encoding="utf-8",
         )
         (root / "doc" / "questions" / "x.md").write_text(
-            "---\n"
-            "id: question:x\n"
-            "type: question\n"
-            "related: [natural-systems:task:t335]\n"
-            "---\n\n"
-            "# X\n",
+            "---\nid: question:x\ntype: question\nrelated: [natural-systems:task:t335]\n---\n\n# X\n",
             encoding="utf-8",
         )
 
@@ -343,6 +380,93 @@ def test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared(
         assert [issue for issue in issues if issue.ref_type == "task" and issue.ref_value == "t335"] == []
 
 
+def test_refs_check_surfaces_removed_children_config() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "science.yaml").write_text(
+            f"name: meta\nid: meta\nchildren:\n  - id: natural-systems\n    path: {root / 'natural-systems'}\n",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValidationError, match=r"Run `science peers migrate` to migrate to `peers:`"):
+            check_refs(root)
+
+
+def test_load_project_ids_includes_peers(tmp_path: Path) -> None:
+    """`_load_project_ids` should pick up peers via the resolver."""
+    from science_tool.refs import _load_project_ids
+
+    peer = tmp_path / "peer"
+    peer.mkdir()
+    (peer / "science.yaml").write_text(
+        """
+name: peer
+id: peer
+profile: research
+research_question: "..."
+""",
+        encoding="utf-8",
+    )
+    host = tmp_path / "host"
+    host.mkdir()
+    (host / "science.yaml").write_text(
+        f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: peer
+    path: {peer}
+""",
+        encoding="utf-8",
+    )
+    ids = _load_project_ids(host)
+    assert "host" in ids
+    assert "peer" in ids
+
+
+def test_load_project_ids_surfaces_peer_config_errors(tmp_path: Path) -> None:
+    """Resolver construction failures should not be downgraded to unknown namespaces."""
+    from science_tool.peers import PeerUnresolved
+    from science_tool.refs import _load_project_ids
+
+    peer_a = tmp_path / "peer-a"
+    peer_b = tmp_path / "peer-b"
+    for peer, project_id in ((peer_a, "peer-a"), (peer_b, "peer-b")):
+        peer.mkdir()
+        (peer / "science.yaml").write_text(
+            f"""
+name: {project_id}
+id: {project_id}
+profile: research
+research_question: "..."
+""",
+            encoding="utf-8",
+        )
+    host = tmp_path / "host"
+    host.mkdir()
+    (host / "science.yaml").write_text(
+        f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: peer
+    path: {peer_a}
+  - id: peer
+    path: {peer_b}
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(PeerUnresolved, match="duplicate_peer_id \\[peer\\]"):
+        _load_project_ids(host)
+
+
 def test_unknown_namespace_is_reported() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:
@@ -350,12 +474,7 @@ def test_unknown_namespace_is_reported() -> None:
         _scaffold(root)
         (root / "science.yaml").write_text("name: demo\nid: demo\n", encoding="utf-8")
         (root / "doc" / "questions" / "x.md").write_text(
-            "---\n"
-            "id: question:x\n"
-            "type: question\n"
-            "related: [natural-systems:task:t335]\n"
-            "---\n\n"
-            "# X\n",
+            "---\nid: question:x\ntype: question\nrelated: [natural-systems:task:t335]\n---\n\n# X\n",
             encoding="utf-8",
         )
 
@@ -365,7 +484,7 @@ def test_unknown_namespace_is_reported() -> None:
         assert len(namespace_issues) == 1
         assert namespace_issues[0].message == (
             "Unknown project namespace 'natural-systems' in ref 'natural-systems:task:t335'. "
-            "Add it to science.yaml children: or use a local ref."
+            "Add it to science.yaml peers: or use a local ref."
         )
 
 
@@ -375,22 +494,11 @@ def test_legacy_two_part_cross_project_ref_reports_suggestion() -> None:
         root = Path(td)
         _scaffold(root)
         (root / "science.yaml").write_text(
-            "name: meta\n"
-            "id: meta\n"
-            "role: meta\n"
-            "children:\n"
-            "  - id: cbioportal\n"
-            f"    path: {root / 'cbioportal'}\n"
-            "    role: data-source\n",
+            f"name: meta\nid: meta\nrole: meta\npeers:\n  - id: cbioportal\n    path: {root / 'cbioportal'}\n",
             encoding="utf-8",
         )
         (root / "doc" / "questions" / "x.md").write_text(
-            "---\n"
-            "id: question:x\n"
-            "type: question\n"
-            "related: [cbioportal:q014]\n"
-            "---\n\n"
-            "# X\n",
+            "---\nid: question:x\ntype: question\nrelated: [cbioportal:q014]\n---\n\n# X\n",
             encoding="utf-8",
         )
 
@@ -469,9 +577,7 @@ def test_doi_check_silent_when_no_bib_or_paper_notes() -> None:
         _scaffold(root)
         # remove the auto-scaffolded bib
         (root / "papers" / "references.bib").unlink()
-        (root / "doc" / "background" / "topics" / "x.md").write_text(
-            "# X\nDOI: 10.1234/anything.goes here\n"
-        )
+        (root / "doc" / "background" / "topics" / "x.md").write_text("# X\nDOI: 10.1234/anything.goes here\n")
         issues = check_refs(root)
         assert [i for i in issues if i.ref_type == "doi"] == []
 

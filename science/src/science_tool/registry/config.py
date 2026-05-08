@@ -5,9 +5,12 @@ from __future__ import annotations
 import os
 from datetime import date
 from pathlib import Path
+from typing import cast
 
 import yaml
 from pydantic import BaseModel, Field
+
+_UNSET = object()
 
 
 def get_science_config_dir() -> Path:
@@ -100,7 +103,7 @@ def ensure_registered(
     config_path: Path | None = None,
     project_id: str | None = None,
     role: str | None = None,
-    parent: str | None = None,
+    parent: str | None | object = _UNSET,
 ) -> None:
     """Register or refresh a project. Idempotent; uses resolved path."""
     config_path = config_path or get_default_config_path()
@@ -116,8 +119,8 @@ def ensure_registered(
             if role is not None and project.role != role:
                 project.role = role
                 changed = True
-            if parent is not None and project.parent != parent:
-                project.parent = parent
+            if parent is not _UNSET and project.parent != parent:
+                project.parent = cast(str | None, parent)
                 changed = True
             if changed:
                 save_global_config(cfg, config_path)
@@ -130,7 +133,7 @@ def ensure_registered(
             registered=date.today(),
             id=project_id,
             role=role,
-            parent=parent,
+            parent=None if parent is _UNSET else cast(str | None, parent),
         )
     )
     save_global_config(cfg, config_path)

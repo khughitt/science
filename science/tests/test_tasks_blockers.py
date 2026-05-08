@@ -56,6 +56,12 @@ def test_validate_rejects_untyped_even_with_force(tmp_path: Path):
         validate_blocker_refs(tmp_path, ["just-a-string"], force=True)
 
 
+def test_validate_rejects_at_in_typed_ref_slug_even_with_force(tmp_path: Path):
+    _setup_project_with_dataset(tmp_path)
+    with pytest.raises(BlockerValidationError, match="must be typed"):
+        validate_blocker_refs(tmp_path, ["dataset:foo@v2"], force=True)
+
+
 def test_validate_accepts_known_typed_ref(tmp_path: Path):
     _setup_project_with_dataset(tmp_path)
     result = validate_blocker_refs(tmp_path, ["dataset:foo"])

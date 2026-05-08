@@ -568,7 +568,6 @@ Highest-value additions:
 - WILDS, distribution-shift, and robustness-benchmark papers for ML robustness evaluation.
 
 Deliverable: either add PDFs and process them in a later batch, or write a topic note explaining how each family should influence evaluation artifacts, metric-family enums, checklist fields, H02 validation outcomes, and H03 reason codes.
-
 ## [t042] Design synthesis artifact lifecycle and output-artifact model
 - priority: P2
 - status: proposed
@@ -578,3 +577,85 @@ Deliverable: either add PDFs and process them in a later batch, or write a topic
 - created: 2026-05-07
 
 Define how synthesis nodes, output artifacts, propositions, validation runs, and downstream syntheses form a derivation DAG. Cover replay, invalidation, supersession, reason-code propagation, artifact reuse, and the decision rule for first-class output artifacts versus embedded output fields.
+
+## [t043] Cross-project blockers spec
+- priority: P1
+- status: deferred
+- related: [topic:cross-project]
+- group: project-peers
+- created: 2026-05-07
+
+Deferred trajectory item from project-peers Decision 13
+
+## [t044] Workspace registry design
+- priority: P2
+- status: deferred
+- group: project-peers
+- created: 2026-05-07
+
+Deferred trajectory item from project-peers Decision 13
+
+## [t045] Remote peers via cloneable repos
+- priority: P3
+- status: deferred
+- group: project-peers
+- created: 2026-05-07
+
+Deferred trajectory item from project-peers Decision 13
+
+## [t046] Versioned entity references
+- priority: P3
+- status: deferred
+- group: project-peers
+- created: 2026-05-07
+
+Deferred trajectory item from project-peers Decision 13
+
+## [t047] L2 caching & freshness
+- priority: P3
+- status: deferred
+- group: project-peers
+- created: 2026-05-07
+
+Deferred trajectory item from project-peers Decision 13
+
+## [t048] Composite graph policy controls (compose: opt-in)
+- priority: P2
+- status: deferred
+- group: project-peers
+- created: 2026-05-07
+
+Deferred trajectory item from project-peers Decision 13
+
+## [t049] Service / capability exchange (Layer 3)
+- priority: P2
+- status: deferred
+- group: project-peers
+- created: 2026-05-07
+
+Deferred trajectory item from project-peers Decision 13
+
+## [t050] Multi-user identity scoping
+- priority: P3
+- status: deferred
+- group: project-peers
+- created: 2026-05-07
+
+Deferred trajectory item from project-peers Decision 13
+
+## [t051] Auto-unblock / change notification
+- priority: P3
+- status: deferred
+- group: project-peers
+- created: 2026-05-07
+
+Deferred trajectory item from project-peers Decision 13
+
+## [t052] Symmetry tooling (peers check --symmetric)
+- priority: P3
+- status: deferred
+- aspects: [software-development]
+- group: project-peers
+- created: 2026-05-07
+
+Deferred trajectory item from project-peers Decision 13
