@@ -6,8 +6,6 @@ from pathlib import Path
 
 import click
 
-from science_tool.federation import validate_federation
-from science_tool.federation_status import render_federated_status
 from science_tool.project_config import ProjectRole, load_project_config
 
 
@@ -25,6 +23,8 @@ def federation_group() -> None:
 )
 def federation_validate(project_root: Path) -> None:
     """Validate meta's children manifest against child parent back-references."""
+    from science_tool.federation import validate_federation  # noqa: PLC0415
+
     root = Path.cwd() if str(project_root) == "." else project_root
     cfg = load_project_config(root)
     if cfg.role != ProjectRole.META:
@@ -49,6 +49,8 @@ def federation_validate(project_root: Path) -> None:
 )
 def federation_status(project_root: Path) -> None:
     """Render a cross-project status rollup for a meta umbrella."""
+    from science_tool.federation_status import render_federated_status  # noqa: PLC0415
+
     root = Path.cwd() if str(project_root) == "." else project_root
     try:
         rendered = render_federated_status(root)

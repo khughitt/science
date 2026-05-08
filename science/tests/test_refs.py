@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
+from pydantic import ValidationError
 
 from science_tool.cli import main
 from science_tool.refs import check_refs
@@ -312,7 +314,7 @@ def test_task_ref_resolves_when_declaration_is_not_first_header_in_tasks_file() 
         assert task_issues == []
 
 
-def test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared() -> None:
+def test_namespace_first_cross_project_task_ref_is_accepted_when_peer_declared() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:
         root = Path(td)
@@ -321,19 +323,13 @@ def test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared(
             "name: meta\n"
             "id: meta\n"
             "role: meta\n"
-            "children:\n"
+            "peers:\n"
             "  - id: natural-systems\n"
-            f"    path: {root / 'natural-systems'}\n"
-            "    role: data-source\n",
+            f"    path: {root / 'natural-systems'}\n",
             encoding="utf-8",
         )
         (root / "doc" / "questions" / "x.md").write_text(
-            "---\n"
-            "id: question:x\n"
-            "type: question\n"
-            "related: [natural-systems:task:t335]\n"
-            "---\n\n"
-            "# X\n",
+            "---\nid: question:x\ntype: question\nrelated: [natural-systems:task:t335]\n---\n\n# X\n",
             encoding="utf-8",
         )
 
@@ -341,6 +337,20 @@ def test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared(
 
         assert [issue for issue in issues if issue.ref_value == "natural-systems:task:t335"] == []
         assert [issue for issue in issues if issue.ref_type == "task" and issue.ref_value == "t335"] == []
+
+
+def test_refs_check_surfaces_removed_children_config() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "science.yaml").write_text(
+            f"name: meta\nid: meta\nchildren:\n  - id: natural-systems\n    path: {root / 'natural-systems'}\n",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValidationError, match=r"Run `science peers migrate` to migrate to `peers:`"):
+            check_refs(root)
 
 
 def test_load_project_ids_includes_peers(tmp_path: Path) -> None:
@@ -384,12 +394,7 @@ def test_unknown_namespace_is_reported() -> None:
         _scaffold(root)
         (root / "science.yaml").write_text("name: demo\nid: demo\n", encoding="utf-8")
         (root / "doc" / "questions" / "x.md").write_text(
-            "---\n"
-            "id: question:x\n"
-            "type: question\n"
-            "related: [natural-systems:task:t335]\n"
-            "---\n\n"
-            "# X\n",
+            "---\nid: question:x\ntype: question\nrelated: [natural-systems:task:t335]\n---\n\n# X\n",
             encoding="utf-8",
         )
 
@@ -399,7 +404,7 @@ def test_unknown_namespace_is_reported() -> None:
         assert len(namespace_issues) == 1
         assert namespace_issues[0].message == (
             "Unknown project namespace 'natural-systems' in ref 'natural-systems:task:t335'. "
-            "Add it to science.yaml children: or use a local ref."
+            "Add it to science.yaml peers: or use a local ref."
         )
 
 
@@ -409,22 +414,11 @@ def test_legacy_two_part_cross_project_ref_reports_suggestion() -> None:
         root = Path(td)
         _scaffold(root)
         (root / "science.yaml").write_text(
-            "name: meta\n"
-            "id: meta\n"
-            "role: meta\n"
-            "children:\n"
-            "  - id: cbioportal\n"
-            f"    path: {root / 'cbioportal'}\n"
-            "    role: data-source\n",
+            f"name: meta\nid: meta\nrole: meta\npeers:\n  - id: cbioportal\n    path: {root / 'cbioportal'}\n",
             encoding="utf-8",
         )
         (root / "doc" / "questions" / "x.md").write_text(
-            "---\n"
-            "id: question:x\n"
-            "type: question\n"
-            "related: [cbioportal:q014]\n"
-            "---\n\n"
-            "# X\n",
+            "---\nid: question:x\ntype: question\nrelated: [cbioportal:q014]\n---\n\n# X\n",
             encoding="utf-8",
         )
 
@@ -503,9 +497,7 @@ def test_doi_check_silent_when_no_bib_or_paper_notes() -> None:
         _scaffold(root)
         # remove the auto-scaffolded bib
         (root / "papers" / "references.bib").unlink()
-        (root / "doc" / "background" / "topics" / "x.md").write_text(
-            "# X\nDOI: 10.1234/anything.goes here\n"
-        )
+        (root / "doc" / "background" / "topics" / "x.md").write_text("# X\nDOI: 10.1234/anything.goes here\n")
         issues = check_refs(root)
         assert [i for i in issues if i.ref_type == "doi"] == []
 

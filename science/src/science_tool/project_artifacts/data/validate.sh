@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.05.07.1
-# science-managed-source-sha256: 0dcbec2b9a6a021c86a69b2bfb6c5347cdf89d563e6b0a91983a9295e72a09ec
+# science-managed-version: 2026.05.07.2
+# science-managed-source-sha256: fba6afb72d98cab843e235bc33dffe2625f2c84f103adfffa2badfe140894bd6
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -1342,7 +1342,7 @@ else
             ref="$project_id"
             warn "Broken reference in $filename: related ID '$ref' not found"
         elif [ "$status" = "UNKNOWN_NAMESPACE" ]; then
-            error "Unknown project namespace '${project_id}' in ref '${raw}'. Add it to science.yaml children: or use a local ref."
+            error "Unknown project namespace '${project_id}' in ref '${raw}'. Add it to science.yaml peers: or use a local ref."
         elif [ "$status" = "LEGACY_PROJECT_REF" ]; then
             warn "Legacy cross-project ref '${raw}' is missing an entity kind. Use '${project_id}:question:${slug}' or another explicit <project-id>:<kind>:<slug> ref."
         fi

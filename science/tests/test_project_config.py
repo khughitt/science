@@ -1,5 +1,8 @@
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from science_tool.project_config import (
     ProjectRole,
     load_project_config,
@@ -140,3 +143,42 @@ peers:
     )
     cfg = load_project_config(project_root)
     assert cfg.peers[0].id == "future-peer"
+
+
+def test_project_config_rejects_legacy_parent(tmp_path: Path) -> None:
+    """parent: is removed; loading a config with it must fail clearly."""
+    project_root = tmp_path / "host"
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text(
+        """
+name: host
+id: host
+profile: research
+research_question: "..."
+parent: ../meta
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError, match=r"Run `science peers migrate` to migrate to `peers:`"):
+        load_project_config(project_root)
+
+
+def test_project_config_rejects_legacy_children(tmp_path: Path) -> None:
+    """children: is removed; loading a config with it must fail clearly."""
+    project_root = tmp_path / "meta"
+    project_root.mkdir()
+    (project_root / "science.yaml").write_text(
+        """
+name: meta
+id: meta
+role: meta
+profile: research
+research_question: "..."
+children:
+  - id: a
+    path: ../a
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError, match=r"Run `science peers migrate` to migrate to `peers:`"):
+        load_project_config(project_root)

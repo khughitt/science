@@ -1324,7 +1324,7 @@ def test_validate_reports_unknown_namespace_with_raw_ref(tmp_path: Path) -> None
     assert result.returncode == 1, combined
     assert (
         "Unknown project namespace 'natural-systems' in ref 'natural-systems:task:t335'. "
-        "Add it to science.yaml children: or use a local ref."
+        "Add it to science.yaml peers: or use a local ref."
     ) in combined
 
 
