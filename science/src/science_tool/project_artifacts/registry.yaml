@@ -29,8 +29,8 @@ artifacts:
       requires_clean_worktree: true
       commit_default: true
       transaction_kind: temp_commit
-    version: '2026.05.07.2'
-    current_hash: fba6afb72d98cab843e235bc33dffe2625f2c84f103adfffa2badfe140894bd6
+    version: '2026.05.07.3'
+    current_hash: 8f242be49a97880e074b08985196988b153837cd2693998dc7c0f6b6d4a7b02b
     previous_hashes:
       - version: '2026.04.26'
         hash: f4596de3e9b2696066097621d5aef5606f247d144c5530409433427949c830d1
@@ -60,6 +60,8 @@ artifacts:
         hash: f66137dd05b07e36728936dd8e0be86df5cc315fef3797c4c5216f6deb3cd63c
       - version: '2026.05.07.1'
         hash: 0dcbec2b9a6a021c86a69b2bfb6c5347cdf89d563e6b0a91983a9295e72a09ec
+      - version: '2026.05.07.2'
+        hash: fba6afb72d98cab843e235bc33dffe2625f2c84f103adfffa2badfe140894bd6
     migrations:
       - from: '2026.04.26'
         to: '2026.04.26.1'
@@ -131,6 +133,11 @@ artifacts:
         kind: byte_replace
         summary: 'Update validate.sh unknown namespace guidance from children: to peers:.'
         steps: []
+      - from: '2026.05.07.2'
+        to: '2026.05.07.3'
+        kind: byte_replace
+        summary: 'Remove validate.sh legacy children: namespace discovery.'
+        steps: []
     changelog:
       '2026.04.26': Initial managed artifact (port of scripts/validate.sh + hook infrastructure).
       '2026.04.26.1': 'Audit-surfaced six-fix batch (Plan #7 of conventions audit).'
@@ -147,3 +154,4 @@ artifacts:
       '2026.05.06.1': 'Rename CLI binary from `science-tool` to `science`. Resolver now invokes `uv run --project <path> science`, searches for `./science`, `../science`, etc., and the smoke test runs `uv run science --help`.'
       '2026.05.07.1': 'Recognize science.yaml peers: entries during validate.sh namespace-first reference checks.'
       '2026.05.07.2': 'Update validate.sh unknown namespace guidance from children: to peers:.'
+      '2026.05.07.3': 'Remove validate.sh legacy children: namespace discovery.'

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.05.07.2
-# science-managed-source-sha256: fba6afb72d98cab843e235bc33dffe2625f2c84f103adfffa2badfe140894bd6
+# science-managed-version: 2026.05.07.3
+# science-managed-source-sha256: 8f242be49a97880e074b08985196988b153837cd2693998dc7c0f6b6d4a7b02b
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -1226,16 +1226,6 @@ def load_project_ids(path):
     project_id = data.get("id")
     if isinstance(project_id, str) and project_id:
         ids.add(project_id)
-    peers = data.get("peers")
-    if isinstance(peers, list):
-        for peer in peers:
-            if isinstance(peer, dict) and isinstance(peer.get("id"), str):
-                ids.add(peer["id"])
-    children = data.get("children")
-    if isinstance(children, list):
-        for child in children:
-            if isinstance(child, dict) and isinstance(child.get("id"), str):
-                ids.add(child["id"])
     peers = data.get("peers")
     if isinstance(peers, list):
         for peer in peers:
