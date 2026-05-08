@@ -6,7 +6,7 @@
 
 **Architecture:** Add a backend attention read model derived from existing project scans, analyses, graph data, task metadata, and DAG evidence YAML. Expose it through a read-only `/api/attention` endpoint, then replace the root frontend view with a workspace that consumes the same payload for graph, ledger, sidebar, URL state, and browser-local preferences. Keep the current project/entity/task APIs intact.
 
-**Tech Stack:** Python 3.12, FastAPI, Pydantic, pytest, React 19, TypeScript, Vite, Zustand, Tailwind CSS, existing `science-model` and `science-tool` path packages.
+**Tech Stack:** Python 3.12, FastAPI, Pydantic, pytest, React 19, TypeScript, Vite, React Router for the existing route shell, TanStack Router installed as the planned typed-router migration target, Zustand, Tailwind CSS, `react-force-graph-2d` / `react-force-graph-3d` for V1 graph rendering, existing `science-model` and `science-tool` path packages.
 
 ---
 
@@ -25,19 +25,19 @@ All implementation paths below are relative to `/home/keith/d/dashboard` unless 
 - Modify `frontend/src/types/index.ts`: add attention payload types.
 - Modify `frontend/src/api/client.ts`: add `api.attention.get`.
 - Create `frontend/src/routes/AttentionWorkspace.tsx`: root Split Attention Workspace.
-- Create `frontend/src/components/Attention/AttentionGraph.tsx`: deterministic 2D SVG graph slice.
+- Create `frontend/src/components/Attention/AttentionGraph.tsx`: deterministic 2D force-graph slice using `react-force-graph-2d`.
 - Create `frontend/src/components/Attention/FindingsLedger.tsx`: ranked findings ledger with tabs and score breakdown entry points.
 - Create `frontend/src/components/Attention/ResearchMeaningSidebar.tsx`: selected entity/finding profile.
 - Create `frontend/src/components/Attention/AttentionControls.tsx`: scope, preset, lens, snapshot, and refresh controls.
-- Create `frontend/src/components/Attention/attentionLayout.ts`: stable layout helper for 2D graph positions.
 - Create `frontend/src/components/Attention/useAttentionState.ts`: URL state plus localStorage preferences.
-- Modify `frontend/src/App.tsx`: route `/` to `AttentionWorkspace`.
 - Modify `frontend/src/hooks/useKeyboard.ts`: reserve `1`-`4` for attention presets when the workspace is active.
 
 ## V1 Scope Decisions
 
 - The first screen is `/` and defaults to `scope=all`, `preset=3`, `lens=semantic`, `tab=attention`.
-- V1 graph is 2D SVG for legibility and deterministic placement. Keep existing project graph route unchanged.
+- V1 graph uses the already-installed `react-force-graph-2d` package for the root attention workspace. Keep existing project graph route unchanged.
+- `r3f-forcegraph` + `@react-three/fiber` + `@react-three/drei` is the alternate 3D composition path. Do not add it to V1 unless replacing the React Force Graph renderer in Task 8.
+- TanStack Router is added to the dependency set now, but full migration from React Router is a follow-up because the current app has route hooks and links spread across existing screens. Do not partially wrap both routers around the same route tree.
 - Findings are derived read-model records; no project files are modified.
 - Cross-project edges come from shared source refs and explicit related refs in the configured projects. Peer path resolution issues are surfaced as profile/quality warnings when visible in the read model; full project-peers validation is not implemented here.
 - DAG edge YAML extraction handles `doc/figures/dags/*.edges.yaml` when present.
@@ -1311,7 +1311,56 @@ git commit -m "feat(attention): expose workspace snapshot API"
 
 ---
 
-### Task 6: Frontend Attention Types And API Client
+### Task 6: Frontend Library Baseline And Router Package
+
+**Files:**
+- Modify: `frontend/package.json`
+- Modify: `frontend/package-lock.json`
+
+- [ ] **Step 1: Install TanStack Router**
+
+Run:
+
+```bash
+cd frontend && npm install @tanstack/react-router
+```
+
+Expected: `frontend/package.json` includes `@tanstack/react-router` under dependencies and `frontend/package-lock.json` updates.
+
+- [ ] **Step 2: Confirm graph renderer dependency choice**
+
+Run:
+
+```bash
+cd frontend && npm ls react-force-graph-2d react-force-graph-3d
+```
+
+Expected: both packages are present. V1 uses `react-force-graph-2d` for the attention workspace and keeps the existing `react-force-graph-3d` dependency available for the existing project graph route.
+
+Do not install `r3f-forcegraph`, `@react-three/fiber`, or `@react-three/drei` in V1 unless the implementation intentionally replaces the React Force Graph renderer. If choosing that alternate path instead, run:
+
+```bash
+cd frontend && npm install r3f-forcegraph @react-three/fiber @react-three/drei
+```
+
+Then update Task 9 to implement an R3F `<Canvas>` graph component instead of the `react-force-graph-2d` component.
+
+- [ ] **Step 3: Run frontend build**
+
+Run: `cd frontend && npm run build`
+
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add frontend/package.json frontend/package-lock.json
+git commit -m "feat(frontend): add tanstack router dependency"
+```
+
+---
+
+### Task 7: Frontend Attention Types And API Client
 
 **Files:**
 - Modify: `frontend/src/types/index.ts`
@@ -1483,7 +1532,7 @@ git commit -m "feat(attention): add frontend API types"
 
 ---
 
-### Task 7: URL State And Preferences Hook
+### Task 8: URL State And Preferences Hook
 
 **Files:**
 - Create: `frontend/src/components/Attention/useAttentionState.ts`
@@ -1580,10 +1629,9 @@ git commit -m "feat(attention): manage workspace URL state"
 
 ---
 
-### Task 8: Attention Workspace Components
+### Task 9: Attention Workspace Components
 
 **Files:**
-- Create: `frontend/src/components/Attention/attentionLayout.ts`
 - Create: `frontend/src/components/Attention/AttentionGraph.tsx`
 - Create: `frontend/src/components/Attention/FindingsLedger.tsx`
 - Create: `frontend/src/components/Attention/ResearchMeaningSidebar.tsx`
@@ -1591,42 +1639,34 @@ git commit -m "feat(attention): manage workspace URL state"
 - Create: `frontend/src/routes/AttentionWorkspace.tsx`
 - Modify: `frontend/src/App.tsx`
 
-- [ ] **Step 1: Create deterministic layout helper**
-
-Create `frontend/src/components/Attention/attentionLayout.ts`:
-
-```ts
-import type { AttentionGraphNode } from '../../types'
-
-export interface PositionedAttentionNode extends AttentionGraphNode {
-  x: number
-  y: number
-}
-
-export function layoutAttentionNodes(nodes: AttentionGraphNode[], width: number, height: number): PositionedAttentionNode[] {
-  if (nodes.length === 0) return []
-  const centerX = width / 2
-  const centerY = height / 2
-  const radius = Math.max(90, Math.min(width, height) / 2 - 48)
-  return nodes.map((node, index) => {
-    const angle = (Math.PI * 2 * index) / nodes.length - Math.PI / 2
-    const scoreRadius = radius * (0.45 + 0.55 * (1 - Math.min(1, node.scores.composite)))
-    return {
-      ...node,
-      x: centerX + Math.cos(angle) * scoreRadius,
-      y: centerY + Math.sin(angle) * scoreRadius,
-    }
-  })
-}
-```
-
-- [ ] **Step 2: Create graph component**
+- [ ] **Step 1: Create React Force Graph component**
 
 Create `frontend/src/components/Attention/AttentionGraph.tsx`:
 
 ```tsx
+import { useMemo, useRef } from 'react'
+import ForceGraph2D, { type ForceGraphMethods, type NodeObject, type LinkObject } from 'react-force-graph-2d'
 import type { AttentionGraphEdge, AttentionGraphNode } from '../../types'
-import { layoutAttentionNodes } from './attentionLayout'
+
+interface AttentionForceNode extends NodeObject {
+  id: string
+  label: string
+  source: AttentionGraphNode
+  color: string
+  stroke: string
+  radius: number
+  fx: number
+  fy: number
+}
+
+interface AttentionForceLink extends LinkObject<AttentionForceNode> {
+  id: string
+  source: string
+  target: string
+  color: string
+  width: number
+  dashed: boolean
+}
 
 export function AttentionGraph({
   nodes,
@@ -1639,61 +1679,83 @@ export function AttentionGraph({
   selectedId: string | null
   onSelect: (id: string) => void
 }) {
-  const width = 760
-  const height = 460
-  const positioned = layoutAttentionNodes(nodes, width, height)
-  const byId = new Map(positioned.map((node) => [node.id, node]))
+  const graphRef = useRef<ForceGraphMethods<AttentionForceNode, AttentionForceLink> | undefined>(undefined)
+  const graphData = useMemo(() => buildGraphData(nodes, edges), [nodes, edges])
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full rounded border border-neutral-800 bg-neutral-950">
-      {edges.map((edge) => {
-        const source = byId.get(edge.source)
-        const target = byId.get(edge.target)
-        if (!source || !target) return null
-        return (
-          <line
-            key={edge.id}
-            x1={source.x}
-            y1={source.y}
-            x2={target.x}
-            y2={target.y}
-            stroke={edge.cross_project ? '#818cf8' : edgeColor(edge.evidence_status)}
-            strokeWidth={1 + edge.load_bearingness * 3}
-            strokeDasharray={edge.evidence_status === 'eliminated' ? '3 5' : edge.cross_project ? '6 4' : undefined}
-            opacity={0.7}
-          />
-        )
-      })}
-      {positioned.map((node) => {
-        const selected = node.id === selectedId
-        const radius = 7 + node.scores.composite * 12
-        return (
-          <g key={node.id} transform={`translate(${node.x} ${node.y})`}>
-            <g
-              role="button"
-              tabIndex={0}
-              aria-label={node.label}
-              onClick={() => onSelect(node.id)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') onSelect(node.id)
-              }}
-              className="cursor-pointer outline-none"
-            >
-              <circle
-                r={radius + (selected ? 5 : 0)}
-                fill={nodeColor(node)}
-                stroke={selected ? '#f8fafc' : supportStroke(node.support_class)}
-                strokeWidth={selected ? 2.5 : 1.5}
-              />
-            </g>
-            <text y={radius + 14} textAnchor="middle" className="fill-neutral-300 text-[10px]">
-              {truncate(node.label, 28)}
-            </text>
-          </g>
-        )
-      })}
-    </svg>
+    <div className="h-full w-full rounded border border-neutral-800 bg-neutral-950">
+      <ForceGraph2D<AttentionForceNode, AttentionForceLink>
+        ref={graphRef}
+        graphData={graphData}
+        backgroundColor="#0a0a0a"
+        cooldownTicks={0}
+        nodeRelSize={1}
+        linkColor={(link) => link.color}
+        linkWidth={(link) => link.width}
+        linkLineDash={(link) => (link.dashed ? [4, 4] : undefined)}
+        nodeCanvasObject={(node, ctx, globalScale) => drawNode(node, ctx, globalScale, node.id === selectedId)}
+        nodePointerAreaPaint={(node, color, ctx) => {
+          ctx.fillStyle = color
+          ctx.beginPath()
+          ctx.arc(node.fx, node.fy, node.radius + 8, 0, Math.PI * 2)
+          ctx.fill()
+        }}
+        onNodeClick={(node) => onSelect(node.id)}
+      />
+    </div>
   )
+}
+
+function buildGraphData(nodes: AttentionGraphNode[], edges: AttentionGraphEdge[]) {
+  const positioned = layoutNodes(nodes)
+  const nodeIds = new Set(positioned.map((node) => node.id))
+  return {
+    nodes: positioned,
+    links: edges
+      .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
+      .map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        color: edge.cross_project ? '#818cf8' : edgeColor(edge.evidence_status),
+        width: 1 + edge.load_bearingness * 3,
+        dashed: edge.evidence_status === 'eliminated' || edge.cross_project,
+      })),
+  }
+}
+
+function layoutNodes(nodes: AttentionGraphNode[]): AttentionForceNode[] {
+  const radius = 160
+  return nodes.map((node, index) => {
+    const angle = (Math.PI * 2 * index) / Math.max(1, nodes.length) - Math.PI / 2
+    const scoreRadius = radius * (0.45 + 0.55 * (1 - Math.min(1, node.scores.composite)))
+    return {
+      id: node.id,
+      label: node.label,
+      source: node,
+      color: nodeColor(node),
+      stroke: supportStroke(node.support_class),
+      radius: 7 + node.scores.composite * 12,
+      fx: Math.cos(angle) * scoreRadius,
+      fy: Math.sin(angle) * scoreRadius,
+    }
+  })
+}
+
+function drawNode(node: AttentionForceNode, ctx: CanvasRenderingContext2D, globalScale: number, selected: boolean) {
+  ctx.save()
+  ctx.fillStyle = node.color
+  ctx.strokeStyle = selected ? '#f8fafc' : node.stroke
+  ctx.lineWidth = selected ? 2.5 : 1.5
+  ctx.beginPath()
+  ctx.arc(node.fx, node.fy, node.radius + (selected ? 4 : 0), 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = '#d4d4d4'
+  ctx.font = `${Math.max(9, 12 / globalScale)}px sans-serif`
+  ctx.textAlign = 'center'
+  ctx.fillText(truncate(node.label, 28), node.fx, node.fy + node.radius + 14)
+  ctx.restore()
 }
 
 function nodeColor(node: AttentionGraphNode): string {
@@ -1726,7 +1788,7 @@ function truncate(value: string, max: number): string {
 }
 ```
 
-- [ ] **Step 3: Create ledger component**
+- [ ] **Step 2: Create ledger component**
 
 Create `frontend/src/components/Attention/FindingsLedger.tsx`:
 
@@ -1800,7 +1862,7 @@ export function FindingsLedger({
 }
 ```
 
-- [ ] **Step 4: Create sidebar and controls**
+- [ ] **Step 3: Create sidebar and controls**
 
 Create `frontend/src/components/Attention/ResearchMeaningSidebar.tsx`:
 
@@ -1910,7 +1972,7 @@ export function AttentionControls({
 }
 ```
 
-- [ ] **Step 5: Create workspace route and wire root route**
+- [ ] **Step 4: Create workspace route and wire root route**
 
 Create `frontend/src/routes/AttentionWorkspace.tsx`:
 
@@ -2002,13 +2064,13 @@ Change the root route:
 <Route path="/" element={<AttentionWorkspace />} />
 ```
 
-- [ ] **Step 6: Run frontend build**
+- [ ] **Step 5: Run frontend build**
 
 Run: `cd frontend && npm run build`
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add frontend/src/components/Attention frontend/src/routes/AttentionWorkspace.tsx frontend/src/App.tsx
@@ -2017,7 +2079,7 @@ git commit -m "feat(attention): add split workspace UI"
 
 ---
 
-### Task 9: Keyboard Presets And Browser Behavior
+### Task 10: Keyboard Presets And Browser Behavior
 
 **Files:**
 - Modify: `frontend/src/hooks/useKeyboard.ts`
@@ -2066,7 +2128,7 @@ git commit -m "feat(attention): add workspace preset shortcuts"
 
 ---
 
-### Task 10: Verification Sweep
+### Task 11: Verification Sweep
 
 **Files:**
 - Modify if needed: files touched by prior tasks only.
@@ -2132,15 +2194,15 @@ If no fixes were needed, do not create an empty commit.
 
 ## Spec Coverage Self-Review
 
-- Multi-project model: Tasks 4 and 5 build All Projects snapshots; Task 10 verifies root first-open behavior.
+- Multi-project model: Tasks 4 and 5 build All Projects snapshots; Task 11 verifies root first-open behavior.
 - Finding data model: Tasks 1 and 2 define stable IDs, extraction, deduplication, and provenance.
 - Skeptical confidence: Task 3 implements support classes, fragile single-workflow treatment, and score reasons.
-- Evidence semantics: Tasks 2 and 3 carry `edge_status`, `identification`, and ruled-out state into read models; Task 8 renders them in graph/ledger/sidebar text.
-- Graph encoding and deterministic layout: Task 8 implements deterministic 2D SVG layout and non-color support cues.
+- Evidence semantics: Tasks 2 and 3 carry `edge_status`, `identification`, and ruled-out state into read models; Task 9 renders them in graph/ledger/sidebar text.
+- Graph encoding and deterministic layout: Task 9 implements deterministic fixed-position `react-force-graph-2d` rendering and non-color support cues.
 - Attention scoring and transparency: Tasks 3 and 8 expose composite scores and score breakdowns.
-- State and persistence: Task 7 handles URL state and `localStorage`; Task 9 adds keyboard preset state.
-- Build/freshness: Tasks 4 and 5 create snapshot IDs/build timestamps; Task 8 shows built time; deeper file-watch incremental refresh remains through existing rescan/watch behavior.
-- Error/degraded states: Tasks 4 and 8 preserve warnings and empty results; Task 10 smoke-tests default rendering.
+- State and persistence: Task 8 handles URL state and `localStorage`; Task 10 adds keyboard preset state.
+- Build/freshness: Tasks 4 and 5 create snapshot IDs/build timestamps; Task 9 shows built time; deeper file-watch incremental refresh remains through existing rescan/watch behavior.
+- Error/degraded states: Tasks 4 and 9 preserve warnings and empty results; Task 11 smoke-tests default rendering.
 
 ## Implementation Notes
 
