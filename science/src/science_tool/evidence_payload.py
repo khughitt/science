@@ -191,9 +191,7 @@ class EvidencePayloadRegistry:
                 f"{primary_name!r} artifact_type {primary.artifact_type!r}"
             )
 
-        missing_sections = [
-            name for name in payload.core.extensions if name not in payload.extension_sections
-        ]
+        missing_sections = [name for name in payload.core.extensions if name not in payload.extension_sections]
         if missing_sections:
             missing = ", ".join(repr(name) for name in missing_sections)
             raise PayloadValidationError(f"missing extension section(s): {missing}")
@@ -300,8 +298,7 @@ def _extension_section_occurrences(payload: EvidencePayload, extension_name: str
     if not isinstance(raw_codes, list) or any(not isinstance(code, str) for code in raw_codes):
         raise PayloadValidationError(f"extension {extension_name!r} reason_codes must be a list of strings")
     return [
-        ReasonCodeOccurrence(code=code, origin=extension_name, chain=(payload.core.payload_id,))
-        for code in raw_codes
+        ReasonCodeOccurrence(code=code, origin=extension_name, chain=(payload.core.payload_id,)) for code in raw_codes
     ]
 
 

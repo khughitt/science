@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from science_tool.evidence_payload import EvidencePayload, PayloadValidationError
 from science_tool.synthesis_payload import (
+    SYNTHESIS_FAMILIES,
     SYNTHESIS_OPERATION_EXTENSION,
     SYNTHESIS_PRIMARY_EXTENSION_NAMES,
     SynthesisOperation,
@@ -165,3 +167,11 @@ def test_derivation_edges_skip_empty_proposition_refs() -> None:
 
     assert not any(edge[1] == "targets-proposition" for edge in edges)
     assert ("syn-2026-graph", "produced", "payload:bma-model-summary") in edges
+
+
+def test_typed_synthesis_docs_list_every_family() -> None:
+    docs = Path(__file__).resolve().parents[1] / "docs" / "typed-synthesis-nodes.md"
+    text = docs.read_text()
+
+    for family in SYNTHESIS_FAMILIES:
+        assert f"`{family}`" in text

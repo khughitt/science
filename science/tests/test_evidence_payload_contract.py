@@ -130,9 +130,7 @@ def test_payload_rejects_strengthen_belief_when_effective_blocking_reason_inheri
                 "uncertainty_summary": "OSIRIS 24/32 items present",
                 "reason_codes": ["code-or-data-unavailable"],
             },
-            "extension_sections": {
-                "reproducibility-checklist-audit": {"checklist_ref": "checklist:OSIRIS-32"}
-            },
+            "extension_sections": {"reproducibility-checklist-audit": {"checklist_ref": "checklist:OSIRIS-32"}},
         }
     )
     downstream = _payload(
@@ -175,9 +173,7 @@ def test_nonblocking_codes_do_not_propagate_under_default_blocking_policy() -> N
                 "uncertainty_summary": "TD posterior: x~=0.31",
                 "reason_codes": [],
             },
-            "extension_sections": {
-                "truth-discovery": {"source_reliability_estimates": {"s1": {"sensitivity": 0.83}}}
-            },
+            "extension_sections": {"truth-discovery": {"source_reliability_estimates": {"s1": {"sensitivity": 0.83}}}},
         }
     )
     downstream = _payload(
@@ -194,7 +190,9 @@ def test_extension_section_reason_codes_join_effective_codes_with_extension_orig
     payload = _payload(
         "ev-2026-causal-extension-coded",
         core={"reason_codes": []},
-        extension_sections={"causal-graph": {"identification_status": "not-attempted", "reason_codes": ["identification-missing"]}},
+        extension_sections={
+            "causal-graph": {"identification_status": "not-attempted", "reason_codes": ["identification-missing"]}
+        },
     )
 
     codes = effective_reason_codes(payload, _registry())
