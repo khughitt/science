@@ -47,13 +47,16 @@ Science treats research graphs as uncertain by default.
 
 If a project still mainly expresses confidence as scalar values on hypotheses or questions, and does not yet expose proposition-backed evidence, it is only partially migrated to the current model.
 
-## Federation
+## Project Peers
 
-Science supports a v1.0 meta-project federation model for umbrella projects that coordinate multiple child projects
-without taking ownership of their files. A `role: meta` project declares a `children:` manifest, can validate child
-`parent:` back-references with `science federation validate`, and can materialize a read-only federated graph with
-`science graph build`. See [docs/federation.md](docs/federation.md) for the schema, graph behavior, status rollup,
-and deferred v1.1+ work.
+Science supports decentralized project peers for cross-project references and
+graph composition. A project declares recognized namespaces in `science.yaml`
+with `peers:`, checks them with `science peers check`, and inspects them with
+`science peers list` or `science peers show <peer-id>`. `science graph build`
+writes the local graph to `knowledge/graph.trig`; when peers are declared it
+also writes `knowledge/composite.trig` from the host local graph plus each
+peer's local graph. See [docs/federation.md](docs/federation.md) for the current
+peers and addressing reference.
 
 ## Installation
 

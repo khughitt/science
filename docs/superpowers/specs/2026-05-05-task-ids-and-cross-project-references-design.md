@@ -12,9 +12,9 @@ duplicate `t001`, so `meta/validate.sh` fails. The ad-hoc suffix also leaves
 three meanings ambiguous: revision, decomposition, and follow-up fragment.
 
 At the same time, Science projects increasingly need to refer to tasks and
-entities owned by other projects. Federation already defines stable project IDs
-and a namespace-first address convention, but local task parsing and entity
-references still mostly assume local `kind:slug` references.
+entities owned by other projects. Project peers define stable project IDs and a
+namespace-first address convention, but local task parsing and entity references
+still mostly assume local `kind:slug` references.
 
 ## Goals
 
@@ -30,7 +30,7 @@ references still mostly assume local `kind:slug` references.
 ## Non-Goals
 
 - No global task numbering.
-- No automatic writes into child projects.
+- No automatic writes into peer projects.
 - No attempt to solve entity rename or declarative migrations here.
 - No compatibility layer that silently accepts every historical task-ID shape.
 
@@ -132,16 +132,16 @@ multiple-myeloma:hypothesis:h01
 cbioportal:question:q006-ch-priority-gene-completeness
 ```
 
-The first segment is a federation project ID from `science.yaml` or a meta
-project's `children:` manifest. The remaining segments are the target project's
-normal local entity reference.
+The first segment is either the current project's own `id` or a peer project ID
+declared in `science.yaml` under `peers:`. The remaining segments are the target
+project's normal local entity reference.
 
-This refines the existing federation convention in `docs/federation.md`, which
-currently describes `<project-id>:<artifact-id>`. The broad namespace-first
+This refines the existing addressing convention in `docs/federation.md`, which
+historically described `<project-id>:<artifact-id>`. The broad namespace-first
 rule remains; this design makes canonical entity refs explicit by requiring the
 local `kind:slug` after the project namespace.
 
-Existing two-part federation examples such as `cbioportal:q014`,
+Existing two-part cross-project examples such as `cbioportal:q014`,
 `multiple-myeloma:h003`, and `evolution:t012` are legacy shorthand and must be
 audited/migrated during implementation. Checked-in examples in
 `docs/federation.md` and `science/tests/test_addressing.py` should either
@@ -176,10 +176,11 @@ local entity kind or the slug does not resolve.
 Validation behavior:
 
 - Local refs are resolved against the current project.
-- Cross-project refs resolve through the federation membership table when
-  available.
+- Cross-project refs resolve through the peer project-ID set declared in
+  `science.yaml` under `peers:` when available.
 - Three-part namespace-first refs are syntactically accepted but reported as an
-  unresolved namespace when the first segment is not in federation metadata.
+  unresolved namespace when the first segment is not the current project ID or a
+  declared peer ID.
 - Two-part refs remain local `kind:slug` when the first segment is a registered
   local entity kind.
 - Two-part refs whose first segment is a known project ID but not a local entity
@@ -187,8 +188,9 @@ Validation behavior:
   suggested three-part replacement rather than silently treating them as local.
 
 For the initial implementation, the parser can use an explicit project-ID set
-from federation config to decide whether the first segment is a namespace. It
-should not infer namespaces from arbitrary strings.
+from `science.yaml` `peers:` plus the current project ID to decide whether the
+first segment is a namespace. It should not infer namespaces from arbitrary
+strings.
 
 ## Migration
 
@@ -230,7 +232,7 @@ The migration should be explicit and small. Do not add a legacy alias layer for
     separately from this parser/namespace fix.
 - Reference parsing / validation
   - Add a small parser for local vs namespace-first refs.
-  - Validate namespace-first refs through federation config where available.
+  - Validate namespace-first refs through the peer project-ID set where available.
   - Detect legacy two-part cross-project shorthand when the first segment is a
     known project ID and suggest `<project-id>:<kind>:<slug>`.
 - `commands/tasks.md`
@@ -252,7 +254,7 @@ Invalid task id 't001b' in tasks/active.md: task ids must match tNNN. Use parent
 Unresolved namespace:
 
 ```text
-Unknown project namespace 'natural-systems' in ref 'natural-systems:task:t335'. Add it to science.yaml children: or use a local ref.
+Unknown project namespace 'natural-systems' in ref 'natural-systems:task:t335'. Add it to science.yaml peers: or use a local ref.
 ```
 
 Legacy two-part cross-project ref:
@@ -280,8 +282,8 @@ Legacy cross-project ref 'cbioportal:q014' is missing an entity kind. Use 'cbiop
   - `cbioportal:q014` as legacy two-part cross-project shorthand when
     `cbioportal` is a known project ID and not a local entity kind.
   - unknown namespace as unresolved namespace.
-- Federation-aware validation resolves a child task ref when the child project
-  is declared in `children:`.
+- Peer-aware validation resolves a cross-project task ref when the target project
+  is declared in `peers:`.
 
 ## Acceptance Criteria
 

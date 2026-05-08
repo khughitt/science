@@ -694,7 +694,7 @@ git commit -m "feat: classify namespace-first entity refs"
 Add to `science/tests/test_refs.py`:
 
 ```python
-def test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared() -> None:
+def test_namespace_first_cross_project_task_ref_is_accepted_when_peer_declared() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:
         root = Path(td)
@@ -703,10 +703,9 @@ def test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared(
             "name: meta\n"
             "id: meta\n"
             "role: meta\n"
-            "children:\n"
+            "peers:\n"
             "  - id: natural-systems\n"
             f"    path: {root / 'natural-systems'}\n"
-            "    role: data-source\n",
             encoding="utf-8",
         )
         (root / "doc" / "questions" / "x.md").write_text(
@@ -747,7 +746,7 @@ def test_unknown_namespace_is_reported() -> None:
         assert len(namespace_issues) == 1
         assert namespace_issues[0].message == (
             "Unknown project namespace 'natural-systems' in ref 'natural-systems:task:t335'. "
-            "Add it to science.yaml children: or use a local ref."
+            "Add it to science.yaml peers: or use a local ref."
         )
 
 
@@ -760,10 +759,9 @@ def test_legacy_two_part_cross_project_ref_reports_suggestion() -> None:
             "name: meta\n"
             "id: meta\n"
             "role: meta\n"
-            "children:\n"
+            "peers:\n"
             "  - id: cbioportal\n"
             f"    path: {root / 'cbioportal'}\n"
-            "    role: data-source\n",
             encoding="utf-8",
         )
         (root / "doc" / "questions" / "x.md").write_text(
@@ -791,10 +789,10 @@ def test_legacy_two_part_cross_project_ref_reports_suggestion() -> None:
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_refs.py::test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared science/tests/test_refs.py::test_unknown_namespace_is_reported science/tests/test_refs.py::test_legacy_two_part_cross_project_ref_reports_suggestion -q
+uv run --frozen pytest science/tests/test_refs.py::test_namespace_first_cross_project_task_ref_is_accepted_when_peer_declared science/tests/test_refs.py::test_unknown_namespace_is_reported science/tests/test_refs.py::test_legacy_two_part_cross_project_ref_reports_suggestion -q
 ```
 
-Expected: fails because `check_refs()` does not inspect frontmatter entity refs with federation metadata.
+Expected: fails because `check_refs()` does not inspect frontmatter entity refs with the peer project-ID set.
 
 - [ ] **Step 3: Load project IDs and frontmatter refs**
 
@@ -847,7 +845,7 @@ def _load_project_ids(root: Path) -> set[str]:
         cfg = load_project_config(root)
     except Exception:
         return set()
-    ids = {child.id for child in cfg.children}
+    ids = {peer.id for peer in cfg.peers}
     if cfg.id:
         ids.add(cfg.id)
     return ids
@@ -910,7 +908,7 @@ Inside the per-file loop, after reading `rel_path`, add:
                         ref_value=raw_ref,
                         message=(
                             f"Unknown project namespace '{parsed_ref.project_id}' in ref '{raw_ref}'. "
-                            "Add it to science.yaml children: or use a local ref."
+                            "Add it to science.yaml peers: or use a local ref."
                         ),
                     )
                 )
@@ -942,7 +940,7 @@ Then, inside the existing `for line_num, line in enumerate(lines, start=1):` sca
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_refs.py::test_namespace_first_cross_project_task_ref_is_accepted_when_child_declared science/tests/test_refs.py::test_unknown_namespace_is_reported science/tests/test_refs.py::test_legacy_two_part_cross_project_ref_reports_suggestion -q
+uv run --frozen pytest science/tests/test_refs.py::test_namespace_first_cross_project_task_ref_is_accepted_when_peer_declared science/tests/test_refs.py::test_unknown_namespace_is_reported science/tests/test_refs.py::test_legacy_two_part_cross_project_ref_reports_suggestion -q
 ```
 
 Expected: all three tests pass.
@@ -1075,7 +1073,7 @@ def test_validate_catches_stale_task_ref_after_migration(tmp_path: Path) -> None
     assert "stale task ref 't001'" not in combined
 
 
-def test_validate_accepts_namespace_first_ref_for_declared_child(tmp_path: Path) -> None:
+def test_validate_accepts_namespace_first_ref_for_declared_peer(tmp_path: Path) -> None:
     _write_common_files(tmp_path, "software")
     _write_python3_stub(tmp_path / "bin")
     _write_science_tool_stub(tmp_path / "bin")
@@ -1089,10 +1087,9 @@ def test_validate_accepts_namespace_first_ref_for_declared_child(tmp_path: Path)
         "layout_version: 2\n"
         "knowledge_profiles:\n"
         "  local: local\n"
-        "children:\n"
+        "peers:\n"
         "  - id: natural-systems\n"
         f"    path: {tmp_path / 'natural-systems'}\n"
-        "    role: data-source\n",
         encoding="utf-8",
     )
     (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
@@ -1152,7 +1149,7 @@ def test_validate_reports_unknown_namespace_with_raw_ref(tmp_path: Path) -> None
     assert result.returncode == 1, combined
     assert (
         "Unknown project namespace 'natural-systems' in ref 'natural-systems:task:t335'. "
-        "Add it to science.yaml children: or use a local ref."
+        "Add it to science.yaml peers: or use a local ref."
     ) in combined
 
 
@@ -1170,10 +1167,9 @@ def test_validate_reports_legacy_two_part_cross_project_ref(tmp_path: Path) -> N
         "layout_version: 2\n"
         "knowledge_profiles:\n"
         "  local: local\n"
-        "children:\n"
+        "peers:\n"
         "  - id: cbioportal\n"
         f"    path: {tmp_path / 'cbioportal'}\n"
-        "    role: data-source\n",
         encoding="utf-8",
     )
     (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
@@ -1211,7 +1207,7 @@ def test_validate_reports_legacy_two_part_cross_project_ref(tmp_path: Path) -> N
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_validate_script.py::test_validate_rejects_invalid_task_id_suffix science/tests/test_validate_script.py::test_validate_rejects_cross_project_parent science/tests/test_validate_script.py::test_validate_catches_stale_task_ref_after_migration science/tests/test_validate_script.py::test_validate_accepts_namespace_first_ref_for_declared_child science/tests/test_validate_script.py::test_validate_reports_unknown_namespace_with_raw_ref science/tests/test_validate_script.py::test_validate_reports_legacy_two_part_cross_project_ref -q
+uv run --frozen pytest science/tests/test_validate_script.py::test_validate_rejects_invalid_task_id_suffix science/tests/test_validate_script.py::test_validate_rejects_cross_project_parent science/tests/test_validate_script.py::test_validate_catches_stale_task_ref_after_migration science/tests/test_validate_script.py::test_validate_accepts_namespace_first_ref_for_declared_peer science/tests/test_validate_script.py::test_validate_reports_unknown_namespace_with_raw_ref science/tests/test_validate_script.py::test_validate_reports_legacy_two_part_cross_project_ref -q
 ```
 
 Expected: fails because Section 15 still partially parses invalid task headers and Section 16 treats namespace-first refs as broken local refs.
@@ -1379,11 +1375,11 @@ def load_project_ids(path):
     project_id = data.get("id")
     if isinstance(project_id, str) and project_id:
         ids.add(project_id)
-    children = data.get("children")
-    if isinstance(children, list):
-        for child in children:
-            if isinstance(child, dict) and isinstance(child.get("id"), str):
-                ids.add(child["id"])
+    peers = data.get("peers")
+    if isinstance(peers, list):
+        for peer in peers:
+            if isinstance(peer, dict) and isinstance(peer.get("id"), str):
+                ids.add(peer["id"])
     return ids
 
 
@@ -1448,7 +1444,7 @@ Update the shell reader to handle the new statuses:
             ref="$project_id"
             warn "Broken reference in $filename: related ID '$ref' not found"
         elif [ "$status" = "UNKNOWN_NAMESPACE" ]; then
-            error "Unknown project namespace '${project_id}' in ref '${raw}'. Add it to science.yaml children: or use a local ref."
+            error "Unknown project namespace '${project_id}' in ref '${raw}'. Add it to science.yaml peers: or use a local ref."
         elif [ "$status" = "LEGACY_PROJECT_REF" ]; then
             warn "Legacy cross-project ref '${raw}' is missing an entity kind. Use '${project_id}:question:${slug}' or another explicit <project-id>:<kind>:<slug> ref."
         fi
@@ -1491,7 +1487,7 @@ Add to `changelog`:
 Run:
 
 ```bash
-uv run --frozen pytest science/tests/test_validate_script.py::test_validate_rejects_invalid_task_id_suffix science/tests/test_validate_script.py::test_validate_rejects_cross_project_parent science/tests/test_validate_script.py::test_validate_catches_stale_task_ref_after_migration science/tests/test_validate_script.py::test_validate_accepts_namespace_first_ref_for_declared_child science/tests/test_validate_script.py::test_validate_reports_unknown_namespace_with_raw_ref science/tests/test_validate_script.py::test_validate_reports_legacy_two_part_cross_project_ref science/tests/test_initial_validate_sh.py::test_current_hash_matches_body -q
+uv run --frozen pytest science/tests/test_validate_script.py::test_validate_rejects_invalid_task_id_suffix science/tests/test_validate_script.py::test_validate_rejects_cross_project_parent science/tests/test_validate_script.py::test_validate_catches_stale_task_ref_after_migration science/tests/test_validate_script.py::test_validate_accepts_namespace_first_ref_for_declared_peer science/tests/test_validate_script.py::test_validate_reports_unknown_namespace_with_raw_ref science/tests/test_validate_script.py::test_validate_reports_legacy_two_part_cross_project_ref science/tests/test_initial_validate_sh.py::test_current_hash_matches_body -q
 ```
 
 Expected: all selected tests pass.
@@ -1572,7 +1568,7 @@ In the `"add <description>"` action, update the related entity bullet to:
 - **Related entities:** (optional) typed refs for hypotheses, themes, methods, questions, tasks, etc. Local refs use `<kind>:<slug>` such as `hypothesis:h01` or `task:t016`; cross-project refs use `<project-id>:<kind>:<slug>` such as `natural-systems:task:t335`.
 ```
 
-- [ ] **Step 4: Update federation addressing docs**
+- [ ] **Step 4: Update peers/addressing docs**
 
 Replace the current `## Addressing` section in `docs/federation.md` with:
 
@@ -1592,7 +1588,7 @@ Examples:
 - `evolution:task:t012`
 - `cbioportal:topic:clonal-hematopoiesis-contamination`
 
-The first segment is a federation project ID from the meta project's `children:` manifest or the current project's own `id`. The remaining segments are the target project's normal local entity reference.
+The first segment is either the current project's own `id` or a peer project ID declared in `science.yaml` under `peers:`. The remaining segments are the target project's normal local entity reference.
 
 Local refs stay local by default:
 
