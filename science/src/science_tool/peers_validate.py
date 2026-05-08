@@ -120,6 +120,16 @@ def validate_peers(project_root: Path) -> list[PeerIssue]:
     return issues
 
 
+def peer_error_issues(project_root: Path) -> list[PeerIssue]:
+    """Return only blocking peer configuration issues."""
+    return [issue for issue in validate_peers(project_root) if issue.severity == "error"]
+
+
+def format_peer_issues(issues: list[PeerIssue]) -> str:
+    """Render peer issues for fail-fast consumers."""
+    return "; ".join(f"{issue.kind.value} [{issue.peer_id}]: {issue.detail}" for issue in issues)
+
+
 def _peer_id(raw_entry: dict[Any, Any]) -> str:
     raw_id = raw_entry.get("id")
     if isinstance(raw_id, str) and raw_id:

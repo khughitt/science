@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.05.07.3
-# science-managed-source-sha256: 8f242be49a97880e074b08985196988b153837cd2693998dc7c0f6b6d4a7b02b
+# science-managed-version: 2026.05.07.4
+# science-managed-source-sha256: 517199d70d40317733c4974162cbd0fdf635377ab6129000896b178c78a6584a
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -782,6 +782,18 @@ echo "Checking knowledge graph..."
 # block below is skipped — so promoting "unparseable output" from warn to error
 # below cannot fire spuriously on environments without the tool installed.
 if [ -n "$SCIENCE_TOOL" ]; then
+    peer_output=$($SCIENCE_TOOL peers check --project-root . 2>&1)
+    peer_status=$?
+    if [ "$peer_status" -eq 0 ]; then
+        info "peer check: declared peers valid"
+    else
+        while IFS= read -r line; do
+            if [ -n "$line" ]; then
+                error "peer check failed: ${line}"
+            fi
+        done < <(printf "%s\n" "$peer_output")
+    fi
+
     audit_output=$($SCIENCE_TOOL graph audit --project-root . --format json 2>/dev/null) || true
     if printf "%s" "$audit_output" | python3 -c "import sys,json; json.load(sys.stdin)" &>/dev/null; then
         audit_rows=$(printf "%s" "$audit_output" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['rows']))")

@@ -80,10 +80,17 @@ class LocalPeerResolver:
 
     def __init__(self, project_root: Path) -> None:
         from science_tool.project_config import load_project_config  # noqa: PLC0415
+        from science_tool.peers_validate import format_peer_issues, peer_error_issues  # noqa: PLC0415
 
         self._project_root = project_root
         self._in_flight: set[str] = set()
         cfg = load_project_config(project_root)
+        errors = peer_error_issues(project_root)
+        if errors:
+            raise PeerUnresolved(
+                f"invalid peer configuration in {self._project_root}/science.yaml: "
+                f"{format_peer_issues(errors)}"
+            )
         self._entries: dict[str, PeerEntry] = {}
         for entry in cfg.peers:
             if entry.id == cfg.id:

@@ -98,7 +98,7 @@ def test_migrate_empty_children_removes_legacy_field(tmp_path: Path) -> None:
     assert raw["peers"] == []
 
 
-def test_migrate_null_children_fails_without_writing(tmp_path: Path) -> None:
+def test_migrate_null_children_removes_legacy_field(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_science_yaml(
         project,
@@ -107,12 +107,13 @@ def test_migrate_null_children_fails_without_writing(tmp_path: Path) -> None:
         children: null
         """,
     )
-    original_text = (project / "science.yaml").read_text(encoding="utf-8")
 
-    with pytest.raises(MigrationError, match="children must be a list"):
-        migrate_project(project, dry_run=False)
+    summary = migrate_project(project, dry_run=False)
 
-    assert (project / "science.yaml").read_text(encoding="utf-8") == original_text
+    assert summary.migrated is True
+    raw = _read_science_yaml(project)
+    assert "children" not in raw
+    assert raw["peers"] == []
 
 
 @pytest.mark.parametrize(
@@ -295,7 +296,7 @@ def test_migrate_parent_yaml_must_be_mapping(tmp_path: Path, parent_yaml: str) -
     assert (child / "science.yaml").read_text(encoding="utf-8") == original_text
 
 
-def test_migrate_null_parent_returns_unchanged(tmp_path: Path) -> None:
+def test_migrate_null_parent_removes_legacy_field(tmp_path: Path) -> None:
     project = tmp_path / "project"
     _write_science_yaml(
         project,
@@ -304,13 +305,13 @@ def test_migrate_null_parent_returns_unchanged(tmp_path: Path) -> None:
         parent: null
         """,
     )
-    original_text = (project / "science.yaml").read_text(encoding="utf-8")
 
     summary = migrate_project(project, dry_run=False)
 
-    assert summary.migrated is False
-    assert summary.note == "No legacy fields found; nothing to migrate."
-    assert (project / "science.yaml").read_text(encoding="utf-8") == original_text
+    assert summary.migrated is True
+    raw = _read_science_yaml(project)
+    assert "parent" not in raw
+    assert raw["peers"] == []
 
 
 def test_migrate_no_legacy_fields_returns_unchanged(tmp_path: Path) -> None:

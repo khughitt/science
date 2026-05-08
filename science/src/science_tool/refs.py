@@ -167,12 +167,9 @@ def _load_project_ids(root: Path) -> set[str]:
     except FileNotFoundError:
         return set()
     ids: set[str] = set()
-    try:
-        from science_tool.peers import make_local_resolver  # noqa: PLC0415
+    from science_tool.peers import make_local_resolver  # noqa: PLC0415
 
-        ids.update(make_local_resolver(root).known_ids())
-    except Exception:  # noqa: BLE001
-        pass
+    ids.update(make_local_resolver(root).known_ids())
     if cfg.id:
         ids.add(cfg.id)
     return ids

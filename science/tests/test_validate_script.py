@@ -113,6 +113,32 @@ def _write_science_tool_stub(bin_dir: Path) -> None:
     stub.chmod(0o755)
 
 
+def _write_science_tool_stub_with_failing_peers_check(bin_dir: Path) -> None:
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    stub = bin_dir / "science"
+    stub.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                "set -eu",
+                'if [ "${1:-}" = "peers" ] && [ "${2:-}" = "check" ]; then',
+                "    printf 'failed: 1 peers, 0 warning, 1 error\\n'",
+                "    exit 1",
+                "fi",
+                'if [ "${1:-}" = "graph" ] && [ "${2:-}" = "audit" ]; then',
+                "    printf '{\"rows\": []}\\n'",
+                "    exit 0",
+                "fi",
+                "printf '{\"rows\": []}\\n'",
+                "exit 0",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+
+
 def _write_minimal_research_project(root: Path) -> None:
     """Set up a research-profile project with all paths the validator expects."""
     _write_common_files(root, "research")
@@ -1297,6 +1323,44 @@ def test_validate_accepts_namespace_first_ref_for_declared_peer(tmp_path: Path) 
     combined = result.stdout + result.stderr
     assert result.returncode == 0, combined
     assert "natural-systems:task:t335" not in combined
+
+
+def test_validate_fails_when_semantic_peer_check_fails(tmp_path: Path) -> None:
+    _write_common_files(tmp_path, "software")
+    _write_python3_stub(tmp_path / "bin")
+    _write_science_tool_stub_with_failing_peers_check(tmp_path / "bin")
+    (tmp_path / "science.yaml").write_text(
+        'name: "demo"\n'
+        'created: "2026-03-18"\n'
+        'last_modified: "2026-03-18"\n'
+        'summary: "demo"\n'
+        'status: "active"\n'
+        "profile: software\n"
+        "layout_version: 2\n"
+        "knowledge_profiles:\n"
+        "  local: local\n"
+        "peers:\n"
+        "  - id: demo\n"
+        "    path: .\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "src").mkdir(parents=True)
+    (tmp_path / "tests").mkdir(parents=True)
+
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    combined = result.stdout + result.stderr
+    assert result.returncode == 1, combined
+    assert "peer check failed" in combined
+    assert "failed: 1 peers, 0 warning, 1 error" in combined
 
 
 def test_validate_reports_unknown_namespace_with_raw_ref(tmp_path: Path) -> None:

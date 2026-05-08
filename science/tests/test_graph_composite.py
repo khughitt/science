@@ -157,7 +157,7 @@ def test_composite_rejects_peer_id_mismatch(tmp_path: Path) -> None:
     _write_local_graph(host, "host")
     _write_local_graph(peer, "actual-peer")
 
-    with pytest.raises(ValueError, match="declared-peer.*actual-peer"):
+    with pytest.raises(PeerUnresolved, match="id_mismatch.*declared-peer.*actual-peer"):
         assemble_composite_graph(host)
 
     assert not (host / "knowledge" / "composite.trig").exists()
@@ -323,4 +323,56 @@ def test_graph_build_missing_peer_removes_stale_composite(tmp_path: Path) -> Non
     assert result.exit_code != 0
     assert "Error:" in result.output
     assert "missing-peer" in result.output
+    assert not (host / "knowledge" / "composite.trig").exists()
+
+
+def test_graph_build_rejects_self_peer_before_composite(tmp_path: Path) -> None:
+    host = tmp_path / "host"
+    _write_project(host, "host")
+    (host / "science.yaml").write_text(
+        """
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: host
+    path: .
+""",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "build", "--project-root", str(host)])
+
+    assert result.exit_code != 0
+    assert "self_peer" in result.output
+    assert not (host / "knowledge" / "composite.trig").exists()
+
+
+def test_graph_build_rejects_reserved_peer_field_before_composite(tmp_path: Path) -> None:
+    host = tmp_path / "host"
+    peer = tmp_path / "peer"
+    _write_project(host, "host")
+    _write_project(peer, "peer")
+    _write_local_graph(peer, "peer")
+    (host / "science.yaml").write_text(
+        f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: peer
+    path: {peer}
+    git: https://example.invalid/peer.git
+""",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["graph", "build", "--project-root", str(host)])
+
+    assert result.exit_code != 0
+    assert "reserved_field" in result.output
     assert not (host / "knowledge" / "composite.trig").exists()

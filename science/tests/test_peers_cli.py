@@ -534,7 +534,7 @@ peers:
     assert result.exit_code != 0
     assert isinstance(result.exception, SystemExit)
     assert "error:" in result.output.lower()
-    assert "duplicate peer id" in result.output.lower()
+    assert "duplicate_peer_id" in result.output
     assert "dup" in result.output
 
 
@@ -750,7 +750,7 @@ name: child
 id: child-project
 role: data-source
 parent: ../meta
-children: null
+children: invalid
 profile: research
 research_question: "..."
 """,

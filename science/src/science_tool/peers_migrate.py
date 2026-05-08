@@ -25,7 +25,7 @@ def migrate_project(project_root: Path, *, dry_run: bool) -> MigrationSummary:
     if not isinstance(raw, dict):
         raise MigrationError(f"{yaml_path} must contain a YAML mapping")
 
-    has_parent = "parent" in raw and raw["parent"] is not None
+    has_parent = "parent" in raw
     has_children = "children" in raw
     if not has_parent and not has_children:
         return MigrationSummary(False, "No legacy fields found; nothing to migrate.")
@@ -33,19 +33,25 @@ def migrate_project(project_root: Path, *, dry_run: bool) -> MigrationSummary:
     peers = _peers(raw)
     if has_parent:
         parent_path = raw["parent"]
-        if not isinstance(parent_path, str):
+        if parent_path is None:
+            del raw["parent"]
+        elif not isinstance(parent_path, str):
             raise MigrationError("parent must be a path string")
-        parent_id = _read_parent_id(project_root, parent_path)
-        _append_peer(peers, peer_id=parent_id, path=parent_path)
-        del raw["parent"]
+        else:
+            parent_id = _read_parent_id(project_root, parent_path)
+            _append_peer(peers, peer_id=parent_id, path=parent_path)
+            del raw["parent"]
 
     if has_children:
         children = raw["children"]
-        if not isinstance(children, list):
+        if children is None:
+            del raw["children"]
+        elif not isinstance(children, list):
             raise MigrationError("children must be a list")
-        for child_id, child_path in _child_peers(children):
-            _append_peer(peers, peer_id=child_id, path=child_path)
-        del raw["children"]
+        else:
+            for child_id, child_path in _child_peers(children):
+                _append_peer(peers, peer_id=child_id, path=child_path)
+            del raw["children"]
 
     if dry_run:
         return MigrationSummary(True, "dry-run: no files written")

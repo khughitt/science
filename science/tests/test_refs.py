@@ -387,6 +387,45 @@ peers:
     assert "peer" in ids
 
 
+def test_load_project_ids_surfaces_peer_config_errors(tmp_path: Path) -> None:
+    """Resolver construction failures should not be downgraded to unknown namespaces."""
+    from science_tool.peers import PeerUnresolved
+    from science_tool.refs import _load_project_ids
+
+    peer_a = tmp_path / "peer-a"
+    peer_b = tmp_path / "peer-b"
+    for peer, project_id in ((peer_a, "peer-a"), (peer_b, "peer-b")):
+        peer.mkdir()
+        (peer / "science.yaml").write_text(
+            f"""
+name: {project_id}
+id: {project_id}
+profile: research
+research_question: "..."
+""",
+            encoding="utf-8",
+        )
+    host = tmp_path / "host"
+    host.mkdir()
+    (host / "science.yaml").write_text(
+        f"""
+name: host
+id: host
+profile: research
+research_question: "..."
+peers:
+  - id: peer
+    path: {peer_a}
+  - id: peer
+    path: {peer_b}
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(PeerUnresolved, match="duplicate_peer_id \\[peer\\]"):
+        _load_project_ids(host)
+
+
 def test_unknown_namespace_is_reported() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:

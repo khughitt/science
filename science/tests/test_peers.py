@@ -113,8 +113,8 @@ peers:
         with pytest.raises(PeerUnresolved, match="peer"):
             make_local_resolver(host)
 
-    def test_known_ids_excludes_self_peer_entry(self, tmp_path: Path) -> None:
-        from science_tool.peers import make_local_resolver
+    def test_known_ids_rejects_self_peer_entry(self, tmp_path: Path) -> None:
+        from science_tool.peers import PeerUnresolved, make_local_resolver
 
         host = tmp_path / "host"
         peer = tmp_path / "peer"
@@ -135,13 +135,13 @@ peers:
             encoding="utf-8",
         )
 
-        resolver = make_local_resolver(host)
-        assert resolver.known_ids() == frozenset({"peer"})
+        with pytest.raises(PeerUnresolved, match="self_peer \\[host\\]"):
+            make_local_resolver(host)
 
-    def test_resolve_self_peer_entry_raises_peer_not_found(
+    def test_resolve_self_peer_entry_rejects_peer_config(
         self, tmp_path: Path
     ) -> None:
-        from science_tool.peers import PeerNotFound, make_local_resolver
+        from science_tool.peers import PeerUnresolved, make_local_resolver
 
         host = tmp_path / "host"
         host.mkdir()
@@ -158,9 +158,8 @@ peers:
             encoding="utf-8",
         )
 
-        resolver = make_local_resolver(host)
-        with pytest.raises(PeerNotFound, match="host"):
-            resolver.resolve("host")
+        with pytest.raises(PeerUnresolved, match="self_peer \\[host\\]"):
+            make_local_resolver(host)
 
     def test_known_ids_excludes_host_and_includes_peers(self, tmp_path: Path) -> None:
         from science_tool.peers import make_local_resolver
