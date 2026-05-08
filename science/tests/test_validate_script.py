@@ -361,9 +361,7 @@ def test_validate_fails_when_science_tool_is_missing(tmp_path: Path) -> None:
     )
 
     assert result.returncode != 0
-    assert (
-        "science is required for task management, feedback, and graph workflows" in result.stdout + result.stderr
-    )
+    assert "science is required for task management, feedback, and graph workflows" in result.stdout + result.stderr
 
 
 def test_validate_reports_missing_science_tool_once_when_graph_exists(tmp_path: Path) -> None:
@@ -1259,7 +1257,7 @@ def test_validate_ignores_task_like_substrings_inside_non_task_typed_refs(tmp_pa
     assert "stale or invalid task ref 't001a'" not in combined
 
 
-def test_validate_accepts_namespace_first_ref_for_declared_child(tmp_path: Path) -> None:
+def test_validate_accepts_namespace_first_ref_for_declared_peer(tmp_path: Path) -> None:
     _write_common_files(tmp_path, "software")
     _write_python3_stub(tmp_path / "bin")
     _write_science_tool_stub(tmp_path / "bin")
@@ -1273,7 +1271,7 @@ def test_validate_accepts_namespace_first_ref_for_declared_child(tmp_path: Path)
         "layout_version: 2\n"
         "knowledge_profiles:\n"
         "  local: local\n"
-        "children:\n"
+        "peers:\n"
         "  - id: natural-systems\n"
         f"    path: {tmp_path / 'natural-systems'}\n"
         "    role: data-source\n",
@@ -1283,12 +1281,7 @@ def test_validate_accepts_namespace_first_ref_for_declared_child(tmp_path: Path)
     (tmp_path / "src").mkdir(parents=True)
     (tmp_path / "tests").mkdir(parents=True)
     (tmp_path / "doc" / "questions" / "x.md").write_text(
-        "---\n"
-        'id: "question:x"\n'
-        'type: "question"\n'
-        'related: ["natural-systems:task:t335"]\n'
-        "---\n\n"
-        "# X\n",
+        '---\nid: "question:x"\ntype: "question"\nrelated: ["natural-systems:task:t335"]\n---\n\n# X\n',
         encoding="utf-8",
     )
 
@@ -1314,12 +1307,7 @@ def test_validate_reports_unknown_namespace_with_raw_ref(tmp_path: Path) -> None
     (tmp_path / "src").mkdir(parents=True)
     (tmp_path / "tests").mkdir(parents=True)
     (tmp_path / "doc" / "questions" / "x.md").write_text(
-        "---\n"
-        'id: "question:x"\n'
-        'type: "question"\n'
-        'related: ["natural-systems:task:t335"]\n'
-        "---\n\n"
-        "# X\n",
+        '---\nid: "question:x"\ntype: "question"\nrelated: ["natural-systems:task:t335"]\n---\n\n# X\n',
         encoding="utf-8",
     )
 
@@ -1354,7 +1342,7 @@ def test_validate_reports_legacy_two_part_cross_project_ref(tmp_path: Path) -> N
         "layout_version: 2\n"
         "knowledge_profiles:\n"
         "  local: local\n"
-        "children:\n"
+        "peers:\n"
         "  - id: cbioportal\n"
         f"    path: {tmp_path / 'cbioportal'}\n"
         "    role: data-source\n",
@@ -1364,12 +1352,7 @@ def test_validate_reports_legacy_two_part_cross_project_ref(tmp_path: Path) -> N
     (tmp_path / "src").mkdir(parents=True)
     (tmp_path / "tests").mkdir(parents=True)
     (tmp_path / "doc" / "questions" / "x.md").write_text(
-        "---\n"
-        'id: "question:x"\n'
-        'type: "question"\n'
-        'related: ["cbioportal:q014"]\n'
-        "---\n\n"
-        "# X\n",
+        '---\nid: "question:x"\ntype: "question"\nrelated: ["cbioportal:q014"]\n---\n\n# X\n',
         encoding="utf-8",
     )
 

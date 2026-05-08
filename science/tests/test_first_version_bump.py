@@ -1,17 +1,17 @@
-"""After Plan #7 fixes: registry shows two versions; old install classifies as STALE."""
+"""Managed-artifact registry versioning invariants."""
 
-import hashlib
 from pathlib import Path
 
 from science_tool.project_artifacts.loader import load_packaged_registry
 
 
-def test_registry_has_two_versions() -> None:
+def test_registry_tracks_current_and_previous_versions() -> None:
     reg = load_packaged_registry()
     art = next(a for a in reg.artifacts if a.name == "validate.sh")
     assert len(art.previous_hashes) >= 4
-    assert art.version == "2026.05.06.1"
-    assert art.previous_hashes[-1].version == "2026.05.05.3"
+    assert art.version not in {previous.version for previous in art.previous_hashes}
+    assert art.current_hash not in {previous.hash for previous in art.previous_hashes}
+    assert art.previous_hashes[-1].version < art.version
 
 
 def test_byte_replace_migration_recorded() -> None:
@@ -33,8 +33,6 @@ def test_old_install_classifies_as_stale(tmp_path: Path) -> None:
     reg = load_packaged_registry()
     art = next(a for a in reg.artifacts if a.name == "validate.sh")
     prev = art.previous_hashes[-1]
-    body = b"# fake body matching previous_hashes\n"
-    _h = hashlib.sha256(body).hexdigest()
     target = tmp_path / "validate.sh"
     target.write_bytes(
         b"#!/usr/bin/env bash\n# science-managed-artifact: validate.sh\n"
@@ -42,5 +40,5 @@ def test_old_install_classifies_as_stale(tmp_path: Path) -> None:
         + f"# science-managed-source-sha256: {prev.hash}\n".encode()
         + b"# (body would be the actual previous canonical body)\n"
     )
-    assert prev.version == "2026.05.05.3"
+    assert prev.version < art.version
     assert len(prev.hash) == 64
