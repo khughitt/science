@@ -581,6 +581,7 @@ Define how synthesis nodes, output artifacts, propositions, validation runs, and
 ## [t043] Cross-project blockers spec
 - priority: P1
 - status: deferred
+- aspects: [software-development, framework-design]
 - related: [topic:cross-project]
 - group: project-peers
 - created: 2026-05-07
@@ -590,6 +591,7 @@ Deferred trajectory item from project-peers Decision 13
 ## [t044] Workspace registry design
 - priority: P2
 - status: deferred
+- aspects: [software-development, framework-design]
 - group: project-peers
 - created: 2026-05-07
 
@@ -598,6 +600,7 @@ Deferred trajectory item from project-peers Decision 13
 ## [t045] Remote peers via cloneable repos
 - priority: P3
 - status: deferred
+- aspects: [software-development, framework-design]
 - group: project-peers
 - created: 2026-05-07
 
@@ -606,6 +609,7 @@ Deferred trajectory item from project-peers Decision 13
 ## [t046] Versioned entity references
 - priority: P3
 - status: deferred
+- aspects: [software-development, framework-design]
 - group: project-peers
 - created: 2026-05-07
 
@@ -614,6 +618,7 @@ Deferred trajectory item from project-peers Decision 13
 ## [t047] L2 caching & freshness
 - priority: P3
 - status: deferred
+- aspects: [software-development]
 - group: project-peers
 - created: 2026-05-07
 
@@ -622,6 +627,7 @@ Deferred trajectory item from project-peers Decision 13
 ## [t048] Composite graph policy controls (compose: opt-in)
 - priority: P2
 - status: deferred
+- aspects: [software-development, framework-design]
 - group: project-peers
 - created: 2026-05-07
 
@@ -630,6 +636,7 @@ Deferred trajectory item from project-peers Decision 13
 ## [t049] Service / capability exchange (Layer 3)
 - priority: P2
 - status: deferred
+- aspects: [software-development, framework-design]
 - group: project-peers
 - created: 2026-05-07
 
@@ -638,6 +645,7 @@ Deferred trajectory item from project-peers Decision 13
 ## [t050] Multi-user identity scoping
 - priority: P3
 - status: deferred
+- aspects: [software-development]
 - group: project-peers
 - created: 2026-05-07
 
@@ -646,6 +654,7 @@ Deferred trajectory item from project-peers Decision 13
 ## [t051] Auto-unblock / change notification
 - priority: P3
 - status: deferred
+- aspects: [software-development]
 - group: project-peers
 - created: 2026-05-07
 
