@@ -4,8 +4,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
-from science_tool.evidence_payload import EvidencePayload, PayloadValidationError
+from science_tool.evidence_payload import EvidencePayload, PayloadValidationError, ReasonCodeSpec
 from science_tool.synthesis_payload import (
     SYNTHESIS_FAMILIES,
     SYNTHESIS_OPERATION_EXTENSION,
@@ -56,6 +57,11 @@ def test_synthesis_operation_section_parses_required_refs() -> None:
     operation = SynthesisOperation.model_validate(payload.extension_sections["synthesis-operation"])
     assert operation.output_artifact_refs == ["payload:bma-model-summary"]
     assert operation.operator_assumption_refs == ["assumption:prior-model-probabilities-explicit"]
+
+
+def test_synthesis_operation_requires_declared_refs() -> None:
+    with pytest.raises(ValidationError, match="output_artifact_refs"):
+        SynthesisOperation.model_validate({})
 
 
 def test_all_non_reserved_synthesis_families_register_primary_extensions() -> None:
@@ -111,6 +117,32 @@ def test_family_permission_ceiling_blocks_strengthen_belief_for_feature_selectio
 
     with pytest.raises(PayloadValidationError, match="exceeds max permission"):
         validate_synthesis_payload(payload)
+
+
+def test_synthesis_validation_uses_inherited_blocking_reason_codes() -> None:
+    registry = build_synthesis_registry()
+    registry.register_reason_code(ReasonCodeSpec(code="code-or-data-unavailable", blocking=True))
+    upstream = _synthesis_payload(
+        "syn-2026-upstream-blocked",
+        core={
+            "input_artifact_refs": [],
+            "reason_codes": ["code-or-data-unavailable"],
+        },
+    )
+    downstream = _synthesis_payload(
+        "syn-2026-downstream-strengthening",
+        core={
+            "input_artifact_refs": [upstream.core.payload_id],
+            "validation_role": "strengthen-belief",
+        },
+    )
+
+    with pytest.raises(PayloadValidationError, match="code-or-data-unavailable"):
+        validate_synthesis_payload(
+            downstream,
+            registry,
+            payloads_by_id={upstream.core.payload_id: upstream},
+        )
 
 
 def test_route_synthesis_family_sends_bma_to_model_comparison() -> None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from science_tool.evidence_payload import (
     EvidencePayload,
@@ -24,8 +24,8 @@ class SynthesisOperation(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    output_artifact_refs: list[str] = Field(default_factory=list)
-    operator_assumption_refs: list[str] = Field(default_factory=list)
+    output_artifact_refs: list[str]
+    operator_assumption_refs: list[str]
 
 
 @dataclass(frozen=True)
@@ -226,7 +226,12 @@ def build_synthesis_registry() -> EvidencePayloadRegistry:
     return registry
 
 
-def validate_synthesis_payload(payload: EvidencePayload, registry: EvidencePayloadRegistry | None = None) -> None:
+def validate_synthesis_payload(
+    payload: EvidencePayload,
+    registry: EvidencePayloadRegistry | None = None,
+    *,
+    payloads_by_id: dict[str, EvidencePayload] | None = None,
+) -> None:
     """Validate t023 synthesis-family constraints on top of the generic payload contract."""
 
     family = payload.core.artifact_type
@@ -247,7 +252,7 @@ def validate_synthesis_payload(payload: EvidencePayload, registry: EvidencePaylo
         )
 
     active_registry = registry or build_synthesis_registry()
-    active_registry.validate_payload(payload)
+    active_registry.validate_payload(payload, payloads_by_id=payloads_by_id)
     SynthesisOperation.model_validate(payload.extension_sections[SYNTHESIS_OPERATION_EXTENSION])
 
 
