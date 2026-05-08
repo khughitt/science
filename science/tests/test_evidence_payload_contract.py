@@ -200,3 +200,18 @@ def test_extension_section_reason_codes_join_effective_codes_with_extension_orig
     codes = effective_reason_codes(payload, _registry())
 
     assert ("identification-missing", "causal-graph") in [(item.code, item.origin) for item in codes]
+
+
+def test_payload_accepts_create_hypothesis_validation_role() -> None:
+    payload = _payload(
+        "ev-2026-candidate-hypothesis",
+        core={
+            "validation_role": "create-hypothesis",
+            "proposition_refs": [],
+            "support_direction": "methodological-input",
+        },
+    )
+
+    _registry().validate_payload(payload)
+
+    assert payload.core.validation_role == "create-hypothesis"

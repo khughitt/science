@@ -18,7 +18,14 @@ SupportDirection = Literal[
     "quality-record",
     "operation-record",
 ]
-ValidationRole = Literal["strengthen-belief", "prioritize-attention", "gate-update", "quality-record-only", "record-only"]
+ValidationRole = Literal[
+    "strengthen-belief",
+    "prioritize-attention",
+    "create-hypothesis",
+    "gate-update",
+    "quality-record-only",
+    "record-only",
+]
 ValidationStatus = Literal["validated", "pending", "failed", "not-applicable", "unknown"]
 PropagationPolicy = Literal["propagate-all", "propagate-blocking", "propagate-tagged-only", "no-propagate"]
 
