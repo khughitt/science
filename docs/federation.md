@@ -124,8 +124,8 @@ science peers migrate
 
 ## Historical Context
 
-Older Science projects used `children:` on umbrella projects and `parent:` on
-child projects, with `science federation ...` commands for status and
-validation. Those fields and commands described a tree-shaped relationship and
-are no longer current guidance. Run `science peers migrate` for projects that
-still carry those legacy fields.
+Older Science projects used umbrella-child config fields with
+`science federation ...` commands for status and validation. Those fields and
+commands described a tree-shaped relationship and are no longer current
+guidance. Run `science peers migrate` for projects that still carry those
+legacy fields.
