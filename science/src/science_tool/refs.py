@@ -36,6 +36,9 @@ _CITATION_RE = re.compile(r"\[@([^\]]+)\]")
 _LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 _UNVERIFIED_RE = re.compile(r"\[UNVERIFIED\]")
 _NEEDS_CITATION_RE = re.compile(r"\[NEEDS CITATION\]")
+_FENCE_RE = re.compile(r"^\s*(```|~~~)")
+_INLINE_CODE_RE = re.compile(r"`[^`]*`")
+_BIBLIOGRAPHY_CITATION_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]*[0-9][A-Za-z0-9_.-]*$")
 # DOIs in prose: ``10.<registrant>/<suffix>``, optionally preceded by ``doi:`` or
 # a ``https://doi.org/`` URL prefix. The character class for the suffix follows
 # Crossref's spec (``[-._;()/:A-Z0-9]`` plus letters); we trim trailing
@@ -273,6 +276,19 @@ def _is_heading_line(line: str) -> bool:
     return line.lstrip().startswith("#")
 
 
+def _is_fence_line(line: str) -> bool:
+    return _FENCE_RE.match(line) is not None
+
+
+def _strip_inline_code(line: str) -> str:
+    return _INLINE_CODE_RE.sub("", line)
+
+
+def _looks_like_bibtex_citation_key(key: str) -> bool:
+    """Return True for project-style BibTeX keys, not semantic ref tokens."""
+    return _BIBLIOGRAPHY_CITATION_KEY_RE.match(key) is not None
+
+
 def _hypothesis_id_from_path(file_path: Path) -> str | None:
     """Extract the primary legacy HNN alias from a hypothesis file path, if any."""
     aliases = _hypothesis_aliases_from_path(file_path)
@@ -410,17 +426,25 @@ def check_refs(root: Path) -> list[RefIssue]:
         # corpus contributors, not consumers.
         skip_doi_pmid_check = rel_path.startswith("doc/papers/")
 
+        in_fenced_code = False
         for line_num, line in enumerate(lines, start=1):
             if line_num in frontmatter_lines:
                 continue
+            if _is_fence_line(line):
+                in_fenced_code = not in_fenced_code
+                continue
+            if in_fenced_code:
+                continue
+
+            scan_line = _strip_inline_code(line)
 
             # Skip headings and frontmatter for hypothesis checks
-            if _is_heading_line(line):
+            if _is_heading_line(scan_line):
                 continue
 
             # --- Task ID references ---
             if not skip_task_check and task_ids:
-                for m in _TASK_ID_RE.finditer(line):
+                for m in _TASK_ID_RE.finditer(scan_line):
                     task_num = m.group(1)
                     if task_num in task_ids:
                         continue
@@ -436,7 +460,7 @@ def check_refs(root: Path) -> list[RefIssue]:
 
             # --- DOI references ---
             if not skip_doi_pmid_check and doi_corpus:
-                for m in _DOI_RE.finditer(line):
+                for m in _DOI_RE.finditer(scan_line):
                     doi = _normalize_doi_token(m.group(1))
                     if doi in doi_corpus:
                         continue
@@ -453,7 +477,7 @@ def check_refs(root: Path) -> list[RefIssue]:
 
             # --- PMID references ---
             if not skip_doi_pmid_check and pmid_corpus:
-                for m in _PMID_REF_RE.finditer(line):
+                for m in _PMID_REF_RE.finditer(scan_line):
                     pmid = m.group(1)
                     if pmid in pmid_corpus:
                         continue
@@ -468,7 +492,7 @@ def check_refs(root: Path) -> list[RefIssue]:
                     )
 
             # --- Hypothesis references ---
-            for m in _HYPOTHESIS_RE.finditer(line):
+            for m in _HYPOTHESIS_RE.finditer(scan_line):
                 hyp_num = m.group(1)
                 if hyp_num in own_hyp_ids:
                     continue  # Self-reference in own file
@@ -490,12 +514,12 @@ def check_refs(root: Path) -> list[RefIssue]:
                     )
 
             # --- Citation references ---
-            for m in _CITATION_RE.finditer(line):
+            for m in _CITATION_RE.finditer(scan_line):
                 cite_group = m.group(1)
                 # Split on ; for multi-cites like [@Smith2024; @Jones2023]
                 for part in cite_group.split(";"):
                     key = part.strip().lstrip("@").split(",")[0].split(" ")[0].strip()
-                    if not key:
+                    if not key or not _looks_like_bibtex_citation_key(key):
                         continue
                     if key not in bib_keys:
                         issues.append(
@@ -509,7 +533,7 @@ def check_refs(root: Path) -> list[RefIssue]:
                         )
 
             # --- Markdown links ---
-            for m in _LINK_RE.finditer(line):
+            for m in _LINK_RE.finditer(scan_line):
                 target = m.group(2)
                 # Skip external URLs and anchors
                 if target.startswith(("http://", "https://", "#", "mailto:")):
@@ -531,7 +555,7 @@ def check_refs(root: Path) -> list[RefIssue]:
                         )
 
             # --- Unresolved markers ---
-            for m in _UNVERIFIED_RE.finditer(line):
+            for m in _UNVERIFIED_RE.finditer(scan_line):
                 issues.append(
                     RefIssue(
                         file=rel_path,
@@ -541,7 +565,7 @@ def check_refs(root: Path) -> list[RefIssue]:
                         message="Unresolved [UNVERIFIED] marker",
                     )
                 )
-            for m in _NEEDS_CITATION_RE.finditer(line):
+            for m in _NEEDS_CITATION_RE.finditer(scan_line):
                 issues.append(
                     RefIssue(
                         file=rel_path,

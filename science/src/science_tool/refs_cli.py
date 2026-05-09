@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 
 import click
@@ -62,6 +63,10 @@ def check(root_path: Path, output_format: str, strict: bool) -> None:
     else:
         if broken:
             click.echo(f"refs check: {len(broken)} broken, {len(markers)} unresolved markers\n")
+            click.echo("By type:")
+            for ref_type, count in sorted(Counter(issue.ref_type for issue in broken).items()):
+                click.echo(f"  {ref_type}: {count}")
+            click.echo()
             for issue in broken:
                 click.echo(f"  {issue.file}:{issue.line}")
                 click.echo(f"    {issue.message}")

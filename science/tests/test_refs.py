@@ -323,6 +323,87 @@ def test_multiple_citations_in_one_bracket() -> None:
         assert cite_issues[0].ref_value == "Jones2023"
 
 
+def test_citation_like_tokens_in_fenced_code_are_ignored() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "# Test\n"
+            "```markdown\n"
+            "Broken example [@Missing2024], t99, and [missing](nope.md).\n"
+            "```\n",
+            encoding="utf-8",
+        )
+
+        issues = check_refs(root)
+
+        assert issues == []
+
+
+def test_citation_like_tokens_in_inline_code_are_ignored() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "# Test\nUse `[@Missing2024]` as a placeholder example.\n",
+            encoding="utf-8",
+        )
+
+        issues = check_refs(root)
+
+        assert [issue for issue in issues if issue.ref_type == "citation"] == []
+
+
+def test_namespaced_semantic_refs_are_not_bibtex_citations() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "# Test\nThe [@model:gray-scott] model uses [@param:feed-rate].\n",
+            encoding="utf-8",
+        )
+
+        issues = check_refs(root)
+
+        assert [issue for issue in issues if issue.ref_type == "citation"] == []
+
+
+def test_placeholder_citation_keys_are_ignored() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "# Test\nTemplate examples use [@AuthorYear] and [@<key>].\n",
+            encoding="utf-8",
+        )
+
+        issues = check_refs(root)
+
+        assert [issue for issue in issues if issue.ref_type == "citation"] == []
+
+
+def test_cli_refs_check_summarizes_broken_refs_by_type() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "# Test\nH99 is broken and [@Nobody2099] too.\n",
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["refs", "check"])
+
+        assert result.exit_code == 1
+        assert "By type:" in result.output
+        assert "citation: 1" in result.output
+        assert "hypothesis: 1" in result.output
+
+
 def test_external_url_links_ignored() -> None:
     """Links starting with http(s) or # should not be checked."""
     runner = CliRunner()
