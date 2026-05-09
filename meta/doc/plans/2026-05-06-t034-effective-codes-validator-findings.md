@@ -162,10 +162,10 @@ Plus the two carried v1.3 candidates that are now adopted into the contract:
 
 ## Next steps
 
-1. **Land the slice-2 prototype patch.** Drop mr-6 (the "must contain instrument-assumption-risk" rule) from the slice-2 validator; remove the code from the t01/t08/t13/t15/t21/t24 fixtures' `core.reason_codes`; add v1.3-auto-inject as a co-validator. This brings slice 2 in line with the v1.3 contract and closes the "prototype lags contract" gap noted in the v1.3 commit message (85b984c).
-2. **Adopt v1.4 candidate #1 (iar retirement).** One-paragraph design patch. Should land before the next slice or before any payloads use the two-stage MR pattern.
-3. **Decide auto-injected-code authoring policy.** Either hard-error (current prototype behavior) or warn-with-strip (migration-friendly). Affects when the prototypes can be folded into `meta/validate.sh` without breaking existing payloads.
-4. **Fold the prototypes into `meta/validate.sh`.** Two prerequisites: (a) the auto-injected-code authoring policy decided; (b) a YAML payload-loader (currently the prototypes take Python dicts). After that, every t034 payload runs structural / role-permission / propagation rule-sets at extract-time.
+1. ~~**Land the slice-2 prototype patch.**~~ **Done 2026-05-09.** Slice-2 prototype now drops `mr-6` and replaces it with `v1.3-auto-inject` as a co-validator; effective-codes computation adds the auto-injection step; fixtures `_base_payload`, t08, t11, t13, t14, t15, t17, t20, t24 strip hand-written `instrument-assumption-risk`; t21 repurposed to verify hand-writing iar fires `v1.3-auto-inject`. 25/25 tests still pass. The "prototype lags contract" gap from v1.3 (commit 85b984c) is now closed.
+2. ~~**Adopt v1.4 candidate #1 (iar retirement).**~~ **Done 2026-05-09 — adopted as P1.4-a (see above).**
+3. ~~**Decide auto-injected-code authoring policy.**~~ **Done 2026-05-09 — adopted as P1.4-b: hard-error (no migration window). Existing-payload sweep complete; three example payloads in plan docs updated.**
+4. **Fold the prototypes into `meta/validate.sh`.** Remaining prerequisite: a YAML payload-loader (currently the prototypes take Python dicts) and a single integrated runner that composes the three slices. After that, every t034 payload runs structural / role-permission / propagation rule-sets at extract-time.
 5. **Then pivot.** The t034 validator-program work is feature-complete after step 4. Sister-extension work (`[t037]` agent-ops, `[t023]` synthesis) is the next natural target.
 
 **The natural-systems "asserted vs verified" commitment is now fully discharged for `[t034]` machinery.** All three layers (structural rules, role-permission rules, cross-payload propagation) are decidable from payload state and enforced by runnable validators. The remaining work to make this *production-active* (steps 1–4 above) is mechanical, not research.

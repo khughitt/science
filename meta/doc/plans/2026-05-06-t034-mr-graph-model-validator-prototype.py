@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Prototype validator for t034 v1.2 `mr-graph-model` extension role-permission and
+Prototype validator for t034 v1.4 `mr-graph-model` extension role-permission and
 conditional-required-field rules.
 
 Second prototype slice. Sister to `2026-05-06-t034-causal-graph-validator-prototype.py`.
@@ -23,22 +23,35 @@ Rules implemented:
 - mr-5: required fields conditionally-required: instrument_set,
         summary_statistic_provenance — required UNLESS
         extracted-from-summary-only ∈ effective_codes.
-- mr-6 (semantic): instrument-assumption-risk MUST be in core.reason_codes
-        whenever this extension is loaded.
 - mr-7 (semantic): pleiotropy-untested ↔ pleiotropy_model ∈
         {none-assumed, not-modelled}.
 - mr-8 (semantic): pleiotropy-unspecified ↔ pleiotropy_model = unspecified.
 - mr-9 (semantic): reverse-causation-assumed ↔ direction_constraint =
         exposures-to-outcomes-only AND direction-inherent-from-iv-class NOT in
         instrument_validity_assumptions.
+- v1.3-auto-inject (added v1.4): hard-error if author hand-wrote any of the
+        codes auto-injected by a loaded extension (for mr-graph-model: the only
+        auto-injected code is instrument-assumption-risk). v1.4 selects the
+        hard-error authoring policy — there is no migration window.
 
 mr-2 is the rule the natural-systems "asserted vs verified" thread cares about —
 a payload that *says* strengthen-belief on a stage-(a) MR posterior must be
 rejected at validate-time, not flagged in prose.
 
-Effective codes: for this stage-(a) primary, we treat core.reason_codes as the
-effective set. Cross-payload reason-code propagation is out of scope here (it's
-the third prototype slice).
+Effective codes (v1.3+): declared ∪ auto-injected. For mr-graph-model the
+auto-injection table contributes {instrument-assumption-risk} as soon as the
+extension is loaded. Cross-payload reason-code propagation is the third
+prototype slice's concern; not exercised here (this is a stage-(a) primary).
+
+**v1.4 patch (slice-3 step 1):**
+- mr-6 (was: "instrument-assumption-risk MUST be in core.reason_codes") is
+  retired — the code is now auto-injected per t034 v1.3 P1.3-c, not
+  hand-authored. The corresponding test (t21) is repurposed to verify that
+  hand-writing iar fires the new v1.3-auto-inject rule.
+- _effective_codes upgraded to include auto-injected contributions, matching
+  the slice-3 prototype's effective_codes formula.
+- Fixtures (t01 base / t08 / t13 / t14 / t15 / t17 / t20 / t24) updated to
+  drop hand-written iar from core.reason_codes.
 
 Standalone runner. NOT integrated into meta/validate.sh; this is a study.
 
@@ -71,6 +84,10 @@ CONDITIONALLY_REQUIRED_FIELDS: tuple[str, ...] = (
 
 PLEIOTROPY_BLOCKING_VALUES: set[str] = {"none-assumed", "not-modelled"}
 
+# v1.3 P1.3-c auto-injection table (mr-graph-model slice). Mirrors the entry
+# in slice-3's AUTO_INJECTION dict.
+AUTO_INJECTED_FOR_MR: set[str] = {"instrument-assumption-risk"}
+
 
 @dataclass(frozen=True)
 class Issue:
@@ -80,12 +97,21 @@ class Issue:
     msg: str
 
     def __str__(self) -> str:
-        return f"[{self.severity:5}] {self.rule:6} {self.path}: {self.msg}"
+        return f"[{self.severity:5}] {self.rule:18} {self.path}: {self.msg}"
 
 
 def _effective_codes(payload: dict) -> set[str]:
-    """Stage-(a) effective codes = core.reason_codes (no upstream propagation here)."""
-    return set(payload.get("core", {}).get("reason_codes") or [])
+    """Stage-(a) effective codes = declared ∪ auto-injected.
+
+    No upstream propagation here (this prototype is stage-(a) primary only).
+    Auto-injection added v1.4 per t034 v1.3 P1.3-c — `instrument-assumption-risk`
+    is contributed by the mr-graph-model extension when loaded.
+    """
+    declared = set(payload.get("core", {}).get("reason_codes") or [])
+    auto: set[str] = set()
+    if EXT_KEY in payload:
+        auto |= AUTO_INJECTED_FOR_MR
+    return declared | auto
 
 
 def _is_nonempty(value) -> bool:
@@ -151,11 +177,18 @@ def validate_mr_graph_model(payload: dict) -> list[Issue]:
                             f"{got!r} not in mr-graph-model permitted set "
                             f"{sorted(GRAPH_OBJECT_TYPES_FOR_MR)}"))
 
-    # mr-6 (semantic): instrument-assumption-risk must be declared
-    if "instrument-assumption-risk" not in eff_codes:
-        issues.append(Issue("error", "core.reason_codes", "mr-6",
-                            "instrument-assumption-risk must be declared whenever "
-                            "mr-graph-model extension is loaded"))
+    # v1.3-auto-inject (v1.4 — replaces mr-6): hand-writing an auto-injected
+    # code is a hard error. For mr-graph-model the auto-injected set is just
+    # {instrument-assumption-risk}. The contribution-merger adds it to
+    # effective_codes via _effective_codes; authors must not duplicate it in
+    # core.reason_codes.
+    declared = set(core.get("reason_codes") or [])
+    overlap = declared & AUTO_INJECTED_FOR_MR
+    if overlap:
+        issues.append(Issue("error", "core.reason_codes", "v1.3-auto-inject",
+                            f"author hand-wrote auto-injected code(s) {sorted(overlap)}; "
+                            f"per t034 v1.3 P1.3-c the validator's contribution-merger "
+                            f"adds these — v1.4 hard-errors on hand-writing"))
 
     # mr-7 (semantic): pleiotropy-untested ↔ pleiotropy_model ∈ blocking
     pmodel = ext.get("pleiotropy_model")
@@ -205,12 +238,16 @@ def validate_mr_graph_model(payload: dict) -> list[Issue]:
 # -----------------------------------------------------------------------------
 
 def _base_payload(**core_overrides) -> dict:
-    """Helper: build a minimal valid mr-graph-model payload, then apply overrides."""
+    """Helper: build a minimal valid mr-graph-model payload, then apply overrides.
+
+    Note (v1.4): core.reason_codes is now empty by default. instrument-assumption-risk
+    is auto-injected by the mr-graph-model extension and must NOT be hand-written.
+    """
     p = {
         "core": {
             "extensions": ["mr-graph-model", "causal-graph", "statistical-uncertainty"],
             "validation_role": "prioritize-attention",
-            "reason_codes": ["instrument-assumption-risk"],
+            "reason_codes": [],
         },
         "extension/mr-graph-model": {
             "exposure_set": ["var:exposure-1"],
@@ -270,7 +307,7 @@ def t08_missing_instrument_set_with_summary_gate() -> tuple[str, dict, set[str]]
     """instrument_set missing WITH extracted-from-summary-only — relaxed; passes."""
     p = _base_payload()
     del p["extension/mr-graph-model"]["instrument_set"]
-    p["core"]["reason_codes"] = ["instrument-assumption-risk", "extracted-from-summary-only"]
+    p["core"]["reason_codes"] = ["extracted-from-summary-only"]
     return ("08-missing-instrument-set-with-summary-gate", p, set())
 
 
@@ -278,7 +315,7 @@ def t09_missing_provenance_with_summary_gate() -> tuple[str, dict, set[str]]:
     """summary_statistic_provenance missing WITH extracted-from-summary-only — relaxed."""
     p = _base_payload()
     del p["extension/mr-graph-model"]["summary_statistic_provenance"]
-    p["core"]["reason_codes"] = ["instrument-assumption-risk", "extracted-from-summary-only"]
+    p["core"]["reason_codes"] = ["extracted-from-summary-only"]
     return ("09-missing-provenance-with-summary-gate", p, set())
 
 
@@ -292,7 +329,7 @@ def t11_always_required_missing() -> tuple[str, dict, set[str]]:
     """exposure_set is always required — even with summary gate."""
     p = _base_payload()
     del p["extension/mr-graph-model"]["exposure_set"]
-    p["core"]["reason_codes"] = ["instrument-assumption-risk", "extracted-from-summary-only"]
+    p["core"]["reason_codes"] = ["extracted-from-summary-only"]
     return ("11-always-required-missing-with-gate", p, {"mr-4"})
 
 
@@ -306,14 +343,14 @@ def t12_pleiotropy_blocking_code_missing() -> tuple[str, dict, set[str]]:
 def t13_pleiotropy_blocking_code_correct() -> tuple[str, dict, set[str]]:
     p = _base_payload()
     p["extension/mr-graph-model"]["pleiotropy_model"] = "not-modelled"
-    p["core"]["reason_codes"] = ["instrument-assumption-risk", "pleiotropy-untested"]
+    p["core"]["reason_codes"] = ["pleiotropy-untested"]
     return ("13-pleiotropy-blocking-code-correct", p, set())
 
 
 def t14_pleiotropy_untested_overdeclared() -> tuple[str, dict, set[str]]:
     """pleiotropy-untested declared but pleiotropy_model=mr-egger (handled) — false alarm."""
     p = _base_payload()
-    p["core"]["reason_codes"] = ["instrument-assumption-risk", "pleiotropy-untested"]
+    p["core"]["reason_codes"] = ["pleiotropy-untested"]
     return ("14-pleiotropy-untested-overdeclared", p, {"mr-7"})
 
 
@@ -321,8 +358,7 @@ def t15_pleiotropy_unspecified_correct() -> tuple[str, dict, set[str]]:
     """Adapted Zuber pilot: pleiotropy_model=unspecified + pleiotropy-unspecified code."""
     p = _base_payload()
     p["extension/mr-graph-model"]["pleiotropy_model"] = "unspecified"
-    p["core"]["reason_codes"] = ["instrument-assumption-risk", "pleiotropy-unspecified",
-                                 "extracted-from-summary-only"]
+    p["core"]["reason_codes"] = ["pleiotropy-unspecified", "extracted-from-summary-only"]
     return ("15-pleiotropy-unspecified-correct", p, set())
 
 
@@ -334,7 +370,7 @@ def t16_pleiotropy_unspecified_code_missing() -> tuple[str, dict, set[str]]:
 
 def t17_pleiotropy_unspecified_overdeclared() -> tuple[str, dict, set[str]]:
     p = _base_payload()
-    p["core"]["reason_codes"] = ["instrument-assumption-risk", "pleiotropy-unspecified"]
+    p["core"]["reason_codes"] = ["pleiotropy-unspecified"]
     return ("17-pleiotropy-unspecified-overdeclared", p, {"mr-8"})
 
 
@@ -358,14 +394,21 @@ def t19_reverse_causation_carve_out() -> tuple[str, dict, set[str]]:
 def t20_reverse_causation_overdeclared() -> tuple[str, dict, set[str]]:
     """reverse-causation-assumed declared with bidirectional-search — false alarm."""
     p = _base_payload()
-    p["core"]["reason_codes"] = ["instrument-assumption-risk", "reverse-causation-assumed"]
+    p["core"]["reason_codes"] = ["reverse-causation-assumed"]
     return ("20-reverse-causation-overdeclared", p, {"mr-9"})
 
 
-def t21_instrument_assumption_risk_missing() -> tuple[str, dict, set[str]]:
+def t21_instrument_assumption_risk_handwritten() -> tuple[str, dict, set[str]]:
+    """v1.4 repurpose: hand-writing the auto-injected iar code → v1.3-auto-inject error.
+
+    Replaces the v1.2 t21 (`instrument-assumption-risk-missing` → mr-6), which
+    is no longer reachable: under v1.3 P1.3-c the code is auto-injected as soon
+    as the extension is loaded, so "missing" is impossible. The new failure mode
+    is hand-writing the code, which v1.4 hard-errors.
+    """
     p = _base_payload()
-    p["core"]["reason_codes"] = []
-    return ("21-instrument-assumption-risk-missing", p, {"mr-6"})
+    p["core"]["reason_codes"] = ["instrument-assumption-risk"]
+    return ("21-instrument-assumption-risk-handwritten", p, {"v1.3-auto-inject"})
 
 
 def t22_graph_object_type_out_of_slice() -> tuple[str, dict, set[str]]:
@@ -385,13 +428,16 @@ def t23_no_extension_loaded() -> tuple[str, dict, set[str]]:
 
 
 def t24_zuber_pilot_adapted() -> tuple[str, dict, set[str]]:
-    """Adapted Zuber2025: full paper-summary extraction with all v1.2 relaxations engaged."""
+    """Adapted Zuber2025: full paper-summary extraction with all v1.2 relaxations engaged.
+
+    v1.4: instrument-assumption-risk dropped from declared codes — auto-injected by
+    the mr-graph-model extension per v1.3 P1.3-c.
+    """
     return ("24-zuber-pilot-adapted", {
         "core": {
             "extensions": ["mr-graph-model", "causal-graph", "statistical-uncertainty"],
             "validation_role": "prioritize-attention",
             "reason_codes": [
-                "instrument-assumption-risk",
                 "pleiotropy-unspecified",
                 "extracted-from-summary-only",
             ],
@@ -428,7 +474,7 @@ TESTS = [
     t17_pleiotropy_unspecified_overdeclared,
     t18_reverse_causation_required, t19_reverse_causation_carve_out,
     t20_reverse_causation_overdeclared,
-    t21_instrument_assumption_risk_missing,
+    t21_instrument_assumption_risk_handwritten,
     t22_graph_object_type_out_of_slice, t23_no_extension_loaded,
     t24_zuber_pilot_adapted, t25_zuber_pilot_strengthen_attempt,
 ]
@@ -438,7 +484,7 @@ def main() -> int:
     passed = 0
     failed: list[str] = []
 
-    print(f"t034 v1.2 mr-graph-model validator prototype — running {len(TESTS)} tests\n")
+    print(f"t034 v1.4 mr-graph-model validator prototype — running {len(TESTS)} tests\n")
 
     for tc in TESTS:
         name, payload, expected_rules = tc()
