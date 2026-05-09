@@ -118,7 +118,7 @@ core:
   validation_role: prioritize-attention                  # 2: per extension rule
   validation_status: pending                             # A
   uncertainty_summary: "MrDAG posterior over lifestyle/behavior exposures and mental-health outcomes; pleiotropy model unspecified in summary"   # 0: prose
-  reason_codes: [single-source-evidence, instrument-assumption-risk, reverse-causation-assumed]   # 2
+  reason_codes: [single-source-evidence, reverse-causation-assumed]   # 2; instrument-assumption-risk auto-injected per t034 v1.3 (mr-graph-model extension); v1.4 hard-errors on hand-writing
 
 extension/mr-graph-model:
   exposure_set: [var:education, var:smoking, ...]        # 1: partial; "education and smoking" + "lifestyle/behavioral exposures" implies more, not enumerated
@@ -216,7 +216,7 @@ core:
   validation_role: prioritize-attention                  # 2
   validation_status: pending                             # A
   uncertainty_summary: "mechanistic hypothesis: hypoxia + inflammatory + oncogenic patterns recovered; subnetwork size unspecified in summary"   # 0
-  reason_codes: [mechanism-hypothesis-only, prior-network-dependent, single-source-evidence]   # 2
+  reason_codes: [single-source-evidence]   # 2; mechanism-hypothesis-only and prior-network-dependent auto-injected per t034 v1.3 (mechanistic-hypothesis-bundle extension); v1.4 hard-errors on hand-writing
 
 extension/mechanistic-hypothesis-bundle:
   prior_knowledge_network_ref: ~                         # ✗: paper says "signed directed prior knowledge network integrating signaling, transcriptional regulation, and metabolism"; no specific network ref (OmniPath? Reactome? custom?) named in summary

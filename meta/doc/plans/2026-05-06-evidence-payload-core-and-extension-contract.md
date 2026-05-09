@@ -297,7 +297,7 @@ core:
   validation_role: prioritize-attention                   # gated; cannot strengthen until identified
   validation_status: pending
   uncertainty_summary: "CPDAG, 12 edges, vaccination→severe-illness present (undirected)"
-  reason_codes: [causal-sufficiency-assumption, identification-missing]
+  reason_codes: [causal-sufficiency-assumption]   # identification-missing auto-injected per t034 v1.3 (causal-discovery-run extension); v1.4 hard-errors on hand-writing
 
 extension/causal-discovery-run:
   observed_data_link: dataset:covid-vaccine-obs-cohort
