@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Prototype validator for t034 v1.3 cross-payload reason-code propagation.
+Prototype validator for t034 v1.4 cross-payload reason-code propagation.
 
 Third validator slice. Sister to:
 - meta/doc/plans/2026-05-06-t034-causal-graph-validator-prototype.py (slice 1: structural)
@@ -11,28 +11,47 @@ This slice closes the natural-systems alignment commitment for t034: it implemen
 propagated upstream blocking codes minus retired codes), then enforces the
 consumer-side `causal-effect-estimate.strengthen-belief` rule against that state.
 
-v1.3 contract reminder:
+v1.4 contract reminder:
     effective_codes(p) = declared(p) ∪ auto_injected(p) ∪ propagated_blocking(upstream(p))
                        \\ retired_by(p)
 
 Where:
-- declared(p)       = p.core.reason_codes (author-written, post-v1.3 should EXCLUDE auto-injected)
+- declared(p)       = p.core.reason_codes (author-written, post-v1.3 must EXCLUDE auto-injected;
+                      v1.4 hard-errors on hand-writing per P1.4-b)
 - auto_injected(p)  = ∪ over loaded extensions of AUTO_INJECTION[ext]
 - propagated_blocking(upstream(p)) = ∪ over p.core.input_artifact_refs of
                                      {c ∈ effective_codes(upstream) : c is blocking}
-- retired_by(p)     = codes p resolves on its content (e.g., causal-identification with
-                      identification_status ∈ {identified, partially-identified}
-                      retires identification-missing)
+- retired_by(p)     = codes p resolves on its content. v1.4 retirement table:
+                      (1) causal-identification with identification_status ∈
+                          {identified, partially-identified} retires identification-missing;
+                      (2) mr-analysis with pleiotropy_handling != unhandled retires
+                          pleiotropy-untested;
+                      (3) [P1.4-a] mr-analysis with pleiotropy_handling != unhandled
+                          AND upstream mr_graph_payload_ref.instrument_validity_assumptions
+                          containing 'relevance' retires instrument-assumption-risk
+                          (first retirement reading upstream payload state).
 
 The consumer-side rule under test (the load-bearing case the slice-2 findings called
 out as the smallest non-trivial slice-3 test):
 
     causal-effect-estimate.validation_role: strengthen-belief is permitted iff
     (a) identification_payload_ref.identification_status ∈ {identified, partially-identified}
-    (b) effective_codes excludes BOTH identification-missing AND instrument-assumption-risk
+    (b) effective_codes (post-retirement) excludes identification-missing AND
+        instrument-assumption-risk
     (c) estimator_diagnostics is present
 
+**v1.4 patch:**
+- _retired_by signature changed: now takes (store, payload) so the iar retirement
+  can resolve mr_graph_payload_ref and read its instrument_validity_assumptions.
+- test_strengthen_mr_two_stage_iar_finding renamed to test_strengthen_mr_two_stage_iar_retired
+  and its assertion flipped: under v1.4, the two-stage MR pattern with valid pleiotropy
+  handling and upstream relevance now correctly retires iar, so cee-strengthen-b does
+  NOT fire and the consumer rule passes. Fixture updated to populate
+  instrument_validity_assumptions and mr_graph_payload_ref so the upstream-state
+  check can resolve.
+
 Standalone runner. NOT integrated into meta/validate.sh; this is a study.
+The production validator at meta/src/t034_validator/ already implements v1.4.
 
 Run with:  python meta/doc/plans/2026-05-06-t034-effective-codes-validator-prototype.py
 Exits 0 if all tests match expectations; nonzero otherwise.
@@ -100,8 +119,9 @@ def _auto_injected(payload: dict) -> set[str]:
     return out
 
 
-def _retired_by(payload: dict) -> set[str]:
-    """Codes this payload resolves on its own content."""
+def _retired_by(store: "Store", payload: dict) -> set[str]:
+    """Codes this payload resolves. Reads local payload state and (for the v1.4
+    P1.4-a iar rule) upstream state via mr_graph_payload_ref."""
     retired: set[str] = set()
     exts = _loaded_extensions(payload)
 
@@ -113,11 +133,20 @@ def _retired_by(payload: dict) -> set[str]:
             retired.add("identification-missing")
 
     # mr-analysis with pleiotropy_handling != unhandled retires propagated
-    # pleiotropy-untested (per design line 398).
+    # pleiotropy-untested.
     if "mr-analysis" in exts:
         ma = payload.get("extension/mr-analysis") or {}
         if ma.get("pleiotropy_handling") not in {None, "unhandled"}:
             retired.add("pleiotropy-untested")
+            # v1.4 P1.4-a: iar retirement also requires upstream relevance.
+            mr_ref = ma.get("mr_graph_payload_ref")
+            if mr_ref:
+                upstream = store.get(mr_ref)
+                if upstream is not None:
+                    upstream_ext = upstream.get("extension/mr-graph-model") or {}
+                    iva = set(upstream_ext.get("instrument_validity_assumptions") or [])
+                    if "relevance" in iva:
+                        retired.add("instrument-assumption-risk")
 
     return retired
 
@@ -146,7 +175,7 @@ def effective_codes(store: Store, pid: str, _seen: set[str] | None = None) -> se
         upstream_eff = effective_codes(store, upstream_ref, seen)
         propagated |= {c for c in upstream_eff if c in BLOCKING_CODES}
 
-    retired = _retired_by(payload)
+    retired = _retired_by(store, payload)
 
     return (declared | auto | propagated) - retired
 
@@ -435,30 +464,34 @@ def test_strengthen_role_not_triggered():
     assert issues == [], issues
 
 
-def test_strengthen_mr_two_stage_iar_finding():
-    """End-to-end MR: stage (a) declares pleiotropy-untested; stage (b) retires it via mr-egger-intercept.
+def test_strengthen_mr_two_stage_iar_retired():
+    """End-to-end two-stage MR (T34-6): stage (a) declares pleiotropy-untested; stage (b)
+    retires both pleiotropy-untested AND instrument-assumption-risk via valid
+    pleiotropy_handling plus upstream relevance.
 
-    pleiotropy retirement works correctly (it does NOT appear in effective_codes at cee1),
-    but the generic CEE strengthen rule still rejects on instrument-assumption-risk because
-    mr-analysis auto-injects iar locally. This is the design ambiguity around line 331's
-    parenthetical "unless [iar] has been retired by an upstream MR diagnostic" — when
-    mr-analysis is co-loaded with valid pleiotropy_handling, iar should be retired at
-    that stage too. The slice-3 prototype does not implement that retirement; the
-    findings doc proposes the v1.4 patch."""
+    Pre-v1.4, this test asserted the misfire (cee-strengthen-b fired on locally-auto-injected
+    iar) — the slice-3 finding labeled this as the test_strengthen_mr_two_stage_iar_finding
+    case. v1.4 P1.4-a adopted the iar retirement rule explicitly: when mr-analysis has
+    valid pleiotropy_handling AND upstream mr_graph_payload_ref.instrument_validity_assumptions
+    contains 'relevance', iar is retired locally. This flipped fixture exercises the rule:
+    the consumer rule now passes, demonstrating that T34-6 stage (b) validates at
+    strengthen-belief under v1.4."""
     store = Store()
-    # stage (a)
+    # stage (a) — must populate instrument_validity_assumptions for the iar retirement
+    # to fire on the downstream stage (b).
     store.add("mra1", _payload(["mr-graph-model", "causal-graph", "statistical-uncertainty"],
                                validation_role="prioritize-attention",
-                               reason_codes=["pleiotropy-untested"]))
+                               reason_codes=["pleiotropy-untested"],
+                               exts={"mr_graph_model": {
+                                   "instrument_validity_assumptions": ["relevance", "exclusion"],
+                               }}))
     # an identification payload referencing the MR graph
     store.add("id1", _payload(["causal-identification"],
                               input_artifact_refs=["mra1"],
                               exts={"causal_identification": {"identification_status": "identified"}}))
-    # stage (b): cee + mr-analysis retires pleiotropy-untested via mr-egger-intercept
-    # NOTE: instrument-assumption-risk is auto-injected on cee1 via mr-analysis,
-    # so this case still violates cee-strengthen-b. Demonstrates the design decision
-    # that MR strengthening must clear iar via separate mechanism (handled at the
-    # mr-analysis-strengthen rule, not the generic cee rule). See FINDING.
+    # stage (b): cee + mr-analysis retires pleiotropy-untested via mr-egger-intercept,
+    # and (v1.4) retires instrument-assumption-risk via mr_graph_payload_ref pointing to
+    # an upstream graph whose instrument_validity_assumptions includes relevance.
     store.add("cee1", _payload(
         ["causal-effect-estimate", "mr-analysis", "statistical-uncertainty"],
         validation_role="strengthen-belief",
@@ -467,14 +500,13 @@ def test_strengthen_mr_two_stage_iar_finding():
             "identification_payload_ref": "id1",
             "estimator_diagnostics": {"converged": True},
         },
-           "mr_analysis": {"pleiotropy_handling": "mr-egger-intercept"}}))
+           "mr_analysis": {
+               "mr_graph_payload_ref": "mra1",
+               "pleiotropy_handling": "mr-egger-intercept",
+           }}))
     issues = validate_strengthen_cee(store, "cee1")
-    # Expectation: the generic cee-strengthen rule fires on iar (auto-injected by mr-analysis).
-    # The mr-analysis-specific strengthen rule (which would override and accept this) is not
-    # implemented in this slice — it requires reading the mr-analysis spec's "additional rules"
-    # branch. See findings doc.
     rules = {i.rule for i in issues}
-    assert rules == {"cee-strengthen-b"}, (rules, issues)
+    assert rules == set(), (rules, issues)
 
 
 TESTS = [
@@ -491,14 +523,14 @@ TESTS = [
     test_strengthen_missing_diagnostics,
     test_strengthen_unresolved_id_ref,
     test_strengthen_role_not_triggered,
-    test_strengthen_mr_two_stage_iar_finding,
+    test_strengthen_mr_two_stage_iar_retired,
 ]
 
 
 def main() -> int:
     passed = 0
     failed: list[tuple[str, BaseException]] = []
-    print(f"t034 v1.3 effective-codes / propagation validator prototype — running {len(TESTS)} tests\n")
+    print(f"t034 v1.4 effective-codes / propagation validator prototype — running {len(TESTS)} tests\n")
     for tc in TESTS:
         name = tc.__name__
         try:
