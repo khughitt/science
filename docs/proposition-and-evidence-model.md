@@ -277,3 +277,58 @@ The flag is set and cleared via `science entity review <id>` (records last-revie
 and surfaced via `science entity needs-review` (read-only listing). See
 `docs/claim-and-evidence-model.md` for the full mechanism description and
 `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` for the design.
+
+## Pre-registration: Operational vs Epistemic Targets
+
+Pre-registrations carry commitments about future analyses. Two distinct
+commitment shapes coexist under the single `type: pre-registration`:
+
+- **Operational pre-regs** commit to a procedure: "run pipeline P with
+  params X before unblinding." These are **gating** — deviations require
+  an `amendments:` record. Belief about the operational target is binary
+  (the procedure either ran as committed or it didn't).
+- **Epistemic pre-regs** commit to an interpretation rule: "if effect > 0.3,
+  treat hypothesis H as supported." These are **non-gating** — the result
+  feeds H's evidence base via a weighted `bears_on` edge derived at
+  graph-build time. A null result against an epistemic pre-reg is
+  evidence weighted by the pre-reg's commitment, not a kill switch on H.
+
+The classification falls out of the registered `EntityClass` of each entity
+in the pre-reg's `related:` field — no per-entity schema change is needed.
+Epistemic kinds for `bears_on` participation are: `hypothesis`, `question`,
+`proposition`, `inquiry`, `interpretation`, `finding`, `report`, `story`,
+`assumption`, `discussion`, `validation-report`, `mechanism`, and
+`observation`. (Note: `inquiry` is `EPISTEMIC` as part of the recast — it
+organizes uncertain assertions, same as questions and propositions.)
+Mixed pre-regs (an analysis that commits to both a procedure and an
+interpretation rule) split cleanly: the operational portion remains an
+amendment-gate check at interpret-results time, and the epistemic portion
+materializes as a `bears_on` edge into the epistemic target. Operational
+targets are not `bears_on` sinks, so no operational `bears_on` is emitted.
+
+When the pre-reg's frontmatter includes the optional `commits_to:` field,
+that field overrides `related:` for commitment-target derivation:
+`bears_on` edges are emitted from the pre-reg only to entities listed in
+`commits_to:`, treating other `related:` entries as navigation context
+only. This handles the common case where `related:` is used both for
+genuine commitment targets and for discoverability.
+
+`commits_to:` is an edge-scoping field, not a lock. It records which
+epistemic entities receive the pre-reg's evidential signal; it does not
+freeze those entities, suppress upstream changes, or exempt them from
+freshness propagation. A committed-to hypothesis, question, proposition, or
+inquiry remains responsive to every other upstream dependency in the
+`bears_on` graph. If a newer dataset, workflow-run, observation, proposition,
+interpretation, report, or other upstream epistemic entity changes, the
+target should still become `needs-review` through the existing freshness
+engine.
+
+This dissolves the "gate slammed shut on a viable pathway" failure mode:
+under hard-gating semantics, a null result against a pre-registered
+prediction terminates a hypothesis even when the underlying physical claim
+is still viable. Under the recast, the null result reduces belief weighted
+by the pre-reg's commitment level, and the hypothesis remains queryable
+and reviewable in the graph (subject to freshness propagation).
+
+See `commands/pre-register.md` for the authoring workflow and
+`commands/interpret-results.md` for the evaluation workflow.

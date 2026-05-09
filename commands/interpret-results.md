@@ -193,6 +193,45 @@ Also ask:
 - Enumerate plausible inflators: confounds, data leakage, overfitting, control inadequacy
 - Reference the pre-registration document (in `doc/meta/pre-registration-*.md`) and compare observed vs. expected range explicitly
 - State whether the result survives scrutiny or needs additional verification
+- For epistemic-target pre-regs, an out-of-range result is `disputes` evidence weighted by the pre-reg's commitment — it does not invalidate the hypothesis on its own.
+
+### 4d. Pre-registration evaluation
+
+For each pre-registration relevant to the current analysis, classify its target class and frame the comparison accordingly. Pre-registered evidence flows into the graph as a `bears_on` edge derived from the pre-reg's commitment targets to the relevant epistemic entities; this step structures the proposition updates that § 5 will emit.
+
+Locate any pre-reg with the current analysis or its hypothesis/question in its `related` set:
+
+```bash
+science entity list --kind pre-registration --related <ref>
+```
+
+`science entity list --related <ref>` filters source-authored entities whose `related:` refs point to the current analysis, hypothesis, question, or other focus entity, resolving aliases where possible.
+
+For each found pre-reg, read its `committed:` clause and classify each commitment target by the registered `EntityClass` of its kind (or by `commits_to:` when populated):
+
+- **Operational pre-regs.** Did the analysis run as committed? If not, flag the deviation and confirm an `amendments:` entry exists. Operational pre-regs remain gating; this is unchanged from prior practice.
+- **Epistemic pre-regs.** Compare the observed result to the pre-registered prediction and frame the comparison as a *weighted update*, not a verdict. Example framing:
+
+  > "Pre-reg `pre-registration:h07-beta-arbitration` predicted effect > 0.3 for support of H07. Observed: 0.18. This is a `disputes` evidence edge into H07, weighted strong (per pre-reg commitment level)."
+
+  Avoid framings like "Pre-reg predicted >0.3, observed 0.18 — H07 is rejected per the pre-registered criterion." That is the kill-switch framing the recast deliberately drops for epistemic targets.
+
+- **Pre-canonical pre-regs (hypothesis-in-body-only).** Some older pre-regs reference hypotheses inline in their body prose (e.g., "H1 (primary, confirmatory)") but do not carry the corresponding `hypothesis:` ref in `related:`. The auto-derivation rule produces no `bears_on` edge for body-only hypotheses. When interpreting:
+
+  1. Read the pre-reg's body for inline hypothesis labels and identify the corresponding `hypothesis:` entity if it exists.
+  2. If the entity exists, emit the proposition with the pre-registration backlink, then add the evidence edge explicitly:
+
+     ```bash
+     science graph add proposition "<observed result proposition>" \
+       --source <data-package-or-workflow-run-ref> \
+       --pre-registration pre-registration:<slug> \
+       --id <proposition-id>
+
+     science graph add evidence proposition:<proposition-id> hypothesis:<target-id> \
+       --stance supports  # or disputes
+     ```
+
+  3. If no formal `hypothesis:` entity exists yet, flag this in the interpretation document and recommend the project promote it to a formal entity. Project-side cleanup is the resolution path; the recast cannot fully derive `bears_on` for body-only hypotheses.
 
 ### 5. Update Proposition Support / Dispute
 
@@ -201,6 +240,7 @@ When graph updates are warranted, frame them as proposition updates:
 - attach it as `cito:supports` or `cito:disputes` to the affected proposition
 - note residual uncertainty, especially when evidence is single-source, weak, or contested
 - classify the new evidence explicitly using the canonical evidence types above
+- when the proposition is grounded in a pre-registered analysis, pass `--pre-registration pre-registration:<slug>` to `science graph add proposition`. This writes a `sci:preRegisteredIn` triple into the materialized graph so downstream weighted attention sampling can boost pre-registered evidence.
 
 Do not use hypothesis status changes as the primary output.
 Hypothesis-level summaries can be updated later as a secondary reflection of underlying proposition changes.

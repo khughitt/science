@@ -23,7 +23,7 @@ The current H01 simulator emits binary Bernoulli signals — H01's recall findin
 Tests whether the H01 finding generalises beyond binary signals. If it does, D-003's continuous-belief commitment has stronger empirical footing. If not, H01 is bounded to the Beta-Bernoulli regime and the design principle needs re-examination. Likely a substantial new package alongside `h01_simulator/` (or a parallel module within it) with its own sweep, notebook, and interpretation. Plan before implementation.
 
 ## [t008] Validator: warn on inline-dict synthesized_from items
-- priority: P3
+- priority: P2
 - status: proposed
 - aspects: [software-development]
 - created: 2026-04-25
@@ -68,24 +68,6 @@ Land the long-term ideal articulated as Q5 in the 2026-04-25 synthesis-shape inv
 Phase 2 of `scripts/migrate_downstream_conventions.py` (shape-driven rules, landed `fe8d974`) is the first concrete step toward this; it should be cited as the prior art when planning the declarative migration shape.
 
 Surfaced by: 2026-04-26 brainstorm of the managed-artifact long-term design (Q5 referenced from `docs/audits/downstream-project-conventions/synthesis-shape-investigation-2026-04-25.md` and `docs/plans/2026-04-25-rollout-and-migration-handoff.md` decision #6).
-
-## [t012] Pre-registration semantics recast (epistemic vs operational targets)
-- priority: P2
-- status: proposed
-- aspects: [skills, framework-design]
-- related: [hypothesis:h01-stochastic-revisiting]
-- created: 2026-05-03
-
-Update `science:pre-register` and `science:interpret-results` skills (and the project-level docs `docs/claim-and-evidence-model.md`, `docs/proposition-and-evidence-model.md`) to reflect the recast articulated in `docs/plans/2026-05-03-epistemic-dependency-graph-design.md` § Part 4: a pre-registration over an *operational* claim ("we will run pipeline P with params X before unblinding") stays binary and gating; a pre-reg over an *epistemic* claim ("if we observe Y we will treat hypothesis H as supported") becomes evidence input to H's standing rather than a verdict on H.
-
-Zero schema change to pre-reg entities. Behavioral changes:
-- `science:pre-register` prompts the user to identify whether the target is operational or epistemic, and frames the commitment language accordingly.
-- `science:interpret-results` reads the pre-reg's commitment, evaluates the result against it, and emits a `bears_on` edge into the epistemic target — weighted by pre-reg commitment, not as a binary verdict.
-- Skill prose explicitly drops "kill switch" framing for null results against epistemic targets.
-
-Independent of `[t010]`/`[t011]`: can land before, during, or after the code changes since it touches only skills and prose. Do *not* land before downstream projects (myeloma, natural-systems) have a chance to surface objections — the recast changes how their existing pre-regs are interpreted.
-
-Surfaced by: 2026-05-03 design discussion on continuous-belief flow.
 
 ## [t014] Epistemic freshness: content-hash upstream change detection
 - priority: P3
@@ -221,10 +203,11 @@ Aspect-extension design tasks (`[t034]`, `[t035]`, `[t037]`, `[t038]`, `[t040]`)
 
 ## [t026] Causal synthesis guardrails
 - priority: P2
-- status: proposed
+- status: blocked
 - parent: task:t021
 - aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
 - related: [task:t021, question:02-causal-synthesis-guardrails, question:01-evidence-payload-schema]
+- blocked-by: [task:t034]
 - group: evidence-payload-schema
 - created: 2026-05-05
 
@@ -246,6 +229,10 @@ Special attention:
 - whether missing metadata should produce a warning, validation error, or H01 revisit signal.
 
 Start from `paper:Berenfeld2026`, `paper:Dai2023`, `paper:Thijssen2017`, `paper:Majumdar2022`, `paper:Petersen2014`, `paper:Shi2022`, `paper:Dong2023`, `paper:Faller2024`, `paper:Zheng2024`, `paper:Zuber2025`, and the causal-modeling aspect.
+
+### Notes
+
+- 2026-05-08: Scope narrowed (2026-05-08): t034 v1.3 design absorbs per-payload schema (graph-object taxonomy, edge-role typing, causal-sufficiency, mediation, MR, self-compatibility, identification). t026 now owns the cross-payload policy layer: non-collapsibility / odds ratios, arm-based vs contrast-based aggregation, source-population transport, and the decision rule for when t034 graph + t023 synthesis + t040 robustness jointly strengthen a causal proposition (warning vs validation error vs H01 revisit signal).
 
 ## [t028] Follow-up literature on Bayesian synthesis, causal meta-analysis, and anytime-valid evidence
 - priority: P3
@@ -332,9 +319,10 @@ Steps:
 
 ## [t033] Model LLM agents as fallible evidence sources and graph-governed operators
 - priority: P2
-- status: proposed
+- status: blocked
 - aspects: [software-development, framework-design, research]
 - related: [task:t022, task:t024, task:t031, task:t037, task:t038, question:07-llm-agents-as-fallible-sources, question:05-source-dependence-detection, question:12-agent-tool-kg-operations, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
+- blocked-by: [task:t037]
 - group: agent-source-modeling
 - created: 2026-05-05
 
@@ -353,9 +341,13 @@ Granularity is a key design decision; expect to defend the chosen level (per-pro
 
 **Inputs from `[t030]` D4 (2026-05-06)** at `meta/doc/plans/2026-05-06-t030-full-audit-results.md`: two verbatim-identical blind-LLM extraction passes disagreed within-1 on ~25–40% of rubric-ambiguous fields, with systematic pass-1-higher-than-pass-2 calibration drift (17/25 cases). Implications for this task: (a) per-extraction confidence and per-call agent identity are needed in agent-source records; (b) ensemble-of-N or repeated-extraction-with-disagreement-flagging should be considered for high-stakes fields; (c) the deferred full-context-manual-vs-blind-LLM signal is required to fully ground this task and should be obtained via a fresh audit before agent-source modeling commits.
 
+### Notes
+
+- 2026-05-08: Scope reduced (2026-05-08): t037 v1.3 design absorbs source-side agent schema (agent/agent_role registry entities, validation_status, agent-evaluation extension with Si2025 Bayes-factor semantics). Residual t033 scope to re-evaluate when t037 closes: (a) self-application / retroactive agent-provenance pass on Batch 1-5 syntheses; (b) granularity decision (per-prompt vs per-tool-version vs per-model); (c) source-dependence integration with t031 (shared prompt/model/tool-chain/KG-view); (d) repeated-extraction-with-disagreement policy per t030 D4 calibration drift finding.
+
 ## [t034] Design causal graph construction pipeline artifacts
 - priority: P1
-- status: proposed
+- status: active
 - parent: task:t021
 - aspects: [software-development, framework-design, causal-modeling, hypothesis-testing]
 - related: [task:t022, task:t023, task:t025, task:t026, question:10-causal-graph-construction-pipeline, question:02-causal-synthesis-guardrails, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting, hypothesis:h04-causal-estimand-guardrails-reduce-false-causal-edge-strengthening]
@@ -438,7 +430,7 @@ Deliverable: either add PDFs and process them in a later batch, or write a topic
 
 ## [t037] Design agent/tool operations schema
 - priority: P1
-- status: proposed
+- status: active
 - aspects: [software-development, framework-design, research]
 - related: [task:t029, task:t033, question:07-llm-agents-as-fallible-sources, question:12-agent-tool-kg-operations, hypothesis:h02-rich-evidence-payloads-improve-graph-calibration, hypothesis:h03-reason-coded-revisiting-beats-posterior-only-revisiting]
 - group: agent-source-modeling
@@ -568,6 +560,7 @@ Highest-value additions:
 - WILDS, distribution-shift, and robustness-benchmark papers for ML robustness evaluation.
 
 Deliverable: either add PDFs and process them in a later batch, or write a topic note explaining how each family should influence evaluation artifacts, metric-family enums, checklist fields, H02 validation outcomes, and H03 reason codes.
+
 ## [t042] Design synthesis artifact lifecycle and output-artifact model
 - priority: P2
 - status: proposed
