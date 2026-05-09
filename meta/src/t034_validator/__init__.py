@@ -428,7 +428,11 @@ def validate_strengthen_cee(store: Store, pid: str) -> list[Issue]:
     payload = store.get(pid)
     if payload is None:
         return issues
-    if "causal-effect-estimate" not in _loaded_extensions(payload):
+    # Dispatch on section presence rather than core.extensions membership so a
+    # payload with the section but a misconfigured list still gets validated.
+    # The section/list mismatch itself is reported separately by
+    # validate_section_list_consistency.
+    if "extension/causal-effect-estimate" not in payload:
         return issues
 
     core = payload.get("core", {}) or {}
@@ -475,6 +479,62 @@ def validate_strengthen_cee(store: Store, pid: str) -> list[Issue]:
 
 
 # ---------------------------------------------------------------------------
+# Core shape rules — section/list consistency and ref resolution
+# ---------------------------------------------------------------------------
+
+def validate_section_list_consistency(pid: str, payload: dict) -> list[Issue]:
+    """Errors on mismatch between core.extensions and extension/* sections.
+
+    Both directions are errors:
+    - A name in core.extensions without a matching extension/<name>: section
+      means the dispatcher would skip rules that the author intended to load.
+    - An extension/<name>: section without the name in core.extensions means
+      the dispatcher (when keyed off the list) would silently skip the section's
+      rules — the failure mode this rule was added to catch.
+    """
+    issues: list[Issue] = []
+    core = payload.get("core") or {}
+    listed = list(core.get("extensions") or [])
+    sectioned = [k[len("extension/"):] for k in payload.keys()
+                 if isinstance(k, str) and k.startswith("extension/")]
+
+    listed_set = set(listed)
+    sectioned_set = set(sectioned)
+
+    listed_no_section = listed_set - sectioned_set
+    if listed_no_section:
+        issues.append(Issue("error", pid, "core.extensions", "core-extensions-shape",
+                            f"core.extensions lists {sorted(listed_no_section)} but no "
+                            f"matching extension/<name> section is present"))
+
+    section_not_listed = sectioned_set - listed_set
+    if section_not_listed:
+        issues.append(Issue("error", pid, "extension/*", "core-extensions-shape",
+                            f"extension/<name> section(s) {sorted(section_not_listed)} "
+                            f"present but not declared in core.extensions"))
+
+    return issues
+
+
+def validate_input_refs(store: Store, pid: str, payload: dict) -> list[Issue]:
+    """Errors on every entry in core.input_artifact_refs that doesn't resolve.
+
+    An unresolved upstream ref would otherwise silently drop the propagation
+    chain (effective_codes returns set() for missing payloads), letting a typo
+    mask blocking codes that should reach this payload.
+    """
+    issues: list[Issue] = []
+    core = payload.get("core") or {}
+    refs = core.get("input_artifact_refs") or []
+    for i, ref in enumerate(refs):
+        if store.get(ref) is None:
+            issues.append(Issue("error", pid,
+                                f"core.input_artifact_refs[{i}]", "core-input-refs",
+                                f"input_artifact_refs entry {ref!r} does not resolve in store"))
+    return issues
+
+
+# ---------------------------------------------------------------------------
 # Top-level dispatch
 # ---------------------------------------------------------------------------
 
@@ -486,6 +546,8 @@ def validate_payload(store: Store, pid: str) -> list[Issue]:
                       "payload not found in store")]
 
     issues: list[Issue] = []
+    issues.extend(validate_section_list_consistency(pid, payload))
+    issues.extend(validate_input_refs(store, pid, payload))
     issues.extend(validate_v13_authoring(pid, payload))
     issues.extend(validate_causal_graph(pid, payload))
     issues.extend(validate_mr_graph_model(pid, payload))
