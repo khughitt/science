@@ -472,6 +472,79 @@ def test_cli_refs_check_json_summary_only_omits_details() -> None:
         }
 
 
+def test_cli_refs_check_type_filters_broken_refs() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "tasks").mkdir(parents=True, exist_ok=True)
+        (root / "tasks" / "active.md").write_text("## [t05] Build pipeline\n- status: proposed\n")
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "# Test\nH99 is broken, [@Nobody2099] is missing, and t99 is missing.\n",
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["refs", "check", "--type", "task", "--summary-only"])
+
+        assert result.exit_code == 1
+        assert "refs check: 1 broken, 0 unresolved markers" in result.output
+        assert "task: 1" in result.output
+        assert "citation:" not in result.output
+        assert "hypothesis:" not in result.output
+
+
+def test_cli_refs_check_by_value_groups_filtered_refs() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "tasks").mkdir(parents=True, exist_ok=True)
+        (root / "tasks" / "active.md").write_text("## [t05] Build pipeline\n- status: proposed\n")
+        (root / "doc" / "background" / "topics" / "one.md").write_text(
+            "# One\nMissing t99 appears twice: t99.\n",
+            encoding="utf-8",
+        )
+        (root / "doc" / "background" / "topics" / "two.md").write_text(
+            "# Two\nMissing t42 appears once.\n",
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["refs", "check", "--type", "task", "--by-value", "--summary-only"])
+
+        assert result.exit_code == 1
+        assert "By value:" in result.output
+        assert "task:t99: 2" in result.output
+        assert "task:t42: 1" in result.output
+
+
+def test_cli_refs_check_json_by_value_groups_filtered_refs() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "tasks").mkdir(parents=True, exist_ok=True)
+        (root / "tasks" / "active.md").write_text("## [t05] Build pipeline\n- status: proposed\n")
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "# Test\nMissing t99 appears twice: t99. H99 is separate.\n",
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(
+            main,
+            ["refs", "check", "--type", "task", "--by-value", "--format", "json", "--summary-only"],
+        )
+
+        assert result.exit_code == 1
+        assert json.loads(result.output) == {
+            "summary": {
+                "broken": 2,
+                "markers": 0,
+                "by_type": {"task": 2},
+                "by_value": {"task:t99": 2},
+            }
+        }
+
+
 def test_external_url_links_ignored() -> None:
     """Links starting with http(s) or # should not be checked."""
     runner = CliRunner()
