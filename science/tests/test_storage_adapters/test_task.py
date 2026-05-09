@@ -64,6 +64,28 @@ def test_multiple_tasks_in_one_file(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert ids == {"task:t001", "task:t002"}
 
 
+def test_discover_ignores_historical_alias_archive(tmp_path: Path) -> None:
+    (tmp_path / "tasks").mkdir()
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t001] T01\n- type: research\n- priority: P1\n- status: active\n- created: 2026-04-20\n\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tasks" / "archive.md").write_text(
+        "# Historical task aliases\n\n"
+        "## [t024] Old analysis task\n"
+        "- status: archived\n"
+        "- note: Kept only so older documents can resolve task:t024.\n\n"
+        "## [t35] Legacy short-form task\n"
+        "- status: archived\n"
+        "- note: Short-form historical alias.\n",
+        encoding="utf-8",
+    )
+
+    refs = TaskAdapter().discover(tmp_path)
+
+    assert len(refs) == 1
+
+
 def test_load_raw_uses_discovered_tasks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "tasks").mkdir()
     (tmp_path / "tasks" / "active.md").write_text(

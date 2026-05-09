@@ -24,6 +24,8 @@ class TaskAdapter(StorageAdapter):
             return []
         refs: list[SourceRef] = []
         for path in sorted(tasks_dir.rglob("*.md")):
+            if path == tasks_dir / "archive.md":
+                continue
             try:
                 rel = str(path.relative_to(project_root))
             except ValueError:
