@@ -1264,6 +1264,7 @@ dependencies = [
     { name = "marimo" },
     { name = "numpy" },
     { name = "polars" },
+    { name = "pyyaml" },
 ]
 
 [package.dev-dependencies]
@@ -1281,6 +1282,7 @@ requires-dist = [
     { name = "marimo", specifier = ">=0.8" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "polars", specifier = ">=0.20" },
+    { name = "pyyaml", specifier = ">=6.0" },
 ]
 
 [package.metadata.requires-dev]

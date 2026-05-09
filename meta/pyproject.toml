@@ -13,6 +13,7 @@ dependencies = [
     "polars>=0.20",
     "marimo>=0.8",
     "altair>=5.0",
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]
@@ -27,7 +28,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/h01_simulator"]
+packages = ["src/h01_simulator", "src/t034_validator"]
 
 [tool.pyright]
 include = ["src", "tests"]
