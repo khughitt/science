@@ -3342,21 +3342,92 @@ def project_index(output_format: str, project_root: Path) -> None:
     show_default=True,
     type=click.Choice(["table", "json"]),
 )
-def health_command(project_root: Path, output_format: str) -> None:
+@click.option(
+    "--timings",
+    is_flag=True,
+    help="Include per-check timing diagnostics.",
+)
+@click.option(
+    "--fast",
+    is_flag=True,
+    help="Run only health checks that do not require loading project sources.",
+)
+@click.option(
+    "--check",
+    "checks",
+    multiple=True,
+    help="Run only the named health check. May be passed multiple times.",
+)
+@click.option(
+    "--skip",
+    "skip_checks",
+    multiple=True,
+    help="Skip the named health check. May be passed multiple times.",
+)
+@click.option(
+    "--list-checks",
+    is_flag=True,
+    help="List available health checks and exit.",
+)
+def health_command(
+    project_root: Path,
+    output_format: str,
+    timings: bool,
+    fast: bool,
+    checks: tuple[str, ...],
+    skip_checks: tuple[str, ...],
+    list_checks: bool,
+) -> None:
     """Aggregate diagnostics for the project: unresolved refs, lingering tags, etc."""
     import json as _json
 
     from rich.table import Table
 
-    from science_tool.graph.health import build_health_report
+    from science_tool.graph.health import build_health_report, list_health_checks
     from science_tool.styles import get_console
 
     project_root = project_root.resolve()
-    report = build_health_report(project_root)
+    if list_checks:
+        available_checks = list_health_checks()
+        if output_format == "json":
+            click.echo(_json.dumps({"checks": available_checks}, indent=2))
+            return
+        table = Table(title="Health checks")
+        table.add_column("Name", style="bold")
+        table.add_column("Requires sources")
+        table.add_column("Description")
+        for row in available_checks:
+            table.add_row(str(row["name"]), "yes" if row["requires_sources"] else "no", str(row["description"]))
+        get_console().print(table)
+        return
+
+    try:
+        if timings or fast or checks or skip_checks:
+            report = build_health_report(
+                project_root,
+                collect_timings=timings,
+                checks=frozenset(checks) or None,
+                skip_checks=frozenset(skip_checks) or None,
+                fast=fast,
+            )
+        else:
+            report = build_health_report(project_root)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     if output_format == "json":
         click.echo(_json.dumps(report, indent=2))
         return
+
+    if timings:
+        meta = report.get("_meta") or {}
+        timing_rows = meta.get("timings") or []
+        total_duration = meta.get("total_duration_seconds")
+        click.echo("Health timings:", err=True)
+        for row in timing_rows:
+            click.echo(f"  {row['name']}: {row['duration_seconds']:.3f}s", err=True)
+        if isinstance(total_duration, int | float):
+            click.echo(f"  total: {total_duration:.3f}s", err=True)
 
     layered_claims = report["layered_claims"]
     layered_claim_issue_count = len(layered_claims["migration_issues"]) + len(
@@ -3685,7 +3756,7 @@ def _split_csv(value: str | None) -> list[str]:
 @click.option("--title", default=None, help="Question title (used in frontmatter and H1)")
 @click.option("--related", default=None, help="Comma-separated related entity IDs")
 @click.option("--ontology", default=None, help="Comma-separated ontology terms")
-@click.option("--source-refs", default=None, help="Comma-separated source references (DOIs, paper citekeys)")
+@click.option("--source-refs", default=None, help="Comma-separated source refs, e.g. cite:Smith2024 or paper:Smith2024")
 @click.option("--datasets", default=None, help="Comma-separated dataset IDs")
 @click.option(
     "--questions-dir",

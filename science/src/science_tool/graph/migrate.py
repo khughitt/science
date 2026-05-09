@@ -12,6 +12,7 @@ from science_model.entities import Entity
 from science_model.frontmatter import parse_frontmatter
 
 from science_tool.addressing import is_address
+from science_tool.bibliography import is_bibliography_reference
 from science_tool.graph.reference_resolution import ReferenceResolver
 from science_tool.graph.sources import (
     AliasCollisionError,
@@ -159,10 +160,13 @@ def audit_project_graph(project_root: Path) -> AuditProjectReport:
     }
 
 
-def build_layered_claim_migration_report(project_root: Path) -> LayeredClaimMigrationReport:
+def build_layered_claim_migration_report(
+    project_root: Path, *, sources: ProjectSources | None = None
+) -> LayeredClaimMigrationReport:
     """Scan proposition sources and emit conservative layered-claim migration guidance."""
     project_root = project_root.resolve()
-    sources = load_project_sources(project_root)
+    if sources is None:
+        sources = load_project_sources(project_root)
 
     rows: list[LayeredClaimMigrationRow] = []
     for entity in sources.entities:
@@ -530,6 +534,8 @@ def _audit_binding_endpoint(
     ext_prefixes: frozenset[str],
     allow_external: bool = False,
 ) -> list[AuditRow]:
+    if field_name == "source_refs" and is_bibliography_reference(raw_target):
+        return []
     if allow_external and is_external_reference(raw_target, known_prefixes=ext_prefixes):
         return []
 
@@ -598,6 +604,8 @@ def _audit_reference(
     allow_tag: bool = False,
     allow_cross_project_address: bool = False,
 ) -> list[AuditRow]:
+    if field_name in {"source_refs", "evidence_refs"} and is_bibliography_reference(raw_target):
+        return []
     if is_external_reference(raw_target, known_prefixes=ext_prefixes):
         return []
     if is_metadata_reference(raw_target):

@@ -14,6 +14,7 @@ from pathlib import Path
 from science_model.frontmatter import parse_frontmatter
 
 from science_tool.addressing import classify_entity_ref
+from science_tool.bibliography import bibliography_key_from_reference, load_bib_keys
 from science_tool.project_config import load_project_config
 
 
@@ -175,18 +176,18 @@ def _load_project_ids(root: Path) -> set[str]:
     return ids
 
 
-def _extract_frontmatter_refs(path: Path) -> list[str]:
+def _extract_frontmatter_refs(path: Path) -> list[tuple[str, str]]:
     parsed = parse_frontmatter(path)
     if parsed is None:
         return []
     fm, _body = parsed
-    refs: list[str] = []
-    for key in ("related", "blocked_by", "blocked-by", "source_refs"):
+    refs: list[tuple[str, str]] = []
+    for key in ("related", "blocked_by", "blocked-by", "source_refs", "evidence_refs"):
         value = fm.get(key)
         if isinstance(value, str):
-            refs.append(value)
+            refs.append((key, value))
         elif isinstance(value, list):
-            refs.extend(item for item in value if isinstance(item, str))
+            refs.extend((key, item) for item in value if isinstance(item, str))
     return refs
 
 
@@ -205,16 +206,7 @@ def _frontmatter_line_numbers(path: Path) -> set[int]:
 
 def _load_bib_keys(root: Path) -> set[str]:
     """Extract all BibTeX entry keys from references.bib."""
-    bib_path = root / "papers" / "references.bib"
-    if not bib_path.is_file():
-        return set()
-    keys: set[str] = set()
-    bib_re = re.compile(r"@\w+\{(\w+),")
-    for line in bib_path.read_text(encoding="utf-8").splitlines():
-        m = bib_re.match(line.strip())
-        if m:
-            keys.add(m.group(1))
-    return keys
+    return load_bib_keys(root)
 
 
 def _normalize_doi_token(value: str) -> str:
@@ -344,7 +336,21 @@ def check_refs(root: Path) -> list[RefIssue]:
     for file_path in files:
         rel_path = str(file_path.relative_to(root))
         frontmatter_lines = _frontmatter_line_numbers(file_path)
-        for raw_ref in _extract_frontmatter_refs(file_path):
+        for field_name, raw_ref in _extract_frontmatter_refs(file_path):
+            if field_name in {"source_refs", "evidence_refs"}:
+                bibkey = bibliography_key_from_reference(raw_ref)
+                if bibkey is not None:
+                    if bibkey not in bib_keys:
+                        issues.append(
+                            RefIssue(
+                                file=rel_path,
+                                line=1,
+                                ref_type="citation",
+                                ref_value=raw_ref,
+                                message=f"{raw_ref} — not in papers/references.bib",
+                            )
+                        )
+                    continue
             parsed_ref = classify_entity_ref(
                 raw_ref,
                 local_kinds=_LOCAL_ENTITY_KINDS,

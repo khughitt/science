@@ -18,6 +18,7 @@ from science_model.reasoning import MeasurementModel, RivalModelPacket
 from science_model.relations import relation_allows_kinds
 
 from science_tool.addressing import is_address, parse_address
+from science_tool.bibliography import is_bibliography_reference
 from science_tool.graph.freshness import (
     EntityFreshnessInfo,
     close_bears_on,
@@ -327,6 +328,8 @@ def _add_relations(
         knowledge.add((entity_uri, SKOS.exactMatch, _entity_uri(target.canonical_id)))
 
     for raw_target in sorted(entity.source_refs):
+        if is_bibliography_reference(raw_target):
+            continue
         if is_external_reference(raw_target, known_prefixes=ext_prefixes):
             _link_external_term(entity_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)
             continue
@@ -342,6 +345,8 @@ def _add_relations(
         provenance.add((entity_uri, PROV.wasDerivedFrom, _entity_uri(target.canonical_id)))
 
     for raw_target in sorted(getattr(entity, "evidence_refs", []) or []):
+        if is_bibliography_reference(raw_target):
+            continue
         if is_external_reference(raw_target, known_prefixes=ext_prefixes):
             _link_external_term(entity_uri, raw_target, bridge=bridge, ontology_catalogs=ontology_catalogs)
             continue
@@ -682,6 +687,8 @@ def _add_binding(
     if binding.notes:
         provenance.add((binding_uri, SCI_NS.note, Literal(binding.notes)))
     for target in binding.source_refs:
+        if is_bibliography_reference(target):
+            continue
         provenance.add(
             (
                 binding_uri,

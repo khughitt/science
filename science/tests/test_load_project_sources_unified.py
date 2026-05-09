@@ -19,6 +19,7 @@ from science_model.entities import (
 )
 from science_model.identity import EntityScope, ExternalId
 from science_model.profiles.schema import EntityKind, ProfileManifest
+from science_model.source_contracts import BindingSource
 
 from science_tool.graph.entity_registry import EntityKindShadowError
 from science_tool.graph.errors import EntityIdentityCollisionError
@@ -48,6 +49,119 @@ def test_load_produces_typed_entity_instances(tmp_path: Path) -> None:
     by_id = {e.canonical_id: e for e in sources.entities}
     assert isinstance(by_id["hypothesis:h1"], ProjectEntity)
     assert isinstance(by_id["task:t001"], TaskEntity)
+
+
+def test_legacy_typed_sources_are_parsed_once_per_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import science_tool.graph.sources as sources_module
+
+    _seed(tmp_path)
+    local_sources = tmp_path / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "models.yaml").write_text(
+        "\n".join(
+            [
+                "models:",
+                "  - canonical_id: model:m1",
+                "    title: Model 1",
+                "    profile: local",
+                "    source_path: knowledge/sources/local/models.yaml",
+                "    relations:",
+                "      - predicate: sci:approximates",
+                "        target: model:m2",
+                "  - canonical_id: model:m2",
+                "    title: Model 2",
+                "    profile: local",
+                "    source_path: knowledge/sources/local/models.yaml",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (local_sources / "parameters.yaml").write_text(
+        "\n".join(
+            [
+                "parameters:",
+                "  - canonical_id: parameter:p1",
+                "    title: Parameter 1",
+                "    symbol: p",
+                "    profile: local",
+                "    source_path: knowledge/sources/local/parameters.yaml",
+                "    relations:",
+                "      - predicate: sci:partOf",
+                "        target: model:m1",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (local_sources / "bindings.yaml").write_text(
+        "\n".join(
+            [
+                "bindings:",
+                "  - model: model:m1",
+                "    parameter: parameter:p1",
+                "    source_path: knowledge/sources/local/bindings.yaml",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    parse_counts = {"models": 0, "parameters": 0, "bindings": 0}
+    real_load = sources_module.yaml.load
+
+    def counted_load(text: str, *args: object, Loader: object | None = None):
+        if "models:" in text and "model:m1" in text:
+            parse_counts["models"] += 1
+        elif "parameters:" in text and "parameter:p1" in text:
+            parse_counts["parameters"] += 1
+        elif "bindings:" in text and "parameter:p1" in text:
+            parse_counts["bindings"] += 1
+        if Loader is not None:
+            return real_load(text, Loader=Loader)
+        return real_load(text, *args)
+
+    monkeypatch.setattr(sources_module.yaml, "load", counted_load)
+
+    sources = sources_module.load_project_sources(tmp_path)
+
+    assert {"model:m1", "model:m2", "parameter:p1"} <= {entity.canonical_id for entity in sources.entities}
+    assert parse_counts == {"models": 1, "parameters": 1, "bindings": 1}
+
+
+def test_typed_records_use_c_safe_loader_when_available(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import science_tool.graph.sources as sources_module
+
+    _seed(tmp_path)
+    local_sources = tmp_path / "knowledge" / "sources" / "local"
+    local_sources.mkdir(parents=True)
+    (local_sources / "bindings.yaml").write_text("bindings: []\n", encoding="utf-8")
+    loader_calls: list[object] = []
+
+    def fake_load(_text: str, *args: object, Loader: object | None = None) -> dict[str, object]:
+        loader_calls.append(Loader if Loader is not None else args[0])
+        return {
+            "bindings": [
+                {
+                    "model": "model:m1",
+                    "parameter": "parameter:p1",
+                    "source_path": "knowledge/sources/local/bindings.yaml",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(sources_module.yaml, "load", fake_load)
+
+    records = sources_module._load_typed_records(
+        tmp_path,
+        local_profile="local",
+        file_name="bindings.yaml",
+        root_key="bindings",
+        model=BindingSource,
+    )
+
+    assert len(records) == 1
+    assert loader_calls == [sources_module.yaml.CSafeLoader]
 
 
 def test_load_produces_dataset_entity_for_datapackage(tmp_path: Path) -> None:

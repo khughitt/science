@@ -172,6 +172,7 @@ Follow `.ai/templates/paper.md` first, then `templates/paper.md`, and fill every
 - Include frontmatter `Source:` describing provenance (`LLM knowledge`, `web search`, `PDF`, or combination).
 - Generate BibTeX key as `FirstAuthorLastNameYear` (with suffix if needed).
 - Save to `doc/papers/<citekey>.md`.
+- Use `paper:<citekey>` for the paper note entity and `cite:<citekey>` for the backing BibTeX entry in `source_refs`.
 
 ## After Writing
 
@@ -186,7 +187,7 @@ Follow `.ai/templates/paper.md` first, then `templates/paper.md`, and fill every
    uv run science question reserve \
      --slug "<short-kebab-slug>" \
      --title "<question title>" \
-     --source-refs "<this paper's citekey>" \
+     --source-refs "cite:<this paper's citekey>" \
      [--related "<related-id>,<related-id>"] \
      [--ontology "<term>,<term>"] \
      --json

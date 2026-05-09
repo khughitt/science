@@ -141,6 +141,51 @@ def test_broken_citation_ref() -> None:
         assert cite_issues[0].ref_value == "Jones2023"
 
 
+def test_valid_frontmatter_cite_ref() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "---\n"
+            'id: "topic:test"\n'
+            'type: "topic"\n'
+            'title: "Test"\n'
+            'source_refs: ["cite:Smith2024"]\n'
+            "---\n"
+            "# Test\n",
+            encoding="utf-8",
+        )
+
+        issues = check_refs(root)
+
+        assert [i for i in issues if i.ref_type == "citation"] == []
+
+
+def test_missing_frontmatter_cite_ref_is_flagged() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "---\n"
+            'id: "topic:test"\n'
+            'type: "topic"\n'
+            'title: "Test"\n'
+            'source_refs: ["cite:Jones2023"]\n'
+            "---\n"
+            "# Test\n",
+            encoding="utf-8",
+        )
+
+        issues = check_refs(root)
+
+        cite_issues = [i for i in issues if i.ref_type == "citation"]
+        assert len(cite_issues) == 1
+        assert cite_issues[0].ref_value == "cite:Jones2023"
+        assert cite_issues[0].message == "cite:Jones2023 — not in papers/references.bib"
+
+
 def test_broken_markdown_link() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem() as td:

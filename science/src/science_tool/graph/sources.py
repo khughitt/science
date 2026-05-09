@@ -6,7 +6,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError
@@ -33,6 +33,7 @@ from science_model.source_contracts import AuthoredTargetedRelation, BindingSour
 from science_model.source_ref import SourceRef
 
 from science_tool.big_picture.literature_prefix import canonical_paper_id
+from science_tool.bibliography import is_bibliography_reference as _is_bibliography_reference
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError, EntityRegistry
 from science_tool.graph.errors import EntityIdentityCollisionError
 from science_tool.graph.storage_adapters.aggregate import AggregateAdapter
@@ -48,6 +49,7 @@ _SHORT_ID_RE = re.compile(r"^(?P<token>[a-z]\d+)(?:[-_].*)?$", re.IGNORECASE)
 _EXTERNAL_PREFIXES = frozenset({"go", "mesh", "doid", "hp", "so", "ncbitaxon", "ncbigene", "ensembl"})
 _CORE_KINDS = frozenset(kind.name for kind in CORE_PROFILE.entity_kinds)
 _SourceRecordT = TypeVar("_SourceRecordT", bound=BaseModel)
+_TypedRecordCache = dict[tuple[str, str, str, str, type[BaseModel]], object]
 
 _ENUM_FIELDS: dict[str, type] = {
     "claim_layer": ClaimLayer,
@@ -56,6 +58,8 @@ _ENUM_FIELDS: dict[str, type] = {
     "supports_scope": SupportScope,
     "evidence_role": EvidenceRole,
 }
+
+_SAFE_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
 
 class KnowledgeProfiles(BaseModel):
@@ -257,6 +261,7 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
     # Produce ProjectEntity records through the registry so they join the same pipeline.
     paths = resolve_paths(project_root)
     del paths  # unused; kept to document intent
+    typed_record_cache: _TypedRecordCache = {}
     for entity, ref in _load_legacy_records(
         project_root,
         registry=registry,
@@ -264,6 +269,7 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
         project_slug=project_slug,
         active_kinds=active_kinds,
         ontology_catalogs=ontology_catalogs,
+        typed_record_cache=typed_record_cache,
     ):
         existing = identity_table.get(entity.canonical_id)
         if existing is not None:
@@ -283,6 +289,7 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
             file_name="models.yaml",
             root_key="models",
             model=ModelSource,
+            typed_record_cache=typed_record_cache,
         )
     )
     relations.extend(
@@ -292,10 +299,11 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
             file_name="parameters.yaml",
             root_key="parameters",
             model=ParameterSource,
+            typed_record_cache=typed_record_cache,
         )
     )
     relations.sort(key=lambda relation: (relation.graph_layer, relation.subject, relation.predicate, relation.object))
-    bindings = _load_binding_sources(project_root, local_profile=local_profile)
+    bindings = _load_binding_sources(project_root, local_profile=local_profile, typed_record_cache=typed_record_cache)
     bindings.sort(key=lambda binding: (binding.model, binding.parameter, binding.source_path))
 
     return ProjectSources(
@@ -359,6 +367,11 @@ def is_metadata_reference(raw: str) -> bool:
     excluded from KG materialization (no entity required, no edge created).
     """
     return raw.startswith("meta:")
+
+
+def is_bibliography_reference(raw: str) -> bool:
+    """Return True for project bibliography refs such as `cite:<bibkey>`."""
+    return _is_bibliography_reference(raw)
 
 
 def _enrich_raw(
@@ -478,6 +491,7 @@ def _load_legacy_records(
     project_slug: str,
     active_kinds: frozenset[str],
     ontology_catalogs: list[OntologyCatalog],
+    typed_record_cache: _TypedRecordCache | None = None,
 ) -> list[tuple[Entity, SourceRef]]:
     """Load model + parameter records from knowledge/sources/<local>/{models,parameters}.yaml."""
     out: list[tuple[Entity, SourceRef]] = []
@@ -488,6 +502,7 @@ def _load_legacy_records(
         file_name="models.yaml",
         root_key="models",
         model=ModelSource,
+        cache=typed_record_cache,
     )
     for record in model_records:
         raw: dict[str, Any] = {
@@ -521,6 +536,7 @@ def _load_legacy_records(
         file_name="parameters.yaml",
         root_key="parameters",
         model=ParameterSource,
+        cache=typed_record_cache,
     )
     for record in parameter_records:
         raw = {
@@ -563,6 +579,7 @@ def _legacy_nested_relations(
     file_name: str,
     root_key: str,
     model: type[_SourceRecordT],
+    typed_record_cache: _TypedRecordCache | None = None,
 ) -> list[SourceRelation]:
     records = _load_typed_records(
         project_root,
@@ -570,6 +587,7 @@ def _legacy_nested_relations(
         file_name=file_name,
         root_key=root_key,
         model=model,
+        cache=typed_record_cache,
     )
     out: list[SourceRelation] = []
     for record in records:
@@ -600,13 +618,19 @@ def _entity_nested_relations(entities: list[Entity]) -> list[SourceRelation]:
     return flattened
 
 
-def _load_binding_sources(project_root: Path, *, local_profile: str) -> list[BindingSource]:
+def _load_binding_sources(
+    project_root: Path,
+    *,
+    local_profile: str,
+    typed_record_cache: _TypedRecordCache | None = None,
+) -> list[BindingSource]:
     return _load_typed_records(
         project_root,
         local_profile=local_profile,
         file_name="bindings.yaml",
         root_key="bindings",
         model=BindingSource,
+        cache=typed_record_cache,
     )
 
 
@@ -657,14 +681,23 @@ def _load_typed_records(
     file_name: str,
     root_key: str,
     model: type[_SourceRecordT],
+    cache: _TypedRecordCache | None = None,
 ) -> list[_SourceRecordT]:
+    cache_key = (str(project_root.resolve()), local_profile, file_name, root_key, model)
+    if cache is not None and cache_key in cache:
+        return cast("list[_SourceRecordT]", cache[cache_key])
+
     path = local_profile_sources_dir(project_root, local_profile=local_profile) / file_name
     if not path.is_file():
+        if cache is not None:
+            cache[cache_key] = []
         return []
 
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    data = yaml.load(path.read_text(encoding="utf-8"), Loader=_SAFE_YAML_LOADER) or {}
     items = data.get(root_key) or []
     if not isinstance(items, list):
+        if cache is not None:
+            cache[cache_key] = []
         return []
 
     records: list[_SourceRecordT] = []
@@ -672,6 +705,8 @@ def _load_typed_records(
         if not isinstance(item, dict):
             continue
         records.append(model.model_validate(item))
+    if cache is not None:
+        cache[cache_key] = records
     return records
 
 

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import science_tool.graph.storage_adapters.task as task_module
 from science_tool.graph.storage_adapters.task import TaskAdapter
 
 
@@ -61,6 +62,25 @@ def test_multiple_tasks_in_one_file(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     raws = [TaskAdapter().load_raw(r) for r in refs]
     ids = {r["canonical_id"] for r in raws}
     assert ids == {"task:t001", "task:t002"}
+
+
+def test_load_raw_uses_discovered_tasks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "tasks").mkdir()
+    (tmp_path / "tasks" / "active.md").write_text(
+        "## [t001] T01\n- type: research\n- priority: P1\n- status: active\n- created: 2026-04-20\n\n"
+        "## [t002] T02\n- type: research\n- priority: P2\n- status: active\n- created: 2026-04-20\n\n",
+        encoding="utf-8",
+    )
+    adapter = TaskAdapter()
+    refs = adapter.discover(tmp_path)
+
+    def fail_reparse(_path: Path) -> list[object]:
+        raise AssertionError("load_raw reparsed task markdown")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(task_module, "parse_tasks", fail_reparse)
+
+    assert [adapter.load_raw(ref)["canonical_id"] for ref in refs] == ["task:t001", "task:t002"]
 
 
 def test_load_raw_includes_parent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -5,7 +5,7 @@ title: "{{Title}}"
 status: "active"
 ontology_terms: []
 datasets: []                    # omit if not applicable to this topic
-source_refs: []
+source_refs: []                  # use cite:<bibkey> for bibliography refs; paper:<bibkey> for graph-visible paper notes
 related: []
 created: "{{YYYY-MM-DD}}"
 updated: "{{YYYY-MM-DD}}"

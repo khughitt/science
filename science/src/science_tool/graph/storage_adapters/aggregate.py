@@ -46,8 +46,10 @@ class AggregateAdapter(StorageAdapter):
 
     def __init__(self, local_profile: str) -> None:
         self._local_profile = local_profile
+        self._items_by_path: dict[str, list[Any]] = {}
 
     def discover(self, project_root: Path) -> list[SourceRef]:
+        self._items_by_path.clear()
         refs: list[SourceRef] = []
         refs.extend(self._discover_multi_type(project_root))
         refs.extend(self._discover_single_type(project_root))
@@ -71,6 +73,7 @@ class AggregateAdapter(StorageAdapter):
                 rel = str(path.relative_to(project_root))
             except ValueError:
                 rel = str(path)
+            self._items_by_path[rel] = items
             for idx, raw in enumerate(items):
                 if not isinstance(raw, dict):
                     continue
@@ -89,6 +92,7 @@ class AggregateAdapter(StorageAdapter):
                     rel = str(f.relative_to(project_root))
                 except ValueError:
                     rel = str(f)
+                self._items_by_path[rel] = items
                 for idx, raw in enumerate(items):
                     if not isinstance(raw, dict):
                         continue
@@ -102,8 +106,10 @@ class AggregateAdapter(StorageAdapter):
         if not path.is_absolute():
             path = Path.cwd() / path
         if path.name in _MULTI_TYPE_FILES:
-            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-            items = data.get(_MULTI_TYPE_FILES[path.name]) or []
+            items = self._items_by_path.get(ref.path)
+            if items is None:
+                data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+                items = data.get(_MULTI_TYPE_FILES[path.name]) or []
             raw = dict(items[ref.line])
             if path.name == "terms.yaml":
                 raw = self._normalize_term_row(raw)
@@ -111,7 +117,9 @@ class AggregateAdapter(StorageAdapter):
             # Single-type: kind from directory name.
             plural = path.parent.name
             kind = _DIR_TO_KIND.get(plural, "unknown")
-            items = self._read_list(path)
+            items = self._items_by_path.get(ref.path)
+            if items is None:
+                items = self._read_list(path)
             raw = dict(items[ref.line])
             raw.setdefault("kind", kind)
         # Normalize canonical_id from id if needed.

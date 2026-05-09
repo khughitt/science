@@ -9,16 +9,29 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from dataclasses import dataclass, field as dataclass_field
 from pathlib import Path
-from typing import TypedDict, cast
+from time import perf_counter
+from typing import Callable, NotRequired, TypeVar, TypedDict, cast
 
 import yaml as _yaml
 
 from science_model.entities import Entity
 from science_tool.big_picture.literature_prefix import canonical_paper_id
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError
-from science_tool.graph.migrate import audit_project_sources, build_layered_claim_migration_report
-from science_tool.graph.sources import external_prefixes, is_external_reference, is_metadata_reference, load_project_sources
+from science_tool.graph.migrate import (
+    LayeredClaimMigrationReport,
+    audit_project_sources,
+    build_layered_claim_migration_report,
+)
+from science_tool.graph.sources import (
+    ProjectSources,
+    external_prefixes,
+    is_bibliography_reference,
+    is_external_reference,
+    is_metadata_reference,
+    load_project_sources,
+)
 
 
 DATASET_ANOMALY_CODES: tuple[str, ...] = (
@@ -35,6 +48,8 @@ DATASET_ANOMALY_CODES: tuple[str, ...] = (
     "dataset_research_package_asymmetric",
     "data_package_unmigrated",
 )
+
+_T = TypeVar("_T")
 
 
 class UnresolvedRef(TypedDict):
@@ -79,13 +94,14 @@ def _classify(target: str) -> str:
     return "unknown"
 
 
-def collect_unresolved_refs(project_root: Path) -> list[UnresolvedRef]:
+def collect_unresolved_refs(project_root: Path, *, sources: ProjectSources | None = None) -> list[UnresolvedRef]:
     """Walk a project, run the audit, group unresolved refs by target.
 
     Returns a list sorted by mention count (descending), then target (asc).
     Meta: refs are excluded (they're intentional metadata, not unresolved).
     """
-    sources = load_project_sources(project_root.resolve())
+    if sources is None:
+        sources = load_project_sources(project_root.resolve())
     rows, _ = audit_project_sources(sources)
 
     # Group fail rows by target
@@ -111,9 +127,10 @@ def collect_unresolved_refs(project_root: Path) -> list[UnresolvedRef]:
     return result
 
 
-def collect_unregistered_ref_kinds(project_root: Path) -> list[UnregisteredRefKind]:
+def collect_unregistered_ref_kinds(project_root: Path, *, sources: ProjectSources | None = None) -> list[UnregisteredRefKind]:
     """Report identity refs whose CURIE prefix is not a registered entity kind."""
-    sources = load_project_sources(project_root.resolve())
+    if sources is None:
+        sources = load_project_sources(project_root.resolve())
     external = external_prefixes(sources.ontology_catalogs)
     grouped: dict[tuple[str, str], _UnregisteredRefKindAccumulator] = {}
 
@@ -124,6 +141,7 @@ def collect_unregistered_ref_kinds(project_root: Path) -> list[UnregisteredRefKi
                 if (
                     ":" not in raw
                     or is_metadata_reference(raw)
+                    or (field in _BIBLIOGRAPHY_REFERENCE_FIELDS and is_bibliography_reference(raw))
                     or is_external_reference(raw)
                     or is_external_reference(raw, known_prefixes=external)
                 ):
@@ -267,6 +285,59 @@ class HealthReport(TypedDict):
     managed_artifacts: list[dict]
     tooling_scaffold: list[ToolingScaffoldFinding]
     total_issues: int
+    _meta: NotRequired["HealthMeta"]
+
+
+class HealthTiming(TypedDict):
+    name: str
+    duration_seconds: float
+
+
+class HealthMeta(TypedDict):
+    timings: list[HealthTiming]
+    total_duration_seconds: float
+
+
+@dataclass
+class HealthContext:
+    project_root: Path
+    collect_timings: bool = False
+    sources: ProjectSources | None = None
+    selected_checks: tuple[HealthCheck, ...] = ()
+    timings: list[HealthTiming] = dataclass_field(default_factory=list)
+
+    def run(self, name: str, fn: Callable[[], _T]) -> _T:
+        started = perf_counter()
+        result = fn()
+        if self.collect_timings:
+            self.timings.append(
+                {
+                    "name": name,
+                    "duration_seconds": perf_counter() - started,
+                }
+            )
+        return result
+
+
+@dataclass(frozen=True)
+class HealthCheck:
+    name: str
+    description: str
+    requires_sources: bool
+    run: Callable[[HealthContext], object]
+
+
+def _context_sources(context: HealthContext) -> ProjectSources:
+    if context.sources is None:
+        raise RuntimeError("health check requires loaded project sources")
+    return context.sources
+
+
+def _run_health_checks(context: HealthContext) -> dict[str, object]:
+    results: dict[str, object] = {}
+    for check in context.selected_checks:
+        results[check.name] = context.run(check.name, lambda check=check: check.run(context))
+    return results
 
 
 class CoverageMetric(TypedDict):
@@ -295,13 +366,105 @@ class LayeredClaimHealthReport(TypedDict):
     migration_issues: list[LayeredClaimIssue]
 
 
-def build_health_report(project_root: Path) -> HealthReport:
+def _health_check_names() -> frozenset[str]:
+    return frozenset(check.name for check in HEALTH_CHECKS)
+
+
+def list_health_checks() -> list[dict[str, object]]:
+    return [
+        {
+            "name": check.name,
+            "description": check.description,
+            "requires_sources": check.requires_sources,
+        }
+        for check in HEALTH_CHECKS
+    ]
+
+
+def _select_health_checks(
+    *,
+    checks: set[str] | frozenset[str] | None,
+    skip_checks: set[str] | frozenset[str] | None,
+    fast: bool,
+) -> tuple[HealthCheck, ...]:
+    known_names = _health_check_names()
+    if fast and checks:
+        raise ValueError("cannot combine --fast and --check")
+    if fast:
+        requested = frozenset(check.name for check in HEALTH_CHECKS if not check.requires_sources)
+    else:
+        requested = frozenset(checks or known_names)
+    skipped = frozenset(skip_checks or ())
+    unknown = (requested | skipped) - known_names
+    if unknown:
+        names = ", ".join(sorted(unknown))
+        known = ", ".join(sorted(known_names))
+        raise ValueError(f"unknown health check(s): {names}; known checks: {known}")
+    selected_names = requested - skipped
+    return tuple(check for check in HEALTH_CHECKS if check.name in selected_names)
+
+
+def _empty_layered_claim_migration_report(project_root: Path) -> LayeredClaimMigrationReport:
+    return {
+        "project_root": str(project_root),
+        "rows": [],
+        "summary": {
+            "proposition_count": 0,
+            "authored_claim_layer_count": 0,
+            "authored_identification_strength_count": 0,
+            "warning_count": 0,
+            "todo_count": 0,
+        },
+    }
+
+
+def _empty_check_results(project_root: Path) -> dict[str, object]:
+    return {
+        "identity_policy": [],
+        "layered_claim_migration": _empty_layered_claim_migration_report(project_root),
+        "archive_lag": {"done_in_active": 0, "retired_in_active": 0, "missing_completed": 0},
+        "managed_artifacts": [],
+        "tooling_scaffold": [],
+        "unresolved_refs": [],
+        "unregistered_ref_kinds": [],
+        "lingering_tags": [],
+        "legacy_structured_literature_prefixes": [],
+        "dataset_anomalies": [],
+        "legacy_task_type": [],
+        "invalid_entity_aspects": [],
+    }
+
+
+def build_health_report(
+    project_root: Path,
+    *,
+    collect_timings: bool = False,
+    checks: set[str] | frozenset[str] | None = None,
+    skip_checks: set[str] | frozenset[str] | None = None,
+    fast: bool = False,
+) -> HealthReport:
     """Aggregate all health checks for a project."""
     project_root = project_root.resolve()
-    sources = load_project_sources(project_root)
-    identity_policy_findings = collect_identity_policy_findings(project_root)
-    proposition_entities = [entity for entity in sources.entities if entity.kind == "proposition"]
-    migration_report = build_layered_claim_migration_report(project_root)
+    selected_checks = _select_health_checks(checks=checks, skip_checks=skip_checks, fast=fast)
+    context = HealthContext(
+        project_root=project_root,
+        collect_timings=collect_timings,
+        selected_checks=selected_checks,
+    )
+    total_started = perf_counter()
+    needs_sources = any(check.requires_sources for check in selected_checks)
+    if needs_sources:
+        context.sources = context.run("load_project_sources", lambda: load_project_sources(project_root))
+    check_results = _empty_check_results(project_root)
+    check_results.update(_run_health_checks(context))
+    identity_policy_findings = cast("list[IdentityPolicyFinding]", check_results["identity_policy"])
+    layered_claims_enabled = "layered_claim_migration" in {check.name for check in selected_checks}
+    proposition_entities = (
+        [entity for entity in _context_sources(context).entities if entity.kind == "proposition"]
+        if layered_claims_enabled
+        else []
+    )
+    migration_report = cast(LayeredClaimMigrationReport, check_results["layered_claim_migration"])
     causal_leaning_rows = [
         row
         for row in migration_report["rows"]
@@ -335,20 +498,19 @@ def build_health_report(project_root: Path) -> HealthReport:
         if row["warnings"] or row["todos"]
     ]
 
-    from science_tool.tasks_archive import count_archivable
-
-    archive_lag = count_archivable(project_root / "tasks")
-
-    from science_tool.project_artifacts.health_integration import health_findings as _ma_findings
-
-    managed_artifacts = _ma_findings(project_root)
-    tooling_scaffold = collect_tooling_scaffold_findings(project_root)
-
-    unresolved_refs = collect_unresolved_refs(project_root)
-    unregistered_ref_kinds = collect_unregistered_ref_kinds(project_root)
-    lingering_tags_lines = collect_lingering_tags(project_root)
-    legacy_structured_literature_prefixes = collect_legacy_structured_literature_prefixes(project_root)
-    dataset_anomalies = check_dataset_anomalies(project_root)
+    archive_lag = cast("TaskArchiveLag", check_results["archive_lag"])
+    managed_artifacts = cast("list[dict]", check_results["managed_artifacts"])
+    tooling_scaffold = cast("list[ToolingScaffoldFinding]", check_results["tooling_scaffold"])
+    unresolved_refs = cast("list[UnresolvedRef]", check_results["unresolved_refs"])
+    unregistered_ref_kinds = cast("list[UnregisteredRefKind]", check_results["unregistered_ref_kinds"])
+    lingering_tags_lines = cast("list[LingeringTagsRecord]", check_results["lingering_tags"])
+    legacy_structured_literature_prefixes = cast(
+        "list[LegacyStructuredLiteraturePrefixFinding]",
+        check_results["legacy_structured_literature_prefixes"],
+    )
+    dataset_anomalies = cast("list[dict]", check_results["dataset_anomalies"])
+    legacy_task_type = cast("list[LegacyTaskTypeFinding]", check_results["legacy_task_type"])
+    invalid_entity_aspects = cast("list[InvalidEntityAspectsFinding]", check_results["invalid_entity_aspects"])
 
     layered_claim_issue_count = len(migration_issues) + len(rival_model_gaps)
     coverage_gaps = 0
@@ -382,7 +544,7 @@ def build_health_report(project_root: Path) -> HealthReport:
         + len(tooling_scaffold)
     )
 
-    return {
+    report: HealthReport = {
         "unresolved_refs": unresolved_refs,
         "unregistered_ref_kinds": unregistered_ref_kinds,
         "lingering_tags_lines": lingering_tags_lines,
@@ -393,8 +555,8 @@ def build_health_report(project_root: Path) -> HealthReport:
             "rival_model_packets_missing_discriminating_predictions": rival_model_gaps,
             "migration_issues": migration_issues,
         },
-        "legacy_task_type": collect_legacy_task_type(project_root),
-        "invalid_entity_aspects": collect_invalid_entity_aspects(project_root),
+        "legacy_task_type": legacy_task_type,
+        "invalid_entity_aspects": invalid_entity_aspects,
         "legacy_structured_literature_prefixes": legacy_structured_literature_prefixes,
         "dataset_anomalies": dataset_anomalies,
         "archive_lag": cast("TaskArchiveLag", archive_lag),
@@ -402,6 +564,12 @@ def build_health_report(project_root: Path) -> HealthReport:
         "tooling_scaffold": tooling_scaffold,
         "total_issues": total_issues,
     }
+    if collect_timings:
+        report["_meta"] = {
+            "timings": context.timings,
+            "total_duration_seconds": perf_counter() - total_started,
+        }
+    return report
 
 
 def collect_tooling_scaffold_findings(project_root: Path) -> list[ToolingScaffoldFinding]:
@@ -572,6 +740,7 @@ _IDENTITY_REFERENCE_FIELDS = (
     "blocked_by",
     "consumed_by",
 )
+_BIBLIOGRAPHY_REFERENCE_FIELDS = frozenset({"source_refs", "evidence_refs"})
 
 
 def _coerce_external_curie(raw: object) -> str | None:
@@ -592,9 +761,10 @@ def _coerce_external_curie(raw: object) -> str | None:
     return None
 
 
-def collect_identity_policy_findings(project_root: Path) -> list[IdentityPolicyFinding]:
+def collect_identity_policy_findings(project_root: Path, *, sources: ProjectSources | None = None) -> list[IdentityPolicyFinding]:
     """Return identity-policy issues surfaced from loaded entities and relations."""
-    sources = load_project_sources(project_root.resolve())
+    if sources is None:
+        sources = load_project_sources(project_root.resolve())
     findings: list[IdentityPolicyFinding] = []
 
     primary_claims: dict[str, list[tuple[str, str]]] = defaultdict(list)
@@ -1230,3 +1400,91 @@ def _load_workflow_runs(project_root: Path) -> dict[str, dict]:
         if fm.get("type") == "workflow-run" and fm.get("id"):
             runs[str(fm["id"])] = fm
     return runs
+
+
+def _collect_archive_lag(context: HealthContext) -> TaskArchiveLag:
+    from science_tool.tasks_archive import count_archivable
+
+    return cast("TaskArchiveLag", count_archivable(context.project_root / "tasks"))
+
+
+def _collect_managed_artifacts(context: HealthContext) -> list[dict]:
+    from science_tool.project_artifacts.health_integration import health_findings
+
+    return cast("list[dict]", health_findings(context.project_root))
+
+
+HEALTH_CHECKS: tuple[HealthCheck, ...] = (
+    HealthCheck(
+        name="identity_policy",
+        description="Validate entity identity policy and relation endpoint disambiguation.",
+        requires_sources=True,
+        run=lambda context: collect_identity_policy_findings(context.project_root, sources=_context_sources(context)),
+    ),
+    HealthCheck(
+        name="layered_claim_migration",
+        description="Report layered-claim adoption gaps and migration issues.",
+        requires_sources=True,
+        run=lambda context: build_layered_claim_migration_report(context.project_root, sources=_context_sources(context)),
+    ),
+    HealthCheck(
+        name="archive_lag",
+        description="Count completed tasks that should be archived.",
+        requires_sources=False,
+        run=_collect_archive_lag,
+    ),
+    HealthCheck(
+        name="managed_artifacts",
+        description="Check installed managed artifacts against canonical versions.",
+        requires_sources=False,
+        run=_collect_managed_artifacts,
+    ),
+    HealthCheck(
+        name="tooling_scaffold",
+        description="Check pyproject and environment scaffold for science tooling.",
+        requires_sources=False,
+        run=lambda context: collect_tooling_scaffold_findings(context.project_root),
+    ),
+    HealthCheck(
+        name="unresolved_refs",
+        description="Find project references that do not resolve to known entities.",
+        requires_sources=True,
+        run=lambda context: collect_unresolved_refs(context.project_root, sources=_context_sources(context)),
+    ),
+    HealthCheck(
+        name="unregistered_ref_kinds",
+        description="Find identity refs whose prefix is not a registered entity kind.",
+        requires_sources=True,
+        run=lambda context: collect_unregistered_ref_kinds(context.project_root, sources=_context_sources(context)),
+    ),
+    HealthCheck(
+        name="lingering_tags",
+        description="Find legacy tags fields in document and task metadata.",
+        requires_sources=False,
+        run=lambda context: collect_lingering_tags(context.project_root),
+    ),
+    HealthCheck(
+        name="legacy_structured_literature_prefixes",
+        description="Find legacy article: refs in structured literature sources.",
+        requires_sources=False,
+        run=lambda context: collect_legacy_structured_literature_prefixes(context.project_root),
+    ),
+    HealthCheck(
+        name="dataset_anomalies",
+        description="Run dataset lineage, access, and package invariant checks.",
+        requires_sources=False,
+        run=lambda context: check_dataset_anomalies(context.project_root),
+    ),
+    HealthCheck(
+        name="legacy_task_type",
+        description="Find tasks still carrying the legacy type field.",
+        requires_sources=False,
+        run=lambda context: collect_legacy_task_type(context.project_root),
+    ),
+    HealthCheck(
+        name="invalid_entity_aspects",
+        description="Validate explicit entity aspects against the project aspect catalog.",
+        requires_sources=False,
+        run=lambda context: collect_invalid_entity_aspects(context.project_root),
+    ),
+)

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import science_tool.graph.storage_adapters.aggregate as aggregate_module
 from science_tool.graph.storage_adapters.aggregate import AggregateAdapter
 
 
@@ -116,3 +117,53 @@ def test_single_type_yaml_also_works(tmp_path: Path, monkeypatch: pytest.MonkeyP
     raw = a.load_raw(refs[0])
     assert raw["kind"] == "topic"
     assert raw.get("id") == "topic:rare-z"
+
+
+def test_load_raw_uses_discovered_multi_type_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    src = tmp_path / "knowledge" / "sources" / "local"
+    src.mkdir(parents=True)
+    (src / "entities.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "entities": [
+                    {"canonical_id": "concept:c1", "kind": "concept", "title": "C1"},
+                    {"canonical_id": "concept:c2", "kind": "concept", "title": "C2"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    a = AggregateAdapter(local_profile="local")
+    refs = a.discover(tmp_path)
+
+    def fail_reparse(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("load_raw reparsed aggregate YAML")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(aggregate_module.yaml, "safe_load", fail_reparse)
+
+    assert [a.load_raw(ref)["canonical_id"] for ref in refs] == ["concept:c1", "concept:c2"]
+
+
+def test_load_raw_uses_discovered_single_type_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    topics_dir = tmp_path / "doc" / "topics"
+    topics_dir.mkdir(parents=True)
+    (topics_dir / "topics.yaml").write_text(
+        yaml.safe_dump(
+            [
+                {"id": "topic:rare-x", "title": "Rare X"},
+                {"id": "topic:rare-y", "title": "Rare Y"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    a = AggregateAdapter(local_profile="local")
+    refs = a.discover(tmp_path)
+
+    def fail_read_list(_path: Path) -> list[object]:
+        raise AssertionError("load_raw reparsed aggregate list")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(a, "_read_list", fail_read_list)
+
+    assert [a.load_raw(ref)["id"] for ref in refs] == ["topic:rare-x", "topic:rare-y"]

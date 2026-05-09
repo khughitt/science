@@ -53,6 +53,8 @@ All documents follow framework templates unless the project defines an override 
 - Multiple: `[@Smith2020; @Jones2021]`
 - With page: `[@Smith2020, p. 42]`
 - Narrative: `Smith et al. [@Smith2020] found that...`
+- Frontmatter bibliography source: `source_refs: ["cite:AuthorYear"]`
+- Graph-visible paper note: `paper:AuthorYear`
 
 Every BibTeX key used in a document must have a corresponding entry in `papers/references.bib`. If you create a new citation, add the BibTeX entry.
 

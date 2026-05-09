@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from science_tool.graph.health import check_dataset_anomalies
 
 
@@ -321,6 +323,125 @@ class TestBuildHealthReport:
         assert report["lingering_tags_lines"] == []
         assert report["layered_claims"]["migration_issues"] == []
 
+    def test_build_health_report_reuses_loaded_project_sources(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import science_tool.graph.health as health_module
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+        real_load_project_sources = health_module.load_project_sources
+        call_count = 0
+
+        def counted_load_project_sources(project_root: Path):
+            nonlocal call_count
+            call_count += 1
+            return real_load_project_sources(project_root)
+
+        monkeypatch.setattr(health_module, "load_project_sources", counted_load_project_sources)
+
+        health_module.build_health_report(tmp_path)
+
+        assert call_count == 1
+
+    def test_build_health_report_can_include_timing_metadata(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+
+        report = build_health_report(tmp_path, collect_timings=True)
+
+        meta = report["_meta"]
+        timings = meta["timings"]
+        names = [row["name"] for row in timings]
+        assert "load_project_sources" in names
+        assert "unresolved_refs" in names
+        assert meta["total_duration_seconds"] >= 0
+        assert all(row["duration_seconds"] >= 0 for row in timings)
+
+    def test_health_check_registry_drives_timing_rows(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import HEALTH_CHECKS, build_health_report
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+
+        check_names = [check.name for check in HEALTH_CHECKS]
+        report = build_health_report(tmp_path, collect_timings=True)
+        timing_names = [row["name"] for row in report["_meta"]["timings"]]
+
+        assert len(check_names) == len(set(check_names))
+        assert timing_names == ["load_project_sources", *check_names]
+
+    def test_build_health_report_can_run_only_named_checks(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+        doc = tmp_path / "doc" / "questions"
+        doc.mkdir(parents=True)
+        (doc / "q01.md").write_text(
+            "---\n"
+            'id: "question:q01"\n'
+            'type: "question"\n'
+            'title: "Q1"\n'
+            'status: "open"\n'
+            'related: ["topic:missing", "decision:d1"]\n'
+            "---\n"
+            "Body.\n",
+            encoding="utf-8",
+        )
+
+        report = build_health_report(tmp_path, checks={"unregistered_ref_kinds"}, collect_timings=True)
+
+        assert report["unregistered_ref_kinds"][0]["kind"] == "decision"
+        assert report["unresolved_refs"] == []
+        assert report["_meta"]["timings"][1:] == [
+            {
+                "name": "unregistered_ref_kinds",
+                "duration_seconds": report["_meta"]["timings"][1]["duration_seconds"],
+            }
+        ]
+
+    def test_build_health_report_can_skip_named_checks(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+        doc = tmp_path / "doc" / "questions"
+        doc.mkdir(parents=True)
+        (doc / "q01.md").write_text(
+            "---\n"
+            'id: "question:q01"\n'
+            'type: "question"\n'
+            'title: "Q1"\n'
+            'status: "open"\n'
+            'related: ["decision:d1"]\n'
+            "---\n"
+            "Body.\n",
+            encoding="utf-8",
+        )
+
+        report = build_health_report(tmp_path, skip_checks={"unregistered_ref_kinds"}, collect_timings=True)
+
+        assert report["unregistered_ref_kinds"] == []
+        assert "unregistered_ref_kinds" not in [row["name"] for row in report["_meta"]["timings"]]
+
+    def test_fast_health_report_skips_source_required_checks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import science_tool.graph.health as health_module
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+
+        def fail_load_project_sources(*_args: object, **_kwargs: object) -> object:
+            raise AssertionError("fast health should not load project sources")
+
+        monkeypatch.setattr(health_module, "load_project_sources", fail_load_project_sources)
+
+        report = health_module.build_health_report(tmp_path, fast=True, collect_timings=True)
+
+        timing_names = [row["name"] for row in report["_meta"]["timings"]]
+        assert "load_project_sources" not in timing_names
+        assert "unregistered_ref_kinds" not in timing_names
+        assert "archive_lag" in timing_names
+        assert report["unregistered_ref_kinds"] == []
+
     def test_reports_unregistered_reference_kinds_in_identity_fields(self, tmp_path: Path) -> None:
         from science_tool.graph.health import build_health_report
 
@@ -361,6 +482,29 @@ class TestBuildHealthReport:
         ]
         assert any(row["target"] == "hypothesis:h01" for row in report["unresolved_refs"])
         assert report["total_issues"] >= 2
+
+    def test_bibliography_refs_are_not_unregistered_ref_kinds(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+        doc = tmp_path / "doc" / "questions"
+        doc.mkdir(parents=True)
+        (doc / "q01.md").write_text(
+            "---\n"
+            'id: "question:q01"\n'
+            'type: "question"\n'
+            'title: "Q1"\n'
+            'status: "open"\n'
+            'source_refs: ["cite:Smith2024"]\n'
+            "---\n"
+            "Body.\n",
+            encoding="utf-8",
+        )
+
+        report = build_health_report(tmp_path, checks={"unregistered_ref_kinds", "unresolved_refs"})
+
+        assert report["unregistered_ref_kinds"] == []
+        assert report["unresolved_refs"] == []
 
     def test_includes_identity_policy_section(self, tmp_path: Path) -> None:
         from science_tool.graph.health import build_health_report
@@ -508,6 +652,174 @@ class TestHealthCLI:
         report = json.loads(result.output)
         assert "unresolved_refs" in report
         assert report["unresolved_refs"][0]["target"] == "topic:missing"
+
+    def test_json_output_with_timings_includes_meta(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["health", "--project-root", str(tmp_path), "--format", "json", "--timings"])
+
+        assert result.exit_code == 0, result.output
+        report = json.loads(result.output)
+        assert report["_meta"]["total_duration_seconds"] >= 0
+        assert any(row["name"] == "load_project_sources" for row in report["_meta"]["timings"])
+
+    def test_table_output_with_timings_writes_stderr(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+        spec = tmp_path / "specs" / "hypotheses"
+        spec.mkdir(parents=True)
+        (spec / "h01.md").write_text(
+            '---\nid: "hypothesis:h01"\ntype: "hypothesis"\ntitle: "H1"\n'
+            'status: "proposed"\nrelated: [topic:missing]\n'
+            'source_refs: []\ncreated: "2026-04-13"\n---\nBody.\n',
+            encoding="utf-8",
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["health", "--project-root", str(tmp_path), "--timings"])
+
+        assert result.exit_code == 0, result.output
+        assert "topic:missing" in result.output
+        assert "health timings" in result.stderr.lower()
+        assert "load_project_sources" in result.stderr
+
+    def test_json_output_can_run_only_named_health_checks(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+        doc = tmp_path / "doc" / "questions"
+        doc.mkdir(parents=True)
+        (doc / "q01.md").write_text(
+            "---\n"
+            'id: "question:q01"\n'
+            'type: "question"\n'
+            'title: "Q1"\n'
+            'status: "open"\n'
+            'related: ["topic:missing", "decision:d1"]\n'
+            "---\n"
+            "Body.\n",
+            encoding="utf-8",
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            [
+                "health",
+                "--project-root",
+                str(tmp_path),
+                "--format",
+                "json",
+                "--timings",
+                "--check",
+                "unregistered_ref_kinds",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        report = json.loads(result.output)
+        assert report["unregistered_ref_kinds"][0]["kind"] == "decision"
+        assert report["unresolved_refs"] == []
+        assert [row["name"] for row in report["_meta"]["timings"]] == [
+            "load_project_sources",
+            "unregistered_ref_kinds",
+        ]
+
+    def test_json_output_rejects_unknown_health_check(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["health", "--project-root", str(tmp_path), "--check", "not_a_check"])
+
+        assert result.exit_code != 0
+        assert "unknown health check" in result.output.lower()
+
+    def test_json_output_fast_skips_source_required_health_checks(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+        import science_tool.graph.health as health_module
+        from science_tool.cli import main
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+
+        def fail_load_project_sources(*_args: object, **_kwargs: object) -> object:
+            raise AssertionError("--fast should not load project sources")
+
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setattr(health_module, "load_project_sources", fail_load_project_sources)
+        try:
+            runner = CliRunner()
+            result = runner.invoke(
+                main,
+                ["health", "--project-root", str(tmp_path), "--format", "json", "--timings", "--fast"],
+            )
+        finally:
+            monkeypatch.undo()
+
+        assert result.exit_code == 0, result.output
+        report = json.loads(result.output)
+        timing_names = [row["name"] for row in report["_meta"]["timings"]]
+        assert "load_project_sources" not in timing_names
+        assert "unregistered_ref_kinds" not in timing_names
+        assert "archive_lag" in timing_names
+
+    def test_fast_rejects_explicit_check_selection(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["health", "--project-root", str(tmp_path), "--fast", "--check", "archive_lag"],
+        )
+
+        assert result.exit_code != 0
+        assert "cannot combine --fast and --check" in result.output.lower()
+
+    def test_list_checks_table_output(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from click.testing import CliRunner
+        import science_tool.graph.health as health_module
+        from science_tool.cli import main
+
+        def fail_build_report(*_args: object, **_kwargs: object) -> object:
+            raise AssertionError("--list-checks should not build a health report")
+
+        monkeypatch.setattr(health_module, "build_health_report", fail_build_report)
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["health", "--project-root", str(tmp_path), "--list-checks"])
+
+        assert result.exit_code == 0, result.output
+        assert "Health checks" in result.output
+        assert "unregistered_ref_kinds" in result.output
+        assert "Requires sources" in result.output
+
+    def test_list_checks_json_output(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main,
+            ["health", "--project-root", str(tmp_path), "--format", "json", "--list-checks"],
+        )
+
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        first = payload["checks"][0]
+        assert set(first) == {"name", "description", "requires_sources"}
+        assert any(row["name"] == "unregistered_ref_kinds" for row in payload["checks"])
 
     def test_table_output_includes_layered_claim_sections(self, tmp_path: Path) -> None:
         from click.testing import CliRunner

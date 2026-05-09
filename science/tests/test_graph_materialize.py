@@ -304,6 +304,31 @@ def test_evidence_refs_with_local_ref_materializes_provenance(tmp_path: Path) ->
     ) in provenance
 
 
+def test_bibliography_source_refs_do_not_materialize_provenance_edges(tmp_path: Path) -> None:
+    project = tmp_path / "demo"
+    _write_demo_project(project)
+    question = project / "doc" / "questions" / "q01-demo.md"
+    question.write_text(
+        question.read_text(encoding="utf-8").replace(
+            'source_refs: ["hypothesis:h01-demo"]',
+            'source_refs: ["cite:Smith2024"]',
+        ),
+        encoding="utf-8",
+    )
+
+    trig_path = materialize_graph(project)
+    dataset = Dataset()
+    dataset.parse(trig_path, format="trig")
+    provenance = dataset.graph(PROJECT_NS["graph/provenance"])
+
+    targets = {
+        str(target)
+        for target in provenance.objects(PROJECT_NS["question/q01-demo"], PROV.wasDerivedFrom)
+    }
+    assert str(PROJECT_NS["hypothesis/h01-demo"]) not in targets
+    assert all("cite" not in target.lower() for target in targets)
+
+
 def test_evidence_refs_with_unknown_local_ref_still_fails(tmp_path: Path) -> None:
     project = tmp_path / "demo"
     _write_demo_project(project)

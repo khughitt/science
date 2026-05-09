@@ -14,7 +14,11 @@ from science_tool.tasks import parse_tasks
 class TaskAdapter(StorageAdapter):
     name = "task"
 
+    def __init__(self) -> None:
+        self._tasks_by_path: dict[str, list[Any]] = {}
+
     def discover(self, project_root: Path) -> list[SourceRef]:
+        self._tasks_by_path.clear()
         tasks_dir = project_root / "tasks"
         if not tasks_dir.is_dir():
             return []
@@ -25,6 +29,7 @@ class TaskAdapter(StorageAdapter):
             except ValueError:
                 rel = str(path)
             parsed = parse_tasks(path)
+            self._tasks_by_path[rel] = parsed
             for idx, _task in enumerate(parsed):
                 refs.append(SourceRef(adapter_name=self.name, path=rel, line=idx))
         return refs
@@ -34,7 +39,9 @@ class TaskAdapter(StorageAdapter):
         path = Path(ref.path)
         if not path.is_absolute():
             path = Path.cwd() / path
-        tasks = parse_tasks(path)
+        tasks = self._tasks_by_path.get(ref.path)
+        if tasks is None:
+            tasks = parse_tasks(path)
         task = tasks[ref.line]
         return {
             "id": f"task:{task.id}",
