@@ -274,6 +274,30 @@ intermediate.
 - **Shell:** simple commands, tool invocations
 - **Scripts:** anything needing Python logic (access `snakemake.input`, `snakemake.output`, `snakemake.params`)
 
+### Python `script:` files and `from __future__`
+
+Avoid `from __future__ import ...` in Python files used directly via a
+Snakemake `script:` directive. Snakemake generates a temporary wrapper script
+and prepends its own preamble before the source file body. That makes a source
+file like this fail at runtime:
+
+```python
+"""Analyze data."""
+
+from __future__ import annotations
+```
+
+The generated wrapper no longer has the future import at the beginning of the
+file, so Python raises:
+
+```text
+SyntaxError: from __future__ imports must occur at the beginning of the file
+```
+
+Use normal annotations in `script:` files, or move reusable typed logic into an
+imported helper module. Helper modules can still use future imports because
+Snakemake does not prepend its script preamble to imported modules.
+
 ### Environments
 - One conda env YAML per distinct tool set
 - Pin versions for reproducibility
