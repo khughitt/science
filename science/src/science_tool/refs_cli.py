@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
+from typing import TypedDict
 
 import click
 
 from science_tool.output import OUTPUT_FORMATS
 from science_tool.peers import PeerUnresolved
-from science_tool.refs import check_refs
+from science_tool.refs import RefIssue, check_refs
 from science_tool.refs_migrate import (
     apply_rewrites,
     check_git_clean,
@@ -23,11 +24,44 @@ def refs_group() -> None:
     """Reference-integrity tooling for Science projects."""
 
 
+class RefsSummary(TypedDict):
+    broken: int
+    markers: int
+    by_type: dict[str, int]
+
+
+def _refs_summary(broken: list[RefIssue], markers: list[RefIssue]) -> RefsSummary:
+    return {
+        "broken": len(broken),
+        "markers": len(markers),
+        "by_type": dict(sorted(Counter(issue.ref_type for issue in broken).items())),
+    }
+
+
+def _render_marker_summary(markers: list[RefIssue], *, include_locations: bool) -> None:
+    unverified = [m for m in markers if m.ref_value == "[UNVERIFIED]"]
+    needs_cite = [m for m in markers if m.ref_value == "[NEEDS CITATION]"]
+    click.echo("  Unresolved markers:")
+    if unverified:
+        if include_locations:
+            locs = ", ".join(f"{m.file}:{m.line}" for m in unverified)
+            click.echo(f"    {len(unverified)}x [UNVERIFIED] ({locs})")
+        else:
+            click.echo(f"    {len(unverified)}x [UNVERIFIED]")
+    if needs_cite:
+        if include_locations:
+            locs = ", ".join(f"{m.file}:{m.line}" for m in needs_cite)
+            click.echo(f"    {len(needs_cite)}x [NEEDS CITATION] ({locs})")
+        else:
+            click.echo(f"    {len(needs_cite)}x [NEEDS CITATION]")
+
+
 @refs_group.command("check")
 @click.option("--root", "root_path", default=".", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 @click.option("--strict", is_flag=True, help="Exit with error on any broken ref (not just markers)")
-def check(root_path: Path, output_format: str, strict: bool) -> None:
+@click.option("--summary-only", is_flag=True, help="Print only aggregate counts, not individual references.")
+def check(root_path: Path, output_format: str, strict: bool, summary_only: bool) -> None:
     """Scan project documents for broken cross-references."""
 
     try:
@@ -37,12 +71,14 @@ def check(root_path: Path, output_format: str, strict: bool) -> None:
 
     broken = [i for i in issues if i.ref_type != "marker"]
     markers = [i for i in issues if i.ref_type == "marker"]
+    summary = _refs_summary(broken, markers)
 
     if output_format == "json":
         import json
 
-        click.echo(
-            json.dumps(
+        payload: dict[str, object] = {"summary": summary}
+        if not summary_only:
+            payload.update(
                 {
                     "broken": [
                         {
@@ -56,7 +92,11 @@ def check(root_path: Path, output_format: str, strict: bool) -> None:
                         for i in broken
                     ],
                     "markers": [{"file": i.file, "line": i.line, "value": i.ref_value} for i in markers],
-                },
+                }
+            )
+        click.echo(
+            json.dumps(
+                payload,
                 indent=2,
             )
         )
@@ -64,15 +104,16 @@ def check(root_path: Path, output_format: str, strict: bool) -> None:
         if broken:
             click.echo(f"refs check: {len(broken)} broken, {len(markers)} unresolved markers\n")
             click.echo("By type:")
-            for ref_type, count in sorted(Counter(issue.ref_type for issue in broken).items()):
+            for ref_type, count in summary["by_type"].items():
                 click.echo(f"  {ref_type}: {count}")
             click.echo()
-            for issue in broken:
-                click.echo(f"  {issue.file}:{issue.line}")
-                click.echo(f"    {issue.message}")
-                if issue.suggestion:
-                    click.echo(f"    Suggestion: {issue.suggestion}")
-                click.echo()
+            if not summary_only:
+                for issue in broken:
+                    click.echo(f"  {issue.file}:{issue.line}")
+                    click.echo(f"    {issue.message}")
+                    if issue.suggestion:
+                        click.echo(f"    Suggestion: {issue.suggestion}")
+                    click.echo()
         elif markers:
             click.echo(f"refs check: 0 broken, {len(markers)} unresolved markers\n")
         else:
@@ -80,15 +121,7 @@ def check(root_path: Path, output_format: str, strict: bool) -> None:
             return
 
         if markers:
-            unverified = [m for m in markers if m.ref_value == "[UNVERIFIED]"]
-            needs_cite = [m for m in markers if m.ref_value == "[NEEDS CITATION]"]
-            click.echo("  Unresolved markers:")
-            if unverified:
-                locs = ", ".join(f"{m.file}:{m.line}" for m in unverified)
-                click.echo(f"    {len(unverified)}x [UNVERIFIED] ({locs})")
-            if needs_cite:
-                locs = ", ".join(f"{m.file}:{m.line}" for m in needs_cite)
-                click.echo(f"    {len(needs_cite)}x [NEEDS CITATION] ({locs})")
+            _render_marker_summary(markers, include_locations=not summary_only)
 
     if broken:
         raise click.exceptions.Exit(1)

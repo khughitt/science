@@ -214,7 +214,7 @@ def _load_bib_keys(root: Path) -> set[str]:
 
 def _normalize_doi_token(value: str) -> str:
     """Trim trailing punctuation/quotes/whitespace and lowercase a DOI token."""
-    cleaned = value.strip().rstrip(".,;:'\"`)>]}")
+    cleaned = value.strip().rstrip(".,;:'\"`)>]}*")
     return cleaned.lower()
 
 

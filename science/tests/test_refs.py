@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -404,6 +405,73 @@ def test_cli_refs_check_summarizes_broken_refs_by_type() -> None:
         assert "hypothesis: 1" in result.output
 
 
+def test_cli_refs_check_json_includes_summary() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "# Test\nH99 is broken, [@Nobody2099] is missing, and [NEEDS CITATION].\n",
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["refs", "check", "--format", "json"])
+
+        assert result.exit_code == 1
+        payload = json.loads(result.output)
+        assert payload["summary"] == {
+            "broken": 2,
+            "markers": 1,
+            "by_type": {"citation": 1, "hypothesis": 1},
+        }
+        assert len(payload["broken"]) == 2
+        assert len(payload["markers"]) == 1
+
+
+def test_cli_refs_check_summary_only_omits_table_details() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "# Test\nH99 is broken, [@Nobody2099] is missing, and [NEEDS CITATION].\n",
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["refs", "check", "--summary-only"])
+
+        assert result.exit_code == 1
+        assert "refs check: 2 broken, 1 unresolved markers" in result.output
+        assert "By type:" in result.output
+        assert "citation: 1" in result.output
+        assert "hypothesis: 1" in result.output
+        assert "Unresolved markers:" in result.output
+        assert "doc/background/topics/test.md:1" not in result.output
+        assert "@Nobody2099" not in result.output
+
+
+def test_cli_refs_check_json_summary_only_omits_details() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "doc" / "background" / "topics" / "test.md").write_text(
+            "# Test\nH99 is broken, [@Nobody2099] is missing, and [NEEDS CITATION].\n",
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(main, ["refs", "check", "--format", "json", "--summary-only"])
+
+        assert result.exit_code == 1
+        assert json.loads(result.output) == {
+            "summary": {
+                "broken": 2,
+                "markers": 1,
+                "by_type": {"citation": 1, "hypothesis": 1},
+            }
+        }
+
+
 def test_external_url_links_ignored() -> None:
     """Links starting with http(s) or # should not be checked."""
     runner = CliRunner()
@@ -676,6 +744,23 @@ def test_unknown_doi_in_prose_is_flagged() -> None:
         doi_issues = [i for i in issues if i.ref_type == "doi"]
         assert len(doi_issues) == 1
         assert doi_issues[0].ref_value == "10.9999/fake.123"
+
+
+def test_markdown_emphasis_after_doi_is_not_part_of_doi() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold_with_bib(
+            root,
+            "@article{Smith2024,\n  title={X},\n  doi={10.1007/s10853-019-04261-6},\n}\n",
+        )
+        (root / "doc" / "background" / "topics" / "x.md").write_text(
+            "# X\nThe highlighted DOI is **10.1007/s10853-019-04261-6**.\n"
+        )
+
+        issues = check_refs(root)
+
+        assert [i for i in issues if i.ref_type == "doi"] == []
 
 
 def test_doi_check_skipped_in_doc_papers() -> None:
