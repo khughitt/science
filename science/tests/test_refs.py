@@ -605,6 +605,29 @@ def test_task_ref_in_done_file_resolves() -> None:
         assert task_issues == []
 
 
+def test_task_ref_in_archive_file_resolves() -> None:
+    """Historical task IDs declared in tasks/archive.md should resolve."""
+    runner = CliRunner()
+    with runner.isolated_filesystem() as td:
+        root = Path(td)
+        _scaffold(root)
+        (root / "tasks").mkdir(parents=True, exist_ok=True)
+        (root / "tasks" / "active.md").write_text("## [t05] Active task\n- status: active\n")
+        (root / "tasks" / "archive.md").write_text(
+            "# Historical task aliases\n\n"
+            "## [t27] Diffusion ratio audit\n"
+            "- status: archived\n"
+            "- replacement: task:t227\n",
+            encoding="utf-8",
+        )
+        (root / "doc" / "background" / "topics" / "x.md").write_text("# X\nFollows t27.\n")
+
+        issues = check_refs(root)
+
+        task_issues = [i for i in issues if i.ref_type == "task"]
+        assert task_issues == []
+
+
 def test_task_ref_resolves_when_declaration_is_not_first_header_in_tasks_file() -> None:
     """Task declarations should be found throughout multi-entry task markdown files."""
     runner = CliRunner()

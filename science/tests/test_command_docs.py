@@ -453,6 +453,7 @@ def test_tasks_command_documents_flat_ids_parent_and_namespace_refs() -> None:
         "`parent: task:t001`",
         "`natural-systems:task:t335`",
         "Bare `t123` always means a local task",
+        "`tasks/archive.md` is for historical task aliases",
     )
     for expected in expected_strings:
         assert expected in text

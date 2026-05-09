@@ -26,6 +26,8 @@ Task IDs are flat local identifiers in the form `tNNN`: `t001`, `t016`, `t335`, 
 
 Bare `t123` always means a local task. `task:t123` is the canonical local task reference. Cross-project task and entity refs use namespace-first form: `natural-systems:task:t335`, `multiple-myeloma:hypothesis:h01`, `cbioportal:question:q006-ch-priority-gene-completeness`.
 
+`tasks/archive.md` is for historical task aliases only. Use the same `## [tNNN] Title` heading shape when old documents still cite a task ID that no longer belongs in `tasks/active.md` or `tasks/done/YYYY-MM.md`; include brief metadata such as `status: archived` and `replacement: task:tNNN` when there is a successor. Do not use it for current operational task history.
+
 ## Actions
 
 ### No arguments or "list"

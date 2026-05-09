@@ -54,9 +54,10 @@ _BIB_PMID_FIELD_RE = re.compile(r"^\s*pmid\s*=\s*[{\"]?(\d+)[}\"]?", re.IGNORECA
 # Task IDs — `tNN` or `tNNN`, optionally inside square brackets. Anchored on
 # word boundaries so adjacent letters do not produce false positives.
 _TASK_ID_RE = re.compile(r"\bt(\d{2,})\b")
-# Task ID *declarations* in tasks/active.md and tasks/done/*.md headers, of the
-# form `## [tNN] ...` or `## [tNNN] ...`.
+# Task ID *declarations* in task ledger/archive headers, of the form
+# `## [tNN] ...` or `## [tNNN] ...`.
 _TASK_DECL_RE = re.compile(r"^\s*#+\s*\[t(\d{2,})\]", re.MULTILINE)
+_TASK_REF_SOURCES = "tasks/active.md, tasks/done/*.md, or tasks/archive.md"
 # Tokens that should not trigger task-ID validation when they happen to match
 # the regex above (e.g. the `t` of an article slug).
 _TASK_FALSE_POSITIVE_PARENTS = (
@@ -141,10 +142,12 @@ def _load_hypothesis_ids(root: Path) -> dict[str, Path]:
 
 
 def _load_task_ids(root: Path) -> set[str]:
-    """Collect all declared task IDs from tasks/active.md and tasks/done/*.md.
+    """Collect all declared task IDs from task ledger/archive files.
 
     A task is "declared" when it appears as a markdown header of the form
     `## [tNN] ...` (the canonical format produced by `science tasks add`).
+    `tasks/archive.md` is reserved for historical aliases that should resolve
+    old prose references without reintroducing them into active/done ledgers.
     Returns the set of bare numeric IDs (e.g. `"75"`, not `"t75"`).
     """
     declared: set[str] = set()
@@ -152,6 +155,9 @@ def _load_task_ids(root: Path) -> set[str]:
     active = root / "tasks" / "active.md"
     if active.is_file():
         candidates.append(active)
+    archive = root / "tasks" / "archive.md"
+    if archive.is_file():
+        candidates.append(archive)
     done_dir = root / "tasks" / "done"
     if done_dir.is_dir():
         candidates.extend(done_dir.glob("*.md"))
@@ -454,7 +460,7 @@ def check_refs(root: Path) -> list[RefIssue]:
                             line=line_num,
                             ref_type="task",
                             ref_value=f"t{task_num}",
-                            message=f"t{task_num} — no matching declaration in tasks/active.md or tasks/done/*.md",
+                            message=f"t{task_num} — no matching declaration in {_TASK_REF_SOURCES}",
                         )
                     )
 
