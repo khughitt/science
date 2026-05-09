@@ -318,6 +318,57 @@ def test_validate_summary_counts_broken_xref_warnings(tmp_path: Path) -> None:
     assert "PASSED with 1 warning(s)" in combined
 
 
+def test_validate_resolves_terms_yaml_ids_in_frontmatter_xrefs(tmp_path: Path) -> None:
+    _write_common_files(tmp_path, "software")
+    _write_python3_stub(tmp_path / "bin")
+    _write_science_tool_stub(tmp_path / "bin")
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "src").mkdir(parents=True)
+    (tmp_path / "tests").mkdir(parents=True)
+    (tmp_path / "knowledge" / "sources" / "local" / "terms.yaml").write_text(
+        "\n".join(
+            [
+                "terms:",
+                "  - id: protein:PHF19",
+                "    title: PHF19",
+                "  - id: concept:prc2-complex",
+                "    title: PRC2 complex",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "doc" / "questions" / "terms-xref.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "question:terms-xref"',
+                'type: "question"',
+                'related: ["protein:PHF19", "concept:prc2-complex"]',
+                "---",
+                "",
+                "# Terms xref",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    combined = result.stdout + result.stderr
+    assert result.returncode == 0, combined
+    assert "Broken reference in terms-xref.md" not in combined
+    assert "PASSED: all checks clean" in combined
+
+
 def test_validate_resolves_root_specs_in_frontmatter_xrefs(tmp_path: Path) -> None:
     _write_common_files(tmp_path, "software")
     _write_python3_stub(tmp_path / "bin")

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.05.07.4
+# science-managed-version: 2026.05.09.1
 # science-managed-source-sha256: 517199d70d40317733c4974162cbd0fdf635377ab6129000896b178c78a6584a
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
@@ -1148,7 +1148,7 @@ fi
 echo ""
 echo "Checking frontmatter cross-references..."
 
-xref_result=$(XREF_SPECS="$SPECS_DIR" XREF_DOC="$DOC_DIR" XREF_TASKS="$TASKS_DIR" XREF_ENTITIES="$LOCAL_PROFILE_DIR/entities.yaml" XREF_SCIENCE_YAML="science.yaml" python3 << 'PYEOF'
+xref_result=$(XREF_SPECS="$SPECS_DIR" XREF_DOC="$DOC_DIR" XREF_TASKS="$TASKS_DIR" XREF_ENTITIES="$LOCAL_PROFILE_DIR/entities.yaml" XREF_TERMS="$LOCAL_PROFILE_DIR/terms.yaml" XREF_SCIENCE_YAML="science.yaml" python3 << 'PYEOF'
 import os, re
 
 try:
@@ -1285,6 +1285,27 @@ def load_structured_ids(path):
             ids.add(canonical_id)
     return ids
 
+
+def load_terms_ids(path):
+    ids = set()
+    if yaml is None or not os.path.isfile(path):
+        return ids
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+    except Exception:
+        return ids
+    items = data.get("terms") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        return ids
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        term_id = item.get("id") or item.get("canonical_id")
+        if isinstance(term_id, str) and term_id:
+            ids.add(term_id)
+    return ids
+
 search_dirs = [os.environ['XREF_SPECS'], os.environ['XREF_DOC']]
 all_ids = set()
 refs_by_file = {}
@@ -1304,6 +1325,7 @@ for search_dir in search_dirs:
 
 all_ids.update(load_task_ids(os.environ["XREF_TASKS"]))
 all_ids.update(load_structured_ids(os.environ["XREF_ENTITIES"]))
+all_ids.update(load_terms_ids(os.environ["XREF_TERMS"]))
 project_ids = load_project_ids(os.environ["XREF_SCIENCE_YAML"])
 
 
