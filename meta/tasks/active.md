@@ -377,6 +377,10 @@ Deliverables:
 
 Start from Batch 3 synthesis: `doc/background/papers/synthesis-2026-05-06-causal-graph-construction.md`.
 
+### Notes
+
+- 2026-05-09: v1.4 design patches landed (2026-05-09) per slice-3 effective-codes validator findings: (P1.4-a) explicit iar retirement rule for mr-analysis with pleiotropy_handling != unhandled + upstream instrument_validity_assumptions containing relevance — first retirement rule depending on upstream state, makes T34-6 stage (b) two-stage MR example validate at strengthen-belief; (P1.4-b) authoring-policy decision = hard-error when authors hand-write auto-injected codes (identification-missing, instrument-assumption-risk, mechanism-hypothesis-only, prior-network-dependent). Slice-3 prototype rules carry forward unchanged. Outstanding-mechanical work (per-extension consumer rules, multi-extension dispatch, origin-chain API, ref-resolution registry pass, fold into validate.sh) remains.
+
 ## [t035] Design graph-valued synthesis artifact schema
 - priority: P1
 - status: proposed

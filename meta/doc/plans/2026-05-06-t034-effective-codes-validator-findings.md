@@ -151,9 +151,9 @@ Runs in <250ms total. Production validators for the remaining rules should stay 
 - origin-chain inspection API
 - reference resolution as a registry pass
 
-**Outstanding (semantic / v1.4 candidates surfaced by slice 3):**
-1. **iar retirement by mr-analysis.** Add to retirement table: `mr-analysis` with valid `pleiotropy_handling` and upstream `relevance` retires `instrument-assumption-risk`. Without this, T34-7 doesn't validate.
-2. **Auto-injected-code authoring policy.** Hard-error vs warn vs silently-strip. Pick one. Recommend warn-during-migration, hard-error after.
+**Outstanding (semantic / v1.4 candidates surfaced by slice 3):** *— both adopted in v1.4 (2026-05-09)*
+1. **iar retirement by mr-analysis.** ~~Add to retirement table~~ **Adopted as P1.4-a.** Retirement table now lists: `causal-effect-estimate + mr-analysis` payload with `pleiotropy_handling != unhandled` AND resolved upstream `instrument_validity_assumptions` containing `relevance` retires `instrument-assumption-risk` from `effective_codes` at the current payload. First retirement rule depending on upstream state. T34-6 stage (b) commentary updated to confirm validation. (Slice-3 finding mis-labeled this as T34-7 — actual example is T34-6 stage (b).)
+2. **Auto-injected-code authoring policy.** ~~Hard-error vs warn vs silently-strip~~ **Adopted as P1.4-b: hard-error.** Validator hard-errors when authors hand-write any of the four auto-injected codes (`identification-missing`, `instrument-assumption-risk`, `mechanism-hypothesis-only`, `prior-network-dependent`). No migration window. Existing payloads carrying these by hand must be swept before slice-3 prototype folds into `meta/validate.sh`.
 
 Plus the two carried v1.3 candidates that are now adopted into the contract:
 - (slice 1 → v1.3) `graph-posterior` external edge storage rule. Adopted in v1.3 P1.3-a.
