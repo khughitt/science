@@ -83,6 +83,11 @@ def _render_marker_summary(markers: list[RefIssue], *, include_locations: bool) 
     help="Only report refs of this type. Can be passed more than once, e.g. --type task --type link.",
 )
 @click.option("--by-value", is_flag=True, help="Include duplicate counts grouped by reference value.")
+@click.option(
+    "--include-body",
+    is_flag=True,
+    help="Additionally scan body prose for typed `<kind>:<slug>` refs (not just frontmatter).",
+)
 def check(
     root_path: Path,
     output_format: str,
@@ -90,11 +95,12 @@ def check(
     summary_only: bool,
     ref_types: tuple[str, ...],
     by_value: bool,
+    include_body: bool,
 ) -> None:
     """Scan project documents for broken cross-references."""
 
     try:
-        issues = check_refs(root_path.resolve())
+        issues = check_refs(root_path.resolve(), include_body=include_body)
     except PeerUnresolved as exc:
         raise click.ClickException(str(exc)) from exc
 

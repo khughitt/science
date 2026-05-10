@@ -1092,3 +1092,31 @@ class TestBodyTypedRefScan:
         )
         issues = check_refs(root, include_body=True)
         assert [i for i in issues if i.ref_type == "body-entity-ref"] == []
+
+
+def test_refs_check_include_body_flag_emits_typed_ref_issues(tmp_path):
+    """The CLI `--include-body` flag enables body-typed-ref scanning."""
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "doc" / "t050.md").write_text(
+        "---\nid: task:t050\ntype: task\n---\nBody.\n"
+    )
+    (tmp_path / "doc" / "report.md").write_text(
+        "---\ntype: report\n---\nSee task:t999 for the gap.\n"
+    )
+
+    runner = CliRunner()
+    result_no_body = runner.invoke(refs_group, ["check", "--root", str(tmp_path), "--format", "json"])
+    result_with_body = runner.invoke(
+        refs_group, ["check", "--root", str(tmp_path), "--include-body", "--format", "json"]
+    )
+
+    payload_no = json.loads(result_no_body.output)
+    payload_yes = json.loads(result_with_body.output)
+    # The JSON output shape has "broken" and "markers" keys at the top level.
+    # broken is a list of issue dicts with keys like "type", "value", "file", "line", etc.
+    issues_no = payload_no.get("broken", [])
+    issues_yes = payload_yes.get("broken", [])
+    types_no = {h["type"] for h in issues_no}
+    types_yes = {h["type"] for h in issues_yes}
+    assert "body-entity-ref" not in types_no
+    assert "body-entity-ref" in types_yes
