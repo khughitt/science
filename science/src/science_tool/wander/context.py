@@ -59,9 +59,7 @@ def assemble_bundle(
         source_path=source_path,
         mtime=mtime,
         content_length=content_length,
-        created_date=created_date_for(
-            entity_uri, dataset, source_path=source_path, repo_root=repo_root
-        ),
+        created_date=created_date_for(entity_uri, dataset, source_path=source_path, repo_root=repo_root),
         neighbors=neighbors_for(entity_uri, dataset),
         active_references=active_references_for(entity_uri, dataset),
     )

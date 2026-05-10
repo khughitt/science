@@ -31,14 +31,9 @@ def sample_for_walk(
     weight components for downstream context-bundle assembly.
     """
     if not graph_path.exists():
-        raise WanderSamplerError(
-            f"Graph file not found at {graph_path}. "
-            "Run `science graph build` first."
-        )
+        raise WanderSamplerError(f"Graph file not found at {graph_path}. Run `science graph build` first.")
 
     dataset = Dataset()
     dataset.parse(source=str(graph_path), format="trig")
-    candidates = compute_attention_candidates(
-        dataset, today=today, kinds=kinds, epsilon=epsilon
-    )
+    candidates = compute_attention_candidates(dataset, today=today, kinds=kinds, epsilon=epsilon)
     return weighted_sample_without_replacement(candidates, limit=n, seed=seed)

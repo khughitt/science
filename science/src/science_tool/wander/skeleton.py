@@ -81,9 +81,7 @@ def _render_entity_block(bundle: ContextBundle, signals: StubSignals) -> list[st
     out.append(
         f"- bears_on (in/out): {len(bundle.neighbors.bears_on_incoming)}/{len(bundle.neighbors.bears_on_outgoing)}"
     )
-    out.append(
-        f"- active references: {', '.join(r.entity_id for r in bundle.active_references) or 'none'}"
-    )
+    out.append(f"- active references: {', '.join(r.entity_id for r in bundle.active_references) or 'none'}")
     out.append("")
     out.append("**Stub-smell signals:**")
     out.append(f"- older_than_60_days: {signals.older_than_60_days}")

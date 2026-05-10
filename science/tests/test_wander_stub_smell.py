@@ -52,6 +52,7 @@ def test_not_a_candidate_when_recently_created() -> None:
 
 def test_not_a_candidate_when_has_active_reference() -> None:
     from science_tool.wander.references import Reference
+
     bundle = _bundle(
         created_date=date(2026, 1, 1),
         active_references=[Reference(entity_id="task:t1", kind="task")],

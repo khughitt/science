@@ -30,10 +30,34 @@ WANDER_FORMATS: tuple[str, ...] = ("markdown", "json")
     show_default=True,
     help="Path to the materialized knowledge graph (.trig).",
 )
-@click.option("--format", "output_format", type=click.Choice(WANDER_FORMATS), default="markdown", show_default=True, help="Output format. `markdown` writes a walk skeleton to --out; `json` prints bundles to stdout.")
-@click.option("--out", "out_path", type=click.Path(path_type=Path), default=None, help="Output file (markdown). Defaults to doc/meta/walks/walk-<id>.md.")
-@click.option("--today", type=click.DateTime(formats=["%Y-%m-%d"]), default=None, help="Override the date used for sampling and stub-smell.")
-@click.option("--repo-root", type=click.Path(path_type=Path), default=Path("."), show_default=True, help="Repo root for git-based created-date fallback.")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(WANDER_FORMATS),
+    default="markdown",
+    show_default=True,
+    help="Output format. `markdown` writes a walk skeleton to --out; `json` prints bundles to stdout.",
+)
+@click.option(
+    "--out",
+    "out_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Output file (markdown). Defaults to doc/meta/walks/walk-<id>.md.",
+)
+@click.option(
+    "--today",
+    type=click.DateTime(formats=["%Y-%m-%d"]),
+    default=None,
+    help="Override the date used for sampling and stub-smell.",
+)
+@click.option(
+    "--repo-root",
+    type=click.Path(path_type=Path),
+    default=Path("."),
+    show_default=True,
+    help="Repo root for git-based created-date fallback.",
+)
 def wander_command(
     n: int,
     seed: int | None,
@@ -47,9 +71,7 @@ def wander_command(
 ) -> None:
     """Draw a serendipitous sample of epistemic entities and write a walk skeleton."""
     if not graph_path.exists():
-        raise click.ClickException(
-            f"Graph file not found at {graph_path}. Run `science graph build` first."
-        )
+        raise click.ClickException(f"Graph file not found at {graph_path}. Run `science graph build` first.")
     if n < 0:
         raise click.ClickException("--n must be >= 0")
 
@@ -70,7 +92,9 @@ def wander_command(
     bundles_with_signals = [(b, compute_stub_signals(b, today=walk_date)) for b in bundles]
 
     if output_format == "json":
-        click.echo(render_json(walk_id=walk_id, walk_date=walk_date, seed=seed, n=n, bundles_with_signals=bundles_with_signals))
+        click.echo(
+            render_json(walk_id=walk_id, walk_date=walk_date, seed=seed, n=n, bundles_with_signals=bundles_with_signals)
+        )
         return
 
     text = render_markdown_skeleton(

@@ -27,10 +27,7 @@ class StubSignals:
 
 
 def compute_stub_signals(bundle: ContextBundle, *, today: date) -> StubSignals:
-    older = (
-        bundle.created_date is not None
-        and (today - bundle.created_date).days > STALE_THRESHOLD_DAYS
-    )
+    older = bundle.created_date is not None and (today - bundle.created_date).days > STALE_THRESHOLD_DAYS
     short_or_unchanged = False
     if bundle.content_length is not None and bundle.content_length < SHORT_CONTENT_THRESHOLD:
         short_or_unchanged = True

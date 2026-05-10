@@ -65,9 +65,7 @@ def test_sample_for_walk_respects_kind_filter(tmp_path: Path) -> None:
     knowledge.add((proposition, SCI_NS.freshnessState, Literal("fresh")))
     graph_path = _write_graph(tmp_path, dataset)
 
-    sample = sample_for_walk(
-        graph_path=graph_path, n=5, seed=7, today=date(2026, 5, 9), kinds={"proposition"}
-    )
+    sample = sample_for_walk(graph_path=graph_path, n=5, seed=7, today=date(2026, 5, 9), kinds={"proposition"})
 
     assert {c.entity_id for c in sample} == {"proposition:p1"}
 
