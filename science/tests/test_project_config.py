@@ -163,6 +163,68 @@ parent: ../meta
         load_project_config(project_root)
 
 
+def test_refs_config_defaults_when_absent(tmp_path):
+    """ProjectConfig.refs is None when science.yaml omits the section."""
+    from science_tool.project_config import load_project_config
+
+    (tmp_path / "science.yaml").write_text(
+        "name: test-project\nprofile: research\n", encoding="utf-8"
+    )
+    config = load_project_config(tmp_path)
+    assert config.refs is None
+
+
+def test_refs_config_parses_graph_truth_source(tmp_path):
+    """`refs.entity_index_source: knowledge_graph` parses to the enum value."""
+    from science_tool.project_config import EntityIndexSource, load_project_config
+
+    (tmp_path / "science.yaml").write_text(
+        "name: test-project\nprofile: research\n"
+        "refs:\n"
+        "  entity_index_source: knowledge_graph\n"
+        "  scan_roots: [tasks, papers, core]\n",
+        encoding="utf-8",
+    )
+    config = load_project_config(tmp_path)
+    assert config.refs is not None
+    assert config.refs.entity_index_source == EntityIndexSource.KNOWLEDGE_GRAPH
+    assert config.refs.scan_roots == ["tasks", "papers", "core"]
+
+
+def test_refs_config_default_source_is_frontmatter(tmp_path):
+    """`refs:` block with only scan_roots defaults source to frontmatter."""
+    from science_tool.project_config import EntityIndexSource, load_project_config
+
+    (tmp_path / "science.yaml").write_text(
+        "name: test-project\nprofile: research\n"
+        "refs:\n"
+        "  scan_roots: [tasks]\n",
+        encoding="utf-8",
+    )
+    config = load_project_config(tmp_path)
+    assert config.refs is not None
+    assert config.refs.entity_index_source == EntityIndexSource.FRONTMATTER
+    assert config.refs.scan_roots == ["tasks"]
+
+
+def test_refs_config_rejects_unknown_source(tmp_path):
+    """`refs.entity_index_source` rejects unknown values via Pydantic validation."""
+    from pydantic import ValidationError
+    from science_tool.project_config import load_project_config
+
+    (tmp_path / "science.yaml").write_text(
+        "name: test-project\nprofile: research\n"
+        "refs:\n"
+        "  entity_index_source: rdfox\n",
+        encoding="utf-8",
+    )
+    try:
+        load_project_config(tmp_path)
+    except ValidationError:
+        return
+    raise AssertionError("Expected ValidationError for unknown source")
+
+
 def test_project_config_rejects_legacy_children(tmp_path: Path) -> None:
     """children: is removed; loading a config with it must fail clearly."""
     project_root = tmp_path / "meta"

@@ -79,6 +79,22 @@ class ProseLintConfig(BaseModel):
     short_form_ids_deny: list[str] = Field(default_factory=list)
 
 
+class EntityIndexSource(StrEnum):
+    """Truth source for `science refs check --include-body` entity-ref validation."""
+
+    FRONTMATTER = "frontmatter"
+    KNOWLEDGE_GRAPH = "knowledge_graph"
+
+
+class RefsConfig(BaseModel):
+    """Configuration for `science refs check`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    entity_index_source: EntityIndexSource = EntityIndexSource.FRONTMATTER
+    scan_roots: list[str] = Field(default_factory=list)
+
+
 class ProjectConfig(BaseModel):
     """Typed view of science.yaml. Non-listed fields are preserved as-is."""
 
@@ -89,6 +105,7 @@ class ProjectConfig(BaseModel):
     role: RoleField = ProjectRole.STANDALONE
     peers: list[PeerEntry] = Field(default_factory=list)
     prose_lint: ProseLintConfig | None = None
+    refs: RefsConfig | None = None
 
     @model_validator(mode="before")
     @classmethod
