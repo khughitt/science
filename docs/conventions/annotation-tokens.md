@@ -55,3 +55,10 @@ Is the claim verifiable from a source you can reach?
 ## Future work (phase 3)
 
 A richer sub-document annotation system (rich payloads, multi-annotation per ROI, graph integration) is deferred to a follow-up RFC. The four phase-2 tokens become annotation *types* under that design; existing inline tokens continue to work, and richer payloads opt into a sidecar form. See `docs/plans/2026-05-09-annotation-system-stub.md` for the full phase-3 sketch.
+
+## See also
+
+- [Prose lints](prose-lints.md) — mechanically-detectable prose issues
+  (bare author-year, short-form IDs, frontmatter-inline gaps, numeric
+  anchors). Lints surface candidates; the four-token vocabulary is the
+  authoring output for claims that need LLM/human judgment.
