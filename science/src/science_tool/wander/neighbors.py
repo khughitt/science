@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from rdflib import Dataset, URIRef
+from rdflib import Dataset, Node, URIRef
 
 from science_tool.graph.store import canonical_id_from_entity_uri
 from science_tool.graph.io import PROJECT_NS, SCI_NS
@@ -39,7 +39,7 @@ def neighbors_for(entity_uri: URIRef, dataset: Dataset) -> NeighborSet:
         if eid:
             result.bears_on_outgoing.append(eid)
 
-    for subj, pred, _obj in knowledge.triples((None, None, entity_uri)):
+    for subj, pred, _ in knowledge.triples((None, None, entity_uri)):
         if pred == SCI_NS.bearsOn:
             continue
         eid = canonical_id_from_entity_uri(str(subj))
@@ -49,7 +49,7 @@ def neighbors_for(entity_uri: URIRef, dataset: Dataset) -> NeighborSet:
             break
         result.other_incoming.append(NeighborEdge(_short(pred), eid, str(subj)))
 
-    for _subj, pred, obj in knowledge.triples((entity_uri, None, None)):
+    for _, pred, obj in knowledge.triples((entity_uri, None, None)):
         if pred == SCI_NS.bearsOn:
             continue
         if not isinstance(obj, URIRef):
@@ -66,7 +66,7 @@ def neighbors_for(entity_uri: URIRef, dataset: Dataset) -> NeighborSet:
     return result
 
 
-def _short(predicate_uri: URIRef) -> str:
+def _short(predicate_uri: Node) -> str:
     text = str(predicate_uri)
     for sep in ("#", "/"):
         idx = text.rfind(sep)

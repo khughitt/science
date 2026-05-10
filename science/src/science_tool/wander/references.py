@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from rdflib import Dataset, URIRef
-from rdflib.namespace import RDF
 
 from science_tool.graph.store import canonical_id_from_entity_uri
 from science_tool.graph.io import PROJECT_NS, SCI_NS
@@ -21,7 +20,7 @@ def active_references_for(entity_uri: URIRef, dataset: Dataset) -> list[Referenc
     """Return tasks/hypotheses that reference this entity (excluding inactive tasks)."""
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
     references: list[Reference] = []
-    for subj, _pred, _obj in knowledge.triples((None, None, entity_uri)):
+    for subj, _, _ in knowledge.triples((None, None, entity_uri)):
         if not isinstance(subj, URIRef):
             continue
         eid = canonical_id_from_entity_uri(str(subj))
