@@ -28,8 +28,9 @@ WANDER_FORMATS: tuple[str, ...] = ("markdown", "json")
     type=click.Path(path_type=Path),
     default=Path("knowledge/graph.trig"),
     show_default=True,
+    help="Path to the materialized knowledge graph (.trig).",
 )
-@click.option("--format", "output_format", type=click.Choice(WANDER_FORMATS), default="markdown", show_default=True)
+@click.option("--format", "output_format", type=click.Choice(WANDER_FORMATS), default="markdown", show_default=True, help="Output format. `markdown` writes a walk skeleton to --out; `json` prints bundles to stdout.")
 @click.option("--out", "out_path", type=click.Path(path_type=Path), default=None, help="Output file (markdown). Defaults to doc/meta/walks/walk-<id>.md.")
 @click.option("--today", type=click.DateTime(formats=["%Y-%m-%d"]), default=None, help="Override the date used for sampling and stub-smell.")
 @click.option("--repo-root", type=click.Path(path_type=Path), default=Path("."), show_default=True, help="Repo root for git-based created-date fallback.")
