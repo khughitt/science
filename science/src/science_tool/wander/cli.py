@@ -11,7 +11,6 @@ from science_tool.graph.attention import (
     weighted_sample_without_replacement,
 )
 from science_tool.wander.context import assemble_bundle
-from science_tool.wander.sampling import WanderSamplerError
 from science_tool.wander.skeleton import render_json, render_markdown_skeleton
 from science_tool.wander.stub_smell import compute_stub_signals
 
@@ -85,7 +84,7 @@ def wander_command(
             dataset, today=walk_date, kinds=set(kinds) if kinds else None, epsilon=epsilon
         )
         sample = weighted_sample_without_replacement(candidates, limit=n, seed=seed)
-    except (WanderSamplerError, ValueError) as exc:
+    except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
     bundles = [assemble_bundle(c, dataset, repo_root=repo_root) for c in sample]

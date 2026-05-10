@@ -66,17 +66,31 @@ def test_active_references_returns_referencing_tasks_and_hypotheses() -> None:
     assert ids == ["hypothesis:h1", "task:t1"]
 
 
-def test_active_references_excludes_archived_or_completed_tasks() -> None:
+def test_active_references_excludes_done_or_retired_tasks() -> None:
     dataset = Dataset()
     knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
     target = _u("proposition/p1")
-    archived_task = _u("task/old")
-    knowledge.add((archived_task, RDF.type, SCI_NS.Task))
-    knowledge.add((archived_task, SCI_NS.projectStatus, Literal("archived")))
-    knowledge.add((archived_task, SKOS.related, target))
-    completed_task = _u("task/done")
-    knowledge.add((completed_task, RDF.type, SCI_NS.Task))
-    knowledge.add((completed_task, SCI_NS.projectStatus, Literal("completed")))
-    knowledge.add((completed_task, SKOS.related, target))
+    done_task = _u("task/done")
+    knowledge.add((done_task, RDF.type, SCI_NS.Task))
+    knowledge.add((done_task, SCI_NS.projectStatus, Literal("done")))
+    knowledge.add((done_task, SKOS.related, target))
+    retired_task = _u("task/retired")
+    knowledge.add((retired_task, RDF.type, SCI_NS.Task))
+    knowledge.add((retired_task, SCI_NS.projectStatus, Literal("retired")))
+    knowledge.add((retired_task, SKOS.related, target))
 
     assert active_references_for(target, dataset) == []
+
+
+def test_active_references_includes_deferred_tasks() -> None:
+    dataset = Dataset()
+    knowledge = dataset.graph(PROJECT_NS["graph/knowledge"])
+    target = _u("proposition/p1")
+    knowledge.add((target, RDF.type, SCI_NS.Proposition))
+    deferred_task = _u("task/later")
+    knowledge.add((deferred_task, RDF.type, SCI_NS.Task))
+    knowledge.add((deferred_task, SCI_NS.projectStatus, Literal("deferred")))
+    knowledge.add((deferred_task, SKOS.related, target))
+
+    refs = active_references_for(target, dataset)
+    assert [r.entity_id for r in refs] == ["task:later"]
