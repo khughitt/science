@@ -35,8 +35,6 @@ def sample_for_walk(
             f"Graph file not found at {graph_path}. "
             "Run `science graph build` first."
         )
-    if n < 0:
-        raise WanderSamplerError("n must be >= 0")
 
     dataset = Dataset()
     dataset.parse(source=str(graph_path), format="trig")

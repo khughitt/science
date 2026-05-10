@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from rdflib import Dataset, Literal, URIRef
-from rdflib.namespace import RDF, SKOS, XSD
+from rdflib.namespace import RDF, SKOS
 
 from science_tool.graph.io import PROJECT_NS, SCI_NS, save_canonical_graph_dataset
 from science_tool.wander.sampling import WanderSamplerError, sample_for_walk
