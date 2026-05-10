@@ -29,9 +29,11 @@ artifacts:
       requires_clean_worktree: true
       commit_default: true
       transaction_kind: temp_commit
-    version: '2026.05.10.1'
-    current_hash: 42c73b90376112ca305270290f576638194aedcb08f71af593c855360696eba8
+    version: '2026.05.10.2'
+    current_hash: 7dd9b28ddc728071dafd4ab03592cb20ef47c1f08f5be81aab52783245ca3e6a
     previous_hashes:
+      - version: '2026.05.10.1'
+        hash: 42c73b90376112ca305270290f576638194aedcb08f71af593c855360696eba8
       - version: '2026.05.09.2'
         hash: 6f8cf6488014484d2d93f57654d9ff6500d8638bd122c12864da26a4e05608ca
       - version: '2026.05.09.1'
@@ -158,6 +160,11 @@ artifacts:
         kind: byte_replace
         summary: 'Add Section 18: prose lints (bare-author-year, short-form-ids, frontmatter-inline-gap, numeric-anchor) via `science prose lint`.'
         steps: []
+      - from: '2026.05.10.1'
+        to: '2026.05.10.2'
+        kind: byte_replace
+        summary: 'Section 6: replace bash bibtex grep with `science refs check --format json`; rename to "Reference integrity"; per-type warn (citation/doi/pmid/hypothesis/task/link).'
+        steps: []
     changelog:
       '2026.04.26': Initial managed artifact (port of scripts/validate.sh + hook infrastructure).
       '2026.04.26.1': 'Audit-surfaced six-fix batch (Plan #7 of conventions audit).'
@@ -177,3 +184,4 @@ artifacts:
       '2026.05.07.3': 'Remove validate.sh legacy children: namespace discovery.'
       '2026.05.07.4': 'Run semantic peer validation from validate.sh.'
       '2026.05.10.1': 'Add Section 18 prose lints powered by `science prose lint --format json`. Default emits warn for bare-author-year and short-form-ids; info for frontmatter-inline-gap and numeric-anchor (promoted under --strict).'
+      '2026.05.10.2': 'Section 6 consolidation: replace bash bibtex citation check with `science refs check --format json` invocation (mirroring Section 18 prose-lint pattern). Renamed "Citation integrity" → "Reference integrity" — now reports per-type counts (citation, doi, pmid, hypothesis, task, link, etc.) rather than just bibtex. Falls back to a minimal bash bibtex check when SCIENCE_TOOL is unavailable.'

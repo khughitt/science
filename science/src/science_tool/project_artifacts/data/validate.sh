@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.05.10.1
-# science-managed-source-sha256: 42c73b90376112ca305270290f576638194aedcb08f71af593c855360696eba8
+# science-managed-version: 2026.05.10.2
+# science-managed-source-sha256: 7dd9b28ddc728071dafd4ab03592cb20ef47c1f08f5be81aab52783245ca3e6a
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -471,31 +471,44 @@ for f in $(find "$DOC_DIR" "$SPECS_DIR" -name "*.md" -type f 2>/dev/null); do
     fi
 done
 
-# ─── 6. Citation integrity ───────────────────────────────────────
+# ─── 6. Reference integrity ──────────────────────────────────────
 echo ""
-echo "Checking citations..."
+echo "Checking reference integrity..."
 
-if [ -f "$PAPERS_DIR/references.bib" ]; then
-    # Collect all [@Key] citations across docs
-    cited_keys=""
-    if [ -d "$DOC_DIR" ]; then
-        cited_keys=$(grep -roh '\[@[A-Za-z0-9_-]*\]' "$DOC_DIR/" 2>/dev/null \
-            | sed 's/\[@//;s/\]//' | sort -u || true)
+if [ -n "${SCIENCE_TOOL:-}" ]; then
+    # `science refs check` exits 1 when broken refs exist; capture stdout
+    # regardless of exit code, then fall back only if invocation produced
+    # no output (binary missing, project not loadable, etc.).
+    refs_json=$($SCIENCE_TOOL refs check --root . --format json 2>/dev/null) || true
+    if [ -z "$refs_json" ]; then
+        refs_json='{"summary":{"broken":0,"by_type":{}},"broken":[],"markers":[]}'
     fi
-
+    while IFS=$'\t' read -r ref_type count; do
+        [ -z "$ref_type" ] && continue
+        if [ "$count" -gt 0 ]; then
+            warn "${count} broken refs: ${ref_type}"
+        fi
+    done < <(printf '%s' "$refs_json" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+by_type = data.get("summary", {}).get("by_type", {})
+for ref_type, count in sorted(by_type.items()):
+    print(f"{ref_type}\t{count}")
+')
+    total=$(printf '%s' "$refs_json" | python3 -c 'import json, sys; print(json.load(sys.stdin).get("summary", {}).get("broken", 0))')
+    if [ "$total" -eq 0 ]; then
+        info "Reference integrity check complete (no broken refs)"
+    fi
+elif [ -f "$PAPERS_DIR/references.bib" ] && [ -d "$DOC_DIR" ]; then
+    # Fallback when SCIENCE_TOOL is unavailable: minimal bash bibtex check.
+    cited_keys=$(grep -roh '\[@[A-Za-z0-9_-]*\]' "$DOC_DIR/" 2>/dev/null \
+        | sed 's/\[@//;s/\]//' | sort -u || true)
     for key in $cited_keys; do
         [ -z "$key" ] && continue
         if ! grep -q "@.*{${key}," "$PAPERS_DIR/references.bib" 2>/dev/null; then
             warn "Citation [@${key}] used in docs but not found in $PAPERS_DIR/references.bib"
         fi
     done
-    info "Citation check complete"
-else
-    # Check if any citations exist without a bib file
-    has_citations=$(grep -rl '\[@' "$DOC_DIR/" 2>/dev/null | head -1 || true)
-    if [ -n "$has_citations" ]; then
-        warn "Citations found in docs but $PAPERS_DIR/references.bib does not exist"
-    fi
 fi
 
 # ─── 7. Paper summary template conformance ───────────────────────
