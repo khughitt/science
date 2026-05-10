@@ -227,3 +227,34 @@ class TestScanRoot:
         (tmp_path / "doc" / "a.txt").write_text("Brunton 2022\n")
         result = scan_root(tmp_path)
         assert result["counts"] == {}
+
+
+class TestShortFormIdsDeny:
+    def test_deny_list_suppresses_matching_token(self, tmp_path):
+        path = _write(tmp_path, "Cyclin D1 is upregulated. Histone H3 marks chromatin.\n")
+        # Without deny: both D1 and H3 are flagged
+        issues_default = detect_short_form_ids(path)
+        flagged = {i.message.split("'")[1] for i in issues_default}
+        assert "D1" in flagged
+        assert "H3" in flagged
+
+        # With deny: D1 and H3 are skipped
+        issues_denied = detect_short_form_ids(path, deny=["D1", "H3"])
+        flagged_denied = {i.message.split("'")[1] for i in issues_denied}
+        assert "D1" not in flagged_denied
+        assert "H3" not in flagged_denied
+
+    def test_deny_list_does_not_affect_other_tokens(self, tmp_path):
+        path = _write(tmp_path, "Refer to t050 and D1 here.\n")
+        issues = detect_short_form_ids(path, deny=["D1"])
+        flagged = {i.message.split("'")[1] for i in issues}
+        assert "t050" in flagged  # unaffected
+        assert "D1" not in flagged
+
+    def test_scan_root_threads_deny_list(self, tmp_path):
+        from science_tool.prose_lint import scan_root
+
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "a.md").write_text("Cyclin D1 effect on cells.\n")
+        result = scan_root(tmp_path, short_form_ids_deny=["D1"])
+        assert result["counts"].get("short-form-ids", 0) == 0

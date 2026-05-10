@@ -120,7 +120,12 @@ def detect_bare_author_year(path: Path, *, strict: bool = False) -> list[LintIss
     return issues
 
 
-def detect_short_form_ids(path: Path, *, strict: bool = False) -> list[LintIssue]:
+def detect_short_form_ids(
+    path: Path,
+    *,
+    strict: bool = False,
+    deny: list[str] | None = None,
+) -> list[LintIssue]:
     """Detect bare `Q1` / `t088` style refs that should be `question:q01-…` etc."""
     try:
         text = path.read_text(encoding="utf-8")
@@ -148,6 +153,8 @@ def detect_short_form_ids(path: Path, *, strict: bool = False) -> list[LintIssue
             if _CANONICAL_PREFIX_RE.search(preceding):
                 continue
             short = match.group(0)
+            if deny and short in deny:
+                continue
             kind = _SHORT_FORM_KIND_MAP[match.group(1)]
             issues.append(
                 LintIssue(
@@ -314,6 +321,7 @@ def scan_root(
     checks: list[str] | None = None,
     strict: bool = False,
     anchor_patterns: list[str] | None = None,
+    short_form_ids_deny: list[str] | None = None,
 ) -> dict:
     """Scan a project tree and return ``{"counts": {check: N}, "hits": [...]}``."""
     selected = checks or list(CHECKS)
@@ -327,6 +335,8 @@ def scan_root(
             detector = _DETECTORS[check]
             if check == "numeric-anchor":
                 hits.extend(detector(path, strict=strict, anchor_patterns=anchor_patterns))
+            elif check == "short-form-ids":
+                hits.extend(detector(path, strict=strict, deny=short_form_ids_deny))
             else:
                 hits.extend(detector(path, strict=strict))
     counts: dict[str, int] = {}
