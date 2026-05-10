@@ -159,3 +159,38 @@ def detect_short_form_ids(path: Path, *, strict: bool = False) -> list[LintIssue
                 )
             )
     return issues
+
+
+def detect_frontmatter_inline_gaps(
+    path: Path, *, strict: bool = False
+) -> list[LintIssue]:
+    """For each `related:` entry in frontmatter, flag if absent from body text.
+
+    Reports all gaps at line 1 (the file is the unit, not the location).
+    """
+    data, body_start = parse_frontmatter(path)
+    related = data.get("related") if isinstance(data, dict) else None
+    if not isinstance(related, list) or not related:
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return []
+    body = "\n".join(lines[body_start - 1 :])
+    issues: list[LintIssue] = []
+    for ref in related:
+        if not isinstance(ref, str) or not ref.strip():
+            continue
+        if ref in body:
+            continue
+        issues.append(
+            LintIssue(
+                file=path,
+                line=1,
+                col=1,
+                check="frontmatter-inline-gap",
+                severity=severity_for("frontmatter-inline-gap", strict=strict),
+                message=f"frontmatter related entry '{ref}' never appears in body prose",
+            )
+        )
+    return issues

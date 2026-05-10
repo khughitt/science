@@ -2,7 +2,11 @@
 
 from pathlib import Path
 
-from science_tool.prose_lint import detect_bare_author_year, detect_short_form_ids
+from science_tool.prose_lint import (
+    detect_bare_author_year,
+    detect_frontmatter_inline_gaps,
+    detect_short_form_ids,
+)
 
 
 def _write(tmp_path: Path, body: str, frontmatter: str = "") -> Path:
@@ -102,3 +106,48 @@ class TestShortFormIds:
         # "X1" is a generic identifier, not a known short form.
         path = _write(tmp_path, "Variable X1 holds the result.\n")
         assert detect_short_form_ids(path) == []
+
+
+class TestFrontmatterInlineGap:
+    def test_flags_unmentioned_related_entry(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "# Title\n\nNo mention of the related entries.\n",
+            frontmatter="related:\n  - task:t050\n  - question:q01-foo",
+        )
+        issues = detect_frontmatter_inline_gaps(path)
+        refs_flagged = {i.message.split("'")[1] for i in issues}
+        assert refs_flagged == {"task:t050", "question:q01-foo"}
+        for issue in issues:
+            assert issue.check == "frontmatter-inline-gap"
+            assert issue.severity == "info"
+            assert issue.line == 1  # reported at file start
+
+    def test_no_flag_when_mentioned_in_body(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "# Title\n\nSee task:t050 for details.\n",
+            frontmatter="related:\n  - task:t050",
+        )
+        assert detect_frontmatter_inline_gaps(path) == []
+
+    def test_no_flag_when_no_frontmatter(self, tmp_path):
+        path = _write(tmp_path, "Just body.\n")
+        assert detect_frontmatter_inline_gaps(path) == []
+
+    def test_no_flag_when_no_related_field(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "# Title\n\nBody.\n",
+            frontmatter="id: question:q01-foo",
+        )
+        assert detect_frontmatter_inline_gaps(path) == []
+
+    def test_strict_promotes_severity(self, tmp_path):
+        path = _write(
+            tmp_path,
+            "Body without mention.\n",
+            frontmatter="related:\n  - task:t050",
+        )
+        issues = detect_frontmatter_inline_gaps(path, strict=True)
+        assert all(i.severity == "warn" for i in issues)
