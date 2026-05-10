@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from science_tool.markdown_utils import (
     is_fence_line,
@@ -277,3 +278,58 @@ def detect_numeric_anchor(
                 )
             )
     return issues
+
+
+_DETECTORS: dict[str, Callable[..., list[LintIssue]]] = {
+    "bare-author-year": detect_bare_author_year,
+    "short-form-ids": detect_short_form_ids,
+    "frontmatter-inline-gap": detect_frontmatter_inline_gaps,
+    "numeric-anchor": detect_numeric_anchor,
+}
+_SCAN_DIRS = ("doc", "specs")
+_SCAN_ROOT_FILES = ("README.md", "AGENTS.md", "CLAUDE.md", "RESEARCH_PLAN.md")
+_SKIP_DIRS = {".git", ".venv", "node_modules", "data", "__pycache__", "templates"}
+
+
+def _collect_markdown_files(root: Path) -> list[Path]:
+    files: list[Path] = []
+    for name in _SCAN_DIRS:
+        sub = root / name
+        if not sub.is_dir():
+            continue
+        for path in sub.rglob("*.md"):
+            if any(part in _SKIP_DIRS for part in path.parts):
+                continue
+            files.append(path)
+    for name in _SCAN_ROOT_FILES:
+        candidate = root / name
+        if candidate.is_file():
+            files.append(candidate)
+    return sorted(files)
+
+
+def scan_root(
+    root: Path,
+    *,
+    checks: list[str] | None = None,
+    strict: bool = False,
+    anchor_patterns: list[str] | None = None,
+) -> dict:
+    """Scan a project tree and return ``{"counts": {check: N}, "hits": [...]}``."""
+    selected = checks or list(CHECKS)
+    unknown = [c for c in selected if c not in _DETECTORS]
+    if unknown:
+        raise ValueError(f"unknown checks: {unknown!r}; known: {list(CHECKS)}")
+    files = _collect_markdown_files(root)
+    hits: list[LintIssue] = []
+    for path in files:
+        for check in selected:
+            detector = _DETECTORS[check]
+            if check == "numeric-anchor":
+                hits.extend(detector(path, strict=strict, anchor_patterns=anchor_patterns))
+            else:
+                hits.extend(detector(path, strict=strict))
+    counts: dict[str, int] = {}
+    for hit in hits:
+        counts[hit.check] = counts.get(hit.check, 0) + 1
+    return {"counts": counts, "hits": hits}

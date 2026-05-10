@@ -3,10 +3,12 @@
 from pathlib import Path
 
 from science_tool.prose_lint import (
+    LintIssue,
     detect_bare_author_year,
     detect_frontmatter_inline_gaps,
     detect_numeric_anchor,
     detect_short_form_ids,
+    scan_root,
 )
 
 
@@ -194,3 +196,34 @@ class TestNumericAnchor:
         path = _write(tmp_path, "Result rho = 0.168 (see doc/notes/foo.md).\n")
         issues = detect_numeric_anchor(path, anchor_patterns=["task:", "doc/"])
         assert issues == []
+
+
+class TestScanRoot:
+    def test_scans_doc_tree_with_all_checks(self, tmp_path):
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "a.md").write_text(
+            "# A\n\nAs Brunton 2022 showed, the result rho = 0.168 holds.\n"
+        )
+        (tmp_path / "doc" / "b.md").write_text(
+            "---\nrelated:\n  - task:t050\n---\n# B\n\nNo mention.\n"
+        )
+        result = scan_root(tmp_path)
+        assert result["counts"]["bare-author-year"] == 1
+        assert result["counts"]["numeric-anchor"] >= 1
+        assert result["counts"]["frontmatter-inline-gap"] == 1
+        assert all(isinstance(h, LintIssue) for h in result["hits"])
+
+    def test_filters_by_check(self, tmp_path):
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "a.md").write_text(
+            "# A\n\nBrunton 2022 and rho = 0.168.\n"
+        )
+        result = scan_root(tmp_path, checks=["bare-author-year"])
+        assert "numeric-anchor" not in result["counts"]
+        assert result["counts"]["bare-author-year"] == 1
+
+    def test_skips_non_markdown(self, tmp_path):
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "a.txt").write_text("Brunton 2022\n")
+        result = scan_root(tmp_path)
+        assert result["counts"] == {}
