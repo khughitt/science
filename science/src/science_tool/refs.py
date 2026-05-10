@@ -187,6 +187,37 @@ def _load_project_ids(root: Path) -> set[str]:
     return ids
 
 
+def _load_entity_index(root: Path) -> set[str]:
+    """Return the set of canonical `<kind>:<id>` strings declared in frontmatter.
+
+    Walks the project's markdown tree, parses each file's frontmatter, and
+    collects values from the `id:` field that already include a kind prefix
+    (i.e., match the `<kind>:<slug>` shape with kind in `_LOCAL_ENTITY_KINDS`).
+
+    Used by body-prose scanning (`--include-body`) to validate typed refs.
+    """
+    index: set[str] = set()
+    for path in _collect_markdown_files(root):
+        try:
+            parsed = parse_frontmatter(path)
+        except Exception:  # noqa: BLE001 — defensive; parser is robust.
+            continue
+        if parsed is None:
+            continue
+        fm, _body = parsed
+        if not isinstance(fm, dict):
+            continue
+        raw_id = fm.get("id")
+        if not isinstance(raw_id, str):
+            continue
+        if ":" not in raw_id:
+            continue
+        kind, _, slug = raw_id.partition(":")
+        if kind in _LOCAL_ENTITY_KINDS and slug:
+            index.add(raw_id)
+    return index
+
+
 def _extract_frontmatter_refs(path: Path) -> list[tuple[str, str]]:
     parsed = parse_frontmatter(path)
     if parsed is None:

@@ -983,3 +983,35 @@ def test_check_cli_strict_drops_info_tag() -> None:
         result = runner.invoke(refs_group, ["check", "--root", str(root), "--strict"])
         # Under --strict, the info tag should not appear (severity promoted to warn).
         assert "(info)" not in result.output
+
+
+def test_load_entity_index_collects_kind_id_pairs(tmp_path):
+    """`_load_entity_index` returns the set of <kind>:<id> values discovered in frontmatter."""
+    from science_tool.refs import _load_entity_index
+
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "doc" / "q01.md").write_text(
+        "---\n"
+        "id: question:q01-foo\n"
+        "type: question\n"
+        "---\n"
+        "Body.\n"
+    )
+    (tmp_path / "doc" / "t050.md").write_text(
+        "---\n"
+        "id: task:t050\n"
+        "type: task\n"
+        "---\n"
+        "Body.\n"
+    )
+    (tmp_path / "doc" / "no-id.md").write_text(
+        "---\n"
+        "type: discussion\n"
+        "---\n"
+        "Body.\n"
+    )
+
+    index = _load_entity_index(tmp_path)
+    assert "question:q01-foo" in index
+    assert "task:t050" in index
+    assert len(index) == 2  # no-id.md contributes nothing
