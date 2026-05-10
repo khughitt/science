@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from pydantic import ValidationError
 
 from science_tool.cli import main
 from science_tool.refs import check_refs
+from science_tool.refs_cli import refs_group
 
 
 def _scaffold(root: Path) -> None:
@@ -215,20 +217,46 @@ def test_valid_markdown_link() -> None:
         assert len(link_issues) == 0
 
 
-def test_unverified_markers_tracked() -> None:
-    runner = CliRunner()
-    with runner.isolated_filesystem() as td:
+def test_unverified_and_legacy_needs_citation_tracked() -> None:
+    with tempfile.TemporaryDirectory() as td:
         root = Path(td)
-        _scaffold(root)
-        (root / "doc" / "background" / "topics" / "test.md").write_text(
+        (root / "doc").mkdir()
+        (root / "doc" / "test.md").write_text(
             "# Test\nSome fact [UNVERIFIED] and another [NEEDS CITATION].\n"
         )
         issues = check_refs(root)
         marker_issues = [i for i in issues if i.ref_type == "marker"]
         assert len(marker_issues) == 2
         markers = {i.ref_value for i in marker_issues}
-        assert "[UNVERIFIED]" in markers
-        assert "[NEEDS CITATION]" in markers
+        # Legacy [NEEDS CITATION] is normalized to canonical [MISSING_CITATION].
+        assert markers == {"[UNVERIFIED]", "[MISSING_CITATION]"}
+        # Both default to warn severity.
+        assert {i.severity for i in marker_issues} == {"warn"}
+
+
+def test_speculation_and_inaccessible_default_to_info() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "doc").mkdir()
+        (root / "doc" / "test.md").write_text(
+            "# Test\nMaybe [SPECULATION] and [INACCESSIBLE] paywalled.\n"
+        )
+        issues = check_refs(root)
+        marker_issues = [i for i in issues if i.ref_type == "marker"]
+        severities = {i.ref_value: i.severity for i in marker_issues}
+        assert severities == {"[SPECULATION]": "info", "[INACCESSIBLE]": "info"}
+
+
+def test_backticked_marker_excluded_from_check_refs() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "doc").mkdir()
+        (root / "doc" / "test.md").write_text(
+            "# Test\nUse `[UNVERIFIED]` per convention. Bare [UNVERIFIED] flagged.\n"
+        )
+        issues = check_refs(root)
+        marker_issues = [i for i in issues if i.ref_type == "marker"]
+        assert len(marker_issues) == 1
 
 
 def test_no_bib_file_skips_citation_check() -> None:
@@ -411,7 +439,7 @@ def test_cli_refs_check_json_includes_summary() -> None:
         root = Path(td)
         _scaffold(root)
         (root / "doc" / "background" / "topics" / "test.md").write_text(
-            "# Test\nH99 is broken, [@Nobody2099] is missing, and [NEEDS CITATION].\n",
+            "# Test\nH99 is broken, [@Nobody2099] is missing, and [MISSING_CITATION].\n",
             encoding="utf-8",
         )
 
@@ -434,7 +462,7 @@ def test_cli_refs_check_summary_only_omits_table_details() -> None:
         root = Path(td)
         _scaffold(root)
         (root / "doc" / "background" / "topics" / "test.md").write_text(
-            "# Test\nH99 is broken, [@Nobody2099] is missing, and [NEEDS CITATION].\n",
+            "# Test\nH99 is broken, [@Nobody2099] is missing, and [MISSING_CITATION].\n",
             encoding="utf-8",
         )
 
@@ -456,7 +484,7 @@ def test_cli_refs_check_json_summary_only_omits_details() -> None:
         root = Path(td)
         _scaffold(root)
         (root / "doc" / "background" / "topics" / "test.md").write_text(
-            "# Test\nH99 is broken, [@Nobody2099] is missing, and [NEEDS CITATION].\n",
+            "# Test\nH99 is broken, [@Nobody2099] is missing, and [MISSING_CITATION].\n",
             encoding="utf-8",
         )
 
@@ -904,3 +932,54 @@ def test_unknown_pmid_in_prose_is_flagged() -> None:
         pmid_issues = [i for i in issues if i.ref_type == "pmid"]
         assert len(pmid_issues) == 1
         assert pmid_issues[0].ref_value == "PMID:99999999"
+
+
+def test_legacy_needs_citation_recognized_in_cli_output() -> None:
+    runner = CliRunner()
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "doc").mkdir()
+        (root / "doc" / "test.md").write_text("Old [NEEDS CITATION] in prose.\n")
+        result = runner.invoke(refs_group, ["check", "--root", str(root)])
+        assert "[MISSING_CITATION]" in result.output
+
+
+def test_check_cli_strict_promotes_speculation_to_blocking() -> None:
+    runner = CliRunner()
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "doc").mkdir()
+        (root / "doc" / "test.md").write_text("Just [SPECULATION] here.\n")
+        # Without --strict: SPECULATION is info, exit 0.
+        result = runner.invoke(refs_group, ["check", "--root", str(root)])
+        assert result.exit_code == 0
+        # With --strict: SPECULATION promoted to warn, exit 1.
+        result = runner.invoke(refs_group, ["check", "--root", str(root), "--strict"])
+        assert result.exit_code == 1
+
+
+def test_check_cli_renders_per_token_counts_with_severity_tag() -> None:
+    runner = CliRunner()
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "doc").mkdir()
+        (root / "doc" / "test.md").write_text(
+            "[UNVERIFIED] and [SPECULATION] and [INACCESSIBLE]\n"
+        )
+        result = runner.invoke(refs_group, ["check", "--root", str(root)])
+        assert "[UNVERIFIED]" in result.output
+        assert "[SPECULATION]" in result.output
+        assert "[INACCESSIBLE]" in result.output
+        # Info-severity tokens are tagged.
+        assert "(info)" in result.output
+
+
+def test_check_cli_strict_drops_info_tag() -> None:
+    runner = CliRunner()
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "doc").mkdir()
+        (root / "doc" / "test.md").write_text("[SPECULATION]\n")
+        result = runner.invoke(refs_group, ["check", "--root", str(root), "--strict"])
+        # Under --strict, the info tag should not appear (severity promoted to warn).
+        assert "(info)" not in result.output

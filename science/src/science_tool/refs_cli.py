@@ -53,21 +53,22 @@ def _filter_issues_by_type(issues: list[RefIssue], ref_types: tuple[str, ...]) -
 
 
 def _render_marker_summary(markers: list[RefIssue], *, include_locations: bool) -> None:
-    unverified = [m for m in markers if m.ref_value == "[UNVERIFIED]"]
-    needs_cite = [m for m in markers if m.ref_value == "[NEEDS CITATION]"]
+    by_token: dict[str, list[RefIssue]] = {}
+    for m in markers:
+        by_token.setdefault(m.ref_value, []).append(m)
     click.echo("  Unresolved markers:")
-    if unverified:
+    # Stable display order: warn-severity tokens first, then info, then alpha.
+    ordered = sorted(
+        by_token.items(),
+        key=lambda kv: (kv[1][0].severity != "warn", kv[0]),
+    )
+    for token, hits in ordered:
+        sev_tag = "" if hits[0].severity == "warn" else " (info)"
         if include_locations:
-            locs = ", ".join(f"{m.file}:{m.line}" for m in unverified)
-            click.echo(f"    {len(unverified)}x [UNVERIFIED] ({locs})")
+            locs = ", ".join(f"{m.file}:{m.line}" for m in hits)
+            click.echo(f"    {len(hits)}x {token}{sev_tag} ({locs})")
         else:
-            click.echo(f"    {len(unverified)}x [UNVERIFIED]")
-    if needs_cite:
-        if include_locations:
-            locs = ", ".join(f"{m.file}:{m.line}" for m in needs_cite)
-            click.echo(f"    {len(needs_cite)}x [NEEDS CITATION] ({locs})")
-        else:
-            click.echo(f"    {len(needs_cite)}x [NEEDS CITATION]")
+            click.echo(f"    {len(hits)}x {token}{sev_tag}")
 
 
 @refs_group.command("check")
@@ -100,6 +101,18 @@ def check(
     filtered = _filter_issues_by_type(issues, ref_types)
     broken = [i for i in filtered if i.ref_type != "marker"]
     markers = [i for i in filtered if i.ref_type == "marker"]
+
+    if strict:
+        # Under --strict, info-severity markers (SPECULATION, INACCESSIBLE)
+        # are promoted to warn so they display without the (info) tag and
+        # contribute to the existing strict-exit policy below.
+        from science_tool.markers import severity_for
+
+        for issue in markers:
+            if issue.severity == "info":
+                token = issue.ref_value.strip("[]")
+                issue.severity = severity_for(token, strict=True)
+
     summary = _refs_summary(broken, markers, by_value=by_value)
 
     if output_format == "json":

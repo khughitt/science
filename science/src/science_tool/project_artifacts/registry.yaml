@@ -29,9 +29,15 @@ artifacts:
       requires_clean_worktree: true
       commit_default: true
       transaction_kind: temp_commit
-    version: '2026.05.07.4'
-    current_hash: 517199d70d40317733c4974162cbd0fdf635377ab6129000896b178c78a6584a
+    version: '2026.05.09.2'
+    current_hash: 6f8cf6488014484d2d93f57654d9ff6500d8638bd122c12864da26a4e05608ca
     previous_hashes:
+      - version: '2026.05.09.1'
+        hash: 33e04212c40d4a4c8c1e5864847e3ffec7a52a7a307868dd93dc3d7731985215
+      - version: '2026.05.09.1'
+        hash: cc9e1a0b558a58b6cc728836ac16450d60eecff1fdfef3805dcba08f592a41c4
+      - version: '2026.05.07.4'
+        hash: 517199d70d40317733c4974162cbd0fdf635377ab6129000896b178c78a6584a
       - version: '2026.04.26'
         hash: f4596de3e9b2696066097621d5aef5606f247d144c5530409433427949c830d1
       - version: '2026.04.26.1'

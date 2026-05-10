@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.05.09.1
-# science-managed-source-sha256: 517199d70d40317733c4974162cbd0fdf635377ab6129000896b178c78a6584a
+# science-managed-version: 2026.05.09.2
+# science-managed-source-sha256: 6f8cf6488014484d2d93f57654d9ff6500d8638bd122c12864da26a4e05608ca
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -503,29 +503,30 @@ echo ""
 echo "Checking paper summaries..."
 info "Paper summary structure is checked in $DOC_DIR/background/papers/"
 
-# ─── 8. Unverified/uncited markers ──────────────────────────────
+# ─── 8. Unresolved annotation markers ──────────────────────────────
 echo ""
 echo "Checking for unresolved markers..."
 
-unverified_count=0
-needs_citation_count=0
-
-if [ -d "$DOC_DIR" ]; then
-    unverified_count=$(grep -rc '\[UNVERIFIED\]' "$DOC_DIR/" 2>/dev/null \
-        | awk -F: '{s+=$2} END {print s+0}' || true)
-    needs_citation_count=$(grep -rc '\[NEEDS CITATION\]' "$DOC_DIR/" 2>/dev/null \
-        | awk -F: '{s+=$2} END {print s+0}' || true)
-    # Ensure we have valid integers (awk always outputs via END, || true just suppresses pipefail)
-    unverified_count=${unverified_count:-0}
-    needs_citation_count=${needs_citation_count:-0}
-fi
-
-if [ "$unverified_count" -gt 0 ]; then
-    warn "${unverified_count} [UNVERIFIED] marker(s) found in documents"
-fi
-
-if [ "$needs_citation_count" -gt 0 ]; then
-    warn "${needs_citation_count} [NEEDS CITATION] marker(s) found in documents"
+if command -v science >/dev/null 2>&1 && [ -d "$DOC_DIR" ]; then
+    SCIENCE_MARKERS_FLAGS=()
+    if [ "$STRICT" -eq 1 ]; then
+        SCIENCE_MARKERS_FLAGS+=("--strict")
+    fi
+    markers_json=$(science markers scan --root . --format json "${SCIENCE_MARKERS_FLAGS[@]}" 2>/dev/null || echo '{"counts":{},"hits":[]}')
+    while IFS=$'\t' read -r token count severity; do
+        [ -z "$token" ] && continue
+        if [ "$severity" = "warn" ] && [ "$count" -gt 0 ]; then
+            warn "${count} [${token}] marker(s) found in documents"
+        fi
+    done < <(printf '%s' "$markers_json" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+sev = {}
+for h in data["hits"]:
+    sev.setdefault(h["token"], h["severity"])
+for token, count in sorted(data["counts"].items()):
+    print(f"{token}\t{count}\t{sev.get(token, \"warn\")}")
+')
 fi
 
 # ─── 9. Research gap analysis conformance ────────────────────────

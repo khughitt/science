@@ -15,6 +15,11 @@ from science_model.frontmatter import parse_frontmatter
 
 from science_tool.addressing import classify_entity_ref
 from science_tool.bibliography import bibliography_key_from_reference, load_bib_keys
+from science_tool.markdown_utils import (
+    frontmatter_line_numbers as _frontmatter_line_numbers,
+    is_fence_line as _is_fence_line,
+    strip_inline_code as _strip_inline_code,
+)
 from science_tool.project_config import load_project_config
 
 
@@ -24,20 +29,17 @@ class RefIssue:
 
     file: str
     line: int
-    ref_type: str  # "hypothesis" | "citation" | "link" | "marker"
+    ref_type: str  # "hypothesis" | "citation" | "link" | "marker" | …
     ref_value: str
     message: str
     suggestion: str | None = None
+    severity: str = "warn"  # "warn" | "info"
 
 
 # Patterns
 _HYPOTHESIS_RE = re.compile(r"\bH(\d{2,})\b")
 _CITATION_RE = re.compile(r"\[@([^\]]+)\]")
 _LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
-_UNVERIFIED_RE = re.compile(r"\[UNVERIFIED\]")
-_NEEDS_CITATION_RE = re.compile(r"\[NEEDS CITATION\]")
-_FENCE_RE = re.compile(r"^\s*(```|~~~)")
-_INLINE_CODE_RE = re.compile(r"`[^`]*`")
 _BIBLIOGRAPHY_CITATION_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]*[0-9][A-Za-z0-9_.-]*$")
 # DOIs in prose: ``10.<registrant>/<suffix>``, optionally preceded by ``doi:`` or
 # a ``https://doi.org/`` URL prefix. The character class for the suffix follows
@@ -200,19 +202,6 @@ def _extract_frontmatter_refs(path: Path) -> list[tuple[str, str]]:
     return refs
 
 
-def _frontmatter_line_numbers(path: Path) -> set[int]:
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeDecodeError):
-        return set()
-    if not lines or lines[0].strip() != "---":
-        return set()
-    for index, line in enumerate(lines[1:], start=2):
-        if line.strip() == "---":
-            return set(range(1, index + 1))
-    return set()
-
-
 def _load_bib_keys(root: Path) -> set[str]:
     """Extract all BibTeX entry keys from references.bib."""
     return load_bib_keys(root)
@@ -280,14 +269,6 @@ def _load_pmid_corpus(root: Path) -> set[str]:
 def _is_heading_line(line: str) -> bool:
     """Check if a line is a markdown heading."""
     return line.lstrip().startswith("#")
-
-
-def _is_fence_line(line: str) -> bool:
-    return _FENCE_RE.match(line) is not None
-
-
-def _strip_inline_code(line: str) -> str:
-    return _INLINE_CODE_RE.sub("", line)
 
 
 def _looks_like_bibtex_citation_key(key: str) -> bool:
@@ -560,26 +541,21 @@ def check_refs(root: Path) -> list[RefIssue]:
                             )
                         )
 
-            # --- Unresolved markers ---
-            for m in _UNVERIFIED_RE.finditer(scan_line):
-                issues.append(
-                    RefIssue(
-                        file=rel_path,
-                        line=line_num,
-                        ref_type="marker",
-                        ref_value="[UNVERIFIED]",
-                        message="Unresolved [UNVERIFIED] marker",
-                    )
-                )
-            for m in _NEEDS_CITATION_RE.finditer(scan_line):
-                issues.append(
-                    RefIssue(
-                        file=rel_path,
-                        line=line_num,
-                        ref_type="marker",
-                        ref_value="[NEEDS CITATION]",
-                        message="Unresolved [NEEDS CITATION] marker",
-                    )
-                )
 
+    from science_tool.markers import scan_markers
+
+    for hit in scan_markers(root, strict=False):
+        rel = str(hit.file.relative_to(root))
+        token_label = f"[{hit.token}]"
+        prefix = "Legacy " if hit.legacy else ""
+        issues.append(
+            RefIssue(
+                file=rel,
+                line=hit.line,
+                ref_type="marker",
+                ref_value=token_label,
+                message=f"{prefix}Unresolved {token_label} marker",
+                severity=hit.severity,
+            )
+        )
     return issues
