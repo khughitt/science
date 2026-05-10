@@ -41,9 +41,20 @@ prose_lint:
     - "task:"
     - "pipeline/"
     - "\\[@"
+  short_form_ids_deny:
+    - "D1"   # cyclin D1 — biology shorthand, not a project entity ref
+    - "H3"   # histone H3
+    - "T1"   # T1-weighted MRI
 ```
 
 Defaults: all four checks enabled; `anchor_patterns` defaults to `["task:", "pipeline/", "\\[@", "data/", "scripts/"]`.
+
+`short_form_ids_deny` is a list of token strings (e.g., `D1`, `H3`, `t1`)
+that the `short-form-ids` detector will skip. Useful for biology-heavy
+projects where common shorthand collides with the canonical short-form
+regex `\b([qQhHtTdDiI])(\d{1,4})\b`. See
+[`docs/audits/2026-05-10-prose-lint-baselines.md`](../audits/2026-05-10-prose-lint-baselines.md)
+for diagnostic guidance on whether your project actually needs a deny-list.
 
 ## Tooling
 
@@ -66,3 +77,10 @@ broader "load-bearing claim has no anchor") are handled by the
 [annotation-token vocabulary](annotation-tokens.md): an LLM auditor or
 human writer marks them with `[SPECULATION]` or `[MISSING_CITATION]`, and
 `science markers scan` counts them.
+
+## Related: `science refs check --include-body`
+
+Where prose-lint detects authoring patterns ("you wrote a short-form ID;
+canonical form is `<kind>:<id>`"), `science refs check --include-body`
+detects unresolved typed refs in body prose ("you wrote `task:t999` but no
+project file declares that `id:`"). The two are complementary; run both.
