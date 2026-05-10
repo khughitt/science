@@ -1229,3 +1229,65 @@ class TestEntityIndexSourceSelection:
         captured = capsys.readouterr()
         assert "knowledge/graph.trig" in captured.err
         assert "frontmatter" in captured.err.lower()
+
+
+class TestRefsScanRoots:
+    """`refs.scan_roots` config extends the default scan beyond doc/specs."""
+
+    def test_extra_dir_scanned_when_configured(self, tmp_path):
+        """A `tasks/` ref shows up only when `scan_roots: [tasks]` is configured."""
+        from science_tool.refs import check_refs
+
+        (tmp_path / "science.yaml").write_text(
+            "name: test-project\nprofile: research\n"
+            "refs:\n  scan_roots: [tasks]\n",
+            encoding="utf-8",
+        )
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir()
+        (tasks_dir / "active.md").write_text(
+            "# Active\n\nReferences task:t999 (does not exist).\n",
+            encoding="utf-8",
+        )
+        issues = check_refs(tmp_path, include_body=True)
+        body_issues = [i for i in issues if i.ref_type == "body-entity-ref"]
+        assert any(i.ref_value == "task:t999" for i in body_issues), (
+            f"Expected task:t999 issue from tasks/active.md; got {body_issues}"
+        )
+
+    def test_root_markdown_scanned_when_dot_in_scan_roots(self, tmp_path):
+        """`scan_roots: ['.']` includes root-level .md files."""
+        from science_tool.refs import check_refs
+
+        (tmp_path / "science.yaml").write_text(
+            "name: test-project\nprofile: research\n"
+            "refs:\n  scan_roots: ['.']\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "README.md").write_text(
+            "# Project\n\nSee task:t999 (broken).\n",
+            encoding="utf-8",
+        )
+        issues = check_refs(tmp_path, include_body=True)
+        body_issues = [i for i in issues if i.ref_type == "body-entity-ref"]
+        assert any(
+            i.file == "README.md" and i.ref_value == "task:t999"
+            for i in body_issues
+        ), f"Expected README.md/task:t999 issue; got {body_issues}"
+
+    def test_extra_dir_not_scanned_by_default(self, tmp_path):
+        """Without `scan_roots`, tasks/ refs are NOT detected — confirming default."""
+        from science_tool.refs import check_refs
+
+        (tmp_path / "science.yaml").write_text(
+            "name: test-project\nprofile: research\n", encoding="utf-8"
+        )
+        tasks_dir = tmp_path / "tasks"
+        tasks_dir.mkdir()
+        (tasks_dir / "active.md").write_text(
+            "# Active\n\nReferences task:t999.\n",
+            encoding="utf-8",
+        )
+        issues = check_refs(tmp_path, include_body=True)
+        body_issues = [i for i in issues if i.ref_type == "body-entity-ref"]
+        assert not any(i.ref_value == "task:t999" for i in body_issues)

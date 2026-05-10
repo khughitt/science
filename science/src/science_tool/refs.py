@@ -114,8 +114,15 @@ _TYPED_ENTITY_REF_RE = re.compile(
 )
 
 
-def _collect_markdown_files(root: Path) -> list[Path]:
-    """Collect all markdown files to scan."""
+def _collect_markdown_files(
+    root: Path, *, extra_roots: list[str] | None = None
+) -> list[Path]:
+    """Collect all markdown files to scan.
+
+    Defaults to `paths.doc_dir` + `paths.specs_dir`. `extra_roots` (from
+    `RefsConfig.scan_roots`) appends additional dirs; the special value `"."`
+    means root-level `.md` files only (non-recursive).
+    """
     try:
         from science_tool.paths import resolve_paths
 
@@ -134,7 +141,22 @@ def _collect_markdown_files(root: Path) -> list[Path]:
         f = root / scan_file
         if f.is_file():
             files.append(f)
-    return sorted(files)
+
+    # Honor extra scan roots from refs.scan_roots config.
+    for extra in extra_roots or []:
+        if extra == ".":
+            for p in root.glob("*.md"):
+                if p.is_file():
+                    files.append(p)
+        else:
+            d = root / extra
+            if d.is_dir():
+                for p in d.rglob("*.md"):
+                    if not any(part in _SKIP_DIRS for part in p.parts):
+                        files.append(p)
+
+    # Deduplicate (a file may already be counted via _SCAN_FILES or root .md sweep).
+    return sorted(set(files))
 
 
 def _load_hypothesis_ids(root: Path) -> dict[str, Path]:
@@ -475,8 +497,9 @@ def _hypothesis_aliases_from_path(file_path: Path) -> set[str]:
 def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
     """Run all reference checks and return issues found."""
     issues: list[RefIssue] = []
-    files = _collect_markdown_files(root)
     refs_config = _load_refs_config(root)
+    extra_roots = refs_config.scan_roots if refs_config is not None else None
+    files = _collect_markdown_files(root, extra_roots=extra_roots)
     hyp_ids = _load_hypothesis_ids(root)
     bib_keys = _load_bib_keys(root)
     entity_index = _resolve_entity_index(root, refs_config) if include_body else set()
