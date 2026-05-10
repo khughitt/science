@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from science_tool.prose_lint import detect_bare_author_year
+from science_tool.prose_lint import detect_bare_author_year, detect_short_form_ids
 
 
 def _write(tmp_path: Path, body: str, frontmatter: str = "") -> Path:
@@ -55,3 +55,50 @@ class TestBareAuthorYear:
             "bare author-year mention 'Brunton 2022' has no adjacent [@key]",
             "bare author-year mention 'Gilpin 2021' has no adjacent [@key]",
         }
+
+
+class TestShortFormIds:
+    def test_flags_bare_q_number(self, tmp_path):
+        path = _write(tmp_path, "See Q1 for the framing question.\n")
+        issues = detect_short_form_ids(path)
+        assert len(issues) == 1
+        assert "Q1" in issues[0].message
+        assert "question:" in issues[0].message  # suggestion includes canonical kind
+
+    def test_flags_bare_t_number(self, tmp_path):
+        path = _write(tmp_path, "Implemented in t088.\n")
+        issues = detect_short_form_ids(path)
+        assert len(issues) == 1
+        assert "t088" in issues[0].message
+        assert "task:" in issues[0].message
+
+    def test_no_flag_canonical_form(self, tmp_path):
+        path = _write(tmp_path, "Implemented in task:t088.\n")
+        assert detect_short_form_ids(path) == []
+
+    def test_no_flag_inside_code(self, tmp_path):
+        path = _write(tmp_path, "Refer to `Q1` as a placeholder.\n")
+        assert detect_short_form_ids(path) == []
+
+    def test_no_flag_in_task_list_header(self, tmp_path):
+        # tasks/active.md uses `## [t088] Title` as its canonical heading shape.
+        path = _write(tmp_path, "## [t088] Some task title\n\nDescription.\n")
+        assert detect_short_form_ids(path) == []
+
+    def test_flags_multiple_kinds(self, tmp_path):
+        path = _write(tmp_path, "Per Q1 and h05, refer to t050.\n")
+        issues = detect_short_form_ids(path)
+        # Q1 -> question, h05 -> hypothesis, t050 -> task
+        assert len(issues) == 3
+        kinds_in_messages = {
+            "question:" if "question:" in i.message else
+            "hypothesis:" if "hypothesis:" in i.message else
+            "task:"
+            for i in issues
+        }
+        assert kinds_in_messages == {"question:", "hypothesis:", "task:"}
+
+    def test_no_flag_on_random_caps(self, tmp_path):
+        # "X1" is a generic identifier, not a known short form.
+        path = _write(tmp_path, "Variable X1 holds the result.\n")
+        assert detect_short_form_ids(path) == []

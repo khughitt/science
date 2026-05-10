@@ -57,6 +57,28 @@ _BARE_AUTHOR_YEAR_RE = re.compile(
 # Anchor: `[@key]` immediately following or preceding the match (within 30 chars)
 _NEARBY_BIBTEX_RE = re.compile(r"\[@[A-Za-z][A-Za-z0-9_-]*\]")
 
+# Short-form prefix → canonical kind mapping. Lowercase letter prefixes pulled
+# from refs._LOCAL_ENTITY_KINDS first letters where a unique mapping exists;
+# uppercase variants (Q1, T088) are common ad-hoc shorthand.
+_SHORT_FORM_KIND_MAP: dict[str, str] = {
+    "q": "question",
+    "Q": "question",
+    "h": "hypothesis",
+    "H": "hypothesis",
+    "t": "task",
+    "T": "task",
+    "d": "discussion",
+    "D": "discussion",
+    "i": "interpretation",
+    "I": "interpretation",
+}
+_SHORT_FORM_RE = re.compile(r"\b([qQhHtTdDiI])(\d{1,4})\b")
+# Canonical form check: `<kind>:<short>` should NOT be flagged.
+_CANONICAL_PREFIX_RE = re.compile(r"\b(question|hypothesis|task|discussion|interpretation):")
+# Task-list heading shape: `## [t088] Title`. Don't flag the bracketed ID
+# inside such a header — it IS the canonical form for that file convention.
+_TASK_HEADING_RE = re.compile(r"^\s*##+\s*\[[a-zA-Z]\d+\]")
+
 
 def detect_bare_author_year(path: Path, *, strict: bool = False) -> list[LintIssue]:
     """Detect `<Capitalized> <Year>` mentions in body prose without [@key]."""
@@ -92,6 +114,48 @@ def detect_bare_author_year(path: Path, *, strict: bool = False) -> list[LintIss
                     check="bare-author-year",
                     severity=severity_for("bare-author-year", strict=strict),
                     message=f"bare author-year mention '{mention}' has no adjacent [@key]",
+                )
+            )
+    return issues
+
+
+def detect_short_form_ids(path: Path, *, strict: bool = False) -> list[LintIssue]:
+    """Detect bare `Q1` / `t088` style refs that should be `question:q01-…` etc."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    _, body_start = parse_frontmatter(path)
+    lines = text.splitlines()
+    issues: list[LintIssue] = []
+    in_fence = False
+    for lineno_zero, raw_line in enumerate(lines):
+        lineno = lineno_zero + 1
+        if lineno < body_start:
+            continue
+        if is_fence_line(raw_line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if _TASK_HEADING_RE.match(raw_line):
+            continue
+        line = strip_inline_code(raw_line)
+        for match in _SHORT_FORM_RE.finditer(line):
+            # Skip if preceded by `<kind>:` — already canonical.
+            preceding = line[max(0, match.start() - 20) : match.start()]
+            if _CANONICAL_PREFIX_RE.search(preceding):
+                continue
+            short = match.group(0)
+            kind = _SHORT_FORM_KIND_MAP[match.group(1)]
+            issues.append(
+                LintIssue(
+                    file=path,
+                    line=lineno,
+                    col=match.start() + 1,
+                    check="short-form-ids",
+                    severity=severity_for("short-form-ids", strict=strict),
+                    message=f"short-form ID '{short}' should be canonical '{kind}:…'",
                 )
             )
     return issues
