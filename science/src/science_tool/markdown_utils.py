@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import yaml
+
 _FENCE_RE = re.compile(r"^\s*(```|~~~)")
 _INLINE_CODE_RE = re.compile(r"`[^`]*`")
 
@@ -44,3 +46,29 @@ def frontmatter_line_numbers(path: Path) -> set[int]:
         if line.strip() == "---":
             return set(range(1, index + 1))
     return set()
+
+
+def parse_frontmatter(path: Path) -> tuple[dict, int]:
+    """Return ``(frontmatter_data, body_start_line)`` for a markdown file.
+
+    `body_start_line` is the 1-based line number of the first body line
+    (or 1 if the file has no parseable frontmatter).
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ({}, 1)
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return ({}, 1)
+    for index, line in enumerate(lines[1:], start=2):
+        if line.strip() == "---":
+            yaml_block = "\n".join(lines[1 : index - 1])
+            try:
+                data = yaml.safe_load(yaml_block) or {}
+            except yaml.YAMLError:
+                return ({}, 1)
+            if not isinstance(data, dict):
+                return ({}, 1)
+            return (data, index + 1)
+    return ({}, 1)
