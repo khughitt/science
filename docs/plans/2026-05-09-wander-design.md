@@ -18,7 +18,8 @@ read-only; `--apply` may create tasks but never edits prose or code.
 
 - **Continuous curation** of project entities at low cost per session.
 - **Serendipity:** counter local optima and attention bias by giving every
-  entity a non-zero chance of being visited.
+  *epistemic* entity (those with `sci:freshnessState`) a non-zero chance of
+  being visited each walk.
 - **Re-assessment:** revisit older ideas in the context of current
   understanding.
 
@@ -28,15 +29,22 @@ read-only; `--apply` may create tasks but never edits prose or code.
 - Automatic 30-day pruning enforcement (only flagging is in scope).
 - Walking source code or files outside `knowledge/graph.trig`.
 - Learning sampling weights from past walks.
+- Sampling **non-epistemic** entities (datasets, code modules, raw notes,
+  anything without `sci:freshnessState`). The existing attention machinery in
+  `science_tool.graph.attention` is explicitly epistemic, and v1 inherits that
+  scope. Broadening the candidate set is future work — see §9.
 
 ## 2. Scope and constraints
 
-Sampling is bounded by what is materialized into `knowledge/graph.trig`. If a
-project has not built its graph, `science wander` errors with a hint to run
-`science create-graph` first. Code-level review only happens when an entity
-explicitly references implementation (e.g., a hypothesis pointing at a
-pipeline, a dataset with a loader); the walk does not go hunting through `src/`
-for entities that are not grounded there.
+Sampling is bounded by epistemic entities materialized into
+`knowledge/graph.trig` (entities carrying `sci:freshnessState`). If
+`knowledge/graph.trig` is missing, `science wander` errors with a hint to run
+`science graph build` first (the existing CLI command — `/science:create-graph`
+is the slash-command analog, but the CLI surface is what the error message
+points at). Code-level review only happens when an entity explicitly references
+implementation (e.g., a hypothesis pointing at a pipeline, a dataset with a
+loader); the walk does not go hunting through `src/` for entities that are not
+grounded there.
 
 ## 3. CLI surface
 
@@ -60,22 +68,37 @@ Options:
 
 Behavior:
 
-1. Resolve graph path; error with actionable message if missing.
-2. Call `query_attention_sample(...)` from `science_tool.graph.attention`
-   directly — same package, no subprocess.
-3. For each sampled entity, assemble a small **context bundle**:
-   - id, kind, label, weight components (freshness, days since last review,
-     support/dispute counts);
-   - file path on disk if resolvable from the entity provider;
-   - last-modified timestamp of that file;
-   - direct neighbors in the graph (incoming + outgoing `bears_on` and a small
-     fixed cap on other relation types — 10 each direction).
+1. Resolve graph path; error with actionable message if missing
+   (`run \`science graph build\` first`).
+2. Load the dataset and call `compute_attention_candidates(...)` followed by
+   `weighted_sample_without_replacement(...)` — both already public in
+   `science_tool.graph.attention`. **Do not** call the higher-level
+   `query_attention_sample`, which discards the URI and raw weight components
+   we need for the context bundle. No changes to `attention.py` are required.
+3. For each sampled entity, assemble a **context bundle** by combining the
+   `AttentionCandidate` fields (id, uri, kind, label, raw weight components)
+   with additional lookups from the same dataset and from disk:
+   - **From the candidate:** id, uri, kind, label, freshness state, weight,
+     and the full `components` mapping (incoming_bears_on,
+     days_since_last_review, support_count, dispute_count, etc.).
+   - **From the graph (re-query the loaded dataset):** direct neighbors —
+     incoming + outgoing `sci:bearsOn` (uncapped) and up to 10 each direction
+     for any other predicate; created date (`dcterms:created` or
+     `sci:created` if present); active references from tasks/hypotheses (any
+     subject with kind in `{task, hypothesis}` whose object is this entity).
+   - **From disk:** source file path resolved by mapping the entity's URI
+     through the existing `entity_providers` registry; `mtime` of that file;
+     content length in characters. If no source path resolves, omit the
+     filesystem fields rather than failing.
 4. In `markdown` mode, write a **report skeleton** at `--out`: the report
    template from §6 with frontmatter and the **Sample** and **Per-entity
    review** scaffolding pre-filled with sampled rows and context bundles. The
-   review prose, pairwise, prune, and spawned-tasks sections are present as
-   empty headings, ready for the agent to fill in. In `json` mode, emit the
-   raw context bundles to stdout for programmatic consumers.
+   per-entity review section embeds the context bundle (label, weight
+   breakdown, neighbors, created date, file path, mtime, length) as a small
+   block under each entity heading, so the agent can read it without
+   re-querying. The review prose, pairwise, prune, and spawned-tasks sections
+   are present as empty headings, ready for the agent to fill in. In `json`
+   mode, emit the raw context bundles to stdout for programmatic consumers.
 
 The slash command (next section) runs `science wander` to produce the
 skeleton, then fills it in *in place* — there is exactly one walk file per
@@ -85,18 +108,20 @@ run.
 
 `commands/wander.md` is the agent loop. It:
 
-1. Generates a walk path `doc/meta/walks/walk-YYYY-MM-DD-HHMM.md` and runs
-   `science wander --format markdown --out <walk-path>` to materialize the
-   report skeleton.
-2. Reads the skeleton, including each entity's context bundle.
-3. Performs the review loop (§5).
-4. Edits the same file in place, filling in the empty sections (per-entity
+1. Parses `$ARGUMENTS` for `--apply` (consumed by the slash command itself)
+   and **forwards every other flag verbatim** to `science wander` —
+   specifically `--n`, `--seed`, `--kind`, `--epsilon`, `--graph-path`. This
+   keeps `/wander` and `science wander` reproducible and filterable in the
+   same ways; nothing diverges silently.
+2. Generates a walk path `doc/meta/walks/walk-YYYY-MM-DD-HHMM.md` and runs
+   `science wander --format markdown --out <walk-path> <forwarded-flags>`
+   to materialize the report skeleton.
+3. Reads the skeleton, including each entity's context bundle.
+4. Performs the review loop (§5).
+5. Edits the same file in place, filling in the empty sections (per-entity
    gaps, pairwise connections, prune candidates, spawned tasks).
-5. If `--apply` is in `$ARGUMENTS`, may invoke `science tasks add` per §7
-   and append the resulting task IDs under "Spawned tasks".
-
-The slash command parses `$ARGUMENTS` for the same flag surface as the CLI,
-plus `--apply`.
+6. If `--apply` was passed, may invoke `science tasks add` per §7 and append
+   the resulting task IDs under "Spawned tasks".
 
 ## 5. Agent loop
 
@@ -133,15 +158,25 @@ for the DAG, etc. **Do not invent connections to fill the section.**
 
 Flag an entity as a prune candidate **only if all four hold**:
 
-1. Created more than 60 days ago.
-2. Zero incoming `bears_on` edges in the graph.
-3. Not referenced by any active task or hypothesis.
-4. Content under approximately 500 characters, **or** unchanged since
-   creation.
+1. **Created more than 60 days ago.** Source: `dcterms:created` /
+   `sci:created` in the graph if present; otherwise fall back to the
+   first-commit date for the entity's source file via
+   `git log --diff-filter=A --format=%aI -- <path>`; otherwise file `mtime` as
+   a last resort.
+2. **Zero incoming `sci:bearsOn` edges in the graph.** Source: context
+   bundle's neighbors block.
+3. **Not referenced by any active task or hypothesis.** Source: context
+   bundle's "active references" block (subjects of kind `task` or
+   `hypothesis` whose object is this entity). "Active" excludes archived /
+   completed tasks.
+4. **Content under approximately 500 characters, or unchanged since
+   creation.** Source: file length from the context bundle; "unchanged since
+   creation" means git shows only the initial commit for the file.
 
-Single-criterion flagging will produce too much noise; the conjunction is
-deliberate. Flagging is purely advisory in v1 — there is no automatic
-archival.
+All four signals are pre-computed by `science wander` and embedded in the
+context bundle, so the agent never has to re-derive them. Single-criterion
+flagging will produce too much noise; the conjunction is deliberate. Flagging
+is purely advisory in v1 — there is no automatic archival.
 
 ## 6. Walk report template
 
@@ -200,17 +235,26 @@ reference older ones. The location `doc/meta/walks/` parallels the existing
 
 ## 7. `--apply` mode
 
-Without `--apply`: pure prose report. No file edits, no task creation.
+The walk report itself is **always** written and edited in place — that is the
+output of the command, not a side effect. The `--apply` distinction governs
+side effects on **everything else** in the project: source prose, code,
+graph/DAG, task list, archives.
 
-With `--apply`, the agent may make exactly one kind of side effect:
+Without `--apply`:
+
+- Walk file at `doc/meta/walks/walk-<id>.md`: **written and edited in place**
+  (skeleton by `science wander`, prose by the agent loop).
+- Everything else: **untouched.** No source-prose edits anywhere in `doc/`,
+  no code edits, no DAG edits, no task creation, no archival.
+
+With `--apply`, exactly one additional side effect is permitted:
 
 - `science tasks add` — for either:
   - "investigate connection X↔Y" findings the agent judges worth tracking;
   - "review for deprecation: <stub-entity>" tasks, with a 30-day reconsider
     date in the body.
 
-No prose edits. No DAG edits. No archival.
-
+Even with `--apply`: still no source-prose edits, no DAG edits, no archival.
 Tasks created get a `source: wander/<walk_id>` marker in their description so
 they remain traceable back to the walk that spawned them.
 
@@ -222,17 +266,36 @@ Following the existing pattern under `tests/`:
   - Returns expected JSON shape given a fixture graph.
   - Respects `--seed` for reproducibility (same seed → same sample).
   - Respects `--n` and `--kind` filters.
-  - Errors with an actionable message when `graph.trig` is missing.
-  - Markdown output is well-formed (frontmatter parses, table renders).
+  - Errors with the documented "run `science graph build`" message when
+    `graph.trig` is missing.
+  - Markdown skeleton is well-formed (frontmatter parses, sample table
+    renders, all required empty section headings present).
+- Unit tests for context-bundle assembly:
+  - Given a fixture dataset, the bundle for a sampled entity contains the
+    expected URI, raw weight components, neighbors (incoming + outgoing
+    `sci:bearsOn` plus capped other-predicate counts), created date (with
+    fallback chain: graph → git first-commit → mtime), and active
+    task/hypothesis references.
+  - When no source path resolves, filesystem fields (path, mtime, length)
+    are omitted and the bundle is still well-formed.
+  - All four stub-smell signals are present in the bundle as discrete
+    boolean/numeric fields, so neither the agent nor a downstream tool has
+    to recompute them.
 - Integration test:
-  - End-to-end `science wander --format markdown --seed 42` against a small
-    fixture project produces a prep doc whose frontmatter matches the
-    sampled entities.
+  - End-to-end `science wander --format markdown --seed 42 --out <tmp>`
+    against the fixture project produces a skeleton whose frontmatter
+    `sampled` list matches the sample drawn for that seed.
 - No agent-loop tests; that path is exercised by interactive use of the
   slash command.
 
 ## 9. Future work (explicitly deferred)
 
+- **Broaden the candidate set beyond epistemic entities.** v1 inherits the
+  freshness-state filter from `compute_attention_candidates`. Extending to
+  datasets, code modules, raw notes, and other non-epistemic entities
+  requires defining default weights for them (they have no freshness state,
+  no support/dispute counts, etc.). Worth doing only after v1 reveals which
+  entity classes are actually under-attended.
 - **Pruning enforcement.** Once enough stub-flag tasks accumulate, design a
   `science prune` command that finds tasks flagged 30+ days ago whose targets
   remain unused, and offers archival.
