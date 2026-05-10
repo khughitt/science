@@ -1152,3 +1152,80 @@ def test_refs_check_include_body_flag_emits_typed_ref_issues(tmp_path):
     types_yes = {h["type"] for h in issues_yes}
     assert "body-entity-ref" not in types_no
     assert "body-entity-ref" in types_yes
+
+
+class TestEntityIndexSourceSelection:
+    """`check_refs` honors `refs.entity_index_source` from science.yaml."""
+
+    def test_graph_source_uses_trig_file(self, tmp_path):
+        """When configured to `knowledge_graph`, refs in graph.trig are accepted
+        even when missing from frontmatter `id:` index."""
+        from science_tool.refs import check_refs
+
+        (tmp_path / "science.yaml").write_text(
+            "name: test-project\nprofile: research\n"
+            "refs:\n  entity_index_source: knowledge_graph\n",
+            encoding="utf-8",
+        )
+        knowledge_dir = tmp_path / "knowledge"
+        knowledge_dir.mkdir()
+        (knowledge_dir / "graph.trig").write_text(
+            '<x> schema:identifier "task:t999" .\n', encoding="utf-8"
+        )
+        doc_dir = tmp_path / "doc"
+        doc_dir.mkdir()
+        # Body ref to task:t999 — exists in graph but no markdown file with id: task:t999.
+        (doc_dir / "note.md").write_text(
+            "---\nid: discussion:2026-05-10-note\n---\n\nReferences task:t999 in body.\n",
+            encoding="utf-8",
+        )
+        issues = check_refs(tmp_path, include_body=True)
+        body_issues = [i for i in issues if i.ref_type == "body-entity-ref"]
+        assert body_issues == [], f"Expected no body-entity-ref issues; got {body_issues}"
+
+    def test_frontmatter_source_default_ignores_graph(self, tmp_path):
+        """Default `frontmatter` source ignores graph.trig — same ref reports broken."""
+        from science_tool.refs import check_refs
+
+        (tmp_path / "science.yaml").write_text(
+            "name: test-project\nprofile: research\n", encoding="utf-8"
+        )
+        knowledge_dir = tmp_path / "knowledge"
+        knowledge_dir.mkdir()
+        (knowledge_dir / "graph.trig").write_text(
+            '<x> schema:identifier "task:t999" .\n', encoding="utf-8"
+        )
+        doc_dir = tmp_path / "doc"
+        doc_dir.mkdir()
+        (doc_dir / "note.md").write_text(
+            "---\nid: discussion:2026-05-10-note\n---\n\nReferences task:t999 in body.\n",
+            encoding="utf-8",
+        )
+        issues = check_refs(tmp_path, include_body=True)
+        body_issues = [i for i in issues if i.ref_type == "body-entity-ref"]
+        assert any(i.ref_value == "task:t999" for i in body_issues)
+
+    def test_graph_source_falls_back_when_trig_missing(self, tmp_path, capsys):
+        """Configured `knowledge_graph` with missing trig falls back to frontmatter
+        with a stderr warning."""
+        from science_tool.refs import check_refs
+
+        (tmp_path / "science.yaml").write_text(
+            "name: test-project\nprofile: research\n"
+            "refs:\n  entity_index_source: knowledge_graph\n",
+            encoding="utf-8",
+        )
+        # No knowledge/graph.trig file exists.
+        doc_dir = tmp_path / "doc"
+        doc_dir.mkdir()
+        (doc_dir / "note.md").write_text(
+            "---\nid: discussion:2026-05-10-note\n---\n\nReferences task:t999 in body.\n",
+            encoding="utf-8",
+        )
+        issues = check_refs(tmp_path, include_body=True)
+        # Should report task:t999 as broken (frontmatter fallback, no file with that id).
+        body_issues = [i for i in issues if i.ref_type == "body-entity-ref"]
+        assert any(i.ref_value == "task:t999" for i in body_issues)
+        captured = capsys.readouterr()
+        assert "knowledge/graph.trig" in captured.err
+        assert "frontmatter" in captured.err.lower()

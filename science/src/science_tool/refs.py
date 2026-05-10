@@ -252,6 +252,43 @@ def _load_entity_index_from_graph(root: Path) -> set[str]:
     return index
 
 
+def _load_refs_config(root: Path):
+    """Load project's RefsConfig, returning None on any error (defensive)."""
+    try:
+        from science_tool.project_config import load_project_config
+
+        return load_project_config(root).refs
+    except Exception:  # noqa: BLE001 — defensive; missing/malformed config tolerated.
+        return None
+
+
+def _resolve_entity_index(root: Path, refs_config) -> set[str]:
+    """Choose entity-index loader based on configured truth source.
+
+    Falls back to frontmatter with a stderr warning when `knowledge_graph`
+    is configured but the trig file is missing.
+    """
+    import sys
+
+    from science_tool.project_config import EntityIndexSource
+
+    source = (
+        refs_config.entity_index_source
+        if refs_config is not None
+        else EntityIndexSource.FRONTMATTER
+    )
+    if source == EntityIndexSource.KNOWLEDGE_GRAPH:
+        index = _load_entity_index_from_graph(root)
+        if index:
+            return index
+        print(
+            "[refs] knowledge/graph.trig not found or empty; "
+            "falling back to frontmatter `id:` sweep. Run `science graph build` first.",
+            file=sys.stderr,
+        )
+    return _load_entity_index(root)
+
+
 def _scan_body_typed_refs(
     file_path: Path,
     rel_path: str,
@@ -439,9 +476,10 @@ def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
     """Run all reference checks and return issues found."""
     issues: list[RefIssue] = []
     files = _collect_markdown_files(root)
+    refs_config = _load_refs_config(root)
     hyp_ids = _load_hypothesis_ids(root)
     bib_keys = _load_bib_keys(root)
-    entity_index = _load_entity_index(root) if include_body else set()
+    entity_index = _resolve_entity_index(root, refs_config) if include_body else set()
     task_ids = _load_task_ids(root)
     project_ids = _load_project_ids(root)
     doi_corpus = _load_doi_corpus(root)
