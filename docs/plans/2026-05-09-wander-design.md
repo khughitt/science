@@ -86,10 +86,13 @@ Behavior:
      for any other predicate; created date (`dcterms:created` or
      `sci:created` if present); active references from tasks/hypotheses (any
      subject with kind in `{task, hypothesis}` whose object is this entity).
-   - **From disk:** source file path resolved by mapping the entity's URI
-     through the existing `entity_providers` registry; `mtime` of that file;
-     content length in characters. If no source path resolves, omit the
-     filesystem fields rather than failing.
+   - **From disk:** source file path resolved by querying the provenance
+     graph (`graph/provenance` named graph) for the entity's
+     `prov:wasDerivedFrom` source URI and reading its `schema:identifier`
+     literal — the same mechanism `science_tool.graph.materialize` uses to
+     emit provenance. From that path, read `mtime` and content length in
+     characters. If no provenance edge resolves (entity has no source file),
+     omit the filesystem fields rather than failing.
 4. In `markdown` mode, write a **report skeleton** at `--out`: the report
    template from §6 with frontmatter and the **Sample** and **Per-entity
    review** scaffolding pre-filled with sampled rows and context bundles. The
