@@ -34,3 +34,25 @@ def test_enabled_checks(tmp_path):
     )
     config = load_project_config(tmp_path)
     assert config.prose_lint.enabled_checks == ["bare-author-year"]
+
+
+def test_short_form_ids_deny_defaults_to_empty(tmp_path):
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\nprose_lint:\n  anchor_patterns: ['task:']\n"
+    )
+    config = load_project_config(tmp_path)
+    assert config.prose_lint is not None
+    assert config.prose_lint.short_form_ids_deny == []
+
+
+def test_short_form_ids_deny_explicit_list(tmp_path):
+    (tmp_path / "science.yaml").write_text(
+        "name: demo\n"
+        "prose_lint:\n"
+        "  short_form_ids_deny:\n"
+        "    - 'D1'\n"
+        "    - 'H3'\n"
+        "    - 'T1'\n"
+    )
+    config = load_project_config(tmp_path)
+    assert config.prose_lint.short_form_ids_deny == ["D1", "H3", "T1"]

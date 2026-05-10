@@ -76,6 +76,7 @@ class ProseLintConfig(BaseModel):
 
     enabled_checks: list[str] | None = None
     anchor_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_ANCHOR_PATTERNS))
+    short_form_ids_deny: list[str] = Field(default_factory=list)
 
 
 class ProjectConfig(BaseModel):
