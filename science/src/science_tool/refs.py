@@ -224,6 +224,34 @@ def _load_entity_index(root: Path) -> set[str]:
     return index
 
 
+_GRAPH_IDENTIFIER_RE = re.compile(r'schema:identifier\s+"([^"]+)"')
+
+
+def _load_entity_index_from_graph(root: Path) -> set[str]:
+    """Load entity-ref index from the project's built `knowledge/graph.trig` file.
+
+    Parses `schema:identifier "<kind>:<slug>"` triples and keeps only those
+    whose kind is in `_LOCAL_ENTITY_KINDS`. Returns an empty set if the trig
+    file is missing — caller is responsible for falling back to the
+    frontmatter sweep (with a warning) when this is the configured source.
+    """
+    from science_tool.graph.store import DEFAULT_GRAPH_PATH
+
+    trig_path = root / DEFAULT_GRAPH_PATH
+    if not trig_path.is_file():
+        return set()
+    text = trig_path.read_text(encoding="utf-8")
+    index: set[str] = set()
+    for match in _GRAPH_IDENTIFIER_RE.finditer(text):
+        ref = match.group(1)
+        if ":" not in ref:
+            continue
+        kind, _, slug = ref.partition(":")
+        if kind in _LOCAL_ENTITY_KINDS and slug:
+            index.add(ref)
+    return index
+
+
 def _scan_body_typed_refs(
     file_path: Path,
     rel_path: str,

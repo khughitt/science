@@ -1017,6 +1017,38 @@ def test_load_entity_index_collects_kind_id_pairs(tmp_path):
     assert len(index) == 2  # no-id.md contributes nothing
 
 
+def test_load_entity_index_from_graph_parses_schema_identifiers(tmp_path):
+    """`_load_entity_index_from_graph` extracts <kind>:<slug> from schema:identifier triples."""
+    from science_tool.refs import _load_entity_index_from_graph
+
+    knowledge_dir = tmp_path / "knowledge"
+    knowledge_dir.mkdir()
+    (knowledge_dir / "graph.trig").write_text(
+        "@prefix schema: <https://schema.org/> .\n"
+        "<http://example.org/project/graph/knowledge> {\n"
+        '    <http://example.org/project/task/t100>\n'
+        '        schema:identifier "task:t100" .\n'
+        '    <http://example.org/project/question/q42-foo>\n'
+        '        schema:identifier "question:q42-foo" .\n'
+        '    <http://example.org/project/unknown/info>\n'
+        '        schema:identifier "unknown-kind:info" .\n'  # not in _LOCAL_ENTITY_KINDS
+        '}\n',
+        encoding="utf-8",
+    )
+    index = _load_entity_index_from_graph(tmp_path)
+    assert "task:t100" in index
+    assert "question:q42-foo" in index
+    assert "unknown-kind:info" not in index  # filtered: kind not in _LOCAL_ENTITY_KINDS
+
+
+def test_load_entity_index_from_graph_returns_empty_when_missing(tmp_path):
+    """Missing graph.trig returns empty set without raising."""
+    from science_tool.refs import _load_entity_index_from_graph
+
+    index = _load_entity_index_from_graph(tmp_path)
+    assert index == set()
+
+
 class TestBodyTypedRefScan:
     def _project(self, tmp_path):
         (tmp_path / "doc").mkdir()
