@@ -194,3 +194,86 @@ def detect_frontmatter_inline_gaps(
             )
         )
     return issues
+
+
+# Numeric claim: float, integer with %, ratio. Excludes bare integers <100
+# (too noisy) and bare 4-digit years (handled separately below).
+_NUMERIC_CLAIM_RE = re.compile(
+    r"(?<![0-9.])"
+    r"(?:[0-9]+\.[0-9]+|[0-9]{2,}%|[0-9]{2,}/[0-9]+|[0-9]{3,})"
+    r"(?![0-9.])"
+)
+# Standalone 4-digit years (1900-2099) — never claims, always exclude.
+_BARE_YEAR_RE = re.compile(r"^(?:19\d{2}|20\d{2})$")
+# Section/list header: leading `#`, `-`, `*`, or `1.` style numbering.
+_HEADER_OR_LIST_RE = re.compile(r"^\s*(?:#+|[-*]|\d+\.)\s")
+
+
+def detect_numeric_anchor(
+    path: Path,
+    *,
+    strict: bool = False,
+    anchor_patterns: list[str] | None = None,
+) -> list[LintIssue]:
+    """Flag numeric claims in body prose without an anchor token in the same paragraph.
+
+    `anchor_patterns` is a list of regex fragments. A claim is considered
+    anchored if any pattern matches anywhere in the same paragraph (lines
+    separated by blank lines).
+    """
+    if anchor_patterns is None:
+        from science_tool.project_config import DEFAULT_ANCHOR_PATTERNS  # noqa: PLC0415
+
+        anchor_patterns = list(DEFAULT_ANCHOR_PATTERNS)
+    anchor_re = re.compile("|".join(anchor_patterns)) if anchor_patterns else None
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    _, body_start = parse_frontmatter(path)
+    lines = text.splitlines()
+    issues: list[LintIssue] = []
+    in_fence = False
+    # Pre-compute paragraph boundaries (1-based line index → paragraph index).
+    paragraph_id_per_line: list[int] = [0] * (len(lines) + 1)
+    para_id = 0
+    for idx, line in enumerate(lines, start=1):
+        if not line.strip():
+            para_id += 1
+        paragraph_id_per_line[idx] = para_id
+    paragraph_text: dict[int, str] = {}
+    for idx, line in enumerate(lines, start=1):
+        pid = paragraph_id_per_line[idx]
+        paragraph_text[pid] = paragraph_text.get(pid, "") + line + "\n"
+
+    for lineno_zero, raw_line in enumerate(lines):
+        lineno = lineno_zero + 1
+        if lineno < body_start:
+            continue
+        if is_fence_line(raw_line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if _HEADER_OR_LIST_RE.match(raw_line):
+            continue
+        line = strip_inline_code(raw_line)
+        for match in _NUMERIC_CLAIM_RE.finditer(line):
+            value = match.group(0)
+            if _BARE_YEAR_RE.match(value):
+                continue  # standalone year, not a claim
+            paragraph = paragraph_text[paragraph_id_per_line[lineno]]
+            if anchor_re and anchor_re.search(paragraph):
+                continue
+            issues.append(
+                LintIssue(
+                    file=path,
+                    line=lineno,
+                    col=match.start() + 1,
+                    check="numeric-anchor",
+                    severity=severity_for("numeric-anchor", strict=strict),
+                    message=f"numeric claim '{value}' has no anchor in this paragraph",
+                )
+            )
+    return issues

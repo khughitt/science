@@ -60,6 +60,24 @@ class PeerEntry(BaseModel):
     path: str
 
 
+DEFAULT_ANCHOR_PATTERNS: list[str] = [
+    "task:",
+    "pipeline/",
+    r"\[@",
+    "data/",
+    "scripts/",
+]
+
+
+class ProseLintConfig(BaseModel):
+    """Configuration for `science prose lint`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled_checks: list[str] | None = None
+    anchor_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_ANCHOR_PATTERNS))
+
+
 class ProjectConfig(BaseModel):
     """Typed view of science.yaml. Non-listed fields are preserved as-is."""
 
@@ -69,6 +87,7 @@ class ProjectConfig(BaseModel):
     id: str | None = None
     role: RoleField = ProjectRole.STANDALONE
     peers: list[PeerEntry] = Field(default_factory=list)
+    prose_lint: ProseLintConfig | None = None
 
     @model_validator(mode="before")
     @classmethod

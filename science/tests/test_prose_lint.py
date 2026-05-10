@@ -5,6 +5,7 @@ from pathlib import Path
 from science_tool.prose_lint import (
     detect_bare_author_year,
     detect_frontmatter_inline_gaps,
+    detect_numeric_anchor,
     detect_short_form_ids,
 )
 
@@ -151,3 +152,45 @@ class TestFrontmatterInlineGap:
         )
         issues = detect_frontmatter_inline_gaps(path, strict=True)
         assert all(i.severity == "warn" for i in issues)
+
+
+class TestNumericAnchor:
+    def test_flags_unanchored_numeric_claim(self, tmp_path):
+        path = _write(tmp_path, "The correlation rho = 0.168 was observed.\n")
+        issues = detect_numeric_anchor(path)
+        assert len(issues) == 1
+        assert issues[0].check == "numeric-anchor"
+        assert issues[0].severity == "info"
+        assert "0.168" in issues[0].message
+
+    def test_no_flag_when_anchored_with_task(self, tmp_path):
+        path = _write(tmp_path, "We measured rho = 0.168 (task:t050).\n")
+        assert detect_numeric_anchor(path) == []
+
+    def test_no_flag_when_anchored_with_pipeline(self, tmp_path):
+        path = _write(tmp_path, "Result: 30% accuracy from pipeline/t099/results.\n")
+        assert detect_numeric_anchor(path) == []
+
+    def test_no_flag_when_anchored_with_bibtex(self, tmp_path):
+        path = _write(tmp_path, "Reported as 0.168 in the paper [@brunton2022].\n")
+        assert detect_numeric_anchor(path) == []
+
+    def test_no_flag_in_section_header(self, tmp_path):
+        path = _write(tmp_path, "## 3.2 Methods\n\nText.\n")
+        assert detect_numeric_anchor(path) == []
+
+    def test_no_flag_on_year_alone(self, tmp_path):
+        # Years are too noisy to flag as bare numerics.
+        path = _write(tmp_path, "In 2022, the model was published.\n")
+        assert detect_numeric_anchor(path) == []
+
+    def test_flags_percent_claim(self, tmp_path):
+        path = _write(tmp_path, "Improvement of 47% was observed.\n")
+        issues = detect_numeric_anchor(path)
+        assert len(issues) == 1
+
+    def test_custom_anchor_patterns(self, tmp_path):
+        # Caller passes in extended anchors; "doc/" should now count.
+        path = _write(tmp_path, "Result rho = 0.168 (see doc/notes/foo.md).\n")
+        issues = detect_numeric_anchor(path, anchor_patterns=["task:", "doc/"])
+        assert issues == []
