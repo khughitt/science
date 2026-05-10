@@ -1015,3 +1015,80 @@ def test_load_entity_index_collects_kind_id_pairs(tmp_path):
     assert "question:q01-foo" in index
     assert "task:t050" in index
     assert len(index) == 2  # no-id.md contributes nothing
+
+
+class TestBodyTypedRefScan:
+    def _project(self, tmp_path):
+        (tmp_path / "doc").mkdir()
+        (tmp_path / "doc" / "q01.md").write_text(
+            "---\nid: question:q01-foo\ntype: question\n---\nBody.\n"
+        )
+        (tmp_path / "doc" / "t050.md").write_text(
+            "---\nid: task:t050\ntype: task\n---\nBody.\n"
+        )
+        return tmp_path
+
+    def test_flags_unknown_typed_ref_in_body(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        root = self._project(tmp_path)
+        (root / "doc" / "report.md").write_text(
+            "---\ntype: report\n---\nSee task:t999 for the gap.\n"
+        )
+        issues = check_refs(root, include_body=True)
+        body_issues = [i for i in issues if i.ref_type == "body-entity-ref"]
+        assert len(body_issues) == 1
+        assert body_issues[0].ref_value == "task:t999"
+        assert "doc/report.md" in body_issues[0].file
+        assert body_issues[0].line == 4
+
+    def test_no_flag_for_resolved_typed_ref(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        root = self._project(tmp_path)
+        (root / "doc" / "report.md").write_text(
+            "---\ntype: report\n---\nSee task:t050 for the work.\n"
+        )
+        issues = check_refs(root, include_body=True)
+        assert [i for i in issues if i.ref_type == "body-entity-ref"] == []
+
+    def test_skips_typed_refs_in_fenced_code(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        root = self._project(tmp_path)
+        (root / "doc" / "report.md").write_text(
+            "---\ntype: report\n---\n```\nExample: task:t999\n```\n"
+        )
+        issues = check_refs(root, include_body=True)
+        assert [i for i in issues if i.ref_type == "body-entity-ref"] == []
+
+    def test_skips_typed_refs_in_inline_code(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        root = self._project(tmp_path)
+        (root / "doc" / "report.md").write_text(
+            "---\ntype: report\n---\nUse the `task:tNN` placeholder.\n"
+        )
+        issues = check_refs(root, include_body=True)
+        assert [i for i in issues if i.ref_type == "body-entity-ref"] == []
+
+    def test_default_off_when_include_body_false(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        root = self._project(tmp_path)
+        (root / "doc" / "report.md").write_text(
+            "---\ntype: report\n---\nSee task:t999 for the gap.\n"
+        )
+        issues = check_refs(root)  # include_body=False default
+        assert [i for i in issues if i.ref_type == "body-entity-ref"] == []
+
+    def test_skips_cross_project_refs(self, tmp_path):
+        from science_tool.refs import check_refs
+
+        root = self._project(tmp_path)
+        # Triple-segment refs like `mm30:task:t050` are cross-project; not our concern.
+        (root / "doc" / "report.md").write_text(
+            "---\ntype: report\n---\nSee mm30:task:t050.\n"
+        )
+        issues = check_refs(root, include_body=True)
+        assert [i for i in issues if i.ref_type == "body-entity-ref"] == []

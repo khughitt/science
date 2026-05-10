@@ -107,6 +107,12 @@ _LOCAL_ENTITY_KINDS = frozenset(
     }
 )
 
+# Typed entity ref in body prose: `<kind>:<slug>` where kind is canonical.
+# Uses kind alternation ordered longest-first so `data-package` wins over `data`.
+_TYPED_ENTITY_REF_RE = re.compile(
+    r"\b(" + "|".join(sorted(_LOCAL_ENTITY_KINDS, key=len, reverse=True)) + r"):([a-z0-9][a-z0-9_-]+)\b"
+)
+
 
 def _collect_markdown_files(root: Path) -> list[Path]:
     """Collect all markdown files to scan."""
@@ -216,6 +222,51 @@ def _load_entity_index(root: Path) -> set[str]:
         if kind in _LOCAL_ENTITY_KINDS and slug:
             index.add(raw_id)
     return index
+
+
+def _scan_body_typed_refs(
+    file_path: Path,
+    rel_path: str,
+    lines: list[str],
+    frontmatter_lines: set[int],
+    entity_index: set[str],
+) -> list[RefIssue]:
+    """Scan body prose for typed `<kind>:<slug>` refs not in the entity index.
+
+    Skips frontmatter, fenced code, inline code, and cross-project triple-form
+    refs (those have a peer `<project-id>:` prefix and are validated separately).
+    """
+    issues: list[RefIssue] = []
+    in_fence = False
+    for line_num, line in enumerate(lines, start=1):
+        if line_num in frontmatter_lines:
+            continue
+        if _is_fence_line(line):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        scan_line = _strip_inline_code(line)
+        for match in _TYPED_ENTITY_REF_RE.finditer(scan_line):
+            kind, slug = match.group(1), match.group(2)
+            ref = f"{kind}:{slug}"
+            # Cross-project refs have an extra `<project-id>:` prefix; the
+            # alternation matched only the kind:slug portion. Skip if the
+            # preceding character is `:` (signaling a triple-form like mm30:task:t050).
+            if match.start() > 0 and scan_line[match.start() - 1] == ":":
+                continue
+            if ref in entity_index:
+                continue
+            issues.append(
+                RefIssue(
+                    file=rel_path,
+                    line=line_num,
+                    ref_type="body-entity-ref",
+                    ref_value=ref,
+                    message=f"{ref} — typed entity ref not found in project frontmatter `id:` index",
+                )
+            )
+    return issues
 
 
 def _extract_frontmatter_refs(path: Path) -> list[tuple[str, str]]:
@@ -356,12 +407,13 @@ def _hypothesis_aliases_from_path(file_path: Path) -> set[str]:
     return aliases
 
 
-def check_refs(root: Path) -> list[RefIssue]:
+def check_refs(root: Path, *, include_body: bool = False) -> list[RefIssue]:
     """Run all reference checks and return issues found."""
     issues: list[RefIssue] = []
     files = _collect_markdown_files(root)
     hyp_ids = _load_hypothesis_ids(root)
     bib_keys = _load_bib_keys(root)
+    entity_index = _load_entity_index(root) if include_body else set()
     task_ids = _load_task_ids(root)
     project_ids = _load_project_ids(root)
     doi_corpus = _load_doi_corpus(root)
@@ -572,6 +624,16 @@ def check_refs(root: Path) -> list[RefIssue]:
                             )
                         )
 
+        if include_body:
+            issues.extend(
+                _scan_body_typed_refs(
+                    file_path,
+                    rel_path,
+                    lines,
+                    frontmatter_lines,
+                    entity_index,
+                )
+            )
 
     from science_tool.markers import scan_markers
 
