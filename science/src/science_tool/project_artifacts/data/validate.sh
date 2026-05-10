@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.05.09.2
-# science-managed-source-sha256: 6f8cf6488014484d2d93f57654d9ff6500d8638bd122c12864da26a4e05608ca
+# science-managed-version: 2026.05.10.1
+# science-managed-source-sha256: 42c73b90376112ca305270290f576638194aedcb08f71af593c855360696eba8
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -1372,6 +1372,35 @@ else
             warn "Legacy cross-project ref '${raw}' is missing an entity kind. Use '${project_id}:question:${slug}' or another explicit <project-id>:<kind>:<slug> ref."
         fi
     done < <(echo "$xref_result")
+fi
+
+# ─── 18. Prose lints ──────────────────────────────────────────────
+echo ""
+echo "Checking prose quality lints..."
+
+if [ -n "${SCIENCE_TOOL:-}" ] && [ -d "$DOC_DIR" ]; then
+    SCIENCE_PROSE_FLAGS=()
+    if [ "$STRICT" -eq 1 ]; then
+        SCIENCE_PROSE_FLAGS+=("--strict")
+    fi
+    prose_json=$($SCIENCE_TOOL prose lint --root . --format json "${SCIENCE_PROSE_FLAGS[@]}" 2>/dev/null || echo '{"counts":{},"hits":[]}')
+    while IFS=$'\t' read -r check count severity; do
+        [ -z "$check" ] && continue
+        if [ "$severity" = "warn" ] && [ "$count" -gt 0 ]; then
+            warn "${count} prose lint issue(s): ${check}"
+        elif [ "$count" -gt 0 ]; then
+            info "${count} prose lint issue(s): ${check} (use --strict to promote)"
+        fi
+    done < <(printf '%s' "$prose_json" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+sev = {}
+for h in data["hits"]:
+    sev.setdefault(h["check"], h["severity"])
+for check, count in sorted(data["counts"].items()):
+    s = sev.get(check, "warn")
+    print(f"{check}\t{count}\t{s}")
+')
 fi
 
 # Hook point: extra_checks. Fires after all canonical sections complete,
