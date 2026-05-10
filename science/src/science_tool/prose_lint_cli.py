@@ -34,12 +34,14 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
     selected = list(checks) if checks else None
     anchor_patterns = list(DEFAULT_ANCHOR_PATTERNS)
     enabled_from_config: list[str] | None = None
+    short_form_ids_deny: list[str] = []
     science_yaml = root / "science.yaml"
     if science_yaml.is_file():
         config = load_project_config(root)
         if config.prose_lint is not None:
             anchor_patterns = config.prose_lint.anchor_patterns
             enabled_from_config = config.prose_lint.enabled_checks
+            short_form_ids_deny = config.prose_lint.short_form_ids_deny
     if selected is None and enabled_from_config:
         selected = enabled_from_config
 
@@ -48,6 +50,7 @@ def lint_cmd(root: Path, fmt: str, checks: tuple[str, ...], strict: bool) -> Non
         checks=selected,
         strict=strict,
         anchor_patterns=anchor_patterns,
+        short_form_ids_deny=short_form_ids_deny,
     )
 
     if fmt == "json":

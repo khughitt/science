@@ -88,3 +88,23 @@ def test_lint_uses_project_anchor_patterns(tmp_path):
     )
     payload = json.loads(result.output)
     assert "numeric-anchor" not in payload["counts"]
+
+
+def test_lint_uses_short_form_ids_deny_from_config(tmp_path):
+    root = _write_project(
+        tmp_path,
+        science_yaml=(
+            "name: demo\n"
+            "prose_lint:\n"
+            "  short_form_ids_deny:\n"
+            "    - 'D1'\n"
+            "    - 'H3'\n"
+        ),
+    )
+    (root / "doc" / "a.md").write_text("Cyclin D1 effect; H3 marks chromatin.\n")
+    runner = CliRunner()
+    result = runner.invoke(
+        prose_group, ["lint", "--root", str(root), "--format", "json"]
+    )
+    payload = json.loads(result.output)
+    assert payload["counts"].get("short-form-ids", 0) == 0
