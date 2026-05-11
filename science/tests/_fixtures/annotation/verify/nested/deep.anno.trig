@@ -1,0 +1,26 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix oa:   <http://www.w3.org/ns/oa#> .
+@prefix dc:   <http://purl.org/dc/terms/> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix sci:  <http://example.org/science/vocab/> .
+@prefix anno: <#> .
+
+anno:annotations {
+  anno:a-nested-broken a oa:Annotation ;
+    oa:hasTarget [
+      oa:hasSource <deep.md> ;
+      oa:hasSelector [
+        a oa:TextQuoteSelector ;
+        oa:exact   "completely removed sentence from an earlier draft" ;
+        oa:prefix  "" ;
+        oa:suffix  ""
+      ]
+    ] ;
+    oa:hasBody         [ a oa:TextualBody ; dc:format "text/plain" ; rdf:value "x" ] ;
+    oa:motivatedBy     oa:commenting ;
+    sci:annotationType "comment" ;
+    sci:source         "human:test" ;
+    sci:status         "open" ;
+    dc:creator         "test" ;
+    dc:created         "2026-05-11T00:00:00+00:00"^^xsd:dateTime .
+}
