@@ -1,0 +1,80 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix oa:   <http://www.w3.org/ns/oa#> .
+@prefix dc:   <http://purl.org/dc/terms/> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix sci:  <http://example.org/science/vocab/> .
+@prefix anno: <#> .
+
+anno:annotations {
+  anno:a-ok a oa:Annotation ;
+    oa:hasTarget [
+      oa:hasSource <source.md> ;
+      oa:hasSelector [
+        a oa:TextQuoteSelector ;
+        oa:exact   "the annotation system uses TextQuoteSelector for span addressing" ;
+        oa:prefix  "The original sentence reads exactly: " ;
+        oa:suffix  ".\n\nA second paragraph"
+      ]
+    ] ;
+    oa:hasBody         [ a oa:TextualBody ; dc:format "text/plain" ; rdf:value "ok body" ] ;
+    oa:motivatedBy     oa:commenting ;
+    sci:annotationType "comment" ;
+    sci:source         "human:test" ;
+    sci:status         "open" ;
+    dc:creator         "test" ;
+    dc:created         "2026-05-11T00:00:00+00:00"^^xsd:dateTime .
+
+  anno:a-degraded a oa:Annotation ;
+    oa:hasTarget [
+      oa:hasSource <source.md> ;
+      oa:hasSelector [
+        a oa:TextQuoteSelector ;
+        oa:exact   "category theory is the right framework" ;
+        oa:prefix  "PREFIX_THAT_DOES_NOT_MATCH_ANYTHING " ;
+        oa:suffix  " SUFFIX_THAT_DOES_NOT_MATCH_ANYTHING"
+      ]
+    ] ;
+    oa:hasBody         [ a oa:TextualBody ; dc:format "text/plain" ; rdf:value "degraded body" ] ;
+    oa:motivatedBy     oa:commenting ;
+    sci:annotationType "comment" ;
+    sci:source         "human:test" ;
+    sci:status         "open" ;
+    dc:creator         "test" ;
+    dc:created         "2026-05-11T00:00:00+00:00"^^xsd:dateTime .
+
+  anno:a-fuzzy a oa:Annotation ;
+    oa:hasTarget [
+      oa:hasSource <source.md> ;
+      oa:hasSelector [
+        a oa:TextQuoteSelector ;
+        oa:exact   "the framework is built on solid theoretical foundations" ;
+        oa:prefix  "" ;
+        oa:suffix  ""
+      ]
+    ] ;
+    oa:hasBody         [ a oa:TextualBody ; dc:format "text/plain" ; rdf:value "fuzzy body" ] ;
+    oa:motivatedBy     oa:commenting ;
+    sci:annotationType "comment" ;
+    sci:source         "human:test" ;
+    sci:status         "open" ;
+    dc:creator         "test" ;
+    dc:created         "2026-05-11T00:00:00+00:00"^^xsd:dateTime .
+
+  anno:a-broken a oa:Annotation ;
+    oa:hasTarget [
+      oa:hasSource <source.md> ;
+      oa:hasSelector [
+        a oa:TextQuoteSelector ;
+        oa:exact   "deleted text that does not appear anywhere in the source" ;
+        oa:prefix  "" ;
+        oa:suffix  ""
+      ]
+    ] ;
+    oa:hasBody         [ a oa:TextualBody ; dc:format "text/plain" ; rdf:value "broken body" ] ;
+    oa:motivatedBy     oa:commenting ;
+    sci:annotationType "comment" ;
+    sci:source         "human:test" ;
+    sci:status         "open" ;
+    dc:creator         "test" ;
+    dc:created         "2026-05-11T00:00:00+00:00"^^xsd:dateTime .
+}
