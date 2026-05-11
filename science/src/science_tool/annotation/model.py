@@ -6,7 +6,7 @@ See docs/plans/2026-05-10-annotation-system-spec.md §Data model.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Optional

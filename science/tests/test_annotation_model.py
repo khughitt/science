@@ -7,7 +7,6 @@ import pytest
 from science_tool.annotation.model import (
     Annotation,
     AuditLedger,
-    IriBody,
     Motivation,
     Sidecar,
     SpecificResource,
