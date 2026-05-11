@@ -1,0 +1,60 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix oa:   <http://www.w3.org/ns/oa#> .
+@prefix dc:   <http://purl.org/dc/terms/> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix sci:  <http://example.org/science/vocab/> .
+@prefix anno: <#> .
+
+anno:annotations {
+  anno:t-7f3a a oa:SpecificResource ;
+    oa:hasSource <citation-audit-pilot.md> ;
+    oa:hasSelector [
+      a oa:TextQuoteSelector ;
+      oa:exact   "category theory is the right framework" ;
+      oa:prefix  "background ('category theory is the right framework', " ;
+      oa:suffix  "', 'ontologies remain siloed', 'shared parameters not"
+    ] .
+
+  anno:a-7f3a a oa:Annotation ;
+    oa:hasTarget       anno:t-7f3a ;
+    oa:hasBody         [
+      a oa:TextualBody ;
+      dc:format        "text/plain" ;
+      rdf:value        "Strong field-state claim with no anchor or explicit hedge."
+    ] ;
+    oa:motivatedBy     oa:classifying ;
+    sci:annotationType "consensus-claim-unsupported" ;
+    sci:source         "llm-audit:gap-d-v1" ;
+    sci:status         "ack" ;
+    sci:contentHash    "sha256:1f9dab" ;
+    dc:creator         "claude-opus-4-7" ;
+    dc:created         "2026-05-10T14:23:00+00:00"^^xsd:dateTime ;
+    dc:modified        "2026-05-10T15:01:00+00:00"^^xsd:dateTime ;
+    dc:contributor     "keith.hughitt@gmail.com" ;
+    dc:description     "Standard textbook framing; no source needed." ;
+    prov:wasRevisionOf [
+      sci:status       "open" ;
+      dc:created       "2026-05-10T14:23:00+00:00"^^xsd:dateTime ;
+      dc:creator       "claude-opus-4-7"
+    ] .
+
+  anno:a-7f3b a oa:Annotation ;
+    oa:hasTarget       anno:t-7f3a ;
+    oa:hasBody         [
+      a oa:TextualBody ;
+      dc:format        "text/plain" ;
+      rdf:value        "Worth a footnote pointing at Spivak when we revisit ch3."
+    ] ;
+    oa:motivatedBy     oa:commenting ;
+    sci:annotationType "comment" ;
+    sci:source         "human:keith.hughitt@gmail.com" ;
+    sci:status         "open" ;
+    dc:creator         "keith.hughitt@gmail.com" ;
+    dc:created         "2026-05-10T15:02:00+00:00"^^xsd:dateTime .
+
+  anno:ledger-gap-d-v1 a sci:AuditLedger ;
+    sci:source         "llm-audit:gap-d-v1" ;
+    sci:auditedHashes  ( "sha256:1f9dab" "sha256:abc1" "sha256:def2" ) ;
+    dc:modified        "2026-05-10T14:23:00+00:00"^^xsd:dateTime .
+}

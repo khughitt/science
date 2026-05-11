@@ -1,0 +1,4 @@
+@prefix anno: <#> .
+
+anno:annotations {
+}
