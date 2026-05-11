@@ -15,8 +15,16 @@ from typing import Optional
 
 import click
 
-from science_tool.annotation.audit import audit_file
+from science_tool.annotation.audit import audit_file, merge_planned
+from science_tool.annotation.io import read_sidecar, write_sidecar
+from science_tool.annotation.model import Sidecar
 from science_tool.annotation.sources import LINT_SOURCES, SOURCES
+from science_tool.annotation.sources.marker_token import (
+    MarkerTokenSource,
+    TOKEN_TYPE_MAP,
+)
+from science_tool.markers import scan_text as _scan_markers_text
+import re as _re
 from science_tool.annotation.verify import (
     VerifyReport,
     apply_supersessions,
@@ -371,3 +379,314 @@ def _emit_audit_table(
         )
     for entry in files:
         click.echo(f"  {entry['path']}: {entry}")
+
+
+_TOKEN_LITERAL_PATTERN = _re.compile(
+    r" *\[(?:" + "|".join(TOKEN_TYPE_MAP.keys()) + r")\] *",
+)
+
+
+@annotate_group.command("lift-tokens")
+@click.option(
+    "--root", "root_path",
+    default=".",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option("--remove", "remove_mode", is_flag=True, default=False)
+@click.option("--force-dirty", is_flag=True, default=False)
+@click.option(
+    "--format", "fmt",
+    type=click.Choice(("table", "json")), default="table",
+)
+@click.option("--actor", default="science-annotate-cli")
+def lift_tokens_cmd(
+    root_path: Path,
+    remove_mode: bool,
+    force_dirty: bool,
+    fmt: str,
+    actor: str,
+) -> None:
+    """Lift inline phase-2 tokens to sidecar annotation rows."""
+    root = root_path.resolve()
+    md_files = _collect_lift_markdown_files(root)
+    now = datetime.now(timezone.utc)
+    source = MarkerTokenSource()
+
+    summary: dict = {
+        "files_scanned": len(md_files),
+        "rows_written": 0,
+        "tokens_removed": 0,
+        "duplicates_skipped": 0,
+        "files_with_writes": 0,
+    }
+    file_reports: list[dict] = []
+
+    if remove_mode:
+        affected = _files_with_hits(md_files)
+        if not force_dirty and affected:
+            dirty = _dirty_files_among(root, affected)
+            if dirty:
+                click.echo(
+                    "lift-tokens --remove refuses on dirty tree:\n  "
+                    + "\n  ".join(str(p.relative_to(root)) for p in dirty),
+                )
+                raise SystemExit(1)
+
+    for md in md_files:
+        sidecar_path = md.with_suffix(".anno.trig")
+        original_text = md.read_text(encoding="utf-8")
+        original_hits = list(
+            _scan_markers_text(md, original_text, strict=False)
+        )
+        non_doc_hits = [h for h in original_hits if not h.in_documentation]
+        if not non_doc_hits:
+            continue
+
+        if remove_mode:
+            cleaned_text = _strip_tokens_from_prose(original_text)
+            plans = _replan_for_remove(
+                source, md, original_text, cleaned_text, non_doc_hits,
+            )
+        else:
+            plans = list(source.scan(md))
+
+        sidecar = (
+            read_sidecar(sidecar_path) if sidecar_path.exists() else Sidecar()
+        )
+        new_sidecar, written = merge_planned(
+            sidecar, plans, actor=actor, now=now,
+        )
+
+        if remove_mode:
+            # Sidecar first, then prose (per spec write-order rationale).
+            if written or new_sidecar != sidecar:
+                _atomic_write_text(
+                    sidecar_path,
+                    _serialize_sidecar(new_sidecar),
+                )
+            _atomic_write_text(md, cleaned_text)
+            summary["tokens_removed"] += len(non_doc_hits)
+        else:
+            if written:
+                _atomic_write_text(
+                    sidecar_path, _serialize_sidecar(new_sidecar),
+                )
+
+        skipped = len(plans) - len(written)
+        summary["rows_written"] += len(written)
+        summary["duplicates_skipped"] += skipped
+        if written:
+            summary["files_with_writes"] += 1
+
+        file_reports.append({
+            "path": str(md.relative_to(root)),
+            "rows_written": len(written),
+            "duplicates_skipped": skipped,
+            **({"tokens_removed": len(non_doc_hits)} if remove_mode else {}),
+        })
+
+    if fmt == "json":
+        click.echo(
+            json.dumps(
+                {"summary": summary, "files": file_reports}, indent=2,
+            )
+        )
+    else:
+        click.echo(
+            f"lift-tokens: {summary['rows_written']} row(s) written, "
+            f"{summary['tokens_removed']} token(s) removed, "
+            f"{summary['duplicates_skipped']} duplicate(s) skipped, "
+            f"{summary['files_with_writes']} file(s) modified."
+        )
+
+
+def _collect_lift_markdown_files(root: Path) -> list[Path]:
+    from science_tool.markers import _collect_markdown_files  # noqa: PLC0415
+    return _collect_markdown_files(root)
+
+
+def _files_with_hits(md_files: list[Path]) -> list[Path]:
+    out: list[Path] = []
+    for md in md_files:
+        text = md.read_text(encoding="utf-8")
+        hits = [
+            h
+            for h in _scan_markers_text(md, text, strict=False)
+            if not h.in_documentation
+        ]
+        if hits:
+            out.append(md)
+    return out
+
+
+def _dirty_files_among(root: Path, files: list[Path]) -> list[Path]:
+    try:
+        proc = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(root), capture_output=True, text=True, check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return []  # not a git repo / git unavailable -> no dirty check
+    dirty_rel: set[str] = set()
+    for line in proc.stdout.splitlines():
+        if len(line) < 4:
+            continue
+        dirty_rel.add(line[3:].strip())
+    out: list[Path] = []
+    for f in files:
+        rel = str(f.relative_to(root))
+        if rel in dirty_rel:
+            out.append(f)
+    return out
+
+
+def _strip_tokens_from_prose(text: str) -> str:
+    from science_tool.markdown_utils import is_fence_line  # noqa: PLC0415
+    out_lines: list[str] = []
+    in_fence = False
+    for line in text.splitlines(keepends=True):
+        no_nl = line.rstrip("\n")
+        if is_fence_line(no_nl):
+            in_fence = not in_fence
+            out_lines.append(line)
+            continue
+        if in_fence:
+            out_lines.append(line)
+            continue
+        out_lines.append(_strip_tokens_outside_backticks(line))
+    return "".join(out_lines)
+
+
+def _strip_tokens_outside_backticks(line: str) -> str:
+    parts = _re.split(r"(`[^`]*`)", line)
+    for i, part in enumerate(parts):
+        if part.startswith("`") and part.endswith("`"):
+            continue
+        parts[i] = _TOKEN_LITERAL_PATTERN.sub(" ", part)
+    joined = "".join(parts)
+    # Collapse the double-space introduced by removing a token from the
+    # middle of a sentence; preserve leading indentation.
+    leading_match = _re.match(r"^[ \t]*", joined)
+    leading = leading_match.group(0) if leading_match else ""
+    body = joined[len(leading):]
+    body = _re.sub(r"  +", " ", body)
+    return leading + body
+
+
+def _replan_for_remove(
+    source: MarkerTokenSource,
+    md: Path,
+    original_text: str,
+    cleaned_text: str,
+    original_hits,
+) -> list:
+    """Build planned rows whose selectors anchor to cleaned_text but whose
+    `match_text`/`lifted_from` retain the original bracketed token."""
+    from science_tool.annotation.model import (  # noqa: PLC0415
+        Motivation, SpecificResource, TextQuoteSelector, TextualBody,
+    )
+    from science_tool.annotation.sources.base import (  # noqa: PLC0415
+        PlannedAnnotation,
+    )
+    plans: list = []
+    cleaned_sentences = _split_sentences_with_offsets(cleaned_text)
+    original_sentences = _split_sentences_with_offsets(original_text)
+    for hit in original_hits:
+        ordinal = _sentence_ordinal_for_line(
+            original_text, original_sentences, hit.line,
+        )
+        if ordinal is None or ordinal >= len(cleaned_sentences):
+            continue
+        sent_start, sent_end = cleaned_sentences[ordinal]
+        sentence = cleaned_text[sent_start:sent_end]
+        atype, body_msg = TOKEN_TYPE_MAP[hit.token]
+        literal = f"[{hit.token}]"
+        sel = TextQuoteSelector(
+            exact=sentence,
+            prefix=cleaned_text[max(0, sent_start - 60):sent_start],
+            suffix=cleaned_text[sent_end:min(len(cleaned_text), sent_end + 60)],
+        )
+        plans.append(PlannedAnnotation(
+            target=SpecificResource(source=md.name, selector=sel),
+            annotation_type=atype,
+            motivation=Motivation.CLASSIFYING,
+            body=TextualBody(value=f"{body_msg} (lifted from {literal})"),
+            match_text=literal,
+            source_name=source.name,
+            lifted_from=literal,
+        ))
+    return plans
+
+
+_SENTENCE_SPLIT_RE = _re.compile(r"(?<=[.!?])\s+")
+
+
+def _split_sentences_with_offsets(text: str) -> list[tuple[int, int]]:
+    """Return (start, end) char ranges of each sentence."""
+    out: list[tuple[int, int]] = []
+    cursor = 0
+    for sent in _SENTENCE_SPLIT_RE.split(text):
+        if not sent:
+            continue
+        start = text.find(sent, cursor)
+        if start == -1:
+            continue
+        end = start + len(sent)
+        out.append((start, end))
+        cursor = end
+    return out
+
+
+def _sentence_ordinal_for_line(
+    text: str, sentences: list[tuple[int, int]], line: int,
+) -> int | None:
+    offsets = [0]
+    for i, ch in enumerate(text):
+        if ch == "\n":
+            offsets.append(i + 1)
+    if line < 1 or line > len(offsets):
+        return None
+    line_start = offsets[line - 1]
+    line_end = offsets[line] if line < len(offsets) else len(text)
+    for idx, (start, end) in enumerate(sentences):
+        if start <= line_start < end:
+            return idx
+        if start < line_end and end > line_start:
+            return idx
+    # Fallback: nearest preceding sentence.
+    for idx in range(len(sentences) - 1, -1, -1):
+        if sentences[idx][0] <= line_start:
+            return idx
+    return None
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    import os, tempfile  # noqa: PLC0415
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=path.name, dir=str(path.parent), text=True,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp_name, str(path))
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
+def _serialize_sidecar(sidecar: Sidecar) -> str:
+    """Serialize a Sidecar to a string via write_sidecar's emission logic."""
+    import os, tempfile  # noqa: PLC0415
+    fd, tmp = tempfile.mkstemp(suffix=".anno.trig")
+    os.close(fd)
+    try:
+        write_sidecar(Path(tmp), sidecar)
+        return Path(tmp).read_text(encoding="utf-8")
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
