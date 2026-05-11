@@ -54,10 +54,7 @@ class LintSource:
 
     def scan(self, md_path: Path) -> Iterable[PlannedAnnotation]:
         issues = self.detector(md_path)
-        try:
-            text = md_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            return []
+        text = md_path.read_text(encoding="utf-8")
         out: list[PlannedAnnotation] = []
         for issue in issues:
             sel = _selector_for_issue(text, issue)
