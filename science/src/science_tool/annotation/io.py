@@ -253,3 +253,138 @@ def _read_optional_dt(node: Node | None) -> datetime | None:
     if node is None:
         return None
     return _read_dt(node)
+
+
+def write_sidecar(path: Path, sidecar: Sidecar) -> None:
+    """Write a Sidecar to TriG with deterministic, git-friendly formatting.
+
+    Hand-rolled rather than rdflib-serialized to control ordering and
+    spacing; rdflib's TriG serializer randomizes blank-node IDs and
+    triple ordering across runs.
+    """
+    lines: list[str] = []
+    lines.append("@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .")
+    lines.append("@prefix oa:   <http://www.w3.org/ns/oa#> .")
+    lines.append("@prefix dc:   <http://purl.org/dc/terms/> .")
+    lines.append("@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .")
+    lines.append("@prefix prov: <http://www.w3.org/ns/prov#> .")
+    lines.append("@prefix sci:  <http://example.org/science/vocab/> .")
+    lines.append("@prefix anno: <#> .")
+    lines.append("")
+    lines.append("anno:annotations {")
+
+    # Shared targets first (so by-ID references resolve), sorted.
+    for target in sorted(sidecar.shared_targets, key=lambda t: t.id or ""):
+        lines.extend(_emit_shared_target(target))
+        lines.append("")
+
+    # Annotations sorted by ID.
+    for ann in sorted(sidecar.annotations, key=lambda a: a.id):
+        lines.extend(_emit_annotation(ann))
+        lines.append("")
+
+    # Ledgers sorted by ID.
+    for led in sorted(sidecar.ledgers, key=lambda l: l.id):
+        lines.extend(_emit_ledger(led))
+        lines.append("")
+
+    lines.append("}")
+    lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _emit_shared_target(target: SpecificResource) -> "list[str]":
+    if target.id is None:
+        raise ValueError("shared target requires id")
+    sel = target.selector
+    return [
+        f"  anno:{target.id} a oa:SpecificResource ;",
+        f"    oa:hasSource <{target.source}> ;",
+        f"    oa:hasSelector [",
+        f"      a oa:TextQuoteSelector ;",
+        f"      oa:exact   {_str_lit(sel.exact)} ;",
+        f"      oa:prefix  {_str_lit(sel.prefix)} ;",
+        f"      oa:suffix  {_str_lit(sel.suffix)}",
+        f"    ] .",
+    ]
+
+
+def _emit_annotation(ann: Annotation) -> "list[str]":
+    out: list[str] = []
+    out.append(f"  anno:{ann.id} a oa:Annotation ;")
+    if ann.target.id is not None:
+        out.append(f"    oa:hasTarget       anno:{ann.target.id} ;")
+    else:
+        sel = ann.target.selector
+        out.append(f"    oa:hasTarget       [")
+        out.append(f"      oa:hasSource <{ann.target.source}> ;")
+        out.append(f"      oa:hasSelector [")
+        out.append(f"        a oa:TextQuoteSelector ;")
+        out.append(f"        oa:exact   {_str_lit(sel.exact)} ;")
+        out.append(f"        oa:prefix  {_str_lit(sel.prefix)} ;")
+        out.append(f"        oa:suffix  {_str_lit(sel.suffix)}")
+        out.append(f"      ]")
+        out.append(f"    ] ;")
+    for body in ann.bodies:
+        out.extend(_emit_body(body))
+    out.append(f"    oa:motivatedBy     oa:{ann.motivation.value} ;")
+    out.append(f"    sci:annotationType {_str_lit(ann.annotation_type)} ;")
+    out.append(f"    sci:source         {_str_lit(ann.source)} ;")
+    out.append(f"    sci:status         {_str_lit(ann.status.value)} ;")
+    if ann.content_hash is not None:
+        out.append(f"    sci:contentHash    {_str_lit(ann.content_hash)} ;")
+    if ann.lifted_from is not None:
+        out.append(f"    sci:liftedFrom     {_str_lit(ann.lifted_from)} ;")
+    out.append(f"    dc:creator         {_str_lit(ann.creator)} ;")
+    out.append(f"    dc:created         {_dt_lit(ann.created)}")
+    if ann.modified is not None:
+        out[-1] += " ;"
+        out.append(f"    dc:modified        {_dt_lit(ann.modified)}")
+        # modified_by is required whenever modified is set (model invariant).
+        assert ann.modified_by is not None
+        out[-1] += " ;"
+        out.append(f"    dc:contributor     {_str_lit(ann.modified_by)}")
+    if ann.description is not None:
+        out[-1] += " ;"
+        out.append(f"    dc:description     {_str_lit(ann.description)}")
+    for prior in ann.prior_states:
+        out[-1] += " ;"
+        out.append(f"    prov:wasRevisionOf [")
+        out.append(f"      sci:status       {_str_lit(prior.status.value)} ;")
+        out.append(f"      dc:created       {_dt_lit(prior.created)} ;")
+        out.append(f"      dc:creator       {_str_lit(prior.creator)}")
+        out.append(f"    ]")
+    out[-1] += " ."
+    return out
+
+
+def _emit_body(body: Body) -> "list[str]":
+    if isinstance(body, IriBody):
+        return [f"    oa:hasBody         <{body.iri}> ;"]
+    return [
+        f"    oa:hasBody         [",
+        f"      a oa:TextualBody ;",
+        f"      dc:format        {_str_lit(body.format)} ;",
+        f"      rdf:value        {_str_lit(body.value)}",
+        f"    ] ;",
+    ]
+
+
+def _emit_ledger(led: AuditLedger) -> "list[str]":
+    hashes = " ".join(_str_lit(h) for h in led.audited_hashes)
+    return [
+        f"  anno:{led.id} a sci:AuditLedger ;",
+        f"    sci:source         {_str_lit(led.source)} ;",
+        f"    sci:auditedHashes  ( {hashes} ) ;",
+        f"    dc:modified        {_dt_lit(led.modified)} .",
+    ]
+
+
+def _str_lit(s: str) -> str:
+    """Escape a string for use as a TriG plain literal."""
+    escaped = s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    return f'"{escaped}"'
+
+
+def _dt_lit(dt: datetime) -> str:
+    return f'"{dt.isoformat()}"^^xsd:dateTime'

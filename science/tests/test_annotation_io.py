@@ -111,3 +111,58 @@ def test_malformed_sidecar_missing_required_field_raises() -> None:
     # produce annotation_type="None" or "".
     with pytest.raises(ValueError, match="missing required"):
         read_sidecar(FIXTURE.parent / "malformed-missing-type.anno.trig")
+
+
+from science_tool.annotation.io import write_sidecar
+
+
+def test_write_sidecar_creates_file(tmp_path: Path) -> None:
+    sc = Sidecar()  # empty
+    out = tmp_path / "empty.anno.trig"
+    write_sidecar(out, sc)
+    assert out.exists()
+
+
+def test_round_trip_preserves_annotations(tmp_path: Path) -> None:
+    original = read_sidecar(FIXTURE)
+    out = tmp_path / "roundtrip.anno.trig"
+    write_sidecar(out, original)
+    re_read = read_sidecar(out)
+    assert len(re_read.annotations) == len(original.annotations)
+    assert len(re_read.ledgers) == len(original.ledgers)
+    assert len(re_read.shared_targets) == len(original.shared_targets)
+    by_id_orig = {a.id: a for a in original.annotations}
+    by_id_new = {a.id: a for a in re_read.annotations}
+    for ann_id, orig_ann in by_id_orig.items():
+        new_ann = by_id_new[ann_id]
+        assert new_ann.annotation_type == orig_ann.annotation_type
+        assert new_ann.source == orig_ann.source
+        assert new_ann.status == orig_ann.status
+        assert new_ann.motivation == orig_ann.motivation
+        assert new_ann.content_hash == orig_ann.content_hash
+        assert new_ann.creator == orig_ann.creator
+        assert new_ann.created == orig_ann.created
+        assert new_ann.modified == orig_ann.modified
+        assert new_ann.modified_by == orig_ann.modified_by
+        assert new_ann.description == orig_ann.description
+        assert new_ann.target.source == orig_ann.target.source  # round-trip relative path
+        assert len(new_ann.bodies) == len(orig_ann.bodies)
+        assert len(new_ann.prior_states) == len(orig_ann.prior_states)
+
+
+def test_writer_output_is_deterministic(tmp_path: Path) -> None:
+    sc = read_sidecar(FIXTURE)
+    out_a = tmp_path / "a.anno.trig"
+    out_b = tmp_path / "b.anno.trig"
+    write_sidecar(out_a, sc)
+    write_sidecar(out_b, sc)
+    assert out_a.read_text() == out_b.read_text()
+
+
+def test_writer_sorts_annotations_by_id(tmp_path: Path) -> None:
+    sc = read_sidecar(FIXTURE)
+    out = tmp_path / "sorted.anno.trig"
+    write_sidecar(out, sc)
+    text = out.read_text()
+    # a-7f3a should appear before a-7f3b in the serialized output
+    assert text.index("anno:a-7f3a ") < text.index("anno:a-7f3b ")
