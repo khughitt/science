@@ -238,9 +238,19 @@ step 1 (the scanner has to exist). Step 2 must not land before step 1.
 Phase 2 is intentionally scoped to inline tokens. No ROI machinery, no
 sidecar files, no graph integration. Forward-compatible with phase 3.
 
-## Phase 3 — full sub-document annotation system (deferred RFC)
+## Phase 3 — full sub-document annotation system
 
-### Open design questions (need a dedicated `/science:brainstorming` session)
+> **Superseded.** Phase-3 design now lives in
+> `plan:2026-05-10-annotation-system-spec`
+> (`docs/plans/2026-05-10-annotation-system-spec.md`). The notes below
+> are preserved for historical context — they were the brainstorming
+> seeds that fed the spec session of 2026-05-10. Decisions adopted in
+> the spec: sidecar `*.anno.trig` storage; W3C Web Annotation Data
+> Model (`oa:`) vocabulary; `oa:TextQuoteSelector` for span addressing;
+> tokens lift to annotations on phase-3 land; in-band audit with
+> sentence-hash cache; CLI render now, dashboard downstream.
+
+### Open design questions (resolved in the spec; preserved as historical brainstorming notes)
 
 **ROI anchoring.** Three plausible shapes:
 
@@ -296,9 +306,10 @@ continue to work; richer payloads opt into sidecar form.
   an authoring convention that makes line-anchored annotations less brittle
   to whitespace edits.
 
-### Phase 3 deliverables (when scoped)
+### Phase 3 deliverables
 
-To be designed in a follow-up RFC. Not in scope for phase 2.
+See `plan:2026-05-10-annotation-system-spec` §Sequencing for the
+P3.0–P3.7 phased rollout.
 
 ## Phase ordering rationale
 
