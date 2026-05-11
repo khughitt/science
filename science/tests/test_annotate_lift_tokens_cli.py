@@ -85,7 +85,7 @@ def test_remove_refuses_dirty_tree(git_workspace: Path) -> None:
         ],
     )
     assert result.exit_code == 1
-    assert "dirty" in result.output.lower()
+    assert "dirty" in (result.output + (result.stderr or "")).lower()
 
 
 def test_remove_force_dirty_overrides(git_workspace: Path) -> None:

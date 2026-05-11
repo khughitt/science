@@ -429,6 +429,7 @@ def lift_tokens_cmd(
                 click.echo(
                     "lift-tokens --remove refuses on dirty tree:\n  "
                     + "\n  ".join(str(p.relative_to(root)) for p in dirty),
+                    err=True,
                 )
                 raise SystemExit(1)
 
