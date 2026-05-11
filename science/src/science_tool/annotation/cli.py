@@ -15,6 +15,8 @@ from typing import Optional
 
 import click
 
+from science_tool.annotation.audit import audit_file
+from science_tool.annotation.sources import LINT_SOURCES, SOURCES
 from science_tool.annotation.verify import (
     VerifyReport,
     apply_supersessions,
@@ -261,3 +263,111 @@ def _dirty_anno_files(root: Path) -> list[Path]:
         if rel.endswith(".anno.trig"):
             dirty.append(Path(rel))
     return dirty
+
+
+@annotate_group.command("audit")
+@click.option(
+    "--root", "root_path",
+    default=".",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option(
+    "--source", "sources_opt",
+    multiple=True,
+    help=(
+        "Source short name (repeatable). Defaults to LINT_SOURCES. "
+        "Valid: " + ", ".join(sorted(SOURCES))
+    ),
+)
+@click.option(
+    "--no-llm", is_flag=True, default=False,
+    help="Skip LLM sources (forward-compat no-op in P3.2).",
+)
+@click.option("--dry-run", is_flag=True, default=False)
+@click.option(
+    "--format", "fmt",
+    type=click.Choice(("table", "json")), default="table",
+)
+@click.option("--actor", default="science-annotate-cli")
+def audit_cmd(
+    root_path: Path,
+    sources_opt: tuple[str, ...],
+    no_llm: bool,
+    dry_run: bool,
+    fmt: str,
+    actor: str,
+) -> None:
+    """Run mechanical-audit sources; write planned rows to sidecars."""
+    del no_llm  # accepted; P3.2 has no LLM sources to skip
+    selected_names = tuple(sources_opt) if sources_opt else LINT_SOURCES
+    unknown = [s for s in selected_names if s not in SOURCES]
+    if unknown:
+        click.echo(f"unknown source(s): {unknown!r}", err=True)
+        raise SystemExit(1)
+    selected = [SOURCES[s] for s in selected_names]
+    full_source_names = sorted({s.name for s in selected})
+
+    root = root_path.resolve()
+    md_files = _collect_audit_markdown_files(root)
+    now = datetime.now(timezone.utc)
+
+    file_reports: list[dict] = []
+    summary = {
+        "files_scanned": len(md_files),
+        "rows_written": 0,
+        "duplicates_skipped": 0,
+        "files_with_writes": 0,
+        "sources_run": full_source_names,
+    }
+
+    for md in md_files:
+        sidecar = md.with_suffix(".anno.trig")
+        if dry_run:
+            planned_per_source = {}
+            for src in selected:
+                plans = list(src.scan(md))
+                planned_per_source[src.short_name] = len(plans)
+            file_reports.append({
+                "path": str(md.relative_to(root)),
+                "rows_planned": planned_per_source,
+            })
+            continue
+        report = audit_file(
+            md, sidecar, sources=selected, actor=actor, now=now,
+        )
+        if report.rows_written or report.duplicates_skipped:
+            file_reports.append({
+                "path": str(md.relative_to(root)),
+                "rows_written": report.written_per_source,
+                "duplicates_skipped": report.duplicates_skipped,
+            })
+        summary["rows_written"] += report.rows_written
+        summary["duplicates_skipped"] += report.duplicates_skipped
+        if report.rows_written:
+            summary["files_with_writes"] += 1
+
+    if fmt == "json":
+        click.echo(json.dumps({"summary": summary, "files": file_reports}, indent=2))
+    else:
+        _emit_audit_table(summary, file_reports, dry_run=dry_run)
+
+
+def _collect_audit_markdown_files(root: Path) -> list[Path]:
+    """Mirror prose_lint._collect_markdown_files but importable here."""
+    from science_tool.prose_lint import _collect_markdown_files  # noqa: PLC0415
+    return _collect_markdown_files(root)
+
+
+def _emit_audit_table(
+    summary: dict, files: list[dict], *, dry_run: bool,
+) -> None:
+    if dry_run:
+        click.echo(f"audit dry-run over {summary['files_scanned']} file(s):")
+    else:
+        click.echo(
+            f"audit: {summary['rows_written']} row(s) written, "
+            f"{summary['duplicates_skipped']} duplicate(s) skipped, "
+            f"{summary['files_with_writes']} file(s) modified."
+        )
+    for entry in files:
+        click.echo(f"  {entry['path']}: {entry}")
