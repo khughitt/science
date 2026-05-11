@@ -32,3 +32,24 @@ def test_planned_annotation_construction() -> None:
 def test_id_collision_error_carries_message() -> None:
     err = IdCollisionError("boom")
     assert "boom" in str(err)
+
+
+def test_sources_registry_contains_expected_keys() -> None:
+    from science_tool.annotation.sources import LINT_SOURCES, SOURCES
+    assert set(SOURCES) == {
+        "marker-token", "bare-author-year",
+        "short-form-ids", "numeric-anchor",
+    }
+    assert "frontmatter-inline-gap" not in SOURCES
+    assert LINT_SOURCES == (
+        "bare-author-year", "short-form-ids", "numeric-anchor",
+    )
+    assert "marker-token" not in LINT_SOURCES
+
+
+def test_each_source_exposes_protocol_attrs() -> None:
+    from science_tool.annotation.sources import SOURCES
+    for short, src in SOURCES.items():
+        assert src.short_name == short
+        assert isinstance(src.name, str) and src.name
+        assert callable(getattr(src, "scan"))

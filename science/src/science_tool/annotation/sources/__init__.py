@@ -13,5 +13,30 @@ from science_tool.annotation.sources.base import (
     PlannedAnnotation,
     SourceAdapter,
 )
+from science_tool.annotation.sources.lint import (
+    bare_author_year_source,
+    numeric_anchor_source,
+    short_form_ids_source,
+)
+from science_tool.annotation.sources.marker_token import MarkerTokenSource
 
-__all__ = ["IdCollisionError", "PlannedAnnotation", "SourceAdapter"]
+SOURCES: dict[str, SourceAdapter] = {
+    "marker-token":     MarkerTokenSource(),
+    "bare-author-year": bare_author_year_source(),
+    "short-form-ids":   short_form_ids_source(),
+    "numeric-anchor":   numeric_anchor_source(),
+}
+
+LINT_SOURCES: tuple[str, ...] = (
+    "bare-author-year",
+    "short-form-ids",
+    "numeric-anchor",
+)
+
+__all__ = [
+    "IdCollisionError",
+    "LINT_SOURCES",
+    "PlannedAnnotation",
+    "SOURCES",
+    "SourceAdapter",
+]
