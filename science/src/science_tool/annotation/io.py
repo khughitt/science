@@ -382,7 +382,12 @@ def _emit_ledger(led: AuditLedger) -> "list[str]":
 
 def _str_lit(s: str) -> str:
     """Escape a string for use as a TriG plain literal."""
-    escaped = s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    escaped = (
+        s.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+    )
     return f'"{escaped}"'
 
 

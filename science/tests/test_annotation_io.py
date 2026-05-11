@@ -166,3 +166,27 @@ def test_writer_sorts_annotations_by_id(tmp_path: Path) -> None:
     text = out.read_text()
     # a-7f3a should appear before a-7f3b in the serialized output
     assert text.index("anno:a-7f3a ") < text.index("anno:a-7f3b ")
+
+
+def test_writer_escapes_carriage_return(tmp_path: Path) -> None:
+    # Round-trip a string containing CR to confirm _str_lit escapes it.
+    # Unescaped \r is illegal in a TriG string literal and would raise on re-parse.
+    sc = read_sidecar(FIXTURE)
+    target = sc.shared_targets[0]
+    cr_selector = TextQuoteSelector(
+        exact="line one\r\nline two",
+        prefix=target.selector.prefix,
+        suffix=target.selector.suffix,
+    )
+    cr_target = SpecificResource(
+        source=target.source, selector=cr_selector, id=target.id
+    )
+    sc_cr = Sidecar(
+        annotations=(),
+        ledgers=(),
+        shared_targets=(cr_target,),
+    )
+    out = tmp_path / "cr.anno.trig"
+    write_sidecar(out, sc_cr)
+    re_read = read_sidecar(out)
+    assert re_read.shared_targets[0].selector.exact == "line one\r\nline two"
