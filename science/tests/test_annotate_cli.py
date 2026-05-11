@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -67,6 +68,72 @@ def test_verify_does_not_write_back_without_apply(tmp_path: Path) -> None:
     CliRunner().invoke(annotate_group, ["verify", "--root", str(work)])
     after = (work / "source.anno.trig").read_text()
     assert before == after
+
+
+def test_verify_json_schema_summary_keys(tmp_path: Path) -> None:
+    work = _seed(tmp_path)
+    result = CliRunner().invoke(
+        annotate_group, ["verify", "--root", str(work), "--format", "json"]
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert set(payload.keys()) == {"summary", "issues"}
+    summary = payload["summary"]
+    assert set(summary.keys()) == {
+        "sidecars",
+        "annotations",
+        "broken",
+        "degraded",
+        "fuzzy",
+        "source_missing",
+        "parse_errors",
+        "superseded_skipped",
+    }
+    assert summary["broken"] >= 1
+    assert summary["degraded"] >= 1
+    assert summary["fuzzy"] >= 1
+
+
+def test_verify_json_issues_use_relative_sidecar_paths(tmp_path: Path) -> None:
+    work = _seed(tmp_path)
+    result = CliRunner().invoke(
+        annotate_group, ["verify", "--root", str(work), "--format", "json"]
+    )
+    payload = json.loads(result.output)
+    for issue in payload["issues"]:
+        assert not issue["sidecar"].startswith("/")
+        assert "annotation_id" in issue
+        assert "source" in issue
+        assert "kind" in issue
+        assert issue["kind"] in (
+            "broken",
+            "degraded",
+            "fuzzy",
+            "source-missing",
+            "parse-error",
+        )
+
+
+def test_verify_json_summary_only_omits_issues_array(tmp_path: Path) -> None:
+    work = _seed(tmp_path)
+    result = CliRunner().invoke(
+        annotate_group,
+        ["verify", "--root", str(work), "--format", "json", "--summary-only"],
+    )
+    payload = json.loads(result.output)
+    assert "issues" not in payload
+    assert "summary" in payload
+
+
+def test_verify_json_clean_project(tmp_path: Path) -> None:
+    result = CliRunner().invoke(
+        annotate_group, ["verify", "--root", str(tmp_path), "--format", "json"]
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["summary"]["broken"] == 0
+    assert payload["summary"]["sidecars"] == 0
+    assert payload["issues"] == []
 
 
 def _one_degraded_sidecar() -> str:

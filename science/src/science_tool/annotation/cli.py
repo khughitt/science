@@ -7,11 +7,14 @@ Phase 3.1 ships the `verify` subcommand. Later phases (P3.2+) will add
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Optional
 
 import click
 
 from science_tool.annotation.verify import VerifyReport, verify_path
+from science_tool.output import OUTPUT_FORMATS
 
 
 @click.group("annotate")
@@ -37,10 +40,26 @@ def annotate_group() -> None:
     is_flag=True,
     help="Promote degraded/fuzzy warnings to failures (exit 1).",
 )
-def verify(root_path: Path, summary_only: bool, strict: bool) -> None:
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(OUTPUT_FORMATS),
+    default="table",
+    show_default=True,
+)
+def verify(
+    root_path: Path,
+    summary_only: bool,
+    strict: bool,
+    output_format: str,
+) -> None:
     """Resolve every annotation's selector against its source; report drift."""
-    report = verify_path(root_path.resolve())
-    _emit_table(report, summary_only=summary_only)
+    root = root_path.resolve()
+    report = verify_path(root)
+    if output_format == "json":
+        _emit_json(report, root=root, summary_only=summary_only)
+    else:
+        _emit_table(report, summary_only=summary_only)
     _exit_for_report(report, strict=strict)
 
 
@@ -86,6 +105,47 @@ def _emit_table(report: VerifyReport, *, summary_only: bool) -> None:
             click.echo(f"      source: {issue.source}")
         if issue.exact_preview:
             click.echo(f"      exact:  {issue.exact_preview!r}")
+
+
+def _emit_json(
+    report: VerifyReport,
+    *,
+    root: Path,
+    summary_only: bool,
+    apply_meta: Optional[dict[str, int]] = None,
+) -> None:
+    summary = {
+        "sidecars": report.sidecars,
+        "annotations": report.annotations,
+        "broken": report.broken,
+        "degraded": report.degraded,
+        "fuzzy": report.fuzzy,
+        "source_missing": report.source_missing,
+        "parse_errors": report.parse_errors,
+        "superseded_skipped": report.superseded_skipped,
+    }
+    payload: dict[str, object] = {"summary": summary}
+    if apply_meta is not None:
+        payload["apply"] = apply_meta
+    if not summary_only:
+        payload["issues"] = [
+            {
+                "sidecar": _relpath(issue.sidecar, root),
+                "annotation_id": issue.annotation_id,
+                "source": issue.source,
+                "kind": issue.kind,
+                "exact_preview": issue.exact_preview,
+            }
+            for issue in report.issues
+        ]
+    click.echo(json.dumps(payload, indent=2))
+
+
+def _relpath(path: Path, root: Path) -> str:
+    try:
+        return path.resolve().relative_to(root).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 def _exit_for_report(report: VerifyReport, *, strict: bool) -> None:
