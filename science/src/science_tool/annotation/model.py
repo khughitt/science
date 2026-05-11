@@ -89,6 +89,7 @@ class Annotation:
     modified_by: Optional[str] = None     # actor of most recent status mutation
     description: Optional[str] = None
     lifted_from: Optional[str] = None
+    match_text: Optional[str] = None      # per-finding identity (P3.2 dedupe key)
     prior_states: tuple[PriorState, ...] = ()
 
     def __post_init__(self) -> None:
