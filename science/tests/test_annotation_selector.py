@@ -1,7 +1,5 @@
 # science/tests/test_annotation_selector.py
 """Unit tests for science_tool.annotation.selector."""
-import pytest
-
 from science_tool.annotation import TextQuoteSelector
 from science_tool.annotation.selector import (
     ResolutionStatus,

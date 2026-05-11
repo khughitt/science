@@ -2,8 +2,6 @@
 """Unit tests for science_tool.annotation.ledger."""
 from datetime import datetime, timezone
 
-import pytest
-
 from science_tool.annotation import AuditLedger, Sidecar
 from science_tool.annotation.ledger import (
     find_or_create_ledger,
