@@ -43,6 +43,7 @@ class LintIssue:
     check: str
     severity: str
     message: str
+    match: str
 
 
 def severity_for(check: str, *, strict: bool) -> str:
@@ -115,6 +116,7 @@ def detect_bare_author_year(path: Path, *, strict: bool = False) -> list[LintIss
                     check="bare-author-year",
                     severity=severity_for("bare-author-year", strict=strict),
                     message=f"bare author-year mention '{mention}' has no adjacent [@key]",
+                    match=mention,
                 )
             )
     return issues
@@ -164,6 +166,7 @@ def detect_short_form_ids(
                     check="short-form-ids",
                     severity=severity_for("short-form-ids", strict=strict),
                     message=f"short-form ID '{short}' should be canonical '{kind}:…'",
+                    match=short,
                 )
             )
     return issues
@@ -199,6 +202,7 @@ def detect_frontmatter_inline_gaps(
                 check="frontmatter-inline-gap",
                 severity=severity_for("frontmatter-inline-gap", strict=strict),
                 message=f"frontmatter related entry '{ref}' never appears in body prose",
+                match=ref,
             )
         )
     return issues
@@ -282,6 +286,7 @@ def detect_numeric_anchor(
                     check="numeric-anchor",
                     severity=severity_for("numeric-anchor", strict=strict),
                     message=f"numeric claim '{value}' has no anchor in this paragraph",
+                    match=value,
                 )
             )
     return issues
