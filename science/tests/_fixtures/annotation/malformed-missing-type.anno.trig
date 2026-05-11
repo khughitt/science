@@ -1,0 +1,31 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix oa:   <http://www.w3.org/ns/oa#> .
+@prefix dc:   <http://purl.org/dc/terms/> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix sci:  <http://example.org/science/vocab/> .
+@prefix anno: <#> .
+
+anno:annotations {
+  anno:a-bad a oa:Annotation ;
+    oa:hasTarget [
+      oa:hasSource <citation-audit-pilot.md> ;
+      oa:hasSelector [
+        a oa:TextQuoteSelector ;
+        oa:exact   "x" ;
+        oa:prefix  "" ;
+        oa:suffix  ""
+      ]
+    ] ;
+    oa:hasBody [
+      a oa:TextualBody ;
+      dc:format "text/plain" ;
+      rdf:value "body"
+    ] ;
+    oa:motivatedBy oa:classifying ;
+    # sci:annotationType deliberately missing
+    sci:source         "lint:test" ;
+    sci:status         "open" ;
+    sci:contentHash    "sha256:zzz" ;
+    dc:creator         "test" ;
+    dc:created         "2026-05-11T00:00:00+00:00"^^xsd:dateTime .
+}
