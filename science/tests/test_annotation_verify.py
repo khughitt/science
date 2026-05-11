@@ -166,6 +166,113 @@ def _minimal_empty_sidecar() -> str:
     )
 
 
+from datetime import datetime, timezone
+import shutil
+
+from science_tool.annotation.io import read_sidecar
+from science_tool.annotation.model import Status
+from science_tool.annotation.verify import apply_supersessions
+
+
+def test_apply_supersessions_marks_broken_annotations(tmp_path: Path) -> None:
+    work = tmp_path / "project"
+    shutil.copytree(FIX, work)
+    report = verify_path(work)
+    assert report.broken >= 1
+
+    now = datetime(2026, 5, 11, 12, 0, tzinfo=timezone.utc)
+    rewritten = apply_supersessions(report, actor="ci@science", now=now)
+
+    rewritten_names = sorted(p.name for p in rewritten)
+    assert "source.anno.trig" in rewritten_names
+    assert "deep.anno.trig" in rewritten_names
+
+    sidecar = read_sidecar(work / "source.anno.trig")
+    by_id = {a.id: a for a in sidecar.annotations}
+    broken = by_id["a-broken"]
+    assert broken.status is Status.SUPERSEDED
+    assert broken.modified == now
+    assert broken.modified_by == "ci@science"
+    assert broken.creator == "test"
+    assert len(broken.prior_states) == 1
+    assert broken.prior_states[0].status is Status.OPEN
+
+    ok = by_id["a-ok"]
+    assert ok.status is Status.OPEN
+    assert ok.modified is None
+
+
+def test_apply_supersessions_is_idempotent(tmp_path: Path) -> None:
+    work = tmp_path / "project"
+    shutil.copytree(FIX, work)
+    now = datetime(2026, 5, 11, 12, 0, tzinfo=timezone.utc)
+    apply_supersessions(verify_path(work), actor="ci@science", now=now)
+    second_report = verify_path(work)
+    assert second_report.broken == 0
+    second_rewrites = apply_supersessions(
+        second_report, actor="ci@science", now=now
+    )
+    assert second_rewrites == set()
+
+
+def test_apply_supersessions_does_not_touch_degraded_or_fuzzy(tmp_path: Path) -> None:
+    work = tmp_path / "project"
+    shutil.copytree(FIX, work)
+    now = datetime(2026, 5, 11, 12, 0, tzinfo=timezone.utc)
+    apply_supersessions(verify_path(work), actor="ci@science", now=now)
+    sidecar = read_sidecar(work / "source.anno.trig")
+    by_id = {a.id: a for a in sidecar.annotations}
+    assert by_id["a-degraded"].status is Status.OPEN
+    assert by_id["a-fuzzy"].status is Status.OPEN
+
+
+def test_apply_supersessions_writes_each_sidecar_at_most_once(tmp_path: Path) -> None:
+    """Two broken annotations in one sidecar produce one write, not two."""
+    work = tmp_path / "project"
+    work.mkdir()
+    (work / "src.md").write_text("kept paragraph.\n")
+    (work / "src.anno.trig").write_text(_two_broken_in_one_sidecar())
+    report = verify_path(work)
+    assert report.broken == 2
+    rewritten = apply_supersessions(
+        report,
+        actor="ci@science",
+        now=datetime(2026, 5, 11, 12, 0, tzinfo=timezone.utc),
+    )
+    assert len(rewritten) == 1
+
+
+def _two_broken_in_one_sidecar() -> str:
+    return (
+        "@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n"
+        "@prefix oa:   <http://www.w3.org/ns/oa#> .\n"
+        "@prefix dc:   <http://purl.org/dc/terms/> .\n"
+        "@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .\n"
+        "@prefix sci:  <http://example.org/science/vocab/> .\n"
+        "@prefix anno: <#> .\n"
+        "anno:annotations {\n"
+        "  anno:a-1 a oa:Annotation ;\n"
+        "    oa:hasTarget [ oa:hasSource <src.md> ;\n"
+        "      oa:hasSelector [ a oa:TextQuoteSelector ;\n"
+        '        oa:exact "deleted one" ; oa:prefix "" ; oa:suffix "" ] ] ;\n'
+        '    oa:hasBody [ a oa:TextualBody ; dc:format "text/plain" ; rdf:value "x" ] ;\n'
+        "    oa:motivatedBy oa:commenting ;\n"
+        '    sci:annotationType "comment" ; sci:source "human:test" ;\n'
+        '    sci:status "open" ; dc:creator "test" ;\n'
+        '    dc:created "2026-05-11T00:00:00+00:00"^^xsd:dateTime .\n'
+        "  anno:a-2 a oa:Annotation ;\n"
+        "    oa:hasTarget [ oa:hasSource <src.md> ;\n"
+        "      oa:hasSelector [ a oa:TextQuoteSelector ;\n"
+        '        oa:exact "deleted two" ; oa:prefix "" ; oa:suffix "" ] ] ;\n'
+        '    oa:hasBody [ a oa:TextualBody ; dc:format "text/plain" ; rdf:value "y" ] ;\n'
+        "    oa:motivatedBy oa:commenting ;\n"
+        '    sci:annotationType "comment" ; sci:source "human:test" ;\n'
+        '    sci:status "open" ; dc:creator "test" ;\n'
+        '    dc:created "2026-05-11T00:00:00+00:00"^^xsd:dateTime .\n'
+        "}\n"
+    )
+
+
 def _sidecar_with_one_already_superseded() -> str:
     """A sidecar whose one annotation has status='superseded'.
 

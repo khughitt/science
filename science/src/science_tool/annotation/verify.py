@@ -7,11 +7,13 @@ and called separately by the CLI's --apply branch.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Optional
 
-from science_tool.annotation.io import read_sidecar
+from science_tool.annotation.io import read_sidecar, write_sidecar
+from science_tool.annotation.lifecycle import mutate_status
 from science_tool.annotation.model import Status
 from science_tool.annotation.selector import (
     ResolutionStatus,
@@ -193,3 +195,38 @@ def _truncate(s: str, n: int) -> str:
     if len(s) <= n:
         return s
     return s[: n - 1] + "…"
+
+
+def apply_supersessions(
+    report: VerifyReport,
+    *,
+    actor: str,
+    now: datetime,
+) -> set[Path]:
+    """Mutate broken annotations to status='superseded' and rewrite sidecars.
+
+    Returns the set of sidecar paths that were actually rewritten. Only
+    `kind="broken"` issues trigger writes; degraded/fuzzy/source-missing/
+    parse-error are advisory and never auto-mutate.
+    """
+    by_sidecar: dict[Path, set[str]] = {}
+    for issue in report.issues:
+        if issue.kind != "broken":
+            continue
+        by_sidecar.setdefault(issue.sidecar, set()).add(issue.annotation_id)
+
+    rewritten: set[Path] = set()
+    for sidecar_path, broken_ids in by_sidecar.items():
+        sidecar = read_sidecar(sidecar_path)
+        new_annotations = tuple(
+            mutate_status(ann, Status.SUPERSEDED, actor=actor, now=now)
+            if ann.id in broken_ids and ann.status is not Status.SUPERSEDED
+            else ann
+            for ann in sidecar.annotations
+        )
+        if new_annotations == sidecar.annotations:
+            continue
+        new_sidecar = replace(sidecar, annotations=new_annotations)
+        write_sidecar(sidecar_path, new_sidecar)
+        rewritten.add(sidecar_path)
+    return rewritten
