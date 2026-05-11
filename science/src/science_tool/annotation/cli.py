@@ -8,12 +8,18 @@ Phase 3.1 ships the `verify` subcommand. Later phases (P3.2+) will add
 from __future__ import annotations
 
 import json
+import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 import click
 
-from science_tool.annotation.verify import VerifyReport, verify_path
+from science_tool.annotation.verify import (
+    VerifyReport,
+    apply_supersessions,
+    verify_path,
+)
 from science_tool.output import OUTPUT_FORMATS
 
 
@@ -47,20 +53,99 @@ def annotate_group() -> None:
     default="table",
     show_default=True,
 )
+@click.option(
+    "--apply",
+    "apply_changes",
+    is_flag=True,
+    help="Mutate broken annotations to status='superseded' and rewrite sidecars.",
+)
+@click.option(
+    "--actor",
+    type=str,
+    default=None,
+    help="Required with --apply. Identity recorded as dc:contributor on each mutation.",
+)
+@click.option(
+    "--force-dirty",
+    is_flag=True,
+    help="Bypass the clean-tree guard when --apply is set.",
+)
 def verify(
     root_path: Path,
     summary_only: bool,
     strict: bool,
     output_format: str,
+    apply_changes: bool,
+    actor: str | None,
+    force_dirty: bool,
 ) -> None:
-    """Resolve every annotation's selector against its source; report drift."""
+    """Resolve every annotation's selector against its source; report drift.
+
+    Default is dry-run. With --apply, broken annotations are mutated to
+    status='superseded' and their sidecars rewritten. --apply requires
+    --actor.
+    """
     root = root_path.resolve()
+
+    if apply_changes:
+        if not actor:
+            raise click.ClickException("--apply requires --actor <identity>")
+        if not force_dirty:
+            dirty = _dirty_anno_files(root)
+            if dirty:
+                raise click.ClickException(
+                    "Refusing to --apply: the following annotation files have "
+                    "uncommitted changes:\n  "
+                    + "\n  ".join(sorted(d.as_posix() for d in dirty))
+                    + "\nCommit or stash, or pass --force-dirty to override."
+                )
+
     report = verify_path(root)
+
+    rewritten_count = 0
+    pre_apply_broken = 0
+    if apply_changes:
+        pre_apply_broken = report.broken
+        rewritten = apply_supersessions(
+            report,
+            actor=actor,
+            now=datetime.now(timezone.utc),
+        )
+        rewritten_count = len(rewritten)
+        # Re-run after apply so the table/JSON reflects the post-mutation
+        # state. Broken count drops to 0 (or near-zero if a rewrite raced
+        # with a concurrent edit); degraded/fuzzy/parse-errors unchanged.
+        report = verify_path(root)
+
     if output_format == "json":
-        _emit_json(report, root=root, summary_only=summary_only)
+        _emit_json(
+            report,
+            root=root,
+            summary_only=summary_only,
+            apply_meta=(
+                {
+                    "rewritten_sidecars": rewritten_count,
+                    "superseded_annotations": pre_apply_broken,
+                }
+                if apply_changes
+                else None
+            ),
+        )
     else:
+        if apply_changes:
+            click.echo(
+                f"annotate verify --apply: rewrote {rewritten_count} sidecar(s); "
+                f"superseded {pre_apply_broken} broken annotation(s)."
+            )
         _emit_table(report, summary_only=summary_only)
-    _exit_for_report(report, strict=strict)
+
+    # Unified exit policy. Parse errors and post-apply broken rows are
+    # always hard failures. Strict additionally promotes degraded/fuzzy/
+    # source-missing.
+    if report.broken > 0 or report.parse_errors > 0:
+        raise click.exceptions.Exit(1)
+    if strict and (report.degraded > 0 or report.fuzzy > 0 or report.source_missing > 0):
+        raise click.exceptions.Exit(1)
 
 
 def _emit_table(report: VerifyReport, *, summary_only: bool) -> None:
@@ -148,8 +233,31 @@ def _relpath(path: Path, root: Path) -> str:
         return path.as_posix()
 
 
-def _exit_for_report(report: VerifyReport, *, strict: bool) -> None:
-    if report.broken > 0 or report.parse_errors > 0:
-        raise click.exceptions.Exit(1)
-    if strict and (report.degraded > 0 or report.fuzzy > 0):
-        raise click.exceptions.Exit(1)
+def _dirty_anno_files(root: Path) -> list[Path]:
+    """Return *.anno.trig files with uncommitted changes under `root`.
+
+    Returns an empty list when `root` is not a git repo (we don't refuse
+    to apply in non-git contexts; the guard is a convenience for CI/dev
+    workflows, not a hard correctness requirement).
+    """
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (OSError, FileNotFoundError):
+        return []
+    if result.returncode != 0:
+        return []
+    dirty: list[Path] = []
+    for line in result.stdout.splitlines():
+        # Porcelain format: "XY path" — first two chars are status, then space, then path.
+        if len(line) < 4:
+            continue
+        rel = line[3:].strip()
+        if rel.endswith(".anno.trig"):
+            dirty.append(Path(rel))
+    return dirty
