@@ -87,6 +87,7 @@ from science_tool.graph.store import (
     validate_inquiry,
 )
 from science_tool.aspects.cli import aspects_group
+from science_tool.annotation.cli import annotate_group
 from science_tool.big_picture.cli import big_picture_group
 from science_tool.curate.cli import curate_group
 from science_tool.dag.cli import dag_group
@@ -202,6 +203,7 @@ main.add_command(research_package_group)
 main.add_command(verdict_group)
 main.add_command(big_picture_group)
 main.add_command(refs_group)
+main.add_command(annotate_group)
 main.add_command(markers_group)
 main.add_command(prose_group)
 main.add_command(skills_group)
