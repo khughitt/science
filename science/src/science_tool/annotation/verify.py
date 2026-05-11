@@ -118,13 +118,16 @@ def verify_path(root: Path) -> VerifyReport:
             preview = _truncate(ann.target.selector.exact, 80)
 
             if text is None:
+                missing_preview = (
+                    f"[uri-out-of-scope] {preview}" if "://" in source_str else preview
+                )
                 issues.append(
                     VerifyIssue(
                         sidecar=sidecar_path,
                         annotation_id=ann.id,
                         source=source_str,
                         kind="source-missing",
-                        exact_preview=preview,
+                        exact_preview=missing_preview,
                     )
                 )
                 continue

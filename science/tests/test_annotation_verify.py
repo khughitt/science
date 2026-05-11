@@ -118,6 +118,46 @@ def test_verify_path_records_parse_error_without_aborting(tmp_path: Path) -> Non
     assert report.sidecars == 2
 
 
+def test_verify_path_marks_uri_sources_distinctly(tmp_path: Path) -> None:
+    """Absolute URIs are out of scope for v1 but must be visible to the user.
+
+    Regression: an earlier implementation classified URI sources as bare
+    'source-missing' indistinguishable from a missing local file.
+    """
+    sidecar = tmp_path / "uri.anno.trig"
+    sidecar.write_text(_sidecar_with_uri_source())
+    report = verify_path(tmp_path)
+    uri_issues = [i for i in report.issues if i.annotation_id == "a-uri"]
+    assert len(uri_issues) == 1
+    assert uri_issues[0].kind == "source-missing"
+    assert "[uri-out-of-scope]" in uri_issues[0].exact_preview
+
+
+def _sidecar_with_uri_source() -> str:
+    return (
+        "@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n"
+        "@prefix oa:   <http://www.w3.org/ns/oa#> .\n"
+        "@prefix dc:   <http://purl.org/dc/terms/> .\n"
+        "@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .\n"
+        "@prefix sci:  <http://example.org/science/vocab/> .\n"
+        "@prefix anno: <#> .\n"
+        "anno:annotations {\n"
+        "  anno:a-uri a oa:Annotation ;\n"
+        "    oa:hasTarget [\n"
+        "      oa:hasSource <https://example.com/external.html> ;\n"
+        "      oa:hasSelector [\n"
+        "        a oa:TextQuoteSelector ;\n"
+        '        oa:exact "anything" ; oa:prefix "" ; oa:suffix "" ]\n'
+        "    ] ;\n"
+        '    oa:hasBody [ a oa:TextualBody ; dc:format "text/plain" ; rdf:value "x" ] ;\n'
+        "    oa:motivatedBy oa:commenting ;\n"
+        '    sci:annotationType "comment" ; sci:source "human:test" ;\n'
+        '    sci:status "open" ; dc:creator "test" ;\n'
+        '    dc:created "2026-05-11T00:00:00+00:00"^^xsd:dateTime .\n'
+        "}\n"
+    )
+
+
 def _minimal_empty_sidecar() -> str:
     return (
         "@prefix oa: <http://www.w3.org/ns/oa#> .\n"
