@@ -44,6 +44,18 @@ def test_render_one_handles_eliminated_edge(render_workspace: Path) -> None:
     assert dot.count("[✗]") >= 2, "expected at least 2 [✗] eliminated markers"
 
 
+def test_render_one_uses_compact_inline_legend(render_workspace: Path) -> None:
+    render_one(render_workspace, "h1-prognosis")
+    dot = (render_workspace / "h1-prognosis-auto.dot").read_text()
+
+    assert "lg_supp_a" not in dot
+    assert "lg_long_b" not in dot
+    assert 'cellspacing="0" cellpadding="3"' in dot
+    assert '<font color="#2e7d32">&#9473;&#9473;&#9654;</font> supported' in dot
+    assert '<font color="#2e7d32">&#9473;&#9473;&#9670;</font> interventional' in dot
+    assert '<font color="#2e7d32">&#9473;&#9473;&#8857;</font> longitudinal' in dot
+
+
 def test_render_one_structural_invariants(render_workspace: Path) -> None:
     render_one(render_workspace, "h1-progression")
     yaml_path = render_workspace / "h1-progression.edges.yaml"

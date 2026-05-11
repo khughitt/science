@@ -219,47 +219,38 @@ def emit_styled_dot(dot_path: Path, edges: list[dict], out_path: Path) -> None: 
 
         out.append(line)
 
-    # Append a footer legend strip before the closing brace.
-    # Two axes: color/width = edge_status; arrowhead = identification.
+    # Append a compact footer legend before the closing brace. Keep samples as
+    # inline glyphs so Graphviz does not allocate a separate mini-graph.
     legend = [
         "",
         "  // --- Auto-footer legend (two-axis: edge_status + identification) ---",
         "  subgraph cluster_auto_footer_legend {",
         "    rank=sink;",
         '    label="";',
-        '    color="#bdbdbd"; style="rounded"; margin=10;',
+        '    color="#bdbdbd"; style="rounded"; margin=4;',
         "    node [shape=plaintext, fontsize=9];",
-        '    footer_legend [label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="5" color="#bdbdbd">',
+        '    footer_legend [label=<<table border="0" cellborder="1" cellspacing="0" cellpadding="3" color="#bdbdbd">',
         (
             '      <tr><td bgcolor="#f5f5f5"><b>Auto legend</b></td>'
-            '<td bgcolor="#f5f5f5">color/width = edge_status</td>'
-            '<td bgcolor="#f5f5f5">arrowhead = identification</td></tr>'
+            '<td bgcolor="#f5f5f5"><b>edge_status</b>: color / width / style</td>'
+            '<td bgcolor="#f5f5f5"><b>identification</b>: arrowhead</td></tr>'
         ),
         (
-            '      <tr><td><font color="#2e7d32">supported</font></td>'
-            '<td><font color="#1565c0">tentative</font> / '
-            '<font color="#757575">structural</font> / '
-            '<font color="#c62828">unknown</font> / '
-            '<font color="#9e9e9e">eliminated</font></td>'
-            "<td>normal = observational/structural/none; "
-            "diamond = interventional; odot = longitudinal</td></tr>"
+            '      <tr><td align="left">status</td>'
+            '<td align="left"><font color="#2e7d32">&#9473;&#9473;&#9654;</font> supported &nbsp; '
+            '<font color="#1565c0">&#9472;&#9472;&#9654;</font> tentative &nbsp; '
+            '<font color="#757575">&#8943;&#9654;</font> structural</td>'
+            '<td align="left"><font color="#2e7d32">&#9473;&#9473;&#9654;</font> normal: '
+            "observational / structural / none</td></tr>"
+        ),
+        (
+            '      <tr><td align="left"></td>'
+            '<td align="left"><font color="#c62828">&#9548;&#9548;&#9654;</font> unknown &nbsp; '
+            '<font color="#9e9e9e">&#8943;&#9654;</font> [x] eliminated</td>'
+            '<td align="left"><font color="#2e7d32">&#9473;&#9473;&#9670;</font> interventional &nbsp; '
+            '<font color="#2e7d32">&#9473;&#9473;&#8857;</font> longitudinal</td></tr>'
         ),
         "    </table>>];",
-        "    node [shape=plaintext, fontsize=9];",
-        '    lg_supp_a [label="supported"]; lg_supp_b [label=""];',
-        '    lg_tent_a [label="tentative"]; lg_tent_b [label=""];',
-        '    lg_struct_a [label="structural"]; lg_struct_b [label=""];',
-        '    lg_unk_a [label="unknown"]; lg_unk_b [label=""];',
-        '    lg_elim_a [label="[x] eliminated"]; lg_elim_b [label=""];',
-        '    lg_int_a [label="interventional"]; lg_int_b [label=""];',
-        '    lg_long_a [label="longitudinal"]; lg_long_b [label=""];',
-        '    lg_supp_a -> lg_supp_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=normal];',
-        '    lg_tent_a -> lg_tent_b [color="#1565c0", penwidth=1.6, style="solid", arrowhead=normal];',
-        '    lg_struct_a -> lg_struct_b [color="#757575", penwidth=1.0, style="dotted", arrowhead=normal];',
-        '    lg_unk_a -> lg_unk_b [color="#c62828", penwidth=1.2, style="dashed", arrowhead=normal];',
-        '    lg_elim_a -> lg_elim_b [color="#9e9e9e", penwidth=1.0, style="dotted", arrowhead=normal];',
-        '    lg_int_a -> lg_int_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=diamond];',
-        '    lg_long_a -> lg_long_b [color="#2e7d32", penwidth=2.5, style="solid", arrowhead=odot];',
         "  }",
     ]
     # Insert legend before the closing `}` of the outermost digraph.
