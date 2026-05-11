@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.05.11.1
-# science-managed-source-sha256: 171dada621d6741d0deb7d592ec6ac92f4ceb10d39941d6dc06e8d898824cf23
+# science-managed-version: 2026.05.11.2
+# science-managed-source-sha256: 86dedcc6beebd74d4427b9202a1f083ef6de89b0eedbd06ae205db4b688087a4
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -521,7 +521,7 @@ echo ""
 echo "Checking for unresolved markers..."
 
 if command -v science >/dev/null 2>&1 && [ -d "$DOC_DIR" ]; then
-    SCIENCE_MARKERS_FLAGS=()
+    SCIENCE_MARKERS_FLAGS=(--ignore-lifted)
     if [ "$STRICT" -eq 1 ]; then
         SCIENCE_MARKERS_FLAGS+=("--strict")
     fi
