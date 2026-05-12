@@ -25,6 +25,7 @@ from science_tool.entities import (
     list_entities,
 )
 from science_tool.entities_inventory import build_inventory
+from science_tool.entity_kinds import register_local_kind
 from science_tool.graph.materialize import materialization_audit, materialize_graph
 from science_tool.graph.cross_impact import query_cross_impact
 from science_tool.graph.migrate import (
@@ -229,6 +230,19 @@ def entities_inventory_command(project_path: Path, output_format: str, output: P
         click.echo(rendered, nl=False)
     else:
         output.write_text(rendered, encoding="utf-8")
+
+
+@entities_group.command("register-kind")
+@click.argument("kind")
+@click.option("--class", "entity_class", required=True)
+@click.option("--project", "project_path", type=click.Path(path_type=Path), default=Path.cwd())
+def entities_register_kind_command(kind: str, entity_class: str, project_path: Path) -> None:
+    """Register a project-local entity kind in the local profile."""
+    try:
+        result = register_local_kind(project_path, kind, entity_class)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"{kind}: {result}")
 
 
 @main.group("entity")

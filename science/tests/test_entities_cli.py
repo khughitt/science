@@ -293,6 +293,45 @@ def test_entities_inventory_cli_writes_contract_json_to_output_file(tmp_path) ->
     assert payload.entities[0].id == "finding:f001"
 
 
+def test_entities_register_kind_is_idempotent_with_same_metadata(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "knowledge" / "profiles").mkdir(parents=True)
+    (project / "science.yaml").write_text(
+        "id: kind-project\nknowledge_profiles:\n  local: knowledge/profiles/local.yaml\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+
+    first = runner.invoke(
+        main,
+        ["entities", "register-kind", "critique", "--class", "interpretation", "--project", str(project)],
+    )
+    second = runner.invoke(
+        main,
+        ["entities", "register-kind", "critique", "--class", "interpretation", "--project", str(project)],
+    )
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    assert "already registered" in second.output
+
+
+def test_entities_register_kind_errors_on_changed_semantics(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "knowledge" / "profiles").mkdir(parents=True)
+    (project / "science.yaml").write_text(
+        "id: kind-project\nknowledge_profiles:\n  local: knowledge/profiles/local.yaml\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+    runner.invoke(main, ["entities", "register-kind", "critique", "--class", "interpretation", "--project", str(project)])
+
+    result = runner.invoke(main, ["entities", "register-kind", "critique", "--class", "artifact", "--project", str(project)])
+
+    assert result.exit_code != 0
+    assert "already registered with different metadata" in result.output
+
+
 def test_question_create_wrapper_delegates_to_entity_create() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
