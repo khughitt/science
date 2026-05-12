@@ -81,3 +81,16 @@ def test_audit_identifiers_ignores_project_template_markdown(tmp_path) -> None:
     report = audit_identifiers(project)
 
     assert report == {"missing_canonical_ids": [], "invalid_canonical_ids": []}
+
+
+def test_doc_templates_markdown_is_still_audited_and_migrated(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc" / "templates").mkdir(parents=True)
+    path = project / "doc" / "templates" / "foo.md"
+    path.write_text("---\nkind: finding\ntitle: Foo\n---\n", encoding="utf-8")
+
+    audit_report = audit_identifiers(project)
+    migration_report = migrate_identifiers(project, apply=False)
+
+    assert audit_report["missing_canonical_ids"] == ["doc/templates/foo.md"]
+    assert migration_report["planned_changes"] == [{"path": "doc/templates/foo.md", "new_id": "finding:foo"}]

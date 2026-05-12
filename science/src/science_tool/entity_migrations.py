@@ -67,7 +67,7 @@ def _markdown_paths(project_root: Path) -> list[Path]:
     return [
         path
         for path in sorted(project_root.glob("**/*.md"))
-        if "templates" not in path.relative_to(project_root).parts
+        if path.relative_to(project_root).parts[:1] != ("templates",)
     ]
 
 
