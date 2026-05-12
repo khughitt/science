@@ -94,8 +94,9 @@ itself adding any of these should stop and escalate.
   `text_segmentation.sentence_range_at` (col known) +
   `text_segmentation.build_quote_selector`.
 - `science/src/science_tool/annotation/audit.py` — replace `assert`
-  invariants with explicit `ValueError` raises; hoist `existing_ids`
-  set construction out of `mint_id` so `merge_planned` builds it once.
+  invariants with explicit `ValueError` raises; hoist
+  `existing_by_id` map construction out of `mint_id` so
+  `merge_planned` builds it once and `mint_id` becomes O(1) per call.
 - `science/src/science_tool/annotation/lifecycle.py` — tighten
   `mutate_status` to require `OPEN` source for any non-`SUPERSEDED`
   target status (Decision 12).
@@ -231,7 +232,7 @@ def test_round_trip_multi_dotted() -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest science/tests/test_io_path_helpers.py -v`
+Run: `cd science && uv run pytest tests/test_io_path_helpers.py -v`
 Expected: FAIL — `cannot import name 'sidecar_for_markdown' from
 'science_tool.annotation.io'`.
 
@@ -279,12 +280,12 @@ def markdown_for_sidecar(sidecar_path: Path) -> Path:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest science/tests/test_io_path_helpers.py -v`
+Run: `cd science && uv run pytest tests/test_io_path_helpers.py -v`
 Expected: PASS (10 tests).
 
 - [ ] **Step 5: Confirm no regressions**
 
-Run: `uv run pytest science/tests/ -q -k "annotation or annotate"`
+Run: `cd science && uv run pytest tests/ -q -k "annotation or annotate"`
 Expected: all annotation tests green; this is purely additive.
 
 - [ ] **Step 6: Commit**
@@ -391,7 +392,7 @@ def test_serialize_sidecar_returns_str() -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest science/tests/test_io_atomic_write_serialize.py -v`
+Run: `cd science && uv run pytest tests/test_io_atomic_write_serialize.py -v`
 Expected: FAIL — `cannot import name 'atomic_write_text'`.
 
 - [ ] **Step 3: Add public helpers in `io.py`**
@@ -486,12 +487,12 @@ inside `lift_tokens_cmd`).
 
 - [ ] **Step 5: Run new tests to verify they pass**
 
-Run: `uv run pytest science/tests/test_io_atomic_write_serialize.py -v`
+Run: `cd science && uv run pytest tests/test_io_atomic_write_serialize.py -v`
 Expected: PASS (4 tests).
 
 - [ ] **Step 6: Run lift-tokens tests to confirm no regression**
 
-Run: `uv run pytest science/tests/test_annotate_lift_tokens_cli.py -v`
+Run: `cd science && uv run pytest tests/test_annotate_lift_tokens_cli.py -v`
 Expected: all P3.2 lift-tokens tests still pass.
 
 - [ ] **Step 7: Commit**
@@ -672,7 +673,7 @@ def test_sentence_range_at_requires_col_no_default() -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest science/tests/test_text_segmentation.py -v`
+Run: `cd science && uv run pytest tests/test_text_segmentation.py -v`
 Expected: FAIL — `No module named 'science_tool.annotation.text_segmentation'`.
 
 - [ ] **Step 3: Create `text_segmentation.py`**
@@ -832,7 +833,7 @@ def build_quote_selector(
 
 - [ ] **Step 4: Run new tests to verify they pass**
 
-Run: `uv run pytest science/tests/test_text_segmentation.py -v`
+Run: `cd science && uv run pytest tests/test_text_segmentation.py -v`
 Expected: PASS (15 tests).
 
 - [ ] **Step 5: Switch `marker_token.py` to use the new helpers**
@@ -968,7 +969,7 @@ def _replan_for_remove(
 
 - [ ] **Step 8: Run all annotation tests to confirm no regression**
 
-Run: `uv run pytest science/tests/ -q -k "annotation or annotate"`
+Run: `cd science && uv run pytest tests/ -q -k "annotation or annotate"`
 Expected: all pre-existing tests (P3.0 / P3.1 / P3.2) still green.
 The marker-token and lint tests in particular are the regression
 sentinels for the swap.
@@ -997,9 +998,12 @@ git commit -m "refactor(annotation): extract text_segmentation helpers (P3.2 fol
 Two micro-changes folded together (Follow-ups 2 + 3):
 - `assert` invariants in `merge_planned` and `mint_id` become explicit
   `ValueError` raises so the guards survive `python -O`.
-- `existing_ids` set construction hoists out of `mint_id` into
-  `merge_planned`, so K planned rows share one O(N) set build instead
-  of K of them.
+- `existing_by_id: dict[str, Annotation]` map construction hoists
+  out of `mint_id` into `merge_planned`. Replaces both the per-call
+  `next(...)` scan over `sidecar.annotations` (was O(N) per call)
+  and the `existing_ids` set used for `-N` suffix probing — one map
+  serves both purposes. K planned rows now share one O(N) build
+  instead of doing K × O(N) scans.
 
 - [ ] **Step 1: Write the failing tests for the invariant change**
 
@@ -1052,36 +1056,102 @@ def test_merge_planned_rejects_mixed_sources_with_value_error() -> None:
         )
 ```
 
-- [ ] **Step 2: Write the failing test for the set-hoist refactor**
+- [ ] **Step 2: Write the failing tests for the set-hoist refactor**
 
 Create `science/tests/test_audit_mint_id_set_hoist.py`:
 
 ```python
-"""mint_id accepts existing_ids set so merge_planned can build it once."""
+"""mint_id accepts existing_by_id map; merge_planned scales O(planned + existing)."""
 
 from __future__ import annotations
 
 import inspect
+import time
+from datetime import datetime, timezone
 
-from science_tool.annotation.audit import mint_id
+import pytest
+
+from science_tool.annotation.audit import merge_planned, mint_id
+from science_tool.annotation.model import (
+    Annotation,
+    Motivation,
+    Sidecar,
+    SpecificResource,
+    Status,
+    TextQuoteSelector,
+    TextualBody,
+)
+from science_tool.annotation.sources.base import PlannedAnnotation
 
 
-def test_mint_id_signature_takes_existing_ids() -> None:
+def _planned(i: int) -> PlannedAnnotation:
+    return PlannedAnnotation(
+        target=SpecificResource(
+            source="x.md",
+            selector=TextQuoteSelector(
+                exact=f"sentence number {i}.",
+                prefix="", suffix="",
+            ),
+        ),
+        annotation_type="bare-author-year",
+        motivation=Motivation.CLASSIFYING,
+        body=TextualBody(value="msg"),
+        match_text=f"m{i}",
+        source_name="lint:foo-v1",
+    )
+
+
+def test_mint_id_signature_takes_existing_by_id() -> None:
+    """Signature change is the load-bearing API contract."""
     sig = inspect.signature(mint_id)
-    assert "existing_ids" in sig.parameters, (
-        "mint_id must accept existing_ids: set[str] for O(N) hoist"
+    assert "existing_by_id" in sig.parameters, (
+        "mint_id must accept existing_by_id: dict[str, Annotation] "
+        "(set-only is insufficient: base_id lookup also needs the map)"
+    )
+
+
+def test_merge_planned_handles_large_batch_in_reasonable_time() -> None:
+    """Soft performance assertion: O(planned + existing), not O(planned × existing).
+
+    With 500 existing rows and 500 fresh planned rows (no collisions),
+    merge_planned should complete well under 1 second on commodity
+    hardware. The threshold has a generous 10× margin to absorb CI
+    variance; the goal is to catch regressions to O(N²) behavior, not
+    to micro-benchmark.
+    """
+    now = datetime(2026, 5, 11, tzinfo=timezone.utc)
+    initial_planned = [_planned(i) for i in range(500)]
+    sidecar0, _ = merge_planned(
+        Sidecar(), initial_planned, actor="t", now=now,
+    )
+    new_planned = [_planned(500 + i) for i in range(500)]
+    start = time.perf_counter()
+    sidecar1, written = merge_planned(
+        sidecar0, new_planned, actor="t", now=now,
+    )
+    elapsed = time.perf_counter() - start
+    assert len(written) == 500
+    assert len(sidecar1.annotations) == 1000
+    assert elapsed < 1.0, (
+        f"merge_planned took {elapsed:.2f}s for 500+500 rows "
+        "(suggests O(N²) regression in mint_id)"
     )
 ```
+
+The signature test pins the API contract; the performance test
+catches a future regression that re-introduces a per-call O(N) scan
+inside `mint_id`.
 
 - [ ] **Step 3: Run tests to verify they fail**
 
 Run:
 ```bash
-uv run pytest science/tests/test_audit_invariant_value_error.py \
-              science/tests/test_audit_mint_id_set_hoist.py -v
+cd science && uv run pytest \
+    tests/test_audit_invariant_value_error.py \
+    tests/test_audit_mint_id_set_hoist.py -v
 ```
 Expected: FAIL on both — current `merge_planned` raises
-`AssertionError`; current `mint_id` lacks `existing_ids` parameter.
+`AssertionError`; current `mint_id` lacks `existing_by_id` parameter.
 
 - [ ] **Step 4: Convert `assert` to `ValueError` in `audit.py`**
 
@@ -1121,28 +1191,33 @@ Replace with:
         )
 ```
 
-- [ ] **Step 5: Hoist `existing_ids` set construction**
+- [ ] **Step 5: Hoist `existing_by_id` map construction**
 
 Still in `audit.py`. Change `mint_id`'s signature and body to accept
-the precomputed set:
+the precomputed `id → Annotation` map. The map subsumes the set
+(`.keys()` gives O(1) membership) and replaces the per-call O(N)
+`next(...)` scan over `sidecar.annotations`:
 
 ```python
 def mint_id(
     sidecar: Sidecar,
     p: PlannedAnnotation,
     *,
-    existing_ids: set[str],
+    existing_by_id: dict[str, Annotation],
 ) -> str:
     """Mint the on-disk ID for a planned row.
 
-    `existing_ids` is the set of every annotation id currently in
-    `sidecar` (built once by the caller for O(1) lookups across many
-    `mint_id` calls).
+    `existing_by_id` is `{a.id: a for a in sidecar.annotations}` built
+    once by the caller. Used for both the base-ID lookup and the `-N`
+    suffix probe so a single mint_id call is O(1) regardless of
+    sidecar size.
+
+    Note: `sidecar` is no longer scanned by mint_id itself, but is
+    retained in the signature for the IdCollisionError message and
+    forward-compat (e.g. P3.5 LLM source may want sidecar metadata).
     """
     base_id = _mint_base_id(p)
-    existing_at_base = next(
-        (a for a in sidecar.annotations if a.id == base_id), None,
-    )
+    existing_at_base = existing_by_id.get(base_id)
     if existing_at_base is None:
         return base_id
 
@@ -1157,7 +1232,7 @@ def mint_id(
                 f"{existing_at_base.status.value!r})"
             )
         n = 2
-        while f"{base_id}-{n}" in existing_ids:
+        while f"{base_id}-{n}" in existing_by_id:
             n += 1
         return f"{base_id}-{n}"
 
@@ -1168,20 +1243,34 @@ def mint_id(
     )
 ```
 
-In `merge_planned`, build `existing_ids` once and thread it through.
-Find the loop that calls `mint_id(sidecar, p)` and update:
+In `merge_planned`, build `existing_by_id` once and add each newly
+constructed Annotation to it as the loop iterates. This keeps the
+map consistent for both the `.get(base_id)` semantic check (needs a
+real Annotation to read `.status`, `.source`, etc.) and the
+`f"{base_id}-{n}" in existing_by_id` suffix-probe membership test:
 
 ```python
-    existing_ids: set[str] = {a.id for a in sidecar.annotations}
-    # ... later, where mint_id is called:
-    new_id = mint_id(sidecar, p, existing_ids=existing_ids)
-    existing_ids.add(new_id)  # keep up-to-date for subsequent rows
+    existing_by_id: dict[str, Annotation] = {
+        a.id: a for a in sidecar.annotations
+    }
+    out_annotations = list(sidecar.annotations)
+    written: list[Annotation] = []
+    for p in planned:
+        # ... existing 4-tuple skip / dedupe logic unchanged ...
+        new_id = mint_id(sidecar, p, existing_by_id=existing_by_id)
+        new_ann = _build_annotation(new_id, p, actor=actor, now=now)
+        existing_by_id[new_id] = new_ann   # <-- real Annotation, not a sentinel
+        out_annotations.append(new_ann)
+        written.append(new_ann)
+    new_sidecar = replace(sidecar, annotations=tuple(out_annotations))
+    return new_sidecar, written
 ```
 
-The exact placement: find the existing `mint_id(...)` call inside
-`merge_planned`'s body and adjust as above. Adding the new id to the
-set after each call ensures successive planned rows in the same merge
-batch see prior assignments.
+The exact placement: locate the existing per-planned-row body inside
+`merge_planned`, insert the `existing_by_id` initialisation before
+the loop, and add `existing_by_id[new_id] = new_ann` immediately
+after the new annotation is built. No sentinel values; the map only
+ever contains real Annotation instances.
 
 - [ ] **Step 6: Update the existing audit-merge test**
 
@@ -1208,15 +1297,16 @@ with pytest.raises(ValueError, match="single-source"):
 
 Run:
 ```bash
-uv run pytest science/tests/test_audit_invariant_value_error.py \
-              science/tests/test_audit_mint_id_set_hoist.py \
-              science/tests/test_annotation_audit_merge.py -v
+cd science && uv run pytest \
+    tests/test_audit_invariant_value_error.py \
+    tests/test_audit_mint_id_set_hoist.py \
+    tests/test_annotation_audit_merge.py -v
 ```
 Expected: PASS on all.
 
 - [ ] **Step 8: Run full annotation suite to confirm no regressions**
 
-Run: `uv run pytest science/tests/ -q -k "annotation or annotate"`
+Run: `cd science && uv run pytest tests/ -q -k "annotation or annotate"`
 Expected: green.
 
 - [ ] **Step 9: Commit**
@@ -1226,7 +1316,7 @@ git add science/src/science_tool/annotation/audit.py \
         science/tests/test_annotation_audit_merge.py \
         science/tests/test_audit_invariant_value_error.py \
         science/tests/test_audit_mint_id_set_hoist.py
-git commit -m "refactor(annotation/audit): assert→ValueError; hoist existing_ids set"
+git commit -m "refactor(annotation/audit): assert→ValueError; hoist existing_by_id map (O(1) mint_id)"
 ```
 
 ---
@@ -1348,7 +1438,7 @@ def test_transition_to_open_refused() -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest science/tests/test_lifecycle_open_source_guard.py -v`
+Run: `cd science && uv run pytest tests/test_lifecycle_open_source_guard.py -v`
 Expected: the `test_superseded_to_terminal_refused` parametrized cases
 all FAIL (current code allows the transition); other tests pass.
 
@@ -1393,12 +1483,12 @@ SUPERSEDED-source attempts.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest science/tests/test_lifecycle_open_source_guard.py -v`
+Run: `cd science && uv run pytest tests/test_lifecycle_open_source_guard.py -v`
 Expected: PASS (all parametrized cases).
 
 - [ ] **Step 5: Confirm pre-existing lifecycle tests still pass**
 
-Run: `uv run pytest science/tests/ -q -k "lifecycle"`
+Run: `cd science && uv run pytest tests/ -q -k "lifecycle"`
 Expected: green. (P3.0 lifecycle tests cover OPEN→* and terminal
 refusal; both branches survive the change.)
 
@@ -1514,11 +1604,32 @@ def test_iter_sidecars_returns_parsed_sidecar(tmp_path: Path) -> None:
     assert len(results) == 1
     _path, sidecar = results[0]
     assert sidecar.annotations[0].id == "a-xyz"
+
+
+def test_read_sidecar_strict_wraps_parse_error(tmp_path: Path) -> None:
+    """Single-file read goes through the same SidecarParseError wrap."""
+    from science_tool.annotation.query import read_sidecar_strict
+
+    bad = tmp_path / "bad.anno.trig"
+    bad.write_text("THIS IS NOT VALID TRIG", encoding="utf-8")
+    with pytest.raises(SidecarParseError) as excinfo:
+        read_sidecar_strict(bad)
+    assert excinfo.value.sidecar_path == bad
+    assert isinstance(excinfo.value.cause, Exception)
+
+
+def test_read_sidecar_strict_returns_parsed(tmp_path: Path) -> None:
+    from science_tool.annotation.query import read_sidecar_strict
+
+    p = tmp_path / "x.anno.trig"
+    write_sidecar(p, Sidecar(annotations=(_ann("a-good"),)))
+    sidecar = read_sidecar_strict(p)
+    assert sidecar.annotations[0].id == "a-good"
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest science/tests/test_query_iter_sidecars.py -v`
+Run: `cd science && uv run pytest tests/test_query_iter_sidecars.py -v`
 Expected: FAIL — `No module named 'science_tool.annotation.query'`.
 
 - [ ] **Step 3: Create `query.py` with `iter_sidecars` + `SidecarParseError`**
@@ -1568,27 +1679,39 @@ class SidecarParseError(Exception):
         )
 
 
+# ---- Single-sidecar read with parse-error wrapping -----------------
+
+def read_sidecar_strict(path: Path) -> Sidecar:
+    """Read one sidecar; wrap any parse exception in SidecarParseError.
+
+    Used by every code path in this module that loads a sidecar
+    (iter_sidecars, resolve_id qualified lookups, etc.) and by
+    cli._scope_to_sidecars when PATH names a single .md or
+    .anno.trig file. Centralising the wrap means callers only ever
+    need to catch SidecarParseError, not the underlying rdflib /
+    ValueError / FileNotFoundError zoo.
+    """
+    try:
+        return read_sidecar(path)
+    except Exception as exc:
+        raise SidecarParseError(path, exc) from exc
+
+
 # ---- Walk ------------------------------------------------------------
 
 def iter_sidecars(root: Path) -> Iterator[tuple[Path, Sidecar]]:
     """Yield (sidecar_path, parsed Sidecar) for every *.anno.trig under root.
 
-    Walks recursively. Wraps any read_sidecar exception (ValueError,
-    FileNotFoundError, rdflib parse errors) in SidecarParseError(
-    sidecar_path, cause). The first SidecarParseError propagates;
-    iteration stops.
+    Walks recursively. Parse failures propagate as SidecarParseError
+    via `read_sidecar_strict`; iteration stops at the first failure.
     """
     for path in sorted(root.rglob("*.anno.trig")):
-        try:
-            sidecar = read_sidecar(path)
-        except Exception as exc:
-            raise SidecarParseError(path, exc) from exc
-        yield path, sidecar
+        yield path, read_sidecar_strict(path)
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest science/tests/test_query_iter_sidecars.py -v`
+Run: `cd science && uv run pytest tests/test_query_iter_sidecars.py -v`
 Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
@@ -1763,7 +1886,7 @@ def test_resolved_carries_full_sidecar(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest science/tests/test_query_resolve_id.py -v`
+Run: `cd science && uv run pytest tests/test_query_resolve_id.py -v`
 Expected: FAIL — symbols don't yet exist in `query.py`.
 
 - [ ] **Step 3: Add types and `resolve_id` to `query.py`**
@@ -1872,7 +1995,7 @@ def _resolve_rel_path(
         raise AnnotationNotFound(
             f"no sidecar at {sidecar_path}"
         )
-    sidecar = read_sidecar(sidecar_path)
+    sidecar = read_sidecar_strict(sidecar_path)
     for ann in sidecar.annotations:
         if ann.id == frag:
             return _build_resolved(sidecar_path, sidecar, ann, root)
@@ -1901,7 +2024,7 @@ def _resolve_bare_stem(
             candidates=candidates,
         )
     sidecar_path = matches[0]
-    sidecar = read_sidecar(sidecar_path)
+    sidecar = read_sidecar_strict(sidecar_path)
     for ann in sidecar.annotations:
         if ann.id == frag:
             return _build_resolved(sidecar_path, sidecar, ann, root)
@@ -1935,12 +2058,12 @@ def _resolve_bare_frag(root: Path, frag: str) -> ResolvedAnnotation:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest science/tests/test_query_resolve_id.py -v`
+Run: `cd science && uv run pytest tests/test_query_resolve_id.py -v`
 Expected: PASS (11 tests).
 
 - [ ] **Step 5: Run prior query tests to confirm no regression**
 
-Run: `uv run pytest science/tests/test_query_iter_sidecars.py -v`
+Run: `cd science && uv run pytest tests/test_query_iter_sidecars.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -2190,7 +2313,7 @@ def test_git_changed_markdown_non_repo_raises(tmp_path: Path, monkeypatch) -> No
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `uv run pytest science/tests/test_query_filter.py -v`
+Run: `cd science && uv run pytest tests/test_query_filter.py -v`
 Expected: FAIL — `filter_annotations` and `git_changed_markdown` not
 defined.
 
@@ -2281,12 +2404,12 @@ def git_changed_markdown(root: Path, ref: str) -> frozenset[Path]:
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `uv run pytest science/tests/test_query_filter.py -v`
+Run: `cd science && uv run pytest tests/test_query_filter.py -v`
 Expected: PASS (11 tests).
 
 - [ ] **Step 6: Run prior query tests to confirm no regression**
 
-Run: `uv run pytest science/tests/test_query_iter_sidecars.py science/tests/test_query_resolve_id.py -v`
+Run: `cd science && uv run pytest tests/test_query_iter_sidecars.py science/tests/test_query_resolve_id.py -v`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -2429,7 +2552,7 @@ def test_total_sidecars_counts_files(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest science/tests/test_query_stats.py -v`
+Run: `cd science && uv run pytest tests/test_query_stats.py -v`
 Expected: FAIL — `compute_stats` and `StatsReport` not defined.
 
 - [ ] **Step 3: Add `StatsReport` + `compute_stats`**
@@ -2484,12 +2607,12 @@ def _sorted_desc(d: dict, *, key_to_str) -> dict:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest science/tests/test_query_stats.py -v`
+Run: `cd science && uv run pytest tests/test_query_stats.py -v`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Run all query tests to confirm green**
 
-Run: `uv run pytest science/tests/test_query_*.py -v`
+Run: `cd science && uv run pytest tests/test_query_*.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -2740,7 +2863,7 @@ def test_round_trip_after_mutation(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest science/tests/test_crud_apply.py -v`
+Run: `cd science && uv run pytest tests/test_crud_apply.py -v`
 Expected: FAIL — `science_tool.annotation.crud` module does not exist.
 
 - [ ] **Step 3: Create `crud.py`**
@@ -2886,12 +3009,12 @@ def _resolve_actor(actor_opt: Optional[str], root: Path) -> str:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest science/tests/test_crud_apply.py -v`
+Run: `cd science && uv run pytest tests/test_crud_apply.py -v`
 Expected: PASS (≈12 tests).
 
 - [ ] **Step 5: Confirm no regression in adjacent tests**
 
-Run: `uv run pytest science/tests/ -q -k "lifecycle or crud or query"`
+Run: `cd science && uv run pytest tests/ -q -k "lifecycle or crud or query"`
 Expected: green.
 
 - [ ] **Step 6: Commit**
@@ -3070,6 +3193,28 @@ def test_list_path_missing_md_is_empty(tmp_path: Path) -> None:
     assert "0 annotation" in result.output
 
 
+def test_list_path_md_with_corrupt_sidecar_friendly_error(tmp_path: Path) -> None:
+    """PATH=foo.md with corrupt foo.anno.trig produces ClickException, not raw rdflib trace."""
+    md = tmp_path / "foo.md"
+    md.write_text("body", encoding="utf-8")
+    sidecar = tmp_path / "foo.anno.trig"
+    sidecar.write_text("THIS IS NOT VALID TRIG", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(annotate_group, ["list", str(md)])
+    assert result.exit_code == 1
+    assert "foo.anno.trig" in result.output
+
+
+def test_list_path_anno_trig_corrupt_friendly_error(tmp_path: Path) -> None:
+    """PATH=foo.anno.trig (corrupt) produces ClickException, not raw rdflib trace."""
+    sidecar = tmp_path / "foo.anno.trig"
+    sidecar.write_text("THIS IS NOT VALID TRIG", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(annotate_group, ["list", str(sidecar)])
+    assert result.exit_code == 1
+    assert "foo.anno.trig" in result.output
+
+
 def test_list_root_and_path_mutually_exclusive(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(annotate_group, [
@@ -3093,7 +3238,7 @@ def test_list_since_outside_repo_errors(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest science/tests/test_annotate_list_cli.py -v`
+Run: `cd science && uv run pytest tests/test_annotate_list_cli.py -v`
 Expected: FAIL — `list` subcommand not registered.
 
 - [ ] **Step 3: Add `list_cmd` to `cli.py`**
@@ -3147,12 +3292,12 @@ def _scope_to_sidecars(
                 return path.parent.resolve(), []
             return (
                 path.parent.resolve(),
-                [(sidecar_path, read_sidecar(sidecar_path))],
+                [(sidecar_path, query.read_sidecar_strict(sidecar_path))],
             )
         if path.name.endswith(".anno.trig"):
             return (
                 path.parent.resolve(),
-                [(path, read_sidecar(path))],
+                [(path, query.read_sidecar_strict(path))],
             )
         raise click.ClickException(
             f"PATH {path} is not a directory, .md, or .anno.trig file"
@@ -3282,12 +3427,12 @@ during step 4, add an explicit
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest science/tests/test_annotate_list_cli.py -v`
+Run: `cd science && uv run pytest tests/test_annotate_list_cli.py -v`
 Expected: PASS (≈10 tests).
 
 - [ ] **Step 5: Confirm broader CLI suite green**
 
-Run: `uv run pytest science/tests/ -q -k "annotate"`
+Run: `cd science && uv run pytest tests/ -q -k "annotate"`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -3422,7 +3567,12 @@ def test_dismiss_happy(tmp_path: Path) -> None:
         "--actor", "alice", "--reason", "not actionable",
     ])
     assert result.exit_code == 0, result.output
+    # Verb prefix must be `dismiss:` (the command name), NOT
+    # `dismissed:` (Status.DISMISSED.value). Regression sentinel.
     assert "dismiss:" in result.output
+    assert "dismissed:" not in result.output  # would indicate verb-not-passed bug
+    assert "open → dismissed" in result.output
+    assert "(reason: not actionable)" in result.output
     sidecar = read_sidecar(sidecar_path)
     assert sidecar.annotations[0].description == "not actionable"
 
@@ -3436,6 +3586,10 @@ def test_fix_happy(tmp_path: Path) -> None:
         "fix", "a-aaa", "--root", str(tmp_path), "--actor", "alice",
     ])
     assert result.exit_code == 0
+    # Verb prefix must be the user-facing command name, NOT
+    # Status.FIXED.value ("fixed"). Regression sentinel.
+    assert "fix:" in result.output
+    assert "open → fixed" in result.output
     assert read_sidecar(sidecar_path).annotations[0].status is Status.FIXED
 
 
@@ -3539,7 +3693,7 @@ def test_actor_falls_back_to_git_user_email(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest science/tests/test_annotate_ack_dismiss_fix_cli.py -v`
+Run: `cd science && uv run pytest tests/test_annotate_ack_dismiss_fix_cli.py -v`
 Expected: FAIL — three commands not registered.
 
 - [ ] **Step 3: Add the three CLI commands to `cli.py`**
@@ -3549,6 +3703,7 @@ Edit `science/src/science_tool/annotation/cli.py`. Append after
 
 ```python
 def _crud_invoke(
+    verb: str,
     new_status: Status,
     *,
     id_arg: str,
@@ -3557,7 +3712,14 @@ def _crud_invoke(
     force_dirty: bool,
     reason: str | None = None,
 ) -> None:
-    """Shared body for ack_cmd / dismiss_cmd / fix_cmd."""
+    """Shared body for ack_cmd / dismiss_cmd / fix_cmd.
+
+    `verb` is the user-facing command name ("ack", "dismiss", "fix")
+    used as the output prefix. Necessary because Status.DISMISSED.value
+    is "dismissed" and Status.FIXED.value is "fixed" — the resulting
+    status is NOT the verb. The spec output examples are
+    `dismiss: ...` and `fix: ...`, not `dismissed: ...` / `fixed: ...`.
+    """
     root = (root_path or Path.cwd()).resolve()
     actor = crud._resolve_actor(actor_opt, root)
     now = datetime.now(timezone.utc)
@@ -3582,7 +3744,7 @@ def _crud_invoke(
         f" (reason: {reason})" if reason else ""
     )
     click.echo(
-        f"{new_status.value}: {result.qualified_id} "
+        f"{verb}: {result.qualified_id} "
         f"{result.prior_status.value} → {result.new_status.value}{suffix}"
     )
 
@@ -3601,7 +3763,7 @@ def ack_cmd(
 ) -> None:
     """Acknowledge an annotation (status: open → ack)."""
     _crud_invoke(
-        Status.ACK,
+        "ack", Status.ACK,
         id_arg=id_arg, root_path=root_path,
         actor_opt=actor_opt, force_dirty=force_dirty,
     )
@@ -3624,7 +3786,7 @@ def dismiss_cmd(
     if not reason.strip():
         raise click.ClickException("--reason cannot be empty")
     _crud_invoke(
-        Status.DISMISSED,
+        "dismiss", Status.DISMISSED,
         id_arg=id_arg, root_path=root_path,
         actor_opt=actor_opt, force_dirty=force_dirty,
         reason=reason,
@@ -3645,7 +3807,7 @@ def fix_cmd(
 ) -> None:
     """Mark an annotation as fixed (status: open → fixed)."""
     _crud_invoke(
-        Status.FIXED,
+        "fix", Status.FIXED,
         id_arg=id_arg, root_path=root_path,
         actor_opt=actor_opt, force_dirty=force_dirty,
     )
@@ -3653,12 +3815,12 @@ def fix_cmd(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest science/tests/test_annotate_ack_dismiss_fix_cli.py -v`
+Run: `cd science && uv run pytest tests/test_annotate_ack_dismiss_fix_cli.py -v`
 Expected: PASS (≈11 tests).
 
 - [ ] **Step 5: Confirm broader suite green**
 
-Run: `uv run pytest science/tests/ -q -k "annotate"`
+Run: `cd science && uv run pytest tests/ -q -k "annotate"`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -3804,7 +3966,7 @@ def test_stats_descending_order_in_json(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `uv run pytest science/tests/test_annotate_stats_cli.py -v`
+Run: `cd science && uv run pytest tests/test_annotate_stats_cli.py -v`
 Expected: FAIL — `stats` command not registered.
 
 - [ ] **Step 3: Add `stats_cmd` to `cli.py`**
@@ -3861,12 +4023,12 @@ def stats_cmd(root_path: Path | None, fmt: str) -> None:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `uv run pytest science/tests/test_annotate_stats_cli.py -v`
+Run: `cd science && uv run pytest tests/test_annotate_stats_cli.py -v`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Confirm broader suite green**
 
-Run: `uv run pytest science/tests/ -q -k "annotate"`
+Run: `cd science && uv run pytest tests/ -q -k "annotate"`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -4031,12 +4193,12 @@ def test_full_pipeline(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run the integration test**
 
-Run: `uv run pytest science/tests/test_annotate_p33_integration.py -v`
+Run: `cd science && uv run pytest tests/test_annotate_p33_integration.py -v`
 Expected: PASS (1 test).
 
 - [ ] **Step 3: Confirm the entire annotation suite is green**
 
-Run: `uv run pytest science/tests/ -q -k "annotation or annotate or lifecycle or query or crud or text_segmentation or io_path_helpers or io_atomic"`
+Run: `cd science && uv run pytest tests/ -q -k "annotation or annotate or lifecycle or query or crud or text_segmentation or io_path_helpers or io_atomic"`
 Expected: green; total ≥ 60 new tests added across Tasks 1–14.
 
 - [ ] **Step 4: Commit**
