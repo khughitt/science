@@ -25,6 +25,7 @@ from science_tool.entities import (
     list_entities,
 )
 from science_tool.entities_inventory import build_inventory
+from science_tool.entity_migrations import audit_identifiers, migrate_identifiers
 from science_tool.entity_kinds import register_local_kind
 from science_tool.graph.materialize import materialization_audit, materialize_graph
 from science_tool.graph.cross_impact import query_cross_impact
@@ -230,6 +231,23 @@ def entities_inventory_command(project_path: Path, output_format: str, output: P
         click.echo(rendered, nl=False)
     else:
         output.write_text(rendered, encoding="utf-8")
+
+
+@entities_group.command("audit-identifiers")
+@click.option("--project", "project_path", type=click.Path(path_type=Path), default=Path.cwd())
+def entities_audit_identifiers_command(project_path: Path) -> None:
+    click.echo(json.dumps(audit_identifiers(project_path), indent=2))
+
+
+@entities_group.command("migrate-identifiers")
+@click.option("--project", "project_path", type=click.Path(path_type=Path), default=Path.cwd())
+@click.option("--apply", "apply_changes", is_flag=True, default=False)
+def entities_migrate_identifiers_command(project_path: Path, apply_changes: bool) -> None:
+    try:
+        report = migrate_identifiers(project_path, apply=apply_changes)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(json.dumps(report, indent=2))
 
 
 @entities_group.command("register-kind")
