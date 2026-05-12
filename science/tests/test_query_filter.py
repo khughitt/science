@@ -190,8 +190,8 @@ def test_git_changed_markdown_returns_paths(tmp_path: Path, monkeypatch) -> None
         (tmp_path / "notes/foo.md").resolve(),
         (tmp_path / "appendix/bar.md").resolve(),
     })
-    assert captured["args"][0:5] == [
-        "git", "diff", "--name-only", "main...", "--",
+    assert captured["args"] == [
+        "git", "diff", "--name-only", "main...", "--", "*.md",
     ]
 
 
