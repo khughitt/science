@@ -16,8 +16,10 @@ from typing import Callable, NotRequired, TypeVar, TypedDict, cast
 
 import yaml as _yaml
 
+from science_model.contracts.inventory_v1 import InventoryWarning
 from science_model.entities import Entity
 from science_tool.big_picture.literature_prefix import canonical_paper_id
+from science_tool.entity_identity import collect_identity_warnings
 from science_tool.graph.entity_registry import EntityKindNotRegisteredError
 from science_tool.graph.migrate import (
     LayeredClaimMigrationReport,
@@ -280,12 +282,21 @@ class AgentContextFinding(TypedDict):
     fix: str
 
 
+class EntityIdentityFinding(TypedDict):
+    code: str
+    severity: str
+    message: str
+    path: str | None
+    canonical_id: str | None
+
+
 class HealthReport(TypedDict):
     unresolved_refs: list[UnresolvedRef]
     unregistered_ref_kinds: list[UnregisteredRefKind]
     lingering_tags_lines: list[LingeringTagsRecord]
     agent_context: list[AgentContextFinding]
     identity_policy: list["IdentityPolicyFinding"]
+    entity_identity: list[EntityIdentityFinding]
     layered_claims: "LayeredClaimHealthReport"
     legacy_task_type: list["LegacyTaskTypeFinding"]
     invalid_entity_aspects: list["InvalidEntityAspectsFinding"]
@@ -348,6 +359,24 @@ def _run_health_checks(context: HealthContext) -> dict[str, object]:
     for check in context.selected_checks:
         results[check.name] = context.run(check.name, lambda check=check: check.run(context))
     return results
+
+
+def _entity_identity_finding(warning: InventoryWarning) -> EntityIdentityFinding:
+    return {
+        "code": warning.code,
+        "severity": warning.severity,
+        "message": warning.message,
+        "path": warning.path,
+        "canonical_id": warning.canonical_id,
+    }
+
+
+def _collect_entity_identity(context: HealthContext) -> list[EntityIdentityFinding]:
+    sources = _context_sources(context)
+    return [
+        _entity_identity_finding(warning)
+        for warning in collect_identity_warnings(context.project_root, sources=sources)
+    ]
 
 
 class CoverageMetric(TypedDict):
@@ -431,6 +460,7 @@ def _empty_layered_claim_migration_report(project_root: Path) -> LayeredClaimMig
 def _empty_check_results(project_root: Path) -> dict[str, object]:
     return {
         "identity_policy": [],
+        "entity_identity": [],
         "layered_claim_migration": _empty_layered_claim_migration_report(project_root),
         "archive_lag": {"done_in_active": 0, "retired_in_active": 0, "missing_completed": 0},
         "managed_artifacts": [],
@@ -469,6 +499,7 @@ def build_health_report(
     check_results = _empty_check_results(project_root)
     check_results.update(_run_health_checks(context))
     identity_policy_findings = cast("list[IdentityPolicyFinding]", check_results["identity_policy"])
+    entity_identity = cast("list[EntityIdentityFinding]", check_results.get("entity_identity", []))
     layered_claims_enabled = "layered_claim_migration" in {check.name for check in selected_checks}
     proposition_entities = (
         [entity for entity in _context_sources(context).entities if entity.kind == "proposition"]
@@ -548,6 +579,7 @@ def build_health_report(
         + len(lingering_tags_lines)
         + len(agent_context)
         + len(identity_policy_findings)
+        + len(entity_identity)
         + len(legacy_structured_literature_prefixes)
         + layered_claim_issue_count
         + coverage_gaps
@@ -563,6 +595,7 @@ def build_health_report(
         "lingering_tags_lines": lingering_tags_lines,
         "agent_context": agent_context,
         "identity_policy": identity_policy_findings,
+        "entity_identity": entity_identity,
         "layered_claims": {
             "proposition_claim_layer_coverage": proposition_coverage,
             "causal_leaning_identification_coverage": causal_coverage,
@@ -1512,6 +1545,12 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
         description="Validate entity identity policy and relation endpoint disambiguation.",
         requires_sources=True,
         run=lambda context: collect_identity_policy_findings(context.project_root, sources=_context_sources(context)),
+    ),
+    HealthCheck(
+        name="entity_identity",
+        description="Validate canonical entity identifiers, baseline status, and prose references.",
+        requires_sources=True,
+        run=_collect_entity_identity,
     ),
     HealthCheck(
         name="layered_claim_migration",

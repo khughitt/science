@@ -79,6 +79,12 @@ class SourceRelation(BaseModel):
     source_path: str
 
 
+class MarkdownSourceDocument(BaseModel):
+    path: str
+    frontmatter: dict[str, Any] = Field(default_factory=dict)
+    body: str = ""
+
+
 def known_kinds(
     extra_profiles: list[ProfileManifest] | None = None,
     ontology_catalogs: list[OntologyCatalog] | None = None,
@@ -126,6 +132,7 @@ class ProjectSources(BaseModel):
     manual_aliases: dict[str, str] = Field(default_factory=dict)
     ontology_catalogs: list[OntologyCatalog] = Field(default_factory=list)
     registry: EntityRegistry
+    markdown_documents: list[MarkdownSourceDocument] = Field(default_factory=list)
     freshness_enabled: bool = True
 
 
@@ -203,6 +210,7 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
     identity_table: dict[str, SourceRef] = {}
     entities: list[Entity] = []
     entity_source_adapters: dict[str, str] = {}
+    markdown_documents: list[MarkdownSourceDocument] = []
 
     # cwd for relative-path resolution in adapters. The StorageAdapter.load_raw()
     # contract resolves ref.path against cwd; we chdir into project_root rather
@@ -213,6 +221,14 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
         for adapter in adapters:
             for ref in adapter.discover(project_root):
                 raw = adapter.load_raw(ref)
+                if isinstance(adapter, MarkdownAdapter):
+                    markdown_documents.append(
+                        MarkdownSourceDocument(
+                            path=ref.path,
+                            frontmatter={key: value for key, value in raw.items() if key != "content"},
+                            body=str(raw.get("content") or ""),
+                        )
+                    )
                 raw_kind = raw.get("kind")
                 if not isinstance(raw_kind, str) or not raw_kind:
                     # Adapter returned a record with no kind (e.g. frontmatter-less
@@ -323,6 +339,7 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
         manual_aliases=_load_manual_aliases(project_root, local_profile=local_profile),
         ontology_catalogs=ontology_catalogs,
         registry=registry,
+        markdown_documents=markdown_documents,
         freshness_enabled=freshness_enabled,
     )
 

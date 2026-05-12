@@ -11,12 +11,14 @@ from science_model.contracts.inventory_v1 import (
     InventoryEntity,
     InventoryPayload,
     InventoryProjectMetadata,
+    InventoryWarning,
     InventoryReference,
     InventorySourceLocation,
     finalize_inventory_payload,
 )
 
 from science_tool.dag.inventory import load_dag_inventory_records
+from science_tool.entity_identity import collect_identity_warnings
 from science_tool.graph.sources import load_project_sources
 
 DEFAULT_WATCH_PATHS = ["doc", "knowledge", "notes", "papers", "results", "specs", "tasks"]
@@ -46,6 +48,7 @@ def build_inventory(project_root: Path) -> InventoryPayload:
     sources = load_project_sources(project_root)
     dag_records = load_dag_inventory_records(project_root)
     project_metadata = _read_project_metadata(project_root)
+    warnings: list[InventoryWarning] = [*collect_identity_warnings(project_root, sources=sources), *dag_records.warnings]
 
     entities: list[InventoryEntity] = []
     aliases: list[InventoryAlias] = []
@@ -94,7 +97,7 @@ def build_inventory(project_root: Path) -> InventoryPayload:
         aliases=sorted(aliases, key=lambda item: item.alias),
         graph_addresses=dag_records.graph_addresses,
         finding_candidates=dag_records.finding_candidates,
-        warnings=list(dag_records.warnings),
+        warnings=warnings,
         watch_paths=_watch_paths(project_root),
     )
     return finalize_inventory_payload(payload)

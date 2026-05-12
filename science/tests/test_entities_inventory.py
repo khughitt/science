@@ -159,6 +159,7 @@ def test_build_inventory_promotes_targets_without_duplicating_them_in_data(tmp_p
     sources = SimpleNamespace(
         entities=[EntityWithTargets()],
         entity_source_adapters={"finding:f001": "fake-adapter"},
+        markdown_documents=[],
         ontology_catalogs=[],
     )
     monkeypatch.setattr(entities_inventory, "load_project_sources", lambda _project_root: sources)
