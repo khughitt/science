@@ -5,10 +5,13 @@ import os
 from pathlib import Path
 
 from click.testing import CliRunner
+import yaml
 
 from _fixtures.entity_helpers import seed_project, write_markdown_entity
 from science_model.contracts.inventory_v1 import InventoryPayload
+from science_model.entities import EntityClass
 from science_tool.cli import main
+from science_tool.graph.sources import load_project_sources
 
 
 def test_entity_create_question_writes_source() -> None:
@@ -295,41 +298,151 @@ def test_entities_inventory_cli_writes_contract_json_to_output_file(tmp_path) ->
 
 def test_entities_register_kind_is_idempotent_with_same_metadata(tmp_path) -> None:
     project = tmp_path / "project"
-    (project / "knowledge" / "profiles").mkdir(parents=True)
+    project.mkdir()
     (project / "science.yaml").write_text(
-        "id: kind-project\nknowledge_profiles:\n  local: knowledge/profiles/local.yaml\n",
+        "id: kind-project\nknowledge_profiles: {local: local}\n",
         encoding="utf-8",
     )
     runner = CliRunner()
 
     first = runner.invoke(
         main,
-        ["entities", "register-kind", "critique", "--class", "interpretation", "--project", str(project)],
+        ["entities", "register-kind", "critique", "--class", "epistemic", "--project", str(project)],
     )
     second = runner.invoke(
         main,
-        ["entities", "register-kind", "critique", "--class", "interpretation", "--project", str(project)],
+        ["entities", "register-kind", "critique", "--class", "epistemic", "--project", str(project)],
     )
 
     assert first.exit_code == 0, first.output
     assert second.exit_code == 0, second.output
     assert "already registered" in second.output
+    manifest = yaml.safe_load(
+        (project / "knowledge" / "sources" / "local" / "manifest.yaml").read_text(encoding="utf-8")
+    )
+    assert manifest["name"] == "local"
+    assert manifest["imports"] == []
+    assert manifest["strictness"] == "typed-extension"
+    assert manifest["relation_kinds"] == []
+    assert manifest["entity_kinds"] == [
+        {
+            "name": "critique",
+            "canonical_prefix": "critique",
+            "layer": "layer/local",
+            "description": "Project-local critique entity kind.",
+            "entity_class": "epistemic",
+        }
+    ]
 
 
 def test_entities_register_kind_errors_on_changed_semantics(tmp_path) -> None:
     project = tmp_path / "project"
-    (project / "knowledge" / "profiles").mkdir(parents=True)
+    project.mkdir()
     (project / "science.yaml").write_text(
-        "id: kind-project\nknowledge_profiles:\n  local: knowledge/profiles/local.yaml\n",
+        "id: kind-project\nknowledge_profiles: {local: local}\n",
         encoding="utf-8",
     )
     runner = CliRunner()
-    runner.invoke(main, ["entities", "register-kind", "critique", "--class", "interpretation", "--project", str(project)])
+    first = runner.invoke(
+        main, ["entities", "register-kind", "critique", "--class", "epistemic", "--project", str(project)]
+    )
+    assert first.exit_code == 0, first.output
 
-    result = runner.invoke(main, ["entities", "register-kind", "critique", "--class", "artifact", "--project", str(project)])
+    result = runner.invoke(
+        main, ["entities", "register-kind", "critique", "--class", "operational", "--project", str(project)]
+    )
 
     assert result.exit_code != 0
     assert "already registered with different metadata" in result.output
+
+
+def test_entities_register_kind_makes_markdown_kind_loadable(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc").mkdir(parents=True)
+    (project / "science.yaml").write_text(
+        "id: kind-project\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
+    (project / "doc" / "critique.md").write_text(
+        "---\nkind: critique\nid: critique:c001\ntitle: Critique\n---\nBody.\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        ["entities", "register-kind", "critique", "--class", "epistemic", "--project", str(project)],
+    )
+
+    assert result.exit_code == 0, result.output
+    sources = load_project_sources(project)
+    assert [entity.id for entity in sources.entities] == ["critique:c001"]
+    assert sources.registry.kind_class("critique") == EntityClass.EPISTEMIC
+
+
+def test_entities_register_kind_preserves_existing_manifest_sections(tmp_path) -> None:
+    project = tmp_path / "project"
+    manifest_path = project / "knowledge" / "sources" / "lab" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    (project / "science.yaml").write_text(
+        "id: kind-project\nknowledge_profiles: {local: lab}\n",
+        encoding="utf-8",
+    )
+    manifest_path.write_text(
+        """
+name: existing-name
+imports:
+  - shared
+strictness: typed-extension
+entity_kinds:
+  - name: note-kind
+    canonical_prefix: note
+    layer: layer/existing
+    description: Existing note kind.
+    entity_class: operational
+relation_kinds: []
+x-extra:
+  keep: true
+""".lstrip(),
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        ["entities", "register-kind", "critique", "--class", "epistemic", "--project", str(project)],
+    )
+
+    assert result.exit_code == 0, result.output
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["name"] == "existing-name"
+    assert manifest["imports"] == ["shared"]
+    assert manifest["relation_kinds"] == []
+    assert manifest["x-extra"] == {"keep": True}
+    assert [entry["name"] for entry in manifest["entity_kinds"]] == ["note-kind", "critique"]
+
+
+def test_entities_register_kind_errors_without_overwriting_malformed_manifest(tmp_path) -> None:
+    project = tmp_path / "project"
+    manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    (project / "science.yaml").write_text(
+        "id: kind-project\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
+    original = "- not-a-manifest\n"
+    manifest_path.write_text(original, encoding="utf-8")
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        ["entities", "register-kind", "critique", "--class", "epistemic", "--project", str(project)],
+    )
+
+    assert result.exit_code != 0
+    assert str(manifest_path) in result.output
+    assert "must contain a YAML mapping" in result.output
+    assert manifest_path.read_text(encoding="utf-8") == original
 
 
 def test_question_create_wrapper_delegates_to_entity_create() -> None:
