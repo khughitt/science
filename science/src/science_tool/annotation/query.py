@@ -14,12 +14,14 @@ See spec docs/plans/2026-05-11-annotation-system-p3.3-spec.md
 
 from __future__ import annotations
 
+import fnmatch
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Iterable, Iterator, Optional
 
-from science_tool.annotation.io import read_sidecar
-from science_tool.annotation.model import Annotation, Sidecar
+from science_tool.annotation.io import markdown_for_sidecar, read_sidecar
+from science_tool.annotation.model import Annotation, Sidecar, Status
 
 
 # ---- Errors ----------------------------------------------------------
@@ -223,3 +225,71 @@ def _resolve_bare_frag(root: Path, frag: str) -> ResolvedAnnotation:
         )
     path, sidecar, ann = hits[0]
     return _build_resolved(path, sidecar, ann, root)
+
+
+# ---- Filter ---------------------------------------------------------
+
+def filter_annotations(
+    sidecars: Iterable[tuple[Path, Sidecar]],
+    *,
+    statuses: Optional[frozenset[Status]] = None,
+    sources: tuple[str, ...] = (),
+    since_changed: Optional[frozenset[Path]] = None,
+) -> Iterator[tuple[Path, Annotation]]:
+    """Yield (sidecar_path, annotation) tuples matching all predicates.
+
+    - `statuses`: None means no filter; otherwise membership test.
+    - `sources`: empty tuple means no filter; otherwise OR of
+      `fnmatch.fnmatchcase` patterns (supports `lint:*`).
+    - `since_changed`: None means no filter; otherwise the sidecar's
+      paired markdown (via `io.markdown_for_sidecar`) must be in the
+      set (paths compared after `.resolve()`).
+    """
+    for sidecar_path, sidecar in sidecars:
+        if since_changed is not None:
+            md_path = markdown_for_sidecar(sidecar_path).resolve()
+            if md_path not in since_changed:
+                continue
+        for ann in sidecar.annotations:
+            if statuses is not None and ann.status not in statuses:
+                continue
+            if sources and not _source_matches(ann.source, sources):
+                continue
+            yield sidecar_path, ann
+
+
+def _source_matches(source: str, patterns: tuple[str, ...]) -> bool:
+    return any(fnmatch.fnmatchcase(source, pat) for pat in patterns)
+
+
+# ---- --since plumbing ----------------------------------------------
+
+def _run_git(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess:
+    """Indirection seam for tests to monkeypatch."""
+    return subprocess.run(
+        args, cwd=str(cwd), capture_output=True, text=True, check=False,
+    )
+
+
+def git_changed_markdown(root: Path, ref: str) -> frozenset[Path]:
+    """Return absolute paths of *.md files changed since `ref` (`<ref>...HEAD`).
+
+    Shells out to `git diff --name-only <ref>... -- '*.md'`. Empty
+    git output → empty set. Non-zero git exit → RuntimeError carrying
+    git's stderr (CLI layer converts to ClickException).
+    """
+    args = [
+        "git", "diff", "--name-only", f"{ref}...", "--", "*.md",
+    ]
+    proc = _run_git(args, cwd=root)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"git diff failed (rc={proc.returncode}): {proc.stderr.strip()}"
+        )
+    out: set[Path] = set()
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if not line.endswith(".md"):
+            continue
+        out.add((root / line).resolve())
+    return frozenset(out)
