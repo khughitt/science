@@ -36,8 +36,6 @@ TOKEN_TYPE_MAP: dict[str, tuple[str, str]] = {
     "INACCESSIBLE":     ("inaccessible", "paywalled / image-only / private source"),
 }
 
-_SELECTOR_CONTEXT = 60  # max prefix/suffix length, matches lint selector
-
 
 class MarkerTokenSource:
     name: str = TOKEN_SOURCE_NAME

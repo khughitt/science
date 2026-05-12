@@ -39,8 +39,6 @@ DETECTOR_VERSIONS: dict[str, str] = {
     "numeric-anchor":   "v2026-05-11",
 }
 
-_SELECTOR_CONTEXT = 60
-
 
 def lint_source_name(short: str) -> str:
     return f"lint:{short}-{DETECTOR_VERSIONS[short]}"
