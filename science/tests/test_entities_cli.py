@@ -466,6 +466,46 @@ def test_entities_register_kind_rejects_builtin_local_kind_shadow_without_writin
     assert not manifest_path.exists()
 
 
+def test_entities_register_kind_rejects_parameter_alias_shadow_without_writing(tmp_path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "science.yaml").write_text(
+        "id: kind-project\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
+    manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        ["entities", "register-kind", "parameter", "--class", "operational", "--project", str(project)],
+    )
+
+    assert result.exit_code != 0
+    assert "normalizes to built-in entity kind" in result.output
+    assert not manifest_path.exists()
+
+
+def test_entities_register_kind_rejects_hyphenated_parameter_alias_shadow_without_writing(tmp_path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "science.yaml").write_text(
+        "id: kind-project\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
+    manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        ["entities", "register-kind", "parameter-binding", "--class", "operational", "--project", str(project)],
+    )
+
+    assert result.exit_code != 0
+    assert "normalizes to built-in entity kind" in result.output
+    assert not manifest_path.exists()
+
+
 def test_entities_register_kind_rejects_registry_core_kind_shadow_without_writing(tmp_path) -> None:
     project = tmp_path / "project"
     project.mkdir()

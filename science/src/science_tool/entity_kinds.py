@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 from pydantic import ValidationError
-from science_model.entities import EntityClass
+from science_model.entities import EntityClass, EntityType
 from science_model.ontologies import load_catalogs_for_names
 from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE, load_shared_profile
 from science_model.profiles.schema import ProfileManifest
@@ -16,7 +16,7 @@ from science_tool.graph.sources import local_profile_sources_dir
 def register_local_kind(project_root: Path, kind: str, entity_class: str) -> str:
     validated_entity_class = _validate_entity_class(entity_class)
     config = _read_project_config(project_root)
-    _reject_reserved_kind(config, kind)
+    _reject_reserved_kind(config, kind, _normalize_kind(kind))
     local_profile = _local_profile_name(project_root)
     manifest_path = local_profile_sources_dir(project_root, local_profile=local_profile) / "manifest.yaml"
     manifest = _read_manifest(manifest_path)
@@ -56,22 +56,36 @@ def _validate_entity_class(entity_class: str) -> str:
         raise ValueError(msg) from exc
 
 
-def _reject_reserved_kind(config: dict, kind: str) -> None:
+def _reject_reserved_kind(config: dict, kind: str, normalized_kind: str) -> None:
     builtin_kinds = {
         entity_kind.name for profile in (CORE_PROFILE, LOCAL_PROFILE) for entity_kind in profile.entity_kinds
     }
     builtin_kinds.update(EntityRegistry.with_core_types().all_kind_classes())
-    if kind in builtin_kinds:
+    if normalized_kind in builtin_kinds:
+        if normalized_kind != kind:
+            msg = f"kind {kind!r} normalizes to built-in entity kind {normalized_kind!r}"
+            raise ValueError(msg)
         msg = f"kind {kind!r} is a built-in entity kind and cannot be registered locally"
         raise ValueError(msg)
     shared_profile = load_shared_profile()
-    if shared_profile is not None and any(entity_kind.name == kind for entity_kind in shared_profile.entity_kinds):
+    if shared_profile is not None and any(
+        entity_kind.name == normalized_kind for entity_kind in shared_profile.entity_kinds
+    ):
         msg = f"kind {kind!r} is a shared profile entity kind and cannot be registered locally"
         raise ValueError(msg)
     for catalog in load_catalogs_for_names(_active_ontology_names(config)):
-        if any(entity_type.name == kind for entity_type in catalog.entity_types):
+        if any(entity_type.name == normalized_kind for entity_type in catalog.entity_types):
             msg = f"kind {kind!r} is an active ontology entity kind and cannot be registered locally"
             raise ValueError(msg)
+
+
+def _normalize_kind(kind: str) -> str:
+    cleaned = kind.strip()
+    if cleaned in {"parameter", "canonical-parameter"}:
+        return EntityType.CANONICAL_PARAMETER.value
+    if cleaned == "parameter-binding":
+        return "parameter_binding"
+    return cleaned
 
 
 def _read_manifest(manifest_path: Path) -> dict:
