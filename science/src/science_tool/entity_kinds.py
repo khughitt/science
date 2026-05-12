@@ -5,7 +5,7 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 from science_model.entities import EntityClass
-from science_model.profiles import CORE_PROFILE
+from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE
 from science_model.profiles.schema import ProfileManifest
 
 from science_tool.graph.sources import local_profile_sources_dir
@@ -54,8 +54,11 @@ def _validate_entity_class(entity_class: str) -> str:
 
 
 def _reject_core_kind(kind: str) -> None:
-    if kind in {entity_kind.name for entity_kind in CORE_PROFILE.entity_kinds}:
-        msg = f"kind {kind!r} is a core entity kind and cannot be registered locally"
+    builtin_kinds = {
+        entity_kind.name for profile in (CORE_PROFILE, LOCAL_PROFILE) for entity_kind in profile.entity_kinds
+    }
+    if kind in builtin_kinds:
+        msg = f"kind {kind!r} is a built-in entity kind and cannot be registered locally"
         raise ValueError(msg)
 
 
