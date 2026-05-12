@@ -41,6 +41,7 @@ from science_tool.graph.storage_adapters.base import StorageAdapter
 from science_tool.graph.storage_adapters.datapackage import DatapackageAdapter
 from science_tool.graph.storage_adapters.markdown import MarkdownAdapter
 from science_tool.graph.storage_adapters.task import TaskAdapter
+from science_tool.graph.storage_adapters.workflow_run import WorkflowRunAdapter
 from science_tool.paths import resolve_paths
 
 logger = logging.getLogger(__name__)
@@ -193,6 +194,7 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
         MarkdownAdapter(virtual_files=markdown_overrides),
         AggregateAdapter(local_profile=local_profile),
         DatapackageAdapter(),
+        WorkflowRunAdapter(),
         TaskAdapter(),
     ]
 

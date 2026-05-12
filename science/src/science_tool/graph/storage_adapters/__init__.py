@@ -1,0 +1,1 @@
+from science_tool.graph.storage_adapters.workflow_run import WorkflowRunAdapter as WorkflowRunAdapter
