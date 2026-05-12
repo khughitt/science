@@ -99,3 +99,65 @@ edges:
         "Finding text survives blank interpretation.",
         "Claim text survives non-string interpretation.",
     ]
+
+
+def test_dag_edges_with_duplicate_ids_emit_warning_and_skip_duplicate(tmp_path) -> None:
+    project = tmp_path / "project"
+    dag_path = project / "doc" / "figures" / "dags" / "h4.edges.yaml"
+    dag_path.parent.mkdir(parents=True)
+    dag_path.write_text(
+        """
+edges:
+  - id: e001
+    source: a
+    target: b
+    relation: supports
+    interpretation: First candidate survives.
+  - id: e001
+    source: b
+    target: c
+    relation: supports
+    interpretation: Duplicate candidate must be skipped.
+""".strip(),
+        encoding="utf-8",
+    )
+
+    records = load_dag_inventory_records(project)
+
+    assert [address.address for address in records.graph_addresses] == ["dag-edge:h4:e001"]
+    assert [candidate.title for candidate in records.finding_candidates] == ["First candidate survives."]
+    assert records.warnings[0].code == "duplicate-dag-edge-id"
+    assert records.warnings[0].severity == "warning"
+
+
+def test_dag_inventory_scans_dag_files_in_sorted_path_order(tmp_path) -> None:
+    project = tmp_path / "project"
+    dags_dir = project / "doc" / "figures" / "dags"
+    dags_dir.mkdir(parents=True)
+    (dags_dir / "zeta.edges.yaml").write_text(
+        """
+edges:
+  - id: e001
+    source: z
+    target: done
+    relation: supports
+""".strip(),
+        encoding="utf-8",
+    )
+    (dags_dir / "alpha.edges.yaml").write_text(
+        """
+edges:
+  - id: e001
+    source: a
+    target: done
+    relation: supports
+""".strip(),
+        encoding="utf-8",
+    )
+
+    records = load_dag_inventory_records(project)
+
+    assert [address.address for address in records.graph_addresses] == [
+        "dag-edge:alpha:e001",
+        "dag-edge:zeta:e001",
+    ]
