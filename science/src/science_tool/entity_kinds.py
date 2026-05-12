@@ -5,15 +5,18 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 from science_model.entities import EntityClass
+from science_model.ontologies import load_catalogs_for_names
 from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE
 from science_model.profiles.schema import ProfileManifest
 
+from science_tool.graph.entity_registry import EntityRegistry
 from science_tool.graph.sources import local_profile_sources_dir
 
 
 def register_local_kind(project_root: Path, kind: str, entity_class: str) -> str:
     validated_entity_class = _validate_entity_class(entity_class)
-    _reject_core_kind(kind)
+    config = _read_project_config(project_root)
+    _reject_reserved_kind(config, kind)
     local_profile = _local_profile_name(project_root)
     manifest_path = local_profile_sources_dir(project_root, local_profile=local_profile) / "manifest.yaml"
     manifest = _read_manifest(manifest_path)
@@ -53,13 +56,18 @@ def _validate_entity_class(entity_class: str) -> str:
         raise ValueError(msg) from exc
 
 
-def _reject_core_kind(kind: str) -> None:
+def _reject_reserved_kind(config: dict, kind: str) -> None:
     builtin_kinds = {
         entity_kind.name for profile in (CORE_PROFILE, LOCAL_PROFILE) for entity_kind in profile.entity_kinds
     }
+    builtin_kinds.update(EntityRegistry.with_core_types().all_kind_classes())
     if kind in builtin_kinds:
         msg = f"kind {kind!r} is a built-in entity kind and cannot be registered locally"
         raise ValueError(msg)
+    for catalog in load_catalogs_for_names(_active_ontology_names(config)):
+        if any(entity_type.name == kind for entity_type in catalog.entity_types):
+            msg = f"kind {kind!r} is an active ontology entity kind and cannot be registered locally"
+            raise ValueError(msg)
 
 
 def _read_manifest(manifest_path: Path) -> dict:
@@ -109,13 +117,25 @@ def _format_validation_error(exc: ValidationError) -> str:
     return "; ".join(parts) if parts else str(exc)
 
 
-def _local_profile_name(project_root: Path) -> str:
+def _read_project_config(project_root: Path) -> dict:
     config_path = project_root / "science.yaml"
     if not config_path.exists():
-        return "local"
+        return {}
     config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(config, dict):
-        return "local"
+        return {}
+    return config
+
+
+def _active_ontology_names(config: dict) -> list[str]:
+    raw_ontologies = config.get("ontologies") or []
+    if not isinstance(raw_ontologies, list):
+        return []
+    return [str(ontology) for ontology in raw_ontologies]
+
+
+def _local_profile_name(project_root: Path) -> str:
+    config = _read_project_config(project_root)
     knowledge_profiles = config.get("knowledge_profiles") or {}
     if not isinstance(knowledge_profiles, dict):
         knowledge_profiles = {}
