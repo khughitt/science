@@ -73,8 +73,8 @@ def mint_id(
     sidecar size.
 
     Note: `sidecar` is no longer scanned by mint_id itself, but is
-    retained in the signature for the IdCollisionError message and
-    forward-compat (e.g. P3.5 LLM source may want sidecar metadata).
+    retained in the signature for forward-compat (e.g. P3.5 LLM source
+    may want sidecar metadata at minting time).
     """
     base_id = _mint_base_id(p)
     existing_at_base = existing_by_id.get(base_id)
