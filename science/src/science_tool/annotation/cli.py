@@ -917,3 +917,50 @@ def fix_cmd(
         id_arg=id_arg, root_path=root_path,
         actor_opt=actor_opt, force_dirty=force_dirty,
     )
+
+
+@annotate_group.command("stats")
+@click.option(
+    "--root", "root_path", default=None,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option(
+    "--format", "fmt", type=click.Choice(("table", "json")), default="table",
+)
+def stats_cmd(root_path: Path | None, fmt: str) -> None:
+    """Project-wide annotation counts (status / source / type)."""
+    root = (root_path or Path.cwd()).resolve()
+    try:
+        sidecars = list(query.iter_sidecars(root))
+    except query.SidecarParseError as exc:
+        raise click.ClickException(str(exc)) from exc
+    report = query.compute_stats(sidecars)
+    if fmt == "json":
+        click.echo(json.dumps({
+            "summary": {
+                "total_annotations": report.total_annotations,
+                "total_sidecars": report.total_sidecars,
+            },
+            "by_status": {k.value: v for k, v in report.by_status.items()},
+            "by_source": dict(report.by_source),
+            "by_type": dict(report.by_type),
+        }, indent=2))
+        return
+    click.echo(
+        f"annotate stats: {report.total_annotations} annotation(s) across "
+        f"{report.total_sidecars} sidecar(s)\n"
+    )
+    if report.by_status:
+        click.echo("By status:")
+        for status, count in report.by_status.items():
+            click.echo(f"  {status.value:<12} {count}")
+        click.echo()
+    if report.by_source:
+        click.echo("By source:")
+        for source, count in report.by_source.items():
+            click.echo(f"  {source:<40} {count}")
+        click.echo()
+    if report.by_type:
+        click.echo("By type:")
+        for type_, count in report.by_type.items():
+            click.echo(f"  {type_:<24} {count}")
