@@ -39,6 +39,41 @@ from science_tool.annotation.model import (
 OA = Namespace("http://www.w3.org/ns/oa#")
 SCI = Namespace("http://example.org/science/vocab/")
 
+_MD_SUFFIX = ".md"
+_SIDECAR_SUFFIX = ".anno.trig"
+
+
+def sidecar_for_markdown(md_path: Path) -> Path:
+    """Return the sidecar Path for a markdown file.
+
+    `foo.md` → `foo.anno.trig`; `paper.v1.md` → `paper.v1.anno.trig`.
+
+    Raises ValueError if `md_path` does not end with `.md`.
+    """
+    name = md_path.name
+    if not name.endswith(_MD_SUFFIX):
+        raise ValueError(
+            f"not a markdown path (expected '.md' suffix): {md_path}"
+        )
+    base = name[: -len(_MD_SUFFIX)]
+    return md_path.with_name(base + _SIDECAR_SUFFIX)
+
+
+def markdown_for_sidecar(sidecar_path: Path) -> Path:
+    """Return the markdown Path for a sidecar file.
+
+    `foo.anno.trig` → `foo.md`; `paper.v1.anno.trig` → `paper.v1.md`.
+
+    Raises ValueError if `sidecar_path` does not end with `.anno.trig`.
+    """
+    name = sidecar_path.name
+    if not name.endswith(_SIDECAR_SUFFIX):
+        raise ValueError(
+            f"not a sidecar path (expected '.anno.trig' suffix): {sidecar_path}"
+        )
+    base = name[: -len(_SIDECAR_SUFFIX)]
+    return sidecar_path.with_name(base + _MD_SUFFIX)
+
 
 def read_sidecar(path: Path) -> Sidecar:
     """Parse a `*.anno.trig` file into a Sidecar.
