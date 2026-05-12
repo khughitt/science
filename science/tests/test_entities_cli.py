@@ -380,6 +380,71 @@ def test_entities_register_kind_makes_markdown_kind_loadable(tmp_path) -> None:
     assert sources.registry.kind_class("critique") == EntityClass.EPISTEMIC
 
 
+def test_entities_register_kind_uses_legacy_profiles_local_fallback(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc").mkdir(parents=True)
+    (project / "science.yaml").write_text(
+        "id: kind-project\nprofiles: {local: lab}\n",
+        encoding="utf-8",
+    )
+    (project / "doc" / "critique.md").write_text(
+        "---\nkind: critique\nid: critique:c001\ntitle: Critique\n---\nBody.\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        ["entities", "register-kind", "critique", "--class", "epistemic", "--project", str(project)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (project / "knowledge" / "sources" / "lab" / "manifest.yaml").is_file()
+    assert not (project / "knowledge" / "sources" / "local" / "manifest.yaml").exists()
+    sources = load_project_sources(project)
+    assert [entity.id for entity in sources.entities] == ["critique:c001"]
+
+
+def test_entities_register_kind_rejects_invalid_class_without_writing(tmp_path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "science.yaml").write_text(
+        "id: kind-project\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
+    manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        ["entities", "register-kind", "critique", "--class", "interpretation", "--project", str(project)],
+    )
+
+    assert result.exit_code != 0
+    assert "Invalid entity_class" in result.output
+    assert not manifest_path.exists()
+
+
+def test_entities_register_kind_rejects_core_kind_shadow_without_writing(tmp_path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "science.yaml").write_text(
+        "id: kind-project\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
+    manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        ["entities", "register-kind", "hypothesis", "--class", "epistemic", "--project", str(project)],
+    )
+
+    assert result.exit_code != 0
+    assert "core entity kind" in result.output
+    assert not manifest_path.exists()
+
+
 def test_entities_register_kind_preserves_existing_manifest_sections(tmp_path) -> None:
     project = tmp_path / "project"
     manifest_path = project / "knowledge" / "sources" / "lab" / "manifest.yaml"
@@ -442,6 +507,64 @@ def test_entities_register_kind_errors_without_overwriting_malformed_manifest(tm
     assert result.exit_code != 0
     assert str(manifest_path) in result.output
     assert "must contain a YAML mapping" in result.output
+    assert manifest_path.read_text(encoding="utf-8") == original
+
+
+def test_entities_register_kind_errors_without_overwriting_non_list_imports(tmp_path) -> None:
+    project = tmp_path / "project"
+    manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    (project / "science.yaml").write_text(
+        "id: kind-project\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
+    original = """
+name: local
+imports: core
+strictness: typed-extension
+entity_kinds: []
+relation_kinds: []
+""".lstrip()
+    manifest_path.write_text(original, encoding="utf-8")
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        ["entities", "register-kind", "critique", "--class", "epistemic", "--project", str(project)],
+    )
+
+    assert result.exit_code != 0
+    assert str(manifest_path) in result.output
+    assert "imports" in result.output
+    assert manifest_path.read_text(encoding="utf-8") == original
+
+
+def test_entities_register_kind_errors_without_overwriting_non_list_relation_kinds(tmp_path) -> None:
+    project = tmp_path / "project"
+    manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    (project / "science.yaml").write_text(
+        "id: kind-project\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
+    original = """
+name: local
+imports: []
+strictness: typed-extension
+entity_kinds: []
+relation_kinds: nope
+""".lstrip()
+    manifest_path.write_text(original, encoding="utf-8")
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        ["entities", "register-kind", "critique", "--class", "epistemic", "--project", str(project)],
+    )
+
+    assert result.exit_code != 0
+    assert str(manifest_path) in result.output
+    assert "relation_kinds" in result.output
     assert manifest_path.read_text(encoding="utf-8") == original
 
 
