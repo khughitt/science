@@ -15,14 +15,17 @@ from typing import Optional
 
 import click
 
+from science_tool.annotation import crud, query
 from science_tool.annotation.audit import audit_file, merge_planned
 from science_tool.annotation.io import (
     atomic_write_text,
+    markdown_for_sidecar,
     read_sidecar,
     serialize_sidecar,
+    sidecar_for_markdown,
     write_sidecar,
 )
-from science_tool.annotation.model import Sidecar
+from science_tool.annotation.model import Annotation, Sidecar, Status
 from science_tool.annotation.sources import LINT_SOURCES, SOURCES
 from science_tool.annotation.sources.marker_token import (
     MarkerTokenSource,
@@ -633,3 +636,169 @@ def _replan_for_remove(
             lifted_from=literal,
         ))
     return plans
+
+
+# ---------------------------------------------------------------------------
+# annotate list
+# ---------------------------------------------------------------------------
+
+_VALID_STATUS_VALUES = (
+    "open", "ack", "fixed", "dismissed", "superseded", "all",
+)
+
+
+def _parse_status_filter(values: tuple[str, ...]) -> frozenset[Status] | None:
+    """Convert --status flag values into a query.filter_annotations argument.
+
+    `("all",)` (or any tuple containing "all") → None (no filter).
+    Empty tuple is treated by the CLI default; this helper only sees
+    explicit values.
+    """
+    if "all" in values:
+        return None
+    return frozenset(Status(v) for v in values)
+
+
+def _scope_to_sidecars(
+    root: Path | None,
+    path: Path | None,
+) -> tuple[Path, list[tuple[Path, Sidecar]]]:
+    """Resolve the (--root, PATH) pair into (root_path, sidecars list).
+
+    Caller is responsible for the mutual-exclusion check.
+    """
+    if path is not None:
+        if path.is_dir():
+            return path.resolve(), list(query.iter_sidecars(path))
+        if path.suffix == ".md":
+            sidecar_path = sidecar_for_markdown(path)
+            if not sidecar_path.exists():
+                return path.parent.resolve(), []
+            return (
+                path.parent.resolve(),
+                [(sidecar_path, query.read_sidecar_strict(sidecar_path))],
+            )
+        if path.name.endswith(".anno.trig"):
+            return (
+                path.parent.resolve(),
+                [(path, query.read_sidecar_strict(path))],
+            )
+        raise click.ClickException(
+            f"PATH {path} is not a directory, .md, or .anno.trig file"
+        )
+    effective_root = (root or Path.cwd()).resolve()
+    return effective_root, list(query.iter_sidecars(effective_root))
+
+
+@annotate_group.command("list")
+@click.argument("path", required=False, type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--root", "root_path", default=None,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option(
+    "--status", "statuses_opt", multiple=True,
+    type=click.Choice(_VALID_STATUS_VALUES),
+)
+@click.option("--source", "sources_opt", multiple=True)
+@click.option("--since", "since_ref", default=None)
+@click.option(
+    "--format", "fmt", type=click.Choice(("table", "json")), default="table",
+)
+def list_cmd(
+    path: Path | None,
+    root_path: Path | None,
+    statuses_opt: tuple[str, ...],
+    sources_opt: tuple[str, ...],
+    since_ref: str | None,
+    fmt: str,
+) -> None:
+    """List annotations matching filters."""
+    if path is not None and root_path is not None:
+        raise click.ClickException("--root and PATH are mutually exclusive")
+
+    try:
+        effective_root, sidecars = _scope_to_sidecars(root_path, path)
+    except query.SidecarParseError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    statuses = _parse_status_filter(
+        statuses_opt or ("open",),
+    )
+
+    since_changed: frozenset[Path] | None = None
+    if since_ref is not None:
+        try:
+            since_changed = query.git_changed_markdown(effective_root, since_ref)
+        except RuntimeError as exc:
+            raise click.ClickException(
+                f"--since failed: {exc}"
+            ) from exc
+
+    rows = list(query.filter_annotations(
+        sidecars,
+        statuses=statuses,
+        sources=sources_opt,
+        since_changed=since_changed,
+    ))
+    rows.sort(key=lambda pa: (
+        query.entity_relpath_for_sidecar(pa[0], effective_root),
+        pa[1].id,
+    ))
+
+    if fmt == "json":
+        _emit_list_json(rows, effective_root, len(sidecars))
+    else:
+        _emit_list_table(rows, effective_root, len(sidecars))
+
+
+def _emit_list_table(
+    rows: list[tuple[Path, Annotation]],
+    root: Path,
+    sidecar_count: int,
+) -> None:
+    if not rows:
+        click.echo(
+            f"annotate list: 0 annotation(s) across {sidecar_count} sidecar(s)"
+        )
+        return
+    for sidecar_path, ann in rows:
+        qualified = (
+            f"{query.entity_relpath_for_sidecar(sidecar_path, root)}:{ann.id}"
+        )
+        preview = ann.target.selector.exact
+        if len(preview) > 60:
+            preview = preview[:60] + "…"
+        click.echo(
+            f"  {qualified}  {ann.status.value:<10}  "
+            f"{ann.source}  {ann.annotation_type}  {preview!r}"
+        )
+    click.echo(
+        f"\nannotate list: {len(rows)} annotation(s) across "
+        f"{sidecar_count} sidecar(s)"
+    )
+
+
+def _emit_list_json(
+    rows: list[tuple[Path, Annotation]],
+    root: Path,
+    sidecar_count: int,
+) -> None:
+    items = []
+    for sidecar_path, ann in rows:
+        items.append({
+            "id": ann.id,
+            "qualified_id":
+                f"{query.entity_relpath_for_sidecar(sidecar_path, root)}:{ann.id}",
+            "status": ann.status.value,
+            "source": ann.source,
+            "annotation_type": ann.annotation_type,
+            "exact_preview": ann.target.selector.exact[:60],
+        })
+    click.echo(json.dumps({
+        "summary": {
+            "total_annotations": len(rows),
+            "total_sidecars": sidecar_count,
+        },
+        "annotations": items,
+    }, indent=2))
