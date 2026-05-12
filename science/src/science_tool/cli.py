@@ -3519,12 +3519,14 @@ def health_command(
     tooling_scaffold = report.get("tooling_scaffold") or []
     agent_context = report.get("agent_context") or []
     unregistered_ref_kinds = report.get("unregistered_ref_kinds") or []
+    entity_identity = report.get("entity_identity") or []
 
     total_issues = (
         len(report["unresolved_refs"])
         + len(unregistered_ref_kinds)
         + len(report["lingering_tags_lines"])
         + len(report["identity_policy"])
+        + len(entity_identity)
         + len(report["legacy_structured_literature_prefixes"])
         + layered_claim_issue_count
         + coverage_gaps
@@ -3656,6 +3658,23 @@ def health_command(
         table.add_column("Message")
         for row in report["identity_policy"]:
             table.add_row(row["check"], row["entity_id"], row["source_file"], row["message"])
+        console.print(table)
+
+    if entity_identity:
+        table = Table(title=f"Entity Identity ({len(entity_identity)})")
+        table.add_column("Code", style="bold", no_wrap=True, min_width=26)
+        table.add_column("Severity")
+        table.add_column("Path", overflow="fold")
+        table.add_column("Canonical ID", overflow="fold")
+        table.add_column("Message", overflow="fold")
+        for row in entity_identity:
+            table.add_row(
+                row["code"],
+                row["severity"],
+                row.get("path") or "",
+                row.get("canonical_id") or "",
+                row["message"],
+            )
         console.print(table)
 
     if report["legacy_structured_literature_prefixes"]:

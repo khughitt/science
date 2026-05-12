@@ -885,6 +885,24 @@ class TestHealthCLI:
         assert result.exit_code == 0, result.output
         assert "Identity Policy" in result.output
 
+    def test_table_output_includes_entity_identity_section(self, tmp_path: Path) -> None:
+        from click.testing import CliRunner
+        from science_tool.cli import main
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+        doc = tmp_path / "doc"
+        doc.mkdir(parents=True)
+        (doc / "summary.md").write_text("This cites [[h999]] in prose.\n", encoding="utf-8")
+
+        runner = CliRunner()
+        result = runner.invoke(main, ["health", "--project-root", str(tmp_path), "--check", "entity_identity"])
+
+        assert result.exit_code == 0, result.output
+        assert "Project is clean" not in result.output
+        assert "Entity Identity" in result.output
+        assert "unresolved-prose-reference" in result.output
+        assert "h999" in result.output
+
     def test_json_output_includes_identity_policy_section(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
         from science_tool.cli import main

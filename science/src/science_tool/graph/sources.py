@@ -259,6 +259,13 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
                 except ValidationError as exc:
                     details = _format_missing_fields(exc)
                     if registry.is_core_kind(kind):
+                        if isinstance(adapter, MarkdownAdapter) and _is_missing_identity_validation(exc):
+                            logger.warning(
+                                "skipping %s: core entity is missing identity fields (%s)",
+                                ref.path,
+                                details,
+                            )
+                            continue
                         raise ValueError(
                             f"schema validation failed for registered entity kind {kind!r} at {ref.path}: {details}"
                         ) from exc
@@ -915,3 +922,16 @@ def _format_missing_fields(exc: ValidationError) -> str:
         msg = err.get("msg", "invalid")
         parts.append(f"{loc}: {msg}" if loc else msg)
     return "; ".join(parts) if parts else str(exc)
+
+
+def _is_missing_identity_validation(exc: ValidationError) -> bool:
+    errors = exc.errors()
+    if not errors:
+        return False
+    identity_fields = {"id", "canonical_id"}
+    for err in errors:
+        loc = err.get("loc", ())
+        field = str(loc[0]) if loc else ""
+        if field not in identity_fields or err.get("type") != "missing":
+            return False
+    return True

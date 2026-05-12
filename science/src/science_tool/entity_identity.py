@@ -10,6 +10,7 @@ from science_tool.graph.sources import ProjectSources
 CANONICAL_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*:[A-Za-z0-9][A-Za-z0-9_.-]*$")
 PROSE_REFERENCE_PATTERN = re.compile(
     r"\[\[((?:[A-Za-z][A-Za-z0-9_-]*:[A-Za-z0-9][A-Za-z0-9_.-]*)|(?:[thqf]\d{2,}[a-z0-9_.-]*))\]\]",
+    re.IGNORECASE,
 )
 
 
@@ -68,16 +69,22 @@ def _canonical_ids(sources: ProjectSources) -> set[str]:
     ids: set[str] = set()
     for entity in sources.entities:
         ids.add(entity.canonical_id or entity.id)
-        ids.update(str(alias) for alias in entity.aliases)
-    ids.update(str(alias) for alias in sources.manual_aliases)
+        for alias in entity.aliases:
+            ids.update(_alias_keys(str(alias)))
+    for alias in sources.manual_aliases:
+        ids.update(_alias_keys(str(alias)))
     return ids
+
+
+def _alias_keys(alias: str) -> set[str]:
+    return {alias, alias.lower()}
 
 
 def _prose_reference_warnings(rel_path: str, text: str, canonical_ids: set[str]) -> list[InventoryWarning]:
     warnings: list[InventoryWarning] = []
     for match in PROSE_REFERENCE_PATTERN.finditer(text):
         target = match.group(1)
-        if target not in canonical_ids:
+        if target not in canonical_ids and target.lower() not in canonical_ids:
             warnings.append(
                 InventoryWarning(
                     code="unresolved-prose-reference",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from science_tool.entity_identity import collect_identity_warnings
+from science_tool.graph.health import build_health_report
 from science_tool.graph.entity_registry import EntityRegistry
 from science_tool.graph.sources import KnowledgeProfiles, MarkdownSourceDocument, ProjectSources, load_project_sources
 
@@ -26,6 +27,47 @@ def test_identity_health_resolves_markdown_manual_aliases(tmp_path) -> None:
     warnings = collect_identity_warnings(project, sources=sources)
 
     assert not [warning for warning in warnings if warning.code == "unresolved-prose-reference"]
+
+
+def test_identity_health_reports_baselined_missing_id_through_real_health_flow(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc").mkdir(parents=True)
+    (project / "knowledge").mkdir(parents=True)
+    (project / "science.yaml").write_text("id: missing-id-project\n", encoding="utf-8")
+    (project / "knowledge" / "entity-identity-baseline.yaml").write_text(
+        """
+records:
+  - path: doc/finding.md
+    accepted_at: "2026-05-12T10:00:00Z"
+""".strip(),
+        encoding="utf-8",
+    )
+    (project / "doc" / "finding.md").write_text(
+        "---\nkind: finding\ntitle: Legacy\n---\n",
+        encoding="utf-8",
+    )
+
+    report = build_health_report(project, checks={"entity_identity"})
+
+    assert report["entity_identity"][0]["code"] == "missing-canonical-id"
+    assert report["entity_identity"][0]["severity"] == "warning"
+    assert report["total_issues"] == 1
+
+
+def test_identity_health_reports_unbaselined_missing_id_as_error_through_real_health_flow(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc").mkdir(parents=True)
+    (project / "science.yaml").write_text("id: missing-id-project\n", encoding="utf-8")
+    (project / "doc" / "finding.md").write_text(
+        "---\nkind: finding\ntitle: Current\n---\n",
+        encoding="utf-8",
+    )
+
+    report = build_health_report(project, checks={"entity_identity"})
+
+    assert report["entity_identity"][0]["code"] == "missing-canonical-id"
+    assert report["entity_identity"][0]["severity"] == "error"
+    assert report["total_issues"] == 1
 
 
 def test_identity_health_flags_missing_canonical_id_as_warning_for_baselined_record(tmp_path) -> None:
@@ -79,5 +121,17 @@ def test_identity_health_resolves_markdown_aliases_from_loaded_sources(tmp_path)
     (project / "doc" / "summary.md").write_text("This cites [[h001]] in prose.\n", encoding="utf-8")
 
     warnings = collect_identity_warnings(project, sources=load_project_sources(project))
+
+    assert not [warning for warning in warnings if warning.code == "unresolved-prose-reference"]
+
+
+def test_identity_health_resolves_uppercase_short_refs_case_insensitively(tmp_path) -> None:
+    project = tmp_path / "project"
+    sources = _sources_with_documents(
+        project,
+        [MarkdownSourceDocument(path="doc/summary.md", frontmatter={}, body="This cites [[H001]] in prose.\n")],
+    ).model_copy(update={"manual_aliases": {"h001": "hypothesis:h001"}})
+
+    warnings = collect_identity_warnings(project, sources=sources)
 
     assert not [warning for warning in warnings if warning.code == "unresolved-prose-reference"]
