@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 from science_model.contracts.inventory_v1 import InventoryPayload
@@ -110,3 +111,59 @@ def test_build_inventory_fails_when_entity_source_adapter_mapping_is_missing(tmp
 
     with pytest.raises(ValueError, match="finding:f001.*source adapter"):
         build_inventory(project)
+
+
+def test_build_inventory_promotes_targets_without_duplicating_them_in_data(tmp_path, monkeypatch) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "science.yaml").write_text("id: target-project\n", encoding="utf-8")
+
+    class EntityWithTargets:
+        id = "finding:f001"
+        canonical_id = "finding:f001"
+        kind = "finding"
+        title = "Finding"
+        status = None
+        profile = "core"
+        file_path = "doc/finding.md"
+        aliases: list[str] = []
+        related: list[str] = []
+        source_refs: list[str] = []
+        review_state = None
+        deprecated_ids: list[str] = []
+        scope = "project"
+
+        def model_dump(self, *, mode, exclude_none, exclude):
+            data = {
+                "id": self.id,
+                "canonical_id": self.canonical_id,
+                "kind": self.kind,
+                "title": self.title,
+                "project": "project",
+                "ontology_terms": [],
+                "related": [],
+                "relations": [],
+                "source_refs": [],
+                "aliases": [],
+                "deprecated_ids": [],
+                "review_state": None,
+                "file_path": self.file_path,
+                "scope": self.scope,
+                "targets": ["dag-edge:h1:e001"],
+                "content_preview": "Finding preview.",
+            }
+            if exclude_none:
+                data = {key: value for key, value in data.items() if value is not None}
+            return {key: value for key, value in data.items() if key not in exclude}
+
+    sources = SimpleNamespace(
+        entities=[EntityWithTargets()],
+        entity_source_adapters={"finding:f001": "fake-adapter"},
+        ontology_catalogs=[],
+    )
+    monkeypatch.setattr(entities_inventory, "load_project_sources", lambda _project_root: sources)
+
+    inventory = build_inventory(project)
+
+    assert inventory.entities[0].targets == ["dag-edge:h1:e001"]
+    assert inventory.entities[0].data == {"content_preview": "Finding preview."}

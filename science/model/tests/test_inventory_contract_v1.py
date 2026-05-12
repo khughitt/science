@@ -221,12 +221,35 @@ def test_inventory_payload_normalizes_finding_candidate_targets_for_hashing() ->
     assert compute_content_hash(left) == compute_content_hash(right)
 
 
-def test_inventory_entity_rejects_inconsistent_canonical_id_parts() -> None:
-    with pytest.raises(ValidationError, match="must match"):
+def test_inventory_entity_rejects_local_id_that_does_not_match_canonical_suffix() -> None:
+    with pytest.raises(ValidationError, match="local_id"):
         InventoryEntity(
             id="finding:wrong-id",
             kind="finding",
             local_id="landscape-topology",
+            source=InventorySourceLocation(adapter="markdown", path="doc/finding.md"),
+        )
+
+
+def test_inventory_entity_accepts_canonical_prefix_that_differs_from_kind() -> None:
+    entity = InventoryEntity(
+        id="parameter:kcat",
+        kind="canonical_parameter",
+        local_id="kcat",
+        source=InventorySourceLocation(adapter="structured-source", path="knowledge/sources/local/parameters.yaml"),
+    )
+
+    assert entity.id == "parameter:kcat"
+    assert entity.kind == "canonical_parameter"
+    assert entity.local_id == "kcat"
+
+
+def test_inventory_entity_rejects_id_without_separator() -> None:
+    with pytest.raises(ValidationError, match="canonical"):
+        InventoryEntity(
+            id="finding",
+            kind="finding",
+            local_id="finding",
             source=InventorySourceLocation(adapter="markdown", path="doc/finding.md"),
         )
 

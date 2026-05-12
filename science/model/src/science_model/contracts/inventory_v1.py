@@ -100,10 +100,13 @@ class InventoryEntity(_InventoryContractModel):
         return value
 
     @model_validator(mode="after")
-    def canonical_id_matches_kind_and_local_id(self) -> Self:
-        expected = f"{self.kind}:{self.local_id}"
-        if self.id != expected:
-            msg = f"Inventory entity id must match kind and local_id, expected {expected!r}, got {self.id!r}."
+    def local_id_matches_canonical_id_suffix(self) -> Self:
+        _, suffix = self.id.split(":", 1)
+        if self.local_id != suffix:
+            msg = (
+                "Inventory entity local_id must match the canonical id suffix after the first ':', "
+                f"expected {suffix!r}, got {self.local_id!r}."
+            )
             raise ValueError(msg)
         return self
 

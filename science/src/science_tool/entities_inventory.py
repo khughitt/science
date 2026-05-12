@@ -37,6 +37,7 @@ PROMOTED_ENTITY_DATA_FIELDS = {
     "review_state",
     "file_path",
     "scope",
+    "targets",
 }
 
 
@@ -61,7 +62,8 @@ def build_inventory(project_root: Path) -> InventoryPayload:
             adapter=adapter,
             path=entity.file_path,
         )
-        data = entity.model_dump(mode="json", exclude_none=True, exclude=PROMOTED_ENTITY_DATA_FIELDS)
+        entity_data = entity.model_dump(mode="json", exclude_none=True, exclude=set())
+        data = {key: value for key, value in entity_data.items() if key not in PROMOTED_ENTITY_DATA_FIELDS}
         entities.append(
             InventoryEntity(
                 id=canonical_id,
@@ -75,7 +77,7 @@ def build_inventory(project_root: Path) -> InventoryPayload:
                 aliases=list(entity.aliases),
                 related=_references_from_entity(entity),
                 source_refs=list(entity.source_refs),
-                targets=[str(value) for value in data.get("targets", []) if value],
+                targets=[str(value) for value in entity_data.get("targets", []) if value],
                 review_state=_optional_str(entity.review_state),
                 deprecated_ids=list(entity.deprecated_ids),
                 data=data,

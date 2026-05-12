@@ -270,6 +270,29 @@ def test_entities_inventory_cli_outputs_contract_json(tmp_path) -> None:
     assert payload.entities[0].id == "finding:f001"
 
 
+def test_entities_inventory_cli_writes_contract_json_to_output_file(tmp_path) -> None:
+    project = tmp_path / "project"
+    output = tmp_path / "inventory.json"
+    (project / "doc").mkdir(parents=True)
+    (project / "science.yaml").write_text("id: cli-output-project\n", encoding="utf-8")
+    (project / "doc" / "finding.md").write_text(
+        "---\nkind: finding\nid: finding:f001\ntitle: Finding\n---\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        ["entities", "inventory", "--project", str(project), "--format", "json", "--output", str(output)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output == ""
+    payload = InventoryPayload.model_validate_json(output.read_text(encoding="utf-8"))
+    assert payload.project_id == "cli-output-project"
+    assert payload.entities[0].id == "finding:f001"
+
+
 def test_question_create_wrapper_delegates_to_entity_create() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
