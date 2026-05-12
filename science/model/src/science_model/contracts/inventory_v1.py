@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from typing import Any, Final, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -92,6 +93,12 @@ class InventoryEntity(_InventoryContractModel):
             raise ValueError(msg)
         return value
 
+    @field_validator("data")
+    @classmethod
+    def data_values_are_json_serializable(cls, value: dict[str, Any]) -> dict[str, Any]:
+        _validate_json_value(value, "data")
+        return value
+
     @model_validator(mode="after")
     def canonical_id_matches_kind_and_local_id(self) -> Self:
         expected = f"{self.kind}:{self.local_id}"
@@ -120,6 +127,29 @@ class InventoryPayload(_InventoryContractModel):
 def canonical_json_bytes(value: BaseModel | dict[str, Any]) -> bytes:
     data = value.model_dump(mode="json", exclude_none=True) if isinstance(value, BaseModel) else value
     return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def _validate_json_value(value: Any, path: str) -> None:
+    if value is None or isinstance(value, str | bool | int):
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            msg = f"{path} must contain JSON-serializable values."
+            raise ValueError(msg)
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _validate_json_value(item, f"{path}[{index}]")
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                msg = f"{path} must contain only string object keys."
+                raise ValueError(msg)
+            _validate_json_value(item, f"{path}.{key}")
+        return
+    msg = f"{path} must contain JSON-serializable values."
+    raise ValueError(msg)
 
 
 def _sort_key_with_canonical_tie_breaker(item: dict[str, Any], fields: tuple[str, ...]) -> tuple[Any, ...]:

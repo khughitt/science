@@ -204,6 +204,42 @@ def test_inventory_entity_rejects_inconsistent_canonical_id_parts() -> None:
         )
 
 
+def test_inventory_entity_rejects_non_json_data_values() -> None:
+    with pytest.raises(ValidationError, match="JSON"):
+        InventoryEntity(
+            id="finding:f01",
+            kind="finding",
+            local_id="f01",
+            source=InventorySourceLocation(adapter="markdown", path="doc/finding.md"),
+            data={"bad": object()},
+        )
+
+
+def test_inventory_entity_accepts_json_data_values_for_hashing() -> None:
+    entity = InventoryEntity(
+        id="finding:f01",
+        kind="finding",
+        local_id="f01",
+        source=InventorySourceLocation(adapter="markdown", path="doc/finding.md"),
+        data={
+            "name": "Landscape topology",
+            "rank": 3,
+            "score": 0.75,
+            "active": True,
+            "optional": None,
+            "tags": ["alpha", "beta"],
+            "metrics": {"effect": 1.2, "count": 4},
+        },
+    )
+    payload = InventoryPayload(
+        generated_at="2026-05-12T10:00:00Z",
+        project_id="natural-systems",
+        entities=[entity],
+    )
+
+    assert compute_content_hash(payload)
+
+
 def test_inventory_payload_top_level_sorts_have_deterministic_tie_breakers() -> None:
     left = InventoryPayload(
         generated_at="2026-05-12T10:00:00Z",
