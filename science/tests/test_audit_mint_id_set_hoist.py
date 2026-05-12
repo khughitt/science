@@ -6,15 +6,11 @@ import inspect
 import time
 from datetime import datetime, timezone
 
-import pytest
-
 from science_tool.annotation.audit import merge_planned, mint_id
 from science_tool.annotation.model import (
-    Annotation,
     Motivation,
     Sidecar,
     SpecificResource,
-    Status,
     TextQuoteSelector,
     TextualBody,
 )
