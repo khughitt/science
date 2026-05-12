@@ -54,8 +54,11 @@ def build_inventory(project_root: Path) -> InventoryPayload:
         canonical_id = entity.canonical_id or entity.id
         kind = entity.kind
         local_id = canonical_id.split(":", 1)[1] if ":" in canonical_id else canonical_id
+        adapter = sources.entity_source_adapters.get(canonical_id)
+        if adapter is None:
+            raise ValueError(f"Entity {canonical_id} is missing source adapter mapping.")
         source = InventorySourceLocation(
-            adapter=sources.entity_source_adapters.get(canonical_id, "unknown"),
+            adapter=adapter,
             path=entity.file_path,
         )
         data = entity.model_dump(mode="json", exclude_none=True, exclude=PROMOTED_ENTITY_DATA_FIELDS)
@@ -104,8 +107,8 @@ def _read_project_metadata(project_root: Path) -> InventoryProjectMetadata:
     canonical_id = str(project_id) if project_id else project_root.name
     return InventoryProjectMetadata(
         id=canonical_id,
-        name=str(data.get("name") or canonical_id),
-        path=project_root.as_posix(),
+        name=str(data.get("name") or project_root.name),
+        path=str(data.get("path") or project_root.as_posix()),
         summary=_optional_str(data.get("summary")),
         status=_optional_str(data.get("status")),
         aspects=[str(value) for value in data.get("aspects", [])],
