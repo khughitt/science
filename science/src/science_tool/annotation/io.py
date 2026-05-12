@@ -14,6 +14,8 @@ output. See spec §File layout and §Concrete sidecar example.
 
 from __future__ import annotations
 
+import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -440,9 +442,6 @@ def atomic_write_text(path: Path, text: str) -> None:
     Same semantics as P3.2's `cli._atomic_write_text` (which calls
     this helper now).
     """
-    import os
-    import tempfile
-
     fd, tmp_name = tempfile.mkstemp(
         prefix=path.name, dir=str(path.parent), text=True,
     )
@@ -465,9 +464,6 @@ def serialize_sidecar(sidecar: Sidecar) -> str:
     file) so callers that need the textual representation don't have
     to write to disk first.
     """
-    import os
-    import tempfile
-
     fd, tmp = tempfile.mkstemp(suffix=".anno.trig")
     os.close(fd)
     try:
