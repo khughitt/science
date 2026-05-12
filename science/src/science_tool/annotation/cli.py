@@ -802,3 +802,118 @@ def _emit_list_json(
         },
         "annotations": items,
     }, indent=2))
+
+
+# ---------------------------------------------------------------------------
+# annotate ack / dismiss / fix  (shared _crud_invoke orchestrator)
+# ---------------------------------------------------------------------------
+
+def _crud_invoke(
+    verb: str,
+    new_status: Status,
+    *,
+    id_arg: str,
+    root_path: Path | None,
+    actor_opt: str | None,
+    force_dirty: bool,
+    reason: str | None = None,
+) -> None:
+    """Shared body for ack_cmd / dismiss_cmd / fix_cmd.
+
+    `verb` is the user-facing command name ("ack", "dismiss", "fix")
+    used as the output prefix. Necessary because Status.DISMISSED.value
+    is "dismissed" and Status.FIXED.value is "fixed" — the resulting
+    status is NOT the verb. The spec output examples are
+    `dismiss: ...` and `fix: ...`, not `dismissed: ...` / `fixed: ...`.
+    """
+    root = (root_path or Path.cwd()).resolve()
+    actor = crud._resolve_actor(actor_opt, root)
+    now = datetime.now(timezone.utc)
+    try:
+        result = crud.apply_status_change(
+            root, id_arg, new_status,
+            actor=actor, now=now, reason=reason, force_dirty=force_dirty,
+        )
+    except query.AmbiguousAnnotationId as exc:
+        click.echo(str(exc), err=True)
+        for cand in exc.candidates:
+            click.echo(f"  {cand}", err=True)
+        raise click.exceptions.Exit(2) from exc
+    except query.AnnotationNotFound as exc:
+        raise click.ClickException(str(exc)) from exc
+    except crud.CrudRefusedDirty as exc:
+        raise click.ClickException(str(exc)) from exc
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    suffix = (
+        f" (reason: {reason})" if reason else ""
+    )
+    click.echo(
+        f"{verb}: {result.qualified_id} "
+        f"{result.prior_status.value} → {result.new_status.value}{suffix}"
+    )
+
+
+@annotate_group.command("ack")
+@click.argument("id_arg", metavar="ID")
+@click.option(
+    "--root", "root_path", default=None,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option("--actor", "actor_opt", default=None)
+@click.option("--force-dirty", is_flag=True, default=False)
+def ack_cmd(
+    id_arg: str, root_path: Path | None,
+    actor_opt: str | None, force_dirty: bool,
+) -> None:
+    """Acknowledge an annotation (status: open → ack)."""
+    _crud_invoke(
+        "ack", Status.ACK,
+        id_arg=id_arg, root_path=root_path,
+        actor_opt=actor_opt, force_dirty=force_dirty,
+    )
+
+
+@annotate_group.command("dismiss")
+@click.argument("id_arg", metavar="ID")
+@click.option(
+    "--root", "root_path", default=None,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option("--actor", "actor_opt", default=None)
+@click.option("--force-dirty", is_flag=True, default=False)
+@click.option("--reason", "reason", required=True)
+def dismiss_cmd(
+    id_arg: str, root_path: Path | None,
+    actor_opt: str | None, force_dirty: bool, reason: str,
+) -> None:
+    """Dismiss an annotation (status: open → dismissed)."""
+    if not reason.strip():
+        raise click.ClickException("--reason cannot be empty")
+    _crud_invoke(
+        "dismiss", Status.DISMISSED,
+        id_arg=id_arg, root_path=root_path,
+        actor_opt=actor_opt, force_dirty=force_dirty,
+        reason=reason,
+    )
+
+
+@annotate_group.command("fix")
+@click.argument("id_arg", metavar="ID")
+@click.option(
+    "--root", "root_path", default=None,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option("--actor", "actor_opt", default=None)
+@click.option("--force-dirty", is_flag=True, default=False)
+def fix_cmd(
+    id_arg: str, root_path: Path | None,
+    actor_opt: str | None, force_dirty: bool,
+) -> None:
+    """Mark an annotation as fixed (status: open → fixed)."""
+    _crud_invoke(
+        "fix", Status.FIXED,
+        id_arg=id_arg, root_path=root_path,
+        actor_opt=actor_opt, force_dirty=force_dirty,
+    )
