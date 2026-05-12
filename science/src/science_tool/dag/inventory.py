@@ -35,8 +35,8 @@ def load_dag_inventory_records(project_root: Path) -> DagInventoryRecords:
             if not isinstance(edge, dict):
                 continue
             raw_edge_id = edge.get("id")
-            edge_id = raw_edge_id.strip() if isinstance(raw_edge_id, str) else raw_edge_id
-            if not isinstance(edge_id, str) or not edge_id:
+            edge_id = str(raw_edge_id).strip() if raw_edge_id is not None else None
+            if not edge_id:
                 warnings.append(
                     InventoryWarning(
                         code="missing-dag-edge-id",

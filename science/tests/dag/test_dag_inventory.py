@@ -25,6 +25,30 @@ edges:
     assert records.finding_candidates[0].targets == ["dag-edge:h4-attractor-convergence:e001"]
 
 
+def test_dag_edges_accept_numeric_declared_ids(tmp_path) -> None:
+    project = tmp_path / "project"
+    dag_path = project / "doc" / "figures" / "dags" / "h4.edges.yaml"
+    dag_path.parent.mkdir(parents=True)
+    dag_path.write_text(
+        """
+edges:
+  - id: 1
+    source: a
+    target: b
+    relation: supports
+    interpretation: Numeric DAG edge IDs are production format.
+""".strip(),
+        encoding="utf-8",
+    )
+
+    records = load_dag_inventory_records(project)
+
+    assert [address.address for address in records.graph_addresses] == ["dag-edge:h4:1"]
+    assert records.graph_addresses[0].source.address == "1"
+    assert records.finding_candidates[0].targets == ["dag-edge:h4:1"]
+    assert [warning.code for warning in records.warnings] == []
+
+
 def test_dag_edges_without_ids_emit_warning_instead_of_position_address(tmp_path) -> None:
     project = tmp_path / "project"
     dag_path = project / "doc" / "figures" / "dags" / "h4.edges.yaml"
