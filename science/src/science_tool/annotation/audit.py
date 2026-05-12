@@ -59,18 +59,25 @@ def _mint_base_id(p: PlannedAnnotation) -> str:
     return f"a-{h.hexdigest()[:6]}"
 
 
-def mint_id(sidecar: Sidecar, p: PlannedAnnotation) -> str:
+def mint_id(
+    sidecar: Sidecar,
+    p: PlannedAnnotation,
+    *,
+    existing_by_id: dict[str, Annotation],
+) -> str:
     """Mint the on-disk ID for a planned row.
 
-    Same-finding superseded predecessor → suffix `-N`.
-    Same-finding non-superseded match → unreachable (caller must
-    have run merge_planned dedupe first; assert guards).
-    Unrelated 4-tuple at same base_id → IdCollisionError.
+    `existing_by_id` is `{a.id: a for a in sidecar.annotations}` built
+    once by the caller. Used for both the base-ID lookup and the `-N`
+    suffix probe so a single mint_id call is O(1) regardless of
+    sidecar size.
+
+    Note: `sidecar` is no longer scanned by mint_id itself, but is
+    retained in the signature for the IdCollisionError message and
+    forward-compat (e.g. P3.5 LLM source may want sidecar metadata).
     """
     base_id = _mint_base_id(p)
-    existing_at_base = next(
-        (a for a in sidecar.annotations if a.id == base_id), None,
-    )
+    existing_at_base = existing_by_id.get(base_id)
     if existing_at_base is None:
         return base_id
 
@@ -78,12 +85,14 @@ def mint_id(sidecar: Sidecar, p: PlannedAnnotation) -> str:
         _annotation_tuple(existing_at_base)[:3] == _planned_tuple(p)[:3]
         and existing_at_base.match_text == p.match_text
     ):
-        assert existing_at_base.status is Status.SUPERSEDED, (
-            "merge_planned should have skipped a non-superseded match"
-        )
-        existing_ids = {a.id for a in sidecar.annotations}
+        if existing_at_base.status is not Status.SUPERSEDED:
+            raise ValueError(
+                "merge_planned should have skipped a non-superseded match "
+                f"(annotation {existing_at_base.id!r} is "
+                f"{existing_at_base.status.value!r})"
+            )
         n = 2
-        while f"{base_id}-{n}" in existing_ids:
+        while f"{base_id}-{n}" in existing_by_id:
             n += 1
         return f"{base_id}-{n}"
 
@@ -111,15 +120,21 @@ def merge_planned(
     if not planned:
         return sidecar, []
     source_name = planned[0].source_name
-    assert all(p.source_name == source_name for p in planned), (
-        "merge_planned requires single-source planned rows"
-    )
+    if not all(p.source_name == source_name for p in planned):
+        raise ValueError(
+            "merge_planned requires single-source planned rows; got "
+            f"{sorted({p.source_name for p in planned})!r}"
+        )
 
     existing = list(sidecar.annotations)
     existing_keys: dict[
         tuple[str, str, Optional[str], Optional[str]], Annotation
     ] = {_annotation_tuple(a): a for a in existing}
 
+    existing_by_id: dict[str, Annotation] = {
+        a.id: a for a in sidecar.annotations
+    }
+    out_annotations = list(sidecar.annotations)
     written: list[Annotation] = []
     seen_planned_keys: set[tuple[str, str, Optional[str], str]] = set()
     seen_planned_base_ids: dict[str, PlannedAnnotation] = {}
@@ -145,10 +160,7 @@ def merge_planned(
             )
         seen_planned_base_ids[base_id] = p
 
-        new_id = mint_id(
-            Sidecar(annotations=tuple(existing + written)),
-            p,
-        )
+        new_id = mint_id(sidecar, p, existing_by_id=existing_by_id)
         new_ann = Annotation(
             id=new_id,
             target=p.target,
@@ -163,11 +175,13 @@ def merge_planned(
             lifted_from=p.lifted_from,
             match_text=p.match_text,
         )
+        existing_by_id[new_id] = new_ann
+        out_annotations.append(new_ann)
         written.append(new_ann)
 
     new_sidecar = replace(
         sidecar,
-        annotations=tuple(existing + written),
+        annotations=tuple(out_annotations),
     )
     return new_sidecar, written
 

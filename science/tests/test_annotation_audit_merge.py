@@ -104,7 +104,7 @@ def test_superseded_predecessor_yields_dash_2_id() -> None:
 def test_unrelated_collision_raises() -> None:
     """Force a collision by manually placing an unrelated row at base_id."""
     p = _planned()
-    base_id = mint_id(Sidecar(), p)
+    base_id = mint_id(Sidecar(), p, existing_by_id={})
     fake = Annotation(
         id=base_id,
         target=SpecificResource(
@@ -137,13 +137,13 @@ def test_planned_vs_planned_collision_within_call_raises() -> None:
 def test_mint_id_deterministic_on_4_tuple() -> None:
     p_a = _planned(match_text="Brunton 2022")
     p_b = _planned(match_text="Brunton 2022")
-    assert mint_id(Sidecar(), p_a) == mint_id(Sidecar(), p_b)
+    assert mint_id(Sidecar(), p_a, existing_by_id={}) == mint_id(Sidecar(), p_b, existing_by_id={})
 
 
 def test_single_source_invariant_enforced() -> None:
     p1 = _planned(source_name="lint:bare-author-year-v2026-05-11")
     p2 = _planned(source_name="lint:numeric-anchor-v2026-05-11")
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError, match="single-source"):
         merge_planned(Sidecar(), [p1, p2], actor="t", now=NOW)
 
 
