@@ -33,7 +33,7 @@ def test_section_8_passes_ignore_lifted() -> None:
 def test_registry_version_bumped() -> None:
     data = yaml.safe_load(REGISTRY_YAML.read_text(encoding="utf-8"))
     validate = next(a for a in data["artifacts"] if a["name"] == "validate.sh")
-    assert validate["version"] == "2026.05.11.2"
+    assert validate["version"] == "2026.05.12.1"
 
 
 def test_registry_current_hash_matches_validate_body() -> None:
@@ -43,38 +43,38 @@ def test_registry_current_hash_matches_validate_body() -> None:
 
 
 def test_registry_previous_hashes_grow() -> None:
-    """The pre-P3.2 version's hash is preserved in previous_hashes."""
+    """The previous validate.sh version's hash is preserved in previous_hashes."""
     data = yaml.safe_load(REGISTRY_YAML.read_text(encoding="utf-8"))
     validate = next(a for a in data["artifacts"] if a["name"] == "validate.sh")
     prev = validate["previous_hashes"]
     assert any(
-        entry.get("version") == "2026.05.11.1"
-        and entry.get("hash") == "171dada621d6741d0deb7d592ec6ac92f4ceb10d39941d6dc06e8d898824cf23"
+        entry.get("version") == "2026.05.11.2"
+        and entry.get("hash") == "86dedcc6beebd74d4427b9202a1f083ef6de89b0eedbd06ae205db4b688087a4"
         for entry in prev
     )
 
 
-def test_registry_migration_entry_for_2026_05_11_2() -> None:
+def test_registry_migration_entry_for_2026_05_12_1() -> None:
     data = yaml.safe_load(REGISTRY_YAML.read_text(encoding="utf-8"))
     validate = next(a for a in data["artifacts"] if a["name"] == "validate.sh")
     migrations = validate["migrations"]
-    assert any(
-        m.get("from") == "2026.05.11.1" and m.get("to") == "2026.05.11.2"
-        for m in migrations
-    )
+    assert any(m.get("from") == "2026.05.11.2" and m.get("to") == "2026.05.12.1" for m in migrations)
 
 
-def test_registry_changelog_entry_for_2026_05_11_2() -> None:
+def test_registry_changelog_entry_for_2026_05_12_1() -> None:
     data = yaml.safe_load(REGISTRY_YAML.read_text(encoding="utf-8"))
     validate = next(a for a in data["artifacts"] if a["name"] == "validate.sh")
-    assert "2026.05.11.2" in validate["changelog"]
+    assert "2026.05.12.1" in validate["changelog"]
 
 
 def test_section_8_runs_against_empty_dir() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         result = subprocess.run(
             ["bash", str(VALIDATE_SH)],
-            cwd=tmp, capture_output=True, text=True, check=False,
+            cwd=tmp,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         assert result.returncode in (0, 1)
         # Section 8 always echoes this header banner; confirms the script ran past it.

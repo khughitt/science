@@ -392,7 +392,7 @@ def _enrich_raw(
     - Alias derivation for hypothesis/question/task
     - Normalize `kind` and optional core-only `type` projection
     - Description → content_preview fallback (legacy aggregate rows)
-    - Drop invalid enum values for reasoning fields (soft warn via stderr)
+    - Validate reasoning enum fields and fail early on legacy/invalid shapes
     """
     raw.setdefault("project", project_slug)
     raw.setdefault("ontology_terms", [])
@@ -473,14 +473,19 @@ def _enrich_raw(
                 ]
         raw["aliases"] = _derive_aliases(canonical_id, kind, [*explicit_list, *path_aliases])
 
-    # Drop invalid enum values silently (matches legacy load_reasoning_metadata behavior).
+    # Reasoning metadata is current-state metadata. Do not silently erase invalid
+    # legacy shapes: fail early so migrations have a visible target.
     for field, enum_type in _ENUM_FIELDS.items():
         value = raw.get(field)
         if isinstance(value, str):
             try:
                 enum_type(value)
-            except ValueError:
-                raw.pop(field, None)
+            except ValueError as exc:
+                allowed = ", ".join(sorted(str(member.value) for member in enum_type))
+                source = raw.get("file_path") or raw.get("canonical_id") or raw.get("id") or "<unknown source>"
+                raise ValueError(
+                    f"invalid reasoning metadata {field}={value!r} at {source}; expected one of: {allowed}"
+                ) from exc
 
 
 def _load_legacy_records(

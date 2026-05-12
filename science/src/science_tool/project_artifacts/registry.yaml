@@ -29,9 +29,11 @@ artifacts:
       requires_clean_worktree: true
       commit_default: true
       transaction_kind: temp_commit
-    version: '2026.05.11.2'
-    current_hash: 86dedcc6beebd74d4427b9202a1f083ef6de89b0eedbd06ae205db4b688087a4
+    version: '2026.05.12.1'
+    current_hash: ec986621008863cffd749c59e5478722ca7d6f3ea75b497a4d49b801639e0be1
     previous_hashes:
+      - version: '2026.05.11.2'
+        hash: 86dedcc6beebd74d4427b9202a1f083ef6de89b0eedbd06ae205db4b688087a4
       - version: '2026.05.11.1'
         hash: 171dada621d6741d0deb7d592ec6ac92f4ceb10d39941d6dc06e8d898824cf23
       - version: '2026.05.10.2'
@@ -179,6 +181,11 @@ artifacts:
         kind: byte_replace
         summary: 'Section 8 markers scan now passes --ignore-lifted to dedupe inline tokens against lifted sidecar rows.'
         steps: []
+      - from: '2026.05.11.2'
+        to: '2026.05.12.1'
+        kind: byte_replace
+        summary: 'Add agent-context drift checks for CLAUDE.md, AGENTS.md, and core/overview.md size.'
+        steps: []
     changelog:
       '2026.04.26': Initial managed artifact (port of scripts/validate.sh + hook infrastructure).
       '2026.04.26.1': 'Audit-surfaced six-fix batch (Plan #7 of conventions audit).'
@@ -201,3 +208,4 @@ artifacts:
       '2026.05.10.2': 'Section 6 consolidation: replace bash bibtex citation check with `science refs check --format json` invocation (mirroring Section 18 prose-lint pattern). Renamed "Citation integrity" → "Reference integrity" — now reports per-type counts (citation, doi, pmid, hypothesis, task, link, etc.) rather than just bibtex. Falls back to a minimal bash bibtex check when SCIENCE_TOOL is unavailable.'
       '2026.05.11.1': 'Section 19 (Annotation drift): invokes `science annotate verify --format json --summary-only` and reports broken / degraded / fuzzy / source-missing / parse-error counts. Broken and parse-errors warn unconditionally; the rest promote under --strict (via `strict_warn`).'
       '2026.05.11.2': 'Section 8 markers scan now passes --ignore-lifted to dedupe inline tokens against lifted sidecar rows (P3.2).'
+      '2026.05.12.1': 'Add agent-context drift checks: CLAUDE.md must stay minimal, @core/* includes warn, AGENTS.md digest markers are checked, and core/overview.md has a 150-line / 1200-word budget.'

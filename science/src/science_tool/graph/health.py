@@ -127,7 +127,9 @@ def collect_unresolved_refs(project_root: Path, *, sources: ProjectSources | Non
     return result
 
 
-def collect_unregistered_ref_kinds(project_root: Path, *, sources: ProjectSources | None = None) -> list[UnregisteredRefKind]:
+def collect_unregistered_ref_kinds(
+    project_root: Path, *, sources: ProjectSources | None = None
+) -> list[UnregisteredRefKind]:
     """Report identity refs whose CURIE prefix is not a registered entity kind."""
     if sources is None:
         sources = load_project_sources(project_root.resolve())
@@ -271,10 +273,18 @@ class ToolingScaffoldFinding(TypedDict):
     fix: str  # suggested remediation command
 
 
+class AgentContextFinding(TypedDict):
+    code: str
+    source_file: str
+    detail: str
+    fix: str
+
+
 class HealthReport(TypedDict):
     unresolved_refs: list[UnresolvedRef]
     unregistered_ref_kinds: list[UnregisteredRefKind]
     lingering_tags_lines: list[LingeringTagsRecord]
+    agent_context: list[AgentContextFinding]
     identity_policy: list["IdentityPolicyFinding"]
     layered_claims: "LayeredClaimHealthReport"
     legacy_task_type: list["LegacyTaskTypeFinding"]
@@ -428,6 +438,7 @@ def _empty_check_results(project_root: Path) -> dict[str, object]:
         "unresolved_refs": [],
         "unregistered_ref_kinds": [],
         "lingering_tags": [],
+        "agent_context": [],
         "legacy_structured_literature_prefixes": [],
         "dataset_anomalies": [],
         "legacy_task_type": [],
@@ -504,6 +515,7 @@ def build_health_report(
     unresolved_refs = cast("list[UnresolvedRef]", check_results["unresolved_refs"])
     unregistered_ref_kinds = cast("list[UnregisteredRefKind]", check_results["unregistered_ref_kinds"])
     lingering_tags_lines = cast("list[LingeringTagsRecord]", check_results["lingering_tags"])
+    agent_context = cast("list[AgentContextFinding]", check_results["agent_context"])
     legacy_structured_literature_prefixes = cast(
         "list[LegacyStructuredLiteraturePrefixFinding]",
         check_results["legacy_structured_literature_prefixes"],
@@ -534,6 +546,7 @@ def build_health_report(
         len(unresolved_refs)
         + len(unregistered_ref_kinds)
         + len(lingering_tags_lines)
+        + len(agent_context)
         + len(identity_policy_findings)
         + len(legacy_structured_literature_prefixes)
         + layered_claim_issue_count
@@ -548,6 +561,7 @@ def build_health_report(
         "unresolved_refs": unresolved_refs,
         "unregistered_ref_kinds": unregistered_ref_kinds,
         "lingering_tags_lines": lingering_tags_lines,
+        "agent_context": agent_context,
         "identity_policy": identity_policy_findings,
         "layered_claims": {
             "proposition_claim_layer_coverage": proposition_coverage,
@@ -570,6 +584,85 @@ def build_health_report(
             "total_duration_seconds": perf_counter() - total_started,
         }
     return report
+
+
+OVERVIEW_LINE_BUDGET = 150
+OVERVIEW_WORD_BUDGET = 1200
+
+
+def collect_agent_context_findings(project_root: Path) -> list[AgentContextFinding]:
+    """Return drift that makes session-start agent context too large or fragmented."""
+    from science_tool.curate.agents_md import collect_agents_md_state
+
+    project_root = project_root.resolve()
+    state = collect_agents_md_state(project_root)
+    findings: list[AgentContextFinding] = []
+
+    for include in state.claude_md_legacy_at_includes:
+        findings.append(
+            {
+                "code": "claude_md_legacy_includes",
+                "source_file": "CLAUDE.md",
+                "detail": f"CLAUDE.md includes {include}; keep CLAUDE.md to a single @AGENTS.md pointer.",
+                "fix": "Move durable guidance into AGENTS.md and keep core files as pointers.",
+            }
+        )
+    if state.claude_md_present and not _claude_md_is_minimal(project_root / "CLAUDE.md"):
+        findings.append(
+            {
+                "code": "claude_md_not_minimal",
+                "source_file": "CLAUDE.md",
+                "detail": "CLAUDE.md should contain only @AGENTS.md.",
+                "fix": "Move project-specific guidance into AGENTS.md, then replace CLAUDE.md with @AGENTS.md.",
+            }
+        )
+
+    for include in state.agents_md_legacy_at_includes:
+        findings.append(
+            {
+                "code": "agents_md_legacy_includes",
+                "source_file": "AGENTS.md",
+                "detail": f"AGENTS.md includes {include}; @core/* directives inline large files into every session.",
+                "fix": "Remove the @core/* directive and keep core files in the Pointers section.",
+            }
+        )
+
+    if state.agents_md_present and not state.markers_present:
+        findings.append(
+            {
+                "code": "agents_md_digest_markers_missing",
+                "source_file": "AGENTS.md",
+                "detail": "AGENTS.md is missing the managed load-bearing-constraints digest markers.",
+                "fix": "Run /science:curate or add the canonical managed marker block from templates/agents-md.md.",
+            }
+        )
+
+    overview = project_root / "core" / "overview.md"
+    if overview.is_file():
+        text = overview.read_text(encoding="utf-8")
+        line_count = len(text.splitlines())
+        word_count = len(text.split())
+        if line_count > OVERVIEW_LINE_BUDGET or word_count > OVERVIEW_WORD_BUDGET:
+            findings.append(
+                {
+                    "code": "overview_too_long",
+                    "source_file": "core/overview.md",
+                    "detail": (
+                        f"core/overview.md is {line_count} lines / {word_count} words; "
+                        f"budget is {OVERVIEW_LINE_BUDGET} lines / {OVERVIEW_WORD_BUDGET} words."
+                    ),
+                    "fix": "Keep overview as boot context and move detailed evidence narratives into canonical docs.",
+                }
+            )
+
+    return findings
+
+
+def _claude_md_is_minimal(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return lines == ["@AGENTS.md"]
 
 
 def collect_tooling_scaffold_findings(project_root: Path) -> list[ToolingScaffoldFinding]:
@@ -607,10 +700,7 @@ def collect_tooling_scaffold_findings(project_root: Path) -> list[ToolingScaffol
             dev_group = data.get("dependency-groups", {}).get("dev", [])
             for entry in dev_group:
                 # entries can be strings ("science") or tables; we only need name match
-                if (
-                    isinstance(entry, str)
-                    and entry.split("[")[0].split(">=")[0].split("==")[0].strip() == "science"
-                ):
+                if isinstance(entry, str) and entry.split("[")[0].split(">=")[0].split("==")[0].strip() == "science":
                     has_dep = True
                     break
         except Exception as exc:
@@ -761,7 +851,9 @@ def _coerce_external_curie(raw: object) -> str | None:
     return None
 
 
-def collect_identity_policy_findings(project_root: Path, *, sources: ProjectSources | None = None) -> list[IdentityPolicyFinding]:
+def collect_identity_policy_findings(
+    project_root: Path, *, sources: ProjectSources | None = None
+) -> list[IdentityPolicyFinding]:
     """Return identity-policy issues surfaced from loaded entities and relations."""
     if sources is None:
         sources = load_project_sources(project_root.resolve())
@@ -1425,7 +1517,9 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
         name="layered_claim_migration",
         description="Report layered-claim adoption gaps and migration issues.",
         requires_sources=True,
-        run=lambda context: build_layered_claim_migration_report(context.project_root, sources=_context_sources(context)),
+        run=lambda context: build_layered_claim_migration_report(
+            context.project_root, sources=_context_sources(context)
+        ),
     ),
     HealthCheck(
         name="archive_lag",
@@ -1444,6 +1538,12 @@ HEALTH_CHECKS: tuple[HealthCheck, ...] = (
         description="Check pyproject and environment scaffold for science tooling.",
         requires_sources=False,
         run=lambda context: collect_tooling_scaffold_findings(context.project_root),
+    ),
+    HealthCheck(
+        name="agent_context",
+        description="Check CLAUDE.md, AGENTS.md, and core/overview.md for session-context drift.",
+        requires_sources=False,
+        run=lambda context: collect_agent_context_findings(context.project_root),
     ),
     HealthCheck(
         name="unresolved_refs",

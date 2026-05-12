@@ -390,6 +390,32 @@ def test_load_project_sources_returns_typed_theme_entity(tmp_path: Path) -> None
     assert theme.theme_scope == "federation"
 
 
+def test_load_project_sources_rejects_invalid_reasoning_enum(tmp_path: Path) -> None:
+    _seed(tmp_path)
+    (tmp_path / "specs" / "propositions").mkdir(parents=True)
+    (tmp_path / "specs" / "propositions" / "p1.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'id: "proposition:p1"',
+                'type: "proposition"',
+                'title: "P1"',
+                'claim_layer: "legacy-causal"',
+                "related: []",
+                "source_refs: []",
+                "---",
+                "",
+                "Body.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="invalid reasoning metadata"):
+        load_project_sources(tmp_path)
+
+
 def test_load_project_sources_preserves_markdown_identity_fields(tmp_path: Path) -> None:
     (tmp_path / "science.yaml").write_text(
         "name: unified\nprofile: research\nprofiles: {local: local}\nontologies: [biology]\n",

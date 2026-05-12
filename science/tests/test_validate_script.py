@@ -37,7 +37,22 @@ def _write_common_files(root: Path, profile: str) -> None:
         ),
         encoding="utf-8",
     )
-    (root / "AGENTS.md").write_text("# Operational Guide\n", encoding="utf-8")
+    (root / "AGENTS.md").write_text(
+        "\n".join(
+            [
+                "# Operational Guide",
+                "",
+                "<!-- BEGIN: load-bearing-constraints (managed by /science:curate; edit core/decisions.md instead) -->",
+                "## Load-bearing constraints",
+                "",
+                "- _none yet._",
+                "",
+                "<!-- END: load-bearing-constraints -->",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
     (root / "CLAUDE.md").write_text("@AGENTS.md\n", encoding="utf-8")
     # Tooling scaffold (Section 0): pyproject.toml + .env keep the validate run silent.
     (root / "pyproject.toml").write_text(
@@ -72,6 +87,8 @@ def _validate_env(*, extra_path: Path | None = None) -> dict[str, str]:
     # Tests stub `science` on PATH; skip dotenv sourcing so the placeholder
     # SCIENCE_TOOL_PATH in the test fixture's .env doesn't override the stub.
     env["SCIENCE_VALIDATE_SKIP_DOTENV"] = "1"
+    env.pop("SCIENCE_TOOL", None)
+    env.pop("SCIENCE_TOOL_PATH", None)
     return env
 
 
@@ -103,6 +120,18 @@ def _write_science_tool_stub(bin_dir: Path) -> None:
                 "    printf '{\"rows\": []}\\n'",
                 "    exit 0",
                 "fi",
+                'if [ "${1:-}" = "markers" ] && [ "${2:-}" = "scan" ]; then',
+                '    printf \'{"counts": {}, "hits": []}\\n\'',
+                "    exit 0",
+                "fi",
+                'if [ "${1:-}" = "refs" ] && [ "${2:-}" = "check" ]; then',
+                '    printf \'{"summary":{"broken":0,"by_type":{}},"broken":[],"markers":[]}\\n\'',
+                "    exit 0",
+                "fi",
+                'if [ "${1:-}" = "annotate" ] && [ "${2:-}" = "verify" ]; then',
+                '    printf \'{"summary":{"broken":0,"degraded":0,"fuzzy":0,"source_missing":0,"parse_errors":0}}\\n\'',
+                "    exit 0",
+                "fi",
                 "printf '{\"rows\": []}\\n'",
                 "exit 0",
                 "",
@@ -127,6 +156,18 @@ def _write_science_tool_stub_with_failing_peers_check(bin_dir: Path) -> None:
                 "fi",
                 'if [ "${1:-}" = "graph" ] && [ "${2:-}" = "audit" ]; then',
                 "    printf '{\"rows\": []}\\n'",
+                "    exit 0",
+                "fi",
+                'if [ "${1:-}" = "markers" ] && [ "${2:-}" = "scan" ]; then',
+                '    printf \'{"counts": {}, "hits": []}\\n\'',
+                "    exit 0",
+                "fi",
+                'if [ "${1:-}" = "refs" ] && [ "${2:-}" = "check" ]; then',
+                '    printf \'{"summary":{"broken":0,"by_type":{}},"broken":[],"markers":[]}\\n\'',
+                "    exit 0",
+                "fi",
+                'if [ "${1:-}" = "annotate" ] && [ "${2:-}" = "verify" ]; then',
+                '    printf \'{"summary":{"broken":0,"degraded":0,"fuzzy":0,"source_missing":0,"parse_errors":0}}\\n\'',
                 "    exit 0",
                 "fi",
                 "printf '{\"rows\": []}\\n'",
@@ -278,6 +319,37 @@ def test_validate_accepts_software_profile_without_research_code_roots(tmp_path:
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_validate_warns_on_agent_context_drift(tmp_path: Path) -> None:
+    _write_common_files(tmp_path, "software")
+    _write_python3_stub(tmp_path / "bin")
+    _write_science_tool_stub(tmp_path / "bin")
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "src").mkdir(parents=True)
+    (tmp_path / "tests").mkdir(parents=True)
+    (tmp_path / "CLAUDE.md").write_text("@AGENTS.md\n@core/overview.md\n", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text("@core/decisions.md\n\n# Operational Guide\n", encoding="utf-8")
+    (tmp_path / "core").mkdir()
+    (tmp_path / "core" / "overview.md").write_text(
+        "\n".join(["# Overview", *["- accumulated detail"] * 151]),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_validate_script_path())],
+        cwd=tmp_path,
+        env=_validate_env(extra_path=tmp_path / "bin"),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "CLAUDE.md contains legacy @core/* include(s)" in output
+    assert "AGENTS.md contains legacy @core/* include(s)" in output
+    assert "core/overview.md is 152 lines" in output
 
 
 def test_validate_summary_counts_broken_xref_warnings(tmp_path: Path) -> None:

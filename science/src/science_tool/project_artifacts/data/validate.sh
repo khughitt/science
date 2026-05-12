@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # science-managed-artifact: validate.sh
-# science-managed-version: 2026.05.11.2
-# science-managed-source-sha256: 86dedcc6beebd74d4427b9202a1f083ef6de89b0eedbd06ae205db4b688087a4
+# science-managed-version: 2026.05.12.1
+# science-managed-source-sha256: ec986621008863cffd749c59e5478722ca7d6f3ea75b497a4d49b801639e0be1
 # === managed-artifact: hook infrastructure ===
 declare -A SCIENCE_VALIDATE_HOOKS=()
 
@@ -335,6 +335,46 @@ for file in CLAUDE.md AGENTS.md; do
     fi
 done
 
+if [ -f "CLAUDE.md" ]; then
+    claude_nonblank=$(grep -v '^[[:space:]]*$' CLAUDE.md 2>/dev/null || true)
+    if [ "$claude_nonblank" != "@AGENTS.md" ]; then
+        warn "CLAUDE.md should contain only @AGENTS.md"
+    fi
+    if awk '
+        /^[[:space:]]*$/ { next }
+        /^@core\// { found=1; next }
+        /^@/ { next }
+        { exit }
+        END { exit found ? 0 : 1 }
+    ' CLAUDE.md 2>/dev/null; then
+        warn "CLAUDE.md contains legacy @core/* include(s) — keep core files as pointers from AGENTS.md"
+    fi
+fi
+
+if [ -f "AGENTS.md" ]; then
+    if awk '
+        /^[[:space:]]*$/ { next }
+        /^@core\// { found=1; next }
+        /^@/ { next }
+        { exit }
+        END { exit found ? 0 : 1 }
+    ' AGENTS.md 2>/dev/null; then
+        warn "AGENTS.md contains legacy @core/* include(s) — use the Pointers section instead"
+    fi
+    if ! grep -q 'BEGIN: load-bearing-constraints' AGENTS.md 2>/dev/null || \
+       ! grep -q 'END: load-bearing-constraints' AGENTS.md 2>/dev/null; then
+        warn "AGENTS.md missing managed load-bearing-constraints markers — run /science:curate or refresh from templates/agents-md.md"
+    fi
+fi
+
+if [ -f "core/overview.md" ]; then
+    overview_lines=$(awk 'END { print NR }' "core/overview.md")
+    overview_words=$(wc -w < "core/overview.md" | tr -d ' ')
+    if [ "$overview_lines" -gt 150 ] || [ "$overview_words" -gt 1200 ]; then
+        warn "core/overview.md is ${overview_lines} lines / ${overview_words} words; keep it under 150 lines / 1200 words and move evidence narratives into canonical docs"
+    fi
+fi
+
 if [ "$PROFILE" = "research" ]; then
     if [ ! -f "RESEARCH_PLAN.md" ]; then
         warn "RESEARCH_PLAN.md not found (allowed if high-level planning is in README.md)"
@@ -535,10 +575,11 @@ if command -v science >/dev/null 2>&1 && [ -d "$DOC_DIR" ]; then
 import json, sys
 data = json.load(sys.stdin)
 sev = {}
-for h in data["hits"]:
+for h in data.get("hits", []):
     sev.setdefault(h["token"], h["severity"])
-for token, count in sorted(data["counts"].items()):
-    print(f"{token}\t{count}\t{sev.get(token, \"warn\")}")
+for token, count in sorted(data.get("counts", {}).items()):
+    s = sev.get(token, "warn")
+    print(f"{token}\t{count}\t{s}")
 ')
 fi
 
@@ -1408,9 +1449,9 @@ if [ -n "${SCIENCE_TOOL:-}" ] && [ -d "$DOC_DIR" ]; then
 import json, sys
 data = json.load(sys.stdin)
 sev = {}
-for h in data["hits"]:
+for h in data.get("hits", []):
     sev.setdefault(h["check"], h["severity"])
-for check, count in sorted(data["counts"].items()):
+for check, count in sorted(data.get("counts", {}).items()):
     s = sev.get(check, "warn")
     print(f"{check}\t{count}\t{s}")
 ')

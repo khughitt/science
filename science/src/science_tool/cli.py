@@ -3497,6 +3497,7 @@ def health_command(
     managed_artifacts_issue_count = sum(1 for f in managed_artifacts if f.get("counts_as_issue"))
 
     tooling_scaffold = report.get("tooling_scaffold") or []
+    agent_context = report.get("agent_context") or []
     unregistered_ref_kinds = report.get("unregistered_ref_kinds") or []
 
     total_issues = (
@@ -3511,6 +3512,7 @@ def health_command(
         + (1 if archive_lag_total else 0)
         + managed_artifacts_issue_count
         + len(tooling_scaffold)
+        + len(agent_context)
     )
     if total_issues == 0:
         click.echo("Project is clean — no issues found.")
@@ -3555,6 +3557,20 @@ def health_command(
         console.print(
             "\n[bold]Next:[/bold] follow the suggested fix for each row — "
             "see [cyan]commands/create-project.md[/cyan] for the canonical scaffold."
+        )
+
+    if agent_context:
+        ac_table = Table(title=f"Agent context ({len(agent_context)})")
+        ac_table.add_column("Code", style="bold")
+        ac_table.add_column("File")
+        ac_table.add_column("Detail")
+        ac_table.add_column("Fix")
+        for row in agent_context:
+            ac_table.add_row(row["code"], row["source_file"], row["detail"], row["fix"])
+        console.print(ac_table)
+        console.print(
+            "\n[bold]Next:[/bold] keep [cyan]CLAUDE.md[/cyan] minimal, remove [cyan]@core/*[/cyan] "
+            "includes, and keep [cyan]core/overview.md[/cyan] as concise boot context."
         )
 
     if report["unresolved_refs"]:

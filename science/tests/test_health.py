@@ -321,7 +321,25 @@ class TestBuildHealthReport:
 
         assert report["unresolved_refs"] == []
         assert report["lingering_tags_lines"] == []
+        assert report["agent_context"] == []
         assert report["layered_claims"]["migration_issues"] == []
+
+    def test_build_health_report_flags_agent_context_drift(self, tmp_path: Path) -> None:
+        from science_tool.graph.health import build_health_report
+
+        (tmp_path / "science.yaml").write_text("name: test\n", encoding="utf-8")
+        (tmp_path / "CLAUDE.md").write_text("@AGENTS.md\n@core/overview.md\n", encoding="utf-8")
+        (tmp_path / "AGENTS.md").write_text("@core/decisions.md\n\n# Agent guide\n", encoding="utf-8")
+        (tmp_path / "core").mkdir()
+        (tmp_path / "core" / "overview.md").write_text("\n".join(["# Overview", *["- detail"] * 151]), encoding="utf-8")
+
+        report = build_health_report(tmp_path, checks={"agent_context"})
+
+        codes = {row["code"] for row in report["agent_context"]}
+        assert "claude_md_legacy_includes" in codes
+        assert "agents_md_legacy_includes" in codes
+        assert "overview_too_long" in codes
+        assert report["total_issues"] == len(report["agent_context"])
 
     def test_build_health_report_reuses_loaded_project_sources(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -12,6 +12,11 @@ Keep it durable. Avoid:
 
 Include only the judgment calls and context that machine-readable manifests
 cannot capture.
+
+Current entity state belongs in typed specs/frontmatter and graph sources.
+Evidence narratives, reasoning history, and journal-style updates belong in
+doc/ interpretation, synthesis, plan, or task documents. This file only carries
+the concise current-state digest needed at session start.
 -->
 
 # Project Overview
@@ -34,7 +39,9 @@ Two paragraphs max. -->
 - what was just decided
 
 Update this section when the answer to "what should I work on next?" changes
-materially. Stale entries here are worse than no entries. -->
+materially. Stale entries here are worse than no entries. Do not paste detailed
+evidence narratives here; route them to the canonical entity or interpretation
+document. -->
 
 ## Open fronts
 
