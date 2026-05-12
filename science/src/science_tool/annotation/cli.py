@@ -28,6 +28,11 @@ from science_tool.annotation.sources.marker_token import (
     MarkerTokenSource,
     TOKEN_TYPE_MAP,
 )
+from science_tool.annotation.text_segmentation import (
+    build_quote_selector,
+    sentence_range_containing_literal,
+    split_sentences_with_offsets,
+)
 from science_tool.markers import scan_text as _scan_markers_text
 import re as _re
 from science_tool.annotation.verify import (
@@ -589,28 +594,34 @@ def _replan_for_remove(
     """Build planned rows whose selectors anchor to cleaned_text but whose
     `match_text`/`lifted_from` retain the original bracketed token."""
     from science_tool.annotation.model import (  # noqa: PLC0415
-        Motivation, SpecificResource, TextQuoteSelector, TextualBody,
+        Motivation, SpecificResource, TextualBody,
     )
     from science_tool.annotation.sources.base import (  # noqa: PLC0415
         PlannedAnnotation,
     )
     plans: list = []
-    cleaned_sentences = _split_sentences_with_offsets(cleaned_text)
-    original_sentences = _split_sentences_with_offsets(original_text)
+    cleaned_sentences = split_sentences_with_offsets(cleaned_text)
+    original_sentences = split_sentences_with_offsets(original_text)
     for hit in original_hits:
-        ordinal = _sentence_ordinal_for_line(
-            original_text, original_sentences, hit.line,
+        literal = f"[{hit.token}]"
+        rng = sentence_range_containing_literal(
+            original_text, hit.line, literal,
         )
-        if ordinal is None or ordinal >= len(cleaned_sentences):
+        if rng is None:
+            continue
+        try:
+            ordinal = next(
+                i for i, (s, _e) in enumerate(original_sentences)
+                if s == rng[0]
+            )
+        except StopIteration:
+            continue
+        if ordinal >= len(cleaned_sentences):
             continue
         sent_start, sent_end = cleaned_sentences[ordinal]
-        sentence = cleaned_text[sent_start:sent_end]
         atype, body_msg = TOKEN_TYPE_MAP[hit.token]
-        literal = f"[{hit.token}]"
-        sel = TextQuoteSelector(
-            exact=sentence,
-            prefix=cleaned_text[max(0, sent_start - 60):sent_start],
-            suffix=cleaned_text[sent_end:min(len(cleaned_text), sent_end + 60)],
+        sel = build_quote_selector(
+            cleaned_text, sent_start, sent_end, context=60,
         )
         plans.append(PlannedAnnotation(
             target=SpecificResource(source=md.name, selector=sel),
@@ -622,45 +633,3 @@ def _replan_for_remove(
             lifted_from=literal,
         ))
     return plans
-
-
-_SENTENCE_SPLIT_RE = _re.compile(r"(?<=[.!?])\s+")
-
-
-def _split_sentences_with_offsets(text: str) -> list[tuple[int, int]]:
-    """Return (start, end) char ranges of each sentence."""
-    out: list[tuple[int, int]] = []
-    cursor = 0
-    for sent in _SENTENCE_SPLIT_RE.split(text):
-        if not sent:
-            continue
-        start = text.find(sent, cursor)
-        if start == -1:
-            continue
-        end = start + len(sent)
-        out.append((start, end))
-        cursor = end
-    return out
-
-
-def _sentence_ordinal_for_line(
-    text: str, sentences: list[tuple[int, int]], line: int,
-) -> int | None:
-    offsets = [0]
-    for i, ch in enumerate(text):
-        if ch == "\n":
-            offsets.append(i + 1)
-    if line < 1 or line > len(offsets):
-        return None
-    line_start = offsets[line - 1]
-    line_end = offsets[line] if line < len(offsets) else len(text)
-    for idx, (start, end) in enumerate(sentences):
-        if start <= line_start < end:
-            return idx
-        if start < line_end and end > line_start:
-            return idx
-    # Fallback: nearest preceding sentence.
-    for idx in range(len(sentences) - 1, -1, -1):
-        if sentences[idx][0] <= line_start:
-            return idx
-    return None

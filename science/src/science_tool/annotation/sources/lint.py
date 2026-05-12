@@ -12,7 +12,6 @@ See spec docs/plans/2026-05-11-annotation-system-p3.2-spec.md
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable
@@ -20,10 +19,13 @@ from typing import Callable, Iterable
 from science_tool.annotation.model import (
     Motivation,
     SpecificResource,
-    TextQuoteSelector,
     TextualBody,
 )
 from science_tool.annotation.sources.base import PlannedAnnotation
+from science_tool.annotation.text_segmentation import (
+    build_quote_selector,
+    sentence_range_at,
+)
 from science_tool.prose_lint import (
     LintIssue,
     detect_bare_author_year,
@@ -38,7 +40,6 @@ DETECTOR_VERSIONS: dict[str, str] = {
 }
 
 _SELECTOR_CONTEXT = 60
-_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
 
 def lint_source_name(short: str) -> str:
@@ -57,10 +58,12 @@ class LintSource:
         text = md_path.read_text(encoding="utf-8")
         out: list[PlannedAnnotation] = []
         for issue in issues:
-            sel = _selector_for_issue(text, issue)
-            if sel is None:
+            rng = sentence_range_at(text, issue.line, issue.col)
+            if rng is None:
                 continue
-            target = SpecificResource(source=md_path.name, selector=sel)
+            sent_start, sent_end = rng
+            selector = build_quote_selector(text, sent_start, sent_end, context=60)
+            target = SpecificResource(source=md_path.name, selector=selector)
             body = TextualBody(value=issue.message)
             out.append(
                 PlannedAnnotation(
@@ -74,43 +77,6 @@ class LintSource:
                 )
             )
         return out
-
-
-def _line_offsets(text: str) -> list[int]:
-    offsets = [0]
-    for i, ch in enumerate(text):
-        if ch == "\n":
-            offsets.append(i + 1)
-    return offsets
-
-
-def _selector_for_issue(
-    text: str, issue: LintIssue,
-) -> TextQuoteSelector | None:
-    """Build a sentence-level TextQuoteSelector for a LintIssue.
-
-    Locates the sentence that covers the (line, col) char position
-    in `text`; returns None if the position is out of range.
-    """
-    offsets = _line_offsets(text)
-    if issue.line < 1 or issue.line > len(offsets):
-        return None
-    line_start = offsets[issue.line - 1]
-    char_pos = line_start + max(0, issue.col - 1)
-    cursor = 0
-    for sent in _SENTENCE_SPLIT_RE.split(text):
-        start = text.find(sent, cursor)
-        if start == -1:
-            continue
-        end = start + len(sent)
-        if start <= char_pos < end:
-            return TextQuoteSelector(
-                exact=text[start:end],
-                prefix=text[max(0, start - _SELECTOR_CONTEXT):start],
-                suffix=text[end:min(len(text), end + _SELECTOR_CONTEXT)],
-            )
-        cursor = end
-    return None
 
 
 def bare_author_year_source() -> LintSource:
