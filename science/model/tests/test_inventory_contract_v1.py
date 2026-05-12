@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from science_model.contracts.inventory_v1 import (
     InventoryAlias,
     InventoryEntity,
     InventoryPayload,
+    InventoryReference,
     InventorySourceLocation,
     InventoryWarning,
     compute_audit_hash,
@@ -69,5 +73,64 @@ def test_inventory_payload_sorts_stable_collections_for_hashing() -> None:
         ],
     )
     right = left.model_copy(update={"entities": list(reversed(left.entities))})
+
+    assert compute_content_hash(left) == compute_content_hash(right)
+
+
+def test_inventory_models_reject_compatible_type_coercion() -> None:
+    source_location_data: dict[str, object] = {
+        "adapter": "markdown",
+        "path": "doc/source.md",
+        "line": "3",
+    }
+    alias_data: dict[str, object] = {
+        "alias": 123,
+        "canonical_id": "finding:landscape-topology",
+    }
+
+    with pytest.raises(ValidationError, match="line"):
+        InventorySourceLocation.model_validate(source_location_data)
+
+    with pytest.raises(ValidationError, match="alias"):
+        InventoryAlias.model_validate(alias_data)
+
+
+def test_inventory_payload_normalizes_nested_entity_collections_for_hashing() -> None:
+    source = InventorySourceLocation(adapter="markdown", path="doc/finding.md")
+    left = InventoryPayload(
+        generated_at="2026-05-12T10:00:00Z",
+        project_id="natural-systems",
+        entities=[
+            InventoryEntity(
+                id="finding:f01",
+                kind="finding",
+                local_id="f01",
+                source=source,
+                aliases=["f001", "finding-one"],
+                source_refs=["paper:beta", "paper:alpha"],
+                targets=["question:q02", "question:q01"],
+                deprecated_ids=["old:f02", "old:f01"],
+                related=[
+                    InventoryReference(relation="supports", target_id="hypothesis:h02"),
+                    InventoryReference(relation="supports", target_id="hypothesis:h01"),
+                ],
+            )
+        ],
+    )
+    right = left.model_copy(
+        update={
+            "entities": [
+                left.entities[0].model_copy(
+                    update={
+                        "aliases": list(reversed(left.entities[0].aliases)),
+                        "source_refs": list(reversed(left.entities[0].source_refs)),
+                        "targets": list(reversed(left.entities[0].targets)),
+                        "deprecated_ids": list(reversed(left.entities[0].deprecated_ids)),
+                        "related": list(reversed(left.entities[0].related)),
+                    }
+                )
+            ]
+        }
+    )
 
     assert compute_content_hash(left) == compute_content_hash(right)

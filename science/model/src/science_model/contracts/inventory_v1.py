@@ -2,41 +2,37 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION: Final = "1"
 
 WarningSeverity = Literal["error", "warning", "info"]
 
 
-class InventorySourceLocation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class _InventoryContractModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
 
+
+class InventorySourceLocation(_InventoryContractModel):
     adapter: str
     path: str
     address: str | None = None
     line: int | None = Field(default=None, ge=1)
 
 
-class InventoryAlias(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class InventoryAlias(_InventoryContractModel):
     alias: str
     canonical_id: str
 
 
-class InventoryReference(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class InventoryReference(_InventoryContractModel):
     relation: str
     target_id: str
 
 
-class InventoryGraphAddress(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class InventoryGraphAddress(_InventoryContractModel):
     address: str
     kind: str
     source: InventorySourceLocation
@@ -44,9 +40,7 @@ class InventoryGraphAddress(BaseModel):
     label: str | None = None
 
 
-class InventoryFindingCandidate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class InventoryFindingCandidate(_InventoryContractModel):
     candidate_id: str
     title: str
     targets: list[str] = Field(default_factory=list)
@@ -54,9 +48,7 @@ class InventoryFindingCandidate(BaseModel):
     reason: str
 
 
-class InventoryWarning(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class InventoryWarning(_InventoryContractModel):
     code: str
     severity: WarningSeverity
     message: str
@@ -64,9 +56,7 @@ class InventoryWarning(BaseModel):
     canonical_id: str | None = None
 
 
-class InventoryProjectMetadata(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class InventoryProjectMetadata(_InventoryContractModel):
     id: str
     name: str
     path: str | None = None
@@ -76,9 +66,7 @@ class InventoryProjectMetadata(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
-class InventoryEntity(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class InventoryEntity(_InventoryContractModel):
     id: str
     kind: str
     local_id: str
@@ -105,10 +93,8 @@ class InventoryEntity(BaseModel):
         return value
 
 
-class InventoryPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    schema_version: Literal["1"] = "1"
+class InventoryPayload(_InventoryContractModel):
+    schema_version: Literal["1"] = SCHEMA_VERSION
     generated_at: str
     project_id: str
     project_path: str | None = None
@@ -128,11 +114,25 @@ def canonical_json_bytes(value: BaseModel | dict[str, Any]) -> bytes:
     return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
+def _normalize_entity_for_content_hash(entity: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(entity)
+    for key in ("aliases", "source_refs", "targets", "deprecated_ids"):
+        normalized[key] = sorted(normalized.get(key, []))
+    normalized["related"] = sorted(
+        normalized.get("related", []),
+        key=lambda item: (item["relation"], item["target_id"]),
+    )
+    return normalized
+
+
 def _payload_for_content_hash(payload: InventoryPayload) -> dict[str, Any]:
     data = payload.model_dump(mode="json", exclude_none=True)
     for key in ("generated_at", "content_hash", "audit_hash", "warnings"):
         data.pop(key, None)
-    data["entities"] = sorted(data.get("entities", []), key=lambda item: item["id"])
+    data["entities"] = sorted(
+        (_normalize_entity_for_content_hash(item) for item in data.get("entities", [])),
+        key=lambda item: item["id"],
+    )
     data["aliases"] = sorted(data.get("aliases", []), key=lambda item: item["alias"])
     data["graph_addresses"] = sorted(data.get("graph_addresses", []), key=lambda item: item["address"])
     data["finding_candidates"] = sorted(data.get("finding_candidates", []), key=lambda item: item["candidate_id"])
