@@ -193,7 +193,7 @@ def test_dirty_sidecar_force_dirty_bypass(tmp_path: Path) -> None:
 
 
 def test_dirty_other_sidecar_does_not_refuse(tmp_path: Path) -> None:
-    sidecar_path = _setup_clean(tmp_path)
+    _sidecar_path = _setup_clean(tmp_path)
     other = tmp_path / "other.anno.trig"
     write_sidecar(other, Sidecar(annotations=(_ann("a-bbb"),)))
     result = apply_status_change(

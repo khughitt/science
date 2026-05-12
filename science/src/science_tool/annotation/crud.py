@@ -20,7 +20,7 @@ from science_tool.annotation.io import (
     atomic_write_text,
     serialize_sidecar,
 )
-from science_tool.annotation.model import Sidecar, Status
+from science_tool.annotation.model import Status
 
 
 # ---- Result + error -------------------------------------------------
