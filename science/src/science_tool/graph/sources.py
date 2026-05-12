@@ -120,6 +120,7 @@ class ProjectSources(BaseModel):
     project_root: str
     profiles: KnowledgeProfiles
     entities: list[Entity]
+    entity_source_adapters: dict[str, str] = Field(default_factory=dict)
     relations: list[SourceRelation] = Field(default_factory=list)
     bindings: list[BindingSource] = Field(default_factory=list)
     manual_aliases: dict[str, str] = Field(default_factory=dict)
@@ -201,6 +202,7 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
     project_slug = project_root.name
     identity_table: dict[str, SourceRef] = {}
     entities: list[Entity] = []
+    entity_source_adapters: dict[str, str] = {}
 
     # cwd for relative-path resolution in adapters. The StorageAdapter.load_raw()
     # contract resolves ref.path against cwd; we chdir into project_root rather
@@ -256,6 +258,7 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
                     raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
                 identity_table[entity.canonical_id] = ref
                 entities.append(entity)
+                entity_source_adapters[entity.canonical_id] = adapter.name
     finally:
         os.chdir(prev_cwd)
 
@@ -278,6 +281,7 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
             raise EntityIdentityCollisionError(entity.canonical_id, existing, ref)
         identity_table[entity.canonical_id] = ref
         entities.append(entity)
+        entity_source_adapters[entity.canonical_id] = ref.adapter_name
 
     entities.sort(key=lambda e: e.canonical_id)
 
@@ -313,6 +317,7 @@ def load_project_sources(project_root: Path, markdown_overrides: dict[str, str] 
         project_root=str(project_root),
         profiles=profiles,
         entities=entities,
+        entity_source_adapters=entity_source_adapters,
         relations=relations,
         bindings=bindings,
         manual_aliases=_load_manual_aliases(project_root, local_profile=local_profile),

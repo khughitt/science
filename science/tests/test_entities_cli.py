@@ -7,6 +7,7 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from _fixtures.entity_helpers import seed_project, write_markdown_entity
+from science_model.contracts.inventory_v1 import InventoryPayload
 from science_tool.cli import main
 
 
@@ -249,6 +250,24 @@ def test_entity_list_filters_related_refs_with_alias_resolution() -> None:
         assert result.exit_code == 0, result.output
         payload = json.loads(result.output)
         assert [row["id"] for row in payload["rows"]] == ["question:q01-alpha"]
+
+
+def test_entities_inventory_cli_outputs_contract_json(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc").mkdir(parents=True)
+    (project / "science.yaml").write_text("id: cli-project\n", encoding="utf-8")
+    (project / "doc" / "finding.md").write_text(
+        "---\nkind: finding\nid: finding:f001\ntitle: Finding\n---\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(main, ["entities", "inventory", "--project", str(project), "--format", "json"])
+
+    assert result.exit_code == 0, result.output
+    payload = InventoryPayload.model_validate_json(result.output)
+    assert payload.project_id == "cli-project"
+    assert payload.entities[0].id == "finding:f001"
 
 
 def test_question_create_wrapper_delegates_to_entity_create() -> None:

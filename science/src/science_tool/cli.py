@@ -24,6 +24,7 @@ from science_tool.entities import (
     graph_is_stale,
     list_entities,
 )
+from science_tool.entities_inventory import build_inventory
 from science_tool.graph.materialize import materialization_audit, materialize_graph
 from science_tool.graph.cross_impact import query_cross_impact
 from science_tool.graph.migrate import (
@@ -209,6 +210,25 @@ main.add_command(prose_group)
 main.add_command(skills_group)
 main.add_command(peers_group)
 main.add_command(wander_command)
+
+
+@main.group("entities")
+def entities_group() -> None:
+    """Inspect and migrate Science entity inventories."""
+
+
+@entities_group.command("inventory")
+@click.option("--project", "project_path", type=click.Path(path_type=Path), default=Path.cwd())
+@click.option("--format", "output_format", type=click.Choice(["json"]), default="json")
+@click.option("--output", type=click.Path(path_type=Path), default=None)
+def entities_inventory_command(project_path: Path, output_format: str, output: Path | None) -> None:
+    """Emit the versioned Science entity inventory for a project."""
+    inventory = build_inventory(project_path)
+    rendered = inventory.model_dump_json(indent=2) + "\n"
+    if output is None:
+        click.echo(rendered, nl=False)
+    else:
+        output.write_text(rendered, encoding="utf-8")
 
 
 @main.group("entity")
