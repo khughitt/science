@@ -34,7 +34,8 @@ def load_dag_inventory_records(project_root: Path) -> DagInventoryRecords:
         for edge in edges:
             if not isinstance(edge, dict):
                 continue
-            edge_id = edge.get("id")
+            raw_edge_id = edge.get("id")
+            edge_id = raw_edge_id.strip() if isinstance(raw_edge_id, str) else raw_edge_id
             if not isinstance(edge_id, str) or not edge_id:
                 warnings.append(
                     InventoryWarning(
@@ -66,7 +67,7 @@ def load_dag_inventory_records(project_root: Path) -> DagInventoryRecords:
                     source=source,
                 )
             )
-            interpretation = edge.get("interpretation") or edge.get("finding") or edge.get("claim")
+            interpretation = _first_non_blank_string(edge, ("interpretation", "finding", "claim"))
             if isinstance(interpretation, str) and interpretation.strip():
                 finding_candidates.append(
                     InventoryFindingCandidate(
@@ -90,3 +91,11 @@ def _edge_label(edge: dict[str, Any]) -> str:
     relation = str(edge.get("relation") or "edge")
     target = str(edge.get("target") or "")
     return " ".join(part for part in (source, relation, target) if part)
+
+
+def _first_non_blank_string(edge: dict[str, Any], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        value = edge.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
