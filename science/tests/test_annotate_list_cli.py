@@ -6,7 +6,6 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from science_tool.annotation.cli import annotate_group
