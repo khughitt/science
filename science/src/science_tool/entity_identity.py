@@ -29,7 +29,7 @@ def collect_identity_warnings(project_root: Path, *, sources: ProjectSources) ->
         if not kind:
             warnings.extend(_prose_reference_warnings(rel_path, document.body, canonical_ids))
             continue
-        entity_id = frontmatter.get("id")
+        entity_id = frontmatter.get("id") or frontmatter.get("canonical_id")
         if not isinstance(entity_id, str) or not entity_id:
             severity = "warning" if rel_path in baseline_paths else "error"
             warnings.append(

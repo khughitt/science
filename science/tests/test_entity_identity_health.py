@@ -98,6 +98,43 @@ records:
     assert warnings[0].severity == "warning"
 
 
+def test_identity_health_accepts_canonical_id_when_id_is_absent(tmp_path) -> None:
+    project = tmp_path / "project"
+    sources = _sources_with_documents(
+        project,
+        [
+            MarkdownSourceDocument(
+                path="doc/concept.md",
+                frontmatter={"kind": "concept", "canonical_id": "concept:c1", "title": "Concept"},
+                body="",
+            )
+        ],
+    )
+
+    warnings = collect_identity_warnings(project, sources=sources)
+
+    assert not [warning for warning in warnings if warning.code in {"missing-canonical-id", "invalid-canonical-id"}]
+
+
+def test_identity_health_flags_invalid_canonical_id_when_id_is_absent(tmp_path) -> None:
+    project = tmp_path / "project"
+    sources = _sources_with_documents(
+        project,
+        [
+            MarkdownSourceDocument(
+                path="doc/concept.md",
+                frontmatter={"kind": "concept", "canonical_id": "not canonical", "title": "Concept"},
+                body="",
+            )
+        ],
+    )
+
+    warnings = collect_identity_warnings(project, sources=sources)
+
+    assert warnings[0].code == "invalid-canonical-id"
+    assert warnings[0].canonical_id == "not canonical"
+
+
 def test_identity_health_flags_unresolved_markdown_prose_reference_as_warning(tmp_path) -> None:
     project = tmp_path / "project"
     sources = _sources_with_documents(
