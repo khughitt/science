@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Iterator, Optional
 
 from science_tool.annotation.io import read_sidecar
-from science_tool.annotation.model import Sidecar
+from science_tool.annotation.model import Annotation, Sidecar
 
 
 # ---- Errors ----------------------------------------------------------
@@ -68,3 +68,158 @@ def iter_sidecars(root: Path) -> Iterator[tuple[Path, Sidecar]]:
     """
     for path in sorted(root.rglob("*.anno.trig")):
         yield path, read_sidecar_strict(path)
+
+
+# ---- Lookup result + errors -----------------------------------------
+
+@dataclass(frozen=True)
+class ResolvedAnnotation:
+    sidecar_path: Path
+    sidecar: Sidecar
+    annotation: Annotation
+    entity_stem: str       # bare markdown stem ("foo")
+    entity_relpath: str    # rel-to-root, no suffix ("notes/foo")
+
+
+class AnnotationLookupError(Exception):
+    """Base class for resolve_id errors."""
+
+
+class AnnotationNotFound(AnnotationLookupError):
+    """No annotation matched the given handle."""
+
+
+class AmbiguousAnnotationId(AnnotationLookupError):
+    """Bare frag or bare-stem qualifier matched more than one sidecar.
+
+    `candidates` is always populated with rel-path-qualified IDs so
+    the user has unambiguous handles to retry with.
+    """
+
+    def __init__(self, message: str, candidates: tuple[str, ...]) -> None:
+        super().__init__(message)
+        self.candidates = candidates
+
+
+# ---- Resolution -----------------------------------------------------
+
+def entity_relpath_for_sidecar(sidecar_path: Path, root: Path) -> str:
+    """Public helper: rel-path-without-suffix for a sidecar under `root`.
+
+    `<root>/notes/foo.anno.trig`, `<root>` → `"notes/foo"`. Used by
+    `cli.py:list_cmd` to render qualified IDs in table/JSON output.
+    """
+    rel = sidecar_path.resolve().relative_to(root.resolve())
+    name = rel.name
+    if name.endswith(".anno.trig"):
+        name = name[: -len(".anno.trig")]
+    return rel.with_name(name).as_posix()
+
+
+def entity_stem_for_sidecar(sidecar_path: Path) -> str:
+    """Public helper: bare stem for a sidecar (filename minus .anno.trig)."""
+    name = sidecar_path.name
+    if name.endswith(".anno.trig"):
+        return name[: -len(".anno.trig")]
+    return sidecar_path.stem
+
+
+def _qualified(sidecar_path: Path, root: Path, frag: str) -> str:
+    return f"{entity_relpath_for_sidecar(sidecar_path, root)}:{frag}"
+
+
+def _build_resolved(
+    sidecar_path: Path,
+    sidecar: Sidecar,
+    annotation: Annotation,
+    root: Path,
+) -> ResolvedAnnotation:
+    return ResolvedAnnotation(
+        sidecar_path=sidecar_path,
+        sidecar=sidecar,
+        annotation=annotation,
+        entity_stem=entity_stem_for_sidecar(sidecar_path),
+        entity_relpath=entity_relpath_for_sidecar(sidecar_path, root),
+    )
+
+
+def resolve_id(root: Path, id_arg: str) -> ResolvedAnnotation:
+    """Resolve `a-7f3a`, `foo:a-7f3a`, or `notes/foo:a-7f3a` to a sidecar+row.
+
+    See spec §"ID resolution algorithm" for the full contract.
+    """
+    if ":" in id_arg:
+        entity_key, frag = id_arg.split(":", 1)
+        if "/" in entity_key:
+            return _resolve_rel_path(root, entity_key, frag)
+        return _resolve_bare_stem(root, entity_key, frag)
+    return _resolve_bare_frag(root, id_arg)
+
+
+def _resolve_rel_path(
+    root: Path, entity_key: str, frag: str,
+) -> ResolvedAnnotation:
+    sidecar_path = (root / f"{entity_key}.anno.trig").resolve()
+    if not sidecar_path.exists():
+        raise AnnotationNotFound(
+            f"no sidecar at {sidecar_path}"
+        )
+    sidecar = read_sidecar_strict(sidecar_path)
+    for ann in sidecar.annotations:
+        if ann.id == frag:
+            return _build_resolved(sidecar_path, sidecar, ann, root)
+    raise AnnotationNotFound(
+        f"sidecar {sidecar_path.name} has no annotation {frag!r}"
+    )
+
+
+def _resolve_bare_stem(
+    root: Path, entity_key: str, frag: str,
+) -> ResolvedAnnotation:
+    matches: list[Path] = sorted(
+        root.rglob(f"{entity_key}.anno.trig"),
+    )
+    if not matches:
+        raise AnnotationNotFound(
+            f"no sidecar with stem {entity_key!r} under {root}"
+        )
+    if len(matches) > 1:
+        candidates = tuple(
+            sorted(_qualified(p, root, frag) for p in matches)
+        )
+        raise AmbiguousAnnotationId(
+            f"ambiguous: {entity_key!r}:{frag} matches multiple sidecars; "
+            "retry with one of the rel-path-qualified forms in .candidates",
+            candidates=candidates,
+        )
+    sidecar_path = matches[0]
+    sidecar = read_sidecar_strict(sidecar_path)
+    for ann in sidecar.annotations:
+        if ann.id == frag:
+            return _build_resolved(sidecar_path, sidecar, ann, root)
+    raise AnnotationNotFound(
+        f"sidecar {sidecar_path.name} has no annotation {frag!r}"
+    )
+
+
+def _resolve_bare_frag(root: Path, frag: str) -> ResolvedAnnotation:
+    hits: list[tuple[Path, Sidecar, Annotation]] = []
+    for path, sidecar in iter_sidecars(root):
+        for ann in sidecar.annotations:
+            if ann.id == frag:
+                hits.append((path, sidecar, ann))
+    if not hits:
+        raise AnnotationNotFound(
+            f"no annotation matching {frag!r} under {root}"
+        )
+    if len(hits) > 1:
+        candidates = tuple(
+            sorted(_qualified(p, root, frag) for p, _s, _a in hits)
+        )
+        raise AmbiguousAnnotationId(
+            f"ambiguous: {frag!r} matches multiple sidecars; "
+            "retry with one of the rel-path-qualified forms in .candidates",
+            candidates=candidates,
+        )
+    path, sidecar, ann = hits[0]
+    return _build_resolved(path, sidecar, ann, root)
