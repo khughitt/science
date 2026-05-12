@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from science_model import Entity
@@ -126,7 +126,9 @@ def _references_from_entity(entity: Entity) -> list[InventoryReference]:
     return [InventoryReference(relation="related", target_id=target) for target in entity.related]
 
 
-def _registration_state(entity: Entity, *, ontology_profile_names: set[str]) -> str:
+def _registration_state(
+    entity: Entity, *, ontology_profile_names: set[str]
+) -> Literal["core", "ontology", "local", "unknown"]:
     if entity.profile == "core":
         return "core"
     if entity.profile in ontology_profile_names:
@@ -136,7 +138,7 @@ def _registration_state(entity: Entity, *, ontology_profile_names: set[str]) -> 
     return "unknown"
 
 
-def _inventory_scope(entity: Entity) -> str:
+def _inventory_scope(entity: Entity) -> Literal["project", "cross-project"]:
     if str(entity.scope) == "shared":
         return "cross-project"
     return "project"
