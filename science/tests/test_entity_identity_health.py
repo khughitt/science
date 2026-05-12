@@ -16,6 +16,18 @@ def _sources_with_documents(project, documents: list[MarkdownSourceDocument]) ->
     )
 
 
+def test_identity_health_resolves_markdown_manual_aliases(tmp_path) -> None:
+    project = tmp_path / "project"
+    sources = _sources_with_documents(
+        project,
+        [MarkdownSourceDocument(path="doc/summary.md", frontmatter={}, body="This cites [[h999]] in prose.\n")],
+    ).model_copy(update={"manual_aliases": {"h999": "hypothesis:h999"}})
+
+    warnings = collect_identity_warnings(project, sources=sources)
+
+    assert not [warning for warning in warnings if warning.code == "unresolved-prose-reference"]
+
+
 def test_identity_health_flags_missing_canonical_id_as_warning_for_baselined_record(tmp_path) -> None:
     project = tmp_path / "project"
     (project / "knowledge").mkdir(parents=True)
@@ -53,10 +65,7 @@ def test_identity_health_flags_unresolved_markdown_prose_reference_as_warning(tm
 
     warnings = collect_identity_warnings(project, sources=sources)
 
-    assert any(
-        warning.code == "unresolved-prose-reference" and warning.severity == "warning"
-        for warning in warnings
-    )
+    assert any(warning.code == "unresolved-prose-reference" and warning.severity == "warning" for warning in warnings)
 
 
 def test_identity_health_resolves_markdown_aliases_from_loaded_sources(tmp_path) -> None:

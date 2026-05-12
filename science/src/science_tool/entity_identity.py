@@ -59,7 +59,9 @@ def _baseline_paths(project_root: Path) -> set[str]:
     if not path.exists():
         return set()
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    return {str(record["path"]) for record in data.get("records", []) if isinstance(record, dict) and record.get("path")}
+    return {
+        str(record["path"]) for record in data.get("records", []) if isinstance(record, dict) and record.get("path")
+    }
 
 
 def _canonical_ids(sources: ProjectSources) -> set[str]:
@@ -67,6 +69,7 @@ def _canonical_ids(sources: ProjectSources) -> set[str]:
     for entity in sources.entities:
         ids.add(entity.canonical_id or entity.id)
         ids.update(str(alias) for alias in entity.aliases)
+    ids.update(str(alias) for alias in sources.manual_aliases)
     return ids
 
 
