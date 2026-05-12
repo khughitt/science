@@ -218,6 +218,8 @@ def _payload_for_audit_hash(payload: InventoryPayload) -> dict[str, Any]:
         "finding_candidates",
     ):
         data.pop(key, None)
+    if "project" in data:
+        data["project"] = _normalize_project_for_content_hash(data["project"])
     data["warnings"] = sorted(
         data.get("warnings", []),
         key=lambda item: _sort_key_with_canonical_tie_breaker(

@@ -166,6 +166,33 @@ def test_inventory_payload_normalizes_project_metadata_collections_for_hashing()
     assert compute_content_hash(left) == compute_content_hash(right)
 
 
+def test_inventory_audit_hash_normalizes_project_metadata_collections() -> None:
+    left = InventoryPayload(
+        generated_at="2026-05-12T10:00:00Z",
+        project_id="natural-systems",
+        project=InventoryProjectMetadata(
+            id="natural-systems",
+            name="Natural systems",
+            aspects=["ecology", "hydrology"],
+            tags=["field", "model"],
+        ),
+    )
+    project = left.project
+    assert project is not None
+    right = left.model_copy(
+        update={
+            "project": project.model_copy(
+                update={
+                    "aspects": list(reversed(project.aspects)),
+                    "tags": list(reversed(project.tags)),
+                }
+            )
+        }
+    )
+
+    assert compute_audit_hash(left) == compute_audit_hash(right)
+
+
 def test_inventory_payload_normalizes_finding_candidate_targets_for_hashing() -> None:
     source = InventorySourceLocation(adapter="markdown", path="doc/candidate.md")
     left = InventoryPayload(
