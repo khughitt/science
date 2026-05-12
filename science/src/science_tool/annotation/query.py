@@ -262,6 +262,51 @@ def _source_matches(source: str, patterns: tuple[str, ...]) -> bool:
     return any(fnmatch.fnmatchcase(source, pat) for pat in patterns)
 
 
+# ---- Stats ----------------------------------------------------------
+
+@dataclass(frozen=True)
+class StatsReport:
+    by_status: dict[Status, int]
+    by_source: dict[str, int]
+    by_type: dict[str, int]
+    total_annotations: int
+    total_sidecars: int
+
+
+def compute_stats(
+    sidecars: Iterable[tuple[Path, Sidecar]],
+) -> StatsReport:
+    """Three independent aggregations; one row contributes to all three.
+
+    Each output dict iterates in descending-count order (key
+    tiebroken alphabetically) for stable display.
+    """
+    by_status: dict[Status, int] = {}
+    by_source: dict[str, int] = {}
+    by_type: dict[str, int] = {}
+    sidecar_count = 0
+    annotation_count = 0
+    for _path, sidecar in sidecars:
+        sidecar_count += 1
+        for ann in sidecar.annotations:
+            annotation_count += 1
+            by_status[ann.status] = by_status.get(ann.status, 0) + 1
+            by_source[ann.source] = by_source.get(ann.source, 0) + 1
+            by_type[ann.annotation_type] = by_type.get(ann.annotation_type, 0) + 1
+    return StatsReport(
+        by_status=_sorted_desc(by_status, key_to_str=lambda s: s.value),
+        by_source=_sorted_desc(by_source, key_to_str=lambda s: s),
+        by_type=_sorted_desc(by_type, key_to_str=lambda s: s),
+        total_annotations=annotation_count,
+        total_sidecars=sidecar_count,
+    )
+
+
+def _sorted_desc(d: dict, *, key_to_str) -> dict:
+    items = sorted(d.items(), key=lambda kv: (-kv[1], key_to_str(kv[0])))
+    return dict(items)
+
+
 # ---- --since plumbing ----------------------------------------------
 
 def _run_git(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess:
