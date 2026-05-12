@@ -10,6 +10,7 @@ import yaml
 from _fixtures.entity_helpers import seed_project, write_markdown_entity
 from science_model.contracts.inventory_v1 import InventoryPayload
 from science_model.entities import EntityClass
+from science_model.profiles.schema import ProfileManifest
 from science_tool.cli import main
 from science_tool.graph.sources import load_project_sources
 
@@ -502,6 +503,44 @@ def test_entities_register_kind_rejects_active_ontology_kind_shadow_without_writ
 
     assert result.exit_code != 0
     assert "active ontology entity kind" in result.output
+    assert not manifest_path.exists()
+
+
+def test_entities_register_kind_rejects_shared_profile_kind_shadow_without_writing(tmp_path, monkeypatch) -> None:
+    shared_profile = ProfileManifest.model_validate(
+        {
+            "name": "shared",
+            "imports": [],
+            "strictness": "typed-extension",
+            "entity_kinds": [
+                {
+                    "name": "shared-kind",
+                    "canonical_prefix": "shared-kind",
+                    "layer": "layer/shared",
+                    "description": "Shared test kind.",
+                    "entity_class": "epistemic",
+                }
+            ],
+            "relation_kinds": [],
+        }
+    )
+    monkeypatch.setattr("science_tool.entity_kinds.load_shared_profile", lambda: shared_profile, raising=False)
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "science.yaml").write_text(
+        "id: kind-project\nknowledge_profiles: {local: local}\n",
+        encoding="utf-8",
+    )
+    manifest_path = project / "knowledge" / "sources" / "local" / "manifest.yaml"
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        ["entities", "register-kind", "shared-kind", "--class", "epistemic", "--project", str(project)],
+    )
+
+    assert result.exit_code != 0
+    assert "shared profile entity kind" in result.output
     assert not manifest_path.exists()
 
 

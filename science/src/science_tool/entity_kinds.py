@@ -6,7 +6,7 @@ import yaml
 from pydantic import ValidationError
 from science_model.entities import EntityClass
 from science_model.ontologies import load_catalogs_for_names
-from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE
+from science_model.profiles import CORE_PROFILE, LOCAL_PROFILE, load_shared_profile
 from science_model.profiles.schema import ProfileManifest
 
 from science_tool.graph.entity_registry import EntityRegistry
@@ -63,6 +63,10 @@ def _reject_reserved_kind(config: dict, kind: str) -> None:
     builtin_kinds.update(EntityRegistry.with_core_types().all_kind_classes())
     if kind in builtin_kinds:
         msg = f"kind {kind!r} is a built-in entity kind and cannot be registered locally"
+        raise ValueError(msg)
+    shared_profile = load_shared_profile()
+    if shared_profile is not None and any(entity_kind.name == kind for entity_kind in shared_profile.entity_kinds):
+        msg = f"kind {kind!r} is a shared profile entity kind and cannot be registered locally"
         raise ValueError(msg)
     for catalog in load_catalogs_for_names(_active_ontology_names(config)):
         if any(entity_type.name == kind for entity_type in catalog.entity_types):
