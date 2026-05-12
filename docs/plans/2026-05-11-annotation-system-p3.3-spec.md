@@ -66,10 +66,17 @@
 
 1. **`stats` ships in P3.3** alongside CRUD. Same project-walk plumbing
    as `list`; piggybacks at near-zero cost.
-2. **ID resolution: walk-on-every-call, no cache.** Bare frag (`a-7f3a`)
-   works if globally unique; ambiguous bare frags raise with candidate
-   qualified IDs in the message. Qualified form (`entity:a-7f3a`) is
-   always accepted and pins lookup to a single sidecar.
+2. **ID resolution: walk-on-every-call, no cache.** Two qualifier
+   forms accepted:
+   - **Bare frag** (`a-7f3a`) — works when the frag is unique across
+     the project. Ambiguous → error with rel-path candidates.
+   - **Qualified** (`<entity-key>:<frag>`) where `entity-key` is
+     either a *bare stem* (`foo`) or a *rel-path-without-suffix*
+     (`notes/foo`). Bare stem is unique-when-it-is-unique; on
+     collision the user gets an error listing rel-path candidates.
+     Rel-path form is always unambiguous. Both are accepted by the
+     CLI; the resolver picks the right strategy by checking for `/`
+     in the entity-key.
 3. **`dismiss --reason` is required.** Refuse with `ClickException`
    when absent or whitespace-only. Forensic value: re-audit may
    reproduce the finding later; the reason is the author's recorded
@@ -115,12 +122,12 @@
     tests covering `OPEN → *` and terminal refusal stay green; new
     test covers `SUPERSEDED → ack` refusal.
 13. **`list [PATH]` accepts directory, markdown file, or sidecar.**
-    Directory → walk that subtree. Markdown file → derive
-    `<path>.with_suffix('').with_suffix('.anno.trig')` and read just
-    that sidecar (no walk). `.anno.trig` file → read it directly.
-    Bare `list` (no positional) → walk from `--root` (cwd default).
-    `--root` and positional `PATH` are mutually exclusive (Click
-    enforces with custom callback; both → `ClickException`).
+    Directory → walk that subtree. Markdown file → derive sidecar via
+    `io.sidecar_for_markdown(path)` (handles multi-dotted names like
+    `paper.v1.md`) and read it directly. `.anno.trig` file → read it
+    directly. Bare `list` (no positional) → walk from `--root` (cwd
+    default). `--root` and positional `PATH` are mutually exclusive
+    (Click enforces with custom callback; both → `ClickException`).
 14. **Read-time `(target, source)` dedupe is a no-op for P3.3.** The
     source spec's dedupe rule (§"Migration from phase 2" line 555)
     targets the unified inline-token + sidecar-row view that
@@ -265,8 +272,8 @@ guarantee the user has an unambiguous handle to retry with.
 paths. Empty result → empty filter (no entities pass). Non-zero git
 exit / not-a-repo → `ClickException` from the CLI layer (no silent
 fallback). `filter_annotations` excludes a `(sidecar_path, annotation)`
-when `sidecar_path.with_suffix('').with_suffix('.md')` is not in the
-changed set.
+when `io.markdown_for_sidecar(sidecar_path)` is not in the changed
+set.
 
 **Source pattern matching.** `fnmatch.fnmatchcase(source_name, pattern)`
 per pattern; OR across patterns. Empty patterns tuple → no filter.
@@ -326,6 +333,34 @@ output round-trips into a follow-up CRUD command without ambiguity.
 public `atomic_write_text(path: Path, text: str) -> None` and
 `serialize_sidecar(sidecar: Sidecar) -> str`. Update `cli.py` import;
 no behavior change for `lift-tokens`.
+
+**Path-derivation helpers in `io.py` (new).** Both directions need
+explicit, fail-loud helpers — `Path.with_suffix` alone misbehaves on
+multi-dotted names (`Path("paper.v1.anno.trig").with_suffix(".md")`
+returns `paper.v1.anno.md`, not `paper.v1.md`). The two helpers:
+
+```python
+def sidecar_for_markdown(md_path: Path) -> Path:
+    """foo.md → foo.anno.trig; paper.v1.md → paper.v1.anno.trig.
+
+    Matches P3.2's `md_path.with_suffix(".anno.trig")` convention.
+    Raises ValueError if md_path does not end with `.md`.
+    """
+
+def markdown_for_sidecar(sidecar_path: Path) -> Path:
+    """foo.anno.trig → foo.md; paper.v1.anno.trig → paper.v1.md.
+
+    Strips the literal `.anno.trig` suffix and appends `.md`. Raises
+    ValueError if sidecar_path does not end with `.anno.trig`.
+    """
+```
+
+All call sites that currently chain `with_suffix("").with_suffix(...)`
+or use ad-hoc string slicing for these conversions switch to the
+helpers: `query.iter_sidecars` (no — already walks `*.anno.trig`
+glob), `query.filter_annotations` `--since` predicate (uses
+`markdown_for_sidecar`), `cli.list_cmd` PATH-is-markdown branch (uses
+`sidecar_for_markdown`).
 
 **`_resolve_actor(actor_opt: str | None, root: Path) -> str`** lives in
 `crud.py`. Returns `actor_opt` if given; else `git config user.email`
@@ -440,8 +475,29 @@ New `annotation/text_segmentation.py`:
 def split_sentences_with_offsets(text: str) -> list[tuple[int, int]]:
     """(start, end) char ranges of each sentence."""
 
-def sentence_range_at(text: str, line: int, col: int = 1) -> tuple[int, int] | None:
-    """Sentence-range covering (line, col); fall back to nearest preceding."""
+def sentence_range_at(text: str, line: int, col: int) -> tuple[int, int] | None:
+    """Sentence-range covering the (line, col) cursor position.
+
+    Falls back to nearest preceding sentence when (line, col) lies in
+    inter-sentence whitespace. `col` is REQUIRED — there is no default.
+    Lint findings carry both line and col, so this is the right API
+    for that caller. Callers without a column should use
+    `sentence_range_containing_literal` instead.
+    """
+
+def sentence_range_containing_literal(
+    text: str, line: int, literal: str,
+) -> tuple[int, int] | None:
+    """Sentence containing `literal` on the given line.
+
+    Searches `line` for `literal`, then maps its character offset to a
+    sentence range. Returns None if the literal is not on that line.
+    Designed for line-only callers (e.g. MarkerHit, which carries
+    `line` and `token` but no `col`). Picking the right sentence even
+    when multiple sentences share a line is load-bearing — token
+    appearing in the second sentence on a line must NOT anchor to the
+    first sentence's range.
+    """
 
 def build_quote_selector(
     text: str, sent_start: int, sent_end: int, *, context: int = 60,
@@ -454,14 +510,28 @@ focused on resolution.)
 
 Callers updated:
 - `sources/marker_token.py` — replaces `_sentence_range_at` and
-  `_build_selector`; both `scan` and `scan_text` use the same
-  helpers (closes Follow-up 7).
-- `sources/lint.py` — replaces `_selector_for_issue`.
-- `cli.py:_replan_for_remove` — replaces module-local
-  `_split_sentences_with_offsets` and `_sentence_ordinal_for_line`.
+  `_build_selector`. Calls `sentence_range_containing_literal(text,
+  hit.line, f"[{hit.token}]")` since `MarkerHit` lacks `col`. Both
+  `scan` and `scan_text` use the same helpers (closes Follow-up 7).
+- `sources/lint.py` — replaces `_selector_for_issue`. Calls
+  `sentence_range_at(text, issue.line, issue.col)` since lint findings
+  carry both.
+- `cli.py:_replan_for_remove` — uses
+  `sentence_range_containing_literal` on `original_text` to find the
+  source sentence, then maps to `cleaned_text` by sentence ordinal
+  (existing logic preserved; helpers from this module take over the
+  segmentation).
+
+**Why two helpers, not one with optional col?** A single
+`sentence_range_at(text, line, col=1)` defaults to col=1, which silently
+mis-anchors marker tokens that appear after the first sentence on a
+line. Better to make `col` required and surface the column-less case as
+a distinct call site (`sentence_range_containing_literal`).
 
 Net effect: ~80 lines of near-duplicated code removed across the three
-callers; one canonical implementation in `text_segmentation.py`.
+callers; one canonical implementation in `text_segmentation.py`. No
+changes to `markers.py` or `MarkerHit` (column-add stays out of P3.3
+scope).
 
 ### Follow-up 2 — `merge_planned` invariant: assert → ValueError
 
@@ -483,9 +553,19 @@ of iterating annotations. Keeps the same suffix-allocation semantics
 ### Unit tests (`tests/annotation/`)
 
 - `test_text_segmentation.py` — sentence boundaries, multi-line, edge
-  cases (empty, no-period, fragment); `sentence_range_at` line/col
-  resolution and fallback; `build_quote_selector` prefix/suffix windowing
-  at file boundaries.
+  cases (empty, no-period, fragment); `sentence_range_at(text, line,
+  col)` resolution and inter-sentence fallback;
+  `sentence_range_containing_literal(text, line, literal)` correctly
+  picks the SECOND sentence on a multi-sentence line when the literal
+  appears there (regression for marker-token mis-anchoring); literal
+  not on line returns None; `build_quote_selector` prefix/suffix
+  windowing at file boundaries (full-window in middle, truncated
+  prefix near start-of-file, truncated suffix near EOF).
+- `test_io_path_helpers.py` — `sidecar_for_markdown` and
+  `markdown_for_sidecar` round-trip on simple (`foo.md`),
+  multi-dotted (`paper.v1.md`), and rejected inputs (`README` →
+  ValueError; `foo.txt` → ValueError); round-trip identity holds for
+  all valid inputs.
 - `test_query_resolve_id.py` — bare-frag unique / bare-frag ambiguous
   / bare-frag not-found / qualified bare-stem unique / qualified
   bare-stem ambiguous (two `notes/foo.anno.trig` and
