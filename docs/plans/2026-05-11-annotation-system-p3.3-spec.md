@@ -184,13 +184,26 @@ def iter_sidecars(root: Path) -> Iterator[tuple[Path, Sidecar]]:
     """
 
 def resolve_id(root: Path, id_arg: str) -> ResolvedAnnotation:
-    """Resolve `a-7f3a` (bare frag) or `entity:a-7f3a` (qualified)
-    to (sidecar_path, Annotation, entity).
+    """Resolve an annotation handle to a fully-loaded ResolvedAnnotation.
+
+    Accepts three input shapes:
+      - `a-7f3a`               (bare frag — globally unique frags only)
+      - `foo:a-7f3a`           (bare-stem-qualified — unique stems only)
+      - `notes/foo:a-7f3a`     (rel-path-qualified — always unambiguous)
+
+    Returns ResolvedAnnotation(sidecar_path, sidecar, annotation,
+    entity_stem, entity_relpath).
 
     Raises:
-      AnnotationNotFound       — no match
-      AmbiguousAnnotationId    — bare frag matches >1 sidecar;
-                                 .candidates lists qualified forms
+      AnnotationNotFound       — no match (bare frag with zero hits;
+                                 qualifier names a missing sidecar; or
+                                 sidecar exists but lacks the frag).
+      AmbiguousAnnotationId    — bare frag matches >1 sidecar OR
+                                 bare-stem qualifier matches >1
+                                 sidecar. `.candidates` is always
+                                 populated with rel-path-qualified IDs
+                                 so the user has unambiguous handles
+                                 to retry with.
     """
 
 def filter_annotations(
@@ -450,7 +463,8 @@ Exit policy: 0 on success; 1 on parse errors. Same surface as `list`.
 | Condition | Exception | Exit | Message shape |
 |---|---|---|---|
 | ID not found | `AnnotationNotFound` | 1 | `no annotation matching '<id_arg>'` |
-| Bare ID ambiguous | `AmbiguousAnnotationId` | 2 | `ambiguous: '<id_arg>' matches:\n  ent1:a-7f3a\n  ent2:a-7f3a\nuse 'entity:id' form` |
+| Bare frag ambiguous | `AmbiguousAnnotationId` | 2 | `ambiguous: 'a-7f3a' matches:\n  notes/foo:a-7f3a\n  appendix/foo:a-7f3a\nretry with one of the rel-path-qualified forms above` |
+| Bare-stem qualifier ambiguous | `AmbiguousAnnotationId` | 2 | `ambiguous: 'foo:a-7f3a' matches multiple sidecars:\n  notes/foo:a-7f3a\n  appendix/foo:a-7f3a\nretry with one of the rel-path-qualified forms above` |
 | Sidecar dirty | `CrudRefusedDirty` | 1 | `refusing: <sidecar> has uncommitted changes; commit/stash or use --force-dirty` |
 | Transition to `open` | `ValueError` | 1 | (lifecycle msg) `cannot transition to 'open'; status flows forward only` |
 | Already terminal | `ValueError` | 1 | (lifecycle msg) `annotation 'a-7f3a' is already in terminal status 'fixed'` |
