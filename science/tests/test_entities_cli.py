@@ -297,6 +297,51 @@ def test_entities_inventory_cli_writes_contract_json_to_output_file(tmp_path) ->
     assert payload.entities[0].id == "finding:f001"
 
 
+def test_entities_audit_identifiers_cli_outputs_json(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc").mkdir(parents=True)
+    (project / "doc" / "finding.md").write_text("---\nkind: finding\ntitle: Finding\n---\n", encoding="utf-8")
+    runner = CliRunner()
+
+    result = runner.invoke(main, ["entities", "audit-identifiers", "--project", str(project)])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == {
+        "missing_canonical_ids": ["doc/finding.md"],
+        "invalid_canonical_ids": [],
+    }
+
+
+def test_entities_migrate_identifiers_cli_dry_run_outputs_json(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc").mkdir(parents=True)
+    path = project / "doc" / "finding.md"
+    path.write_text("---\nkind: finding\ntitle: Finding\n---\n", encoding="utf-8")
+    runner = CliRunner()
+
+    result = runner.invoke(main, ["entities", "migrate-identifiers", "--project", str(project)])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["planned_changes"] == [{"path": "doc/finding.md", "new_id": "finding:finding"}]
+    assert "id: finding:finding" not in path.read_text(encoding="utf-8")
+
+
+def test_entities_identifier_commands_emit_json_for_malformed_non_entity_markdown(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "notes").mkdir(parents=True)
+    (project / "notes" / "command.md").write_text("---\nrun: [unterminated\n---\n", encoding="utf-8")
+    runner = CliRunner()
+
+    audit = runner.invoke(main, ["entities", "audit-identifiers", "--project", str(project)])
+    migrate = runner.invoke(main, ["entities", "migrate-identifiers", "--project", str(project)])
+
+    assert audit.exit_code == 0, audit.output
+    assert migrate.exit_code == 0, migrate.output
+    assert json.loads(audit.output) == {"missing_canonical_ids": [], "invalid_canonical_ids": []}
+    assert json.loads(migrate.output)["planned_changes"] == []
+
+
 def test_entities_register_kind_is_idempotent_with_same_metadata(tmp_path) -> None:
     project = tmp_path / "project"
     project.mkdir()
