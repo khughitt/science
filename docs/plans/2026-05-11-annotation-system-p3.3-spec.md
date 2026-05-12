@@ -56,8 +56,11 @@
 - **`prose lint` deprecation.** Long-term `prose lint` may collapse to
   a thin wrapper over `annotate list --source 'lint:*'`; that's not
   P3.3 work.
-- **Touching `verify` or `audit`.** Their CLIs are stable. Only audit's
-  internals change to fold follow-ups (2) and (3); behavior unchanged.
+- **Touching `verify` or `audit` CLIs.** Their command surfaces are
+  stable. Only `audit.py` internals change to fold follow-ups (2) and
+  (3); behavior unchanged. `lifecycle.py` *is* touched — see Decision
+  12 — but the change is tightening one guard, not reshaping the
+  module.
 
 ## Decisions ratified during brainstorming
 
@@ -97,7 +100,38 @@
 11. **`--actor` resolution order:** `--actor` flag → `git config
     user.email` → fail with explicit error. No `unknown` / `cli` /
     hostname fallback (no silent fallbacks per CLAUDE.md).
-12. **Folded follow-ups: (1), (2), (3), (7).** Deferred: (4)
+12. **Tighten `lifecycle.mutate_status`: author transitions require
+    `OPEN` source.** Per source-spec §"Status lifecycle"
+    (lines 266, 292), `ack`/`fixed`/`dismissed` are author-set from
+    `open` only; `superseded` is tooling-set. Current
+    `lifecycle._TERMINAL_STATES` correctly refuses transitions out of
+    `ack`/`fixed`/`dismissed`, but it permits `superseded → ack/fixed/
+    dismissed`, which contradicts the source spec (superseded means
+    "the prose moved on"; resurrecting it via author CRUD is
+    confusing and wrong). P3.3 tightens the guard: any
+    non-`SUPERSEDED` `new_status` requires source status `OPEN`. The
+    auto `* → SUPERSEDED` transition is unchanged (still permitted
+    from any status). One-line change to `lifecycle.py`; existing
+    tests covering `OPEN → *` and terminal refusal stay green; new
+    test covers `SUPERSEDED → ack` refusal.
+13. **`list [PATH]` accepts directory, markdown file, or sidecar.**
+    Directory → walk that subtree. Markdown file → derive
+    `<path>.with_suffix('').with_suffix('.anno.trig')` and read just
+    that sidecar (no walk). `.anno.trig` file → read it directly.
+    Bare `list` (no positional) → walk from `--root` (cwd default).
+    `--root` and positional `PATH` are mutually exclusive (Click
+    enforces with custom callback; both → `ClickException`).
+14. **Read-time `(target, source)` dedupe is a no-op for P3.3.** The
+    source spec's dedupe rule (§"Migration from phase 2" line 555)
+    targets the unified inline-token + sidecar-row view that
+    `render` (P3.4) produces. `list` reads only sidecar rows, where
+    P3.2's 4-tuple write-side key (`source_name, target.exact,
+    lifted_from, match_text`) already prevents intra-sidecar
+    `(target, source)` duplicates at write time. So `list` and
+    `stats` count every row without further dedupe. The spec's rule
+    is preserved, not superseded — it just lives at the unified-view
+    layer (P3.4), not the per-sidecar read layer (P3.3).
+15. **Folded follow-ups: (1), (2), (3), (7).** Deferred: (4)
     `_strip_tokens_from_prose` re-walk, (5) `LintSource.scan` Sidecar
     O(N²), (6) `audit_file` parallelization. None are touched by P3.3
     code paths and none have measured performance impact.
@@ -112,7 +146,7 @@ science/src/science_tool/annotation/
 ├── cli.py                      # MOD: +5 commands (list/ack/dismiss/fix/stats)
 ├── crud.py                     # NEW: apply_status_change orchestrator
 ├── io.py                       # MOD: serialize_sidecar + atomic_write_text move here
-├── lifecycle.py                # unchanged
+├── lifecycle.py                # MOD: tighten guard (Decision 12)
 ├── model.py                    # unchanged
 ├── query.py                    # NEW: walk + resolve_id + filter + stats
 ├── selector.py                 # unchanged (resolution algorithm only)
@@ -135,7 +169,12 @@ it grows further).
 ```python
 def iter_sidecars(root: Path) -> Iterator[tuple[Path, Sidecar]]:
     """Walk root, yield (sidecar_path, parsed Sidecar) for every *.anno.trig.
-    Parse errors propagate as IOError — caller decides policy."""
+
+    Wraps any read_sidecar exception (ValueError, FileNotFoundError,
+    rdflib parse errors) in SidecarParseError(sidecar_path, cause).
+    The first SidecarParseError propagates; iteration stops. CLI layer
+    converts to ClickException naming the offending file.
+    """
 
 def resolve_id(root: Path, id_arg: str) -> ResolvedAnnotation:
     """Resolve `a-7f3a` (bare frag) or `entity:a-7f3a` (qualified)
@@ -168,8 +207,10 @@ def compute_stats(
 @dataclass(frozen=True)
 class ResolvedAnnotation:
     sidecar_path: Path
+    sidecar: Sidecar           # full parse, so callers don't re-read
     annotation: Annotation
-    entity: str            # markdown stem (e.g. "citation-audit-pilot")
+    entity_stem: str           # bare markdown stem ("foo")
+    entity_relpath: str        # rel-to-root, no suffix ("notes/foo")
 
 @dataclass(frozen=True)
 class StatsReport:
@@ -182,18 +223,41 @@ class StatsReport:
 class AnnotationLookupError(Exception): ...
 class AnnotationNotFound(AnnotationLookupError): ...
 class AmbiguousAnnotationId(AnnotationLookupError):
-    candidates: tuple[str, ...]
+    candidates: tuple[str, ...]   # rel-path-qualified IDs
+
+class SidecarParseError(Exception):
+    sidecar_path: Path
+    cause: Exception
 ```
 
 **ID resolution algorithm:**
 
-1. If `id_arg` contains `:`, split on first `:` into (`entity`, `frag`).
-   Look up `<root>/**/<entity>.anno.trig` (single match expected).
-   No file → `AnnotationNotFound("no sidecar for entity '<entity>'")`.
-   Found → search annotations for `id == frag`. No match → `AnnotationNotFound`.
-2. Else (`a-7f3a` bare): walk all sidecars. Collect matches. Zero →
-   `AnnotationNotFound`. >1 → `AmbiguousAnnotationId(candidates=(...))`.
-   1 → return.
+The qualified form is `<entity-key>:<frag>` where `entity-key` is
+either:
+- a **bare stem** like `foo` (works only when stem is unique across the
+  project), or
+- a **rel-path-without-suffix** like `notes/foo` (always unambiguous;
+  resolves to `<root>/notes/foo.anno.trig`).
+
+Algorithm:
+
+1. If `id_arg` contains `:`, split on first `:` into (`entity_key`, `frag`).
+   - If `entity_key` contains `/`: look up
+     `<root>/<entity_key>.anno.trig` (exact path). No file →
+     `AnnotationNotFound("no sidecar at <path>")`.
+   - Else (bare stem): collect every `<root>/**/<entity_key>.anno.trig`.
+     Zero → `AnnotationNotFound`. >1 → `AmbiguousAnnotationId(
+     candidates=(rel-path-qualified IDs, ...))` so the user knows the
+     full forms to retry with. 1 → use it.
+
+   Then search the chosen sidecar's annotations for `id == frag`. No
+   match → `AnnotationNotFound`.
+2. Else (`a-7f3a` bare frag): walk all sidecars. Collect matches.
+   Zero → `AnnotationNotFound`. >1 → `AmbiguousAnnotationId(
+   candidates=(rel-path-qualified IDs, ...))`. 1 → return.
+
+Candidates in `AmbiguousAnnotationId` always use rel-path form to
+guarantee the user has an unambiguous handle to retry with.
 
 **`--since <git-ref>` plumbing.** Helper
 `git_changed_markdown(root: Path, ref: str) -> frozenset[Path]` runs
@@ -238,17 +302,24 @@ class CrudRefusedDirty(Exception):
 
 **Steps inside `apply_status_change`:**
 
-1. `resolved = query.resolve_id(root, id_arg)`.
+1. `resolved = query.resolve_id(root, id_arg)` — returns
+   `ResolvedAnnotation(sidecar_path, sidecar, annotation,
+   entity_stem, entity_relpath)`.
 2. If `not force_dirty and _sidecar_is_dirty(root, resolved.sidecar_path)`:
    `raise CrudRefusedDirty(sidecar_path=...)`.
 3. `mutated = lifecycle.mutate_status(resolved.annotation, new_status,
    actor=actor, now=now, reason=reason)` — propagates lifecycle
-   `ValueError` for terminal-state / transition-to-open refusals.
+   `ValueError` for non-`OPEN`-source / terminal-state /
+   transition-to-open refusals.
 4. Build new `Sidecar` by replacing the matching annotation in
    `resolved.sidecar.annotations` (tuple comprehension; preserves order).
 5. `io.atomic_write_text(resolved.sidecar_path, io.serialize_sidecar(new_sidecar))`.
-6. Return `CrudResult(sidecar_path=..., qualified_id=f"{entity}:{frag}",
+6. Return `CrudResult(sidecar_path=resolved.sidecar_path,
+   qualified_id=f"{resolved.entity_relpath}:{resolved.annotation.id}",
    prior_status=resolved.annotation.status, new_status=new_status)`.
+
+The `qualified_id` always uses rel-path form (not bare stem) so the
+output round-trips into a follow-up CRUD command without ambiguity.
 
 **Helper migration into `io.py`.** P3.2's `_atomic_write_text` and
 `_serialize_sidecar` live in `cli.py:664-693`. Move them to `io.py` as
@@ -265,20 +336,35 @@ user.email available)")`. Helper-only; not in the public surface.
 
 **`science annotate list [PATH]`** — query/filter projection.
 
+`PATH` (positional, optional) selects the read scope:
+- *Directory*: walk that subtree for `*.anno.trig`.
+- *Markdown file* (`foo.md`): read only `foo.anno.trig` (no walk).
+  Missing sidecar → empty result, not error.
+- *Sidecar file* (`foo.anno.trig`): read it directly.
+- *Omitted*: walk from `--root` (cwd default).
+
+`PATH` and `--root` are mutually exclusive. Specifying both →
+`ClickException("--root and PATH are mutually exclusive")`.
+
 | Option | Type | Default | Notes |
 |---|---|---|---|
-| `--root PATH` | Path | cwd | Ignored if positional `PATH` given |
+| `--root PATH` | Path | cwd | Mutually exclusive with positional `PATH` |
 | `--status STATUS` | str (multi) | `open` | `all` is sentinel for no filter |
 | `--source PATTERN` | str (multi) | (none) | Trailing `*` glob OK |
 | `--since GIT_REF` | str | (none) | `git diff --name-only <ref>...` |
 | `--format` | `table\|json` | `table` | |
 
 Table columns: `entity:id  status  source  type  exact-preview`.
-`exact-preview` is `selector.exact[:60]` ellipsised. Sorted by
+`entity:id` uses the rel-path-qualified form so it round-trips into
+CRUD commands without ambiguity. `exact-preview` is
+`selector.exact[:60]` with trailing `…` if truncated. Sorted by
 `(entity, id)` for stable diffs. Trailing summary
-`N annotation(s) across M sidecar(s)`. Always exit 0.
+`N annotation(s) across M sidecar(s)`.
 
-JSON: `{"summary": {...}, "annotations": [{...}]}`. Always exit 0.
+JSON: `{"summary": {...}, "annotations": [{...}]}`.
+
+Exit policy: 0 on success; 1 on filter / parse / git errors (see
+matrix below). No 2 — list and stats can never produce ambiguous-id.
 
 **`science annotate ack <ID>`**
 
@@ -320,7 +406,9 @@ change.)
 Table: header `annotate stats: N annotations across M sidecars`, then
 three sections (`By status`, `By source`, `By type`), each
 descending-numerically-sorted. JSON: `{"summary", "by_status",
-"by_source", "by_type"}`. Always exit 0.
+"by_source", "by_type"}`.
+
+Exit policy: 0 on success; 1 on parse errors. Same surface as `list`.
 
 ### Error handling matrix
 
@@ -331,10 +419,12 @@ descending-numerically-sorted. JSON: `{"summary", "by_status",
 | Sidecar dirty | `CrudRefusedDirty` | 1 | `refusing: <sidecar> has uncommitted changes; commit/stash or use --force-dirty` |
 | Transition to `open` | `ValueError` | 1 | (lifecycle msg) `cannot transition to 'open'; status flows forward only` |
 | Already terminal | `ValueError` | 1 | (lifecycle msg) `annotation 'a-7f3a' is already in terminal status 'fixed'` |
+| Source not `OPEN` (e.g. superseded → ack) | `ValueError` | 1 | (lifecycle msg) `cannot ack/dismiss/fix annotation 'a-7f3a' in status 'superseded'; only 'open' annotations accept author transitions` |
+| `--root` and positional `PATH` both given | `ClickException` | 1 | `--root and PATH are mutually exclusive` |
 | `dismiss` empty reason | `ClickException` | 1 | `--reason cannot be empty` |
 | `--since` not in repo | `ClickException` | 1 | `--since requires a git repository at <root>` |
 | `--since` ref invalid | `ClickException` | 1 | propagated git stderr |
-| Sidecar parse error | `IOError` propagated | 1 | first failure aborts; identifies file |
+| Sidecar parse error | `SidecarParseError` (wraps `ValueError`/`FileNotFoundError`/rdflib) | 1 | first failure aborts; CLI message includes `sidecar_path` and `cause` |
 | `--actor` unresolvable | `ClickException` | 1 | `--actor required (no git user.email available)` |
 
 No silent fallbacks; each failure tells the operator exactly what to
@@ -396,9 +486,16 @@ of iterating annotations. Keeps the same suffix-allocation semantics
   cases (empty, no-period, fragment); `sentence_range_at` line/col
   resolution and fallback; `build_quote_selector` prefix/suffix windowing
   at file boundaries.
-- `test_query_resolve_id.py` — bare unique / bare ambiguous / bare
-  not-found / qualified hit / qualified missing-sidecar / qualified
-  missing-frag / entity-stem-vs-filename mismatch.
+- `test_query_resolve_id.py` — bare-frag unique / bare-frag ambiguous
+  / bare-frag not-found / qualified bare-stem unique / qualified
+  bare-stem ambiguous (two `notes/foo.anno.trig` and
+  `appendix/foo.anno.trig`, error candidates use rel-path form) /
+  qualified rel-path hit / qualified rel-path missing-sidecar /
+  qualified missing-frag.
+- `test_query_iter_sidecars_parse_error.py` — corrupt `*.anno.trig`
+  triggers `SidecarParseError` with correct `sidecar_path` and
+  `cause`; CLI smoke test asserts `ClickException` message names the
+  file and cause class.
 - `test_query_filter.py` — status filter (default, multi, `all`); source
   glob (`lint:*`, exact, multi-pattern OR); `--since` with mock git
   helper; AND across all predicates.
@@ -406,9 +503,15 @@ of iterating annotations. Keeps the same suffix-allocation semantics
   all three; descending-sorted output invariant; empty corpus.
 - `test_crud_apply.py` — happy path each verb (open→ack, open→fixed,
   open→dismissed); terminal-state refusal (ack→fixed, fixed→dismissed,
-  dismissed→ack all rejected); dirty-tree refusal; `--force-dirty`
-  bypass; reason persists in `dc:description`; `prov:wasRevisionOf`
-  records prior status; round-trip write→re-parse→compare.
+  dismissed→ack all rejected); **non-OPEN-source refusal**
+  (superseded→ack, superseded→fixed, superseded→dismissed all
+  rejected); dirty-tree refusal; `--force-dirty` bypass; reason
+  persists in `dc:description`; `prov:wasRevisionOf` records prior
+  status; round-trip write→re-parse→compare.
+- `test_lifecycle_open_source_guard.py` — direct unit test of the
+  tightened `lifecycle.mutate_status` guard: `OPEN → {ACK, FIXED,
+  DISMISSED}` allowed; `SUPERSEDED → {ACK, FIXED, DISMISSED}`
+  refused; `* → SUPERSEDED` allowed from any status.
 - `test_audit_invariants.py` (new or extend existing) — `merge_planned`
   raises `ValueError` (not `AssertionError`) on cross-source contamination;
   exercises code path under `python -O` (assert-stripped) by import
@@ -420,17 +523,30 @@ of iterating annotations. Keeps the same suffix-allocation semantics
 
 Click `CliRunner` based:
 - One smoke test per command (happy path, table + json).
-- `list` filter combinations (status, source glob, since with mock git).
+- `list` PATH modes: directory (subtree walk), markdown file
+  (single-sidecar derive), `.anno.trig` (direct), omitted (root walk),
+  missing markdown (empty result, exit 0), `--root` + PATH conflict
+  (exit 1).
+- `list` filter combinations (status, source glob, since with mock
+  git, `--since` outside repo → exit 1).
 - `ack` / `dismiss` / `fix` happy path, plus each error class above.
 - `dismiss` empty-reason rejection.
 - `stats` three-section table output, JSON schema.
-- ambiguous-bare-id integration: real fixture with two sidecars sharing
-  `a-aaaa`; assert `ack a-aaaa` exits 2 with both candidates listed.
+- Ambiguous-bare-frag integration: fixture with two sidecars in
+  separate dirs sharing `a-aaaa`; `ack a-aaaa` exits 2 with both
+  candidates in rel-path form.
+- Ambiguous-bare-stem integration: fixture with `notes/foo.anno.trig`
+  + `appendix/foo.anno.trig`; `ack foo:a-7f3a` exits 2 with both
+  rel-path candidates; `ack notes/foo:a-7f3a` succeeds.
 
 ### Fixture corpus (`tests/_fixtures/annotation/p33/`)
 
-- `multi-entity/` — two `*.md` + two `*.anno.trig` with intentionally
-  colliding bare IDs (`a-aaaa` in both) for ambiguous-id path.
+- `multi-entity/` — two `*.md` + two `*.anno.trig` in separate
+  subdirectories with intentionally colliding bare frag IDs (`a-aaaa`
+  in both) for ambiguous-bare-frag path.
+- `bare-stem-collision/` — `notes/foo.md` + `notes/foo.anno.trig`
+  alongside `appendix/foo.md` + `appendix/foo.anno.trig` for
+  ambiguous-bare-stem path; rel-path qualified form must succeed.
 - `mixed-statuses/` — single sidecar containing one annotation in each
   of the five statuses, drives `list --status all` and `stats`.
 - `dirty-tree/` — single sidecar; tests set up via subprocess
@@ -453,14 +569,17 @@ Rough dependency order (writing-plans will refine into bite-sized tasks):
    (Follow-ups 1 + 7.)
 2. `audit.py` invariant + `mint_id` fixes. Update affected tests.
    (Follow-ups 2 + 3.)
-3. Move `serialize_sidecar` + `atomic_write_text` from `cli.py` into
+3. Tighten `lifecycle.mutate_status` (Decision 12) + add
+   `test_lifecycle_open_source_guard.py`.
+4. Move `serialize_sidecar` + `atomic_write_text` from `cli.py` into
    `io.py`. Update `cli.py` imports.
-4. Build `query.py` (walk, resolve_id, filter, stats) + unit tests.
-5. Build `crud.py` + unit tests.
-6. Wire `list` CLI + tests.
-7. Wire `ack` / `dismiss` / `fix` CLI + tests.
-8. Wire `stats` CLI + tests.
-9. Integration test pass.
+5. Build `query.py` (walk, resolve_id, filter, stats,
+   `SidecarParseError` wrapping) + unit tests.
+6. Build `crud.py` + unit tests.
+7. Wire `list` CLI + tests.
+8. Wire `ack` / `dismiss` / `fix` CLI + tests.
+9. Wire `stats` CLI + tests.
+10. Integration test pass.
 
 ## Out of scope reminders (for the P3.4+ author)
 
