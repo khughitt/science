@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 SCHEMA_VERSION: Final = "1"
 
@@ -92,6 +92,14 @@ class InventoryEntity(_InventoryContractModel):
             raise ValueError(msg)
         return value
 
+    @model_validator(mode="after")
+    def canonical_id_matches_kind_and_local_id(self) -> Self:
+        expected = f"{self.kind}:{self.local_id}"
+        if self.id != expected:
+            msg = f"Inventory entity id must match kind and local_id, expected {expected!r}, got {self.id!r}."
+            raise ValueError(msg)
+        return self
+
 
 class InventoryPayload(_InventoryContractModel):
     schema_version: Literal["1"] = SCHEMA_VERSION
@@ -114,6 +122,10 @@ def canonical_json_bytes(value: BaseModel | dict[str, Any]) -> bytes:
     return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
+def _sort_key_with_canonical_tie_breaker(item: dict[str, Any], fields: tuple[str, ...]) -> tuple[Any, ...]:
+    return tuple(item.get(field) or "" for field in fields) + (canonical_json_bytes(item),)
+
+
 def _normalize_entity_for_content_hash(entity: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(entity)
     for key in ("aliases", "source_refs", "targets", "deprecated_ids"):
@@ -125,17 +137,41 @@ def _normalize_entity_for_content_hash(entity: dict[str, Any]) -> dict[str, Any]
     return normalized
 
 
+def _normalize_project_for_content_hash(project: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(project)
+    normalized["aspects"] = sorted(normalized.get("aspects", []))
+    normalized["tags"] = sorted(normalized.get("tags", []))
+    return normalized
+
+
+def _normalize_finding_candidate_for_content_hash(candidate: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(candidate)
+    normalized["targets"] = sorted(normalized.get("targets", []))
+    return normalized
+
+
 def _payload_for_content_hash(payload: InventoryPayload) -> dict[str, Any]:
     data = payload.model_dump(mode="json", exclude_none=True)
     for key in ("generated_at", "content_hash", "audit_hash", "warnings"):
         data.pop(key, None)
+    if "project" in data:
+        data["project"] = _normalize_project_for_content_hash(data["project"])
     data["entities"] = sorted(
         (_normalize_entity_for_content_hash(item) for item in data.get("entities", [])),
-        key=lambda item: item["id"],
+        key=lambda item: _sort_key_with_canonical_tie_breaker(item, ("id",)),
     )
-    data["aliases"] = sorted(data.get("aliases", []), key=lambda item: item["alias"])
-    data["graph_addresses"] = sorted(data.get("graph_addresses", []), key=lambda item: item["address"])
-    data["finding_candidates"] = sorted(data.get("finding_candidates", []), key=lambda item: item["candidate_id"])
+    data["aliases"] = sorted(
+        data.get("aliases", []),
+        key=lambda item: _sort_key_with_canonical_tie_breaker(item, ("alias",)),
+    )
+    data["graph_addresses"] = sorted(
+        data.get("graph_addresses", []),
+        key=lambda item: _sort_key_with_canonical_tie_breaker(item, ("address",)),
+    )
+    data["finding_candidates"] = sorted(
+        (_normalize_finding_candidate_for_content_hash(item) for item in data.get("finding_candidates", [])),
+        key=lambda item: _sort_key_with_canonical_tie_breaker(item, ("candidate_id",)),
+    )
     data["watch_paths"] = sorted(data.get("watch_paths", []))
     return data
 
@@ -154,7 +190,10 @@ def _payload_for_audit_hash(payload: InventoryPayload) -> dict[str, Any]:
         data.pop(key, None)
     data["warnings"] = sorted(
         data.get("warnings", []),
-        key=lambda item: (item["severity"], item["code"], item.get("path") or "", item.get("canonical_id") or ""),
+        key=lambda item: _sort_key_with_canonical_tie_breaker(
+            item,
+            ("severity", "code", "path", "canonical_id"),
+        ),
     )
     data["watch_paths"] = sorted(data.get("watch_paths", []))
     return data

@@ -6,12 +6,15 @@ from pydantic import ValidationError
 from science_model.contracts.inventory_v1 import (
     InventoryAlias,
     InventoryEntity,
+    InventoryFindingCandidate,
     InventoryPayload,
+    InventoryProjectMetadata,
     InventoryReference,
     InventorySourceLocation,
     InventoryWarning,
     compute_audit_hash,
     compute_content_hash,
+    finalize_inventory_payload,
 )
 
 
@@ -134,3 +137,107 @@ def test_inventory_payload_normalizes_nested_entity_collections_for_hashing() ->
     )
 
     assert compute_content_hash(left) == compute_content_hash(right)
+
+
+def test_inventory_payload_normalizes_project_metadata_collections_for_hashing() -> None:
+    left = InventoryPayload(
+        generated_at="2026-05-12T10:00:00Z",
+        project_id="natural-systems",
+        project=InventoryProjectMetadata(
+            id="natural-systems",
+            name="Natural systems",
+            aspects=["ecology", "hydrology"],
+            tags=["field", "model"],
+        ),
+    )
+    project = left.project
+    assert project is not None
+    right = left.model_copy(
+        update={
+            "project": project.model_copy(
+                update={
+                    "aspects": list(reversed(project.aspects)),
+                    "tags": list(reversed(project.tags)),
+                }
+            )
+        }
+    )
+
+    assert compute_content_hash(left) == compute_content_hash(right)
+
+
+def test_inventory_payload_normalizes_finding_candidate_targets_for_hashing() -> None:
+    source = InventorySourceLocation(adapter="markdown", path="doc/candidate.md")
+    left = InventoryPayload(
+        generated_at="2026-05-12T10:00:00Z",
+        project_id="natural-systems",
+        finding_candidates=[
+            InventoryFindingCandidate(
+                candidate_id="candidate:one",
+                title="Candidate one",
+                targets=["question:q02", "question:q01"],
+                source=source,
+                reason="Referenced in synthesis.",
+            )
+        ],
+    )
+    right = left.model_copy(
+        update={
+            "finding_candidates": [
+                left.finding_candidates[0].model_copy(
+                    update={"targets": list(reversed(left.finding_candidates[0].targets))}
+                )
+            ]
+        }
+    )
+
+    assert compute_content_hash(left) == compute_content_hash(right)
+
+
+def test_inventory_entity_rejects_inconsistent_canonical_id_parts() -> None:
+    with pytest.raises(ValidationError, match="must match"):
+        InventoryEntity(
+            id="finding:wrong-id",
+            kind="finding",
+            local_id="landscape-topology",
+            source=InventorySourceLocation(adapter="markdown", path="doc/finding.md"),
+        )
+
+
+def test_inventory_payload_top_level_sorts_have_deterministic_tie_breakers() -> None:
+    left = InventoryPayload(
+        generated_at="2026-05-12T10:00:00Z",
+        project_id="natural-systems",
+        aliases=[
+            InventoryAlias(alias="f001", canonical_id="finding:beta"),
+            InventoryAlias(alias="f001", canonical_id="finding:alpha"),
+        ],
+    )
+    right = left.model_copy(update={"aliases": list(reversed(left.aliases))})
+
+    assert compute_content_hash(left) == compute_content_hash(right)
+
+
+def test_finalize_inventory_payload_populates_stable_hashes() -> None:
+    payload = InventoryPayload(
+        generated_at="2026-05-12T10:00:00Z",
+        project_id="natural-systems",
+        warnings=[
+            InventoryWarning(
+                code="deprecated-prose-reference",
+                severity="warning",
+                message="Markdown prose references deprecated ID h4.",
+                path="doc/summary.md",
+            )
+        ],
+    )
+
+    finalized = finalize_inventory_payload(payload)
+    finalized_again = finalize_inventory_payload(finalized)
+
+    assert finalized.content_hash == compute_content_hash(payload)
+    assert finalized.audit_hash == compute_audit_hash(payload)
+    assert finalized.content_hash is not None
+    assert finalized.audit_hash is not None
+    assert finalized_again.content_hash == finalized.content_hash
+    assert finalized_again.audit_hash == finalized.audit_hash
