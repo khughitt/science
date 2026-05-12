@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime
+from json import JSONDecodeError
 from pathlib import Path
 from typing import Any
 
@@ -9,10 +11,19 @@ from science_model.source_ref import SourceRef
 from science_tool.graph.storage_adapters.base import StorageAdapter
 
 
-def _manifest_date(value: Any) -> Any:
+def _manifest_date(value: Any, *, manifest_path: str) -> str | None:
+    if value is None:
+        return None
     if not isinstance(value, str):
-        return value
-    return value.split("T", 1)[0]
+        raise ValueError(f"{manifest_path}: created must be an ISO date or datetime string")
+    try:
+        if "T" not in value:
+            return date.fromisoformat(value).isoformat()
+        datetime_value = f"{value[:-1]}+00:00" if value.endswith("Z") else value
+        parsed = datetime.fromisoformat(datetime_value)
+    except ValueError as exc:
+        raise ValueError(f"{manifest_path}: invalid created value {value!r}; expected ISO date or datetime") from exc
+    return parsed.date().isoformat()
 
 
 class WorkflowRunAdapter(StorageAdapter):
@@ -34,7 +45,12 @@ class WorkflowRunAdapter(StorageAdapter):
         path = Path(ref.path)
         if not path.is_absolute():
             path = Path.cwd() / path
-        manifest = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except JSONDecodeError as exc:
+            raise ValueError(f"{ref.path}: invalid JSON in workflow-run manifest: {exc.msg}") from exc
+        if not isinstance(manifest, dict):
+            raise ValueError(f"{ref.path}: workflow-run manifest must be a JSON object")
         local_id = str(manifest.get("name") or path.parent.name)
         canonical_id = f"workflow-run:{local_id}"
         title = str(manifest.get("title") or local_id)
@@ -45,6 +61,6 @@ class WorkflowRunAdapter(StorageAdapter):
             "title": title,
             "manifest_path": ref.path,
             "resources": manifest.get("resources", []),
-            "created": _manifest_date(manifest.get("created")),
+            "created": _manifest_date(manifest.get("created"), manifest_path=ref.path),
             "file_path": ref.path,
         }
