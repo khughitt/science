@@ -68,7 +68,7 @@ def _baseline_paths(project_root: Path) -> set[str]:
 def _canonical_ids(sources: ProjectSources) -> set[str]:
     ids: set[str] = set()
     for entity in sources.entities:
-        ids.add(entity.canonical_id or entity.id)
+        ids.update(_alias_keys(entity.canonical_id or entity.id))
         for alias in entity.aliases:
             ids.update(_alias_keys(str(alias)))
     for alias in sources.manual_aliases:

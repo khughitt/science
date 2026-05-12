@@ -162,6 +162,21 @@ def test_identity_health_resolves_markdown_aliases_from_loaded_sources(tmp_path)
     assert not [warning for warning in warnings if warning.code == "unresolved-prose-reference"]
 
 
+def test_identity_health_resolves_uppercase_full_canonical_refs_case_insensitively(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc").mkdir(parents=True)
+    (project / "science.yaml").write_text("id: canonical-case-project\n", encoding="utf-8")
+    (project / "doc" / "paper.md").write_text(
+        "---\nkind: paper\nid: paper:Smith2024\ntitle: Smith 2024\n---\n",
+        encoding="utf-8",
+    )
+    (project / "doc" / "summary.md").write_text("This cites [[PAPER:SMITH2024]] in prose.\n", encoding="utf-8")
+
+    warnings = collect_identity_warnings(project, sources=load_project_sources(project))
+
+    assert not [warning for warning in warnings if warning.code == "unresolved-prose-reference"]
+
+
 def test_identity_health_resolves_uppercase_short_refs_case_insensitively(tmp_path) -> None:
     project = tmp_path / "project"
     sources = _sources_with_documents(
