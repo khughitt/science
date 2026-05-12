@@ -16,7 +16,12 @@ from typing import Optional
 import click
 
 from science_tool.annotation.audit import audit_file, merge_planned
-from science_tool.annotation.io import read_sidecar, write_sidecar
+from science_tool.annotation.io import (
+    atomic_write_text,
+    read_sidecar,
+    serialize_sidecar,
+    write_sidecar,
+)
 from science_tool.annotation.model import Sidecar
 from science_tool.annotation.sources import LINT_SOURCES, SOURCES
 from science_tool.annotation.sources.marker_token import (
@@ -461,16 +466,16 @@ def lift_tokens_cmd(
         if remove_mode:
             # Sidecar first, then prose (per spec write-order rationale).
             if written or new_sidecar != sidecar:
-                _atomic_write_text(
+                atomic_write_text(
                     sidecar_path,
-                    _serialize_sidecar(new_sidecar),
+                    serialize_sidecar(new_sidecar),
                 )
-            _atomic_write_text(md, cleaned_text)
+            atomic_write_text(md, cleaned_text)
             summary["tokens_removed"] += len(non_doc_hits)
         else:
             if written:
-                _atomic_write_text(
-                    sidecar_path, _serialize_sidecar(new_sidecar),
+                atomic_write_text(
+                    sidecar_path, serialize_sidecar(new_sidecar),
                 )
 
         skipped = len(plans) - len(written)
@@ -659,35 +664,3 @@ def _sentence_ordinal_for_line(
         if sentences[idx][0] <= line_start:
             return idx
     return None
-
-
-def _atomic_write_text(path: Path, text: str) -> None:
-    import os, tempfile  # noqa: PLC0415
-    fd, tmp_name = tempfile.mkstemp(
-        prefix=path.name, dir=str(path.parent), text=True,
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(text)
-        os.replace(tmp_name, str(path))
-    except Exception:
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            pass
-        raise
-
-
-def _serialize_sidecar(sidecar: Sidecar) -> str:
-    """Serialize a Sidecar to a string via write_sidecar's emission logic."""
-    import os, tempfile  # noqa: PLC0415
-    fd, tmp = tempfile.mkstemp(suffix=".anno.trig")
-    os.close(fd)
-    try:
-        write_sidecar(Path(tmp), sidecar)
-        return Path(tmp).read_text(encoding="utf-8")
-    finally:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass

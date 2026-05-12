@@ -432,3 +432,49 @@ def _str_lit(s: str) -> str:
 
 def _dt_lit(dt: datetime) -> str:
     return f'"{dt.isoformat()}"^^xsd:dateTime'
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    """Write `text` to `path` atomically via temp + os.replace.
+
+    Same semantics as P3.2's `cli._atomic_write_text` (which calls
+    this helper now).
+    """
+    import os
+    import tempfile
+
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=path.name, dir=str(path.parent), text=True,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp_name, str(path))
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
+def serialize_sidecar(sidecar: Sidecar) -> str:
+    """Serialize a Sidecar to its TriG textual form.
+
+    Mirrors `write_sidecar`'s emission to a string buffer (via temp
+    file) so callers that need the textual representation don't have
+    to write to disk first.
+    """
+    import os
+    import tempfile
+
+    fd, tmp = tempfile.mkstemp(suffix=".anno.trig")
+    os.close(fd)
+    try:
+        write_sidecar(Path(tmp), sidecar)
+        return Path(tmp).read_text(encoding="utf-8")
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
