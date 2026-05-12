@@ -39,11 +39,19 @@ def mutate_status(
     """
     if new_status is Status.OPEN:
         raise ValueError("cannot transition to 'open'; status flows forward only")
-    if new_status is not Status.SUPERSEDED and annotation.status in _TERMINAL_STATES:
-        raise ValueError(
-            f"annotation {annotation.id!r} is already in terminal status "
-            f"{annotation.status.value!r}"
-        )
+    if new_status is not Status.SUPERSEDED:
+        if annotation.status in _TERMINAL_STATES:
+            raise ValueError(
+                f"annotation {annotation.id!r} is already in terminal status "
+                f"{annotation.status.value!r}"
+            )
+        if annotation.status is not Status.OPEN:
+            # Only superseded reaches here (terminals handled above).
+            raise ValueError(
+                f"cannot {new_status.value} annotation {annotation.id!r} "
+                f"in status {annotation.status.value!r}; only 'open' "
+                "annotations accept author transitions"
+            )
 
     prior = PriorState(
         status=annotation.status,
