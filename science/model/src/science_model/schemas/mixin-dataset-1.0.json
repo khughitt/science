@@ -5,7 +5,7 @@
   "type": "object",
   "required": ["id", "type", "datapackage", "origin", "tier"],
   "properties": {
-    "id": {"type": "string", "pattern": "^dataset:[a-z0-9][a-z0-9-]{0,63}$"},
+    "id": {"type": "string", "pattern": "^dataset:[a-z0-9][a-z0-9-]{1,63}$"},
     "type": {"const": "dataset"},
     "datapackage": {"type": "string", "minLength": 1, "science:merge": "forbidden"},
     "origin": {"enum": ["external", "derived"]},
