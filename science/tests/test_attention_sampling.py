@@ -262,3 +262,39 @@ def test_graph_attention_sample_cli_outputs_seeded_json(tmp_path: Path) -> None:
     assert rows[0]["id"]
     assert rows[0]["attention_weight"]
     assert rows[0]["freshness_state"]
+    assert "belief_weight" in rows[0]
+    assert "influence_weight" in rows[0]
+    assert "reasons" in rows[0]
+
+
+def test_graph_attention_sample_cli_table_does_not_print_raw_reason_dicts(tmp_path: Path) -> None:
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir()
+    save_canonical_graph_dataset(
+        _reason_fixture(),
+        graph_path,
+        preferred_graph_order=[PROJECT_NS["graph/knowledge"]],
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "graph",
+            "attention-sample",
+            "--path",
+            str(graph_path),
+            "--limit",
+            "1",
+            "--seed",
+            "1",
+            "--today",
+            "2026-05-01",
+        ],
+        env={"COLUMNS": "160"},
+    )
+
+    assert result.exit_code == 0
+    assert '"code":' not in result.output
+    assert "'code':" not in result.output
+    assert "Reasons" in result.output

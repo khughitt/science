@@ -1477,6 +1477,15 @@ def graph_attention_sample(
         )
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
+    table_rows = rows
+    if output_format == "table":
+        table_rows = [
+            {
+                **row,
+                "reasons": ", ".join(reason["code"] for reason in row.get("reasons", [])),
+            }
+            for row in rows
+        ]
     emit_query_rows(
         output_format=output_format,
         title="Graph Attention Sample",
@@ -1488,9 +1497,11 @@ def graph_attention_sample(
             ("days_since_last_review", "Days"),
             ("support_count", "Supports"),
             ("dispute_count", "Disputes"),
+            ("evidence_source_count", "Evidence Sources"),
+            ("reasons", "Reasons"),
             ("label", "Label"),
         ],
-        rows=rows,
+        rows=table_rows,
     )
 
 
