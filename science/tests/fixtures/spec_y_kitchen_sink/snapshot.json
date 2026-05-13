@@ -205,6 +205,14 @@
     "origin": null,
     "blocked_by": [],
     "evidence_role": null,
-    "rival_model_packet": null
+    "rival_model_packet": null,
+    "task_type": "research",
+    "priority": "P1",
+    "aspects": [],
+    "parent": "",
+    "group": "",
+    "artifacts": [],
+    "findings": [],
+    "completed": null
   }
 ]
