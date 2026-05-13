@@ -38,7 +38,7 @@ def test_parse_multiple_extensions_preserves_order() -> None:
 
 
 def test_parse_rejects_missing_base() -> None:
-    with pytest.raises(ProfileParseError, match="must start with science-entity-base"):
+    with pytest.raises(ProfileParseError, match="must start with 'science-entity-base'"):
         parse_profile("dataset/1.0")
 
 
