@@ -12,6 +12,7 @@ from science_tool.cli import main
 from science_tool.graph.attention import (
     compute_attention_candidates,
     format_attention_candidate,
+    reason_aware_sample_candidates,
     weighted_sample_without_replacement,
 )
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, save_canonical_graph_dataset
@@ -228,6 +229,32 @@ def test_epsilon_floor_keeps_quiet_candidates_sampleable() -> None:
     assert all(candidate.weight > 0 for candidate in sample)
 
 
+def test_reason_aware_sample_promotes_uncertainty_but_caps_review_routing() -> None:
+    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1))
+
+    sampled = reason_aware_sample_candidates(candidates, limit=5, seed=17)
+
+    assert [candidate.entity_id for candidate in sampled[:2]] == [
+        "proposition:contested",
+        "proposition:fragile",
+    ]
+    assert "hypothesis:not_reason_scoped" in {candidate.entity_id for candidate in sampled}
+    assert len(sampled) == 5
+
+
+def test_reason_aware_sample_does_not_promote_counterevidence_or_unscaffolded_first() -> None:
+    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1))
+
+    sampled = reason_aware_sample_candidates(candidates, limit=2, seed=17)
+
+    assert sampled[0].entity_id == "proposition:contested"
+    assert len(sampled) == 2
+    assert sampled[0].entity_id not in {
+        "proposition:counterevidence",
+        "proposition:unscaffolded",
+    }
+
+
 def test_graph_attention_sample_cli_outputs_seeded_json(tmp_path: Path) -> None:
     graph_path = tmp_path / "knowledge" / "graph.trig"
     graph_path.parent.mkdir()
@@ -265,6 +292,42 @@ def test_graph_attention_sample_cli_outputs_seeded_json(tmp_path: Path) -> None:
     assert "belief_weight" in rows[0]
     assert "influence_weight" in rows[0]
     assert "reasons" in rows[0]
+
+
+def test_graph_attention_sample_cli_reason_aware_json_uses_bounded_review_route(tmp_path: Path) -> None:
+    graph_path = tmp_path / "knowledge" / "graph.trig"
+    graph_path.parent.mkdir()
+    save_canonical_graph_dataset(
+        _reason_fixture(),
+        graph_path,
+        preferred_graph_order=[PROJECT_NS["graph/knowledge"]],
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "graph",
+            "attention-sample",
+            "--path",
+            str(graph_path),
+            "--limit",
+            "5",
+            "--today",
+            "2026-05-01",
+            "--reason-aware",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    rows = json.loads(result.output)["rows"]
+    assert [row["id"] for row in rows[:2]] == [
+        "proposition:contested",
+        "proposition:fragile",
+    ]
+    assert len(rows) == 5
 
 
 def test_graph_attention_sample_cli_table_does_not_print_raw_reason_dicts(tmp_path: Path) -> None:

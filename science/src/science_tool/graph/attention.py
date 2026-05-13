@@ -133,6 +133,55 @@ def compute_attention_candidates(
     return candidates
 
 
+def reason_aware_sample_candidates(
+    candidates: Sequence[AttentionCandidate],
+    *,
+    limit: int,
+    seed: int | None = None,
+) -> list[AttentionCandidate]:
+    """Sample candidates with a bounded reason-coded review slice.
+
+    This is a review-routing toggle, not a replacement belief model. It promotes
+    ordinary uncertainty reasons first, then fills the rest using the existing
+    weighted sampler so the epsilon floor remains meaningful.
+    """
+    if limit < 0:
+        raise ValueError("limit must be >= 0")
+    if limit == 0 or not candidates:
+        return []
+
+    promoted = [candidate for candidate in candidates if _is_uncertainty_review_candidate(candidate)]
+    promoted = sorted(promoted, key=_reason_route_sort_key)
+    promoted_limit = min(len(promoted), max(1, limit // 2))
+    review_slice = promoted[:promoted_limit]
+
+    remaining_limit = limit - len(review_slice)
+    if remaining_limit == 0:
+        return review_slice
+
+    selected_ids = {candidate.entity_id for candidate in review_slice}
+    tail_pool = [candidate for candidate in candidates if candidate.entity_id not in selected_ids]
+    return review_slice + weighted_sample_without_replacement(tail_pool, limit=remaining_limit, seed=seed)
+
+
+def _is_uncertainty_review_candidate(candidate: AttentionCandidate) -> bool:
+    codes = {reason.code for reason in candidate.reasons}
+    if "strong_counterevidence" in codes or "unscaffolded" in codes:
+        return False
+    return bool(codes & {"contestation", "fragility"})
+
+
+def _reason_route_sort_key(candidate: AttentionCandidate) -> tuple[int, float, str]:
+    codes = {reason.code for reason in candidate.reasons}
+    if "contestation" in codes:
+        bucket = 0
+    elif "fragility" in codes:
+        bucket = 1
+    else:
+        bucket = 2
+    return (bucket, -candidate.weight, candidate.entity_id)
+
+
 def weighted_sample_without_replacement(
     candidates: Sequence[AttentionCandidate],
     *,
@@ -176,12 +225,16 @@ def query_attention_sample(
     today: date | None = None,
     kinds: set[str] | None = None,
     epsilon: float = DEFAULT_EPSILON,
+    reason_aware: bool = False,
 ) -> list[dict[str, Any]]:
     """Load a materialized graph and return sampled attention rows."""
     dataset = Dataset()
     dataset.parse(source=str(graph_path), format="trig")
     candidates = compute_attention_candidates(dataset, today=today, kinds=kinds, epsilon=epsilon)
-    sample = weighted_sample_without_replacement(candidates, limit=limit, seed=seed)
+    if reason_aware:
+        sample = reason_aware_sample_candidates(candidates, limit=limit, seed=seed)
+    else:
+        sample = weighted_sample_without_replacement(candidates, limit=limit, seed=seed)
     return [format_attention_candidate(candidate) for candidate in sample]
 
 
