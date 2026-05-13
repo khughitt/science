@@ -7,13 +7,13 @@
   "properties": {
     "id": {"type": "string", "pattern": "^dataset:[a-z0-9][a-z0-9-]{0,63}$"},
     "type": {"const": "dataset"},
-    "datapackage": {"type": "string", "minLength": 1},
+    "datapackage": {"type": "string", "minLength": 1, "science:merge": "forbidden"},
     "origin": {"enum": ["external", "derived"]},
     "tier": {"enum": ["use-now", "evaluate-next", "track"]},
     "update_cadence": {"type": "string"},
-    "accessions": {"type": "array", "items": {"type": "string"}},
-    "access": {"$ref": "#/$defs/access"},
-    "derivation": {"$ref": "#/$defs/derivation"},
+    "accessions": {"type": "array", "items": {"type": "string"}, "science:merge": "forbidden"},
+    "access": {"$ref": "#/$defs/access", "science:merge": "forbidden"},
+    "derivation": {"$ref": "#/$defs/derivation", "science:merge": "forbidden"},
     "parent_dataset": {"type": "string"},
     "siblings": {"type": "array", "items": {"type": "string"}},
     "consumed_by": {"type": "array", "items": {"type": "string"}}
