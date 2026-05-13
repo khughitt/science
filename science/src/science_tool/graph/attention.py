@@ -176,7 +176,7 @@ def query_attention_sample(
     today: date | None = None,
     kinds: set[str] | None = None,
     epsilon: float = DEFAULT_EPSILON,
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """Load a materialized graph and return sampled attention rows."""
     dataset = Dataset()
     dataset.parse(source=str(graph_path), format="trig")
@@ -185,7 +185,7 @@ def query_attention_sample(
     return [format_attention_candidate(candidate) for candidate in sample]
 
 
-def format_attention_candidate(candidate: AttentionCandidate) -> dict[str, str]:
+def format_attention_candidate(candidate: AttentionCandidate) -> dict[str, Any]:
     """Format a candidate for CLI table / JSON output."""
     components = candidate.components
     return {
@@ -194,11 +194,15 @@ def format_attention_candidate(candidate: AttentionCandidate) -> dict[str, str]:
         "label": candidate.label,
         "freshness_state": candidate.freshness_state,
         "attention_weight": f"{candidate.weight:.4f}",
+        "belief_weight": None,
+        "influence_weight": None,
         "incoming_bears_on": str(int(components["incoming_bears_on"])),
         "days_since_last_review": f"{components['days_since_last_review']:.0f}",
         "support_count": str(int(components["support_count"])),
         "dispute_count": str(int(components["dispute_count"])),
+        "evidence_source_count": str(int(components["evidence_source_count"])),
         "evidence_balance_factor": f"{components['evidence_balance_factor']:.2f}",
+        "reasons": [reason.as_dict() for reason in candidate.reasons],
     }
 
 

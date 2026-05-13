@@ -9,7 +9,11 @@ from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import RDF, SKOS, XSD
 
 from science_tool.cli import main
-from science_tool.graph.attention import compute_attention_candidates, weighted_sample_without_replacement
+from science_tool.graph.attention import (
+    compute_attention_candidates,
+    format_attention_candidate,
+    weighted_sample_without_replacement,
+)
 from science_tool.graph.io import CITO_NS, PROJECT_NS, SCI_NS, save_canonical_graph_dataset
 
 
@@ -170,6 +174,35 @@ def test_phase1_reason_derivation_is_proposition_scoped() -> None:
         },
     ]
     assert by_id["hypothesis:not_reason_scoped"].reasons == []
+
+
+def test_format_attention_candidate_includes_reasons_for_json_ready_rows() -> None:
+    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1))
+    by_id = {candidate.entity_id: candidate for candidate in candidates}
+
+    row = format_attention_candidate(by_id["proposition:unscaffolded"])
+
+    assert row["belief_weight"] is None
+    assert row["influence_weight"] is None
+    assert row["evidence_source_count"] == "0"
+    assert row["reasons"] == [
+        {
+            "code": "unscaffolded",
+            "direction": "route_attention",
+            "strength": "high",
+            "provenance": "derived:unscaffolded_source_count(evidence_source_count)",
+            "next_action": "scaffold_evidence_base",
+        }
+    ]
+
+
+def test_format_attention_candidate_uses_empty_reasons_list_when_no_reason_qualifies() -> None:
+    candidates = compute_attention_candidates(_reason_fixture(), today=date(2026, 5, 1))
+    by_id = {candidate.entity_id: candidate for candidate in candidates}
+
+    row = format_attention_candidate(by_id["hypothesis:not_reason_scoped"])
+
+    assert row["reasons"] == []
 
 
 def test_weighted_sampling_is_seeded_and_without_replacement() -> None:
