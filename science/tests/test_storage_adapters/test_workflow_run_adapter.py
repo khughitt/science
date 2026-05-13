@@ -19,6 +19,10 @@ def test_workflow_run_adapter_loads_results_datapackage_json(tmp_path, monkeypat
 {
   "name": "run-a",
   "title": "Run A",
+  "description": "Workflow run description.",
+  "status": "running",
+  "workflow": {"name": "workflow-a"},
+  "entities": {"tests": ["hypothesis:h001"]},
   "resources": [{"path": "table.csv"}],
   "created": "2026-05-12T10:00:00Z"
 }
@@ -35,7 +39,10 @@ def test_workflow_run_adapter_loads_results_datapackage_json(tmp_path, monkeypat
     assert raw["kind"] == "workflow-run"
     assert raw["id"] == "workflow-run:run-a"
     assert raw["title"] == "Run A"
+    assert raw["status"] == "running"
     assert raw["created"] == "2026-05-12"
+    assert raw["related"] == ["hypothesis:h001", "workflow:workflow-a"]
+    assert raw["content_preview"] == "Workflow run description."
     assert raw["manifest_path"] == "results/run-a/datapackage.json"
 
 
@@ -63,6 +70,7 @@ def test_load_project_sources_loads_workflow_run_manifest(tmp_path: Path) -> Non
 
     assert isinstance(entity, WorkflowRunEntity)
     assert entity.title == "Run A"
+    assert entity.status == "complete"
     assert entity.created == date(2026, 5, 12)
     assert entity.file_path == "results/run-a/datapackage.json"
 

@@ -41,6 +41,7 @@ def test_load_raw_produces_task_entity_shape(tmp_path: Path, monkeypatch: pytest
     assert raw["task_type"] == "research"
     assert raw["priority"] == "P1"
     assert raw["status"] == "active"
+    assert raw["completed"] is None
     assert raw["content"].strip().startswith("Body prose")
 
 

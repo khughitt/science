@@ -53,6 +53,9 @@ edges:
     InventoryPayload.model_validate(json.loads(inventory.model_dump_json()))
     assert inventory.schema_version == "1"
     assert inventory.project_id == "test-project"
+    assert inventory.project is not None
+    assert inventory.project.last_activity is not None
+    assert inventory.project.staleness_days is not None
     assert inventory.content_hash
     assert inventory.audit_hash
     assert [entity.id for entity in inventory.entities] == ["finding:f001"]
@@ -79,6 +82,27 @@ path: registry/projects/configured-project
     assert inventory.project is not None
     assert inventory.project.name == "project-slug"
     assert inventory.project.path == "registry/projects/configured-project"
+    assert inventory.project.created is None
+    assert inventory.project.last_modified is None
+
+
+def test_build_inventory_metadata_preserves_project_dates(tmp_path) -> None:
+    project = tmp_path / "project-slug"
+    project.mkdir()
+    (project / "science.yaml").write_text(
+        """
+id: configured-project
+created: 2026-03-01
+last_modified: 2026-03-02
+""".strip(),
+        encoding="utf-8",
+    )
+
+    inventory = build_inventory(project)
+
+    assert inventory.project is not None
+    assert inventory.project.created == "2026-03-01"
+    assert inventory.project.last_modified == "2026-03-02"
 
 
 def test_build_inventory_metadata_without_science_yaml_uses_project_root_name(tmp_path) -> None:
@@ -102,8 +126,9 @@ def test_build_inventory_preserves_task_dsl_type_in_data(tmp_path) -> None:
         "## [t001] T01\n"
         "- type: research\n"
         "- priority: P1\n"
-        "- status: active\n"
-        "- created: 2026-04-20\n\n"
+        "- status: done\n"
+        "- created: 2026-04-20\n"
+        "- completed: 2026-04-21\n\n"
         "Body prose.\n",
         encoding="utf-8",
     )
@@ -112,6 +137,8 @@ def test_build_inventory_preserves_task_dsl_type_in_data(tmp_path) -> None:
 
     task = next(entity for entity in inventory.entities if entity.id == "task:t001")
     assert task.data["task_type"] == "research"
+    assert task.data["priority"] == "P1"
+    assert task.data["completed"] == "2026-04-21"
     assert task.data["content_preview"] == "Body prose."
 
 

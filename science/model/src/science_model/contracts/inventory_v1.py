@@ -65,6 +65,10 @@ class InventoryProjectMetadata(_InventoryContractModel):
     status: str | None = None
     aspects: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    created: str | None = None
+    last_modified: str | None = None
+    last_activity: str | None = None
+    staleness_days: int | None = None
 
 
 class InventoryEntity(_InventoryContractModel):

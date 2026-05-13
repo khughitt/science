@@ -26,6 +26,20 @@ def _manifest_date(value: Any, *, manifest_path: str) -> str | None:
     return parsed.date().isoformat()
 
 
+def _manifest_related(manifest: dict[str, Any]) -> list[str]:
+    related: list[str] = []
+    entity_refs = manifest.get("entities", {})
+    if isinstance(entity_refs, dict):
+        for ref_list in entity_refs.values():
+            if isinstance(ref_list, list):
+                related.extend(str(ref) for ref in ref_list)
+    workflow = manifest.get("workflow", {})
+    workflow_name = workflow.get("name") if isinstance(workflow, dict) else None
+    if workflow_name:
+        related.append(f"workflow:{workflow_name}")
+    return related
+
+
 class WorkflowRunAdapter(StorageAdapter):
     """Load workflow-run entities from results/**/datapackage.json manifests."""
 
@@ -59,8 +73,11 @@ class WorkflowRunAdapter(StorageAdapter):
             "canonical_id": canonical_id,
             "kind": "workflow-run",
             "title": title,
+            "status": str(manifest.get("status") or "complete"),
             "manifest_path": ref.path,
             "resources": manifest.get("resources", []),
             "created": _manifest_date(manifest.get("created"), manifest_path=ref.path),
+            "related": _manifest_related(manifest),
+            "content_preview": str(manifest.get("description") or ""),
             "file_path": ref.path,
         }

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -105,8 +105,15 @@ def build_inventory(project_root: Path) -> InventoryPayload:
 
 def _read_project_metadata(project_root: Path) -> InventoryProjectMetadata:
     config_path = project_root / "science.yaml"
+    last_activity = _latest_activity(project_root)
     if not config_path.exists():
-        return InventoryProjectMetadata(id=project_root.name, name=project_root.name, path=project_root.as_posix())
+        return InventoryProjectMetadata(
+            id=project_root.name,
+            name=project_root.name,
+            path=project_root.as_posix(),
+            last_activity=last_activity.isoformat() if last_activity else None,
+            staleness_days=_staleness_days(last_activity),
+        )
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     project_id = data.get("id")
     canonical_id = str(project_id) if project_id else project_root.name
@@ -118,7 +125,43 @@ def _read_project_metadata(project_root: Path) -> InventoryProjectMetadata:
         status=_optional_str(data.get("status")),
         aspects=[str(value) for value in data.get("aspects", [])],
         tags=[str(value) for value in data.get("tags", [])],
+        created=_metadata_date(data.get("created")),
+        last_modified=_metadata_date(data.get("last_modified")),
+        last_activity=last_activity.isoformat() if last_activity else None,
+        staleness_days=_staleness_days(last_activity),
     )
+
+
+def _metadata_date(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value)
+
+
+def _latest_activity(project_root: Path) -> datetime | None:
+    latest: float = 0
+    for path in project_root.rglob("*.md"):
+        if any(part in {"templates", ".venv", "data", ".git", "__pycache__", "node_modules"} for part in path.parts):
+            continue
+        latest = max(latest, path.stat().st_mtime)
+    graph_path = project_root / "knowledge" / "graph.trig"
+    if graph_path.is_file():
+        latest = max(latest, graph_path.stat().st_mtime)
+    for path in project_root.rglob("datapackage.json"):
+        if "results" not in path.parts:
+            continue
+        latest = max(latest, path.stat().st_mtime)
+    return datetime.fromtimestamp(latest) if latest > 0 else None
+
+
+def _staleness_days(last_activity: datetime | None) -> int | None:
+    if last_activity is None:
+        return None
+    return (datetime.now() - last_activity).days
 
 
 def _watch_paths(project_root: Path) -> list[str]:

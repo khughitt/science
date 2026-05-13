@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from enum import StrEnum
 
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -479,6 +479,13 @@ class TaskEntity(ProjectEntity):
     """
 
     task_type: str = ""
+    priority: str = "P2"
+    aspects: list[str] = Field(default_factory=list)
+    parent: str = ""
+    group: str = ""
+    artifacts: list[str] = Field(default_factory=list)
+    findings: list[str] = Field(default_factory=list)
+    completed: date | None = None
 
 
 class DatasetEntity(ProjectEntity):
@@ -557,6 +564,9 @@ class DatasetEntity(ProjectEntity):
 
 class WorkflowRunEntity(ProjectEntity):
     """Workflow run — readiness is `complete` when status == 'complete'."""
+
+    manifest_path: str = ""
+    resources: list[dict[str, Any]] = Field(default_factory=list)
 
     def readiness(self, resolver: ReadinessResolverProtocol | None = None) -> Readiness:
         if self.status == "complete":
