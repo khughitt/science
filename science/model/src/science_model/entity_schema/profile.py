@@ -50,7 +50,7 @@ def parse_profile(raw: str) -> ProfileString:
     base = components[0]
     if base.name != BASE_NAME:
         raise ProfileParseError(
-            f"schema_profile must start with science-entity-base, got {base.name!r}"
+            f"schema_profile must start with {BASE_NAME!r}, got {base.name!r}"
         )
     if len(components) == 1:
         return ProfileString(base=base, mixin=None, extensions=())
