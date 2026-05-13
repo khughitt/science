@@ -1,0 +1,8 @@
+name: cath-domains
+profile: "data-package"
+resources:
+  - name: cath_domains
+    path: cath_domains.parquet
+    hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    bytes: 4521339201
+    format: "parquet"

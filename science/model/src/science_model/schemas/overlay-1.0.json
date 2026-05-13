@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/overlay-1.0.json",
+  "title": "science entity project overlay",
+  "type": "object",
+  "required": ["id", "overlay_of"],
+  "$defs": {
+    "canonicalId": {
+      "type": "string",
+      "oneOf": [
+        {"pattern": "^dataset:[a-z0-9][a-z0-9-]{0,63}$"},
+        {"pattern": "^paper:[A-Za-z][A-Za-z0-9]{1,63}$"},
+        {"pattern": "^topic:[a-z0-9][a-z0-9-]{0,63}$"},
+        {"pattern": "^theme:[a-z0-9][a-z0-9-]{0,63}$"}
+      ]
+    }
+  },
+  "properties": {
+    "id": {"$ref": "#/$defs/canonicalId"},
+    "overlay_of": {"$ref": "#/$defs/canonicalId"},
+    "pin_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "pin_effective_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+\\+[0-9a-f]{7,40}$"
+    },
+    "relevance": {"type": "string"},
+    "hypothesis_links": {"type": "array", "items": {"type": "string"}},
+    "task_links": {"type": "array", "items": {"type": "string"}},
+    "question_links": {"type": "array", "items": {"type": "string"}},
+    "project_tags": {"type": "array", "items": {"type": "string"}},
+    "project_notes": {"type": "string"},
+    "tags": {
+      "type": "array",
+      "items": {"type": "string"},
+      "science:merge": "append"
+    },
+    "ontology_terms": {
+      "type": "array",
+      "items": {"type": "string"},
+      "science:merge": "append"
+    }
+  },
+  "additionalProperties": false
+}

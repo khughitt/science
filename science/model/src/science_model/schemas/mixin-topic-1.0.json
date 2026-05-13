@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/mixin-topic-1.0.json",
+  "title": "science entity topic mixin",
+  "type": "object",
+  "required": ["id", "type"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^topic:[a-z0-9][a-z0-9-]{1,63}$"},
+    "type": {"const": "topic"},
+    "datasets": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^dataset:"}
+    },
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "related": {"type": "array", "items": {"type": "string"}}
+  }
+}

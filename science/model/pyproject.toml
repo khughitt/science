@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
   "pydantic>=2.0",
   "pyyaml>=6.0.3",
+  "jsonschema>=4.26",
 ]
 
 [build-system]
@@ -30,7 +31,6 @@ venv = ".venv"
 
 [dependency-groups]
 dev = [
-    "jsonschema>=4.26.0",
     "pytest>=9.0",
     "ruff>=0.15.7",
 ]
