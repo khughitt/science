@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/mixin-paper-1.0.json",
+  "title": "science entity paper mixin",
+  "type": "object",
+  "required": ["id", "type"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^paper:[A-Za-z][A-Za-z0-9]{1,63}$"},
+    "type": {"const": "paper"},
+    "bibkey": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]{1,63}$"},
+    "authors": {"type": "array", "items": {"type": "string"}},
+    "year": {"type": "integer", "minimum": 1800, "maximum": 2200},
+    "journal": {"type": "string"},
+    "doi": {"type": "string"},
+    "url": {"type": "string"},
+    "datasets": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^dataset:"}
+    },
+    "key_findings": {"type": "array", "items": {"type": "string"}},
+    "methods_summary": {"type": "string"},
+    "limitations": {"type": "array", "items": {"type": "string"}},
+    "model_or_tool_availability": {"type": "string"}
+  }
+}
