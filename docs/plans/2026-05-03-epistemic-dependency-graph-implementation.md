@@ -2949,7 +2949,7 @@ Phase 1 finishes by surfacing the new state to humans/agents through the skills 
 
 - [ ] **Step 1: Update `science:status` skill prose**
 
-In `commands/science/status.md` (or wherever the skill body lives — find via `grep -rn "## science:status\|^name: status" /mnt/ssd/Dropbox/science/skills/`), add a section near "Recent activity" that explicitly mentions reading `entity needs-review` for the orientation:
+In `commands/science/status.md` (or wherever the skill body lives — find via `grep -rn "## science:status\|^name: status" ~/d/science/skills/`), add a section near "Recent activity" that explicitly mentions reading `entity needs-review` for the orientation:
 
 > Run `science entity needs-review` to surface epistemic entities whose evidence base has changed since their last reviewed-as-of date. Include up to 5 of the highest-impact ones (most upstream sources flagged) in the orientation.
 

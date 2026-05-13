@@ -1070,10 +1070,10 @@ status: "active"
 EOF
 (
   cd "$tmpdir"
-  uv run --project /mnt/ssd/Dropbox/science/science science question create "What should we test next?"
-  uv run --project /mnt/ssd/Dropbox/science/science science hypothesis create "Template shell hypothesis" --id hypothesis:h01-template-shell
-  uv run --project /mnt/ssd/Dropbox/science/science science discussion create "Template shell discussion" --with double-blind-addendum
-  uv run --project /mnt/ssd/Dropbox/science/science science interpretation create "Template shell interpretation"
+  uv run --project ~/d/science/science science question create "What should we test next?"
+  uv run --project ~/d/science/science science hypothesis create "Template shell hypothesis" --id hypothesis:h01-template-shell
+  uv run --project ~/d/science/science science discussion create "Template shell discussion" --with double-blind-addendum
+  uv run --project ~/d/science/science science interpretation create "Template shell interpretation"
 )
 ```
 
@@ -1087,8 +1087,8 @@ Run:
 tmpdir="$(cat /tmp/science-template-shells-tmpdir)"
 (
   cd "$tmpdir"
-  uv run --project /mnt/ssd/Dropbox/science/science science entity list
-  uv run --project /mnt/ssd/Dropbox/science/science science graph audit --project-root "$tmpdir"
+  uv run --project ~/d/science/science science entity list
+  uv run --project ~/d/science/science science graph audit --project-root "$tmpdir"
 )
 ```
 

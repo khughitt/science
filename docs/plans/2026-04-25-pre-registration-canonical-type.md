@@ -335,7 +335,7 @@ Expected: all tests pass.
 
 - [x] **Step 5: Smoke-test against the live `meta/` project**
 
-Run from `/mnt/ssd/Dropbox/science/meta`:
+Run from `~/d/science/meta`:
 ```bash
 bash validate.sh 2>&1 | grep -i "pre-registration" || echo "no pre-registration warnings"
 ```
@@ -425,7 +425,7 @@ If Step 1 found an enumeration, append `pre-registration` in alphabetical order.
 
 - [x] **Step 3: Run full repo validators**
 
-Run from `/mnt/ssd/Dropbox/science`:
+Run from `~/d/science`:
 ```bash
 cd meta && bash validate.sh --verbose 2>&1 | tail -20
 ```

@@ -123,7 +123,7 @@ def test_next_feedback_id_different_date(tmp_path: Path):
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_feedback.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_feedback.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'science_tool.feedback'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -197,13 +197,13 @@ def next_feedback_id(feedback_dir: Path, date_str: str) -> str:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_feedback.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_feedback.py -v`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 git add src/science_tool/feedback.py tests/test_feedback.py
 git commit -m "feat(feedback): add data model and YAML I/O"
 ```
@@ -305,7 +305,7 @@ def test_list_entries_multiple_filters_and(tmp_path: Path):
 
 - [ ] **Step 2: Run tests to verify new tests fail**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_feedback.py -v -k "test_list or test_load_all"`
+Run: `cd ~/d/science/science && uv run pytest tests/test_feedback.py -v -k "test_list or test_load_all"`
 Expected: FAIL — `ImportError: cannot import name 'list_entries'`
 
 - [ ] **Step 3: Implement list and filter functions**
@@ -354,13 +354,13 @@ def list_entries(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_feedback.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_feedback.py -v`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 git add src/science_tool/feedback.py tests/test_feedback.py
 git commit -m "feat(feedback): add list and filter operations"
 ```
@@ -472,7 +472,7 @@ def test_find_duplicate_different_target_no_match(tmp_path: Path):
 
 - [ ] **Step 2: Run tests to verify new tests fail**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_feedback.py -v -k "test_update or test_find_duplicate"`
+Run: `cd ~/d/science/science && uv run pytest tests/test_feedback.py -v -k "test_update or test_find_duplicate"`
 Expected: FAIL — `ImportError`
 
 - [ ] **Step 3: Implement update and deduplication**
@@ -541,13 +541,13 @@ def find_duplicate(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_feedback.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_feedback.py -v`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 git add src/science_tool/feedback.py tests/test_feedback.py
 git commit -m "feat(feedback): add update and deduplication operations"
 ```
@@ -611,7 +611,7 @@ def test_render_report_empty(tmp_path: Path):
 
 - [ ] **Step 2: Run tests to verify new tests fail**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_feedback.py -v -k "test_group or test_render"`
+Run: `cd ~/d/science/science && uv run pytest tests/test_feedback.py -v -k "test_group or test_render"`
 Expected: FAIL — `ImportError`
 
 - [ ] **Step 3: Implement triage grouping and report rendering**
@@ -685,13 +685,13 @@ def render_report(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_feedback.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_feedback.py -v`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 git add src/science_tool/feedback.py tests/test_feedback.py
 git commit -m "feat(feedback): add triage grouping and report rendering"
 ```
@@ -738,7 +738,7 @@ def test_detect_project_no_science_yaml_uses_cwd_name(tmp_path: Path):
 
 - [ ] **Step 2: Run tests to verify new tests fail**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_feedback.py -v -k "test_detect"`
+Run: `cd ~/d/science/science && uv run pytest tests/test_feedback.py -v -k "test_detect"`
 Expected: FAIL — `ImportError`
 
 - [ ] **Step 3: Implement detect_project**
@@ -767,13 +767,13 @@ def detect_project(start: Path) -> str:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_feedback.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_feedback.py -v`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 git add src/science_tool/feedback.py tests/test_feedback.py
 git commit -m "feat(feedback): add project auto-detection"
 ```
@@ -927,7 +927,7 @@ class TestFeedbackUpdate:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_feedback_cli.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_feedback_cli.py -v`
 Expected: FAIL — `Error: No such command 'feedback'`
 
 - [ ] **Step 3: Add the feedback CLI group with add, list, update commands**
@@ -1104,13 +1104,13 @@ Then replace `VALID_CATEGORIES` with `_FB_CATEGORIES` and `VALID_STATUSES` with 
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_feedback_cli.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_feedback_cli.py -v`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 git add src/science_tool/cli.py tests/test_feedback_cli.py
 git commit -m "feat(feedback): add CLI commands — add, list, update"
 ```
@@ -1185,7 +1185,7 @@ class TestFeedbackReport:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_feedback_cli.py -v -k "TestFeedbackTriage or TestFeedbackReport"`
+Run: `cd ~/d/science/science && uv run pytest tests/test_feedback_cli.py -v -k "TestFeedbackTriage or TestFeedbackReport"`
 Expected: FAIL — `Error: No such command 'triage'`
 
 - [ ] **Step 3: Add triage and report commands to cli.py**
@@ -1230,18 +1230,18 @@ def feedback_report(status: str | None, project: str | None) -> None:
 
 - [ ] **Step 4: Run all feedback CLI tests**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_feedback_cli.py -v`
+Run: `cd ~/d/science/science && uv run pytest tests/test_feedback_cli.py -v`
 Expected: All PASS
 
 - [ ] **Step 5: Run the full test suite to check for regressions**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/ -v --timeout=30`
+Run: `cd ~/d/science/science && uv run pytest tests/ -v --timeout=30`
 Expected: All PASS (no regressions in existing tests)
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 git add src/science_tool/cli.py tests/test_feedback_cli.py
 git commit -m "feat(feedback): add CLI commands — triage and report"
 ```
@@ -1314,7 +1314,7 @@ Read the `## Process Reflection` section from 3 files (one from each variant + o
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add commands/*.md
 git commit -m "commands: update process reflection to use science feedback add"
 ```

@@ -1391,7 +1391,7 @@ Run from the repo root:
 UV_CACHE_DIR=/tmp/uv-cache uv run --project science python scripts/generate_codex_skills.py
 ```
 
-Expected: `Generated Codex skills in /mnt/ssd/Dropbox/science/codex-skills`
+Expected: `Generated Codex skills in ~/d/science/codex-skills`
 
 - [ ] **Step 2: Verify no generated SKILL.md still references `@core/*`**
 

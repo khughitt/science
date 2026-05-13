@@ -194,7 +194,7 @@ Add `"archive_lag": archive_lag,` to the returned dict. The planner returns zero
 
 - [x] **Step 4: Read-only smoke-test against downstream projects** — run `science tasks archive --tasks-dir <project>/tasks --format json` against `natural-systems`, `mm30`, `protein-landscape`. Do **not** pass `--apply`. Expect dry-run plans of ~114, ~44, ~44 entries respectively (audit's 49% / ~30% / 44%) routed to monthly buckets matching `completed:` dates.
 
-- [x] **Step 5: Smoke-test health surfacing** — `science health --project-root /home/keith/d/r/natural-systems --format json | jq .archive_lag` shows non-zero `done_in_active`; the table view renders the "Next:" hint.
+- [x] **Step 5: Smoke-test health surfacing** — `science health --project-root ~/d/r/natural-systems --format json | jq .archive_lag` shows non-zero `done_in_active`; the table view renders the "Next:" hint.
 
 - [x] **Step 6: Final commit if formatting changed** — `chore(tasks-archive): format archive implementation`. Skip if no diff.
 

@@ -212,7 +212,7 @@ touch AGENTS.md CLAUDE.md
 mkdir -p doc specs tasks knowledge src
 echo "<!-- tasks -->" > tasks/active.md
 
-bash /mnt/ssd/Dropbox/science/science/src/science_tool/project_artifacts/data/validate.sh
+bash ~/d/science/science/src/science_tool/project_artifacts/data/validate.sh
 echo "exit code: $?"
 ```
 

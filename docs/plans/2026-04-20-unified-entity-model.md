@@ -149,7 +149,7 @@ def test_project_entity_does_not_allow_dataset_specific_fields() -> None:
 - [ ] **Step 2: Run failing test**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/unified-entity-model
+cd ~/d/science/.worktrees/unified-entity-model
 uv run --frozen pytest science-model/tests/test_entity_hierarchy.py -v
 ```
 
@@ -2007,7 +2007,7 @@ def _project_for_snapshot(entities: list) -> list[dict]:
 Regenerate `tests/fixtures/spec_y_kitchen_sink/snapshot.json`:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/unified-entity-model/science
+cd ~/d/science/.worktrees/unified-entity-model/science
 uv run --frozen python -c "
 import json
 from pathlib import Path
@@ -2078,7 +2078,7 @@ Many tests still reference SourceEntity — migrated in Task 11."
 - [ ] **Step 1: Find all SourceEntity references**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/unified-entity-model
+cd ~/d/science/.worktrees/unified-entity-model
 grep -rn "SourceEntity\|entity_providers\|EntityProvider\|EntityResolver\|EntityRecord\|_normalize_record\|source_types" science/src/ science/tests/ | grep -v __pycache__ > /tmp/sources-entity-refs.txt
 wc -l /tmp/sources-entity-refs.txt
 head -30 /tmp/sources-entity-refs.txt
@@ -2269,7 +2269,7 @@ as an extension-layer helper but is no longer imported from graph/sources.py."
 - [ ] **Step 1: Ruff**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/unified-entity-model/science
+cd ~/d/science/.worktrees/unified-entity-model/science
 uv run --frozen ruff check . --fix
 uv run --frozen ruff format .
 cd ../science-model

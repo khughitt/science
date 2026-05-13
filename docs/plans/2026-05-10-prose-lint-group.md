@@ -1452,8 +1452,8 @@ Expected: prints the same `<NEW_HASH>` written into registry.yaml's `current_has
 Run:
 
 ```bash
-cd /home/keith/d/cancer/cancer-types/multiple-myeloma
-bash /mnt/ssd/Dropbox/science/science/src/science_tool/project_artifacts/data/validate.sh 2>&1 | grep -A20 "9/"
+cd ~/d/cancer/cancer-types/multiple-myeloma
+bash ~/d/science/science/src/science_tool/project_artifacts/data/validate.sh 2>&1 | grep -A20 "9/"
 ```
 
 Expected: section 9 appears with non-zero counts (MM has well-known short-form IDs and bare author-year mentions).
@@ -1582,7 +1582,7 @@ git commit -m "docs: add prose-lints convention doc + cross-link annotation-toke
 Run:
 
 ```bash
-uv run --project science science prose lint --root /home/keith/d/natural-systems --format json > /tmp/ns-prose.json
+uv run --project science science prose lint --root ~/d/natural-systems --format json > /tmp/ns-prose.json
 python3 -c "import json; d=json.load(open('/tmp/ns-prose.json')); print('natural-systems counts:'); [print(f'  {k}: {v}') for k,v in sorted(d['counts'].items())]"
 ```
 
@@ -1593,7 +1593,7 @@ Record the output.
 Run:
 
 ```bash
-uv run --project science science prose lint --root /home/keith/d/cancer/cancer-types/multiple-myeloma --format json > /tmp/mm-prose.json
+uv run --project science science prose lint --root ~/d/cancer/cancer-types/multiple-myeloma --format json > /tmp/mm-prose.json
 python3 -c "import json; d=json.load(open('/tmp/mm-prose.json')); print('multiple-myeloma counts:'); [print(f'  {k}: {v}') for k,v in sorted(d['counts'].items())]"
 ```
 
@@ -1626,7 +1626,7 @@ Create `docs/audits/2026-05-10-prose-lint-baselines.md` containing:
 - Summary table: project × check → count.
 - Top 10 per-file offenders for each project.
 - One-sentence interpretation per project (e.g., "natural-systems chapter 20 dominates bare-author-year because it imports textbook-style claims wholesale").
-- Pointer to the citation-audit-pilot interpretation (`/home/keith/d/natural-systems/doc/interpretations/2026-05-06-citation-audit-pilot.md`) and to MM's marker-triage audit (`~/d/cancer/cancer-types/multiple-myeloma/doc/audits/2026-05-09-unverified-marker-triage.md`).
+- Pointer to the citation-audit-pilot interpretation (`~/d/natural-systems/doc/interpretations/2026-05-06-citation-audit-pilot.md`) and to MM's marker-triage audit (`~/d/cancer/cancer-types/multiple-myeloma/doc/audits/2026-05-09-unverified-marker-triage.md`).
 
 - [ ] **Step 5: Commit**
 

@@ -1917,7 +1917,7 @@ Fix any reported issues inline. If the project also runs mypy/pyright, run that 
 - [ ] **Step 3: Manual CLI smoke test**
 
 ```bash
-cd /mnt/ssd/Dropbox/science  # project root that has knowledge/graph.trig
+cd ~/d/science  # project root that has knowledge/graph.trig
 uv run science wander --n 2 --seed 11 --format json --today 2026-05-09 | head -40
 ```
 

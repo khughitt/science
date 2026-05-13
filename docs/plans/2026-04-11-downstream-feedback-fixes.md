@@ -87,7 +87,7 @@ def test_status_and_interpret_results_do_not_assume_project_local_model_doc() ->
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_command_docs.py -q
 ```
 
@@ -116,7 +116,7 @@ Resolve `.ai/templates/<name>.md` first; if it does not exist, use `${CLAUDE_PLU
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_command_docs.py -q
 ```
 
@@ -169,7 +169,7 @@ def test_project_structure_documents_root_tool_manifest() -> None:
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_command_docs.py -q
 ```
 
@@ -217,7 +217,7 @@ In `references/project-structure.md`, `README.md`, and `references/command-pream
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_command_docs.py -q
 ```
 
@@ -295,7 +295,7 @@ def test_validate_accepts_project_when_science_tool_on_path(tmp_path: Path) -> N
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_validate_script.py -q
 ```
 
@@ -324,7 +324,7 @@ error "science is required for task management, feedback, and graph workflows"
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_validate_script.py -q
 ```
 
@@ -387,7 +387,7 @@ def test_graph_question_summary_returns_all_questions_by_default() -> None:
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_graph_cli.py -q -k "question_summary_returns_all_questions_by_default"
 ```
 
@@ -425,7 +425,7 @@ In `commands/status.md`, `commands/interpret-results.md`, and `README.md`:
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_graph_cli.py -q -k "question_summary"
 ```
 
@@ -450,7 +450,7 @@ git commit -m "fix(graph): return all question-summary rows by default"
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen pytest tests/test_command_docs.py tests/test_validate_script.py tests/test_graph_cli.py -q -k "question_summary or validate or command_docs"
 ```
 
@@ -461,7 +461,7 @@ Expected: PASS
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 UV_CACHE_DIR=/tmp/uv-cache uv run --frozen ruff check src tests
 ```
 

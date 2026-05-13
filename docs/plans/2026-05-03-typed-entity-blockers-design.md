@@ -2396,10 +2396,10 @@ access:
 EOF
 (
   cd "$tmpdir"
-  uv run --project /mnt/ssd/Dropbox/science/science science tasks add "Use embargoed data" --priority P1
-  uv run --project /mnt/ssd/Dropbox/science/science science tasks block t001 --by dataset:embargoed
-  uv run --project /mnt/ssd/Dropbox/science/science science tasks show t001
-  uv run --project /mnt/ssd/Dropbox/science/science science tasks blockers t001 --format json
+  uv run --project ~/d/science/science science tasks add "Use embargoed data" --priority P1
+  uv run --project ~/d/science/science science tasks block t001 --by dataset:embargoed
+  uv run --project ~/d/science/science science tasks show t001
+  uv run --project ~/d/science/science science tasks blockers t001 --format json
 )
 ```
 

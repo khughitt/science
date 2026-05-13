@@ -105,7 +105,7 @@ The `path` field accepts three shapes, dispatched by leading character:
 
 | Form | Example | Resolution |
 |---|---|---|
-| Absolute | `/home/keith/d/r/lit-explore` | Used as-is. |
+| Absolute | `~/d/r/lit-explore` | Used as-is. |
 | `~`-anchored | `~/d/r/lit-explore` | `Path.expanduser()` then resolve. |
 | Relative | `../mm30`, `../../r/lit-explore` | Resolved against the project root (the directory containing the `science.yaml` declaring this peer). |
 
@@ -318,7 +318,7 @@ old-project  ~/d/archive/old-project              path-missing
 {
   "project_id": "evolution",
   "peers": [
-    {"id": "mm30", "path": "~/d/cancer/mm30", "resolved": "/home/keith/d/cancer/mm30", "status": "ok"},
+    {"id": "mm30", "path": "~/d/cancer/mm30", "resolved": "~/d/cancer/mm30", "status": "ok"},
     {"id": "old-project", "path": "~/d/archive/old-project", "resolved": null, "status": "path-missing"}
   ]
 }
@@ -342,7 +342,7 @@ $ science-tool peers show mm30
 id:       mm30
 name:     multiple-myeloma-30
 role:     cancer-type
-path:     /home/keith/d/cancer/mm30
+path:     ~/d/cancer/mm30
 entities: 12 hypotheses, 8 questions, 3 datasets, 24 tasks
 ```
 

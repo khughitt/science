@@ -414,7 +414,7 @@ This task is verification-only. Confirms (a) no existing hypothesis is broken by
 
 - [ ] **Step 1: Run the full repository validator**
 
-Run from `/mnt/ssd/Dropbox/science`:
+Run from `~/d/science`:
 ```bash
 bash scripts/validate.sh --verbose 2>&1 | tail -40
 ```

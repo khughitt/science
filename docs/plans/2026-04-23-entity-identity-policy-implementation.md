@@ -106,7 +106,7 @@ Extend `science-model/tests/test_entities.py` with one regression asserting a ve
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-model
+cd ~/d/science/science-model
 uv run --frozen pytest tests/test_identity.py tests/test_entities.py -q
 ```
 
@@ -157,7 +157,7 @@ Do not add merge/split orchestration logic here; only the typed data contract.
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-model
+cd ~/d/science/science-model
 uv run --frozen pytest tests/test_identity.py tests/test_entities.py -q
 uv run --frozen ruff check src/science_model/identity.py src/science_model/entities.py tests/test_identity.py tests/test_entities.py
 ```
@@ -226,7 +226,7 @@ Add a second test that a versioned accession in frontmatter normalizes to an unv
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-model
+cd ~/d/science/science-model
 uv run --frozen pytest tests/test_frontmatter.py tests/test_frontmatter_dataset.py -q
 ```
 
@@ -265,7 +265,7 @@ Normalize versioned external identifiers here so every loader path sees the same
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-model
+cd ~/d/science/science-model
 uv run --frozen pytest tests/test_frontmatter.py tests/test_frontmatter_dataset.py -q
 uv run --frozen ruff check src/science_model/frontmatter.py tests/test_frontmatter.py tests/test_frontmatter_dataset.py
 ```
@@ -310,7 +310,7 @@ Add a regression that structured source rows with `deprecated_ids` and `replaced
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen pytest tests/test_load_project_sources_unified.py tests/test_load_project_sources_regression.py -q
 ```
 
@@ -338,7 +338,7 @@ Do not add alias derivation from `deprecated_ids`; keep deprecation explicit.
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen pytest tests/test_load_project_sources_unified.py tests/test_load_project_sources_regression.py -q
 uv run --frozen ruff check src/science_tool/graph/sources.py tests/test_load_project_sources_unified.py tests/test_load_project_sources_regression.py
 ```
@@ -396,7 +396,7 @@ Cover JSON and table output so the new section is visible to both humans and age
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen pytest tests/test_health.py -q
 ```
 
@@ -434,7 +434,7 @@ Expose a concise CLI section in `science_tool.cli.health_command()` and JSON out
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen pytest tests/test_health.py -q
 uv run --frozen ruff check src/science_tool/graph/health.py src/science_tool/cli.py tests/test_health.py
 ```
@@ -489,7 +489,7 @@ Add one test that a project-scoped collision remains namespaced and warned, rath
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen pytest tests/test_registry_index.py tests/test_registry_sync.py tests/test_sync_cli.py -q
 ```
 
@@ -524,7 +524,7 @@ Thread these warnings through `SyncReport.drift_warnings` and the CLI.
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen pytest tests/test_registry_index.py tests/test_registry_sync.py tests/test_sync_cli.py -q
 uv run --frozen ruff check src/science_tool/registry/index.py src/science_tool/registry/sync.py tests/test_registry_index.py tests/test_registry_sync.py tests/test_sync_cli.py
 ```
@@ -587,7 +587,7 @@ The cookbook should include both positive and negative examples:
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen pytest tests/test_command_docs.py tests/test_codex_skills.py -q
 ```
 
@@ -614,7 +614,7 @@ Required guidance changes:
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen pytest tests/test_command_docs.py tests/test_codex_skills.py -q
 ```
 
@@ -647,12 +647,12 @@ Use the task-local commands above immediately after each implementation slice.
 Run:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-model
+cd ~/d/science/science-model
 uv run --frozen ruff check .
 uv run --frozen pyright
 uv run --frozen pytest
 
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen ruff check .
 uv run --frozen pyright
 uv run --frozen pytest

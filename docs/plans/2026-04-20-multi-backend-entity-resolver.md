@@ -25,7 +25,7 @@
 
 **Key cross-cutting invariants (read before any task):**
 
-- **All paths in this plan are relative to the worktree root** (`/mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/`). The worktree is set up by the executing skill before Task 1.
+- **All paths in this plan are relative to the worktree root** (`~/d/science/.worktrees/multi-backend-entity-resolver/`). The worktree is set up by the executing skill before Task 1.
 - **Every commit must keep the existing test suite green.** Run `cd science && uv run --frozen pytest -q` after every task before committing.
 - **Snapshot regression** (`test_load_project_sources_regression.py`) uses a `_project_for_snapshot()` helper that excludes the new `provider` and `description` fields. This is the canary; it must stay green across every commit in this plan.
 - **Specialized parsers** (`parse_tasks`, `_load_model_sources`, `_load_parameter_sources`) keep their existing direct callsites — DO NOT wrap them in EntityProvider classes.
@@ -107,7 +107,7 @@ def test_entity_datapackage_invalid_error_message_includes_path_and_field() -> N
 - [ ] **Step 2: Run failing test**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science
+cd ~/d/science/.worktrees/multi-backend-entity-resolver/science
 uv run --frozen pytest tests/test_source_types.py -v
 ```
 
@@ -273,7 +273,7 @@ profiles:
 Create the directory structure and files:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science
+cd ~/d/science/.worktrees/multi-backend-entity-resolver/science
 mkdir -p tests/fixtures/spec_y_kitchen_sink/doc/hypotheses
 mkdir -p tests/fixtures/spec_y_kitchen_sink/doc/datasets
 mkdir -p tests/fixtures/spec_y_kitchen_sink/doc/topics
@@ -405,7 +405,7 @@ def test_load_project_sources_kitchen_sink_snapshot() -> None:
 Run the helper to produce `snapshot.json` from the current (pre-refactor) behavior:
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science
+cd ~/d/science/.worktrees/multi-backend-entity-resolver/science
 uv run --frozen python -c "
 import json
 from pathlib import Path
@@ -2659,7 +2659,7 @@ git commit -m "test: end-to-end migration scenarios (mixed mode + collision reco
 - [ ] **Step 1: Lint + format**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science
+cd ~/d/science/.worktrees/multi-backend-entity-resolver/science
 uv run --frozen ruff check . 2>&1 | tail -10
 uv run --frozen ruff format --check . 2>&1 | tail -10
 ```
@@ -2680,7 +2680,7 @@ Pre-existing pyright errors are LISTED in the plan header — confirm the count 
 
 ```bash
 # Count pre-existing on main:
-cd /mnt/ssd/Dropbox/science && git stash -u 2>&1 | head -1 ; git checkout main -- science/ 2>&1 | head -1 ; cd science && uv run --frozen pyright 2>&1 | tail -1 ; cd .. && git checkout HEAD -- science/ ; git stash pop 2>&1 | head -1
+cd ~/d/science && git stash -u 2>&1 | head -1 ; git checkout main -- science/ 2>&1 | head -1 ; cd science && uv run --frozen pyright 2>&1 | tail -1 ; cd .. && git checkout HEAD -- science/ ; git stash pop 2>&1 | head -1
 # (Or alternative: just confirm the worktree's pyright count is no worse than main's.)
 ```
 
@@ -2693,10 +2693,10 @@ git add . && git commit -m "fix: address pyright errors introduced by Spec Y"
 - [ ] **Step 3: Full test sweep**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science
+cd ~/d/science/.worktrees/multi-backend-entity-resolver/science
 uv run --frozen pytest -q 2>&1 | tail -5
 
-cd /mnt/ssd/Dropbox/science/.worktrees/multi-backend-entity-resolver/science-model
+cd ~/d/science/.worktrees/multi-backend-entity-resolver/science-model
 uv run --frozen pytest -q 2>&1 | tail -5
 ```
 

@@ -1863,7 +1863,7 @@ git commit -m "doc: add lab notebook skill (layer 2 — web app rendering)"
 
 - [ ] **Step 1: Update package profile**
 
-In `/mnt/ssd/Dropbox/natural-systems/research/packages/theme/instability-bifurcation/datapackage.json`, change:
+In `~/d/natural-systems/research/packages/theme/instability-bifurcation/datapackage.json`, change:
 
 ```json
 "profile": "natural-systems-research-package"
@@ -1877,7 +1877,7 @@ to:
 
 - [ ] **Step 2: Update TypeScript schema**
 
-In `/mnt/ssd/Dropbox/natural-systems/src/research/types.ts`, update the `ResearchPackageSchema` profile literal:
+In `~/d/natural-systems/src/research/types.ts`, update the `ResearchPackageSchema` profile literal:
 
 ```typescript
 profile: z.literal('science-research-package'),
@@ -1911,17 +1911,17 @@ Export the new types.
 
 - [ ] **Step 3: Regenerate public copy**
 
-Run: `cd /mnt/ssd/Dropbox/natural-systems && npm run generate:research-packages`
+Run: `cd ~/d/natural-systems && npm run generate:research-packages`
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /mnt/ssd/Dropbox/natural-systems && npx vitest run src/research/`
+Run: `cd ~/d/natural-systems && npx vitest run src/research/`
 Expected: All tests PASS (update test fixtures if they reference the old profile literal)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/natural-systems
+cd ~/d/natural-systems
 git add research/packages/ public/research/ src/research/types.ts src/research/__tests__/
 git commit -m "feat(research): migrate to science-research-package profile"
 ```

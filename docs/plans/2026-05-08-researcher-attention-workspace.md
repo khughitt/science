@@ -10,7 +10,7 @@
 
 ---
 
-All implementation paths below are relative to `/home/keith/d/dashboard` unless a path starts with `/mnt/ssd/Dropbox/science`. The design source is `/mnt/ssd/Dropbox/science/docs/superpowers/specs/2026-05-08-researcher-attention-workspace-design.md`.
+All implementation paths below are relative to `~/d/dashboard` unless a path starts with `~/d/science`. The design source is `~/d/science/docs/superpowers/specs/2026-05-08-researcher-attention-workspace-design.md`.
 
 ## File Structure
 
