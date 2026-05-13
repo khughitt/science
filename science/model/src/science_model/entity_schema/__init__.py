@@ -9,4 +9,42 @@ section 3 for the design.
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from science_model.entity_schema.merge import (
+    MergePolicy,
+    read_merge_policy,
+    read_overlay_merge_policy,
+)
+from science_model.entity_schema.profile import (
+    BASE_NAME,
+    TYPE_MIXIN_NAMES,
+    ProfileComponent,
+    ProfileParseError,
+    ProfileString,
+    parse_profile,
+)
+from science_model.entity_schema.loader import (
+    SchemaLoader,
+    SchemaNotFoundError,
+)
+from science_model.entity_schema.validator import (
+    EntityValidationError,
+    EntityValidator,
+)
+from science_model.entity_schema.wrapper import SharedEntity
+
+__all__ = [
+    "BASE_NAME",
+    "TYPE_MIXIN_NAMES",
+    "EntityValidationError",
+    "EntityValidator",
+    "MergePolicy",
+    "ProfileComponent",
+    "ProfileParseError",
+    "ProfileString",
+    "SchemaLoader",
+    "SchemaNotFoundError",
+    "SharedEntity",
+    "parse_profile",
+    "read_merge_policy",
+    "read_overlay_merge_policy",
+]
