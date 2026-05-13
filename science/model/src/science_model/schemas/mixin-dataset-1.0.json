@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/mixin-dataset-1.0.json",
+  "title": "science entity dataset mixin",
+  "type": "object",
+  "required": ["id", "type", "datapackage", "origin", "tier"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^dataset:[a-z0-9][a-z0-9-]{0,63}$"},
+    "type": {"const": "dataset"},
+    "datapackage": {"type": "string", "minLength": 1},
+    "origin": {"enum": ["external", "derived"]},
+    "tier": {"enum": ["use-now", "evaluate-next", "track"]},
+    "update_cadence": {"type": "string"},
+    "accessions": {"type": "array", "items": {"type": "string"}},
+    "access": {"$ref": "#/$defs/access"},
+    "derivation": {"$ref": "#/$defs/derivation"},
+    "parent_dataset": {"type": "string"},
+    "siblings": {"type": "array", "items": {"type": "string"}},
+    "consumed_by": {"type": "array", "items": {"type": "string"}}
+  },
+  "not": {"required": ["resources"]},
+  "allOf": [
+    {
+      "if": {"properties": {"origin": {"const": "external"}}, "required": ["origin"]},
+      "then": {
+        "required": ["access"],
+        "not": {"required": ["derivation"]}
+      }
+    },
+    {
+      "if": {"properties": {"origin": {"const": "derived"}}, "required": ["origin"]},
+      "then": {
+        "required": ["derivation"],
+        "not": {"anyOf": [{"required": ["access"]}, {"required": ["accessions"]}]}
+      }
+    }
+  ],
+  "$defs": {
+    "access": {
+      "type": "object",
+      "required": ["level", "verified"],
+      "properties": {
+        "level": {"enum": ["public", "registration", "controlled", "commercial", "mixed"]},
+        "availability": {"enum": ["available", "embargoed", "withdrawn"]},
+        "verified": {"type": "boolean"},
+        "verification_method": {"enum": ["", "retrieved", "credential-confirmed"]},
+        "last_reviewed": {"type": "string"},
+        "verified_by": {"type": "string"},
+        "source_url": {"type": "string"},
+        "credentials_required": {"type": "string"}
+      }
+    },
+    "derivation": {
+      "type": "object",
+      "required": ["workflow_recipe", "inputs"],
+      "properties": {
+        "workflow_recipe": {"type": "string"},
+        "recipe_lockfile": {"type": "string"},
+        "inputs": {"type": "array", "items": {"type": "string", "pattern": "^dataset:"}}
+      }
+    }
+  }
+}
