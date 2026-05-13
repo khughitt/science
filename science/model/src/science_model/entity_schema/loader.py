@@ -39,6 +39,8 @@ class SchemaLoader:
 def _filename_for(component: ProfileComponent) -> str:
     if component.name == BASE_NAME:
         return f"{component.name}-{component.version}.json"
+    if component.name == "overlay":
+        return f"overlay-{component.version}.json"
     if component.name in TYPE_MIXIN_NAMES:
         return f"mixin-{component.name}-{component.version}.json"
     # Extensions: replace dots with hyphens (e.g. bio.rnaseq -> bio-rnaseq).

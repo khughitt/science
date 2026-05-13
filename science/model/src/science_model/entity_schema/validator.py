@@ -56,6 +56,26 @@ class EntityValidator:
                 errors=errors,
             )
 
+    def validate_overlay(self, overlay: dict[str, Any]) -> None:
+        """Validate a project overlay (different schema than canonical entities)."""
+        from science_model.entity_schema.profile import ProfileComponent
+
+        # Overlay schema is identified by a synthetic ProfileComponent: name="overlay".
+        # Filename convention is special-cased in loader._filename_for.
+        schema = self._loader.load(ProfileComponent(name="overlay", version="1.0"))
+        validator = Draft202012Validator(schema)
+        errors = sorted(validator.iter_errors(overlay), key=lambda e: list(e.absolute_path))
+        if errors:
+            joined = "; ".join(_format_error(err) for err in errors)
+            raise EntityValidationError(
+                f"overlay failed schema validation: {joined}",
+                errors=errors,
+            )
+        if overlay.get("id") != overlay.get("overlay_of"):
+            raise EntityValidationError(
+                f"overlay_of {overlay.get('overlay_of')!r} must equal id {overlay.get('id')!r}"
+            )
+
     def _compose(self, profile: ProfileString) -> dict[str, Any]:
         parts = [self._loader.load(profile.base)]
         if profile.mixin is not None:
