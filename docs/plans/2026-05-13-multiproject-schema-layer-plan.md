@@ -184,7 +184,8 @@ def test_parse_multiple_extensions_preserves_order() -> None:
 
 
 def test_parse_rejects_missing_base() -> None:
-    with pytest.raises(ProfileParseError, match="must start with science-entity-base"):
+    # f"{BASE_NAME!r}" renders with single quotes, so the regex must include them.
+    with pytest.raises(ProfileParseError, match="must start with 'science-entity-base'"):
         parse_profile("dataset/1.0")
 
 
