@@ -94,6 +94,27 @@ def test_build_inventory_metadata_without_science_yaml_uses_project_root_name(tm
     assert inventory.project.path == project.resolve().as_posix()
 
 
+def test_build_inventory_preserves_task_dsl_type_in_data(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "tasks").mkdir(parents=True)
+    (project / "science.yaml").write_text("id: task-project\n", encoding="utf-8")
+    (project / "tasks" / "active.md").write_text(
+        "## [t001] T01\n"
+        "- type: research\n"
+        "- priority: P1\n"
+        "- status: active\n"
+        "- created: 2026-04-20\n\n"
+        "Body prose.\n",
+        encoding="utf-8",
+    )
+
+    inventory = build_inventory(project)
+
+    task = next(entity for entity in inventory.entities if entity.id == "task:t001")
+    assert task.data["task_type"] == "research"
+    assert task.data["content_preview"] == "Body prose."
+
+
 def test_build_inventory_fails_when_entity_source_adapter_mapping_is_missing(tmp_path, monkeypatch) -> None:
     project = tmp_path / "project"
     (project / "doc").mkdir(parents=True)

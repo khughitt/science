@@ -50,6 +50,7 @@ class TaskAdapter(StorageAdapter):
             "canonical_id": f"task:{task.id}",
             "kind": "task",
             "type": "task",
+            "task_type": task.type,
             "title": task.title,
             "project": task.project or "",
             "priority": task.priority,

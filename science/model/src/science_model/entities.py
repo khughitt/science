@@ -478,7 +478,7 @@ class TaskEntity(ProjectEntity):
     records for registry-based validation.
     """
 
-    pass
+    task_type: str = ""
 
 
 class DatasetEntity(ProjectEntity):
