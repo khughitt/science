@@ -183,12 +183,17 @@ class OverlayRecord:
     type: str                       # dataset | paper | topic | theme
     slug: str
     project: str                    # registered project name
-    overlay_path: Path
+    project_root: Path              # the project's root dir (for relative paths)
+    overlay_path: Path              # absolute path to the overlay .md file
     frontmatter: dict[str, Any]
     body: str                       # overlay markdown body text
     pin_version: str | None
     pin_effective_version: str | None
 ```
+
+`project_root` is carried so serializers can render `overlay_path` relative to
+the project (the CLI's commons-root is the wrong base — see §6.1). The
+`OverlayAdapter` already holds both values at construction time.
 
 ### 5.3 `OverlayAdapter` (`overlay.py`)
 
@@ -355,11 +360,15 @@ Report shape mirrors Phase B's `ValidationReport`.
     `warning: pin_version <v> on overlay is inactive until Phase E; merged from
     live entity`.
   - Human output: canonical fields, then an `overlay:` block (project name +
-    the fields it contributed, read from `field_sources`), then the merged body.
-  - `--json`: a new `_merged_to_json(m, root)` emitting `canonical_id`,
+    the fields it contributed), then the merged body. **Contributed fields** are
+    those whose `field_sources` value is `"overlay"` *or* `"canonical+overlay"`
+    — append fields like `tags` must not be omitted.
+  - `--json`: a new `_merged_to_json(m)` emitting `canonical_id`,
     `merged_frontmatter`, `merged_body`, `field_sources`, and an `overlay`
-    sub-object (`project`, `overlay_path` relative to the project root,
-    `pin_version`, `pin_effective_version`) or `null`.
+    sub-object (`project`, `overlay_path` rendered relative to
+    `m.overlay.project_root`, `pin_version`, `pin_effective_version`) or `null`.
+    It takes only `m` — the project root needed for the relative path comes
+    from `m.overlay.project_root`, not the commons root.
 - `CommonsError` (base of every new subclass) → `click.ClickException`.
 
 ### 6.2 `science commons validate --project <name>`
