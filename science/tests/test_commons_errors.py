@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from science_tool.commons.errors import (
     CommonsEntityError,
     CommonsError,
