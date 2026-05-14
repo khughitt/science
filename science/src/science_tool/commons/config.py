@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel
 
-from science_tool.commons.errors import CommonsError
+from science_tool.commons.errors import CommonsError, ProjectNotRegisteredError
 
 
 class CommonsSettings(BaseModel):
@@ -109,3 +109,20 @@ def load_data_overrides() -> dict[str, Path]:
             )
         result[slug] = path
     return result
+
+
+def resolve_project_root(name: str) -> Path:
+    """Look up a registered project by name and return its root path.
+
+    Reads `projects[]` from the global config. Raises ProjectNotRegisteredError
+    if no entry matches `name`. Does not assert the path exists on disk - that
+    is checked by callers (resolve_entity / validate_project_overlays), which
+    raise ProjectDirectoryMissingError instead.
+    """
+    from science_tool.registry.config import load_global_config
+
+    cfg = load_global_config()
+    for project in cfg.projects:
+        if project.name == name:
+            return Path(project.path).expanduser()
+    raise ProjectNotRegisteredError(name)

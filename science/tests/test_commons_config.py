@@ -206,3 +206,46 @@ def test_load_data_overrides_rejects_non_string_value(
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
     with pytest.raises(CommonsError):
         load_data_overrides()
+
+
+def test_resolve_project_root_returns_registered_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from science_tool.commons.config import resolve_project_root
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.yaml").write_text(
+        yaml.dump(
+            {
+                "projects": [
+                    {
+                        "path": "/home/me/d/protein-landscape",
+                        "name": "protein-landscape",
+                        "registered": "2026-05-14",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    assert resolve_project_root("protein-landscape") == Path(
+        "/home/me/d/protein-landscape"
+    )
+
+
+def test_resolve_project_root_unknown_name_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from science_tool.commons.config import resolve_project_root
+    from science_tool.commons.errors import ProjectNotRegisteredError
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.yaml").write_text(
+        yaml.dump({"projects": []}), encoding="utf-8"
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    with pytest.raises(ProjectNotRegisteredError, match="nope"):
+        resolve_project_root("nope")
