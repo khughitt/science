@@ -118,6 +118,50 @@ def _seeded_store(tmp_path: Path) -> Path:
     return root
 
 
+def test_commons_inventory_to_stdout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["inventory"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["schema_version"] == "2"
+    assert payload["project_id"] == "commons"
+    assert {e["id"] for e in payload["entities"]} == {
+        "dataset:cath-domains",
+        "dataset:rnaseq-example",
+        "paper:Adams2025",
+        "topic:single-cell-foundation-models",
+        "theme:research-hygiene",
+    }
+
+
+def test_commons_inventory_to_output_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    output = tmp_path / "commons-inventory.json"
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["inventory", "--output", str(output)])
+    assert result.exit_code == 0, result.output
+    assert result.output == ""
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["project_id"] == "commons"
+
+
+def test_commons_inventory_missing_root_exits_1(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "nope"))
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["inventory"])
+    assert result.exit_code == 1
+    assert "commons store not found" in result.output
+
+
 def test_show_human(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _seeded_store(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))

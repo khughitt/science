@@ -11,6 +11,7 @@ from science_tool.commons.adapter import CommonsEntityAdapter, CommonsEntityReco
 from science_tool.commons.bootstrap import init_commons
 from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError, CommonsRootNotFoundError
+from science_tool.commons.inventory import build_commons_inventory
 from science_tool.commons.overlay import (
     MergedEntity,
     resolve_entity,
@@ -329,6 +330,26 @@ def validate_cmd(
             click.echo(f"  error: {err}", err=True)
     if report.errors:
         raise click.exceptions.Exit(1)
+
+
+@commons_group.command("inventory")
+@click.option(
+    "--output",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the payload to FILE instead of stdout.",
+)
+def inventory_cmd(output: Path | None) -> None:
+    """Emit the inventory_v2 payload for the whole commons store."""
+    try:
+        payload = build_commons_inventory()
+    except CommonsError as exc:
+        raise click.ClickException(str(exc)) from exc
+    rendered = payload.model_dump_json(indent=2) + "\n"
+    if output is None:
+        click.echo(rendered, nl=False)
+    else:
+        output.write_text(rendered, encoding="utf-8")
 
 
 @commons_group.group("data")
