@@ -24,6 +24,7 @@ from science_tool.commons.datapackage import (
     validate_logical_path,
 )
 from science_tool.commons.errors import (
+    CommonsError,
     CommonsEntityError,
     DataIntegrityError,
     DataResourceNotFoundError,
@@ -47,9 +48,12 @@ class ResolvedDataResource:
 def _sha256_file(path: Path) -> str:
     """Stream the file and return its lowercase hex sha256 digest."""
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(_HASH_CHUNK_BYTES):
-            digest.update(chunk)
+    try:
+        with path.open("rb") as handle:
+            while chunk := handle.read(_HASH_CHUNK_BYTES):
+                digest.update(chunk)
+    except OSError as exc:
+        raise CommonsError(f"cannot read data resource at {path}: {exc}") from exc
     return digest.hexdigest()
 
 

@@ -12,6 +12,7 @@ import yaml
 from science_tool.commons.errors import (
     CommonsDatapackageError,
     CommonsEntityError,
+    CommonsError,
     CommonsLayoutError,
     DataIntegrityError,
     DataLogicalPathError,
@@ -138,6 +139,27 @@ def test_resolve_hash_mismatch(tmp_path: Path) -> None:
     _write_data(data_root, content=b"corrupted-bytes\n")
     with pytest.raises(DataIntegrityError):
         resolve(f"dataset:{_SLUG}", _LOGICAL, commons_root=commons_root, data_root=data_root)
+
+
+def test_resolve_wraps_resource_read_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commons_root = _make_commons(tmp_path)
+    data_root = tmp_path / "data"
+    target = _write_data(data_root)
+    original_open = Path.open
+
+    def fail_for_resource(self: Path, *args: object, **kwargs: object) -> object:
+        if self == target:
+            raise OSError("resource disappeared")
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", fail_for_resource)
+    with pytest.raises(CommonsError, match="cannot read data resource") as exc_info:
+        resolve(f"dataset:{_SLUG}", _LOGICAL, commons_root=commons_root, data_root=data_root)
+
+    assert not isinstance(exc_info.value, DataIntegrityError)
+    assert exc_info.value.__cause__ is not None
 
 
 def test_resolve_rejects_non_dataset_id(tmp_path: Path) -> None:

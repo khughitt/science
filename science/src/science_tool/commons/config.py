@@ -79,7 +79,12 @@ def load_data_overrides() -> dict[str, Path]:
         return {}
 
     try:
-        raw = yaml.safe_load(overrides_path.read_text(encoding="utf-8"))
+        text = overrides_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise CommonsError(f"{overrides_path}: cannot read data overrides: {exc}") from exc
+
+    try:
+        raw = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         raise CommonsError(f"{overrides_path}: malformed YAML: {exc}") from exc
     if raw is None:

@@ -174,6 +174,29 @@ def test_load_data_overrides_rejects_malformed_yaml(
         load_data_overrides()
 
 
+def test_load_data_overrides_wraps_read_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    data_yaml = cfg_dir / "data.yaml"
+    data_yaml.write_text(yaml.dump({"cath-domains": "/data/legacy/cath"}), encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    original_read_text = Path.read_text
+
+    def fail_for_data_yaml(self: Path, *args: object, **kwargs: object) -> str:
+        if self == data_yaml:
+            raise OSError("permission denied")
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", fail_for_data_yaml)
+    with pytest.raises(CommonsError, match="cannot read data overrides") as exc_info:
+        load_data_overrides()
+
+    assert exc_info.value.__cause__ is not None
+
+
 def test_load_data_overrides_rejects_non_string_value(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
