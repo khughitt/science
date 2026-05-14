@@ -51,6 +51,20 @@ def test_inventory_overlay_rejects_overlay_of_without_separator() -> None:
         )
 
 
+def test_inventory_overlay_rejects_overlay_of_empty_kind() -> None:
+    with pytest.raises(ValidationError, match="canonical"):
+        InventoryOverlay(
+            overlay_of=":Adams2025", project_id="proj-alpha", source=_source()
+        )
+
+
+def test_inventory_overlay_rejects_overlay_of_empty_local_id() -> None:
+    with pytest.raises(ValidationError, match="canonical"):
+        InventoryOverlay(
+            overlay_of="paper:", project_id="proj-alpha", source=_source()
+        )
+
+
 def test_inventory_overlay_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         InventoryOverlay(

@@ -70,7 +70,8 @@ class InventoryOverlay(_InventoryContractModel):
     @field_validator("overlay_of")
     @classmethod
     def overlay_of_has_separator(cls, value: str) -> str:
-        if ":" not in value:
+        kind, separator, local_id = value.partition(":")
+        if not separator or not kind or not local_id:
             msg = (
                 "Inventory overlay overlay_of must be canonical "
                 f"'<kind>:<local-id>', got {value!r}."
