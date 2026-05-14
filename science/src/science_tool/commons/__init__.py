@@ -24,6 +24,7 @@ from science_tool.commons.config import (
     load_data_overrides,
     resolve_commons_data_root,
     resolve_commons_root,
+    resolve_project_root,
 )
 from science_tool.commons.datapackage import (
     DatapackageDescriptor,
@@ -43,6 +44,19 @@ from science_tool.commons.errors import (
     DataIntegrityError,
     DataLogicalPathError,
     DataResourceNotFoundError,
+    OverlayMergeError,
+    OverlayValidationError,
+    ProjectDirectoryMissingError,
+    ProjectNotRegisteredError,
+)
+from science_tool.commons.overlay import (
+    MergedEntity,
+    OverlayAdapter,
+    OverlayRecord,
+    OverlayValidationReport,
+    merge_entity,
+    resolve_entity,
+    validate_project_overlays,
 )
 from science_tool.commons.query import CommonsQuery
 from science_tool.commons.registry import RebuildReport, RegistryBuilder
@@ -67,6 +81,14 @@ __all__ = [
     "DataResource",
     "DataResourceNotFoundError",
     "DatapackageDescriptor",
+    "MergedEntity",
+    "OverlayAdapter",
+    "OverlayMergeError",
+    "OverlayRecord",
+    "OverlayValidationError",
+    "OverlayValidationReport",
+    "ProjectDirectoryMissingError",
+    "ProjectNotRegisteredError",
     "RebuildReport",
     "RegistryBuilder",
     "ResolvedDataResource",
@@ -74,10 +96,14 @@ __all__ = [
     "commons_group",
     "init_commons",
     "load_data_overrides",
+    "merge_entity",
     "parse_resource_hash",
     "read_datapackage",
     "resolve",
     "resolve_commons_data_root",
     "resolve_commons_root",
+    "resolve_entity",
+    "resolve_project_root",
+    "validate_project_overlays",
     "validate_logical_path",
 ]

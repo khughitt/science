@@ -36,6 +36,19 @@ def test_public_api_exports() -> None:
         "parse_resource_hash",
         "ResolvedDataResource",
         "resolve",
+        # Phase D1
+        "OverlayAdapter",
+        "OverlayRecord",
+        "MergedEntity",
+        "OverlayValidationReport",
+        "merge_entity",
+        "resolve_entity",
+        "validate_project_overlays",
+        "resolve_project_root",
+        "ProjectNotRegisteredError",
+        "ProjectDirectoryMissingError",
+        "OverlayValidationError",
+        "OverlayMergeError",
     }
     assert expected.issubset(set(pkg.__all__))
     for name in expected:
