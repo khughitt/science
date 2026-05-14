@@ -10,7 +10,7 @@ import click
 from science_tool.commons.adapter import CommonsEntityAdapter, CommonsEntityRecord
 from science_tool.commons.bootstrap import init_commons
 from science_tool.commons.config import resolve_commons_root
-from science_tool.commons.errors import CommonsError
+from science_tool.commons.errors import CommonsError, CommonsRootNotFoundError
 from science_tool.commons.query import CommonsQuery
 from science_tool.commons.registry import RegistryBuilder
 from science_tool.commons.validator import CommonsValidator
@@ -71,9 +71,8 @@ def _require_root() -> Path:
     """Resolve the commons root, raising a ClickException if it is missing."""
     root = resolve_commons_root()
     if not root.is_dir():
-        raise click.ClickException(
-            f"commons store not found at {root}; run `science commons init`"
-        )
+        exc = CommonsRootNotFoundError(root)
+        raise click.ClickException(str(exc)) from exc
     return root
 
 
