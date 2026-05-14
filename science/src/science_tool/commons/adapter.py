@@ -3,7 +3,7 @@
 In Phase B the adapter parses frontmatter, validates against
 Phase A's EntityValidator, and emits CommonsEntityRecord (or
 CommonsEntityError) per entity. The validated frontmatter dict is
-carried as-is - no `science_model.Entity` materialization (deferred
+carried as-is — no `science_model.Entity` materialization (deferred
 to Phase D, see the design spec).
 """
 
@@ -14,10 +14,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from science_model.entity_schema import EntityValidationError, EntityValidator
+
 from science_tool.commons.errors import CommonsEntityError, CommonsLayoutError
+from science_tool.markdown_utils import parse_frontmatter
 
 _TYPE_DIRS = ("datasets", "papers", "topics", "themes")
 _SKIP_NAMES = frozenset({".git", ".migrations", "__pycache__", "registry.sqlite"})
+
 _TYPE_DIR_TO_TYPE = {
     "datasets": "dataset",
     "papers": "paper",
@@ -30,21 +34,22 @@ _TYPE_DIR_TO_TYPE = {
 class CommonsEntityRecord:
     """One validated entity from the commons store."""
 
-    canonical_id: str           # "<type>:<slug>", e.g. "dataset:cath-domains"
-    type: str                   # "dataset" | "paper" | "topic" | "theme"
+    canonical_id: str
+    type: str
     slug: str
     schema_profile: str
-    frontmatter: dict[str, Any]  # validated against schema_profile
-    body_path: Path             # absolute path to entity.md
-    datapackage_path: Path | None  # sibling datapackage.yaml (datasets only)
-    mtime_ns: int               # max st_mtime_ns over (body_path, datapackage_path)
+    frontmatter: dict[str, Any]
+    body_path: Path
+    datapackage_path: Path | None
+    mtime_ns: int
 
 
 class CommonsEntityAdapter:
     """Walk the commons store and yield records or per-entity errors."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, validator: EntityValidator | None = None) -> None:
         self._root = root
+        self._validator = validator or EntityValidator()
 
     def scan(self) -> Iterator[CommonsEntityRecord | CommonsEntityError]:
         for type_name in _TYPE_DIRS:
@@ -65,14 +70,13 @@ class CommonsEntityAdapter:
                 entity_path = child / "entity.md"
                 dp_path = child / "datapackage.yaml"
                 if not entity_path.is_file():
-                    # Empty dataset directory (e.g., .gitkeep'd); skip silently.
                     continue
                 if not dp_path.is_file():
                     raise CommonsLayoutError(
                         child,
                         reason="dataset directory missing required datapackage.yaml sibling",
                     )
-                yield self._make_record(type_name, child.name, entity_path, dp_path)
+                yield self._build(type_name, child.name, entity_path, dp_path)
         else:
             for child in sorted(type_dir.iterdir()):
                 if child.name in _SKIP_NAMES or child.name.startswith("."):
@@ -81,28 +85,54 @@ class CommonsEntityAdapter:
                     continue
                 if child.suffix != ".md":
                     continue
-                slug = child.stem
-                yield self._make_record(type_name, slug, child, None)
+                yield self._build(type_name, child.stem, child, None)
 
-    def _make_record(
+    def _build(
         self,
         type_dir: str,
         slug: str,
         body_path: Path,
         datapackage_path: Path | None,
     ) -> CommonsEntityRecord | CommonsEntityError:
-        # Parsing/validation arrives in Task 6. For now, build a stub record so
-        # the walking tests pass.
-        canonical_id = f"{_TYPE_DIR_TO_TYPE[type_dir]}:{slug}"
+        type_name = _TYPE_DIR_TO_TYPE[type_dir]
+        canonical_id = f"{type_name}:{slug}"
+        try:
+            frontmatter, _ = parse_frontmatter(body_path)
+            if not frontmatter:
+                raise EntityValidationError(
+                    f"{body_path} has no parseable frontmatter"
+                )
+            self._validator.validate(frontmatter)
+            declared_id = frontmatter.get("id")
+            if declared_id != canonical_id:
+                raise EntityValidationError(
+                    f"frontmatter id {declared_id!r} does not match path-derived "
+                    f"canonical id {canonical_id!r}"
+                )
+            declared_type = frontmatter.get("type")
+            if declared_type != type_name:
+                raise EntityValidationError(
+                    f"frontmatter type {declared_type!r} does not match path-derived "
+                    f"type {type_name!r}"
+                )
+        except EntityValidationError as exc:
+            return CommonsEntityError(
+                body_path, canonical_id=canonical_id, cause=exc
+            )
+        except Exception as exc:  # pragma: no cover — unexpected I/O / yaml errors
+            return CommonsEntityError(
+                body_path, canonical_id=canonical_id, cause=exc
+            )
+
         mtime_ns = body_path.stat().st_mtime_ns
         if datapackage_path is not None:
             mtime_ns = max(mtime_ns, datapackage_path.stat().st_mtime_ns)
         return CommonsEntityRecord(
             canonical_id=canonical_id,
-            type=_TYPE_DIR_TO_TYPE[type_dir],
+            type=type_name,
             slug=slug,
-            schema_profile="",  # filled in Task 6
-            frontmatter={},     # filled in Task 6
+            schema_profile=str(frontmatter["schema_profile"]),
+            frontmatter=frontmatter,
             body_path=body_path,
             datapackage_path=datapackage_path,
             mtime_ns=mtime_ns,

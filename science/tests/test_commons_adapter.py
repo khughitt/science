@@ -85,3 +85,146 @@ def test_record_captures_paths_and_mtime(tmp_path: Path) -> None:
     assert paper.datapackage_path is None
     assert paper.type == "paper"
     assert paper.slug == "Adams2025"
+
+
+def test_scan_populates_frontmatter_and_schema_profile(tmp_path: Path) -> None:
+    root = _make_store(tmp_path, "valid")
+    adapter = CommonsEntityAdapter(root)
+    by_id = {
+        r.canonical_id: r
+        for r in adapter.scan()
+        if isinstance(r, CommonsEntityRecord)
+    }
+    paper = by_id["paper:Adams2025"]
+    assert paper.schema_profile == "science-entity-base/1.0+paper/1.0"
+    assert paper.frontmatter["bibkey"] == "Adams2025"
+    assert paper.frontmatter["year"] == 2025
+
+    rnaseq = by_id["dataset:rnaseq-example"]
+    assert rnaseq.schema_profile.endswith("+bio.rnaseq/1.0")
+    assert rnaseq.frontmatter["species"] == "Homo sapiens"
+
+
+def test_scan_yields_error_for_bad_bibkey(tmp_path: Path) -> None:
+    root = _make_store(tmp_path, "invalid/paper-bad-bibkey")
+    adapter = CommonsEntityAdapter(root)
+    items = list(adapter.scan())
+    errors = [it for it in items if isinstance(it, CommonsEntityError)]
+    records = [it for it in items if isinstance(it, CommonsEntityRecord)]
+    assert records == []
+    assert len(errors) == 1
+    assert errors[0].path == root / "papers" / "badname.md"
+
+
+def test_scan_yields_error_for_bad_schema_profile(tmp_path: Path) -> None:
+    root = _make_store(tmp_path, "invalid/topic-bad-profile")
+    adapter = CommonsEntityAdapter(root)
+    items = list(adapter.scan())
+    errors = [it for it in items if isinstance(it, CommonsEntityError)]
+    assert len(errors) == 1
+    assert errors[0].path == root / "topics" / "x.md"
+
+
+def test_scan_continues_after_per_entity_error(tmp_path: Path) -> None:
+    root = _make_store(tmp_path, "valid")
+    # Inject a bad paper (hyphenated bibkey violates the paper-mixin pattern)
+    # alongside good ones.
+    bad = root / "papers" / "bad-name.md"
+    bad.write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
+        'id: "paper:bad-name"\n'
+        'type: "paper"\n'
+        'title: "Bad"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-05-13"\n'
+        'updated: "2026-05-13"\n'
+        'bibkey: "bad-name"\n'
+        'authors: ["X"]\n'
+        "year: 2025\n"
+        'journal: "T"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "---\nbody\n",
+        encoding="utf-8",
+    )
+    adapter = CommonsEntityAdapter(root)
+    items = list(adapter.scan())
+    records = [it for it in items if isinstance(it, CommonsEntityRecord)]
+    errors = [it for it in items if isinstance(it, CommonsEntityError)]
+    assert "paper:Adams2025" in {r.canonical_id for r in records}
+    assert len(errors) == 1
+    assert errors[0].path == bad
+
+
+def test_scan_rejects_id_path_mismatch(tmp_path: Path) -> None:
+    """A schema-valid paper at papers/Adams2025.md whose frontmatter says
+    id: paper:Other2025 must be reported as an error — not silently indexed
+    under the path-derived id."""
+    root = _make_store(tmp_path, "valid")
+    impostor = root / "papers" / "Adams2025.md"
+    impostor.write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
+        'id: "paper:Other2025"\n'        # contradicts path-derived paper:Adams2025
+        'type: "paper"\n'
+        'title: "Impostor"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-05-13"\n'
+        'updated: "2026-05-13"\n'
+        'bibkey: "Other2025"\n'
+        'authors: ["X"]\n'
+        "year: 2025\n"
+        'journal: "T"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "---\nbody\n",
+        encoding="utf-8",
+    )
+    adapter = CommonsEntityAdapter(root)
+    items = list(adapter.scan())
+    paper_records = [
+        r for r in items
+        if isinstance(r, CommonsEntityRecord) and r.type == "paper"
+    ]
+    paper_errors = [
+        e for e in items
+        if isinstance(e, CommonsEntityError) and e.path == impostor
+    ]
+    assert paper_records == [], "impostor should not appear in records"
+    assert len(paper_errors) == 1
+    assert "does not match path-derived" in str(paper_errors[0].cause)
+
+
+def test_scan_rejects_type_path_mismatch(tmp_path: Path) -> None:
+    """An entity in papers/Foo2025.md claiming type: dataset must error."""
+    root = _make_store(tmp_path, "valid")
+    impostor = root / "papers" / "Adams2025.md"
+    impostor.write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
+        'id: "paper:Adams2025"\n'
+        'type: "dataset"\n'
+        'title: "Misfiled"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-05-13"\n'
+        'updated: "2026-05-13"\n'
+        'bibkey: "Adams2025"\n'
+        'authors: ["X"]\n'
+        "year: 2025\n"
+        'journal: "T"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "---\nbody\n",
+        encoding="utf-8",
+    )
+    adapter = CommonsEntityAdapter(root)
+    items = list(adapter.scan())
+    errors = [e for e in items if isinstance(e, CommonsEntityError) and e.path == impostor]
+    # Either the schema mixin guards this directly, or our consistency check fires.
+    assert errors, "type mismatch must produce an error"
+    records = [r for r in items if isinstance(r, CommonsEntityRecord) and r.body_path == impostor]
+    assert records == []
