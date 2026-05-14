@@ -17,7 +17,10 @@ from science_model.contracts.inventory_v1 import (
     InventorySourceLocation,
     finalize_inventory_payload,
 )
+from science_model.entity_schema import MergePolicy, read_overlay_merge_policy
 
+from science_tool.commons.errors import OverlayValidationError
+from science_tool.commons.overlay import OverlayAdapter
 from science_tool.dag.inventory import load_dag_inventory_records
 from science_tool.entity_identity import collect_identity_warnings
 from science_tool.graph.sources import load_project_sources
@@ -130,6 +133,7 @@ def build_inventory(
         )
         return finalize_inventory_payload(payload)
 
+    overlays = _scan_overlays(project_root, project_metadata.id, warnings)
     payload_v2 = inventory_v2.InventoryPayload(
         generated_at=generated_at,
         project_id=project_metadata.id,
@@ -141,7 +145,7 @@ def build_inventory(
         finding_candidates=dag_records.finding_candidates,
         warnings=warnings,
         watch_paths=watch_paths,
-        overlays=[],
+        overlays=overlays,
     )
     return inventory_v2.finalize_inventory_payload(payload_v2)
 
@@ -235,3 +239,56 @@ def _inventory_scope(entity: Entity) -> Literal["project", "cross-project"]:
 
 def _optional_str(value: Any) -> str | None:
     return str(value) if value is not None else None
+
+
+_SKIP_OVERLAY_FIELDS = frozenset(
+    {"id", "overlay_of", "pin_version", "pin_effective_version"}
+)
+
+
+def _scan_overlays(
+    project_root: Path, project_id: str, warnings: list[InventoryWarning]
+) -> list[inventory_v2.InventoryOverlay]:
+    """Scan the project's doc/ overlay files into InventoryOverlay records.
+
+    Overlay-schema failures become `overlay-invalid` warnings. Fields are split
+    project-only vs append per the overlay schema's science:merge annotations.
+    """
+    overlay_policy = read_overlay_merge_policy()
+    overlays: list[inventory_v2.InventoryOverlay] = []
+    for item in OverlayAdapter(project_root, project_id).scan():
+        if isinstance(item, OverlayValidationError):
+            warnings.append(
+                InventoryWarning(
+                    code="overlay-invalid",
+                    severity="error",
+                    message=str(item),
+                    path=str(item.overlay_path),
+                    canonical_id=item.canonical_id,
+                )
+            )
+            continue
+        project_only: dict[str, Any] = {}
+        append: dict[str, Any] = {}
+        for field, value in item.frontmatter.items():
+            if field in _SKIP_OVERLAY_FIELDS:
+                continue
+            if overlay_policy.get(field) is MergePolicy.APPEND:
+                append[field] = value
+            else:
+                project_only[field] = value
+        overlays.append(
+            inventory_v2.InventoryOverlay(
+                overlay_of=item.canonical_id,
+                project_id=project_id,
+                source=InventorySourceLocation(
+                    adapter="commons-overlay", path=str(item.overlay_path)
+                ),
+                pin_version=item.pin_version,
+                pin_effective_version=item.pin_effective_version,
+                project_only_fields=project_only,
+                append_fields=append,
+                body_sections=[item.body] if item.body.strip() else [],
+            )
+        )
+    return sorted(overlays, key=lambda o: (o.overlay_of, o.project_id))

@@ -243,6 +243,59 @@ def test_build_inventory_v2_returns_v2_payload_with_empty_overlays(tmp_path) -> 
     assert inventory.audit_hash
 
 
+def test_build_inventory_v2_scans_project_overlays(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc" / "papers").mkdir(parents=True)
+    (project / "science.yaml").write_text("id: overlay-project\n", encoding="utf-8")
+    (project / "doc" / "papers" / "Adams2025.md").write_text(
+        "---\n"
+        'id: "paper:Adams2025"\n'
+        'overlay_of: "paper:Adams2025"\n'
+        'relevance: "H2 — supports the homology-split argument"\n'
+        'hypothesis_links: ["H2", "H4"]\n'
+        'project_tags: ["high-priority"]\n'
+        'tags: ["overlay-added"]\n'
+        "---\n\n## Project-Specific Notes\n\nText.\n",
+        encoding="utf-8",
+    )
+
+    inventory = build_inventory(project, schema_version="2")
+
+    assert len(inventory.overlays) == 1
+    overlay = inventory.overlays[0]
+    assert overlay.overlay_of == "paper:Adams2025"
+    assert overlay.project_id == "overlay-project"
+    assert overlay.source.adapter == "commons-overlay"
+    assert overlay.append_fields == {"tags": ["overlay-added"]}
+    assert overlay.project_only_fields == {
+        "relevance": "H2 — supports the homology-split argument",
+        "hypothesis_links": ["H2", "H4"],
+        "project_tags": ["high-priority"],
+    }
+    assert overlay.body_sections == ["\n## Project-Specific Notes\n\nText.\n"]
+
+
+def test_build_inventory_v2_overlay_validation_error_becomes_warning(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc" / "papers").mkdir(parents=True)
+    (project / "science.yaml").write_text("id: broken-overlay\n", encoding="utf-8")
+    (project / "doc" / "papers" / "Adams2025.md").write_text(
+        "---\n"
+        'id: "paper:Wrong2025"\n'
+        'overlay_of: "paper:Wrong2025"\n'
+        'relevance: "mismatch"\n'
+        "---\n\n## Notes\n",
+        encoding="utf-8",
+    )
+
+    inventory = build_inventory(project, schema_version="2")
+
+    assert inventory.overlays == []
+    overlay_warnings = [w for w in inventory.warnings if w.code == "overlay-invalid"]
+    assert len(overlay_warnings) == 1
+    assert overlay_warnings[0].path.endswith("doc/papers/Adams2025.md")
+
+
 def test_build_inventory_defaults_to_v2(tmp_path) -> None:
     project = tmp_path / "project"
     (project / "doc").mkdir(parents=True)
