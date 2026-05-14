@@ -1412,16 +1412,26 @@ def test_build_inventory_defaults_to_v2(tmp_path) -> None:
     assert inventory.schema_version == "2"
 
 
-def test_build_inventory_rejects_unknown_schema_version(tmp_path) -> None:
+def test_build_inventory_rejects_unknown_schema_version_before_loading(
+    tmp_path, monkeypatch
+) -> None:
     project = tmp_path / "project"
-    (project / "doc").mkdir(parents=True)
-    (project / "science.yaml").write_text("id: bad-version\n", encoding="utf-8")
+    project.mkdir()
 
+    def _fail(_project_root):
+        raise AssertionError(
+            "load_project_sources must not run for a bad schema_version"
+        )
+
+    monkeypatch.setattr(entities_inventory, "load_project_sources", _fail)
+
+    # The guard at the top of build_inventory raises ValueError before any
+    # project filesystem work — so the monkeypatched _fail is never reached.
     with pytest.raises(ValueError, match="schema_version"):
         build_inventory(project, schema_version="3")
 ```
 
-`pytest` is already imported at the top of `test_entities_inventory.py`.
+`pytest` and `entities_inventory` are already imported at the top of `test_entities_inventory.py`.
 
 - [ ] **Step 3: Run the tests to verify the new ones fail**
 
@@ -1483,21 +1493,38 @@ In `science/src/science_tool/entities_inventory.py`, replace the `build_inventor
     return finalize_inventory_payload(payload)
 ```
 
-Change the signature (line 46) from:
+Change the signature **and add the schema-version guard as the very first
+statements of the function body** — before `project_root = project_root.resolve()`
+and `load_project_sources(...)`, so a bad value fails immediately without doing
+any project filesystem work. The current function head (lines 46-48) is:
 
 ```python
 def build_inventory(project_root: Path) -> InventoryPayload:
+    project_root = project_root.resolve()
+    sources = load_project_sources(project_root)
 ```
 
-to:
+Replace it with:
 
 ```python
 def build_inventory(
     project_root: Path, schema_version: Literal["1", "2"] = "2"
 ) -> InventoryPayload | inventory_v2.InventoryPayload:
+    if schema_version not in ("1", "2"):
+        raise ValueError(
+            f"unsupported schema_version {schema_version!r}; expected '1' or '2'"
+        )
+    project_root = project_root.resolve()
+    sources = load_project_sources(project_root)
 ```
 
-And replace the payload-assembly block above with:
+This is the "fail early / no silent fallbacks" rule: the CLI's
+`click.Choice(["1", "2"])` blocks bad values at the command boundary, but a
+direct Python API caller must get an immediate `ValueError` — not a payload, and
+not an unrelated failure from `load_project_sources`.
+
+Then replace the final payload-assembly block (the `payload = InventoryPayload(...)`
+through `return finalize_inventory_payload(payload)` shown above) with:
 
 ```python
     generated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
@@ -1519,11 +1546,6 @@ And replace the payload-assembly block above with:
         )
         return finalize_inventory_payload(payload)
 
-    if schema_version != "2":
-        raise ValueError(
-            f"unsupported schema_version {schema_version!r}; expected '1' or '2'"
-        )
-
     payload_v2 = inventory_v2.InventoryPayload(
         generated_at=generated_at,
         project_id=project_metadata.id,
@@ -1540,10 +1562,8 @@ And replace the payload-assembly block above with:
     return inventory_v2.finalize_inventory_payload(payload_v2)
 ```
 
-The explicit `ValueError` keeps the function honest for direct Python API
-callers — the CLI's `click.Choice(["1", "2"])` already blocks bad values at the
-command boundary, but `build_inventory` must not silently treat an unknown
-`schema_version` as v2 (the project's "fail early / no silent fallbacks" rule).
+The `schema_version` value is already validated by the top-of-function guard, so
+the tail only needs the `"1"` vs `"2"` branch — no second `ValueError` here.
 
 The v1 `InventoryEntity` / `InventoryAlias` / `InventoryProjectMetadata` / `InventoryWarning` objects already built above are reused as-is: `inventory_v2` imports those exact classes from `inventory_v1`, so they are type-compatible with `inventory_v2.InventoryPayload`.
 
