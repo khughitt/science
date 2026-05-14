@@ -124,3 +124,109 @@ def test_overlay_adapter_scan_missing_doc_dir_yields_nothing(tmp_path: Path) -> 
 
     # tmp_path exists but has no doc/ subtree.
     assert list(OverlayAdapter(tmp_path, "empty-proj").scan()) == []
+
+
+def _canonical_record(tmp_path: Path, slug: str = "Adams2025"):
+    """Copy the commons paper fixture into tmp_path and return its CommonsEntityRecord."""
+    import shutil
+
+    from science_tool.commons.adapter import CommonsEntityAdapter
+
+    src = Path(__file__).parent / "fixtures" / "commons" / "valid"
+    root = tmp_path / "commons"
+    shutil.copytree(src, root)
+    return CommonsEntityAdapter(root).load(f"paper:{slug}")
+
+
+def _merge_policy_for(record):
+    from science_model.entity_schema import parse_profile, read_merge_policy
+
+    return read_merge_policy(parse_profile(record.schema_profile))
+
+
+def test_merge_entity_no_overlay_is_canonical_only(tmp_path: Path) -> None:
+    from science_tool.commons.overlay import MergedEntity, merge_entity
+
+    record = _canonical_record(tmp_path)
+    merged = merge_entity(record, None, _merge_policy_for(record))
+    assert isinstance(merged, MergedEntity)
+    assert merged.overlay is None
+    assert merged.merged_frontmatter == record.frontmatter
+    assert "representative paper" in merged.merged_body
+    assert set(merged.field_sources.values()) == {"canonical"}
+
+
+def test_merge_entity_append_field_dedups_and_orders(tmp_path: Path) -> None:
+    from science_tool.commons.overlay import OverlayAdapter, merge_entity
+
+    record = _canonical_record(tmp_path)  # tags == ["evaluation", "homology"]
+    overlay = OverlayAdapter(
+        _OVERLAYS / "proj-alpha", "proj-alpha"
+    ).load("paper:Adams2025")  # tags == ["overlay-added"]
+    merged = merge_entity(record, overlay, _merge_policy_for(record))
+    assert merged.merged_frontmatter["tags"] == [
+        "evaluation",
+        "homology",
+        "overlay-added",
+    ]
+    assert merged.field_sources["tags"] == "canonical+overlay"
+
+
+def test_merge_entity_project_only_field_copied_from_overlay(tmp_path: Path) -> None:
+    from science_tool.commons.overlay import OverlayAdapter, merge_entity
+
+    record = _canonical_record(tmp_path)
+    overlay = OverlayAdapter(
+        _OVERLAYS / "proj-alpha", "proj-alpha"
+    ).load("paper:Adams2025")
+    merged = merge_entity(record, overlay, _merge_policy_for(record))
+    assert merged.merged_frontmatter["hypothesis_links"] == ["H2", "H4"]
+    assert merged.merged_frontmatter["relevance"].startswith("H2")
+    assert merged.field_sources["hypothesis_links"] == "overlay"
+    assert merged.field_sources["relevance"] == "overlay"
+
+
+def test_merge_entity_body_appends_overlay_sections(tmp_path: Path) -> None:
+    from science_tool.commons.overlay import OverlayAdapter, merge_entity
+
+    record = _canonical_record(tmp_path)
+    overlay = OverlayAdapter(
+        _OVERLAYS / "proj-alpha", "proj-alpha"
+    ).load("paper:Adams2025")
+    merged = merge_entity(record, overlay, _merge_policy_for(record))
+    assert "representative paper" in merged.merged_body
+    assert "Project-Specific Notes" in merged.merged_body
+    assert merged.merged_body.index("representative paper") < merged.merged_body.index(
+        "Project-Specific Notes"
+    )
+
+
+def test_merge_entity_rejects_forbidden_overlay_field(tmp_path: Path) -> None:
+    from science_model.entity_schema import MergePolicy
+
+    from science_tool.commons.errors import OverlayMergeError
+    from science_tool.commons.overlay import OverlayRecord, merge_entity
+
+    record = _canonical_record(tmp_path)
+    # Hand-craft an OverlayRecord that smuggles a `replace`-policy field past
+    # validation — exercises the defense-in-depth guard.
+    bad = OverlayRecord(
+        canonical_id="paper:Adams2025",
+        type="paper",
+        slug="Adams2025",
+        project="x",
+        project_root=tmp_path,
+        overlay_path=tmp_path / "x.md",
+        frontmatter={
+            "id": "paper:Adams2025",
+            "overlay_of": "paper:Adams2025",
+            "title": "smuggled",
+        },
+        body="",
+        pin_version=None,
+        pin_effective_version=None,
+    )
+    policy = _merge_policy_for(record)
+    assert policy["title"] == MergePolicy.REPLACE  # sanity
+    with pytest.raises(OverlayMergeError, match="title"):
+        merge_entity(record, bad, policy)
