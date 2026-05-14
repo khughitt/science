@@ -21,6 +21,14 @@ from science_tool.commons.registry import (
 )
 
 
+# Column order is load-bearing: `_hydrate` unpacks rows positionally, so both
+# SELECTs (`find` and `_row_for`) must use this exact list.
+_ENTITY_COLUMNS = (
+    "canonical_id, type, slug, title, schema_profile, body_path, "
+    "datapackage_path, mtime_ns, frontmatter_json"
+)
+
+
 class CommonsQuery:
     """Read-only access to the commons registry. Warns (does not rebuild) on staleness."""
 
@@ -58,7 +66,7 @@ class CommonsQuery:
         self._require_registry()
         self._warn_if_stale()
         clauses = ["type = ?"]
-        params: list[object] = [type]
+        params: list[str] = [type]
         for tag in tags:
             clauses.append(
                 "canonical_id IN (SELECT canonical_id FROM entity_tags WHERE tag = ?)"
@@ -70,8 +78,7 @@ class CommonsQuery:
             )
             params.append(term)
         sql = (
-            "SELECT canonical_id, type, slug, title, schema_profile, body_path, "
-            "datapackage_path, mtime_ns, frontmatter_json FROM entities "
+            f"SELECT {_ENTITY_COLUMNS} FROM entities "
             f"WHERE {' AND '.join(clauses)} ORDER BY canonical_id"
         )
         try:
@@ -137,9 +144,7 @@ class CommonsQuery:
             conn = sqlite3.connect(self._root / REGISTRY_FILENAME)
             try:
                 return conn.execute(
-                    "SELECT canonical_id, type, slug, title, schema_profile, body_path, "
-                    "datapackage_path, mtime_ns, frontmatter_json FROM entities "
-                    "WHERE canonical_id = ?",
+                    f"SELECT {_ENTITY_COLUMNS} FROM entities WHERE canonical_id = ?",
                     (canonical_id,),
                 ).fetchone()
             finally:
