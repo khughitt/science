@@ -320,6 +320,17 @@ def test_load_data_overrides_rejects_non_mapping(
         load_data_overrides()
 
 
+def test_load_data_overrides_rejects_malformed_yaml(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "data.yaml").write_text("cath-domains: [unclosed\n", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    with pytest.raises(CommonsError, match="malformed YAML"):
+        load_data_overrides()
+
+
 def test_load_data_overrides_rejects_non_string_value(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -374,6 +385,12 @@ def resolve_commons_data_root() -> Path:
     1. `$SCIENCE_COMMONS_DATA_ROOT` environment variable.
     2. `commons.data_root` in the global config file.
     3. Default: `/data/science-commons/`.
+
+    Note: like the Phase B `resolve_commons_root()`, this does not assert that
+    the env/config value is absolute — a relative value resolves against the
+    process CWD, and the built-in default is absolute. Only the per-machine
+    `data.yaml` override values are required to be absolute (a relative entry
+    there is almost certainly a user mistake; see `load_data_overrides`).
     """
     if env := os.environ.get("SCIENCE_COMMONS_DATA_ROOT"):
         return Path(env).expanduser()
@@ -391,8 +408,9 @@ def load_data_overrides() -> dict[str, Path]:
     """Load the per-machine data-override map from `~/.config/science/data.yaml`.
 
     Maps `<dataset-slug>` to an absolute directory. Returns `{}` if the file is
-    missing. Raises `CommonsError` if the file exists but is not a mapping of
-    string slugs to absolute-path strings.
+    missing. Raises `CommonsError` if the file exists but is malformed YAML, is
+    not a mapping, or maps a string slug to anything other than an absolute-path
+    string.
     """
     from science_tool.registry.config import get_science_config_dir
 
@@ -400,7 +418,10 @@ def load_data_overrides() -> dict[str, Path]:
     if not overrides_path.is_file():
         return {}
 
-    raw = yaml.safe_load(overrides_path.read_text(encoding="utf-8"))
+    try:
+        raw = yaml.safe_load(overrides_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise CommonsError(f"{overrides_path}: malformed YAML: {exc}") from exc
     if raw is None:
         return {}
     if not isinstance(raw, dict):
@@ -1023,9 +1044,20 @@ def _make_commons(tmp_path: Path, *, content: bytes = _CONTENT) -> Path:
 
 
 def _write_data(root: Path, content: bytes = _CONTENT) -> Path:
-    """Write <root>/<slug>/<logical> with `content`. Returns the file path."""
+    """Write <root>/<slug>/<logical> with `content` — the data_root layout.
+    Returns the file path."""
     target = root / _SLUG / _LOGICAL
     target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(content)
+    return target
+
+
+def _write_override_data(override_dir: Path, content: bytes = _CONTENT) -> Path:
+    """Write <override_dir>/<logical> with `content`. The per-machine override
+    maps a slug straight to its dataset directory, so bytes live directly under
+    it — no <slug>/ segment. Returns the file path."""
+    override_dir.mkdir(parents=True, exist_ok=True)
+    target = override_dir / _LOGICAL
     target.write_bytes(content)
     return target
 
@@ -1049,7 +1081,7 @@ def test_resolve_from_override(tmp_path: Path) -> None:
     commons_root = _make_commons(tmp_path)
     data_root = tmp_path / "data"  # intentionally empty
     override_dir = tmp_path / "legacy"
-    _write_data(override_dir)
+    override_target = _write_override_data(override_dir)
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
     (cfg_dir / "data.yaml").write_text(
@@ -1058,7 +1090,7 @@ def test_resolve_from_override(tmp_path: Path) -> None:
     result = resolve(
         f"dataset:{_SLUG}", _LOGICAL, commons_root=commons_root, data_root=data_root
     )
-    assert result.path == (override_dir / _SLUG / _LOGICAL).resolve()
+    assert result.path == override_target.resolve()
     assert result.source == "override"
 
 
@@ -1067,7 +1099,7 @@ def test_resolve_data_root_takes_precedence_over_override(tmp_path: Path) -> Non
     data_root = tmp_path / "data"
     data_target = _write_data(data_root)
     override_dir = tmp_path / "legacy"
-    _write_data(override_dir)
+    _write_override_data(override_dir)
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir()
     (cfg_dir / "data.yaml").write_text(

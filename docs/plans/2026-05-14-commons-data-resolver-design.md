@@ -122,6 +122,11 @@ def resolve_commons_data_root() -> Path:
     # 3. default: /data/science-commons/
 ```
 
+Like the Phase B `resolve_commons_root()`, this does **not** assert that the env/config value
+is absolute — a relative value resolves against the process CWD, and only the built-in
+default is guaranteed absolute. Absolute-path validation applies *only* to the per-machine
+`data.yaml` override values below, where a relative entry is almost certainly a mistake.
+
 **Per-machine override loader.** A separate file `~/.config/science/data.yaml` (sibling of
 `config.yaml`, located via the existing `get_science_config_dir()`):
 
