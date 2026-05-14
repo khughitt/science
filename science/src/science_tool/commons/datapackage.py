@@ -8,9 +8,12 @@ docs/plans/2026-05-14-commons-data-resolver-design.md §5.2.
 from __future__ import annotations
 
 import re
-from pathlib import PurePosixPath
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
 
-from science_tool.commons.errors import DataLogicalPathError
+import yaml
+
+from science_tool.commons.errors import CommonsDatapackageError, DataLogicalPathError
 
 _SHA256_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _DRIVE_LETTER = re.compile(r"^[A-Za-z]:")
@@ -73,3 +76,105 @@ def parse_resource_hash(raw: str) -> tuple[str, str]:
             f"malformed sha256 digest {digest!r}; expected 64 lowercase hex chars"
         )
     return (algorithm, digest)
+
+
+@dataclass(frozen=True, slots=True)
+class DataResource:
+    """One resource entry from a datapackage.yaml -- path + hash only."""
+
+    path: str  # validated forward-slash relative logical path
+    hash: str  # full "sha256:<hex>" string, verbatim from resources[].hash
+
+
+@dataclass(frozen=True, slots=True)
+class DatapackageDescriptor:
+    """The Phase C view of a datapackage.yaml: its source path + its resources."""
+
+    source_path: Path
+    resources: tuple[DataResource, ...]
+
+    def resource(self, logical_path: str) -> DataResource:
+        """Return the resource with the given logical path.
+
+        Raises `CommonsDatapackageError` (naming `source_path`) if absent.
+        """
+        for resource in self.resources:
+            if resource.path == logical_path:
+                return resource
+        raise CommonsDatapackageError(
+            self.source_path,
+            reason=f"no resource with logical path {logical_path!r}",
+        )
+
+
+def read_datapackage(path: Path) -> DatapackageDescriptor:
+    """Parse a datapackage.yaml into a `DatapackageDescriptor`.
+
+    Raises `CommonsDatapackageError` on unreadable/malformed YAML, a missing or
+    empty `resources` list, a resource with a missing/invalid `path`, a
+    duplicate logical path, or a resource with a missing/malformed `hash`.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise CommonsDatapackageError(path, reason=f"cannot read file: {exc}") from exc
+    try:
+        raw = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise CommonsDatapackageError(path, reason=f"malformed YAML: {exc}") from exc
+
+    if not isinstance(raw, dict):
+        raise CommonsDatapackageError(path, reason="top level is not a mapping")
+    raw_resources = raw.get("resources")
+    if not isinstance(raw_resources, list) or not raw_resources:
+        raise CommonsDatapackageError(
+            path, reason="missing or empty 'resources' list"
+        )
+
+    resources: list[DataResource] = []
+    seen: set[str] = set()
+    for index, entry in enumerate(raw_resources):
+        if not isinstance(entry, dict):
+            raise CommonsDatapackageError(
+                path, reason=f"resources[{index}] is not a mapping"
+            )
+
+        raw_path = entry.get("path")
+        if not isinstance(raw_path, str):
+            raise CommonsDatapackageError(
+                path,
+                reason=f"resources[{index}] has a missing or non-string 'path'",
+            )
+        try:
+            logical_path = validate_logical_path(raw_path)
+        except DataLogicalPathError as exc:
+            raise CommonsDatapackageError(
+                path,
+                reason=f"resources[{index}] has an invalid path: {exc.reason}",
+            ) from exc
+        if logical_path in seen:
+            raise CommonsDatapackageError(
+                path, reason=f"duplicate resource path {logical_path!r}"
+            )
+        seen.add(logical_path)
+
+        raw_hash = entry.get("hash")
+        if not isinstance(raw_hash, str):
+            raise CommonsDatapackageError(
+                path,
+                reason=(
+                    f"resources[{index}] ({logical_path}) has a missing or "
+                    f"non-string 'hash'"
+                ),
+            )
+        try:
+            parse_resource_hash(raw_hash)
+        except ValueError as exc:
+            raise CommonsDatapackageError(
+                path,
+                reason=f"resources[{index}] ({logical_path}) has an invalid hash: {exc}",
+            ) from exc
+
+        resources.append(DataResource(path=logical_path, hash=raw_hash))
+
+    return DatapackageDescriptor(source_path=path, resources=tuple(resources))

@@ -1,13 +1,18 @@
 """Tests for science_tool.commons.datapackage."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from science_tool.commons.datapackage import (
+    DataResource,
+    DatapackageDescriptor,
     parse_resource_hash,
+    read_datapackage,
     validate_logical_path,
 )
-from science_tool.commons.errors import DataLogicalPathError
+from science_tool.commons.errors import CommonsDatapackageError, DataLogicalPathError
 
 _GOOD_HASH = "sha256:" + "a" * 64
 
@@ -62,3 +67,105 @@ def test_parse_resource_hash_accepts_sha256() -> None:
 def test_parse_resource_hash_rejects_bad(bad: str) -> None:
     with pytest.raises(ValueError):
         parse_resource_hash(bad)
+
+
+def _write(path: Path, text: str) -> Path:
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def test_read_datapackage_parses_valid(tmp_path: Path) -> None:
+    dp = _write(
+        tmp_path / "datapackage.yaml",
+        "name: rnaseq-example\n"
+        'profile: "data-package"\n'
+        "resources:\n"
+        "  - name: counts\n"
+        "    path: counts.parquet\n"
+        f'    hash: "{_GOOD_HASH}"\n'
+        "  - name: meta\n"
+        "    path: raw/meta.csv\n"
+        f'    hash: "{_GOOD_HASH}"\n',
+    )
+    descriptor = read_datapackage(dp)
+    assert isinstance(descriptor, DatapackageDescriptor)
+    assert descriptor.source_path == dp
+    assert descriptor.resources == (
+        DataResource(path="counts.parquet", hash=_GOOD_HASH),
+        DataResource(path="raw/meta.csv", hash=_GOOD_HASH),
+    )
+
+
+def test_resource_lookup_hit_and_miss(tmp_path: Path) -> None:
+    dp = _write(
+        tmp_path / "datapackage.yaml",
+        "resources:\n"
+        "  - path: counts.parquet\n"
+        f'    hash: "{_GOOD_HASH}"\n',
+    )
+    descriptor = read_datapackage(dp)
+    assert descriptor.resource("counts.parquet").path == "counts.parquet"
+    with pytest.raises(CommonsDatapackageError, match="no resource"):
+        descriptor.resource("missing.parquet")
+
+
+def test_read_datapackage_rejects_malformed_yaml(tmp_path: Path) -> None:
+    dp = _write(tmp_path / "datapackage.yaml", "resources: [unclosed\n")
+    with pytest.raises(CommonsDatapackageError, match="YAML"):
+        read_datapackage(dp)
+
+
+def test_read_datapackage_rejects_missing_resources(tmp_path: Path) -> None:
+    dp = _write(tmp_path / "datapackage.yaml", "name: x\n")
+    with pytest.raises(CommonsDatapackageError, match="resources"):
+        read_datapackage(dp)
+
+
+def test_read_datapackage_rejects_empty_resources(tmp_path: Path) -> None:
+    dp = _write(tmp_path / "datapackage.yaml", "resources: []\n")
+    with pytest.raises(CommonsDatapackageError, match="resources"):
+        read_datapackage(dp)
+
+
+def test_read_datapackage_rejects_duplicate_path(tmp_path: Path) -> None:
+    dp = _write(
+        tmp_path / "datapackage.yaml",
+        "resources:\n"
+        "  - path: counts.parquet\n"
+        f'    hash: "{_GOOD_HASH}"\n'
+        "  - path: counts.parquet\n"
+        f'    hash: "{_GOOD_HASH}"\n',
+    )
+    with pytest.raises(CommonsDatapackageError, match="duplicate"):
+        read_datapackage(dp)
+
+
+def test_read_datapackage_rejects_invalid_resource_path(tmp_path: Path) -> None:
+    dp = _write(
+        tmp_path / "datapackage.yaml",
+        "resources:\n"
+        "  - path: ../escape.tsv\n"
+        f'    hash: "{_GOOD_HASH}"\n',
+    )
+    with pytest.raises(CommonsDatapackageError, match="invalid path"):
+        read_datapackage(dp)
+
+
+def test_read_datapackage_rejects_missing_hash(tmp_path: Path) -> None:
+    dp = _write(
+        tmp_path / "datapackage.yaml",
+        "resources:\n  - path: counts.parquet\n",
+    )
+    with pytest.raises(CommonsDatapackageError, match="hash"):
+        read_datapackage(dp)
+
+
+def test_read_datapackage_rejects_malformed_hash(tmp_path: Path) -> None:
+    dp = _write(
+        tmp_path / "datapackage.yaml",
+        "resources:\n"
+        "  - path: counts.parquet\n"
+        '    hash: "md5:abc"\n',
+    )
+    with pytest.raises(CommonsDatapackageError, match="invalid hash"):
+        read_datapackage(dp)
