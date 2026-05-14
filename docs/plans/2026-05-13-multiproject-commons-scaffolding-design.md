@@ -12,7 +12,7 @@ Stand up the shared knowledge store as a queryable, validatable, CLI-accessible 
 
 - A user can run `science commons init` to create `~/d/science-commons/` as a standalone git repo with the expected layout.
 - A user can place valid entity files into that store and run `science commons index rebuild` to build a SQLite index.
-- A user can run `science commons find dataset --tag scrna`, `science commons show paper:adams2025`, and `science commons validate` against that index.
+- A user can run `science commons find dataset --tag scrna`, `science commons show paper:Adams2025`, and `science commons validate` against that index. Canonical-id lookup is case-sensitive — the slug component matches the Phase A schema's per-type regex (papers: bibkey camelcase; datasets/topics/themes: lowercase-kebab).
 
 Phase B is intentionally standalone: nothing else in the existing `science_tool` pipeline (inventory builder, dashboard, sync) is touched. Inventory integration lands in Phase D when `inventory_v2` introduces the contract changes that shared rows require.
 
@@ -72,7 +72,7 @@ science/src/science_tool/
 │   ├── registry.py                       # SQLite schema + RegistryBuilder
 │   ├── query.py                          # find/show search logic
 │   ├── validator.py                      # `science commons validate` driver
-│   └── cli.py                            # Typer subcommands
+│   └── cli.py                            # Click commands (matches existing CLI framework)
 ├── registry/config.py                    # MODIFY — add commons: CommonsSettings to GlobalConfig
 └── cli.py                                # MODIFY — register `science commons` group
 ```
@@ -203,7 +203,9 @@ CREATE TABLE schema_meta (
 -- rows:
 --   ('schema_version', '1')
 --   ('max_source_mtime_ns', '<integer-as-decimal-string>')  -- max st_mtime_ns across all indexed source files at rebuild
---   ('built_at', '<ISO-8601 UTC>')                          -- human-readable only; NOT used for staleness comparison
+--   ('source_count', '<integer-as-decimal-string>')          -- count of indexed source files at rebuild
+--   ('source_paths_digest', '<hex sha256>')                  -- sha256 over sorted relative paths of indexed source files
+--   ('built_at', '<ISO-8601 UTC>')                           -- human-readable only; NOT used for staleness comparison
 --   ('store_root', '<absolute path>')
 
 CREATE TABLE entities (
@@ -246,14 +248,26 @@ class RebuildReport:
 class RegistryBuilder:
     def __init__(self, root: Path, adapter: CommonsEntityAdapter) -> None: ...
     def rebuild(self) -> RebuildReport: ...        # full: drop + recreate
-    def is_stale(self) -> bool: ...                # current max st_mtime_ns vs schema_meta.max_source_mtime_ns
+    def is_stale(self) -> bool: ...                # see "Staleness detection" below
 ```
 
 **Semantics:**
 - Always full rebuild — drop tables, recreate, repopulate. Phase B does not implement incremental updates.
 - Per-entity errors are **collected**, not raised; the registry still indexes successful entities. CLI prints a non-zero exit if `errors` is non-empty.
 - Atomic write: build into a unique temp file inside the store dir (`tempfile.NamedTemporaryFile(dir=root, prefix='.registry-', suffix='.sqlite', delete=False)`), `fsync`, then `os.replace()` onto `registry.sqlite`. Multiple concurrent explicit rebuilds do not collide on a fixed temp name; the second rename wins atomically.
-- `is_stale()` compares `max(os.stat(p).st_mtime_ns for p in source_files)` against the integer stored in `schema_meta.max_source_mtime_ns`. Returns `True` if the registry is missing, the meta row is missing, or current max exceeds stored max. Nanosecond integers avoid float-precision and timezone bugs.
+
+**Staleness detection.** `is_stale()` walks the store (the same walk the adapter does, skipping `.git`, `.migrations`, `__pycache__`, `registry.sqlite`, dotfiles) and computes three things:
+- `current_count` — number of source files (entity.md, datapackage.yaml siblings).
+- `current_max_mtime_ns` — `max(os.stat(p).st_mtime_ns for p in source_files)`.
+- `current_paths_digest` — sha256 over `\n`.join(sorted(rel_paths)).encode()`.
+
+It returns `True` if **any** of the following holds:
+1. `registry.sqlite` is missing, or any required `schema_meta` row is missing.
+2. `current_count != schema_meta.source_count` — a file was added or removed.
+3. `current_max_mtime_ns > schema_meta.max_source_mtime_ns` — a file was modified in place.
+4. `current_paths_digest != schema_meta.source_paths_digest` — a file was renamed (count and max-mtime can both be unchanged on rename).
+
+This catches add, modify, delete, and rename. Nanosecond integers avoid float-precision and timezone bugs.
 
 **Staleness handling (no auto-rebuild in Phase B):**
 - Queries do **not** mutate state. `query.py` calls `is_stale()` before each query; if stale, emits a one-line warning to stderr — `"warning: registry is stale (N source files newer than last rebuild); run `science commons index rebuild`"` — then queries the existing index against possibly-stale data.
@@ -296,7 +310,7 @@ class ValidationReport:
 
 ### 5.7 CLI (`commons/cli.py`)
 
-Typer subcommands, registered as a `science commons` group in `science_tool.cli`. Mirrors the existing `graph init` / `inquiry init` precedent — `init` lives inside the subgroup, not as a top-level command.
+Click commands, registered as a `science commons` group in `science_tool.cli` via `main.add_command(commons_group)` (matches the existing `graph` / `inquiry` registration pattern at `science/src/science_tool/cli.py:202`). The existing CLI is built on **Click**, not Typer — `commons/cli.py` uses `@click.group()` / `@commons.command()` decorators throughout, not Typer's `Typer()` app. `init` lives inside the subgroup (matches the `graph init` / `inquiry init` precedent at lines 757 and 2161 of `cli.py`), not as a top-level command.
 
 | Subcommand | Behavior |
 | --- | --- |
@@ -371,10 +385,10 @@ The right answer is to land shared rows in **`inventory_v2`** (Phase D), which a
 | `commons/config.py` | YAML round-trip, env var override, default fallback. |
 | `commons/bootstrap.py` | Directory creation, idempotence, refuse-on-malformed. |
 | `commons/adapter.py` | Frontmatter parsing, pair invariant, profile validation, per-entity error wrapping, mtime_ns capture. |
-| `commons/registry.py` | Schema creation, atomic rebuild via unique temp file, error collection, `is_stale()` semantics using `max_source_mtime_ns`. |
+| `commons/registry.py` | Schema creation, atomic rebuild via unique temp file, error collection, `is_stale()` covering add / modify / delete / rename detection. |
 | `commons/query.py` | Each filter, AND-semantics across repeats, year range, slug-glob, stale-warning emission (and suppression via env var). |
 | `commons/validator.py` | Walks store without registry; surfaces EntityValidator errors. |
-| `commons/cli.py` | Typer CliRunner — arg parsing, exit codes, JSON output shape, `--project` rejection on `show`. |
+| `commons/cli.py` | `click.testing.CliRunner` — arg parsing, exit codes, JSON output shape, `--project` rejection on `show`. |
 
 **Fixture layout** under `science/model/tests/fixtures/commons/`:
 
