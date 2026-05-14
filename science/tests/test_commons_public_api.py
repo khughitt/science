@@ -49,6 +49,8 @@ def test_public_api_exports() -> None:
         "ProjectDirectoryMissingError",
         "OverlayValidationError",
         "OverlayMergeError",
+        # Phase D2
+        "build_commons_inventory",
     }
     assert expected.issubset(set(pkg.__all__))
     for name in expected:

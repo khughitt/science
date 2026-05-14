@@ -58,6 +58,7 @@ from science_tool.commons.overlay import (
     resolve_entity,
     validate_project_overlays,
 )
+from science_tool.commons.inventory import build_commons_inventory
 from science_tool.commons.query import CommonsQuery
 from science_tool.commons.registry import RebuildReport, RegistryBuilder
 from science_tool.commons.resolver import ResolvedDataResource, resolve
@@ -93,6 +94,7 @@ __all__ = [
     "RegistryBuilder",
     "ResolvedDataResource",
     "ValidationReport",
+    "build_commons_inventory",
     "commons_group",
     "init_commons",
     "load_data_overrides",
