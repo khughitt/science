@@ -90,3 +90,37 @@ def test_overlay_adapter_load_malformed_id_raises(canonical_id: str) -> None:
     assert excinfo.value.cause is not None
     if ":" in canonical_id:
         assert excinfo.value.canonical_id == canonical_id
+
+
+def test_overlay_adapter_scan_yields_records() -> None:
+    from science_tool.commons.overlay import OverlayAdapter, OverlayRecord
+
+    root = _OVERLAYS / "proj-alpha"
+    items = list(OverlayAdapter(root, "proj-alpha").scan())
+    assert all(isinstance(i, OverlayRecord) for i in items)
+    ids = sorted(i.canonical_id for i in items)
+    assert ids == ["dataset:cath-domains", "paper:Adams2025"]
+
+
+def test_overlay_adapter_scan_yields_errors_for_broken_files() -> None:
+    from science_tool.commons.errors import OverlayValidationError
+    from science_tool.commons.overlay import OverlayAdapter, OverlayRecord
+
+    root = _OVERLAYS / "proj-broken"
+    items = list(OverlayAdapter(root, "proj-broken").scan())
+    # proj-broken/doc/papers/Adams2025.md fails the overlay schema;
+    # proj-broken/doc/topics/nonexistent-topic.md is schema-valid here
+    # (the dangling overlay_of check belongs to validate_project_overlays).
+    errors = [i for i in items if isinstance(i, OverlayValidationError)]
+    records = [i for i in items if isinstance(i, OverlayRecord)]
+    assert len(errors) == 1
+    assert errors[0].canonical_id == "paper:Adams2025"
+    assert len(records) == 1
+    assert records[0].canonical_id == "topic:nonexistent-topic"
+
+
+def test_overlay_adapter_scan_missing_doc_dir_yields_nothing(tmp_path: Path) -> None:
+    from science_tool.commons.overlay import OverlayAdapter
+
+    # tmp_path exists but has no doc/ subtree.
+    assert list(OverlayAdapter(tmp_path, "empty-proj").scan()) == []

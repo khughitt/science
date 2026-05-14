@@ -11,6 +11,7 @@ See docs/plans/2026-05-14-commons-overlay-merge-design.md.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -76,6 +77,26 @@ class OverlayAdapter:
         if not overlay_path.is_file():
             return None
         return self._build(canonical_id, overlay_path)
+
+    def scan(self) -> Iterator[OverlayRecord | OverlayValidationError]:
+        """Walk the project's doc/{datasets,papers,topics,themes}/*.md overlays.
+
+        Yields an OverlayRecord or an OverlayValidationError per file. A missing
+        doc/ directory or a missing type subdirectory yields nothing -- a project
+        need not overlay every type.
+        """
+        for type_name, type_dir in _TYPE_TO_DIR.items():
+            subdir = self._project_root / "doc" / type_dir
+            if not subdir.is_dir():
+                continue
+            for child in sorted(subdir.iterdir()):
+                if child.suffix != ".md" or not child.is_file():
+                    continue
+                canonical_id = f"{type_name}:{child.stem}"
+                try:
+                    yield self._build(canonical_id, child)
+                except OverlayValidationError as exc:
+                    yield exc
 
     def _split_id(self, canonical_id: str) -> tuple[str, str]:
         if ":" not in canonical_id:
