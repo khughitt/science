@@ -77,9 +77,12 @@ science/model/src/science_model/contracts/
                         #       compute_audit_hash / finalize (v2 variants)
 
 science/src/science_tool/commons/
+├── adapter.py          # MODIFY — scan() yields CommonsLayoutError per-entity
+│                       #          instead of raising mid-walk (§3.6)
 ├── datapackage.py      # MODIFY — DataResource gains bytes/format/mediatype;
 │                       #          read_datapackage captures them
 ├── inventory.py        # NEW — build_commons_inventory()
+├── validator.py        # MODIFY — handle the yielded CommonsLayoutError (§3.6)
 ├── cli.py              # MODIFY — `science commons inventory` subcommand
 └── __init__.py         # MODIFY — export build_commons_inventory
 
@@ -128,6 +131,29 @@ inventory builds even when the commons store is absent.
 `science_model.entity_schema` (`read_overlay_merge_policy`) — no cycle
 (`commons.overlay` does not import `entities_inventory`).
 
+### 3.6 Phase B prerequisite: make `CommonsEntityAdapter.scan()` walk-safe
+
+`CommonsEntityAdapter._scan_type` currently **raises** `CommonsLayoutError`
+mid-generator (`science/src/science_tool/commons/adapter.py:74`) when a dataset
+directory has `entity.md` but no `datapackage.yaml` sibling. A raised exception
+aborts the generator, so the commons inventory build would lose every entity
+discovered *after* the bad dataset — catching it in `build_commons_inventory`
+cannot recover that. (The same raise also crashes `commons validate` today,
+since `CommonsValidator` iterates the same `scan()`.)
+
+D2 therefore carries a small, principled Phase B change: `_scan_type` **yields**
+the `CommonsLayoutError` for that per-entity case instead of raising it. One bad
+dataset directory then becomes one error item in the stream, not a dead walk.
+
+- `scan()` / `_scan_type()` return type widens to
+  `Iterator[CommonsEntityRecord | CommonsEntityError | CommonsLayoutError]`.
+- `CommonsValidator.validate()` is updated to also collect a yielded
+  `CommonsLayoutError`; `ValidationReport.errors` widens from
+  `list[CommonsEntityError]` to `list[CommonsError]`.
+- `load()`'s own `raise CommonsLayoutError` paths are untouched — `load` is a
+  single-id lookup where raising is correct; only the multi-entity `scan` walk
+  needs the per-entity-error treatment.
+
 ## 4. The `inventory_v2` contract module
 
 `science/model/src/science_model/contracts/inventory_v2.py`.
@@ -141,6 +167,7 @@ from science_model.contracts.inventory_v1 import (
     InventoryFindingCandidate,
     InventoryGraphAddress,
     InventoryProjectMetadata,
+    InventoryReference,
     InventorySourceLocation,
     InventoryWarning,
     _InventoryContractModel,
@@ -284,11 +311,18 @@ def build_commons_inventory() -> InventoryPayload:   # inventory_v2.InventoryPay
 1. `root = resolve_commons_root()`. If `not root.is_dir()` →
    `CommonsRootNotFoundError`.
 2. Iterate `CommonsEntityAdapter(root).scan()` — yields
-   `CommonsEntityRecord | CommonsEntityError`:
+   `CommonsEntityRecord | CommonsEntityError | CommonsLayoutError` (the
+   `CommonsLayoutError` arm exists because of the §3.6 walk-safe change):
    - **`CommonsEntityError`** → `InventoryWarning(code="commons-entity-invalid",
      severity="error", message=str(err), path=..., canonical_id=...)`. The build
      does not abort — it mirrors the project builder's collect-warnings
      behavior.
+   - **`CommonsLayoutError`** (a dataset directory missing its `datapackage.yaml`
+     sibling) → `InventoryWarning(code="commons-datapackage-invalid",
+     severity="error", message=str(err), path=...)`. A missing `datapackage.yaml`
+     is conceptually a datapackage problem, so it shares the warning code with
+     `read_datapackage` failures (step 3) — consumers get one coherent bucket
+     for datapackage trouble.
    - **`CommonsEntityRecord`** → an `InventoryEntity`:
      - `id = record.canonical_id`, `kind = record.type`, `local_id = record.slug`
      - `title` / `status` from `record.frontmatter` (absent → `None`)
@@ -411,8 +445,12 @@ entries:
 | Code | Raised by | Severity |
 | --- | --- | --- |
 | `commons-entity-invalid` | `CommonsEntityAdapter.scan` yields a `CommonsEntityError` | error |
-| `commons-datapackage-invalid` | `read_datapackage` raises for a dataset's sidecar | error |
+| `commons-datapackage-invalid` | `CommonsEntityAdapter.scan` yields a `CommonsLayoutError` (missing `datapackage.yaml`), **or** `read_datapackage` raises a `CommonsDatapackageError` for a sidecar | error |
 | `overlay-invalid` | `OverlayAdapter.scan` yields an `OverlayValidationError` | error |
+
+The §3.6 walk-safe change is what makes the `commons-datapackage-invalid` row's
+first source non-fatal — without it, a missing `datapackage.yaml` would abort
+the whole scan rather than producing a warning.
 
 The only hard failure is pre-flight: `CommonsRootNotFoundError` from
 `resolve_commons_root()` in the commons builder, surfaced by the CLI as a
@@ -445,11 +483,21 @@ a malformed payload, which is a builder bug, not a user-facing path.
   - Malformed `datapackage.yaml` → `InventoryWarning`
     (`commons-datapackage-invalid`); the dataset entity is emitted without
     `data["resources"]`.
+  - Dataset directory missing its `datapackage.yaml` sibling → `InventoryWarning`
+    (`commons-datapackage-invalid`); entities discovered after it are still
+    emitted (proves the §3.6 walk-safe change).
   - Missing commons root → `CommonsRootNotFoundError`.
   - Payload `project_id == "commons"`, `project is None`, `overlays == []`.
 
 ### 10.2 Extended test files
 
+- `science/tests/test_commons_adapter.py` — `CommonsEntityAdapter.scan` **yields**
+  a `CommonsLayoutError` for a dataset directory missing `datapackage.yaml` (no
+  longer raises), and continues to yield records for entities discovered after
+  it.
+- `science/tests/test_commons_validator.py` — `CommonsValidator.validate`
+  collects a yielded `CommonsLayoutError` into `ValidationReport.errors` instead
+  of crashing.
 - `science/tests/test_commons_datapackage.py` — `read_datapackage` captures
   `bytes` / `format` / `mediatype`; non-int (or `bool`) `bytes` and non-str
   `format` / `mediatype` → `CommonsDatapackageError`; absent → `None`; existing
