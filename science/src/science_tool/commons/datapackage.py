@@ -80,10 +80,13 @@ def parse_resource_hash(raw: str) -> tuple[str, str]:
 
 @dataclass(frozen=True, slots=True)
 class DataResource:
-    """One resource entry from a datapackage.yaml -- path + hash only."""
+    """One resource entry from a datapackage.yaml."""
 
     path: str  # validated forward-slash relative logical path
     hash: str  # full "sha256:<hex>" string, verbatim from resources[].hash
+    bytes: int | None = None  # resources[].bytes if present
+    format: str | None = None  # resources[].format if present
+    mediatype: str | None = None  # resources[].mediatype if present
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,6 +178,39 @@ def read_datapackage(path: Path) -> DatapackageDescriptor:
                 reason=f"resources[{index}] ({logical_path}) has an invalid hash: {exc}",
             ) from exc
 
-        resources.append(DataResource(path=logical_path, hash=raw_hash))
+        raw_bytes = entry.get("bytes")
+        if raw_bytes is not None and (
+            not isinstance(raw_bytes, int) or isinstance(raw_bytes, bool)
+        ):
+            raise CommonsDatapackageError(
+                path,
+                reason=(
+                    f"resources[{index}] ({logical_path}) has a non-integer 'bytes'"
+                ),
+            )
+        raw_format = entry.get("format")
+        if raw_format is not None and not isinstance(raw_format, str):
+            raise CommonsDatapackageError(
+                path,
+                reason=f"resources[{index}] ({logical_path}) has a non-string 'format'",
+            )
+        raw_mediatype = entry.get("mediatype")
+        if raw_mediatype is not None and not isinstance(raw_mediatype, str):
+            raise CommonsDatapackageError(
+                path,
+                reason=(
+                    f"resources[{index}] ({logical_path}) has a non-string 'mediatype'"
+                ),
+            )
+
+        resources.append(
+            DataResource(
+                path=logical_path,
+                hash=raw_hash,
+                bytes=raw_bytes,
+                format=raw_format,
+                mediatype=raw_mediatype,
+            )
+        )
 
     return DatapackageDescriptor(source_path=path, resources=tuple(resources))

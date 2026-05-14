@@ -169,3 +169,79 @@ def test_read_datapackage_rejects_malformed_hash(tmp_path: Path) -> None:
     )
     with pytest.raises(CommonsDatapackageError, match="invalid hash"):
         read_datapackage(dp)
+
+
+def test_read_datapackage_captures_bytes_format_mediatype(tmp_path: Path) -> None:
+    dp = _write(
+        tmp_path / "datapackage.yaml",
+        "resources:\n"
+        "  - path: counts.parquet\n"
+        f'    hash: "{_GOOD_HASH}"\n'
+        "    bytes: 12345678\n"
+        '    format: "parquet"\n'
+        '    mediatype: "application/vnd.apache.parquet"\n',
+    )
+    descriptor = read_datapackage(dp)
+    resource = descriptor.resources[0]
+    assert resource.bytes == 12345678
+    assert resource.format == "parquet"
+    assert resource.mediatype == "application/vnd.apache.parquet"
+
+
+def test_read_datapackage_optional_fields_default_to_none(tmp_path: Path) -> None:
+    dp = _write(
+        tmp_path / "datapackage.yaml",
+        "resources:\n  - path: counts.parquet\n" f'    hash: "{_GOOD_HASH}"\n',
+    )
+    resource = read_datapackage(dp).resources[0]
+    assert resource.bytes is None
+    assert resource.format is None
+    assert resource.mediatype is None
+
+
+def test_read_datapackage_rejects_non_int_bytes(tmp_path: Path) -> None:
+    dp = _write(
+        tmp_path / "datapackage.yaml",
+        "resources:\n"
+        "  - path: counts.parquet\n"
+        f'    hash: "{_GOOD_HASH}"\n'
+        '    bytes: "lots"\n',
+    )
+    with pytest.raises(CommonsDatapackageError, match="bytes"):
+        read_datapackage(dp)
+
+
+def test_read_datapackage_rejects_bool_bytes(tmp_path: Path) -> None:
+    dp = _write(
+        tmp_path / "datapackage.yaml",
+        "resources:\n"
+        "  - path: counts.parquet\n"
+        f'    hash: "{_GOOD_HASH}"\n'
+        "    bytes: true\n",
+    )
+    with pytest.raises(CommonsDatapackageError, match="bytes"):
+        read_datapackage(dp)
+
+
+def test_read_datapackage_rejects_non_str_format(tmp_path: Path) -> None:
+    dp = _write(
+        tmp_path / "datapackage.yaml",
+        "resources:\n"
+        "  - path: counts.parquet\n"
+        f'    hash: "{_GOOD_HASH}"\n'
+        "    format: 5\n",
+    )
+    with pytest.raises(CommonsDatapackageError, match="format"):
+        read_datapackage(dp)
+
+
+def test_read_datapackage_rejects_non_str_mediatype(tmp_path: Path) -> None:
+    dp = _write(
+        tmp_path / "datapackage.yaml",
+        "resources:\n"
+        "  - path: counts.parquet\n"
+        f'    hash: "{_GOOD_HASH}"\n'
+        "    mediatype: 5\n",
+    )
+    with pytest.raises(CommonsDatapackageError, match="mediatype"):
+        read_datapackage(dp)
