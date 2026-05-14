@@ -241,6 +241,61 @@ def test_show_before_rebuild_exits_1_cleanly(
     )
 
 
+def test_validate_clean_store_exits_0(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["validate"])
+    assert result.exit_code == 0, result.output
+    assert "5 entities" in result.output or "checked 5" in result.output
+
+
+def test_validate_reports_per_entity_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seeded_store(tmp_path)
+    # bibkey "bad-name" (hyphen) violates the paper-mixin bibkey regex.
+    (root / "papers" / "badname.md").write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
+        'id: "paper:badname"\n'
+        'type: "paper"\n'
+        'title: "Bad"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-05-13"\n'
+        'updated: "2026-05-13"\n'
+        'bibkey: "bad-name"\n'
+        'authors: ["X"]\n'
+        "year: 2025\n"
+        'journal: "T"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "---\nbody\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["validate"])
+    assert result.exit_code == 1
+    assert "badname.md" in result.output
+
+
+def test_validate_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["validate", "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["checked"] == 5
+    assert payload["errors"] == []
+
+
 def test_find_before_rebuild_exits_1_cleanly(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -13,6 +13,7 @@ from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError
 from science_tool.commons.query import CommonsQuery
 from science_tool.commons.registry import RegistryBuilder
+from science_tool.commons.validator import CommonsValidator
 
 
 @click.group("commons")
@@ -189,3 +190,33 @@ def _print_record_human(record: CommonsEntityRecord) -> None:
         authors = record.frontmatter.get("authors") or []
         click.echo(f"  authors:        {', '.join(authors)}")
         click.echo(f"  year:           {record.frontmatter.get('year', '')}")
+
+
+@commons_group.command("validate")
+@click.option("--type", "entity_type", default=None, help="Filter to one type.")
+@click.option("--slug", default=None, help="Filter to one slug.")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
+def validate_cmd(entity_type: str | None, slug: str | None, as_json: bool) -> None:
+    """Validate every entity in the commons store against its schema_profile."""
+    root = _require_root()
+    adapter = CommonsEntityAdapter(root)
+    report = CommonsValidator(adapter).validate(type=entity_type, slug=slug)
+    if as_json:
+        payload = {
+            "checked": report.checked,
+            "errors": [
+                {
+                    "path": str(e.path),
+                    "canonical_id": e.canonical_id,
+                    "message": str(e.cause),
+                }
+                for e in report.errors
+            ],
+        }
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        click.echo(f"checked {report.checked} entities")
+        for err in report.errors:
+            click.echo(f"  error: {err}", err=True)
+    if report.errors:
+        raise click.exceptions.Exit(1)
