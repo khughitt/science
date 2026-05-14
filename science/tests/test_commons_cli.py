@@ -443,3 +443,36 @@ def test_show_project_warns_on_inactive_pin(
     assert result.exit_code == 0, result.output
     assert "pin_version" in result.stderr
     assert "Phase E" in result.stderr
+
+
+def test_validate_project_clean_exits_0(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seeded_store_with_project(tmp_path, monkeypatch, "proj-alpha", "proj-alpha")
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["validate", "--project", "proj-alpha"])
+    assert result.exit_code == 0, result.output
+    assert "checked 2" in result.output
+
+
+def test_validate_project_broken_exits_1(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seeded_store_with_project(tmp_path, monkeypatch, "proj-broken", "proj-broken")
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["validate", "--project", "proj-broken"])
+    assert result.exit_code == 1
+    assert "error" in result.output
+
+
+def test_validate_project_with_type_is_usage_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seeded_store_with_project(tmp_path, monkeypatch, "proj-alpha", "proj-alpha")
+    runner = CliRunner()
+    result = runner.invoke(
+        commons_group,
+        ["validate", "--project", "proj-alpha", "--type", "paper"],
+    )
+    assert result.exit_code == 2
+    assert "--project cannot be combined with --type" in result.output

@@ -11,7 +11,11 @@ from science_tool.commons.adapter import CommonsEntityAdapter, CommonsEntityReco
 from science_tool.commons.bootstrap import init_commons
 from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError, CommonsRootNotFoundError
-from science_tool.commons.overlay import MergedEntity, resolve_entity
+from science_tool.commons.overlay import (
+    MergedEntity,
+    resolve_entity,
+    validate_project_overlays,
+)
 from science_tool.commons.query import CommonsQuery
 from science_tool.commons.registry import RegistryBuilder
 from science_tool.commons.resolver import resolve
@@ -254,12 +258,58 @@ def _print_merged_human(merged: MergedEntity) -> None:
 @commons_group.command("validate")
 @click.option("--type", "entity_type", default=None, help="Filter to one type.")
 @click.option("--slug", default=None, help="Filter to one slug.")
+@click.option(
+    "--project",
+    default=None,
+    help="Validate every overlay file in the named registered project.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
-def validate_cmd(entity_type: str | None, slug: str | None, as_json: bool) -> None:
-    """Validate every entity in the commons store against its schema_profile."""
+def validate_cmd(
+    entity_type: str | None,
+    slug: str | None,
+    project: str | None,
+    as_json: bool,
+) -> None:
+    """Validate commons entities, or a project's overlay files with --project."""
+    if project is not None:
+        if entity_type is not None or slug is not None:
+            raise click.UsageError(
+                "--project cannot be combined with --type/--slug"
+            )
+        try:
+            overlay_report = validate_project_overlays(project)
+        except CommonsError as exc:
+            raise click.ClickException(str(exc)) from exc
+        if as_json:
+            click.echo(
+                json.dumps(
+                    {
+                        "checked": overlay_report.checked,
+                        "errors": [
+                            {
+                                "overlay_path": str(e.overlay_path),
+                                "canonical_id": e.canonical_id,
+                                "message": str(e.cause),
+                            }
+                            for e in overlay_report.errors
+                        ],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        else:
+            click.echo(f"checked {overlay_report.checked} overlays")
+            for err in overlay_report.errors:
+                click.echo(f"  error: {err}", err=True)
+        if overlay_report.errors:
+            raise click.exceptions.Exit(1)
+        return
+
     root = _require_root()
-    adapter = CommonsEntityAdapter(root)
-    report = CommonsValidator(adapter).validate(type=entity_type, slug=slug)
+    report = CommonsValidator(CommonsEntityAdapter(root)).validate(
+        type=entity_type, slug=slug
+    )
     if as_json:
         payload = {
             "checked": report.checked,
