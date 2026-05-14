@@ -238,6 +238,13 @@ def test_load_returns_record_for_known_id(tmp_path: Path) -> None:
     assert record.canonical_id == "paper:Adams2025"
 
 
+def test_load_dataset_missing_datapackage_raises_layout_error(tmp_path: Path) -> None:
+    root = _make_store(tmp_path, "invalid/dataset-missing-datapackage")
+    adapter = CommonsEntityAdapter(root)
+    with pytest.raises(CommonsLayoutError, match="datapackage.yaml"):
+        adapter.load("dataset:no-dp")
+
+
 def test_load_raises_entity_error_for_unknown_id(tmp_path: Path) -> None:
     root = _make_store(tmp_path, "valid")
     adapter = CommonsEntityAdapter(root)

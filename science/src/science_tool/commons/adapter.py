@@ -120,6 +120,11 @@ class CommonsEntityAdapter:
                 canonical_id=canonical_id,
                 cause=FileNotFoundError(str(body)),
             )
+        if dp is not None and not dp.is_file():
+            raise CommonsLayoutError(
+                self._root / "datasets" / slug,
+                reason="dataset directory missing required datapackage.yaml sibling",
+            )
         result = self._build(type_dir, slug, body, dp)
         if isinstance(result, CommonsEntityError):
             raise result
