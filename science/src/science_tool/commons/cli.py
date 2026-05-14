@@ -13,6 +13,7 @@ from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError, CommonsRootNotFoundError
 from science_tool.commons.query import CommonsQuery
 from science_tool.commons.registry import RegistryBuilder
+from science_tool.commons.resolver import resolve
 from science_tool.commons.validator import CommonsValidator
 
 
@@ -219,3 +220,36 @@ def validate_cmd(entity_type: str | None, slug: str | None, as_json: bool) -> No
             click.echo(f"  error: {err}", err=True)
     if report.errors:
         raise click.exceptions.Exit(1)
+
+
+@commons_group.group("data")
+def data_group() -> None:
+    """Resolve bulk data for commons datasets."""
+
+
+@data_group.command("resolve")
+@click.argument("dataset_id")
+@click.argument("logical_path")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON.")
+def data_resolve_cmd(dataset_id: str, logical_path: str, as_json: bool) -> None:
+    """Resolve DATASET_ID + LOGICAL_PATH to a verified absolute filesystem path."""
+    try:
+        resolved = resolve(dataset_id, logical_path)
+    except CommonsError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if as_json:
+        click.echo(
+            json.dumps(
+                {
+                    "dataset_id": resolved.dataset_id,
+                    "logical_path": resolved.logical_path,
+                    "resolved_path": str(resolved.path),
+                    "hash": resolved.hash,
+                    "source": resolved.source,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+    else:
+        click.echo(str(resolved.path))
