@@ -20,11 +20,20 @@ from science_model.entity_schema import (
     EntityValidationError,
     EntityValidator,
     MergePolicy,
+    parse_profile,
+    read_merge_policy,
     read_overlay_merge_policy,
 )
 
 from science_tool.commons.adapter import CommonsEntityRecord
-from science_tool.commons.errors import OverlayMergeError, OverlayValidationError
+from science_tool.commons.config import resolve_commons_root, resolve_project_root
+from science_tool.commons.errors import (
+    CommonsRootNotFoundError,
+    OverlayMergeError,
+    OverlayValidationError,
+    ProjectDirectoryMissingError,
+)
+from science_tool.commons.query import CommonsQuery
 from science_tool.markdown_utils import parse_frontmatter
 
 _TYPE_TO_DIR = {
@@ -266,3 +275,30 @@ def merge_entity(
         merged_body=merged_body,
         field_sources=field_sources,
     )
+
+
+def resolve_entity(canonical_id: str, project: str | None = None) -> MergedEntity:
+    """Resolve a commons entity, optionally merged with a project overlay.
+
+    With `project=None`, returns a canonical-only MergedEntity. With a project
+    name, reads the project's overlay (if any) and merges it. Raises
+    CommonsRootNotFoundError, CommonsEntityError (unknown id),
+    ProjectNotRegisteredError (unknown project name), or
+    ProjectDirectoryMissingError (registered project whose directory is gone).
+    """
+    root = resolve_commons_root()
+    if not root.is_dir():
+        raise CommonsRootNotFoundError(root)
+
+    record = CommonsQuery(root).show(canonical_id)
+    policy = read_merge_policy(parse_profile(record.schema_profile))
+
+    if project is None:
+        return merge_entity(record, None, policy)
+
+    project_root = resolve_project_root(project)
+    if not project_root.is_dir():
+        raise ProjectDirectoryMissingError(project, project_root)
+
+    overlay = OverlayAdapter(project_root, project).load(canonical_id)
+    return merge_entity(record, overlay, policy)

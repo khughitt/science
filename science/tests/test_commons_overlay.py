@@ -257,3 +257,112 @@ def test_merge_entity_rejects_unknown_overlay_field(tmp_path: Path) -> None:
     )
     with pytest.raises(OverlayMergeError, match="unknown_project_field"):
         merge_entity(record, bad, _merge_policy_for(record))
+
+
+def _seed_commons_and_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, projects: dict[str, Path]
+) -> Path:
+    """Copy the commons fixture, build its registry, and write a config.yaml
+    registering `projects` (name -> root path). Returns the commons root."""
+    import shutil
+
+    import yaml
+
+    from science_tool.commons.adapter import CommonsEntityAdapter
+    from science_tool.commons.registry import RegistryBuilder
+
+    src = Path(__file__).parent / "fixtures" / "commons" / "valid"
+    commons_root = tmp_path / "commons"
+    shutil.copytree(src, commons_root)
+    RegistryBuilder(commons_root, CommonsEntityAdapter(commons_root)).rebuild()
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.yaml").write_text(
+        yaml.dump(
+            {
+                "projects": [
+                    {"path": str(p), "name": n, "registered": "2026-05-14"}
+                    for n, p in projects.items()
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(commons_root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    return commons_root
+
+
+def test_resolve_entity_no_project_is_canonical_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.commons.overlay import resolve_entity
+
+    _seed_commons_and_config(tmp_path, monkeypatch, projects={})
+    merged = resolve_entity("paper:Adams2025")
+    assert merged.overlay is None
+    assert merged.merged_frontmatter["title"].startswith("A representative")
+
+
+def test_resolve_entity_with_overlay_merges(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.commons.overlay import resolve_entity
+
+    _seed_commons_and_config(
+        tmp_path, monkeypatch, projects={"proj-alpha": _OVERLAYS / "proj-alpha"}
+    )
+    merged = resolve_entity("paper:Adams2025", project="proj-alpha")
+    assert merged.overlay is not None
+    assert merged.merged_frontmatter["hypothesis_links"] == ["H2", "H4"]
+    assert "overlay-added" in merged.merged_frontmatter["tags"]
+
+
+def test_resolve_entity_project_without_overlay_for_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.commons.overlay import resolve_entity
+
+    _seed_commons_and_config(
+        tmp_path, monkeypatch, projects={"proj-alpha": _OVERLAYS / "proj-alpha"}
+    )
+    # proj-alpha has no overlay for the theme — canonical-only, not an error.
+    merged = resolve_entity("theme:research-hygiene", project="proj-alpha")
+    assert merged.overlay is None
+
+
+def test_resolve_entity_unknown_project_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.commons.errors import ProjectNotRegisteredError
+    from science_tool.commons.overlay import resolve_entity
+
+    _seed_commons_and_config(tmp_path, monkeypatch, projects={})
+    with pytest.raises(ProjectNotRegisteredError):
+        resolve_entity("paper:Adams2025", project="ghost")
+
+
+def test_resolve_entity_registered_project_missing_dir_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.commons.errors import ProjectDirectoryMissingError
+    from science_tool.commons.overlay import resolve_entity
+
+    _seed_commons_and_config(
+        tmp_path, monkeypatch, projects={"gone": tmp_path / "does-not-exist"}
+    )
+    with pytest.raises(ProjectDirectoryMissingError):
+        resolve_entity("paper:Adams2025", project="gone")
+
+
+def test_resolve_entity_unknown_id_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.commons.errors import CommonsEntityError
+    from science_tool.commons.overlay import resolve_entity
+
+    _seed_commons_and_config(tmp_path, monkeypatch, projects={})
+    with pytest.raises(CommonsEntityError):
+        resolve_entity("paper:NoSuchPaper")
