@@ -31,7 +31,9 @@ from science_tool.commons.errors import (
 )
 
 _TYPE_DIRS = ("datasets", "papers", "topics", "themes")
-_PROMOTED_KEYS = frozenset({"id", "type", "title", "status", "aliases", "related"})
+_PROMOTED_KEYS = frozenset(
+    {"id", "type", "title", "status", "aliases", "related", "resources"}
+)
 
 
 def build_commons_inventory() -> InventoryPayload:

@@ -186,6 +186,25 @@ def test_build_commons_inventory_projects_dataset_resources(
     assert "resources" not in paper.data
 
 
+def test_build_commons_inventory_reserves_resources_for_datapackages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_store(tmp_path)
+    paper_path = root / "papers" / "Adams2025.md"
+    paper_path.write_text(
+        paper_path.read_text(encoding="utf-8").replace(
+            'tags: ["evaluation", "homology"]\n',
+            'tags: ["evaluation", "homology"]\nresources: ["not-inventory-resources"]\n',
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    payload = build_commons_inventory()
+
+    paper = next(e for e in payload.entities if e.id == "paper:Adams2025")
+    assert "resources" not in paper.data
+
+
 def test_build_commons_inventory_warns_on_malformed_datapackage(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
