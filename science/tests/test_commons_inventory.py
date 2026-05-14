@@ -90,13 +90,61 @@ def test_build_commons_inventory_clean_store(tmp_path: Path, monkeypatch: pytest
 
 def test_build_commons_inventory_warns_on_malformed_entity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _make_store(tmp_path)
-    (root / "papers" / "badname.md").write_text(_BAD_PAPER, encoding="utf-8")
+    bad_path = root / "papers" / "badname.md"
+    bad_path.write_text(_BAD_PAPER, encoding="utf-8")
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
     payload = build_commons_inventory()
 
-    codes = {w.code for w in payload.warnings}
-    assert "commons-entity-invalid" in codes
+    warning = next(w for w in payload.warnings if w.code == "commons-entity-invalid")
+    assert warning.severity == "error"
+    assert warning.canonical_id == "paper:badname"
+    assert warning.path == str(bad_path)
     assert len(payload.entities) == 5
+
+
+def test_build_commons_inventory_rejects_scalar_aliases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _make_store(tmp_path)
+    paper_path = root / "papers" / "Adams2025.md"
+    paper_path.write_text(
+        paper_path.read_text(encoding="utf-8").replace(
+            'tags: ["evaluation", "homology"]\n',
+            'tags: ["evaluation", "homology"]\naliases: ABC\n',
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    payload = build_commons_inventory()
+
+    warning = next(w for w in payload.warnings if w.canonical_id == "paper:Adams2025")
+    assert warning.code == "commons-entity-invalid"
+    assert warning.severity == "error"
+    assert warning.path == str(paper_path)
+    assert "aliases" in warning.message
+    assert "paper:Adams2025" not in {e.id for e in payload.entities}
+    assert {alias.alias for alias in payload.aliases}.isdisjoint({"A", "B", "C"})
+
+
+def test_build_commons_inventory_rejects_scalar_related(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _make_store(tmp_path)
+    paper_path = root / "papers" / "Adams2025.md"
+    paper_path.write_text(
+        paper_path.read_text(encoding="utf-8").replace(
+            'tags: ["evaluation", "homology"]\n',
+            'tags: ["evaluation", "homology"]\nrelated: dataset:x\n',
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    payload = build_commons_inventory()
+
+    warning = next(w for w in payload.warnings if w.canonical_id == "paper:Adams2025")
+    assert warning.code == "commons-entity-invalid"
+    assert warning.severity == "error"
+    assert warning.path == str(paper_path)
+    assert "related" in warning.message
+    assert "paper:Adams2025" not in {e.id for e in payload.entities}
+    related_targets = {reference.target_id for entity in payload.entities for reference in entity.related}
+    assert related_targets.isdisjoint(set("dataset:x"))
 
 
 def test_build_commons_inventory_warns_on_missing_datapackage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -109,6 +157,9 @@ def test_build_commons_inventory_warns_on_missing_datapackage(tmp_path: Path, mo
 
     dp_warnings = [w for w in payload.warnings if w.code == "commons-datapackage-invalid"]
     assert len(dp_warnings) == 1
+    assert dp_warnings[0].severity == "error"
+    assert dp_warnings[0].canonical_id == "dataset:no-dp"
+    assert dp_warnings[0].path == str(no_dp)
     assert "dataset:rnaseq-example" in {e.id for e in payload.entities}
 
 

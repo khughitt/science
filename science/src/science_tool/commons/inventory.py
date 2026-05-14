@@ -59,7 +59,19 @@ def build_commons_inventory() -> InventoryPayload:
                 )
             )
             continue
-        entity, entity_aliases = _entity_from_record(item, warnings)
+        try:
+            entity, entity_aliases = _entity_from_record(item, warnings)
+        except ValueError as exc:
+            warnings.append(
+                InventoryWarning(
+                    code="commons-entity-invalid",
+                    severity="error",
+                    message=f"commons entity {item.body_path} failed inventory projection: {exc}",
+                    path=str(item.body_path),
+                    canonical_id=item.canonical_id,
+                )
+            )
+            continue
         entities.append(entity)
         aliases.extend(entity_aliases)
 
@@ -80,12 +92,9 @@ def _entity_from_record(
     record: CommonsEntityRecord, warnings: list[InventoryWarning]
 ) -> tuple[InventoryEntity, list[InventoryAlias]]:
     frontmatter = record.frontmatter
-    related = [
-        InventoryReference(relation="related", target_id=str(target))
-        for target in frontmatter.get("related", [])
-        if target
-    ]
-    entity_aliases = [str(alias) for alias in frontmatter.get("aliases", [])]
+    related_targets = _optional_string_list(frontmatter, "related")
+    entity_aliases = _optional_string_list(frontmatter, "aliases")
+    related = [InventoryReference(relation="related", target_id=str(target)) for target in related_targets]
     data = {key: value for key, value in frontmatter.items() if key not in _PROMOTED_KEYS}
     entity = InventoryEntity(
         id=record.canonical_id,
@@ -102,3 +111,21 @@ def _entity_from_record(
     )
     aliases = [InventoryAlias(alias=alias, canonical_id=record.canonical_id) for alias in entity_aliases]
     return entity, aliases
+
+
+def _optional_string_list(frontmatter: dict[str, object], field: str) -> list[str]:
+    if field not in frontmatter:
+        return []
+
+    value = frontmatter[field]
+    if not isinstance(value, list):
+        raise ValueError(f"{field} must be a list of strings")
+
+    items: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str):
+            raise ValueError(f"{field}[{index}] must be a string")
+        if not item.strip():
+            raise ValueError(f"{field}[{index}] must be a non-empty string")
+        items.append(item)
+    return items
