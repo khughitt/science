@@ -13,7 +13,8 @@ Stand up the shared knowledge store as a queryable, validatable, CLI-accessible 
 - A user can run `science commons init` to create `~/d/science-commons/` as a standalone git repo with the expected layout.
 - A user can place valid entity files into that store and run `science commons index rebuild` to build a SQLite index.
 - A user can run `science commons find dataset --tag scrna`, `science commons show paper:adams2025`, and `science commons validate` against that index.
-- The existing inventory builder can optionally include shared entities (`scope="cross-project"`) in `inventory_v1` output via a new `--include-shared` flag, with no changes to the v1 contract.
+
+Phase B is intentionally standalone: nothing else in the existing `science_tool` pipeline (inventory builder, dashboard, sync) is touched. Inventory integration lands in Phase D when `inventory_v2` introduces the contract changes that shared rows require.
 
 ## 2. Naming
 
@@ -32,23 +33,24 @@ The parent design uses "shared store" / "shared entity" throughout. Phase B rena
 | Errors | `Commons*Error` |
 | Settings model | `CommonsSettings` |
 
-**What does NOT rename:** `EntityScope.SHARED` (model-layer nomenclature), the inventory `scope="cross-project"` export label (external contract — already abstracted from the internal enum), and `science_model.entity_schema` (the parent design's name for the schema layer).
+**What does NOT rename:** `EntityScope.SHARED` (model-layer nomenclature, used by Phase D inventory integration but not by Phase B itself), the inventory `scope="cross-project"` export label (Phase D concern), and `science_model.entity_schema` (the parent design's name for the schema layer).
 
 ## 3. Scope
 
 ### In scope
 - Directory bootstrap with `git init`, README, `.gitignore`.
-- `CommonsEntityAdapter` — walks the store, parses entities into `science_model.Entity` instances.
+- `CommonsEntityAdapter` — walks the store, parses each entity into a record holding the validated schema frontmatter dict plus filesystem metadata (no `Entity` materialization in Phase B).
 - SQLite registry with three tables (`entities`, `entity_tags`, `entity_ontology_terms`).
 - CLI: `science commons {init, index rebuild, show, find, validate}`.
-- Inventory builder integration via opt-in `--include-shared` flag.
 - Global config extension (`commons.root`).
 - Test fixtures under `science/model/tests/fixtures/commons/`.
 
 ### Out of scope (deferred)
 - Data resolver, `$SCIENCE_COMMONS_DATA_ROOT`, hash verification, recipe regeneration — Phase C.
 - Overlay reading and read-time merge — Phase D.
-- `inventory_v2` and the `overlays[]` field — Phase D.
+- `inventory_v2`, the `overlays[]` field, and any inventory builder modification (including `--include-shared`) — Phase D. `inventory_v1`'s path semantics (single `project_path`, source paths resolved as `project_root / source.path`) and content-hash determinism do not accommodate shared rows; v2 is the right layer.
+- Transparent auto-rebuild on stale registry — Phase E (when migration traffic justifies the writer-lock + concurrency primitives). Phase B requires explicit `science commons index rebuild`.
+- Per-`Entity` projection of shared frontmatter (`project`, `related`, `source_refs`, `content_preview`, `file_path` defaults) — Phase D, alongside `inventory_v2`.
 - `science promote`, `science fork`, `.migrations/` audit log writes — Phase E/F/G.
 - CAS object store — out of scope per parent §10.
 - Dashboard changes — sequenced after E/F/G.
@@ -72,8 +74,6 @@ science/src/science_tool/
 │   ├── validator.py                      # `science commons validate` driver
 │   └── cli.py                            # Typer subcommands
 ├── registry/config.py                    # MODIFY — add commons: CommonsSettings to GlobalConfig
-├── entities_inventory.py                 # MODIFY — opt-in include_shared flag wires
-│                                         # CommonsEntityAdapter into inventory_v1 build
 └── cli.py                                # MODIFY — register `science commons` group
 ```
 
@@ -155,17 +155,22 @@ Behavior:
 ```python
 @dataclass(frozen=True, slots=True)
 class CommonsEntityRecord:
-    entity: Entity                         # science_model.Entity, scope=EntityScope.SHARED
+    canonical_id: str                      # "<type>:<slug>", e.g. "dataset:cath-domains"
+    type: str                              # "dataset" | "paper" | "topic" | "theme"
+    slug: str
+    schema_profile: str
+    frontmatter: dict[str, Any]            # validated against schema_profile by EntityValidator
     body_path: Path                        # absolute path to entity.md
     datapackage_path: Path | None          # absolute path to sibling datapackage.yaml (datasets only)
-    mtime_ns: int                          # max(entity.md, datapackage.yaml) mtime
-    schema_profile: str
+    mtime_ns: int                          # max(st_mtime_ns of entity.md, datapackage.yaml)
 
 class CommonsEntityAdapter:
     def __init__(self, root: Path) -> None: ...
     def scan(self) -> Iterator[CommonsEntityRecord | CommonsEntityError]: ...
     def load(self, canonical_id: str) -> CommonsEntityRecord: ...
 ```
+
+**Why not `science_model.Entity`?** `Entity` requires fields not present in shared frontmatter (`project`, `related`, `source_refs`, `content_preview`, `file_path`) that project-side loaders fill via enrichment defaults. Phase B does not need an `Entity` (it has no inventory integration), so it carries the validated frontmatter dict directly — the most honest representation of what's actually in the store. Phase D adds the projection step (synthetic defaults + `scope=EntityScope.SHARED`) when `inventory_v2` requires it.
 
 **Walking rules:**
 - `datasets/<slug>/entity.md` — required. Missing sibling `datapackage.yaml` → `CommonsLayoutError` (this is a structural invariant, not a per-entity error).
@@ -175,8 +180,8 @@ class CommonsEntityAdapter:
 
 **Parsing:**
 - Frontmatter parsing delegates to the existing `MarkdownAdapter` frontmatter helper if cleanly importable. If extraction is non-trivial, vendor a thin re-implementation in `commons/adapter.py`. (Decided in design: vendoring is acceptable.)
-- For datasets, `datapackage.yaml` is **not** materialized into `Entity` (no `resources` field on the model — per parent §2.1). Path captured separately for Phase C.
-- `schema_profile` parsed via `science_model.entity_schema.parse_profile`; entity validated via `EntityValidator.validate`.
+- For datasets, `datapackage.yaml` is **not** loaded into the record (no `resources` field — per parent §2.1). Path captured separately for Phase C.
+- `schema_profile` is parsed via `science_model.entity_schema.parse_profile`; the entity is validated via `EntityValidator.validate`. The validated frontmatter dict is then stored as-is.
 - Per-entity failures (bad frontmatter, schema violation, invalid profile) become `CommonsEntityError` records yielded from `scan()` — the registry builder collects them rather than aborting.
 
 **What it does NOT do:**
@@ -195,7 +200,11 @@ CREATE TABLE schema_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
--- rows: ('schema_version', '1'), ('built_at', ISO-8601), ('store_root', absolute path)
+-- rows:
+--   ('schema_version', '1')
+--   ('max_source_mtime_ns', '<integer-as-decimal-string>')  -- max st_mtime_ns across all indexed source files at rebuild
+--   ('built_at', '<ISO-8601 UTC>')                          -- human-readable only; NOT used for staleness comparison
+--   ('store_root', '<absolute path>')
 
 CREATE TABLE entities (
     canonical_id     TEXT PRIMARY KEY,     -- "dataset:cath-domains"
@@ -237,18 +246,19 @@ class RebuildReport:
 class RegistryBuilder:
     def __init__(self, root: Path, adapter: CommonsEntityAdapter) -> None: ...
     def rebuild(self) -> RebuildReport: ...        # full: drop + recreate
-    def is_stale(self) -> bool: ...                # built_at vs max(file mtime)
+    def is_stale(self) -> bool: ...                # current max st_mtime_ns vs schema_meta.max_source_mtime_ns
 ```
 
 **Semantics:**
 - Always full rebuild — drop tables, recreate, repopulate. Phase B does not implement incremental updates.
 - Per-entity errors are **collected**, not raised; the registry still indexes successful entities. CLI prints a non-zero exit if `errors` is non-empty.
-- Atomic write: build into `registry.sqlite.new`, `fsync`, rename. Prevents partial-index reads.
-- `is_stale()` is cheap: walk the store, compare each file's `st_mtime` against `schema_meta.built_at`.
+- Atomic write: build into a unique temp file inside the store dir (`tempfile.NamedTemporaryFile(dir=root, prefix='.registry-', suffix='.sqlite', delete=False)`), `fsync`, then `os.replace()` onto `registry.sqlite`. Multiple concurrent explicit rebuilds do not collide on a fixed temp name; the second rename wins atomically.
+- `is_stale()` compares `max(os.stat(p).st_mtime_ns for p in source_files)` against the integer stored in `schema_meta.max_source_mtime_ns`. Returns `True` if the registry is missing, the meta row is missing, or current max exceeds stored max. Nanosecond integers avoid float-precision and timezone bugs.
 
-**Auto-rebuild:**
-- `query.py` calls `is_stale()` before each query; rebuilds first if stale.
-- `SCIENCE_COMMONS_NO_AUTO_REBUILD=1` disables auto-rebuild (CI / debugging).
+**Staleness handling (no auto-rebuild in Phase B):**
+- Queries do **not** mutate state. `query.py` calls `is_stale()` before each query; if stale, emits a one-line warning to stderr — `"warning: registry is stale (N source files newer than last rebuild); run `science commons index rebuild`"` — then queries the existing index against possibly-stale data.
+- This deliberately removes the concurrency footgun a transparent auto-rebuild would introduce (two `find` processes racing on the same temp file + rename). Phase E adds proper auto-rebuild with a writer lock when migration traffic justifies it.
+- `SCIENCE_COMMONS_QUIET_STALE=1` suppresses the stderr warning (CI / scripted use).
 
 ### 5.5 Query (`commons/query.py`)
 
@@ -265,7 +275,7 @@ class CommonsQuery:
 - `find` filter semantics: repeated `--tag` and repeated `--ontology` use **AND** across repeats. `--tag-any` deferred.
 - `year_from`/`year_to` are only meaningful for `type == "paper"` (validated; otherwise rejected with a CLI parse error).
 - `slug_glob` uses fnmatch semantics.
-- Each query call `is_stale()` checks first; rebuild is transparent.
+- Each query checks `is_stale()` first; if stale, emits the stderr warning (per §5.4) and continues querying — no rebuild.
 
 ### 5.6 Validator driver (`commons/validator.py`)
 
@@ -346,28 +356,11 @@ class CommonsRegistryError(CommonsError):
 | Registry corruption | `CommonsRegistryError` raised — fatal. |
 | CLI entry point | Catches `CommonsError`, prints `<error-type>: <message>` to stderr, exits 1. No traceback unless `--debug`. |
 
-## 7. Inventory integration
+## 7. Inventory integration — deferred to Phase D
 
-`science_tool.entities_inventory.build_inventory` gains a new keyword (and a corresponding CLI flag in whichever entry point currently drives it):
+`inventory_v1`'s contract assumes a single project root (`project_path`) and resolves source paths as `project_root / source.path` (per the dashboard-consumption design at `docs/plans/2026-05-12-science-entity-inventory-and-dashboard-consumption.md`). Commons-rooted paths do not fit either branch of that resolution: relative-to-commons-root produces wrong paths under `project_root /`, and absolute paths break `compute_content_hash`'s machine-portability guarantee (since `source` is included in the canonical-bytes hash). Either form is effectively a v1 contract change.
 
-```python
-def build_inventory(
-    project_root: Path,
-    *,
-    include_shared: bool = False,
-    commons_root: Path | None = None,
-    ...,
-) -> InventoryPayload:
-```
-
-When `include_shared=True`:
-- `CommonsEntityAdapter(commons_root or resolve_commons_root()).scan()` is invoked.
-- Each successful `CommonsEntityRecord` is projected to an `InventoryEntity` with `scope="cross-project"`. Existing v1 projection logic is reused.
-- The store's relative path becomes `source.path`; `source.adapter = "commons"`.
-- `CommonsEntityError`s are surfaced as `InventoryWarning` entries with `severity="error"` and a stable warning code (e.g., `commons-entity-invalid`).
-- Existing per-project entities continue to be emitted exactly as before.
-
-**Contract guarantee:** no fields are added to `InventoryPayload` or `InventoryEntity`. The v1 contract stays intact; this is purely additive content, not additive structure. `inventory_v2` (and the `overlays[]` field) remains a Phase D concern.
+The right answer is to land shared rows in **`inventory_v2`** (Phase D), which already needs new structure for `overlays[]` and can carry the path semantics shared rows require. Phase B therefore does **not** modify `entities_inventory.py` and does **not** introduce a `--include-shared` flag. The CLI commands (`science commons {init, index rebuild, show, find, validate}`) operate against `registry.sqlite` directly and are the sole consumers of `CommonsEntityAdapter` until Phase D.
 
 ## 8. Testing strategy
 
@@ -377,12 +370,11 @@ When `include_shared=True`:
 | --- | --- |
 | `commons/config.py` | YAML round-trip, env var override, default fallback. |
 | `commons/bootstrap.py` | Directory creation, idempotence, refuse-on-malformed. |
-| `commons/adapter.py` | Frontmatter parsing, pair invariant, scope assignment, profile validation, per-entity error wrapping. |
-| `commons/registry.py` | Schema creation, atomic rebuild, error collection, staleness detection. |
-| `commons/query.py` | Each filter, AND-semantics across repeats, year range, slug-glob. |
+| `commons/adapter.py` | Frontmatter parsing, pair invariant, profile validation, per-entity error wrapping, mtime_ns capture. |
+| `commons/registry.py` | Schema creation, atomic rebuild via unique temp file, error collection, `is_stale()` semantics using `max_source_mtime_ns`. |
+| `commons/query.py` | Each filter, AND-semantics across repeats, year range, slug-glob, stale-warning emission (and suppression via env var). |
 | `commons/validator.py` | Walks store without registry; surfaces EntityValidator errors. |
-| `commons/cli.py` | Typer CliRunner — arg parsing, exit codes, JSON output shape. |
-| Inventory wiring | `include_shared=True` emits `scope="cross-project"` rows; `inventory_v1` content-hash machinery unchanged. |
+| `commons/cli.py` | Typer CliRunner — arg parsing, exit codes, JSON output shape, `--project` rejection on `show`. |
 
 **Fixture layout** under `science/model/tests/fixtures/commons/`:
 
@@ -401,16 +393,17 @@ invalid/
 
 Adapter/registry tests build tmp stores by **copying** from `valid/` and adding/removing files per test — never mutate static fixtures.
 
-**Integration test:** one end-to-end test in the `science_tool` suite that builds a real inventory with `include_shared=True` over a tmp commons store + a tmp project, asserts shared and project entities both appear, and asserts content-hash machinery still works.
+No inventory-integration test in Phase B (inventory wiring is a Phase D concern, see §7).
 
 ## 9. Risks
 
 | Risk | Likelihood | Mitigation |
 | --- | --- | --- |
 | `MarkdownAdapter` frontmatter helper isn't cleanly extractable | medium | Allowed fallback: vendor a thin re-implementation in `commons/adapter.py`. |
-| `registry.sqlite` corruption mid-rebuild | low | Atomic rename; auto-rebuild on staleness self-heals. |
-| Adapter races with concurrent `science promote` (later phases) | deferred | Phase E will add a writer lock; Phase B reads only. |
-| Performance: full rebuild on every staleness check | low | Phase B store is empty/small. Re-evaluate when Phase E lands real volume. |
+| `registry.sqlite` corruption mid-rebuild | low | Unique temp file per rebuild + atomic `os.replace()`. A second concurrent rebuild succeeds atomically (last writer wins); neither sees partial state. |
+| Concurrent explicit `science commons index rebuild` calls | low | Each rebuild writes its own temp file (`.registry-XXX.sqlite`) and atomically replaces `registry.sqlite`. Wasted work, but no corruption and no lock needed. |
+| Stale registry queried silently | medium | `is_stale()` warns to stderr before each query; user knows to run `science commons index rebuild`. Phase E adds auto-rebuild + writer lock. |
+| Performance: stat-walking the store on every query | low | Phase B store is small; full mtime walk is cheap. Re-evaluate when Phase E lands real volume. |
 | Existing `~/d/science-commons/` from prior experiments | low | `science commons init` refuses to operate on a non-empty path that doesn't match layout. |
 
 ## 10. Deliverables checklist
@@ -418,13 +411,12 @@ Adapter/registry tests build tmp stores by **copying** from `valid/` and adding/
 1. `~/d/science-commons/` bootstrappable via `science commons init`.
 2. `CommonsEntityAdapter`, `RegistryBuilder`, `CommonsQuery`, `CommonsValidator` working against fixtures and an empty real store.
 3. `science commons {init, index rebuild, show, find, validate}` subcommands wired in.
-5. `entities_inventory.build_inventory` gains `include_shared` flag emitting `scope="cross-project"` rows in `inventory_v1`.
-6. `~/.config/science/config.yaml` extended with optional `commons.root`.
-7. Test fixtures under `science/model/tests/fixtures/commons/{valid,invalid}/`.
-8. Test coverage: per-module unit tests + one integration test for inventory wiring.
+4. `~/.config/science/config.yaml` extended with optional `commons.root`.
+5. Test fixtures under `science/model/tests/fixtures/commons/{valid,invalid}/`.
+6. Test coverage: per-module unit tests. No inventory-integration test (deferred to Phase D per §7).
 
 ## 11. Follow-on phases
 
 - **Phase C — Data resolver.** Reuses `CommonsEntityAdapter` to locate `datapackage.yaml`. Adds `$SCIENCE_COMMONS_DATA_ROOT`, hash verification, `science commons data {resolve, fetch}`.
-- **Phase D — Overlay merge.** Adds `OverlayAdapter`, extends registry with an `overlays` table, introduces `inventory_v2` with top-level `overlays[]`, enables `science commons show --project <name>`.
+- **Phase D — Overlay merge + inventory_v2.** Adds `OverlayAdapter`, extends the registry with an `overlays` table, introduces `inventory_v2` with the top-level `overlays[]` field and the path-semantics needed to carry commons-rooted source paths. Adds `--include-shared` (or its v2-named equivalent) to the inventory builder so shared entities flow to consumers. Defines the `CommonsEntityRecord → InventoryEntity` projection (synthetic defaults for `project`, `related`, `source_refs`, `content_preview`, `file_path`; `scope=EntityScope.SHARED`). Enables `science commons show --project <name>` and overlay-aware rendering.
 - **Phase E/F/G — Migration.** `science promote` writes into `.migrations/`, calls `RegistryBuilder.rebuild()` after each promotion.
