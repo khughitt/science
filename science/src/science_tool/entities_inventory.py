@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, overload
 
 import yaml
 from science_model import Entity
@@ -44,8 +44,24 @@ PROMOTED_ENTITY_DATA_FIELDS = {
 }
 
 
+@overload
+def build_inventory(project_root: Path, schema_version: Literal["1"]) -> InventoryPayload: ...
+
+
+@overload
 def build_inventory(
-    project_root: Path, schema_version: Literal["1", "2"] = "2"
+    project_root: Path, schema_version: Literal["2"] = "2"
+) -> inventory_v2.InventoryPayload: ...
+
+
+@overload
+def build_inventory(
+    project_root: Path, schema_version: str
+) -> InventoryPayload | inventory_v2.InventoryPayload: ...
+
+
+def build_inventory(
+    project_root: Path, schema_version: str = "2"
 ) -> InventoryPayload | inventory_v2.InventoryPayload:
     if schema_version not in ("1", "2"):
         raise ValueError(
