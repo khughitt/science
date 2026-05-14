@@ -9,6 +9,7 @@ import yaml
 
 from _fixtures.entity_helpers import seed_project, write_markdown_entity
 from science_model.contracts.inventory_v1 import InventoryPayload
+from science_model.contracts.inventory_v2 import InventoryPayload as InventoryPayloadV2
 from science_model.entities import EntityClass
 from science_model.profiles.schema import ProfileManifest
 from science_tool.cli import main
@@ -269,7 +270,8 @@ def test_entities_inventory_cli_outputs_contract_json(tmp_path) -> None:
     result = runner.invoke(main, ["entities", "inventory", "--project", str(project), "--format", "json"])
 
     assert result.exit_code == 0, result.output
-    payload = InventoryPayload.model_validate_json(result.output)
+    payload = InventoryPayloadV2.model_validate_json(result.output)
+    assert payload.schema_version == "2"
     assert payload.project_id == "cli-project"
     assert payload.entities[0].id == "finding:f001"
 
@@ -292,9 +294,39 @@ def test_entities_inventory_cli_writes_contract_json_to_output_file(tmp_path) ->
 
     assert result.exit_code == 0, result.output
     assert result.output == ""
-    payload = InventoryPayload.model_validate_json(output.read_text(encoding="utf-8"))
+    payload = InventoryPayloadV2.model_validate_json(output.read_text(encoding="utf-8"))
     assert payload.project_id == "cli-output-project"
     assert payload.entities[0].id == "finding:f001"
+
+
+def test_entities_inventory_cli_schema_version_1_emits_v1(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc").mkdir(parents=True)
+    (project / "science.yaml").write_text("id: v1-cli-project\n", encoding="utf-8")
+    (project / "doc" / "finding.md").write_text(
+        "---\nkind: finding\nid: finding:f001\ntitle: Finding\n---\n",
+        encoding="utf-8",
+    )
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        [
+            "entities",
+            "inventory",
+            "--project",
+            str(project),
+            "--format",
+            "json",
+            "--schema-version",
+            "1",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = InventoryPayload.model_validate_json(result.output)
+    assert payload.schema_version == "1"
+    assert payload.project_id == "v1-cli-project"
 
 
 def test_entities_audit_identifiers_cli_outputs_json(tmp_path) -> None:
