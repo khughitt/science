@@ -58,6 +58,9 @@ class CommonsValidator:
     ) -> bool:
         if type is None and slug is None:
             return True
+        # An error without a canonical_id can't be matched against a type/slug
+        # filter, so it is treated as non-matching. In practice the adapter's
+        # _build always sets canonical_id on the errors it yields.
         canonical = err.canonical_id or ""
         err_type, _, err_slug = canonical.partition(":")
         if type is not None and err_type != type:
