@@ -18,6 +18,12 @@ from science_tool.commons.errors import CommonsEntityError, CommonsLayoutError
 
 _TYPE_DIRS = ("datasets", "papers", "topics", "themes")
 _SKIP_NAMES = frozenset({".git", ".migrations", "__pycache__", "registry.sqlite"})
+_TYPE_DIR_TO_TYPE = {
+    "datasets": "dataset",
+    "papers": "paper",
+    "topics": "topic",
+    "themes": "theme",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,7 +70,7 @@ class CommonsEntityAdapter:
                 if not dp_path.is_file():
                     raise CommonsLayoutError(
                         child,
-                        reason=f"dataset directory missing required datapackage.yaml sibling",
+                        reason="dataset directory missing required datapackage.yaml sibling",
                     )
                 yield self._make_record(type_name, child.name, entity_path, dp_path)
         else:
@@ -101,11 +107,3 @@ class CommonsEntityAdapter:
             datapackage_path=datapackage_path,
             mtime_ns=mtime_ns,
         )
-
-
-_TYPE_DIR_TO_TYPE = {
-    "datasets": "dataset",
-    "papers": "paper",
-    "topics": "topic",
-    "themes": "theme",
-}
