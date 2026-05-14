@@ -249,7 +249,7 @@ def test_validate_clean_store_exits_0(
     runner = CliRunner()
     result = runner.invoke(commons_group, ["validate"])
     assert result.exit_code == 0, result.output
-    assert "5 entities" in result.output or "checked 5" in result.output
+    assert "checked 5 entities" in result.output
 
 
 def test_validate_reports_per_entity_errors(
