@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import click
@@ -28,8 +27,7 @@ def init_cmd(force: bool) -> None:
     try:
         init_commons(root, force=force)
     except CommonsError as exc:
-        click.echo(f"error: {exc}", err=True)
-        sys.exit(1)
+        raise click.ClickException(str(exc)) from exc
     click.echo(f"commons initialized at {root}")
 
 
@@ -46,36 +44,32 @@ def index_rebuild_cmd(as_json: bool) -> None:
     adapter = CommonsEntityAdapter(root)
     report = RegistryBuilder(root, adapter).rebuild()
     if as_json:
-        click.echo(
-            json.dumps(
+        payload = {
+            "entities_indexed": report.entities_indexed,
+            "errors": [
                 {
-                    "entities_indexed": report.entities_indexed,
-                    "errors": [
-                        {
-                            "path": str(e.path),
-                            "canonical_id": e.canonical_id,
-                            "message": str(e.cause),
-                        }
-                        for e in report.errors
-                    ],
-                    "duration_ms": report.duration_ms,
+                    "path": str(e.path),
+                    "canonical_id": e.canonical_id,
+                    "message": str(e.cause),
                 }
-            )
-        )
+                for e in report.errors
+            ],
+            "duration_ms": report.duration_ms,
+        }
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
     else:
         click.echo(f"indexed {report.entities_indexed} entities in {report.duration_ms} ms")
         for err in report.errors:
             click.echo(f"  error: {err}", err=True)
-    sys.exit(1 if report.errors else 0)
+    if report.errors:
+        raise click.exceptions.Exit(1)
 
 
 def _require_root() -> Path:
-    """Resolve the commons root and exit cleanly if missing."""
+    """Resolve the commons root, raising a ClickException if it is missing."""
     root = resolve_commons_root()
     if not root.is_dir():
-        click.echo(
-            f"error: commons store not found at {root}; run `science commons init`",
-            err=True,
+        raise click.ClickException(
+            f"commons store not found at {root}; run `science commons init`"
         )
-        sys.exit(1)
     return root
