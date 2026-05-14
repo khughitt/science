@@ -366,3 +366,46 @@ def test_resolve_entity_unknown_id_raises(
     _seed_commons_and_config(tmp_path, monkeypatch, projects={})
     with pytest.raises(CommonsEntityError):
         resolve_entity("paper:NoSuchPaper")
+
+
+def test_validate_project_overlays_clean_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.commons.overlay import validate_project_overlays
+
+    _seed_commons_and_config(
+        tmp_path, monkeypatch, projects={"proj-alpha": _OVERLAYS / "proj-alpha"}
+    )
+    report = validate_project_overlays("proj-alpha")
+    assert report.checked == 2
+    assert report.errors == []
+
+
+def test_validate_project_overlays_reports_schema_and_dangling_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.commons.overlay import validate_project_overlays
+
+    _seed_commons_and_config(
+        tmp_path, monkeypatch, projects={"proj-broken": _OVERLAYS / "proj-broken"}
+    )
+    report = validate_project_overlays("proj-broken")
+    # one schema failure (papers/Adams2025.md) + one dangling overlay_of
+    # (topics/nonexistent-topic.md).
+    assert report.checked == 2
+    assert len(report.errors) == 2
+    failed_ids = sorted(e.canonical_id for e in report.errors)
+    assert failed_ids == ["paper:Adams2025", "topic:nonexistent-topic"]
+
+
+def test_validate_project_overlays_missing_dir_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from science_tool.commons.errors import ProjectDirectoryMissingError
+    from science_tool.commons.overlay import validate_project_overlays
+
+    _seed_commons_and_config(
+        tmp_path, monkeypatch, projects={"gone": tmp_path / "does-not-exist"}
+    )
+    with pytest.raises(ProjectDirectoryMissingError):
+        validate_project_overlays("gone")

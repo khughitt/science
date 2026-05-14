@@ -25,9 +25,10 @@ from science_model.entity_schema import (
     read_overlay_merge_policy,
 )
 
-from science_tool.commons.adapter import CommonsEntityRecord
+from science_tool.commons.adapter import CommonsEntityAdapter, CommonsEntityRecord
 from science_tool.commons.config import resolve_commons_root, resolve_project_root
 from science_tool.commons.errors import (
+    CommonsEntityError,
     CommonsRootNotFoundError,
     OverlayMergeError,
     OverlayValidationError,
@@ -302,3 +303,48 @@ def resolve_entity(canonical_id: str, project: str | None = None) -> MergedEntit
 
     overlay = OverlayAdapter(project_root, project).load(canonical_id)
     return merge_entity(record, overlay, policy)
+
+
+@dataclass(frozen=True)
+class OverlayValidationReport:
+    """Result of validating every overlay file in one project."""
+
+    checked: int
+    errors: list[OverlayValidationError]
+
+
+def validate_project_overlays(project: str) -> OverlayValidationReport:
+    """Validate every overlay file in a registered project.
+
+    Each overlay is checked against the overlay schema (via OverlayAdapter.scan)
+    and its `overlay_of` is confirmed to resolve to a real canonical entity in
+    the commons store. Raises CommonsRootNotFoundError, ProjectNotRegisteredError,
+    or ProjectDirectoryMissingError before scanning.
+    """
+    root = resolve_commons_root()
+    if not root.is_dir():
+        raise CommonsRootNotFoundError(root)
+
+    project_root = resolve_project_root(project)
+    if not project_root.is_dir():
+        raise ProjectDirectoryMissingError(project, project_root)
+
+    commons_adapter = CommonsEntityAdapter(root)
+    checked = 0
+    errors: list[OverlayValidationError] = []
+    for item in OverlayAdapter(project_root, project).scan():
+        checked += 1
+        if isinstance(item, OverlayValidationError):
+            errors.append(item)
+            continue
+        try:
+            commons_adapter.load(item.canonical_id)
+        except CommonsEntityError as exc:
+            errors.append(
+                OverlayValidationError(
+                    item.overlay_path,
+                    canonical_id=item.canonical_id,
+                    cause=exc,
+                )
+            )
+    return OverlayValidationReport(checked=checked, errors=errors)
