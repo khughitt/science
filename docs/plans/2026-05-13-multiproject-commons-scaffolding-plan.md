@@ -395,20 +395,12 @@ def resolve_commons_root() -> Path:
     return Path.home() / "d" / "science-commons"
 ```
 
-- [ ] **Step 4: Extend `GlobalConfig`**
+- [ ] **Step 4: Wire `CommonsSettings` into `GlobalConfig`**
 
-Modify `science/src/science_tool/registry/config.py`. After the `SyncSettings` class definition (around line 41), add:
+Modify `science/src/science_tool/registry/config.py`. Import `CommonsSettings` from the commons subpackage at the top of the file (the one-way dependency does not create a cycle — `commons.config` only imports `load_global_config` lazily inside `resolve_commons_root`). Add this import near the existing pydantic import:
 
 ```python
-class CommonsSettings(BaseModel):
-    """Settings controlling the shared knowledge store (commons).
-
-    Mirrored from science_tool.commons.config to keep `GlobalConfig`
-    independent of the commons subpackage. The two definitions are
-    structurally identical and round-trip through YAML.
-    """
-
-    root: Path | None = None
+from science_tool.commons.config import CommonsSettings
 ```
 
 Then update `GlobalConfig` (currently around lines 55-59) to:
@@ -422,7 +414,7 @@ class GlobalConfig(BaseModel):
     commons: CommonsSettings = Field(default_factory=CommonsSettings)
 ```
 
-Add the `Path` import at the top of the file if not already present (it is — confirm before editing).
+Do not redefine `CommonsSettings` here. There is one class — the test in step 1 asserts `isinstance(cfg.commons, CommonsSettings)` using the import from `science_tool.commons.config`, and `GlobalConfig` must reference that same class for the check to pass.
 
 - [ ] **Step 5: Run test to verify it passes**
 
@@ -1306,6 +1298,79 @@ def test_scan_continues_after_per_entity_error(tmp_path: Path) -> None:
     assert "paper:Adams2025" in {r.canonical_id for r in records}
     assert len(errors) == 1
     assert errors[0].path == bad
+
+
+def test_scan_rejects_id_path_mismatch(tmp_path: Path) -> None:
+    """A schema-valid paper at papers/Adams2025.md whose frontmatter says
+    id: paper:Other2025 must be reported as an error — not silently indexed
+    under the path-derived id."""
+    root = _make_store(tmp_path, "valid")
+    impostor = root / "papers" / "Adams2025.md"
+    impostor.write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
+        'id: "paper:Other2025"\n'        # contradicts path-derived paper:Adams2025
+        'type: "paper"\n'
+        'title: "Impostor"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-05-13"\n'
+        'updated: "2026-05-13"\n'
+        'bibkey: "Other2025"\n'
+        'authors: ["X"]\n'
+        "year: 2025\n"
+        'journal: "T"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "---\nbody\n",
+        encoding="utf-8",
+    )
+    adapter = CommonsEntityAdapter(root)
+    items = list(adapter.scan())
+    paper_records = [
+        r for r in items
+        if isinstance(r, CommonsEntityRecord) and r.type == "paper"
+    ]
+    paper_errors = [
+        e for e in items
+        if isinstance(e, CommonsEntityError) and e.path == impostor
+    ]
+    assert paper_records == [], "impostor should not appear in records"
+    assert len(paper_errors) == 1
+    assert "does not match path-derived" in str(paper_errors[0].cause)
+
+
+def test_scan_rejects_type_path_mismatch(tmp_path: Path) -> None:
+    """An entity in papers/Foo2025.md claiming type: dataset must error."""
+    root = _make_store(tmp_path, "valid")
+    impostor = root / "papers" / "Adams2025.md"
+    impostor.write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+paper/1.0"\n'
+        'id: "paper:Adams2025"\n'
+        'type: "dataset"\n'              # contradicts path-derived type "paper"
+        'title: "Misfiled"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-05-13"\n'
+        'updated: "2026-05-13"\n'
+        'bibkey: "Adams2025"\n'
+        'authors: ["X"]\n'
+        "year: 2025\n"
+        'journal: "T"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "---\nbody\n",
+        encoding="utf-8",
+    )
+    adapter = CommonsEntityAdapter(root)
+    items = list(adapter.scan())
+    errors = [e for e in items if isinstance(e, CommonsEntityError) and e.path == impostor]
+    # Either the schema mixin guards this directly, or our consistency check fires.
+    # Either way, it must not appear as a record.
+    assert errors, "type mismatch must produce an error"
+    records = [r for r in items if isinstance(r, CommonsEntityRecord) and r.body_path == impostor]
+    assert records == []
 ```
 
 - [ ] **Step 2: Run tests to verify the new ones fail**
@@ -1423,6 +1488,21 @@ class CommonsEntityAdapter:
                     f"{body_path} has no parseable frontmatter"
                 )
             self._validator.validate(frontmatter)
+            # Path/frontmatter consistency: an entity in papers/Adams2025.md
+            # claiming id: paper:Other2025 must be a hard error, not silently
+            # indexed under the path-derived id.
+            declared_id = frontmatter.get("id")
+            if declared_id != canonical_id:
+                raise EntityValidationError(
+                    f"frontmatter id {declared_id!r} does not match path-derived "
+                    f"canonical id {canonical_id!r}"
+                )
+            declared_type = frontmatter.get("type")
+            if declared_type != type_name:
+                raise EntityValidationError(
+                    f"frontmatter type {declared_type!r} does not match path-derived "
+                    f"type {type_name!r}"
+                )
         except EntityValidationError as exc:
             return CommonsEntityError(
                 body_path, canonical_id=canonical_id, cause=exc
@@ -2201,6 +2281,45 @@ def test_show_warns_on_stale(tmp_path: Path, capsys: pytest.CaptureFixture[str])
     assert "science commons index rebuild" in err
 
 
+def test_show_without_registry_raises_registry_error(tmp_path: Path) -> None:
+    """Querying before `index rebuild` must raise CommonsRegistryError,
+    not a bare sqlite3.OperationalError from a phantom auto-created DB."""
+    import shutil
+    root = tmp_path / "commons"
+    shutil.copytree(FIXTURES / "valid", root)
+    # Note: no rebuild — registry.sqlite does not exist.
+    from science_tool.commons.errors import CommonsRegistryError
+    q = CommonsQuery(root)
+    with pytest.raises(CommonsRegistryError):
+        q.show("paper:Adams2025")
+
+
+def test_find_without_registry_raises_registry_error(tmp_path: Path) -> None:
+    import shutil
+    root = tmp_path / "commons"
+    shutil.copytree(FIXTURES / "valid", root)
+    from science_tool.commons.errors import CommonsRegistryError
+    q = CommonsQuery(root)
+    with pytest.raises(CommonsRegistryError):
+        q.find("paper")
+
+
+def test_show_with_empty_registry_raises_registry_error(tmp_path: Path) -> None:
+    """If registry.sqlite exists but lacks the entities table (e.g., the file
+    was created by a stray sqlite3.connect call), surface a CommonsRegistryError."""
+    import shutil
+    import sqlite3
+    root = tmp_path / "commons"
+    shutil.copytree(FIXTURES / "valid", root)
+    # Touch an empty DB at registry.sqlite (simulates partial init)
+    conn = sqlite3.connect(root / "registry.sqlite")
+    conn.close()
+    from science_tool.commons.errors import CommonsRegistryError
+    q = CommonsQuery(root)
+    with pytest.raises(CommonsRegistryError):
+        q.find("paper")
+
+
 def test_stale_warning_suppressed_by_env(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -2255,7 +2374,7 @@ from science_tool.commons.adapter import (
     CommonsEntityAdapter,
     CommonsEntityRecord,
 )
-from science_tool.commons.errors import CommonsEntityError
+from science_tool.commons.errors import CommonsEntityError, CommonsRegistryError
 from science_tool.commons.registry import (
     REGISTRY_FILENAME,
     RegistryBuilder,
@@ -2271,6 +2390,7 @@ class CommonsQuery:
         self._builder = RegistryBuilder(root, self._adapter)
 
     def show(self, canonical_id: str) -> CommonsEntityRecord:
+        self._require_registry()
         self._warn_if_stale()
         row = self._row_for(canonical_id)
         if row is None:
@@ -2295,12 +2415,10 @@ class CommonsQuery:
             raise ValueError(
                 f"year filters are only valid for type='paper', got type={type!r}"
             )
+        self._require_registry()
         self._warn_if_stale()
         clauses = ["type = ?"]
         params: list[object] = [type]
-        if slug_glob is not None:
-            # fnmatch handles globbing in Python; we hydrate first then filter.
-            pass
         for tag in tags:
             clauses.append(
                 "canonical_id IN (SELECT canonical_id FROM entity_tags WHERE tag = ?)"
@@ -2316,11 +2434,16 @@ class CommonsQuery:
             "datapackage_path, mtime_ns, frontmatter_json FROM entities "
             f"WHERE {' AND '.join(clauses)} ORDER BY canonical_id"
         )
-        conn = sqlite3.connect(self._root / REGISTRY_FILENAME)
         try:
-            rows = conn.execute(sql, params).fetchall()
-        finally:
-            conn.close()
+            conn = sqlite3.connect(self._root / REGISTRY_FILENAME)
+            try:
+                rows = conn.execute(sql, params).fetchall()
+            finally:
+                conn.close()
+        except sqlite3.Error as exc:
+            raise CommonsRegistryError(
+                self._root / REGISTRY_FILENAME, cause=exc
+            ) from exc
         records = [self._hydrate(row) for row in rows]
         if slug_glob is not None:
             records = [r for r in records if fnmatch.fnmatch(r.slug, slug_glob)]
@@ -2332,17 +2455,59 @@ class CommonsQuery:
             ]
         return records
 
-    def _row_for(self, canonical_id: str) -> tuple | None:
-        conn = sqlite3.connect(self._root / REGISTRY_FILENAME)
+    def _require_registry(self) -> None:
+        """Raise CommonsRegistryError if the registry is absent or malformed.
+
+        sqlite3.connect() creates an empty database when the file is missing,
+        so a naive query against a non-existent registry would surface as a
+        bare `OperationalError: no such table: entities` rather than a
+        CommonsError. Probe explicitly.
+        """
+        db_path = self._root / REGISTRY_FILENAME
+        if not db_path.is_file():
+            raise CommonsRegistryError(
+                db_path,
+                cause=FileNotFoundError(
+                    f"registry not found at {db_path}; "
+                    "run `science commons index rebuild`"
+                ),
+            )
         try:
-            return conn.execute(
-                "SELECT canonical_id, type, slug, title, schema_profile, body_path, "
-                "datapackage_path, mtime_ns, frontmatter_json FROM entities "
-                "WHERE canonical_id = ?",
-                (canonical_id,),
-            ).fetchone()
-        finally:
-            conn.close()
+            conn = sqlite3.connect(db_path)
+            try:
+                row = conn.execute(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type = 'table' AND name = 'entities'"
+                ).fetchone()
+            finally:
+                conn.close()
+        except sqlite3.Error as exc:
+            raise CommonsRegistryError(db_path, cause=exc) from exc
+        if row is None:
+            raise CommonsRegistryError(
+                db_path,
+                cause=RuntimeError(
+                    "registry exists but is missing the entities table; "
+                    "run `science commons index rebuild`"
+                ),
+            )
+
+    def _row_for(self, canonical_id: str) -> tuple | None:
+        try:
+            conn = sqlite3.connect(self._root / REGISTRY_FILENAME)
+            try:
+                return conn.execute(
+                    "SELECT canonical_id, type, slug, title, schema_profile, body_path, "
+                    "datapackage_path, mtime_ns, frontmatter_json FROM entities "
+                    "WHERE canonical_id = ?",
+                    (canonical_id,),
+                ).fetchone()
+            finally:
+                conn.close()
+        except sqlite3.Error as exc:
+            raise CommonsRegistryError(
+                self._root / REGISTRY_FILENAME, cause=exc
+            ) from exc
 
     def _hydrate(self, row: tuple) -> CommonsEntityRecord:
         (
@@ -2418,8 +2583,6 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-
-import pytest
 
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.validator import CommonsValidator, ValidationReport
@@ -2502,7 +2665,6 @@ stale or absent).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 from science_tool.commons.adapter import (
     CommonsEntityAdapter,
@@ -2723,10 +2885,7 @@ import click
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.bootstrap import init_commons
 from science_tool.commons.config import resolve_commons_root
-from science_tool.commons.errors import (
-    CommonsError,
-    CommonsRootNotFoundError,
-)
+from science_tool.commons.errors import CommonsError
 from science_tool.commons.registry import RegistryBuilder
 
 
@@ -2933,6 +3092,40 @@ def test_find_year_filter_only_for_papers(
         commons_group, ["find", "dataset", "--year-from", "2020"]
     )
     assert result.exit_code != 0
+
+
+def test_show_before_rebuild_exits_1_cleanly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Show must surface CommonsRegistryError as a clean exit-1 message,
+    not a raw sqlite3.OperationalError traceback."""
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    # Note: no `index rebuild` invocation — registry.sqlite is absent.
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["show", "paper:Adams2025"])
+    assert result.exit_code == 1
+    assert "OperationalError" not in result.output
+    # The error message either references the registry or suggests rebuilding.
+    assert (
+        "registry" in result.output.lower()
+        or "index rebuild" in result.output
+    )
+
+
+def test_find_before_rebuild_exits_1_cleanly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["find", "paper"])
+    assert result.exit_code == 1
+    assert "OperationalError" not in result.output
+    assert (
+        "registry" in result.output.lower()
+        or "index rebuild" in result.output
+    )
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -2969,7 +3162,7 @@ def show_cmd(entity_id: str, as_json: bool, project: str | None) -> None:
     try:
         record = CommonsQuery(root).show(entity_id)
     except CommonsError as exc:
-        click.echo(f"error: entity not found: {exc}", err=True)
+        click.echo(f"error: {exc}", err=True)
         sys.exit(1)
     if as_json:
         click.echo(json.dumps(_record_to_json(record, root)))
@@ -3015,6 +3208,9 @@ def find_cmd(
     except ValueError as exc:
         click.echo(f"error: {exc}", err=True)
         sys.exit(2)
+    except CommonsError as exc:
+        click.echo(f"error: {exc}", err=True)
+        sys.exit(1)
     if as_json:
         click.echo(json.dumps([_record_to_json(r, root) for r in records]))
     else:
