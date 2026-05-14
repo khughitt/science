@@ -1,6 +1,7 @@
 """Tests for science_tool.commons.registry."""
 from __future__ import annotations
 
+import os
 import shutil
 import sqlite3
 from pathlib import Path
@@ -121,7 +122,6 @@ def test_is_stale_detects_file_modification(tmp_path: Path) -> None:
     paper = root / "papers" / "Adams2025.md"
     # bump mtime by writing the same content one nanosecond later
     paper.write_text(paper.read_text(encoding="utf-8"), encoding="utf-8")
-    import os
     os.utime(paper, ns=(paper.stat().st_atime_ns, paper.stat().st_mtime_ns + 1_000_000))
     assert builder.is_stale() is True
 
@@ -166,6 +166,5 @@ def test_is_stale_detects_rename(tmp_path: Path) -> None:
     # Keep mtime identical so only the path-digest signal fires
     src_mtime = src.stat().st_mtime_ns
     src.rename(dst)
-    import os
     os.utime(dst, ns=(src_mtime, src_mtime))
     assert builder.is_stale() is True

@@ -145,20 +145,26 @@ class RegistryBuilder:
         if any(k not in meta for k in required):
             return True
 
-        source_files = sorted(self._source_files())
-        current_count = len(source_files)
+        current_count, current_digest, current_max = self._source_signature()
         if current_count != int(meta["source_count"]):
             return True
-
-        rel_posix = [p.relative_to(self._root).as_posix() for p in source_files]
-        current_digest = hashlib.sha256("\n".join(rel_posix).encode("utf-8")).hexdigest()
         if current_digest != meta["source_paths_digest"]:
             return True
-
-        current_max = max((p.stat().st_mtime_ns for p in source_files), default=0)
         if current_max > int(meta["max_source_mtime_ns"]):
             return True
         return False
+
+    def _source_signature(self) -> tuple[int, str, int]:
+        """Return (count, paths_digest, max_mtime_ns) over current source files.
+
+        Shared by `is_stale` (compares against stored schema_meta) and
+        `_write_schema_meta` (records it) so the two can never drift.
+        """
+        source_files = sorted(self._source_files())
+        rel_posix = [p.relative_to(self._root).as_posix() for p in source_files]
+        digest = hashlib.sha256("\n".join(rel_posix).encode("utf-8")).hexdigest()
+        max_mtime = max((p.stat().st_mtime_ns for p in source_files), default=0)
+        return len(source_files), digest, max_mtime
 
     def _insert_records(
         self,
@@ -203,14 +209,11 @@ class RegistryBuilder:
                 )
 
     def _write_schema_meta(self, conn: sqlite3.Connection) -> None:
-        source_files = sorted(self._source_files())
-        rel_posix = [p.relative_to(self._root).as_posix() for p in source_files]
-        digest = hashlib.sha256("\n".join(rel_posix).encode("utf-8")).hexdigest()
-        max_mtime = max((p.stat().st_mtime_ns for p in source_files), default=0)
+        count, digest, max_mtime = self._source_signature()
         rows = {
             "schema_version": REGISTRY_SCHEMA_VERSION,
             "store_root": str(self._root.resolve()),
-            "source_count": str(len(source_files)),
+            "source_count": str(count),
             "max_source_mtime_ns": str(max_mtime),
             "source_paths_digest": digest,
             "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
