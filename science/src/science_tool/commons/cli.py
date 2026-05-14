@@ -11,6 +11,7 @@ from science_tool.commons.adapter import CommonsEntityAdapter, CommonsEntityReco
 from science_tool.commons.bootstrap import init_commons
 from science_tool.commons.config import resolve_commons_root
 from science_tool.commons.errors import CommonsError, CommonsRootNotFoundError
+from science_tool.commons.overlay import MergedEntity, resolve_entity
 from science_tool.commons.query import CommonsQuery
 from science_tool.commons.registry import RegistryBuilder
 from science_tool.commons.resolver import resolve
@@ -83,23 +84,38 @@ def _require_root() -> Path:
 @click.option(
     "--project",
     default=None,
-    help="(reserved) Overlay-merged view; rejected in Phase B.",
+    help="Merge the named registered project's overlay into the entity.",
 )
 def show_cmd(entity_id: str, as_json: bool, project: str | None) -> None:
-    """Print one entity by canonical id."""
-    if project is not None:
-        raise click.ClickException(
-            "--project is rejected in Phase B; overlay merge lands in Phase D"
-        )
-    root = _require_root()
+    """Print one entity by canonical id, optionally merged with a project overlay."""
+    if project is None:
+        root = _require_root()
+        try:
+            record = CommonsQuery(root).show(entity_id)
+        except CommonsError as exc:
+            raise click.ClickException(str(exc)) from exc
+        if as_json:
+            click.echo(
+                json.dumps(_record_to_json(record, root), indent=2, sort_keys=True)
+            )
+        else:
+            _print_record_human(record)
+        return
+
     try:
-        record = CommonsQuery(root).show(entity_id)
+        merged = resolve_entity(entity_id, project=project)
     except CommonsError as exc:
         raise click.ClickException(str(exc)) from exc
+    if merged.overlay is not None and merged.overlay.pin_version:
+        click.echo(
+            f"warning: pin_version {merged.overlay.pin_version} on overlay is "
+            f"inactive until Phase E; merged from live entity",
+            err=True,
+        )
     if as_json:
-        click.echo(json.dumps(_record_to_json(record, root), indent=2, sort_keys=True))
+        click.echo(json.dumps(_merged_to_json(merged), indent=2, sort_keys=True))
     else:
-        _print_record_human(record)
+        _print_merged_human(merged)
 
 
 @commons_group.command("find")
@@ -176,6 +192,29 @@ def _record_to_json(record: CommonsEntityRecord, root: Path) -> dict:
     }
 
 
+def _merged_to_json(merged: MergedEntity) -> dict:
+    overlay = merged.overlay
+    overlay_json = None
+    if overlay is not None:
+        overlay_json = {
+            "project": overlay.project,
+            "overlay_path": str(
+                overlay.overlay_path.relative_to(overlay.project_root)
+            ),
+            "pin_version": overlay.pin_version,
+            "pin_effective_version": overlay.pin_effective_version,
+        }
+    return {
+        "canonical_id": merged.canonical.canonical_id,
+        "type": merged.canonical.type,
+        "schema_profile": merged.canonical.schema_profile,
+        "merged_frontmatter": merged.merged_frontmatter,
+        "merged_body": merged.merged_body,
+        "field_sources": merged.field_sources,
+        "overlay": overlay_json,
+    }
+
+
 def _print_record_human(record: CommonsEntityRecord) -> None:
     click.echo(f"{record.canonical_id}")
     click.echo(f"  title:          {record.frontmatter.get('title', '')}")
@@ -190,6 +229,26 @@ def _print_record_human(record: CommonsEntityRecord) -> None:
         authors = record.frontmatter.get("authors") or []
         click.echo(f"  authors:        {', '.join(authors)}")
         click.echo(f"  year:           {record.frontmatter.get('year', '')}")
+
+
+def _print_merged_human(merged: MergedEntity) -> None:
+    record = merged.canonical
+    click.echo(f"{record.canonical_id}")
+    click.echo(f"  title:          {merged.merged_frontmatter.get('title', '')}")
+    click.echo(f"  schema_profile: {record.schema_profile}")
+    tags = merged.merged_frontmatter.get("tags") or []
+    if tags:
+        click.echo(f"  tags:           {', '.join(tags)}")
+    if merged.overlay is not None:
+        contributed = sorted(
+            field
+            for field, src in merged.field_sources.items()
+            if src in ("overlay", "canonical+overlay")
+        )
+        click.echo(f"  overlay:        {merged.overlay.project}")
+        click.echo(f"    contributed:  {', '.join(contributed)}")
+    click.echo("")
+    click.echo(merged.merged_body)
 
 
 @commons_group.command("validate")

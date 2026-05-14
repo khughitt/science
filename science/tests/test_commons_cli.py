@@ -144,21 +144,6 @@ def test_show_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "commons_metadata" in payload
 
 
-def test_show_rejects_project_flag(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root = _seeded_store(tmp_path)
-    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
-    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
-    runner = CliRunner()
-    runner.invoke(commons_group, ["index", "rebuild"])
-    result = runner.invoke(
-        commons_group, ["show", "paper:Adams2025", "--project", "foo"]
-    )
-    assert result.exit_code == 1
-    assert "Phase D" in result.output
-
-
 def test_show_missing_entity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _seeded_store(tmp_path)
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
@@ -309,3 +294,152 @@ def test_find_before_rebuild_exits_1_cleanly(
         "registry" in result.output.lower()
         or "index rebuild" in result.output
     )
+
+
+def _seeded_store_with_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, project_name: str, fixture: str
+) -> Path:
+    """Seed the commons store + registry, register one overlay project, return root."""
+    import shutil
+
+    import yaml
+
+    from science_tool.commons.adapter import CommonsEntityAdapter
+    from science_tool.commons.registry import RegistryBuilder
+
+    src = Path(__file__).parent / "fixtures" / "commons" / "valid"
+    root = tmp_path / "commons"
+    shutil.copytree(src, root)
+    RegistryBuilder(root, CommonsEntityAdapter(root)).rebuild()
+
+    overlay_root = Path(__file__).parent / "fixtures" / "overlays" / fixture
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.yaml").write_text(
+        yaml.dump(
+            {
+                "projects": [
+                    {
+                        "path": str(overlay_root),
+                        "name": project_name,
+                        "registered": "2026-05-14",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    return root
+
+
+def test_show_project_human_merges_overlay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seeded_store_with_project(tmp_path, monkeypatch, "proj-alpha", "proj-alpha")
+    runner = CliRunner()
+    result = runner.invoke(
+        commons_group, ["show", "paper:Adams2025", "--project", "proj-alpha"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "overlay:" in result.output
+    assert "proj-alpha" in result.output
+    assert "Project-Specific Notes" in result.output
+
+
+def test_show_project_json_includes_overlay_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seeded_store_with_project(tmp_path, monkeypatch, "proj-alpha", "proj-alpha")
+    runner = CliRunner()
+    result = runner.invoke(
+        commons_group,
+        ["show", "paper:Adams2025", "--project", "proj-alpha", "--json"],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["canonical_id"] == "paper:Adams2025"
+    assert payload["merged_frontmatter"]["hypothesis_links"] == ["H2", "H4"]
+    assert payload["overlay"]["project"] == "proj-alpha"
+    assert payload["overlay"]["overlay_path"] == "doc/papers/Adams2025.md"
+    assert payload["field_sources"]["tags"] == "canonical+overlay"
+
+
+def test_show_project_with_no_overlay_for_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seeded_store_with_project(tmp_path, monkeypatch, "proj-alpha", "proj-alpha")
+    runner = CliRunner()
+    result = runner.invoke(
+        commons_group,
+        ["show", "theme:research-hygiene", "--project", "proj-alpha", "--json"],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["overlay"] is None
+
+
+def test_show_unknown_project_exits_1(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seeded_store_with_project(tmp_path, monkeypatch, "proj-alpha", "proj-alpha")
+    runner = CliRunner()
+    result = runner.invoke(
+        commons_group, ["show", "paper:Adams2025", "--project", "ghost"]
+    )
+    assert result.exit_code == 1
+    assert "ghost" in result.output
+
+
+def test_show_project_warns_on_inactive_pin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Add a pin_version to the proj-alpha paper overlay copy.
+    import shutil
+
+    import yaml
+
+    from science_tool.commons.adapter import CommonsEntityAdapter
+    from science_tool.commons.registry import RegistryBuilder
+
+    src = Path(__file__).parent / "fixtures" / "commons" / "valid"
+    root = tmp_path / "commons"
+    shutil.copytree(src, root)
+    RegistryBuilder(root, CommonsEntityAdapter(root)).rebuild()
+
+    proj = tmp_path / "proj-pinned"
+    (proj / "doc" / "papers").mkdir(parents=True)
+    (proj / "doc" / "papers" / "Adams2025.md").write_text(
+        '---\nid: "paper:Adams2025"\noverlay_of: "paper:Adams2025"\n'
+        'pin_version: "1.2.0"\nrelevance: "pinned"\n---\n\n## Notes\n',
+        encoding="utf-8",
+    )
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.yaml").write_text(
+        yaml.dump(
+            {
+                "projects": [
+                    {
+                        "path": str(proj),
+                        "name": "proj-pinned",
+                        "registered": "2026-05-14",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        commons_group, ["show", "paper:Adams2025", "--project", "proj-pinned"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "pin_version" in result.stderr
+    assert "Phase E" in result.stderr
