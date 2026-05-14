@@ -71,10 +71,22 @@ def test_overlay_adapter_load_schema_failure_raises_with_cause() -> None:
     assert excinfo.value.cause is not None
 
 
-def test_overlay_adapter_load_malformed_id_raises() -> None:
+@pytest.mark.parametrize(
+    "canonical_id",
+    [
+        "not-a-canonical-id",
+        "paper:",
+        "paper:bad/name",
+        "paper:Adams2025:extra",
+    ],
+)
+def test_overlay_adapter_load_malformed_id_raises(canonical_id: str) -> None:
     from science_tool.commons.errors import OverlayValidationError
     from science_tool.commons.overlay import OverlayAdapter
 
     root = _OVERLAYS / "proj-alpha"
-    with pytest.raises(OverlayValidationError):
-        OverlayAdapter(root, "proj-alpha").load("not-a-canonical-id")
+    with pytest.raises(OverlayValidationError) as excinfo:
+        OverlayAdapter(root, "proj-alpha").load(canonical_id)
+    assert excinfo.value.cause is not None
+    if ":" in canonical_id:
+        assert excinfo.value.canonical_id == canonical_id

@@ -94,6 +94,28 @@ class OverlayAdapter:
                 canonical_id=canonical_id,
                 cause=ValueError(f"unknown entity type {type_name!r}"),
             )
+        if not slug:
+            raise OverlayValidationError(
+                self._project_root,
+                canonical_id=canonical_id,
+                cause=ValueError(f"canonical id {canonical_id!r} has an empty slug"),
+            )
+        if ":" in slug:
+            raise OverlayValidationError(
+                self._project_root,
+                canonical_id=canonical_id,
+                cause=ValueError(
+                    f"canonical id {canonical_id!r} has an invalid ':' in slug"
+                ),
+            )
+        if "/" in slug or "\\" in slug:
+            raise OverlayValidationError(
+                self._project_root,
+                canonical_id=canonical_id,
+                cause=ValueError(
+                    f"canonical id {canonical_id!r} has a path separator in slug"
+                ),
+            )
         return type_dir, slug
 
     def _build(self, canonical_id: str, overlay_path: Path) -> OverlayRecord:
