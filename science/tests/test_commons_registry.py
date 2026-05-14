@@ -5,8 +5,6 @@ import shutil
 import sqlite3
 from pathlib import Path
 
-import pytest
-
 from science_tool.commons.adapter import CommonsEntityAdapter
 from science_tool.commons.registry import (
     REGISTRY_FILENAME,

@@ -97,9 +97,10 @@ class RegistryBuilder:
         try:
             conn = sqlite3.connect(temp_path)
             try:
+                conn.execute("PRAGMA foreign_keys = ON")
                 conn.executescript(_DDL)
                 self._insert_records(conn, records)
-                self._write_schema_meta(conn, records)
+                self._write_schema_meta(conn)
                 conn.commit()
             finally:
                 conn.close()
@@ -158,11 +159,7 @@ class RegistryBuilder:
                     (record.canonical_id, str(term)),
                 )
 
-    def _write_schema_meta(
-        self,
-        conn: sqlite3.Connection,
-        records: list[CommonsEntityRecord],
-    ) -> None:
+    def _write_schema_meta(self, conn: sqlite3.Connection) -> None:
         source_files = sorted(self._source_files())
         rel_posix = [p.relative_to(self._root).as_posix() for p in source_files]
         digest = hashlib.sha256("\n".join(rel_posix).encode("utf-8")).hexdigest()
