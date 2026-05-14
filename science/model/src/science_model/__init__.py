@@ -41,6 +41,12 @@ from science_model.packages import (
     validate_package,
 )
 from science_model.tasks import Task, TaskCreate, TaskStatus, TaskUpdate
+from science_model.entity_schema import (
+    EntityValidationError,
+    EntityValidator,
+    MergePolicy,
+    SharedEntity,
+)
 
 __all__ = [
     "ActivityItem",
@@ -54,6 +60,8 @@ __all__ = [
     "Entity",
     "EntityKind",
     "EntityType",
+    "EntityValidationError",
+    "EntityValidator",
     "EvidenceIndependence",
     "EvidenceLineMetadata",
     "EvidenceRole",
@@ -72,6 +80,7 @@ __all__ = [
     "ProjectDetail",
     "MeasurementModel",
     "MechanismEntity",
+    "MergePolicy",
     "ModelSource",
     "ParameterSource",
     "BindingSource",
@@ -81,6 +90,7 @@ __all__ = [
     "RivalModelPacket",
     "ResearchPackageDescriptor",
     "SearchResult",
+    "SharedEntity",
     "SupportScope",
     "SyncSource",
     "StructuralChainEntity",

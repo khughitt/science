@@ -68,7 +68,7 @@ def test_entity_has_no_tags_field():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /mnt/ssd/Dropbox/science/science-model && uv run --frozen pytest tests/test_entities.py::test_entity_has_no_tags_field -v`
+Run: `cd ~/d/science/science-model && uv run --frozen pytest tests/test_entities.py::test_entity_has_no_tags_field -v`
 Expected: FAIL — `tags` is still a required field and the assertion fails.
 
 - [ ] **Step 3: Remove `tags` from Entity, EntityUpdate, and Filters**
@@ -107,7 +107,7 @@ Update every Entity constructor in `test_entities.py` to remove the `tags` param
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd /mnt/ssd/Dropbox/science/science-model && uv run --frozen pytest tests/test_entities.py -v`
+Run: `cd ~/d/science/science-model && uv run --frozen pytest tests/test_entities.py -v`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
@@ -158,7 +158,7 @@ def test_legacy_tags_no_duplicates(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /mnt/ssd/Dropbox/science/science-model && uv run --frozen pytest tests/test_frontmatter.py::test_legacy_tags_merged_into_related tests/test_frontmatter.py::test_legacy_tags_no_duplicates -v`
+Run: `cd ~/d/science/science-model && uv run --frozen pytest tests/test_frontmatter.py::test_legacy_tags_merged_into_related tests/test_frontmatter.py::test_legacy_tags_no_duplicates -v`
 Expected: FAIL — Entity no longer has `tags` field (from Task 1), and the merge logic doesn't exist yet.
 
 - [ ] **Step 3: Implement legacy tags merge in `parse_entity_file`**
@@ -240,7 +240,7 @@ def test_parse_entity_file(tmp_path: Path) -> None:
 
 - [ ] **Step 5: Run all frontmatter tests**
 
-Run: `cd /mnt/ssd/Dropbox/science/science-model && uv run --frozen pytest tests/test_frontmatter.py -v`
+Run: `cd ~/d/science/science-model && uv run --frozen pytest tests/test_frontmatter.py -v`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
@@ -276,7 +276,7 @@ def test_task_has_no_tags_field():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_tasks.py::test_task_has_no_tags_field -v`
+Run: `cd ~/d/science && uv run --frozen pytest science/tests/test_tasks.py::test_task_has_no_tags_field -v`
 Expected: FAIL — Task still has `tags`.
 
 - [ ] **Step 3: Remove `tags` from Task, TaskCreate, TaskUpdate**
@@ -288,7 +288,7 @@ In `science-model/src/science_model/tasks.py`:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_tasks.py::test_task_has_no_tags_field -v`
+Run: `cd ~/d/science && uv run --frozen pytest science/tests/test_tasks.py::test_task_has_no_tags_field -v`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -326,7 +326,7 @@ def test_source_entity_has_no_tags_field():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_graph_materialize.py::test_source_entity_has_no_tags_field -v`
+Run: `cd ~/d/science && uv run --frozen pytest science/tests/test_graph_materialize.py::test_source_entity_has_no_tags_field -v`
 Expected: FAIL
 
 - [ ] **Step 3: Remove `tags` from SourceEntity and markdown loading**
@@ -341,7 +341,7 @@ In `science/tests/test_graph_materialize.py`, remove all `"tags: [demo]"` lines 
 
 - [ ] **Step 5: Run materialize tests**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_graph_materialize.py -v`
+Run: `cd ~/d/science && uv run --frozen pytest science/tests/test_graph_materialize.py -v`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
@@ -374,7 +374,7 @@ def test_render_and_parse_task_without_tags(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_tasks.py::test_render_and_parse_task_without_tags -v`
+Run: `cd ~/d/science && uv run --frozen pytest science/tests/test_tasks.py::test_render_and_parse_task_without_tags -v`
 Expected: FAIL — `add_task` still expects `tags` parameter.
 
 - [ ] **Step 3: Remove tags from task parser, renderer, and CRUD functions**
@@ -486,7 +486,7 @@ class TestTagsAndGroups:
 
 - [ ] **Step 5: Run task tests**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_tasks.py -v`
+Run: `cd ~/d/science && uv run --frozen pytest science/tests/test_tasks.py -v`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
@@ -564,7 +564,7 @@ In `science/tests/test_tasks_cli.py`, remove or update any tests that use `--tag
 
 - [ ] **Step 4: Run CLI tests**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_tasks_cli.py -v`
+Run: `cd ~/d/science && uv run --frozen pytest science/tests/test_tasks_cli.py -v`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -617,7 +617,7 @@ def test_graph_add_question_with_generic_related() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_graph_cli.py::test_graph_add_question_with_generic_related -v`
+Run: `cd ~/d/science && uv run --frozen pytest science/tests/test_graph_cli.py::test_graph_add_question_with_generic_related -v`
 Expected: FAIL — `--related` option doesn't exist yet.
 
 - [ ] **Step 3: Update `add_question` in store.py**
@@ -706,7 +706,7 @@ In `science/tests/test_graph_cli.py`, find all tests using `--related-hypothesis
 
 - [ ] **Step 6: Run question CLI tests**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen pytest science/tests/test_graph_cli.py -k "question" -v`
+Run: `cd ~/d/science && uv run --frozen pytest science/tests/test_graph_cli.py -k "question" -v`
 Expected: PASS
 
 - [ ] **Step 7: Commit**
@@ -734,8 +734,8 @@ In `science-model/tests/test_projects.py`, the `Project` model still has `tags` 
 
 - [ ] **Step 3: Run full test suite for both packages**
 
-Run: `cd /mnt/ssd/Dropbox/science/science-model && uv run --frozen pytest -v`
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run --frozen pytest -v`
+Run: `cd ~/d/science/science-model && uv run --frozen pytest -v`
+Run: `cd ~/d/science/science && uv run --frozen pytest -v`
 Expected: PASS for both
 
 - [ ] **Step 4: Commit**
@@ -774,7 +774,7 @@ For templates with non-empty tags (`comparison.md` → `[comparison]`, `bias-aud
 Spot-check by parsing a template with frontmatter parser:
 
 ```bash
-cd /mnt/ssd/Dropbox/science && python -c "
+cd ~/d/science && python -c "
 from science_model.frontmatter import parse_frontmatter
 from pathlib import Path
 for p in Path('templates').glob('*.md'):
@@ -843,23 +843,23 @@ git commit -m "docs: update review-tasks command to use related instead of tags"
 
 - [ ] **Step 1: Run science-model tests**
 
-Run: `cd /mnt/ssd/Dropbox/science/science-model && uv run --frozen pytest -v`
+Run: `cd ~/d/science/science-model && uv run --frozen pytest -v`
 Expected: PASS
 
 - [ ] **Step 2: Run science tests**
 
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run --frozen pytest -v`
+Run: `cd ~/d/science/science && uv run --frozen pytest -v`
 Expected: PASS
 
 - [ ] **Step 3: Run type checks**
 
-Run: `cd /mnt/ssd/Dropbox/science/science-model && uv run --frozen pyright`
-Run: `cd /mnt/ssd/Dropbox/science/science && uv run --frozen pyright`
+Run: `cd ~/d/science/science-model && uv run --frozen pyright`
+Run: `cd ~/d/science/science && uv run --frozen pyright`
 Expected: No new errors
 
 - [ ] **Step 4: Run linting**
 
-Run: `cd /mnt/ssd/Dropbox/science && uv run --frozen ruff check .`
+Run: `cd ~/d/science && uv run --frozen ruff check .`
 Expected: No new errors
 
 ---

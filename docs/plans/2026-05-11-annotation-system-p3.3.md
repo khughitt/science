@@ -4243,10 +4243,10 @@ Brunton 2022 wrote about modes. h04 is bare.
 A claim is uncited [UNVERIFIED].
 EOF
 git add . && git commit -q -m init
-uv run --project /mnt/ssd/Dropbox/science/science science annotate audit --root . --actor t
+uv run --project ~/d/science/science science annotate audit --root . --actor t
 git add . && git commit -q -m audit
-uv run --project /mnt/ssd/Dropbox/science/science science annotate list --root .
-uv run --project /mnt/ssd/Dropbox/science/science science annotate stats --root .
+uv run --project ~/d/science/science science annotate list --root .
+uv run --project ~/d/science/science science annotate stats --root .
 ```
 Expected: `audit` writes the sidecar; `list` shows ≥2 open rows;
 `stats` shows non-zero counts in each section.
@@ -4255,10 +4255,10 @@ Expected: `audit` writes the sidecar; `list` shows ≥2 open rows;
 
 (continuing from step 2's directory)
 ```bash
-ID=$(uv run --project /mnt/ssd/Dropbox/science/science science annotate list --root . --format json | python3 -c "import json,sys; print(json.load(sys.stdin)['annotations'][0]['id'])")
-uv run --project /mnt/ssd/Dropbox/science/science science annotate ack "$ID" --root . --actor t
+ID=$(uv run --project ~/d/science/science science annotate list --root . --format json | python3 -c "import json,sys; print(json.load(sys.stdin)['annotations'][0]['id'])")
+uv run --project ~/d/science/science science annotate ack "$ID" --root . --actor t
 git add . && git commit -q -m ack
-uv run --project /mnt/ssd/Dropbox/science/science science annotate list --root . --status all
+uv run --project ~/d/science/science science annotate list --root . --status all
 ```
 Expected: `ack:` line in output; subsequent `list --status all` shows
 the ack'd row.
@@ -4277,11 +4277,11 @@ cat > appendix/foo.md <<'EOF'
 Brunton 2022 wrote.
 EOF
 git add . && git commit -q -m init
-uv run --project /mnt/ssd/Dropbox/science/science science annotate audit --root . --actor t
+uv run --project ~/d/science/science science annotate audit --root . --actor t
 git add . && git commit -q -m audit
-ID=$(uv run --project /mnt/ssd/Dropbox/science/science science annotate list --root . --format json | python3 -c "import json,sys; print(json.load(sys.stdin)['annotations'][0]['id'].split(':')[-1])")
+ID=$(uv run --project ~/d/science/science science annotate list --root . --format json | python3 -c "import json,sys; print(json.load(sys.stdin)['annotations'][0]['id'].split(':')[-1])")
 # Bare frag is ambiguous (a-XXXX exists in both sidecars):
-uv run --project /mnt/ssd/Dropbox/science/science science annotate ack "$ID" --root . --actor t
+uv run --project ~/d/science/science science annotate ack "$ID" --root . --actor t
 echo "exit code: $?"
 ```
 Expected: exit code 2; stderr lists rel-path-qualified candidates.
@@ -4297,7 +4297,7 @@ cat > doc.md <<'EOF'
 A claim is uncited [UNVERIFIED] and stands alone.
 EOF
 git add . && git commit -q -m init
-uv run --project /mnt/ssd/Dropbox/science/science science annotate lift-tokens --root . --actor t
+uv run --project ~/d/science/science science annotate lift-tokens --root . --actor t
 ```
 Expected: 1 row written; no error. (Confirms text_segmentation swap
 preserved P3.2 behavior.)
@@ -4306,7 +4306,7 @@ preserved P3.2 behavior.)
 
 (continuing from step 5)
 ```bash
-uv run --project /mnt/ssd/Dropbox/science/science science annotate verify --root .
+uv run --project ~/d/science/science science annotate verify --root .
 ```
 Expected: 0 broken / 0 degraded / 0 fuzzy.
 

@@ -316,7 +316,7 @@ Same pattern as Phase 1:
 
 ## Documentation
 
-- `/mnt/ssd/Dropbox/science/references/dag-two-axis-evidence-model.md`
+- `~/d/science/references/dag-two-axis-evidence-model.md`
   (created in Phase 1) gets an additive section on "validate vs strict"
   — a short paragraph explaining that strict gates are opt-in migration
   completeness signals, not "the correct level of rigor."

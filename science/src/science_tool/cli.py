@@ -1449,6 +1449,11 @@ def graph_inquiry_summary(top: int, output_format: str, graph_path: Path) -> Non
 @click.option("--today", type=click.DateTime(formats=["%Y-%m-%d"]), default=None, help="Date for age weighting.")
 @click.option("--format", "output_format", type=click.Choice(OUTPUT_FORMATS), default="table", show_default=True)
 @click.option(
+    "--reason-aware",
+    is_flag=True,
+    help="Use opt-in reason-coded review routing before weighted random sampling.",
+)
+@click.option(
     "--path", "graph_path", default=str(DEFAULT_GRAPH_PATH), show_default=True, type=click.Path(path_type=Path)
 )
 def graph_attention_sample(
@@ -1458,6 +1463,7 @@ def graph_attention_sample(
     epsilon: float,
     today: datetime | None,
     output_format: str,
+    reason_aware: bool,
     graph_path: Path,
 ) -> None:
     """Sample epistemic entities by graph-derived attention weight."""
@@ -1474,9 +1480,19 @@ def graph_attention_sample(
             today=sample_date,
             kinds=set(kinds) if kinds else None,
             epsilon=epsilon,
+            reason_aware=reason_aware,
         )
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
+    table_rows = rows
+    if output_format == "table":
+        table_rows = [
+            {
+                **row,
+                "reasons": ", ".join(reason["code"] for reason in row.get("reasons", [])),
+            }
+            for row in rows
+        ]
     emit_query_rows(
         output_format=output_format,
         title="Graph Attention Sample",
@@ -1488,9 +1504,11 @@ def graph_attention_sample(
             ("days_since_last_review", "Days"),
             ("support_count", "Supports"),
             ("dispute_count", "Disputes"),
+            ("evidence_source_count", "Evidence Sources"),
+            ("reasons", "Reasons"),
             ("label", "Label"),
         ],
-        rows=rows,
+        rows=table_rows,
     )
 
 

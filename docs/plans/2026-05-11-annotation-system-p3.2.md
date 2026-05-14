@@ -524,7 +524,7 @@ Run:
 ```bash
 mkdir -p /tmp/p32-lint-smoke/doc && cd /tmp/p32-lint-smoke
 echo "Background: Brunton 2022 wrote about modes." > doc/x.md
-uv run --project /mnt/ssd/Dropbox/science/science science prose lint --root . --format json | python3 -m json.tool
+uv run --project ~/d/science/science science prose lint --root . --format json | python3 -m json.tool
 ```
 
 Expected: each `hits[*]` object now contains a `"match"` key
@@ -3259,7 +3259,7 @@ Expected: shows `--root`, `--remove`, `--force-dirty`, `--format`,
 ```bash
 cp -r science/tests/_fixtures/annotation/audit /tmp/p32-smoke
 cd /tmp/p32-smoke
-uv run --project /mnt/ssd/Dropbox/science/science science annotate audit \
+uv run --project ~/d/science/science science annotate audit \
     --root . --format json --actor smoke
 ```
 Expected: `summary.rows_written > 0`, multiple `lint:*` source-versions
@@ -3268,7 +3268,7 @@ in `summary.sources_run`, sidecars created next to fixtures.
 - [ ] **Step 5: Re-run audit**
 
 ```bash
-uv run --project /mnt/ssd/Dropbox/science/science science annotate audit \
+uv run --project ~/d/science/science science annotate audit \
     --root . --format json --actor smoke
 ```
 Expected: `summary.rows_written == 0`,
@@ -3280,7 +3280,7 @@ Expected: `summary.rows_written == 0`,
 rm -rf /tmp/p32-smoke && cp -r science/tests/_fixtures/annotation/audit /tmp/p32-smoke
 cd /tmp/p32-smoke && git init -q && git add . \
     && git -c user.name=t -c user.email=t@t commit -qm init
-uv run --project /mnt/ssd/Dropbox/science/science science annotate lift-tokens \
+uv run --project ~/d/science/science science annotate lift-tokens \
     --root . --format json --actor smoke
 ```
 Expected: sidecars written; mixed-tokens.md unchanged on disk.
@@ -3288,7 +3288,7 @@ Expected: sidecars written; mixed-tokens.md unchanged on disk.
 - [ ] **Step 7: Lift-tokens remove**
 
 ```bash
-uv run --project /mnt/ssd/Dropbox/science/science science annotate lift-tokens \
+uv run --project ~/d/science/science science annotate lift-tokens \
     --root . --remove --format json --actor smoke
 ```
 Expected: tokens stripped from prose; sidecars updated;
@@ -3297,9 +3297,9 @@ Expected: tokens stripped from prose; sidecars updated;
 - [ ] **Step 8: markers scan dedupe**
 
 ```bash
-uv run --project /mnt/ssd/Dropbox/science/science science markers scan \
+uv run --project ~/d/science/science science markers scan \
     --root . --format json
-uv run --project /mnt/ssd/Dropbox/science/science science markers scan \
+uv run --project ~/d/science/science science markers scan \
     --root . --ignore-lifted --format json
 ```
 Expected: plain reports zero (tokens were stripped); `--ignore-lifted`
@@ -3311,7 +3311,7 @@ the smoke from step 6 and compare the two outputs there: plain >
 
 ```bash
 mkdir -p /tmp/p32-validate-smoke && cd /tmp/p32-validate-smoke
-bash /mnt/ssd/Dropbox/science/science/src/science_tool/project_artifacts/data/validate.sh
+bash ~/d/science/science/src/science_tool/project_artifacts/data/validate.sh
 ```
 Expected: exit 0 or 1; output includes a section-8 block; no
 `unbound variable` or shell errors.

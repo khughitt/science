@@ -35,7 +35,7 @@
 
 ## Working environment
 
-All commands assume CWD `/mnt/ssd/Dropbox/science`. Tests run via `uv run --project science pytest <path>` or `uv run --project science/model pytest <path>` depending on package. Use `-v` for visibility.
+All commands assume CWD `~/d/science`. Tests run via `uv run --project science pytest <path>` or `uv run --project science/model pytest <path>` depending on package. Use `-v` for visibility.
 
 Each task ends with a commit. Commit message convention: `feat(chain-audit): <task scope>` for additive code, `test(chain-audit): <task scope>` if a task is test-only.
 

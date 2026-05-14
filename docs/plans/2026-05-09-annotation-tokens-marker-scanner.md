@@ -1521,7 +1521,7 @@ Pick by access status, not by reflex. Most paper-summary fields warrant `[UNVERI
 - [ ] **Step 2: Verify the file still parses as markdown**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.claude/worktrees/annotation-tokens-phase2 && head -200 commands/research-papers.md > /dev/null
+cd ~/d/science/.claude/worktrees/annotation-tokens-phase2 && head -200 commands/research-papers.md > /dev/null
 ```
 (No errors expected; this is just a smoke read.)
 
@@ -1574,7 +1574,7 @@ git commit -m "docs(writing-skill): document four-token annotation vocabulary"
 - [ ] **Step 1: Create the directory if it doesn't exist**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.claude/worktrees/annotation-tokens-phase2 && mkdir -p docs/conventions
+cd ~/d/science/.claude/worktrees/annotation-tokens-phase2 && mkdir -p docs/conventions
 ```
 
 - [ ] **Step 2: Write the convention doc**
@@ -1643,14 +1643,14 @@ A richer sub-document annotation system (rich payloads, multi-annotation per ROI
 - [ ] **Step 3: Verify `validate.sh` doesn't flag this doc itself**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.claude/worktrees/annotation-tokens-phase2 && cd science && uv run python -m science_tool markers scan --root .. --format json | python3 -c "import json,sys; d=json.load(sys.stdin); hits=[h for h in d['hits'] if 'annotation-tokens.md' in h['file']]; print('hits in convention doc:', hits)"
+cd ~/d/science/.claude/worktrees/annotation-tokens-phase2 && cd science && uv run python -m science_tool markers scan --root .. --format json | python3 -c "import json,sys; d=json.load(sys.stdin); hits=[h for h in d['hits'] if 'annotation-tokens.md' in h['file']]; print('hits in convention doc:', hits)"
 ```
 Expected: `hits in convention doc: []` (every token in the convention doc is either backticked or in a fenced code block, so none should leak through as annotations).
 
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.claude/worktrees/annotation-tokens-phase2
+cd ~/d/science/.claude/worktrees/annotation-tokens-phase2
 git add docs/conventions/annotation-tokens.md
 git commit -m "docs: annotation-tokens convention reference"
 ```
@@ -1685,7 +1685,7 @@ Expected: no errors.
 - [ ] **Step 4: Manual smoke test against the worktree itself**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.claude/worktrees/annotation-tokens-phase2/science && uv run python -m science_tool markers scan --root .. --format table | head -30
+cd ~/d/science/.claude/worktrees/annotation-tokens-phase2/science && uv run python -m science_tool markers scan --root .. --format table | head -30
 ```
 Expected: shows per-token counts for the worktree's own markdown. The convention doc should not appear in hits (Task 12 Step 3 verified this).
 

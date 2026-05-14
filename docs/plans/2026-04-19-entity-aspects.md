@@ -79,7 +79,7 @@ def test_known_aspects_matches_science_yaml_schema() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: FAIL — `science_model.aspects` does not exist.
@@ -113,7 +113,7 @@ SOFTWARE_ASPECT: str = "software-development"
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: PASS.
@@ -121,7 +121,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /mnt/ssd/Dropbox/science
+cd ~/d/science
 git add science-model/src/science_model/aspects.py science/tests/test_aspects_helpers.py
 git commit -m "feat(aspects): scaffold science_model.aspects with vocabulary constant"
 ```
@@ -169,7 +169,7 @@ def test_resolve_preserves_order_of_explicit_entity_aspects() -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: FAIL — `resolve_entity_aspects` not defined.
@@ -198,7 +198,7 @@ def resolve_entity_aspects(
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: 4 tests PASS.
@@ -253,7 +253,7 @@ def test_does_not_match_on_empty_filter_set() -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: 4 failures.
@@ -275,7 +275,7 @@ def matches_aspect_filter(resolved: list[str], filter_set: set[str]) -> bool:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: 8 total tests PASS.
@@ -344,7 +344,7 @@ def test_validate_rejects_aspect_not_in_vocabulary() -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: 6 failures (new tests) — `AspectValidationError` and `validate_entity_aspects` not defined.
@@ -398,7 +398,7 @@ def validate_entity_aspects(
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: 14 total tests PASS.
@@ -452,7 +452,7 @@ def test_load_raises_when_yaml_missing(tmp_path: Path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: 3 failures — `load_project_aspects` not defined.
@@ -488,7 +488,7 @@ def load_project_aspects(project_root: Path) -> list[str]:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_helpers.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_helpers.py -v
 ```
 
 Expected: 17 total tests PASS.
@@ -536,7 +536,7 @@ def test_task_create_and_update_carry_aspects() -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py::test_task_accepts_aspects_field -v
+cd ~/d/science/science && uv run pytest tests/test_tasks.py::test_task_accepts_aspects_field -v
 ```
 
 Expected: FAIL — `aspects` is not an accepted field.
@@ -602,7 +602,7 @@ class TaskUpdate(BaseModel):
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py -v
+cd ~/d/science/science && uv run pytest tests/test_tasks.py -v
 ```
 
 Expected: PASS (new tests + existing tests still pass).
@@ -648,7 +648,7 @@ def test_parse_task_reads_aspects_inline_field(tmp_path):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py::test_parse_task_reads_aspects_inline_field -v
+cd ~/d/science/science && uv run pytest tests/test_tasks.py::test_parse_task_reads_aspects_inline_field -v
 ```
 
 Expected: FAIL — parser doesn't populate `aspects`.
@@ -679,7 +679,7 @@ The existing `_parse_list_value` helper already handles `[a, b, c]`-bracketed li
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py -v
+cd ~/d/science/science && uv run pytest tests/test_tasks.py -v
 ```
 
 Expected: all tests PASS.
@@ -740,7 +740,7 @@ def test_render_task_omits_aspects_when_empty() -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py -v
+cd ~/d/science/science && uv run pytest tests/test_tasks.py -v
 ```
 
 Expected: first new test FAILs (renderer doesn't emit aspects); second passes incidentally.
@@ -779,7 +779,7 @@ def render_task(task: Task) -> str:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py -v
+cd ~/d/science/science && uv run pytest tests/test_tasks.py -v
 ```
 
 Expected: all tests PASS.
@@ -835,7 +835,7 @@ def test_add_task_without_aspects_writes_no_aspects_line(tmp_path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py -v
+cd ~/d/science/science && uv run pytest tests/test_tasks.py -v
 ```
 
 Expected: FAIL — `add_task` signature requires `task_type`.
@@ -882,7 +882,7 @@ def add_task(
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks.py -v
+cd ~/d/science/science && uv run pytest tests/test_tasks.py -v
 ```
 
 Expected: PASS. No existing test should regress (they pass `task_type=` as a keyword, which still works).
@@ -960,7 +960,7 @@ def test_tasks_add_without_type_or_aspects(tmp_path, monkeypatch):
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks_cli.py -v
+cd ~/d/science/science && uv run pytest tests/test_tasks_cli.py -v
 ```
 
 Expected: FAIL — `--type` is still required.
@@ -1021,7 +1021,7 @@ Note: the `--type` flag is removed entirely. Callers that previously passed `--t
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks_cli.py -v
+cd ~/d/science/science && uv run pytest tests/test_tasks_cli.py -v
 ```
 
 Expected: PASS.
@@ -1085,7 +1085,7 @@ def test_tasks_edit_updates_aspects(tmp_path, monkeypatch):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks_cli.py::test_tasks_edit_updates_aspects -v
+cd ~/d/science/science && uv run pytest tests/test_tasks_cli.py::test_tasks_edit_updates_aspects -v
 ```
 
 Expected: FAIL — `--aspects` not accepted.
@@ -1197,7 +1197,7 @@ Find any remaining callers that pass `task_type=` into `edit_task` and update th
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks_cli.py -v
+cd ~/d/science/science && uv run pytest tests/test_tasks_cli.py -v
 ```
 
 Expected: PASS.
@@ -1262,7 +1262,7 @@ def test_tasks_list_filter_by_aspect(tmp_path, monkeypatch):
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks_cli.py::test_tasks_list_filter_by_aspect -v
+cd ~/d/science/science && uv run pytest tests/test_tasks_cli.py::test_tasks_list_filter_by_aspect -v
 ```
 
 Expected: FAIL — `--aspect` not recognized.
@@ -1347,7 +1347,7 @@ If the existing `list_tasks` wrapper has a different signature (e.g., accepts `t
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_tasks_cli.py tests/test_tasks.py -v
+cd ~/d/science/science && uv run pytest tests/test_tasks_cli.py tests/test_tasks.py -v
 ```
 
 Expected: PASS.
@@ -1489,7 +1489,7 @@ def test_plan_raises_when_project_has_no_aspects(tmp_path: Path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_migrate.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_migrate.py -v
 ```
 
 Expected: FAIL — module not found.
@@ -1615,7 +1615,7 @@ def build_migration_plan(project_root: Path) -> AspectsMigrationPlan:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_migrate.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_migrate.py -v
 ```
 
 Expected: 5 PASS.
@@ -1693,7 +1693,7 @@ def test_apply_is_idempotent(tmp_path: Path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_migrate.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_migrate.py -v
 ```
 
 Expected: FAIL — `apply_migration_plan` not defined.
@@ -1730,7 +1730,7 @@ def apply_migration_plan(plan: AspectsMigrationPlan) -> None:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_migrate.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_migrate.py -v
 ```
 
 Expected: 7 PASS.
@@ -1816,7 +1816,7 @@ def test_migrate_apply_rewrites_file(tmp_path: Path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_cli.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_cli.py -v
 ```
 
 Expected: FAIL — `aspects` group not registered.
@@ -1909,7 +1909,7 @@ main.add_command(aspects_group)
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_aspects_cli.py -v
+cd ~/d/science/science && uv run pytest tests/test_aspects_cli.py -v
 ```
 
 Expected: 3 PASS.
@@ -1987,7 +1987,7 @@ def test_resolver_raises_on_invalid_explicit_aspects(tmp_path: Path) -> None:
 - [ ] **Step 3: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_resolver.py -v
 ```
 
 Expected: new tests FAIL — `resolved_aspects` not on `ResolverOutput`.
@@ -2062,7 +2062,7 @@ Replace the old `return {qid: _finalize(matches) for qid, matches in results.ite
 - [ ] **Step 5: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_resolver.py -v
 ```
 
 Expected: all PASS (existing tests + new tests). The existing direct/inverse/transitive tests still pass because the resolver's association logic is unchanged.
@@ -2109,7 +2109,7 @@ def test_orphan_count_excludes_software_only_questions() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: FAIL — `count_research_orphans` not defined.
@@ -2170,7 +2170,7 @@ def validate_rollup_file(path: Path, project_root: Path) -> list[ValidationIssue
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: all PASS.
@@ -2290,7 +2290,7 @@ prior_interpretations: []  # optional: interpretation IDs this document extends 
 - [ ] **Step 4: Verify**
 
 ```bash
-grep -n "aspects" /mnt/ssd/Dropbox/science/templates/hypothesis.md /mnt/ssd/Dropbox/science/templates/question.md /mnt/ssd/Dropbox/science/templates/interpretation.md
+grep -n "aspects" ~/d/science/templates/hypothesis.md ~/d/science/templates/question.md ~/d/science/templates/interpretation.md
 ```
 
 Expected: three lines, one per file, each showing `# aspects: ["hypothesis-testing"]`.
@@ -2352,7 +2352,7 @@ def test_health_flags_invalid_entity_aspects(tmp_path: Path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_health.py -v
+cd ~/d/science/science && uv run pytest tests/test_health.py -v
 ```
 
 Expected: FAIL — functions don't exist.
@@ -2451,7 +2451,7 @@ def collect_invalid_entity_aspects(project_root: Path) -> list[InvalidEntityAspe
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_health.py -v
+cd ~/d/science/science && uv run pytest tests/test_health.py -v
 ```
 
 Expected: PASS.
@@ -2472,7 +2472,7 @@ git commit -m "feat(aspects): health check for legacy type and invalid aspects"
 - [ ] **Step 1: Run the full science test suite**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest --tb=no 2>&1 | tail -5
+cd ~/d/science/science && uv run pytest --tb=no 2>&1 | tail -5
 ```
 
 Expected: all tests pass. If any pre-existing big-picture test regressed due to the resolver output-schema change or the fixture science.yaml aspect addition, fix inline.
@@ -2480,8 +2480,8 @@ Expected: all tests pass. If any pre-existing big-picture test regressed due to 
 - [ ] **Step 2: Ruff + pyright**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run --frozen ruff check src/science_tool/aspects/ src/science_tool/big_picture/ src/science_tool/tasks.py src/science_tool/cli.py tests/test_aspects_*.py tests/test_big_picture_*.py tests/test_tasks*.py 2>&1 | tail -3
-cd /mnt/ssd/Dropbox/science/science && uv run --frozen pyright src/science_tool/aspects/ src/science_tool/big_picture/resolver.py src/science_tool/big_picture/validator.py 2>&1 | tail -3
+cd ~/d/science/science && uv run --frozen ruff check src/science_tool/aspects/ src/science_tool/big_picture/ src/science_tool/tasks.py src/science_tool/cli.py tests/test_aspects_*.py tests/test_big_picture_*.py tests/test_tasks*.py 2>&1 | tail -3
+cd ~/d/science/science && uv run --frozen pyright src/science_tool/aspects/ src/science_tool/big_picture/resolver.py src/science_tool/big_picture/validator.py 2>&1 | tail -3
 ```
 
 Expected: ruff clean on new files; pyright clean on new files (pre-existing errors in unrelated files are OK).
@@ -2492,12 +2492,12 @@ Expected: ruff clean on new files; pyright clean on new files (pre-existing erro
 
 ## Task 22: Smoke test on mm30 — run migration + `/science:big-picture`
 
-**Files:** none in `science`; execution occurs in `/mnt/ssd/Dropbox/r/mm30/`
+**Files:** none in `science`; execution occurs in `~/d/r/mm30/`
 
 - [ ] **Step 1: Capture pre-state**
 
 ```bash
-cd /mnt/ssd/Dropbox/r/mm30
+cd ~/d/r/mm30
 git status
 git rev-parse HEAD
 ```
@@ -2515,7 +2515,7 @@ If `aspects:` is absent or empty, add appropriate aspects (research projects typ
 - [ ] **Step 3: Run migration dry-run**
 
 ```bash
-cd /mnt/ssd/Dropbox/r/mm30
+cd ~/d/r/mm30
 uv run science aspects migrate --project-root . 2>&1 | head -50
 ```
 
@@ -2531,7 +2531,7 @@ Expected: task files rewritten. `git diff tasks/` should show `- type:` lines re
 
 - [ ] **Step 5: Re-run `/science:big-picture`**
 
-In a Claude Code session at `/mnt/ssd/Dropbox/r/mm30`, invoke `/science:big-picture`. Confirm:
+In a Claude Code session at `~/d/r/mm30`, invoke `/science:big-picture`. Confirm:
 
 - The generated bundles no longer include software-oriented tasks.
 - `_emergent-threads.md`'s orphan count has dropped by the number of previously-orphaned software questions.
@@ -2549,14 +2549,14 @@ Expected: exit 0. Any `orphan_count_mismatch` surfaces from aspect-aware countin
 
 ## Task 23: Smoke test on natural-systems — same flow
 
-**Files:** none in `science`; execution occurs in `/home/keith/d/natural-systems/`
+**Files:** none in `science`; execution occurs in `~/d/natural-systems/`
 
 Same structure as Task 22.
 
 - [ ] **Step 1: Pre-state + science.yaml aspects check**
 
 ```bash
-cd /home/keith/d/natural-systems
+cd ~/d/natural-systems
 git status
 git rev-parse HEAD
 grep -A4 "^aspects:" science.yaml
@@ -2578,7 +2578,7 @@ The audit flagged `question:q14-data-quality-lens-design` as software-oriented. 
 - [ ] **Step 4: Re-run `/science:big-picture` + validator**
 
 ```bash
-# In a fresh Claude Code session at /home/keith/d/natural-systems/:
+# In a fresh Claude Code session at ~/d/natural-systems/:
 /science:big-picture
 # After it finishes:
 uv run science big-picture validate --project-root .

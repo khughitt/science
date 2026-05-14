@@ -2404,15 +2404,15 @@ Run (from `~/d/science/science`):
 ```bash
 cd ~/d/science/science
 for f in \
-  /mnt/ssd/Dropbox/r/mm30/doc/interpretations/2026-04-19-t221-literature-gene-lookups.md \
-  /mnt/ssd/Dropbox/r/mm30/doc/interpretations/2026-04-14-t197-gse155135-ezh2i-replication.md \
-  /mnt/ssd/Dropbox/r/mm30/doc/interpretations/2026-04-19-t234-hopfield-hamming-robustness.md \
-  /mnt/ssd/Dropbox/r/mm30/doc/interpretations/2026-04-18-t204-bulk-composition-beyond-pc-maturity-verdict.md \
-  /mnt/ssd/Dropbox/r/mm30/doc/interpretations/2026-04-12-t163-prolif-adjusted-tf-edges.md \
-  /mnt/ssd/Dropbox/r/mm30/doc/interpretations/2026-04-12-ribosome-regulator-screen-clr.md \
-  /mnt/ssd/Dropbox/r/mm30/doc/interpretations/2026-04-21-t099-skerget-transition-matrix.md \
-  /mnt/ssd/Dropbox/r/mm30/doc/interpretations/2026-04-21-t240-misund-phf19-trajectory.md \
-  /mnt/ssd/Dropbox/r/mm30/doc/interpretations/2026-04-21-t258-phf19-pathway-specificity.md; do
+  ~/d/r/mm30/doc/interpretations/2026-04-19-t221-literature-gene-lookups.md \
+  ~/d/r/mm30/doc/interpretations/2026-04-14-t197-gse155135-ezh2i-replication.md \
+  ~/d/r/mm30/doc/interpretations/2026-04-19-t234-hopfield-hamming-robustness.md \
+  ~/d/r/mm30/doc/interpretations/2026-04-18-t204-bulk-composition-beyond-pc-maturity-verdict.md \
+  ~/d/r/mm30/doc/interpretations/2026-04-12-t163-prolif-adjusted-tf-edges.md \
+  ~/d/r/mm30/doc/interpretations/2026-04-12-ribosome-regulator-screen-clr.md \
+  ~/d/r/mm30/doc/interpretations/2026-04-21-t099-skerget-transition-matrix.md \
+  ~/d/r/mm30/doc/interpretations/2026-04-21-t240-misund-phf19-trajectory.md \
+  ~/d/r/mm30/doc/interpretations/2026-04-21-t258-phf19-pathway-specificity.md; do
     echo "=== $f ==="
     uv run science verdict parse "$f" | python -c "import sys, json; d = json.load(sys.stdin); print(f\"composite={d['composite_token']} derived={d['rule_derived_composite']} disagrees={d['rule_disagrees_with_body']}\")"
 done
@@ -2451,8 +2451,8 @@ Run:
 cd ~/d/science/science
 uv run science verdict rollup \
   --scope claim \
-  --root /mnt/ssd/Dropbox/r/mm30/doc/interpretations \
-  --registry /mnt/ssd/Dropbox/r/mm30/specs/claim-registry.yaml \
+  --root ~/d/r/mm30/doc/interpretations \
+  --registry ~/d/r/mm30/specs/claim-registry.yaml \
   --output json | python -m json.tool | head -40
 ```
 
@@ -2474,14 +2474,14 @@ Run:
 cd ~/d/science/science
 uv run science verdict rollup \
   --by-claim \
-  --root /mnt/ssd/Dropbox/r/mm30/doc/interpretations \
-  --registry /mnt/ssd/Dropbox/r/mm30/specs/claim-registry.yaml \
+  --root ~/d/r/mm30/doc/interpretations \
+  --registry ~/d/r/mm30/specs/claim-registry.yaml \
   --output json > /tmp/rollup_by_claim.json
 
 uv run science verdict rollup \
   --scope claim \
-  --root /mnt/ssd/Dropbox/r/mm30/doc/interpretations \
-  --registry /mnt/ssd/Dropbox/r/mm30/specs/claim-registry.yaml \
+  --root ~/d/r/mm30/doc/interpretations \
+  --registry ~/d/r/mm30/specs/claim-registry.yaml \
   --output json > /tmp/rollup_scope_claim.json
 
 diff /tmp/rollup_by_claim.json /tmp/rollup_scope_claim.json
@@ -2498,8 +2498,8 @@ cd ~/d/science/science
 uv run science verdict rollup \
   --scope claim \
   --strict \
-  --root /mnt/ssd/Dropbox/r/mm30/doc/interpretations \
-  --registry /mnt/ssd/Dropbox/r/mm30/specs/claim-registry.yaml \
+  --root ~/d/r/mm30/doc/interpretations \
+  --registry ~/d/r/mm30/specs/claim-registry.yaml \
   --output json >/dev/null
 echo "exit=$?"
 ```
@@ -2516,7 +2516,7 @@ Run:
 cd ~/d/science/science
 uv run science verdict rollup \
   --scope all \
-  --root /mnt/ssd/Dropbox/r/mm30/doc/interpretations \
+  --root ~/d/r/mm30/doc/interpretations \
   --output table
 ```
 
@@ -2952,7 +2952,7 @@ current spec lineage.
 ## Reference pointers for the executing engineer
 
 - **Spec (authoritative):** `~/d/science/docs/specs/2026-04-19-verdict-tokens-and-atomic-decomposition-design.md`
-- **mm30 claim registry (real-world example):** `/mnt/ssd/Dropbox/r/mm30/specs/claim-registry.yaml`
+- **mm30 claim registry (real-world example):** `~/d/r/mm30/specs/claim-registry.yaml`
 - **mm30 9 atomic-decomposition docs (real-world fixtures):**
   `doc/interpretations/2026-04-19-t221-literature-gene-lookups.md`,
   `2026-04-14-t197-gse155135-ezh2i-replication.md`,
@@ -2964,8 +2964,8 @@ current spec lineage.
   `2026-04-21-t240-misund-phf19-trajectory.md`,
   `2026-04-21-t258-phf19-pathway-specificity.md`.
 - **Hand-emulated conflict/coverage scan (target for Task 11 rollup output):**
-  `/mnt/ssd/Dropbox/r/mm30/doc/discussions/2026-04-19-verdict-conflict-coverage-scan.md`
+  `~/d/r/mm30/doc/discussions/2026-04-19-verdict-conflict-coverage-scan.md`
 - **Dogfood discussion (schema validation on real docs):**
-  `/mnt/ssd/Dropbox/r/mm30/doc/discussions/2026-04-19-t243-atomic-decomposition-dogfood.md`
+  `~/d/r/mm30/doc/discussions/2026-04-19-t243-atomic-decomposition-dogfood.md`
 - **Calibration backtest (advisory-only finding for confidence column):**
-  `/mnt/ssd/Dropbox/r/mm30/doc/discussions/2026-04-21-t246-verdict-confidence-calibration.md`
+  `~/d/r/mm30/doc/discussions/2026-04-21-t246-verdict-confidence-calibration.md`

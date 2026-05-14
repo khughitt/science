@@ -543,9 +543,9 @@ git commit -m "review-pipeline: conditional N/A for inherited rubric dimensions 
 ### Task 11: Update feedback file triage dates
 
 **Files:**
-- Modify: `/home/keith/d/3d-attention-bias/doc/meta/skill-feedback.md:3`
-- Modify: `/home/keith/d/seq-feats/doc/meta/skill-feedback.md:3`
-- Modify: `/home/keith/d/natural-systems/doc/meta/skill-feedback.md:3`
+- Modify: `~/d/3d-attention-bias/doc/meta/skill-feedback.md:3`
+- Modify: `~/d/seq-feats/doc/meta/skill-feedback.md:3`
+- Modify: `~/d/natural-systems/doc/meta/skill-feedback.md:3`
 
 - [ ] **Step 1: Update 3d-attention-bias triage date**
 
@@ -585,7 +585,7 @@ With:
 - [ ] **Step 4: Commit all three**
 
 ```bash
-cd /home/keith/d/3d-attention-bias && git add doc/meta/skill-feedback.md && git commit -m "doc: update skill feedback triage date to 2026-03-25"
-cd /home/keith/d/seq-feats && git add doc/meta/skill-feedback.md && git commit -m "doc: update skill feedback triage date to 2026-03-25"
-cd /home/keith/d/natural-systems && git add doc/meta/skill-feedback.md && git commit -m "doc: update skill feedback triage date to 2026-03-25"
+cd ~/d/3d-attention-bias && git add doc/meta/skill-feedback.md && git commit -m "doc: update skill feedback triage date to 2026-03-25"
+cd ~/d/seq-feats && git add doc/meta/skill-feedback.md && git commit -m "doc: update skill feedback triage date to 2026-03-25"
+cd ~/d/natural-systems && git add doc/meta/skill-feedback.md && git commit -m "doc: update skill feedback triage date to 2026-03-25"
 ```

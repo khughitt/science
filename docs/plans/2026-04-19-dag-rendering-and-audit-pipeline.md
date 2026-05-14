@@ -57,8 +57,8 @@
 
 **Upstream — skills and references:**
 
-- `/mnt/ssd/Dropbox/science/skills/dag-audit.md` — new `/science:dag-audit` skill.
-- `/mnt/ssd/Dropbox/science/references/dag-two-axis-evidence-model.md` — explainer doc for the replication × identification axes.
+- `~/d/science/skills/dag-audit.md` — new `/science:dag-audit` skill.
+- `~/d/science/references/dag-two-axis-evidence-model.md` — explainer doc for the replication × identification axes.
 
 ### Modified files
 
@@ -660,7 +660,7 @@ def run_audit(paths: DagPaths, *, fix: bool = False) -> AuditReport:
 ## Task 11: `/science:dag-audit` skill
 
 **Files:**
-- Create: `/mnt/ssd/Dropbox/science/skills/dag-audit.md`
+- Create: `~/d/science/skills/dag-audit.md`
 
 - [ ] **Step 1: Draft the skill frontmatter.**
 
@@ -677,7 +677,7 @@ description: Audit causal DAG freshness — run drift detection read-only, surfa
   - Step 3: for each finding, propose a concrete action; do NOT call `--fix` without user approval.
   - Step 4: on approval, invoke `dag audit --fix` (or narrower `tasks add` / YAML edit sequences) and commit.
 
-- [ ] **Step 3: Add the skill to `/mnt/ssd/Dropbox/science/commands/big-picture.md`** Phase 3 rollup — read-only invocation only, so the synthesis report automatically surfaces DAG freshness without mutation.
+- [ ] **Step 3: Add the skill to `~/d/science/commands/big-picture.md`** Phase 3 rollup — read-only invocation only, so the synthesis report automatically surfaces DAG freshness without mutation.
 
 - [ ] **Step 4: Commit.** `feat(skills): /science:dag-audit — drift-based DAG audit with read-only default`
 
@@ -686,7 +686,7 @@ description: Audit causal DAG freshness — run drift detection read-only, surfa
 ## Task 12: Reference doc — two-axis evidence model
 
 **Files:**
-- Create: `/mnt/ssd/Dropbox/science/references/dag-two-axis-evidence-model.md`
+- Create: `~/d/science/references/dag-two-axis-evidence-model.md`
 
 - [ ] **Step 1: Draft the explainer** covering:
   - Why replication (`edge_status`) and identification are orthogonal.

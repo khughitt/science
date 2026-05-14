@@ -1200,7 +1200,7 @@ git commit -m "docs(project-artifacts): document managed validator workflow"
 
 **Files:**
 
-- Verify only unless the user explicitly approves updating `/home/keith/d/r/mm30/validate.sh`.
+- Verify only unless the user explicitly approves updating `~/d/r/mm30/validate.sh`.
 
 This task is user-local verification for Keith's workstation. Other operators should skip it or adapt the paths to a downstream Science project that has an older copied `validate.sh`.
 
@@ -1209,7 +1209,7 @@ This task is user-local verification for Keith's workstation. Other operators sh
 Run:
 
 ```bash
-uv run --project science science project artifacts check --project-root /home/keith/d/r/mm30
+uv run --project science science project artifacts check --project-root ~/d/r/mm30
 ```
 
 Expected before adoption: `validate.sh` reports `untracked` because the existing file predates the managed header. This confirms the checker finds the real drift case without assuming it is safe to overwrite.
@@ -1219,7 +1219,7 @@ Expected before adoption: `validate.sh` reports `untracked` because the existing
 Run:
 
 ```bash
-uv run --project science science project artifacts diff validate.sh --project-root /home/keith/d/r/mm30
+uv run --project science science project artifacts diff validate.sh --project-root ~/d/r/mm30
 ```
 
 Expected: unified diff shows the current `mm30/validate.sh` versus the canonical managed validator. Review whether local project-specific validator logic exists.
@@ -1229,13 +1229,13 @@ Expected: unified diff shows the current `mm30/validate.sh` versus the canonical
 If the user wants `mm30` to adopt the Science-managed validator, run:
 
 ```bash
-uv run --project science science project artifacts update validate.sh --project-root /home/keith/d/r/mm30 --force --yes
+uv run --project science science project artifacts update validate.sh --project-root ~/d/r/mm30 --force --yes
 ```
 
 Expected:
 
 - command reports `validate.sh: current`
-- `/home/keith/d/r/mm30/validate.sh.pre-update.bak` exists
+- `~/d/r/mm30/validate.sh.pre-update.bak` exists
 - backup contains the pre-update validator
 
 If the user does not want to adopt the managed validator yet, stop after the diff and record that `mm30` intentionally remains `untracked`.
@@ -1245,7 +1245,7 @@ If the user does not want to adopt the managed validator yet, stop after the dif
 If Step 3 adopted the managed validator, run:
 
 ```bash
-uv run --project science science project artifacts check --project-root /home/keith/d/r/mm30 --strict
+uv run --project science science project artifacts check --project-root ~/d/r/mm30 --strict
 ```
 
 Expected: exit code `0`, `validate.sh` reports `current`.
@@ -1253,7 +1253,7 @@ Expected: exit code `0`, `validate.sh` reports `current`.
 If Step 3 did not adopt it, run the same command without `--strict`:
 
 ```bash
-uv run --project science science project artifacts check --project-root /home/keith/d/r/mm30
+uv run --project science science project artifacts check --project-root ~/d/r/mm30
 ```
 
 Expected: exit code `0`, `validate.sh` reports `untracked`.
@@ -1263,7 +1263,7 @@ Expected: exit code `0`, `validate.sh` reports `untracked`.
 Run:
 
 ```bash
-cd /home/keith/d/r/mm30 && bash validate.sh --verbose
+cd ~/d/r/mm30 && bash validate.sh --verbose
 ```
 
 Expected: the validator runs to completion. It may report project-specific warnings or errors unrelated to managed artifact adoption; record those separately instead of treating them as updater failures.

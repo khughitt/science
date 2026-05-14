@@ -96,7 +96,7 @@ def test_load_entity_index_collects_kind_id_pairs(tmp_path):
 - [ ] **Step 2: Verify failure**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run pytest tests/test_refs.py::test_load_entity_index_collects_kind_id_pairs -v
 ```
 
@@ -140,7 +140,7 @@ Note: `parse_frontmatter` is already imported at the top of refs.py (`from scien
 - [ ] **Step 4: Verify pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run pytest tests/test_refs.py::test_load_entity_index_collects_kind_id_pairs -v
 uv run ruff check src/science_tool/refs.py tests/test_refs.py
 ```
@@ -247,7 +247,7 @@ class TestBodyTypedRefScan:
 - [ ] **Step 2: Verify failure**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run pytest tests/test_refs.py::TestBodyTypedRefScan -v
 ```
 
@@ -356,7 +356,7 @@ The insertion point is between the closing of the per-line loop (currently aroun
 - [ ] **Step 5: Verify pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run pytest tests/test_refs.py -v
 uv run ruff check src/science_tool/refs.py tests/test_refs.py
 ```
@@ -426,7 +426,7 @@ def test_refs_check_include_body_flag_emits_typed_ref_issues(tmp_path):
 - [ ] **Step 3: Verify failure**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run pytest tests/test_refs.py::test_refs_check_include_body_flag_emits_typed_ref_issues -v
 ```
 
@@ -459,7 +459,7 @@ issues = check_refs(root, include_body=include_body)
 - [ ] **Step 5: Verify pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run pytest tests/test_refs.py::test_refs_check_include_body_flag_emits_typed_ref_issues -v
 uv run ruff check src/science_tool/refs_cli.py
 ```
@@ -469,9 +469,9 @@ Expected: PASS; ruff clean.
 - [ ] **Step 6: End-to-end smoke test**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.claude/worktrees/<this-worktree>
+cd ~/d/science/.claude/worktrees/<this-worktree>
 uv run --project science science refs check --help | grep -A1 include-body
-uv run --project science science refs check --root /home/keith/d/natural-systems --include-body --format json --summary-only 2>&1 | tail -20
+uv run --project science science refs check --root ~/d/natural-systems --include-body --format json --summary-only 2>&1 | tail -20
 ```
 
 Expected: `--include-body` appears in `--help` output; the natural-systems run produces a non-zero count for `body-entity-ref` issues (we know audit-citations.ts finds many).
@@ -523,7 +523,7 @@ def test_short_form_ids_deny_explicit_list(tmp_path):
 - [ ] **Step 2: Verify failure**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run pytest tests/test_project_config_prose_lint.py -v
 ```
 
@@ -542,7 +542,7 @@ Place it after the existing `anchor_patterns` field.
 - [ ] **Step 4: Verify pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run pytest tests/test_project_config_prose_lint.py -v
 uv run ruff check src/science_tool/project_config.py
 ```
@@ -603,7 +603,7 @@ class TestShortFormIdsDeny:
 - [ ] **Step 2: Verify failure**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run pytest tests/test_prose_lint.py::TestShortFormIdsDeny -v
 ```
 
@@ -660,7 +660,7 @@ Inside the dispatch loop, modify the per-detector call to forward `deny` for `sh
 - [ ] **Step 5: Verify pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run pytest tests/test_prose_lint.py -v
 uv run ruff check src/science_tool/prose_lint.py
 ```
@@ -710,7 +710,7 @@ def test_lint_uses_short_form_ids_deny_from_config(tmp_path):
 - [ ] **Step 2: Verify failure**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run pytest tests/test_prose_lint_cli.py::test_lint_uses_short_form_ids_deny_from_config -v
 ```
 
@@ -757,7 +757,7 @@ Then update the `scan_root(...)` call to forward it:
 - [ ] **Step 4: Verify pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run pytest tests/test_prose_lint_cli.py -v
 uv run ruff check src/science_tool/prose_lint_cli.py
 ```
@@ -833,8 +833,8 @@ git commit -m "docs(prose-lints): document short_form_ids_deny + refs --include-
 - [ ] **Step 1: Run `science refs check --include-body` against natural-systems**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/.claude/worktrees/<this-worktree>
-uv run --project science science refs check --root /home/keith/d/natural-systems --include-body --format json --summary-only > /tmp/ns-refs-body.json 2>&1
+cd ~/d/science/.claude/worktrees/<this-worktree>
+uv run --project science science refs check --root ~/d/natural-systems --include-body --format json --summary-only > /tmp/ns-refs-body.json 2>&1
 python3 -c "
 import json
 d = json.load(open('/tmp/ns-refs-body.json'))
@@ -854,7 +854,7 @@ Record the output.
 - [ ] **Step 2: Compare to natural-systems's existing `audit-citations.ts`**
 
 ```bash
-cd /home/keith/d/natural-systems
+cd ~/d/natural-systems
 npm run audit:citations 2>&1 | tail -20
 ```
 
@@ -863,7 +863,7 @@ Record the headline count from audit-citations.ts (it uses `knowledge/graph.trig
 - [ ] **Step 3: Run against multiple-myeloma**
 
 ```bash
-uv run --project science science refs check --root /home/keith/d/cancer/cancer-types/multiple-myeloma --include-body --format json > /tmp/mm-refs-body.json 2>&1
+uv run --project science science refs check --root ~/d/cancer/cancer-types/multiple-myeloma --include-body --format json > /tmp/mm-refs-body.json 2>&1
 python3 -c "
 import json
 d = json.load(open('/tmp/mm-refs-body.json'))

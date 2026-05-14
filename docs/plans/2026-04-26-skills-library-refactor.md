@@ -437,12 +437,12 @@ The string `knowledge-graph` is a `> Prerequisites:` reference in command and co
 
 - [ ] **Step 1: Search the repo for any file that could be the `knowledge-graph` or `causal-dag` skill**
 
-Run: `rg -l "^# Knowledge Graph|name: knowledge-graph|name: knowledge_graph|^# Causal DAG|name: causal-dag|name: causal_dag" /mnt/ssd/Dropbox/science --glob '!node_modules/**' --glob '!.git/**'`
+Run: `rg -l "^# Knowledge Graph|name: knowledge-graph|name: knowledge_graph|^# Causal DAG|name: causal-dag|name: causal_dag" ~/d/science --glob '!node_modules/**' --glob '!.git/**'`
 Expected: either zero results (skill never existed) or a path outside `skills/` (skill lives elsewhere).
 
 - [ ] **Step 2: Search for a likely alternative source**
 
-Run: `rg -l "knowledge graph|sci:Concept|knowledge/graph.trig|causal DAG|identification" /mnt/ssd/Dropbox/science/references/ /mnt/ssd/Dropbox/science/docs/ 2>&1 | head -40`
+Run: `rg -l "knowledge graph|sci:Concept|knowledge/graph.trig|causal DAG|identification" ~/d/science/references/ ~/d/science/docs/ 2>&1 | head -40`
 Expected: identifies a candidate document (likely in `docs/specs/` or `references/`) that explains the knowledge-graph model.
 
 - [ ] **Step 3: Document findings inline in the plan**

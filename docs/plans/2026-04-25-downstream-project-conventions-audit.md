@@ -4,10 +4,10 @@
 
 **Scope:** This audit focuses only on downstream projects:
 
-- `/home/keith/d/natural-systems`
-- `/home/keith/d/r/mm30`
-- `/home/keith/d/protein-landscape`
-- `/home/keith/d/r/cbioportal`
+- `~/d/natural-systems`
+- `~/d/r/mm30`
+- `~/d/protein-landscape`
+- `~/d/r/cbioportal`
 
 Do not audit the Science repository's own templates, fixtures, or command docs in this pass except when a downstream observation needs a concise upstream implication note.
 
@@ -102,7 +102,7 @@ Recommended path:
 The script should accept:
 
 ```bash
-uv run python scripts/audit_downstream_project_inventory.py /home/keith/d/r/mm30 \
+uv run python scripts/audit_downstream_project_inventory.py ~/d/r/mm30 \
   > docs/audits/downstream-project-conventions/inventory/mm30.md
 ```
 

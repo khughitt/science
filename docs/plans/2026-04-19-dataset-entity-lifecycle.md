@@ -116,7 +116,7 @@ def test_entity_rejects_resources_field(entity_schema: dict) -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-model
+cd ~/d/science/science-model
 uv add --dev jsonschema
 uv run --frozen pytest tests/test_science_pkg_schema.py -v
 ```
@@ -496,7 +496,7 @@ class TestAccessBlock:
 - [ ] **Step 2: Run to confirm failure**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-model
+cd ~/d/science/science-model
 uv run --frozen pytest tests/test_dataset_models.py -v
 ```
 
@@ -1009,7 +1009,7 @@ def test_new_shape_origin_external(tmp_md) -> None:
 - [ ] **Step 2: Run failing test**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-model
+cd ~/d/science/science-model
 uv run --frozen pytest tests/test_frontmatter_dataset.py -v
 ```
 
@@ -1297,7 +1297,7 @@ updated: "<YYYY-MM-DD>"
 - [ ] **Step 3: Verify the template renders no parser errors**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-model
+cd ~/d/science/science-model
 uv run --frozen python -c "
 from pathlib import Path
 from science_model.frontmatter import parse_entity_file
@@ -1458,7 +1458,7 @@ To surface `research-package` entities, we extend the roots assembly to include 
 - [ ] **Step 1: Locate the roots assembly**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 sed -n '139,260p' src/science_tool/graph/sources.py
 ```
 
@@ -1648,7 +1648,7 @@ Goal: implement all twelve anomalies from spec §Health Check Additions. One tas
 - [ ] **Step 1: Inspect existing health module**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 sed -n '1,120p' src/science_tool/graph/health.py
 ```
 
@@ -2662,7 +2662,7 @@ git commit -m "feat(health): expose dataset anomalies via science health"
 - [ ] **Step 1: Locate the existing `dataset list` command**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 grep -rn "@.*group\|def.*dataset\|name=\"dataset\"" src/science_tool/ | head
 ```
 
@@ -3623,7 +3623,7 @@ def test_migrate_marks_old_data_package_superseded(tmp_path: Path) -> None:
 - [ ] **Step 2: Run failing test**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen pytest tests/test_data_package_migrate.py -v -k "emits_derived"
 ```
 
@@ -4067,7 +4067,7 @@ git commit -m "feat(data-package cli): list subcommand"
 - [ ] **Step 1: Locate graph-build entry**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 grep -rn "def.*build\|create-graph" src/science_tool/graph/ | head
 ```
 
@@ -4664,11 +4664,11 @@ git commit -m "test: end-to-end data-package migrate -> strict graph build unblo
 - [ ] **Step 1: Lint**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-model
+cd ~/d/science/science-model
 uv run --frozen ruff check .
 uv run --frozen ruff format --check .
 
-cd /mnt/ssd/Dropbox/science/science
+cd ~/d/science/science
 uv run --frozen ruff check .
 uv run --frozen ruff format --check .
 ```
@@ -4678,8 +4678,8 @@ Expected: no errors.
 - [ ] **Step 2: Type-check**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-model && uv run --frozen pyright
-cd /mnt/ssd/Dropbox/science/science && uv run --frozen pyright
+cd ~/d/science/science-model && uv run --frozen pyright
+cd ~/d/science/science && uv run --frozen pyright
 ```
 
 Expected: no errors.
@@ -4687,8 +4687,8 @@ Expected: no errors.
 - [ ] **Step 3: Full test sweep**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science-model && uv run --frozen pytest -q
-cd /mnt/ssd/Dropbox/science/science && uv run --frozen pytest -q
+cd ~/d/science/science-model && uv run --frozen pytest -q
+cd ~/d/science/science && uv run --frozen pytest -q
 ```
 
 Expected: all green.

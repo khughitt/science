@@ -393,7 +393,7 @@ see every edge flagged.
 
 ### `/science:dag-audit` skill
 
-New skill under `/mnt/ssd/Dropbox/science/skills/dag-audit.md`:
+New skill under `~/d/science/skills/dag-audit.md`:
 
 ```
 ---
@@ -506,7 +506,7 @@ but is NOT required to be byte-identical across graphviz versions.
 ## Documentation
 
 New reference doc at
-`/mnt/ssd/Dropbox/science/references/dag-two-axis-evidence-model.md`
+`~/d/science/references/dag-two-axis-evidence-model.md`
 explaining:
 
 - Why replication and identification are orthogonal

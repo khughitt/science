@@ -81,7 +81,7 @@ def test_big_picture_group_registered() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_cli.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_cli.py -v
 ```
 
 Expected: FAIL (the `big-picture` group doesn't exist yet).
@@ -133,7 +133,7 @@ At the bottom of the file (after all other `main.add_command(...)` calls, if any
 - [ ] **Step 5: Run test to verify it passes**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_cli.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_cli.py -v
 ```
 
 Expected: PASS.
@@ -141,7 +141,7 @@ Expected: PASS.
 - [ ] **Step 6: Verify the CLI end-to-end**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run science big-picture --help
+cd ~/d/science/science && uv run science big-picture --help
 ```
 
 Expected output includes `resolve-questions` and `validate` as subcommands.
@@ -208,7 +208,7 @@ def test_returns_none_on_invalid_yaml(tmp_path: Path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_frontmatter.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_frontmatter.py -v
 ```
 
 Expected: FAIL (module not found).
@@ -255,7 +255,7 @@ def read_frontmatter(path: Path) -> dict[str, Any] | None:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_frontmatter.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_frontmatter.py -v
 ```
 
 Expected: 5 tests PASS.
@@ -412,7 +412,7 @@ Interpretation confirming q04 spans both hypotheses.
 - [ ] **Step 5: Verify fixture with a quick sanity check**
 
 ```bash
-find /mnt/ssd/Dropbox/science/science/tests/fixtures/big_picture/minimal_project -type f | sort
+find ~/d/science/science/tests/fixtures/big_picture/minimal_project -type f | sort
 ```
 
 Expected: 11 files (science.yaml + 2 hypotheses + 5 questions + 2 interpretations + verify the parent dirs exist).
@@ -461,7 +461,7 @@ def test_direct_match() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_resolver.py -v
 ```
 
 Expected: FAIL (module not found).
@@ -553,7 +553,7 @@ def _conf_rank(c: Confidence) -> int:
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_resolver.py -v
 ```
 
 Expected: PASS.
@@ -589,7 +589,7 @@ def test_inverse_match() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py::test_inverse_match -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_resolver.py::test_inverse_match -v
 ```
 
 Expected: FAIL (q02 has no match yet).
@@ -609,7 +609,7 @@ In `resolver.py`, in the `resolve_questions` function, after the "Direct" loop a
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_resolver.py -v
 ```
 
 Expected: both tests PASS.
@@ -645,7 +645,7 @@ def test_transitive_match() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py::test_transitive_match -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_resolver.py::test_transitive_match -v
 ```
 
 Expected: FAIL.
@@ -670,7 +670,7 @@ In `resolver.py`, after the inverse loop, add:
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_resolver.py -v
 ```
 
 Expected: 3 tests PASS.
@@ -721,7 +721,7 @@ def test_primary_prefers_higher_confidence() -> None:
 - [ ] **Step 2: Run tests to verify status**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_resolver.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_resolver.py -v
 ```
 
 Expected: all 6 tests PASS. (The resolver logic from Tasks 4–6 already handles many-to-many and orphan naturally; this task verifies it.)
@@ -779,7 +779,7 @@ def test_resolve_questions_emits_json() -> None:
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_cli.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_cli.py -v
 ```
 
 Expected: FAIL (the stub raises ClickException).
@@ -841,7 +841,7 @@ Leave the `validate` stub as-is for now; Task 12 replaces it.
 - [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_cli.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_cli.py -v
 ```
 
 Expected: 2 tests PASS (the help test from Task 1 + the resolver JSON test).
@@ -849,7 +849,7 @@ Expected: 2 tests PASS (the help test from Task 1 + the resolver JSON test).
 - [ ] **Step 5: Verify the CLI end-to-end**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run science big-picture resolve-questions --project-root tests/fixtures/big_picture/minimal_project | head -30
+cd ~/d/science/science && uv run science big-picture resolve-questions --project-root tests/fixtures/big_picture/minimal_project | head -30
 ```
 
 Expected: JSON with 5 questions, each showing hypotheses + primary_hypothesis.
@@ -935,7 +935,7 @@ The investigation built on interpretation:i01-h1-q03.
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: FAIL (module not found).
@@ -1010,7 +1010,7 @@ def _collect_project_ids(project_root: Path) -> set[str]:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: 2 tests PASS.
@@ -1074,7 +1074,7 @@ synthesized_from: []
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: FAIL (`validate_rollup_file` not defined).
@@ -1125,7 +1125,7 @@ def validate_rollup_file(path: Path, project_root: Path) -> list[ValidationIssue
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: 4 tests PASS.
@@ -1196,7 +1196,7 @@ Arc reconstruction is limited because no prior_interpretations chains exist.
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: FAIL.
@@ -1247,7 +1247,7 @@ def _extract_section(text: str, heading: str) -> str:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_validator.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_validator.py -v
 ```
 
 Expected: 6 tests PASS.
@@ -1323,7 +1323,7 @@ def test_validate_passes_on_clean_project(tmp_path: Path) -> None:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_cli.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_cli.py -v
 ```
 
 Expected: FAIL (validate is still stubbed).
@@ -1368,7 +1368,7 @@ def validate_cmd(project_root: Path) -> None:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest tests/test_big_picture_cli.py -v
+cd ~/d/science/science && uv run pytest tests/test_big_picture_cli.py -v
 ```
 
 Expected: 4 tests PASS.
@@ -1392,7 +1392,7 @@ This task has no TDD step — the artifact is a prompt. After writing, a manual 
 - [ ] **Step 1: Read existing sub-agent precedent**
 
 ```bash
-cat /mnt/ssd/Dropbox/science/agents/paper-researcher.md | head -80
+cat ~/d/science/agents/paper-researcher.md | head -80
 ```
 
 Note the frontmatter fields (`name`, `description`, `model`, `tools`) and the "You are a dispatched subagent" framing. Match this style.
@@ -1584,7 +1584,7 @@ git commit -m "feat(big-picture): emergent-threads-synthesizer subagent prompt"
 - [ ] **Step 1: Read the `commands/status.md` file as structural reference**
 
 ```bash
-cat /mnt/ssd/Dropbox/science/commands/status.md
+cat ~/d/science/commands/status.md
 ```
 
 Match its overall shape (frontmatter + prose instructions + bash blocks).
@@ -1860,9 +1860,9 @@ After all phases:
 - [ ] **Step 2: Final read-through of the command file**
 
 ```bash
-wc -l /mnt/ssd/Dropbox/science/commands/big-picture.md
-cat /mnt/ssd/Dropbox/science/commands/big-picture.md | head -20
-cat /mnt/ssd/Dropbox/science/commands/big-picture.md | tail -40
+wc -l ~/d/science/commands/big-picture.md
+cat ~/d/science/commands/big-picture.md | head -20
+cat ~/d/science/commands/big-picture.md | tail -40
 ```
 
 Confirm all four phases + flag handling are present, and the structure matches the spec's generation flow.
@@ -1883,7 +1883,7 @@ git commit -m "feat(big-picture): write phase, flag handling, staleness warning"
 - [ ] **Step 1: Run the full science test suite**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run pytest
+cd ~/d/science/science && uv run pytest
 ```
 
 Expected: all tests pass, including the new big-picture ones.
@@ -1891,7 +1891,7 @@ Expected: all tests pass, including the new big-picture ones.
 - [ ] **Step 2: Run type checks if present**
 
 ```bash
-cd /mnt/ssd/Dropbox/science/science && uv run --frozen ruff check . && uv run --frozen pyright 2>/dev/null || echo "pyright not configured — skipping"
+cd ~/d/science/science && uv run --frozen ruff check . && uv run --frozen pyright 2>/dev/null || echo "pyright not configured — skipping"
 ```
 
 Expected: ruff passes; pyright passes or is not configured.
@@ -1899,7 +1899,7 @@ Expected: ruff passes; pyright passes or is not configured.
 - [ ] **Step 3: Confirm the command renders in Claude's command help**
 
 ```bash
-ls -la /mnt/ssd/Dropbox/science/commands/big-picture.md
+ls -la ~/d/science/commands/big-picture.md
 ```
 
 (No `/science:` command-registration step required — Claude discovers commands by filename.)
@@ -1912,14 +1912,14 @@ This is a verification-only task.
 
 ## Task 20: Smoke test on natural-systems (frontmatter-only fixture)
 
-**Files:** none in `science` repo (execution occurs in `/home/keith/d/natural-systems/`)
+**Files:** none in `science` repo (execution occurs in `~/d/natural-systems/`)
 
 This task validates end-to-end behavior on a real project. It requires invoking the full `/science:big-picture` command, which involves sub-agent dispatch and costs API tokens. Run once per meaningful change to the command or agent prompts.
 
 - [ ] **Step 1: Capture pre-state**
 
 ```bash
-cd /home/keith/d/natural-systems
+cd ~/d/natural-systems
 git status
 git rev-parse HEAD
 ```
@@ -1928,7 +1928,7 @@ Record the SHA for reproducibility.
 
 - [ ] **Step 2: Run `/science:big-picture` in a fresh session**
 
-In a Claude Code session opened at `/home/keith/d/natural-systems`, invoke:
+In a Claude Code session opened at `~/d/natural-systems`, invoke:
 
 ```
 /science:big-picture
@@ -1939,7 +1939,7 @@ Let it complete. Record elapsed time.
 - [ ] **Step 3: Validate the output**
 
 ```bash
-cd /home/keith/d/natural-systems
+cd ~/d/natural-systems
 science big-picture validate --project-root .
 ```
 
@@ -1976,21 +1976,21 @@ If issues are found that trace back to prompt or command logic, update the agent
 
 ## Task 21: Smoke test on mm30 (.edges.yaml fixture)
 
-**Files:** none in `science` repo (execution occurs in `/home/keith/d/r/mm30/`)
+**Files:** none in `science` repo (execution occurs in `~/d/r/mm30/`)
 
 Same structure as Task 20, but now exercising the `.edges.yaml` data-source path.
 
 - [ ] **Step 1: Capture pre-state**
 
 ```bash
-cd /home/keith/d/r/mm30
+cd ~/d/r/mm30
 git status
 git rev-parse HEAD
 ```
 
 - [ ] **Step 2: Run `/science:big-picture` in a fresh session**
 
-In a Claude Code session opened at `/home/keith/d/r/mm30`, invoke:
+In a Claude Code session opened at `~/d/r/mm30`, invoke:
 
 ```
 /science:big-picture
@@ -2001,7 +2001,7 @@ Record elapsed time.
 - [ ] **Step 3: Validate the output**
 
 ```bash
-cd /home/keith/d/r/mm30
+cd ~/d/r/mm30
 science big-picture validate --project-root .
 ```
 

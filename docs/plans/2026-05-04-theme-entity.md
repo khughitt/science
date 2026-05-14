@@ -865,9 +865,9 @@ Run:
 tmpdir="$(mktemp -d)"
 cd "$tmpdir"
 printf 'name: theme-smoke\nprofile: research\nknowledge_profiles:\n  local: local\n' > science.yaml
-uv run --project /home/keith/d/science/science --frozen science entity create theme "Transportability Across Cancer Types" --id theme:transportability-across-cancer-types --no-hints
-uv run --project /home/keith/d/science/science --frozen science refs check
-uv run --project /home/keith/d/science/science --frozen science graph build
+uv run --project ~/d/science/science --frozen science entity create theme "Transportability Across Cancer Types" --id theme:transportability-across-cancer-types --no-hints
+uv run --project ~/d/science/science --frozen science refs check
+uv run --project ~/d/science/science --frozen science graph build
 test -f knowledge/graph.trig
 ```
 

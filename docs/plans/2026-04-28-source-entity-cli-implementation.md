@@ -1558,7 +1558,7 @@ Expected: PASS.
 Run:
 
 ```bash
-repo=/mnt/ssd/Dropbox/science
+repo=~/d/science
 tmpdir=$(mktemp -d)
 cd "$tmpdir"
 printf 'name: smoke\nknowledge_profiles: {local: local}\n' > science.yaml

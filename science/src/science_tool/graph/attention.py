@@ -6,7 +6,7 @@ import random
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from rdflib import Dataset, Literal, URIRef
 from rdflib.namespace import SKOS
@@ -21,6 +21,33 @@ NEVER_REVIEWED_DAYS = 365.0
 
 
 @dataclass(frozen=True)
+class AttentionReason:
+    """Machine-visible reason metadata for why an entity deserves attention."""
+
+    code: str
+    direction: str
+    strength: str
+    provenance: str
+    next_action: str
+
+    def as_dict(self) -> dict[str, str]:
+        return {
+            "code": self.code,
+            "direction": self.direction,
+            "strength": self.strength,
+            "provenance": self.provenance,
+            "next_action": self.next_action,
+        }
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, AttentionReason):
+            return self.as_dict() == other.as_dict()
+        if isinstance(other, Mapping):
+            return self.as_dict() == other
+        return NotImplemented
+
+
+@dataclass(frozen=True)
 class AttentionCandidate:
     """One graph entity with an observable attention weight."""
 
@@ -31,6 +58,7 @@ class AttentionCandidate:
     freshness_state: str
     weight: float
     components: Mapping[str, float]
+    reasons: Sequence[AttentionReason]
 
 
 def compute_attention_candidates(
@@ -68,6 +96,7 @@ def compute_attention_candidates(
         days_since_last_review = _days_since_last_review(knowledge, entity_uri, current_date)
         support_count = _count_uri_objects(knowledge.triples((None, CITO_NS.supports, entity_uri)))
         dispute_count = _count_uri_objects(knowledge.triples((None, CITO_NS.disputes, entity_uri)))
+        evidence_source_count = support_count + dispute_count
         evidence_balance_factor = _evidence_balance_factor(support_count, dispute_count)
         freshness_multiplier = _freshness_multiplier(freshness_state)
 
@@ -92,14 +121,65 @@ def compute_attention_candidates(
                     "freshness_multiplier": float(freshness_multiplier),
                     "support_count": float(support_count),
                     "dispute_count": float(dispute_count),
+                    "evidence_source_count": float(evidence_source_count),
                     "evidence_balance_factor": float(evidence_balance_factor),
                     "epsilon": float(epsilon),
                 },
+                reasons=_derive_phase1_reasons(kind, support_count, dispute_count),
             )
         )
 
     candidates.sort(key=lambda candidate: candidate.entity_id)
     return candidates
+
+
+def reason_aware_sample_candidates(
+    candidates: Sequence[AttentionCandidate],
+    *,
+    limit: int,
+    seed: int | None = None,
+) -> list[AttentionCandidate]:
+    """Sample candidates with a bounded reason-coded review slice.
+
+    This is a review-routing toggle, not a replacement belief model. It promotes
+    ordinary uncertainty reasons first, then fills the rest using the existing
+    weighted sampler so the epsilon floor remains meaningful.
+    """
+    if limit < 0:
+        raise ValueError("limit must be >= 0")
+    if limit == 0 or not candidates:
+        return []
+
+    promoted = [candidate for candidate in candidates if _is_uncertainty_review_candidate(candidate)]
+    promoted = sorted(promoted, key=_reason_route_sort_key)
+    promoted_limit = min(len(promoted), max(1, limit // 2))
+    review_slice = promoted[:promoted_limit]
+
+    remaining_limit = limit - len(review_slice)
+    if remaining_limit == 0:
+        return review_slice
+
+    selected_ids = {candidate.entity_id for candidate in review_slice}
+    tail_pool = [candidate for candidate in candidates if candidate.entity_id not in selected_ids]
+    return review_slice + weighted_sample_without_replacement(tail_pool, limit=remaining_limit, seed=seed)
+
+
+def _is_uncertainty_review_candidate(candidate: AttentionCandidate) -> bool:
+    codes = {reason.code for reason in candidate.reasons}
+    if "strong_counterevidence" in codes or "unscaffolded" in codes:
+        return False
+    return bool(codes & {"contestation", "fragility"})
+
+
+def _reason_route_sort_key(candidate: AttentionCandidate) -> tuple[int, float, str]:
+    codes = {reason.code for reason in candidate.reasons}
+    if "contestation" in codes:
+        bucket = 0
+    elif "fragility" in codes:
+        bucket = 1
+    else:
+        bucket = 2
+    return (bucket, -candidate.weight, candidate.entity_id)
 
 
 def weighted_sample_without_replacement(
@@ -145,16 +225,20 @@ def query_attention_sample(
     today: date | None = None,
     kinds: set[str] | None = None,
     epsilon: float = DEFAULT_EPSILON,
-) -> list[dict[str, str]]:
+    reason_aware: bool = False,
+) -> list[dict[str, Any]]:
     """Load a materialized graph and return sampled attention rows."""
     dataset = Dataset()
     dataset.parse(source=str(graph_path), format="trig")
     candidates = compute_attention_candidates(dataset, today=today, kinds=kinds, epsilon=epsilon)
-    sample = weighted_sample_without_replacement(candidates, limit=limit, seed=seed)
+    if reason_aware:
+        sample = reason_aware_sample_candidates(candidates, limit=limit, seed=seed)
+    else:
+        sample = weighted_sample_without_replacement(candidates, limit=limit, seed=seed)
     return [format_attention_candidate(candidate) for candidate in sample]
 
 
-def format_attention_candidate(candidate: AttentionCandidate) -> dict[str, str]:
+def format_attention_candidate(candidate: AttentionCandidate) -> dict[str, Any]:
     """Format a candidate for CLI table / JSON output."""
     components = candidate.components
     return {
@@ -163,12 +247,95 @@ def format_attention_candidate(candidate: AttentionCandidate) -> dict[str, str]:
         "label": candidate.label,
         "freshness_state": candidate.freshness_state,
         "attention_weight": f"{candidate.weight:.4f}",
+        "belief_weight": None,
+        "influence_weight": None,
         "incoming_bears_on": str(int(components["incoming_bears_on"])),
         "days_since_last_review": f"{components['days_since_last_review']:.0f}",
         "support_count": str(int(components["support_count"])),
         "dispute_count": str(int(components["dispute_count"])),
+        "evidence_source_count": str(int(components["evidence_source_count"])),
         "evidence_balance_factor": f"{components['evidence_balance_factor']:.2f}",
+        "reasons": [reason.as_dict() for reason in candidate.reasons],
     }
+
+
+def _derive_phase1_reasons(kind: str, support_count: int, dispute_count: int) -> list[AttentionReason]:
+    if kind != "proposition":
+        return []
+
+    evidence_source_count = support_count + dispute_count
+    reasons: list[AttentionReason] = []
+
+    if evidence_source_count == 0:
+        reasons.append(
+            AttentionReason(
+                code="unscaffolded",
+                direction="route_attention",
+                strength="high",
+                provenance="derived:unscaffolded_source_count(evidence_source_count)",
+                next_action="scaffold_evidence_base",
+            )
+        )
+        return reasons
+
+    if evidence_source_count <= 2:
+        reasons.append(
+            AttentionReason(
+                code="fragility",
+                direction="increase_attention",
+                strength="high" if evidence_source_count == 1 else "moderate",
+                provenance="derived:fragility_source_count(evidence_source_count)",
+                next_action="seek_independent_evidence",
+            )
+        )
+
+    if support_count >= 1 and dispute_count >= 1:
+        reasons.append(
+            AttentionReason(
+                code="contestation",
+                direction="increase_attention",
+                strength=_contestation_strength(support_count, dispute_count),
+                provenance="derived:contestation_counts(support_count,dispute_count)",
+                next_action="compare_contexts",
+            )
+        )
+
+    if _has_strong_counterevidence(support_count, dispute_count):
+        reasons.append(
+            AttentionReason(
+                code="strong_counterevidence",
+                direction="decrease_attention",
+                strength=_counterevidence_strength(support_count, dispute_count),
+                provenance="derived:counterevidence_counts(support_count,dispute_count)",
+                next_action="preserve_floor",
+            )
+        )
+
+    return reasons
+
+
+def _contestation_strength(support_count: int, dispute_count: int) -> str:
+    weaker_count = min(support_count, dispute_count)
+    stronger_count = max(support_count, dispute_count)
+    if weaker_count >= 2:
+        return "high"
+    if stronger_count < weaker_count * 3:
+        return "moderate"
+    return "low"
+
+
+def _has_strong_counterevidence(support_count: int, dispute_count: int) -> bool:
+    if dispute_count >= 1 and support_count == 0:
+        return True
+    return dispute_count >= 2 * max(support_count, 1) and dispute_count >= 2
+
+
+def _counterevidence_strength(support_count: int, dispute_count: int) -> str:
+    if support_count == 0 and dispute_count >= 3:
+        return "high"
+    if support_count > 0 and dispute_count / support_count >= 3:
+        return "high"
+    return "moderate"
 
 
 def _count_uri_objects(triples: Iterable[tuple[object, object, object]]) -> int:
