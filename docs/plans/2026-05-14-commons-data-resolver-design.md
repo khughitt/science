@@ -12,7 +12,13 @@ Add a **bulk-data resolver** to `science_tool.commons`: an in-process library pl
 The commons store (Phase B) is the source of truth for *what the bytes should be* — each
 dataset's sibling `datapackage.yaml` carries `resources[]` with a required `hash:`. The
 resolver finds the actual bytes on the local machine and proves they match that hash. Bulk
-data lives **outside** the Dropbox-synced metadata tree, content-addressed by hash.
+data lives **outside** the Dropbox-synced metadata tree.
+
+Phase C is **path-addressed and hash-verified**: bytes are located by a conventional
+`<data_root>/<slug>/<logical_path>` layout (or a per-machine override) and then verified
+against the descriptor hash. It is *not* content-addressed — a content-addressed object store
+(CAS), where the hash *is* the lookup key, is explicitly a v2 concern (parent §4.1 steps 4–5,
+§10). The hash in Phase C is an integrity check on a path lookup, not the lookup mechanism.
 
 **Guiding principle (inherited from parent §1):** *metadata is small, versioned, and shared;
 bulk data is large, hashed, and out-of-tree.* Phase C builds the read path for that bulk data.
@@ -128,6 +134,14 @@ def load_data_overrides() -> dict[str, Path]:
     Raises a loud error if the file exists but is malformed."""
 ```
 
+**Validation contract.** A missing file yields `{}`. If the file exists it must parse as a
+YAML mapping of `str → str`, and **every value must be an absolute path** (after
+`~`-expansion) — a relative path is a loud error, not a silently-resolved-against-cwd value.
+The path is *not* required to exist on disk at load time (the resolver checks existence per
+lookup); the contract is only that it is well-formed and absolute. A non-mapping document, a
+non-string key or value, or a relative value each raise a clear error naming the offending
+entry.
+
 It is a deliberately **separate file** from `config.yaml` because it is machine-local and not
 synced; keeping it out of `config.yaml` avoids accidentally committing machine-specific paths.
 
@@ -139,8 +153,8 @@ schemas, dialects, and other Frictionless fields are ignored.
 ```python
 @dataclass(frozen=True, slots=True)
 class DataResource:
-    path: str          # logical path within the dataset (resources[].path)
-    hash: str          # full "sha256:..." string, verbatim from resources[].hash
+    path: str          # logical path within the dataset (resources[].path), validated
+    hash: str          # full "sha256:<64 hex>" string, verbatim from resources[].hash
 
 @dataclass(frozen=True, slots=True)
 class DatapackageDescriptor:
@@ -151,13 +165,48 @@ class DatapackageDescriptor:
 
 def read_datapackage(path: Path) -> DatapackageDescriptor:
     """Parse a datapackage.yaml. Raises CommonsDatapackageError on malformed YAML,
-    missing resources[], or any resource with a missing/empty hash."""
+    missing resources[], a resource with an invalid path, or a resource with a
+    missing/malformed hash."""
+
+def validate_logical_path(logical_path: str) -> str:
+    """Assert a logical path is a safe relative path within a dataset. Returns it
+    unchanged on success; raises CommonsDatapackageError otherwise. Shared by
+    read_datapackage (for resources[].path) and the resolver (for the CLI arg)."""
+
+def parse_resource_hash(raw: str) -> tuple[str, str]:
+    """Parse a 'sha256:<64 hex>' string into (algorithm, hexdigest).
+    Raises CommonsDatapackageError on a missing prefix, an unsupported algorithm,
+    or a malformed digest."""
 ```
 
-**Invariants enforced:**
+**Logical-path validation (`validate_logical_path`).** Both the descriptor's
+`resources[].path` values *and* the `logical_path` CLI argument are joined onto a filesystem
+root, so both are an injection surface. A logical path is **rejected** if it is:
+- empty or whitespace-only;
+- absolute (`Path(p).is_absolute()`, which also catches POSIX `/foo`);
+- a Windows drive/root form (`C:\...`, `\\server\share`, leading backslash) — rejected
+  explicitly so behavior does not depend on the host OS;
+- containing a `..` parent-traversal segment, or a `.` segment;
+- not normalized (any path that does not round-trip cleanly as a forward-slash relative path).
+
+The accepted form is a forward-slash relative path with no traversal — e.g. `domains.tsv`,
+`raw/chains.csv`. Validation is purely lexical (no filesystem access), so it runs before any
+join. The resolver calls it on the CLI argument *before* the descriptor lookup, so a hostile
+input fails fast with a clear message rather than a confusing not-found.
+
+**Hash contract (`parse_resource_hash`).** Phase C accepts exactly one algorithm:
+`sha256:<64 lowercase hex chars>`. The prefix is **required** (parent §4.2 keeps it for
+future algorithm migration). A bare hex digest, an unsupported algorithm
+(`md5:...`, `sha1:...`), or a malformed digest (wrong length, non-hex) is a loud
+`CommonsDatapackageError` — there is no lenient fallback. Verification compares the computed
+sha256 hexdigest of the on-disk file to the parsed expected hexdigest; the comparison is on
+the parsed `(algorithm, hexdigest)` pair, never on raw strings.
+
+**Invariants enforced by `read_datapackage`:**
 - The file must parse as YAML and contain a `resources` list.
-- Every resource must carry a non-empty `path` and a non-empty `hash`. A resource with no
-  hash is unusable (it cannot be integrity-verified), so this is a loud failure, not a skip.
+- Every resource must carry a `path` that passes `validate_logical_path`.
+- Every resource must carry a `hash` that passes `parse_resource_hash`. A resource with no
+  hash (or an unverifiable one) is unusable, so this is a loud failure, not a skip.
 
 **Why not reuse `DatapackageAdapter`?** `science_tool.graph.storage_adapters.datapackage.DatapackageAdapter`
 is entity-profile focused — it filters to an `_ENTITY_FIELDS` allowlist and *deliberately
@@ -168,31 +217,50 @@ tool for reading resource hashes; reusing it would mean bending it away from its
 ### 5.3 Resolver (`commons/resolver.py`)
 
 ```python
+@dataclass(frozen=True, slots=True)
+class ResolvedDataResource:
+    path: Path         # absolute, verified filesystem path to the bytes
+    hash: str          # the expected "sha256:<hex>" the bytes were verified against
+    source: str        # "data_root" | "override" — which lookup branch matched
+    logical_path: str  # the (validated) logical path that was resolved
+    dataset_id: str    # "dataset:<slug>"
+
 def resolve(
     dataset_id: str,                    # "dataset:<slug>"
     logical_path: str,
     *,
     commons_root: Path | None = None,   # default: resolve_commons_root()
     data_root: Path | None = None,      # default: resolve_commons_data_root()
-) -> Path:
-    """Map (dataset_id, logical_path) to a verified absolute filesystem path."""
+) -> ResolvedDataResource:
+    """Map (dataset_id, logical_path) to a verified resource. The .path field is
+    an absolute, hash-verified filesystem path."""
 ```
+
+`resolve` returns a `ResolvedDataResource`, not a bare `Path`: the CLI's `--json` output
+needs `hash` and `source`, and any future programmatic consumer benefits from the same. The
+resolver is the single place that knows all of these — the CLI must not re-derive them.
 
 **Steps:**
 
-1. `CommonsEntityAdapter(commons_root).load(dataset_id)` → `CommonsEntityRecord`. A
+1. `validate_logical_path(logical_path)` — reject hostile input (absolute paths, `..`
+   traversal, Windows drive forms; see §5.2) *before* any filesystem join or store access.
+2. `CommonsEntityAdapter(commons_root).load(dataset_id)` → `CommonsEntityRecord`. A
    non-dataset id (e.g. `paper:...`) or a dataset with no `datapackage_path` is an error.
-2. `read_datapackage(record.datapackage_path)` → `.resource(logical_path)` → the expected
+3. `read_datapackage(record.datapackage_path)` → `.resource(logical_path)` → the expected
    `hash`.
-3. **Lookup chain**, in order (parent §4.1 steps 1–2; step 3 recipe regen is Phase E):
-   1. `data_root / slug / logical_path` — if the file exists, this is the candidate.
-   2. else `load_data_overrides().get(slug)` → `<override_dir> / logical_path` — if it
-      exists, this is the candidate.
-   3. neither exists → `DataResourceNotFoundError`, listing both paths tried.
-4. **Hash-verify** the candidate: stream sha256 over the file, compare to the expected hash.
-   Mismatch → `DataIntegrityError`. Verification runs on **every** call, for **both** lookup
-   sources — there is no silent fall-through (parent §4.2).
-5. Return the absolute, verified path.
+4. **Lookup chain**, in order (parent §4.1 steps 1–2; step 3 recipe regen is Phase E):
+   1. `data_root / slug / logical_path` — if it is a regular file (`is_file()`), this is the
+      candidate, `source="data_root"`.
+   2. else `load_data_overrides().get(slug)` → `<override_dir> / logical_path` — if it is a
+      regular file (`is_file()`), this is the candidate, `source="override"`.
+   3. neither is a regular file → `DataResourceNotFoundError`, listing both paths tried.
+   `is_file()` (not `exists()`) is used deliberately: a directory or special file at the
+   target path is not a resolvable resource and must not be hashed.
+5. **Hash-verify** the candidate: stream sha256 over the file, compare the computed hexdigest
+   to the digest from `parse_resource_hash(expected)`. Mismatch → `DataIntegrityError`.
+   Verification runs on **every** call, for **both** lookup sources — there is no silent
+   fall-through (parent §4.2).
+6. Return a `ResolvedDataResource` with the absolute, verified path.
 
 The `data_root` directory takes precedence over the per-machine override: the override is a
 migration aid for legacy layouts, and the canonical location should win when both are present.
@@ -205,10 +273,11 @@ A new `data` subgroup under the existing `commons_group`:
 science commons data resolve <dataset:slug> <logical_path> [--json]
 ```
 
-- **Default output:** the verified absolute path on stdout, one line — composable into shell
+- **Default output:** `ResolvedDataResource.path` on stdout, one line — composable into shell
   pipelines, e.g. `cat "$(science commons data resolve dataset:cath-domains domains.tsv)"`.
-- **`--json`:** `{"dataset_id", "logical_path", "resolved_path", "hash", "source"}` where
-  `source` is `"data_root"` or `"override"`.
+- **`--json`:** the `ResolvedDataResource` serialized — `{"dataset_id", "logical_path",
+  "resolved_path", "hash", "source"}`, where `source` is `"data_root"` or `"override"`. Every
+  field comes straight off the dataclass; the CLI derives nothing itself.
 - Errors map to the repo's `click.ClickException` convention (the Phase B CLI realignment),
   exiting non-zero with a clear message.
 - **No `data fetch` command** — deferred to Phase E (see §2).
@@ -219,8 +288,9 @@ Added to `commons/errors.py`, under the existing `CommonsError` base:
 
 ```python
 class CommonsDatapackageError(CommonsError):
-    """datapackage.yaml is malformed, missing resources[], or has a resource
-    with a missing/empty hash."""
+    """datapackage.yaml is malformed, missing resources[], has a resource with an
+    invalid logical path, or has a resource with a missing/malformed hash. Also
+    raised by validate_logical_path / parse_resource_hash for a bad CLI argument."""
     def __init__(self, path: Path, *, reason: str) -> None: ...
 
 class DataResourceNotFoundError(CommonsError):
@@ -241,10 +311,10 @@ Per-module unit tests, fixture-driven, all under `science/tests/`:
 
 | File | Coverage |
 | --- | --- |
-| `test_commons_datapackage.py` | valid descriptor parse; missing `resources`; resource with missing/empty `hash` → `CommonsDatapackageError`; `resource()` lookup hit + miss |
-| `test_commons_resolver.py` | resolve from `data_root`; resolve from override; precedence (`data_root` wins when both present); not-found → `DataResourceNotFoundError`; hash mismatch → `DataIntegrityError`; non-dataset id; missing `logical_path` |
-| `test_commons_cli_data.py` | `resolve` happy path (plain + `--json`); each error class → non-zero exit with clear message |
-| `test_commons_config.py` (extend) | `resolve_commons_data_root()` discovery order; `load_data_overrides()` missing-file → `{}`, malformed-file → loud error |
+| `test_commons_datapackage.py` | valid descriptor parse; missing `resources`; `resource()` lookup hit + miss; **`validate_logical_path`**: accepts `a.tsv` / `raw/b.csv`, rejects empty, absolute (`/x`), `..` traversal, leading `./`, Windows drive (`C:\x`) and UNC (`\\s\share`); **`parse_resource_hash`**: accepts `sha256:<64 hex>`, rejects bare hex, unsupported algo (`md5:`), wrong-length / non-hex digest; resource with missing/malformed `hash` or invalid `path` → `CommonsDatapackageError` |
+| `test_commons_resolver.py` | resolve from `data_root`; resolve from override; precedence (`data_root` wins when both present); `source` field correct per branch; not-found → `DataResourceNotFoundError`; hash mismatch → `DataIntegrityError`; non-dataset id; missing `logical_path` in descriptor; hostile `logical_path` arg rejected before store access; target path is a directory → `DataResourceNotFoundError` (not hashed) |
+| `test_commons_cli_data.py` | `resolve` happy path (plain path output + `--json` with all five fields); each error class → non-zero exit with clear message |
+| `test_commons_config.py` (extend) | `resolve_commons_data_root()` discovery order; `load_data_overrides()` missing-file → `{}`, malformed (non-mapping / non-string entry) → loud error, **relative-path value → loud error** |
 
 **Fixtures.** Extend Phase B's `science/tests/fixtures/commons/` with a dataset whose
 `datapackage.yaml` carries real `resources[]` + sha256 hashes, plus matching byte files in a
@@ -255,9 +325,11 @@ The full `science` suite and the `science_model` suite must stay green.
 
 ## 8. Deliverables checklist
 
-1. `commons/config.py` — `data_root` field, `resolve_commons_data_root()`, `load_data_overrides()`.
-2. `commons/datapackage.py` — `DataResource`, `DatapackageDescriptor`, `read_datapackage()`.
-3. `commons/resolver.py` — `resolve()`.
+1. `commons/config.py` — `data_root` field, `resolve_commons_data_root()`, `load_data_overrides()`
+   (with absolute-path validation).
+2. `commons/datapackage.py` — `DataResource`, `DatapackageDescriptor`, `read_datapackage()`,
+   `validate_logical_path()`, `parse_resource_hash()`.
+3. `commons/resolver.py` — `ResolvedDataResource`, `resolve()`.
 4. `commons/errors.py` — three new error classes.
 5. `commons/cli.py` — `data` subgroup with `resolve`.
 6. `commons/__init__.py` — public surface exports.
