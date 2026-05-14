@@ -108,3 +108,149 @@ def test_missing_store_root(
     result = runner.invoke(commons_group, ["index", "rebuild"])
     assert result.exit_code == 1
     assert "commons store not found" in result.output
+
+
+def _seeded_store(tmp_path: Path) -> Path:
+    import shutil
+    fixtures = Path(__file__).parent / "fixtures" / "commons" / "valid"
+    root = tmp_path / "commons"
+    shutil.copytree(fixtures, root)
+    return root
+
+
+def test_show_human(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    runner = CliRunner()
+    runner.invoke(commons_group, ["index", "rebuild"])
+    result = runner.invoke(commons_group, ["show", "paper:Adams2025"])
+    assert result.exit_code == 0, result.output
+    assert "paper:Adams2025" in result.output
+    assert "Adams, A." in result.output  # author from frontmatter
+
+
+def test_show_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    runner = CliRunner()
+    runner.invoke(commons_group, ["index", "rebuild"])
+    result = runner.invoke(commons_group, ["show", "paper:Adams2025", "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["canonical_id"] == "paper:Adams2025"
+    assert payload["frontmatter"]["bibkey"] == "Adams2025"
+    assert "commons_metadata" in payload
+
+
+def test_show_rejects_project_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    runner = CliRunner()
+    runner.invoke(commons_group, ["index", "rebuild"])
+    result = runner.invoke(
+        commons_group, ["show", "paper:Adams2025", "--project", "foo"]
+    )
+    assert result.exit_code == 1
+    assert "Phase D" in result.output
+
+
+def test_show_missing_entity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    runner = CliRunner()
+    runner.invoke(commons_group, ["index", "rebuild"])
+    result = runner.invoke(commons_group, ["show", "paper:DoesNotExist"])
+    assert result.exit_code == 1
+    assert "not found" in result.output.lower() or "failed" in result.output.lower()
+
+
+def test_find_default_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    runner = CliRunner()
+    runner.invoke(commons_group, ["index", "rebuild"])
+    result = runner.invoke(commons_group, ["find", "dataset"])
+    assert result.exit_code == 0
+    assert "dataset:cath-domains" in result.output
+    assert "dataset:rnaseq-example" in result.output
+
+
+def test_find_with_tag_and(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    runner = CliRunner()
+    runner.invoke(commons_group, ["index", "rebuild"])
+    result = runner.invoke(
+        commons_group, ["find", "dataset", "--tag", "rnaseq", "--tag", "bulk"]
+    )
+    assert result.exit_code == 0
+    assert "dataset:rnaseq-example" in result.output
+    assert "dataset:cath-domains" not in result.output
+
+
+def test_find_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    runner = CliRunner()
+    runner.invoke(commons_group, ["index", "rebuild"])
+    result = runner.invoke(commons_group, ["find", "paper", "--json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert isinstance(payload, list)
+    assert payload[0]["canonical_id"] == "paper:Adams2025"
+
+
+def test_find_year_filter_only_for_papers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    monkeypatch.setenv("SCIENCE_COMMONS_QUIET_STALE", "1")
+    runner = CliRunner()
+    runner.invoke(commons_group, ["index", "rebuild"])
+    result = runner.invoke(
+        commons_group, ["find", "dataset", "--year-from", "2020"]
+    )
+    assert result.exit_code != 0
+
+
+def test_show_before_rebuild_exits_1_cleanly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Show must surface CommonsRegistryError as a clean exit-1 message,
+    not a raw sqlite3.OperationalError traceback."""
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    # Note: no `index rebuild` invocation — registry.sqlite is absent.
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["show", "paper:Adams2025"])
+    assert result.exit_code == 1
+    assert "OperationalError" not in result.output
+    assert (
+        "registry" in result.output.lower()
+        or "index rebuild" in result.output
+    )
+
+
+def test_find_before_rebuild_exits_1_cleanly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seeded_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["find", "paper"])
+    assert result.exit_code == 1
+    assert "OperationalError" not in result.output
+    assert (
+        "registry" in result.output.lower()
+        or "index rebuild" in result.output
+    )
