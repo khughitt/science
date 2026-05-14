@@ -105,6 +105,7 @@ from science_tool.research_package.cli import research_package_group
 from science_tool.styles import COLOR_POLICY_CHOICES, resolve_color_policy, set_color_policy
 from science_tool.verdict.cli import verdict_group
 from science_tool.skills_lint import skills_group
+from science_tool.commons import commons_group
 from science_tool.wander.cli import wander_command
 
 
@@ -212,6 +213,7 @@ main.add_command(prose_group)
 main.add_command(skills_group)
 main.add_command(peers_group)
 main.add_command(wander_command)
+main.add_command(commons_group)
 
 
 @main.group("entities")
