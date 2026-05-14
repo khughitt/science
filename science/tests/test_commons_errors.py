@@ -4,12 +4,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from science_tool.commons.errors import (
+    CommonsDatapackageError,
     CommonsEntityError,
     CommonsError,
     CommonsLayoutError,
     CommonsRegistryError,
     CommonsRootMalformedError,
     CommonsRootNotFoundError,
+    DataIntegrityError,
+    DataLogicalPathError,
+    DataResourceNotFoundError,
 )
 
 
@@ -60,3 +64,48 @@ def test_registry_error_carries_db_path() -> None:
     err = CommonsRegistryError(Path("/x/registry.sqlite"), cause=inner)
     assert err.db_path == Path("/x/registry.sqlite")
     assert err.cause is inner
+
+
+def test_phase_c_errors_subclass_commons_error() -> None:
+    assert issubclass(CommonsDatapackageError, CommonsError)
+    assert issubclass(DataLogicalPathError, CommonsError)
+    assert issubclass(DataResourceNotFoundError, CommonsError)
+    assert issubclass(DataIntegrityError, CommonsError)
+
+
+def test_datapackage_error_carries_path_and_reason() -> None:
+    err = CommonsDatapackageError(Path("/x/datapackage.yaml"), reason="missing resources[]")
+    assert err.path == Path("/x/datapackage.yaml")
+    assert err.reason == "missing resources[]"
+    assert "missing resources[]" in str(err)
+    assert "/x/datapackage.yaml" in str(err)
+
+
+def test_logical_path_error_carries_string_not_path() -> None:
+    err = DataLogicalPathError("../escape", reason="path may not contain '..' segments")
+    assert err.logical_path == "../escape"
+    assert err.reason == "path may not contain '..' segments"
+    assert "../escape" in str(err)
+
+
+def test_resource_not_found_lists_tried_paths() -> None:
+    tried = [Path("/data/foo/x.tsv"), Path("/legacy/foo/x.tsv")]
+    err = DataResourceNotFoundError("dataset:foo", "x.tsv", tried=tried)
+    assert err.dataset_id == "dataset:foo"
+    assert err.logical_path == "x.tsv"
+    assert err.tried == tried
+    assert "/data/foo/x.tsv" in str(err)
+    assert "/legacy/foo/x.tsv" in str(err)
+
+
+def test_integrity_error_carries_expected_and_actual() -> None:
+    err = DataIntegrityError(
+        Path("/data/foo/x.tsv"),
+        expected="sha256:aaaa",
+        actual="sha256:bbbb",
+    )
+    assert err.path == Path("/data/foo/x.tsv")
+    assert err.expected == "sha256:aaaa"
+    assert err.actual == "sha256:bbbb"
+    assert "sha256:aaaa" in str(err)
+    assert "sha256:bbbb" in str(err)

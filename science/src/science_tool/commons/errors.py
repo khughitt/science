@@ -62,3 +62,53 @@ class CommonsRegistryError(CommonsError):
         super().__init__(f"commons registry at {db_path} failed: {cause}")
         self.db_path = db_path
         self.cause = cause
+
+
+class CommonsDatapackageError(CommonsError):
+    """A datapackage.yaml is malformed, missing resources[], has an invalid or
+    duplicate resource path, or has a resource with a missing/malformed hash."""
+
+    def __init__(self, path: Path, *, reason: str) -> None:
+        super().__init__(f"commons datapackage error at {path}: {reason}")
+        self.path = path
+        self.reason = reason
+
+
+class DataLogicalPathError(CommonsError):
+    """A logical path string is not a safe forward-slash relative path.
+
+    Carries the offending string (not a Path) so a bad CLI argument is not
+    forced to masquerade as a datapackage file.
+    """
+
+    def __init__(self, logical_path: str, *, reason: str) -> None:
+        super().__init__(f"invalid logical path {logical_path!r}: {reason}")
+        self.logical_path = logical_path
+        self.reason = reason
+
+
+class DataResourceNotFoundError(CommonsError):
+    """The bytes for a resource were not found in any lookup source."""
+
+    def __init__(
+        self, dataset_id: str, logical_path: str, *, tried: list[Path]
+    ) -> None:
+        tried_str = ", ".join(str(p) for p in tried)
+        super().__init__(
+            f"data resource {dataset_id} / {logical_path} not found; tried: {tried_str}"
+        )
+        self.dataset_id = dataset_id
+        self.logical_path = logical_path
+        self.tried = tried
+
+
+class DataIntegrityError(CommonsError):
+    """A resource file was found but its sha256 does not match the expected hash."""
+
+    def __init__(self, path: Path, *, expected: str, actual: str) -> None:
+        super().__init__(
+            f"data integrity error at {path}: expected {expected}, got {actual}"
+        )
+        self.path = path
+        self.expected = expected
+        self.actual = actual
