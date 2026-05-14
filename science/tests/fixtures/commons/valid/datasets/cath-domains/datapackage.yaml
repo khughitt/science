@@ -6,3 +6,4 @@ resources:
     hash: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
     bytes: 4521339201
     format: "parquet"
+    mediatype: "application/vnd.apache.parquet"

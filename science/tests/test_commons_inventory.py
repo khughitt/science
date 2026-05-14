@@ -163,6 +163,48 @@ def test_build_commons_inventory_warns_on_missing_datapackage(tmp_path: Path, mo
     assert "dataset:rnaseq-example" in {e.id for e in payload.entities}
 
 
+def test_build_commons_inventory_projects_dataset_resources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_store(tmp_path)
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    payload = build_commons_inventory()
+
+    cath = next(e for e in payload.entities if e.id == "dataset:cath-domains")
+    assert cath.data["resources"] == [
+        {
+            "path": "cath_domains.parquet",
+            "hash": "sha256:" + "0" * 64,
+            "bytes": 4521339201,
+            "format": "parquet",
+            "mediatype": "application/vnd.apache.parquet",
+        }
+    ]
+    rnaseq = next(e for e in payload.entities if e.id == "dataset:rnaseq-example")
+    assert rnaseq.data["resources"][0]["mediatype"] is None
+    paper = next(e for e in payload.entities if e.id == "paper:Adams2025")
+    assert "resources" not in paper.data
+
+
+def test_build_commons_inventory_warns_on_malformed_datapackage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _make_store(tmp_path)
+    (root / "datasets" / "cath-domains" / "datapackage.yaml").write_text(
+        "resources: [unclosed\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    payload = build_commons_inventory()
+
+    dp_warnings = [
+        w for w in payload.warnings if w.code == "commons-datapackage-invalid"
+    ]
+    assert len(dp_warnings) == 1
+    assert dp_warnings[0].canonical_id == "dataset:cath-domains"
+    cath = next(e for e in payload.entities if e.id == "dataset:cath-domains")
+    assert "resources" not in cath.data
+
+
 def test_build_commons_inventory_missing_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(tmp_path / "nope"))
     with pytest.raises(CommonsRootNotFoundError):

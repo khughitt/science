@@ -22,7 +22,9 @@ from science_model.contracts.inventory_v2 import (
 
 from science_tool.commons.adapter import CommonsEntityAdapter, CommonsEntityRecord
 from science_tool.commons.config import resolve_commons_root
+from science_tool.commons.datapackage import read_datapackage
 from science_tool.commons.errors import (
+    CommonsDatapackageError,
     CommonsEntityError,
     CommonsLayoutError,
     CommonsRootNotFoundError,
@@ -96,6 +98,30 @@ def _entity_from_record(
     entity_aliases = _optional_string_list(frontmatter, "aliases")
     related = [InventoryReference(relation="related", target_id=str(target)) for target in related_targets]
     data = {key: value for key, value in frontmatter.items() if key not in _PROMOTED_KEYS}
+    if record.type == "dataset" and record.datapackage_path is not None:
+        try:
+            descriptor = read_datapackage(record.datapackage_path)
+        except CommonsDatapackageError as exc:
+            warnings.append(
+                InventoryWarning(
+                    code="commons-datapackage-invalid",
+                    severity="error",
+                    message=str(exc),
+                    path=str(record.datapackage_path),
+                    canonical_id=record.canonical_id,
+                )
+            )
+        else:
+            data["resources"] = [
+                {
+                    "path": resource.path,
+                    "hash": resource.hash,
+                    "bytes": resource.bytes,
+                    "format": resource.format,
+                    "mediatype": resource.mediatype,
+                }
+                for resource in descriptor.resources
+            ]
     entity = InventoryEntity(
         id=record.canonical_id,
         kind=record.type,
