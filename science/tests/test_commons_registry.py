@@ -99,3 +99,73 @@ def test_rebuild_is_idempotent(tmp_path: Path) -> None:
     first = builder.rebuild()
     second = builder.rebuild()
     assert first.entities_indexed == second.entities_indexed
+
+
+def test_is_stale_false_immediately_after_rebuild(tmp_path: Path) -> None:
+    root = _make_store(tmp_path)
+    builder = RegistryBuilder(root, CommonsEntityAdapter(root))
+    builder.rebuild()
+    assert builder.is_stale() is False
+
+
+def test_is_stale_true_when_registry_missing(tmp_path: Path) -> None:
+    root = _make_store(tmp_path)
+    builder = RegistryBuilder(root, CommonsEntityAdapter(root))
+    assert builder.is_stale() is True
+
+
+def test_is_stale_detects_file_modification(tmp_path: Path) -> None:
+    root = _make_store(tmp_path)
+    builder = RegistryBuilder(root, CommonsEntityAdapter(root))
+    builder.rebuild()
+    paper = root / "papers" / "Adams2025.md"
+    # bump mtime by writing the same content one nanosecond later
+    paper.write_text(paper.read_text(encoding="utf-8"), encoding="utf-8")
+    import os
+    os.utime(paper, ns=(paper.stat().st_atime_ns, paper.stat().st_mtime_ns + 1_000_000))
+    assert builder.is_stale() is True
+
+
+def test_is_stale_detects_addition(tmp_path: Path) -> None:
+    root = _make_store(tmp_path)
+    builder = RegistryBuilder(root, CommonsEntityAdapter(root))
+    builder.rebuild()
+    new_topic = root / "topics" / "another-topic.md"
+    new_topic.write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+topic/1.0"\n'
+        'id: "topic:another-topic"\n'
+        'type: "topic"\n'
+        'title: "Another"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-05-13"\n'
+        'updated: "2026-05-13"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "---\nbody\n",
+        encoding="utf-8",
+    )
+    assert builder.is_stale() is True
+
+
+def test_is_stale_detects_deletion(tmp_path: Path) -> None:
+    root = _make_store(tmp_path)
+    builder = RegistryBuilder(root, CommonsEntityAdapter(root))
+    builder.rebuild()
+    (root / "topics" / "single-cell-foundation-models.md").unlink()
+    assert builder.is_stale() is True
+
+
+def test_is_stale_detects_rename(tmp_path: Path) -> None:
+    root = _make_store(tmp_path)
+    builder = RegistryBuilder(root, CommonsEntityAdapter(root))
+    builder.rebuild()
+    src = root / "topics" / "single-cell-foundation-models.md"
+    dst = root / "topics" / "renamed-topic.md"
+    # Keep mtime identical so only the path-digest signal fires
+    src_mtime = src.stat().st_mtime_ns
+    src.rename(dst)
+    import os
+    os.utime(dst, ns=(src_mtime, src_mtime))
+    assert builder.is_stale() is True

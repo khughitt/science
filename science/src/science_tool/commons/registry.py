@@ -117,6 +117,49 @@ class RegistryBuilder:
             duration_ms=duration_ms,
         )
 
+    def is_stale(self) -> bool:
+        """Return True if the registry needs a rebuild.
+
+        Triggers on:
+        1. Missing registry or missing schema_meta rows.
+        2. source_count mismatch (add or delete).
+        3. max source mtime advance (in-place modification).
+        4. source_paths_digest mismatch (rename — count + mtime can both be
+           unchanged).
+        """
+        if not self.db_path.is_file():
+            return True
+        try:
+            conn = sqlite3.connect(self.db_path)
+            try:
+                meta = dict(conn.execute("SELECT key, value FROM schema_meta").fetchall())
+            finally:
+                conn.close()
+        except sqlite3.Error:
+            return True
+        required = (
+            "source_count",
+            "max_source_mtime_ns",
+            "source_paths_digest",
+        )
+        if any(k not in meta for k in required):
+            return True
+
+        source_files = sorted(self._source_files())
+        current_count = len(source_files)
+        if current_count != int(meta["source_count"]):
+            return True
+
+        rel_posix = [p.relative_to(self._root).as_posix() for p in source_files]
+        current_digest = hashlib.sha256("\n".join(rel_posix).encode("utf-8")).hexdigest()
+        if current_digest != meta["source_paths_digest"]:
+            return True
+
+        current_max = max((p.stat().st_mtime_ns for p in source_files), default=0)
+        if current_max > int(meta["max_source_mtime_ns"]):
+            return True
+        return False
+
     def _insert_records(
         self,
         conn: sqlite3.Connection,
