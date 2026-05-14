@@ -228,3 +228,26 @@ def test_scan_rejects_type_path_mismatch(tmp_path: Path) -> None:
     assert errors, "type mismatch must produce an error"
     records = [r for r in items if isinstance(r, CommonsEntityRecord) and r.body_path == impostor]
     assert records == []
+
+
+def test_load_returns_record_for_known_id(tmp_path: Path) -> None:
+    root = _make_store(tmp_path, "valid")
+    adapter = CommonsEntityAdapter(root)
+    record = adapter.load("paper:Adams2025")
+    assert isinstance(record, CommonsEntityRecord)
+    assert record.canonical_id == "paper:Adams2025"
+
+
+def test_load_raises_entity_error_for_unknown_id(tmp_path: Path) -> None:
+    root = _make_store(tmp_path, "valid")
+    adapter = CommonsEntityAdapter(root)
+    with pytest.raises(CommonsEntityError) as exc_info:
+        adapter.load("paper:DoesNotExist")
+    assert exc_info.value.canonical_id == "paper:DoesNotExist"
+
+
+def test_load_raises_on_malformed_id(tmp_path: Path) -> None:
+    root = _make_store(tmp_path, "valid")
+    adapter = CommonsEntityAdapter(root)
+    with pytest.raises(CommonsEntityError):
+        adapter.load("not-a-canonical-id")

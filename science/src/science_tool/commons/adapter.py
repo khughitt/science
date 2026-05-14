@@ -87,6 +87,44 @@ class CommonsEntityAdapter:
                     continue
                 yield self._build(type_name, child.stem, child, None)
 
+    def load(self, canonical_id: str) -> CommonsEntityRecord:
+        """Load one entity by canonical id. Raises CommonsEntityError on failure."""
+        if ":" not in canonical_id:
+            raise CommonsEntityError(
+                self._root,
+                canonical_id=canonical_id,
+                cause=ValueError(
+                    f"canonical id {canonical_id!r} is not in '<type>:<slug>' form"
+                ),
+            )
+        type_name, slug = canonical_id.split(":", 1)
+        type_dir = next(
+            (k for k, v in _TYPE_DIR_TO_TYPE.items() if v == type_name),
+            None,
+        )
+        if type_dir is None:
+            raise CommonsEntityError(
+                self._root,
+                canonical_id=canonical_id,
+                cause=ValueError(f"unknown entity type {type_name!r}"),
+            )
+        if type_dir == "datasets":
+            body = self._root / "datasets" / slug / "entity.md"
+            dp = self._root / "datasets" / slug / "datapackage.yaml"
+        else:
+            body = self._root / type_dir / f"{slug}.md"
+            dp = None
+        if not body.is_file():
+            raise CommonsEntityError(
+                body,
+                canonical_id=canonical_id,
+                cause=FileNotFoundError(str(body)),
+            )
+        result = self._build(type_dir, slug, body, dp)
+        if isinstance(result, CommonsEntityError):
+            raise result
+        return result
+
     def _build(
         self,
         type_dir: str,
