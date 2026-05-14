@@ -10,6 +10,8 @@ from typing import cast
 import yaml
 from pydantic import BaseModel, Field
 
+from science_tool.commons.config import CommonsSettings
+
 _UNSET = object()
 
 
@@ -57,6 +59,7 @@ class GlobalConfig(BaseModel):
 
     sync: SyncSettings = Field(default_factory=SyncSettings)
     projects: list[RegisteredProject] = Field(default_factory=list)
+    commons: CommonsSettings = Field(default_factory=CommonsSettings)
 
 
 def load_global_config(config_path: Path | None = None) -> GlobalConfig:
