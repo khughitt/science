@@ -17,19 +17,24 @@
 
 ### Task 1: Phase B prerequisite — make `CommonsEntityAdapter.scan()` walk-safe
 
-`_scan_type` currently **raises** `CommonsLayoutError` mid-generator when a dataset directory has `entity.md` but no `datapackage.yaml`. A raised exception aborts the whole walk (and crashes `CommonsValidator`). This task makes `scan()` *yield* that error instead, so one bad dataset becomes one error item rather than a dead walk. `load()` is left untouched — single-id lookup, raising is correct there.
+`_scan_type` currently **raises** `CommonsLayoutError` mid-generator when a dataset directory has `entity.md` but no `datapackage.yaml`. A raised exception aborts the whole walk — and crashes `CommonsValidator.validate()` and `RegistryBuilder.rebuild()`, which both iterate the same `scan()`.
+
+This task makes `scan()` *yield* an error item instead. Crucially it yields the **existing `CommonsEntityError` type** (with a `CommonsLayoutError` as its `cause`) — *not* a new type and *not* a bare `CommonsLayoutError`. Because the yielded item is still a `CommonsEntityError`, every existing consumer (`CommonsValidator`, `RegistryBuilder`, and both `--json` CLI paths, which read `.path`/`.canonical_id`/`.cause`) handles it correctly with **zero code change**. `scan()`'s return type does not widen. `load()` is left untouched — single-id lookup, raising is correct there.
+
+Steps 5-8 are regression coverage proving the no-consumer-change claim.
 
 **Files:**
-- Modify: `science/src/science_tool/commons/adapter.py:54` (`scan` signature), `:60-62` (`_scan_type` signature), `:73-77` (the `raise`)
-- Modify: `science/src/science_tool/commons/validator.py:15` (import), `:18-21` (`ValidationReport`), `:30-43` (`validate`)
-- Test: `science/tests/test_commons_adapter.py`, `science/tests/test_commons_validator.py`
+- Modify: `science/src/science_tool/commons/adapter.py:73-77` (the `raise` block in `_scan_type`)
+- Test: `science/tests/test_commons_adapter.py`, `science/tests/test_commons_cli.py`
 
 - [ ] **Step 1: Replace the adapter test that asserts `scan()` raises**
 
 In `science/tests/test_commons_adapter.py`, **delete** `test_scan_raises_layout_error_for_dataset_missing_datapackage` (lines 59-65) and replace it with:
 
 ```python
-def test_scan_yields_layout_error_and_continues(tmp_path: Path) -> None:
+def test_scan_yields_entity_error_for_dataset_missing_datapackage(
+    tmp_path: Path,
+) -> None:
     root = _make_store(tmp_path, "valid")
     no_dp = root / "datasets" / "no-dp"
     no_dp.mkdir()
@@ -56,29 +61,29 @@ def test_scan_yields_layout_error_and_continues(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     items = list(CommonsEntityAdapter(root).scan())
-    layout_errors = [it for it in items if isinstance(it, CommonsLayoutError)]
+    errors = [it for it in items if isinstance(it, CommonsEntityError)]
     records = [it for it in items if isinstance(it, CommonsEntityRecord)]
-    assert len(layout_errors) == 1
-    assert layout_errors[0].path == no_dp
+    # The missing datapackage is yielded as a CommonsEntityError, not raised,
+    # and not a bare CommonsLayoutError.
+    assert len(errors) == 1
+    assert errors[0].path == no_dp
+    assert errors[0].canonical_id == "dataset:no-dp"
+    assert isinstance(errors[0].cause, CommonsLayoutError)
     # Entities discovered after the bad dataset are still emitted.
     assert "dataset:rnaseq-example" in {r.canonical_id for r in records}
     assert "paper:Adams2025" in {r.canonical_id for r in records}
 ```
 
+`CommonsEntityError`, `CommonsEntityRecord`, and `CommonsLayoutError` are all already imported at the top of `test_commons_adapter.py`.
+
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `uv run pytest tests/test_commons_adapter.py::test_scan_yields_layout_error_and_continues -v`
-Expected: FAIL — `scan()` currently raises `CommonsLayoutError` instead of yielding it.
+Run: `uv run pytest tests/test_commons_adapter.py::test_scan_yields_entity_error_for_dataset_missing_datapackage -v`
+Expected: FAIL — `scan()` currently raises `CommonsLayoutError` instead of yielding a `CommonsEntityError`.
 
-- [ ] **Step 3: Make `_scan_type` yield instead of raise**
+- [ ] **Step 3: Make `_scan_type` yield a `CommonsEntityError` instead of raising**
 
-In `science/src/science_tool/commons/adapter.py`, change the `scan` signature (line 54) and `_scan_type` signature (lines 60-62) so both return:
-
-```python
-    ) -> Iterator[CommonsEntityRecord | CommonsEntityError | CommonsLayoutError]:
-```
-
-Then in `_scan_type` replace the `raise` block:
+In `science/src/science_tool/commons/adapter.py`, in `_scan_type`, replace the `raise` block:
 
 ```python
                 if not dp_path.is_file():
@@ -93,133 +98,102 @@ with:
 
 ```python
                 if not dp_path.is_file():
-                    yield CommonsLayoutError(
+                    yield CommonsEntityError(
                         child,
-                        reason="dataset directory missing required datapackage.yaml sibling",
+                        canonical_id=f"dataset:{child.name}",
+                        cause=CommonsLayoutError(
+                            child,
+                            reason=(
+                                "dataset directory missing required "
+                                "datapackage.yaml sibling"
+                            ),
+                        ),
                     )
                     continue
                 yield self._build(type_name, child.name, entity_path, dp_path)
 ```
 
-`CommonsLayoutError` is already imported in `adapter.py`.
+Both `CommonsEntityError` and `CommonsLayoutError` are already imported in `adapter.py`. The `scan()` / `_scan_type()` signatures are unchanged — they still return `Iterator[CommonsEntityRecord | CommonsEntityError]`.
 
-- [ ] **Step 4: Run the adapter test to verify it passes**
+- [ ] **Step 4: Run the adapter test file to verify it passes**
 
 Run: `uv run pytest tests/test_commons_adapter.py -v`
 Expected: PASS (all adapter tests, including the new one).
 
-- [ ] **Step 5: Write the failing validator test**
+- [ ] **Step 5: Write the regression tests for the downstream CLI consumers**
 
-In `science/tests/test_commons_validator.py`, add at the end:
+In `science/tests/test_commons_cli.py`, add at the end. These prove that `index rebuild` and `validate` handle the yielded `CommonsEntityError` with no code change:
 
 ```python
-def test_validate_collects_layout_error_for_dataset_missing_datapackage(
-    tmp_path: Path,
-) -> None:
-    from science_tool.commons.errors import CommonsLayoutError
+_NO_DP_ENTITY = (
+    "---\n"
+    'schema_profile: "science-entity-base/1.0+dataset/1.0"\n'
+    'id: "dataset:no-dp"\n'
+    'type: "dataset"\n'
+    'title: "No datapackage"\n'
+    'version: "1.0.0"\n'
+    'status: "active"\n'
+    'created: "2026-05-13"\n'
+    'updated: "2026-05-13"\n'
+    'datapackage: "datapackage.yaml"\n'
+    'origin: "external"\n'
+    'tier: "use-now"\n'
+    "access:\n"
+    '  level: "public"\n'
+    "  verified: true\n"
+    '  source_url: "https://example.org"\n'
+    "ontology_terms: []\n"
+    "tags: []\n"
+    "---\nbody\n"
+)
 
-    root = _make_store(tmp_path, "valid")
+
+def test_index_rebuild_reports_missing_datapackage_as_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seeded_store(tmp_path)
     no_dp = root / "datasets" / "no-dp"
     no_dp.mkdir()
-    (no_dp / "entity.md").write_text(
-        "---\n"
-        'schema_profile: "science-entity-base/1.0+dataset/1.0"\n'
-        'id: "dataset:no-dp"\n'
-        'type: "dataset"\n'
-        'title: "No datapackage"\n'
-        'version: "1.0.0"\n'
-        'status: "active"\n'
-        'created: "2026-05-13"\n'
-        'updated: "2026-05-13"\n'
-        'datapackage: "datapackage.yaml"\n'
-        'origin: "external"\n'
-        'tier: "use-now"\n'
-        "access:\n"
-        '  level: "public"\n'
-        "  verified: true\n"
-        '  source_url: "https://example.org"\n'
-        "ontology_terms: []\n"
-        "tags: []\n"
-        "---\nbody\n",
-        encoding="utf-8",
-    )
-    report = CommonsValidator(CommonsEntityAdapter(root)).validate()
-    layout_errors = [e for e in report.errors if isinstance(e, CommonsLayoutError)]
-    assert len(layout_errors) == 1
-    assert report.checked == 6  # 5 valid entities + 1 layout error
+    (no_dp / "entity.md").write_text(_NO_DP_ENTITY, encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["index", "rebuild", "--json"])
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["entities_indexed"] == 5
+    assert any("no-dp" in err["path"] for err in payload["errors"])
+
+
+def test_validate_reports_missing_datapackage_as_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seeded_store(tmp_path)
+    no_dp = root / "datasets" / "no-dp"
+    no_dp.mkdir()
+    (no_dp / "entity.md").write_text(_NO_DP_ENTITY, encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["validate", "--json"])
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert any("no-dp" in err["path"] for err in payload["errors"])
 ```
 
-- [ ] **Step 6: Run the validator test to verify it fails**
+- [ ] **Step 6: Run the regression tests to verify they pass**
 
-Run: `uv run pytest tests/test_commons_validator.py::test_validate_collects_layout_error_for_dataset_missing_datapackage -v`
-Expected: FAIL — `CommonsValidator.validate` does not handle a yielded `CommonsLayoutError` (it falls through to `_matches_record`, which accesses `.type` and raises `AttributeError`).
+Run: `uv run pytest tests/test_commons_cli.py -k "missing_datapackage" -v`
+Expected: PASS — `RegistryBuilder.rebuild()` and `CommonsValidator.validate()` both already route `CommonsEntityError` items into their report's `errors` list, and the `--json` CLI paths read `.path`/`.canonical_id`/`.cause` (all present on `CommonsEntityError`). No code change was needed in `registry.py`, `validator.py`, or `cli.py`.
 
-- [ ] **Step 7: Update `CommonsValidator` to collect layout errors**
+- [ ] **Step 7: Run both touched test files to confirm nothing else regressed**
 
-In `science/src/science_tool/commons/validator.py`:
+Run: `uv run pytest tests/test_commons_adapter.py tests/test_commons_cli.py tests/test_commons_validator.py tests/test_commons_registry.py -v`
+Expected: PASS (all tests — the existing `test_load_dataset_missing_datapackage_raises_layout_error` still passes because `load()` is untouched).
 
-Change the import (line 15) from:
-```python
-from science_tool.commons.errors import CommonsEntityError
-```
-to:
-```python
-from science_tool.commons.errors import CommonsEntityError, CommonsError, CommonsLayoutError
-```
-
-Change `ValidationReport` (lines 18-21):
-```python
-@dataclass(frozen=True)
-class ValidationReport:
-    checked: int
-    errors: list[CommonsError]
-```
-
-In `validate` (lines 32-43), change the loop body. Replace:
-```python
-        errors: list[CommonsEntityError] = []
-        for item in self._adapter.scan():
-            if isinstance(item, CommonsEntityError):
-                if not self._matches_error(item, type=type, slug=slug):
-                    continue
-                checked += 1
-                errors.append(item)
-                continue
-            if not self._matches_record(item, type=type, slug=slug):
-                continue
-            checked += 1
-```
-with:
-```python
-        errors: list[CommonsError] = []
-        for item in self._adapter.scan():
-            if isinstance(item, CommonsEntityError):
-                if not self._matches_error(item, type=type, slug=slug):
-                    continue
-                checked += 1
-                errors.append(item)
-                continue
-            if isinstance(item, CommonsLayoutError):
-                # A structural layout error is type-agnostic; surface it
-                # regardless of any --type/--slug filter.
-                checked += 1
-                errors.append(item)
-                continue
-            if not self._matches_record(item, type=type, slug=slug):
-                continue
-            checked += 1
-```
-
-- [ ] **Step 8: Run both test files to verify they pass**
-
-Run: `uv run pytest tests/test_commons_adapter.py tests/test_commons_validator.py -v`
-Expected: PASS (all tests).
-
-- [ ] **Step 9: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add science/src/science_tool/commons/adapter.py science/src/science_tool/commons/validator.py science/tests/test_commons_adapter.py science/tests/test_commons_validator.py
-git commit -m "fix(commons): scan() yields CommonsLayoutError instead of raising mid-walk"
+git add science/src/science_tool/commons/adapter.py science/tests/test_commons_adapter.py science/tests/test_commons_cli.py
+git commit -m "fix(commons): scan() yields CommonsEntityError instead of raising mid-walk"
 ```
 
 ---
@@ -298,6 +272,18 @@ def test_read_datapackage_rejects_non_str_format(tmp_path: Path) -> None:
         "    format: 5\n",
     )
     with pytest.raises(CommonsDatapackageError, match="format"):
+        read_datapackage(dp)
+
+
+def test_read_datapackage_rejects_non_str_mediatype(tmp_path: Path) -> None:
+    dp = _write(
+        tmp_path / "datapackage.yaml",
+        "resources:\n"
+        "  - path: counts.parquet\n"
+        f'    hash: "{_GOOD_HASH}"\n'
+        "    mediatype: 5\n",
+    )
+    with pytest.raises(CommonsDatapackageError, match="mediatype"):
         read_datapackage(dp)
 ```
 
@@ -1137,23 +1123,21 @@ def build_commons_inventory() -> InventoryPayload:
 
     for item in CommonsEntityAdapter(root).scan():
         if isinstance(item, CommonsEntityError):
+            # scan() yields CommonsEntityError for both schema/parse failures
+            # and (per design §3.6) a dataset missing datapackage.yaml — the
+            # latter carries a CommonsLayoutError cause.
+            code = (
+                "commons-datapackage-invalid"
+                if isinstance(item.cause, CommonsLayoutError)
+                else "commons-entity-invalid"
+            )
             warnings.append(
                 InventoryWarning(
-                    code="commons-entity-invalid",
+                    code=code,
                     severity="error",
                     message=str(item),
                     path=str(item.path),
                     canonical_id=item.canonical_id,
-                )
-            )
-            continue
-        if isinstance(item, CommonsLayoutError):
-            warnings.append(
-                InventoryWarning(
-                    code="commons-datapackage-invalid",
-                    severity="error",
-                    message=str(item),
-                    path=str(item.path),
                 )
             )
             continue
@@ -1426,11 +1410,22 @@ def test_build_inventory_defaults_to_v2(tmp_path) -> None:
     inventory = build_inventory(project)
 
     assert inventory.schema_version == "2"
+
+
+def test_build_inventory_rejects_unknown_schema_version(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc").mkdir(parents=True)
+    (project / "science.yaml").write_text("id: bad-version\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="schema_version"):
+        build_inventory(project, schema_version="3")
 ```
+
+`pytest` is already imported at the top of `test_entities_inventory.py`.
 
 - [ ] **Step 3: Run the tests to verify the new ones fail**
 
-Run: `uv run pytest tests/test_entities_inventory.py -k "v2 or defaults_to_v2" -v`
+Run: `uv run pytest tests/test_entities_inventory.py -k "v2 or defaults_to_v2 or unknown_schema_version" -v`
 Expected: FAIL — `build_inventory` does not accept `schema_version` and returns a v1 payload.
 
 - [ ] **Step 4: Update `build_inventory` imports and signature**
@@ -1524,6 +1519,11 @@ And replace the payload-assembly block above with:
         )
         return finalize_inventory_payload(payload)
 
+    if schema_version != "2":
+        raise ValueError(
+            f"unsupported schema_version {schema_version!r}; expected '1' or '2'"
+        )
+
     payload_v2 = inventory_v2.InventoryPayload(
         generated_at=generated_at,
         project_id=project_metadata.id,
@@ -1539,6 +1539,11 @@ And replace the payload-assembly block above with:
     )
     return inventory_v2.finalize_inventory_payload(payload_v2)
 ```
+
+The explicit `ValueError` keeps the function honest for direct Python API
+callers — the CLI's `click.Choice(["1", "2"])` already blocks bad values at the
+command boundary, but `build_inventory` must not silently treat an unknown
+`schema_version` as v2 (the project's "fail early / no silent fallbacks" rule).
 
 The v1 `InventoryEntity` / `InventoryAlias` / `InventoryProjectMetadata` / `InventoryWarning` objects already built above are reused as-is: `inventory_v2` imports those exact classes from `inventory_v1`, so they are type-compatible with `inventory_v2.InventoryPayload`.
 
@@ -2108,9 +2113,11 @@ Expected: exits 0; the output begins with a JSON object whose `"schema_version"`
 
 - [ ] **Step 4: Commit any fixes**
 
-If Steps 1-2 surfaced regressions and you fixed them:
+If Steps 1-2 surfaced regressions and you fixed them, stage **only the files you
+actually edited** (name them explicitly — do not use `git add -A` / `git add .`,
+which can sweep in unrelated worktree changes):
 ```bash
-git add -A
+git add <explicit/path/to/each/fixed/file> ...
 git commit -m "fix(commons): address D2 full-suite regressions"
 ```
 If no fixes were needed, this task makes no commit.
@@ -2137,6 +2144,6 @@ If no fixes were needed, this task makes no commit.
 
 **2. Placeholder scan** — no "TBD"/"TODO"/"handle edge cases"/"similar to Task N". Every code step has complete code; every test step has full test bodies; every run step has an exact command and expected result.
 
-**3. Type consistency** — `build_commons_inventory() -> InventoryPayload` (v2) consistent across Tasks 6, 7, 10, 12. `build_inventory(project_root, schema_version="2")` consistent across Tasks 8, 9, 11. `InventoryOverlay` field names (`overlay_of`, `project_id`, `source`, `pin_version`, `pin_effective_version`, `project_only_fields`, `append_fields`, `body_sections`) identical in Tasks 3, 4, 5 (contract), 9 (producer), and the test assertions. Warning codes (`commons-entity-invalid`, `commons-datapackage-invalid`, `overlay-invalid`) consistent between Tasks 6/7/9 and their tests. `_entity_from_record(record, warnings)` signature defined in Task 6 and extended (not re-signatured) in Task 7. `_scan_overlays(project_root, project_id, warnings)` defined and wired in Task 9. `ValidationReport.errors: list[CommonsError]` (Task 1) accommodates both `CommonsEntityError` and `CommonsLayoutError`.
+**3. Type consistency** — `build_commons_inventory() -> InventoryPayload` (v2) consistent across Tasks 6, 7, 10, 12. `build_inventory(project_root, schema_version="2")` consistent across Tasks 8, 9, 11. `InventoryOverlay` field names (`overlay_of`, `project_id`, `source`, `pin_version`, `pin_effective_version`, `project_only_fields`, `append_fields`, `body_sections`) identical in Tasks 3, 4, 5 (contract), 9 (producer), and the test assertions. Warning codes (`commons-entity-invalid`, `commons-datapackage-invalid`, `overlay-invalid`) consistent between Tasks 6/7/9 and their tests. `_entity_from_record(record, warnings)` signature defined in Task 6 and extended (not re-signatured) in Task 7. `_scan_overlays(project_root, project_id, warnings)` defined and wired in Task 9. Task 1 keeps `scan()`'s return type `Iterator[CommonsEntityRecord | CommonsEntityError]` unchanged — the missing-datapackage case is a `CommonsEntityError` with a `CommonsLayoutError` `cause`, so `RegistryBuilder`, `CommonsValidator`, and the `--json` CLI paths need no change; Task 6 discriminates the warning code via `isinstance(item.cause, CommonsLayoutError)`. `build_inventory` raises `ValueError` on any `schema_version` other than `"1"`/`"2"` (Task 8).
 
 **Deviations from spec:** none.
