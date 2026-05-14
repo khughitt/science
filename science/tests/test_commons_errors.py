@@ -14,6 +14,10 @@ from science_tool.commons.errors import (
     DataIntegrityError,
     DataLogicalPathError,
     DataResourceNotFoundError,
+    OverlayMergeError,
+    OverlayValidationError,
+    ProjectDirectoryMissingError,
+    ProjectNotRegisteredError,
 )
 
 
@@ -109,3 +113,41 @@ def test_integrity_error_carries_expected_and_actual() -> None:
     assert err.actual == "sha256:bbbb"
     assert "sha256:aaaa" in str(err)
     assert "sha256:bbbb" in str(err)
+
+
+def test_project_not_registered_error_carries_name() -> None:
+    exc = ProjectNotRegisteredError("protein-landscape")
+    assert isinstance(exc, CommonsError)
+    assert exc.name == "protein-landscape"
+    assert "protein-landscape" in str(exc)
+
+
+def test_project_directory_missing_error_carries_project_and_path() -> None:
+    exc = ProjectDirectoryMissingError("protein-landscape", Path("/gone/pl"))
+    assert isinstance(exc, CommonsError)
+    assert exc.project == "protein-landscape"
+    assert exc.path == Path("/gone/pl")
+    assert "/gone/pl" in str(exc)
+
+
+def test_overlay_validation_error_carries_cause() -> None:
+    cause = ValueError("schema boom")
+    exc = OverlayValidationError(
+        Path("/p/doc/papers/Adams2025.md"),
+        canonical_id="paper:Adams2025",
+        cause=cause,
+    )
+    assert isinstance(exc, CommonsError)
+    assert exc.overlay_path == Path("/p/doc/papers/Adams2025.md")
+    assert exc.canonical_id == "paper:Adams2025"
+    assert exc.cause is cause
+    assert "schema boom" in str(exc)
+    assert "Adams2025.md" in str(exc)
+
+
+def test_overlay_merge_error_carries_field_and_id() -> None:
+    exc = OverlayMergeError(field="title", canonical_id="paper:Adams2025")
+    assert isinstance(exc, CommonsError)
+    assert exc.field == "title"
+    assert exc.canonical_id == "paper:Adams2025"
+    assert "title" in str(exc)

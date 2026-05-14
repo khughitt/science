@@ -112,3 +112,56 @@ class DataIntegrityError(CommonsError):
         self.path = path
         self.expected = expected
         self.actual = actual
+
+
+class ProjectNotRegisteredError(CommonsError):
+    """A `--project <name>` value has no entry in config.yaml `projects[]`."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(
+            f"project {name!r} is not registered; check `projects:` in "
+            f"the global config"
+        )
+        self.name = name
+
+
+class ProjectDirectoryMissingError(CommonsError):
+    """A registered project's path is not a directory on disk."""
+
+    def __init__(self, project: str, path: Path) -> None:
+        super().__init__(
+            f"registered project {project!r} directory not found at {path}"
+        )
+        self.project = project
+        self.path = path
+
+
+class OverlayValidationError(CommonsError):
+    """A project overlay file failed parsing or schema validation, or its
+    `overlay_of` does not resolve to a real canonical entity."""
+
+    def __init__(
+        self,
+        overlay_path: Path,
+        *,
+        canonical_id: str | None,
+        cause: Exception,
+    ) -> None:
+        super().__init__(f"overlay {overlay_path} failed: {cause}")
+        self.overlay_path = overlay_path
+        self.canonical_id = canonical_id
+        self.cause = cause
+
+
+class OverlayMergeError(CommonsError):
+    """Defense-in-depth: a `replace`/`forbidden` field reached `merge_entity`
+    despite overlay-schema validation. Indicates a corrupt overlay schema or a
+    validation bypass, never a normal user path."""
+
+    def __init__(self, *, field: str, canonical_id: str) -> None:
+        super().__init__(
+            f"overlay for {canonical_id} sets field {field!r} whose merge "
+            f"policy forbids overlay contribution"
+        )
+        self.field = field
+        self.canonical_id = canonical_id
