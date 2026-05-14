@@ -56,13 +56,43 @@ def test_scan_skips_hidden_and_meta_files(tmp_path: Path) -> None:
     assert len(records) == 5  # same as the clean valid case
 
 
-def test_scan_raises_layout_error_for_dataset_missing_datapackage(tmp_path: Path) -> None:
-    root = _make_store(tmp_path, "invalid/dataset-missing-datapackage")
-    adapter = CommonsEntityAdapter(root)
-    with pytest.raises(CommonsLayoutError) as exc_info:
-        list(adapter.scan())
-    assert "datapackage.yaml" in exc_info.value.reason
-    assert exc_info.value.path == root / "datasets" / "no-dp"
+def test_scan_yields_entity_error_for_dataset_missing_datapackage(
+    tmp_path: Path,
+) -> None:
+    root = _make_store(tmp_path, "valid")
+    no_dp = root / "datasets" / "no-dp"
+    no_dp.mkdir()
+    (no_dp / "entity.md").write_text(
+        "---\n"
+        'schema_profile: "science-entity-base/1.0+dataset/1.0"\n'
+        'id: "dataset:no-dp"\n'
+        'type: "dataset"\n'
+        'title: "No datapackage"\n'
+        'version: "1.0.0"\n'
+        'status: "active"\n'
+        'created: "2026-05-13"\n'
+        'updated: "2026-05-13"\n'
+        'datapackage: "datapackage.yaml"\n'
+        'origin: "external"\n'
+        'tier: "use-now"\n'
+        "access:\n"
+        '  level: "public"\n'
+        "  verified: true\n"
+        '  source_url: "https://example.org"\n'
+        "ontology_terms: []\n"
+        "tags: []\n"
+        "---\nbody\n",
+        encoding="utf-8",
+    )
+    items = list(CommonsEntityAdapter(root).scan())
+    errors = [it for it in items if isinstance(it, CommonsEntityError)]
+    records = [it for it in items if isinstance(it, CommonsEntityRecord)]
+    assert len(errors) == 1
+    assert errors[0].path == no_dp
+    assert errors[0].canonical_id == "dataset:no-dp"
+    assert isinstance(errors[0].cause, CommonsLayoutError)
+    assert "dataset:rnaseq-example" in {r.canonical_id for r in records}
+    assert "paper:Adams2025" in {r.canonical_id for r in records}
 
 
 def test_record_captures_paths_and_mtime(tmp_path: Path) -> None:

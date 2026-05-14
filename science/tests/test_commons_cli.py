@@ -476,3 +476,57 @@ def test_validate_project_with_type_is_usage_error(
     )
     assert result.exit_code == 2
     assert "--project cannot be combined with --type" in result.output
+
+
+_NO_DP_ENTITY = (
+    "---\n"
+    'schema_profile: "science-entity-base/1.0+dataset/1.0"\n'
+    'id: "dataset:no-dp"\n'
+    'type: "dataset"\n'
+    'title: "No datapackage"\n'
+    'version: "1.0.0"\n'
+    'status: "active"\n'
+    'created: "2026-05-13"\n'
+    'updated: "2026-05-13"\n'
+    'datapackage: "datapackage.yaml"\n'
+    'origin: "external"\n'
+    'tier: "use-now"\n'
+    "access:\n"
+    '  level: "public"\n'
+    "  verified: true\n"
+    '  source_url: "https://example.org"\n'
+    "ontology_terms: []\n"
+    "tags: []\n"
+    "---\nbody\n"
+)
+
+
+def test_index_rebuild_reports_missing_datapackage_as_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seeded_store(tmp_path)
+    no_dp = root / "datasets" / "no-dp"
+    no_dp.mkdir()
+    (no_dp / "entity.md").write_text(_NO_DP_ENTITY, encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["index", "rebuild", "--json"])
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert payload["entities_indexed"] == 5
+    assert any("no-dp" in err["path"] for err in payload["errors"])
+
+
+def test_validate_reports_missing_datapackage_as_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _seeded_store(tmp_path)
+    no_dp = root / "datasets" / "no-dp"
+    no_dp.mkdir()
+    (no_dp / "entity.md").write_text(_NO_DP_ENTITY, encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_COMMONS_ROOT", str(root))
+    runner = CliRunner()
+    result = runner.invoke(commons_group, ["validate", "--json"])
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert any("no-dp" in err["path"] for err in payload["errors"])

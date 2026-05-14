@@ -72,10 +72,18 @@ class CommonsEntityAdapter:
                 if not entity_path.is_file():
                     continue
                 if not dp_path.is_file():
-                    raise CommonsLayoutError(
+                    yield CommonsEntityError(
                         child,
-                        reason="dataset directory missing required datapackage.yaml sibling",
+                        canonical_id=f"dataset:{child.name}",
+                        cause=CommonsLayoutError(
+                            child,
+                            reason=(
+                                "dataset directory missing required "
+                                "datapackage.yaml sibling"
+                            ),
+                        ),
                     )
+                    continue
                 yield self._build(type_name, child.name, entity_path, dp_path)
         else:
             for child in sorted(type_dir.iterdir()):
