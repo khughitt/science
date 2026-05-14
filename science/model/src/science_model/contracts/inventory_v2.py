@@ -86,3 +86,20 @@ class InventoryOverlay(_InventoryContractModel):
     ) -> dict[str, Any]:
         _validate_json_value(value, "merge_fields")
         return value
+
+
+class InventoryPayload(_InventoryContractModel):
+    schema_version: Literal["2"] = SCHEMA_VERSION
+    generated_at: str
+    project_id: str
+    project_path: str | None = None
+    project: InventoryProjectMetadata | None = None
+    content_hash: str | None = None
+    audit_hash: str | None = None
+    entities: list[InventoryEntity] = Field(default_factory=list)
+    aliases: list[InventoryAlias] = Field(default_factory=list)
+    graph_addresses: list[InventoryGraphAddress] = Field(default_factory=list)
+    finding_candidates: list[InventoryFindingCandidate] = Field(default_factory=list)
+    warnings: list[InventoryWarning] = Field(default_factory=list)
+    watch_paths: list[str] = Field(default_factory=list)
+    overlays: list[InventoryOverlay] = Field(default_factory=list)

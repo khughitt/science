@@ -90,3 +90,53 @@ def test_inventory_overlay_rejects_non_json_field_values() -> None:
             source=_source(),
             append_fields={"bad": object()},
         )
+
+
+def test_inventory_payload_v2_defaults_schema_version_and_overlays() -> None:
+    from science_model.contracts.inventory_v2 import InventoryPayload
+
+    payload = InventoryPayload(
+        generated_at="2026-05-14T10:00:00Z", project_id="commons"
+    )
+    assert payload.schema_version == "2"
+    assert payload.overlays == []
+    assert payload.entities == []
+
+
+def test_inventory_payload_v2_rejects_schema_version_1() -> None:
+    from science_model.contracts.inventory_v2 import InventoryPayload
+
+    with pytest.raises(ValidationError):
+        InventoryPayload(
+            generated_at="2026-05-14T10:00:00Z",
+            project_id="commons",
+            schema_version="1",
+        )
+
+
+def test_inventory_payload_v2_rejects_unknown_fields() -> None:
+    from science_model.contracts.inventory_v2 import InventoryPayload
+
+    with pytest.raises(ValidationError):
+        InventoryPayload(
+            generated_at="2026-05-14T10:00:00Z",
+            project_id="commons",
+            mystery="value",
+        )
+
+
+def test_inventory_payload_v2_carries_overlays() -> None:
+    from science_model.contracts.inventory_v2 import InventoryPayload
+
+    payload = InventoryPayload(
+        generated_at="2026-05-14T10:00:00Z",
+        project_id="proj-alpha",
+        overlays=[
+            InventoryOverlay(
+                overlay_of="paper:Adams2025",
+                project_id="proj-alpha",
+                source=_source(),
+            )
+        ],
+    )
+    assert payload.overlays[0].overlay_of == "paper:Adams2025"
