@@ -22,6 +22,20 @@ def test_public_api_exports() -> None:
         "commons_group",
         "init_commons",
         "resolve_commons_root",
+        # Phase C
+        "CommonsDatapackageError",
+        "DataLogicalPathError",
+        "DataResourceNotFoundError",
+        "DataIntegrityError",
+        "resolve_commons_data_root",
+        "load_data_overrides",
+        "DataResource",
+        "DatapackageDescriptor",
+        "read_datapackage",
+        "validate_logical_path",
+        "parse_resource_hash",
+        "ResolvedDataResource",
+        "resolve",
     }
     assert expected.issubset(set(pkg.__all__))
     for name in expected:
