@@ -230,3 +230,30 @@ def test_merge_entity_rejects_forbidden_overlay_field(tmp_path: Path) -> None:
     assert policy["title"] == MergePolicy.REPLACE  # sanity
     with pytest.raises(OverlayMergeError, match="title"):
         merge_entity(record, bad, policy)
+
+
+def test_merge_entity_rejects_unknown_overlay_field(tmp_path: Path) -> None:
+    from science_tool.commons.errors import OverlayMergeError
+    from science_tool.commons.overlay import OverlayRecord, merge_entity
+
+    record = _canonical_record(tmp_path)
+    # Hand-craft an OverlayRecord that smuggles a field absent from both the
+    # canonical entity policy and the overlay schema policy maps.
+    bad = OverlayRecord(
+        canonical_id="paper:Adams2025",
+        type="paper",
+        slug="Adams2025",
+        project="x",
+        project_root=tmp_path,
+        overlay_path=tmp_path / "x.md",
+        frontmatter={
+            "id": "paper:Adams2025",
+            "overlay_of": "paper:Adams2025",
+            "unknown_project_field": "x",
+        },
+        body="",
+        pin_version=None,
+        pin_effective_version=None,
+    )
+    with pytest.raises(OverlayMergeError, match="unknown_project_field"):
+        merge_entity(record, bad, _merge_policy_for(record))

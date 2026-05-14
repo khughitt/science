@@ -237,9 +237,11 @@ def merge_entity(
     for field, value in overlay.frontmatter.items():
         if field in _SKIP_OVERLAY_FIELDS:
             continue
-        policy = merge_policy.get(field) or overlay_policy.get(
-            field, MergePolicy.PROJECT_ONLY
-        )
+        policy = merge_policy.get(field) or overlay_policy.get(field)
+        if policy is None:
+            raise OverlayMergeError(
+                field=field, canonical_id=canonical.canonical_id
+            )
         if policy is MergePolicy.APPEND:
             base = canonical.frontmatter.get(field, [])
             merged[field] = _dedup(list(base) + list(value))
