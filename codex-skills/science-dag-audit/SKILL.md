@@ -92,7 +92,7 @@ Additionally:
 ### 1. Run the audit read-only
 
 ```
-science dag audit --json
+science dag audit --format json
 ```
 
 This re-renders every DAG (idempotent) and runs drift-based staleness detection.

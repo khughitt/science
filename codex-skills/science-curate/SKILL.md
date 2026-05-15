@@ -122,7 +122,7 @@ should be re-evaluated, not blindly carried.
 If DAG tooling is present and the project has DAGs:
 
 ```bash
-uv run science dag audit --json
+uv run science dag audit --format json
 ```
 
 The inventory helper should return compact facts only:

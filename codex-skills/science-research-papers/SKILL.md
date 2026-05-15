@@ -133,7 +133,7 @@ When both a DOI and a PMID/PMCID are available (e.g. user gave both, or a PubMed
 
 Run `paper-fetch` once with the chosen flag(s) and branch on `status`:
 
-- **`ok`** — read the file at `pdf_path` / `text_path` and fill the template. Cross-check key metadata via targeted searches only when template fields require it; mark unverified details as `[UNVERIFIED]`.
+- **`ok`** — read the file at `pdf_path` / `text_path` and fill the template. Cross-check key metadata via targeted searches only when template fields require it; mark each not-yet-checked detail as `[UNVERIFIED]`; mark paywalled / image-only / DACO-gated source content as `[INACCESSIBLE]`; mark author conjecture as `[SPECULATION]`.
   - **Author-attribution check (before writing).** If the user's request named an author or research group, compare it against `metadata.authors[0]` from the `paper-fetch` result. On a clear mismatch (different surname, or different institutional group), pause and surface the discrepancy to the orchestrator before writing — the user may have had the wrong paper in mind, or the wrong author for the right paper. Don't silently follow either source; flag the conflict so the orchestrator can confirm with the user.
 
 - **`paywalled`** — Unpaywall has no OA record. By default: stop, set `Source: paywalled`, and either (a) defer with `status: paywalled` in frontmatter, or (b) re-run against a PDF if the user supplies one.
@@ -142,10 +142,10 @@ Run `paper-fetch` once with the chosen flag(s) and branch on `status`:
     - Widely cited (>500 citations — quick estimate via Crossref `is-referenced-by-count` or a Google Scholar lookup).
     - Task is conceptual/theoretical synthesis, not data extraction or methods replication.
     - Paper is comprehensively covered by general LLM training (a foundational paper, not a niche follow-up).
-  - When proceeding under this exception: set `Source: LLM knowledge`, mark every specific number / figure / method detail as `[UNVERIFIED]`, and **do not invent quantitative claims** (cohort sizes, effect sizes, fold-changes, accuracies). Stick to conceptual contributions.
+  - When proceeding under this exception: set `Source: LLM knowledge`, mark every specific number / figure / method detail as `[UNVERIFIED]` (you may verify later) — but mark conceptual extrapolations beyond what the abstract states as `[SPECULATION]`, and **do not invent quantitative claims** (cohort sizes, effect sizes, fold-changes, accuracies). Stick to conceptual contributions.
   - **Review-paper triangulation** — if the paywalled paper's Crossref `type` indicates a review (or the title says "review" / "perspective"), pull 2-3 citing primary papers via Europe PMC's citations endpoint and triangulate the headline claims rather than relying on the abstract alone.
 
-- **`blocked_but_oa`** — OA copy exists but every agent-accessible tier failed. Before asking the orchestrator for a PDF, try one Europe PMC abstract-level fallback: `WebFetch https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:"<doi>"&format=json` — if it returns an abstract, you have enough for the summary's overview/significance fields (mark methods/results as `[UNVERIFIED]`). If that also fails, ask the orchestrator to request a PDF. Do not retry with open-ended search.
+- **`blocked_but_oa`** — OA copy exists but every agent-accessible tier failed. Before asking the orchestrator for a PDF, try one Europe PMC abstract-level fallback: `WebFetch https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:"<doi>"&format=json` — if it returns an abstract, you have enough for the summary's overview/significance fields (mark methods/results as `[INACCESSIBLE]` — the full text is not reachable from any agent-accessible tier). If that also fails, ask the orchestrator to request a PDF. Do not retry with open-ended search.
 
 - **`not_found`** — no source resolved the identifier. Ask the orchestrator for better metadata; do not fabricate a summary.
 
@@ -196,11 +196,22 @@ Follow `.ai/templates/paper.md` first, then `templates/paper.md`, and fill every
 4. Note approach implications in `doc/04-approach.md` when relevant.
 5. Commit: `git add -A && git commit -m "docs(papers): research <citekey> - <short title>"`. The `docs(papers):` prefix is commitlint-conventional compliant out of the box; if your project's commitlint config explicitly allows `papers:` as a custom type, prefer that.
 
+## Annotation tokens
+
+Use the four-token vocabulary defined in `docs/conventions/annotation-tokens.md`:
+
+- `[UNVERIFIED]` — the claim is verifiable in principle but you haven't checked.
+- `[MISSING_CITATION]` — the claim needs a specific source pointer (the claim itself isn't in dispute).
+- `[SPECULATION]` — author conjecture; not from the source.
+- `[INACCESSIBLE]` — paywalled / image-only / DACO-gated / private; resolution requires resources you don't have.
+
+Pick by access status, not by reflex. Most paper-summary fields warrant `[UNVERIFIED]` (the PDF is in front of you — it's verifiable). Switch to `[INACCESSIBLE]` only when the source genuinely can't be reached. `[SPECULATION]` is for your own extrapolations, never for things that should have been quoted from the paper.
+
 ## Orchestrator Post-Dispatch
 
 After the subagent returns its report:
 
-1. Review any `[UNVERIFIED]` fields the subagent flagged and surface them to the user — they may warrant a follow-up web check or a note in `doc/questions/`.
+1. Review any `[UNVERIFIED]` / `[SPECULATION]` fields the subagent flagged and surface them to the user — they may warrant a follow-up web check or a note in `doc/questions/`. (`[INACCESSIBLE]` markers are permanent and don't need follow-up.)
 2. If the subagent could not identify the paper, relay its request for additional metadata to the user and stop; do not attempt to fabricate a summary on the orchestrator.
 3. Read the written summary only if you need its content for downstream reasoning (e.g., before cross-paper synthesis or hypothesis linking). Otherwise, trust the report.
 4. If you hold broader project context than the subagent did — unmerged hypotheses, recent approach decisions in `doc/04-approach.md`, adjacent open questions — make small follow-up edits as a separate commit.

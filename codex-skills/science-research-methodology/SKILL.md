@@ -163,6 +163,7 @@ These are high-value places to direct reading, replication, experimental work, o
 
 - Every factual claim in a document needs a source
 - Use BibTeX keys: `[@AuthorYear]` inline, full entries in `papers/references.bib`
+- Use `cite:AuthorYear` in `source_refs` for bibliography backing, and `paper:AuthorYear` only when linking to a project paper note.
 - When citing from LLM knowledge, cross-check key facts via web search
 - If a claim cannot be sourced, mark it as `[NEEDS CITATION]`
 - Prefer primary sources over secondary summaries

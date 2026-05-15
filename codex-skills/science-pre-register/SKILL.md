@@ -86,6 +86,28 @@ Additionally:
 
 Have a natural conversation with the user to formalize their expectations. The questions below are guidelines — use your judgment about which are needed based on how much context the user has already provided.
 
+### 0. Target Class — Operational or Epistemic?
+
+Before anything else, identify which class the pre-reg primarily commits to. The two classes are evaluated differently at interpretation time and produce different graph effects.
+
+- **Operational target** — a procedure, pipeline run, dataset processing step, or experimental protocol. The commitment is "we will execute X before observing Y." Deviation requires an `amendments:` record. Operational pre-regs remain gating.
+- **Epistemic target** — a hypothesis, question, proposition, inquiry, or interpretation rule. The commitment is "we will *interpret* observed Y in this way to update belief about X." A null result against an epistemic pre-reg is **evidence**, weighted by the pre-reg's commitment — not a verdict that kills the hypothesis.
+
+Mixed targets are common (e.g., "we will run analysis A, and treat H as supported if effect > 0.3"). Treat the procedure portion and the interpretation portion separately:
+
+- **Operational portion:** stays as an amendment-gate check. `science:interpret-results` confirms the analysis ran as committed (or that any deviation has a corresponding `amendments:` record). No `bears_on` edge — operational targets are not `bears_on` sinks; the materializer rejects authored `bears_on` edges to non-epistemic targets.
+- **Epistemic portion:** materializes as a `bears_on` edge from the pre-reg into the epistemic target via the auto-derivation rule registered in `science_tool/graph/materialize.py`. This is the load-bearing graph effect.
+
+#### Sub-prompt: which `related:` entries are commitment targets vs. navigation context?
+
+After the user lists `related:` entries, ask which subset the pre-reg actually constrains. This is the load-bearing question for whether `bears_on` edges accurately reflect the author's commitment — every pre-reg-using project mixes commitment targets with navigation-context refs in `related:`, and treating all epistemic refs as commitment targets over-derives edges.
+
+> "Of the epistemic entries in `related:`, which are commitment targets — i.e., entities this pre-reg actually constrains the interpretation of? Anything *not* called out here will still appear in `related:` for discoverability but won't produce a `bears_on` edge."
+
+Record the commitment-target subset as `commits_to:` in the pre-reg frontmatter (optional). The field means **"derive pre-reg `bears_on` edges to these targets"**; it does **not** mean "lock these targets forever." Any epistemic entity named in `commits_to:` remains responsive to all other upstream freshness dependencies — datasets, workflow-runs, observations, propositions, interpretations, and reports can still flag it `needs-review`.
+
+If `commits_to:` is absent, the deriver falls back to "all epistemic `related:` entries are commitment targets," which over-derives for many existing mixed pre-regs. When in doubt, populate `commits_to:` explicitly.
+
 ### 1. Identify the Analysis
 
 - What analysis are you about to run?
@@ -106,16 +128,24 @@ advisory, not a hard dependency.
 
 ### 3. Define Decision Criteria
 
-For each hypothesis under test:
+Frame decision criteria according to the target class identified in § 0.
+
+**For epistemic targets:**
 - What evidence would **support** it? Be concrete — name the metric, the threshold, the pattern.
-- What evidence would **weaken** it? What would make you less confident but not abandon it?
-- What evidence would **refute** it? What would make you abandon this hypothesis?
+- What evidence would **weaken** it? What would make you less confident?
+- What evidence would **shift belief away from** it? Don't frame as "would I abandon" — that's a kill-switch framing. Instead: how strongly would each result class move belief, and in which direction?
+
+**For operational targets,** "refute" / "abandon" remains accurate (the procedure either ran as committed or it didn't):
+- What evidence would **support** that the procedure ran as committed?
+- What evidence would **refute** that — i.e., trigger an `amendments:` record?
 
 ### 4. Plan for Null Results
 
 - What does a null result mean? Hypothesis is wrong, or test is inadequate?
 - Is the analysis sufficiently powered to detect the expected effect?
 - What would you do next if results are ambiguous?
+
+**For epistemic targets:** A null result is evidence, weighted by the pre-reg's commitment. It is not a verdict on the hypothesis. Frame the null-result plan as "what update should this trigger?" rather than "would this kill the hypothesis?" The result feeds the target's evidence base via a `bears_on` edge derived at graph-build time; downstream `science:status` and `science:next-steps` then surface the target for review under the recast freshness/attention semantics.
 
 **Pilot experiments:** If this is a pilot (1-2 seeds, small N, exploratory scope), explicitly state what it CAN and CANNOT establish. A pilot can suggest directions and calibrate effect sizes but cannot confirm or refute a hypothesis. Frame decision criteria accordingly — a pilot's null result means "insufficient signal to justify scaling up", not "hypothesis is wrong."
 
@@ -163,8 +193,10 @@ Use the hypothesis ID, inquiry slug, or task ID as the basis:
   - `status: "committed"` once the user has signed off on the criteria
   - `committed: "<YYYY-MM-DD>"` — the date the criteria are locked
   - `spec: "<path-to-design-doc>"` — optional; empty string if no paired design doc exists
-  - `related: [...]` — hypothesis IDs, inquiry slugs, and/or task IDs this pre-reg covers
+  - `related: [...]` — hypothesis IDs, inquiry slugs, and/or task IDs this pre-reg covers (mix of commitment targets and navigation context is fine here)
+  - `commits_to: [...]` — optional; the subset of epistemic `related:` entries this pre-reg actually constrains. When present, `bears_on` edges are derived only to these targets. When absent, the deriver falls back to "all epistemic `related:` entries are commitment targets," which over-derives for mixed pre-regs.
 - The `related` field is what `interpret-results` searches on, so it must be populated.
+- `commits_to:` is an edge-scoping field, not a lock. Populating it does not exempt the target from freshness propagation from other upstream entities.
 
 ## After Writing
 

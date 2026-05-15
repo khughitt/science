@@ -49,12 +49,27 @@ All documents follow framework templates unless the project defines an override 
 - **Cross-reference liberally.** Link to other project documents, for example `(see Background: Topic A)`.
 - **End with implications.** What does this mean for the project? What should we do next?
 
+## Annotation Tokens
+
+When drafting prose where a specific claim cannot be backed by an in-line citation, choose from the four-token vocabulary defined in `docs/conventions/annotation-tokens.md`:
+
+- `[UNVERIFIED]` — claim is verifiable in principle, not yet checked. Default for "I'll backfill the cite later."
+- `[MISSING_CITATION]` — the claim itself isn't in dispute, but a specific source pointer is needed.
+- `[SPECULATION]` — author conjecture / brainstorming layer. Marks the claim as belonging to the speculative tier.
+- `[INACCESSIBLE]` — source is paywalled / image-only / DACO-gated; resolution requires resources you don't have.
+
+These are bare tokens in prose. References to the *tokens themselves* (e.g., when documenting the convention) must be backticked: ``Use the `[UNVERIFIED]` token``. Validators exclude backticked occurrences automatically.
+
+`validate.sh` and `science refs check` count `[UNVERIFIED]` and `[MISSING_CITATION]` as warnings by default; `[SPECULATION]` and `[INACCESSIBLE]` are reported as info only (use `--strict` to treat them as warnings).
+
 ## Citation Format
 
 - Inline: `[@AuthorYear]` using BibTeX keys from `papers/references.bib`
 - Multiple: `[@Smith2020; @Jones2021]`
 - With page: `[@Smith2020, p. 42]`
 - Narrative: `Smith et al. [@Smith2020] found that...`
+- Frontmatter bibliography source: `source_refs: ["cite:AuthorYear"]`
+- Graph-visible paper note: `paper:AuthorYear`
 
 Every BibTeX key used in a document must have a corresponding entry in `papers/references.bib`. If you create a new citation, add the BibTeX entry.
 
