@@ -108,6 +108,9 @@ class OverlayAdapter:
             for child in sorted(subdir.iterdir()):
                 if child.suffix != ".md" or not child.is_file():
                     continue
+                frontmatter, _ = parse_frontmatter(child)
+                if "overlay_of" not in frontmatter:
+                    continue
                 canonical_id = f"{type_name}:{child.stem}"
                 try:
                     yield self._build(canonical_id, child)

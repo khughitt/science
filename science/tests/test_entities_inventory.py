@@ -328,6 +328,37 @@ def test_build_inventory_v2_overlay_validation_error_becomes_warning(tmp_path) -
     assert warning_path.endswith("doc/papers/Adams2025.md")
 
 
+def test_build_inventory_v2_treats_project_paper_as_entity_not_overlay(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc" / "papers").mkdir(parents=True)
+    (project / "science.yaml").write_text("id: project-paper\n", encoding="utf-8")
+    paper_path = project / "doc" / "papers" / "Adams2025.md"
+    paper_path.write_text(
+        "---\n"
+        "kind: paper\n"
+        "id: paper:Adams2025\n"
+        "title: Adams 2025\n"
+        "---\n\n"
+        "Project-authored paper note.\n",
+        encoding="utf-8",
+    )
+
+    inventory = build_inventory(project, schema_version="2")
+
+    assert inventory.overlays == []
+    paper = next(entity for entity in inventory.entities if entity.id == "paper:Adams2025")
+    assert paper.kind == "paper"
+    assert paper.title == "Adams 2025"
+    assert paper.source.path == "doc/papers/Adams2025.md"
+    assert [
+        warning
+        for warning in inventory.warnings
+        if warning.code == "overlay-invalid"
+        and warning.path is not None
+        and warning.path.endswith("doc/papers/Adams2025.md")
+    ] == []
+
+
 def test_build_inventory_defaults_to_v2(tmp_path) -> None:
     project = tmp_path / "project"
     (project / "doc").mkdir(parents=True)

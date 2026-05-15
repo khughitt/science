@@ -97,9 +97,30 @@ def test_overlay_adapter_scan_yields_records() -> None:
 
     root = _OVERLAYS / "proj-alpha"
     items = list(OverlayAdapter(root, "proj-alpha").scan())
-    assert all(isinstance(i, OverlayRecord) for i in items)
-    ids = sorted(i.canonical_id for i in items)
+    records = [i for i in items if isinstance(i, OverlayRecord)]
+    assert records == items
+    ids = sorted(i.canonical_id for i in records)
     assert ids == ["dataset:cath-domains", "paper:Adams2025"]
+
+
+def test_overlay_adapter_scan_skips_project_paper_without_overlay_of(
+    tmp_path: Path,
+) -> None:
+    from science_tool.commons.overlay import OverlayAdapter
+
+    paper = tmp_path / "doc" / "papers" / "Adams2025.md"
+    paper.parent.mkdir(parents=True)
+    paper.write_text(
+        "---\n"
+        "kind: paper\n"
+        "id: paper:Adams2025\n"
+        "title: Adams 2025\n"
+        "---\n\n"
+        "Project-authored paper note.\n",
+        encoding="utf-8",
+    )
+
+    assert list(OverlayAdapter(tmp_path, "project").scan()) == []
 
 
 def test_overlay_adapter_scan_yields_errors_for_broken_files() -> None:
@@ -394,7 +415,7 @@ def test_validate_project_overlays_reports_schema_and_dangling_errors(
     # (topics/nonexistent-topic.md).
     assert report.checked == 2
     assert len(report.errors) == 2
-    failed_ids = sorted(e.canonical_id for e in report.errors)
+    failed_ids = sorted(e.canonical_id or "" for e in report.errors)
     assert failed_ids == ["paper:Adams2025", "topic:nonexistent-topic"]
 
 
