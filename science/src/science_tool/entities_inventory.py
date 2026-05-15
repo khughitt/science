@@ -133,14 +133,19 @@ def build_inventory(
         )
         return finalize_inventory_payload(payload)
 
+    project_entities = [entity for entity in entities if entity.scope == "project"]
+    project_entity_ids = {entity.id for entity in project_entities}
+    project_aliases = [
+        alias for alias in sorted_aliases if alias.canonical_id in project_entity_ids
+    ]
     overlays = _scan_overlays(project_root, project_metadata.id, warnings)
     payload_v2 = inventory_v2.InventoryPayload(
         generated_at=generated_at,
         project_id=project_metadata.id,
         project_path=project_root.as_posix(),
         project=project_metadata,
-        entities=entities,
-        aliases=sorted_aliases,
+        entities=project_entities,
+        aliases=project_aliases,
         graph_addresses=dag_records.graph_addresses,
         finding_candidates=dag_records.finding_candidates,
         warnings=warnings,

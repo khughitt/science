@@ -243,6 +243,36 @@ def test_build_inventory_v2_returns_v2_payload_with_empty_overlays(tmp_path) -> 
     assert inventory.audit_hash
 
 
+def test_build_inventory_v2_excludes_project_authored_shared_entities_and_aliases(tmp_path) -> None:
+    project = tmp_path / "project"
+    (project / "doc").mkdir(parents=True)
+    (project / "science.yaml").write_text("id: mixed-scope-project\n", encoding="utf-8")
+    (project / "doc" / "local.md").write_text(
+        "---\nkind: finding\nid: finding:local\ntitle: Local finding\n---\n",
+        encoding="utf-8",
+    )
+    (project / "doc" / "shared.md").write_text(
+        "---\n"
+        "kind: method\n"
+        "id: method:shared\n"
+        "title: Shared method\n"
+        "scope: shared\n"
+        "aliases: [shared-method]\n"
+        "---\n",
+        encoding="utf-8",
+    )
+
+    inventory_v1 = build_inventory(project, schema_version="1")
+    shared_v1 = next(entity for entity in inventory_v1.entities if entity.id == "method:shared")
+    assert shared_v1.scope == "cross-project"
+
+    inventory_v2 = build_inventory(project, schema_version="2")
+
+    assert [entity.id for entity in inventory_v2.entities] == ["finding:local"]
+    assert all(entity.scope == "project" for entity in inventory_v2.entities)
+    assert all(alias.canonical_id != "method:shared" for alias in inventory_v2.aliases)
+
+
 def test_build_inventory_v2_scans_project_overlays(tmp_path) -> None:
     project = tmp_path / "project"
     (project / "doc" / "papers").mkdir(parents=True)
@@ -293,7 +323,9 @@ def test_build_inventory_v2_overlay_validation_error_becomes_warning(tmp_path) -
     assert inventory.overlays == []
     overlay_warnings = [w for w in inventory.warnings if w.code == "overlay-invalid"]
     assert len(overlay_warnings) == 1
-    assert overlay_warnings[0].path.endswith("doc/papers/Adams2025.md")
+    warning_path = overlay_warnings[0].path
+    assert warning_path is not None
+    assert warning_path.endswith("doc/papers/Adams2025.md")
 
 
 def test_build_inventory_defaults_to_v2(tmp_path) -> None:
