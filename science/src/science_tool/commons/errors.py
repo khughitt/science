@@ -165,3 +165,63 @@ class OverlayMergeError(CommonsError):
         )
         self.field = field
         self.canonical_id = canonical_id
+
+
+class PromoteInputError(CommonsError):
+    """Bad input to `science commons promote`.
+
+    Raised for: missing/unregistered/null-id `--from` slug; commons store missing;
+    required positional argument absent; dirty target file at preflight; commons
+    repo dirty at preflight; repo mid-merge/rebase/cherry-pick/bisect.
+    """
+
+
+class PromoteCandidateError(CommonsError):
+    """A paper file is malformed (parse error, unreadable, schema-failing).
+
+    Constructed per-candidate. NOT raised out of `discover_paper_candidates`;
+    instead wrapped as a `FailedCandidate` in the plan. Raised directly only by
+    `apply_promote` if an in-plan decision turns out to be unparseable at write
+    time (file deleted between plan and apply) — that's a hard-stop case.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        bibkey: str | None = None,
+        path: Path | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.bibkey = bibkey
+        self.path = path
+
+
+class PromoteConflictAbort(CommonsError):
+    """User aborted at a conflict prompt (Ctrl-C, or 'abort' answer).
+
+    Batch stops cleanly before any commons or project write.
+    """
+
+
+class PromoteWriteError(CommonsError):
+    """IO / git failure during apply steps 4–7.
+
+    Carries `stage`, `detail`, and optional partial-state info (commons commit
+    hash if step 5 landed, list of projects touched) so the audit log can record
+    exactly what landed.
+    """
+
+    def __init__(
+        self,
+        *,
+        stage: str,
+        detail: str,
+        commons_commit: str | None = None,
+        projects_touched: list[str] | None = None,
+    ) -> None:
+        super().__init__(f"[{stage}] {detail}")
+        self.stage = stage
+        self.detail = detail
+        self.commons_commit = commons_commit
+        self.projects_touched = projects_touched or []

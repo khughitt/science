@@ -18,6 +18,10 @@ from science_tool.commons.errors import (
     OverlayValidationError,
     ProjectDirectoryMissingError,
     ProjectNotRegisteredError,
+    PromoteCandidateError,
+    PromoteConflictAbort,
+    PromoteInputError,
+    PromoteWriteError,
 )
 
 
@@ -151,3 +155,35 @@ def test_overlay_merge_error_carries_field_and_id() -> None:
     assert exc.field == "title"
     assert exc.canonical_id == "paper:Adams2025"
     assert "title" in str(exc)
+
+
+def test_promote_input_error_is_commons_error() -> None:
+    e = PromoteInputError("missing --from")
+    assert isinstance(e, CommonsError)
+    assert "missing --from" in str(e)
+
+
+def test_promote_candidate_error_carries_bibkey_and_path() -> None:
+    e = PromoteCandidateError("frontmatter parse error", bibkey="Adams2025", path=Path("/x/y.md"))
+    assert e.bibkey == "Adams2025"
+    assert e.path == Path("/x/y.md")
+    assert isinstance(e, CommonsError)
+
+
+def test_promote_conflict_abort_is_commons_error() -> None:
+    e = PromoteConflictAbort("user aborted")
+    assert isinstance(e, CommonsError)
+
+
+def test_promote_write_error_carries_stage_and_partial_state() -> None:
+    e = PromoteWriteError(
+        stage="rewrite_projects",
+        detail="overlay write failed",
+        commons_commit="abc1234",
+        projects_touched=["natural-systems"],
+    )
+    assert e.stage == "rewrite_projects"
+    assert e.detail == "overlay write failed"
+    assert e.commons_commit == "abc1234"
+    assert e.projects_touched == ["natural-systems"]
+    assert isinstance(e, CommonsError)
