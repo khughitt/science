@@ -27,7 +27,7 @@ Copying the ~1437-line Phase E module three times produces drift. A kind-pluggab
 ### Non-goals
 
 - **Datasets (Phase G).** Single-file entities only; pair-handling logic stays out.
-- **Schema fixes for pre-existing mismatches.** Real `mm` themes carry `theme_kind: "biological"` (not in the current enum). Phase F surfaces these as loud validation failures with atomic rollback; it does **not** widen the enum or rewrite project files.
+- **Schema fixes for pre-existing mismatches.** Real `mm` themes carry `theme_kind: "biological"` (not in the current enum). All currently-inspected `theme_kind: "biological"` themes are also `theme_scope: "project"`, so they're skipped silently by the eligibility filter and never reach validation in practice. If a future project marks a `theme_kind: "biological"` theme as `theme_scope: "cross-project"`, plan-time validation surfaces the enum mismatch as a `PromoteValidationError` before any I/O. Phase F neither widens the enum nor rewrites project files.
 - **Compatibility shims for old function names.** Per the project's "no legacy layers" rule, `discover_paper_candidates` is renamed (or absorbed into a kind-parametric `discover_candidates`) in the same PR — no transitional alias survives merge.
 
 ## 3. Architecture
@@ -257,11 +257,14 @@ Every site above gets a dedicated regression test that exercises both paper and 
 
 #### 4.4.1 Topic overlay flatten
 
-For topic kind, `apply_promote` must also handle the source-relocation case (overlay sourced from `doc/background/topics/foo.md` lands at `doc/topics/foo.md`):
+For topic kind, `apply_promote` must also handle the source-relocation case (overlay sourced from `doc/background/topics/foo.md` lands at `doc/topics/foo.md`). Phase E's project-side contract (design §6.3 step 5) is that promote **rewrites project files in the working tree only**, leaving review and commit to the user — there are no project-side commits and no `git rm` staging. Phase F preserves that contract:
 
 1. Build the target overlay path as `project_root / kind.overlay_dest_subdir / f"{slug}.md"`.
-2. If the source path differs from target (i.e. source was in `doc/background/topics/`): write the target, `git rm` the source, in the same per-project commit. Both paths appear in `_project_target_files_clean` preflight.
-3. Rollback hint must cover both paths so `git checkout HEAD -- <source-path> <target-path>` restores the project to its pre-promotion state.
+2. If the source path differs from target (source was in `doc/background/topics/`): write the new overlay file at the target path, then `Path.unlink()` the source file (filesystem delete, no git staging). The user sees both changes in `git status` (untracked or modified target + deleted source) and commits them together when reviewing.
+3. Both source and target paths are included in `_project_target_files_clean` preflight (the same-project collision case from §5 — both can't already exist before the operation runs).
+4. Rollback hint covers both paths: `git -C <project> checkout HEAD -- <source-rel> <target-rel>` restores the source file and discards the new target. The rollback command builder (`_build_project_rollback_command`) now derives multiple per-decision paths instead of one.
+
+The audit YAML's `overlay_rewrites` entry for a flatten case records both `path` (the target) and `unlinked_source` (the source path that was removed), so a manual rollback has all the information needed.
 
 #### 4.4.2 Theme-specific behaviour
 
@@ -284,7 +287,7 @@ Reuses Phase E's four error classes (`PromoteInputError`, `PromoteCandidateError
 | Topic appears in both `doc/topics/` and `doc/background/topics/` in one project | `PromoteCandidateError` | discovery | Cannot resolve canonical source; user must remove one |
 | Topic / theme `id:` stem mismatch | `PromoteCandidateError` | discovery | Same rule as paper (design §4.1.3, Phase E) |
 | Topic without `type:`, valid `id: topic:...` | inferred, no error | discovery | Canonical write normalises by emitting `type: topic` |
-| Theme with `theme_kind: "biological"` (out-of-enum) | `PromoteValidationError` | end of `plan_promote` | **No rollback needed — fails before any I/O.** User gets the jsonschema message verbatim |
+| **Eligible** theme (`theme_scope: cross-project`) with `theme_kind: "biological"` (out-of-enum) | `PromoteValidationError` | end of `plan_promote` | **No rollback needed — fails before any I/O.** User gets the jsonschema message verbatim. Project-scoped biological themes are filtered out earlier and never reach this check |
 | Canonical fails any schema check | `PromoteValidationError` | end of `plan_promote` | Same — pre-I/O fail |
 | Overlay fails overlay-1.1 schema | `PromoteValidationError` | end of `plan_promote` | Same — pre-I/O fail |
 | User aborts conflict prompt | `PromoteConflictAbort` | plan | Pre-`--apply` so no rollback needed |
@@ -304,8 +307,9 @@ All existing Phase E paper tests pass against the kind-pluggable rewrite. `PROMO
 ### 6.2 Schema tests
 
 - `mixin-topic-2.0.json` and `mixin-theme-2.0.json` round-trip through the validator.
-- `read_canonical_body_sections` returns the declared lists for each new mixin.
-- `read_overlay_merge_policy` reads `project_only` annotations for `status` / `created` / `updated` on both new mixins.
+- `read_canonical_body_sections(kind.default_profile)` returns the declared lists for each new mixin.
+- `read_merge_policy(kind.default_profile)` reads `project_only` annotations for `status` / `created` / `updated` on each new mixin. (`read_overlay_merge_policy` reads overlay-1.1 only — wrong API for mixin annotations.)
+- `read_merge_policy(kind.default_profile)` reads `append` annotations for the array fields (`datasets`/`source_refs`/`related` on topic; `source_refs`/`evidence_refs`/`related` on theme).
 
 ### 6.3 Per-kind discovery / plan / apply / CLI
 
@@ -322,7 +326,7 @@ Extend `science/tests/fixtures/promote/` (existing 2-project corpus `proj-alpha`
 
 - `proj-alpha/doc/topics/` and `proj-beta/doc/topics/` — covering single-instance, no-conflict dedup, and field-conflict dedup shapes.
 - `proj-alpha/doc/background/topics/` — at least one entry to exercise the flatten-to-`doc/topics/` overlay-rewrite path (§4.4.1). Plus a same-project-collision pair (`doc/topics/foo.md` + `doc/background/topics/foo.md`) for the error case.
-- `proj-alpha/doc/themes/` and `proj-beta/doc/themes/` — same shapes, plus one `theme_scope: project` (eligibility skip) and one with malformed `theme_scope` (eligibility FAIL), and one with `theme_kind: "biological"` to exercise the `PromoteValidationError` plan-time path.
+- `proj-alpha/doc/themes/` and `proj-beta/doc/themes/` — same shapes, plus one `theme_scope: project` (eligibility skip), one with malformed `theme_scope` (eligibility FAIL), and one **`theme_scope: cross-project` + `theme_kind: "biological"`** (eligible-but-fails-validation: exercises `PromoteValidationError` at the end of `plan_promote`; a `theme_scope: project + theme_kind: biological` fixture would be skipped and never reach validation, which would not test the path).
 - ~5 topics and ~5 themes total.
 
 ### 6.5 Apply-stage refactor regression
