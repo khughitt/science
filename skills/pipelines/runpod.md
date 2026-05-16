@@ -99,6 +99,35 @@ Pin a matched `torch` plus `torchvision` wheel pair and store that whole package
 
 This usually means the workload depends on a CLI that only lives in the dev group, such as `snakemake`. Install those tools in a dedicated `project_install_runtime_tools()` hook inside `setup.sh`, then verify them there.
 
+### `uv sync --no-dev` succeeds but a runtime library import fails
+
+Distinct from the missing-CLI case above: sometimes runtime *libraries* — not just CLIs — are mis-classified in the dev group of `pyproject.toml`. Scientific libraries like `pymc`, `scanpy`, or `arviz` are common offenders when a project historically scoped them as "research-only" dependencies. On a pod, `uv sync --no-dev` then succeeds but the real workload fails at import time.
+
+Two fixes:
+
+- (Preferred) Move the library out of the dev group in `pyproject.toml` so the regular sync covers it. One pyproject change that helps every environment, not just the pod.
+- (Workaround) Drop `--no-dev` from the pod's sync if dev-group content is small enough that the extra install cost is acceptable. Do not add per-library install hooks for runtime libraries — that creates drift between local and pod resolution.
+
+Audit which dependency group each runtime import comes from before the first pod run. The answer is rarely what you assume on a research project that started before the env was deliberately structured.
+
+### Patching `pyproject.toml` on the pod invalidates the lock
+
+`patch_pyproject_for_remote` inside `setup.sh` rewrites the manifest to strip local editable sources (or substitute pinned alternatives). A subsequent `uv sync` notices the manifest no longer matches the lock and silently re-resolves the environment — swapping resolved versions and losing reproducibility with the workstation.
+
+Mitigations, in order of preference:
+
+- Run `uv sync --frozen` immediately after patching. The frozen flag surfaces the mismatch as an error rather than a silent re-resolve. If the patch was scoped (e.g. "remove editable source X and substitute pinned X"), the lock is in fact stale and you need the next mitigation.
+- Run `uv lock` deliberately after patching and record the resulting lock state in the pod's setup marker. Later runs then detect drift and re-lock predictably instead of regenerating on every sync.
+- Treat the patched `pyproject.toml` + regenerated lock as the pod's environment of record. Do not assume the workstation lock applies after the patch.
+
+### PyMC + numpyro on a single GPU runs chains sequentially without `chain_method="vectorized"`
+
+PyMC's default chain method is `parallel`, which spawns one process per chain. With the `numpyro` NUTS sampler on a single GPU, this serializes the chains because all processes queue for the same device.
+
+Fix: pass `nuts_sampler_kwargs={"chain_method": "vectorized"}` to `pm.sample()`. JAX vectorizes the chains across a single GPU's batch dimension, giving roughly N× speedup at N chains. The cost is increased GPU memory (all chains share the device), so size the pod's VRAM accordingly.
+
+This is a single-GPU rule. On multi-GPU pods or paralleled hosts, `chain_method="parallel"` is again the right choice. Document the chosen method alongside the seed and tune settings so reruns are bit-reproducible.
+
 ### Setup succeeds but the real workload still is not runnable
 
 Add a project-specific smoke test to `setup.sh` and keep the real workload entrypoint in `run.sh`. Do not treat “dependency install completed” as a sufficient verification step. The shared template should already verify:
