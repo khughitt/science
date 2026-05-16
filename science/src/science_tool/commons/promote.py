@@ -21,6 +21,7 @@ from typing import Any, Callable, Literal
 
 import yaml
 
+from science_model.entity_schema import MergePolicy
 from science_tool.commons.config import resolve_project_by_id
 from science_tool.commons.errors import PromoteCandidateError
 
@@ -373,3 +374,115 @@ def _scan_project_papers(
         )
 
     return candidates, failures
+
+
+# --------------------------------------------------------------------------- #
+# _classify_entity helpers (Task 11)                                          #
+# --------------------------------------------------------------------------- #
+
+# Overlay-only fields that MUST never leak onto the canonical or project-only
+# field dicts (the overlay-rewrite step writes these directly).
+_OVERLAY_ONLY_KEYS: frozenset[str] = frozenset({"overlay_of", "pin_version", "pin_effective_version"})
+
+# Base-required fields that the promote tool generates on the canonical side
+# and that MUST NOT be copied from source. `created` / `updated` are NOT here:
+# they have `science:merge: project_only` in the paper schema, so the policy
+# lookup routes them correctly to the project_only bucket. The canonical
+# writer fills its own `created` / `updated` from the apply timestamp.
+_GENERATED_BY_PROMOTE_KEYS: frozenset[str] = frozenset(
+    {"schema_profile", "version"}
+)
+
+# Identity fields promote re-derives from the PromoteDecision after the
+# canonical bibkey case is picked. They are stripped from the canonical merge
+# bucket so case-divergent overlays don't surface a bogus `id` conflict
+# (design §4.1.3).
+_PROMOTE_DERIVED_IDENTITY_KEYS: frozenset[str] = frozenset({"id", "type", "bibkey"})
+
+
+def _split_body_by_headings(body: str) -> dict[str, str]:
+    """Parse a markdown body into `{heading: content_after_heading}`.
+
+    Only `## ` (level-2) headings are tracked. Content before the first `## ` is
+    keyed as `""` (the empty string). Sub-headings (`###` etc.) stay inside
+    whichever level-2 section contains them.
+    """
+    sections: dict[str, list[str]] = {"": []}
+    current = ""
+    for line in body.splitlines():
+        if line.startswith("## "):
+            current = line[3:].strip()
+            sections.setdefault(current, [])
+            continue
+        sections[current].append(line)
+    return {heading: "\n".join(lines) for heading, lines in sections.items() if lines or heading}
+
+
+def _classify_entity(
+    frontmatter: dict,
+    body: str,
+    merge_policy: dict[str, MergePolicy],
+    canonical_body_sections: list[str],
+) -> tuple[dict, dict, dict[str, str], dict[str, str]]:
+    """Split (frontmatter, body) into (canonical_fields, project_only_fields,
+    canonical_body, project_only_body).
+
+    - Promote-generated fields (schema_profile, version) are NOT copied from
+      source; the canonical writer fills them. `created` / `updated` are
+      schema-tagged `project_only` and route to the overlay via the policy
+      lookup — the canonical writer fills its own from the apply timestamp.
+    - Overlay-management fields (overlay_of, pin_version) NEVER appear on either
+      side (they're written by the overlay renderer alone).
+    - Promote-derived identity fields (id, type, bibkey) NEVER appear on either
+      side either — the canonical writer re-emits them from the PromoteDecision
+      (after `_pick_canonical_bibkey_case` chooses the canonical-case bibkey).
+      Letting them flow through the canonical bucket would surface a bogus
+      `id` conflict any time two case-divergent overlays merge (design §4.1.3).
+    - For every remaining source field, the merge policy decides:
+        REPLACE / APPEND / FORBIDDEN → canonical bucket
+        PROJECT_ONLY                  → project-only bucket
+        no policy entry               → conservative default: project-only
+    - `authors` is coerced to list[str] if it arrives as a string.
+    - `journal` is renamed to `venue` (one-time coercion).
+    """
+    canonical: dict = {}
+    project_only: dict = {}
+    for key, value in frontmatter.items():
+        if key in _OVERLAY_ONLY_KEYS:
+            continue
+        if key in _PROMOTE_DERIVED_IDENTITY_KEYS:
+            continue
+        if key in _GENERATED_BY_PROMOTE_KEYS:
+            continue
+        if key == "journal":
+            canonical["venue"] = value
+            continue
+        if key == "authors" and not isinstance(value, list):
+            canonical["authors"] = [str(value)]
+            continue
+        # `tags` uses APPEND policy in the schema but promote always writes
+        # canonical `tags: []` (design §4.1.2) so the source's tags stay
+        # project-only during classification; the renderer zeros out canonical tags.
+        if key == "tags":
+            project_only[key] = value
+            continue
+        policy = merge_policy.get(key, MergePolicy.PROJECT_ONLY)
+        if policy == MergePolicy.PROJECT_ONLY:
+            project_only[key] = value
+        else:
+            canonical[key] = value
+
+    raw_body_sections = _split_body_by_headings(body)
+    canonical_set = {s.casefold() for s in canonical_body_sections}
+    canonical_body: dict[str, str] = {}
+    project_only_body: dict[str, str] = {}
+    for heading, content in raw_body_sections.items():
+        if heading == "":
+            project_only_body[""] = content
+            continue
+        if heading.casefold() in canonical_set:
+            canonical_body[heading] = content
+        else:
+            project_only_body[heading] = content
+
+    return canonical, project_only, canonical_body, project_only_body
