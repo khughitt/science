@@ -15,6 +15,7 @@ from science_tool.commons.errors import (
     CommonsRootNotFoundError,
     PromoteConflictAbort,
     PromoteInputError,
+    PromoteValidationError,
     PromoteWriteError,
 )
 from science_tool.commons.inventory import build_commons_inventory
@@ -472,9 +473,7 @@ def promote_paper_cmd(
             kind=PROMOTE_KIND_PAPER,
             from_order=list(from_),
         )
-    except PromoteConflictAbort as exc:
-        raise click.ClickException(f"aborted at conflict prompt: {exc}") from exc
-    except PromoteInputError as exc:
+    except (PromoteInputError, PromoteConflictAbort, PromoteValidationError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     click.echo(

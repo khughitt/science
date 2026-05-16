@@ -37,6 +37,7 @@ from science_tool.commons.errors import (
     PromoteCandidateError,
     PromoteConflictAbort,
     PromoteInputError,
+    PromoteValidationError,
     PromoteWriteError,
 )
 
@@ -487,7 +488,47 @@ def plan_promote(
             )
         )
 
+    _validate_plan(decisions)
     return PromotePlan(decisions=decisions, failed_candidates=soft_failures, kind=kind)
+
+
+def _validate_plan(decisions: list[PromoteDecision]) -> None:
+    """Validate every canonical against its declared base+mixin profile and
+    every overlay against overlay-1.1. Raises PromoteValidationError on
+    the first failure. Pre-I/O — no disk state mutated.
+
+    Uses `EntityValidator` from science_model.entity_schema:
+    - `.validate(entity_dict)` reads the entity's `schema_profile` field and
+      composes base + mixin + extensions via the internal SchemaLoader.
+    - `.validate_overlay(overlay_dict)` loads overlay-1.1 internally and
+      also enforces `id == overlay_of`.
+    Both raise `EntityValidationError` on failure.
+    """
+    from science_model.entity_schema import EntityValidationError, EntityValidator
+
+    validator = EntityValidator()
+    for d in decisions:
+        canonical_fm = _parse_frontmatter_only(d.canonical_content)
+        try:
+            validator.validate(canonical_fm)
+        except EntityValidationError as exc:
+            raise PromoteValidationError(
+                decision_slug=d.slug,
+                target_kind="canonical",
+                project_id=None,
+                schema_message=str(exc),
+            ) from exc
+        for project_slug, overlay in d.overlays.items():
+            overlay_fm = _parse_frontmatter_only(overlay.after_content)
+            try:
+                validator.validate_overlay(overlay_fm)
+            except EntityValidationError as exc:
+                raise PromoteValidationError(
+                    decision_slug=d.slug,
+                    target_kind="overlay",
+                    project_id=project_slug,
+                    schema_message=str(exc),
+                ) from exc
 
 
 def _commons_is_clean(commons_root: Path, kind: PromoteKindConfig) -> tuple[bool, list[str]]:
@@ -967,6 +1008,23 @@ def _parse_entity_file(path: Path) -> tuple[dict, str]:
     if text.endswith("\n") and not body.endswith("\n"):
         body += "\n"
     return fm, body
+
+
+def _parse_frontmatter_only(rendered: str) -> dict:
+    """Parse just the frontmatter block from rendered <slug>.md content."""
+    if not rendered.startswith("---\n"):
+        raise PromoteCandidateError("rendered content has no opening --- fence", slug=None)
+    rest = rendered[len("---\n") :]
+    end = rest.find("\n---\n")
+    if end == -1:
+        raise PromoteCandidateError("rendered content has no closing --- fence", slug=None)
+    fm_yaml = rest[:end]
+    parsed = yaml.safe_load(fm_yaml)
+    if not isinstance(parsed, dict):
+        raise PromoteCandidateError(
+            f"frontmatter is not a mapping: {type(parsed).__name__}", slug=None
+        )
+    return parsed
 
 
 def _scan_project(
