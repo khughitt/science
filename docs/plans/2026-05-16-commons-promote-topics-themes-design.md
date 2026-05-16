@@ -54,7 +54,7 @@ class PromoteKindConfig:
     eligibility_filter: Callable[[Mapping[str, Any]], EligibilityVerdict] | None
 ```
 
-`source_subdirs` is plural to accommodate topic's two source locations (`doc/topics/` and the legacy `doc/background/topics/`). `overlay_dest_subdir` is the single directory overlay rewrites land in — for topic, an overlay sourced from `doc/background/topics/foo.md` is rewritten to `doc/topics/foo.md` and the original `doc/background/topics/foo.md` is deleted in the same atomic project commit. If both `doc/topics/<slug>.md` and `doc/background/topics/<slug>.md` exist within one project, that's a single-project intra-kind collision → `PromoteCandidateError` at discovery.
+`source_subdirs` is plural to accommodate topic's two source locations (`doc/topics/` and the legacy `doc/background/topics/`). `overlay_dest_subdir` is the single directory overlay rewrites land in — for topic, an overlay sourced from `doc/background/topics/foo.md` is rewritten to `doc/topics/foo.md` and the original `doc/background/topics/foo.md` is `Path.unlink()`-ed in the project working tree (no `git rm`, no project-side commit; matches Phase E's "rewrite working tree only, user reviews and commits" contract — see §4.4.1). If both `doc/topics/<slug>.md` and `doc/background/topics/<slug>.md` exist within one project, that's a single-project intra-kind collision → `PromoteCandidateError` at discovery.
 
 `EligibilityVerdict` is a small enum:
 
@@ -240,18 +240,20 @@ Rationale: Phase E's design referenced an apply-stage "step 7 validation" that i
 
 ### 4.4 Apply (atomic batch) — de-hardcoding
 
-The 8-step transaction from Phase E §6.3 is reused, but six sites in `apply_promote` and its helpers currently hard-code `"paper"` / `"papers"` / `"doc/papers/"`. These must be parametrised via `PromotePlan.kind`:
+The 8-step transaction from Phase E §6.3 is reused, but multiple sites in `apply_promote` and its helpers currently hard-code `"paper"` / `"papers"` / `"doc/papers/"` / `bibkey`. These must be parametrised via `PromotePlan.kind`:
 
 | Site (current code) | Hardcoded value | Replacement |
 |---|---|---|
 | `promote.py:315` | `commons_root / "papers" / ...` | `commons_root / kind.commons_subdir / ...` |
 | `promote.py:393` | `path.startswith("papers/")` in `_commons_is_clean` | `path.startswith(f"{kind.commons_subdir}/")` |
 | `promote.py:403,407` | `f"doc/papers/{name}"` in `_project_target_files_clean` | `f"{kind.overlay_dest_subdir}/{name}"` — plus an additional scan over `kind.source_subdirs` for renamed-away source files (the flatten case for topic) |
-| `promote.py:577` | `f"paper/{decision.bibkey}/..."` tag preflight | `f"{kind.kind}/{decision.slug}/..."` |
-| `promote.py:1246,1247` | `f"paper:{decision.bibkey}"` in `_render_overlay` head | `f"{kind.id_prefix}{decision.slug}"` |
-| `promote.py:1289` | `first_path.parents[2]` in `_build_project_rollback_command` (assumes 2-segment `doc/papers/` suffix) | The relative path length depends on `kind.overlay_dest_subdir`. Compute parent count from `Path(kind.overlay_dest_subdir).parts` length |
-| `promote.py:1332` | `"type": "paper"` in audit log | `"type": kind.kind` |
-| `promote.py:1319` | `"bibkey": decision.bibkey` in audit-log entry | `"slug": decision.slug` (rename; the field was misnamed for non-paper kinds anyway) |
+| `promote.py:577` (preflight) and `promote.py:626-627` (tag creation + sort) | `f"paper/{decision.bibkey}/..."` and `sorted(..., key=lambda d: d.bibkey)` | `f"{kind.kind}/{decision.slug}/..."` and sort by `.slug`. Both preflight and creation must use the same kind-derived tag prefix |
+| `promote.py:609` | `f"promote: {len(plan.decisions)} papers via op {op_id}"` commons commit message | `f"promote: {len(plan.decisions)} {kind.commons_subdir} via op {op_id}"` (or equivalently `kind.kind + "s"`) |
+| `promote.py:1214-1223` `_render_canonical` | `default_profile_for_kind("paper")`, `f"paper:{decision.bibkey}"`, `"type": "paper"`, unconditional `"bibkey": decision.bibkey` field | `kind.default_profile.render()`, `f"{kind.id_prefix}{decision.slug}"`, `"type": kind.kind`, and emit `"bibkey": decision.slug` **only when** `kind.kind == "paper"` (topic/theme canonicals must not carry a `bibkey` field — it isn't in their mixins) |
+| `promote.py:1246,1247` `_render_overlay` head | `f"paper:{decision.bibkey}"` | `f"{kind.id_prefix}{decision.slug}"` |
+| `promote.py:1289` `_build_project_rollback_command` | `first_path.parents[2]` (assumes 2-segment `doc/papers/` suffix) | Compute parent count from `len(Path(kind.overlay_dest_subdir).parts)` so the project root is recovered correctly for any kind |
+| `promote.py:1319` | `"bibkey": decision.bibkey` in audit-log overlay-rewrite entry | `"slug": decision.slug` (rename; the field was misnamed for non-paper kinds anyway) |
+| `promote.py:1332` | `"type": "paper"` in audit log root | `"type": kind.kind` |
 
 Every site above gets a dedicated regression test that exercises both paper and topic kinds through it.
 
