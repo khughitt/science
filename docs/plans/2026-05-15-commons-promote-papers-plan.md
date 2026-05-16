@@ -1203,6 +1203,14 @@ class PromoteResult:
         "write_commons", "rewrite_projects", "audit",
     ] | None
     failure_detail: str | None
+    # Project slugs whose `doc/papers/<file>.md` were actually modified by this
+    # operation. On the success path, every overlay slug; on a partial step-6
+    # failure, just the slugs reached before the failure; on
+    # preflight/tag/commit failures (no project file touched), the empty list.
+    # The audit log filters `projects_touched` (overlay_rewrites + rollback
+    # hints) by this list so failure logs don't suggest rollbacks for projects
+    # that were never modified (design §6.3 step 7 failure variant).
+    projects_touched: list[str]
 
 
 # --------------------------------------------------------------------------- #
@@ -1529,6 +1537,24 @@ def test_scan_project_papers_skips_other_kind_with_warning(tmp_path, caplog):
     candidates, failures = _scan_project_papers(tmp_path, "test-project")
     assert candidates == []
     assert failures == []  # not a failure, just a skip
+
+
+def test_scan_project_papers_fails_when_id_does_not_match_stem(tmp_path):
+    """Source files with an explicit `id:` that disagrees with the filename
+    stem are rejected at discovery — the commons/overlay adapters require an
+    exact match and promote inherits that rule (design §4.1.3)."""
+    from science_tool.commons.promote import _scan_project_papers
+    papers = tmp_path / "doc" / "papers"
+    papers.mkdir(parents=True)
+    (papers / "Adams2025.md").write_text(
+        "---\nid: paper:WrongStem\ntitle: A\n---\n",
+        encoding="utf-8",
+    )
+    candidates, failures = _scan_project_papers(tmp_path, "test-project")
+    assert candidates == []
+    assert len(failures) == 1
+    assert failures[0].source_path.name == "Adams2025.md"
+    assert "does not match filename stem" in failures[0].error_message
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -1631,6 +1657,29 @@ def _scan_project_papers(
             )
             continue
 
+        # Commons / overlay adapters derive ids from filename stems case-
+        # sensitively and require frontmatter id to match the stem exactly
+        # (adapter.py:149, overlay.py:114). Promote inherits the same rule —
+        # the source case is canonical (design §4.1.3). If the source carries
+        # an explicit `id:` that disagrees with its filename stem, that's a
+        # bug in the source file, not something promote should silently
+        # rewrite: fail the candidate so the user can fix it.
+        explicit_id = fm.get("id")
+        if explicit_id is not None and explicit_id != f"paper:{md_path.stem}":
+            failures.append(
+                FailedCandidate(
+                    bibkey=md_path.stem,
+                    project_slug=project_slug,
+                    source_path=md_path,
+                    error_class="PromoteCandidateError",
+                    error_message=(
+                        f"frontmatter id {explicit_id!r} does not match filename "
+                        f"stem {md_path.stem!r}; expected id 'paper:{md_path.stem}'"
+                    ),
+                )
+            )
+            continue
+
         bibkey_source = md_path.stem
         try:
             bibkey_normalized = _normalize_bibkey_for_match(bibkey_source)
@@ -1674,7 +1723,7 @@ Note: `project_only_body` is stashing `{"__raw_frontmatter__": fm, "__raw_body__
 cd science && uv run pytest tests/test_commons_promote_discovery.py -v
 ```
 
-Expected: 7 new tests PASS (17 total in the file).
+Expected: 8 new tests PASS (18 total in the file).
 
 - [ ] **Step 5: Commit**
 
@@ -1894,6 +1943,7 @@ def test_classify_entity_splits_canonical_vs_project_only():
     fm = {
         "id": "paper:Adams2025",
         "type": "paper",
+        "bibkey": "Adams2025",
         "title": "A title",
         "authors": ["Adams, J."],
         "year": 2025,
@@ -1907,10 +1957,19 @@ def test_classify_entity_splits_canonical_vs_project_only():
     can_f, proj_f, can_b, proj_b = _classify_entity(
         fm, body, _PAPER_POLICY, _PAPER_SECTIONS
     )
-    # Canonical surface gets: title, authors, year, id, type
+    # Canonical surface gets the merge-eligible fields:
     assert can_f["title"] == "A title"
     assert can_f["authors"] == ["Adams, J."]
     assert can_f["year"] == 2025
+    # id / type / bibkey are promote-derived — re-emitted from the decision
+    # at render time; they MUST NOT enter the canonical merge bucket (otherwise
+    # case-divergent overlays produce a bogus `id` conflict at merge):
+    assert "id" not in can_f
+    assert "type" not in can_f
+    assert "bibkey" not in can_f
+    assert "id" not in proj_f
+    assert "type" not in proj_f
+    assert "bibkey" not in proj_f
     # tags, related, status, created, updated → overlay (project_only/append on overlay side)
     assert "tags" in proj_f
     assert "related" in proj_f
@@ -1919,6 +1978,18 @@ def test_classify_entity_splits_canonical_vs_project_only():
     # Body splits by x-canonical-body-sections:
     assert "Key Findings" in can_b
     assert "Project Use" in proj_b
+
+
+def test_classify_entity_drops_id_even_on_case_divergent_input():
+    """Two candidates with the same bibkey but different `id:` case (Adams2025
+    vs adams2025) must not surface `id` as a merge conflict — promote re-derives
+    the canonical id from the case-pick decision."""
+    fm_upper = {"id": "paper:Adams2025", "type": "paper", "title": "T"}
+    fm_lower = {"id": "paper:adams2025", "type": "paper", "title": "T"}
+    upper_can, _, _, _ = _classify_entity(fm_upper, "", _PAPER_POLICY, _PAPER_SECTIONS)
+    lower_can, _, _, _ = _classify_entity(fm_lower, "", _PAPER_POLICY, _PAPER_SECTIONS)
+    assert "id" not in upper_can
+    assert "id" not in lower_can
 
 
 def test_classify_entity_coerces_string_authors_to_single_element_list():
@@ -1987,6 +2058,12 @@ _GENERATED_BY_PROMOTE_KEYS: frozenset[str] = frozenset(
     {"schema_profile", "version", "created", "updated"}
 )
 
+# Identity fields promote re-derives from the PromoteDecision after the
+# canonical bibkey case is picked. They are stripped from the canonical merge
+# bucket so case-divergent overlays don't surface a bogus `id` conflict
+# (design §4.1.3).
+_PROMOTE_DERIVED_IDENTITY_KEYS: frozenset[str] = frozenset({"id", "type", "bibkey"})
+
 
 def _split_body_by_headings(body: str) -> dict[str, str]:
     """Parse a markdown body into `{heading: content_after_heading}`.
@@ -2019,6 +2096,11 @@ def _classify_entity(
       NOT copied from source; the canonical writer fills them.
     - Overlay-management fields (overlay_of, pin_version) NEVER appear on either
       side (they're written by the overlay renderer alone).
+    - Promote-derived identity fields (id, type, bibkey) NEVER appear on either
+      side either — the canonical writer re-emits them from the PromoteDecision
+      (after `_pick_canonical_bibkey_case` chooses the canonical-case bibkey).
+      Letting them flow through the canonical bucket would surface a bogus
+      `id` conflict any time two case-divergent overlays merge (design §4.1.3).
     - For every remaining source field, the merge policy decides:
         REPLACE / APPEND / FORBIDDEN → canonical bucket
         PROJECT_ONLY                  → project-only bucket
@@ -2032,6 +2114,9 @@ def _classify_entity(
     project_only: dict = {}
     for key, value in frontmatter.items():
         if key in _OVERLAY_ONLY_KEYS:
+            continue
+        if key in _PROMOTE_DERIVED_IDENTITY_KEYS:
+            # promote re-emits id/type/bibkey from the decision at render time
             continue
         if key in _GENERATED_BY_PROMOTE_KEYS and key not in ("created", "updated"):
             # created/updated still flow to project_only (mixin override); the
@@ -2762,7 +2847,7 @@ In `science/src/science_tool/commons/promote.py`, **delete the existing `plan_pr
 ```python
 import click
 
-from science_tool.commons.errors import PromoteConflictAbort
+from science_tool.commons.errors import PromoteConflictAbort, PromoteInputError
 
 
 def prompt_resolve(conflict: FieldConflict) -> Any:
@@ -2905,6 +2990,14 @@ def plan_promote(
             source_path = c.overlay_source_path
             target_path = source_path.parent / f"{canonical_case}.md"
             rename_from = source_path if source_path.name != target_path.name else None
+            # Collision check (design §4.1.3 rule 4): on a rename, the canonical-
+            # cased target must not already exist in the project — otherwise
+            # we'd be about to overwrite an unrelated file.
+            if rename_from is not None and target_path.exists():
+                raise PromoteInputError(
+                    f"case-rename collision in {c.project_slug}: cannot rename "
+                    f"{rename_from} → {target_path}; target already exists"
+                )
             rendered_overlay = _render_overlay(
                 PromoteDecision(
                     bibkey=canonical_case,
@@ -3068,6 +3161,7 @@ def test_write_audit_log_writes_yaml_with_expected_shape(tmp_path):
         status="ok",
         failure_stage=None,
         failure_detail=None,
+        projects_touched=[],
     )
     path = _write_audit_log(result, tmp_path, invocation="science commons promote paper --apply")
     assert path.exists()
@@ -3171,26 +3265,26 @@ def _git(commons_root: Path, *args: str, check: bool = True) -> subprocess.Compl
     )
 
 
-def _write_audit_log(
+def _render_audit_log_yaml(
     result: PromoteResult,
     commons_root: Path,
     *,
     invocation: str,
-) -> Path:
-    """Write the per-op YAML audit log under `<commons_root>/.migrations/`.
-
-    Filename: `<UTC-YYYYMMDDTHHMMSSZ>-<op_id>.yaml`. The log is NOT committed
-    here — `apply_promote` commits it path-limited on the success path; failure
-    paths leave it uncommitted (best-effort).
-    """
-    migrations = commons_root / ".migrations"
-    migrations.mkdir(exist_ok=True)
-    stamp = result.started_at.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    path = migrations / f"{stamp}-{result.op_id}.yaml"
-
+) -> str:
+    """Serialize the audit log dict to YAML. Pure function — no disk I/O.
+    Used by both the success path (which then writes + commits) and the
+    failure path (which writes uncommitted, or falls back to stderr if the
+    write itself fails)."""
+    # Only report overlay_rewrites / rollback hints for projects actually
+    # modified by this op. `result.projects_touched` is authoritative — for
+    # failure logs it's the post-rollback truth (preflight: empty; mid-step-6:
+    # only the slugs reached before the failure).
+    touched_set = set(result.projects_touched)
     projects_touched: dict = {}
     for decision in result.decisions:
         for slug, overlay in decision.overlays.items():
+            if slug not in touched_set:
+                continue
             projects_touched.setdefault(slug, {"overlay_rewrites": []})
             entry: dict = {
                 "bibkey": decision.bibkey,
@@ -3250,7 +3344,30 @@ def _write_audit_log(
         log["failure_stage"] = result.failure_stage
         log["failure_detail"] = result.failure_detail
 
-    path.write_text(yaml.safe_dump(log, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return yaml.safe_dump(log, sort_keys=False, allow_unicode=True)
+
+
+def _write_audit_log(
+    result: PromoteResult,
+    commons_root: Path,
+    *,
+    invocation: str,
+) -> Path:
+    """Write the per-op YAML audit log under `<commons_root>/.migrations/`.
+
+    Filename: `<UTC-YYYYMMDDTHHMMSSZ>-<op_id>.yaml`. The log is NOT committed
+    here — `apply_promote` commits it path-limited on the success path; failure
+    paths use `_write_failure_audit_log` (which calls the same renderer but
+    tolerates write failure).
+    """
+    migrations = commons_root / ".migrations"
+    migrations.mkdir(exist_ok=True)
+    stamp = result.started_at.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = migrations / f"{stamp}-{result.op_id}.yaml"
+    path.write_text(
+        _render_audit_log_yaml(result, commons_root, invocation=invocation),
+        encoding="utf-8",
+    )
     return path
 
 
@@ -3507,9 +3624,110 @@ def test_apply_promote_idempotent_skips_already_overlayed(tmp_path, monkeypatch)
     # Commit the project overlay rewrite so the working tree is clean again:
     subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
     subprocess.run(["git", "-C", str(proj), "commit", "-q", "-m", "promote"], check=True)
-    # Second run: discovery skips the now-overlayed file:
+    # Second run: discovery skips the now-overlayed file, plan is empty, and
+    # apply_promote no-ops cleanly (no commit, no tags, no audit log written,
+    # no `git add -- <empty>` error from passing an empty pathspec).
     discovery2 = discover_paper_candidates(["proj-a"])
     assert discovery2.candidates_by_bibkey == {}
+    plan2 = plan_promote(discovery2, commons_root=tmp_path / "commons",
+                         resolve_conflict=lambda c: None, from_order=["proj-a"])
+    assert plan2.decisions == []
+    head_before = subprocess.run(
+        ["git", "-C", str(tmp_path / "commons"), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    result2 = apply_promote(plan2, commons_root=tmp_path / "commons", invocation="second")
+    assert result2.status == "ok"
+    assert result2.commons_commit is None
+    assert result2.tags_created == []
+    assert result2.audit_log_path is None
+    head_after = subprocess.run(
+        ["git", "-C", str(tmp_path / "commons"), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert head_before == head_after
+
+
+def test_apply_promote_rename_happy_path_unlinks_source_writes_target(tmp_path, monkeypatch):
+    """When --from order forces canonical case `Huh2024` but proj-b has
+    `huh2024.md`, apply must (1) write target `Huh2024.md`, (2) unlink
+    `huh2024.md`, and record the rename in the audit log."""
+    from science_tool.commons.promote import (
+        apply_promote,
+        discover_paper_candidates,
+        plan_promote,
+    )
+
+    _init_commons(tmp_path / "commons")
+    proj_a = _build_project(
+        tmp_path, "proj-a",
+        {"Huh2024.md": "---\nid: paper:Huh2024\ntitle: H\n---\n"},
+    )
+    proj_b = _build_project(
+        tmp_path, "proj-b",
+        {"huh2024.md": "---\nid: paper:huh2024\ntitle: H\n---\n"},
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: {"proj-a": proj_a, "proj-b": proj_b}[slug],
+    )
+
+    discovery = discover_paper_candidates(["proj-a", "proj-b"])
+    plan = plan_promote(
+        discovery, commons_root=tmp_path / "commons",
+        resolve_conflict=lambda c: None, from_order=["proj-a", "proj-b"],
+    )
+    assert plan.decisions[0].bibkey == "Huh2024"
+    result = apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
+    assert result.status == "ok"
+    # proj-b's lowercase source unlinked, canonical-case target written:
+    assert not (proj_b / "doc" / "papers" / "huh2024.md").exists()
+    assert (proj_b / "doc" / "papers" / "Huh2024.md").exists()
+    # proj-a's overlay also at the canonical case (no rename needed):
+    assert (proj_a / "doc" / "papers" / "Huh2024.md").exists()
+    # Audit log records the rename:
+    log = yaml.safe_load(result.audit_log_path.read_text(encoding="utf-8"))
+    proj_b_rewrites = log["projects_touched"]["proj-b"]["overlay_rewrites"]
+    assert proj_b_rewrites[0]["rename"] == {"from": "huh2024.md", "to": "Huh2024.md"}
+
+
+def test_apply_promote_rename_collision_aborts(tmp_path, monkeypatch):
+    """If the canonical-case target already exists in the project (an unrelated
+    file shares the case-folded name), promote refuses to clobber it."""
+    from science_tool.commons.errors import PromoteInputError
+    from science_tool.commons.promote import (
+        apply_promote,
+        discover_paper_candidates,
+        plan_promote,
+    )
+
+    _init_commons(tmp_path / "commons")
+    proj_a = _build_project(
+        tmp_path, "proj-a",
+        {"Huh2024.md": "---\nid: paper:Huh2024\ntitle: H\n---\n"},
+    )
+    # proj-b carries BOTH casings (case-sensitive FS); plan picks "Huh2024"
+    # as canonical and would try to rename `huh2024.md` → `Huh2024.md`, but
+    # `Huh2024.md` already exists in proj-b too:
+    proj_b = _build_project(
+        tmp_path, "proj-b",
+        {
+            "huh2024.md": "---\nid: paper:huh2024\ntitle: H\n---\n",
+            "Huh2024.md": "---\nid: paper:Huh2024\ntitle: H (different file)\n---\n",
+        },
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: {"proj-a": proj_a, "proj-b": proj_b}[slug],
+    )
+
+    discovery = discover_paper_candidates(["proj-a", "proj-b"])
+    # plan_promote raises at plan time:
+    with pytest.raises(PromoteInputError, match="case-rename collision"):
+        plan_promote(
+            discovery, commons_root=tmp_path / "commons",
+            resolve_conflict=lambda c: None, from_order=["proj-a", "proj-b"],
+        )
 
 
 def test_apply_promote_tag_preflight_rejects_existing_tag(tmp_path, monkeypatch):
@@ -3610,127 +3828,26 @@ def _repo_is_idle(root: Path) -> bool:
     return not any((git_dir / s).exists() for s in sentinels)
 
 
-def apply_promote(
-    plan: PromotePlan,
-    commons_root: Path,
+def _write_failure_audit_log(
     *,
+    op_id: str,
+    started_at: datetime,
+    commons_root: Path,
+    commons_commit: str | None,
+    tags_created: list[str],
+    plan: PromotePlan,
+    projects_touched: list[str],
+    failure_stage: str,
+    failure_detail: str,
     invocation: str,
-) -> PromoteResult:
-    """Atomic-batch apply per design §6.3."""
-    started_at = datetime.now(tz=timezone.utc)
-    op_id = secrets.token_hex(4)
-
-    # ---------- Step 0: preflight ----------
-    if not commons_root.exists():
-        raise PromoteInputError(
-            f"commons store missing at {commons_root}; run `science commons init`"
-        )
-    if not _repo_is_idle(commons_root):
-        raise PromoteInputError(f"commons repo is mid-merge/rebase: {commons_root}")
-    clean, dirty = _commons_is_clean(commons_root)
-    if not clean:
-        raise PromoteInputError(
-            "commons repo is not clean. Commit/stash before re-running. Dirty: "
-            + ", ".join(dirty)
-        )
-
-    # Target file map keyed by project_root:
-    target_files_per_project: dict[Path, list[str]] = {}
-    for decision in plan.decisions:
-        for slug, overlay in decision.overlays.items():
-            target_files_per_project.setdefault(
-                overlay.path.parent.parent.parent, []
-            ).append(overlay.path.name)
-
-    for project_root, names in target_files_per_project.items():
-        if not _repo_is_idle(project_root):
-            raise PromoteInputError(f"project {project_root} is mid-merge/rebase")
-        clean, dirty = _project_target_files_clean(project_root, names)
-        if not clean:
-            raise PromoteInputError(
-                f"project {project_root} has dirty target files: " + ", ".join(dirty)
-            )
-
-    # ---------- Step 5.1: tag preflight ----------
-    for decision in plan.decisions:
-        tag = f"paper/{decision.bibkey}/{decision.canonical_version}"
-        existing = _git(commons_root, "rev-parse", "--verify", "--quiet", tag, check=False)
-        if existing.returncode == 0:
-            raise PromoteWriteError(
-                stage="write_commons",
-                detail=f"tag {tag!r} already exists in commons; refusing to overwrite",
-            )
-
-    # ---------- Step 4: write commons (staged) ----------
-    written_canonical_paths: list[Path] = []
-    for decision in plan.decisions:
-        decision.canonical_path.parent.mkdir(parents=True, exist_ok=True)
-        decision.canonical_path.write_text(decision.canonical_content, encoding="utf-8")
-        written_canonical_paths.append(decision.canonical_path)
-
-    # ---------- Step 5.2: commit (path-limited) ----------
-    rel_paths = [str(p.relative_to(commons_root)) for p in written_canonical_paths]
-    try:
-        _git(commons_root, "add", "--", *rel_paths)
-        _git(
-            commons_root,
-            "commit", "-m", f"promote: {len(plan.decisions)} papers via op {op_id}",
-            "--", *rel_paths,
-        )
-    except subprocess.CalledProcessError as exc:
-        # Step 4 wrote files; on commit failure, restore via path-limited checkout.
-        _restore_paths_to_head(commons_root, written_canonical_paths)
-        raise PromoteWriteError(
-            stage="write_commons",
-            detail=f"commons commit failed: {exc.stderr or exc}",
-        ) from exc
-
-    commons_commit = _git(commons_root, "rev-parse", "--short", "HEAD").stdout.strip()
-
-    # ---------- Step 5.3: tag (path-limited per-tag) ----------
-    tags_created: list[str] = []
-    for decision in sorted(plan.decisions, key=lambda d: d.bibkey):
-        tag = f"paper/{decision.bibkey}/{decision.canonical_version}"
-        try:
-            _git(commons_root, "tag", tag, commons_commit)
-            tags_created.append(tag)
-        except subprocess.CalledProcessError as exc:
-            _rollback_step5(commons_root, tags_created, written_canonical_paths)
-            raise PromoteWriteError(
-                stage="write_commons",
-                detail=f"tag {tag!r} failed after commit: {exc.stderr or exc}",
-                commons_commit=commons_commit,
-            ) from exc
-
-    # ---------- Step 6: rewrite projects ----------
-    projects_touched: list[str] = []
-    try:
-        for decision in plan.decisions:
-            for slug, overlay in decision.overlays.items():
-                if overlay.rename_from is not None and overlay.rename_from.exists():
-                    overlay.rename_from.unlink()
-                overlay.path.parent.mkdir(parents=True, exist_ok=True)
-                overlay.path.write_text(overlay.after_content, encoding="utf-8")
-                if slug not in projects_touched:
-                    projects_touched.append(slug)
-    except OSError as exc:
-        # Per-path rollback for each touched project file:
-        for decision in plan.decisions:
-            for overlay in decision.overlays.values():
-                project_root = overlay.path.parent.parent.parent
-                rel = overlay.path.relative_to(project_root)
-                subprocess.run(
-                    ["git", "-C", str(project_root), "checkout", "HEAD", "--", str(rel)],
-                    check=False,
-                )
-        raise PromoteWriteError(
-            stage="rewrite_projects",
-            detail=f"overlay write failed: {exc}",
-            commons_commit=commons_commit,
-            projects_touched=projects_touched,
-        ) from exc
-
-    # ---------- Step 7: write audit log (success path) ----------
+) -> tuple[Path | None, str]:
+    """Best-effort uncommitted audit log for a failure path (design §6.3 step 7
+    failure variant). Returns `(path, yaml_text)`:
+      - On successful write: `(path, yaml_text)` where path is the file written.
+      - On write failure: `(None, yaml_text)` — caller is responsible for
+        surfacing yaml_text to stderr so the operator can recover forensics
+        when the audit dir itself is unwritable (disk full, permissions, no
+        commons store)."""
     finished_at = datetime.now(tz=timezone.utc)
     result = PromoteResult(
         op_id=op_id,
@@ -3741,30 +3858,300 @@ def apply_promote(
         decisions=plan.decisions,
         failed_candidates=plan.failed_candidates,
         audit_log_path=None,
-        status="ok",
-        failure_stage=None,
-        failure_detail=None,
+        status="failed",
+        failure_stage=failure_stage,
+        failure_detail=failure_detail,
+        projects_touched=projects_touched,
     )
-    audit_path = _write_audit_log(result, commons_root, invocation=invocation)
-    # Path-limited audit commit:
-    audit_rel = str(audit_path.relative_to(commons_root))
-    _git(commons_root, "add", "--", audit_rel)
-    _git(commons_root, "commit", "-m", f"audit: op {op_id}", "--", audit_rel)
+    yaml_text = _render_audit_log_yaml(result, commons_root, invocation=invocation)
+    try:
+        migrations = commons_root / ".migrations"
+        migrations.mkdir(parents=True, exist_ok=True)
+        stamp = result.started_at.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        path = migrations / f"{stamp}-{result.op_id}.yaml"
+        path.write_text(yaml_text, encoding="utf-8")
+        return (path, yaml_text)
+    except OSError as audit_exc:
+        logger.error(
+            "failure-path audit log write failed for op %s: %s", op_id, audit_exc
+        )
+        return (None, yaml_text)
 
-    # Replace audit_log_path on the result (frozen dataclass → rebuild):
-    return PromoteResult(
-        op_id=result.op_id,
-        started_at=result.started_at,
-        finished_at=result.finished_at,
-        commons_commit=result.commons_commit,
-        tags_created=result.tags_created,
-        decisions=result.decisions,
-        failed_candidates=result.failed_candidates,
-        audit_log_path=audit_path,
-        status="ok",
-        failure_stage=None,
-        failure_detail=None,
-    )
+
+def apply_promote(
+    plan: PromotePlan,
+    commons_root: Path,
+    *,
+    invocation: str,
+) -> PromoteResult:
+    """Atomic-batch apply per design §6.3.
+
+    The body is wrapped in a try/except that writes a best-effort uncommitted
+    audit log on any failure (design §6.3 step 7 failure variant) before
+    re-raising. The success path commits the audit log path-limited.
+    """
+    started_at = datetime.now(tz=timezone.utc)
+    op_id = secrets.token_hex(4)
+    commons_commit: str | None = None
+    tags_created: list[str] = []
+    projects_touched: list[str] = []
+    current_stage: str = "preflight"
+
+    # Empty-plan no-op (design §6.3: idempotency). A plan with no decisions —
+    # because everything is already overlayed, or --limit 0 was passed —
+    # produces no commit, no tag, no overlay rewrite, no audit log. This
+    # must short-circuit BEFORE git add/commit, both of which would error on
+    # an empty pathspec.
+    if not plan.decisions:
+        finished_at = datetime.now(tz=timezone.utc)
+        return PromoteResult(
+            op_id=op_id,
+            started_at=started_at,
+            finished_at=finished_at,
+            commons_commit=None,
+            tags_created=[],
+            decisions=[],
+            failed_candidates=plan.failed_candidates,
+            audit_log_path=None,
+            status="ok",
+            failure_stage=None,
+            failure_detail=None,
+            projects_touched=[],
+        )
+
+    try:
+        # ---------- Step 0: preflight ----------
+        if not commons_root.exists():
+            raise PromoteInputError(
+                f"commons store missing at {commons_root}; run `science commons init`"
+            )
+        if not _repo_is_idle(commons_root):
+            raise PromoteInputError(f"commons repo is mid-merge/rebase: {commons_root}")
+        clean, dirty = _commons_is_clean(commons_root)
+        if not clean:
+            raise PromoteInputError(
+                "commons repo is not clean. Commit/stash before re-running. Dirty: "
+                + ", ".join(dirty)
+            )
+
+        # Target file map keyed by project_root. For rename overlays, the
+        # *source* path (rename_from) is the one whose dirty state we care
+        # about — that's the file we're going to unlink. The new target path
+        # is checked separately: it must NOT exist on disk (collision;
+        # plan_promote raises PromoteInputError earlier, but re-check here
+        # in case the filesystem changed between plan and apply).
+        target_files_per_project: dict[Path, list[str]] = {}
+        rename_collisions: list[tuple[str, Path]] = []
+        for decision in plan.decisions:
+            for slug, overlay in decision.overlays.items():
+                project_root = overlay.path.parent.parent.parent
+                if overlay.rename_from is not None:
+                    target_files_per_project.setdefault(project_root, []).append(
+                        overlay.rename_from.name
+                    )
+                    if overlay.path.exists():
+                        rename_collisions.append((slug, overlay.path))
+                else:
+                    target_files_per_project.setdefault(project_root, []).append(
+                        overlay.path.name
+                    )
+        if rename_collisions:
+            raise PromoteInputError(
+                "case-rename target(s) already exist on disk: "
+                + ", ".join(f"{slug}:{path}" for slug, path in rename_collisions)
+            )
+
+        for project_root, names in target_files_per_project.items():
+            if not _repo_is_idle(project_root):
+                raise PromoteInputError(f"project {project_root} is mid-merge/rebase")
+            clean, dirty = _project_target_files_clean(project_root, names)
+            if not clean:
+                raise PromoteInputError(
+                    f"project {project_root} has dirty target files: " + ", ".join(dirty)
+                )
+
+        # ---------- Step 5.1: tag preflight ----------
+        current_stage = "write_commons"
+        for decision in plan.decisions:
+            tag = f"paper/{decision.bibkey}/{decision.canonical_version}"
+            existing = _git(commons_root, "rev-parse", "--verify", "--quiet", tag, check=False)
+            if existing.returncode == 0:
+                raise PromoteWriteError(
+                    stage="write_commons",
+                    detail=f"tag {tag!r} already exists in commons; refusing to overwrite",
+                )
+
+        # ---------- Step 4: write commons (staged) ----------
+        written_canonical_paths: list[Path] = []
+        for decision in plan.decisions:
+            decision.canonical_path.parent.mkdir(parents=True, exist_ok=True)
+            decision.canonical_path.write_text(decision.canonical_content, encoding="utf-8")
+            written_canonical_paths.append(decision.canonical_path)
+
+        # ---------- Step 5.2: commit (path-limited) ----------
+        rel_paths = [str(p.relative_to(commons_root)) for p in written_canonical_paths]
+        try:
+            _git(commons_root, "add", "--", *rel_paths)
+            _git(
+                commons_root,
+                "commit", "-m", f"promote: {len(plan.decisions)} papers via op {op_id}",
+                "--", *rel_paths,
+            )
+        except subprocess.CalledProcessError as exc:
+            # Step 4 wrote files; on commit failure, restore via path-limited checkout.
+            _restore_paths_to_head(commons_root, written_canonical_paths)
+            raise PromoteWriteError(
+                stage="write_commons",
+                detail=f"commons commit failed: {exc.stderr or exc}",
+            ) from exc
+
+        commons_commit = _git(commons_root, "rev-parse", "--short", "HEAD").stdout.strip()
+
+        # ---------- Step 5.3: tag (path-limited per-tag) ----------
+        for decision in sorted(plan.decisions, key=lambda d: d.bibkey):
+            tag = f"paper/{decision.bibkey}/{decision.canonical_version}"
+            try:
+                _git(commons_root, "tag", tag, commons_commit)
+                tags_created.append(tag)
+            except subprocess.CalledProcessError as exc:
+                _rollback_step5(commons_root, tags_created, written_canonical_paths)
+                # _rollback_step5 reset HEAD~1 so the commit is gone; clear
+                # local trackers so the failure audit log reflects the
+                # post-rollback truth (no commons commit, no tags).
+                rolled_back_commit = commons_commit
+                commons_commit = None
+                tags_created.clear()
+                raise PromoteWriteError(
+                    stage="write_commons",
+                    detail=(
+                        f"tag {tag!r} failed after commit (rolled back "
+                        f"{rolled_back_commit}): {exc.stderr or exc}"
+                    ),
+                ) from exc
+
+        # ---------- Step 6: rewrite projects ----------
+        current_stage = "rewrite_projects"
+        try:
+            for decision in plan.decisions:
+                for slug, overlay in decision.overlays.items():
+                    # Record the slug BEFORE the first mutation. On a rename
+                    # we unlink rename_from first; if the subsequent write
+                    # fails, that project IS partially modified and the
+                    # rollback path below restores both paths — the audit log
+                    # must reflect that the slug was reached.
+                    if slug not in projects_touched:
+                        projects_touched.append(slug)
+                    if overlay.rename_from is not None and overlay.rename_from.exists():
+                        overlay.rename_from.unlink()
+                    overlay.path.parent.mkdir(parents=True, exist_ok=True)
+                    overlay.path.write_text(overlay.after_content, encoding="utf-8")
+        except OSError as exc:
+            # Per-path rollback for each touched project file. For renames we
+            # restore BOTH the target path (unlink if it didn't exist at HEAD,
+            # else checkout) AND the source path (the file we just unlinked
+            # must be put back from HEAD).
+            for decision in plan.decisions:
+                for overlay in decision.overlays.values():
+                    project_root = overlay.path.parent.parent.parent
+                    paths_to_restore: list[Path] = [overlay.path]
+                    if overlay.rename_from is not None:
+                        paths_to_restore.append(overlay.rename_from)
+                    for path in paths_to_restore:
+                        rel = path.relative_to(project_root)
+                        existed = subprocess.run(
+                            ["git", "-C", str(project_root), "cat-file", "-e", f"HEAD:{rel}"],
+                            capture_output=True,
+                        ).returncode == 0
+                        if existed:
+                            subprocess.run(
+                                ["git", "-C", str(project_root), "checkout", "HEAD", "--", str(rel)],
+                                check=False,
+                            )
+                        else:
+                            path.unlink(missing_ok=True)
+            raise PromoteWriteError(
+                stage="rewrite_projects",
+                detail=f"overlay write failed: {exc}",
+                commons_commit=commons_commit,
+                projects_touched=projects_touched,
+            ) from exc
+
+        # ---------- Step 7: write audit log (success path) ----------
+        current_stage = "audit"
+        finished_at = datetime.now(tz=timezone.utc)
+        result = PromoteResult(
+            op_id=op_id,
+            started_at=started_at,
+            finished_at=finished_at,
+            commons_commit=commons_commit,
+            tags_created=tags_created,
+            decisions=plan.decisions,
+            failed_candidates=plan.failed_candidates,
+            audit_log_path=None,
+            status="ok",
+            failure_stage=None,
+            failure_detail=None,
+            projects_touched=projects_touched,
+        )
+        # Wrap the audit write + path-limited commit so OSError / git failures
+        # are converted to PromoteWriteError(stage="audit") rather than
+        # propagating as raw exceptions. By this point commons commit, tags,
+        # and every project rewrite have already landed — design §6.4 says
+        # this is recoverable manually (the audit log path-limited commit can
+        # be re-issued); we must not crash the CLI with a traceback.
+        try:
+            audit_path = _write_audit_log(result, commons_root, invocation=invocation)
+            audit_rel = str(audit_path.relative_to(commons_root))
+            _git(commons_root, "add", "--", audit_rel)
+            _git(commons_root, "commit", "-m", f"audit: op {op_id}", "--", audit_rel)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise PromoteWriteError(
+                stage="audit",
+                detail=f"audit log write/commit failed: {exc}",
+                commons_commit=commons_commit,
+                projects_touched=projects_touched,
+            ) from exc
+
+        return PromoteResult(
+            op_id=result.op_id,
+            started_at=result.started_at,
+            finished_at=result.finished_at,
+            commons_commit=result.commons_commit,
+            tags_created=result.tags_created,
+            decisions=result.decisions,
+            failed_candidates=result.failed_candidates,
+            audit_log_path=audit_path,
+            status="ok",
+            failure_stage=None,
+            failure_detail=None,
+            projects_touched=result.projects_touched,
+        )
+
+    except (PromoteInputError, PromoteWriteError, PromoteCandidateError) as exc:
+        # Best-effort uncommitted failure audit log (design §6.3 step 7 failure
+        # variant). Use the exception's own stage if it has one (PromoteWriteError
+        # carries it); otherwise fall back to the most recent phase we entered.
+        # `projects_touched` is the post-rollback truth: preflight failure → [];
+        # mid-step-6 → whatever was reached before the failure.
+        stage = getattr(exc, "stage", None) or current_stage
+        audit_path, audit_yaml = _write_failure_audit_log(
+            op_id=op_id,
+            started_at=started_at,
+            commons_root=commons_root,
+            commons_commit=commons_commit,
+            tags_created=tags_created,
+            plan=plan,
+            projects_touched=projects_touched,
+            failure_stage=stage,
+            failure_detail=str(exc),
+            invocation=invocation,
+        )
+        if audit_path is None:
+            # Write failed (disk full, missing commons, permission denied).
+            # Attach the would-have-been YAML to the exception so the CLI can
+            # surface it to stderr (design §6.3 step 7 failure variant).
+            exc.failure_audit_yaml = audit_yaml  # type: ignore[attr-defined]
+        raise
 
 
 def _restore_paths_to_head(commons_root: Path, paths: list[Path]) -> None:
@@ -3787,7 +4174,7 @@ Note: the `overlay.path.parent.parent.parent` walk-up assumes overlay path = `<p
 cd science && uv run pytest tests/test_commons_promote_apply.py -v
 ```
 
-Expected: all 9 tests PASS (6 new + 3 from Task 15).
+Expected: all 11 tests PASS (8 new + 3 from Task 15).
 
 - [ ] **Step 5: Run full science suite**
 
@@ -3809,12 +4196,20 @@ Implements step 0 (strict commons preflight, target-scoped project preflight)
 through step 7 (path-limited audit commit). All commons-side commits carry
 explicit -- <paths>; tag preflight catches existing tags before the commit.
 Step 5 mid-failure uses _rollback_step5; step 6 mid-failure restores project
-files per-path via `git checkout HEAD --`.
+files per-path via `git checkout HEAD --` (both target and rename_from when
+the overlay carries a case-rename). Every typed failure path writes a
+best-effort uncommitted audit log under .migrations/ before re-raising.
+
+Case-rename support: when --from order picks a canonical case that differs
+from a project's source filename, the project file is unlinked at its
+original case and rewritten at the canonical case (recorded in the audit
+log). plan_promote raises PromoteInputError on a real collision (canonical
+target already exists in the project); apply re-checks at preflight.
 
 Idempotency: re-applying a discovery that contains no candidates (because all
 papers are already overlayed) is a no-op.
 
-Refs docs/plans/2026-05-15-commons-promote-papers-design.md §6.3 steps 0-7.
+Refs docs/plans/2026-05-15-commons-promote-papers-design.md §4.1.3, §6.3 steps 0-7.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
@@ -3921,11 +4316,13 @@ def test_apply_promote_path_limited_commit_does_not_pick_up_post_preflight_race(
 
     def racing_git(commons_root, *args, **kw):
         call_count["n"] += 1
-        # After the canonical-paths `add --` (call sequence depends on impl,
-        # but the first `add --` happens at step 5.2); inject before `commit`.
-        if args[:1] == ("add",) and args[2:3] == ("--",):
+        # After the canonical-paths `add --` (call shape is
+        # `_git(commons_root, "add", "--", *rel_paths)` so args[0]=="add" and
+        # args[1]=="--"). Inject the unrelated stage AFTER this add but BEFORE
+        # the path-limited commit, then let promote's own `commit -- <paths>`
+        # filter the race file out.
+        if args[:2] == ("add", "--") and any(a.startswith("papers/") for a in args[2:]):
             result = real_git(commons_root, *args, **kw)
-            # Race: stage an unrelated file:
             unrelated = commons_root / "race.txt"
             unrelated.write_text("staged after preflight\n", encoding="utf-8")
             real_git(commons_root, "add", "--", "race.txt")
@@ -3992,6 +4389,339 @@ def test_apply_promote_project_rollback_preserves_dirty_non_target(tmp_path, mon
 
     # The non-target dirty file must still be exactly as we left it:
     assert (proj / "other.txt").read_text(encoding="utf-8") == "dirty WIP\n"
+
+
+def test_apply_promote_preflight_failure_audit_omits_projects_touched(
+    tmp_path, monkeypatch
+):
+    """A preflight failure must NOT report projects_touched / project rollback
+    commands, because no project file was modified."""
+    from science_tool.commons.errors import PromoteInputError
+    from science_tool.commons.promote import (
+        apply_promote,
+        discover_paper_candidates,
+        plan_promote,
+    )
+
+    _init_commons(tmp_path / "commons")
+    (tmp_path / "commons" / "dirty.txt").write_text("WIP\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(tmp_path / "commons"), "add", "--", "dirty.txt"], check=True
+    )
+    proj = _build_project(
+        tmp_path, "proj-a",
+        {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+    discovery = discover_paper_candidates(["proj-a"])
+    plan = plan_promote(discovery, commons_root=tmp_path / "commons",
+                        resolve_conflict=lambda c: None, from_order=["proj-a"])
+
+    with pytest.raises(PromoteInputError):
+        apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
+
+    logs = list((tmp_path / "commons" / ".migrations").glob("*.yaml"))
+    data = yaml.safe_load(logs[0].read_text(encoding="utf-8"))
+    assert data["projects_touched"] == {}
+    assert data["rollback"]["projects"] == {}
+    assert data["rollback"]["commons"] is None
+
+
+def test_apply_promote_audit_write_failure_attaches_yaml_to_exception(
+    tmp_path, monkeypatch
+):
+    """If the failure audit log itself cannot be written (permissions, disk),
+    the would-have-been YAML is attached to the raised exception so the CLI
+    can print it to stderr (design §6.3 step 7 failure variant)."""
+    from science_tool.commons.errors import PromoteInputError
+    from science_tool.commons.promote import (
+        apply_promote,
+        discover_paper_candidates,
+        plan_promote,
+    )
+
+    _init_commons(tmp_path / "commons")
+    (tmp_path / "commons" / "dirty.txt").write_text("WIP\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(tmp_path / "commons"), "add", "--", "dirty.txt"], check=True
+    )
+    # Make the .migrations dir un-writable so the audit log write fails:
+    (tmp_path / "commons" / ".migrations").chmod(0o555)
+    try:
+        proj = _build_project(
+            tmp_path, "proj-a",
+            {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
+        )
+        monkeypatch.setattr(
+            "science_tool.commons.promote.resolve_project_by_id",
+            lambda slug: proj,
+        )
+        discovery = discover_paper_candidates(["proj-a"])
+        plan = plan_promote(discovery, commons_root=tmp_path / "commons",
+                            resolve_conflict=lambda c: None, from_order=["proj-a"])
+
+        with pytest.raises(PromoteInputError) as ei:
+            apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
+
+        yaml_text = getattr(ei.value, "failure_audit_yaml", None)
+        assert yaml_text is not None
+        # Sanity-check the YAML body has the expected failure shape:
+        parsed = yaml.safe_load(yaml_text)
+        assert parsed["status"] == "failed"
+        assert parsed["failure_stage"] == "preflight"
+    finally:
+        (tmp_path / "commons" / ".migrations").chmod(0o755)
+
+
+def test_apply_promote_empty_plan_no_op(tmp_path, monkeypatch):
+    """A plan with zero decisions returns ok cleanly — no commit, no tag, no
+    audit log, no `git add -- <empty>` error."""
+    from science_tool.commons.promote import (
+        DiscoveryResult,
+        apply_promote,
+        plan_promote,
+    )
+
+    _init_commons(tmp_path / "commons")
+    discovery = DiscoveryResult(candidates_by_bibkey={}, failed_candidates=[])
+    plan = plan_promote(
+        discovery, commons_root=tmp_path / "commons",
+        resolve_conflict=lambda c: None, from_order=[],
+    )
+    assert plan.decisions == []
+    head_before = subprocess.run(
+        ["git", "-C", str(tmp_path / "commons"), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    result = apply_promote(plan, commons_root=tmp_path / "commons", invocation="empty")
+    assert result.status == "ok"
+    assert result.commons_commit is None
+    assert result.tags_created == []
+    assert result.audit_log_path is None
+    head_after = subprocess.run(
+        ["git", "-C", str(tmp_path / "commons"), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert head_before == head_after
+    # No audit log written either way:
+    assert not list((tmp_path / "commons" / ".migrations").glob("*.yaml"))
+
+
+def test_apply_promote_step7_audit_failure_does_not_crash_after_landed_writes(
+    tmp_path, monkeypatch
+):
+    """If the step-7 audit write or commit fails AFTER commons commit + tags +
+    project rewrites have all landed, apply_promote must raise a typed
+    PromoteWriteError(stage='audit'), not a raw OSError / CalledProcessError.
+    Commons commit and project rewrites stay put; the audit log path-limited
+    commit is left for manual recovery (design §6.4 step 7 manual recovery)."""
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        apply_promote,
+        discover_paper_candidates,
+        plan_promote,
+    )
+    from science_tool.commons import promote as promote_module
+
+    _init_commons(tmp_path / "commons")
+    proj = _build_project(
+        tmp_path, "proj-a",
+        {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+    discovery = discover_paper_candidates(["proj-a"])
+    plan = plan_promote(discovery, commons_root=tmp_path / "commons",
+                        resolve_conflict=lambda c: None, from_order=["proj-a"])
+
+    # Sabotage the audit commit specifically: let the canonical `add --` and
+    # `commit -- <papers>` succeed, but force the audit-log `commit -- .migrations/...`
+    # to raise. We do this by wrapping _git so commits whose pathspec starts
+    # with `.migrations/` fail.
+    real_git = promote_module._git
+
+    def sabotaged_git(commons_root, *args, **kw):
+        if args[:1] == ("commit",) and any(
+            a.startswith(".migrations/") for a in args
+        ):
+            raise subprocess.CalledProcessError(
+                returncode=1, cmd=["git", "commit"], stderr="forced audit commit failure"
+            )
+        return real_git(commons_root, *args, **kw)
+
+    monkeypatch.setattr(promote_module, "_git", sabotaged_git)
+
+    with pytest.raises(PromoteWriteError, match="audit log write/commit failed"):
+        apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
+
+    # Commons commit + project rewrite landed and stay put:
+    assert (tmp_path / "commons" / "papers" / "Adams2025.md").exists()
+    overlay_text = (proj / "doc" / "papers" / "Adams2025.md").read_text(encoding="utf-8")
+    assert "overlay_of: paper:Adams2025" in overlay_text
+    # Failure audit log was written (uncommitted) by the outer except clause:
+    logs = list((tmp_path / "commons" / ".migrations").glob("*.yaml"))
+    assert logs, "failure audit log should have been written"
+    data = yaml.safe_load(logs[0].read_text(encoding="utf-8"))
+    assert data["status"] == "failed"
+    assert data["failure_stage"] == "audit"
+
+
+def test_apply_promote_step6_partial_rename_records_slug_in_projects_touched(
+    tmp_path, monkeypatch
+):
+    """When a rename overlay's unlink succeeds but the subsequent write fails,
+    the project IS partially modified. The failure audit must list that slug
+    in projects_touched so the operator knows recovery is needed (design §6.5)."""
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        apply_promote,
+        discover_paper_candidates,
+        plan_promote,
+    )
+
+    _init_commons(tmp_path / "commons")
+    proj_a = _build_project(
+        tmp_path, "proj-a",
+        {"Huh2024.md": "---\nid: paper:Huh2024\ntitle: H\n---\n"},
+    )
+    proj_b = _build_project(
+        tmp_path, "proj-b",
+        {"huh2024.md": "---\nid: paper:huh2024\ntitle: H\n---\n"},
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: {"proj-a": proj_a, "proj-b": proj_b}[slug],
+    )
+    discovery = discover_paper_candidates(["proj-a", "proj-b"])
+    plan = plan_promote(
+        discovery, commons_root=tmp_path / "commons",
+        resolve_conflict=lambda c: None, from_order=["proj-a", "proj-b"],
+    )
+
+    # Sabotage write_text for proj-b's rename target so the unlink of
+    # `huh2024.md` succeeds (partial mutation!) and the subsequent write of
+    # `Huh2024.md` fails — exactly the case the slug-before-mutation fix
+    # protects against.
+    real_write_text = Path.write_text
+    target = proj_b / "doc" / "papers" / "Huh2024.md"
+
+    def sabotaged_write_text(self, *args, **kw):
+        if self == target:
+            raise OSError("forced rename-target write failure")
+        return real_write_text(self, *args, **kw)
+
+    monkeypatch.setattr(Path, "write_text", sabotaged_write_text)
+
+    with pytest.raises(PromoteWriteError, match="overlay write"):
+        apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
+
+    logs = list((tmp_path / "commons" / ".migrations").glob("*.yaml"))
+    data = yaml.safe_load(logs[0].read_text(encoding="utf-8"))
+    # proj-a wrote successfully; proj-b unlinked huh2024.md then failed on
+    # Huh2024.md → partially modified. Both must appear in projects_touched
+    # so the operator sees the full recovery surface.
+    assert "proj-a" in data["projects_touched"]
+    assert "proj-b" in data["projects_touched"]
+
+
+def test_apply_promote_failure_writes_best_effort_uncommitted_audit_log(
+    tmp_path, monkeypatch
+):
+    """Design §6.3 step 7 (failure variant): every failure path writes a
+    best-effort audit log under .migrations/. The log is NOT committed — it
+    sits uncommitted so the user can decide whether to version it."""
+    from science_tool.commons.errors import PromoteInputError
+    from science_tool.commons.promote import (
+        apply_promote,
+        discover_paper_candidates,
+        plan_promote,
+    )
+
+    _init_commons(tmp_path / "commons")
+    # Make commons dirty so step-0 preflight fails:
+    (tmp_path / "commons" / "dirty.txt").write_text("WIP\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(tmp_path / "commons"), "add", "--", "dirty.txt"], check=True
+    )
+
+    proj = _build_project(
+        tmp_path, "proj-a",
+        {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+    discovery = discover_paper_candidates(["proj-a"])
+    plan = plan_promote(discovery, commons_root=tmp_path / "commons",
+                        resolve_conflict=lambda c: None, from_order=["proj-a"])
+
+    with pytest.raises(PromoteInputError, match="commons"):
+        apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
+
+    # A failure audit log exists under .migrations/ ...
+    logs = list((tmp_path / "commons" / ".migrations").glob("*.yaml"))
+    assert len(logs) == 1
+    data = yaml.safe_load(logs[0].read_text(encoding="utf-8"))
+    assert data["status"] == "failed"
+    assert data["failure_stage"] == "preflight"
+    assert "commons repo is not clean" in data["failure_detail"]
+    assert data["commons_commit"] is None
+    assert data["commons_tags"] == []
+    # ... and it is NOT committed (uncommitted in working tree):
+    status = subprocess.run(
+        ["git", "-C", str(tmp_path / "commons"), "status", "--porcelain", "--", ".migrations/"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    assert "??" in status and ".migrations/" in status
+
+
+def test_apply_promote_failure_audit_records_post_commit_failure_stage(
+    tmp_path, monkeypatch
+):
+    """A step-6 failure (after commons commit landed) records
+    failure_stage='rewrite_projects' and the commons commit hash."""
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        apply_promote,
+        discover_paper_candidates,
+        plan_promote,
+    )
+
+    _init_commons(tmp_path / "commons")
+    proj = _build_project(
+        tmp_path, "proj-a",
+        {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\n---\n"},
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+    discovery = discover_paper_candidates(["proj-a"])
+    plan = plan_promote(discovery, commons_root=tmp_path / "commons",
+                        resolve_conflict=lambda c: None, from_order=["proj-a"])
+
+    # Force the project overlay write to fail by making the target read-only:
+    target = proj / "doc" / "papers" / "Adams2025.md"
+    target.chmod(0o444)
+    try:
+        with pytest.raises(PromoteWriteError, match="overlay write"):
+            apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
+    finally:
+        target.chmod(0o644)
+
+    logs = list((tmp_path / "commons" / ".migrations").glob("*.yaml"))
+    assert len(logs) == 1
+    data = yaml.safe_load(logs[0].read_text(encoding="utf-8"))
+    assert data["status"] == "failed"
+    assert data["failure_stage"] == "rewrite_projects"
+    # commons commit landed (step 5 succeeded, step 6 failed) → recorded:
+    assert data["commons_commit"] is not None
 ```
 
 - [ ] **Step 2: Run tests**
@@ -4000,7 +4730,7 @@ def test_apply_promote_project_rollback_preserves_dirty_non_target(tmp_path, mon
 cd science && uv run pytest tests/test_commons_promote_apply.py -v
 ```
 
-Expected: all three new failure-path tests PASS (they exercise code paths already wired in Task 16).
+Expected: all ten new failure-path tests PASS (they exercise code paths already wired in Task 16).
 
 If any test fails: the implementation has a bug. Fix in `promote.py` until tests pass.
 
@@ -4022,8 +4752,10 @@ test(commons/promote): apply_promote failure-path regression tests
 - first-promote canonical is unlinked (not orphaned) on commit failure
 - path-limited commit ignores a post-preflight staged race file
 - mid-step-6 project rollback preserves dirty non-target files
+- best-effort uncommitted audit log on every failure (preflight failure → log)
+- post-commit failure audit log records stage='rewrite_projects' + commit sha
 
-Refs docs/plans/2026-05-15-commons-promote-papers-design.md §6.4.
+Refs docs/plans/2026-05-15-commons-promote-papers-design.md §6.3 step 7 (failure variant), §6.4.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
@@ -4532,6 +5264,50 @@ def test_promote_paper_single_entity_form(tmp_path, monkeypatch, runner):
     # Dry-run summary should mention exactly one paper:
     assert result.exit_code == 0, result.output
     assert "Adams2025" in result.output
+
+
+def test_promote_paper_plan_time_collision_exits_nonzero_cleanly(
+    tmp_path, monkeypatch, runner
+):
+    """plan_promote can raise PromoteInputError on a case-rename collision
+    BEFORE any disk write. The CLI must catch it and return a clean Click
+    error (non-zero exit, helpful message) — never an unhandled traceback."""
+    from science_tool.commons.cli import commons_group
+
+    _init_commons(tmp_path / "commons")
+    # proj-x carries both `huh2024.md` and `Huh2024.md` — the rename to
+    # canonical case would collide. (Case-sensitive FS required; xfail on macOS.)
+    proj = tmp_path / "proj-x"
+    (proj / "doc" / "papers").mkdir(parents=True)
+    (proj / "doc" / "papers" / "Huh2024.md").write_text(
+        "---\nid: paper:Huh2024\ntitle: H1\n---\n", encoding="utf-8",
+    )
+    (proj / "doc" / "papers" / "huh2024.md").write_text(
+        "---\nid: paper:huh2024\ntitle: H2\n---\n", encoding="utf-8",
+    )
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    subprocess.run(["git", "-C", str(proj), "config", "user.email", "t@x"], check=True)
+    subprocess.run(["git", "-C", str(proj), "config", "user.name", "t"], check=True)
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(proj), "commit", "-q", "-m", "init"], check=True)
+
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.cli.resolve_commons_root",
+        lambda: tmp_path / "commons",
+    )
+
+    result = runner.invoke(
+        commons_group,
+        ["promote", "paper", "--from", "proj-x"],
+    )
+    assert result.exit_code != 0
+    assert "case-rename collision" in result.output
+    # The exception is a clean Click error, not a raw traceback:
+    assert "Traceback" not in result.output
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -4633,9 +5409,11 @@ def promote_paper_cmd(
     n_total = sum(len(v) for v in discovery.candidates_by_bibkey.values())
     n_groups = len(discovery.candidates_by_bibkey)
     n_multi = sum(1 for v in discovery.candidates_by_bibkey.values() if len(v) > 1)
+    n_single = n_groups - n_multi
     click.echo(
         f"Discovered {n_total} paper candidates across {len(from_)} projects "
-        f"({n_groups} unique bibkeys, {n_multi} multi-instance)."
+        f"({n_groups} unique bibkeys, {n_single} single-instance, "
+        f"{n_multi} multi-instance)."
     )
     if discovery.failed_candidates:
         click.echo(f"  • {len(discovery.failed_candidates)} failed candidates:")
@@ -4648,11 +5426,15 @@ def promote_paper_cmd(
         click.echo("Nothing to promote.")
         return
 
-    # Plan (with conflict prompts in BOTH dry-run and --apply paths):
+    # Plan (with conflict prompts in BOTH dry-run and --apply paths). Plan-time
+    # may raise PromoteInputError (e.g., case-rename collision detected before
+    # any disk write) — catch it here for a clean Click error.
     try:
         plan = plan_promote(discovery, commons_root=root, from_order=list(from_))
     except PromoteConflictAbort as exc:
         raise click.ClickException(f"aborted at conflict prompt: {exc}") from exc
+    except PromoteInputError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     click.echo(f"Plan: {len(plan.decisions)} canonical entities, "
                f"{sum(len(d.overlays) for d in plan.decisions)} overlay rewrites.")
@@ -4669,6 +5451,17 @@ def promote_paper_cmd(
     try:
         result = apply_promote(plan, commons_root=root, invocation=_invocation())
     except (PromoteInputError, PromoteWriteError) as exc:
+        # If the best-effort failure audit log could not be written (disk full,
+        # missing commons, permission denied), apply_promote attaches the
+        # would-have-been YAML to the exception. Surface it on stderr so the
+        # operator can recover forensics (design §6.3 step 7 failure variant).
+        audit_yaml = getattr(exc, "failure_audit_yaml", None)
+        if audit_yaml:
+            click.echo(
+                "Failure-path audit log could not be written. Would-have-been "
+                "content:\n" + audit_yaml,
+                err=True,
+            )
         raise click.ClickException(str(exc)) from exc
 
     click.echo(f"Applied op {result.op_id}: commit {result.commons_commit}, "
@@ -4689,7 +5482,7 @@ Note: `CommonsError` is already imported at the top of `cli.py` (Phase B). If no
 cd science && uv run pytest tests/test_commons_cli_promote.py -v
 ```
 
-Expected: all five new CLI tests PASS.
+Expected: all six new CLI tests PASS.
 
 - [ ] **Step 5: Run full science suite**
 
