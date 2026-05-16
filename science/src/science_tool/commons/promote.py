@@ -474,6 +474,7 @@ def plan_promote(
             canonical_body=classified[0].canonical_body,
             created=date.today(),
             updated=date.today(),
+            kind=kind,
         )
         decisions.append(
             PromoteDecision(
@@ -1419,26 +1420,30 @@ def _render_canonical(
     canonical_body: dict[str, str],
     created: date,
     updated: date,
+    kind: PromoteKindConfig,
 ) -> str:
-    """Render the commons-side papers/<slug>.md content.
+    """Render the commons-side <commons_subdir>/<slug>.md content.
 
-    Fills base-required fields (schema_profile, version, created, updated) and
-    always emits `tags: []` so the per-project overlay-merge produces only the
-    project's overlay tags (design §4.1.2).
+    Emits schema_profile from kind.default_profile, id from kind.id_prefix,
+    type from kind.kind. For paper kind only, also emits a `bibkey:` field
+    (preserved from Phase E; not in topic/theme mixins).
     """
-    profile_str = default_profile_for_kind("paper").render()
+    profile_str = kind.default_profile.render()
     head: dict = {
         "schema_profile": profile_str,
-        "id": f"paper:{decision.slug}",
-        "type": "paper",
+        "id": f"{kind.id_prefix}{decision.slug}",
+        "type": kind.kind,
         "title": canonical_fields.get("title", ""),
         "version": decision.canonical_version,
         "created": _coerce_date_for_yaml(created),
         "updated": _coerce_date_for_yaml(updated),
-        "bibkey": decision.slug,
-        "tags": [],
     }
+    if kind.kind == "paper":
+        head["bibkey"] = decision.slug
+    head["tags"] = []
     for k, v in canonical_fields.items():
+        if k == "bibkey" and kind.kind != "paper":
+            continue
         if k in head:
             continue
         head[k] = v

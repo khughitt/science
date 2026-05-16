@@ -208,7 +208,7 @@ def test_coerce_date_for_yaml() -> None:
 
 
 def test_render_canonical_includes_base_required_fields() -> None:
-    from science_tool.commons.promote import _render_canonical, PromoteDecision
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, PromoteDecision, _render_canonical
 
     decision = PromoteDecision(
         slug="Adams2025",
@@ -224,6 +224,7 @@ def test_render_canonical_includes_base_required_fields() -> None:
         canonical_body={"Key Findings": "\nOne.\n"},
         created=date(2026, 5, 15),
         updated=date(2026, 5, 15),
+        kind=PROMOTE_KIND_PAPER,
     )
     assert "schema_profile: science-entity-base/1.0+paper/2.0" in rendered
     assert 'version: "1.0.0"' in rendered
@@ -237,7 +238,7 @@ def test_render_canonical_includes_base_required_fields() -> None:
 
 
 def test_render_canonical_dates_are_quoted_strings() -> None:
-    from science_tool.commons.promote import _render_canonical, PromoteDecision
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, PromoteDecision, _render_canonical
     import yaml
 
     decision = PromoteDecision(
@@ -254,11 +255,72 @@ def test_render_canonical_dates_are_quoted_strings() -> None:
         canonical_body={},
         created=date(2026, 5, 15),
         updated=date(2026, 5, 15),
+        kind=PROMOTE_KIND_PAPER,
     )
     fm_block = rendered.split("---", 2)[1]
     fm = yaml.safe_load(fm_block)
     assert isinstance(fm["created"], str)
     assert fm["created"] == "2026-05-15"
+
+
+def test_render_canonical_paper_emits_bibkey_field() -> None:
+    """Paper canonicals still emit bibkey: <slug> in frontmatter."""
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        PromoteDecision,
+        _render_canonical,
+    )
+
+    d = PromoteDecision(
+        slug="Adams2025",
+        canonical_path=Path("/x/papers/Adams2025.md"),
+        canonical_content="",
+        canonical_version="1.0.0",
+        overlays={},
+        resolved_conflicts=(),
+    )
+    rendered = _render_canonical(
+        d,
+        canonical_fields={"title": "T"},
+        canonical_body={},
+        created=date(2026, 1, 1),
+        updated=date(2026, 1, 1),
+        kind=PROMOTE_KIND_PAPER,
+    )
+    assert "id: paper:Adams2025" in rendered
+    assert "type: paper" in rendered
+    assert "bibkey: Adams2025" in rendered  # paper-only field
+    assert rendered.index("bibkey: Adams2025") < rendered.index("tags: []")
+
+
+def test_render_canonical_topic_omits_bibkey_field() -> None:
+    """Topic canonicals must NOT carry a bibkey field — not in the mixin."""
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_TOPIC,
+        PromoteDecision,
+        _render_canonical,
+    )
+
+    d = PromoteDecision(
+        slug="hypothesis",
+        canonical_path=Path("/x/topics/hypothesis.md"),
+        canonical_content="",
+        canonical_version="1.0.0",
+        overlays={},
+        resolved_conflicts=(),
+    )
+    rendered = _render_canonical(
+        d,
+        canonical_fields={"title": "T", "bibkey": "should-not-render"},
+        canonical_body={},
+        created=date(2026, 1, 1),
+        updated=date(2026, 1, 1),
+        kind=PROMOTE_KIND_TOPIC,
+    )
+    assert f"schema_profile: {PROMOTE_KIND_TOPIC.default_profile.render()}" in rendered
+    assert "id: topic:hypothesis" in rendered
+    assert "type: topic" in rendered
+    assert "bibkey" not in rendered
 
 
 def test_render_overlay_preserves_project_dates_and_overlay_fields() -> None:
