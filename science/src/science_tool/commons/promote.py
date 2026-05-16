@@ -1560,11 +1560,14 @@ def _render_audit_log_yaml(
                     "from": overlay.rename_from.name,
                     "to": overlay.path.name,
                 }
+            unlinked_source = getattr(overlay, "unlinked_source", None)
+            if unlinked_source is not None:
+                entry["unlinked_source"] = str(unlinked_source)
             projects_touched[slug]["overlay_rewrites"].append(entry)
 
     log: dict = {
         "op_id": result.op_id,
-        "type": "paper",
+        "type": result.kind.kind,
         "invocation": invocation,
         "status": result.status,
         "started_at": result.started_at.isoformat(),

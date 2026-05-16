@@ -82,6 +82,37 @@ def test_write_audit_log_writes_yaml_with_expected_shape(tmp_path) -> None:
     assert "rollback" in data
 
 
+def test_audit_log_yaml_type_field_uses_kind_kind() -> None:
+    """Audit log root type field reads from result.kind.kind."""
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_TOPIC,
+        PromoteResult,
+        _render_audit_log_yaml,
+    )
+
+    result = PromoteResult(
+        op_id="abc",
+        started_at=datetime(2026, 5, 16, 12, 0, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 5, 16, 12, 1, tzinfo=timezone.utc),
+        commons_commit="deadbeef",
+        tags_created=[],
+        decisions=[],
+        failed_candidates=[],
+        audit_log_path=None,
+        status="ok",
+        failure_stage=None,
+        failure_detail=None,
+        projects_touched=[],
+        kind=PROMOTE_KIND_TOPIC,
+    )
+    yaml_str = _render_audit_log_yaml(result, Path("/tmp/x"), invocation="x")
+    assert "type: topic" in yaml_str
+    assert "type: paper" not in yaml_str
+
+
 def test_build_project_rollback_command_derives_project_root_from_kind_depth(tmp_path) -> None:
     """A deeper overlay_dest_subdir must still resolve project_root correctly."""
     import re
