@@ -1059,3 +1059,66 @@ def test_apply_promote_failure_audit_records_post_commit_failure_stage(
     assert data["status"] == "failed"
     assert data["failure_stage"] == "rewrite_projects"
     assert data["commons_commit"] is not None
+
+
+def test_apply_commons_path_uses_kind_commons_subdir(tmp_path, monkeypatch) -> None:
+    """commons_root / "papers" / ... was hardcoded. After de-hardcoding,
+    kind.commons_subdir is used. Drive plan_promote with a real minimal
+    candidate so the decision-building loop runs, then assert the resulting
+    PromoteDecision.canonical_path is under kind.commons_subdir."""
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_TOPIC,
+        discover_candidates,
+        plan_promote,
+    )
+
+    proj = tmp_path / "proj_p"
+    (proj / "doc" / "topics").mkdir(parents=True)
+    (proj / "doc" / "topics" / "single.md").write_text(
+        "---\nid: topic:single\ntitle: T\n---\n\n## Summary\n\nx\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+    commons = tmp_path / "commons"
+    commons.mkdir()
+
+    discovery = discover_candidates(["proj_p"], PROMOTE_KIND_TOPIC)
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_TOPIC)
+
+    assert len(plan.decisions) == 1
+    canonical_path = plan.decisions[0].canonical_path
+    # The path MUST live under commons/topics/, not commons/papers/.
+    assert canonical_path.parent.name == "topics"
+    assert str(canonical_path).startswith(str(commons / "topics"))
+    assert canonical_path.relative_to(commons).parts[0] == "topics"
+
+
+def test_commons_is_clean_checks_kind_commons_subdir(tmp_path) -> None:
+    """_commons_is_clean hardcoded path.startswith("papers/"). After de-
+    hardcoding, kind.commons_subdir is used. Initialise an empty commons
+    repo + add an untracked file under topics/ and verify that
+    _commons_is_clean(commons_root, PROMOTE_KIND_TOPIC) reports it dirty
+    while PROMOTE_KIND_PAPER would not."""
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        PROMOTE_KIND_TOPIC,
+        _commons_is_clean,
+    )
+
+    _init_repo(tmp_path)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "commit", "--allow-empty", "-m", "init"],
+        check=True,
+        capture_output=True,
+    )
+    (tmp_path / "topics").mkdir()
+    (tmp_path / "topics" / "x.md").write_text("hi", encoding="utf-8")
+
+    paper_clean, _ = _commons_is_clean(tmp_path, PROMOTE_KIND_PAPER)
+    topic_clean, dirty = _commons_is_clean(tmp_path, PROMOTE_KIND_TOPIC)
+    assert paper_clean is True
+    assert topic_clean is False
+    assert "topics/x.md" in dirty

@@ -422,7 +422,7 @@ def plan_promote(
             )
             merged[conflict.field] = resolved_value
 
-        canonical_path = commons_root / "papers" / f"{canonical_case}.md"
+        canonical_path = commons_root / kind.commons_subdir / f"{canonical_case}.md"
         overlays: dict[str, OverlayRewrite] = {}
         for c in classified:
             source_path = c.overlay_source_path
@@ -489,10 +489,10 @@ def plan_promote(
     return PromotePlan(decisions=decisions, failed_candidates=soft_failures, kind=kind)
 
 
-def _commons_is_clean(commons_root: Path) -> tuple[bool, list[str]]:
-    """Return (clean, dirty_paths). Clean = no staged, no unstaged, no untracked
-    inside papers/ or .migrations/."""
-    status = _git(commons_root, "status", "--porcelain").stdout
+def _commons_is_clean(commons_root: Path, kind: PromoteKindConfig) -> tuple[bool, list[str]]:
+    """Path-limited cleanliness check. Untracked files under
+    kind.commons_subdir/ or .migrations/ count as dirty."""
+    status = _git(commons_root, "status", "--porcelain", "--untracked-files=all").stdout
     dirty: list[str] = []
     for line in status.splitlines():
         if len(line) < 4:
@@ -500,7 +500,7 @@ def _commons_is_clean(commons_root: Path) -> tuple[bool, list[str]]:
         path = line[3:]
         flags = line[:2]
         if flags == "??":
-            if path.startswith("papers/") or path.startswith(".migrations/"):
+            if path.startswith(f"{kind.commons_subdir}/") or path.startswith(".migrations/"):
                 dirty.append(path)
         else:
             dirty.append(path)
@@ -649,7 +649,7 @@ def apply_promote(
             raise PromoteInputError(f"commons store missing at {commons_root}; run `science commons init`")
         if not _repo_is_idle(commons_root):
             raise PromoteInputError(f"commons repo is mid-merge/rebase: {commons_root}")
-        clean, dirty = _commons_is_clean(commons_root)
+        clean, dirty = _commons_is_clean(commons_root, plan.kind)
         if not clean:
             raise PromoteInputError(
                 "commons repo is not clean. Commit/stash before re-running. Dirty: " + ", ".join(dirty)
