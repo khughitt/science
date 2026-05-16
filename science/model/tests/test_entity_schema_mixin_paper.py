@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import json
+import re
+from pathlib import Path
+
 import pytest
 
+from science_model.entity_schema import MergePolicy, parse_profile, read_merge_policy
 from science_model.entity_schema.validator import EntityValidationError, EntityValidator
+
+_SCHEMAS = Path(__file__).resolve().parents[1] / "src" / "science_model" / "schemas"
 
 
 @pytest.fixture
@@ -61,3 +68,46 @@ def test_paper_datasets_must_be_dataset_refs(base_entity: dict) -> None:
     entity = base_entity | {"datasets": ["paper:OtherThing"]}
     with pytest.raises(EntityValidationError):
         EntityValidator().validate(entity)
+
+
+def test_mixin_paper_2_0_schema_loads():
+    raw = (_SCHEMAS / "mixin-paper-2.0.json").read_text(encoding="utf-8")
+    schema = json.loads(raw)
+    assert schema["$id"].endswith("mixin-paper-2.0.json")
+    assert "venue" in schema["properties"]
+    assert "journal" not in schema["properties"]
+
+
+def test_mixin_paper_2_0_bibkey_regex_permits_hyphens():
+    raw = (_SCHEMAS / "mixin-paper-2.0.json").read_text(encoding="utf-8")
+    schema = json.loads(raw)
+    pattern = schema["properties"]["bibkey"]["pattern"]
+    assert re.match(pattern, "categorical-composition-trio-2023-2025")
+    assert re.match(pattern, "Adams2025")
+    assert not re.match(pattern, "1leading-digit")
+
+
+def test_mixin_paper_2_0_canonical_body_sections_annotation():
+    raw = (_SCHEMAS / "mixin-paper-2.0.json").read_text(encoding="utf-8")
+    schema = json.loads(raw)
+    sections = schema["x-canonical-body-sections"]
+    assert "Key Findings" in sections
+    assert "Methods Summary" in sections
+    assert "Limitations" in sections
+
+
+def test_mixin_paper_2_0_merge_policy_overrides_base_for_created_updated_status():
+    profile = parse_profile("science-entity-base/1.0+paper/2.0")
+    policy = read_merge_policy(profile)
+    assert policy["created"] == MergePolicy.PROJECT_ONLY
+    assert policy["updated"] == MergePolicy.PROJECT_ONLY
+    assert policy["status"] == MergePolicy.PROJECT_ONLY
+    # Base contributes these; mixin does NOT override:
+    assert policy["tags"] == MergePolicy.APPEND
+    assert policy["ontology_terms"] == MergePolicy.APPEND
+    # Paper-specific canonical fields default to REPLACE:
+    assert policy["title"] == MergePolicy.REPLACE
+    assert policy["authors"] == MergePolicy.REPLACE
+    assert policy["year"] == MergePolicy.REPLACE
+    # datasets is paper's own override → append:
+    assert policy["datasets"] == MergePolicy.APPEND
