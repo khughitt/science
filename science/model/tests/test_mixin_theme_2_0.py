@@ -1,6 +1,14 @@
 """Tests for mixin-theme-2.0.json."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+
+def _load_theme_schema() -> dict[str, object]:
+    schemas_dir = Path(__file__).resolve().parents[1] / "src" / "science_model" / "schemas"
+    return json.loads((schemas_dir / "mixin-theme-2.0.json").read_text())
+
 
 def test_theme_mixin_2_0_loads_via_default_profile() -> None:
     from science_model.entity_schema import default_profile_for_kind
@@ -45,25 +53,30 @@ def test_theme_mixin_2_0_merge_policies() -> None:
 
 
 def test_theme_mixin_2_0_keeps_required_kind_and_scope() -> None:
-    import json
-    from pathlib import Path
-
-    schemas_dir = Path(__file__).resolve().parents[1] / "src" / "science_model" / "schemas"
-    schema = json.loads((schemas_dir / "mixin-theme-2.0.json").read_text())
-    assert "theme_kind" in schema["required"]
-    assert "theme_scope" in schema["required"]
+    schema = _load_theme_schema()
+    assert schema["$id"] == "https://schemas.science/mixin-theme-2.0.json"
+    assert schema["required"] == ["id", "type", "theme_kind", "theme_scope"]
 
 
 def test_theme_mixin_2_0_keeps_theme_kind_enum_canonical() -> None:
-    import json
-    from pathlib import Path
-
-    schemas_dir = Path(__file__).resolve().parents[1] / "src" / "science_model" / "schemas"
-    schema = json.loads((schemas_dir / "mixin-theme-2.0.json").read_text())
-    assert schema["properties"]["theme_kind"]["enum"] == [
+    schema = _load_theme_schema()
+    properties = schema["properties"]
+    assert isinstance(properties, dict)
+    theme_kind = properties["theme_kind"]
+    assert isinstance(theme_kind, dict)
+    assert theme_kind["enum"] == [
         "methodological",
         "conceptual",
         "empirical",
         "domain",
     ]
-    assert "biological" not in schema["properties"]["theme_kind"]["enum"]
+    assert "biological" not in theme_kind["enum"]
+
+
+def test_theme_mixin_2_0_keeps_theme_scope_enum_canonical() -> None:
+    schema = _load_theme_schema()
+    properties = schema["properties"]
+    assert isinstance(properties, dict)
+    theme_scope = properties["theme_scope"]
+    assert isinstance(theme_scope, dict)
+    assert theme_scope["enum"] == ["project", "cross-project"]

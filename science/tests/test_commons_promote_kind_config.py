@@ -85,7 +85,10 @@ def test_promote_kind_theme_constant() -> None:
     assert PROMOTE_KIND_THEME.slug_match == "exact"
     # eligibility_filter is set in Task 3; this test only checks the constant
     # exists with the kind-specific structural fields.
-    assert "theme" in PROMOTE_KIND_THEME.mixin_schema_id
+    assert (
+        PROMOTE_KIND_THEME.mixin_schema_id
+        == "https://schemas.science/mixin-theme-2.0.json"
+    )
 
 
 def test_three_kinds_have_distinct_id_prefixes() -> None:
