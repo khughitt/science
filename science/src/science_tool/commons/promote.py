@@ -15,13 +15,13 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Literal
 
 import yaml
 
-from science_model.entity_schema import MergePolicy
+from science_model.entity_schema import MergePolicy, default_profile_for_kind
 from science_tool.commons.config import resolve_project_by_id
 from science_tool.commons.errors import PromoteCandidateError
 
@@ -557,3 +557,141 @@ def _pick_canonical_bibkey_case(
         key=lambda c: (order.get(c.project_slug, len(order)), c.project_slug),
     )
     return sorted_by_order[0].bibkey
+
+
+# --------------------------------------------------------------------------- #
+# Renderer helpers (Task 13)                                                   #
+# --------------------------------------------------------------------------- #
+
+_DATE_KEYS: frozenset[str] = frozenset({"created", "updated"})
+# Scalar keys whose values must be emitted as double-quoted strings regardless
+# of how pyyaml chooses to serialise them (version strings look numeric to YAML).
+_FORCE_QUOTED_KEYS: frozenset[str] = _DATE_KEYS | frozenset({"version", "pin_version"})
+
+
+def _coerce_date_for_yaml(value: Any) -> str:
+    """`datetime.date` / `datetime.datetime` / `str` → ISO-8601 string. Other
+    types are returned as-is via `str(value)`."""
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value)
+
+
+def _render_frontmatter(fields: dict) -> str:
+    """Render an ordered, deterministic YAML frontmatter block.
+
+    Date fields go through `_coerce_date_for_yaml` and are quoted; version /
+    pin_version scalars are also force-quoted (pyyaml treats "1.0.0" as a
+    plain float-like scalar).  Lists are block style.
+    """
+    out: dict = {}
+    for key, value in fields.items():
+        if key in _DATE_KEYS:
+            out[key] = _coerce_date_for_yaml(value)
+        else:
+            out[key] = value
+    dumped = yaml.safe_dump(
+        out,
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+        width=10_000,
+    )
+    # Force double-quoting of scalars in _FORCE_QUOTED_KEYS — pyyaml may emit
+    # unquoted or single-quoted forms that would round-trip incorrectly.
+    lines = []
+    for line in dumped.splitlines():
+        for k in _FORCE_QUOTED_KEYS:
+            prefix = f"{k}:"
+            if line.startswith(prefix):
+                raw = line[len(prefix):].strip()
+                # Strip surrounding single- or double-quotes pyyaml may add
+                if len(raw) >= 2 and raw[0] in ('"', "'") and raw[-1] == raw[0]:
+                    raw = raw[1:-1]
+                if raw and raw != "null":
+                    line = f'{k}: "{raw}"'
+        lines.append(line)
+    return "\n".join(lines) + "\n"
+
+
+def _render_body(sections: dict[str, str]) -> str:
+    """Render `{heading: content}` back to markdown. Empty heading "" goes first
+    (intro prose); the rest are emitted in insertion order with `## ` prefix."""
+    parts: list[str] = []
+    if "" in sections:
+        intro = sections[""].strip("\n")
+        if intro:
+            parts.append(intro + "\n")
+    for heading, content in sections.items():
+        if heading == "":
+            continue
+        parts.append(f"## {heading}\n{content.rstrip()}\n")
+    return "\n".join(parts)
+
+
+def _render_canonical(
+    decision: PromoteDecision,
+    *,
+    canonical_fields: dict,
+    canonical_body: dict[str, str],
+    created: date,
+    updated: date,
+) -> str:
+    """Render the commons-side papers/<bibkey>.md content.
+
+    Fills base-required fields (schema_profile, version, created, updated) and
+    always emits `tags: []` so the per-project overlay-merge produces only the
+    project's overlay tags (design §4.1.2).
+    """
+    profile_str = default_profile_for_kind("paper").render()
+    head: dict = {
+        "schema_profile": profile_str,
+        "id": f"paper:{decision.bibkey}",
+        "type": "paper",
+        "title": canonical_fields.get("title", ""),
+        "version": decision.canonical_version,
+        "created": _coerce_date_for_yaml(created),
+        "updated": _coerce_date_for_yaml(updated),
+        "bibkey": decision.bibkey,
+        "tags": [],
+    }
+    for k, v in canonical_fields.items():
+        if k in head:
+            continue
+        head[k] = v
+
+    fm = _render_frontmatter(head)
+    body = _render_body(canonical_body)
+    return f"---\n{fm}---\n{body}"
+
+
+def _render_overlay(
+    decision: PromoteDecision,
+    *,
+    project_slug: str,  # noqa: ARG001 — retained for Task 15 audit-log call-site symmetry
+    project_only_fields: dict,
+    project_only_body: dict[str, str],
+) -> str:
+    """Render a project-side overlay file. NEVER emits schema_profile; the
+    overlay validator is hardcoded to overlay/1.1 (design §4.4)."""
+    head: dict = {
+        "id": f"paper:{decision.bibkey}",
+        "overlay_of": f"paper:{decision.bibkey}",
+        "pin_version": decision.canonical_version,
+    }
+    # Skip overlay-only-management keys (overlay_of/pin_version/pin_effective_version)
+    # AND any head-priority key, so project_only_fields can't accidentally
+    # overwrite the promote-derived id/overlay_of/pin_version (mirrors
+    # _render_canonical's guard pattern).
+    for k, v in project_only_fields.items():
+        if k in _OVERLAY_ONLY_KEYS:
+            continue
+        if k in head:
+            continue
+        head[k] = v
+
+    fm = _render_frontmatter(head)
+    body = _render_body(project_only_body)
+    return f"---\n{fm}---\n{body}"

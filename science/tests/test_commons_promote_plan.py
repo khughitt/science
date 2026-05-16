@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -179,3 +180,97 @@ def test_pick_canonical_bibkey_case_from_order_first() -> None:
 def test_pick_canonical_bibkey_case_tiebreaks_by_slug() -> None:
     cands = [_case_cand("z-proj", "huh2024"), _case_cand("a-proj", "Huh2024")]
     assert _pick_canonical_bibkey_case(cands, ["a-proj", "z-proj"]) == "Huh2024"
+
+
+def test_coerce_date_for_yaml() -> None:
+    from science_tool.commons.promote import _coerce_date_for_yaml
+    assert _coerce_date_for_yaml(date(2026, 5, 15)) == "2026-05-15"
+    assert _coerce_date_for_yaml(datetime(2026, 5, 15, 12, 30)) == "2026-05-15"
+    assert _coerce_date_for_yaml("2026-05-15") == "2026-05-15"
+    assert _coerce_date_for_yaml("already-not-a-date") == "already-not-a-date"
+
+
+def test_render_canonical_includes_base_required_fields() -> None:
+    from science_tool.commons.promote import _render_canonical, PromoteDecision
+
+    decision = PromoteDecision(
+        bibkey="Adams2025",
+        canonical_path=Path("/c/papers/Adams2025.md"),
+        canonical_content="",
+        canonical_version="1.0.0",
+        overlays={},
+        resolved_conflicts=(),
+    )
+    rendered = _render_canonical(
+        decision,
+        canonical_fields={"title": "T", "authors": ["A"], "year": 2025},
+        canonical_body={"Key Findings": "\nOne.\n"},
+        created=date(2026, 5, 15),
+        updated=date(2026, 5, 15),
+    )
+    assert "schema_profile: science-entity-base/1.0+paper/2.0" in rendered
+    assert "version: \"1.0.0\"" in rendered or 'version: "1.0.0"' in rendered
+    assert "id: paper:Adams2025" in rendered
+    assert "type: paper" in rendered
+    assert "title: T" in rendered
+    assert 'created: "2026-05-15"' in rendered
+    assert "tags: []" in rendered
+    assert "## Key Findings" in rendered
+    assert "One." in rendered
+
+
+def test_render_canonical_dates_are_quoted_strings() -> None:
+    from science_tool.commons.promote import _render_canonical, PromoteDecision
+    import yaml
+
+    decision = PromoteDecision(
+        bibkey="X",
+        canonical_path=Path("/c/papers/X.md"),
+        canonical_content="",
+        canonical_version="1.0.0",
+        overlays={},
+        resolved_conflicts=(),
+    )
+    rendered = _render_canonical(
+        decision,
+        canonical_fields={"title": "T"},
+        canonical_body={},
+        created=date(2026, 5, 15),
+        updated=date(2026, 5, 15),
+    )
+    fm_block = rendered.split("---", 2)[1]
+    fm = yaml.safe_load(fm_block)
+    assert isinstance(fm["created"], str)
+    assert fm["created"] == "2026-05-15"
+
+
+def test_render_overlay_preserves_project_dates_and_overlay_fields() -> None:
+    from science_tool.commons.promote import _render_overlay, PromoteDecision
+
+    decision = PromoteDecision(
+        bibkey="Adams2025",
+        canonical_path=Path("/c/papers/Adams2025.md"),
+        canonical_content="",
+        canonical_version="1.0.0",
+        overlays={},
+        resolved_conflicts=(),
+    )
+    rendered = _render_overlay(
+        decision,
+        project_slug="natural-systems",
+        project_only_fields={
+            "tags": ["foo", "bar"],
+            "status": "active",
+            "created": "2026-01-01",
+            "updated": "2026-05-15",
+            "related": ["question:q1"],
+        },
+        project_only_body={"Project Use": "\nused here\n"},
+    )
+    assert "id: paper:Adams2025" in rendered
+    assert "overlay_of: paper:Adams2025" in rendered
+    assert "pin_version: \"1.0.0\"" in rendered or 'pin_version: "1.0.0"' in rendered
+    assert 'created: "2026-01-01"' in rendered
+    assert 'updated: "2026-05-15"' in rendered
+    assert "## Project Use" in rendered
+    assert "schema_profile" not in rendered
