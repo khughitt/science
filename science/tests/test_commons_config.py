@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 import yaml
@@ -11,6 +12,7 @@ from science_tool.commons.config import (
     load_data_overrides,
     resolve_commons_data_root,
     resolve_commons_root,
+    resolve_project_by_id,
 )
 from science_tool.commons.errors import CommonsError
 from science_tool.registry.config import GlobalConfig, load_global_config, save_global_config
@@ -249,3 +251,69 @@ def test_resolve_project_root_unknown_name_raises(
     monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
     with pytest.raises(ProjectNotRegisteredError, match="nope"):
         resolve_project_root("nope")
+
+
+def _write_config(tmp_path: Path, body: str) -> Path:
+    """Write a config.yaml under tmp_path/.science-config/ and return that dir."""
+    cfg_dir = tmp_path / ".science-config"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    cfg = cfg_dir / "config.yaml"
+    cfg.write_text(dedent(body), encoding="utf-8")
+    return cfg_dir
+
+
+def test_resolve_project_by_id_returns_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg_dir = _write_config(
+        tmp_path,
+        """
+        projects:
+          - path: ~/d/natural-systems
+            name: natural-systems-guide
+            id: natural-systems
+            role: standalone
+            parent: null
+            registered: "2026-01-01"
+        """,
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    p = resolve_project_by_id("natural-systems")
+    assert p == (tmp_path / "d" / "natural-systems")
+
+
+def test_resolve_project_by_id_rejects_unregistered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg_dir = _write_config(
+        tmp_path,
+        """
+        projects:
+          - path: ~/d/natural-systems
+            name: natural-systems-guide
+            id: natural-systems
+            role: standalone
+            parent: null
+            registered: "2026-01-01"
+        """,
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    with pytest.raises(CommonsError, match="no registered project with id"):
+        resolve_project_by_id("not-a-real-id")
+
+
+def test_resolve_project_by_id_rejects_null_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg_dir = _write_config(
+        tmp_path,
+        """
+        projects:
+          - path: ~/d/legacy
+            name: legacy-project
+            id: null
+            role: null
+            parent: null
+            registered: "2026-01-01"
+        """,
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    with pytest.raises(CommonsError, match="id: null"):
+        resolve_project_by_id("legacy-project")

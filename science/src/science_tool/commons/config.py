@@ -126,3 +126,35 @@ def resolve_project_root(name: str) -> Path:
         if project.name == name:
             return Path(project.path).expanduser()
     raise ProjectNotRegisteredError(name)
+
+
+def resolve_project_by_id(project_id: str) -> Path:
+    """Look up a registered project by `id:` (not `name:`) and return its root path.
+
+    Reads `projects[]` from the global config. Distinguishes three failure modes:
+
+    - id is null on a matching entry → CommonsError("id is null") — caller (promote)
+      maps this to "this registration has no id; assign one or deregister"
+    - no entry matches the given id → CommonsError("no registered project with id")
+    - all good → return the path (expanded `~`).
+
+    Used by `science commons promote --from <id>` to enforce the id-based
+    `--from` contract. The legacy `resolve_project_root(name)` matches by name and
+    is left alone for callers that still want name-based lookup.
+    """
+    from science_tool.registry.config import load_global_config
+
+    cfg = load_global_config()
+    for project in cfg.projects:
+        if project.id == project_id:
+            return Path(project.path).expanduser()
+    # No match by id; check whether any registration uses the same name and
+    # has a null id, which is the legacy-registration failure mode we want
+    # to diagnose specifically.
+    for project in cfg.projects:
+        if project.name == project_id and project.id is None:
+            raise CommonsError(
+                f"project {project_id!r} has id: null; assign an id "
+                "in ~/.config/science/config.yaml or deregister the entry"
+            )
+    raise CommonsError(f"no registered project with id {project_id!r}")
