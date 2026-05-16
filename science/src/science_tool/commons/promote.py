@@ -90,7 +90,7 @@ PROMOTE_KIND_TOPIC = PromoteKindConfig(
     id_prefix="topic:",
     slug_regex=re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$"),
     slug_match="exact",
-    mixin_schema_id="https://schemas.science/mixin-topic-1.0.json",  # bumped to 2.0 in Task 21
+    mixin_schema_id="https://schemas.science/mixin-topic-2.0.json",
     default_profile=default_profile_for_kind("topic"),
     eligibility_filter=None,
 )

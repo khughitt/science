@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/mixin-topic-2.0.json",
+  "title": "science entity topic mixin",
+  "$comment": "2.0 adds x-canonical-body-sections + project_only annotations on status/created/updated.",
+  "type": "object",
+  "required": ["id", "type"],
+  "x-canonical-body-sections": [
+    "Summary",
+    "Key Concepts",
+    "Current State of Knowledge",
+    "Controversies & Open Questions",
+    "Key References"
+  ],
+  "properties": {
+    "id":   {"type": "string", "pattern": "^topic:[a-z0-9][a-z0-9-]{1,63}$"},
+    "type": {"const": "topic"},
+    "datasets":    {"type": "array", "items": {"type": "string", "pattern": "^dataset:"},
+                    "science:merge": "append"},
+    "source_refs": {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
+    "related":     {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
+    "status":      {"type": "string", "science:merge": "project_only"},
+    "created":     {"type": "string", "format": "date", "science:merge": "project_only"},
+    "updated":     {"type": "string", "format": "date", "science:merge": "project_only"}
+  }
+}

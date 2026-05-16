@@ -77,7 +77,7 @@ def _parse_component(token: str) -> ProfileComponent:
 _DEFAULT_MIXIN_VERSION: dict[str, str] = {
     "dataset": "1.0",
     "paper": "2.0",
-    "topic": "1.0",
+    "topic": "2.0",
     "theme": "1.0",
 }
 
