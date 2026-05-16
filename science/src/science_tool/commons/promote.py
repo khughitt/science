@@ -442,9 +442,9 @@ def plan_promote(
                     overlays={},
                     resolved_conflicts=(),
                 ),
-                project_slug=c.project_slug,
                 project_only_fields=c.project_only_fields,
                 project_only_body=c.project_only_body,
+                kind=kind,
             )
             overlays[c.project_slug] = OverlayRewrite(
                 project_slug=c.project_slug,
@@ -1456,15 +1456,15 @@ def _render_canonical(
 def _render_overlay(
     decision: PromoteDecision,
     *,
-    project_slug: str,  # noqa: ARG001 — retained for Task 15 audit-log call-site symmetry
     project_only_fields: dict,
     project_only_body: dict[str, str],
+    kind: PromoteKindConfig,
 ) -> str:
     """Render a project-side overlay file. NEVER emits schema_profile; the
     overlay validator is hardcoded to overlay/1.1 (design §4.4)."""
     head: dict = {
-        "id": f"paper:{decision.slug}",
-        "overlay_of": f"paper:{decision.slug}",
+        "id": f"{kind.id_prefix}{decision.slug}",
+        "overlay_of": f"{kind.id_prefix}{decision.slug}",
         "pin_version": decision.canonical_version,
     }
     # Skip overlay-only-management keys (overlay_of/pin_version/pin_effective_version)

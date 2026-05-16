@@ -324,7 +324,7 @@ def test_render_canonical_topic_omits_bibkey_field() -> None:
 
 
 def test_render_overlay_preserves_project_dates_and_overlay_fields() -> None:
-    from science_tool.commons.promote import _render_overlay, PromoteDecision
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, PromoteDecision, _render_overlay
 
     decision = PromoteDecision(
         slug="Adams2025",
@@ -336,7 +336,6 @@ def test_render_overlay_preserves_project_dates_and_overlay_fields() -> None:
     )
     rendered = _render_overlay(
         decision,
-        project_slug="natural-systems",
         project_only_fields={
             "tags": ["foo", "bar"],
             "status": "active",
@@ -345,6 +344,7 @@ def test_render_overlay_preserves_project_dates_and_overlay_fields() -> None:
             "related": ["question:q1"],
         },
         project_only_body={"Project Use": "\nused here\n"},
+        kind=PROMOTE_KIND_PAPER,
     )
     assert "id: paper:Adams2025" in rendered
     assert "overlay_of: paper:Adams2025" in rendered
@@ -353,6 +353,34 @@ def test_render_overlay_preserves_project_dates_and_overlay_fields() -> None:
     assert 'updated: "2026-05-15"' in rendered
     assert "## Project Use" in rendered
     assert "schema_profile" not in rendered
+
+
+def test_render_overlay_uses_kind_id_prefix() -> None:
+    from pathlib import Path
+
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_THEME,
+        PromoteDecision,
+        _render_overlay,
+    )
+
+    d = PromoteDecision(
+        slug="my-theme",
+        canonical_path=Path("/x/themes/my-theme.md"),
+        canonical_content="",
+        canonical_version="1.0.0",
+        overlays={},
+        resolved_conflicts=(),
+    )
+    rendered = _render_overlay(
+        d,
+        project_only_fields={},
+        project_only_body={},
+        kind=PROMOTE_KIND_THEME,
+    )
+    assert "id: theme:my-theme" in rendered
+    assert "overlay_of: theme:my-theme" in rendered
+    assert "paper:" not in rendered
 
 
 def test_plan_promote_groups_by_bibkey_and_carries_failures(tmp_path) -> None:
