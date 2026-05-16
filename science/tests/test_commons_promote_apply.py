@@ -147,7 +147,11 @@ def test_apply_promote_happy_path_writes_commits_tags_rewrites(tmp_path, monkeyp
 
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     plan = plan_promote(
-        discovery, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
     )
 
     result = apply_promote(
@@ -197,7 +201,11 @@ def test_apply_promote_preflight_rejects_dirty_commons(tmp_path, monkeypatch) ->
 
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     plan = plan_promote(
-        discovery, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
     )
     with pytest.raises(PromoteInputError, match="commons"):
         apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
@@ -229,7 +237,11 @@ def test_apply_promote_preflight_rejects_dirty_target_project_file(tmp_path, mon
 
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     plan = plan_promote(
-        discovery, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
     )
     with pytest.raises(PromoteInputError, match="dirty"):
         apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
@@ -257,7 +269,11 @@ def test_apply_promote_preflight_allows_dirty_non_target_project_file(tmp_path, 
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     plan = plan_promote(
-        discovery, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
     )
     result = apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
     assert result.status == "ok"
@@ -283,7 +299,11 @@ def test_apply_promote_idempotent_skips_already_overlayed(tmp_path, monkeypatch)
     )
     discovery1 = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     plan1 = plan_promote(
-        discovery1, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+        discovery1,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
     )
     apply_promote(plan1, commons_root=tmp_path / "commons", invocation="first")
     subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
@@ -291,7 +311,11 @@ def test_apply_promote_idempotent_skips_already_overlayed(tmp_path, monkeypatch)
     discovery2 = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     assert discovery2.candidates_by_slug == {}
     plan2 = plan_promote(
-        discovery2, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+        discovery2,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
     )
     assert plan2.decisions == []
     head_before = subprocess.run(
@@ -345,6 +369,7 @@ def test_apply_promote_rename_happy_path_unlinks_source_writes_target(tmp_path, 
     plan = plan_promote(
         discovery,
         commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
         resolve_conflict=lambda c: None,
         from_order=["proj-a", "proj-b"],
     )
@@ -393,6 +418,7 @@ def test_apply_promote_rename_collision_aborts(tmp_path, monkeypatch) -> None:
         plan_promote(
             discovery,
             commons_root=tmp_path / "commons",
+            kind=PROMOTE_KIND_PAPER,
             resolve_conflict=lambda c: None,
             from_order=["proj-a", "proj-b"],
         )
@@ -421,7 +447,11 @@ def test_apply_promote_tag_preflight_rejects_existing_tag(tmp_path, monkeypatch)
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     plan = plan_promote(
-        discovery, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
     )
     with pytest.raises(PromoteWriteError, match="tag"):
         apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
@@ -456,7 +486,11 @@ def test_apply_promote_step4_os_error_converts_to_promote_write_error(
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     plan = plan_promote(
-        discovery, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
     )
 
     # Force write_text to fail at step 4 by making the commons papers/ dir
@@ -506,7 +540,11 @@ def test_apply_promote_failure_before_commit_unlinks_first_promote_canonical(
 
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     plan = plan_promote(
-        discovery, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
     )
 
     subprocess.run(
@@ -555,7 +593,11 @@ def test_apply_promote_path_limited_commit_does_not_pick_up_post_preflight_race(
 
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     plan = plan_promote(
-        discovery, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
     )
 
     from science_tool.commons import promote as promote_module
@@ -620,7 +662,11 @@ def test_apply_promote_project_rollback_preserves_dirty_non_target(tmp_path, mon
 
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     plan = plan_promote(
-        discovery, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
     )
 
     second_overlay = plan.decisions[1].overlays["proj-a"]
@@ -662,7 +708,11 @@ def test_apply_promote_preflight_failure_audit_omits_projects_touched(
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     plan = plan_promote(
-        discovery, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
     )
 
     with pytest.raises(PromoteInputError):
@@ -705,7 +755,11 @@ def test_apply_promote_audit_write_failure_attaches_yaml_to_exception(
         )
         discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
         plan = plan_promote(
-            discovery, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+            discovery,
+            commons_root=tmp_path / "commons",
+            kind=PROMOTE_KIND_PAPER,
+            resolve_conflict=lambda c: None,
+            from_order=["proj-a"],
         )
 
         with pytest.raises(PromoteInputError) as ei:
@@ -725,6 +779,7 @@ def test_apply_promote_empty_plan_no_op(tmp_path, monkeypatch) -> None:
     audit log, no `git add -- <empty>` error."""
     from science_tool.commons.promote import (
         DiscoveryResult,
+        PROMOTE_KIND_PAPER,
         apply_promote,
         plan_promote,
     )
@@ -734,6 +789,7 @@ def test_apply_promote_empty_plan_no_op(tmp_path, monkeypatch) -> None:
     plan = plan_promote(
         discovery,
         commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
         resolve_conflict=lambda c: None,
         from_order=[],
     )
@@ -786,7 +842,11 @@ def test_apply_promote_step7_audit_failure_does_not_crash_after_landed_writes(
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     plan = plan_promote(
-        discovery, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
     )
 
     real_git = promote_module._git
@@ -846,6 +906,7 @@ def test_apply_promote_step6_partial_rename_records_slug_in_projects_touched(
     plan = plan_promote(
         discovery,
         commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
         resolve_conflict=lambda c: None,
         from_order=["proj-a", "proj-b"],
     )
@@ -898,7 +959,11 @@ def test_apply_promote_failure_writes_best_effort_uncommitted_audit_log(
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     plan = plan_promote(
-        discovery, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
     )
 
     with pytest.raises(PromoteInputError, match="commons"):
@@ -947,7 +1012,11 @@ def test_apply_promote_failure_audit_records_post_commit_failure_stage(
     )
     discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
     plan = plan_promote(
-        discovery, commons_root=tmp_path / "commons", resolve_conflict=lambda c: None, from_order=["proj-a"]
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
     )
 
     target = proj / "doc" / "papers" / "Adams2025.md"

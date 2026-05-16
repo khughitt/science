@@ -27,10 +27,15 @@ def _merge_cand(slug: str, fields: dict) -> PromoteCandidate:
     """Build a PromoteCandidate with the given canonical_fields. Used by
     _merge_canonical_fields tests where only fields + slug matter."""
     return PromoteCandidate(
-        slug="X", slug_normalized="x", project_slug=slug,
-        project_root=Path("/tmp"), overlay_source_path=Path("/tmp/x.md"),
-        canonical_fields=fields, project_only_fields={},
-        canonical_body={}, project_only_body={},
+        slug="X",
+        slug_normalized="x",
+        project_slug=slug,
+        project_root=Path("/tmp"),
+        overlay_source_path=Path("/tmp/x.md"),
+        canonical_fields=fields,
+        project_only_fields={},
+        canonical_body={},
+        project_only_body={},
     )
 
 
@@ -38,11 +43,15 @@ def _case_cand(slug: str, bibkey: str) -> PromoteCandidate:
     """Build a PromoteCandidate with the given bibkey case. Used by
     _pick_canonical_bibkey_case tests."""
     return PromoteCandidate(
-        slug=bibkey, slug_normalized=bibkey.casefold(),
-        project_slug=slug, project_root=Path("/tmp"),
+        slug=bibkey,
+        slug_normalized=bibkey.casefold(),
+        project_slug=slug,
+        project_root=Path("/tmp"),
         overlay_source_path=Path("/tmp/x.md"),
-        canonical_fields={}, project_only_fields={},
-        canonical_body={}, project_only_body={},
+        canonical_fields={},
+        project_only_fields={},
+        canonical_body={},
+        project_only_body={},
     )
 
 
@@ -61,9 +70,7 @@ def test_classify_entity_splits_canonical_vs_project_only() -> None:
         "updated": "2026-05-15",
     }
     body = "## Key Findings\n\nfoo\n\n## Project Use\n\nbar\n"
-    can_f, proj_f, can_b, proj_b = _classify_entity(
-        fm, body, _PAPER_POLICY, _PAPER_SECTIONS
-    )
+    can_f, proj_f, can_b, proj_b = _classify_entity(fm, body, _PAPER_POLICY, _PAPER_SECTIONS)
     assert can_f["title"] == "A title"
     assert can_f["authors"] == ["Adams, J."]
     assert can_f["year"] == 2025
@@ -181,6 +188,7 @@ def test_pick_canonical_bibkey_case_tiebreaks_by_slug() -> None:
 
 def test_coerce_date_for_yaml() -> None:
     from science_tool.commons.promote import _coerce_date_for_yaml
+
     assert _coerce_date_for_yaml(date(2026, 5, 15)) == "2026-05-15"
     assert _coerce_date_for_yaml(datetime(2026, 5, 15, 12, 30)) == "2026-05-15"
     assert _coerce_date_for_yaml("2026-05-15") == "2026-05-15"
@@ -206,7 +214,7 @@ def test_render_canonical_includes_base_required_fields() -> None:
         updated=date(2026, 5, 15),
     )
     assert "schema_profile: science-entity-base/1.0+paper/2.0" in rendered
-    assert "version: \"1.0.0\"" in rendered or 'version: "1.0.0"' in rendered
+    assert 'version: "1.0.0"' in rendered
     assert "id: paper:Adams2025" in rendered
     assert "type: paper" in rendered
     assert "title: T" in rendered
@@ -266,7 +274,7 @@ def test_render_overlay_preserves_project_dates_and_overlay_fields() -> None:
     )
     assert "id: paper:Adams2025" in rendered
     assert "overlay_of: paper:Adams2025" in rendered
-    assert "pin_version: \"1.0.0\"" in rendered or 'pin_version: "1.0.0"' in rendered
+    assert 'pin_version: "1.0.0"' in rendered
     assert 'created: "2026-01-01"' in rendered
     assert 'updated: "2026-05-15"' in rendered
     assert "## Project Use" in rendered
@@ -277,19 +285,22 @@ def test_plan_promote_groups_by_bibkey_and_carries_failures(tmp_path) -> None:
     from science_tool.commons.promote import (
         DiscoveryResult,
         FailedCandidate,
+        PROMOTE_KIND_PAPER,
         plan_promote,
     )
 
     def _cand(slug, bibkey, fields):
         return PromoteCandidate(
-            slug=bibkey, slug_normalized=bibkey.casefold(),
-            project_slug=slug, project_root=Path("/tmp") / slug,
+            slug=bibkey,
+            slug_normalized=bibkey.casefold(),
+            project_slug=slug,
+            project_root=Path("/tmp") / slug,
             overlay_source_path=Path("/tmp") / slug / "doc/papers" / f"{bibkey}.md",
-            canonical_fields={}, project_only_fields={},
+            canonical_fields={},
+            project_only_fields={},
             canonical_body={},
             project_only_body={
-                "__raw_frontmatter__": {"id": f"paper:{bibkey}", "type": "paper",
-                                        "title": "T", **fields},
+                "__raw_frontmatter__": {"id": f"paper:{bibkey}", "type": "paper", "title": "T", **fields},
                 "__raw_body__": "",
             },
         )
@@ -299,12 +310,22 @@ def test_plan_promote_groups_by_bibkey_and_carries_failures(tmp_path) -> None:
             "adams2025": [_cand("A", "Adams2025", {"year": 2025})],
         },
         failed_candidates=[
-            FailedCandidate(slug="x", project_slug="A", source_path=Path("/x"),
-                            error_class="PromoteCandidateError", error_message="bad")
+            FailedCandidate(
+                slug="x",
+                project_slug="A",
+                source_path=Path("/x"),
+                error_class="PromoteCandidateError",
+                error_message="bad",
+            )
         ],
     )
 
-    plan = plan_promote(discovery, commons_root=tmp_path, resolve_conflict=lambda c: None)
+    plan = plan_promote(
+        discovery,
+        commons_root=tmp_path,
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+    )
     assert len(plan.decisions) == 1
     assert plan.decisions[0].slug == "Adams2025"
     assert len(plan.failed_candidates) == 1
@@ -314,19 +335,26 @@ def test_plan_promote_groups_by_bibkey_and_carries_failures(tmp_path) -> None:
 def test_plan_promote_invokes_resolver_on_conflict(tmp_path) -> None:
     from science_tool.commons.promote import (
         DiscoveryResult,
+        PROMOTE_KIND_PAPER,
         plan_promote,
     )
 
     def _cand(slug, year):
         return PromoteCandidate(
-            slug="Dang2023", slug_normalized="dang2023",
-            project_slug=slug, project_root=Path("/tmp") / slug,
+            slug="Dang2023",
+            slug_normalized="dang2023",
+            project_slug=slug,
+            project_root=Path("/tmp") / slug,
             overlay_source_path=Path("/tmp") / slug / "doc/papers/Dang2023.md",
-            canonical_fields={}, project_only_fields={}, canonical_body={},
+            canonical_fields={},
+            project_only_fields={},
+            canonical_body={},
             project_only_body={
                 "__raw_frontmatter__": {
-                    "id": "paper:Dang2023", "type": "paper",
-                    "title": "T", "year": year,
+                    "id": "paper:Dang2023",
+                    "type": "paper",
+                    "title": "T",
+                    "year": year,
                 },
                 "__raw_body__": "",
             },
@@ -338,11 +366,17 @@ def test_plan_promote_invokes_resolver_on_conflict(tmp_path) -> None:
     )
 
     resolved: list = []
+
     def picker(conflict):
         resolved.append(conflict.field)
         return conflict.candidates["A"]
 
-    plan = plan_promote(discovery, commons_root=tmp_path, resolve_conflict=picker)
+    plan = plan_promote(
+        discovery,
+        commons_root=tmp_path,
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=picker,
+    )
     assert resolved == ["year"]
     decision = plan.decisions[0]
     assert len(decision.resolved_conflicts) == 1
@@ -350,17 +384,23 @@ def test_plan_promote_invokes_resolver_on_conflict(tmp_path) -> None:
 
 
 def test_plan_promote_case_collision_picks_first_from_order(tmp_path) -> None:
-    from science_tool.commons.promote import DiscoveryResult, plan_promote
+    from science_tool.commons.promote import DiscoveryResult, PROMOTE_KIND_PAPER, plan_promote
 
     def _cand(slug, bibkey):
         return PromoteCandidate(
-            slug=bibkey, slug_normalized=bibkey.casefold(),
-            project_slug=slug, project_root=Path("/tmp") / slug,
+            slug=bibkey,
+            slug_normalized=bibkey.casefold(),
+            project_slug=slug,
+            project_root=Path("/tmp") / slug,
             overlay_source_path=Path("/tmp") / slug / "doc/papers" / f"{bibkey}.md",
-            canonical_fields={}, project_only_fields={}, canonical_body={},
+            canonical_fields={},
+            project_only_fields={},
+            canonical_body={},
             project_only_body={
                 "__raw_frontmatter__": {
-                    "id": f"paper:{bibkey}", "type": "paper", "title": "T",
+                    "id": f"paper:{bibkey}",
+                    "type": "paper",
+                    "title": "T",
                 },
                 "__raw_body__": "",
             },
@@ -370,10 +410,49 @@ def test_plan_promote_case_collision_picks_first_from_order(tmp_path) -> None:
         candidates_by_slug={"huh2024": [_cand("A", "Huh2024"), _cand("B", "huh2024")]},
         failed_candidates=[],
     )
-    plan = plan_promote(discovery, commons_root=tmp_path, resolve_conflict=lambda c: None,
-                        from_order=["A", "B"])
+    plan = plan_promote(
+        discovery,
+        commons_root=tmp_path,
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["A", "B"],
+    )
     assert plan.decisions[0].slug == "Huh2024"
     b_overlay = plan.decisions[0].overlays["B"]
     assert b_overlay.rename_from is not None
     assert b_overlay.rename_from.name == "huh2024.md"
     assert b_overlay.path.name == "Huh2024.md"
+
+
+def test_plan_promote_calls_profile_readers_with_kind_profile(tmp_path, monkeypatch) -> None:
+    """Pin the per-kind profile lookups. Without this guard, plan_promote
+    would silently use the paper policy for topic/theme runs and misclassify
+    fields like topic 'datasets' or theme 'evidence_refs'."""
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        PROMOTE_KIND_TOPIC,
+        DiscoveryResult,
+        plan_promote,
+    )
+    import science_tool.commons.promote as promote_mod
+
+    captured = {}
+    real_read_merge_policy = promote_mod.read_merge_policy
+    real_read_canonical_body_sections = promote_mod.read_canonical_body_sections
+
+    def spy_merge_policy(profile, *a, **kw):
+        captured["merge_policy_profile"] = profile
+        return real_read_merge_policy(profile, *a, **kw)
+
+    def spy_body_sections(profile, *a, **kw):
+        captured["body_sections_profile"] = profile
+        return real_read_canonical_body_sections(profile, *a, **kw)
+
+    monkeypatch.setattr(promote_mod, "read_merge_policy", spy_merge_policy)
+    monkeypatch.setattr(promote_mod, "read_canonical_body_sections", spy_body_sections)
+
+    discovery = DiscoveryResult(candidates_by_slug={}, failed_candidates=[])
+    plan_promote(discovery, commons_root=tmp_path, kind=PROMOTE_KIND_TOPIC)
+    assert captured["merge_policy_profile"] == PROMOTE_KIND_TOPIC.default_profile
+    assert captured["body_sections_profile"] == PROMOTE_KIND_TOPIC.default_profile
+    assert PROMOTE_KIND_TOPIC.default_profile != PROMOTE_KIND_PAPER.default_profile

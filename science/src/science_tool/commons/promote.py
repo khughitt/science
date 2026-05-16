@@ -6,7 +6,7 @@ per docs/plans/2026-05-15-commons-promote-papers-design.md §6.3.
 This module owns:
 - Dataclasses for the public surface (PromoteCandidate, PromotePlan, …).
 - `discover_candidates(project_slugs, kind) -> DiscoveryResult`.
-- `plan_promote(discovery, commons_root, *, resolve_conflict) -> PromotePlan` (Task 14).
+- `plan_promote(discovery, *, commons_root, kind, from_order, resolve_conflict) -> PromotePlan` (Task 14).
 - `apply_promote(plan, commons_root, *, invocation) -> PromoteResult` (Tasks 16–17).
 """
 
@@ -307,8 +307,9 @@ def prompt_resolve(conflict: FieldConflict) -> Any:
 
 def plan_promote(
     discovery: DiscoveryResult,
-    commons_root: Path,
     *,
+    commons_root: Path,
+    kind: PromoteKindConfig,
     resolve_conflict: Callable[[FieldConflict], Any] | None = None,
     from_order: list[str] | None = None,
 ) -> PromotePlan:
@@ -328,9 +329,8 @@ def plan_promote(
     if resolve_conflict is None:
         resolve_conflict = prompt_resolve
 
-    paper_profile = default_profile_for_kind("paper")
-    merge_policy = read_merge_policy(paper_profile)
-    body_sections = read_canonical_body_sections(paper_profile)
+    merge_policy = read_merge_policy(kind.default_profile)
+    body_sections = read_canonical_body_sections(kind.default_profile)
 
     if from_order is None:
         from_order = []

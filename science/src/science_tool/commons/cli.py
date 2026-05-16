@@ -466,7 +466,12 @@ def promote_paper_cmd(
         return
 
     try:
-        plan = plan_promote(discovery, commons_root=root, from_order=list(from_))
+        plan = plan_promote(
+            discovery,
+            commons_root=root,
+            kind=PROMOTE_KIND_PAPER,
+            from_order=list(from_),
+        )
     except PromoteConflictAbort as exc:
         raise click.ClickException(f"aborted at conflict prompt: {exc}") from exc
     except PromoteInputError as exc:
