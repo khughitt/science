@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.science/mixin-theme-2.0.json",
+  "title": "science entity theme mixin",
+  "$comment": "2.0 adds x-canonical-body-sections + project_only annotations. theme_scope stays canonical.",
+  "type": "object",
+  "required": ["id", "type", "theme_kind", "theme_scope"],
+  "x-canonical-body-sections": [
+    "Definition",
+    "Why It Matters",
+    "Boundaries",
+    "Guardrails",
+    "Open Questions",
+    "Update Triggers"
+  ],
+  "properties": {
+    "id":   {"type": "string", "pattern": "^theme:[a-z0-9][a-z0-9-]{1,63}$"},
+    "type": {"const": "theme"},
+    "theme_kind":  {"enum": ["methodological", "conceptual", "empirical", "domain"]},
+    "theme_scope": {"enum": ["project", "cross-project"]},
+    "source_refs":   {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
+    "evidence_refs": {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
+    "related":       {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
+    "status":  {"type": "string", "science:merge": "project_only"},
+    "created": {"type": "string", "format": "date", "science:merge": "project_only"},
+    "updated": {"type": "string", "format": "date", "science:merge": "project_only"}
+  }
+}
