@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from science_model.entity_schema import default_profile_for_kind
 from science_model.entity_schema.profile import (
     ProfileComponent,
     ProfileParseError,
@@ -61,3 +62,26 @@ def test_parse_rejects_unknown_mixin_position() -> None:
 def test_render_round_trips() -> None:
     raw = "science-entity-base/1.0+dataset/1.0+bio.rnaseq/1.0"
     assert parse_profile(raw).render() == raw
+
+
+def test_default_profile_for_kind_paper() -> None:
+    profile = default_profile_for_kind("paper")
+    assert profile.render() == "science-entity-base/1.0+paper/2.0"
+
+
+def test_default_profile_for_kind_dataset() -> None:
+    profile = default_profile_for_kind("dataset")
+    assert profile.base.name == "science-entity-base"
+    assert profile.mixin is not None
+    assert profile.mixin.name == "dataset"
+
+
+def test_default_profile_for_kind_rejects_unknown_kind() -> None:
+    with pytest.raises(ProfileParseError):
+        default_profile_for_kind("not-a-real-kind")
+
+
+def test_default_profile_for_kind_returns_parsed_profile() -> None:
+    profile = default_profile_for_kind("paper")
+    # Round-trip through parse_profile to confirm it's a real ProfileString:
+    assert parse_profile(profile.render()).render() == profile.render()

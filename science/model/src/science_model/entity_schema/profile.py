@@ -70,3 +70,33 @@ def _parse_component(token: str) -> ProfileComponent:
     if not name or not version:
         raise ProfileParseError(f"profile component {token!r} has empty name or version")
     return ProfileComponent(name=name, version=version)
+
+
+# Default mixin version per kind, used by `default_profile_for_kind`.
+# Add an entry here when a new mixin version becomes the project default.
+_DEFAULT_MIXIN_VERSION: dict[str, str] = {
+    "dataset": "1.0",
+    "paper": "2.0",
+    "topic": "1.0",
+    "theme": "1.0",
+}
+
+_DEFAULT_BASE_VERSION = "1.0"
+
+
+def default_profile_for_kind(kind: str) -> ProfileString:
+    """Return the default parsed ProfileString for a kind.
+
+    Composes the current default base version with the kind's current default
+    mixin version, e.g. `default_profile_for_kind("paper")` returns the parsed
+    form of `"science-entity-base/1.0+paper/2.0"`.
+
+    Raises ProfileParseError for an unknown kind.
+    """
+    if kind not in _DEFAULT_MIXIN_VERSION:
+        raise ProfileParseError(
+            f"unknown kind {kind!r}; expected one of {sorted(_DEFAULT_MIXIN_VERSION)}"
+        )
+    return parse_profile(
+        f"{BASE_NAME}/{_DEFAULT_BASE_VERSION}+{kind}/{_DEFAULT_MIXIN_VERSION[kind]}"
+    )

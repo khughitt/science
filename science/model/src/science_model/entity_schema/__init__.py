@@ -21,6 +21,7 @@ from science_model.entity_schema.profile import (
     ProfileComponent,
     ProfileParseError,
     ProfileString,
+    default_profile_for_kind,
     parse_profile,
 )
 from science_model.entity_schema.loader import (
@@ -45,6 +46,7 @@ __all__ = [
     "SchemaLoader",
     "SchemaNotFoundError",
     "SharedEntity",
+    "default_profile_for_kind",
     "parse_profile",
     "read_canonical_body_sections",
     "read_merge_policy",
