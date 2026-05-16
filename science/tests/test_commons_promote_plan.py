@@ -153,7 +153,7 @@ def test_merge_canonical_fields_one_sided_auto_takes() -> None:
     a = _merge_cand("A", {"title": "T", "authors": ["a"]})
     b = _merge_cand("B", {"title": "T", "doi": "10.x"})
 
-    merged, conflicts = _merge_canonical_fields([a, b], _PAPER_POLICY)
+    merged, conflicts = _merge_canonical_fields([a, b], _PAPER_POLICY, kind="paper")
     assert merged["title"] == "T"
     assert merged["authors"] == ["a"]
     assert merged["doi"] == "10.x"
@@ -163,7 +163,7 @@ def test_merge_canonical_fields_one_sided_auto_takes() -> None:
 def test_merge_canonical_fields_identical_auto_takes() -> None:
     a = _merge_cand("A", {"year": 2025})
     b = _merge_cand("B", {"year": 2025})
-    merged, conflicts = _merge_canonical_fields([a, b], _PAPER_POLICY)
+    merged, conflicts = _merge_canonical_fields([a, b], _PAPER_POLICY, kind="paper")
     assert merged["year"] == 2025
     assert conflicts == []
 
@@ -171,7 +171,7 @@ def test_merge_canonical_fields_identical_auto_takes() -> None:
 def test_merge_canonical_fields_emits_conflict_on_differing_values() -> None:
     a = _merge_cand("A", {"year": 2023})
     b = _merge_cand("B", {"year": 2024})
-    merged, conflicts = _merge_canonical_fields([a, b], _PAPER_POLICY)
+    merged, conflicts = _merge_canonical_fields([a, b], _PAPER_POLICY, kind="paper")
     assert "year" not in merged
     assert len(conflicts) == 1
     assert conflicts[0].field == "year"
@@ -181,7 +181,7 @@ def test_merge_canonical_fields_emits_conflict_on_differing_values() -> None:
 def test_merge_canonical_fields_append_unions_deterministically() -> None:
     a = _merge_cand("A", {"ontology_terms": ["foo", "bar"], "datasets": ["dataset:d1"]})
     b = _merge_cand("B", {"ontology_terms": ["bar", "baz"], "datasets": ["dataset:d2", "dataset:d1"]})
-    merged, conflicts = _merge_canonical_fields([a, b], _PAPER_POLICY)
+    merged, conflicts = _merge_canonical_fields([a, b], _PAPER_POLICY, kind="paper")
     assert merged["ontology_terms"] == ["bar", "baz", "foo"]
     assert merged["datasets"] == ["dataset:d1", "dataset:d2"]
     assert conflicts == []
@@ -468,3 +468,34 @@ def test_plan_promote_calls_profile_readers_with_kind_profile(tmp_path, monkeypa
     assert captured["merge_policy_profile"] == PROMOTE_KIND_TOPIC.default_profile
     assert captured["body_sections_profile"] == PROMOTE_KIND_TOPIC.default_profile
     assert PROMOTE_KIND_TOPIC.default_profile != PROMOTE_KIND_PAPER.default_profile
+
+
+def test_field_conflict_carries_kind() -> None:
+    from science_tool.commons.promote import FieldConflict
+
+    c = FieldConflict(
+        slug="hypothesis",
+        kind="topic",
+        field="title",
+        candidates={"proj_a": "Hyp A", "proj_b": "Hyp B"},
+    )
+    assert c.kind == "topic"
+
+
+def test_prompt_resolve_uses_kind_in_display(monkeypatch, capsys) -> None:
+    from science_tool.commons.promote import FieldConflict, prompt_resolve
+
+    c = FieldConflict(
+        slug="my-theme",
+        kind="theme",
+        field="title",
+        candidates={"proj_a": "T A", "proj_b": "T B"},
+    )
+
+    # Simulate the user picking option 1.
+    monkeypatch.setattr("click.prompt", lambda *a, **k: "1")
+    prompt_resolve(c)
+
+    out = capsys.readouterr().out
+    assert "theme:my-theme" in out
+    assert "paper:" not in out

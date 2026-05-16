@@ -156,6 +156,7 @@ class PromoteCandidate:
 @dataclass(frozen=True, slots=True)
 class FieldConflict:
     slug: str
+    kind: Literal["paper", "topic", "theme"]
     field: str
     candidates: dict[str, Any]  # project_slug → value
 
@@ -278,7 +279,7 @@ def prompt_resolve(conflict: FieldConflict) -> Any:
     UI mirrors design §7.1. Returns the resolved value (a candidate value, a
     user-entered manual value, or raises `PromoteConflictAbort` on 'a' / Ctrl-C).
     """
-    click.echo(f'\nConflict for paper:{conflict.slug}, field "{conflict.field}":')
+    click.echo(f'\nConflict for {conflict.kind}:{conflict.slug}, field "{conflict.field}":')
     ordered = sorted(conflict.candidates.items())
     for idx, (slug, value) in enumerate(ordered, start=1):
         click.echo(f"  [{idx}] {slug}: {value!r}")
@@ -401,7 +402,7 @@ def plan_promote(
                     f"{source_path} → {target_path}; target already exists"
                 )
 
-        merged, conflicts = _merge_canonical_fields(classified, merge_policy)
+        merged, conflicts = _merge_canonical_fields(classified, merge_policy, kind=kind.kind)
 
         resolved_conflicts: list[ConflictResolution] = []
         for conflict in conflicts:
@@ -1247,6 +1248,8 @@ def _classify_entity(
 def _merge_canonical_fields(
     candidates: list[PromoteCandidate],
     merge_policy: dict[str, MergePolicy],
+    *,
+    kind: Literal["paper", "topic", "theme"],
 ) -> tuple[dict, list[FieldConflict]]:
     """Merge canonical_fields across N candidates of the same slug.
 
@@ -1283,6 +1286,7 @@ def _merge_canonical_fields(
             conflicts.append(
                 FieldConflict(
                     slug=present[0].slug,
+                    kind=kind,
                     field=key,
                     candidates={c.project_slug: c.canonical_fields[key] for c in present},
                 )
