@@ -859,31 +859,32 @@ def _normalize_slug_for_match(raw: str, kind: PromoteKindConfig) -> str:
     return stripped
 
 
-def _classify_paper_file_kind(
+def _classify_file_kind(
     frontmatter: dict,
-) -> Literal["paper", "skip-other-kind", "skip-other-id"]:
-    """Decide whether a file under `doc/papers/` is a paper candidate.
+    kind: PromoteKindConfig,
+) -> Literal["match", "skip-other-kind", "skip-other-id"]:
+    """Decide whether a file under `kind.source_subdirs` matches this kind.
 
-    Rule (design §6.3 step 2):
-    1. Explicit `kind: paper` or `type: paper` → paper.
-    2. Explicit `kind` / `type` with any other value → skip-other-kind.
-    3. No `kind` / `type`, `id` present and NOT starting with `paper:` →
-       skip-other-id (defense-in-depth; stronger declaration than directory
-       inference, but weaker than an explicit kind/type).
-    4. No `kind` / `type` and no contradictory `id` → infer from directory: paper.
-
-    Rules are checked in order: explicit kind/type wins over the id-prefix
-    check, so `{"id": "dataset:foo", "kind": "paper"}` returns "paper".
+    Rule order (design §4.1, Phase E §6.3 step 2):
+    1. Explicit `kind:` or `type:` equal to `kind.kind` -> match.
+    2. Explicit `kind` / `type` with any other value -> skip-other-kind.
+    3. No `kind` / `type`, `id` present and NOT starting with `kind.id_prefix` ->
+       skip-other-id.
+    4. Otherwise infer from directory: match.
     """
-    kind_val = frontmatter.get("kind") or frontmatter.get("type")
-    if kind_val == "paper":
-        return "paper"
-    if kind_val is not None:
+    explicit_values = [
+        frontmatter[key]
+        for key in ("kind", "type")
+        if key in frontmatter
+    ]
+    if any(value == kind.kind for value in explicit_values):
+        return "match"
+    if explicit_values:
         return "skip-other-kind"
     id_val = frontmatter.get("id")
-    if isinstance(id_val, str) and not id_val.startswith("paper:"):
+    if isinstance(id_val, str) and not id_val.startswith(kind.id_prefix):
         return "skip-other-id"
-    return "paper"
+    return "match"
 
 
 logger = logging.getLogger(__name__)
@@ -955,7 +956,7 @@ def _scan_project_papers(
         if "overlay_of" in fm:
             continue  # already promoted; idempotent skip
 
-        classification = _classify_paper_file_kind(fm)
+        classification = _classify_file_kind(fm, PROMOTE_KIND_PAPER)
         if classification == "skip-other-kind":
             logger.warning(
                 "%s: kind/type is not 'paper'; skipping (explicit non-paper)",

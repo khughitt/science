@@ -120,37 +120,88 @@ def test_normalize_slug_for_match_theme_returns_stem_as_is() -> None:
     assert _normalize_slug_for_match("my-theme", PROMOTE_KIND_THEME) == "my-theme"
 
 
-def test_classify_paper_file_kind_explicit_paper() -> None:
-    from science_tool.commons.promote import _classify_paper_file_kind
-    assert _classify_paper_file_kind({"kind": "paper"}) == "paper"
-    assert _classify_paper_file_kind({"type": "paper"}) == "paper"
+def test_classify_file_kind_existing_paper_explicit_paper() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, _classify_file_kind
+
+    assert _classify_file_kind({"kind": "paper"}, PROMOTE_KIND_PAPER) == "match"
+    assert _classify_file_kind({"type": "paper"}, PROMOTE_KIND_PAPER) == "match"
 
 
-def test_classify_paper_file_kind_explicit_other_kind() -> None:
-    from science_tool.commons.promote import _classify_paper_file_kind
-    assert _classify_paper_file_kind({"kind": "review-article"}) == "skip-other-kind"
-    assert _classify_paper_file_kind({"type": "dataset"}) == "skip-other-kind"
+def test_classify_file_kind_existing_paper_explicit_other_kind() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, _classify_file_kind
+
+    assert _classify_file_kind({"kind": "review-article"}, PROMOTE_KIND_PAPER) == "skip-other-kind"
+    assert _classify_file_kind({"type": "dataset"}, PROMOTE_KIND_PAPER) == "skip-other-kind"
+    assert _classify_file_kind({"kind": ""}, PROMOTE_KIND_PAPER) == "skip-other-kind"
+    assert _classify_file_kind({"type": ""}, PROMOTE_KIND_PAPER) == "skip-other-kind"
 
 
-def test_classify_paper_file_kind_no_kind_inferred_as_paper() -> None:
-    from science_tool.commons.promote import _classify_paper_file_kind
-    assert _classify_paper_file_kind({"title": "Foo"}) == "paper"
-    assert _classify_paper_file_kind({}) == "paper"
+def test_classify_file_kind_existing_paper_no_kind_inferred_as_match() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, _classify_file_kind
+
+    assert _classify_file_kind({"title": "Foo"}, PROMOTE_KIND_PAPER) == "match"
+    assert _classify_file_kind({}, PROMOTE_KIND_PAPER) == "match"
 
 
-def test_classify_paper_file_kind_non_paper_id_prefix() -> None:
-    from science_tool.commons.promote import _classify_paper_file_kind
-    assert _classify_paper_file_kind({"id": "dataset:foo"}) == "skip-other-id"
-    assert _classify_paper_file_kind({"id": "paper:Adams2025"}) == "paper"
+def test_classify_file_kind_existing_paper_non_paper_id_prefix() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, _classify_file_kind
+
+    assert _classify_file_kind({"id": "dataset:foo"}, PROMOTE_KIND_PAPER) == "skip-other-id"
+    assert _classify_file_kind({"id": "paper:Adams2025"}, PROMOTE_KIND_PAPER) == "match"
 
 
-def test_classify_paper_file_kind_explicit_kind_overrides_contradictory_id() -> None:
+def test_classify_file_kind_existing_paper_explicit_kind_overrides_contradictory_id() -> None:
     """Rule ordering: explicit `kind: paper` wins over a non-paper `id:` prefix
     (the id check is defense-in-depth against directory-inference, not
     against an explicit kind declaration)."""
-    from science_tool.commons.promote import _classify_paper_file_kind
-    assert _classify_paper_file_kind({"id": "dataset:foo", "kind": "paper"}) == "paper"
-    assert _classify_paper_file_kind({"id": "paper:Adams2025", "kind": "dataset"}) == "skip-other-kind"
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, _classify_file_kind
+
+    assert _classify_file_kind({"id": "dataset:foo", "kind": "paper"}, PROMOTE_KIND_PAPER) == "match"
+    assert _classify_file_kind({"id": "paper:Adams2025", "kind": "dataset"}, PROMOTE_KIND_PAPER) == "skip-other-kind"
+
+
+def test_classify_file_kind_paper_explicit_match() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, _classify_file_kind
+
+    assert _classify_file_kind({"kind": "paper"}, PROMOTE_KIND_PAPER) == "match"
+    assert _classify_file_kind({"type": "paper"}, PROMOTE_KIND_PAPER) == "match"
+    assert _classify_file_kind({"kind": "dataset", "type": "paper"}, PROMOTE_KIND_PAPER) == "match"
+
+
+def test_classify_file_kind_topic_explicit_match() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_TOPIC, _classify_file_kind
+
+    assert _classify_file_kind({"kind": "topic"}, PROMOTE_KIND_TOPIC) == "match"
+    assert _classify_file_kind({"type": "topic"}, PROMOTE_KIND_TOPIC) == "match"
+
+
+def test_classify_file_kind_topic_disagreeing_kind_is_skip_other_kind() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_TOPIC, _classify_file_kind
+
+    assert _classify_file_kind({"kind": "paper"}, PROMOTE_KIND_TOPIC) == "skip-other-kind"
+    assert _classify_file_kind({"type": "theme"}, PROMOTE_KIND_TOPIC) == "skip-other-kind"
+
+
+def test_classify_file_kind_topic_id_prefix_disagreement_is_skip_other_id() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_TOPIC, _classify_file_kind
+
+    assert _classify_file_kind({"id": "paper:Adams2025"}, PROMOTE_KIND_TOPIC) == "skip-other-id"
+    assert _classify_file_kind({"id": "topic:hypothesis"}, PROMOTE_KIND_TOPIC) == "match"
+
+
+def test_classify_file_kind_no_kind_inferred() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_TOPIC, _classify_file_kind
+
+    # No kind/type, no id -> infer "match" from directory placement.
+    assert _classify_file_kind({"title": "Foo"}, PROMOTE_KIND_TOPIC) == "match"
+
+
+def test_classify_file_kind_explicit_kind_overrides_contradictory_id() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, _classify_file_kind
+
+    # Rule ordering: explicit kind/type wins over id-prefix.
+    assert _classify_file_kind({"id": "dataset:foo", "kind": "paper"}, PROMOTE_KIND_PAPER) == "match"
+    assert _classify_file_kind({"id": "dataset:foo", "type": "paper"}, PROMOTE_KIND_PAPER) == "match"
 
 
 def test_parse_paper_file_returns_frontmatter_and_body(tmp_path) -> None:
