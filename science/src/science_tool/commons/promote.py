@@ -63,6 +63,46 @@ class PromoteKindConfig:
     eligibility_filter: Callable[[Mapping[str, Any]], "EligibilityVerdict"] | None
 
 
+PROMOTE_KIND_PAPER = PromoteKindConfig(
+    kind="paper",
+    source_subdirs=("doc/papers",),
+    overlay_dest_subdir="doc/papers",
+    commons_subdir="papers",
+    id_prefix="paper:",
+    slug_regex=re.compile(r"^[A-Za-z][A-Za-z0-9-]{1,63}$"),
+    slug_match="casefold",
+    mixin_schema_id="https://schemas.science/mixin-paper-2.0.json",
+    default_profile=default_profile_for_kind("paper"),
+    eligibility_filter=None,
+)
+
+PROMOTE_KIND_TOPIC = PromoteKindConfig(
+    kind="topic",
+    source_subdirs=("doc/topics", "doc/background/topics"),
+    overlay_dest_subdir="doc/topics",
+    commons_subdir="topics",
+    id_prefix="topic:",
+    slug_regex=re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$"),
+    slug_match="exact",
+    mixin_schema_id="https://schemas.science/mixin-topic-1.0.json",  # bumped to 2.0 in Task 21
+    default_profile=default_profile_for_kind("topic"),
+    eligibility_filter=None,
+)
+
+PROMOTE_KIND_THEME = PromoteKindConfig(
+    kind="theme",
+    source_subdirs=("doc/themes",),
+    overlay_dest_subdir="doc/themes",
+    commons_subdir="themes",
+    id_prefix="theme:",
+    slug_regex=re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$"),
+    slug_match="exact",
+    mixin_schema_id="https://schemas.science/mixin-theme-1.0.json",  # bumped to 2.0 in Task 22
+    default_profile=default_profile_for_kind("theme"),
+    eligibility_filter=None,  # set in Task 3
+)
+
+
 # --------------------------------------------------------------------------- #
 # Public dataclasses                                                          #
 # --------------------------------------------------------------------------- #

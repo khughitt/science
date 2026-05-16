@@ -46,3 +46,58 @@ def test_eligibility_verdict_enum_values() -> None:
     assert EligibilityVerdict.SKIP_SILENT.value == "skip_silent"
     assert EligibilityVerdict.FAIL.value == "fail"
     assert len(list(EligibilityVerdict)) == 3
+
+
+def test_promote_kind_paper_constant() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER
+
+    assert PROMOTE_KIND_PAPER.kind == "paper"
+    assert PROMOTE_KIND_PAPER.source_subdirs == ("doc/papers",)
+    assert PROMOTE_KIND_PAPER.overlay_dest_subdir == "doc/papers"
+    assert PROMOTE_KIND_PAPER.commons_subdir == "papers"
+    assert PROMOTE_KIND_PAPER.id_prefix == "paper:"
+    assert PROMOTE_KIND_PAPER.slug_match == "casefold"
+    assert PROMOTE_KIND_PAPER.eligibility_filter is None
+    assert "paper" in PROMOTE_KIND_PAPER.mixin_schema_id
+
+
+def test_promote_kind_topic_constant() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_TOPIC
+
+    assert PROMOTE_KIND_TOPIC.kind == "topic"
+    assert PROMOTE_KIND_TOPIC.source_subdirs == ("doc/topics", "doc/background/topics")
+    assert PROMOTE_KIND_TOPIC.overlay_dest_subdir == "doc/topics"
+    assert PROMOTE_KIND_TOPIC.commons_subdir == "topics"
+    assert PROMOTE_KIND_TOPIC.id_prefix == "topic:"
+    assert PROMOTE_KIND_TOPIC.slug_match == "exact"
+    assert PROMOTE_KIND_TOPIC.eligibility_filter is None
+    assert "topic" in PROMOTE_KIND_TOPIC.mixin_schema_id
+
+
+def test_promote_kind_theme_constant() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_THEME
+
+    assert PROMOTE_KIND_THEME.kind == "theme"
+    assert PROMOTE_KIND_THEME.source_subdirs == ("doc/themes",)
+    assert PROMOTE_KIND_THEME.overlay_dest_subdir == "doc/themes"
+    assert PROMOTE_KIND_THEME.commons_subdir == "themes"
+    assert PROMOTE_KIND_THEME.id_prefix == "theme:"
+    assert PROMOTE_KIND_THEME.slug_match == "exact"
+    # eligibility_filter is set in Task 3; this test only checks the constant
+    # exists with the kind-specific structural fields.
+    assert "theme" in PROMOTE_KIND_THEME.mixin_schema_id
+
+
+def test_three_kinds_have_distinct_id_prefixes() -> None:
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        PROMOTE_KIND_THEME,
+        PROMOTE_KIND_TOPIC,
+    )
+
+    prefixes = {
+        PROMOTE_KIND_PAPER.id_prefix,
+        PROMOTE_KIND_TOPIC.id_prefix,
+        PROMOTE_KIND_THEME.id_prefix,
+    }
+    assert prefixes == {"paper:", "topic:", "theme:"}
