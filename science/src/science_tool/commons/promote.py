@@ -18,20 +18,49 @@ import secrets
 import subprocess
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Mapping
 
 import click
 import yaml
 
 from science_model.entity_schema import (
     MergePolicy,
+    ProfileString,
     default_profile_for_kind,
     read_canonical_body_sections,
     read_merge_policy,
 )
 from science_tool.commons.config import resolve_project_by_id
 from science_tool.commons.errors import PromoteCandidateError, PromoteConflictAbort, PromoteInputError, PromoteWriteError
+
+
+class EligibilityVerdict(Enum):
+    ELIGIBLE = "eligible"
+    SKIP_SILENT = "skip_silent"
+    FAIL = "fail"
+
+
+@dataclass(frozen=True, slots=True)
+class PromoteKindConfig:
+    """Per-kind configuration for the promote pipeline.
+
+    One instance per kind ("paper", "topic", "theme"). Pure data plus an
+    optional eligibility-filter callable; threaded through discovery /
+    plan / apply via the `kind` parameter or `PromotePlan.kind`.
+    """
+
+    kind: Literal["paper", "topic", "theme"]
+    source_subdirs: tuple[str, ...]
+    overlay_dest_subdir: str
+    commons_subdir: str
+    id_prefix: str
+    slug_regex: re.Pattern[str]
+    slug_match: Literal["casefold", "exact"]
+    mixin_schema_id: str
+    default_profile: "ProfileString"
+    eligibility_filter: Callable[[Mapping[str, Any]], "EligibilityVerdict"] | None
 
 
 # --------------------------------------------------------------------------- #
