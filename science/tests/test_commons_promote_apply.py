@@ -82,6 +82,61 @@ def test_write_audit_log_writes_yaml_with_expected_shape(tmp_path) -> None:
     assert "rollback" in data
 
 
+def test_build_project_rollback_command_derives_project_root_from_kind_depth(tmp_path) -> None:
+    """A deeper overlay_dest_subdir must still resolve project_root correctly."""
+    import re
+
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_TOPIC,
+        PromoteKindConfig,
+        _build_project_rollback_command,
+    )
+
+    deep_kind = PromoteKindConfig(
+        kind="topic",
+        source_subdirs=("doc/datasets/promoted",),
+        overlay_dest_subdir="doc/datasets/promoted",
+        commons_subdir="topics",
+        id_prefix="topic:",
+        slug_regex=re.compile(r"^[a-z0-9-]+$"),
+        slug_match="exact",
+        mixin_schema_id=PROMOTE_KIND_TOPIC.mixin_schema_id,
+        default_profile=PROMOTE_KIND_TOPIC.default_profile,
+        eligibility_filter=None,
+    )
+    entries = [
+        {"path": str(tmp_path / "doc" / "datasets" / "promoted" / "x.md")},
+        {"path": str(tmp_path / "doc" / "datasets" / "promoted" / "y.md")},
+    ]
+    cmd = _build_project_rollback_command(entries, deep_kind)
+    assert (
+        cmd
+        == f"git -C {tmp_path} checkout HEAD -- "
+        "doc/datasets/promoted/x.md doc/datasets/promoted/y.md"
+    )
+
+
+def test_build_project_rollback_command_includes_unlinked_source(tmp_path) -> None:
+    """Flatten case: an entry with `unlinked_source` extends the rollback to
+    cover both target and source paths."""
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_TOPIC,
+        _build_project_rollback_command,
+    )
+
+    entries = [
+        {
+            "path": str(tmp_path / "doc" / "topics" / "primitives.md"),
+            "unlinked_source": str(
+                tmp_path / "doc" / "background" / "topics" / "primitives.md"
+            ),
+        },
+    ]
+    cmd = _build_project_rollback_command(entries, PROMOTE_KIND_TOPIC)
+    assert "doc/topics/primitives.md" in cmd
+    assert "doc/background/topics/primitives.md" in cmd
+
+
 def test_rollback_step5_deletes_tags_and_restores_path_limited(tmp_path) -> None:
     from science_tool.commons.promote import _rollback_step5
 

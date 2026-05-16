@@ -1502,17 +1502,35 @@ def _git(commons_root: Path, *args: str, check: bool = True) -> subprocess.Compl
     )
 
 
-def _build_project_rollback_command(overlay_rewrites: list[dict]) -> str:
+def _build_project_rollback_command(
+    overlay_rewrites: list[dict],
+    kind: PromoteKindConfig,
+) -> str:
     """Build a concrete `git checkout HEAD -- <paths>` command for one project,
     given its overlay_rewrites entries from the audit log. Each entry's `path`
-    is an absolute `<project_root>/doc/papers/<file>.md`; we strip the trailing
-    `doc/papers/<file>.md` to recover the project_root."""
+    is the absolute target overlay path. Optional `unlinked_source` (flatten
+    case) is added to the rollback set so the source-file deletion can also be
+    reverted.
+
+    Project root is derived by stripping len(overlay_dest_subdir.parts)+1
+    segments from the path (last segment is the file; preceding segments are
+    the overlay_dest_subdir).
+    """
     if not overlay_rewrites:
         return ""
     first_path = Path(overlay_rewrites[0]["path"])
-    project_root = first_path.parents[2]
-    rels = sorted(str(Path(entry["path"]).relative_to(project_root)) for entry in overlay_rewrites)
-    return f"git -C {project_root} checkout HEAD -- {' '.join(rels)}"
+    parents_to_strip = len(Path(kind.overlay_dest_subdir).parts) + 1
+    project_root = first_path.parents[parents_to_strip - 1]
+
+    paths: list[str] = []
+    for entry in overlay_rewrites:
+        target = Path(entry["path"])
+        paths.append(str(target.relative_to(project_root)))
+        if "unlinked_source" in entry:
+            source = Path(entry["unlinked_source"])
+            paths.append(str(source.relative_to(project_root)))
+    paths_sorted = sorted(set(paths))
+    return f"git -C {project_root} checkout HEAD -- {' '.join(paths_sorted)}"
 
 
 def _render_audit_log_yaml(
@@ -1582,7 +1600,7 @@ def _render_audit_log_yaml(
             # overlay path (`<root>/doc/papers/<file>`) and list every rewritten
             # path so the operator can restore exactly the touched files.
             "projects": {
-                slug: _build_project_rollback_command(rewrites["overlay_rewrites"])
+                slug: _build_project_rollback_command(rewrites["overlay_rewrites"], result.kind)
                 for slug, rewrites in projects_touched.items()
             },
         },
