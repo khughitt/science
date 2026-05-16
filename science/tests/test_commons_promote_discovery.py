@@ -93,3 +93,124 @@ def test_classify_paper_file_kind_explicit_kind_overrides_contradictory_id() -> 
     from science_tool.commons.promote import _classify_paper_file_kind
     assert _classify_paper_file_kind({"id": "dataset:foo", "kind": "paper"}) == "paper"
     assert _classify_paper_file_kind({"id": "paper:Adams2025", "kind": "dataset"}) == "skip-other-kind"
+
+
+def test_parse_paper_file_returns_frontmatter_and_body(tmp_path) -> None:
+    from science_tool.commons.promote import _parse_paper_file
+    p = tmp_path / "Adams2025.md"
+    p.write_text(
+        "---\n"
+        "id: paper:Adams2025\n"
+        "title: Hello\n"
+        "---\n"
+        "\n"
+        "## Key Findings\n\nOne.\n",
+        encoding="utf-8",
+    )
+    fm, body = _parse_paper_file(p)
+    assert fm["id"] == "paper:Adams2025"
+    assert fm["title"] == "Hello"
+    assert "## Key Findings" in body
+
+
+def test_parse_paper_file_no_frontmatter_raises(tmp_path) -> None:
+    from science_tool.commons.promote import _parse_paper_file
+    from science_tool.commons.errors import PromoteCandidateError
+    p = tmp_path / "broken.md"
+    p.write_text("just a body, no frontmatter\n", encoding="utf-8")
+    with pytest.raises(PromoteCandidateError, match="no frontmatter"):
+        _parse_paper_file(p)
+
+
+def test_parse_paper_file_malformed_yaml_raises(tmp_path) -> None:
+    from science_tool.commons.promote import _parse_paper_file
+    from science_tool.commons.errors import PromoteCandidateError
+    p = tmp_path / "broken.md"
+    p.write_text("---\nid: : :\n---\nbody\n", encoding="utf-8")
+    with pytest.raises(PromoteCandidateError, match="frontmatter parse"):
+        _parse_paper_file(p)
+
+
+def test_scan_project_papers_walks_doc_papers(tmp_path) -> None:
+    from science_tool.commons.promote import _scan_project_papers
+
+    papers = tmp_path / "doc" / "papers"
+    papers.mkdir(parents=True)
+    (papers / "Adams2025.md").write_text(
+        "---\nid: paper:Adams2025\ntitle: A\n---\n\nbody\n",
+        encoding="utf-8",
+    )
+    (papers / "Huh2024.md").write_text(
+        "---\nid: paper:Huh2024\ntitle: H\nkind: paper\n---\n",
+        encoding="utf-8",
+    )
+
+    candidates, failures = _scan_project_papers(tmp_path, "test-project")
+    bibkeys = sorted(c.bibkey for c in candidates)
+    assert bibkeys == ["Adams2025", "Huh2024"]
+    assert failures == []
+
+
+def test_scan_project_papers_skips_already_promoted(tmp_path) -> None:
+    from science_tool.commons.promote import _scan_project_papers
+    papers = tmp_path / "doc" / "papers"
+    papers.mkdir(parents=True)
+    (papers / "Done2024.md").write_text(
+        "---\nid: paper:Done2024\noverlay_of: paper:Done2024\npin_version: '1.0.0'\n---\n",
+        encoding="utf-8",
+    )
+    candidates, failures = _scan_project_papers(tmp_path, "test-project")
+    assert candidates == []
+    assert failures == []
+
+
+def test_scan_project_papers_records_failures_without_aborting(tmp_path) -> None:
+    from science_tool.commons.promote import _scan_project_papers
+    papers = tmp_path / "doc" / "papers"
+    papers.mkdir(parents=True)
+    (papers / "Good2024.md").write_text(
+        "---\nid: paper:Good2024\ntitle: G\n---\n",
+        encoding="utf-8",
+    )
+    (papers / "Broken2024.md").write_text(
+        "no frontmatter\n",
+        encoding="utf-8",
+    )
+    candidates, failures = _scan_project_papers(tmp_path, "test-project")
+    assert [c.bibkey for c in candidates] == ["Good2024"]
+    assert len(failures) == 1
+    assert failures[0].source_path.name == "Broken2024.md"
+    assert failures[0].error_class == "PromoteCandidateError"
+
+
+def test_scan_project_papers_skips_other_kind_with_warning(tmp_path, caplog) -> None:
+    import logging
+    from science_tool.commons.promote import _scan_project_papers
+    papers = tmp_path / "doc" / "papers"
+    papers.mkdir(parents=True)
+    (papers / "Misfiled.md").write_text(
+        "---\nid: paper:Misfiled\ntitle: X\nkind: dataset\n---\n",
+        encoding="utf-8",
+    )
+    caplog.set_level(logging.WARNING, logger="science_tool.commons.promote")
+    candidates, failures = _scan_project_papers(tmp_path, "test-project")
+    assert candidates == []
+    assert failures == []
+    assert "kind/type is not 'paper'" in caplog.text
+
+
+def test_scan_project_papers_fails_when_id_does_not_match_stem(tmp_path) -> None:
+    """Source files with an explicit `id:` that disagrees with the filename
+    stem are rejected at discovery (design §4.1.3)."""
+    from science_tool.commons.promote import _scan_project_papers
+    papers = tmp_path / "doc" / "papers"
+    papers.mkdir(parents=True)
+    (papers / "Adams2025.md").write_text(
+        "---\nid: paper:WrongStem\ntitle: A\n---\n",
+        encoding="utf-8",
+    )
+    candidates, failures = _scan_project_papers(tmp_path, "test-project")
+    assert candidates == []
+    assert len(failures) == 1
+    assert failures[0].source_path.name == "Adams2025.md"
+    assert "does not match filename stem" in failures[0].error_message

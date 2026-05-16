@@ -12,11 +12,14 @@ This module owns:
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Literal
+
+import yaml
 
 from science_tool.commons.errors import PromoteCandidateError
 
@@ -166,6 +169,13 @@ def apply_promote(
 
 _BIBKEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]{1,63}$")
 
+# Sentinel keys for stashing raw frontmatter+body in PromoteCandidate.project_only_body
+# during discovery, to be consumed by _classify_entity in plan_promote (Task 11).
+# Defined as module-level constants so the coupling between discovery and
+# classification is greppable rather than hidden in two string literals.
+_RAW_FRONTMATTER_KEY = "__raw_frontmatter__"
+_RAW_BODY_KEY = "__raw_body__"
+
 
 def _normalize_bibkey_for_match(raw: str) -> str:
     """Strip `.md`, casefold for dedup grouping. Raises PromoteCandidateError on
@@ -209,3 +219,144 @@ def _classify_paper_file_kind(
     if isinstance(id_val, str) and not id_val.startswith("paper:"):
         return "skip-other-id"
     return "paper"
+
+
+logger = logging.getLogger(__name__)
+
+
+def _parse_paper_file(path: Path) -> tuple[dict, str]:
+    """Return (frontmatter_dict, body_text). Raises PromoteCandidateError on
+    parse failure, unreadable file, or missing frontmatter delimiters."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise PromoteCandidateError(
+            f"unreadable file: {exc}", path=path
+        ) from exc
+    lines = text.splitlines(keepends=False)
+    if not lines or lines[0].strip() != "---":
+        raise PromoteCandidateError("no frontmatter (missing leading ---)", path=path)
+    closing_idx: int | None = None
+    for idx, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            closing_idx = idx
+            break
+    if closing_idx is None:
+        raise PromoteCandidateError("no frontmatter (missing closing ---)", path=path)
+    yaml_block = "\n".join(lines[1:closing_idx])
+    try:
+        fm = yaml.safe_load(yaml_block) or {}
+    except yaml.YAMLError as exc:
+        raise PromoteCandidateError(
+            f"frontmatter parse error: {exc}", path=path
+        ) from exc
+    if not isinstance(fm, dict):
+        raise PromoteCandidateError(
+            "frontmatter is not a mapping", path=path
+        )
+    body = "\n".join(lines[closing_idx + 1 :])
+    if text.endswith("\n") and not body.endswith("\n"):
+        body += "\n"
+    return fm, body
+
+
+def _scan_project_papers(
+    project_root: Path, project_slug: str
+) -> tuple[list[PromoteCandidate], list[FailedCandidate]]:
+    """Walk `<project_root>/doc/papers/*.md`, classify each file, return
+    (candidates, failures). Skips already-promoted files and explicit non-paper
+    kinds. Per-file failures become FailedCandidate records; the walk continues."""
+    candidates: list[PromoteCandidate] = []
+    failures: list[FailedCandidate] = []
+    papers_dir = project_root / "doc" / "papers"
+    if not papers_dir.is_dir():
+        return candidates, failures
+
+    for md_path in sorted(papers_dir.glob("*.md")):
+        try:
+            fm, body = _parse_paper_file(md_path)
+        except PromoteCandidateError as exc:
+            failures.append(
+                FailedCandidate(
+                    bibkey=md_path.stem,
+                    project_slug=project_slug,
+                    source_path=md_path,
+                    error_class="PromoteCandidateError",
+                    error_message=str(exc),
+                )
+            )
+            continue
+
+        if "overlay_of" in fm:
+            continue  # already promoted; idempotent skip
+
+        classification = _classify_paper_file_kind(fm)
+        if classification == "skip-other-kind":
+            logger.warning(
+                "%s: kind/type is not 'paper'; skipping (explicit non-paper)",
+                md_path,
+            )
+            continue
+        if classification == "skip-other-id":
+            logger.warning(
+                "%s: id prefix is not 'paper:'; skipping (explicit non-paper id)",
+                md_path,
+            )
+            continue
+
+        # Commons / overlay adapters derive ids from filename stems case-
+        # sensitively and require frontmatter id to match the stem exactly
+        # (adapter.py:149, overlay.py:114). Promote inherits the same rule —
+        # the source case is canonical (design §4.1.3). If the source carries
+        # an explicit `id:` that disagrees with its filename stem, that's a
+        # bug in the source file, not something promote should silently
+        # rewrite: fail the candidate so the user can fix it.
+        explicit_id = fm.get("id")
+        if explicit_id is not None and explicit_id != f"paper:{md_path.stem}":
+            failures.append(
+                FailedCandidate(
+                    bibkey=md_path.stem,
+                    project_slug=project_slug,
+                    source_path=md_path,
+                    error_class="PromoteCandidateError",
+                    error_message=(
+                        f"frontmatter id {explicit_id!r} does not match filename "
+                        f"stem {md_path.stem!r}; expected id 'paper:{md_path.stem}'"
+                    ),
+                )
+            )
+            continue
+
+        bibkey_source = md_path.stem
+        try:
+            bibkey_normalized = _normalize_bibkey_for_match(bibkey_source)
+        except PromoteCandidateError as exc:
+            failures.append(
+                FailedCandidate(
+                    bibkey=bibkey_source,
+                    project_slug=project_slug,
+                    source_path=md_path,
+                    error_class="PromoteCandidateError",
+                    error_message=str(exc),
+                )
+            )
+            continue
+
+        # canonical_fields / project_only_fields / body splits are filled in
+        # later by `_classify_entity` (Task 11). For now we stash raw frontmatter
+        # + body so discovery is independent of merge-policy lookup.
+        candidates.append(
+            PromoteCandidate(
+                bibkey=bibkey_source,
+                bibkey_normalized=bibkey_normalized,
+                project_slug=project_slug,
+                project_root=project_root,
+                overlay_source_path=md_path,
+                canonical_fields={},
+                project_only_fields={},
+                canonical_body={},
+                project_only_body={_RAW_FRONTMATTER_KEY: fm, _RAW_BODY_KEY: body},
+            )
+        )
+
+    return candidates, failures
