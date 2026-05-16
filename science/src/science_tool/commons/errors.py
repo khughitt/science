@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 
 class CommonsError(Exception):
@@ -179,6 +180,39 @@ class PromoteCandidateError(CommonsError):
         super().__init__(message)
         self.slug = slug
         self.path = path
+
+
+class PromoteValidationError(CommonsError):
+    """Canonical content or an overlay failed schema validation at the end
+    of `plan_promote`. Raised BEFORE any I/O — no rollback needed.
+
+    Carries `decision_slug` (the slug whose plan triggered the failure),
+    `target_kind` ("canonical" or "overlay"), `project_id` (overlay only —
+    which project's overlay failed), and `schema_message` (the underlying
+    jsonschema error string).
+    """
+
+    def __init__(
+        self,
+        *,
+        decision_slug: str,
+        target_kind: Literal["canonical", "overlay"],
+        project_id: str | None,
+        schema_message: str,
+    ) -> None:
+        scope = (
+            f"{target_kind}"
+            if project_id is None
+            else f"{target_kind} in project {project_id!r}"
+        )
+        super().__init__(
+            f"plan-time validation failed for {decision_slug!r} ({scope}): "
+            f"{schema_message}"
+        )
+        self.decision_slug = decision_slug
+        self.target_kind = target_kind
+        self.project_id = project_id
+        self.schema_message = schema_message
 
 
 class PromoteConflictAbort(CommonsError):
