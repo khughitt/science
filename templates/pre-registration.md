@@ -40,16 +40,17 @@ guesses.
 
 Out of scope: operational and QA thresholds (minimum sample size, MCMC
 convergence checks like R-hat / ESS, leakage / suspicious-result bounds,
-QC floors, runtime limits). Those live in `## Methods`, `## Known
-Limitations`, or `## Suspicious/Unexpected Result Plan` with their own
-rationale — they are not interpretive claims about expected biology.
+QC floors, runtime limits). Those live in `## Known Limitations`,
+`## Suspicious/Unexpected Result Plan`, or the paired analysis-plan doc
+referenced by `spec:` in frontmatter — they are not interpretive claims
+about expected biology.
 
 ### Evidence tiers
 
 | Tier | What it means | Pre-data gate allowed? |
 |---|---|---|
-| `acknowledged` | Parameter known to be relevant; no estimate authored. `expected:` is null and `provenance:` is empty. Records a known-unknown for transparency and surfaces it as a graph-visible uncertainty node. | **No.** Cannot bind a gate — there is no number to gate on. Forces explicit treatment of the unknown in interpretation rather than silent omission. |
-| `hint` | Number supported by literature only, OR by 1–2 own analyses on disparate datasets. Could be real; not yet validated against confounding, batch effect, or technical artifact. | **Soft only.** A "soft" gate has a wider expected range, not a movable threshold. Original gate is always reported in the verdict, including for failures. Any post-data threshold change requires an amendment or a fresh pre-reg, and the recalibrated gate cannot support a confirmatory claim for the same analysis. |
+| `acknowledged` | Parameter known to be relevant; no estimate authored. `expected.central` and `expected.range` are null (`direction:` may still carry meaning, e.g., `unsigned` or `unknown`); `provenance:` is empty. Records a known-unknown for transparency in a machine-readable form, available for later tooling that extracts uncertainty nodes. (No parser reads these blocks today — the structure is forward-compatible.) | **No.** Cannot bind a gate — there is no number to gate on. Forces explicit treatment of the unknown in interpretation rather than silent omission. |
+| `hint` | Number supported by literature only, OR by one own-analysis on a single dataset, OR by two own-analyses on disparate datasets. Could be real; not yet validated against confounding, batch effect, or technical artifact. | **Soft only.** A "soft" gate has a wider expected range, not a movable threshold. Original gate is always reported in the verdict, including for failures. Any post-data threshold change requires an amendment or a fresh pre-reg, and the recalibrated gate cannot support a confirmatory claim for the same analysis. |
 | `calibrated` | Number supported by 3+ own analyses on disparate datasets, enumerated in `provenance:`. The 3+ requirement is the threshold for "real distribution, not technical artifact." | **Yes.** Narrow gates permitted; cite the 3+ in provenance. |
 
 **On "soft" vs. "movable":** Soft gates lower evidential weight (a failure is
@@ -128,7 +129,7 @@ Worked examples:
     - "no MM scRNA cohort has measured per-patient φ_p at the cell-count scale of the planned fit"
     - "expected magnitude of cross-patient variation in φ_p (1.5× vs 10× vs 50×?)"
     - "whether φ_p variation is dominated by biology (cell-cycle composition, malignancy stage) or technical capture"
-  gate_use: "No gate. Recorded as a known unknown so PPC-adequacy interpretation does not silently assume shared dispersion. Surfaces as a graph-visible uncertainty node for follow-up calibration."
+  gate_use: "No gate. Recorded as a known unknown so PPC-adequacy interpretation does not silently assume shared dispersion. Machine-readable for later tooling that extracts uncertainty nodes."
 ```
 
 The β example would *not* clear a `calibrated` tier — only two own-analyses
@@ -141,7 +142,7 @@ expectations for this parameter.
 The φ_p example is `acknowledged` not `hint` because no numerical estimate
 is authored — we know the parameter matters but have no prior data to
 commit to. Acknowledged blocks should be common in early-stage projects;
-they make graph-visible the "what we don't know" surface.
+they make the "what we don't know" surface machine-readable for later tooling.
 
 If a pre-reg has zero numerical commitments — e.g., a purely qualitative
 "we expect direction X" registration — this section may be omitted, but
@@ -168,9 +169,10 @@ specificity from the criterion.
 
 **Operational / QA thresholds are out of scope** for this binding rule:
 minimum sample size, MCMC convergence checks (R-hat, ESS), leakage /
-suspicious-result bounds, QC floors, and runtime limits live in `## Methods`,
-`## Known Limitations`, or `## Suspicious/Unexpected Result Plan` with their
-own rationale, and do not require Expectations blocks.
+suspicious-result bounds, QC floors, and runtime limits live in
+`## Known Limitations`, `## Suspicious/Unexpected Result Plan`, or the
+paired analysis-plan doc (`spec:` in frontmatter) with their own rationale,
+and do not require Expectations blocks.
 
 **Soft gates are not movable gates.** A criterion citing a `hint`-tier
 expectation has wider acceptance bands authored *before* data arrives. If

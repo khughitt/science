@@ -134,10 +134,11 @@ drive an `## Expectations` block per parameter through § 2a.
 
 Operational and QA thresholds are out of scope for § 2a: minimum sample
 size, MCMC convergence checks (R-hat, ESS), leakage / suspicious-result
-bounds, QC floors, runtime limits. These live in `## Methods`, `## Known
-Limitations`, or `## Suspicious/Unexpected Result Plan` with their own
-rationale. They are not interpretive claims about expected biology and do
-not need Expectations blocks.
+bounds, QC floors, runtime limits. These live in `## Known Limitations`,
+`## Suspicious/Unexpected Result Plan`, or the paired analysis-plan doc
+(`spec:` in frontmatter) with their own rationale. They are not
+interpretive claims about expected biology and do not need Expectations
+blocks.
 
 Also surface *known-relevant parameters with no estimate* — parameters
 the analysis depends on but for which no prior data supports a numerical
@@ -155,7 +156,9 @@ through:
 2. **State the central guess, range, and direction.** If the user can name
    the parameter as analysis-relevant but cannot honestly state a central
    value or range, this is an `acknowledged` block — skip to step 5 with
-   `expected: null` and `provenance: []`.
+   `expected.central` and `expected.range` set to null. `direction:` can
+   still carry meaning (e.g., `unsigned` or `unknown`); `provenance:` is
+   an empty list.
 3. **Enumerate the evidence the guess rests on.** For each source:
    - cohort/dataset/paper-key
    - reported estimate (value or range)
@@ -166,7 +169,7 @@ through:
    | Tier | Trigger |
    |---|---|
    | `acknowledged` | Parameter is analysis-relevant but no estimate is authored. `provenance:` is empty, `expected:` is null. Records a known unknown. |
-   | `hint` | Literature-only support, OR 1–2 own-analyses on disparate datasets. |
+   | `hint` | Literature-only support, OR one own-analysis on a single dataset, OR two own-analyses on disparate datasets. |
    | `calibrated` | 3+ own-analyses on disparate datasets, all enumerated in `provenance:`. The disparate-datasets requirement is the threshold for "real distribution, not technical artifact / batch effect / single-cohort idiosyncrasy." |
 
 5. **Surface unknowns explicitly.** Ask the user to name at least one thing they
@@ -188,9 +191,10 @@ Authoring guidance:
 - If the user proposes a number with no enumerable provenance, do not
   write it into the pre-reg. Either obtain provenance (promoting to
   `hint`) or, if the parameter is genuinely relevant but unestimable,
-  author it as `acknowledged` with `expected: null`. There is no
-  "invalid" tier — pre-reg material requires either provenance or an
-  honest declaration of ignorance.
+  author it as `acknowledged` with `expected.central` and `expected.range`
+  null and `provenance: []`. There is no "invalid" tier — pre-reg
+  material requires either provenance or an honest declaration of
+  ignorance.
 - If only one or two own-analyses or literature claims support the guess,
   this is `hint`. Hint-tier numbers are fine to *register* (better than
   implicit expectations) — but any decision criterion that cites them
@@ -204,9 +208,11 @@ Authoring guidance:
   author `calibrated` expectations").
 - Encourage authoring `acknowledged` blocks for parameters the user
   *knows* matter but cannot estimate. These make the project's
-  uncertainty surface graph-visible and prevent unknown parameters from
-  silently affecting interpretation. Early-stage projects should have
-  more `acknowledged` blocks than `calibrated` ones; that's healthy.
+  uncertainty surface machine-readable (forward-compatible with later
+  tooling that extracts uncertainty nodes; no parser reads them today)
+  and prevent unknown parameters from silently affecting interpretation.
+  Early-stage projects should have more `acknowledged` blocks than
+  `calibrated` ones; that's healthy.
 
 ### 3. Define Decision Criteria
 
@@ -221,8 +227,9 @@ an Expectations block via that block's `gate_use:` field. Three rules:
 - **Operational / QA thresholds are out of scope.** Minimum sample size,
   MCMC convergence checks (R-hat, ESS), leakage / suspicious-result
   bounds, QC floors, and runtime limits do not need Expectations blocks;
-  they live in `## Methods`, `## Known Limitations`, or `## Suspicious/
-  Unexpected Result Plan` with their own rationale.
+  they live in `## Known Limitations`, `## Suspicious/Unexpected Result
+  Plan`, or the paired analysis-plan doc (`spec:` in frontmatter) with
+  their own rationale.
 - **`hint`-backed criteria must have a wider acceptance range authored up
   front.** "Soft" gates lower the evidential weight of both pass and fail
   (a hint-backed pass is less probative; a hint-backed fail is less
