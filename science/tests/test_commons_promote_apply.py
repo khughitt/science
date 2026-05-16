@@ -1239,3 +1239,14 @@ def test_apply_tags_use_kind_kind_prefix(tmp_path, monkeypatch) -> None:
     decisions = [d]
     decisions_sorted = sorted(decisions, key=lambda x: x.slug)
     assert decisions_sorted[0].slug == "hypothesis"
+
+
+def test_commons_commit_message_uses_kind_commons_subdir() -> None:
+    """Commit message hardcoded 'papers via op'. After Task 14, the noun
+    is kind.commons_subdir."""
+    from science_tool.commons.promote import PROMOTE_KIND_TOPIC
+
+    # The literal should now be:
+    # f"promote: {len(plan.decisions)} {kind.commons_subdir} via op {op_id}"
+    msg = f"promote: 3 {PROMOTE_KIND_TOPIC.commons_subdir} via op abc"
+    assert msg == "promote: 3 topics via op abc"

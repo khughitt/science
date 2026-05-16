@@ -742,7 +742,7 @@ def apply_promote(
                 commons_root,
                 "commit",
                 "-m",
-                f"promote: {len(plan.decisions)} papers via op {op_id}",
+                f"promote: {len(plan.decisions)} {plan.kind.commons_subdir} via op {op_id}",
                 "--",
                 *rel_paths,
             )
