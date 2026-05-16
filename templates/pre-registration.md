@@ -30,19 +30,34 @@ intuitions and qualitative shape claims. -->
 
 <!-- Structured per-parameter expectations with explicit evidence provenance.
 
-Every numerical commitment that an `## Decision Criteria` threshold references
-should appear here as its own block. The goal is to make the *epistemic basis*
-of each expectation auditable before data arrives — and to prevent pre-data
-numerical commitments from masquerading as rigor when they are in fact
-extrapolations from one cohort or thin-air guesses.
+Every *interpretive* numerical commitment in `## Decision Criteria` — i.e., a
+threshold that interprets what an observed effect size, CI, or posterior
+quantity means for the hypothesis — should appear here as its own block. The
+goal is to make the *epistemic basis* of each expectation auditable before
+data arrives, and to prevent pre-data numerical commitments from masquerading
+as rigor when they are in fact extrapolations from one cohort or thin-air
+guesses.
+
+Out of scope: operational and QA thresholds (minimum sample size, MCMC
+convergence checks like R-hat / ESS, leakage / suspicious-result bounds,
+QC floors, runtime limits). Those live in `## Methods`, `## Known
+Limitations`, or `## Suspicious/Unexpected Result Plan` with their own
+rationale — they are not interpretive claims about expected biology.
 
 ### Evidence tiers
 
 | Tier | What it means | Pre-data gate allowed? |
 |---|---|---|
-| `invalid` | Number pulled from intuition, narrative reasoning, or untraceable source. | **No.** Cannot anchor any decision criterion. Either upgrade the tier with provenance or remove the commitment. |
-| `hint` | Number supported by literature only, OR by one own-analysis on a single dataset. Could be real; not yet validated for robustness against confounding, batch effect, or technical artifact. | **Soft only.** Use wide CIs, conservative thresholds, and treat the gate as recalibratable post-data. Do *not* author a narrow PPC/CI/effect-size threshold from a `hint`. |
+| `acknowledged` | Parameter known to be relevant; no estimate authored. `expected:` is null and `provenance:` is empty. Records a known-unknown for transparency and surfaces it as a graph-visible uncertainty node. | **No.** Cannot bind a gate — there is no number to gate on. Forces explicit treatment of the unknown in interpretation rather than silent omission. |
+| `hint` | Number supported by literature only, OR by 1–2 own analyses on disparate datasets. Could be real; not yet validated against confounding, batch effect, or technical artifact. | **Soft only.** A "soft" gate has a wider expected range, not a movable threshold. Original gate is always reported in the verdict, including for failures. Any post-data threshold change requires an amendment or a fresh pre-reg, and the recalibrated gate cannot support a confirmatory claim for the same analysis. |
 | `calibrated` | Number supported by 3+ own analyses on disparate datasets, enumerated in `provenance:`. The 3+ requirement is the threshold for "real distribution, not technical artifact." | **Yes.** Narrow gates permitted; cite the 3+ in provenance. |
+
+**On "soft" vs. "movable":** Soft gates lower evidential weight (a failure is
+less catastrophic; a pass is less probative). They do *not* grant permission
+to revise the threshold after seeing data. If a soft gate fails, the analysis
+either accepts the failure under the registered terms or invokes the
+amendment procedure — making the analysis path-B / exploratory for the
+recalibrated threshold, not confirmatory.
 
 ### Per-expectation block
 
@@ -52,13 +67,13 @@ for anything the schema can't capture.
 ```yaml
 - parameter: "<name of the quantity, with units if relevant>"
   expected:
-    central: "<best single guess, with sign>"
-    range:   "<plausible range, e.g., [+0.05, +1.0]>"
+    central: "<best single guess, with sign>"      # null for `acknowledged`
+    range:   "<plausible range, e.g., [+0.05, +1.0]>"  # null for `acknowledged`
     direction: "<positive | negative | either | unsigned>"
-  evidence_tier: <invalid | hint | calibrated>
+  evidence_tier: <acknowledged | hint | calibrated>
   provenance:
-    # One entry per supporting source. At least 3 disparate-dataset own-analyses
-    # required to reach `calibrated`.
+    # One entry per supporting source. Empty list for `acknowledged`.
+    # 1–2 entries → `hint`. 3+ disparate-dataset own-analyses → `calibrated`.
     - source: "<paper-key | cohort name | task id>"
       estimate: "<reported value or range>"
       ref: "<doc/task/file ref — e.g., task:t172, doc:interpretations/...>"
@@ -71,12 +86,14 @@ for anything the schema can't capture.
   gate_use: "<how this expectation binds to a Decision Criteria threshold>"
     # e.g. "informs prior range; does not anchor hard threshold"
     # e.g. "anchors §3 success threshold at central ± 30%"
-    # `hint`-tier expectations should declare informational use only.
+    # `acknowledged` blocks: "no gate; surfaces a known unknown"
+    # `hint`-tier expectations: informational / soft gate only
 ```
 
-Worked example (the kind of block this section expects):
+Worked examples:
 
 ```yaml
+# Hint tier — disagreeing prior own-analyses, soft gate only.
 - parameter: "β_ribosome→E2F1 (per-cell, NB regression)"
   expected:
     central: "+0.3"
@@ -93,20 +110,43 @@ Worked example (the kind of block this section expects):
       ref: "task:t203 Q3"
       notes: "Per-cell Q3; positive sign; PPC-passing; conflicts with Boiarsky."
   unknowns:
-    - "patient-level dispersion structure φ_p — never measured in MM scRNA at this scale"
     - "whether cohort-disagreement reflects biology (cytogenetic stratum mix) or technical confounding (platform, ambient RNA, capture rate)"
     - "whether ribosome-axis score behaves linearly with E2F1 outside [-1, +2] range observed in prior cohorts"
-  gate_use: "informs prior range and direction-prior weakly; does not anchor a hard β threshold. PPC adequacy gate must be soft (≥80%) because patient-level dispersion is unknown."
+  gate_use: "Informs prior range and direction-prior weakly. Does not anchor a narrow β threshold. Verdict uses a wider acceptable-β range than would be granted with calibrated backing; the registered range is reported regardless of result."
 ```
 
-The example would *not* clear a `calibrated` tier — only two own-analyses exist
-and they disagree. The right move is to declare `hint`, soften any threshold
-that references β, and use the current pre-reg analysis as the third data point
-that *might* upgrade the next pre-reg to `calibrated`.
+```yaml
+# Acknowledged tier — known-relevant parameter, no estimate authored.
+- parameter: "patient-level NB dispersion structure φ_p in MM scRNA"
+  expected:
+    central: null
+    range: null
+    direction: unsigned
+  evidence_tier: acknowledged
+  provenance: []
+  unknowns:
+    - "no MM scRNA cohort has measured per-patient φ_p at the cell-count scale of the planned fit"
+    - "expected magnitude of cross-patient variation in φ_p (1.5× vs 10× vs 50×?)"
+    - "whether φ_p variation is dominated by biology (cell-cycle composition, malignancy stage) or technical capture"
+  gate_use: "No gate. Recorded as a known unknown so PPC-adequacy interpretation does not silently assume shared dispersion. Surfaces as a graph-visible uncertainty node for follow-up calibration."
+```
+
+The β example would *not* clear a `calibrated` tier — only two own-analyses
+exist and they disagree. `hint` is the correct declaration; any
+β-referencing threshold in Decision Criteria must be authored with a wider
+acceptance range up front. The current pre-reg's analysis may become the
+third data point that lets the *next* pre-reg author `calibrated`
+expectations for this parameter.
+
+The φ_p example is `acknowledged` not `hint` because no numerical estimate
+is authored — we know the parameter matters but have no prior data to
+commit to. Acknowledged blocks should be common in early-stage projects;
+they make graph-visible the "what we don't know" surface.
 
 If a pre-reg has zero numerical commitments — e.g., a purely qualitative
 "we expect direction X" registration — this section may be omitted, but
-`## Decision Criteria` should then also contain no numerical thresholds. -->
+`## Decision Criteria` should then also contain no interpretive numerical
+thresholds. -->
 
 ## Decision Criteria
 
@@ -116,12 +156,28 @@ If a pre-reg has zero numerical commitments — e.g., a purely qualitative
 - What evidence would REFUTE it?
 Be concrete — name the metric, the threshold, the pattern.
 
-Every numerical threshold in this section must trace back to an `## Expectations`
-block via `gate_use:`. A criterion citing a `hint`-tier expectation must be
-authored as soft / recalibratable — narrow gates require `calibrated`-tier
-backing (3+ disparate own-analyses in provenance). If a criterion has no
-upstream Expectations block, either author the block or remove the numerical
-specificity from the criterion. -->
+Every *interpretive* numerical threshold in this section — a threshold that
+reads an observed effect, CI, or posterior quantity as supporting / weakening /
+refuting the hypothesis — must trace back to an `## Expectations` block via
+`gate_use:`. A criterion citing a `hint`-tier expectation must be authored
+with a wider acceptance range than a `calibrated`-backed criterion would
+permit; narrow gates require `calibrated`-tier backing (3+ disparate own-
+analyses in provenance). If an interpretive criterion has no upstream
+Expectations block, either author the block or remove the numerical
+specificity from the criterion.
+
+**Operational / QA thresholds are out of scope** for this binding rule:
+minimum sample size, MCMC convergence checks (R-hat, ESS), leakage /
+suspicious-result bounds, QC floors, and runtime limits live in `## Methods`,
+`## Known Limitations`, or `## Suspicious/Unexpected Result Plan` with their
+own rationale, and do not require Expectations blocks.
+
+**Soft gates are not movable gates.** A criterion citing a `hint`-tier
+expectation has wider acceptance bands authored *before* data arrives. If
+that wider gate fails, the analysis either accepts the failure under the
+registered terms or invokes the amendment procedure — and the recalibrated
+gate cannot support a confirmatory claim for the same analysis (it becomes
+path-B / exploratory for that threshold). -->
 
 ## Null Result Plan
 

@@ -127,10 +127,23 @@ advisory, not a hard dependency.
 - How specific can you be? (Direction? Magnitude? Pattern?)
 
 For *narrative* direction/pattern expectations, prose in `## Expected Outcomes`
-is fine. For any *numerical* expectation that will anchor a decision criterion
-(an effect-size threshold, a CI floor, a PPC pass-rate gate, a correlation
-target), do not stop at prose — drive an `## Expectations` block per parameter
-through § 2a.
+is fine. For any *interpretive numerical* expectation — a number that will
+anchor a Decision Criteria threshold reading observed effects, CIs, or
+posterior quantities as supporting / weakening / refuting the hypothesis —
+drive an `## Expectations` block per parameter through § 2a.
+
+Operational and QA thresholds are out of scope for § 2a: minimum sample
+size, MCMC convergence checks (R-hat, ESS), leakage / suspicious-result
+bounds, QC floors, runtime limits. These live in `## Methods`, `## Known
+Limitations`, or `## Suspicious/Unexpected Result Plan` with their own
+rationale. They are not interpretive claims about expected biology and do
+not need Expectations blocks.
+
+Also surface *known-relevant parameters with no estimate* — parameters
+the analysis depends on but for which no prior data supports a numerical
+commitment. These are authored as `acknowledged`-tier blocks in § 2a step
+4; they record a known unknown for transparency rather than letting it
+silently affect interpretation.
 
 ### 2a. Classify Each Numerical Expectation by Evidence Tier
 
@@ -139,7 +152,10 @@ from masquerading as rigor. For each numerical expectation, walk the user
 through:
 
 1. **Name the parameter.** What quantity, with what units, on what data?
-2. **State the central guess, range, and direction.** Be specific.
+2. **State the central guess, range, and direction.** If the user can name
+   the parameter as analysis-relevant but cannot honestly state a central
+   value or range, this is an `acknowledged` block — skip to step 5 with
+   `expected: null` and `provenance: []`.
 3. **Enumerate the evidence the guess rests on.** For each source:
    - cohort/dataset/paper-key
    - reported estimate (value or range)
@@ -149,62 +165,86 @@ through:
 
    | Tier | Trigger |
    |---|---|
-   | `invalid` | No provenance, or provenance is intuition / "feels right" / unattributable. |
-   | `hint` | Literature-only support, OR one own-analysis on a single dataset. |
+   | `acknowledged` | Parameter is analysis-relevant but no estimate is authored. `provenance:` is empty, `expected:` is null. Records a known unknown. |
+   | `hint` | Literature-only support, OR 1–2 own-analyses on disparate datasets. |
    | `calibrated` | 3+ own-analyses on disparate datasets, all enumerated in `provenance:`. The disparate-datasets requirement is the threshold for "real distribution, not technical artifact / batch effect / single-cohort idiosyncrasy." |
 
 5. **Surface unknowns explicitly.** Ask the user to name at least one thing they
-   *don't* know about this quantity that could move the estimate. Empty
-   `unknowns:` is the over-confidence smell — push back if the user wants to
-   leave it empty at `hint` or below tier.
-6. **Bind the expectation to gate use.** State how this expectation will be
-   used by Decision Criteria (§ 3): "informs prior range only" / "anchors hard
-   threshold at central ± X%" / etc. `hint`-tier and `invalid`-tier
-   expectations cannot bind to hard thresholds; they bind to soft /
-   recalibratable thresholds only.
+   *don't* know about this quantity that could move the estimate (or, for
+   `acknowledged` blocks, why no estimate is possible). Empty `unknowns:` is
+   the over-confidence smell — push back if the user wants to leave it
+   empty at `hint` tier or below.
+6. **Bind the expectation to gate use.** State how this expectation binds
+   to Decision Criteria (§ 3):
+   - `acknowledged`: "no gate; recorded as a known unknown for
+     interpretation."
+   - `hint`: gate uses a *wider acceptance range* authored before data
+     arrives. Does not anchor a narrow threshold.
+   - `calibrated`: may anchor a narrow threshold; cite the 3+ provenance
+     entries.
 
 Authoring guidance:
 
-- If the user proposes a number with no enumerable provenance, this is
-  `invalid` tier. Do not write it into the pre-reg until provenance is
-  attached or the number is removed.
-- If only one own-analysis or literature claim supports the guess, this is
-  `hint`. Hint-tier numbers are fine to *register* (they are still better
-  than implicit expectations) — but any decision criterion that cites them
-  must be authored as soft/recalibratable.
+- If the user proposes a number with no enumerable provenance, do not
+  write it into the pre-reg. Either obtain provenance (promoting to
+  `hint`) or, if the parameter is genuinely relevant but unestimable,
+  author it as `acknowledged` with `expected: null`. There is no
+  "invalid" tier — pre-reg material requires either provenance or an
+  honest declaration of ignorance.
+- If only one or two own-analyses or literature claims support the guess,
+  this is `hint`. Hint-tier numbers are fine to *register* (better than
+  implicit expectations) — but any decision criterion that cites them
+  must be authored with a wider acceptance range up front.
 - Resist the temptation to upgrade `hint` to `calibrated` by adding
-  literature references. The 3+ requirement is for *own analyses on disparate
-  datasets*; literature support is necessary but not sufficient.
-- When the user has only one or two prior own-analyses, the current pre-reg's
-  analysis is plausibly the third — frame it that way ("if this pre-reg's
-  fit replicates the direction, the *next* pre-reg can author `calibrated`
-  expectations").
+  literature references. The 3+ requirement is for *own analyses on
+  disparate datasets*; literature support is necessary but not sufficient.
+- When the user has only one or two prior own-analyses, the current
+  pre-reg's analysis is plausibly the third — frame it that way ("if
+  this pre-reg's fit replicates the direction, the *next* pre-reg can
+  author `calibrated` expectations").
+- Encourage authoring `acknowledged` blocks for parameters the user
+  *knows* matter but cannot estimate. These make the project's
+  uncertainty surface graph-visible and prevent unknown parameters from
+  silently affecting interpretation. Early-stage projects should have
+  more `acknowledged` blocks than `calibrated` ones; that's healthy.
 
 ### 3. Define Decision Criteria
 
 Frame decision criteria according to the target class identified in § 0.
 
-**Expectations-to-criteria binding (required when § 2a produced any Expectations
-blocks):** every numerical threshold authored here must trace back to an
-Expectations block via that block's `gate_use:` field. Two enforcement rules:
+**Expectations-to-criteria binding (required when § 2a produced any
+Expectations blocks):** every *interpretive* numerical threshold authored
+here — a threshold reading observed effects, CIs, or posterior quantities
+as supporting / weakening / refuting the hypothesis — must trace back to
+an Expectations block via that block's `gate_use:` field. Three rules:
 
-- A criterion citing a `hint`-tier expectation must be authored as soft /
-  recalibratable. "Soft" means: wide CI tolerance, generous PPC pass-rate
-  floor (e.g., 80% rather than 97%), explicit acknowledgment that the
-  threshold may be revised post-data if the prior was misspecified. Author
-  the criterion this way *before* seeing data — do not phrase it as a
-  narrow gate "with the option to relax later," because that re-introduces
-  the post-hoc rationalization the pre-reg exists to prevent.
-- A criterion with no upstream Expectations block must contain no numerical
-  specificity. Either author the block (driving the user through § 2a) or
-  rewrite the criterion as direction-only / pattern-only.
+- **Operational / QA thresholds are out of scope.** Minimum sample size,
+  MCMC convergence checks (R-hat, ESS), leakage / suspicious-result
+  bounds, QC floors, and runtime limits do not need Expectations blocks;
+  they live in `## Methods`, `## Known Limitations`, or `## Suspicious/
+  Unexpected Result Plan` with their own rationale.
+- **`hint`-backed criteria must have a wider acceptance range authored up
+  front.** "Soft" gates lower the evidential weight of both pass and fail
+  (a hint-backed pass is less probative; a hint-backed fail is less
+  catastrophic) but do *not* grant permission to revise the threshold
+  after data arrives. If a soft gate fails, the analysis either accepts
+  the failure under the registered terms or invokes the amendment
+  procedure — and a recalibrated gate cannot support a confirmatory
+  claim for the same analysis. That analysis becomes path-B /
+  exploratory for the recalibrated threshold; the original gate remains
+  reported in the verdict.
+- **Criteria with no upstream Expectations block must contain no
+  interpretive numerical specificity.** Either author the block (driving
+  the user through § 2a) or rewrite the criterion as direction-only /
+  pattern-only.
 
 Narrow gates (small CI windows, high PPC pass-rates, tight effect-size
-thresholds) require `calibrated`-tier backing — i.e., the Expectations block
-this criterion cites must have 3+ disparate-dataset own-analyses in
-`provenance:`. If the user wants a narrow gate but only has `hint`-tier
-support, the right move is to author a soft gate now and queue a follow-up
-analysis that would upgrade the tier for the *next* pre-reg.
+thresholds) require `calibrated`-tier backing — i.e., the Expectations
+block this criterion cites must have 3+ disparate-dataset own-analyses
+in `provenance:`. If the user wants a narrow gate but only has `hint`-
+tier support, the right move is to author a wider gate now and queue a
+follow-up analysis that would upgrade the tier for the *next* pre-reg —
+not to author a narrow gate and plan to "relax it if needed."
 
 **For epistemic targets:**
 - What evidence would **support** it? Be concrete — name the metric, the threshold, the pattern.
