@@ -809,6 +809,31 @@ def test_discover_candidates_iterates_multiple_source_subdirs(tmp_path, monkeypa
     assert set(result.candidates_by_slug) == {"hypothesis", "primitives"}
 
 
+def test_discover_candidates_rejects_explicit_id_with_wrong_prefix(tmp_path, monkeypatch) -> None:
+    """An explicit `kind: topic` + `id: paper:foo` slipped through Phase E's
+    paper-only classifier (id check only ran when prefix already matched).
+    Phase F discovery records a FailedCandidate so contradictory ids never
+    reach plan_promote."""
+    from science_tool.commons.promote import PROMOTE_KIND_TOPIC, discover_candidates
+
+    proj = tmp_path / "proj_w"
+    (proj / "doc" / "topics").mkdir(parents=True)
+    (proj / "doc" / "topics" / "trapped.md").write_text(
+        "---\nkind: topic\nid: paper:trapped\ntitle: X\n---\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+
+    result = discover_candidates(["proj_w"], PROMOTE_KIND_TOPIC)
+    assert result.candidates_by_slug == {}
+    assert len(result.failed_candidates) == 1
+    msg = result.failed_candidates[0].error_message
+    assert "paper:trapped" in msg and "topic:" in msg
+
+
 def test_discover_candidates_same_project_intra_kind_collision(tmp_path, monkeypatch) -> None:
     """A slug appearing in BOTH doc/topics/ and doc/background/topics/ within
     the same project is a hard failure (cannot resolve canonical source)."""
@@ -960,9 +985,29 @@ def _scan_project(
                 )
                 continue
 
-            # Id-stem mismatch (design §4.1.3 Phase E).
+            # Id check (design §4.1.3 Phase E). The classifier may have
+            # matched purely on explicit `kind:` / `type:`, while the file
+            # also carries a contradictory `id:` (e.g. kind: topic + id:
+            # paper:foo). In that case, the id is wrong for this kind and
+            # must be reported as a failure — silently relying on the
+            # filename stem would let mismatched canonical ids slip through.
             id_val = fm.get("id")
-            if isinstance(id_val, str) and id_val.startswith(kind.id_prefix):
+            if isinstance(id_val, str):
+                if not id_val.startswith(kind.id_prefix):
+                    failures.append(
+                        FailedCandidate(
+                            slug=None,
+                            project_slug=project_slug,
+                            source_path=source_path,
+                            error_class="PromoteCandidateError",
+                            error_message=(
+                                f"id {id_val!r} does not have the expected "
+                                f"prefix {kind.id_prefix!r} for kind "
+                                f"{kind.kind!r}"
+                            ),
+                        )
+                    )
+                    continue
                 id_slug = id_val[len(kind.id_prefix):]
                 if _normalize_slug_for_match(id_slug, kind) != slug_normalized:
                     failures.append(
@@ -1075,35 +1120,46 @@ EOF
 - Modify: `science/src/science_tool/commons/cli.py` (call site)
 - Modify: `science/tests/test_commons_promote_plan.py` (rename to pass `kind`)
 
-- [ ] **Step 1: Write the failing test** — append to `test_commons_promote_plan.py`:
+- [ ] **Step 1: Write the failing test** — Task 8's deliverables are (a) `kind` parameter on `plan_promote`, and (b) merge_policy + body_sections read from `kind.default_profile` instead of the hardcoded paper. Test both via an existing call site that now requires `kind=`:
+
+Update all existing call sites in `test_commons_promote_plan.py` to add `kind=PROMOTE_KIND_PAPER` to every `plan_promote(...)` invocation. Those existing tests now also implicitly verify the new signature compiles and the paper merge-policy path is unchanged.
+
+Then append one new test that pins the merge-policy lookup to `kind.default_profile`, observable via the fact that calling with a topic-shaped fixture would treat `datasets` as `append` (the topic policy) — but the simpler/more direct check is to monkeypatch `read_merge_policy` and assert it was called with `kind.default_profile`:
 
 ```python
-def test_plan_promote_reads_merge_policy_from_kind_profile(tmp_path, monkeypatch) -> None:
-    """plan_promote must use kind.default_profile (not hardcoded paper) for
-    merge_policy and body_sections. This guards the bug where topic-only
-    fields like 'datasets' or theme-only 'evidence_refs' would be
-    misclassified under the paper policy."""
+def test_plan_promote_calls_read_merge_policy_with_kind_profile(
+    tmp_path, monkeypatch
+) -> None:
+    """Pin the per-kind merge-policy lookup. Without this guard, plan_promote
+    would silently use the paper policy for topic/theme runs and misclassify
+    fields like topic 'datasets' or theme 'evidence_refs'."""
     from science_tool.commons.promote import (
         PROMOTE_KIND_PAPER,
         DiscoveryResult,
         plan_promote,
     )
+    import science_tool.commons.promote as promote_mod
+
+    captured = {}
+    real_read_merge_policy = promote_mod.read_merge_policy
+
+    def spy(profile, *a, **kw):
+        captured["profile"] = profile
+        return real_read_merge_policy(profile, *a, **kw)
+
+    monkeypatch.setattr(promote_mod, "read_merge_policy", spy)
 
     discovery = DiscoveryResult(candidates_by_slug={}, failed_candidates=[])
-    plan = plan_promote(discovery, commons_root=tmp_path, kind=PROMOTE_KIND_PAPER)
-    assert plan.kind is PROMOTE_KIND_PAPER  # Task 9 adds .kind to PromotePlan
+    plan_promote(discovery, commons_root=tmp_path, kind=PROMOTE_KIND_PAPER)
+    assert captured["profile"] == PROMOTE_KIND_PAPER.default_profile
 ```
-
-> The test references `plan.kind` which lands in Task 9. Order: do Task 8 implementation first (signature + merge-policy lookup), then Task 9 (add `kind` field to `PromotePlan`/`PromoteResult`). The test from Task 8 will fail until Task 9 lands; tests for Task 8 alone are the broader regression — existing paper plan tests passing with the new signature.
-
-Update all existing call sites in `test_commons_promote_plan.py` to add `kind=PROMOTE_KIND_PAPER` to every `plan_promote(...)` call.
 
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
 cd science && python -m pytest tests/test_commons_promote_plan.py -v
 ```
-Expected: failures because `plan_promote` doesn't accept `kind`.
+Expected: failures because `plan_promote` doesn't accept `kind`, or `read_merge_policy` is called with the hardcoded paper profile rather than `kind.default_profile`.
 
 - [ ] **Step 3: Implement** — in `promote.py`, change `plan_promote` signature and body. The relevant existing code is at lines 228-230:
 
@@ -1147,14 +1203,12 @@ plan = plan_promote(
 )
 ```
 
-- [ ] **Step 4: Run test to verify it passes** (after Task 9 adds the `.kind` attribute on `PromotePlan`)
-
-The Task-8 test that reads `plan.kind` will not pass until Task 9 lands. For Task 8's commit, run:
+- [ ] **Step 4: Run test to verify it passes**
 
 ```bash
-cd science && python -m pytest tests/test_commons_promote_plan.py -v --deselect tests/test_commons_promote_plan.py::test_plan_promote_reads_merge_policy_from_kind_profile
+cd science && python -m pytest tests/test_commons_promote_plan.py -v
 ```
-Expected: all existing tests pass with the new signature.
+Expected: every test passes — Task 8's deliverables are self-contained (no cross-task references). The `.kind` attribute on `PromotePlan` / `PromoteResult` lands in Task 9.
 
 - [ ] **Step 5: Commit**
 
@@ -1382,26 +1436,37 @@ EOF
 ```python
 def test_apply_commons_path_uses_kind_commons_subdir(tmp_path, monkeypatch) -> None:
     """commons_root / "papers" / ... was hardcoded at promote.py:315. After
-    de-hardcoding, kind.commons_subdir is used. Regression test exercises
-    the path-building site with both paper and topic kinds (no actual
-    apply — just plan construction and inspection)."""
+    de-hardcoding, kind.commons_subdir is used. Drive plan_promote with a
+    real minimal candidate so the decision-building loop runs, then assert
+    the resulting PromoteDecision.canonical_path is under kind.commons_subdir."""
     from science_tool.commons.promote import (
-        PROMOTE_KIND_PAPER,
         PROMOTE_KIND_TOPIC,
-        DiscoveryResult,
+        discover_candidates,
         plan_promote,
     )
 
-    # The simplest exercise is via plan_promote with an empty discovery —
-    # no decisions are made, but the commons_root scoping code is reached.
-    # Below, when discoveries are richer, the canonical_path on each
-    # PromoteDecision must start with kind.commons_subdir.
-    empty = DiscoveryResult(candidates_by_slug={}, failed_candidates=[])
-    p_paper = plan_promote(empty, commons_root=tmp_path, kind=PROMOTE_KIND_PAPER)
-    p_topic = plan_promote(empty, commons_root=tmp_path, kind=PROMOTE_KIND_TOPIC)
-    # Empty plans — just verify the kinds are carried correctly:
-    assert p_paper.kind.commons_subdir == "papers"
-    assert p_topic.kind.commons_subdir == "topics"
+    proj = tmp_path / "proj_p"
+    (proj / "doc" / "topics").mkdir(parents=True)
+    (proj / "doc" / "topics" / "single.md").write_text(
+        "---\nid: topic:single\ntitle: T\n---\n\n## Summary\n\nx\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+    commons = tmp_path / "commons"
+    commons.mkdir()
+
+    discovery = discover_candidates(["proj_p"], PROMOTE_KIND_TOPIC)
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_TOPIC)
+
+    assert len(plan.decisions) == 1
+    canonical_path = plan.decisions[0].canonical_path
+    # The path MUST live under commons/topics/, not commons/papers/.
+    assert canonical_path.parent.name == "topics"
+    assert str(canonical_path).startswith(str(commons / "topics"))
+    assert "papers" not in str(canonical_path)
 
 
 def test_commons_is_clean_checks_kind_commons_subdir(tmp_path) -> None:
@@ -2366,55 +2431,79 @@ cd science && python -m pytest tests/test_commons_promote_validation.py -v -k va
 - [ ] **Step 3: Implement** — at the end of `plan_promote`, just before constructing `PromotePlan`, add:
 
 ```python
-# Plan-time validation (design §4.3). Raises PromoteValidationError on
-# the first failure — pre-I/O, so no rollback needed.
-_validate_plan(decisions, kind=kind)
+_validate_plan(decisions)
 return PromotePlan(decisions=decisions, failed_candidates=failed, kind=kind)
 ```
 
-And add the helper:
+And add the helper. Use the existing `EntityValidator` from `science_model.entity_schema` — it owns the schema-loading machinery (`SchemaLoader`), the canonical-validation path (`.validate(entity_dict)` which reads `schema_profile` from the entity), and the overlay-validation path (`.validate_overlay(overlay_dict)` which loads overlay-1.1 internally and also enforces `id == overlay_of`). Wrap the `EntityValidationError` it raises into a `PromoteValidationError`:
 
 ```python
-def _validate_plan(decisions: list[PromoteDecision], *, kind: PromoteKindConfig) -> None:
-    """Validate every canonical against base+mixin and every overlay against
-    overlay-1.1. Raises PromoteValidationError on the first failure."""
-    from science_model.entity_schema import load_schema  # adjust import per actual API
-    from jsonschema import ValidationError as JsonSchemaValidationError, Draft202012Validator
-    # Reuse the existing schema_loader infrastructure. The Phase E validation
-    # path used by `commons validate` constructs an `EntitySchemaValidator` —
-    # use the same approach here. The minimum required interface is:
-    #     validator_for_kind(kind).validate_canonical(content_dict)
-    #     validator_for_overlay().validate_overlay(content_dict)
-    # If those don't exist as a public function, import the underlying
-    # jsonschema Validator + the loader and call manually:
-    base_mixin_schema = _compose_schema(kind.default_profile)
-    overlay_schema = _load_overlay_1_1_schema()
+def _validate_plan(decisions: list[PromoteDecision]) -> None:
+    """Validate every canonical against its declared base+mixin profile and
+    every overlay against overlay-1.1. Raises PromoteValidationError on
+    the first failure. Pre-I/O — no disk state mutated.
 
+    Uses `EntityValidator` from science_model.entity_schema:
+    - `.validate(entity_dict)` reads the entity's `schema_profile` field and
+      composes base + mixin + extensions via the internal SchemaLoader.
+    - `.validate_overlay(overlay_dict)` loads overlay-1.1 internally and
+      also enforces `id == overlay_of`.
+    Both raise `EntityValidationError` on failure.
+    """
+    from science_model.entity_schema import EntityValidationError, EntityValidator
+
+    validator = EntityValidator()
     for d in decisions:
-        canonical_fm = _parse_frontmatter(d.canonical_content)
+        canonical_fm = _parse_frontmatter_only(d.canonical_content)
         try:
-            Draft202012Validator(base_mixin_schema).validate(canonical_fm)
-        except JsonSchemaValidationError as exc:
+            validator.validate(canonical_fm)
+        except EntityValidationError as exc:
             raise PromoteValidationError(
                 decision_slug=d.slug,
                 target_kind="canonical",
                 project_id=None,
-                schema_message=str(exc.message),
+                schema_message=str(exc),
             ) from exc
         for project_slug, overlay in d.overlays.items():
-            overlay_fm = _parse_frontmatter(overlay.after_content)
+            overlay_fm = _parse_frontmatter_only(overlay.after_content)
             try:
-                Draft202012Validator(overlay_schema).validate(overlay_fm)
-            except JsonSchemaValidationError as exc:
+                validator.validate_overlay(overlay_fm)
+            except EntityValidationError as exc:
                 raise PromoteValidationError(
                     decision_slug=d.slug,
                     target_kind="overlay",
                     project_id=project_slug,
-                    schema_message=str(exc.message),
+                    schema_message=str(exc),
                 ) from exc
 ```
 
-> **Implementation note for the worker:** The existing commons module already uses the schema-validation machinery in two places: `science_tool.commons.validator` and `science_model.entity_schema`. Inspect both before writing `_compose_schema` / `_load_overlay_1_1_schema` / `_parse_frontmatter` — there should be reusable helpers. The schema composition pattern is the same one `read_merge_policy` uses internally. If a reusable helper exists, use it; if not, write a minimal local helper rather than building new schema-loader infrastructure.
+`_parse_frontmatter_only` extracts the YAML frontmatter dict from a rendered markdown string (between the `---` fences). If the existing `_parse_entity_file` helper from Task 7 has a portion that does this on a `Path`, factor out a string-based variant:
+
+```python
+def _parse_frontmatter_only(rendered: str) -> dict:
+    """Parse just the frontmatter block from a rendered <slug>.md content
+    string. The string begins with '---\\n', contains an opening fence,
+    a YAML body, and a closing '---\\n' fence."""
+    if not rendered.startswith("---\n"):
+        raise PromoteCandidateError(
+            f"rendered content has no opening --- fence", slug=None
+        )
+    rest = rendered[len("---\n"):]
+    end = rest.find("\n---\n")
+    if end == -1:
+        raise PromoteCandidateError(
+            f"rendered content has no closing --- fence", slug=None
+        )
+    fm_yaml = rest[:end]
+    parsed = yaml.safe_load(fm_yaml)
+    if not isinstance(parsed, dict):
+        raise PromoteCandidateError(
+            f"frontmatter is not a mapping: {type(parsed).__name__}", slug=None
+        )
+    return parsed
+```
+
+> **Implementer note:** verify there isn't already a reusable string-based frontmatter parser in the codebase before adding `_parse_frontmatter_only`. Existing candidates include `_parse_entity_file` (Task 7's rename of `_parse_paper_file`, which takes a `Path`) — if it can be refactored to take either a `Path` or a `str`, do that instead and remove the local helper.
 
 In `science/src/science_tool/commons/cli.py`, find the plan-error block (currently catches `PromoteConflictAbort` and `PromoteInputError`) and add `PromoteValidationError`:
 
@@ -3288,17 +3377,105 @@ if candidate.overlay_source_path != target_path:
 
 Pass `unlinked_source=unlinked_source` to the `OverlayRewrite` constructor.
 
-In `apply_promote`, during the project-rewrite step, after writing the target, unlink the source if present:
+In `apply_promote`, during the project-rewrite step, after writing the target, unlink the source if present — **and** ensure the existing project-rewrite failure handler restores any already-unlinked source on rollback. The current handler restores `rewrite.path` and `rewrite.rename_from`; it must also restore `rewrite.unlinked_source` for any rewrite that succeeded before the failing one.
+
+Concretely, every `OverlayRewrite` whose write succeeded before the failure must contribute *all three* paths to the restore set: `path` (the new file — `git checkout HEAD --` removes it since it didn't exist at HEAD), `rename_from` (any case-rename source), AND `unlinked_source` (any flatten-case source). Otherwise a failure after step N can leave a hole: the new overlay reverts but the deleted background-topics source stays missing.
 
 ```python
-for rewrite in decision.overlays.values():
-    rewrite.path.parent.mkdir(parents=True, exist_ok=True)
-    rewrite.path.write_text(rewrite.after_content, encoding="utf-8")
-    if rewrite.unlinked_source is not None and rewrite.unlinked_source != rewrite.path:
-        rewrite.unlinked_source.unlink(missing_ok=False)
+written_rewrites: list[OverlayRewrite] = []  # successful so far
+try:
+    for rewrite in decision.overlays.values():
+        rewrite.path.parent.mkdir(parents=True, exist_ok=True)
+        rewrite.path.write_text(rewrite.after_content, encoding="utf-8")
+        if rewrite.unlinked_source is not None and rewrite.unlinked_source != rewrite.path:
+            rewrite.unlinked_source.unlink(missing_ok=False)
+        written_rewrites.append(rewrite)
+except OSError as exc:
+    # Restore every previously-written rewrite's full path set: new path
+    # (so it goes back to its pre-promotion state — typically nonexistent),
+    # rename_from (case rename), AND unlinked_source (flatten case).
+    paths_to_restore: list[str] = []
+    for prior in written_rewrites:
+        paths_to_restore.append(str(prior.path.relative_to(project_root)))
+        if prior.rename_from is not None:
+            paths_to_restore.append(str(prior.rename_from.relative_to(project_root)))
+        if prior.unlinked_source is not None:
+            paths_to_restore.append(str(prior.unlinked_source.relative_to(project_root)))
+    if paths_to_restore:
+        _git(project_root, "checkout", "HEAD", "--", *paths_to_restore, check=False)
+    raise PromoteWriteError(
+        stage="rewrite_projects",
+        detail=f"project rewrite failed: {exc}",
+        commons_commit=commons_commit,
+        projects_touched=projects_touched_so_far,
+    ) from exc
 ```
 
+> **Implementer note:** the exact failure-handler signature already exists in Phase E. Locate it (search `rewrite_projects` in `apply_promote`), then extend its restore-paths construction to include `unlinked_source` as above. The Phase E handler already handles `path` and `rename_from`; only the `unlinked_source` extension is new.
+
 In `_render_audit_log_yaml` (Task 18 already conditionally handles `unlinked_source`), confirm the entry includes both `path` and `unlinked_source`.
+
+Add a regression test that simulates a write failure on the *second* overlay after the first one's source was unlinked, and asserts the unlinked source is restored:
+
+```python
+def test_topic_apply_rollback_restores_unlinked_source(tmp_path, monkeypatch) -> None:
+    """If overlay N+1 fails to write, overlay N's unlinked background-topics
+    source must be restored to its pre-apply state."""
+    import shutil
+    import subprocess
+    from science_tool.commons.errors import PromoteWriteError
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_TOPIC,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    proj = _copy_fixture(tmp_path, "proj-alpha")
+    # Keep only flatten-source + single-instance so the apply order is
+    # deterministic.
+    for p in (proj / "doc" / "topics").glob("*.md"):
+        if p.name not in {"single-instance.md"}:
+            p.unlink()
+    for p in (proj / "doc" / "background" / "topics").glob("*.md"):
+        if p.name != "flatten-source.md":
+            p.unlink()
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(proj), "commit", "-m", "trim"], check=True, capture_output=True
+    )
+
+    commons = _init_commons(tmp_path)
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+
+    discovery = discover_candidates(["proj-alpha"], PROMOTE_KIND_TOPIC)
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_TOPIC)
+
+    # Force the SECOND project write to fail by monkeypatching Path.write_text
+    # on the second call only. (Implementation-detail: the worker picks the
+    # least-invasive injection point that fits the existing apply loop —
+    # could be Path.write_text patched after N calls, or a fault-injection
+    # hook already used by Phase E tests.)
+    original_write = Path.write_text
+    call_count = {"n": 0}
+    def faulty_write(self, *a, **kw):
+        call_count["n"] += 1
+        if call_count["n"] >= 2:
+            raise OSError("simulated write failure")
+        return original_write(self, *a, **kw)
+    monkeypatch.setattr(Path, "write_text", faulty_write)
+
+    with pytest.raises(PromoteWriteError):
+        apply_promote(plan, commons_root=commons, invocation="test")
+
+    # The flatten-source must be restored to its pre-apply location.
+    assert (proj / "doc" / "background" / "topics" / "flatten-source.md").exists()
+```
+
+> If the test's monkeypatch shape doesn't match the codebase's actual write site, the worker should locate the corresponding fault-injection hook used by Phase E's `test_commons_promote_apply.py` rollback tests and adapt.
 
 - [ ] **Step 4: Run test to verify it passes**
 
