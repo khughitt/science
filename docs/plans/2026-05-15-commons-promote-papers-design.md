@@ -12,8 +12,8 @@
 
 Add `science commons promote paper` to move paper entities from per-project `doc/papers/<slug>.md` files into the commons store at `<commons>/papers/<slug>.md`, splitting each source file into:
 
-- **Canonical surface** (commons-side `papers/<bibkey>.md`): the paper's shared facts — title, authors, year, venue, DOI/PMID, ontology terms, dataset references, key findings, methods summary, limitations.
-- **Project overlay** (project-side `doc/papers/<bibkey>.md`, rewritten in place): `id`, `overlay_of: paper:<bibkey>`, `pin_version: <tagged semver>`, plus project-only fields (`tags`, `related`, `source_refs`, `status`, `source`, `created`, `updated`) and project-only body sections (`## Project Use`, `## Relevance`, free prose).
+- **Canonical surface** (commons-side `papers/<bibkey>.md`): the paper's shared facts — title, authors, year, venue, DOI/PMID, ontology terms, dataset references, key findings, methods summary, limitations. Promote also writes the canonical-required base fields (`schema_profile`, `version`, `created`, `updated`); see §4.1.1.
+- **Project overlay** (project-side `doc/papers/<bibkey>.md`, rewritten in place): `id`, `overlay_of: paper:<bibkey>`, `pin_version: <tagged semver>`, the project-side metadata fields the overlay schema adds (`status`, `source`, `related`, `source_refs`, plus the project's own `created` / `updated`), and project-only body sections (`## Project Use`, `## Relevance`, free prose). `tags` lives only on the overlay (canonical is always empty); see §4.1.2.
 
 Multi-instance dedup is automatic where canonical fields agree or are one-sided; an interactive prompt fires only when the same canonical field has different values across projects. The dedup key is the **normalized bibkey** (filename case-insensitive, without `.md`).
 
@@ -65,8 +65,9 @@ science/model/src/science_model/entity_schema/
 science/src/science_tool/commons/
 ├── promote.py                  # NEW — discovery, plan, apply
 ├── cli.py                      # MODIFIED — `promote paper` subgroup
+├── config.py                   # MODIFIED — new `resolve_project_by_id(project_id) -> Path` helper
 ├── errors.py                   # MODIFIED — four new error classes
-└── __init__.py                 # MODIFIED — export PromoteCandidate / Decision / FailedCandidate / Result + discover/plan/apply
+└── __init__.py                 # MODIFIED — export PromoteCandidate / Decision / FailedCandidate / DiscoveryResult / PromotePlan / Result + discover/plan/apply
 
 science/tests/
 ├── test_commons_promote_discovery.py    # NEW
@@ -82,29 +83,59 @@ Nothing outside `commons/` is touched in `science_tool/`. Schema work touches `s
 
 Two schemas change together: `mixin-paper-2.0` (canonical paper fields) and `overlay-1.1` (the project-side fields and id regex). They MUST ship in the same commit — promote rewrites project files in a shape the 1.0 overlay rejects, so a 1.0/2.0 mix is broken on day one.
 
-### 4.1 `mixin-paper-2.0` — canonical fields only
+### 4.1 `mixin-paper-2.0` — paper-specific canonical fields and base overrides
 
-The mixin declares ONLY the canonical paper surface — fields that live on the commons-side `papers/<bibkey>.md`. Project-only fields (`tags`, `status`, `source`, `related`, `source_refs`, `created`, `updated`) move to the overlay schema (§4.4); they never appear on the canonical surface and so do not need a `project_only` annotation on the mixin. (Declaring them with `project_only` on the mixin would also fail to change overlay-side behavior, since the merge engine reads canonical vs overlay policies from *different* schemas — `read_merge_policy` from the mixin, `read_overlay_merge_policy` from the overlay schema. Putting project-only fields on the overlay is the only place that actually wires the behavior.)
+Every canonical entity is `science-entity-base/1.0+<mixin>` (`schema_profile`, `id`, `type`, `title`, `version`, `created`, `updated` are required by the base, and it contributes `ontology_terms`, `tags`, `status`, plus optional `description` / `sources` / `licenses` / `contributors` as well). The mixin layers paper-specific fields on top of that, AND can override the base's per-field `science:merge` annotations via `read_merge_policy`'s "later component wins" lookup (`merge.py:30`). For papers we use both capabilities.
 
-| Field | Type | Merge policy (on canonical) | Source today |
+**Paper-specific fields added by the mixin** (all `merge: replace` unless noted):
+
+| Field | Type | Merge policy | Source today |
 |---|---|---|---|
-| `id` | `paper:<bibkey>` | (identity) | both projects |
-| `type` | `"paper"` | (identity) | both |
 | `bibkey` | string (`[A-Za-z][A-Za-z0-9-]{1,63}`, hyphens permitted) | replace | derived from `id` |
-| `title` | string | replace | both |
 | `authors` | `list[str]` | replace | MM (string → single-element list; see §4.2) |
 | `year` | int | replace | MM |
 | `venue` | string | replace | MM (renamed from `journal` in 1.0) |
 | `doi` | string | replace | MM |
 | `pmid` | string | replace | MM |
 | `url` | string | replace | rare |
-| `ontology_terms` | `list[str]` | **append** | both |
 | `datasets` | `list["dataset:<slug>"]` | **append** | both |
 | `key_findings` | `list[str]` | replace | MM body sections |
 | `methods_summary` | string | replace | rare |
 | `limitations` | `list[str]` | replace | rare |
 
-`bibkey` regex permits hyphens (2.0 change vs 1.0's `[A-Za-z0-9]` only). At least one real paper carries a hyphenated bibkey (`categorical-composition-trio-2023-2025`); excluding it would mean renaming source files. `bibkey:` is a derived canonical field (always equal to the suffix of `id:`); it is denormalized onto the surface so consumers can query by bibkey directly without parsing `id`.
+(`id`, `type`, `title`, `ontology_terms` are inherited from the base and don't need re-declaration in the mixin; `ontology_terms` keeps base's `append`.)
+
+**Base-field overrides** in the mixin (set the mixin's `science:merge` annotation to override base's default):
+
+| Field | Base policy | Mixin override | Why |
+|---|---|---|---|
+| `created` | replace (default) | **project_only** | Canonical `created` = first promote time; overlay `created` = project's first write. The two values mean different things, and per-project views want the project's value. `project_only` makes the merge use the overlay's value while keeping the canonical's value intact for the commons-view. |
+| `updated` | replace (default) | **project_only** | Same reasoning as `created`. |
+| `status` | replace (default) | **project_only** | Per-project status (active / archived / wip) is a project lens, not a property of the paper. Canonical's `status` is omitted (base doesn't require it). |
+
+**Fields NOT overridden in the mixin:**
+- `tags` keeps base's `append` policy. The behavior we want — each project's view shows only that project's tags — is achieved by promote always writing canonical `tags: []` (or omitting the field), so the merge `canonical.tags + overlay.tags = overlay.tags`. This is `project_only`-equivalent without overriding the policy. See §4.1.2.
+- `version` keeps base's `forbidden` policy (overlay must not override; promote sets canonical version from the semver tag).
+
+### 4.1.1 Canonical-required base fields — what promote generates
+
+For each promoted paper, the canonical file carries these base-required values, generated by promote:
+
+| Field | Value source |
+|---|---|
+| `schema_profile` | `"science-entity-base/1.0+paper/2.0"` (built via `default_profile_for_kind("paper").render()`) |
+| `version` | `"1.0.0"` on a first promote; bumped on each re-promote (semver minor on field changes, patch on body-only changes) |
+| `created` | UTC date of first promote |
+| `updated` | UTC date of this promote run |
+| `id`, `type`, `title` | from the source paper |
+
+On the overlay, `created` / `updated` carry the project's original values (preserved verbatim from the pre-rewrite file), and `version` is **not** written (overlay schema doesn't declare it). `schema_profile` is also **not** written on overlays (see §4.4).
+
+### 4.1.2 `tags` behavior — canonical empty, overlay carries the value
+
+Promote always writes canonical paper files with `tags: []` (or omits the field entirely; the loader treats both the same). The overlay carries the project's `tags` list. The base's `tags: append` annotation then produces `[] + overlay_tags = overlay_tags` in per-project merge views — each project sees only its own tags. There is no cross-project tag union: the merge is per-project (one overlay at a time), and the canonical contributes nothing.
+
+This is functionally what we want from "tags as project-only metadata," achieved within the existing append semantics rather than by overriding the policy. The cost is one always-empty field on the canonical; the benefit is that the rule lives in one place (promote's writer) rather than at every reader.
 
 ### 4.2 Author coercion
 
@@ -287,10 +318,18 @@ def apply_promote(
 ### 5.3 Dependencies
 
 The module imports from:
-- `science_tool.commons.config` (`resolve_commons_root`).
+- `science_tool.commons.config` (`resolve_commons_root`, plus a **new** `resolve_project_by_id` helper — see below).
 - `science_tool.commons.adapter` — only to short-circuit on already-promoted bibkeys (commons-side existence check).
 - `science_model.entity_schema` (`read_merge_policy`, `read_canonical_body_sections`, `default_profile_for_kind`, `MergePolicy`).
 - A minimal YAML frontmatter splitter (likely the existing one in `science_tool.graph.sources` or a small local helper — see below).
+
+**New helper: `resolve_project_by_id(project_id: str) -> Path`** (added to `science_tool/commons/config.py`). The existing `resolve_project_root(name)` matches on `project.name`, which is the legacy human-readable name (e.g. `"natural-systems-guide"`). Phase B introduced a separate `id:` field (e.g. `"natural-systems"`), and promote's `--from` contract is **id-based**, not name-based. The new helper:
+
+1. Loads the global config via `load_global_config`.
+2. Iterates `cfg.projects` looking for an entry whose `id` equals `project_id` AND whose `id` is non-null.
+3. Returns the entry's path (expanded `~`); raises `PromoteInputError` if no match, with a message that distinguishes "no such id" (typo) from "id is null" (legacy registration — point the user at deregistering or assigning an id).
+
+`resolve_project_root(name)` is left alone for any callers that still match by name.
 
 It does NOT import from `science_tool.entities_inventory`. `build_inventory` was an attractive reuse target but is the wrong tool for promote: it delegates to `load_project_sources`, which raises hard `ValueError`s on malformed core entities (`sources.py:257`) and silently drops files missing identity markdown with only a logger warning (`sources.py:262`). Promote needs **structured per-file failure objects** so the audit log and dry-run can name each bad file; turning the inventory's mix of raise/warn/skip into that shape is messier than scanning `doc/papers/*.md` directly. Direct scan also keeps promote's discovery independent of inventory contract churn.
 
@@ -309,7 +348,7 @@ science commons promote paper <paper:bibkey> --from <slug> [--apply]
 science commons promote paper --from <slug>... [--apply] [--limit N]
 ```
 
-- **`--from <slug>`** is required and repeatable. Slugs must resolve to **registered project ids with non-null `id:`** (the Phase B registry field, not `name:`). Registrations with `id: null` (legacy entries) are rejected by name with a clear message — the user fixes the registry first. This sidesteps content-identical legacy registrations (`r/mm30` vs `multiple-myeloma`) mechanically: only one of them carries an `id`.
+- **`--from <slug>`** is required and repeatable. Slugs resolve via `resolve_project_by_id` (§5.3) — they MUST match a registered project's `id:` (the Phase B registry field), not `name:`. Registrations with `id: null` (legacy entries) are rejected with a clear message — the user fixes the registry first. This sidesteps content-identical legacy registrations (`r/mm30` vs `multiple-myeloma`) mechanically: only one of them carries an `id`.
 - **Single-entity form** (`promote paper <paper:bibkey>`) accepts exactly one `--from`. Surgical, not bulk; the user must drop into bulk form to dedup across projects.
 - **Bulk form** discovers all paper candidates across the `--from` set, groups by normalized bibkey, runs plan + apply.
 - **`--limit N`** (bulk only) stops after N papers in deterministic (bibkey-sorted) order; the rest are reported but not planned. Lets a 503-paper pilot be incrementally exercised.
@@ -472,11 +511,11 @@ Per-module unit tests + fixture-driven end-to-end tests, all under `science/test
 
 | File | Coverage |
 |---|---|
-| `test_entity_schema_mixin_paper.py` (extend) | 2.0 schema validates against fixture papers from both project styles; `read_merge_policy(default_profile_for_kind("paper"))` returns the documented canonical-field classification; `read_canonical_body_sections(default_profile_for_kind("paper"))` returns the documented heading list; `journal` → `venue` rename surfaces a deprecation warning when 1.0 papers are read through the 2.0 reader |
+| `test_entity_schema_mixin_paper.py` (extend) | 2.0 schema validates against fixture papers from both project styles; canonical entities carry the base-required `schema_profile` / `version` / `created` / `updated`; `read_merge_policy(default_profile_for_kind("paper"))` returns the documented classification AND shows the mixin's `created` / `updated` / `status` overrides winning over base's defaults (via last-wins composition); `read_merge_policy` reports `tags: append` from base (mixin does NOT override); `read_canonical_body_sections(default_profile_for_kind("paper"))` returns the documented heading list; `journal` → `venue` rename surfaces a deprecation warning when 1.0 papers are read through the 2.0 reader |
 | `test_entity_schema_overlay.py` (new or extend) | 1.1 schema validates overlays carrying `status`, `source`, `related`, `source_refs`, `created`, `updated`; `additionalProperties: false` still rejects unknown fields; `read_overlay_merge_policy()` returns `project_only` for the new fields and keeps `append` for `tags` / `ontology_terms`; the relaxed `canonicalId` regex accepts hyphenated paper ids |
-| `test_commons_promote_discovery.py` (new) | direct `doc/papers/*.md` walk across N projects; group-by normalized bibkey; reject null-id `--from`; skip files with `overlay_of:` set (already promoted); skip files whose `kind`/`type` ≠ `"paper"` with a warning; per-file parse failure / schema-failing frontmatter produces a `FailedCandidate` and does not abort discovery; `DiscoveryResult.failed_candidates` flows into `PromotePlan.failed_candidates` |
+| `test_commons_promote_discovery.py` (new) | direct `doc/papers/*.md` walk across N projects; group-by normalized bibkey; `resolve_project_by_id` matches `.id` (not `.name`), rejects null-id entries with a clear message, rejects unregistered ids with a different message; skip files with `overlay_of:` set (already promoted); skip files whose `kind`/`type` ≠ `"paper"` with a warning; per-file parse failure / schema-failing frontmatter produces a `FailedCandidate` and does not abort discovery; `DiscoveryResult.failed_candidates` flows into `PromotePlan.failed_candidates` |
 | `test_commons_promote_plan.py` (new) | classification places only canonical fields on the canonical entity (project-only fields never appear); auto-union on disjoint canonical fields; auto-union on identical values; `FieldConflict` raised on differing values; resolver callback is honored; body-section split respects `x-canonical-body-sections`; append fields union deterministically; `failed_candidates` carried into the plan |
-| `test_commons_promote_apply.py` (new) | preflight blocks dirty target files with a `PromoteInputError` naming them; preflight allows dirty non-target files; single commit + N tags pointing at it; project file rewrites with pin to tagged version; rewritten overlays validate against `overlay-1.1`; audit log shape (success path: committed; failure path: best-effort uncommitted); **failure-mid-rewrite rolls back project files but leaves commons commit**; **failure-before-commit leaves nothing on disk**; idempotent re-apply (an already-overlayed file is skipped, no-op); `failed_candidates` surfaces in the audit log |
+| `test_commons_promote_apply.py` (new) | preflight blocks dirty target files with a `PromoteInputError` naming them; preflight allows dirty non-target files; canonical paper files include `schema_profile`, `version`, `created`, `updated` set by promote; canonical paper files always carry `tags: []` (or no tags field); single commit + N tags pointing at it; project file rewrites with pin to tagged version; rewritten overlays validate against `overlay-1.1`; rewritten overlays preserve the project's original `created` / `updated`; audit log shape (success path: committed; failure path: best-effort uncommitted); **failure-mid-rewrite rolls back project files but leaves commons commit**; **failure-before-commit leaves nothing on disk**; idempotent re-apply (an already-overlayed file is skipped, no-op); `failed_candidates` surfaces in the audit log |
 | `test_commons_cli_promote.py` (new) | dry-run output format including conflict prompts and failed-candidates summary; `--apply` end-to-end happy path; `--limit`; `--limit 0` produces discovery-only output with no prompts; null-id slug → non-zero exit with clear message; missing commons → non-zero exit; dirty target file → non-zero exit with preflight diagnostic; conflict + interactive resolver via test-injected callback; single-entity form vs bulk form path divergence |
 | `tests/fixtures/promote/` (new) | minimal commons store seed; two synthetic projects with 4 papers each (2 single-instance, 2 cross-project dupes — one auto-mergeable, one with a real `year` conflict). Doubles as the dev bed for the dedup flow |
 
@@ -495,7 +534,8 @@ The full `science` suite and the `science_model` suite must stay green.
 7. `science_tool/commons/errors.py` — four new error classes.
 8. `science_tool/commons/cli.py` — `promote paper` subgroup.
 9. `science_tool/commons/__init__.py` — public surface exports (incl. `FailedCandidate`, `DiscoveryResult`, `PromotePlan`, `PromoteResult`).
-10. Test files (five new) + extension of `test_entity_schema_overlay*` for 1.1 + fixtures per §8.
+10. `science_tool/commons/config.py` — new `resolve_project_by_id(project_id) -> Path` helper (id-based registry lookup, rejects null-id and unregistered entries).
+11. Test files (five new) + extension of `test_entity_schema_overlay*` for 1.1 + fixtures per §8.
 
 ## 10. Follow-on phases
 
