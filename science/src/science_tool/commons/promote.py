@@ -19,11 +19,17 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Literal
 
+import click
 import yaml
 
-from science_model.entity_schema import MergePolicy, default_profile_for_kind
+from science_model.entity_schema import (
+    MergePolicy,
+    default_profile_for_kind,
+    read_canonical_body_sections,
+    read_merge_policy,
+)
 from science_tool.commons.config import resolve_project_by_id
-from science_tool.commons.errors import PromoteCandidateError
+from science_tool.commons.errors import PromoteCandidateError, PromoteConflictAbort, PromoteInputError
 
 
 # --------------------------------------------------------------------------- #
@@ -159,13 +165,203 @@ def discover_paper_candidates(project_slugs: list[str]) -> DiscoveryResult:
     return DiscoveryResult(candidates_by_bibkey=grouped, failed_candidates=failures)
 
 
+def prompt_resolve(conflict: FieldConflict) -> Any:
+    """Interactive terminal prompt — the default `resolve_conflict` callback.
+
+    UI mirrors design §7.1. Returns the resolved value (a candidate value, a
+    user-entered manual value, or raises `PromoteConflictAbort` on 'a' / Ctrl-C).
+    """
+    click.echo(f'\nConflict for paper:{conflict.bibkey}, field "{conflict.field}":')
+    ordered = sorted(conflict.candidates.items())
+    for idx, (slug, value) in enumerate(ordered, start=1):
+        click.echo(f"  [{idx}] {slug}: {value!r}")
+    click.echo(f"  [{len(ordered) + 1}] enter value manually")
+    click.echo("  [a] abort batch")
+    while True:
+        try:
+            choice = click.prompt(
+                f"Choose [1-{len(ordered) + 1}/a]",
+                type=str,
+                show_default=False,
+            ).strip()
+        except (click.Abort, KeyboardInterrupt) as exc:
+            raise PromoteConflictAbort("user aborted at conflict prompt") from exc
+        if choice.lower() == "a":
+            raise PromoteConflictAbort("user chose 'abort batch' at conflict prompt")
+        try:
+            n = int(choice)
+        except ValueError:
+            click.echo("invalid selection")
+            continue
+        if 1 <= n <= len(ordered):
+            return ordered[n - 1][1]
+        if n == len(ordered) + 1:
+            return click.prompt("Manual value", type=str)
+        click.echo("out of range")
+
+
 def plan_promote(
     discovery: DiscoveryResult,
     commons_root: Path,
     *,
     resolve_conflict: Callable[[FieldConflict], Any] | None = None,
+    from_order: list[str] | None = None,
 ) -> PromotePlan:
-    raise NotImplementedError  # Task 14
+    """Build a PromotePlan from a DiscoveryResult.
+
+    For each bibkey group:
+      1. Run `_classify_entity` per candidate (consumes the raw frontmatter/body
+         stashed by discovery in `project_only_body.__raw_*__`).
+      2. Pick canonical bibkey case via `_pick_canonical_bibkey_case`.
+      3. Merge canonical fields → `(merged_fields, conflicts)`.
+      4. Resolve each conflict via `resolve_conflict`.
+      5. Build PromoteDecision (canonical_content rendered, overlays planned).
+
+    `from_order` defaults to the discovery's project_slug encounter order.
+    `resolve_conflict` defaults to `prompt_resolve`.
+    """
+    if resolve_conflict is None:
+        resolve_conflict = prompt_resolve
+
+    paper_profile = default_profile_for_kind("paper")
+    merge_policy = read_merge_policy(paper_profile)
+    body_sections = read_canonical_body_sections(paper_profile)
+
+    if from_order is None:
+        from_order = []
+        seen_slugs: set[str] = set()
+        for cands in discovery.candidates_by_bibkey.values():
+            for c in cands:
+                if c.project_slug not in seen_slugs:
+                    from_order.append(c.project_slug)
+                    seen_slugs.add(c.project_slug)
+
+    decisions: list[PromoteDecision] = []
+    soft_failures: list[FailedCandidate] = list(discovery.failed_candidates)
+
+    for bibkey_norm in sorted(discovery.candidates_by_bibkey):
+        raw_group = discovery.candidates_by_bibkey[bibkey_norm]
+
+        classified: list[PromoteCandidate] = []
+        for c in raw_group:
+            raw_fm = c.project_only_body.get(_RAW_FRONTMATTER_KEY)
+            raw_body = c.project_only_body.get(_RAW_BODY_KEY, "")
+            if not isinstance(raw_fm, dict):
+                soft_failures.append(
+                    FailedCandidate(
+                        bibkey=c.bibkey, project_slug=c.project_slug,
+                        source_path=c.overlay_source_path,
+                        error_class="PromoteCandidateError",
+                        error_message="discovery payload missing raw frontmatter",
+                    )
+                )
+                continue
+            can_f, proj_f, can_b, proj_b = _classify_entity(
+                raw_fm, raw_body, merge_policy, body_sections,
+            )
+            classified.append(
+                PromoteCandidate(
+                    bibkey=c.bibkey,
+                    bibkey_normalized=c.bibkey_normalized,
+                    project_slug=c.project_slug,
+                    project_root=c.project_root,
+                    overlay_source_path=c.overlay_source_path,
+                    canonical_fields=can_f,
+                    project_only_fields=proj_f,
+                    canonical_body=can_b,
+                    project_only_body=proj_b,
+                )
+            )
+
+        if not classified:
+            continue
+
+        canonical_case = _pick_canonical_bibkey_case(classified, from_order)
+        merged, conflicts = _merge_canonical_fields(classified, merge_policy)
+
+        resolved_conflicts: list[ConflictResolution] = []
+        for conflict in conflicts:
+            resolved_value = resolve_conflict(conflict)
+            source_project = next(
+                (slug for slug, v in conflict.candidates.items() if v == resolved_value),
+                None,
+            )
+            resolved_conflicts.append(
+                ConflictResolution(
+                    bibkey=canonical_case,
+                    field=conflict.field,
+                    candidates=conflict.candidates,
+                    resolved_to=resolved_value,
+                    source_project=source_project,
+                )
+            )
+            merged[conflict.field] = resolved_value
+
+        canonical_path = commons_root / "papers" / f"{canonical_case}.md"
+        overlays: dict[str, OverlayRewrite] = {}
+        for c in classified:
+            source_path = c.overlay_source_path
+            target_path = source_path.parent / f"{canonical_case}.md"
+            rename_from = source_path if source_path.name != target_path.name else None
+            if rename_from is not None and target_path.exists():
+                raise PromoteInputError(
+                    f"case-rename collision in {c.project_slug}: cannot rename "
+                    f"{rename_from} → {target_path}; target already exists"
+                )
+            rendered_overlay = _render_overlay(
+                PromoteDecision(
+                    bibkey=canonical_case,
+                    canonical_path=canonical_path,
+                    canonical_content="",
+                    canonical_version="1.0.0",
+                    overlays={},
+                    resolved_conflicts=(),
+                ),
+                project_slug=c.project_slug,
+                project_only_fields=c.project_only_fields,
+                project_only_body=c.project_only_body,
+            )
+            overlays[c.project_slug] = OverlayRewrite(
+                project_slug=c.project_slug,
+                path=target_path,
+                before_sha="",
+                after_content=rendered_overlay,
+                pin_version="1.0.0",
+                rename_from=rename_from,
+            )
+
+        canonical_decision = PromoteDecision(
+            bibkey=canonical_case,
+            canonical_path=canonical_path,
+            canonical_content="",
+            canonical_version="1.0.0",
+            overlays=overlays,
+            resolved_conflicts=tuple(resolved_conflicts),
+        )
+        # NOTE: design §4.1.1 says `created` / `updated` should reflect the
+        # apply timestamp, not the plan timestamp. We render here with
+        # plan-day dates so the dry-run summary can show concrete content;
+        # apply_promote (Task 16) re-renders with the actual write-time
+        # timestamp before committing. The pre-render is informational only.
+        canonical_content = _render_canonical(
+            canonical_decision,
+            canonical_fields=merged,
+            canonical_body=classified[0].canonical_body,
+            created=date.today(),
+            updated=date.today(),
+        )
+        decisions.append(
+            PromoteDecision(
+                bibkey=canonical_case,
+                canonical_path=canonical_path,
+                canonical_content=canonical_content,
+                canonical_version="1.0.0",
+                overlays=overlays,
+                resolved_conflicts=tuple(resolved_conflicts),
+            )
+        )
+
+    return PromotePlan(decisions=decisions, failed_candidates=soft_failures)
 
 
 def apply_promote(

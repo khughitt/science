@@ -274,3 +274,109 @@ def test_render_overlay_preserves_project_dates_and_overlay_fields() -> None:
     assert 'updated: "2026-05-15"' in rendered
     assert "## Project Use" in rendered
     assert "schema_profile" not in rendered
+
+
+def test_plan_promote_groups_by_bibkey_and_carries_failures(tmp_path) -> None:
+    from science_tool.commons.promote import (
+        DiscoveryResult,
+        FailedCandidate,
+        plan_promote,
+    )
+
+    def _cand(slug, bibkey, fields):
+        return PromoteCandidate(
+            bibkey=bibkey, bibkey_normalized=bibkey.casefold(),
+            project_slug=slug, project_root=Path("/tmp") / slug,
+            overlay_source_path=Path("/tmp") / slug / "doc/papers" / f"{bibkey}.md",
+            canonical_fields={}, project_only_fields={},
+            canonical_body={},
+            project_only_body={
+                "__raw_frontmatter__": {"id": f"paper:{bibkey}", "type": "paper",
+                                        "title": "T", **fields},
+                "__raw_body__": "",
+            },
+        )
+
+    discovery = DiscoveryResult(
+        candidates_by_bibkey={
+            "adams2025": [_cand("A", "Adams2025", {"year": 2025})],
+        },
+        failed_candidates=[
+            FailedCandidate(bibkey="x", project_slug="A", source_path=Path("/x"),
+                            error_class="PromoteCandidateError", error_message="bad")
+        ],
+    )
+
+    plan = plan_promote(discovery, commons_root=tmp_path, resolve_conflict=lambda c: None)
+    assert len(plan.decisions) == 1
+    assert plan.decisions[0].bibkey == "Adams2025"
+    assert len(plan.failed_candidates) == 1
+    assert plan.failed_candidates[0].error_class == "PromoteCandidateError"
+
+
+def test_plan_promote_invokes_resolver_on_conflict(tmp_path) -> None:
+    from science_tool.commons.promote import (
+        DiscoveryResult,
+        plan_promote,
+    )
+
+    def _cand(slug, year):
+        return PromoteCandidate(
+            bibkey="Dang2023", bibkey_normalized="dang2023",
+            project_slug=slug, project_root=Path("/tmp") / slug,
+            overlay_source_path=Path("/tmp") / slug / "doc/papers/Dang2023.md",
+            canonical_fields={}, project_only_fields={}, canonical_body={},
+            project_only_body={
+                "__raw_frontmatter__": {
+                    "id": "paper:Dang2023", "type": "paper",
+                    "title": "T", "year": year,
+                },
+                "__raw_body__": "",
+            },
+        )
+
+    discovery = DiscoveryResult(
+        candidates_by_bibkey={"dang2023": [_cand("A", 2023), _cand("B", 2024)]},
+        failed_candidates=[],
+    )
+
+    resolved: list = []
+    def picker(conflict):
+        resolved.append(conflict.field)
+        return conflict.candidates["A"]
+
+    plan = plan_promote(discovery, commons_root=tmp_path, resolve_conflict=picker)
+    assert resolved == ["year"]
+    decision = plan.decisions[0]
+    assert len(decision.resolved_conflicts) == 1
+    assert decision.resolved_conflicts[0].resolved_to == 2023
+
+
+def test_plan_promote_case_collision_picks_first_from_order(tmp_path) -> None:
+    from science_tool.commons.promote import DiscoveryResult, plan_promote
+
+    def _cand(slug, bibkey):
+        return PromoteCandidate(
+            bibkey=bibkey, bibkey_normalized=bibkey.casefold(),
+            project_slug=slug, project_root=Path("/tmp") / slug,
+            overlay_source_path=Path("/tmp") / slug / "doc/papers" / f"{bibkey}.md",
+            canonical_fields={}, project_only_fields={}, canonical_body={},
+            project_only_body={
+                "__raw_frontmatter__": {
+                    "id": f"paper:{bibkey}", "type": "paper", "title": "T",
+                },
+                "__raw_body__": "",
+            },
+        )
+
+    discovery = DiscoveryResult(
+        candidates_by_bibkey={"huh2024": [_cand("A", "Huh2024"), _cand("B", "huh2024")]},
+        failed_candidates=[],
+    )
+    plan = plan_promote(discovery, commons_root=tmp_path, resolve_conflict=lambda c: None,
+                        from_order=["A", "B"])
+    assert plan.decisions[0].bibkey == "Huh2024"
+    b_overlay = plan.decisions[0].overlays["B"]
+    assert b_overlay.rename_from is not None
+    assert b_overlay.rename_from.name == "huh2024.md"
+    assert b_overlay.path.name == "Huh2024.md"
