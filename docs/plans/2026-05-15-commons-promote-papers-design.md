@@ -42,10 +42,10 @@ Multi-instance dedup is automatic where canonical fields agree or are one-sided;
 
 The work splits into two deliverables that ship together:
 
-1. **Schema extension (`science_model`)** — `mixin-paper-2.0.json` becomes the canonical paper profile. The existing `read_merge_policy(profile_string)` reads the new annotations; nothing in the overlay-merge pipeline (Phase D1) or `inventory_v2` builder (Phase D2) needs to change. `core_entity_type_for_kind("paper")` returns `paper/2.0`.
+1. **Schema extension (`science_model`)** — `mixin-paper-2.0.json` becomes the canonical paper profile, addressed via the new `default_profile_for_kind("paper")` helper (§4.5). `overlay-1.1.json` bumps the overlay schema to carry project-only paper fields and relax the canonical id regex (§4.4). The existing `read_merge_policy` and overlay merge pipeline (Phase D1) read the new annotations without code changes; `inventory_v2` is unaffected.
 2. **Promote module (`science_tool/commons/promote.py`)** — sibling of `resolver.py` / `overlay.py`, owning discovery / dedup / classification / write. Atomic-batch transaction semantics: one `--apply` produces one commons commit, N entity tags pointing at it, N project file rewrites, one `.migrations/` audit entry. Dry-run is the default.
 
-Project-side scanning **reuses** `inventory_v2` per registered project (no new file walking). The classifier reads the new merge policy from the schema; conflict resolution prompts use the terminal idioms (`click.prompt`) already established in the Phase B `commons` CLI.
+Project-side discovery walks `<project_root>/doc/papers/*.md` directly (not via `build_inventory`, see §5.3 for why). The classifier reads the new merge policy from the schema; conflict resolution prompts use the terminal idioms (`click.prompt`) already established in the Phase B `commons` CLI.
 
 ### 3.1 Code layout
 
@@ -61,13 +61,6 @@ science/model/src/science_model/entity_schema/
 ├── merge.py                    # MODIFIED — `read_canonical_body_sections(profile)` helper
 └── profile.py                  # MODIFIED — `default_profile_for_kind(kind)` helper
                                 #            returning the parsed `science-entity-base/1.0+<kind>/<ver>`
-
-science/model/src/science_model/entities.py
-                                # MODIFIED — `default_profile_for_kind` consumer; bumps the
-                                #            commons-side `schema_profile` for promoted papers
-                                #            to `science-entity-base/1.0+paper/2.0`. `core_entity_type_for_kind`
-                                #            keeps its existing `EntityType | None` shape — it is
-                                #            unrelated to profile-string resolution.
 
 science/src/science_tool/commons/
 ├── promote.py                  # NEW — discovery, plan, apply
@@ -152,9 +145,15 @@ Changes vs 1.0 (all additive):
   - `created: date`, `updated: date` — project-side metadata.
 - **`additionalProperties` stays `false`.** Strictness is a feature; we add named fields, we don't open the door.
 
-Loader updates: `read_overlay_merge_policy` already reads from `ProfileComponent(name="overlay", version="1.0")` (hardcoded in `merge.py:37`). That string bumps to `"1.1"`. Phase E tests verify the new fields validate cleanly on real overlay files written by promote.
+**Loader and validator updates** — three small, coordinated changes:
 
-The `overlay-1.0.json` file stays in tree for the small number of overlay fixtures that pin 1.0 explicitly; new overlays written by promote always declare `schema_profile: science-entity-base/1.0+overlay/1.1` (or omit `schema_profile` and rely on the loader default — but emitting it explicitly is the safer choice).
+- `read_overlay_merge_policy` currently loads `ProfileComponent(name="overlay", version="1.0")` (hardcoded in `merge.py:37`). The version literal bumps to `"1.1"`.
+- `EntitySchemaValidator.validate_overlay` currently hardcodes `ProfileComponent(name="overlay", version="1.0")` (`validator.py:65`). The version literal bumps to `"1.1"`. The validator stays "hardcoded version" — it never reads a per-file profile field.
+- The `parse_profile`-based profile-string surface is **not** touched: `parse_profile` accepts only the type mixins `{dataset, paper, topic, theme}` (`profile.py:16`), and "overlay" is deliberately not in that set. Overlays do not become first-class parsed profile components in Phase E.
+
+**Promote does NOT emit `schema_profile:` on rewritten overlays.** The validator's hardcoded version is the single source of truth for overlay schema selection; an emitted `schema_profile` would be either ignored (current validator behavior) or, if naively passed to `parse_profile`, would raise. The earlier draft proposed `schema_profile: science-entity-base/1.0+overlay/1.1`; that is incompatible with the profile model and is dropped. If overlay versioning ever needs to be per-file (e.g., to support a 1.0/1.1 mix during a future migration), that becomes its own design slice — either a separate `overlay_schema_version:` field with a dedicated reader, or extending `parse_profile` to treat "overlay" as a fourth special component.
+
+The `overlay-1.0.json` file stays in tree for the small number of overlay fixtures that pin 1.0 explicitly; new overlays written by promote validate against 1.1 via the hardcoded path above.
 
 ### 4.5 Profile string
 
@@ -219,9 +218,14 @@ class FailedCandidate:
     error_message: str
 
 @dataclass(frozen=True, slots=True)
+class DiscoveryResult:
+    candidates_by_bibkey: dict[str, list[PromoteCandidate]]
+    failed_candidates: list[FailedCandidate]   # parse / kind failures encountered during scan
+
+@dataclass(frozen=True, slots=True)
 class PromotePlan:
     decisions: list[PromoteDecision]
-    failed_candidates: list[FailedCandidate]   # soft-failed at discovery / classification
+    failed_candidates: list[FailedCandidate]   # discovery failures + any plan-time soft failures
 
 @dataclass(frozen=True, slots=True)
 class PromoteResult:
@@ -239,19 +243,24 @@ class PromoteResult:
 
 def discover_paper_candidates(
     project_slugs: list[str],
-) -> dict[str, list[PromoteCandidate]]:
-    """Scan each project via inventory_v2; group candidates by normalized bibkey.
-    Skip files whose frontmatter already has `overlay_of:` (already promoted)."""
+) -> DiscoveryResult:
+    """Scan each project's `<project_root>/doc/papers/*.md` directly (not via
+    `build_inventory` — see §5.3 for why). For each file: parse frontmatter,
+    skip if `overlay_of:` present (already promoted), skip with a logger warning
+    if kind/type ≠ "paper", construct a PromoteCandidate otherwise. Parse failures
+    are wrapped as FailedCandidate, never raised. Returns candidates grouped by
+    normalized bibkey plus the failure list."""
 
 def plan_promote(
-    candidates_by_bibkey: dict[str, list[PromoteCandidate]],
+    discovery: DiscoveryResult,
     commons_root: Path,
     *,
     resolve_conflict: Callable[[FieldConflict], Any] = prompt_resolve,
 ) -> PromotePlan:
     """Apply merge-policy classification + auto-union + conflict resolution.
-    Pure modulo the resolver callback. One decision per bibkey, plus a list of
-    soft-failed candidates that couldn't be classified."""
+    `discovery.failed_candidates` is carried into `plan.failed_candidates` and
+    extended with any plan-time soft failures. Pure modulo the resolver callback.
+    One decision per bibkey."""
 
 def apply_promote(
     plan: PromotePlan,
@@ -266,23 +275,28 @@ def apply_promote(
 
 ### 5.2 Internal helpers (not exported)
 
-- `_classify_entity(entity, merge_policy, canonical_body_sections) -> (canonical_fields, project_only_fields, canonical_body, project_only_body)` — single-file classifier.
-- `_merge_canonical_fields(candidates, merge_policy) -> (canonical_dict, conflicts)` — auto-union for replace fields when one-sided or identical; raises conflicts only on differing values. Append fields union deterministically (sorted, deduped).
+- `_scan_project_papers(project_root: Path, project_slug: str) -> tuple[list[PromoteCandidate], list[FailedCandidate]]` — walks `<project_root>/doc/papers/*.md`, parses frontmatter, classifies each file. Per-file failure (parse error, schema-failing frontmatter, malformed `id`) produces a `FailedCandidate`; the walk continues.
+- `_parse_paper_file(path: Path) -> tuple[dict, str]` — frontmatter + body split. Raises `PromoteCandidateError` on parse failure; callers wrap to `FailedCandidate`.
+- `_classify_entity(frontmatter, body, merge_policy, canonical_body_sections) -> (canonical_fields, project_only_fields, canonical_body, project_only_body)` — single-file classifier.
+- `_merge_canonical_fields(candidates, merge_policy) -> (canonical_dict, conflicts)` — auto-union for replace fields when one-sided or identical; produces `FieldConflict` only on differing values. Append fields union deterministically (sorted, deduped).
 - `_render_canonical(decision) -> str` — markdown writer for the commons surface file.
 - `_render_overlay(decision, project_slug) -> str` — markdown writer for the rewritten project file.
 - `_write_audit_log(result, commons_root) -> Path` — YAML writer for the `.migrations/` entry.
-- `_normalize_bibkey(raw: str) -> str` — strips `.md`, lowercases; rejects empty / whitespace / non-alphanumeric strings with `PromoteCandidateError`.
+- `_normalize_bibkey(raw: str) -> str` — strips `.md`, lowercases; rejects empty / whitespace / regex-failing strings with `PromoteCandidateError`.
 
 ### 5.3 Dependencies
 
 The module imports from:
-- `science_tool.entities_inventory` (`build_inventory`) — per-project scan.
 - `science_tool.commons.config` (`resolve_commons_root`).
-- `science_tool.commons.adapter` — only to short-circuit on already-promoted bibkeys.
-- `science_model.entity_schema` (`read_merge_policy`, `read_canonical_body_sections`, `MergePolicy`).
-- `science_model.contracts.inventory_v2` — for the inventory shape.
+- `science_tool.commons.adapter` — only to short-circuit on already-promoted bibkeys (commons-side existence check).
+- `science_model.entity_schema` (`read_merge_policy`, `read_canonical_body_sections`, `default_profile_for_kind`, `MergePolicy`).
+- A minimal YAML frontmatter splitter (likely the existing one in `science_tool.graph.sources` or a small local helper — see below).
 
-It does NOT import from the dashboard, from `science_tool.graph`, or from any project-specific module.
+It does NOT import from `science_tool.entities_inventory`. `build_inventory` was an attractive reuse target but is the wrong tool for promote: it delegates to `load_project_sources`, which raises hard `ValueError`s on malformed core entities (`sources.py:257`) and silently drops files missing identity markdown with only a logger warning (`sources.py:262`). Promote needs **structured per-file failure objects** so the audit log and dry-run can name each bad file; turning the inventory's mix of raise/warn/skip into that shape is messier than scanning `doc/papers/*.md` directly. Direct scan also keeps promote's discovery independent of inventory contract churn.
+
+If the frontmatter splitter currently used by `load_project_sources` is suitable, promote reuses it via a narrow import; otherwise promote defines `_parse_paper_file` locally using the standard YAML reader. Either way, no `build_inventory` dependency.
+
+The module does NOT import from the dashboard or from `science_tool.graph` (beyond a possible frontmatter helper).
 
 ## 6. Data flow
 
@@ -307,7 +321,6 @@ science commons promote paper --from <slug>... [--apply] [--limit N]
 
 ```
 $ science commons promote paper --from natural-systems --from multiple-myeloma --from cancer-meta
-Preflight: 3 project working trees clean, commons working tree clean. ✓
 Discovered 334 paper candidates across 3 projects (NS 17 + MM 232 + cancer-meta 85).
   • 325 single-instance (auto-promote)
   • 9 multi-instance (dedup)
@@ -321,6 +334,8 @@ Conflict for paper:dang2023, field "year":
   [a] abort batch
 Choose [1/2/3/a]: 1
   ...
+Preflight (target paths only): 334 commons-side + 334 project-side files clean,
+  3 project repos and 1 commons repo not mid-merge/rebase. ✓
 Would create:
   • 334 commons entities at ~/d/science-commons/papers/<bibkey>.md
   • 1 commons commit, 334 tags
@@ -331,6 +346,8 @@ Failed candidates: 0
 Re-run with --apply to execute.
 ```
 
+Note the ordering: discovery and planning come first because the preflight check needs the in-plan target set to decide which files matter (any file outside the in-plan set may be dirty without blocking). §6.3 step 0 codifies this — "step 0" is its label for being the gate before any write, not for running first chronologically.
+
 ### 6.3 Apply steps
 
 0. **Preflight cleanliness check** — for every repo that will be touched (the commons store and each `--from` project), require that:
@@ -338,7 +355,7 @@ Re-run with --apply to execute.
    - The repo is NOT in a merge / rebase / cherry-pick / bisect state.
    The check runs **after** discovery (step 2) and **after** the plan is built (step 3), because the in-plan target set is only known then. If any target file is dirty or any repo is mid-operation, the run aborts with a `PromoteInputError` listing every offending path; nothing has been written. This is what makes the §6.4 `git checkout HEAD --` rollback safe.
 1. **Validate inputs** — every `--from` slug resolves to a non-null registered id; `<commons_root>` exists.
-2. **Discover** — for each project, `build_inventory(project_root)` → filter `kind == "paper"` → build `PromoteCandidate`. Skip files whose frontmatter has `overlay_of:` (idempotency). A per-candidate parse failure produces a `FailedCandidate` *for that bibkey only*, recorded in the plan's `failed_candidates` list; the batch continues with the rest. Group surviving candidates by normalized bibkey.
+2. **Discover** — for each project, walk `<project_root>/doc/papers/*.md` directly via `_scan_project_papers` (NOT `build_inventory` — see §5.3). For each file: split frontmatter; if `overlay_of:` is present, skip (idempotency); if `kind`/`type` ≠ `"paper"`, log a warning and skip; otherwise construct a `PromoteCandidate`. A per-file parse failure or schema-failing frontmatter produces a `FailedCandidate` for that path, recorded in `DiscoveryResult.failed_candidates`; the walk continues. Group surviving candidates by normalized bibkey.
 3. **Plan** — for each bibkey group, run `plan_promote`. Conflicts fire prompts here, before any disk write. User Ctrl-C → `PromoteConflictAbort`, nothing on disk has changed yet.
 4. **Write commons (staged)** — for each decision, write canonical `papers/<bibkey>.md` into the commons working tree.
 5. **Commit + tag** — `git -C <commons> add papers/ && git commit -m "promote: N papers via op <op-id>"`; for each decision, `git -C <commons> tag paper/<bibkey>/<semver>`. All tags point at the single batch commit.
@@ -457,7 +474,7 @@ Per-module unit tests + fixture-driven end-to-end tests, all under `science/test
 |---|---|
 | `test_entity_schema_mixin_paper.py` (extend) | 2.0 schema validates against fixture papers from both project styles; `read_merge_policy(default_profile_for_kind("paper"))` returns the documented canonical-field classification; `read_canonical_body_sections(default_profile_for_kind("paper"))` returns the documented heading list; `journal` → `venue` rename surfaces a deprecation warning when 1.0 papers are read through the 2.0 reader |
 | `test_entity_schema_overlay.py` (new or extend) | 1.1 schema validates overlays carrying `status`, `source`, `related`, `source_refs`, `created`, `updated`; `additionalProperties: false` still rejects unknown fields; `read_overlay_merge_policy()` returns `project_only` for the new fields and keeps `append` for `tags` / `ontology_terms`; the relaxed `canonicalId` regex accepts hyphenated paper ids |
-| `test_commons_promote_discovery.py` (new) | discovery across N projects via `inventory_v2`; group-by normalized bibkey; reject null-id `--from`; skip overlay candidates (already promoted); per-candidate parse failure produces a `FailedCandidate` and does not abort discovery |
+| `test_commons_promote_discovery.py` (new) | direct `doc/papers/*.md` walk across N projects; group-by normalized bibkey; reject null-id `--from`; skip files with `overlay_of:` set (already promoted); skip files whose `kind`/`type` ≠ `"paper"` with a warning; per-file parse failure / schema-failing frontmatter produces a `FailedCandidate` and does not abort discovery; `DiscoveryResult.failed_candidates` flows into `PromotePlan.failed_candidates` |
 | `test_commons_promote_plan.py` (new) | classification places only canonical fields on the canonical entity (project-only fields never appear); auto-union on disjoint canonical fields; auto-union on identical values; `FieldConflict` raised on differing values; resolver callback is honored; body-section split respects `x-canonical-body-sections`; append fields union deterministically; `failed_candidates` carried into the plan |
 | `test_commons_promote_apply.py` (new) | preflight blocks dirty target files with a `PromoteInputError` naming them; preflight allows dirty non-target files; single commit + N tags pointing at it; project file rewrites with pin to tagged version; rewritten overlays validate against `overlay-1.1`; audit log shape (success path: committed; failure path: best-effort uncommitted); **failure-mid-rewrite rolls back project files but leaves commons commit**; **failure-before-commit leaves nothing on disk**; idempotent re-apply (an already-overlayed file is skipped, no-op); `failed_candidates` surfaces in the audit log |
 | `test_commons_cli_promote.py` (new) | dry-run output format including conflict prompts and failed-candidates summary; `--apply` end-to-end happy path; `--limit`; `--limit 0` produces discovery-only output with no prompts; null-id slug → non-zero exit with clear message; missing commons → non-zero exit; dirty target file → non-zero exit with preflight diagnostic; conflict + interactive resolver via test-injected callback; single-entity form vs bulk form path divergence |
@@ -471,13 +488,13 @@ The full `science` suite and the `science_model` suite must stay green.
 
 1. `science_model/schemas/mixin-paper-2.0.json` — canonical paper fields + `merge:` annotations + `x-canonical-body-sections`.
 2. `science_model/schemas/overlay-1.1.json` — adds `status`, `source`, `related`, `source_refs`, `created`, `updated` as named properties (default `merge: project_only` via `read_overlay_merge_policy`); relaxes `canonicalId` paper regex to permit hyphens.
-3. `science_model/entity_schema/merge.py` — `read_canonical_body_sections(profile)` helper; bumps the loader's hardcoded overlay component to `1.1`.
+3. `science_model/entity_schema/merge.py` — `read_canonical_body_sections(profile)` helper; bumps the loader's hardcoded overlay component to `1.1`. `science_model/entity_schema/validator.py` — bumps `validate_overlay`'s hardcoded overlay component to `1.1` (matching change; both must move together).
 4. `science_model/entity_schema/profile.py` — `default_profile_for_kind(kind: str) -> ProfileString` helper.
 5. `science_model/entity_schema/__init__.py` — export new helpers.
 6. `science_tool/commons/promote.py` — module per §5.
 7. `science_tool/commons/errors.py` — four new error classes.
 8. `science_tool/commons/cli.py` — `promote paper` subgroup.
-9. `science_tool/commons/__init__.py` — public surface exports (incl. `FailedCandidate`, `PromotePlan`).
+9. `science_tool/commons/__init__.py` — public surface exports (incl. `FailedCandidate`, `DiscoveryResult`, `PromotePlan`, `PromoteResult`).
 10. Test files (five new) + extension of `test_entity_schema_overlay*` for 1.1 + fixtures per §8.
 
 ## 10. Follow-on phases
