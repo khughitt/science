@@ -12,10 +12,13 @@ This module owns:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Literal
+
+from science_tool.commons.errors import PromoteCandidateError
 
 
 # --------------------------------------------------------------------------- #
@@ -155,3 +158,54 @@ def apply_promote(
     invocation: str,
 ) -> PromoteResult:
     raise NotImplementedError  # Tasks 16–17
+
+
+# --------------------------------------------------------------------------- #
+# Private helpers                                                              #
+# --------------------------------------------------------------------------- #
+
+_BIBKEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]{1,63}$")
+
+
+def _normalize_bibkey_for_match(raw: str) -> str:
+    """Strip `.md`, casefold for dedup grouping. Raises PromoteCandidateError on
+    empty / whitespace / regex-failing inputs. Does NOT mutate canonical case."""
+    if raw is None:
+        raise PromoteCandidateError("bibkey is None")
+    stripped = raw.strip()
+    if not stripped:
+        raise PromoteCandidateError("bibkey is empty / whitespace")
+    if stripped.endswith(".md"):
+        stripped = stripped[:-3]
+    if not _BIBKEY_RE.match(stripped):
+        raise PromoteCandidateError(
+            f"bibkey {raw!r} does not match [A-Za-z][A-Za-z0-9-]{{1,63}}"
+        )
+    return stripped.casefold()
+
+
+def _classify_paper_file_kind(
+    frontmatter: dict,
+) -> Literal["paper", "skip-other-kind", "skip-other-id"]:
+    """Decide whether a file under `doc/papers/` is a paper candidate.
+
+    Rule (design §6.3 step 2):
+    1. Explicit `kind: paper` or `type: paper` → paper.
+    2. Explicit `kind` / `type` with any other value → skip-other-kind.
+    3. No `kind` / `type`, `id` present and NOT starting with `paper:` →
+       skip-other-id (defense-in-depth; stronger declaration than directory
+       inference, but weaker than an explicit kind/type).
+    4. No `kind` / `type` and no contradictory `id` → infer from directory: paper.
+
+    Rules are checked in order: explicit kind/type wins over the id-prefix
+    check, so `{"id": "dataset:foo", "kind": "paper"}` returns "paper".
+    """
+    kind_val = frontmatter.get("kind") or frontmatter.get("type")
+    if kind_val == "paper":
+        return "paper"
+    if kind_val is not None:
+        return "skip-other-kind"
+    id_val = frontmatter.get("id")
+    if isinstance(id_val, str) and not id_val.startswith("paper:"):
+        return "skip-other-id"
+    return "paper"
