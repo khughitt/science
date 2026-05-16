@@ -208,6 +208,7 @@ class DiscoveryResult:
 class PromotePlan:
     decisions: list[PromoteDecision]
     failed_candidates: list[FailedCandidate]
+    kind: PromoteKindConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,6 +243,7 @@ class PromoteResult:
     # hints) by this list so failure logs don't suggest rollbacks for projects
     # that were never modified (design §6.3 step 7 failure variant).
     projects_touched: list[str]
+    kind: PromoteKindConfig
 
 
 # --------------------------------------------------------------------------- #
@@ -483,7 +485,7 @@ def plan_promote(
             )
         )
 
-    return PromotePlan(decisions=decisions, failed_candidates=soft_failures)
+    return PromotePlan(decisions=decisions, failed_candidates=soft_failures, kind=kind)
 
 
 def _commons_is_clean(commons_root: Path) -> tuple[bool, list[str]]:
@@ -576,6 +578,7 @@ def _write_failure_audit_log(
         failure_stage=failure_stage,
         failure_detail=failure_detail,
         projects_touched=projects_touched,
+        kind=plan.kind,
     )
     yaml_text = _render_audit_log_yaml(result, commons_root, invocation=invocation)
     try:
@@ -636,6 +639,7 @@ def apply_promote(
             failure_stage=None,
             failure_detail=None,
             projects_touched=[],
+            kind=plan.kind,
         )
 
     try:
@@ -801,6 +805,7 @@ def apply_promote(
             failure_stage=None,
             failure_detail=None,
             projects_touched=projects_touched,
+            kind=plan.kind,
         )
         try:
             audit_path = _write_audit_log(result, commons_root, invocation=invocation)
@@ -828,6 +833,7 @@ def apply_promote(
             failure_stage=None,
             failure_detail=None,
             projects_touched=result.projects_touched,
+            kind=result.kind,
         )
 
     except (PromoteInputError, PromoteWriteError, PromoteCandidateError) as exc:

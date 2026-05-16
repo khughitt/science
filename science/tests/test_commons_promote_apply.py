@@ -25,8 +25,33 @@ def _init_commons(root: Path) -> None:
     subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "init"], check=True)
 
 
+def test_result_carries_kind() -> None:
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        PromoteResult,
+    )
+
+    r = PromoteResult(
+        op_id="x",
+        started_at=datetime.now(timezone.utc),
+        finished_at=datetime.now(timezone.utc),
+        commons_commit=None,
+        tags_created=[],
+        decisions=[],
+        failed_candidates=[],
+        audit_log_path=None,
+        status="ok",
+        failure_stage=None,
+        failure_detail=None,
+        projects_touched=[],
+        kind=PROMOTE_KIND_PAPER,
+    )
+    assert r.kind is PROMOTE_KIND_PAPER
+
+
 def test_write_audit_log_writes_yaml_with_expected_shape(tmp_path) -> None:
     from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
         PromoteResult,
         _write_audit_log,
     )
@@ -45,6 +70,7 @@ def test_write_audit_log_writes_yaml_with_expected_shape(tmp_path) -> None:
         failure_stage=None,
         failure_detail=None,
         projects_touched=[],
+        kind=PROMOTE_KIND_PAPER,
     )
     path = _write_audit_log(result, tmp_path, invocation="science commons promote paper --apply")
     assert path.exists()

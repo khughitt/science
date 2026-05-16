@@ -55,6 +55,18 @@ def _case_cand(slug: str, bibkey: str) -> PromoteCandidate:
     )
 
 
+def test_plan_carries_kind(tmp_path) -> None:
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        DiscoveryResult,
+        plan_promote,
+    )
+
+    discovery = DiscoveryResult(candidates_by_slug={}, failed_candidates=[])
+    plan = plan_promote(discovery, commons_root=tmp_path, kind=PROMOTE_KIND_PAPER)
+    assert plan.kind is PROMOTE_KIND_PAPER
+
+
 def test_classify_entity_splits_canonical_vs_project_only() -> None:
     fm = {
         "id": "paper:Adams2025",
