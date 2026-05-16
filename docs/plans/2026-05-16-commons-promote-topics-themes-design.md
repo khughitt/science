@@ -218,13 +218,18 @@ For each `--from <project>`:
 
 ### 4.2 Plan
 
-Unchanged from Phase E except that conflict-detection iterates per kind:
+Unchanged from Phase E except that conflict-detection iterates per kind, and **all per-kind schema lookups happen at the top of `plan_promote` against `kind.default_profile`** (not the hardcoded paper profile at `promote.py:228`):
+
+- `merge_policy = read_merge_policy(kind.default_profile)` — drives `_classify_entity` (canonical vs. project_only vs. forbidden field routing) and `_merge_canonical_fields` (append vs. replace per array field). Without this, topic-only fields like `datasets` / `source_refs` / `related` and theme-only fields like `evidence_refs` would be misclassified under the paper policy.
+- `body_sections = read_canonical_body_sections(kind.default_profile)` — drives `_split_body_by_headings` (canonical vs. overlay body section routing).
+
+Conflict-detection flow:
 
 - Single-candidate slug → trivial plan entry (no prompt).
 - Multi-candidate slug → `_merge_canonical_fields` produces `FieldConflict`s; each runs through `prompt_resolve` for the interactive N-way diff (Click prompt with manual-value entry + abort).
 
-Body sections split via `_split_body_by_headings(body, kind)`:
-- Headings whose text matches `kind.canonical_body_sections` (looked up via `read_canonical_body_sections(kind.default_profile)`) → canonical body.
+Body sections split via `_split_body_by_headings(body, body_sections)`:
+- Headings whose text matches `body_sections` → canonical body.
 - Anything else → overlay body (prepended to the overlay's `## Project-Specific Notes` section, same convention as Phase E).
 
 ### 4.3 Plan-time validation (new)
