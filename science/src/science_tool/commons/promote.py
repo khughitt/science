@@ -507,20 +507,46 @@ def _commons_is_clean(commons_root: Path, kind: PromoteKindConfig) -> tuple[bool
     return (not dirty, dirty)
 
 
-def _project_target_files_clean(project_root: Path, target_filenames: list[str]) -> tuple[bool, list[str]]:
-    """For each filename in `target_filenames`, check whether `doc/papers/<name>`
-    matches HEAD. Returns (clean, dirty_paths)."""
+def _project_target_files_clean(
+    project_root: Path,
+    target_filenames: list[str],
+    kind: PromoteKindConfig,
+) -> tuple[bool, list[str]]:
+    """For each filename in `target_filenames`, check whether the overlay
+    destination AND every source subdir's same-named file are clean against
+    HEAD. The multi-path scan covers the topic flatten case: when a candidate
+    came from doc/background/topics/, the apply path unlinks that file, so
+    the preflight must catch dirtiness there too."""
     dirty: list[str] = []
-    for name in target_filenames:
-        rel = f"doc/papers/{name}"
-        absolute = project_root / rel
-        if not absolute.exists():
+    subdirs_to_check = [kind.overlay_dest_subdir, *kind.source_subdirs]
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for subdir in subdirs_to_check:
+        if subdir in seen:
             continue
-        diff = subprocess.run(
-            ["git", "-C", str(project_root), "diff", "--exit-code", "--quiet", "HEAD", "--", rel],
-        )
-        if diff.returncode != 0:
-            dirty.append(rel)
+        seen.add(subdir)
+        ordered.append(subdir)
+
+    for name in target_filenames:
+        for sub in ordered:
+            rel = f"{sub}/{name}"
+            status = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(project_root),
+                    "status",
+                    "--porcelain",
+                    "--untracked-files=all",
+                    "--",
+                    rel,
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            if status.stdout.strip():
+                dirty.append(rel)
     return (not dirty, dirty)
 
 
@@ -675,7 +701,7 @@ def apply_promote(
         for project_root, names in target_files_per_project.items():
             if not _repo_is_idle(project_root):
                 raise PromoteInputError(f"project {project_root} is mid-merge/rebase")
-            clean, dirty = _project_target_files_clean(project_root, names)
+            clean, dirty = _project_target_files_clean(project_root, names, plan.kind)
             if not clean:
                 raise PromoteInputError(f"project {project_root} has dirty target files: " + ", ".join(dirty))
 

@@ -1122,3 +1122,92 @@ def test_commons_is_clean_checks_kind_commons_subdir(tmp_path) -> None:
     assert paper_clean is True
     assert topic_clean is False
     assert "topics/x.md" in dirty
+
+
+def test_project_target_files_clean_checks_kind_overlay_dest_subdir(tmp_path) -> None:
+    """_project_target_files_clean hardcoded "doc/papers/{name}". After de-hardcoding,
+    kind.overlay_dest_subdir is used. For topic, also scans kind.source_subdirs
+    so a dirty doc/background/topics/foo.md is reported (the flatten case)."""
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_TOPIC,
+        _project_target_files_clean,
+    )
+
+    _init_repo(tmp_path)
+    (tmp_path / "doc" / "background" / "topics").mkdir(parents=True)
+    target = tmp_path / "doc" / "background" / "topics" / "primitives.md"
+    target.write_text("original\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "commit", "-m", "init"],
+        check=True,
+        capture_output=True,
+    )
+
+    # Dirty the file.
+    target.write_text("dirty\n", encoding="utf-8")
+
+    clean, dirty_paths = _project_target_files_clean(
+        tmp_path, ["primitives.md"], PROMOTE_KIND_TOPIC
+    )
+    assert clean is False
+    assert any("background/topics/primitives.md" in p for p in dirty_paths)
+
+
+def test_project_target_files_clean_reports_deleted_tracked_source_file(tmp_path) -> None:
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_TOPIC,
+        _project_target_files_clean,
+    )
+
+    _init_repo(tmp_path)
+    (tmp_path / "doc" / "background" / "topics").mkdir(parents=True)
+    target = tmp_path / "doc" / "background" / "topics" / "primitives.md"
+    target.write_text("original\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "commit", "-m", "init"],
+        check=True,
+        capture_output=True,
+    )
+
+    target.unlink()
+
+    clean, dirty_paths = _project_target_files_clean(
+        tmp_path, ["primitives.md"], PROMOTE_KIND_TOPIC
+    )
+    assert clean is False
+    assert "doc/background/topics/primitives.md" in dirty_paths
+
+
+@pytest.mark.parametrize(
+    "target_rel",
+    [
+        "doc/topics/primitives.md",
+        "doc/background/topics/primitives.md",
+    ],
+)
+def test_project_target_files_clean_reports_untracked_topic_target_file(
+    tmp_path,
+    target_rel: str,
+) -> None:
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_TOPIC,
+        _project_target_files_clean,
+    )
+
+    _init_repo(tmp_path)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "commit", "--allow-empty", "-m", "init"],
+        check=True,
+        capture_output=True,
+    )
+    target = tmp_path / target_rel
+    target.parent.mkdir(parents=True)
+    target.write_text("untracked\n", encoding="utf-8")
+
+    clean, dirty_paths = _project_target_files_clean(
+        tmp_path, ["primitives.md"], PROMOTE_KIND_TOPIC
+    )
+    assert clean is False
+    assert target_rel in dirty_paths
