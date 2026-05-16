@@ -173,7 +173,7 @@ def test_scan_project_papers_walks_doc_papers(tmp_path) -> None:
     )
 
     candidates, failures = _scan_project_papers(tmp_path, "test-project")
-    bibkeys = sorted(c.bibkey for c in candidates)
+    bibkeys = sorted(c.slug for c in candidates)
     assert bibkeys == ["Adams2025", "Huh2024"]
     assert failures == []
 
@@ -204,7 +204,7 @@ def test_scan_project_papers_records_failures_without_aborting(tmp_path) -> None
         encoding="utf-8",
     )
     candidates, failures = _scan_project_papers(tmp_path, "test-project")
-    assert [c.bibkey for c in candidates] == ["Good2024"]
+    assert [c.slug for c in candidates] == ["Good2024"]
     assert len(failures) == 1
     assert failures[0].source_path.name == "Broken2024.md"
     assert failures[0].error_class == "PromoteCandidateError"
@@ -265,8 +265,8 @@ def test_discover_groups_by_normalized_bibkey(tmp_path, monkeypatch) -> None:
     )
 
     result = discover_paper_candidates(["proj_a", "proj_b"])
-    assert set(result.candidates_by_bibkey) == {"huh2024"}
-    assert len(result.candidates_by_bibkey["huh2024"]) == 2
+    assert set(result.candidates_by_slug) == {"huh2024"}
+    assert len(result.candidates_by_slug["huh2024"]) == 2
     assert result.failed_candidates == []
 
 
@@ -304,6 +304,6 @@ def test_discover_carries_failures(tmp_path, monkeypatch) -> None:
     )
 
     result = discover_paper_candidates(["proj"])
-    assert set(result.candidates_by_bibkey) == {"good"}
+    assert set(result.candidates_by_slug) == {"good"}
     assert len(result.failed_candidates) == 1
     assert result.failed_candidates[0].source_path.name == "Broken.md"

@@ -163,9 +163,9 @@ def test_promote_input_error_is_commons_error() -> None:
     assert "missing --from" in str(e)
 
 
-def test_promote_candidate_error_carries_bibkey_and_path() -> None:
-    e = PromoteCandidateError("frontmatter parse error", bibkey="Adams2025", path=Path("/x/y.md"))
-    assert e.bibkey == "Adams2025"
+def test_promote_candidate_error_carries_slug_and_path() -> None:
+    e = PromoteCandidateError("frontmatter parse error", slug="Adams2025", path=Path("/x/y.md"))
+    assert e.slug == "Adams2025"
     assert e.path == Path("/x/y.md")
     assert isinstance(e, CommonsError)
 

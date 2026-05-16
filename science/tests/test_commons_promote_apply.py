@@ -271,7 +271,7 @@ def test_apply_promote_idempotent_skips_already_overlayed(tmp_path, monkeypatch)
     subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
     subprocess.run(["git", "-C", str(proj), "commit", "-q", "-m", "promote"], check=True)
     discovery2 = discover_paper_candidates(["proj-a"])
-    assert discovery2.candidates_by_bibkey == {}
+    assert discovery2.candidates_by_slug == {}
     plan2 = plan_promote(discovery2, commons_root=tmp_path / "commons",
                          resolve_conflict=lambda c: None, from_order=["proj-a"])
     assert plan2.decisions == []
@@ -320,7 +320,7 @@ def test_apply_promote_rename_happy_path_unlinks_source_writes_target(tmp_path, 
         discovery, commons_root=tmp_path / "commons",
         resolve_conflict=lambda c: None, from_order=["proj-a", "proj-b"],
     )
-    assert plan.decisions[0].bibkey == "Huh2024"
+    assert plan.decisions[0].slug == "Huh2024"
     result = apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
     assert result.status == "ok"
     assert not (proj_b / "doc" / "papers" / "huh2024.md").exists()
@@ -336,7 +336,6 @@ def test_apply_promote_rename_collision_aborts(tmp_path, monkeypatch) -> None:
     file shares the case-folded name), promote refuses to clobber it."""
     from science_tool.commons.errors import PromoteInputError
     from science_tool.commons.promote import (
-        apply_promote,
         discover_paper_candidates,
         plan_promote,
     )
@@ -672,7 +671,7 @@ def test_apply_promote_empty_plan_no_op(tmp_path, monkeypatch) -> None:
     )
 
     _init_commons(tmp_path / "commons")
-    discovery = DiscoveryResult(candidates_by_bibkey={}, failed_candidates=[])
+    discovery = DiscoveryResult(candidates_by_slug={}, failed_candidates=[])
     plan = plan_promote(
         discovery, commons_root=tmp_path / "commons",
         resolve_conflict=lambda c: None, from_order=[],

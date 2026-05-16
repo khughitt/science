@@ -413,7 +413,7 @@ def promote_group() -> None:
     help="Registered project id (NOT name). Required; repeatable for bulk + dedup.",
 )
 @click.option("--apply", "apply_flag", is_flag=True, default=False, help="Write changes (default: dry-run).")
-@click.option("--limit", type=int, default=None, help="Bulk only: stop after N papers (bibkey-sorted).")
+@click.option("--limit", type=int, default=None, help="Bulk only: stop after N papers (slug-sorted).")
 def promote_paper_cmd(
     entity_id: str | None,
     from_: tuple[str, ...],
@@ -449,28 +449,28 @@ def promote_paper_cmd(
             raise click.ClickException(f"expected `paper:<bibkey>`, got {entity_id!r}")
         wanted = entity_id.split(":", 1)[1].casefold()
         filtered = {
-            k: v for k, v in discovery.candidates_by_bibkey.items() if k == wanted
+            k: v for k, v in discovery.candidates_by_slug.items() if k == wanted
         }
         discovery = DiscoveryResult(
-            candidates_by_bibkey=filtered,
+            candidates_by_slug=filtered,
             failed_candidates=discovery.failed_candidates,
         )
 
     if limit is not None and limit >= 0:
-        sorted_keys = sorted(discovery.candidates_by_bibkey)[:limit] if limit > 0 else []
-        truncated = {k: discovery.candidates_by_bibkey[k] for k in sorted_keys}
+        sorted_keys = sorted(discovery.candidates_by_slug)[:limit] if limit > 0 else []
+        truncated = {k: discovery.candidates_by_slug[k] for k in sorted_keys}
         discovery = DiscoveryResult(
-            candidates_by_bibkey=truncated,
+            candidates_by_slug=truncated,
             failed_candidates=discovery.failed_candidates,
         )
 
-    n_total = sum(len(v) for v in discovery.candidates_by_bibkey.values())
-    n_groups = len(discovery.candidates_by_bibkey)
-    n_multi = sum(1 for v in discovery.candidates_by_bibkey.values() if len(v) > 1)
+    n_total = sum(len(v) for v in discovery.candidates_by_slug.values())
+    n_groups = len(discovery.candidates_by_slug)
+    n_multi = sum(1 for v in discovery.candidates_by_slug.values() if len(v) > 1)
     n_single = n_groups - n_multi
     click.echo(
         f"Discovered {n_total} paper candidates across {len(from_)} projects "
-        f"({n_groups} unique bibkeys, {n_single} single-instance, "
+        f"({n_groups} unique slugs, {n_single} single-instance, "
         f"{n_multi} multi-instance)."
     )
     if discovery.failed_candidates:
@@ -480,7 +480,7 @@ def promote_paper_cmd(
         if len(discovery.failed_candidates) > 5:
             click.echo(f"    … and {len(discovery.failed_candidates) - 5} more")
 
-    if not discovery.candidates_by_bibkey:
+    if not discovery.candidates_by_slug:
         click.echo("Nothing to promote.")
         return
 
@@ -498,7 +498,7 @@ def promote_paper_cmd(
             (slug, ov) for slug, ov in d.overlays.items() if ov.rename_from is not None
         ]
         rename_note = f" (rename: {', '.join(slug for slug, _ in renames)})" if renames else ""
-        click.echo(f"  {d.bibkey}{rename_note}")
+        click.echo(f"  {d.slug}{rename_note}")
         for slug, ov in renames:
             click.echo(f"    rename in {slug}: {ov.rename_from.name} → {ov.path.name}")
 

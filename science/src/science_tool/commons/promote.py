@@ -128,12 +128,12 @@ PROMOTE_KIND_THEME = PromoteKindConfig(
 class PromoteCandidate:
     """One paper file found during discovery.
 
-    `bibkey` is the source's case (filename stem). `bibkey_normalized` is
+    `slug` is the source's case (filename stem). `slug_normalized` is
     casefold() used only for dedup grouping. See design §4.1.3.
     """
 
-    bibkey: str
-    bibkey_normalized: str
+    slug: str
+    slug_normalized: str
     project_slug: str
     project_root: Path
     overlay_source_path: Path
@@ -150,14 +150,14 @@ class PromoteCandidate:
 
 @dataclass(frozen=True, slots=True)
 class FieldConflict:
-    bibkey: str
+    slug: str
     field: str
     candidates: dict[str, Any]  # project_slug → value
 
 
 @dataclass(frozen=True, slots=True)
 class ConflictResolution:
-    bibkey: str
+    slug: str
     field: str
     candidates: dict[str, Any]
     resolved_to: Any
@@ -176,8 +176,8 @@ class OverlayRewrite:
 
 @dataclass(frozen=True, slots=True)
 class PromoteDecision:
-    bibkey: str
-    canonical_path: Path                 # absolute `<commons>/papers/<bibkey>.md`
+    slug: str
+    canonical_path: Path                 # absolute `<commons>/papers/<slug>.md`
     canonical_content: str               # rendered canonical file (markdown + frontmatter)
     canonical_version: str               # "1.0.0" etc.
     overlays: dict[str, OverlayRewrite]  # project_slug → rewrite plan
@@ -186,7 +186,7 @@ class PromoteDecision:
 
 @dataclass(frozen=True, slots=True)
 class FailedCandidate:
-    bibkey: str | None
+    slug: str | None
     project_slug: str
     source_path: Path
     error_class: str
@@ -195,7 +195,7 @@ class FailedCandidate:
 
 @dataclass(frozen=True, slots=True)
 class DiscoveryResult:
-    candidates_by_bibkey: dict[str, list[PromoteCandidate]]
+    candidates_by_slug: dict[str, list[PromoteCandidate]]
     failed_candidates: list[FailedCandidate]
 
 
@@ -238,7 +238,7 @@ class PromoteResult:
 
 def discover_paper_candidates(project_slugs: list[str]) -> DiscoveryResult:
     """Scan each project's `doc/papers/*.md` directly. Group by case-insensitive
-    `bibkey_normalized`. Returns successful candidates + failure records."""
+    `slug_normalized`. Returns successful candidates + failure records."""
     grouped: dict[str, list[PromoteCandidate]] = {}
     failures: list[FailedCandidate] = []
 
@@ -247,9 +247,9 @@ def discover_paper_candidates(project_slugs: list[str]) -> DiscoveryResult:
         candidates, project_failures = _scan_project_papers(project_root, slug)
         failures.extend(project_failures)
         for cand in candidates:
-            grouped.setdefault(cand.bibkey_normalized, []).append(cand)
+            grouped.setdefault(cand.slug_normalized, []).append(cand)
 
-    return DiscoveryResult(candidates_by_bibkey=grouped, failed_candidates=failures)
+    return DiscoveryResult(candidates_by_slug=grouped, failed_candidates=failures)
 
 
 def prompt_resolve(conflict: FieldConflict) -> Any:
@@ -258,7 +258,7 @@ def prompt_resolve(conflict: FieldConflict) -> Any:
     UI mirrors design §7.1. Returns the resolved value (a candidate value, a
     user-entered manual value, or raises `PromoteConflictAbort` on 'a' / Ctrl-C).
     """
-    click.echo(f'\nConflict for paper:{conflict.bibkey}, field "{conflict.field}":')
+    click.echo(f'\nConflict for paper:{conflict.slug}, field "{conflict.field}":')
     ordered = sorted(conflict.candidates.items())
     for idx, (slug, value) in enumerate(ordered, start=1):
         click.echo(f"  [{idx}] {slug}: {value!r}")
@@ -296,10 +296,10 @@ def plan_promote(
 ) -> PromotePlan:
     """Build a PromotePlan from a DiscoveryResult.
 
-    For each bibkey group:
+    For each slug group:
       1. Run `_classify_entity` per candidate (consumes the raw frontmatter/body
          stashed by discovery in `project_only_body.__raw_*__`).
-      2. Pick canonical bibkey case via `_pick_canonical_bibkey_case`.
+      2. Pick canonical slug case via `_pick_canonical_bibkey_case`.
       3. Merge canonical fields → `(merged_fields, conflicts)`.
       4. Resolve each conflict via `resolve_conflict`.
       5. Build PromoteDecision (canonical_content rendered, overlays planned).
@@ -317,7 +317,7 @@ def plan_promote(
     if from_order is None:
         from_order = []
         seen_slugs: set[str] = set()
-        for cands in discovery.candidates_by_bibkey.values():
+        for cands in discovery.candidates_by_slug.values():
             for c in cands:
                 if c.project_slug not in seen_slugs:
                     from_order.append(c.project_slug)
@@ -326,8 +326,8 @@ def plan_promote(
     decisions: list[PromoteDecision] = []
     soft_failures: list[FailedCandidate] = list(discovery.failed_candidates)
 
-    for bibkey_norm in sorted(discovery.candidates_by_bibkey):
-        raw_group = discovery.candidates_by_bibkey[bibkey_norm]
+    for slug_norm in sorted(discovery.candidates_by_slug):
+        raw_group = discovery.candidates_by_slug[slug_norm]
 
         classified: list[PromoteCandidate] = []
         for c in raw_group:
@@ -336,7 +336,7 @@ def plan_promote(
             if not isinstance(raw_fm, dict):
                 soft_failures.append(
                     FailedCandidate(
-                        bibkey=c.bibkey, project_slug=c.project_slug,
+                        slug=c.slug, project_slug=c.project_slug,
                         source_path=c.overlay_source_path,
                         error_class="PromoteCandidateError",
                         error_message="discovery payload missing raw frontmatter",
@@ -348,8 +348,8 @@ def plan_promote(
             )
             classified.append(
                 PromoteCandidate(
-                    bibkey=c.bibkey,
-                    bibkey_normalized=c.bibkey_normalized,
+                    slug=c.slug,
+                    slug_normalized=c.slug_normalized,
                     project_slug=c.project_slug,
                     project_root=c.project_root,
                     overlay_source_path=c.overlay_source_path,
@@ -388,7 +388,7 @@ def plan_promote(
             )
             resolved_conflicts.append(
                 ConflictResolution(
-                    bibkey=canonical_case,
+                    slug=canonical_case,
                     field=conflict.field,
                     candidates=conflict.candidates,
                     resolved_to=resolved_value,
@@ -410,7 +410,7 @@ def plan_promote(
                 )
             rendered_overlay = _render_overlay(
                 PromoteDecision(
-                    bibkey=canonical_case,
+                    slug=canonical_case,
                     canonical_path=canonical_path,
                     canonical_content="",
                     canonical_version="1.0.0",
@@ -431,7 +431,7 @@ def plan_promote(
             )
 
         canonical_decision = PromoteDecision(
-            bibkey=canonical_case,
+            slug=canonical_case,
             canonical_path=canonical_path,
             canonical_content="",
             canonical_version="1.0.0",
@@ -452,7 +452,7 @@ def plan_promote(
         )
         decisions.append(
             PromoteDecision(
-                bibkey=canonical_case,
+                slug=canonical_case,
                 canonical_path=canonical_path,
                 canonical_content=canonical_content,
                 canonical_version="1.0.0",
@@ -659,7 +659,7 @@ def apply_promote(
         # ---------- Step 5.1: tag preflight ----------
         current_stage = "write_commons"
         for decision in plan.decisions:
-            tag = f"paper/{decision.bibkey}/{decision.canonical_version}"
+            tag = f"paper/{decision.slug}/{decision.canonical_version}"
             existing = _git(commons_root, "rev-parse", "--verify", "--quiet", tag, check=False)
             if existing.returncode == 0:
                 raise PromoteWriteError(
@@ -708,8 +708,8 @@ def apply_promote(
         assert commons_commit, "rev-parse HEAD returned empty after commit"
 
         # ---------- Step 5.3: tag (path-limited per-tag) ----------
-        for decision in sorted(plan.decisions, key=lambda d: d.bibkey):
-            tag = f"paper/{decision.bibkey}/{decision.canonical_version}"
+        for decision in sorted(plan.decisions, key=lambda d: d.slug):
+            tag = f"paper/{decision.slug}/{decision.canonical_version}"
             try:
                 _git(commons_root, "tag", tag, commons_commit)
                 tags_created.append(tag)
@@ -832,7 +832,7 @@ def apply_promote(
 # Private helpers                                                              #
 # --------------------------------------------------------------------------- #
 
-_BIBKEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]{1,63}$")
+_SLUG_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]{1,63}$")
 
 # Sentinel keys for stashing raw frontmatter+body in PromoteCandidate.project_only_body
 # during discovery, to be consumed by _classify_entity in plan_promote (Task 11).
@@ -846,15 +846,15 @@ def _normalize_bibkey_for_match(raw: str) -> str:
     """Strip `.md`, casefold for dedup grouping. Raises PromoteCandidateError on
     empty / whitespace / regex-failing inputs. Does NOT mutate canonical case."""
     if raw is None:
-        raise PromoteCandidateError("bibkey is None")
+        raise PromoteCandidateError("slug is None")
     stripped = raw.strip()
     if not stripped:
-        raise PromoteCandidateError("bibkey is empty / whitespace")
+        raise PromoteCandidateError("slug is empty / whitespace")
     if stripped.endswith(".md"):
         stripped = stripped[:-3]
-    if not _BIBKEY_RE.match(stripped):
+    if not _SLUG_RE.match(stripped):
         raise PromoteCandidateError(
-            f"bibkey {raw!r} does not match [A-Za-z][A-Za-z0-9-]{{1,63}}"
+            f"slug {raw!r} does not match [A-Za-z][A-Za-z0-9-]{{1,63}}"
         )
     return stripped.casefold()
 
@@ -943,7 +943,7 @@ def _scan_project_papers(
         except PromoteCandidateError as exc:
             failures.append(
                 FailedCandidate(
-                    bibkey=md_path.stem,
+                    slug=md_path.stem,
                     project_slug=project_slug,
                     source_path=md_path,
                     error_class="PromoteCandidateError",
@@ -980,7 +980,7 @@ def _scan_project_papers(
         if explicit_id is not None and explicit_id != f"paper:{md_path.stem}":
             failures.append(
                 FailedCandidate(
-                    bibkey=md_path.stem,
+                    slug=md_path.stem,
                     project_slug=project_slug,
                     source_path=md_path,
                     error_class="PromoteCandidateError",
@@ -992,13 +992,13 @@ def _scan_project_papers(
             )
             continue
 
-        bibkey_source = md_path.stem
+        slug_source = md_path.stem
         try:
-            bibkey_normalized = _normalize_bibkey_for_match(bibkey_source)
+            slug_normalized = _normalize_bibkey_for_match(slug_source)
         except PromoteCandidateError as exc:
             failures.append(
                 FailedCandidate(
-                    bibkey=bibkey_source,
+                    slug=slug_source,
                     project_slug=project_slug,
                     source_path=md_path,
                     error_class="PromoteCandidateError",
@@ -1012,8 +1012,8 @@ def _scan_project_papers(
         # + body so discovery is independent of merge-policy lookup.
         candidates.append(
             PromoteCandidate(
-                bibkey=bibkey_source,
-                bibkey_normalized=bibkey_normalized,
+                slug=slug_source,
+                slug_normalized=slug_normalized,
                 project_slug=project_slug,
                 project_root=project_root,
                 overlay_source_path=md_path,
@@ -1045,7 +1045,7 @@ _GENERATED_BY_PROMOTE_KEYS: frozenset[str] = frozenset(
 )
 
 # Identity fields promote re-derives from the PromoteDecision after the
-# canonical bibkey case is picked. They are stripped from the canonical merge
+# canonical slug case is picked. They are stripped from the canonical merge
 # bucket so case-divergent overlays don't surface a bogus `id` conflict
 # (design §4.1.3).
 _PROMOTE_DERIVED_IDENTITY_KEYS: frozenset[str] = frozenset({"id", "type", "bibkey"})
@@ -1086,7 +1086,7 @@ def _classify_entity(
       side (they're written by the overlay renderer alone).
     - Promote-derived identity fields (id, type, bibkey) NEVER appear on either
       side either — the canonical writer re-emits them from the PromoteDecision
-      (after `_pick_canonical_bibkey_case` chooses the canonical-case bibkey).
+      (after `_pick_canonical_bibkey_case` chooses the canonical-case slug).
       Letting them flow through the canonical bucket would surface a bogus
       `id` conflict any time two case-divergent overlays merge (design §4.1.3).
     - For every remaining source field, the merge policy decides:
@@ -1148,7 +1148,7 @@ def _merge_canonical_fields(
     candidates: list[PromoteCandidate],
     merge_policy: dict[str, MergePolicy],
 ) -> tuple[dict, list[FieldConflict]]:
-    """Merge canonical_fields across N candidates of the same bibkey.
+    """Merge canonical_fields across N candidates of the same slug.
 
     Rule per field (driven by merge_policy lookup):
     - APPEND: union of all candidates' lists, sorted + deduped.
@@ -1182,7 +1182,7 @@ def _merge_canonical_fields(
         else:
             conflicts.append(
                 FieldConflict(
-                    bibkey=present[0].bibkey,
+                    slug=present[0].slug,
                     field=key,
                     candidates={c.project_slug: c.canonical_fields[key] for c in present},
                 )
@@ -1195,7 +1195,7 @@ def _pick_canonical_bibkey_case(
     candidates: list[PromoteCandidate],
     from_order: list[str],
 ) -> str:
-    """Pick the canonical bibkey case from a multi-instance group.
+    """Pick the canonical slug case from a multi-instance group.
 
     Rule (design §4.1.3):
     1. Walk from_order; the first project_slug with a matching candidate wins.
@@ -1207,7 +1207,7 @@ def _pick_canonical_bibkey_case(
         candidates,
         key=lambda c: (order.get(c.project_slug, len(order)), c.project_slug),
     )
-    return sorted_by_order[0].bibkey
+    return sorted_by_order[0].slug
 
 
 # --------------------------------------------------------------------------- #
@@ -1290,7 +1290,7 @@ def _render_canonical(
     created: date,
     updated: date,
 ) -> str:
-    """Render the commons-side papers/<bibkey>.md content.
+    """Render the commons-side papers/<slug>.md content.
 
     Fills base-required fields (schema_profile, version, created, updated) and
     always emits `tags: []` so the per-project overlay-merge produces only the
@@ -1299,13 +1299,13 @@ def _render_canonical(
     profile_str = default_profile_for_kind("paper").render()
     head: dict = {
         "schema_profile": profile_str,
-        "id": f"paper:{decision.bibkey}",
+        "id": f"paper:{decision.slug}",
         "type": "paper",
         "title": canonical_fields.get("title", ""),
         "version": decision.canonical_version,
         "created": _coerce_date_for_yaml(created),
         "updated": _coerce_date_for_yaml(updated),
-        "bibkey": decision.bibkey,
+        "bibkey": decision.slug,
         "tags": [],
     }
     for k, v in canonical_fields.items():
@@ -1328,8 +1328,8 @@ def _render_overlay(
     """Render a project-side overlay file. NEVER emits schema_profile; the
     overlay validator is hardcoded to overlay/1.1 (design §4.4)."""
     head: dict = {
-        "id": f"paper:{decision.bibkey}",
-        "overlay_of": f"paper:{decision.bibkey}",
+        "id": f"paper:{decision.slug}",
+        "overlay_of": f"paper:{decision.slug}",
         "pin_version": decision.canonical_version,
     }
     # Skip overlay-only-management keys (overlay_of/pin_version/pin_effective_version)
@@ -1401,7 +1401,7 @@ def _render_audit_log_yaml(
                 continue
             projects_touched.setdefault(slug, {"overlay_rewrites": []})
             entry: dict = {
-                "bibkey": decision.bibkey,
+                "slug": decision.slug,
                 "path": str(overlay.path),
                 "pin_version": overlay.pin_version,
             }
@@ -1424,7 +1424,7 @@ def _render_audit_log_yaml(
         "projects_touched": projects_touched,
         "conflict_resolutions": [
             {
-                "bibkey": cr.bibkey,
+                "slug": cr.slug,
                 "field": cr.field,
                 "candidates": cr.candidates,
                 "resolved_to": cr.resolved_to,
@@ -1435,7 +1435,7 @@ def _render_audit_log_yaml(
         ],
         "failed_candidates": [
             {
-                "bibkey": f.bibkey,
+                "slug": f.slug,
                 "project_slug": f.project_slug,
                 "source_path": str(f.source_path),
                 "error_class": f.error_class,

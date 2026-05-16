@@ -5,10 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from pathlib import Path
 
-import pytest
-
 from science_model.entity_schema import (
-    MergePolicy,
     default_profile_for_kind,
     read_canonical_body_sections,
     read_merge_policy,
@@ -30,7 +27,7 @@ def _merge_cand(slug: str, fields: dict) -> PromoteCandidate:
     """Build a PromoteCandidate with the given canonical_fields. Used by
     _merge_canonical_fields tests where only fields + slug matter."""
     return PromoteCandidate(
-        bibkey="X", bibkey_normalized="x", project_slug=slug,
+        slug="X", slug_normalized="x", project_slug=slug,
         project_root=Path("/tmp"), overlay_source_path=Path("/tmp/x.md"),
         canonical_fields=fields, project_only_fields={},
         canonical_body={}, project_only_body={},
@@ -41,7 +38,7 @@ def _case_cand(slug: str, bibkey: str) -> PromoteCandidate:
     """Build a PromoteCandidate with the given bibkey case. Used by
     _pick_canonical_bibkey_case tests."""
     return PromoteCandidate(
-        bibkey=bibkey, bibkey_normalized=bibkey.casefold(),
+        slug=bibkey, slug_normalized=bibkey.casefold(),
         project_slug=slug, project_root=Path("/tmp"),
         overlay_source_path=Path("/tmp/x.md"),
         canonical_fields={}, project_only_fields={},
@@ -194,7 +191,7 @@ def test_render_canonical_includes_base_required_fields() -> None:
     from science_tool.commons.promote import _render_canonical, PromoteDecision
 
     decision = PromoteDecision(
-        bibkey="Adams2025",
+        slug="Adams2025",
         canonical_path=Path("/c/papers/Adams2025.md"),
         canonical_content="",
         canonical_version="1.0.0",
@@ -224,7 +221,7 @@ def test_render_canonical_dates_are_quoted_strings() -> None:
     import yaml
 
     decision = PromoteDecision(
-        bibkey="X",
+        slug="X",
         canonical_path=Path("/c/papers/X.md"),
         canonical_content="",
         canonical_version="1.0.0",
@@ -248,7 +245,7 @@ def test_render_overlay_preserves_project_dates_and_overlay_fields() -> None:
     from science_tool.commons.promote import _render_overlay, PromoteDecision
 
     decision = PromoteDecision(
-        bibkey="Adams2025",
+        slug="Adams2025",
         canonical_path=Path("/c/papers/Adams2025.md"),
         canonical_content="",
         canonical_version="1.0.0",
@@ -285,7 +282,7 @@ def test_plan_promote_groups_by_bibkey_and_carries_failures(tmp_path) -> None:
 
     def _cand(slug, bibkey, fields):
         return PromoteCandidate(
-            bibkey=bibkey, bibkey_normalized=bibkey.casefold(),
+            slug=bibkey, slug_normalized=bibkey.casefold(),
             project_slug=slug, project_root=Path("/tmp") / slug,
             overlay_source_path=Path("/tmp") / slug / "doc/papers" / f"{bibkey}.md",
             canonical_fields={}, project_only_fields={},
@@ -298,18 +295,18 @@ def test_plan_promote_groups_by_bibkey_and_carries_failures(tmp_path) -> None:
         )
 
     discovery = DiscoveryResult(
-        candidates_by_bibkey={
+        candidates_by_slug={
             "adams2025": [_cand("A", "Adams2025", {"year": 2025})],
         },
         failed_candidates=[
-            FailedCandidate(bibkey="x", project_slug="A", source_path=Path("/x"),
+            FailedCandidate(slug="x", project_slug="A", source_path=Path("/x"),
                             error_class="PromoteCandidateError", error_message="bad")
         ],
     )
 
     plan = plan_promote(discovery, commons_root=tmp_path, resolve_conflict=lambda c: None)
     assert len(plan.decisions) == 1
-    assert plan.decisions[0].bibkey == "Adams2025"
+    assert plan.decisions[0].slug == "Adams2025"
     assert len(plan.failed_candidates) == 1
     assert plan.failed_candidates[0].error_class == "PromoteCandidateError"
 
@@ -322,7 +319,7 @@ def test_plan_promote_invokes_resolver_on_conflict(tmp_path) -> None:
 
     def _cand(slug, year):
         return PromoteCandidate(
-            bibkey="Dang2023", bibkey_normalized="dang2023",
+            slug="Dang2023", slug_normalized="dang2023",
             project_slug=slug, project_root=Path("/tmp") / slug,
             overlay_source_path=Path("/tmp") / slug / "doc/papers/Dang2023.md",
             canonical_fields={}, project_only_fields={}, canonical_body={},
@@ -336,7 +333,7 @@ def test_plan_promote_invokes_resolver_on_conflict(tmp_path) -> None:
         )
 
     discovery = DiscoveryResult(
-        candidates_by_bibkey={"dang2023": [_cand("A", 2023), _cand("B", 2024)]},
+        candidates_by_slug={"dang2023": [_cand("A", 2023), _cand("B", 2024)]},
         failed_candidates=[],
     )
 
@@ -357,7 +354,7 @@ def test_plan_promote_case_collision_picks_first_from_order(tmp_path) -> None:
 
     def _cand(slug, bibkey):
         return PromoteCandidate(
-            bibkey=bibkey, bibkey_normalized=bibkey.casefold(),
+            slug=bibkey, slug_normalized=bibkey.casefold(),
             project_slug=slug, project_root=Path("/tmp") / slug,
             overlay_source_path=Path("/tmp") / slug / "doc/papers" / f"{bibkey}.md",
             canonical_fields={}, project_only_fields={}, canonical_body={},
@@ -370,12 +367,12 @@ def test_plan_promote_case_collision_picks_first_from_order(tmp_path) -> None:
         )
 
     discovery = DiscoveryResult(
-        candidates_by_bibkey={"huh2024": [_cand("A", "Huh2024"), _cand("B", "huh2024")]},
+        candidates_by_slug={"huh2024": [_cand("A", "Huh2024"), _cand("B", "huh2024")]},
         failed_candidates=[],
     )
     plan = plan_promote(discovery, commons_root=tmp_path, resolve_conflict=lambda c: None,
                         from_order=["A", "B"])
-    assert plan.decisions[0].bibkey == "Huh2024"
+    assert plan.decisions[0].slug == "Huh2024"
     b_overlay = plan.decisions[0].overlays["B"]
     assert b_overlay.rename_from is not None
     assert b_overlay.rename_from.name == "huh2024.md"

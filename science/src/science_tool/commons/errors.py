@@ -189,11 +189,11 @@ class PromoteCandidateError(CommonsError):
         self,
         message: str,
         *,
-        bibkey: str | None = None,
+        slug: str | None = None,
         path: Path | None = None,
     ) -> None:
         super().__init__(message)
-        self.bibkey = bibkey
+        self.slug = slug
         self.path = path
 
 
