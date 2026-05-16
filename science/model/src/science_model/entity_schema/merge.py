@@ -44,6 +44,29 @@ def read_overlay_merge_policy(loader: SchemaLoader | None = None) -> dict[str, M
     return policy
 
 
+def read_canonical_body_sections(
+    profile: ProfileString, loader: SchemaLoader | None = None
+) -> list[str]:
+    """Return the union of `x-canonical-body-sections` declared by the profile
+    components, in declaration order across (base, mixin, extensions).
+
+    Headings are returned verbatim (with original case); matching is case-
+    insensitive at the call site. Returns [] when no component declares the
+    annotation.
+    """
+    loader = loader or SchemaLoader()
+    sections: list[str] = []
+    seen: set[str] = set()
+    for component in _iter_components(profile):
+        schema = loader.load(component)
+        for heading in schema.get("x-canonical-body-sections", []) or []:
+            key = heading.casefold()
+            if key not in seen:
+                sections.append(heading)
+                seen.add(key)
+    return sections
+
+
 def _iter_components(profile: ProfileString) -> list[ProfileComponent]:
     components = [profile.base]
     if profile.mixin is not None:

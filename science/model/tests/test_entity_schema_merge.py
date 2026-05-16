@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from science_model.entity_schema import read_canonical_body_sections
 from science_model.entity_schema.merge import MergePolicy, read_merge_policy
 from science_model.entity_schema.profile import parse_profile
 
@@ -33,3 +34,17 @@ def test_overlay_specific_fields_are_project_only() -> None:
     assert policy["relevance"] == MergePolicy.PROJECT_ONLY
     assert policy["tags"] == MergePolicy.APPEND
     assert policy["ontology_terms"] == MergePolicy.APPEND
+
+
+def test_read_canonical_body_sections_returns_paper_2_0_sections() -> None:
+    profile = parse_profile("science-entity-base/1.0+paper/2.0")
+    sections = read_canonical_body_sections(profile)
+    assert "Key Findings" in sections
+    assert "Methods Summary" in sections
+    assert "Limitations" in sections
+
+
+def test_read_canonical_body_sections_returns_empty_when_annotation_absent() -> None:
+    # base schema has no x-canonical-body-sections
+    profile = parse_profile("science-entity-base/1.0")
+    assert read_canonical_body_sections(profile) == []

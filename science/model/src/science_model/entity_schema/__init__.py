@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from science_model.entity_schema.merge import (
     MergePolicy,
+    read_canonical_body_sections,
     read_merge_policy,
     read_overlay_merge_policy,
 )
@@ -45,6 +46,7 @@ __all__ = [
     "SchemaNotFoundError",
     "SharedEntity",
     "parse_profile",
+    "read_canonical_body_sections",
     "read_merge_policy",
     "read_overlay_merge_policy",
 ]
