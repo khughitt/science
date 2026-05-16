@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import logging
 import re
+import subprocess
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Literal
 
@@ -891,3 +892,177 @@ def _render_overlay(
     fm = _render_frontmatter(head)
     body = _render_body(project_only_body)
     return f"---\n{fm}---\n{body}"
+
+
+# --------------------------------------------------------------------------- #
+# Apply-phase helpers (Task 15)                                                #
+# --------------------------------------------------------------------------- #
+
+
+def _git(commons_root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+    """Run `git -C <commons_root> <args>` and return the CompletedProcess.
+
+    Wrapping makes path-limited call sites readable and centralizes the cwd
+    plumbing so individual helpers don't repeat `["git", "-C", str(root), ...]`.
+    """
+    return subprocess.run(
+        ["git", "-C", str(commons_root), *args],
+        check=check,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _build_project_rollback_command(overlay_rewrites: list[dict]) -> str:
+    """Build a concrete `git checkout HEAD -- <paths>` command for one project,
+    given its overlay_rewrites entries from the audit log. Each entry's `path`
+    is an absolute `<project_root>/doc/papers/<file>.md`; we strip the trailing
+    `doc/papers/<file>.md` to recover the project_root."""
+    if not overlay_rewrites:
+        return ""
+    first_path = Path(overlay_rewrites[0]["path"])
+    project_root = first_path.parents[2]
+    rels = sorted(
+        str(Path(entry["path"]).relative_to(project_root))
+        for entry in overlay_rewrites
+    )
+    return f"git -C {project_root} checkout HEAD -- {' '.join(rels)}"
+
+
+def _render_audit_log_yaml(
+    result: PromoteResult,
+    commons_root: Path,
+    *,
+    invocation: str,
+) -> str:
+    """Serialize the audit log dict to YAML. Pure function — no disk I/O.
+    Used by both the success path (which then writes + commits) and the
+    failure path (which writes uncommitted, or falls back to stderr if the
+    write itself fails)."""
+    touched_set = set(result.projects_touched)
+    projects_touched: dict = {}
+    for decision in result.decisions:
+        for slug, overlay in decision.overlays.items():
+            if slug not in touched_set:
+                continue
+            projects_touched.setdefault(slug, {"overlay_rewrites": []})
+            entry: dict = {
+                "bibkey": decision.bibkey,
+                "path": str(overlay.path),
+                "pin_version": overlay.pin_version,
+            }
+            if overlay.rename_from is not None:
+                entry["rename"] = {
+                    "from": overlay.rename_from.name,
+                    "to": overlay.path.name,
+                }
+            projects_touched[slug]["overlay_rewrites"].append(entry)
+
+    log: dict = {
+        "op_id": result.op_id,
+        "type": "paper",
+        "invocation": invocation,
+        "status": result.status,
+        "started_at": result.started_at.isoformat(),
+        "finished_at": result.finished_at.isoformat(),
+        "commons_commit": result.commons_commit,
+        "commons_tags": result.tags_created,
+        "projects_touched": projects_touched,
+        "conflict_resolutions": [
+            {
+                "bibkey": cr.bibkey,
+                "field": cr.field,
+                "candidates": cr.candidates,
+                "resolved_to": cr.resolved_to,
+                "source_project": cr.source_project,
+            }
+            for d in result.decisions
+            for cr in d.resolved_conflicts
+        ],
+        "failed_candidates": [
+            {
+                "bibkey": f.bibkey,
+                "project_slug": f.project_slug,
+                "source_path": str(f.source_path),
+                "error_class": f.error_class,
+                "error_message": f.error_message,
+            }
+            for f in result.failed_candidates
+        ],
+        "rollback": {
+            "commons": (
+                f"git -C {commons_root} revert {result.commons_commit}"
+                if result.commons_commit else None
+            ),
+            # Per design §6.5: each entry is a copy-pasteable git command,
+            # not a placeholder. Derive project_root by walking up from each
+            # overlay path (`<root>/doc/papers/<file>`) and list every rewritten
+            # path so the operator can restore exactly the touched files.
+            "projects": {
+                slug: _build_project_rollback_command(rewrites["overlay_rewrites"])
+                for slug, rewrites in projects_touched.items()
+            },
+        },
+    }
+    if result.failure_stage:
+        log["failure_stage"] = result.failure_stage
+        log["failure_detail"] = result.failure_detail
+
+    return yaml.safe_dump(log, sort_keys=False, allow_unicode=True)
+
+
+def _write_audit_log(
+    result: PromoteResult,
+    commons_root: Path,
+    *,
+    invocation: str,
+) -> Path:
+    """Write the per-op YAML audit log under `<commons_root>/.migrations/`.
+
+    Filename: `<UTC-YYYYMMDDTHHMMSSZ>-<op_id>.yaml`. The log is NOT committed
+    here — `apply_promote` commits it path-limited on the success path; failure
+    paths use `_write_failure_audit_log` (which calls the same renderer but
+    tolerates write failure).
+    """
+    migrations = commons_root / ".migrations"
+    migrations.mkdir(exist_ok=True)
+    stamp = result.started_at.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = migrations / f"{stamp}-{result.op_id}.yaml"
+    path.write_text(
+        _render_audit_log_yaml(result, commons_root, invocation=invocation),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _rollback_step5(
+    commons_root: Path,
+    tags_attempted: list[str],
+    canonical_paths: list[Path],
+) -> None:
+    """Non-destructive path-limited rollback for a step-5 mid-failure.
+
+    1. Delete every tag in `tags_attempted` (idempotent — tags that never
+       existed silently no-op).
+    2. `git reset --soft HEAD~1` — moves HEAD back without disturbing index/wt.
+    3. For each canonical_path: if it exists at the new HEAD, `git checkout
+       HEAD -- <path>`. If it does NOT exist at HEAD (first-promote), unlink
+       the working-tree file.
+
+    Caller must have verified that HEAD~1 is the pre-step-4 state (the immediate
+    parent of the just-undone promote commit). NEVER calls `reset --hard`.
+    """
+    for tag in tags_attempted:
+        _git(commons_root, "tag", "-d", tag, check=False)
+
+    _git(commons_root, "reset", "--soft", "HEAD~1")
+
+    for canonical_path in canonical_paths:
+        rel = canonical_path.relative_to(commons_root)
+        exists_at_head = (
+            _git(commons_root, "cat-file", "-e", f"HEAD:{rel}", check=False).returncode == 0
+        )
+        if exists_at_head:
+            _git(commons_root, "checkout", "HEAD", "--", str(rel))
+        else:
+            canonical_path.unlink(missing_ok=True)
