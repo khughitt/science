@@ -214,6 +214,101 @@ Authoring guidance:
   Early-stage projects should have more `acknowledged` blocks than
   `calibrated` ones; that's healthy.
 
+### 2b. Classify Each Provenance Entry by Calibration Source
+
+For every entry in an Expectations block's `provenance:` list, ask the
+user: *where did this number come from?* Five classes:
+
+| `calibration_source` | When to use |
+|---|---|
+| `literature` | Paper, review, or external benchmark. Cite paper-key in `ref:`. |
+| `prior_own_analysis` | A prior task or interpretation in this project that estimated this quantity on a different cohort or design. Cite `task:tNNN` or `interpretation:<slug>`. |
+| `pilot_fit` | A committed pilot artifact that estimates this quantity for the *current* cohort/design. Pilot must run before main analysis if the gate depends on it. See § 2c. |
+| `related_cohort_baseline` | A baseline analysis on a different but mechanistically-comparable cohort (e.g., healthy-tissue scRNA when the analysis is on disease scRNA). |
+| `analyst_judgment` | Number picked from intuition without enumerable provenance. **Over-confidence flag.** |
+
+The `analyst_judgment` class is intentionally uncomfortable to declare,
+and that discomfort is the point. When the user proposes a number whose
+honest classification would be `analyst_judgment`, present four options
+in this order:
+
+1. **Demote to `acknowledged`.** If the parameter is genuinely
+   relevant but the user can't justify a number, set `expected.central`
+   and `expected.range` to null. Most defensible default.
+2. **Defer to pilot calibration (§ 2c).** Register a pilot or
+   related-cohort baseline whose output will supply the cut before the
+   main analysis runs. This is the *constructive* path — it turns "I
+   picked a number" into "we will derive a number, by this rule, from
+   this artifact."
+3. **Widen the gate range substantially.** If the analyst's intuition
+   is right about *direction and order of magnitude* but not the precise
+   cut, author a wide range so the cuts are clearly boundary conditions
+   rather than load-bearing thresholds. Soft-gate semantics apply.
+4. **Accept the `analyst_judgment` flag as a permanent caveat.** Only
+   for cases where the analyst's judgment is itself the relevant
+   evidence (e.g., a domain expert's prior on direction), and the user
+   accepts that the verdict will carry the caveat throughout downstream
+   citation.
+
+If the user picks option (4) without first considering (1)-(3), push
+back. The `analyst_judgment` flag exists to *surface* anchoring, not to
+launder it.
+
+Authoring guidance:
+- A block can have mixed `calibration_source` values across its
+  `provenance:` entries. The tier classification (hint vs calibrated)
+  reads off the *strongest* enumerable evidence — 3+ disparate-dataset
+  `prior_own_analysis` entries clear `calibrated`; 1-2 `prior_own_analysis`
+  or any number of `literature` clears `hint`; pure `analyst_judgment`
+  with no other support should be `acknowledged` per option (1) above.
+- `pilot_fit` entries are *promises before the pilot runs* and *evidence
+  after the pilot completes*. The pilot's completion is the only event
+  that promotes a `pilot_fit` entry from forward-reference to actual
+  provenance. Updating the entry's `estimate:` and `ref:` after the
+  pilot completes is the one post-authoring `provenance:` update
+  permitted without an amendment, provided the pilot ran under the
+  registered `derivation_rule`.
+
+### 2c. Defer to Pilot Calibration
+
+When § 2a/2b surface that a numerical cut would be `analyst_judgment` —
+and the user picks option (2) from § 2b's pushback — register the
+deferral in the pre-reg's `## Pilot Calibration` section. The deferral
+itself is pre-registered: source, rule, and no-peeking discipline.
+
+Walk the user through:
+
+1. **Identify the target.** Which Expectations block's cuts are being
+   deferred? Which § Decision Criteria threshold do they feed?
+2. **Identify the calibration artifact.** What pilot fit or related-
+   cohort baseline will produce the cut? Where will its output live
+   (path, format)? When must it complete?
+3. **Author the derivation rule.** Plain-language, specific enough that
+   two independent readers would derive the same cut from the same
+   pilot output. Avoid "we will choose a reasonable threshold" —
+   reasonable-as-judged-after-data is exactly what the deferral is
+   trying to prevent.
+4. **State the no-peeking discipline.** Pilot must run on data that
+   doesn't leak the main analysis's outcome. Common patterns: pilot
+   runs on permutation-shuffled labels; pilot runs on a held-out
+   cohort; pilot runs on a synthetic-data simulation that matches the
+   real data's structural properties but not its true effect.
+5. **Author the fallback.** What counts as pilot failure (degenerate
+   null, missing data, etc.)? What happens to the gate if the pilot
+   fails — usually a demotion of the parent Expectations block to
+   `acknowledged`, or conversion of the gate to direction-only.
+
+The pilot's output, once recorded, becomes a `pilot_fit`-typed
+`provenance:` entry on the parent Expectations block. The cut moves
+from `analyst_judgment` (or null, in the acknowledged case) to
+pilot-derived. This is the only permitted pre-data refinement of a
+provenance entry; everything else requires an amendment.
+
+Pilot-calibration is the *cultural* complement to the schema. The
+schema (tiers, soft gates, acknowledged) makes the absence of evidence
+visible. Pilot calibration is the constructive answer: when evidence
+is absent, build it before authoring the cut.
+
 ### 3. Define Decision Criteria
 
 Frame decision criteria according to the target class identified in § 0.
@@ -330,6 +425,81 @@ Use the hypothesis ID, inquiry slug, or task ID as the basis:
    - `science-bias-audit` — to check for blind spots before running the analysis
    - `science-discuss` — to stress-test the expectations themselves
 4. Commit: `git add -A && git commit -m "doc: pre-register expectations for <slug>"`
+
+## Anti-patterns and Smells
+
+Watch for these during § 2-4 authoring. Each one is a sign that
+numerical specificity is outrunning evidence.
+
+| Smell | What it looks like | Right move |
+|---|---|---|
+| **Tight gates with no enumerable provenance.** | Author proposes "97% PPC pass rate" or "R² < 50%" without pointing to a cohort, pilot, paper, or baseline that established the number. | Drive § 2b classification. If the honest answer is `analyst_judgment`, present § 2b's four options. |
+| **`hint`-tier blocks with narrow gates.** | The provenance has one own-analysis or two literature references, but the registered gate range is small (e.g., ±10% of central). | Widen the range to match the evidence basis. Narrow gates need `calibrated` backing. |
+| **Empty `unknowns:` at `hint` tier or below.** | Author asserts there's nothing they don't know about the quantity. | Push back. At `hint` tier and below, at least one genuine unknown is almost always available — confounding generator, batch effect, scoring-method dependence, generalization to other cohorts. |
+| **"Reasonable threshold" deferrals without a derivation rule.** | `## Pilot Calibration` says "we will pick a sensible cut after the pilot" without specifying how. | Author the derivation rule explicitly. Two readers should derive the same cut from the same pilot output. |
+| **Soft bands borrowed from convention.** | The inconclusive band is "40-60%" or "0.05 < p < 0.1" because those are conventional, not because the evidence basis supports those particular widths. | Either anchor the band to the evidence basis (literature spread, prior own-analysis CIs) or defer the cuts to a pilot. |
+| **Gate cuts where the same number appears in the task description.** | The pre-reg's central cut is the exact number the task author sketched in the task description, with no independent provenance. | Anchoring smell. Acknowledge the source, classify as `analyst_judgment`, and present § 2b's options. |
+| **Verdict labels with no scope qualifier.** | Pre-reg says "supports H_X" without specifying "in cohort/design Y". | For single-dataset analyses, force scope into the verdict label (e.g., "Walker-only consistent with X"). The architectural-change interpretation should require independent replication regardless of within-cohort outcome. |
+| **Reaching for `calibrated` by adding literature references.** | Author adds 3 paper references to a provenance list and labels the block `calibrated`. | The 3+ requirement is for *own analyses on disparate datasets*. Literature alone keeps the block at `hint` regardless of count. |
+| **Operational thresholds dressed up as Expectations.** | Sample size minimums, R-hat ceilings, ESS floors, or QC bounds authored as Expectations blocks. | These belong in `## Known Limitations` or the paired analysis-plan doc. Expectations blocks are for interpretive biology, not pipeline machinery. |
+
+When two or more smells coincide on the same Expectations block, the
+block is almost certainly over-specified. Demote to `acknowledged`,
+defer to pilot, or widen the gate.
+
+## Worked Example: The t648 PPC Gate Failure
+
+A real failure mode that motivated this skill's cultural reform.
+
+**Setup.** A pre-reg for a hierarchical NB fit on ~318k cells / 49
+patients registered a §5 precondition gate: *"97% of patients must
+have observed sample SD inside the 90% predictive interval of the
+NB-with-shared-φ model."* The gate was authored *before* the production
+fit ran.
+
+**What happened.** The fit converged cleanly (R̂ < 1.001, ESS_bulk > 4800,
+zero divergences) but failed the gate: 33% of patients passed the SD
+check, 65% passed the mean check. The misfit was real (per-patient
+dispersion was heterogeneous in a way the shared-φ model couldn't
+absorb), but the gate's threshold was *uninformative* — at n ≈ 6800
+cells per patient, the predictive interval of sample SD is narrow
+enough that no partially-pooled hierarchical model can reliably hit 97%
+containment.
+
+**The anti-patterns.** Three smells from the table above were present:
+
+- Tight gate with no enumerable provenance: the 97% number came from
+  analyst judgment ("seems strict but achievable") with no pilot, no
+  literature, no related-cohort baseline.
+- Empty unknowns: the gate's interaction with per-patient n was a
+  known unknown that wasn't surfaced.
+- Soft band borrowed from convention: 97%/90% is a conventional
+  pair (90% CI, near-total containment) but the evidence basis didn't
+  support that specific pair at this n.
+
+**The corrected pattern.** Under the schema + cultural reform:
+
+- The gate's §2a Expectations block would record `expected.central:
+  null`, `evidence_tier: acknowledged` — no prior cohort had measured
+  per-patient SD containment at n ≈ 6800.
+- `## Pilot Calibration` would defer the cut: *"Run a 4-patient, 1000-
+  cell-per-patient pilot fit. Derive the 97% threshold from the pilot's
+  observed containment rate inflated by ×1.3 to account for the n
+  difference."*
+- Or, more honestly: the gate would be reframed as direction-only —
+  "containment rate is reported; the verdict reads as 'severe misfit'
+  if containment < 50% and 'tolerable misfit' otherwise, with the
+  specific containment fraction always reported."
+
+Either correction would have surfaced the n-dependence of the gate
+*before* the fit ran, prevented the path-B amendment churn, and
+preserved the verdict's evidential weight. The schema makes the
+absence of evidence visible (`acknowledged`); pilot calibration is the
+constructive response (`pilot_fit`); the smells list is the watchlist
+for catching this pattern at authoring time.
+
+Full history: this project's `task:t672` and its source pre-registration's
+amendment chain.
 
 ## Process Reflection
 

@@ -60,6 +60,32 @@ either accepts the failure under the registered terms or invokes the
 amendment procedure — making the analysis path-B / exploratory for the
 recalibrated threshold, not confirmatory.
 
+### Calibration sources
+
+Every `provenance:` entry declares *what kind of source* the estimate came
+from. This is independent of evidence tier — a `hint` block can have one
+`literature` entry, while a `calibrated` block has 3+ `prior_own_analysis`
+entries on disparate datasets. The classification surfaces the most common
+authoring anti-pattern: numbers picked from analyst intuition that look
+like they have provenance because they appear in a structured field.
+
+| `calibration_source` | What it means |
+|---|---|
+| `literature` | Paper, review, or external benchmark. Cite paper-key in `ref:`. |
+| `prior_own_analysis` | A prior task or interpretation in this project that estimated this quantity on a different cohort or design. Cite `task:tNNN` or `interpretation:<slug>` in `ref:`. |
+| `pilot_fit` | A committed pilot artifact that estimates this quantity for the *current* analysis cohort/design. Cite the pilot's task ID and result artifact in `ref:`. Pilot must run before main analysis if the gate depends on this. |
+| `related_cohort_baseline` | A baseline analysis on a different but mechanistically-comparable cohort (e.g., healthy-tissue scRNA when the analysis is on disease scRNA). Cite the baseline task/dataset in `ref:`. |
+| `analyst_judgment` | Number picked by the author from intuition without enumerable provenance. **This is the over-confidence flag.** Permitted only with explicit reasoning in `notes:` and should be paired with a `## Pilot Calibration` deferral or downgraded to `acknowledged`. |
+
+The `analyst_judgment` class is intentionally uncomfortable to declare. If
+an author is willing to flag a number as `analyst_judgment`, the right
+move in most cases is one of: (a) demote the block to `acknowledged`
+(no number authored); (b) author a `## Pilot Calibration` deferral that
+derives the cut from a pilot/baseline; (c) widen the gate range so the
+analyst_judgment cuts are clearly boundary conditions rather than load-
+bearing thresholds; (d) accept the `analyst_judgment` flag as a permanent
+caveat on the verdict.
+
 ### Per-expectation block
 
 Repeat for each expectation. YAML is parser-friendly; prose `notes:` are fine
@@ -76,6 +102,7 @@ for anything the schema can't capture.
     # One entry per supporting source. Empty list for `acknowledged`.
     # 1–2 entries → `hint`. 3+ disparate-dataset own-analyses → `calibrated`.
     - source: "<paper-key | cohort name | task id>"
+      calibration_source: <literature | prior_own_analysis | pilot_fit | related_cohort_baseline | analyst_judgment>
       estimate: "<reported value or range>"
       ref: "<doc/task/file ref — e.g., task:t172, doc:interpretations/...>"
       notes: "<one line on what this source establishes and what it doesn't>"
@@ -103,10 +130,12 @@ Worked examples:
   evidence_tier: hint
   provenance:
     - source: "Boiarsky 2022 (own analysis)"
+      calibration_source: prior_own_analysis
       estimate: "-0.11 [-0.44, +0.24]"
       ref: "task:t172"
       notes: "Per-cell unstratified; HDI spans 0; sign-suggestive but inconclusive."
     - source: "Ledergor 2018 (own analysis)"
+      calibration_source: prior_own_analysis
       estimate: "+0.544 [+0.04, +1.03]"
       ref: "task:t203 Q3"
       notes: "Per-cell Q3; positive sign; PPC-passing; conflicts with Boiarsky."
@@ -148,6 +177,72 @@ If a pre-reg has zero numerical commitments — e.g., a purely qualitative
 "we expect direction X" registration — this section may be omitted, but
 `## Decision Criteria` should then also contain no interpretive numerical
 thresholds. -->
+
+## Pilot Calibration
+
+<!-- Optional. Use this section when an Expectations block's numerical cuts
+*cannot* be honestly anchored in literature, prior own-analyses, or a
+related-cohort baseline — i.e., when the only honest classification of the
+provenance would be `analyst_judgment`.
+
+Rather than authoring `analyst_judgment` numbers directly, defer the cut
+to a pilot fit or related-cohort baseline that will run before the main
+analysis is interpreted. The deferral is itself pre-registered: the
+calibration source, the rule for deriving the cut, and the no-peeking
+discipline.
+
+Each pilot-calibration block registers one or more cuts that will be
+filled in by an upstream artifact before the main analysis verdict is
+read. Authoring this block does not move the cut post-hoc — it registers
+*before data* that the cut comes from the pilot, by the stated rule.
+
+```yaml
+- target_parameter: "<parameter the cut applies to; must match an Expectations block>"
+  target_gate: "<which §Decision Criteria threshold this cut feeds, by name or table row>"
+  deferred_to:
+    artifact: "<task ID, pilot fit slug, or related-cohort baseline ID>"
+    output_path: "<where the pilot result will be recorded — e.g., 'json:tNNN_pilot/result.json' or 'doc:interpretations/...'>"
+    must_complete_before: "main analysis fit unblocks"
+  derivation_rule: |
+    <Plain-language rule for deriving the cut from the pilot result.
+    Must be specific enough that two independent readers would derive
+    the same cut from the same pilot output.>
+  no_peeking_discipline: "<one line on how the author will avoid letting the main analysis's data inform the cut>"
+  fallback_if_pilot_fails:
+    condition: "<what counts as pilot failure>"
+    action: "<what happens — usually: demote the target Expectations block to acknowledged, or convert the gate to direction-only>"
+```
+
+Worked example:
+
+```yaml
+- target_parameter: "R² for per-patient phase_score ~ stage + cytogenetic_subtype"
+  target_gate: "Primary R² gate verdict bands (orthogonal / inconclusive / captured)"
+  deferred_to:
+    artifact: "task:tNNN-permutation-null-pilot"
+    output_path: "json:tNNN_pilot/null_R2_quantiles.json"
+    must_complete_before: "main analysis variance-decomposition fit"
+  derivation_rule: |
+    Compute the permutation null distribution of R² by shuffling
+    cytogenetic subtype labels across patients 1000 times and refitting
+    the variance decomposition under each shuffle. Define:
+      - 'orthogonal' cut = 95th percentile of null R²
+      - 'captured' cut   = empirical R² required to reject the null
+                           at α=0.05 under a one-sided permutation test
+    The inconclusive band is the [orthogonal cut, captured cut] range.
+  no_peeking_discipline: "Pilot runs only on cytogenetic-label-shuffled data; the real R² is never computed during pilot. Pilot's null quantiles are committed to the artifact before main fit unblocks."
+  fallback_if_pilot_fails:
+    condition: "Pilot permutation null is degenerate (e.g., R² distribution is concentrated at one value due to stratum imbalance)"
+    action: "Demote the R² gate from confirmatory to exploratory. Verdict bands are not reported; the analysis becomes a description of within-stratum variance only."
+```
+
+When this section is non-empty, the `analyst_judgment` calibration-source
+flag should not appear on any block whose cuts are deferred here. The
+pilot artifact's output becomes the authoritative source for those cuts;
+the Expectations block's `provenance:` is updated to cite
+`calibration_source: pilot_fit` once the pilot completes, *before* the
+main analysis is run. This is the only post-authoring `provenance:`
+update permitted without an amendment. -->
 
 ## Decision Criteria
 
