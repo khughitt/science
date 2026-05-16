@@ -64,29 +64,60 @@ def test_dataclass_surface_is_frozen() -> None:
         assert cls.__dataclass_params__.frozen, f"{cls.__name__} must be frozen"
 
 
-def test_normalize_bibkey_for_match_casefolds() -> None:
-    from science_tool.commons.promote import _normalize_bibkey_for_match
-    assert _normalize_bibkey_for_match("Huh2024") == "huh2024"
-    assert _normalize_bibkey_for_match("ADAMS2025") == "adams2025"
-    assert _normalize_bibkey_for_match("Adams2025.md") == "adams2025"
+def test_normalize_slug_for_match_casefolds() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, _normalize_slug_for_match
+
+    assert _normalize_slug_for_match("Huh2024", PROMOTE_KIND_PAPER) == "huh2024"
+    assert _normalize_slug_for_match("ADAMS2025", PROMOTE_KIND_PAPER) == "adams2025"
+    assert _normalize_slug_for_match("Adams2025.md", PROMOTE_KIND_PAPER) == "adams2025"
 
 
-def test_normalize_bibkey_for_match_rejects_empty() -> None:
-    from science_tool.commons.promote import _normalize_bibkey_for_match
+def test_normalize_slug_for_match_rejects_empty() -> None:
     from science_tool.commons.errors import PromoteCandidateError
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, _normalize_slug_for_match
+
     with pytest.raises(PromoteCandidateError):
-        _normalize_bibkey_for_match("")
+        _normalize_slug_for_match("", PROMOTE_KIND_PAPER)
     with pytest.raises(PromoteCandidateError):
-        _normalize_bibkey_for_match("   ")
+        _normalize_slug_for_match("   ", PROMOTE_KIND_PAPER)
 
 
-def test_normalize_bibkey_for_match_rejects_regex_failing() -> None:
-    from science_tool.commons.promote import _normalize_bibkey_for_match
+def test_normalize_slug_for_match_rejects_regex_failing() -> None:
     from science_tool.commons.errors import PromoteCandidateError
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, _normalize_slug_for_match
+
     with pytest.raises(PromoteCandidateError):
-        _normalize_bibkey_for_match("1leading-digit")
+        _normalize_slug_for_match("1leading-digit", PROMOTE_KIND_PAPER)
     with pytest.raises(PromoteCandidateError):
-        _normalize_bibkey_for_match("has space")
+        _normalize_slug_for_match("has space", PROMOTE_KIND_PAPER)
+
+
+def test_normalize_slug_for_match_paper_casefolds() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, _normalize_slug_for_match
+
+    assert _normalize_slug_for_match("Adams2025", PROMOTE_KIND_PAPER) == "adams2025"
+    assert _normalize_slug_for_match("Adams2025.md", PROMOTE_KIND_PAPER) == "adams2025"
+
+
+def test_normalize_slug_for_match_topic_returns_stem_as_is() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_TOPIC, _normalize_slug_for_match
+
+    assert _normalize_slug_for_match("hypothesis", PROMOTE_KIND_TOPIC) == "hypothesis"
+    assert _normalize_slug_for_match("hypothesis.md", PROMOTE_KIND_TOPIC) == "hypothesis"
+
+
+def test_normalize_slug_for_match_topic_rejects_uppercase() -> None:
+    from science_tool.commons.errors import PromoteCandidateError
+    from science_tool.commons.promote import PROMOTE_KIND_TOPIC, _normalize_slug_for_match
+
+    with pytest.raises(PromoteCandidateError):
+        _normalize_slug_for_match("Hypothesis", PROMOTE_KIND_TOPIC)
+
+
+def test_normalize_slug_for_match_theme_returns_stem_as_is() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_THEME, _normalize_slug_for_match
+
+    assert _normalize_slug_for_match("my-theme", PROMOTE_KIND_THEME) == "my-theme"
 
 
 def test_classify_paper_file_kind_explicit_paper() -> None:

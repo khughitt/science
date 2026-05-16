@@ -832,8 +832,6 @@ def apply_promote(
 # Private helpers                                                              #
 # --------------------------------------------------------------------------- #
 
-_SLUG_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]{1,63}$")
-
 # Sentinel keys for stashing raw frontmatter+body in PromoteCandidate.project_only_body
 # during discovery, to be consumed by _classify_entity in plan_promote (Task 11).
 # Defined as module-level constants so the coupling between discovery and
@@ -842,21 +840,23 @@ _RAW_FRONTMATTER_KEY = "__raw_frontmatter__"
 _RAW_BODY_KEY = "__raw_body__"
 
 
-def _normalize_bibkey_for_match(raw: str) -> str:
-    """Strip `.md`, casefold for dedup grouping. Raises PromoteCandidateError on
-    empty / whitespace / regex-failing inputs. Does NOT mutate canonical case."""
-    if raw is None:
-        raise PromoteCandidateError("slug is None")
-    stripped = raw.strip()
+def _normalize_slug_for_match(raw: str, kind: PromoteKindConfig) -> str:
+    """Return the matching key for a slug, per kind's `slug_match` policy.
+
+    For paper, casefolds. For topic/theme, returns the stem unchanged and
+    asserts the regex (lowercase-only - uppercase letters fail-fast at
+    discovery rather than slipping through with silent normalisation).
+    """
+    stripped = raw.removesuffix(".md").strip()
     if not stripped:
-        raise PromoteCandidateError("slug is empty / whitespace")
-    if stripped.endswith(".md"):
-        stripped = stripped[:-3]
-    if not _SLUG_RE.match(stripped):
+        raise PromoteCandidateError(f"slug {raw!r} is empty after strip")
+    if not kind.slug_regex.match(stripped):
         raise PromoteCandidateError(
-            f"slug {raw!r} does not match [A-Za-z][A-Za-z0-9-]{{1,63}}"
+            f"slug {raw!r} does not match {kind.slug_regex.pattern}"
         )
-    return stripped.casefold()
+    if kind.slug_match == "casefold":
+        return stripped.casefold()
+    return stripped
 
 
 def _classify_paper_file_kind(
@@ -994,7 +994,9 @@ def _scan_project_papers(
 
         slug_source = md_path.stem
         try:
-            slug_normalized = _normalize_bibkey_for_match(slug_source)
+            slug_normalized = _normalize_slug_for_match(
+                slug_source, PROMOTE_KIND_PAPER
+            )
         except PromoteCandidateError as exc:
             failures.append(
                 FailedCandidate(
