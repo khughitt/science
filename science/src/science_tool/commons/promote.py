@@ -708,7 +708,7 @@ def apply_promote(
         # ---------- Step 5.1: tag preflight ----------
         current_stage = "write_commons"
         for decision in plan.decisions:
-            tag = f"paper/{decision.slug}/{decision.canonical_version}"
+            tag = f"{plan.kind.kind}/{decision.slug}/{decision.canonical_version}"
             existing = _git(commons_root, "rev-parse", "--verify", "--quiet", tag, check=False)
             if existing.returncode == 0:
                 raise PromoteWriteError(
@@ -761,7 +761,7 @@ def apply_promote(
 
         # ---------- Step 5.3: tag (path-limited per-tag) ----------
         for decision in sorted(plan.decisions, key=lambda d: d.slug):
-            tag = f"paper/{decision.slug}/{decision.canonical_version}"
+            tag = f"{plan.kind.kind}/{decision.slug}/{decision.canonical_version}"
             try:
                 _git(commons_root, "tag", tag, commons_commit)
                 tags_created.append(tag)

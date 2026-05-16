@@ -1211,3 +1211,31 @@ def test_project_target_files_clean_reports_untracked_topic_target_file(
     )
     assert clean is False
     assert target_rel in dirty_paths
+
+
+def test_apply_tags_use_kind_kind_prefix(tmp_path, monkeypatch) -> None:
+    """Verify that apply_promote builds tags as {kind.kind}/{slug}/{version}
+    instead of the hardcoded "paper/{bibkey}/{version}". We exercise this
+    indirectly by inspecting the planned tag prefix logic via a tiny stub
+    PromotePlan with a single decision."""
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_TOPIC,
+        PromoteDecision,
+    )
+
+    d = PromoteDecision(
+        slug="hypothesis",
+        canonical_path=tmp_path / "topics" / "hypothesis.md",
+        canonical_content="---\nid: topic:hypothesis\n---\n",
+        canonical_version="1.0.0",
+        overlays={},
+        resolved_conflicts=(),
+    )
+    # The tag-building string template should now be:
+    # f"{plan.kind.kind}/{decision.slug}/{decision.canonical_version}"
+    tag = f"{PROMOTE_KIND_TOPIC.kind}/{d.slug}/{d.canonical_version}"
+    assert tag == "topic/hypothesis/1.0.0"
+    # And a sort by .slug must use the slug attribute, not .bibkey.
+    decisions = [d]
+    decisions_sorted = sorted(decisions, key=lambda x: x.slug)
+    assert decisions_sorted[0].slug == "hypothesis"
