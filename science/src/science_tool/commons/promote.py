@@ -279,6 +279,19 @@ def plan_promote(
             continue
 
         canonical_case = _pick_canonical_bibkey_case(classified, from_order)
+
+        # Pre-check for case-rename collisions before any conflict prompts
+        # (design §4.1.3): if the rename target already exists in the project
+        # directory and is NOT the source file itself, the group is un-promotable.
+        for c in classified:
+            source_path = c.overlay_source_path
+            target_path = source_path.parent / f"{canonical_case}.md"
+            if source_path.name != target_path.name and target_path.exists():
+                raise PromoteInputError(
+                    f"case-rename collision in {c.project_slug}: cannot rename "
+                    f"{source_path} → {target_path}; target already exists"
+                )
+
         merged, conflicts = _merge_canonical_fields(classified, merge_policy)
 
         resolved_conflicts: list[ConflictResolution] = []

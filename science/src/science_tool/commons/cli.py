@@ -10,12 +10,24 @@ import click
 from science_tool.commons.adapter import CommonsEntityAdapter, CommonsEntityRecord
 from science_tool.commons.bootstrap import init_commons
 from science_tool.commons.config import resolve_commons_root
-from science_tool.commons.errors import CommonsError, CommonsRootNotFoundError
+from science_tool.commons.errors import (
+    CommonsError,
+    CommonsRootNotFoundError,
+    PromoteConflictAbort,
+    PromoteInputError,
+    PromoteWriteError,
+)
 from science_tool.commons.inventory import build_commons_inventory
 from science_tool.commons.overlay import (
     MergedEntity,
     resolve_entity,
     validate_project_overlays,
+)
+from science_tool.commons.promote import (
+    DiscoveryResult,
+    apply_promote,
+    discover_paper_candidates,
+    plan_promote,
 )
 from science_tool.commons.query import CommonsQuery
 from science_tool.commons.registry import RegistryBuilder
@@ -383,3 +395,134 @@ def data_resolve_cmd(dataset_id: str, logical_path: str, as_json: bool) -> None:
         )
     else:
         click.echo(str(resolved.path))
+
+
+@commons_group.group("promote")
+def promote_group() -> None:
+    """Promote per-project entities into the shared commons store."""
+
+
+@promote_group.command("paper")
+@click.argument("entity_id", required=False, default=None)
+@click.option(
+    "--from",
+    "from_",
+    multiple=True,
+    required=True,
+    metavar="SLUG",
+    help="Registered project id (NOT name). Required; repeatable for bulk + dedup.",
+)
+@click.option("--apply", "apply_flag", is_flag=True, default=False, help="Write changes (default: dry-run).")
+@click.option("--limit", type=int, default=None, help="Bulk only: stop after N papers (bibkey-sorted).")
+def promote_paper_cmd(
+    entity_id: str | None,
+    from_: tuple[str, ...],
+    apply_flag: bool,
+    limit: int | None,
+) -> None:
+    """Promote paper entities into the commons store.
+
+    Dry-run is the default; pass --apply to write. Conflicts on canonical fields
+    prompt interactively in BOTH dry-run and apply (so dry-run is a faithful
+    preview). Use --limit 0 to get a discovery-only summary without prompts.
+    """
+    root = resolve_commons_root()
+    if not root.exists():
+        raise click.ClickException(
+            f"commons store missing at {root}; run `science commons init` first"
+        )
+
+    if entity_id is not None and len(from_) != 1:
+        raise click.ClickException(
+            "single-entity form (`promote paper <id>`) requires exactly one --from"
+        )
+    if limit is not None and entity_id is not None:
+        raise click.UsageError("--limit applies to bulk form only; cannot combine with <entity_id>")
+
+    try:
+        discovery = discover_paper_candidates(list(from_))
+    except CommonsError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if entity_id is not None:
+        if not entity_id.startswith("paper:"):
+            raise click.ClickException(f"expected `paper:<bibkey>`, got {entity_id!r}")
+        wanted = entity_id.split(":", 1)[1].casefold()
+        filtered = {
+            k: v for k, v in discovery.candidates_by_bibkey.items() if k == wanted
+        }
+        discovery = DiscoveryResult(
+            candidates_by_bibkey=filtered,
+            failed_candidates=discovery.failed_candidates,
+        )
+
+    if limit is not None and limit >= 0:
+        sorted_keys = sorted(discovery.candidates_by_bibkey)[:limit] if limit > 0 else []
+        truncated = {k: discovery.candidates_by_bibkey[k] for k in sorted_keys}
+        discovery = DiscoveryResult(
+            candidates_by_bibkey=truncated,
+            failed_candidates=discovery.failed_candidates,
+        )
+
+    n_total = sum(len(v) for v in discovery.candidates_by_bibkey.values())
+    n_groups = len(discovery.candidates_by_bibkey)
+    n_multi = sum(1 for v in discovery.candidates_by_bibkey.values() if len(v) > 1)
+    n_single = n_groups - n_multi
+    click.echo(
+        f"Discovered {n_total} paper candidates across {len(from_)} projects "
+        f"({n_groups} unique bibkeys, {n_single} single-instance, "
+        f"{n_multi} multi-instance)."
+    )
+    if discovery.failed_candidates:
+        click.echo(f"  • {len(discovery.failed_candidates)} failed candidates:")
+        for f in discovery.failed_candidates[:5]:
+            click.echo(f"    - {f.source_path}: {f.error_message}")
+        if len(discovery.failed_candidates) > 5:
+            click.echo(f"    … and {len(discovery.failed_candidates) - 5} more")
+
+    if not discovery.candidates_by_bibkey:
+        click.echo("Nothing to promote.")
+        return
+
+    try:
+        plan = plan_promote(discovery, commons_root=root, from_order=list(from_))
+    except PromoteConflictAbort as exc:
+        raise click.ClickException(f"aborted at conflict prompt: {exc}") from exc
+    except PromoteInputError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(f"Plan: {len(plan.decisions)} canonical entities, "
+               f"{sum(len(d.overlays) for d in plan.decisions)} overlay rewrites.")
+    for d in plan.decisions:
+        renames = [
+            (slug, ov) for slug, ov in d.overlays.items() if ov.rename_from is not None
+        ]
+        rename_note = f" (rename: {', '.join(slug for slug, _ in renames)})" if renames else ""
+        click.echo(f"  {d.bibkey}{rename_note}")
+        for slug, ov in renames:
+            click.echo(f"    rename in {slug}: {ov.rename_from.name} → {ov.path.name}")
+
+    if not apply_flag:
+        click.echo("Re-run with --apply to execute.")
+        return
+
+    try:
+        result = apply_promote(plan, commons_root=root, invocation=_invocation())
+    except (PromoteInputError, PromoteWriteError) as exc:
+        audit_yaml = getattr(exc, "failure_audit_yaml", None)
+        if audit_yaml:
+            click.echo(
+                "Failure-path audit log could not be written. Would-have-been "
+                "content:\n" + audit_yaml,
+                err=True,
+            )
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(f"Applied op {result.op_id}: commit {result.commons_commit}, "
+               f"{len(result.tags_created)} tags, audit log at {result.audit_log_path}")
+
+
+def _invocation() -> str:
+    """Reconstruct an invocation string from sys.argv for audit logging."""
+    import sys
+    return " ".join(sys.argv)

@@ -1,0 +1,194 @@
+"""Tests for science_tool.commons.cli — promote subgroup."""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+
+from test_commons_promote_apply import _init_commons
+
+
+def _bare_project_from_fixture(tmp_path: Path, fixture_name: str, slug: str) -> Path:
+    """Copy a fixture project into tmp_path and init a git repo."""
+    src = Path(__file__).parent / "fixtures" / "promote" / fixture_name
+    dst = tmp_path / slug
+    shutil.copytree(src, dst)
+    subprocess.run(["git", "init", "-q", str(dst)], check=True)
+    subprocess.run(["git", "-C", str(dst), "config", "user.email", "test@x"], check=True)
+    subprocess.run(["git", "-C", str(dst), "config", "user.name", "test"], check=True)
+    subprocess.run(["git", "-C", str(dst), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(dst), "commit", "-q", "-m", "init"], check=True)
+    return dst
+
+
+@pytest.fixture
+def runner():
+    return CliRunner()
+
+
+def test_promote_paper_bulk_dry_run_summary(tmp_path, monkeypatch, runner) -> None:
+    from science_tool.commons.cli import commons_group
+
+    _init_commons(tmp_path / "commons")
+    alpha = _bare_project_from_fixture(tmp_path, "proj-alpha", "proj-alpha")
+    beta = _bare_project_from_fixture(tmp_path, "proj-beta", "proj-beta")
+
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: {"proj-alpha": alpha, "proj-beta": beta}[slug],
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.cli.resolve_commons_root",
+        lambda: tmp_path / "commons",
+    )
+
+    monkeypatch.setattr(
+        "science_tool.commons.promote.prompt_resolve",
+        lambda conflict: sorted(conflict.candidates.items())[0][1],
+    )
+
+    result = runner.invoke(
+        commons_group,
+        ["promote", "paper", "--from", "proj-alpha", "--from", "proj-beta"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Discovered" in result.output
+    assert "single-instance" in result.output
+    assert "Adams2025" in result.output or "4 single-instance" in result.output
+    assert not (tmp_path / "commons" / "papers" / "Adams2025.md").exists()
+
+
+def test_promote_paper_apply_writes_and_tags(tmp_path, monkeypatch, runner) -> None:
+    from science_tool.commons.cli import commons_group
+
+    _init_commons(tmp_path / "commons")
+    alpha = _bare_project_from_fixture(tmp_path, "proj-alpha", "proj-alpha")
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: alpha,
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.cli.resolve_commons_root",
+        lambda: tmp_path / "commons",
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.prompt_resolve",
+        lambda conflict: sorted(conflict.candidates.items())[0][1],
+    )
+
+    result = runner.invoke(
+        commons_group,
+        ["promote", "paper", "--from", "proj-alpha", "--apply"],
+    )
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "commons" / "papers" / "Adams2025.md").exists()
+    tags = subprocess.run(
+        ["git", "-C", str(tmp_path / "commons"), "tag"],
+        capture_output=True, text=True, check=True,
+    ).stdout.split()
+    assert "paper/Adams2025/1.0.0" in tags
+
+
+def test_promote_paper_null_id_exits_nonzero(tmp_path, monkeypatch, runner) -> None:
+    from science_tool.commons.cli import commons_group
+    from science_tool.commons.errors import CommonsError
+
+    _init_commons(tmp_path / "commons")
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: (_ for _ in ()).throw(CommonsError(f"{slug!r} has id: null")),
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.cli.resolve_commons_root",
+        lambda: tmp_path / "commons",
+    )
+
+    result = runner.invoke(
+        commons_group,
+        ["promote", "paper", "--from", "legacy-slug"],
+    )
+    assert result.exit_code != 0
+    assert "id: null" in result.output
+
+
+def test_promote_paper_missing_commons_exits_nonzero(tmp_path, monkeypatch, runner) -> None:
+    from science_tool.commons.cli import commons_group
+
+    monkeypatch.setattr(
+        "science_tool.commons.cli.resolve_commons_root",
+        lambda: tmp_path / "no-commons",
+    )
+
+    result = runner.invoke(
+        commons_group,
+        ["promote", "paper", "--from", "proj-alpha"],
+    )
+    assert result.exit_code != 0
+    assert "science commons init" in result.output
+
+
+def test_promote_paper_single_entity_form(tmp_path, monkeypatch, runner) -> None:
+    from science_tool.commons.cli import commons_group
+
+    _init_commons(tmp_path / "commons")
+    alpha = _bare_project_from_fixture(tmp_path, "proj-alpha", "proj-alpha")
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: alpha,
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.cli.resolve_commons_root",
+        lambda: tmp_path / "commons",
+    )
+
+    result = runner.invoke(
+        commons_group,
+        ["promote", "paper", "paper:Adams2025", "--from", "proj-alpha"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Adams2025" in result.output
+
+
+def test_promote_paper_plan_time_collision_exits_nonzero_cleanly(
+    tmp_path, monkeypatch, runner,
+) -> None:
+    """plan_promote can raise PromoteInputError on a case-rename collision
+    BEFORE any disk write. The CLI must catch it and return a clean Click
+    error (non-zero exit, helpful message) — never an unhandled traceback."""
+    from science_tool.commons.cli import commons_group
+
+    _init_commons(tmp_path / "commons")
+    proj = tmp_path / "proj-x"
+    (proj / "doc" / "papers").mkdir(parents=True)
+    (proj / "doc" / "papers" / "Huh2024.md").write_text(
+        "---\nid: paper:Huh2024\ntitle: H1\n---\n", encoding="utf-8",
+    )
+    (proj / "doc" / "papers" / "huh2024.md").write_text(
+        "---\nid: paper:huh2024\ntitle: H2\n---\n", encoding="utf-8",
+    )
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    subprocess.run(["git", "-C", str(proj), "config", "user.email", "t@x"], check=True)
+    subprocess.run(["git", "-C", str(proj), "config", "user.name", "t"], check=True)
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(proj), "commit", "-q", "-m", "init"], check=True)
+
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.cli.resolve_commons_root",
+        lambda: tmp_path / "commons",
+    )
+
+    result = runner.invoke(
+        commons_group,
+        ["promote", "paper", "--from", "proj-x"],
+    )
+    assert result.exit_code != 0
+    assert "case-rename collision" in result.output
+    assert "Traceback" not in result.output
