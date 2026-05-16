@@ -75,7 +75,7 @@ from science_tool.commons.promote import (
     PromotePlan,
     PromoteResult,
     apply_promote,
-    discover_paper_candidates,
+    discover_candidates,
     plan_promote,
     prompt_resolve,
 )
@@ -130,7 +130,7 @@ __all__ = [
     "apply_promote",
     "build_commons_inventory",
     "commons_group",
-    "discover_paper_candidates",
+    "discover_candidates",
     "init_commons",
     "load_data_overrides",
     "merge_entity",

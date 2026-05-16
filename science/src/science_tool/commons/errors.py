@@ -13,9 +13,7 @@ class CommonsRootNotFoundError(CommonsError):
     """The configured commons store root does not exist on disk."""
 
     def __init__(self, root: Path) -> None:
-        super().__init__(
-            f"commons store not found at {root}; run `science commons init` to create it"
-        )
+        super().__init__(f"commons store not found at {root}; run `science commons init` to create it")
         self.root = root
 
 
@@ -23,9 +21,7 @@ class CommonsRootMalformedError(CommonsError):
     """The root exists but does not look like a commons store."""
 
     def __init__(self, root: Path, *, missing: list[str]) -> None:
-        super().__init__(
-            f"commons store at {root} is malformed; missing: {', '.join(missing)}"
-        )
+        super().__init__(f"commons store at {root} is malformed; missing: {', '.join(missing)}")
         self.root = root
         self.missing = missing
 
@@ -90,13 +86,9 @@ class DataLogicalPathError(CommonsError):
 class DataResourceNotFoundError(CommonsError):
     """The bytes for a resource were not found in any lookup source."""
 
-    def __init__(
-        self, dataset_id: str, logical_path: str, *, tried: list[Path]
-    ) -> None:
+    def __init__(self, dataset_id: str, logical_path: str, *, tried: list[Path]) -> None:
         tried_str = ", ".join(str(p) for p in tried)
-        super().__init__(
-            f"data resource {dataset_id} / {logical_path} not found; tried: {tried_str}"
-        )
+        super().__init__(f"data resource {dataset_id} / {logical_path} not found; tried: {tried_str}")
         self.dataset_id = dataset_id
         self.logical_path = logical_path
         self.tried = tried
@@ -106,9 +98,7 @@ class DataIntegrityError(CommonsError):
     """A resource file was found but its sha256 does not match the expected hash."""
 
     def __init__(self, path: Path, *, expected: str, actual: str) -> None:
-        super().__init__(
-            f"data integrity error at {path}: expected {expected}, got {actual}"
-        )
+        super().__init__(f"data integrity error at {path}: expected {expected}, got {actual}")
         self.path = path
         self.expected = expected
         self.actual = actual
@@ -118,10 +108,7 @@ class ProjectNotRegisteredError(CommonsError):
     """A `--project <name>` value has no entry in config.yaml `projects[]`."""
 
     def __init__(self, name: str) -> None:
-        super().__init__(
-            f"project {name!r} is not registered; check `projects:` in "
-            f"the global config"
-        )
+        super().__init__(f"project {name!r} is not registered; check `projects:` in the global config")
         self.name = name
 
 
@@ -129,9 +116,7 @@ class ProjectDirectoryMissingError(CommonsError):
     """A registered project's path is not a directory on disk."""
 
     def __init__(self, project: str, path: Path) -> None:
-        super().__init__(
-            f"registered project {project!r} directory not found at {path}"
-        )
+        super().__init__(f"registered project {project!r} directory not found at {path}")
         self.project = project
         self.path = path
 
@@ -160,8 +145,7 @@ class OverlayMergeError(CommonsError):
 
     def __init__(self, *, field: str, canonical_id: str) -> None:
         super().__init__(
-            f"overlay for {canonical_id} sets field {field!r} whose merge "
-            f"policy forbids overlay contribution"
+            f"overlay for {canonical_id} sets field {field!r} whose merge policy forbids overlay contribution"
         )
         self.field = field
         self.canonical_id = canonical_id
@@ -177,9 +161,9 @@ class PromoteInputError(CommonsError):
 
 
 class PromoteCandidateError(CommonsError):
-    """A paper file is malformed (parse error, unreadable, schema-failing).
+    """A promotion candidate file is malformed (parse error, unreadable, schema-failing).
 
-    Constructed per-candidate. NOT raised out of `discover_paper_candidates`;
+    Constructed per-candidate. NOT raised out of `discover_candidates`;
     instead wrapped as a `FailedCandidate` in the plan. Raised directly only by
     `apply_promote` if an in-plan decision turns out to be unparseable at write
     time (file deleted between plan and apply) — that's a hard-stop case.

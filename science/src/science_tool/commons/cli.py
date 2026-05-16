@@ -25,8 +25,9 @@ from science_tool.commons.overlay import (
 )
 from science_tool.commons.promote import (
     DiscoveryResult,
+    PROMOTE_KIND_PAPER,
     apply_promote,
-    discover_paper_candidates,
+    discover_candidates,
     plan_promote,
 )
 from science_tool.commons.query import CommonsQuery
@@ -112,9 +113,7 @@ def show_cmd(entity_id: str, as_json: bool, project: str | None) -> None:
         except CommonsError as exc:
             raise click.ClickException(str(exc)) from exc
         if as_json:
-            click.echo(
-                json.dumps(_record_to_json(record, root), indent=2, sort_keys=True)
-            )
+            click.echo(json.dumps(_record_to_json(record, root), indent=2, sort_keys=True))
         else:
             _print_record_human(record)
         return
@@ -136,9 +135,7 @@ def show_cmd(entity_id: str, as_json: bool, project: str | None) -> None:
 
 
 @commons_group.command("find")
-@click.argument(
-    "entity_type", type=click.Choice(["dataset", "paper", "topic", "theme"])
-)
+@click.argument("entity_type", type=click.Choice(["dataset", "paper", "topic", "theme"]))
 @click.option("--tag", "tags", multiple=True, help="Filter by tag (repeatable; AND).")
 @click.option(
     "--ontology",
@@ -200,9 +197,7 @@ def _record_to_json(record: CommonsEntityRecord, root: Path) -> dict:
         "commons_metadata": {
             "body_path": str(record.body_path.relative_to(root)),
             "datapackage_path": (
-                str(record.datapackage_path.relative_to(root))
-                if record.datapackage_path is not None
-                else None
+                str(record.datapackage_path.relative_to(root)) if record.datapackage_path is not None else None
             ),
             "mtime_ns": record.mtime_ns,
         },
@@ -215,9 +210,7 @@ def _merged_to_json(merged: MergedEntity) -> dict:
     if overlay is not None:
         overlay_json = {
             "project": overlay.project,
-            "overlay_path": str(
-                overlay.overlay_path.relative_to(overlay.project_root)
-            ),
+            "overlay_path": str(overlay.overlay_path.relative_to(overlay.project_root)),
             "pin_version": overlay.pin_version,
             "pin_effective_version": overlay.pin_effective_version,
         }
@@ -258,9 +251,7 @@ def _print_merged_human(merged: MergedEntity) -> None:
         click.echo(f"  tags:           {', '.join(tags)}")
     if merged.overlay is not None:
         contributed = sorted(
-            field
-            for field, src in merged.field_sources.items()
-            if src in ("overlay", "canonical+overlay")
+            field for field, src in merged.field_sources.items() if src in ("overlay", "canonical+overlay")
         )
         click.echo(f"  overlay:        {merged.overlay.project}")
         click.echo(f"    contributed:  {', '.join(contributed)}")
@@ -286,9 +277,7 @@ def validate_cmd(
     """Validate commons entities, or a project's overlay files with --project."""
     if project is not None:
         if entity_type is not None or slug is not None:
-            raise click.UsageError(
-                "--project cannot be combined with --type/--slug"
-            )
+            raise click.UsageError("--project cannot be combined with --type/--slug")
         try:
             overlay_report = validate_project_overlays(project)
         except CommonsError as exc:
@@ -320,9 +309,7 @@ def validate_cmd(
         return
 
     root = _require_root()
-    report = CommonsValidator(CommonsEntityAdapter(root)).validate(
-        type=entity_type, slug=slug
-    )
+    report = CommonsValidator(CommonsEntityAdapter(root)).validate(type=entity_type, slug=slug)
     if as_json:
         payload = {
             "checked": report.checked,
@@ -428,19 +415,15 @@ def promote_paper_cmd(
     """
     root = resolve_commons_root()
     if not root.exists():
-        raise click.ClickException(
-            f"commons store missing at {root}; run `science commons init` first"
-        )
+        raise click.ClickException(f"commons store missing at {root}; run `science commons init` first")
 
     if entity_id is not None and len(from_) != 1:
-        raise click.ClickException(
-            "single-entity form (`promote paper <id>`) requires exactly one --from"
-        )
+        raise click.ClickException("single-entity form (`promote paper <id>`) requires exactly one --from")
     if limit is not None and entity_id is not None:
         raise click.UsageError("--limit applies to bulk form only; cannot combine with <entity_id>")
 
     try:
-        discovery = discover_paper_candidates(list(from_))
+        discovery = discover_candidates(list(from_), PROMOTE_KIND_PAPER)
     except CommonsError as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -448,9 +431,7 @@ def promote_paper_cmd(
         if not entity_id.startswith("paper:"):
             raise click.ClickException(f"expected `paper:<bibkey>`, got {entity_id!r}")
         wanted = entity_id.split(":", 1)[1].casefold()
-        filtered = {
-            k: v for k, v in discovery.candidates_by_slug.items() if k == wanted
-        }
+        filtered = {k: v for k, v in discovery.candidates_by_slug.items() if k == wanted}
         discovery = DiscoveryResult(
             candidates_by_slug=filtered,
             failed_candidates=discovery.failed_candidates,
@@ -491,12 +472,12 @@ def promote_paper_cmd(
     except PromoteInputError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    click.echo(f"Plan: {len(plan.decisions)} canonical entities, "
-               f"{sum(len(d.overlays) for d in plan.decisions)} overlay rewrites.")
+    click.echo(
+        f"Plan: {len(plan.decisions)} canonical entities, "
+        f"{sum(len(d.overlays) for d in plan.decisions)} overlay rewrites."
+    )
     for d in plan.decisions:
-        renames = [
-            (slug, ov) for slug, ov in d.overlays.items() if ov.rename_from is not None
-        ]
+        renames = [(slug, ov) for slug, ov in d.overlays.items() if ov.rename_from is not None]
         rename_note = f" (rename: {', '.join(slug for slug, _ in renames)})" if renames else ""
         click.echo(f"  {d.slug}{rename_note}")
         for slug, ov in renames:
@@ -512,17 +493,19 @@ def promote_paper_cmd(
         audit_yaml = getattr(exc, "failure_audit_yaml", None)
         if audit_yaml:
             click.echo(
-                "Failure-path audit log could not be written. Would-have-been "
-                "content:\n" + audit_yaml,
+                "Failure-path audit log could not be written. Would-have-been content:\n" + audit_yaml,
                 err=True,
             )
         raise click.ClickException(str(exc)) from exc
 
-    click.echo(f"Applied op {result.op_id}: commit {result.commons_commit}, "
-               f"{len(result.tags_created)} tags, audit log at {result.audit_log_path}")
+    click.echo(
+        f"Applied op {result.op_id}: commit {result.commons_commit}, "
+        f"{len(result.tags_created)} tags, audit log at {result.audit_log_path}"
+    )
 
 
 def _invocation() -> str:
     """Reconstruct an invocation string from sys.argv for audit logging."""
     import sys
+
     return " ".join(sys.argv)

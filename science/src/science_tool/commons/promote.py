@@ -5,7 +5,7 @@ per docs/plans/2026-05-15-commons-promote-papers-design.md §6.3.
 
 This module owns:
 - Dataclasses for the public surface (PromoteCandidate, PromotePlan, …).
-- `discover_paper_candidates(project_slugs) -> DiscoveryResult` (Task 10).
+- `discover_candidates(project_slugs, kind) -> DiscoveryResult`.
 - `plan_promote(discovery, commons_root, *, resolve_conflict) -> PromotePlan` (Task 14).
 - `apply_promote(plan, commons_root, *, invocation) -> PromoteResult` (Tasks 16–17).
 """
@@ -33,7 +33,12 @@ from science_model.entity_schema import (
     read_merge_policy,
 )
 from science_tool.commons.config import resolve_project_by_id
-from science_tool.commons.errors import PromoteCandidateError, PromoteConflictAbort, PromoteInputError, PromoteWriteError
+from science_tool.commons.errors import (
+    PromoteCandidateError,
+    PromoteConflictAbort,
+    PromoteInputError,
+    PromoteWriteError,
+)
 
 
 class EligibilityVerdict(Enum):
@@ -177,9 +182,9 @@ class OverlayRewrite:
 @dataclass(frozen=True, slots=True)
 class PromoteDecision:
     slug: str
-    canonical_path: Path                 # absolute `<commons>/papers/<slug>.md`
-    canonical_content: str               # rendered canonical file (markdown + frontmatter)
-    canonical_version: str               # "1.0.0" etc.
+    canonical_path: Path  # absolute `<commons>/papers/<slug>.md`
+    canonical_content: str  # rendered canonical file (markdown + frontmatter)
+    canonical_version: str  # "1.0.0" etc.
     overlays: dict[str, OverlayRewrite]  # project_slug → rewrite plan
     resolved_conflicts: tuple[ConflictResolution, ...]
 
@@ -216,10 +221,18 @@ class PromoteResult:
     failed_candidates: list[FailedCandidate]
     audit_log_path: Path | None
     status: Literal["ok", "failed"]
-    failure_stage: Literal[
-        "preflight", "validate", "discover", "plan",
-        "write_commons", "rewrite_projects", "audit",
-    ] | None
+    failure_stage: (
+        Literal[
+            "preflight",
+            "validate",
+            "discover",
+            "plan",
+            "write_commons",
+            "rewrite_projects",
+            "audit",
+        ]
+        | None
+    )
     failure_detail: str | None
     # Project slugs whose `doc/papers/<file>.md` were actually modified by this
     # operation. On the success path, every overlay slug; on a partial step-6
@@ -236,15 +249,20 @@ class PromoteResult:
 # --------------------------------------------------------------------------- #
 
 
-def discover_paper_candidates(project_slugs: list[str]) -> DiscoveryResult:
-    """Scan each project's `doc/papers/*.md` directly. Group by case-insensitive
-    `slug_normalized`. Returns successful candidates + failure records."""
+def discover_candidates(
+    project_slugs: list[str],
+    kind: PromoteKindConfig,
+) -> DiscoveryResult:
+    """Scan each project's `kind.source_subdirs` for promotion candidates.
+    Group by `_normalize_slug_for_match(stem, kind)`. Returns successful
+    candidates + failure records (no exception path for per-file failures).
+    """
     grouped: dict[str, list[PromoteCandidate]] = {}
     failures: list[FailedCandidate] = []
 
     for slug in project_slugs:
         project_root = resolve_project_by_id(slug)  # raises CommonsError on bad slug
-        candidates, project_failures = _scan_project_papers(project_root, slug)
+        candidates, project_failures = _scan_project(project_root, slug, kind)
         failures.extend(project_failures)
         for cand in candidates:
             grouped.setdefault(cand.slug_normalized, []).append(cand)
@@ -336,7 +354,8 @@ def plan_promote(
             if not isinstance(raw_fm, dict):
                 soft_failures.append(
                     FailedCandidate(
-                        slug=c.slug, project_slug=c.project_slug,
+                        slug=c.slug,
+                        project_slug=c.project_slug,
                         source_path=c.overlay_source_path,
                         error_class="PromoteCandidateError",
                         error_message="discovery payload missing raw frontmatter",
@@ -344,7 +363,10 @@ def plan_promote(
                 )
                 continue
             can_f, proj_f, can_b, proj_b = _classify_entity(
-                raw_fm, raw_body, merge_policy, body_sections,
+                raw_fm,
+                raw_body,
+                merge_policy,
+                body_sections,
             )
             classified.append(
                 PromoteCandidate(
@@ -482,9 +504,7 @@ def _commons_is_clean(commons_root: Path) -> tuple[bool, list[str]]:
     return (not dirty, dirty)
 
 
-def _project_target_files_clean(
-    project_root: Path, target_filenames: list[str]
-) -> tuple[bool, list[str]]:
+def _project_target_files_clean(project_root: Path, target_filenames: list[str]) -> tuple[bool, list[str]]:
     """For each filename in `target_filenames`, check whether `doc/papers/<name>`
     matches HEAD. Returns (clean, dirty_paths)."""
     dirty: list[str] = []
@@ -505,8 +525,12 @@ def _repo_is_idle(root: Path) -> bool:
     """True if the repo is NOT mid-merge/rebase/cherry-pick/bisect."""
     git_dir = root / ".git"
     sentinels = [
-        "MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD",
-        "BISECT_LOG", "rebase-apply", "rebase-merge",
+        "MERGE_HEAD",
+        "REBASE_HEAD",
+        "CHERRY_PICK_HEAD",
+        "BISECT_LOG",
+        "rebase-apply",
+        "rebase-merge",
     ]
     return not any((git_dir / s).exists() for s in sentinels)
 
@@ -521,8 +545,13 @@ def _write_failure_audit_log(
     plan: PromotePlan,
     projects_touched: list[str],
     failure_stage: Literal[
-        "preflight", "validate", "discover", "plan",
-        "write_commons", "rewrite_projects", "audit",
+        "preflight",
+        "validate",
+        "discover",
+        "plan",
+        "write_commons",
+        "rewrite_projects",
+        "audit",
     ],
     failure_detail: str,
     invocation: str,
@@ -557,9 +586,7 @@ def _write_failure_audit_log(
         path.write_text(yaml_text, encoding="utf-8")
         return (path, yaml_text)
     except OSError as audit_exc:
-        logger.error(
-            "failure-path audit log write failed for op %s: %s", op_id, audit_exc
-        )
+        logger.error("failure-path audit log write failed for op %s: %s", op_id, audit_exc)
         return (None, yaml_text)
 
 
@@ -614,16 +641,13 @@ def apply_promote(
     try:
         # ---------- Step 0: preflight ----------
         if not commons_root.exists():
-            raise PromoteInputError(
-                f"commons store missing at {commons_root}; run `science commons init`"
-            )
+            raise PromoteInputError(f"commons store missing at {commons_root}; run `science commons init`")
         if not _repo_is_idle(commons_root):
             raise PromoteInputError(f"commons repo is mid-merge/rebase: {commons_root}")
         clean, dirty = _commons_is_clean(commons_root)
         if not clean:
             raise PromoteInputError(
-                "commons repo is not clean. Commit/stash before re-running. Dirty: "
-                + ", ".join(dirty)
+                "commons repo is not clean. Commit/stash before re-running. Dirty: " + ", ".join(dirty)
             )
 
         target_files_per_project: dict[Path, list[str]] = {}
@@ -632,15 +656,11 @@ def apply_promote(
             for slug, overlay in decision.overlays.items():
                 project_root = overlay.path.parent.parent.parent
                 if overlay.rename_from is not None:
-                    target_files_per_project.setdefault(project_root, []).append(
-                        overlay.rename_from.name
-                    )
+                    target_files_per_project.setdefault(project_root, []).append(overlay.rename_from.name)
                     if overlay.path.exists():
                         rename_collisions.append((slug, overlay.path))
                 else:
-                    target_files_per_project.setdefault(project_root, []).append(
-                        overlay.path.name
-                    )
+                    target_files_per_project.setdefault(project_root, []).append(overlay.path.name)
         if rename_collisions:
             raise PromoteInputError(
                 "case-rename target(s) already exist on disk: "
@@ -652,9 +672,7 @@ def apply_promote(
                 raise PromoteInputError(f"project {project_root} is mid-merge/rebase")
             clean, dirty = _project_target_files_clean(project_root, names)
             if not clean:
-                raise PromoteInputError(
-                    f"project {project_root} has dirty target files: " + ", ".join(dirty)
-                )
+                raise PromoteInputError(f"project {project_root} has dirty target files: " + ", ".join(dirty))
 
         # ---------- Step 5.1: tag preflight ----------
         current_stage = "write_commons"
@@ -691,8 +709,11 @@ def apply_promote(
             _git(commons_root, "add", "--", *rel_paths)
             _git(
                 commons_root,
-                "commit", "-m", f"promote: {len(plan.decisions)} papers via op {op_id}",
-                "--", *rel_paths,
+                "commit",
+                "-m",
+                f"promote: {len(plan.decisions)} papers via op {op_id}",
+                "--",
+                *rel_paths,
             )
         except subprocess.CalledProcessError as exc:
             _restore_paths_to_head(commons_root, written_canonical_paths)
@@ -720,10 +741,7 @@ def apply_promote(
                 tags_created.clear()
                 raise PromoteWriteError(
                     stage="write_commons",
-                    detail=(
-                        f"tag {tag!r} failed after commit (rolled back "
-                        f"{rolled_back_commit}): {exc.stderr or exc}"
-                    ),
+                    detail=(f"tag {tag!r} failed after commit (rolled back {rolled_back_commit}): {exc.stderr or exc}"),
                 ) from exc
 
         # ---------- Step 6: rewrite projects ----------
@@ -746,10 +764,13 @@ def apply_promote(
                         paths_to_restore.append(overlay.rename_from)
                     for path in paths_to_restore:
                         rel = path.relative_to(project_root)
-                        existed = subprocess.run(
-                            ["git", "-C", str(project_root), "cat-file", "-e", f"HEAD:{rel}"],
-                            capture_output=True,
-                        ).returncode == 0
+                        existed = (
+                            subprocess.run(
+                                ["git", "-C", str(project_root), "cat-file", "-e", f"HEAD:{rel}"],
+                                capture_output=True,
+                            ).returncode
+                            == 0
+                        )
                         if existed:
                             subprocess.run(
                                 ["git", "-C", str(project_root), "checkout", "HEAD", "--", str(rel)],
@@ -851,9 +872,7 @@ def _normalize_slug_for_match(raw: str, kind: PromoteKindConfig) -> str:
     if not stripped:
         raise PromoteCandidateError(f"slug {raw!r} is empty after strip")
     if not kind.slug_regex.match(stripped):
-        raise PromoteCandidateError(
-            f"slug {raw!r} does not match {kind.slug_regex.pattern}"
-        )
+        raise PromoteCandidateError(f"slug {raw!r} does not match {kind.slug_regex.pattern}")
     if kind.slug_match == "casefold":
         return stripped.casefold()
     return stripped
@@ -872,11 +891,7 @@ def _classify_file_kind(
        skip-other-id.
     4. Otherwise infer from directory: match.
     """
-    explicit_values = [
-        frontmatter[key]
-        for key in ("kind", "type")
-        if key in frontmatter
-    ]
+    explicit_values = [frontmatter[key] for key in ("kind", "type") if key in frontmatter]
     if any(value == kind.kind for value in explicit_values):
         return "match"
     if explicit_values:
@@ -890,15 +905,13 @@ def _classify_file_kind(
 logger = logging.getLogger(__name__)
 
 
-def _parse_paper_file(path: Path) -> tuple[dict, str]:
+def _parse_entity_file(path: Path) -> tuple[dict, str]:
     """Return (frontmatter_dict, body_text). Raises PromoteCandidateError on
     parse failure, unreadable file, or missing frontmatter delimiters."""
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
-        raise PromoteCandidateError(
-            f"unreadable file: {exc}", path=path
-        ) from exc
+        raise PromoteCandidateError(f"unreadable file: {exc}", path=path) from exc
     lines = text.splitlines(keepends=False)
     if not lines or lines[0].strip() != "---":
         raise PromoteCandidateError("no frontmatter (missing leading ---)", path=path)
@@ -913,119 +926,199 @@ def _parse_paper_file(path: Path) -> tuple[dict, str]:
     try:
         fm = yaml.safe_load(yaml_block) or {}
     except yaml.YAMLError as exc:
-        raise PromoteCandidateError(
-            f"frontmatter parse error: {exc}", path=path
-        ) from exc
+        raise PromoteCandidateError(f"frontmatter parse error: {exc}", path=path) from exc
     if not isinstance(fm, dict):
-        raise PromoteCandidateError(
-            "frontmatter is not a mapping", path=path
-        )
+        raise PromoteCandidateError("frontmatter is not a mapping", path=path)
     body = "\n".join(lines[closing_idx + 1 :])
     if text.endswith("\n") and not body.endswith("\n"):
         body += "\n"
     return fm, body
 
 
-def _scan_project_papers(
-    project_root: Path, project_slug: str
+def _scan_project(
+    project_root: Path,
+    project_slug: str,
+    kind: PromoteKindConfig,
 ) -> tuple[list[PromoteCandidate], list[FailedCandidate]]:
-    """Walk `<project_root>/doc/papers/*.md`, classify each file, return
-    (candidates, failures). Skips already-promoted files and explicit non-paper
-    kinds. Per-file failures become FailedCandidate records; the walk continues."""
+    """Walk every dir in kind.source_subdirs and parse each *.md.
+
+    Detects intra-kind same-project collisions (a slug appearing in more
+    than one source subdir of the same project — only relevant for topic).
+    Calls _classify_file_kind, the eligibility filter (if set), and
+    _normalize_slug_for_match. Project-only filenames are mapped to
+    `(slug_normalized, source_path)` so the collision check can report
+    BOTH offending paths.
+    """
     candidates: list[PromoteCandidate] = []
     failures: list[FailedCandidate] = []
-    papers_dir = project_root / "doc" / "papers"
-    if not papers_dir.is_dir():
-        return candidates, failures
+    seen: dict[str, tuple[str, Path]] = {}
 
-    for md_path in sorted(papers_dir.glob("*.md")):
-        try:
-            fm, body = _parse_paper_file(md_path)
-        except PromoteCandidateError as exc:
-            failures.append(
-                FailedCandidate(
-                    slug=md_path.stem,
+    for sub in kind.source_subdirs:
+        directory = project_root / sub
+        if not directory.exists():
+            continue
+        for source_path in sorted(directory.glob("*.md")):
+            try:
+                fm, body = _parse_entity_file(source_path)
+            except PromoteCandidateError as exc:
+                failures.append(
+                    FailedCandidate(
+                        slug=None,
+                        project_slug=project_slug,
+                        source_path=source_path,
+                        error_class="PromoteCandidateError",
+                        error_message=str(exc),
+                    )
+                )
+                continue
+
+            # Skip already-promoted files (overlay_of present).
+            if "overlay_of" in fm:
+                continue
+
+            classification = _classify_file_kind(fm, kind)
+            if classification == "skip-other-kind":
+                logger.warning("%s: kind/type is not %r; skipping", source_path, kind.kind)
+                continue
+            if classification == "skip-other-id":
+                continue
+
+            # Eligibility filter (theme only at Phase F).
+            if kind.eligibility_filter is not None:
+                verdict = kind.eligibility_filter(fm)
+                if verdict == EligibilityVerdict.SKIP_SILENT:
+                    logger.debug("%s: eligibility skip (kind=%s)", source_path, kind.kind)
+                    continue
+                if verdict == EligibilityVerdict.FAIL:
+                    failures.append(
+                        FailedCandidate(
+                            slug=None,
+                            project_slug=project_slug,
+                            source_path=source_path,
+                            error_class="PromoteCandidateError",
+                            error_message=(
+                                f"eligibility filter rejected {source_path.name}: "
+                                "missing or malformed eligibility marker"
+                            ),
+                        )
+                    )
+                    continue
+
+            try:
+                slug_normalized = _normalize_slug_for_match(source_path.stem, kind)
+            except PromoteCandidateError as exc:
+                failures.append(
+                    FailedCandidate(
+                        slug=None,
+                        project_slug=project_slug,
+                        source_path=source_path,
+                        error_class="PromoteCandidateError",
+                        error_message=str(exc),
+                    )
+                )
+                continue
+
+            # Id check. The classifier may have matched purely on explicit
+            # `kind:` / `type:`, while the file also carries a contradictory
+            # `id:`. In that case, report failure.
+            id_val = fm.get("id")
+            if "id" in fm and not isinstance(id_val, str):
+                failures.append(
+                    FailedCandidate(
+                        slug=None,
+                        project_slug=project_slug,
+                        source_path=source_path,
+                        error_class="PromoteCandidateError",
+                        error_message=(f"id value {id_val!r} must be a string for kind {kind.kind!r}"),
+                    )
+                )
+                continue
+            if isinstance(id_val, str):
+                if not id_val.startswith(kind.id_prefix):
+                    failures.append(
+                        FailedCandidate(
+                            slug=None,
+                            project_slug=project_slug,
+                            source_path=source_path,
+                            error_class="PromoteCandidateError",
+                            error_message=(
+                                f"id {id_val!r} does not have the expected "
+                                f"prefix {kind.id_prefix!r} for kind "
+                                f"{kind.kind!r}"
+                            ),
+                        )
+                    )
+                    continue
+                id_slug = id_val[len(kind.id_prefix) :]
+                try:
+                    id_slug_normalized = _normalize_slug_for_match(id_slug, kind)
+                except PromoteCandidateError as exc:
+                    failures.append(
+                        FailedCandidate(
+                            slug=None,
+                            project_slug=project_slug,
+                            source_path=source_path,
+                            error_class="PromoteCandidateError",
+                            error_message=str(exc),
+                        )
+                    )
+                    continue
+                if id_slug_normalized != slug_normalized:
+                    failures.append(
+                        FailedCandidate(
+                            slug=None,
+                            project_slug=project_slug,
+                            source_path=source_path,
+                            error_class="PromoteCandidateError",
+                            error_message=(f"id {id_val!r} does not match filename stem {source_path.stem!r}"),
+                        )
+                    )
+                    continue
+
+            # Intra-kind same-project collision (topic flatten guard).
+            prior = seen.get(slug_normalized)
+            if prior is not None and prior[0] != sub:
+                _, prior_path = prior
+                failures.append(
+                    FailedCandidate(
+                        slug=slug_normalized,
+                        project_slug=project_slug,
+                        source_path=source_path,
+                        error_class="PromoteCandidateError",
+                        error_message=(
+                            f"slug {slug_normalized!r} appears in both "
+                            f"{prior_path} and {source_path} within project "
+                            f"{project_slug!r}; remove one before promoting"
+                        ),
+                    )
+                )
+                # Remove the prior candidate so this slug cannot be promoted
+                # from a half-resolved same-project corpus.
+                candidates[:] = [c for c in candidates if c.slug_normalized != slug_normalized]
+                continue
+            seen.setdefault(slug_normalized, (sub, source_path))
+
+            # canonical_fields / project_only_fields / body splits are filled
+            # in later by `_classify_entity` (Task 11). For now we stash raw
+            # frontmatter + body so discovery is independent of merge-policy
+            # lookup.
+            source_case_slug = source_path.stem
+            candidates.append(
+                PromoteCandidate(
+                    slug=source_case_slug,
+                    slug_normalized=slug_normalized,
                     project_slug=project_slug,
-                    source_path=md_path,
-                    error_class="PromoteCandidateError",
-                    error_message=str(exc),
+                    project_root=project_root,
+                    overlay_source_path=source_path,
+                    canonical_fields={},
+                    project_only_fields={},
+                    canonical_body={},
+                    project_only_body={
+                        _RAW_FRONTMATTER_KEY: fm,
+                        _RAW_BODY_KEY: body,
+                    },
                 )
             )
-            continue
-
-        if "overlay_of" in fm:
-            continue  # already promoted; idempotent skip
-
-        classification = _classify_file_kind(fm, PROMOTE_KIND_PAPER)
-        if classification == "skip-other-kind":
-            logger.warning(
-                "%s: kind/type is not 'paper'; skipping (explicit non-paper)",
-                md_path,
-            )
-            continue
-        if classification == "skip-other-id":
-            logger.warning(
-                "%s: id prefix is not 'paper:'; skipping (explicit non-paper id)",
-                md_path,
-            )
-            continue
-
-        # Commons / overlay adapters derive ids from filename stems case-
-        # sensitively and require frontmatter id to match the stem exactly
-        # (adapter.py:149, overlay.py:114). Promote inherits the same rule —
-        # the source case is canonical (design §4.1.3). If the source carries
-        # an explicit `id:` that disagrees with its filename stem, that's a
-        # bug in the source file, not something promote should silently
-        # rewrite: fail the candidate so the user can fix it.
-        explicit_id = fm.get("id")
-        if explicit_id is not None and explicit_id != f"paper:{md_path.stem}":
-            failures.append(
-                FailedCandidate(
-                    slug=md_path.stem,
-                    project_slug=project_slug,
-                    source_path=md_path,
-                    error_class="PromoteCandidateError",
-                    error_message=(
-                        f"frontmatter id {explicit_id!r} does not match filename "
-                        f"stem {md_path.stem!r}; expected id 'paper:{md_path.stem}'"
-                    ),
-                )
-            )
-            continue
-
-        slug_source = md_path.stem
-        try:
-            slug_normalized = _normalize_slug_for_match(
-                slug_source, PROMOTE_KIND_PAPER
-            )
-        except PromoteCandidateError as exc:
-            failures.append(
-                FailedCandidate(
-                    slug=slug_source,
-                    project_slug=project_slug,
-                    source_path=md_path,
-                    error_class="PromoteCandidateError",
-                    error_message=str(exc),
-                )
-            )
-            continue
-
-        # canonical_fields / project_only_fields / body splits are filled in
-        # later by `_classify_entity` (Task 11). For now we stash raw frontmatter
-        # + body so discovery is independent of merge-policy lookup.
-        candidates.append(
-            PromoteCandidate(
-                slug=slug_source,
-                slug_normalized=slug_normalized,
-                project_slug=project_slug,
-                project_root=project_root,
-                overlay_source_path=md_path,
-                canonical_fields={},
-                project_only_fields={},
-                canonical_body={},
-                project_only_body={_RAW_FRONTMATTER_KEY: fm, _RAW_BODY_KEY: body},
-            )
-        )
 
     return candidates, failures
 
@@ -1043,9 +1136,7 @@ _OVERLAY_ONLY_KEYS: frozenset[str] = frozenset({"overlay_of", "pin_version", "pi
 # they have `science:merge: project_only` in the paper schema, so the policy
 # lookup routes them correctly to the project_only bucket. The canonical
 # writer fills its own `created` / `updated` from the apply timestamp.
-_GENERATED_BY_PROMOTE_KEYS: frozenset[str] = frozenset(
-    {"schema_profile", "version"}
-)
+_GENERATED_BY_PROMOTE_KEYS: frozenset[str] = frozenset({"schema_profile", "version"})
 
 # Identity fields promote re-derives from the PromoteDecision after the
 # canonical slug case is picked. They are stripped from the canonical merge
@@ -1260,7 +1351,7 @@ def _render_frontmatter(fields: dict) -> str:
         for k in _FORCE_QUOTED_KEYS:
             prefix = f"{k}:"
             if line.startswith(prefix):
-                raw = line[len(prefix):].strip()
+                raw = line[len(prefix) :].strip()
                 # Strip surrounding single- or double-quotes pyyaml may add
                 if len(raw) >= 2 and raw[0] in ('"', "'") and raw[-1] == raw[0]:
                     raw = raw[1:-1]
@@ -1379,10 +1470,7 @@ def _build_project_rollback_command(overlay_rewrites: list[dict]) -> str:
         return ""
     first_path = Path(overlay_rewrites[0]["path"])
     project_root = first_path.parents[2]
-    rels = sorted(
-        str(Path(entry["path"]).relative_to(project_root))
-        for entry in overlay_rewrites
-    )
+    rels = sorted(str(Path(entry["path"]).relative_to(project_root)) for entry in overlay_rewrites)
     return f"git -C {project_root} checkout HEAD -- {' '.join(rels)}"
 
 
@@ -1447,10 +1535,7 @@ def _render_audit_log_yaml(
             for f in result.failed_candidates
         ],
         "rollback": {
-            "commons": (
-                f"git -C {commons_root} revert {result.commons_commit}"
-                if result.commons_commit else None
-            ),
+            "commons": (f"git -C {commons_root} revert {result.commons_commit}" if result.commons_commit else None),
             # Per design §6.5: each entry is a copy-pasteable git command,
             # not a placeholder. Derive project_root by walking up from each
             # overlay path (`<root>/doc/papers/<file>`) and list every rewritten
@@ -1516,9 +1601,7 @@ def _rollback_step5(
 
     for canonical_path in canonical_paths:
         rel = canonical_path.relative_to(commons_root)
-        exists_at_head = (
-            _git(commons_root, "cat-file", "-e", f"HEAD:{rel}", check=False).returncode == 0
-        )
+        exists_at_head = _git(commons_root, "cat-file", "-e", f"HEAD:{rel}", check=False).returncode == 0
         if exists_at_head:
             _git(commons_root, "checkout", "HEAD", "--", str(rel))
         else:
