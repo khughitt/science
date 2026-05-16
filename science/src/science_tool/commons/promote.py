@@ -21,6 +21,7 @@ from typing import Any, Callable, Literal
 
 import yaml
 
+from science_tool.commons.config import resolve_project_by_id
 from science_tool.commons.errors import PromoteCandidateError
 
 
@@ -142,7 +143,19 @@ class PromoteResult:
 
 
 def discover_paper_candidates(project_slugs: list[str]) -> DiscoveryResult:
-    raise NotImplementedError  # Task 10
+    """Scan each project's `doc/papers/*.md` directly. Group by case-insensitive
+    `bibkey_normalized`. Returns successful candidates + failure records."""
+    grouped: dict[str, list[PromoteCandidate]] = {}
+    failures: list[FailedCandidate] = []
+
+    for slug in project_slugs:
+        project_root = resolve_project_by_id(slug)  # raises CommonsError on bad slug
+        candidates, project_failures = _scan_project_papers(project_root, slug)
+        failures.extend(project_failures)
+        for cand in candidates:
+            grouped.setdefault(cand.bibkey_normalized, []).append(cand)
+
+    return DiscoveryResult(candidates_by_bibkey=grouped, failed_candidates=failures)
 
 
 def plan_promote(

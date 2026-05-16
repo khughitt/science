@@ -214,3 +214,69 @@ def test_scan_project_papers_fails_when_id_does_not_match_stem(tmp_path) -> None
     assert len(failures) == 1
     assert failures[0].source_path.name == "Adams2025.md"
     assert "does not match filename stem" in failures[0].error_message
+
+
+def test_discover_groups_by_normalized_bibkey(tmp_path, monkeypatch) -> None:
+    from science_tool.commons.promote import discover_paper_candidates
+
+    proj_a = tmp_path / "proj_a"
+    (proj_a / "doc" / "papers").mkdir(parents=True)
+    (proj_a / "doc" / "papers" / "Huh2024.md").write_text(
+        "---\nid: paper:Huh2024\ntitle: A\n---\n",
+        encoding="utf-8",
+    )
+    proj_b = tmp_path / "proj_b"
+    (proj_b / "doc" / "papers").mkdir(parents=True)
+    (proj_b / "doc" / "papers" / "huh2024.md").write_text(
+        "---\nid: paper:huh2024\ntitle: B\n---\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: {"proj_a": proj_a, "proj_b": proj_b}[slug],
+    )
+
+    result = discover_paper_candidates(["proj_a", "proj_b"])
+    assert set(result.candidates_by_bibkey) == {"huh2024"}
+    assert len(result.candidates_by_bibkey["huh2024"]) == 2
+    assert result.failed_candidates == []
+
+
+def test_discover_rejects_null_id_via_resolver(tmp_path, monkeypatch) -> None:
+    from science_tool.commons.errors import CommonsError
+    from science_tool.commons.promote import discover_paper_candidates
+
+    def fake_resolve(slug: str):
+        raise CommonsError(f"project {slug!r} is registered with id: null; ...")
+
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id", fake_resolve
+    )
+    with pytest.raises(CommonsError, match="id: null"):
+        discover_paper_candidates(["legacy-slug"])
+
+
+def test_discover_carries_failures(tmp_path, monkeypatch) -> None:
+    from science_tool.commons.promote import discover_paper_candidates
+
+    proj = tmp_path / "proj"
+    (proj / "doc" / "papers").mkdir(parents=True)
+    (proj / "doc" / "papers" / "Good.md").write_text(
+        "---\nid: paper:Good\ntitle: G\n---\n",
+        encoding="utf-8",
+    )
+    (proj / "doc" / "papers" / "Broken.md").write_text(
+        "no frontmatter\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: proj,
+    )
+
+    result = discover_paper_candidates(["proj"])
+    assert set(result.candidates_by_bibkey) == {"good"}
+    assert len(result.failed_candidates) == 1
+    assert result.failed_candidates[0].source_path.name == "Broken.md"
