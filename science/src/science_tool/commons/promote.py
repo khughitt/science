@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import re
+import secrets
 import subprocess
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -30,7 +31,7 @@ from science_model.entity_schema import (
     read_merge_policy,
 )
 from science_tool.commons.config import resolve_project_by_id
-from science_tool.commons.errors import PromoteCandidateError, PromoteConflictAbort, PromoteInputError
+from science_tool.commons.errors import PromoteCandidateError, PromoteConflictAbort, PromoteInputError, PromoteWriteError
 
 
 # --------------------------------------------------------------------------- #
@@ -365,13 +366,368 @@ def plan_promote(
     return PromotePlan(decisions=decisions, failed_candidates=soft_failures)
 
 
+def _commons_is_clean(commons_root: Path) -> tuple[bool, list[str]]:
+    """Return (clean, dirty_paths). Clean = no staged, no unstaged, no untracked
+    inside papers/ or .migrations/."""
+    status = _git(commons_root, "status", "--porcelain").stdout
+    dirty: list[str] = []
+    for line in status.splitlines():
+        if len(line) < 4:
+            continue
+        path = line[3:]
+        flags = line[:2]
+        if flags == "??":
+            if path.startswith("papers/") or path.startswith(".migrations/"):
+                dirty.append(path)
+        else:
+            dirty.append(path)
+    return (not dirty, dirty)
+
+
+def _project_target_files_clean(
+    project_root: Path, target_filenames: list[str]
+) -> tuple[bool, list[str]]:
+    """For each filename in `target_filenames`, check whether `doc/papers/<name>`
+    matches HEAD. Returns (clean, dirty_paths)."""
+    dirty: list[str] = []
+    for name in target_filenames:
+        rel = f"doc/papers/{name}"
+        absolute = project_root / rel
+        if not absolute.exists():
+            continue
+        diff = subprocess.run(
+            ["git", "-C", str(project_root), "diff", "--exit-code", "--quiet", "HEAD", "--", rel],
+        )
+        if diff.returncode != 0:
+            dirty.append(rel)
+    return (not dirty, dirty)
+
+
+def _repo_is_idle(root: Path) -> bool:
+    """True if the repo is NOT mid-merge/rebase/cherry-pick/bisect."""
+    git_dir = root / ".git"
+    sentinels = [
+        "MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD",
+        "BISECT_LOG", "rebase-apply", "rebase-merge",
+    ]
+    return not any((git_dir / s).exists() for s in sentinels)
+
+
+def _write_failure_audit_log(
+    *,
+    op_id: str,
+    started_at: datetime,
+    commons_root: Path,
+    commons_commit: str | None,
+    tags_created: list[str],
+    plan: PromotePlan,
+    projects_touched: list[str],
+    failure_stage: Literal[
+        "preflight", "validate", "discover", "plan",
+        "write_commons", "rewrite_projects", "audit",
+    ],
+    failure_detail: str,
+    invocation: str,
+) -> tuple[Path | None, str]:
+    """Best-effort uncommitted audit log for a failure path (design §6.3 step 7
+    failure variant). Returns `(path, yaml_text)`:
+      - On successful write: `(path, yaml_text)` where path is the file written.
+      - On write failure: `(None, yaml_text)` — caller is responsible for
+        surfacing yaml_text to stderr so the operator can recover forensics
+        when the audit dir itself is unwritable."""
+    finished_at = datetime.now(tz=timezone.utc)
+    result = PromoteResult(
+        op_id=op_id,
+        started_at=started_at,
+        finished_at=finished_at,
+        commons_commit=commons_commit,
+        tags_created=tags_created,
+        decisions=plan.decisions,
+        failed_candidates=plan.failed_candidates,
+        audit_log_path=None,
+        status="failed",
+        failure_stage=failure_stage,
+        failure_detail=failure_detail,
+        projects_touched=projects_touched,
+    )
+    yaml_text = _render_audit_log_yaml(result, commons_root, invocation=invocation)
+    try:
+        migrations = commons_root / ".migrations"
+        migrations.mkdir(parents=True, exist_ok=True)
+        stamp = result.started_at.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        path = migrations / f"{stamp}-{result.op_id}.yaml"
+        path.write_text(yaml_text, encoding="utf-8")
+        return (path, yaml_text)
+    except OSError as audit_exc:
+        logger.error(
+            "failure-path audit log write failed for op %s: %s", op_id, audit_exc
+        )
+        return (None, yaml_text)
+
+
+def _restore_paths_to_head(commons_root: Path, paths: list[Path]) -> None:
+    """For each path, checkout HEAD -- <rel> if it existed at HEAD, else unlink.
+    Used in the 'before step 5' failure path."""
+    for path in paths:
+        rel = path.relative_to(commons_root)
+        existed = _git(commons_root, "cat-file", "-e", f"HEAD:{rel}", check=False).returncode == 0
+        if existed:
+            _git(commons_root, "checkout", "HEAD", "--", str(rel))
+        else:
+            path.unlink(missing_ok=True)
+
+
 def apply_promote(
     plan: PromotePlan,
     commons_root: Path,
     *,
     invocation: str,
 ) -> PromoteResult:
-    raise NotImplementedError  # Tasks 16–17
+    """Atomic-batch apply per design §6.3.
+
+    The body is wrapped in a try/except that writes a best-effort uncommitted
+    audit log on any failure (design §6.3 step 7 failure variant) before
+    re-raising. The success path commits the audit log path-limited.
+    """
+    started_at = datetime.now(tz=timezone.utc)
+    op_id = secrets.token_hex(4)
+    commons_commit: str | None = None
+    tags_created: list[str] = []
+    projects_touched: list[str] = []
+    current_stage: str = "preflight"
+
+    if not plan.decisions:
+        finished_at = datetime.now(tz=timezone.utc)
+        return PromoteResult(
+            op_id=op_id,
+            started_at=started_at,
+            finished_at=finished_at,
+            commons_commit=None,
+            tags_created=[],
+            decisions=[],
+            failed_candidates=plan.failed_candidates,
+            audit_log_path=None,
+            status="ok",
+            failure_stage=None,
+            failure_detail=None,
+            projects_touched=[],
+        )
+
+    try:
+        # ---------- Step 0: preflight ----------
+        if not commons_root.exists():
+            raise PromoteInputError(
+                f"commons store missing at {commons_root}; run `science commons init`"
+            )
+        if not _repo_is_idle(commons_root):
+            raise PromoteInputError(f"commons repo is mid-merge/rebase: {commons_root}")
+        clean, dirty = _commons_is_clean(commons_root)
+        if not clean:
+            raise PromoteInputError(
+                "commons repo is not clean. Commit/stash before re-running. Dirty: "
+                + ", ".join(dirty)
+            )
+
+        target_files_per_project: dict[Path, list[str]] = {}
+        rename_collisions: list[tuple[str, Path]] = []
+        for decision in plan.decisions:
+            for slug, overlay in decision.overlays.items():
+                project_root = overlay.path.parent.parent.parent
+                if overlay.rename_from is not None:
+                    target_files_per_project.setdefault(project_root, []).append(
+                        overlay.rename_from.name
+                    )
+                    if overlay.path.exists():
+                        rename_collisions.append((slug, overlay.path))
+                else:
+                    target_files_per_project.setdefault(project_root, []).append(
+                        overlay.path.name
+                    )
+        if rename_collisions:
+            raise PromoteInputError(
+                "case-rename target(s) already exist on disk: "
+                + ", ".join(f"{slug}:{path}" for slug, path in rename_collisions)
+            )
+
+        for project_root, names in target_files_per_project.items():
+            if not _repo_is_idle(project_root):
+                raise PromoteInputError(f"project {project_root} is mid-merge/rebase")
+            clean, dirty = _project_target_files_clean(project_root, names)
+            if not clean:
+                raise PromoteInputError(
+                    f"project {project_root} has dirty target files: " + ", ".join(dirty)
+                )
+
+        # ---------- Step 5.1: tag preflight ----------
+        current_stage = "write_commons"
+        for decision in plan.decisions:
+            tag = f"paper/{decision.bibkey}/{decision.canonical_version}"
+            existing = _git(commons_root, "rev-parse", "--verify", "--quiet", tag, check=False)
+            if existing.returncode == 0:
+                raise PromoteWriteError(
+                    stage="write_commons",
+                    detail=f"tag {tag!r} already exists in commons; refusing to overwrite",
+                )
+
+        # ---------- Step 4: write commons (staged) ----------
+        # OSError (PermissionError, disk-full) here is recoverable: nothing
+        # committed yet, so restore any partially-written canonicals and convert
+        # to PromoteWriteError so the outer except writes a failure audit log
+        # (design §6.4 "Before step 5" recovery path).
+        written_canonical_paths: list[Path] = []
+        try:
+            for decision in plan.decisions:
+                decision.canonical_path.parent.mkdir(parents=True, exist_ok=True)
+                decision.canonical_path.write_text(decision.canonical_content, encoding="utf-8")
+                written_canonical_paths.append(decision.canonical_path)
+        except OSError as exc:
+            _restore_paths_to_head(commons_root, written_canonical_paths)
+            raise PromoteWriteError(
+                stage="write_commons",
+                detail=f"commons canonical write failed: {exc}",
+            ) from exc
+
+        # ---------- Step 5.2: commit (path-limited) ----------
+        rel_paths = [str(p.relative_to(commons_root)) for p in written_canonical_paths]
+        try:
+            _git(commons_root, "add", "--", *rel_paths)
+            _git(
+                commons_root,
+                "commit", "-m", f"promote: {len(plan.decisions)} papers via op {op_id}",
+                "--", *rel_paths,
+            )
+        except subprocess.CalledProcessError as exc:
+            _restore_paths_to_head(commons_root, written_canonical_paths)
+            raise PromoteWriteError(
+                stage="write_commons",
+                detail=f"commons commit failed: {exc.stderr or exc}",
+            ) from exc
+
+        commons_commit = _git(commons_root, "rev-parse", "--short", "HEAD").stdout.strip()
+        # rev-parse on HEAD after a successful commit is always a non-empty
+        # SHA; narrowing here lets the type-checker see commons_commit as `str`
+        # for the rest of the function.
+        assert commons_commit, "rev-parse HEAD returned empty after commit"
+
+        # ---------- Step 5.3: tag (path-limited per-tag) ----------
+        for decision in sorted(plan.decisions, key=lambda d: d.bibkey):
+            tag = f"paper/{decision.bibkey}/{decision.canonical_version}"
+            try:
+                _git(commons_root, "tag", tag, commons_commit)
+                tags_created.append(tag)
+            except subprocess.CalledProcessError as exc:
+                _rollback_step5(commons_root, tags_created, written_canonical_paths)
+                rolled_back_commit = commons_commit
+                commons_commit = None
+                tags_created.clear()
+                raise PromoteWriteError(
+                    stage="write_commons",
+                    detail=(
+                        f"tag {tag!r} failed after commit (rolled back "
+                        f"{rolled_back_commit}): {exc.stderr or exc}"
+                    ),
+                ) from exc
+
+        # ---------- Step 6: rewrite projects ----------
+        current_stage = "rewrite_projects"
+        try:
+            for decision in plan.decisions:
+                for slug, overlay in decision.overlays.items():
+                    if slug not in projects_touched:
+                        projects_touched.append(slug)
+                    if overlay.rename_from is not None and overlay.rename_from.exists():
+                        overlay.rename_from.unlink()
+                    overlay.path.parent.mkdir(parents=True, exist_ok=True)
+                    overlay.path.write_text(overlay.after_content, encoding="utf-8")
+        except OSError as exc:
+            for decision in plan.decisions:
+                for overlay in decision.overlays.values():
+                    project_root = overlay.path.parent.parent.parent
+                    paths_to_restore: list[Path] = [overlay.path]
+                    if overlay.rename_from is not None:
+                        paths_to_restore.append(overlay.rename_from)
+                    for path in paths_to_restore:
+                        rel = path.relative_to(project_root)
+                        existed = subprocess.run(
+                            ["git", "-C", str(project_root), "cat-file", "-e", f"HEAD:{rel}"],
+                            capture_output=True,
+                        ).returncode == 0
+                        if existed:
+                            subprocess.run(
+                                ["git", "-C", str(project_root), "checkout", "HEAD", "--", str(rel)],
+                                check=False,
+                            )
+                        else:
+                            path.unlink(missing_ok=True)
+            raise PromoteWriteError(
+                stage="rewrite_projects",
+                detail=f"overlay write failed: {exc}",
+                commons_commit=commons_commit,
+                projects_touched=projects_touched,
+            ) from exc
+
+        # ---------- Step 7: write audit log (success path) ----------
+        current_stage = "audit"
+        finished_at = datetime.now(tz=timezone.utc)
+        result = PromoteResult(
+            op_id=op_id,
+            started_at=started_at,
+            finished_at=finished_at,
+            commons_commit=commons_commit,
+            tags_created=tags_created,
+            decisions=plan.decisions,
+            failed_candidates=plan.failed_candidates,
+            audit_log_path=None,
+            status="ok",
+            failure_stage=None,
+            failure_detail=None,
+            projects_touched=projects_touched,
+        )
+        try:
+            audit_path = _write_audit_log(result, commons_root, invocation=invocation)
+            audit_rel = str(audit_path.relative_to(commons_root))
+            _git(commons_root, "add", "--", audit_rel)
+            _git(commons_root, "commit", "-m", f"audit: op {op_id}", "--", audit_rel)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise PromoteWriteError(
+                stage="audit",
+                detail=f"audit log write/commit failed: {exc}",
+                commons_commit=commons_commit,
+                projects_touched=projects_touched,
+            ) from exc
+
+        return PromoteResult(
+            op_id=result.op_id,
+            started_at=result.started_at,
+            finished_at=result.finished_at,
+            commons_commit=result.commons_commit,
+            tags_created=result.tags_created,
+            decisions=result.decisions,
+            failed_candidates=result.failed_candidates,
+            audit_log_path=audit_path,
+            status="ok",
+            failure_stage=None,
+            failure_detail=None,
+            projects_touched=result.projects_touched,
+        )
+
+    except (PromoteInputError, PromoteWriteError, PromoteCandidateError) as exc:
+        stage = getattr(exc, "stage", None) or current_stage
+        audit_path, audit_yaml = _write_failure_audit_log(
+            op_id=op_id,
+            started_at=started_at,
+            commons_root=commons_root,
+            commons_commit=commons_commit,
+            tags_created=tags_created,
+            plan=plan,
+            projects_touched=projects_touched,
+            failure_stage=stage,
+            failure_detail=str(exc),
+            invocation=invocation,
+        )
+        if audit_path is None:
+            exc.failure_audit_yaml = audit_yaml  # type: ignore[attr-defined]
+        raise
 
 
 # --------------------------------------------------------------------------- #
