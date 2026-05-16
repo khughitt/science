@@ -9,6 +9,33 @@ def test_promote_module_imports() -> None:
     from science_tool.commons import promote  # noqa: F401
 
 
+def test_promote_public_surface_exports() -> None:
+    """Public types live on the science_tool.commons package surface."""
+    from science_tool.commons import (
+        ConflictResolution,
+        DiscoveryResult,
+        FailedCandidate,
+        FieldConflict,
+        OverlayRewrite,
+        PromoteCandidate,
+        PromoteDecision,
+        PromotePlan,
+        PromoteResult,
+        apply_promote,
+        discover_paper_candidates,
+        plan_promote,
+        prompt_resolve,
+        resolve_project_by_id,
+    )
+    # Reference every name so pyright doesn't complain about unused imports.
+    assert all([
+        ConflictResolution, DiscoveryResult, FailedCandidate, FieldConflict,
+        OverlayRewrite, PromoteCandidate, PromoteDecision, PromotePlan,
+        PromoteResult, apply_promote, discover_paper_candidates, plan_promote,
+        prompt_resolve, resolve_project_by_id,
+    ])
+
+
 def test_dataclass_surface_is_frozen() -> None:
     from science_tool.commons.promote import (
         ConflictResolution,
