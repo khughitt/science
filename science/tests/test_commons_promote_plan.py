@@ -15,12 +15,37 @@ from science_model.entity_schema import (
 from science_tool.commons.promote import (
     PromoteCandidate,
     _classify_entity,
+    _merge_canonical_fields,
+    _pick_canonical_bibkey_case,
 )
 
 
 _PAPER_PROFILE = default_profile_for_kind("paper")
 _PAPER_POLICY = read_merge_policy(_PAPER_PROFILE)
 _PAPER_SECTIONS = read_canonical_body_sections(_PAPER_PROFILE)
+
+
+def _merge_cand(slug: str, fields: dict) -> PromoteCandidate:
+    """Build a PromoteCandidate with the given canonical_fields. Used by
+    _merge_canonical_fields tests where only fields + slug matter."""
+    return PromoteCandidate(
+        bibkey="X", bibkey_normalized="x", project_slug=slug,
+        project_root=Path("/tmp"), overlay_source_path=Path("/tmp/x.md"),
+        canonical_fields=fields, project_only_fields={},
+        canonical_body={}, project_only_body={},
+    )
+
+
+def _case_cand(slug: str, bibkey: str) -> PromoteCandidate:
+    """Build a PromoteCandidate with the given bibkey case. Used by
+    _pick_canonical_bibkey_case tests."""
+    return PromoteCandidate(
+        bibkey=bibkey, bibkey_normalized=bibkey.casefold(),
+        project_slug=slug, project_root=Path("/tmp"),
+        overlay_source_path=Path("/tmp/x.md"),
+        canonical_fields={}, project_only_fields={},
+        canonical_body={}, project_only_body={},
+    )
 
 
 def test_classify_entity_splits_canonical_vs_project_only() -> None:
@@ -105,3 +130,52 @@ def test_classify_entity_body_section_match_is_case_insensitive() -> None:
     body = "## key findings\n\nlowercase heading\n"
     _, _, can_b, _ = _classify_entity(fm, body, _PAPER_POLICY, _PAPER_SECTIONS)
     assert any(k.casefold() == "key findings" for k in can_b)
+
+
+def test_merge_canonical_fields_one_sided_auto_takes() -> None:
+    a = _merge_cand("A", {"title": "T", "authors": ["a"]})
+    b = _merge_cand("B", {"title": "T", "doi": "10.x"})
+
+    merged, conflicts = _merge_canonical_fields([a, b], _PAPER_POLICY)
+    assert merged["title"] == "T"
+    assert merged["authors"] == ["a"]
+    assert merged["doi"] == "10.x"
+    assert conflicts == []
+
+
+def test_merge_canonical_fields_identical_auto_takes() -> None:
+    a = _merge_cand("A", {"year": 2025})
+    b = _merge_cand("B", {"year": 2025})
+    merged, conflicts = _merge_canonical_fields([a, b], _PAPER_POLICY)
+    assert merged["year"] == 2025
+    assert conflicts == []
+
+
+def test_merge_canonical_fields_emits_conflict_on_differing_values() -> None:
+    a = _merge_cand("A", {"year": 2023})
+    b = _merge_cand("B", {"year": 2024})
+    merged, conflicts = _merge_canonical_fields([a, b], _PAPER_POLICY)
+    assert "year" not in merged
+    assert len(conflicts) == 1
+    assert conflicts[0].field == "year"
+    assert conflicts[0].candidates == {"A": 2023, "B": 2024}
+
+
+def test_merge_canonical_fields_append_unions_deterministically() -> None:
+    a = _merge_cand("A", {"ontology_terms": ["foo", "bar"], "datasets": ["dataset:d1"]})
+    b = _merge_cand("B", {"ontology_terms": ["bar", "baz"], "datasets": ["dataset:d2", "dataset:d1"]})
+    merged, conflicts = _merge_canonical_fields([a, b], _PAPER_POLICY)
+    assert merged["ontology_terms"] == ["bar", "baz", "foo"]
+    assert merged["datasets"] == ["dataset:d1", "dataset:d2"]
+    assert conflicts == []
+
+
+def test_pick_canonical_bibkey_case_from_order_first() -> None:
+    cands = [_case_cand("B", "huh2024"), _case_cand("A", "Huh2024")]
+    assert _pick_canonical_bibkey_case(cands, ["A", "B"]) == "Huh2024"
+    assert _pick_canonical_bibkey_case(cands, ["B", "A"]) == "huh2024"
+
+
+def test_pick_canonical_bibkey_case_tiebreaks_by_slug() -> None:
+    cands = [_case_cand("z-proj", "huh2024"), _case_cand("a-proj", "Huh2024")]
+    assert _pick_canonical_bibkey_case(cands, ["a-proj", "z-proj"]) == "Huh2024"

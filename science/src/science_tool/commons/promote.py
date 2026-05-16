@@ -486,3 +486,74 @@ def _classify_entity(
             project_only_body[heading] = content
 
     return canonical, project_only, canonical_body, project_only_body
+
+
+# --------------------------------------------------------------------------- #
+# Multi-instance merge helpers (Task 12)                                       #
+# --------------------------------------------------------------------------- #
+
+
+def _merge_canonical_fields(
+    candidates: list[PromoteCandidate],
+    merge_policy: dict[str, MergePolicy],
+) -> tuple[dict, list[FieldConflict]]:
+    """Merge canonical_fields across N candidates of the same bibkey.
+
+    Rule per field (driven by merge_policy lookup):
+    - APPEND: union of all candidates' lists, sorted + deduped.
+    - Anything else (REPLACE / FORBIDDEN / no entry):
+      - if no candidate has the field → omitted.
+      - if all candidates agree (equal values) → that value.
+      - if candidates disagree → field omitted from `merged`; a FieldConflict
+        with `{slug: value}` for every candidate that has the field is appended.
+    """
+    all_keys = {key for c in candidates for key in c.canonical_fields}
+    merged: dict = {}
+    conflicts: list[FieldConflict] = []
+
+    for key in sorted(all_keys):
+        present = [c for c in candidates if key in c.canonical_fields]
+        policy = merge_policy.get(key, MergePolicy.REPLACE)
+        if policy == MergePolicy.APPEND:
+            union: set = set()
+            for c in present:
+                v = c.canonical_fields[key]
+                if isinstance(v, list):
+                    union.update(v)
+                else:
+                    union.add(v)
+            merged[key] = sorted(union)
+            continue
+
+        values = [c.canonical_fields[key] for c in present]
+        if all(v == values[0] for v in values):
+            merged[key] = values[0]
+        else:
+            conflicts.append(
+                FieldConflict(
+                    bibkey=present[0].bibkey,
+                    field=key,
+                    candidates={c.project_slug: c.canonical_fields[key] for c in present},
+                )
+            )
+
+    return merged, conflicts
+
+
+def _pick_canonical_bibkey_case(
+    candidates: list[PromoteCandidate],
+    from_order: list[str],
+) -> str:
+    """Pick the canonical bibkey case from a multi-instance group.
+
+    Rule (design §4.1.3):
+    1. Walk from_order; the first project_slug with a matching candidate wins.
+    2. If two candidates share the earliest slug (impossible in practice but
+       defensive) or from_order is empty, tie-break by lexical project_slug.
+    """
+    order = {slug: idx for idx, slug in enumerate(from_order)}
+    sorted_by_order = sorted(
+        candidates,
+        key=lambda c: (order.get(c.project_slug, len(order)), c.project_slug),
+    )
+    return sorted_by_order[0].bibkey
