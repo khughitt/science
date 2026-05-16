@@ -34,7 +34,7 @@ def read_merge_policy(profile: ProfileString, loader: SchemaLoader | None = None
 def read_overlay_merge_policy(loader: SchemaLoader | None = None) -> dict[str, MergePolicy]:
     """Project-only / append fields declared on the overlay schema."""
     loader = loader or SchemaLoader()
-    schema = loader.load(ProfileComponent(name="overlay", version="1.0"))
+    schema = loader.load(ProfileComponent(name="overlay", version="1.1"))
     policy: dict[str, MergePolicy] = {}
     for field, spec in (schema.get("properties") or {}).items():
         if field in {"id", "overlay_of", "pin_version", "pin_effective_version"}:

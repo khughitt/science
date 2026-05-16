@@ -62,7 +62,7 @@ class EntityValidator:
 
         # Overlay schema is identified by a synthetic ProfileComponent: name="overlay".
         # Filename convention is special-cased in loader._filename_for.
-        schema = self._loader.load(ProfileComponent(name="overlay", version="1.0"))
+        schema = self._loader.load(ProfileComponent(name="overlay", version="1.1"))
         validator = Draft202012Validator(
             schema,
             format_checker=Draft202012Validator.FORMAT_CHECKER,
