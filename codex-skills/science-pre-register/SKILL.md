@@ -126,9 +126,85 @@ advisory, not a hard dependency.
 - Why do you expect this? (Link to existing evidence — papers, topics, prior results)
 - How specific can you be? (Direction? Magnitude? Pattern?)
 
+For *narrative* direction/pattern expectations, prose in `## Expected Outcomes`
+is fine. For any *numerical* expectation that will anchor a decision criterion
+(an effect-size threshold, a CI floor, a PPC pass-rate gate, a correlation
+target), do not stop at prose — drive an `## Expectations` block per parameter
+through § 2a.
+
+### 2a. Classify Each Numerical Expectation by Evidence Tier
+
+This is the load-bearing step that prevents pre-data numerical commitments
+from masquerading as rigor. For each numerical expectation, walk the user
+through:
+
+1. **Name the parameter.** What quantity, with what units, on what data?
+2. **State the central guess, range, and direction.** Be specific.
+3. **Enumerate the evidence the guess rests on.** For each source:
+   - cohort/dataset/paper-key
+   - reported estimate (value or range)
+   - reference (task ID, doc path, paper key)
+   - one-line note on what the source establishes and what it doesn't
+4. **Classify the tier from the enumeration:**
+
+   | Tier | Trigger |
+   |---|---|
+   | `invalid` | No provenance, or provenance is intuition / "feels right" / unattributable. |
+   | `hint` | Literature-only support, OR one own-analysis on a single dataset. |
+   | `calibrated` | 3+ own-analyses on disparate datasets, all enumerated in `provenance:`. The disparate-datasets requirement is the threshold for "real distribution, not technical artifact / batch effect / single-cohort idiosyncrasy." |
+
+5. **Surface unknowns explicitly.** Ask the user to name at least one thing they
+   *don't* know about this quantity that could move the estimate. Empty
+   `unknowns:` is the over-confidence smell — push back if the user wants to
+   leave it empty at `hint` or below tier.
+6. **Bind the expectation to gate use.** State how this expectation will be
+   used by Decision Criteria (§ 3): "informs prior range only" / "anchors hard
+   threshold at central ± X%" / etc. `hint`-tier and `invalid`-tier
+   expectations cannot bind to hard thresholds; they bind to soft /
+   recalibratable thresholds only.
+
+Authoring guidance:
+
+- If the user proposes a number with no enumerable provenance, this is
+  `invalid` tier. Do not write it into the pre-reg until provenance is
+  attached or the number is removed.
+- If only one own-analysis or literature claim supports the guess, this is
+  `hint`. Hint-tier numbers are fine to *register* (they are still better
+  than implicit expectations) — but any decision criterion that cites them
+  must be authored as soft/recalibratable.
+- Resist the temptation to upgrade `hint` to `calibrated` by adding
+  literature references. The 3+ requirement is for *own analyses on disparate
+  datasets*; literature support is necessary but not sufficient.
+- When the user has only one or two prior own-analyses, the current pre-reg's
+  analysis is plausibly the third — frame it that way ("if this pre-reg's
+  fit replicates the direction, the *next* pre-reg can author `calibrated`
+  expectations").
+
 ### 3. Define Decision Criteria
 
 Frame decision criteria according to the target class identified in § 0.
+
+**Expectations-to-criteria binding (required when § 2a produced any Expectations
+blocks):** every numerical threshold authored here must trace back to an
+Expectations block via that block's `gate_use:` field. Two enforcement rules:
+
+- A criterion citing a `hint`-tier expectation must be authored as soft /
+  recalibratable. "Soft" means: wide CI tolerance, generous PPC pass-rate
+  floor (e.g., 80% rather than 97%), explicit acknowledgment that the
+  threshold may be revised post-data if the prior was misspecified. Author
+  the criterion this way *before* seeing data — do not phrase it as a
+  narrow gate "with the option to relax later," because that re-introduces
+  the post-hoc rationalization the pre-reg exists to prevent.
+- A criterion with no upstream Expectations block must contain no numerical
+  specificity. Either author the block (driving the user through § 2a) or
+  rewrite the criterion as direction-only / pattern-only.
+
+Narrow gates (small CI windows, high PPC pass-rates, tight effect-size
+thresholds) require `calibrated`-tier backing — i.e., the Expectations block
+this criterion cites must have 3+ disparate-dataset own-analyses in
+`provenance:`. If the user wants a narrow gate but only has `hint`-tier
+support, the right move is to author a soft gate now and queue a follow-up
+analysis that would upgrade the tier for the *next* pre-reg.
 
 **For epistemic targets:**
 - What evidence would **support** it? Be concrete — name the metric, the threshold, the pattern.
