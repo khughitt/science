@@ -101,3 +101,48 @@ def test_three_kinds_have_distinct_id_prefixes() -> None:
         PROMOTE_KIND_THEME.id_prefix,
     }
     assert prefixes == {"paper:", "topic:", "theme:"}
+
+
+def test_theme_eligibility_cross_project_is_eligible() -> None:
+    from science_tool.commons.promote import (
+        EligibilityVerdict,
+        PROMOTE_KIND_THEME,
+    )
+
+    f = PROMOTE_KIND_THEME.eligibility_filter
+    assert f is not None
+    verdict = f({"theme_scope": "cross-project"})
+    assert verdict == EligibilityVerdict.ELIGIBLE
+
+
+def test_theme_eligibility_project_scope_is_skip_silent() -> None:
+    from science_tool.commons.promote import (
+        EligibilityVerdict,
+        PROMOTE_KIND_THEME,
+    )
+
+    f = PROMOTE_KIND_THEME.eligibility_filter
+    assert f is not None
+    verdict = f({"theme_scope": "project"})
+    assert verdict == EligibilityVerdict.SKIP_SILENT
+
+
+def test_theme_eligibility_missing_or_malformed_is_fail() -> None:
+    from science_tool.commons.promote import (
+        EligibilityVerdict,
+        PROMOTE_KIND_THEME,
+    )
+
+    f = PROMOTE_KIND_THEME.eligibility_filter
+    assert f is not None
+    assert f({}) == EligibilityVerdict.FAIL
+    assert f({"theme_scope": None}) == EligibilityVerdict.FAIL
+    assert f({"theme_scope": "global"}) == EligibilityVerdict.FAIL
+    assert f({"theme_scope": ""}) == EligibilityVerdict.FAIL
+
+
+def test_paper_and_topic_have_no_eligibility_filter() -> None:
+    from science_tool.commons.promote import PROMOTE_KIND_PAPER, PROMOTE_KIND_TOPIC
+
+    assert PROMOTE_KIND_PAPER.eligibility_filter is None
+    assert PROMOTE_KIND_TOPIC.eligibility_filter is None

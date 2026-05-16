@@ -89,6 +89,22 @@ PROMOTE_KIND_TOPIC = PromoteKindConfig(
     eligibility_filter=None,
 )
 
+
+def _theme_eligibility(fm: Mapping[str, Any]) -> EligibilityVerdict:
+    """Theme eligibility filter (design §3.1).
+
+    Only `theme_scope: cross-project` is eligible. `theme_scope: project` is
+    skipped silently (debug-log + drop). Missing/malformed scope is a hard
+    fail recorded as a `FailedCandidate`.
+    """
+    scope = fm.get("theme_scope")
+    if scope == "cross-project":
+        return EligibilityVerdict.ELIGIBLE
+    if scope == "project":
+        return EligibilityVerdict.SKIP_SILENT
+    return EligibilityVerdict.FAIL
+
+
 PROMOTE_KIND_THEME = PromoteKindConfig(
     kind="theme",
     source_subdirs=("doc/themes",),
@@ -99,7 +115,7 @@ PROMOTE_KIND_THEME = PromoteKindConfig(
     slug_match="exact",
     mixin_schema_id="https://schemas.science/mixin-theme-1.0.json",  # bumped to 2.0 in Task 22
     default_profile=default_profile_for_kind("theme"),
-    eligibility_filter=None,  # set in Task 3
+    eligibility_filter=_theme_eligibility,
 )
 
 
