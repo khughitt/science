@@ -25,10 +25,12 @@ def _init_repo(root: Path) -> None:
     )
 
 
-def _setup(tmp_path: Path) -> tuple[Path, Path]:
-    proj = tmp_path / "proj-alpha"
-    shutil.copytree(FIXTURES / "proj-alpha", proj)
-    (proj / "doc" / "themes" / "cross-biological.md").unlink()
+def _copy_project(tmp_path: Path, fixture_name: str) -> Path:
+    proj = tmp_path / fixture_name
+    shutil.copytree(FIXTURES / fixture_name, proj)
+    invalid_theme = proj / "doc" / "themes" / "cross-biological.md"
+    if invalid_theme.exists():
+        invalid_theme.unlink()
     _init_repo(proj)
     subprocess.run(["git", "-C", str(proj), "add", "."], check=True, capture_output=True)
     subprocess.run(
@@ -36,7 +38,10 @@ def _setup(tmp_path: Path) -> tuple[Path, Path]:
         check=True,
         capture_output=True,
     )
+    return proj
 
+
+def _create_commons(tmp_path: Path) -> Path:
     commons = tmp_path / "commons"
     commons.mkdir()
     (commons / "themes").mkdir()
@@ -47,16 +52,25 @@ def _setup(tmp_path: Path) -> tuple[Path, Path]:
         check=True,
         capture_output=True,
     )
+    return commons
+
+
+def _setup(tmp_path: Path) -> tuple[Path, Path]:
+    proj = _copy_project(tmp_path, "proj-alpha")
+    commons = _create_commons(tmp_path)
     return proj, commons
 
 
 def test_cli_promote_theme_dry_run_excludes_project_scope(tmp_path, monkeypatch) -> None:
     from science_tool.commons import cli as commons_cli
 
-    proj, commons = _setup(tmp_path)
+    alpha = _copy_project(tmp_path, "proj-alpha")
+    beta = _copy_project(tmp_path, "proj-beta")
+    commons = _create_commons(tmp_path)
+    projects = {"proj-alpha": alpha, "proj-beta": beta}
     monkeypatch.setattr(
         "science_tool.commons.promote.resolve_project_by_id",
-        lambda slug: proj,
+        lambda slug: projects[slug],
     )
     monkeypatch.setattr(
         "science_tool.commons.promote.prompt_resolve",
@@ -70,7 +84,7 @@ def test_cli_promote_theme_dry_run_excludes_project_scope(tmp_path, monkeypatch)
     runner = CliRunner()
     result = runner.invoke(
         commons_cli.commons_group,
-        ["promote", "theme", "--from", "proj-alpha"],
+        ["promote", "theme", "--from", "proj-alpha", "--from", "proj-beta"],
     )
 
     assert result.exit_code == 0, result.output
