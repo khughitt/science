@@ -91,14 +91,14 @@ For brevity, the examples below write just `science <command>` — **always expa
 ## Rules
 
 - **MUST** start from a specified inquiry or a task/question description (see Input Modes below)
-- **MUST** write the plan to `doc/plans/YYYY-MM-DD-<slug>-pipeline-plan.md`
+- **MUST** pick a plan mode (`probe` / `design` / `implementation`, see Plan Modes below) and let it dictate plan shape and section list. Right-size aggressively — over-spec'd 1-day probes are the most common drift.
+- **MUST** write the plan to `doc/plans/YYYY-MM-DD-<slug>.md` (suffix omitted for design/implementation modes; `-pipeline-plan.md` suffix permitted but no longer required).
 - **MUST** check whether methodological readiness is already documented by an `analysis-plan:<slug>` artifact. If not, and the user is asking for orchestration before data QA, independent unit, estimand, power/resolution, and sensitivity rules are clear, recommend `science-plan-analysis` before finalizing the pipeline plan.
-- **SHOULD** add `sci:Transformation` nodes when the project uses formal inquiries
-- **SHOULD** connect transformations with `sci:feedsInto` edges
-- **SHOULD** attach `sci:validatedBy` checks to each transformation
-- **SHOULD** include AnnotatedParam metadata for all pipeline parameters
+- **SHOULD** include frontmatter linking the plan to its hypotheses / questions / decisions / tasks via `related: [hypothesis:..., rq:..., decision:..., plan:..., task:..., paper:...]`. For pure upstream design notes (in the science repo itself), a `Parent design / Predecessor / Status / Depends on` header block is an acceptable alternative to frontmatter.
+- **SHOULD** in `design` mode, defend non-obvious choices in named `Key decision` subsections that name the rejected alternative — this replaces the older per-transformation Risks block.
+- **SHOULD** add `sci:Transformation` graph nodes ONLY when the project uses formal inquiries (Step 3 below). Skip in `design` / `implementation` modes — the plan document is the canonical artifact and graph annotations are not load-bearing.
 - **SHOULD** reference tool-specific skills where applicable
-- **SHOULD** suggest a pilot/phased approach for complex pipelines
+- **SHOULD** suggest a pilot/phased approach for complex pipelines (typically a `probe` precursor to a `design`)
 - **SHOULD** suggest the RunPod pipeline skill as an option when the planned workflow appears GPU-intensive; keep this advisory and let the user decide whether to use it
 - **SHOULD** keep plans tool-agnostic by default — reference tool-specific skills. However, when the user explicitly requests a specific orchestration tool (Snakemake, Nextflow, Make, etc.), include a tool-specific section with the workflow definition while keeping the rest of the plan tool-agnostic.
 
@@ -112,6 +112,16 @@ The plan-pipeline command works with two types of input:
 When an existing analysis plan is in scope, read `doc/plans/*-analysis-plan.md`
 and reuse its methodological readiness checks. Do not re-decide those checks in
 the pipeline plan; focus on execution.
+
+## Plan Modes
+
+Orthogonal to input mode (above), the plan **shape** must match scope. Three shapes recur across recent Science plans; pick one before drafting. When in doubt, default to `probe` and grow only when scope demands it.
+
+- **`probe` mode** — 1-page, 1-day experiments. Sections: `Goal` / `Background` / `Approach` / `Inputs` / `Tasks` (≤5) / `Decision criteria` (top-level go/no-go) / `Validation` (summary, not per-step) / `Out of scope` / `Notes on plan scope` (closing sentence documenting why this plan is this size). No Phase structure, no per-step validation tables, no testing matrix.
+- **`design` mode** — engineering or strategic design, 5–15pp. Sections: `Purpose` / `Scope decomposition` (when splitting from a parent plan) / `Architecture` (inline ASCII directory/code-layout tree with `NEW`/`MODIFY`/`UNCHANGED` annotations — this is the canonical architecture-diagram primitive; do not scaffold SVG/Mermaid) / **`Key decisions`** (one named subsection per non-obvious choice; each names the chosen approach AND the rejected alternative with a one-sentence reason — this carries the weight a "Risks" section would in older templates) / `Phases` or `Work Packages` (each with `Depends on` / `Entry point` / `Definition of done`) / `Open questions` / `Non-Goals` / `Acceptance Criteria`. Pure upstream design notes may use a `Parent design / Predecessor / Status / Depends on` header block instead of frontmatter.
+- **`implementation` mode** — companion to a settled design, 5–15pp. Sections: `Goal` / `Architecture` (link to parent design) / `File Structure` (enumerate modify/create with one-line intent) / `Task N → Step N` checkboxes with inline shell commands and expected outputs / Final validation task / Self-review checklist. This is the executable mode — one commit per task is the norm.
+
+Validation lives differently per mode: `probe` → single `Decision criteria` + `Validation` summary; `design` → per-WP `Definition of done` + closing `Acceptance Criteria`; `implementation` → per-task checkbox steps with inline commands. **Do not emit per-transformation validation matrices** — they duplicate effort across modes.
 
 ## Workflow
 
@@ -205,9 +215,11 @@ For each input data source identified in Step 2:
        visited-set; HALT on revisit.
 3. Do NOT mutate `consumed_by` here. Backlink write is Step 4.5.
 
-### Step 3: Add computational nodes to the inquiry (Inquiry mode only)
+### Step 3: Add computational nodes to the inquiry (Inquiry mode only, optional)
 
-Skip this step in Task mode — the plan document captures the same information.
+Skip this step in Task mode — the plan document is the canonical artifact. Also skip in `design` / `implementation` plan modes regardless of input mode — graph annotations on every transformation are not load-bearing in those shapes and add ceremony without payoff.
+
+Run only when (a) input mode is Inquiry, AND (b) the inquiry's downstream tooling (e.g. `science inquiry diagram`) actually consumes these nodes.
 
 For each identified step:
 
@@ -238,38 +250,147 @@ a `workflow` entity:
 2. Link to the method it realizes: `sci:realizes` → `method:<slug>`
 3. Document the steps it contains: `sci:contains` → `workflow-step:<slug>` for each rule
 
-### Step 4: Write the implementation plan
+### Step 4: Write the plan
 
-Save to `doc/plans/YYYY-MM-DD-<slug>-pipeline-plan.md` using the standard plan format:
+Save to `doc/plans/YYYY-MM-DD-<slug>.md`. The plan shape is dictated by the chosen mode (see Plan Modes above). The frontmatter is the same across modes.
 
-```markdown
-# <Inquiry Label> Pipeline Implementation Plan
+**Frontmatter (project-level plans):**
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
-**Goal:** <derived from inquiry target and description>
-
-**Architecture:** <derived from transformation graph>
-
-**New Dependencies:** <libraries, tools, or data sources not already in the project>
-
-**Inquiry:** `<slug>` — see `doc/inquiries/<slug>.md` and knowledge graph
-
+```yaml
 ---
-
-## Task N: <Transformation step>
-...
+id: "plan:YYYY-MM-DD-<slug>"
+type: "plan"
+title: "<short title>"
+status: "active"   # active | draft | merged | archived
+created: "YYYY-MM-DD"
+updated: "YYYY-MM-DD"
+related:
+  - "hypothesis:<id>"   # if any
+  - "rq:<id>"           # if any
+  - "decision:<id>"     # if any
+  - "plan:<id>"         # parent or sibling plan
+  - "task:<id>"         # if filed
+  - "paper:<id>"        # if any
+---
 ```
 
-#### Conditional Plan Sections
+Pure upstream design notes (in the science repo itself) may use a header block instead:
 
-Include these sections when applicable:
+```markdown
+**Parent design:** `<path or ref>`
+**Predecessor:** `<path or ref>`
+**Status:** Draft | Active | Merged
+**Depends on:** `<list>`
+```
 
-- **Changes to Existing Code** (Task mode / extend-existing-workflow plans): Which existing files are modified and why? What's the diff from the current working pipeline? Omit when building from scratch.
-- **Decision Criteria** (exploratory/research plans): What would change our mind about pursuing this? What result at what stage would make us stop or pivot? This is a top-level go/no-go, distinct from per-task validation criteria. Omit for straightforward implementation plans.
+**Body shape by mode:**
+
+#### `probe` mode (1-page, 1-day experiments)
+
+```markdown
+# <Title>
+
+## Goal
+1-2 sentences.
+
+## Background
+What we know, what we are testing, why now. 1 paragraph.
+
+## Approach
+Method in 1-3 paragraphs.
+
+## Inputs
+Bullet list of data sources / prior probes / existing scripts.
+
+## Tasks
+Numbered ≤5 tasks, each 1-3 sentences. No checkbox sub-steps.
+
+## Decision criteria
+What result moves us in which direction (top-level go/no-go).
+
+## Validation
+Sanity checks (≤5 bullets). Not a per-task matrix.
+
+## Out of scope
+What we are NOT doing in this probe.
+
+## Notes on plan scope
+1-2 sentences documenting why this plan is this size (so future readers / agents don't re-expand it).
+```
+
+#### `design` mode (engineering or strategic, 5–15pp)
+
+```markdown
+# <Title>
+
+## Purpose
+Goal + guiding principle. 1-2 paragraphs.
+
+## Scope decomposition (when splitting from a parent plan)
+In scope / Out of scope (deferred) — bullets with reason per deferred item.
+
+## Architecture
+Inline ASCII directory/code-layout tree with NEW / MODIFY / UNCHANGED annotations.
+
+## Key decisions
+### Key decision N: <name>
+- **Chosen approach:** ...
+- **Rejected alternative:** ...
+- **Reason:** one sentence.
+
+(One subsection per non-obvious choice. This replaces a per-transformation Risks block.)
+
+## Phases / Work Packages
+### Phase N / WP N: <name>
+- **Depends on:** ...
+- **Entry point:** ...
+- **Definition of done:** ...
+
+## Open questions
+Bullets.
+
+## Non-Goals
+Bullets.
+
+## Acceptance Criteria
+Closing checklist.
+```
+
+#### `implementation` mode (companion to a settled design)
+
+```markdown
+# <Title>
+
+> **For agentic workers:** Use `superpowers:executing-plans` to implement this plan task-by-task. One commit per task.
+
+## Goal
+1-2 sentences.
+
+## Architecture
+Reference parent design. 1 paragraph + link.
+
+## File structure
+Enumerate every file to modify / create with a one-line intent.
+
+## Task N: <name>
+- [ ] Step N.1: <action> — `<shell command>` — expected output: ...
+- [ ] Step N.2: ...
+
+## Final validation task
+- [ ] Run test suite / smoke / linter.
+- [ ] Manual UI check (if applicable).
+- [ ] Commit.
+
+## Self-review checklist
+Before declaring done: ...
+```
+
+#### Conditional Plan Sections (any mode)
+
+Add when applicable:
+
+- **Changes to Existing Code** (task-mode / extend-existing-workflow): which existing files are modified and why? Omit when building from scratch.
 - **Reusable Infrastructure:** If any task produces infrastructure (tools, indices, data pipelines) with value beyond this specific analysis, flag it with `reusable: true` and briefly describe the broader applicability.
-
-Each task should reference the inquiry node it implements and include TDD steps.
 
 ### Step 4.5: Register plan with consumed datasets (both modes)
 
@@ -308,9 +429,9 @@ science graph stamp-revision
 
 - **Plans are tool-agnostic by default.** Reference tool-specific skills rather than embedding their conventions. Exception: when the user explicitly requests a specific tool, include a dedicated tool-specific section.
 - **RunPod is advisory, not automatic.** For GPU-intensive workflows, suggest the RunPod skill and let the user choose whether to incorporate it.
-- **Pilot first.** For complex pipelines, suggest a pilot phase with reduced scope.
-- **Validation criteria are mandatory.** Every transformation must have a way to verify it worked.
-- **The inquiry is the source of truth.** The plan document is a rendering of the inquiry's computational layer.
+- **Pilot first.** For complex pipelines, suggest a `probe`-mode precursor before a `design`-mode plan.
+- **Validation is mode-specific, not per-transformation.** `probe` plans carry a single `Decision criteria` block + `Validation` summary; `design` plans carry per-WP `Definition of done` plus closing `Acceptance Criteria`; `implementation` plans carry per-task checkbox steps with inline commands. Do not emit per-transformation validation matrices.
+- **The plan document is the canonical artifact.** Inquiry-graph annotations (Step 3) are optional and only meaningful when downstream tooling consumes them; they are not the source of truth for the plan.
 - **When science is unavailable:** If `science` commands fail or time out (>15s), proceed with the plan document directly. Read inquiry and graph data from markdown files in `doc/inquiries/` instead. Graph annotations are secondary — the plan document is the primary deliverable. Note which graph commands were skipped so they can be run later.
 
 ## Process Reflection
