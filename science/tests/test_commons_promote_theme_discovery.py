@@ -28,6 +28,9 @@ def test_theme_discover_only_cross_project_themes_are_candidates(monkeypatch, ca
     assert "cross-biological" in slugs
     assert "project-scope" not in slugs
 
+    failed_names = [Path(fc.source_path).stem for fc in result.failed_candidates]
+    assert "project-scope" not in failed_names
+
 
 def test_theme_discover_malformed_scope_is_failed_candidate(monkeypatch) -> None:
     from science_tool.commons.promote import PROMOTE_KIND_THEME, discover_candidates
