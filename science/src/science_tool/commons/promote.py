@@ -179,6 +179,7 @@ class OverlayRewrite:
     after_content: str
     pin_version: str
     rename_from: Path | None = None  # set when canonical case differs from source
+    unlinked_source: Path | None = None  # set when the original source path is replaced
 
 
 @dataclass(frozen=True, slots=True)
@@ -396,10 +397,15 @@ def plan_promote(
         # directory and is NOT the source file itself, the group is un-promotable.
         for c in classified:
             source_path = c.overlay_source_path
-            target_path = source_path.parent / f"{canonical_case}.md"
+            target_path = c.project_root / kind.overlay_dest_subdir / f"{canonical_case}.md"
             if source_path.name != target_path.name and target_path.exists():
                 raise PromoteInputError(
                     f"case-rename collision in {c.project_slug}: cannot rename "
+                    f"{source_path} → {target_path}; target already exists"
+                )
+            if source_path.parent != target_path.parent and target_path.exists():
+                raise PromoteInputError(
+                    f"overlay target collision in {c.project_slug}: cannot flatten "
                     f"{source_path} → {target_path}; target already exists"
                 )
 
@@ -427,12 +433,18 @@ def plan_promote(
         overlays: dict[str, OverlayRewrite] = {}
         for c in classified:
             source_path = c.overlay_source_path
-            target_path = source_path.parent / f"{canonical_case}.md"
+            target_path = c.project_root / kind.overlay_dest_subdir / f"{canonical_case}.md"
             rename_from = source_path if source_path.name != target_path.name else None
+            unlinked_source = source_path if source_path.parent != target_path.parent else None
             if rename_from is not None and target_path.exists():
                 raise PromoteInputError(
                     f"case-rename collision in {c.project_slug}: cannot rename "
                     f"{rename_from} → {target_path}; target already exists"
+                )
+            if source_path.parent != target_path.parent and target_path.exists():
+                raise PromoteInputError(
+                    f"overlay target collision in {c.project_slug}: cannot flatten "
+                    f"{source_path} → {target_path}; target already exists"
                 )
             rendered_overlay = _render_overlay(
                 PromoteDecision(
@@ -454,6 +466,7 @@ def plan_promote(
                 after_content=rendered_overlay,
                 pin_version="1.0.0",
                 rename_from=rename_from,
+                unlinked_source=unlinked_source,
             )
 
         canonical_decision = PromoteDecision(
@@ -592,6 +605,51 @@ def _project_target_files_clean(
     return (not dirty, dirty)
 
 
+def _project_root_from_overlay_path(path: Path, kind: PromoteKindConfig) -> Path:
+    """Derive project root from `<root>/<kind.overlay_dest_subdir>/<file>`."""
+    parents_to_strip = len(Path(kind.overlay_dest_subdir).parts) + 1
+    return path.parents[parents_to_strip - 1]
+
+
+def _paths_for_overlay_rollback(rewrite: OverlayRewrite) -> list[Path]:
+    paths = [rewrite.path]
+    if rewrite.rename_from is not None:
+        paths.append(rewrite.rename_from)
+    if rewrite.unlinked_source is not None:
+        paths.append(rewrite.unlinked_source)
+    return list(dict.fromkeys(paths))
+
+
+def _restore_project_rewrites_to_head(
+    rewrites: list[OverlayRewrite],
+    kind: PromoteKindConfig,
+) -> None:
+    """Restore rewritten/unlinked project paths to their pre-apply HEAD state."""
+    paths_by_project: dict[Path, list[Path]] = {}
+    for rewrite in rewrites:
+        project_root = _project_root_from_overlay_path(rewrite.path, kind)
+        for path in _paths_for_overlay_rollback(rewrite):
+            paths_by_project.setdefault(project_root, []).append(path)
+
+    for project_root, paths in paths_by_project.items():
+        for path in dict.fromkeys(paths):
+            rel = path.relative_to(project_root)
+            existed = (
+                subprocess.run(
+                    ["git", "-C", str(project_root), "cat-file", "-e", f"HEAD:{rel}"],
+                    capture_output=True,
+                ).returncode
+                == 0
+            )
+            if existed:
+                subprocess.run(
+                    ["git", "-C", str(project_root), "checkout", "HEAD", "--", str(rel)],
+                    check=False,
+                )
+            else:
+                path.unlink(missing_ok=True)
+
+
 def _repo_is_idle(root: Path) -> bool:
     """True if the repo is NOT mid-merge/rebase/cherry-pick/bisect."""
     git_dir = root / ".git"
@@ -727,7 +785,7 @@ def apply_promote(
         rename_collisions: list[tuple[str, Path]] = []
         for decision in plan.decisions:
             for slug, overlay in decision.overlays.items():
-                project_root = overlay.path.parent.parent.parent
+                project_root = _project_root_from_overlay_path(overlay.path, plan.kind)
                 if overlay.rename_from is not None:
                     target_files_per_project.setdefault(project_root, []).append(overlay.rename_from.name)
                     if overlay.path.exists():
@@ -819,38 +877,27 @@ def apply_promote(
 
         # ---------- Step 6: rewrite projects ----------
         current_stage = "rewrite_projects"
+        written_rewrites: list[OverlayRewrite] = []
+        current_rewrite: OverlayRewrite | None = None
         try:
             for decision in plan.decisions:
                 for slug, overlay in decision.overlays.items():
+                    current_rewrite = overlay
                     if slug not in projects_touched:
                         projects_touched.append(slug)
                     if overlay.rename_from is not None and overlay.rename_from.exists():
                         overlay.rename_from.unlink()
                     overlay.path.parent.mkdir(parents=True, exist_ok=True)
                     overlay.path.write_text(overlay.after_content, encoding="utf-8")
+                    if overlay.unlinked_source is not None and overlay.unlinked_source != overlay.path:
+                        overlay.unlinked_source.unlink()
+                    written_rewrites.append(overlay)
+                    current_rewrite = None
         except OSError as exc:
-            for decision in plan.decisions:
-                for overlay in decision.overlays.values():
-                    project_root = overlay.path.parent.parent.parent
-                    paths_to_restore: list[Path] = [overlay.path]
-                    if overlay.rename_from is not None:
-                        paths_to_restore.append(overlay.rename_from)
-                    for path in paths_to_restore:
-                        rel = path.relative_to(project_root)
-                        existed = (
-                            subprocess.run(
-                                ["git", "-C", str(project_root), "cat-file", "-e", f"HEAD:{rel}"],
-                                capture_output=True,
-                            ).returncode
-                            == 0
-                        )
-                        if existed:
-                            subprocess.run(
-                                ["git", "-C", str(project_root), "checkout", "HEAD", "--", str(rel)],
-                                check=False,
-                            )
-                        else:
-                            path.unlink(missing_ok=True)
+            rewrites_to_restore = list(written_rewrites)
+            if current_rewrite is not None and current_rewrite not in rewrites_to_restore:
+                rewrites_to_restore.append(current_rewrite)
+            _restore_project_rewrites_to_head(rewrites_to_restore, plan.kind)
             raise PromoteWriteError(
                 stage="rewrite_projects",
                 detail=f"overlay write failed: {exc}",
@@ -1021,9 +1068,7 @@ def _parse_frontmatter_only(rendered: str) -> dict:
     fm_yaml = rest[:end]
     parsed = yaml.safe_load(fm_yaml)
     if not isinstance(parsed, dict):
-        raise PromoteCandidateError(
-            f"frontmatter is not a mapping: {type(parsed).__name__}", slug=None
-        )
+        raise PromoteCandidateError(f"frontmatter is not a mapping: {type(parsed).__name__}", slug=None)
     return parsed
 
 
