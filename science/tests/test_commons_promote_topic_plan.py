@@ -16,6 +16,18 @@ def _resolver(monkeypatch) -> None:
     )
 
 
+def _only_slugs(discovery, *slugs):
+    from science_tool.commons.promote import DiscoveryResult
+
+    return DiscoveryResult(
+        candidates_by_slug={
+            slug: discovery.candidates_by_slug[slug]
+            for slug in slugs
+        },
+        failed_candidates=discovery.failed_candidates,
+    )
+
+
 def test_topic_plan_single_instance_no_prompt(tmp_path, monkeypatch) -> None:
     from science_tool.commons.promote import (
         PROMOTE_KIND_TOPIC,
@@ -25,6 +37,7 @@ def test_topic_plan_single_instance_no_prompt(tmp_path, monkeypatch) -> None:
 
     _resolver(monkeypatch)
     discovery = discover_candidates(["proj-alpha"], PROMOTE_KIND_TOPIC)
+    discovery = _only_slugs(discovery, "single-instance")
     plan = plan_promote(discovery, commons_root=tmp_path, kind=PROMOTE_KIND_TOPIC)
 
     by_slug = {d.slug: d for d in plan.decisions}
@@ -42,6 +55,7 @@ def test_topic_plan_shared_no_conflict_unifies_canonical(tmp_path, monkeypatch) 
 
     _resolver(monkeypatch)
     discovery = discover_candidates(["proj-alpha", "proj-beta"], PROMOTE_KIND_TOPIC)
+    discovery = _only_slugs(discovery, "shared-no-conflict")
     plan = plan_promote(discovery, commons_root=tmp_path, kind=PROMOTE_KIND_TOPIC)
 
     by_slug = {d.slug: d for d in plan.decisions}

@@ -7,7 +7,6 @@ from pathlib import Path
 
 import click
 
-import science_tool.commons.promote as promote_mod
 from science_tool.commons.adapter import CommonsEntityAdapter, CommonsEntityRecord
 from science_tool.commons.bootstrap import init_commons
 from science_tool.commons.config import resolve_commons_root
@@ -473,7 +472,6 @@ def promote_paper_cmd(
             commons_root=root,
             kind=PROMOTE_KIND_PAPER,
             from_order=list(from_),
-            resolve_conflict=promote_mod.prompt_resolve,
         )
     except (PromoteInputError, PromoteConflictAbort, PromoteValidationError) as exc:
         raise click.ClickException(str(exc)) from exc
@@ -487,7 +485,10 @@ def promote_paper_cmd(
         rename_note = f" (rename: {', '.join(slug for slug, _ in renames)})" if renames else ""
         click.echo(f"  {d.slug}{rename_note}")
         for slug, ov in renames:
-            click.echo(f"    rename in {slug}: {ov.rename_from.name} → {ov.path.name}")
+            rename_from = ov.rename_from
+            if rename_from is None:
+                continue
+            click.echo(f"    rename in {slug}: {rename_from.name} → {ov.path.name}")
 
     if not apply_flag:
         click.echo("Re-run with --apply to execute.")
