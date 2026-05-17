@@ -54,8 +54,9 @@ Expected candidate shapes:
   project overlays.
 - `doc/background/topics/<slug>.md` is eligible and will be flattened to an
   overlay at `doc/topics/<slug>.md` on apply; dry-run should show the rename.
-- Slugs are exact-match, so spelling and case differences are separate
-  candidates.
+- Topic and theme slugs are lowercase-only. Valid lowercase spelling
+  differences are separate candidates; uppercase or case-only differences fail
+  discovery validation instead of merging.
 
 Dry-run theme discovery for the same pilot set:
 
@@ -109,10 +110,41 @@ Do not apply the theme pilot in this first run. See the caveat below.
 
 ## Step 3: Verify
 
-Verify the inventory includes the new topic canonicals and project overlays:
+Verify the commons inventory includes the new topic canonicals:
 
 ```bash
-science commons inventory | rg '"id": "topic:|"overlays":'
+science commons inventory | rg '"id": "topic:'
+```
+
+`science commons inventory` verifies the commons store only. It does not prove
+that project overlay files were rewritten. Inspect overlays directly before
+each manual project commit:
+
+```bash
+for d in ~/d/natural-systems ~/d/cancer/cancer-types/multiple-myeloma; do
+  cd "$d"
+  echo "== $d =="
+  git diff -- doc/topics/ doc/background/topics/
+  rg -n '^overlay_of: "?topic:' doc/topics
+done
+```
+
+If the overlay commit is already made, inspect the committed project overlay
+files instead:
+
+```bash
+git -C ~/d/natural-systems show --stat HEAD -- doc/topics/ doc/background/topics/
+git -C ~/d/natural-systems grep -n -E '^overlay_of: "?topic:' HEAD -- doc/topics
+git -C ~/d/cancer/cancer-types/multiple-myeloma show --stat HEAD -- doc/topics/ doc/background/topics/
+git -C ~/d/cancer/cancer-types/multiple-myeloma grep -n -E '^overlay_of: "?topic:' HEAD -- doc/topics
+```
+
+If the project inventory command is available in the deployed CLI, cross-check
+the overlays through inventory v2:
+
+```bash
+science entities inventory --project ~/d/natural-systems --schema-version 2 | rg '"overlay_of": "topic:'
+science entities inventory --project ~/d/cancer/cancer-types/multiple-myeloma --schema-version 2 | rg '"overlay_of": "topic:'
 ```
 
 Verify commons history and tags:
@@ -128,9 +160,10 @@ Expected: the commons log shows the new topic promotion commit and audit-log
 commit. Topic tags exist for the promoted slugs. Theme tags should be unchanged
 for this topic-only first pilot.
 
-After the later theme apply, repeat the inventory check and confirm:
+After the later theme apply, repeat the commons inventory and direct overlay
+checks, then confirm:
 - Canonical theme entities appear with ids like `theme:<slug>`.
-- Project overlays appear for the theme pilot projects.
+- Project overlay files contain `overlay_of: theme:<slug>`.
 - `git tag --list 'theme/*'` shows one tag per promoted theme.
 
 ## Theme pilot caveat
@@ -191,6 +224,16 @@ For commons commits that were written successfully, prefer a normal revert:
 cd ~/d/science-commons && git revert <commons-commit>
 ```
 
+Then delete only the promotion tags listed in the audit log's `commons_tags`.
+Do not use wildcard tag deletion; stale promotion tags block reruns, but broad
+deletion can remove unrelated history. Examples for tags copied from the audit:
+
+```bash
+cd ~/d/science-commons
+git tag -d topic/<slug>/1.0.0
+git tag -d theme/<slug>/1.0.0
+```
+
 For project working trees, use the path-limited checkout recorded in the audit
 log. Examples:
 
@@ -200,5 +243,5 @@ git -C ~/d/cancer/cancer-types/multiple-myeloma checkout HEAD -- doc/topics/ doc
 git -C ~/d/cancer/meta checkout HEAD -- doc/themes/
 ```
 
-Do not use `git reset --hard`. Rollback is intentionally path-limited so
+Do not hard-reset any repository. Rollback is intentionally path-limited so
 unrelated user work in the same project is not discarded.
