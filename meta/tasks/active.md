@@ -666,3 +666,62 @@ Deferred trajectory item from project-peers Decision 13
 - created: 2026-05-07
 
 Deferred trajectory item from project-peers Decision 13
+
+## [t053] Adaptive project topology task group
+- priority: P1
+- status: proposed
+- aspects: [software-development, hypothesis-testing]
+- group: adaptive-project-topology
+- created: 2026-05-17
+
+Coordinate the meta-research work on evidence-responsive project topology: promotion of dense/high-uncertainty themes into projects, demotion or archival of stale branches, cross-project linking, and human approval gates. This is a Science/meta idea, distinct from the biological model proposed for ~/d/bio/meta.
+
+## [t054] Define adaptive topology signal metrics
+- priority: P1
+- status: proposed
+- aspects: [software-development, hypothesis-testing]
+- related: [task:t053]
+- group: adaptive-project-topology
+- created: 2026-05-17
+
+Define measurable signals for project/theme promotion and demotion: evidence density, graph connectivity, uncertainty gradient, novelty, actionability, decay/staleness, coherence, cross-project utility, and false-positive risk. Deliver a rubric that can be computed from current Science project artifacts before any automation.
+
+## [t055] Draft adaptive project topology hypothesis and question
+- priority: P1
+- status: proposed
+- aspects: [hypothesis-testing]
+- related: [task:t053]
+- group: adaptive-project-topology
+- created: 2026-05-17
+
+Turn the adaptive project topology idea into a formal Science question and candidate hypothesis: project topology should evolve in response to evidence density, uncertainty, novelty, actionability, and stale-branch decay while preserving provenance and requiring human approval.
+
+## [t056] Design topology-change recommendation workflow
+- priority: P2
+- status: proposed
+- aspects: [software-development]
+- related: [task:t053]
+- group: adaptive-project-topology
+- created: 2026-05-17
+
+Design a manual-first workflow that recommends promote, split, merge, demote, archive, create commons resource, or create synthesis task actions. Include dry-run output, required evidence, human approval gates, audit logs, and provenance-preserving links between old and new project homes.
+
+## [t057] Pilot topology audit across Science, health, and cancer projects
+- priority: P2
+- status: proposed
+- aspects: [software-development, hypothesis-testing]
+- related: [task:t053]
+- group: adaptive-project-topology
+- created: 2026-05-17
+
+Apply the signal rubric to current Science, health-meta, cycles, cancer-evolution, pre-cancer, and pan-disease artifacts. Use the pilot to estimate false positives, identify missing signals, and decide whether ~/d/bio/meta is a clean manually promoted project candidate.
+
+## [t058] Prepare bio/meta scaffold brief as a topology case study
+- priority: P2
+- status: proposed
+- aspects: [hypothesis-testing]
+- related: [task:t053]
+- group: bio-meta-scaffold
+- created: 2026-05-17
+
+Write a concise project brief for ~/d/bio/meta as the first manually promoted biological meta-model project: scope, research question, boundaries, initial topics, links to health-meta/cancer/cycles/pre-cancer, and why it should be separate from ~/d/science/meta.
