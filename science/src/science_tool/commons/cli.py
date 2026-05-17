@@ -27,6 +27,8 @@ from science_tool.commons.overlay import (
 from science_tool.commons.promote import (
     DiscoveryResult,
     PROMOTE_KIND_PAPER,
+    PROMOTE_KIND_TOPIC,
+    PromoteKindConfig,
     apply_promote,
     discover_candidates,
     plan_promote,
@@ -390,18 +392,27 @@ def promote_group() -> None:
     """Promote per-project entities into the shared commons store."""
 
 
-@promote_group.command("paper")
-@click.argument("entity_id", required=False, default=None)
-@click.option(
-    "--from",
-    "from_",
-    multiple=True,
-    required=True,
-    metavar="SLUG",
-    help="Registered project id (NOT name). Required; repeatable for bulk + dedup.",
-)
-@click.option("--apply", "apply_flag", is_flag=True, default=False, help="Write changes (default: dry-run).")
-@click.option("--limit", type=int, default=None, help="Bulk only: stop after N papers (slug-sorted).")
+def _promote_from_options(kind: PromoteKindConfig) -> list[click.Parameter]:
+    return [
+        click.Argument(["entity_id"], required=False, default=None),
+        click.Option(
+            ["--from", "from_"],
+            multiple=True,
+            required=True,
+            metavar="SLUG",
+            help="Registered project id (NOT name). Required; repeatable for bulk + dedup.",
+        ),
+        click.Option(["--apply", "apply_flag"], is_flag=True, default=False, help="Write changes (default: dry-run)."),
+        click.Option(
+            ["--limit"],
+            type=int,
+            default=None,
+            help=f"Bulk only: stop after N {kind.commons_subdir} (slug-sorted).",
+        ),
+    ]
+
+
+@promote_group.command("paper", params=_promote_from_options(PROMOTE_KIND_PAPER))
 def promote_paper_cmd(
     entity_id: str | None,
     from_: tuple[str, ...],
@@ -414,24 +425,61 @@ def promote_paper_cmd(
     prompt interactively in BOTH dry-run and apply (so dry-run is a faithful
     preview). Use --limit 0 to get a discovery-only summary without prompts.
     """
+    _promote_kind_cmd(
+        kind=PROMOTE_KIND_PAPER,
+        entity_id=entity_id,
+        from_=from_,
+        apply_=apply_flag,
+        limit=limit,
+    )
+
+
+@promote_group.command("topic", params=_promote_from_options(PROMOTE_KIND_TOPIC))
+def promote_topic_cmd(
+    entity_id: str | None,
+    from_: tuple[str, ...],
+    apply_flag: bool,
+    limit: int | None,
+) -> None:
+    """Promote topic entities into the commons store."""
+    _promote_kind_cmd(
+        kind=PROMOTE_KIND_TOPIC,
+        entity_id=entity_id,
+        from_=from_,
+        apply_=apply_flag,
+        limit=limit,
+    )
+
+
+def _promote_kind_cmd(
+    *,
+    kind: PromoteKindConfig,
+    entity_id: str | None,
+    from_: tuple[str, ...],
+    apply_: bool,
+    limit: int | None,
+) -> None:
+    """Shared implementation for `commons promote <kind>` commands."""
     root = resolve_commons_root()
     if not root.exists():
         raise click.ClickException(f"commons store missing at {root}; run `science commons init` first")
 
     if entity_id is not None and len(from_) != 1:
-        raise click.ClickException("single-entity form (`promote paper <id>`) requires exactly one --from")
+        raise click.ClickException(f"single-entity form (`promote {kind.kind} <id>`) requires exactly one --from")
     if limit is not None and entity_id is not None:
         raise click.UsageError("--limit applies to bulk form only; cannot combine with <entity_id>")
 
     try:
-        discovery = discover_candidates(list(from_), PROMOTE_KIND_PAPER)
+        discovery = discover_candidates(list(from_), kind)
     except CommonsError as exc:
         raise click.ClickException(str(exc)) from exc
 
     if entity_id is not None:
-        if not entity_id.startswith("paper:"):
-            raise click.ClickException(f"expected `paper:<bibkey>`, got {entity_id!r}")
-        wanted = entity_id.split(":", 1)[1].casefold()
+        if not entity_id.startswith(kind.id_prefix):
+            raise click.ClickException(f"expected `{kind.id_prefix}<slug>`, got {entity_id!r}")
+        wanted = entity_id.removeprefix(kind.id_prefix)
+        if kind.slug_match == "casefold":
+            wanted = wanted.casefold()
         filtered = {k: v for k, v in discovery.candidates_by_slug.items() if k == wanted}
         discovery = DiscoveryResult(
             candidates_by_slug=filtered,
@@ -451,7 +499,7 @@ def promote_paper_cmd(
     n_multi = sum(1 for v in discovery.candidates_by_slug.values() if len(v) > 1)
     n_single = n_groups - n_multi
     click.echo(
-        f"Discovered {n_total} paper candidates across {len(from_)} projects "
+        f"Discovered {n_total} {kind.kind} candidates across {len(from_)} projects "
         f"({n_groups} unique slugs, {n_single} single-instance, "
         f"{n_multi} multi-instance)."
     )
@@ -470,7 +518,7 @@ def promote_paper_cmd(
         plan = plan_promote(
             discovery,
             commons_root=root,
-            kind=PROMOTE_KIND_PAPER,
+            kind=kind,
             from_order=list(from_),
         )
     except (PromoteInputError, PromoteConflictAbort, PromoteValidationError) as exc:
@@ -490,7 +538,7 @@ def promote_paper_cmd(
                 continue
             click.echo(f"    rename in {slug}: {rename_from.name} → {ov.path.name}")
 
-    if not apply_flag:
+    if not apply_:
         click.echo("Re-run with --apply to execute.")
         return
 
