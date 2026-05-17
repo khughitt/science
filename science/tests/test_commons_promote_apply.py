@@ -491,6 +491,7 @@ def test_apply_promote_rename_happy_path_unlinks_source_writes_target(tmp_path, 
     assert not (proj_b / "doc" / "papers" / "huh2024.md").exists()
     assert (proj_b / "doc" / "papers" / "Huh2024.md").exists()
     assert (proj_a / "doc" / "papers" / "Huh2024.md").exists()
+    assert result.audit_log_path is not None
     log = yaml.safe_load(result.audit_log_path.read_text(encoding="utf-8"))
     proj_b_rewrites = log["projects_touched"]["proj-b"]["overlay_rewrites"]
     assert proj_b_rewrites[0]["rename"] == {"from": "huh2024.md", "to": "Huh2024.md"}
@@ -729,6 +730,7 @@ def test_apply_promote_path_limited_commit_does_not_pick_up_post_preflight_race(
 
     result = apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
     assert result.status == "ok"
+    assert result.commons_commit is not None
     files = subprocess.run(
         ["git", "-C", str(tmp_path / "commons"), "show", "--stat", result.commons_commit + "~0"],
         capture_output=True,

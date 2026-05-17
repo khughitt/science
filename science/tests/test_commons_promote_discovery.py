@@ -74,7 +74,9 @@ def test_dataclass_surface_is_frozen() -> None:
         PromoteResult,
     ):
         # frozen=True is the authoritative flag on the dataclass params
-        assert cls.__dataclass_params__.frozen, f"{cls.__name__} must be frozen"
+        params = getattr(cls, "__dataclass_params__", None)
+        assert params is not None, f"{cls.__name__} must be a dataclass"
+        assert params.frozen, f"{cls.__name__} must be frozen"
 
 
 def test_normalize_slug_for_match_casefolds() -> None:
