@@ -328,11 +328,10 @@ def plan_promote(
       5. Build PromoteDecision (canonical_content rendered, overlays planned).
 
     `from_order` defaults to the discovery's project_slug encounter order.
-    `resolve_conflict` defaults to `prompt_resolve`.
+    `resolve_conflict=None` records conflicted groups as failed candidates
+    without prompting; callers that want interactive resolution should pass
+    `prompt_resolve`.
     """
-    if resolve_conflict is None:
-        resolve_conflict = prompt_resolve
-
     merge_policy = read_merge_policy(kind.default_profile)
     body_sections = read_canonical_body_sections(kind.default_profile)
 
@@ -406,6 +405,23 @@ def plan_promote(
         merged, conflicts = _merge_canonical_fields(classified, merge_policy, kind=kind.kind)
 
         resolved_conflicts: list[ConflictResolution] = []
+        if conflicts and resolve_conflict is None:
+            conflict_fields = ", ".join(c.field for c in conflicts)
+            first = classified[0]
+            soft_failures.append(
+                FailedCandidate(
+                    slug=canonical_case,
+                    project_slug=first.project_slug,
+                    source_path=first.overlay_source_path,
+                    error_class="PromoteConflictError",
+                    error_message=(
+                        f"unresolved canonical field conflict(s): {conflict_fields}; "
+                        "pass resolve_conflict to choose a value"
+                    ),
+                )
+            )
+            continue
+
         for conflict in conflicts:
             resolved_value = resolve_conflict(conflict)
             source_project = next(
