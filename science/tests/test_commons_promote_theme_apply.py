@@ -78,10 +78,12 @@ def test_theme_apply_happy_path_creates_theme_tag(tmp_path, monkeypatch) -> None
 
     discovery = discover_candidates(["proj-alpha"], PROMOTE_KIND_THEME)
     plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_THEME)
+    assert [d.slug for d in plan.decisions] == ["cross-no-conflict"]
     result = apply_promote(plan, commons_root=commons, invocation="test")
 
     assert (commons / "themes" / "cross-no-conflict.md").exists()
-    assert any(tag.startswith("theme/") for tag in result.tags_created)
+    assert not (commons / "themes" / "project-scope.md").exists()
+    assert "theme/cross-no-conflict/1.0.0" in result.tags_created
     overlay = (proj / "doc" / "themes" / "cross-no-conflict.md").read_text(
         encoding="utf-8"
     )
