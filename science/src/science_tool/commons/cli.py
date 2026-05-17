@@ -27,6 +27,7 @@ from science_tool.commons.overlay import (
 from science_tool.commons.promote import (
     DiscoveryResult,
     PROMOTE_KIND_PAPER,
+    PROMOTE_KIND_THEME,
     PROMOTE_KIND_TOPIC,
     PromoteKindConfig,
     apply_promote,
@@ -444,6 +445,23 @@ def promote_topic_cmd(
     """Promote topic entities into the commons store."""
     _promote_kind_cmd(
         kind=PROMOTE_KIND_TOPIC,
+        entity_id=entity_id,
+        from_=from_,
+        apply_=apply_flag,
+        limit=limit,
+    )
+
+
+@promote_group.command("theme", params=_promote_from_options(PROMOTE_KIND_THEME))
+def promote_theme_cmd(
+    entity_id: str | None,
+    from_: tuple[str, ...],
+    apply_flag: bool,
+    limit: int | None,
+) -> None:
+    """Promote theme entities into the commons store."""
+    _promote_kind_cmd(
+        kind=PROMOTE_KIND_THEME,
         entity_id=entity_id,
         from_=from_,
         apply_=apply_flag,
