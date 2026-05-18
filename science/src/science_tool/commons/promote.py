@@ -53,12 +53,12 @@ class EligibilityVerdict(Enum):
 class PromoteKindConfig:
     """Per-kind configuration for the promote pipeline.
 
-    One instance per kind ("paper", "topic", "theme"). Pure data plus an
+    One instance per kind ("paper", "topic", "theme", "dataset"). Pure data plus an
     optional eligibility-filter callable; threaded through discovery /
     plan / apply via the `kind` parameter or `PromotePlan.kind`.
     """
 
-    kind: Literal["paper", "topic", "theme"]
+    kind: Literal["paper", "topic", "theme", "dataset"]
     source_subdirs: tuple[str, ...]
     overlay_dest_subdir: str
     commons_subdir: str
@@ -126,6 +126,20 @@ PROMOTE_KIND_THEME = PromoteKindConfig(
 )
 
 
+PROMOTE_KIND_DATASET = PromoteKindConfig(
+    kind="dataset",
+    source_subdirs=("doc/datasets",),
+    overlay_dest_subdir="doc/datasets",
+    commons_subdir="datasets",
+    id_prefix="dataset:",
+    slug_regex=re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$"),
+    slug_match="exact",
+    mixin_schema_id="https://schemas.science/mixin-dataset-1.0.json",
+    default_profile=default_profile_for_kind("dataset"),
+    eligibility_filter=None,
+)
+
+
 # --------------------------------------------------------------------------- #
 # Public dataclasses                                                          #
 # --------------------------------------------------------------------------- #
@@ -158,7 +172,7 @@ class PromoteCandidate:
 @dataclass(frozen=True, slots=True)
 class FieldConflict:
     slug: str
-    kind: Literal["paper", "topic", "theme"]
+    kind: Literal["paper", "topic", "theme", "dataset"]
     field: str
     candidates: dict[str, Any]  # project_slug → value
 
@@ -1486,7 +1500,7 @@ def _merge_canonical_fields(
     candidates: list[PromoteCandidate],
     merge_policy: dict[str, MergePolicy],
     *,
-    kind: Literal["paper", "topic", "theme"],
+    kind: Literal["paper", "topic", "theme", "dataset"],
 ) -> tuple[dict, list[FieldConflict]]:
     """Merge canonical_fields across N candidates of the same slug.
 

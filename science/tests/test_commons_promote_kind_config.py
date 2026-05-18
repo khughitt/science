@@ -92,19 +92,36 @@ def test_promote_kind_theme_constant() -> None:
     )
 
 
-def test_three_kinds_have_distinct_id_prefixes() -> None:
+def test_promote_kind_dataset_constant_shape():
+    from science_tool.commons.promote import PROMOTE_KIND_DATASET
+
+    assert PROMOTE_KIND_DATASET.kind == "dataset"
+    assert PROMOTE_KIND_DATASET.source_subdirs == ("doc/datasets",)
+    assert PROMOTE_KIND_DATASET.overlay_dest_subdir == "doc/datasets"
+    assert PROMOTE_KIND_DATASET.commons_subdir == "datasets"
+    assert PROMOTE_KIND_DATASET.id_prefix == "dataset:"
+    # Dataset slug rule: lowercase-kebab
+    assert PROMOTE_KIND_DATASET.slug_regex.match("ccle-proteomics-nusinow-2020")
+    assert not PROMOTE_KIND_DATASET.slug_regex.match("NotKebab")
+    assert PROMOTE_KIND_DATASET.slug_match == "exact"
+    assert "mixin-dataset" in PROMOTE_KIND_DATASET.mixin_schema_id
+
+
+def test_four_kinds_have_distinct_id_prefixes() -> None:
     from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
         PROMOTE_KIND_PAPER,
         PROMOTE_KIND_THEME,
         PROMOTE_KIND_TOPIC,
     )
 
     prefixes = {
+        PROMOTE_KIND_DATASET.id_prefix,
         PROMOTE_KIND_PAPER.id_prefix,
         PROMOTE_KIND_TOPIC.id_prefix,
         PROMOTE_KIND_THEME.id_prefix,
     }
-    assert prefixes == {"paper:", "topic:", "theme:"}
+    assert prefixes == {"dataset:", "paper:", "topic:", "theme:"}
 
 
 def test_theme_eligibility_cross_project_is_eligible() -> None:
