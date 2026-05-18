@@ -11,6 +11,7 @@ from science_model.entity_schema import (
     read_merge_policy,
 )
 from science_tool.commons.promote import (
+    CanonicalArtifact,
     PromoteCandidate,
     _classify_entity,
     _merge_canonical_fields,
@@ -212,8 +213,13 @@ def test_render_canonical_includes_base_required_fields() -> None:
 
     decision = PromoteDecision(
         slug="Adams2025",
-        canonical_path=Path("/c/papers/Adams2025.md"),
-        canonical_content="",
+        canonical_artifacts=[
+            CanonicalArtifact(
+                path=Path("papers/Adams2025.md"),
+                content="",
+                validator="entity-mixin",
+            )
+        ],
         canonical_version="1.0.0",
         overlays={},
         resolved_conflicts=(),
@@ -243,8 +249,13 @@ def test_render_canonical_dates_are_quoted_strings() -> None:
 
     decision = PromoteDecision(
         slug="X",
-        canonical_path=Path("/c/papers/X.md"),
-        canonical_content="",
+        canonical_artifacts=[
+            CanonicalArtifact(
+                path=Path("papers/X.md"),
+                content="",
+                validator="entity-mixin",
+            )
+        ],
         canonical_version="1.0.0",
         overlays={},
         resolved_conflicts=(),
@@ -273,8 +284,13 @@ def test_render_canonical_paper_emits_bibkey_field() -> None:
 
     d = PromoteDecision(
         slug="Adams2025",
-        canonical_path=Path("/x/papers/Adams2025.md"),
-        canonical_content="",
+        canonical_artifacts=[
+            CanonicalArtifact(
+                path=Path("papers/Adams2025.md"),
+                content="",
+                validator="entity-mixin",
+            )
+        ],
         canonical_version="1.0.0",
         overlays={},
         resolved_conflicts=(),
@@ -303,8 +319,13 @@ def test_render_canonical_topic_omits_bibkey_field() -> None:
 
     d = PromoteDecision(
         slug="hypothesis",
-        canonical_path=Path("/x/topics/hypothesis.md"),
-        canonical_content="",
+        canonical_artifacts=[
+            CanonicalArtifact(
+                path=Path("topics/hypothesis.md"),
+                content="",
+                validator="entity-mixin",
+            )
+        ],
         canonical_version="1.0.0",
         overlays={},
         resolved_conflicts=(),
@@ -328,8 +349,13 @@ def test_render_overlay_preserves_project_dates_and_overlay_fields() -> None:
 
     decision = PromoteDecision(
         slug="Adams2025",
-        canonical_path=Path("/c/papers/Adams2025.md"),
-        canonical_content="",
+        canonical_artifacts=[
+            CanonicalArtifact(
+                path=Path("papers/Adams2025.md"),
+                content="",
+                validator="entity-mixin",
+            )
+        ],
         canonical_version="1.0.0",
         overlays={},
         resolved_conflicts=(),
@@ -366,8 +392,13 @@ def test_render_overlay_uses_kind_id_prefix() -> None:
 
     d = PromoteDecision(
         slug="my-theme",
-        canonical_path=Path("/x/themes/my-theme.md"),
-        canonical_content="",
+        canonical_artifacts=[
+            CanonicalArtifact(
+                path=Path("themes/my-theme.md"),
+                content="",
+                validator="entity-mixin",
+            )
+        ],
         canonical_version="1.0.0",
         overlays={},
         resolved_conflicts=(),

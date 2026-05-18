@@ -59,10 +59,11 @@ def test_theme_plan_happy_path_canonical_keeps_kind_and_scope(tmp_path, monkeypa
     )
 
     d = next(d for d in plan.decisions if d.slug == "cross-no-conflict")
-    canonical_fm = _frontmatter(d.canonical_content)
+    canonical_content = d.canonical_artifacts[0].content
+    canonical_fm = _frontmatter(canonical_content)
     assert d.resolved_conflicts == ()
-    assert "theme_kind: methodological" in d.canonical_content
-    assert "theme_scope: cross-project" in d.canonical_content
+    assert "theme_kind: methodological" in canonical_content
+    assert "theme_scope: cross-project" in canonical_content
     assert canonical_fm["theme_kind"] == "methodological"
     assert canonical_fm["theme_scope"] == "cross-project"
     assert canonical_fm.get("status") != "active"
