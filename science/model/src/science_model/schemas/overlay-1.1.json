@@ -39,6 +39,11 @@
       "items": {"type": "string"},
       "science:merge": "append"
     },
+    "same_as": {
+      "type": "array",
+      "items": {"type": "string"},
+      "science:merge": "append"
+    },
     "status": {"type": "string"},
     "source": {"type": "string"},
     "related": {"type": "array", "items": {"type": "string"}},

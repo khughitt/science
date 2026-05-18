@@ -65,13 +65,14 @@ def test_overlay_rejects_mismatched_overlay_of() -> None:
 
 
 def test_overlay_permits_append_fields() -> None:
-    # tags + ontology_terms have merge: append on the canonical schema, so
-    # overlays must be allowed to add to them.
+    # tags + ontology_terms + same_as have merge: append on the canonical
+    # schema, so overlays must be allowed to add to them.
     overlay = {
         "id": "paper:Adams2025",
         "overlay_of": "paper:Adams2025",
         "tags": ["project-relevant", "discussed-in-meeting-3"],
         "ontology_terms": ["EFO:0000400"],
+        "same_as": ["DOID:9538"],
     }
     EntityValidator().validate_overlay(overlay)
 

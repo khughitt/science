@@ -81,6 +81,7 @@ def test_base_accepts_optional_fields_when_present(base_schema: dict) -> None:
         "licenses": ["CC-BY-4.0"],
         "contributors": [{"name": "Ada", "role": "author"}],
         "ontology_terms": ["EFO:0000001"],
+        "same_as": ["DOID:9538", "MeSH:D009101"],
         "tags": ["high-priority"],
     }
     Draft202012Validator(base_schema).validate(entity)

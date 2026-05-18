@@ -64,6 +64,7 @@
       }
     },
     "ontology_terms": {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
+    "same_as": {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
     "tags": {"type": "array", "items": {"type": "string"}, "science:merge": "append"},
     "status": {"type": "string"}
   }
