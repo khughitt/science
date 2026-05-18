@@ -12,6 +12,7 @@ This module owns:
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import secrets
@@ -38,6 +39,7 @@ from science_tool.commons.errors import (
     PromoteCandidateError,
     PromoteConflictAbort,
     PromoteInputError,
+    PromoteResourceMissingError,
     PromoteValidationError,
     PromoteWriteError,
 )
@@ -166,6 +168,8 @@ class PromoteCandidate:
     project_only_fields: dict[str, Any]
     canonical_body: dict[str, str]
     project_only_body: dict[str, Any]
+    datapackage_source_path: Path | None = None
+    datapackage_doc: dict[str, Any] | None = None
     # `project_only_body` is `dict[str, Any]` (not `[str, str]`) so the
     # discovery phase can stash the raw `(frontmatter, body)` pair under
     # sentinel keys `__raw_frontmatter__` / `__raw_body__` for `plan_promote`
@@ -418,6 +422,8 @@ def plan_promote(
                     project_only_fields=proj_f,
                     canonical_body=can_b,
                     project_only_body=proj_b,
+                    datapackage_source_path=c.datapackage_source_path,
+                    datapackage_doc=c.datapackage_doc,
                 )
             )
 
@@ -1199,6 +1205,84 @@ def _parse_frontmatter_only(rendered: str) -> dict:
     return parsed
 
 
+def _project_relative_path(project_root: Path, value: str, *, field: str) -> Path:
+    rel_path = Path(value)
+    if rel_path.is_absolute():
+        raise PromoteCandidateError(f"{field} path {value!r} must be project-relative")
+    root_abs = project_root.resolve()
+    abs_path = (root_abs / rel_path).resolve(strict=False)
+    try:
+        abs_path.relative_to(root_abs)
+    except ValueError as exc:
+        raise PromoteCandidateError(f"{field} path {value!r} escapes project root") from exc
+    return abs_path
+
+
+def _datapackage_relative_path(datapackage_dir: Path, value: str, *, field: str) -> Path:
+    rel_path = Path(value)
+    if rel_path.is_absolute():
+        raise PromoteCandidateError(f"{field} path {value!r} must be relative to the datapackage")
+    package_dir_abs = datapackage_dir.resolve()
+    abs_path = (package_dir_abs / rel_path).resolve(strict=False)
+    try:
+        abs_path.relative_to(package_dir_abs)
+    except ValueError as exc:
+        raise PromoteCandidateError(f"{field} path {value!r} escapes the datapackage directory") from exc
+    return abs_path
+
+
+def _load_project_datapackage(project_root: Path, datapackage_value: Any) -> tuple[Path, dict[str, Any]]:
+    if not isinstance(datapackage_value, str) or not datapackage_value.strip():
+        raise PromoteCandidateError("dataset candidate requires a non-empty string datapackage field")
+
+    dp_abs = _project_relative_path(project_root, datapackage_value, field="datapackage")
+    if not dp_abs.is_file():
+        raise PromoteCandidateError(f"datapackage file does not exist: {datapackage_value}")
+
+    try:
+        dp_raw = dp_abs.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise PromoteCandidateError(f"datapackage file is unreadable: {exc}") from exc
+    try:
+        dp_doc = json.loads(dp_raw)
+    except json.JSONDecodeError as exc:
+        raise PromoteCandidateError(f"datapackage JSON parse error: {exc}") from exc
+    if not isinstance(dp_doc, dict):
+        raise PromoteCandidateError("datapackage JSON top-level value must be an object")
+    resources = dp_doc.get("resources")
+    if not isinstance(resources, list):
+        raise PromoteCandidateError("datapackage JSON requires resources to be a list")
+    return dp_abs, dp_doc
+
+
+def _resource_name(resource: Mapping[str, Any], resource_path: str) -> str:
+    name = resource.get("name")
+    if isinstance(name, str) and name:
+        return name
+    return resource_path
+
+
+def _validate_datapackage_resources(slug: str, dp_abs: Path, dp_doc: dict[str, Any]) -> None:
+    resources = dp_doc["resources"]
+    for idx, resource in enumerate(resources):
+        if not isinstance(resource, dict):
+            raise PromoteCandidateError(f"datapackage resources[{idx}] must be an object")
+        resource_path = resource.get("path")
+        if not isinstance(resource_path, str) or not resource_path.strip():
+            raise PromoteCandidateError(f"datapackage resources[{idx}].path must be a non-empty string")
+        resource_abs = _datapackage_relative_path(
+            dp_abs.parent,
+            resource_path,
+            field=f"datapackage resources[{idx}].path",
+        )
+        if not resource_abs.is_file():
+            raise PromoteResourceMissingError(
+                slug=slug,
+                resource_name=_resource_name(resource, resource_path),
+                resource_path=Path(resource_path),
+            )
+
+
 def _scan_project(
     project_root: Path,
     project_slug: str,
@@ -1380,6 +1464,66 @@ def _scan_project(
                 # from a half-resolved same-project corpus.
                 candidates[:] = [c for c in candidates if c.slug_normalized != slug_normalized]
                 continue
+
+            datapackage_source_path: Path | None = None
+            datapackage_doc: dict[str, Any] | None = None
+            if kind.kind == "dataset":
+                missing_fields = [
+                    field
+                    for field in ("origin", "tier")
+                    if field not in fm or fm[field] in (None, "")
+                ]
+                origin = fm.get("origin")
+                if origin == "external" and ("access" not in fm or fm["access"] in (None, "")):
+                    missing_fields.append("access")
+                if origin == "derived" and ("derivation" not in fm or fm["derivation"] in (None, "")):
+                    missing_fields.append("derivation")
+                if missing_fields:
+                    for field in missing_fields:
+                        failures.append(
+                            FailedCandidate(
+                                slug=source_case_slug,
+                                project_slug=project_slug,
+                                source_path=source_path,
+                                error_class="PromoteCandidateError",
+                                error_message=f"dataset candidate {source_case_slug!r} missing required field {field!r}",
+                            )
+                        )
+                    continue
+
+                try:
+                    datapackage_source_path, datapackage_doc = _load_project_datapackage(
+                        project_root,
+                        fm.get("datapackage"),
+                    )
+                    _validate_datapackage_resources(
+                        source_case_slug,
+                        datapackage_source_path,
+                        datapackage_doc,
+                    )
+                except PromoteResourceMissingError as exc:
+                    failures.append(
+                        FailedCandidate(
+                            slug=source_case_slug,
+                            project_slug=project_slug,
+                            source_path=source_path,
+                            error_class="PromoteResourceMissingError",
+                            error_message=str(exc),
+                        )
+                    )
+                    continue
+                except PromoteCandidateError as exc:
+                    failures.append(
+                        FailedCandidate(
+                            slug=source_case_slug,
+                            project_slug=project_slug,
+                            source_path=source_path,
+                            error_class="PromoteCandidateError",
+                            error_message=str(exc),
+                        )
+                    )
+                    continue
+
             seen.setdefault(slug_normalized, (sub, source_path))
 
             # canonical_fields / project_only_fields / body splits are filled
@@ -1400,6 +1544,8 @@ def _scan_project(
                         _RAW_FRONTMATTER_KEY: fm,
                         _RAW_BODY_KEY: body,
                     },
+                    datapackage_source_path=datapackage_source_path,
+                    datapackage_doc=datapackage_doc,
                 )
             )
 
