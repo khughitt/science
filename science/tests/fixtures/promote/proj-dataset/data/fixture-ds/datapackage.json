@@ -1,0 +1,17 @@
+{
+  "name": "fixture-ds",
+  "resources": [
+    {
+      "name": "r1",
+      "path": "r1.txt",
+      "format": "txt",
+      "mediatype": "text/plain"
+    },
+    {
+      "name": "r2",
+      "path": "r2.txt",
+      "format": "txt",
+      "mediatype": "text/plain"
+    }
+  ]
+}
