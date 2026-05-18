@@ -22,10 +22,16 @@ generalizes; extend it to handle multi-file canonical entities without
 adding discriminator branches throughout the apply pipeline.
 
 The pilot target is `dataset:ccle-proteomics-nusinow-2020` in
-`multiple-myeloma`: 31 MB across 2 Parquet resources, `origin: external`,
-public source (Nusinow 2020 CCLE proteomics), with a clean entity descriptor
-at `doc/datasets/data-ccle-proteomics.md` and a matching Frictionless
-sidecar at `data/external/ccle_proteomics/2020-01/datapackage.json`.
+`multiple-myeloma`: 2 Parquet resources totaling ~1.3 MB
+(`mm-proteomics-long.parquet` 1.31 MB + `mm-cell-lines.parquet` 3 KB),
+public source (Nusinow 2020 CCLE proteomics), with an entity descriptor at
+`doc/datasets/data-ccle-proteomics.md` and a Frictionless sidecar at
+`data/external/ccle_proteomics/2020-01/datapackage.json`. The 31 MB total
+under `data/external/ccle_proteomics/2020-01/` is the directory size
+including `raw/protein_quant_current_normalized.csv.gz`, which is **not** a
+declared resource and is not hashed. The pilot entity is missing required
+dataset-mixin fields (`origin`, `tier`, `access`) and needs a pre-migration
+prep commit (see §3.5).
 
 ---
 
@@ -97,41 +103,114 @@ v1, the pilot always passes `--slug`. Without it, all eligible datasets in
 the project are planned (this stays implemented but isn't exercised by the
 pilot).
 
-### 3.2 Multi-file canonical via render strategy
+### 3.2 Multi-file canonical via the artifact-list model
 
-`PromoteKindConfig` grows one field:
+The current promote model is single-file: `PromoteDecision.canonical_path`
+and `.canonical_content` are singular, and the apply / cleanliness-check /
+rollback paths each handle one path per decision
+(`science/src/science_tool/commons/promote.py:185`,
+`promote.py:824`). A callback alone won't extend cleanly. Phase G replaces
+the singular fields with a list of canonical artifacts and threads the
+list through every site that today reads `canonical_path`.
+
+**Data model.** `PromoteDecision` and `PromoteResult` gain:
 
 ```python
-render_canonical: Callable[[PromoteDecision], list[tuple[Path, str]]]
+@dataclass(frozen=True)
+class CanonicalArtifact:
+    path: Path                            # commons-relative path
+    content: str                          # rendered file content (UTF-8)
+    validator: Literal[
+        "entity-mixin",                   # frontmatter must pass base + mixin
+        "frictionless-datapackage",       # parse + validate via Frictionless
+        "plain",                          # no validation (e.g., recipe stub)
+    ]
+
+class PromoteDecision:
+    canonical_artifacts: list[CanonicalArtifact]   # replaces canonical_path/content
+    ...
+
+class PromoteResult:
+    canonical_paths: list[Path]                    # replaces canonical_path
+    ...
 ```
 
-Default callback (paper / topic / theme): returns one tuple
-`(commons/<subdir>/<slug>.md, body)`. Dataset callback returns three:
+Single-file kinds (paper / topic / theme) produce a one-element list:
+`[CanonicalArtifact(path=commons/<subdir>/<slug>.md, content=<body>,
+validator="entity-mixin")]`. The dataset kind produces three artifacts:
 
-```
-(commons/datasets/<slug>/entity.md, <entity surface YAML + canonical body>)
-(commons/datasets/<slug>/datapackage.yaml, <Frictionless + computed hashes>)
-(commons/datasets/<slug>/recipe/README.md, <stub if no project recipe>)
-```
+| Artifact | Path | Validator |
+|---|---|---|
+| Entity surface | `commons/datasets/<slug>/entity.md` | `entity-mixin` (frontmatter via base + mixin-dataset/1.0) |
+| Frictionless sidecar | `commons/datasets/<slug>/datapackage.yaml` | `frictionless-datapackage` (parse + check resources[].path uniqueness + hash format) |
+| Recipe stub | `commons/datasets/<slug>/recipe/README.md` | `plain` (only emitted if no project recipe found) |
 
-Eight existing apply-stage call sites that hardcode `<slug>.md` (identified
-in Phase F's dehardcoding table) route through this callback. No new
-discriminator branches in generic code; the callback is the strategy.
+**Sites that thread the list (not exhaustive — see implementation plan)**:
 
-### 3.3 Project overlay surface
+- Discovery output: still keyed by candidate, no artifact list yet.
+- Plan stage: renders the artifact list for each candidate (canonical
+  content + datapackage hashes + recipe stub if applicable).
+- Plan-time validation: iterates the artifact list and dispatches by
+  `validator` field. `entity-mixin` calls existing `EntityValidator.validate`;
+  `frictionless-datapackage` parses with `frictionless` package's
+  `Package` (or a minimal in-repo parser to avoid the dep) and checks the
+  required field set we own (`resources[].path` non-empty,
+  `resources[].hash` matches `^sha256:[0-9a-f]{64}$`,
+  `resources[].bytes` non-negative int); `plain` does nothing.
+- Commons cleanliness check: extends the set of "dirty paths under
+  `commons_subdir/`" to include any path that appears in the planned
+  artifact list (currently checks only `<slug>.md`).
+- Commons write: iterates the artifact list, creating parent dirs and
+  writing each content. The commons commit message stays one-per-decision
+  (`promote: <type> <slug> via op <op-id>`).
+- Tag creation: unchanged. One tag per decision: `<type>/<slug>/<version>`.
+- Rollback for partial commons writes: clean up any path in the artifact
+  list, not just `<slug>.md`. Implementation: track which artifacts were
+  written so far in apply, and on failure unwrite them via
+  `Path.unlink(missing_ok=True)` + remove empty parent dirs, before the
+  commons commit happens. Once commons is committed, rollback flips to
+  `git revert` / `git reset --hard` (audit log path).
+- Audit log: records `canonical_paths: [<path>, ...]` instead of singular
+  `canonical_path`.
+
+The Phase F regression suite (paper / topic / theme single-file behavior)
+is exercised end-to-end after the refactor to confirm the list-of-one
+codepath is equivalent to the prior singular fields.
+
+### 3.3 Project overlay surface and field routing
 
 Project file `doc/datasets/data-<slug>.md` is rewritten as a minimal
-overlay, matching the shape Phase F produces for topics/themes:
+overlay constrained by `overlay-1.1.json` (which has
+`additionalProperties: false`). The pilot file has fields that the
+overlay schema rejects (`ontologies: [biology]`, `datasets: [...]`,
+`source_refs: [...]`, etc.); v1 routes each project entity field into
+one of four buckets:
+
+| Bucket | Examples | Disposition |
+|---|---|---|
+| **Canonical (per base + mixin)** | `id`, `type`, `title`, `created`, `updated`, `ontology_terms`, `tags`, `same_as`, `description`, `datapackage`, `origin`, `tier`, `accessions`, `access`, `derivation`, `parent_dataset`, `siblings`, `consumed_by` | Move to canonical `entity.md` frontmatter. Stripped from overlay. |
+| **Overlay (per overlay-1.1 properties)** | `pin_version`, `relevance`, `hypothesis_links`, `task_links`, `project_tags`, `project_notes`, `status`, `source`, `related`, `source_refs`, `created`, `updated`, and base-schema append fields (`tags`, `ontology_terms`, `same_as`) | Keep in overlay frontmatter. |
+| **Dropped with audit** | `ontologies`, `datasets` (on the dataset entity itself — redundant with id), other project-local fields not in any schema | Dropped from both canonical and overlay. Each dropped `(field, value, source_path)` recorded in the audit log under `dropped_fields:`. Plan-stage output also shows them so the user can review before apply. |
+| **Project-only body sections** | Free-text markdown sections | Preserved in the overlay body. |
+
+Plan-time validation catches misrouted fields: if a canonical field is
+unexpectedly absent (e.g., the dataset-mixin's required `origin`), the
+plan halts with `PromoteValidationError` and the user is pointed at
+pre-migration prep (§3.5). v1 deliberately does NOT extend `overlay-1.1`
+to admit new fields; the routing policy keeps the overlay schema stable.
+
+The minimal overlay shape after rewrite:
 
 ```yaml
 ---
 id: "dataset:<slug>"
 overlay_of: "dataset:<slug>"
 pin_version: "1.0.0"
-relevance: ""              # if present in original; project_only fields preserved
-hypothesis_links: []       # if present
-task_links: []             # if present
-status: ""                 # project_only on the dataset mixin
+relevance: ""               # if present in original
+hypothesis_links: []        # if present
+task_links: []              # if present
+project_tags: []            # if present
+status: ""                  # if present (overlay-1.1 allows)
 created: "..."
 updated: "..."
 ---
@@ -163,16 +242,44 @@ the failure-path can restore.
 ### 3.5 Pre-migration contract
 
 Per dataset, before the apply step runs, the project entity descriptor
-must declare:
+must declare the full set of dataset-mixin required fields plus the
+`datapackage:` pointer. The mixin (`mixin-dataset-1.0.json`) requires:
+
+- `id`, `type` (already present)
+- `datapackage:` (project-relative path to the Frictionless sidecar)
+- `origin: "external" | "derived"`
+- `tier: "use-now" | "evaluate-next" | "track"`
+
+Plus conditionals on `origin`:
+
+- `origin: external` → requires `access` block with at minimum `level`
+  and `verified`.
+- `origin: derived` → requires `derivation` block with `workflow_recipe`
+  and `inputs` (list of `dataset:<slug>` ids).
+
+Promote fails-fast at discovery on datasets that are missing any of these
+fields (recorded as a `FailedCandidate` per missing-field reason, with
+the path to the project entity file). v1 deliberately does NOT synthesize
+these from the Frictionless `mm30.external_source` or licenses — the
+inputs are too project-specific and synthesis would mask real metadata
+gaps. The pre-migration prep is an explicit user commit per dataset.
+
+**Pilot example.** Before running Phase G promote on
+`data-ccle-proteomics.md`, the user commits a frontmatter prep that adds:
 
 ```yaml
 datapackage: data/external/ccle_proteomics/2020-01/datapackage.json
+origin: external
+tier: evaluate-next
+access:
+  level: public
+  verified: true
+  source_url: "https://gygi.hms.harvard.edu/publications/ccle.html"
 ```
 
-Path is project-relative. Promote fails-fast at discovery on datasets
-without this field (recorded as a `FailedCandidate`). This is part of
-**pilot prep**, not part of promote — the user adds the field per dataset
-before running promote.
+(Specific values are user-chosen. The example reflects what is already
+known about CCLE proteomics from the Frictionless sidecar prose; the user
+authors the canonical statement.)
 
 ### 3.6 New error classes
 
@@ -260,64 +367,93 @@ For each candidate:
 
 ### 4.3 Apply (writes, in order)
 
+The order matters: **override before overlay**, so the resolver chain is
+always coherent. After overlay rewrite the project starts depending on the
+commons descriptor; if override-write fails after overlay-rewrite, the
+project points at commons but the resolver can't find bytes on this
+machine. Writing override first means the resolver chain works the moment
+the overlay flips.
+
 ```
 1. Pre-flight (extends Phase F):
-   - Commons clean (working tree empty, no untracked under commons_subdir
-     or .migrations).
-   - Project pilot paths clean (doc/datasets/<file> + data/.../datapackage.json
-     parent dir untouched in working tree).
+   - Commons clean (working tree empty, no untracked under any artifact
+     path in the plan, or under .migrations).
+   - Project pilot paths clean (doc/datasets/<file> in working tree).
    - ~/.config/science/data.yaml readable and parseable.
    - Existing override entry for this slug (if any) matches plan.
 
-2. Write commons canonical via render-strategy callback:
+2. Write commons canonical artifacts (iterate canonical_artifacts list):
    commons/datasets/<slug>/entity.md
    commons/datasets/<slug>/datapackage.yaml
-   commons/datasets/<slug>/recipe/README.md   (only if stubbed)
+   commons/datasets/<slug>/recipe/README.md      (only if stubbed)
+
+   Failure here unwrites the partial list (Path.unlink missing_ok=True) +
+   removes empty parent dirs; commons remains uncommitted.
 
 3. Commit in commons: "promote: dataset <slug> via op <op-id>"
 
 4. Tag in commons: dataset/<slug>/1.0.0
 
-5. Write project overlay rewrite to working tree:
-   <project>/doc/datasets/data-<slug>.md  (rewritten in place)
-
-   The project's data/.../datapackage.json is LEFT UNTOUCHED in v1.
-
-6. Write per-machine override side-channel:
+5. Write per-machine override side-channel:
    - Read ~/.config/science/data.yaml (initialize empty if missing).
    - Write ~/.config/science/data.yaml.bak.<op-id> (backup of current).
    - Upsert <slug>: <abs path>.
    - Atomic write via temp-file + rename.
 
+   If this fails, commons is committed + tagged but no project overlay
+   has been rewritten yet. The project still resolves the dataset
+   locally; re-running promote is idempotent (the dry-run will match
+   the in-place state and a re-applied write will succeed).
+
+6. Write project overlay rewrite to working tree:
+   <project>/doc/datasets/data-<slug>.md  (rewritten in place)
+
+   The project's data/.../datapackage.json is LEFT UNTOUCHED in v1. The
+   per-machine override (already written above) points at its parent dir.
+
+   If this fails, restore the overlay via git checkout HEAD -- (Phase F
+   pattern). Override is left in place (the slug → path mapping is
+   harmless without a depending overlay, and matches what a re-run would
+   write anyway).
+
 7. Write success audit log:
    commons/.migrations/<ts>-<op-id>.yaml
-   Records: commons_commit, commons_tags, project files touched, override
-   file path + backup file path + line before/after, per-resource hashes,
-   recipe stub flag.
+   Records: commons_commit, commons_tags, canonical_paths (list, not
+   singular), project files touched, override file path + backup file
+   path + line before/after, per-resource hashes, recipe stub flag,
+   dropped_fields list per §3.3.
 
 8. Commit audit log in commons: "audit: op <op-id>"
 ```
 
 ### 4.4 Failure handling
 
-Same fail-fast envelope as Phase F, extended with the side-channel:
+Same fail-fast envelope as Phase F. The reordering in §4.3 keeps the
+project / override / commons triple coherent at every observable step:
 
 - **Before any writes** (discovery, plan, hash-compute, plan validation) →
   exit non-zero with `PromoteCandidateError` / `PromoteValidationError` /
   `PromoteResourceMissingError` / `PromoteOverrideConflictError`. No state
   touched anywhere.
-- **Commons write/commit fails** (steps 2-4) → no commons commit yet,
-  abort. Stray files in `commons/datasets/<slug>/` cleaned up via
-  `git checkout -- .` on commons. No project / override changes attempted.
-- **Project overlay rewrite fails** (step 5) after commons commit → restore
-  overlay via `git checkout HEAD -- <overlay-path>` (Phase F pattern).
-  Commons commit + tag stay. Failure audit logged. Override not touched.
-- **Override write fails** (step 6) → restore from `.bak.<op-id>`. Commons
-  commit + tag + project overlay stay. Failure audit records both the
-  attempted line and the restore path.
-- **Audit log write or commit fails** (step 7-8) → Phase F's bug-fix for
+- **Commons artifact write fails** (step 2) → no commons commit yet, no
+  override or overlay changes. Partial artifact files unwritten via
+  `Path.unlink(missing_ok=True)` and any empty parent dirs removed.
+  Failure-path audit log written best-effort.
+- **Commons commit/tag fails** (steps 3-4) → commons working tree has the
+  artifacts staged but uncommitted; `git checkout -- .` + `git clean -fd`
+  on commons restores cleanliness. No override or overlay changes.
+- **Override write fails** (step 5) → restore from `.bak.<op-id>`. Commons
+  commit + tag stay. No project overlay has been rewritten yet, so the
+  project still resolves the dataset locally without a depending
+  overlay. Re-running promote is idempotent: dry-run sees the override is
+  unchanged from initial, plans the same delta, and apply retries cleanly.
+- **Project overlay rewrite fails** (step 6) → restore overlay via
+  `git checkout HEAD -- <overlay-path>` (Phase F pattern). Override is
+  left in place (slug → path mapping is harmless without a depending
+  overlay; matches what a re-run would write anyway).
+- **Audit log write or commit fails** (steps 7-8) → Phase F's bugfix for
   `.gitignore` makes this safe; still wrapped in the audit error handler
-  for symmetry.
+  for symmetry. Commons commit + tag + override + overlay all stay.
 
 Backup files (`data.yaml.bak.<op-id>`) are retained on success too — the
 audit log records their location, so a later manual rollback can find
@@ -348,8 +484,8 @@ project under `tmp_path`.
 |---|---|
 | `tests/test_commons_promote_discovery.py` (append) | Dataset discovery: id-prefix rejection, missing `datapackage:` field, datapackage path doesn't resolve, resource path doesn't resolve (raises `PromoteResourceMissingError`), slug-stem mismatch. |
 | `tests/test_commons_promote_dataset_plan.py` (new) | Hash-compute determinism (golden 3-byte fixture → known sha256); multi-resource plan; override-conflict detection (`PromoteOverrideConflictError`); canonical `entity.md` rendering; canonical `datapackage.yaml` rendering (project fields stripped, hashes injected, name reset to `<slug>`); recipe stub content when no project recipe; `tier: track` set when stubbed. |
-| `tests/test_commons_promote_dataset_apply.py` (new) | Multi-file canonical write; commons commit + tag; project overlay rewrite; per-machine override upsert (new file path; existing file with other entries; conflict path); audit log records override file path + backup path; rollback restores override from `.bak.<op-id>` on later-stage failure (fault-injection on git tag step). |
-| `tests/test_commons_promote_kind_pluggable.py` (touch) | Cover the new `render_canonical` strategy: paper / topic / theme kinds keep single-file rendering (regression); dataset kind produces 3 files. |
+| `tests/test_commons_promote_dataset_apply.py` (new) | Multi-artifact canonical write (3 files, parent dir created); commons commit + tag; per-machine override upsert (new file path; existing file with other entries; conflict path); project overlay rewrite; dropped_fields recorded in audit log; rollback paths: (a) partial artifact write unwrites and leaves commons clean, (b) override-write failure restores from `.bak.<op-id>`, commons + tag stay, no project overlay yet (idempotent on re-run), (c) overlay-rewrite failure restores overlay, override stays in place. |
+| `tests/test_commons_promote_kind_pluggable.py` (touch) | Cover the new `canonical_artifacts` list model: paper / topic / theme kinds produce a one-element list (regression that single-file rendering is preserved); dataset kind produces three CanonicalArtifact entries with the expected validators. |
 
 ### 6.2 Integration test
 
@@ -421,11 +557,16 @@ science commons promote dataset \
 
 Expected output:
 - 1 candidate planned, 0 failed.
-- Canonical layout shown (3 file paths under `commons/datasets/ccle-proteomics-nusinow-2020/`).
-- Per-resource hash + bytes (2 hashes; both small files, dry-run completes
+- Canonical artifact list (3 paths under
+  `commons/datasets/ccle-proteomics-nusinow-2020/`): `entity.md`,
+  `datapackage.yaml`, `recipe/README.md`.
+- Per-resource hash + bytes (2 hashes; ~1.3 MB total; dry-run completes
   in well under a second).
 - Per-machine override line to be written.
 - Project overlay rewrite stat (one file modified).
+- Dropped fields list (per §3.3): expect `ontologies`, `datasets` (the
+  redundant slug-on-self field), and possibly others depending on
+  what the pre-migration prep commit added or left.
 
 ### Apply
 
@@ -455,10 +596,10 @@ git commit -m "docs(datasets): promote ccle-proteomics to commons (Phase G pilot
 science commons inventory | rg '"id": "dataset:ccle-proteomics-nusinow-2020"'
 # expect: 1 hit
 
-science show dataset:ccle-proteomics-nusinow-2020 --project multiple-myeloma
+science commons show dataset:ccle-proteomics-nusinow-2020 --project multiple-myeloma
 # expect: merged entity reads correctly
 
-science data resolve dataset:ccle-proteomics-nusinow-2020/mm-cell-lines.parquet
+science commons data resolve dataset:ccle-proteomics-nusinow-2020 mm-cell-lines.parquet
 # expect: returns the original project absolute path (via the override) and
 # verifies the parquet bytes against the canonical hash
 ```
@@ -484,12 +625,12 @@ unrelated work is preserved.
 
 | Phase | Scope |
 |---|---|
-| **G.1 Foundation** | Add `PROMOTE_KIND_DATASET` config + `render_canonical` strategy callback; refactor existing kinds to use the default callback (paper/topic/theme regression test). |
-| **G.2 Discovery** | Dataset-specific discovery with `datapackage:` field check; resource existence check; `PromoteResourceMissingError`. |
-| **G.3 Hash + plan** | Streaming hash compute; canonical `datapackage.yaml` rendering; canonical `entity.md` rendering; recipe stub content; plan-time validation. |
-| **G.4 Override side-channel** | Read/write `~/.config/science/data.yaml`; backup-before-upsert; `PromoteOverrideConflictError`; sandbox-friendly path resolution. |
-| **G.5 Apply** | Multi-file commons write through strategy callback; project overlay rewrite; override write in correct order; audit log fields extended for override + backup paths. |
-| **G.6 Integration test** | End-to-end synthetic-project test under `tmp_path` (§6.2). |
+| **G.1 Canonical artifact model** | Replace `PromoteDecision.canonical_path` / `.canonical_content` with `canonical_artifacts: list[CanonicalArtifact]` (path, content, validator). Replace `PromoteResult.canonical_path` with `canonical_paths: list[Path]`. Thread the list through plan-time validation (dispatch by `validator` field), commons cleanliness check, commons write, partial-write rollback, audit log. Single-element list for paper/topic/theme kinds preserves Phase F behavior; regression test confirms equivalence. |
+| **G.2 Discovery (datasets)** | Dataset-specific discovery: `datapackage:` field check; required mixin fields (`origin`, `tier`, conditional `access`/`derivation`) check; project datapackage parses; resource files exist (`PromoteResourceMissingError`); field-routing policy (canonical / overlay / dropped buckets) returned with the candidate so plan-stage can render the dropped-fields list. |
+| **G.3 Hash + plan** | Streaming sha256 + byte count per resource; canonical `datapackage.yaml` rendering (project datapackage fields stripped, hashes injected); canonical `entity.md` rendering; recipe stub content; plan-time validation per artifact (`entity-mixin` / `frictionless-datapackage` / `plain`). |
+| **G.4 Override side-channel** | Read/write `~/.config/science/data.yaml` via `get_science_config_dir() / "data.yaml"`; backup-before-upsert (`data.yaml.bak.<op-id>`); `PromoteOverrideConflictError`; sandbox-friendly via `XDG_CONFIG_HOME` for tests. |
+| **G.5 Apply (with new ordering)** | Multi-artifact commons write; commit + tag; **then** override side-channel; **then** project overlay rewrite. Audit log records `canonical_paths`, `override_file`, `override_backup`, `dropped_fields`. Failure-path restores match §4.4. |
+| **G.6 Integration test** | End-to-end synthetic-project test under `tmp_path` (§6.2) plus fault-injection tests for each failure transition. |
 | **G.7 Pilot runbook** | Author the companion `2026-05-18-commons-promote-datasets-pilot.md`. |
 
 ---
@@ -530,7 +671,8 @@ The Phase G implementation is done when:
    - 1 `dataset/ccle-proteomics-nusinow-2020/1.0.0` tag
    - 1 project overlay rewritten (uncommitted, manually committed by user)
    - 1 line added to `~/.config/science/data.yaml`
-4. `science commons inventory`, `science show ... --project ...`, and
-   `science data resolve ...` all succeed against the migrated dataset.
+4. `science commons inventory`, `science commons show ... --project ...`,
+   and `science commons data resolve <dataset-id> <logical-path>` all
+   succeed against the migrated dataset.
 5. Rollback from a fault-injected failure restores the override file from
    backup and leaves no orphan commons state.
