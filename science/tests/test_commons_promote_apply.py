@@ -420,6 +420,73 @@ def test_apply_promote_rejects_parent_traversal_canonical_artifact_path(tmp_path
         apply_promote(plan, commons_root=commons, invocation="...")
 
     assert not outside.exists()
+    logs = list((commons / ".migrations").glob("*.yaml"))
+    assert len(logs) == 1
+    log = yaml.safe_load(logs[0].read_text(encoding="utf-8"))
+    assert log["status"] == "failed"
+    assert log["decisions"] == [
+        {
+            "slug": "unsafe",
+            "canonical_version": "1.0.0",
+            "canonical_paths": [],
+        }
+    ]
+
+
+def test_apply_promote_failure_audit_omits_symlink_escape_canonical_artifact_path(tmp_path) -> None:
+    import os
+
+    from science_tool.commons.errors import PromoteInputError
+    from science_tool.commons.promote import (
+        CanonicalArtifact,
+        PROMOTE_KIND_PAPER,
+        PromoteDecision,
+        PromotePlan,
+        apply_promote,
+    )
+
+    commons = tmp_path / "commons"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    _init_commons(commons)
+    os.symlink(outside, commons / "escape_link", target_is_directory=True)
+    subprocess.run(["git", "-C", str(commons), "add", "escape_link"], check=True)
+    subprocess.run(["git", "-C", str(commons), "commit", "-q", "-m", "add symlink"], check=True)
+    plan = PromotePlan(
+        decisions=[
+            PromoteDecision(
+                slug="unsafe",
+                canonical_artifacts=[
+                    CanonicalArtifact(
+                        path=Path("escape_link/out.md"),
+                        content="unsafe\n",
+                        validator="plain",
+                    )
+                ],
+                canonical_version="1.0.0",
+                overlays={},
+                resolved_conflicts=(),
+            )
+        ],
+        failed_candidates=[],
+        kind=PROMOTE_KIND_PAPER,
+    )
+
+    with pytest.raises(PromoteInputError, match="escapes commons root"):
+        apply_promote(plan, commons_root=commons, invocation="...")
+
+    assert not (outside / "out.md").exists()
+    logs = list((commons / ".migrations").glob("*.yaml"))
+    assert len(logs) == 1
+    log = yaml.safe_load(logs[0].read_text(encoding="utf-8"))
+    assert log["status"] == "failed"
+    assert log["decisions"] == [
+        {
+            "slug": "unsafe",
+            "canonical_version": "1.0.0",
+            "canonical_paths": [],
+        }
+    ]
 
 
 def test_apply_promote_writes_and_stages_multiple_canonical_artifacts(tmp_path) -> None:

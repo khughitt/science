@@ -1743,10 +1743,12 @@ def _build_project_rollback_command(
     return f"git -C {project_root} checkout HEAD -- {' '.join(paths_sorted)}"
 
 
-def _audit_canonical_paths(decision: PromoteDecision) -> list[str]:
+def _audit_canonical_paths(decision: PromoteDecision, commons_root: Path) -> list[str]:
     paths: list[str] = []
     for artifact in decision.canonical_artifacts:
-        if artifact.path.is_absolute() or ".." in artifact.path.parts:
+        try:
+            _resolve_canonical_artifact_path(commons_root, artifact.path)
+        except PromoteInputError:
             continue
         paths.append(str(artifact.path))
     return paths
@@ -1798,7 +1800,7 @@ def _render_audit_log_yaml(
             {
                 "slug": d.slug,
                 "canonical_version": d.canonical_version,
-                "canonical_paths": _audit_canonical_paths(d),
+                "canonical_paths": _audit_canonical_paths(d, commons_root),
             }
             for d in result.decisions
         ],
