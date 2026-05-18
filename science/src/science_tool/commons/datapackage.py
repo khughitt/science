@@ -78,6 +78,19 @@ def parse_resource_hash(raw: str) -> tuple[str, str]:
     return (algorithm, digest)
 
 
+def stream_sha256_and_bytes(path: Path) -> tuple[str, int]:
+    """Return (`sha256:<hex>`, byte_count) streaming the file in 1 MiB chunks."""
+    import hashlib
+
+    h = hashlib.sha256()
+    n = 0
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+            n += len(chunk)
+    return f"sha256:{h.hexdigest()}", n
+
+
 @dataclass(frozen=True, slots=True)
 class DataResource:
     """One resource entry from a datapackage.yaml."""
