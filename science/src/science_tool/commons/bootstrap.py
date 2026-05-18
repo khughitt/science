@@ -16,8 +16,9 @@ curated, citable entities — datasets, papers, topics, themes — consumed acro
 projects via the `science commons` CLI.
 
 Files are the source of truth. `registry.sqlite` is a regenerable index built
-by `science commons index rebuild`; `.migrations/` is an audit log written by
-`science promote` (Phase E and later). Both are gitignored.
+by `science commons index rebuild` and is gitignored. `.migrations/` is the
+audit log written by `science promote` (Phase E and later); each successful
+promotion commits one log file there.
 
 See `~/d/science/docs/plans/2026-05-13-multiproject-schema-and-shared-store-design.md`
 for the design.
@@ -27,9 +28,6 @@ _GITIGNORE_TEXT = """# Regenerable index (rebuild from filesystem with `science 
 registry.sqlite
 registry.sqlite-journal
 .registry-*.sqlite
-
-# Promotion audit log (written by `science promote`, Phase E+)
-.migrations/
 
 # Python build artifacts
 __pycache__/

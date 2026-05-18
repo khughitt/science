@@ -21,12 +21,13 @@ def test_init_creates_layout_in_empty_directory(tmp_path: Path) -> None:
         assert (root / sub / ".gitkeep").is_file()
 
 
-def test_gitignore_excludes_registry_and_migrations(tmp_path: Path) -> None:
+def test_gitignore_excludes_registry_but_tracks_migrations(tmp_path: Path) -> None:
+    """`.migrations/` must NOT be gitignored — promote commits audit logs there."""
     root = tmp_path / "commons"
     init_commons(root)
     text = (root / ".gitignore").read_text(encoding="utf-8")
     assert "registry.sqlite" in text
-    assert ".migrations/" in text
+    assert ".migrations/" not in text
     assert "__pycache__/" in text
 
 
