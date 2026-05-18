@@ -1316,7 +1316,6 @@ def _scan_project(
                     )
                     continue
                 id_slug = id_val[len(kind.id_prefix) :]
-                id_slug_stripped = id_slug.removesuffix(".md").strip()
                 try:
                     id_slug_normalized = _normalize_slug_for_match(id_slug, kind)
                 except PromoteCandidateError as exc:
@@ -1332,7 +1331,7 @@ def _scan_project(
                     continue
                 if kind.slug_from_id:
                     slug_normalized = id_slug_normalized
-                    source_case_slug = id_slug_stripped
+                    source_case_slug = id_slug_normalized
 
             if slug_normalized is None:
                 try:

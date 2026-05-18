@@ -276,7 +276,49 @@ def test_dataset_discovery_uses_id_slug_when_filename_stem_differs(tmp_path, mon
 
     discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
     assert "fixture-ds-2026-01" in discovery.candidates_by_slug
+    [candidate] = discovery.candidates_by_slug["fixture-ds-2026-01"]
+    assert candidate.slug == "fixture-ds-2026-01"
     assert "fixture" not in discovery.candidates_by_slug
+
+
+def test_dataset_discovery_normalizes_id_slug_with_filename_prefix(tmp_path, monkeypatch):
+    """id dataset:data-fixture-ds uses the same prefix-stripped canonical slug as the discovery key."""
+    import shutil
+    import subprocess
+
+    src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
+    proj = tmp_path / "proj-dataset"
+    shutil.copytree(src, proj)
+    f = proj / "doc/datasets/data-fixture-ds.md"
+    text = f.read_text(encoding="utf-8")
+    text = text.replace("id: dataset:fixture-ds", "id: dataset:data-fixture-ds")
+    f.write_text(text, encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(proj),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "init",
+        ],
+        check=True,
+    )
+    monkeypatch.setattr("science_tool.commons.promote.resolve_project_by_id", lambda s: proj)
+    from science_tool.commons.promote import PROMOTE_KIND_DATASET, discover_candidates
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    assert set(discovery.candidates_by_slug) == {"fixture-ds"}
+    [candidate] = discovery.candidates_by_slug["fixture-ds"]
+    assert candidate.slug == "fixture-ds"
+    assert candidate.slug_normalized == "fixture-ds"
 
 
 def test_dataset_discovery_skips_files_without_filename_prefix(tmp_path, monkeypatch):
