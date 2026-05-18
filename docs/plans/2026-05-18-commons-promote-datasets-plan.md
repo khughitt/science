@@ -315,10 +315,10 @@ git diff --staged --quiet || git commit -m "commons(promote): align PromoteResul
 ```python
 # tests/test_commons_promote_validation.py — append
 def test_plan_validation_dispatches_by_artifact_validator(tmp_path, monkeypatch):
-    """An artifact with validator='plain' is skipped; 'entity-mixin' runs the EntityValidator."""
+    """An artifact with validator='plain' is skipped; 'entity-mixin' runs EntityValidator()."""
     from pathlib import Path
     from science_tool.commons.promote import (
-        CanonicalArtifact, PromoteDecision, _validate_artifact,
+        CanonicalArtifact, _validate_artifact,
     )
 
     plain = CanonicalArtifact(
@@ -329,13 +329,23 @@ def test_plan_validation_dispatches_by_artifact_validator(tmp_path, monkeypatch)
     # Should NOT raise:
     _validate_artifact(plain, decision_slug="x", project_id=None)
 
+    # Minimal mixin artifact: still missing required dataset-mixin fields
+    # (origin/tier/access), so the science_model EntityValidator will reject it.
     mixin = CanonicalArtifact(
         path=Path("datasets/x/entity.md"),
-        content="---\nid: dataset:x\ntype: dataset\n---\n",
+        content=(
+            "---\n"
+            "schema_profile: science-entity-base/1.0+dataset/1.0\n"
+            "id: dataset:x\n"
+            "type: dataset\n"
+            "title: x\n"
+            "version: 1.0.0\n"
+            "created: '2026-05-18'\n"
+            "updated: '2026-05-18'\n"
+            "---\n"
+        ),
         validator="entity-mixin",
     )
-    # Should attempt mixin validation. With missing required fields this
-    # raises PromoteValidationError:
     import pytest
     from science_tool.commons.errors import PromoteValidationError
     with pytest.raises(PromoteValidationError):
@@ -349,6 +359,8 @@ Expected: FAIL — `ImportError: cannot import name '_validate_artifact'`.
 
 - [ ] **Step 3: Add the dispatch helper to `promote.py`**
 
+The real entity validator is `science_model.entity_schema.EntityValidator` with `.validate(entity_dict)` (consumes parsed frontmatter, not raw markdown). Use the existing `_parse_frontmatter_only(text)` helper from `promote.py` to split frontmatter from body, then call the validator on the dict.
+
 ```python
 def _validate_artifact(
     artifact: CanonicalArtifact,
@@ -357,16 +369,15 @@ def _validate_artifact(
     project_id: str | None,
 ) -> None:
     """Plan-time validation dispatch by artifact.validator."""
-    from science_tool.commons.validator import EntityValidator
-    from science_tool.commons.datapackage import parse_canonical_datapackage_yaml
-
     if artifact.validator == "plain":
         return
     if artifact.validator == "entity-mixin":
-        # Parse frontmatter from artifact.content; validate against base + mixin.
+        from science_model.entity_schema import EntityValidator
+        from science_model.entity_schema.validator import EntityValidationError
+        fm, _body = _parse_frontmatter_only(artifact.content)
         try:
-            EntityValidator.validate_canonical_markdown(artifact.content)
-        except Exception as exc:
+            EntityValidator().validate(fm)
+        except EntityValidationError as exc:
             raise PromoteValidationError(
                 decision_slug=decision_slug,
                 target_kind="canonical",
@@ -375,6 +386,7 @@ def _validate_artifact(
             ) from exc
         return
     if artifact.validator == "frictionless-datapackage":
+        from science_tool.commons.datapackage import parse_canonical_datapackage_yaml
         try:
             parse_canonical_datapackage_yaml(artifact.content)
         except Exception as exc:
@@ -388,7 +400,7 @@ def _validate_artifact(
     raise AssertionError(f"unknown artifact validator: {artifact.validator!r}")
 ```
 
-`EntityValidator.validate_canonical_markdown` already exists; `parse_canonical_datapackage_yaml` is added in Task 12. Use lazy imports inside the function body so the `plain` and `entity-mixin` branches work after this task (paper/topic/theme decisions never produce `frictionless-datapackage` artifacts). The `frictionless-datapackage` branch becomes exercisable only once Task 12 lands.
+`_parse_frontmatter_only` already exists in `promote.py` (it's how discovery reads candidate frontmatter); reuse it directly. `parse_canonical_datapackage_yaml` is added in Task 12 — the `frictionless-datapackage` branch is unreachable until then (paper/topic/theme decisions never produce that validator).
 
 Wire the helper into `plan_promote`'s final validation loop: replace the existing `EntityValidator.validate_canonical_markdown(decision.canonical_content)` call with:
 
@@ -580,6 +592,110 @@ Expected: all passing.
 cd ~/d/science/science
 git add src/science_tool/commons/promote.py tests/test_commons_promote_kind_config.py
 git commit -m "commons(promote): add PROMOTE_KIND_DATASET constant"
+```
+
+---
+
+### Task 7b: Add `filename_prefix` to `PromoteKindConfig` for slug-from-stem derivation
+
+**Background:** Existing `_scan_project` derives the slug from `source_path.stem` and matches it against the id slug (`promote.py:1145, :1203`). Dataset files use the `data-<slug>.md` convention (e.g., `data-fixture-ds.md` → id `dataset:fixture-ds`), so the stem `data-fixture-ds` does not equal `fixture-ds` and discovery rejects every dataset as an id/stem mismatch. Fix by adding a per-kind filename prefix that `_normalize_slug_for_match` strips before regex-matching.
+
+**Files:**
+- Modify: `~/d/science/science/src/science_tool/commons/promote.py` (`PromoteKindConfig`, `_normalize_slug_for_match`, `PROMOTE_KIND_DATASET`)
+- Test: `~/d/science/science/tests/test_commons_promote_kind_config.py`
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_commons_promote_kind_config.py — append
+def test_promote_kind_dataset_has_data_filename_prefix():
+    from science_tool.commons.promote import PROMOTE_KIND_DATASET
+    assert PROMOTE_KIND_DATASET.filename_prefix == "data-"
+
+
+def test_paper_topic_theme_have_empty_filename_prefix():
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER, PROMOTE_KIND_TOPIC, PROMOTE_KIND_THEME,
+    )
+    for k in (PROMOTE_KIND_PAPER, PROMOTE_KIND_TOPIC, PROMOTE_KIND_THEME):
+        assert k.filename_prefix == ""
+
+
+def test_normalize_slug_strips_filename_prefix():
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET, _normalize_slug_for_match,
+    )
+    assert _normalize_slug_for_match("data-fixture-ds", PROMOTE_KIND_DATASET) == "fixture-ds"
+    assert _normalize_slug_for_match("data-ccle-proteomics-nusinow-2020", PROMOTE_KIND_DATASET) == "ccle-proteomics-nusinow-2020"
+
+
+def test_normalize_slug_rejects_dataset_filename_without_prefix():
+    """Bare `<slug>.md` (no data- prefix) must NOT be accepted as a dataset."""
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET, _normalize_slug_for_match,
+    )
+    from science_tool.commons.errors import PromoteCandidateError
+    import pytest
+    with pytest.raises(PromoteCandidateError):
+        _normalize_slug_for_match("fixture-ds", PROMOTE_KIND_DATASET)
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+```bash
+cd ~/d/science/science
+uv run pytest tests/test_commons_promote_kind_config.py -v -k "filename_prefix or strips_filename"
+```
+Expected: 4 failures.
+
+- [ ] **Step 3: Extend `PromoteKindConfig` with `filename_prefix`**
+
+In `promote.py`:
+
+```python
+@dataclass(frozen=True, slots=True)
+class PromoteKindConfig:
+    # ...existing fields...
+    filename_prefix: str = ""        # NEW — stripped from source_path.stem before slug match
+```
+
+Update `_normalize_slug_for_match`:
+
+```python
+def _normalize_slug_for_match(raw: str, kind: PromoteKindConfig) -> str:
+    stripped = raw.removesuffix(".md").strip()
+    if kind.filename_prefix:
+        if not stripped.startswith(kind.filename_prefix):
+            raise PromoteCandidateError(
+                f"file stem {raw!r} must start with prefix "
+                f"{kind.filename_prefix!r} for kind {kind.kind!r}"
+            )
+        stripped = stripped[len(kind.filename_prefix):]
+    if not stripped:
+        raise PromoteCandidateError(f"slug {raw!r} is empty after strip")
+    if not kind.slug_regex.match(stripped):
+        raise PromoteCandidateError(f"slug {raw!r} does not match {kind.slug_regex.pattern}")
+    if kind.slug_match == "casefold":
+        return stripped.casefold()
+    return stripped
+```
+
+Update `PROMOTE_KIND_DATASET` to set `filename_prefix="data-"`. Existing PROMOTE_KIND_PAPER / TOPIC / THEME need no change — the default `""` keeps current behavior.
+
+- [ ] **Step 4: Run tests + regressions**
+
+```bash
+cd ~/d/science/science
+uv run pytest tests/test_commons_promote_kind_config.py tests/test_commons_promote_apply.py tests/test_commons_promote_topic_apply.py tests/test_commons_promote_theme_apply.py -v
+```
+Expected: all passing. The paper/topic/theme regressions confirm `filename_prefix=""` is non-breaking.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd ~/d/science/science
+git add src/science_tool/commons/promote.py tests/test_commons_promote_kind_config.py
+git commit -m "commons(promote): add filename_prefix to PromoteKindConfig for dataset 'data-' convention"
 ```
 
 ---
@@ -1241,127 +1357,107 @@ git commit -m "commons(datapackage): canonical datapackage.yaml render + parse h
 
 ---
 
-### Task 13: Canonical `entity.md` rendering (dataset)
+### Task 13: Canonical `entity.md` rendering — reuse `_render_canonical` with dataset post-process
+
+**Design decision:** Do NOT write a parallel `_render_dataset_canonical_entity`. The existing `_render_canonical` (`promote.py:1519`) already emits the required base fields — `schema_profile`, `id`, `type`, `title`, `version`, `created`, `updated` — and routes the rest from `canonical_fields`. For datasets, the only delta is: inject `datapackage: "datapackage.yaml"` (the sibling pointer) and ensure dataset-allowed fields make it through `_classify_entity`'s split. Add a tiny post-process step that overrides the `datapackage:` value in the rendered canonical frontmatter and verify `schema_profile`/`version` come through.
 
 **Files:**
-- Modify: `~/d/science/science/src/science_tool/commons/promote.py` (`_render_dataset_canonical_entity`)
+- Modify: `~/d/science/science/src/science_tool/commons/promote.py` (small post-process injection in the dataset plan branch — wired up in Task 16)
 - Test: `~/d/science/science/tests/test_commons_promote_dataset_plan.py`
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests** (these are integration-level — assert on the artifact produced by `plan_promote`, since rendering reuses existing infrastructure)
 
 ```python
 # tests/test_commons_promote_dataset_plan.py — append
-def test_render_dataset_canonical_entity_includes_required_mixin_fields():
-    from science_tool.commons.promote import _render_dataset_canonical_entity
-    project_fm = {
-        "id": "dataset:fixture-ds",
-        "type": "dataset",
-        "title": "Fixture dataset",
-        "description": "Synthetic",
-        "datapackage": "data/fixture-ds/datapackage.json",  # project-relative
-        "origin": "external",
-        "tier": "evaluate-next",
-        "access": {"level": "public", "verified": True},
-        "tags": ["test"],
-        "ontologies": ["test-ontology"],        # dropped
-        "created": "2026-05-18",
-        "updated": "2026-05-18",
-    }
-    body = "# Fixture dataset\n\nBody\n"
-    text = _render_dataset_canonical_entity(
-        frontmatter=project_fm, body=body, canonical_slug="fixture-ds",
+def _plan_one(tmp_path, monkeypatch):
+    """Helper: discover + plan the fixture project. Returns the single decision."""
+    import shutil, subprocess
+    src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
+    proj = tmp_path / "proj-dataset"
+    shutil.copytree(src, proj)
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+    subprocess.run(
+        ["git", "-C", str(proj), "-c", "user.email=t@t", "-c", "user.name=t",
+         "commit", "-q", "-m", "init"], check=True,
     )
+    commons = tmp_path / "commons"
+    commons.mkdir()
+    subprocess.run(["git", "init", "-q", str(commons)], check=True)
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id", lambda s: proj,
+    )
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET, discover_candidates, plan_promote,
+    )
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_DATASET)
+    return plan.decisions[0], plan, commons
+
+
+def test_dataset_canonical_entity_emits_required_base_fields(tmp_path, monkeypatch):
+    """schema_profile + version come from _render_canonical; never project frontmatter."""
     import yaml as pyyaml
-    head, _, rest = text.partition("---\n")[2].partition("\n---\n")
+    d, _, _ = _plan_one(tmp_path, monkeypatch)
+    entity = next(a for a in d.canonical_artifacts if a.path.name == "entity.md")
+    head, _, _ = entity.content.partition("---\n")[2].partition("\n---\n")
     fm = pyyaml.safe_load(head)
-    # canonical points at the sibling datapackage.yaml, NOT the project path
+    assert fm["schema_profile"] == "science-entity-base/1.0+dataset/1.0"
+    assert fm["version"] == "1.0.0"
+    assert fm["id"] == "dataset:fixture-ds"
+    assert fm["type"] == "dataset"
+
+
+def test_dataset_canonical_entity_datapackage_points_at_sibling(tmp_path, monkeypatch):
+    """canonical datapackage: points at the sibling 'datapackage.yaml', not the project path."""
+    import yaml as pyyaml
+    d, _, _ = _plan_one(tmp_path, monkeypatch)
+    entity = next(a for a in d.canonical_artifacts if a.path.name == "entity.md")
+    head, _, _ = entity.content.partition("---\n")[2].partition("\n---\n")
+    fm = pyyaml.safe_load(head)
     assert fm["datapackage"] == "datapackage.yaml"
-    # tier verbatim from project (user-authored; never overwritten)
-    assert fm["tier"] == "evaluate-next"
-    # dropped fields gone
-    assert "ontologies" not in fm
-    # canonical body preserved
-    assert "Fixture dataset" in rest
 
 
-def test_render_dataset_canonical_entity_preserves_tier_verbatim():
+def test_dataset_canonical_entity_preserves_tier_verbatim(tmp_path, monkeypatch):
     """tier is user-authored; promote never overwrites."""
-    from science_tool.commons.promote import _render_dataset_canonical_entity
-    for tier_value in ("use-now", "evaluate-next", "track"):
-        fm = {
-            "id": "dataset:x",
-            "type": "dataset",
-            "datapackage": "p/datapackage.json",
-            "origin": "external",
-            "tier": tier_value,
-            "access": {"level": "public", "verified": True},
-        }
-        text = _render_dataset_canonical_entity(
-            frontmatter=fm, body="", canonical_slug="x",
-        )
-        assert f"tier: {tier_value}" in text or f"tier: '{tier_value}'" in text
+    d, _, _ = _plan_one(tmp_path, monkeypatch)
+    entity = next(a for a in d.canonical_artifacts if a.path.name == "entity.md")
+    assert "tier: evaluate-next" in entity.content
+
+
+def test_dataset_canonical_entity_body_is_preserved(tmp_path, monkeypatch):
+    """Body content from project entity (intro paragraph) survives into canonical."""
+    d, _, _ = _plan_one(tmp_path, monkeypatch)
+    entity = next(a for a in d.canonical_artifacts if a.path.name == "entity.md")
+    # Fixture data-fixture-ds.md body is "# Fixture dataset\n\nProject-only body content goes here.\n"
+    # _classify_entity will route the H1 line + intro paragraph to canonical_body[""]
+    # and _render_body will emit them back. At minimum, the prose line survives:
+    _, _, body = entity.content.partition("---\n")[2].partition("\n---\n")
+    assert "Project-only body content goes here" in body or "Fixture dataset" in body
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Expected: `ImportError`.
-
-- [ ] **Step 3: Add `_render_dataset_canonical_entity` to `promote.py`**
-
-```python
-_DATASET_CANONICAL_ALLOWED = frozenset({
-    "id", "type", "title", "description",
-    "datapackage", "origin", "tier", "accessions", "access", "derivation",
-    "parent_dataset", "siblings", "consumed_by",
-    "tags", "ontology_terms", "same_as",
-    "created", "updated", "status", "related", "source_refs",
-    "version", "schema_profile",
-})
-
-_DATASET_DROPPED_DEFAULT = frozenset({
-    "ontologies",    # not in any schema
-    "datasets",      # self-referential on a dataset entity
-})
-
-
-def _render_dataset_canonical_entity(
-    *,
-    frontmatter: dict,
-    body: str,
-    canonical_slug: str,
-) -> str:
-    """Render the canonical datasets/<slug>/entity.md content.
-
-    - Keeps only fields in _DATASET_CANONICAL_ALLOWED.
-    - Resets `datapackage:` to the sibling pointer `datapackage.yaml`.
-    - tier is taken verbatim from the project (never overwritten).
-    - Body preserved verbatim.
-    """
-    fm: dict = {}
-    for k in _DATASET_CANONICAL_ALLOWED:
-        if k in frontmatter:
-            fm[k] = frontmatter[k]
-    fm["datapackage"] = "datapackage.yaml"
-    head = _yaml.safe_dump(fm, sort_keys=False, allow_unicode=True)
-    return f"---\n{head}---\n{body}"
+```bash
+cd ~/d/science/science
+uv run pytest tests/test_commons_promote_dataset_plan.py -v -k "canonical_entity or canonical_dataset or body_is_preserved"
 ```
+Expected: failures (the dataset plan branch hasn't yet wired the canonical render — that's Task 16).
 
-(`_yaml` is the module-level `yaml` alias already used by promote.py for force-quoted dumps; reuse it. If promote.py uses a custom dumper for force-quoting `created`/`updated`, route through that helper instead.)
+- [ ] **Step 3: No code in this task**
 
-- [ ] **Step 4: Run the tests**
+This task defines the assertions. The implementation lands in Task 16 (which wires `_render_canonical` plus the `datapackage: "datapackage.yaml"` post-process). Leave the tests in place — they'll pass after Task 16.
+
+- [ ] **Step 4: Mark tests xfail temporarily**
+
+If running the full suite during G.3, mark these four tests `@pytest.mark.xfail(reason="lands in Task 16")` until Task 16 lands. Remove the marker in Task 16's commit.
+
+- [ ] **Step 5: Commit the test scaffolding**
 
 ```bash
 cd ~/d/science/science
-uv run pytest tests/test_commons_promote_dataset_plan.py -v -k "canonical_entity"
-```
-Expected: 2 passed.
-
-- [ ] **Step 5: Commit**
-
-```bash
-cd ~/d/science/science
-git add src/science_tool/commons/promote.py tests/test_commons_promote_dataset_plan.py
-git commit -m "commons(promote): render canonical dataset entity.md with field allow-list"
+git add tests/test_commons_promote_dataset_plan.py
+git commit -m "commons(tests): scaffold dataset canonical entity render assertions (Task 16 wires)"
 ```
 
 ---
@@ -1423,103 +1519,84 @@ git commit -m "commons(promote): dataset recipe stub renderer"
 
 ---
 
-### Task 15: Field routing — canonical / overlay / dropped buckets
+### Task 15: Compute `dropped_fields` from existing `_classify_entity` output
+
+**Design decision:** Reuse the existing `_classify_entity` (`promote.py:1303`), which already routes fields into `(canonical_fields, project_only_fields, canonical_body, project_only_body)` using the merge-policy table for the kind. For datasets we need one extra output: the names of project frontmatter keys that ended up in neither bucket (because they're not in any schema). That set goes into the audit log under `dropped_fields`. Compute it as a derivation from `_classify_entity`'s output rather than a parallel classifier.
 
 **Files:**
-- Modify: `~/d/science/science/src/science_tool/commons/promote.py` (`_classify_dataset_fields`)
+- Modify: `~/d/science/science/src/science_tool/commons/promote.py` (add `_dataset_dropped_fields` helper)
 - Test: `~/d/science/science/tests/test_commons_promote_dataset_plan.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_commons_promote_dataset_plan.py — append
-def test_classify_dataset_fields_routes_correctly():
-    from science_tool.commons.promote import _classify_dataset_fields
-    fm = {
+def test_dataset_dropped_fields_records_unrouted_keys():
+    """Project keys not in canonical or overlay buckets are recorded as dropped."""
+    from science_tool.commons.promote import _dataset_dropped_fields
+    raw_fm = {
         "id": "dataset:x", "type": "dataset", "title": "T",
         "datapackage": "data/x/datapackage.json",
         "origin": "external", "tier": "track",
         "access": {"level": "public", "verified": True},
-        "tags": ["a"],                       # both layers - append
-        "ontology_terms": ["EFO:1"],          # both layers - append
-        "created": "2026-01-01",              # both layers - same value v1
-        "pin_version": "1.0.0",               # overlay-only
-        "relevance": "high",                  # overlay-only
-        "hypothesis_links": ["H1"],           # overlay-only
-        "ontologies": ["bio"],                # dropped
-        "datasets": ["dataset:y"],            # dropped (self-referential)
-        "weirdo": "stays-in-body",            # dropped with audit
+        "tags": ["a"],
+        "ontologies": ["bio"],            # not in any schema → dropped
+        "datasets": ["dataset:y"],         # not allowed on a dataset entity → dropped
+        "pin_version": "1.0.0",            # overlay
+        "relevance": "high",               # overlay
     }
-    canonical, overlay, dropped = _classify_dataset_fields(fm)
-    # canonical-only / both-layers fields land on canonical:
-    for k in ("id", "type", "title", "datapackage", "origin", "tier", "access",
-             "tags", "ontology_terms", "created"):
-        assert k in canonical, f"{k} should be canonical"
-    # overlay-only fields land on overlay:
-    for k in ("pin_version", "relevance", "hypothesis_links"):
-        assert k in overlay, f"{k} should be overlay-only"
-    # both-layers-append + both-layers-same-value also on overlay:
-    for k in ("tags", "ontology_terms", "created"):
-        assert k in overlay
-    # dropped fields:
-    assert {"ontologies", "datasets", "weirdo"}.issubset(set(dropped))
-    # dropped fields are NOT on canonical or overlay:
-    for k in ("ontologies", "datasets", "weirdo"):
-        assert k not in canonical and k not in overlay
+    canonical_fields = {"id": "dataset:x", "type": "dataset", "title": "T",
+                        "datapackage": "data/x/datapackage.json",
+                        "origin": "external", "tier": "track",
+                        "access": {"level": "public", "verified": True},
+                        "tags": ["a"]}
+    project_only_fields = {"pin_version": "1.0.0", "relevance": "high"}
+    dropped = _dataset_dropped_fields(
+        raw_fm,
+        canonical_fields=canonical_fields,
+        project_only_fields=project_only_fields,
+    )
+    assert set(dropped) == {"ontologies", "datasets"}
 ```
 
 - [ ] **Step 2: Run test — should fail**
 
 Expected: `ImportError`.
 
-- [ ] **Step 3: Implement `_classify_dataset_fields`**
+- [ ] **Step 3: Implement `_dataset_dropped_fields`**
 
 ```python
-_DATASET_OVERLAY_ALLOWED = frozenset({
-    "pin_version", "pin_effective_version",
-    "relevance", "hypothesis_links", "task_links", "project_tags",
-    "status", "source", "related", "source_refs",
-    "created", "updated",
-})
+def _dataset_dropped_fields(
+    raw_frontmatter: dict,
+    *,
+    canonical_fields: dict,
+    project_only_fields: dict,
+) -> list[str]:
+    """Return project frontmatter keys that landed in neither bucket.
 
-_DATASET_BOTH_APPEND = frozenset({"tags", "ontology_terms", "same_as"})
-_DATASET_BOTH_SAME_VALUE = frozenset({"created", "updated", "status", "related", "source_refs"})
+    These are keys not recognized by base, dataset mixin, or overlay-1.1 schemas;
+    promote drops them silently from the output but records them in the audit
+    log so users can audit pre-migration cleanups (design §3.3 'dropped with
+    audit' bucket).
 
-
-def _classify_dataset_fields(
-    frontmatter: dict,
-) -> tuple[dict, dict, list[str]]:
-    """Route project entity fields into (canonical, overlay, dropped_names).
-
-    - Fields in _DATASET_CANONICAL_ALLOWED → canonical.
-    - Fields in _DATASET_OVERLAY_ALLOWED → overlay.
-    - Fields in _DATASET_BOTH_APPEND or _DATASET_BOTH_SAME_VALUE → both.
-    - Anything else → dropped (name recorded in dropped_names).
+    Convention: any key starting with `_` is treated as intentional metadata
+    and not reported (e.g. `_raw_frontmatter__` sentinel).
     """
-    canonical: dict = {}
-    overlay: dict = {}
-    dropped: list[str] = []
-    for k, v in frontmatter.items():
-        is_canonical = k in _DATASET_CANONICAL_ALLOWED
-        is_overlay = k in _DATASET_OVERLAY_ALLOWED
-        is_both = k in _DATASET_BOTH_APPEND or k in _DATASET_BOTH_SAME_VALUE
-        if is_canonical:
-            canonical[k] = v
-        if is_overlay or is_both:
-            overlay[k] = v
-        if not (is_canonical or is_overlay or is_both):
-            dropped.append(k)
-    return canonical, overlay, dropped
+    routed = set(canonical_fields) | set(project_only_fields)
+    return sorted(
+        k for k in raw_frontmatter
+        if k not in routed and not k.startswith("_")
+    )
 ```
 
 - [ ] **Step 4: Run + commit**
 
 ```bash
 cd ~/d/science/science
-uv run pytest tests/test_commons_promote_dataset_plan.py::test_classify_dataset_fields_routes_correctly -v
+uv run pytest tests/test_commons_promote_dataset_plan.py::test_dataset_dropped_fields_records_unrouted_keys -v
 # expect: PASS
 git add src/science_tool/commons/promote.py tests/test_commons_promote_dataset_plan.py
-git commit -m "commons(promote): dataset field-routing buckets (canonical/overlay/dropped)"
+git commit -m "commons(promote): _dataset_dropped_fields helper for audit log"
 ```
 
 ---
@@ -1588,13 +1665,16 @@ uv run pytest tests/test_commons_promote_dataset_plan.py::test_plan_promote_data
 ```
 Expected: FAIL — plan_promote doesn't yet branch on dataset.
 
-- [ ] **Step 3: Add dataset branch to `plan_promote`**
+- [ ] **Step 3: Add dataset branch to `plan_promote` — reuse `_render_canonical` and `_render_overlay`**
 
-In `plan_promote`, after the existing per-candidate processing (where `PromoteDecision` is constructed), add a `kind.kind == "dataset"` branch:
+In `plan_promote`, the existing path for paper/topic/theme runs through `_render_canonical` (which already emits `schema_profile`, `id`, `type`, `title`, `version`, `created`, `updated`) and `_render_overlay`. For datasets, reuse both. The dataset delta is:
+- Three artifacts instead of one (entity.md + datapackage.yaml + recipe/README.md).
+- Post-process the entity canonical content to override `datapackage:` with the sibling pointer `"datapackage.yaml"` (the project's value is the project-relative project sidecar path).
+- Stash `dropped_fields`, `per_resource`, and `recipe_stubbed` on a side-channel `PromotePlan.dataset_audit_extras` keyed by slug (since `PromoteDecision` is frozen).
 
 ```python
 if kind.kind == "dataset":
-    # Compute hashes per resource
+    # 1. Compute hashes per resource
     from science_tool.commons.datapackage import (
         stream_sha256_and_bytes,
         render_canonical_datapackage_yaml,
@@ -1607,14 +1687,34 @@ if kind.kind == "dataset":
         h, n = stream_sha256_and_bytes(rp)
         per_resource[r.get("name") or r["path"]] = (h, n)
 
-    canonical_fm, overlay_fm, dropped = _classify_dataset_fields(
-        candidate.canonical_fields | candidate.project_only_fields
+    # 2. Use existing infrastructure for canonical entity + overlay rendering.
+    # _classify_entity already split fields/body for the candidate. Build the
+    # canonical artifact path via the existing _render_canonical, then
+    # post-process to swap the project-relative datapackage path for the
+    # sibling pointer 'datapackage.yaml'.
+    canonical_path_singleton = (
+        commons_root / kind.commons_subdir / candidate.slug / "entity.md"
     )
-    entity_text = _render_dataset_canonical_entity(
-        frontmatter=canonical_fm,
-        body=candidate.canonical_body.get("body", ""),
-        canonical_slug=candidate.slug,
+    # Temporary singular decision to feed _render_canonical (which expects a
+    # PromoteDecision shape for slug + version). We rebuild artifacts after.
+    tmp_decision = PromoteDecision(
+        slug=candidate.slug,
+        canonical_artifacts=[],   # filled below
+        canonical_version="1.0.0",
+        overlays={},
+        resolved_conflicts=(),
     )
+    entity_text = _render_canonical(
+        tmp_decision,
+        canonical_fields=candidate.canonical_fields,
+        canonical_body=candidate.canonical_body,
+        created=_extract_date_for_canonical(candidate, "created"),
+        updated=_extract_date_for_canonical(candidate, "updated"),
+        kind=kind,
+    )
+    # Override datapackage: -> 'datapackage.yaml' (sibling pointer)
+    entity_text = _override_canonical_datapackage_pointer(entity_text)
+
     datapackage_text = render_canonical_datapackage_yaml(
         project_doc=dp_doc,
         canonical_slug=candidate.slug,
@@ -1622,30 +1722,44 @@ if kind.kind == "dataset":
     )
     recipe_text = _render_dataset_recipe_stub(
         slug=candidate.slug,
-        source_hint=canonical_fm.get("source") or (
-            canonical_fm.get("access") or {}
+        source_hint=candidate.canonical_fields.get("source") or (
+            candidate.canonical_fields.get("access") or {}
         ).get("source_url"),
     )
+
     artifacts = [
         CanonicalArtifact(
-            path=Path(f"datasets/{candidate.slug}/entity.md"),
+            path=Path(f"{kind.commons_subdir}/{candidate.slug}/entity.md"),
             content=entity_text,
             validator="entity-mixin",
         ),
         CanonicalArtifact(
-            path=Path(f"datasets/{candidate.slug}/datapackage.yaml"),
+            path=Path(f"{kind.commons_subdir}/{candidate.slug}/datapackage.yaml"),
             content=datapackage_text,
             validator="frictionless-datapackage",
         ),
         CanonicalArtifact(
-            path=Path(f"datasets/{candidate.slug}/recipe/README.md"),
+            path=Path(f"{kind.commons_subdir}/{candidate.slug}/recipe/README.md"),
             content=recipe_text,
             validator="plain",
         ),
     ]
-    overlay_rewrite = _build_dataset_overlay_rewrite(
-        candidate=candidate, overlay_fm=overlay_fm, dropped=dropped,
+
+    # 3. Overlay rewrite via existing _render_overlay (reuses project_only_*).
+    overlay_text = _render_overlay(
+        tmp_decision,
+        project_only_fields=candidate.project_only_fields,
+        project_only_body=candidate.project_only_body,
+        kind=kind,
     )
+    overlay_rewrite = OverlayRewrite(
+        project_slug=candidate.project_slug,
+        path=candidate.overlay_source_path,
+        before_sha=_existing_helper_for_before_sha(candidate),
+        after_content=overlay_text,
+        pin_version="1.0.0",
+    )
+
     decision = PromoteDecision(
         slug=candidate.slug,
         canonical_artifacts=artifacts,
@@ -1653,51 +1767,71 @@ if kind.kind == "dataset":
         overlays={candidate.project_slug: overlay_rewrite},
         resolved_conflicts=(),
     )
-    # Stash per-resource hashes + dropped on decision for audit log
-    # (use a per-op dict on the plan, not the frozen decision; see Task 22).
-```
 
-For `_build_dataset_overlay_rewrite`, add a small helper that produces the overlay frontmatter + body matching §3.3 of the design, returning an `OverlayRewrite`:
-
-```python
-def _build_dataset_overlay_rewrite(
-    *, candidate: PromoteCandidate, overlay_fm: dict, dropped: list[str],
-) -> OverlayRewrite:
-    """Build the overlay rewrite for a dataset promote.
-
-    Overlay frontmatter: id, overlay_of, pin_version, plus overlay-allowed
-    fields. Body: project_only_body preserved verbatim.
-    """
-    fm: dict = {
-        "id": f"dataset:{candidate.slug}",
-        "overlay_of": f"dataset:{candidate.slug}",
-        "pin_version": "1.0.0",
-    }
-    fm.update(overlay_fm)
-    head = _yaml.safe_dump(fm, sort_keys=False, allow_unicode=True)
-    body = candidate.project_only_body.get("body", "") if isinstance(
-        candidate.project_only_body, dict
-    ) else ""
-    content = f"---\n{head}---\n{body}"
-    return OverlayRewrite(
-        project_slug=candidate.project_slug,
-        path=candidate.overlay_source_path,
-        before_sha="",   # filled in by existing helper
-        after_content=content,
-        pin_version="1.0.0",
+    # 4. Stash audit extras on the plan (frozen decisions can't carry them).
+    raw_fm = candidate.canonical_fields | candidate.project_only_fields
+    dropped = _dataset_dropped_fields(
+        raw_fm,
+        canonical_fields=candidate.canonical_fields,
+        project_only_fields=candidate.project_only_fields,
     )
+    plan.dataset_audit_extras[candidate.slug] = {
+        "per_resource": per_resource,
+        "dropped_fields": dropped,
+        "recipe_stubbed": True,   # v1 always stubs
+        "override_path": str(dp_parent),
+    }
 ```
 
-For audit data on `dropped` and `per_resource`, attach them via a side-channel on `PromotePlan` (since `PromoteDecision` is frozen). Add to `PromotePlan`:
+Add the two small helpers used above to `promote.py`:
 
 ```python
-dataset_audit_extras: dict[str, dict] = field(default_factory=dict)
-# Keyed by slug: {"per_resource": {...}, "dropped_fields": [...], "recipe_stubbed": True}
+def _override_canonical_datapackage_pointer(entity_text: str) -> str:
+    """Replace the datapackage: line in the rendered canonical frontmatter
+    with the sibling pointer 'datapackage.yaml'."""
+    head, sep_open, rest = entity_text.partition("---\n")
+    if not sep_open:
+        return entity_text
+    fm_text, sep_close, body = rest.partition("\n---\n")
+    if not sep_close:
+        return entity_text
+    fm = _yaml.safe_load(fm_text) or {}
+    fm["datapackage"] = "datapackage.yaml"
+    new_fm = _render_frontmatter(fm)
+    return f"---\n{new_fm}---\n{body}"
+
+
+def _extract_date_for_canonical(candidate: PromoteCandidate, key: str) -> "date":
+    """Pull a 'created'/'updated' value off the candidate. Reuses the existing
+    _coerce_date_for_yaml / _classify_entity routing (created/updated are
+    schema-tagged project_only but appear on canonical too — see _render_canonical)."""
+    from datetime import date as _date
+    raw = (
+        candidate.canonical_fields.get(key)
+        or candidate.project_only_fields.get(key)
+        or _date.today().isoformat()
+    )
+    if isinstance(raw, str):
+        return _date.fromisoformat(raw)
+    return raw   # assume datetime.date
 ```
 
-Populate it inside `plan_promote` for each dataset decision.
+`_existing_helper_for_before_sha(candidate)` is whatever helper Phase F already uses to compute `OverlayRewrite.before_sha` — locate it in `promote.py` (search for `before_sha=` in the existing plan branch) and reuse.
 
-- [ ] **Step 4: Run the test**
+Extend `PromotePlan` with the side-channel:
+
+```python
+@dataclass(slots=True)   # NOT frozen — we mutate dataset_audit_extras
+class PromotePlan:
+    decisions: list[PromoteDecision]
+    failed_candidates: list[FailedCandidate]
+    kind: PromoteKindConfig
+    dataset_audit_extras: dict[str, dict] = field(default_factory=dict)
+```
+
+(If unfreezing the dataclass breaks the immutability invariant elsewhere, alternative: keep frozen but use `object.__setattr__` to set the attribute once at construction. Pick whichever causes fewer cascade test failures — the existing test suite will tell you.)
+
+- [ ] **Step 4: Run the test + remove Task 13's xfail markers**
 
 ```bash
 cd ~/d/science/science
@@ -1705,12 +1839,20 @@ uv run pytest tests/test_commons_promote_dataset_plan.py::test_plan_promote_data
 ```
 Expected: PASS.
 
+Then remove the `@pytest.mark.xfail(reason="lands in Task 16")` decorators added in Task 13 Step 4 (four tests: `test_dataset_canonical_entity_emits_required_base_fields`, `_datapackage_points_at_sibling`, `_preserves_tier_verbatim`, `_body_is_preserved`). Re-run:
+
+```bash
+cd ~/d/science/science
+uv run pytest tests/test_commons_promote_dataset_plan.py -v
+```
+Expected: all passed.
+
 - [ ] **Step 5: Commit**
 
 ```bash
 cd ~/d/science/science
 git add src/science_tool/commons/promote.py tests/test_commons_promote_dataset_plan.py
-git commit -m "commons(promote): dataset plan_promote — 3 artifacts + overlay + audit extras"
+git commit -m "commons(promote): dataset plan_promote — 3 artifacts via _render_canonical + sibling datapackage pointer"
 ```
 
 ---
@@ -1802,9 +1944,30 @@ def test_upsert_data_override_creates_file_when_missing(tmp_path, monkeypatch):
     import yaml
     parsed = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
     assert parsed == {"x": str(tmp_path / "fakedata")}
-    # Backup created (empty since no prior file):
-    assert backup_path is not None
-    assert backup_path.name == "data.yaml.bak.op123"
+    # When no prior file existed, an "absent" sentinel is written
+    # (so restore can unlink data.yaml rather than recreate it empty):
+    sentinel = tmp_path / "science" / "data.yaml.bak.op123.absent"
+    assert sentinel.is_file()
+    # The .bak.<op-id> file itself is NOT created in the absent-before case:
+    assert not (tmp_path / "science" / "data.yaml.bak.op123").exists()
+
+
+def test_restore_data_override_unlinks_when_absent_sentinel_present(tmp_path, monkeypatch):
+    """Round-trip: upsert into absent data.yaml, then restore → data.yaml gone."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    from science_tool.commons.config import (
+        upsert_data_override, restore_data_override_from_backup,
+    )
+    yaml_path = tmp_path / "science" / "data.yaml"
+    assert not yaml_path.exists()
+    upsert_data_override(
+        slug="x", absolute_path=tmp_path / "fakedata", op_id="opABS",
+    )
+    assert yaml_path.is_file()
+    restore_data_override_from_backup(op_id="opABS")
+    # Byte-identical restore: file must be gone, sentinel cleaned up:
+    assert not yaml_path.exists()
+    assert not (tmp_path / "science" / "data.yaml.bak.opABS.absent").exists()
 
 
 def test_upsert_data_override_preserves_existing_entries(tmp_path, monkeypatch):
@@ -1882,10 +2045,12 @@ def upsert_data_override(
     yaml_path = _data_yaml_path()
     yaml_path.parent.mkdir(parents=True, exist_ok=True)
     bak = yaml_path.parent / f"data.yaml.bak.{op_id}"
+    sentinel = yaml_path.parent / f"data.yaml.bak.{op_id}.absent"
     if yaml_path.is_file():
         shutil.copy2(yaml_path, bak)
     else:
-        bak.write_text("", encoding="utf-8")
+        # Encode "missing before" so restore can unlink rather than recreate empty:
+        sentinel.write_text("", encoding="utf-8")
     # Load existing:
     existing: dict[str, str] = {}
     if yaml_path.is_file():
@@ -1931,9 +2096,21 @@ def check_override_conflict(*, slug: str, planned_path: Path) -> None:
 
 
 def restore_data_override_from_backup(*, op_id: str) -> None:
-    """Restore data.yaml from data.yaml.bak.<op_id> using atomic rename."""
+    """Restore data.yaml to its pre-upsert byte-identical state.
+
+    Two cases (encoded by upsert_data_override):
+    - data.yaml.bak.<op_id>.absent exists → data.yaml was absent before; unlink
+      data.yaml and remove the sentinel.
+    - data.yaml.bak.<op_id> exists → atomic-rename it back over data.yaml.
+    """
     yaml_path = _data_yaml_path()
+    sentinel = yaml_path.parent / f"data.yaml.bak.{op_id}.absent"
     bak = yaml_path.parent / f"data.yaml.bak.{op_id}"
+    if sentinel.is_file():
+        if yaml_path.exists():
+            yaml_path.unlink()
+        sentinel.unlink()
+        return
     if not bak.is_file():
         raise CommonsError(f"backup not found: {bak}")
     os.replace(bak, yaml_path)
@@ -2097,18 +2274,24 @@ class SideChannelResult:
 
 def _dataset_side_channel_apply(ctx: SideChannelContext) -> SideChannelResult:
     """Write the per-machine override after commons tag, before overlay rewrite."""
-    from science_tool.commons.config import upsert_data_override
+    from science_tool.commons.config import (
+        upsert_data_override, _data_yaml_path,
+    )
     extras = ctx.plan.dataset_audit_extras.get(ctx.decision.slug, {})
     planned_path = Path(extras["override_path"])     # set during plan
-    bak = upsert_data_override(
+    upsert_data_override(
         slug=ctx.decision.slug,
         absolute_path=planned_path,
         op_id=ctx.op_id,
     )
-    from science_tool.commons.config import _data_yaml_path
+    # Determine which backup marker was actually written:
+    yaml_path = _data_yaml_path()
+    bak = yaml_path.parent / f"data.yaml.bak.{ctx.op_id}"
+    sentinel = yaml_path.parent / f"data.yaml.bak.{ctx.op_id}.absent"
+    actual_backup = bak if bak.is_file() else sentinel
     return SideChannelResult(
-        artifact_paths=[_data_yaml_path()],
-        backup_paths=[bak],
+        artifact_paths=[yaml_path],
+        backup_paths=[actual_backup],
     )
 ```
 
@@ -2205,8 +2388,11 @@ def test_dataset_apply_writes_three_artifacts_commit_tag_override_overlay(
     import yaml as pyyaml
     parsed = pyyaml.safe_load(yaml_path.read_text(encoding="utf-8"))
     assert parsed["fixture-ds"] == str(proj / "data/fixture-ds")
-    bak = list((tmp_path / ".config" / "science").glob("data.yaml.bak.*"))
-    assert len(bak) == 1
+    # Backup OR absent-sentinel retained (fixture had no prior data.yaml, so
+    # we expect the .absent sentinel — not a content backup):
+    backups = list((tmp_path / ".config" / "science").glob("data.yaml.bak.*"))
+    assert len(backups) == 1
+    assert backups[0].name.endswith(".absent")
 
     # Project overlay rewritten:
     overlay = (proj / "doc/datasets/data-fixture-ds.md").read_text(encoding="utf-8")
@@ -2234,17 +2420,16 @@ if plan.kind.side_channel_apply is not None:
             )
             side_channel_results[decision.slug] = plan.kind.side_channel_apply(ctx)
     except (OSError, CommonsError) as exc:
-        # Restore any side-channel backups already written, then unwind commons:
+        # Restore any side-channel backups already written, then unwind commons.
+        # Note: backup_paths may contain a .bak.<op_id> file (file existed before)
+        # OR a .bak.<op_id>.absent sentinel (file did not exist before).
+        # `restore_data_override_from_backup` accepts the op_id and handles both.
         from science_tool.commons.config import restore_data_override_from_backup
-        for slug, sc_res in side_channel_results.items():
-            for bak in sc_res.backup_paths:
-                if bak.name.startswith("data.yaml.bak."):
-                    try:
-                        restore_data_override_from_backup(
-                            op_id=bak.name.removeprefix("data.yaml.bak.")
-                        )
-                    except CommonsError:
-                        pass
+        for slug in side_channel_results:
+            try:
+                restore_data_override_from_backup(op_id=op_id)
+            except CommonsError:
+                pass
         _rollback_step5(commons_root, tags_created, written_canonical_paths)
         rolled_back_commit = commons_commit
         commons_commit = None
@@ -2316,7 +2501,12 @@ def test_dataset_apply_audit_log_records_extras(tmp_path, monkeypatch):
     assert "override_file" in fix
     assert fix["override_file"].endswith("data.yaml")
     assert "override_backup" in fix
-    assert fix["override_backup"].endswith(f"data.yaml.bak.{log['op_id']}")
+    # Backup path may be the content backup or the absent-sentinel:
+    op = log["op_id"]
+    assert (
+        fix["override_backup"].endswith(f"data.yaml.bak.{op}")
+        or fix["override_backup"].endswith(f"data.yaml.bak.{op}.absent")
+    )
 ```
 
 - [ ] **Step 2: Run test — should fail**
@@ -2538,10 +2728,26 @@ def test_audit_failure_leaves_migration_landed(tmp_path, monkeypatch):
         capture_output=True, text=True, check=True,
     ).stdout
     assert "dataset/fixture-ds/1.0.0" in tags
-    # Failure exception carries the rendered audit payload:
+    # Failure exception carries the success-shape audit payload (NOT a
+    # failure-shape audit). The migration landed, so the rendered yaml
+    # should describe the successful state.
     assert hasattr(exc_info.value, "failure_audit_yaml")
     payload = exc_info.value.failure_audit_yaml
-    assert payload and "op_id" in payload
+    assert payload
+    import yaml as pyyaml
+    parsed = pyyaml.safe_load(payload)
+    assert parsed["status"] == "ok"
+    assert parsed["op_id"]
+    assert parsed["commons_commit"]            # commit landed
+    assert "dataset/fixture-ds/1.0.0" in parsed["commons_tags"]
+    assert "failure_stage" not in parsed       # success-shape: no failure key
+    # Hand-placement round-trip: writing it under .migrations/ + parsing back
+    # produces an equivalent dict to a normal success audit.
+    migrations = commons / ".migrations"
+    migrations.mkdir(exist_ok=True)
+    target = migrations / f"manual-{parsed['op_id']}.yaml"
+    target.write_text(payload, encoding="utf-8")
+    assert pyyaml.safe_load(target.read_text(encoding="utf-8")) == parsed
 ```
 
 - [ ] **Step 2: Run tests — should fail**
@@ -2564,21 +2770,50 @@ For each failing test, identify the missing rollback wiring in `apply_promote` a
 
 ```python
 # After existing _restore_project_rewrites_to_head call:
-if plan.kind.side_channel_apply is not None:
+if plan.kind.side_channel_apply is not None and side_channel_results:
     from science_tool.commons.config import restore_data_override_from_backup
-    for slug, sc_res in side_channel_results.items():
-        for bak in sc_res.backup_paths:
-            if bak.name.startswith("data.yaml.bak."):
-                try:
-                    restore_data_override_from_backup(
-                        op_id=bak.name.removeprefix("data.yaml.bak.")
-                    )
-                except CommonsError:
-                    pass
+    try:
+        restore_data_override_from_backup(op_id=op_id)
+    except CommonsError:
+        pass
     _rollback_step5(commons_root, tags_created, written_canonical_paths)
 ```
 
-- **(audit failure)**: catch `OSError` / `CommonsError` from `_write_audit_log` separately from earlier failures; do NOT call any rollback. Wrap into a `PromoteWriteError(stage="audit", ...)` and attach `failure_audit_yaml` from `_write_failure_audit_log`'s second return value.
+- **(audit failure)**: catch `OSError` / `CommonsError` from `_write_audit_log` separately from earlier failures; do NOT call any rollback. The migration is still landed, so the payload the user receives must be the **success-shape** audit YAML (the same content `_write_audit_log` would have written), not a failure-shape one. Construct the PromoteResult with `status="ok"`, render it via `_render_audit_log_yaml(result, commons_root, invocation=invocation)`, and attach that string to the exception as `failure_audit_yaml`:
+
+```python
+except (OSError, CommonsError) as audit_exc:
+    # Migration is landed. Render the success-shape audit yaml in memory
+    # so the user can hand-place it into .migrations/<ts>-<op_id>.yaml.
+    landed_result = PromoteResult(
+        op_id=op_id,
+        started_at=started_at,
+        finished_at=datetime.now(tz=timezone.utc),
+        commons_commit=commons_commit,
+        tags_created=list(tags_created),
+        decisions=list(plan.decisions),
+        failed_candidates=list(plan.failed_candidates),
+        audit_log_path=None,
+        status="ok",
+        failure_stage=None,
+        failure_detail=None,
+        projects_touched=projects_touched,
+        kind=plan.kind,
+        plan_audit_extras=plan.dataset_audit_extras,
+        side_channel_results=side_channel_results,
+    )
+    rendered = _render_audit_log_yaml(
+        landed_result, commons_root, invocation=invocation,
+    )
+    err = PromoteWriteError(
+        stage="audit",
+        detail=f"audit log write/commit failed (migration LANDED): {audit_exc}",
+        commons_commit=commons_commit,
+        projects_touched=projects_touched,
+    )
+    err.failure_audit_yaml = rendered
+    raise err from audit_exc
+```
 
 - [ ] **Step 4: Run all 6 tests**
 
