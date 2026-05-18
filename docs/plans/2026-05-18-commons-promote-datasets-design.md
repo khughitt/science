@@ -78,7 +78,11 @@ prerequisite** (matches §3.2 canonical surface; surgical and explicit).
 - Cross-project dedup. v1 supports one project per dataset slug. If two
   projects have the same dataset slug, promote fails with a clear message.
 - Recipe execution / verification. Phase H + later concern. v1 stubs
-  `recipe/README.md` and sets `tier: track`.
+  `recipe/README.md` when no project recipe is found. **`tier:` is
+  user-authored and reflects scientific readiness, not recipe maturity**
+  — promote never overwrites it. The audit log flags
+  `recipe_stubbed: true` so the back-fill task is traceable separately
+  (see §9 open question 1).
 - Bio mixin extensions (RNA-seq / scRNA-seq / CNA). Phase H.
 
 ---
@@ -118,7 +122,7 @@ list through every site that today reads `canonical_path`.
 ```python
 @dataclass(frozen=True)
 class CanonicalArtifact:
-    path: Path                            # commons-relative path
+    path: Path                            # relative to commons root, e.g. datasets/<slug>/entity.md
     content: str                          # rendered file content (UTF-8)
     validator: Literal[
         "entity-mixin",                   # frontmatter must pass base + mixin
@@ -135,15 +139,21 @@ class PromoteResult:
     ...
 ```
 
+Paths are stored relative to the commons root; the apply stage resolves
+them against `commons_root` before writing. Display surfaces (dry-run
+output, error messages) may render the absolute form
+`<commons-root>/datasets/<slug>/entity.md`, but the in-memory `path` field
+is always commons-relative.
+
 Single-file kinds (paper / topic / theme) produce a one-element list:
-`[CanonicalArtifact(path=commons/<subdir>/<slug>.md, content=<body>,
+`[CanonicalArtifact(path=<subdir>/<slug>.md, content=<body>,
 validator="entity-mixin")]`. The dataset kind produces three artifacts:
 
-| Artifact | Path | Validator |
+| Artifact | Path (commons-relative) | Validator |
 |---|---|---|
-| Entity surface | `commons/datasets/<slug>/entity.md` | `entity-mixin` (frontmatter via base + mixin-dataset/1.0) |
-| Frictionless sidecar | `commons/datasets/<slug>/datapackage.yaml` | `frictionless-datapackage` (parse + check resources[].path uniqueness + hash format) |
-| Recipe stub | `commons/datasets/<slug>/recipe/README.md` | `plain` (only emitted if no project recipe found) |
+| Entity surface | `datasets/<slug>/entity.md` | `entity-mixin` (frontmatter via base + mixin-dataset/1.0) |
+| Frictionless sidecar | `datasets/<slug>/datapackage.yaml` | `frictionless-datapackage` (parse + check resources[].path uniqueness + hash format) |
+| Recipe stub | `datasets/<slug>/recipe/README.md` | `plain` (only emitted if no project recipe found) |
 
 **Sites that thread the list (not exhaustive — see implementation plan)**:
 
@@ -188,9 +198,11 @@ one of four buckets:
 
 | Bucket | Examples | Disposition |
 |---|---|---|
-| **Canonical (per base + mixin)** | `id`, `type`, `title`, `created`, `updated`, `ontology_terms`, `tags`, `same_as`, `description`, `datapackage`, `origin`, `tier`, `accessions`, `access`, `derivation`, `parent_dataset`, `siblings`, `consumed_by` | Move to canonical `entity.md` frontmatter. Stripped from overlay. |
-| **Overlay (per overlay-1.1 properties)** | `pin_version`, `relevance`, `hypothesis_links`, `task_links`, `project_tags`, `project_notes`, `status`, `source`, `related`, `source_refs`, `created`, `updated`, and base-schema append fields (`tags`, `ontology_terms`, `same_as`) | Keep in overlay frontmatter. |
-| **Dropped with audit** | `ontologies`, `datasets` (on the dataset entity itself — redundant with id), other project-local fields not in any schema | Dropped from both canonical and overlay. Each dropped `(field, value, source_path)` recorded in the audit log under `dropped_fields:`. Plan-stage output also shows them so the user can review before apply. |
+| **Canonical-only** | `id`, `type`, `title`, `description`, `datapackage`, `origin`, `tier`, `accessions`, `access`, `derivation`, `parent_dataset`, `siblings`, `consumed_by` | Move to canonical `entity.md` frontmatter. Stripped from overlay. |
+| **Overlay-only** | `pin_version`, `relevance`, `hypothesis_links`, `task_links`, `project_tags`, `project_notes`, `source` | Keep in overlay frontmatter. Stripped from canonical. |
+| **Both layers — append at read time** (`science:merge: append` on base) | `tags`, `ontology_terms`, `same_as` | Copied into canonical. Also kept on overlay if the project's value adds entries not present canonically (deduped per schema). Resolver concatenates at read time. |
+| **Both layers — same value v1** (independent `replace` on base + overlay-1.1) | `created`, `updated`, `status`, `related`, `source_refs` | Copied into canonical (source date / status). Also copied into overlay with the same value at promote time. Overlay's `replace` wins at read; v1 keeps them identical so the merge result is unchanged. v2 may diverge them (overlay = project tracking history; canonical = source authorship). Documented in audit log. |
+| **Dropped with audit** | `ontologies` (not in any schema), `datasets` (self-referential on a dataset entity — redundant with `id`), other project-local fields not in any schema | Dropped from both canonical and overlay. Each dropped `(field, value, source_path)` recorded in the audit log under `dropped_fields:`. Plan-stage output also shows them so the user can review before apply. |
 | **Project-only body sections** | Free-text markdown sections | Preserved in the overlay body. |
 
 Plan-time validation catches misrouted fields: if a canonical field is
@@ -345,13 +357,18 @@ For each candidate:
        descriptor.
      - Add datapackage: "datapackage.yaml" pointer (sibling, conventional
        name).
-     - If no recipe was found in the project, set tier: "track" on the
-       canonical entity.
+     - tier: is taken verbatim from the project descriptor (user-authored;
+       promote never overwrites). The recipe stub flag is recorded in
+       the audit log instead.
   4. Build recipe stub content if no project-side recipe was detected:
      recipe/README.md content =
        "# Recipe back-fill needed\n\n
         Acquisition: <source from entity.source or accessions>.\n
-        Marked tier: track until recipe added.\n"
+        Promote stubbed this README because no project recipe was
+        detected. Replace with the acquisition or preprocessing
+        workflow.\n"
+     (`tier:` is left untouched on the canonical entity; recipe
+     maturity is tracked via the audit log's recipe_stubbed flag.)
      Recipe detection in v1: always 'no recipe found'. (Recipe back-fill
      is left as future work — see open questions.)
   5. Build overlay content for the project file: id, overlay_of,
@@ -367,12 +384,18 @@ For each candidate:
 
 ### 4.3 Apply (writes, in order)
 
-The order matters: **override before overlay**, so the resolver chain is
-always coherent. After overlay rewrite the project starts depending on the
-commons descriptor; if override-write fails after overlay-rewrite, the
-project points at commons but the resolver can't find bytes on this
-machine. Writing override first means the resolver chain works the moment
-the overlay flips.
+Phase G keeps Phase E/F's atomic-transaction shape: any failure after the
+plan-time validation passes triggers an unconditional rollback to the
+pre-apply state. The user is expected to fix the failure cause and
+re-run from scratch — there is no resume-from-partial path. This matches
+Phase F precedent (tag-existence preflight at `promote.py:808` already
+rejects re-runs over partially-applied state, so resume would require
+new content/tag-match semantics; deferred).
+
+The order **commons → override → overlay** matters: after overlay rewrite
+the project starts depending on the commons descriptor, and override
+must already point at bytes when that flip happens. Writing override
+before overlay keeps the resolver chain coherent.
 
 ```
 1. Pre-flight (extends Phase F):
@@ -381,18 +404,17 @@ the overlay flips.
    - Project pilot paths clean (doc/datasets/<file> in working tree).
    - ~/.config/science/data.yaml readable and parseable.
    - Existing override entry for this slug (if any) matches plan.
+   - Tag dataset/<slug>/<version> does not already exist
+     (Phase F preflight rule).
 
 2. Write commons canonical artifacts (iterate canonical_artifacts list):
    commons/datasets/<slug>/entity.md
    commons/datasets/<slug>/datapackage.yaml
    commons/datasets/<slug>/recipe/README.md      (only if stubbed)
 
-   Failure here unwrites the partial list (Path.unlink missing_ok=True) +
-   removes empty parent dirs; commons remains uncommitted.
-
 3. Commit in commons: "promote: dataset <slug> via op <op-id>"
 
-4. Tag in commons: dataset/<slug>/1.0.0
+4. Tag in commons: dataset/<slug>/<version>
 
 5. Write per-machine override side-channel:
    - Read ~/.config/science/data.yaml (initialize empty if missing).
@@ -400,27 +422,16 @@ the overlay flips.
    - Upsert <slug>: <abs path>.
    - Atomic write via temp-file + rename.
 
-   If this fails, commons is committed + tagged but no project overlay
-   has been rewritten yet. The project still resolves the dataset
-   locally; re-running promote is idempotent (the dry-run will match
-   the in-place state and a re-applied write will succeed).
-
 6. Write project overlay rewrite to working tree:
    <project>/doc/datasets/data-<slug>.md  (rewritten in place)
 
-   The project's data/.../datapackage.json is LEFT UNTOUCHED in v1. The
-   per-machine override (already written above) points at its parent dir.
-
-   If this fails, restore the overlay via git checkout HEAD -- (Phase F
-   pattern). Override is left in place (the slug → path mapping is
-   harmless without a depending overlay, and matches what a re-run would
-   write anyway).
+   The project's data/.../datapackage.json is LEFT UNTOUCHED in v1.
 
 7. Write success audit log:
    commons/.migrations/<ts>-<op-id>.yaml
    Records: commons_commit, commons_tags, canonical_paths (list, not
    singular), project files touched, override file path + backup file
-   path + line before/after, per-resource hashes, recipe stub flag,
+   path + line before/after, per-resource hashes, recipe_stubbed flag,
    dropped_fields list per §3.3.
 
 8. Commit audit log in commons: "audit: op <op-id>"
@@ -428,36 +439,57 @@ the overlay flips.
 
 ### 4.4 Failure handling
 
-Same fail-fast envelope as Phase F. The reordering in §4.3 keeps the
-project / override / commons triple coherent at every observable step:
+Atomic-transaction semantics: each post-plan failure unwinds all prior
+side effects of the op before exiting. The user always sees one of two
+observable states — pre-apply or post-apply — never partial.
 
-- **Before any writes** (discovery, plan, hash-compute, plan validation) →
-  exit non-zero with `PromoteCandidateError` / `PromoteValidationError` /
-  `PromoteResourceMissingError` / `PromoteOverrideConflictError`. No state
-  touched anywhere.
-- **Commons artifact write fails** (step 2) → no commons commit yet, no
-  override or overlay changes. Partial artifact files unwritten via
-  `Path.unlink(missing_ok=True)` and any empty parent dirs removed.
-  Failure-path audit log written best-effort.
-- **Commons commit/tag fails** (steps 3-4) → commons working tree has the
-  artifacts staged but uncommitted; `git checkout -- .` + `git clean -fd`
-  on commons restores cleanliness. No override or overlay changes.
-- **Override write fails** (step 5) → restore from `.bak.<op-id>`. Commons
-  commit + tag stay. No project overlay has been rewritten yet, so the
-  project still resolves the dataset locally without a depending
-  overlay. Re-running promote is idempotent: dry-run sees the override is
-  unchanged from initial, plans the same delta, and apply retries cleanly.
+State accumulated through the apply sequence is tracked in a per-op
+context (`commons_artifacts_written: list[Path]`,
+`commons_commit_sha: str | None`, `tags_created: list[str]`,
+`override_backup_path: Path | None`, `overlay_rewritten: list[Path]`).
+The rollback handler reads this and reverses each side effect that has
+landed.
+
+- **Before any writes** (discovery, plan, hash-compute, plan validation,
+  preflight) → exit non-zero with `PromoteCandidateError` /
+  `PromoteValidationError` / `PromoteResourceMissingError` /
+  `PromoteOverrideConflictError`. No state touched anywhere.
+- **Commons artifact write fails** (step 2) → unwrite each path in
+  `commons_artifacts_written` via `Path.unlink(missing_ok=True)`; remove
+  any now-empty parent dirs created by promote. No commit yet. Failure
+  audit log written best-effort.
+- **Commons commit fails** (step 3) → artifacts are written + possibly
+  staged but not committed. Run `git checkout -- .` + `git clean -fd` on
+  commons (Phase F pattern). No override or overlay changes attempted.
+- **Tag creation fails** (step 4, commit already succeeded) → mirror
+  Phase F's tag-failure handler at `promote.py:862`:
+  delete any tag created by this op, then `git reset --hard HEAD~1` to
+  undo the commit (safe — the commit was made by this op on the same
+  branch, no other refs depend on it). Working tree clean afterward.
+  No override or overlay changes attempted.
+- **Override write fails** (step 5) → restore override from
+  `.bak.<op-id>`. Then unwind commons: delete created tag, `git reset
+  --hard HEAD~1` to undo the promote commit, working tree clean
+  afterward. No overlay changes attempted.
 - **Project overlay rewrite fails** (step 6) → restore overlay via
-  `git checkout HEAD -- <overlay-path>` (Phase F pattern). Override is
-  left in place (slug → path mapping is harmless without a depending
-  overlay; matches what a re-run would write anyway).
+  `git checkout HEAD -- <overlay-path>` (Phase F pattern). Then restore
+  override from `.bak.<op-id>`. Then unwind commons: delete created tag,
+  `git reset --hard HEAD~1`.
 - **Audit log write or commit fails** (steps 7-8) → Phase F's bugfix for
-  `.gitignore` makes this safe; still wrapped in the audit error handler
-  for symmetry. Commons commit + tag + override + overlay all stay.
+  `.gitignore` makes write+commit safe under normal conditions. If a
+  disk-full or permission failure surfaces here anyway: leave all prior
+  state in place (audit failure does not justify rolling back a
+  successful migration). Emit a clear stderr message pointing at the
+  recovery path: rerun `science commons audit-log write --op <op-id>`
+  (or hand-write the audit yaml from the failure exception's
+  `failure_audit_yaml` payload) when the underlying issue is fixed.
 
 Backup files (`data.yaml.bak.<op-id>`) are retained on success too — the
 audit log records their location, so a later manual rollback can find
 them.
+
+The rollback handler is exercised by fault-injection tests at each
+transition (see §6.1).
 
 ---
 
@@ -483,8 +515,8 @@ project under `tmp_path`.
 | File | Scope |
 |---|---|
 | `tests/test_commons_promote_discovery.py` (append) | Dataset discovery: id-prefix rejection, missing `datapackage:` field, datapackage path doesn't resolve, resource path doesn't resolve (raises `PromoteResourceMissingError`), slug-stem mismatch. |
-| `tests/test_commons_promote_dataset_plan.py` (new) | Hash-compute determinism (golden 3-byte fixture → known sha256); multi-resource plan; override-conflict detection (`PromoteOverrideConflictError`); canonical `entity.md` rendering; canonical `datapackage.yaml` rendering (project fields stripped, hashes injected, name reset to `<slug>`); recipe stub content when no project recipe; `tier: track` set when stubbed. |
-| `tests/test_commons_promote_dataset_apply.py` (new) | Multi-artifact canonical write (3 files, parent dir created); commons commit + tag; per-machine override upsert (new file path; existing file with other entries; conflict path); project overlay rewrite; dropped_fields recorded in audit log; rollback paths: (a) partial artifact write unwrites and leaves commons clean, (b) override-write failure restores from `.bak.<op-id>`, commons + tag stay, no project overlay yet (idempotent on re-run), (c) overlay-rewrite failure restores overlay, override stays in place. |
+| `tests/test_commons_promote_dataset_plan.py` (new) | Hash-compute determinism (golden 12-byte fixture `hello world\n` → sha256 `a948904f...a447`); multi-resource plan; override-conflict detection (`PromoteOverrideConflictError`); canonical `entity.md` rendering; canonical `datapackage.yaml` rendering (project fields stripped, hashes injected, name reset to `<slug>`); recipe stub content when no project recipe; user-authored `tier:` preserved verbatim on the canonical (NOT overwritten when recipe stubbed); `recipe_stubbed: true` flag in the planned audit log. |
+| `tests/test_commons_promote_dataset_apply.py` (new) | Multi-artifact canonical write (3 files, parent dir created); commons commit + tag; per-machine override upsert (new file path; existing file with other entries; conflict path); project overlay rewrite; dropped_fields recorded in audit log; rollback paths (atomic-transaction; each fault-injected at the named step): (a) artifact-write failure unwrites partial files, commons clean; (b) commit failure → `git checkout -- .` + `git clean -fd` cleans the artifacts; (c) tag-creation failure → delete created tag + `git reset --hard HEAD~1` to undo commit; (d) override-write failure → restore `.bak.<op-id>` + delete tag + reset commit; (e) overlay-rewrite failure → restore overlay + restore override + delete tag + reset commit. All five end with commons history at the pre-apply SHA and `~/.config/science/data.yaml` byte-identical to pre-apply. |
 | `tests/test_commons_promote_kind_pluggable.py` (touch) | Cover the new `canonical_artifacts` list model: paper / topic / theme kinds produce a one-element list (regression that single-file rendering is preserved); dataset kind produces three CanonicalArtifact entries with the expected validators. |
 
 ### 6.2 Integration test
@@ -492,10 +524,24 @@ project under `tmp_path`.
 One end-to-end test:
 
 - Set up synthetic project under `tmp_path`:
-  - `doc/datasets/data-fixture-ds.md` with frontmatter (`id: dataset:fixture-ds`,
-    `datapackage: data/fixture-ds/datapackage.json`).
+  - `doc/datasets/data-fixture-ds.md` with frontmatter passing the full
+    mixin-required set:
+    ```yaml
+    id: dataset:fixture-ds
+    type: dataset
+    title: "Fixture dataset"
+    datapackage: data/fixture-ds/datapackage.json
+    origin: external
+    tier: evaluate-next
+    access:
+      level: public
+      verified: true
+    created: "2026-05-18"
+    updated: "2026-05-18"
+    ```
   - `data/fixture-ds/datapackage.json` (Frictionless, 2 resources).
-  - `data/fixture-ds/r1.txt` (12 bytes) and `data/fixture-ds/r2.txt` (37 bytes).
+  - `data/fixture-ds/r1.txt` (12 bytes, content `"hello world\n"`) and
+    `data/fixture-ds/r2.txt` (37 bytes).
 - Configure commons under `tmp_path`; set `XDG_CONFIG_HOME=<tmp_path>/.config`
   via `monkeypatch.setenv` so the override write
   (`get_science_config_dir() / "data.yaml"`) is sandboxed.
@@ -540,10 +586,23 @@ Companion runbook: `docs/plans/2026-05-18-commons-promote-datasets-pilot.md`.
    stable `id: multiple-myeloma`.
 3. Pilot project working tree clean in `doc/datasets/data-ccle-proteomics.md`
    and `data/external/ccle_proteomics/2020-01/`.
-4. **Pre-migration step** (manual, not part of promote): user adds
-   `datapackage: data/external/ccle_proteomics/2020-01/datapackage.json`
-   to `doc/datasets/data-ccle-proteomics.md` frontmatter. Commit this
-   separately.
+4. **Pre-migration step** (manual, not part of promote): user adds the
+   full required dataset-mixin set to `doc/datasets/data-ccle-proteomics.md`
+   frontmatter, committed separately:
+
+   ```yaml
+   datapackage: data/external/ccle_proteomics/2020-01/datapackage.json
+   origin: external
+   tier: evaluate-next            # user-chosen; reflects scientific readiness
+   access:
+     level: public
+     verified: true
+     source_url: "https://gygi.hms.harvard.edu/publications/ccle.html"
+   ```
+
+   These are exactly the fields the discovery preflight will check
+   (§3.5). Skipping any of them causes a `FailedCandidate` per missing
+   field.
 5. `~/.config/science/data.yaml` either doesn't exist or doesn't already
    map `ccle-proteomics-nusinow-2020` to a conflicting path.
 
@@ -674,5 +733,7 @@ The Phase G implementation is done when:
 4. `science commons inventory`, `science commons show ... --project ...`,
    and `science commons data resolve <dataset-id> <logical-path>` all
    succeed against the migrated dataset.
-5. Rollback from a fault-injected failure restores the override file from
-   backup and leaves no orphan commons state.
+5. Rollback from a fault-injected failure at every transition leaves
+   both the commons repo (HEAD SHA, tags, working tree) and
+   `~/.config/science/data.yaml` byte-identical to their pre-apply
+   state.
