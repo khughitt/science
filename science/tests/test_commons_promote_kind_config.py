@@ -1,6 +1,7 @@
 """Tests for the kind-config types in science_tool.commons.promote."""
 from __future__ import annotations
 
+from pathlib import Path
 import re
 
 
@@ -149,3 +150,32 @@ def test_paper_and_topic_have_no_eligibility_filter() -> None:
 
     assert PROMOTE_KIND_PAPER.eligibility_filter is None
     assert PROMOTE_KIND_TOPIC.eligibility_filter is None
+
+
+def test_canonical_artifact_is_frozen_and_holds_three_fields() -> None:
+    from science_tool.commons.promote import CanonicalArtifact
+
+    art = CanonicalArtifact(
+        path=Path("datasets/foo/entity.md"),
+        content="---\nid: dataset:foo\n---\n",
+        validator="entity-mixin",
+    )
+    assert art.path == Path("datasets/foo/entity.md")
+    assert art.content.startswith("---")
+    assert art.validator == "entity-mixin"
+    import dataclasses
+
+    assert dataclasses.is_dataclass(art)
+    # frozen - direct attr assignment should raise
+    import pytest
+
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        art.content = "mutated"
+
+
+def test_canonical_artifact_validator_literal_rejects_unknown() -> None:
+    # Literal typing isn't runtime-enforced, but document accepted values:
+    from science_tool.commons.promote import CanonicalArtifact
+
+    for v in ("entity-mixin", "frictionless-datapackage", "plain"):
+        CanonicalArtifact(path=Path("x.md"), content="", validator=v)

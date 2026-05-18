@@ -183,6 +183,22 @@ class OverlayRewrite:
 
 
 @dataclass(frozen=True, slots=True)
+class CanonicalArtifact:
+    """One file under <commons_root>/<commons_subdir>/<slug>/.
+
+    `path` is stored relative to the commons root (e.g.
+    `datasets/foo/entity.md`). Apply resolves it against `commons_root` once
+    at write time and records the absolute resolved path in the per-op
+    rollback context so existing helpers (`_restore_paths_to_head`,
+    `_rollback_step5`) keep their absolute-path signatures.
+    """
+
+    path: Path
+    content: str
+    validator: Literal["entity-mixin", "frictionless-datapackage", "plain"]
+
+
+@dataclass(frozen=True, slots=True)
 class PromoteDecision:
     slug: str
     canonical_path: Path  # absolute `<commons>/papers/<slug>.md`
