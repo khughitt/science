@@ -288,6 +288,46 @@ def test_apply_promote_happy_path_writes_commits_tags_rewrites(tmp_path, monkeyp
     assert log_data["status"] == "ok"
 
 
+def test_audit_log_records_canonical_paths_per_decision(tmp_path, monkeypatch) -> None:
+    """Each decision contributes one canonical_paths entry, list-form."""
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        apply_promote,
+        discover_candidates,
+        plan_promote,
+    )
+
+    _init_commons(tmp_path / "commons")
+    proj = _build_project(
+        tmp_path,
+        "proj-a",
+        {"Adams2025.md": "---\nid: paper:Adams2025\ntitle: A\nyear: 2025\n---\n\n## Key Findings\n\nfoo\n"},
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id",
+        lambda slug: {"proj-a": proj}[slug],
+    )
+
+    discovery = discover_candidates(["proj-a"], PROMOTE_KIND_PAPER)
+    plan = plan_promote(
+        discovery,
+        commons_root=tmp_path / "commons",
+        kind=PROMOTE_KIND_PAPER,
+        resolve_conflict=lambda c: None,
+        from_order=["proj-a"],
+    )
+
+    result = apply_promote(plan, commons_root=tmp_path / "commons", invocation="...")
+
+    assert result.audit_log_path is not None
+    log = yaml.safe_load(result.audit_log_path.read_text(encoding="utf-8"))
+    assert "decisions" in log
+    for entry in log["decisions"]:
+        assert "canonical_paths" in entry
+        assert isinstance(entry["canonical_paths"], list)
+        assert len(entry["canonical_paths"]) >= 1
+
+
 def test_apply_promote_rejects_absolute_canonical_artifact_path(tmp_path) -> None:
     from science_tool.commons.errors import PromoteInputError
     from science_tool.commons.promote import (

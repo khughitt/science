@@ -1776,6 +1776,14 @@ def _render_audit_log_yaml(
         "commons_commit": result.commons_commit,
         "commons_tags": result.tags_created,
         "projects_touched": projects_touched,
+        "decisions": [
+            {
+                "slug": d.slug,
+                "canonical_version": d.canonical_version,
+                "canonical_paths": [str(a.path) for a in d.canonical_artifacts],
+            }
+            for d in result.decisions
+        ],
         "conflict_resolutions": [
             {
                 "slug": cr.slug,
