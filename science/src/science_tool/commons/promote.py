@@ -201,8 +201,7 @@ class CanonicalArtifact:
 @dataclass(frozen=True, slots=True)
 class PromoteDecision:
     slug: str
-    canonical_path: Path  # absolute `<commons>/papers/<slug>.md`
-    canonical_content: str  # rendered canonical file (markdown + frontmatter)
+    canonical_artifacts: list[CanonicalArtifact]  # one or more commons-relative files
     canonical_version: str  # "1.0.0" etc.
     overlays: dict[str, OverlayRewrite]  # project_slug → rewrite plan
     resolved_conflicts: tuple[ConflictResolution, ...]
@@ -342,7 +341,7 @@ def plan_promote(
       2. Pick canonical slug case via `_pick_canonical_bibkey_case`.
       3. Merge canonical fields → `(merged_fields, conflicts)`.
       4. Resolve each conflict via `resolve_conflict`.
-      5. Build PromoteDecision (canonical_content rendered, overlays planned).
+      5. Build PromoteDecision (canonical artifacts rendered, overlays planned).
 
     `from_order` defaults to the discovery's project_slug encounter order.
     `resolve_conflict` defaults to `prompt_resolve`.
@@ -446,6 +445,7 @@ def plan_promote(
             merged[conflict.field] = resolved_value
 
         canonical_path = commons_root / kind.commons_subdir / f"{canonical_case}.md"
+        canonical_artifact_path = canonical_path.relative_to(commons_root)
         overlays: dict[str, OverlayRewrite] = {}
         for c in classified:
             source_path = c.overlay_source_path
@@ -465,8 +465,13 @@ def plan_promote(
             rendered_overlay = _render_overlay(
                 PromoteDecision(
                     slug=canonical_case,
-                    canonical_path=canonical_path,
-                    canonical_content="",
+                    canonical_artifacts=[
+                        CanonicalArtifact(
+                            path=canonical_artifact_path,
+                            content="",
+                            validator="entity-mixin",
+                        )
+                    ],
                     canonical_version="1.0.0",
                     overlays={},
                     resolved_conflicts=(),
@@ -487,8 +492,13 @@ def plan_promote(
 
         canonical_decision = PromoteDecision(
             slug=canonical_case,
-            canonical_path=canonical_path,
-            canonical_content="",
+            canonical_artifacts=[
+                CanonicalArtifact(
+                    path=canonical_artifact_path,
+                    content="",
+                    validator="entity-mixin",
+                )
+            ],
             canonical_version="1.0.0",
             overlays=overlays,
             resolved_conflicts=tuple(resolved_conflicts),
@@ -509,8 +519,13 @@ def plan_promote(
         decisions.append(
             PromoteDecision(
                 slug=canonical_case,
-                canonical_path=canonical_path,
-                canonical_content=canonical_content,
+                canonical_artifacts=[
+                    CanonicalArtifact(
+                        path=canonical_artifact_path,
+                        content=canonical_content,
+                        validator="entity-mixin",
+                    )
+                ],
                 canonical_version="1.0.0",
                 overlays=overlays,
                 resolved_conflicts=tuple(resolved_conflicts),
@@ -537,16 +552,19 @@ def _validate_plan(decisions: list[PromoteDecision]) -> None:
 
     validator = EntityValidator()
     for d in decisions:
-        canonical_fm = _parse_frontmatter_only(d.canonical_content)
-        try:
-            validator.validate(canonical_fm)
-        except EntityValidationError as exc:
-            raise PromoteValidationError(
-                decision_slug=d.slug,
-                target_kind="canonical",
-                project_id=None,
-                schema_message=str(exc),
-            ) from exc
+        for artifact in d.canonical_artifacts:
+            if artifact.validator != "entity-mixin":
+                continue
+            canonical_fm = _parse_frontmatter_only(artifact.content)
+            try:
+                validator.validate(canonical_fm)
+            except EntityValidationError as exc:
+                raise PromoteValidationError(
+                    decision_slug=d.slug,
+                    target_kind="canonical",
+                    project_id=None,
+                    schema_message=str(exc),
+                ) from exc
         for project_slug, overlay in d.overlays.items():
             overlay_fm = _parse_frontmatter_only(overlay.after_content)
             try:
@@ -840,9 +858,11 @@ def apply_promote(
         written_canonical_paths: list[Path] = []
         try:
             for decision in plan.decisions:
-                decision.canonical_path.parent.mkdir(parents=True, exist_ok=True)
-                decision.canonical_path.write_text(decision.canonical_content, encoding="utf-8")
-                written_canonical_paths.append(decision.canonical_path)
+                for artifact in decision.canonical_artifacts:
+                    abs_path = commons_root / artifact.path
+                    abs_path.parent.mkdir(parents=True, exist_ok=True)
+                    abs_path.write_text(artifact.content, encoding="utf-8")
+                    written_canonical_paths.append(abs_path)
         except OSError as exc:
             _restore_paths_to_head(commons_root, written_canonical_paths)
             raise PromoteWriteError(

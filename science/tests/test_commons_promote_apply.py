@@ -1153,7 +1153,7 @@ def test_apply_commons_path_uses_kind_commons_subdir(tmp_path, monkeypatch) -> N
     """commons_root / "papers" / ... was hardcoded. After de-hardcoding,
     kind.commons_subdir is used. Drive plan_promote with a real minimal
     candidate so the decision-building loop runs, then assert the resulting
-    PromoteDecision.canonical_path is under kind.commons_subdir."""
+    PromoteDecision canonical artifact is under kind.commons_subdir."""
     from science_tool.commons.promote import (
         PROMOTE_KIND_TOPIC,
         discover_candidates,
@@ -1177,7 +1177,7 @@ def test_apply_commons_path_uses_kind_commons_subdir(tmp_path, monkeypatch) -> N
     plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_TOPIC)
 
     assert len(plan.decisions) == 1
-    canonical_path = plan.decisions[0].canonical_path
+    canonical_path = commons / plan.decisions[0].canonical_artifacts[0].path
     # The path MUST live under commons/topics/, not commons/papers/.
     assert canonical_path.parent.name == "topics"
     assert str(canonical_path).startswith(str(commons / "topics"))
@@ -1307,14 +1307,20 @@ def test_apply_tags_use_kind_kind_prefix(tmp_path, monkeypatch) -> None:
     indirectly by inspecting the planned tag prefix logic via a tiny stub
     PromotePlan with a single decision."""
     from science_tool.commons.promote import (
+        CanonicalArtifact,
         PROMOTE_KIND_TOPIC,
         PromoteDecision,
     )
 
     d = PromoteDecision(
         slug="hypothesis",
-        canonical_path=tmp_path / "topics" / "hypothesis.md",
-        canonical_content="---\nid: topic:hypothesis\n---\n",
+        canonical_artifacts=[
+            CanonicalArtifact(
+                path=Path("topics/hypothesis.md"),
+                content="---\nid: topic:hypothesis\n---\n",
+                validator="entity-mixin",
+            )
+        ],
         canonical_version="1.0.0",
         overlays={},
         resolved_conflicts=(),

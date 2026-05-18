@@ -179,3 +179,28 @@ def test_canonical_artifact_validator_literal_rejects_unknown() -> None:
 
     for v in ("entity-mixin", "frictionless-datapackage", "plain"):
         CanonicalArtifact(path=Path("x.md"), content="", validator=v)
+
+
+def test_promote_decision_uses_canonical_artifacts_list():
+    """Paper/topic/theme decisions carry a one-element artifact list (regression)."""
+    from pathlib import Path
+
+    from science_tool.commons.promote import CanonicalArtifact, PromoteDecision
+
+    art = CanonicalArtifact(
+        path=Path("papers/Adams2025.md"),
+        content="---\nid: paper:Adams2025\n---\nbody\n",
+        validator="entity-mixin",
+    )
+    d = PromoteDecision(
+        slug="Adams2025",
+        canonical_artifacts=[art],
+        canonical_version="1.0.0",
+        overlays={},
+        resolved_conflicts=(),
+    )
+    assert len(d.canonical_artifacts) == 1
+    assert d.canonical_artifacts[0].path == Path("papers/Adams2025.md")
+    # The old singular attrs must be gone:
+    assert not hasattr(d, "canonical_path")
+    assert not hasattr(d, "canonical_content")
