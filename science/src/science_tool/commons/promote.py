@@ -68,6 +68,8 @@ class PromoteKindConfig:
     mixin_schema_id: str
     default_profile: "ProfileString"
     eligibility_filter: Callable[[Mapping[str, Any]], "EligibilityVerdict"] | None
+    filename_prefix: str = ""
+    slug_from_id: bool = False
 
 
 PROMOTE_KIND_PAPER = PromoteKindConfig(
@@ -137,6 +139,8 @@ PROMOTE_KIND_DATASET = PromoteKindConfig(
     mixin_schema_id="https://schemas.science/mixin-dataset-1.0.json",
     default_profile=default_profile_for_kind("dataset"),
     eligibility_filter=None,
+    filename_prefix="data-",
+    slug_from_id=True,
 )
 
 
@@ -1112,6 +1116,8 @@ def _normalize_slug_for_match(raw: str, kind: PromoteKindConfig) -> str:
     discovery rather than slipping through with silent normalisation).
     """
     stripped = raw.removesuffix(".md").strip()
+    if kind.filename_prefix and stripped.startswith(kind.filename_prefix):
+        stripped = stripped[len(kind.filename_prefix) :]
     if not stripped:
         raise PromoteCandidateError(f"slug {raw!r} is empty after strip")
     if not kind.slug_regex.match(stripped):
@@ -1216,6 +1222,8 @@ def _scan_project(
         if not directory.exists():
             continue
         for source_path in sorted(directory.glob("*.md")):
+            if kind.filename_prefix and not source_path.stem.startswith(kind.filename_prefix):
+                continue
             try:
                 fm, body = _parse_entity_file(source_path)
             except PromoteCandidateError as exc:
@@ -1262,20 +1270,6 @@ def _scan_project(
                     )
                     continue
 
-            try:
-                slug_normalized = _normalize_slug_for_match(source_path.stem, kind)
-            except PromoteCandidateError as exc:
-                failures.append(
-                    FailedCandidate(
-                        slug=None,
-                        project_slug=project_slug,
-                        source_path=source_path,
-                        error_class="PromoteCandidateError",
-                        error_message=str(exc),
-                    )
-                )
-                continue
-
             # Id check. The classifier may have matched purely on explicit
             # `kind:` / `type:`, while the file also carries a contradictory
             # `id:`. In that case, report failure.
@@ -1291,6 +1285,20 @@ def _scan_project(
                     )
                 )
                 continue
+            if kind.slug_from_id and "id" not in fm:
+                failures.append(
+                    FailedCandidate(
+                        slug=None,
+                        project_slug=project_slug,
+                        source_path=source_path,
+                        error_class="PromoteCandidateError",
+                        error_message=(f"id is required for kind {kind.kind!r} because slug is derived from id"),
+                    )
+                )
+                continue
+            source_case_slug = source_path.stem
+            slug_normalized: str | None = None
+            id_slug_normalized: str | None = None
             if isinstance(id_val, str):
                 if not id_val.startswith(kind.id_prefix):
                     failures.append(
@@ -1308,6 +1316,7 @@ def _scan_project(
                     )
                     continue
                 id_slug = id_val[len(kind.id_prefix) :]
+                id_slug_stripped = id_slug.removesuffix(".md").strip()
                 try:
                     id_slug_normalized = _normalize_slug_for_match(id_slug, kind)
                 except PromoteCandidateError as exc:
@@ -1321,7 +1330,25 @@ def _scan_project(
                         )
                     )
                     continue
-                if id_slug_normalized != slug_normalized:
+                if kind.slug_from_id:
+                    slug_normalized = id_slug_normalized
+                    source_case_slug = id_slug_stripped
+
+            if slug_normalized is None:
+                try:
+                    slug_normalized = _normalize_slug_for_match(source_path.stem, kind)
+                except PromoteCandidateError as exc:
+                    failures.append(
+                        FailedCandidate(
+                            slug=None,
+                            project_slug=project_slug,
+                            source_path=source_path,
+                            error_class="PromoteCandidateError",
+                            error_message=str(exc),
+                        )
+                    )
+                    continue
+                if id_slug_normalized is not None and id_slug_normalized != slug_normalized:
                     failures.append(
                         FailedCandidate(
                             slug=None,
@@ -1360,7 +1387,6 @@ def _scan_project(
             # in later by `_classify_entity` (Task 11). For now we stash raw
             # frontmatter + body so discovery is independent of merge-policy
             # lookup.
-            source_case_slug = source_path.stem
             candidates.append(
                 PromoteCandidate(
                     slug=source_case_slug,

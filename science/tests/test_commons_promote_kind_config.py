@@ -1,4 +1,5 @@
 """Tests for the kind-config types in science_tool.commons.promote."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -86,10 +87,7 @@ def test_promote_kind_theme_constant() -> None:
     assert PROMOTE_KIND_THEME.slug_match == "exact"
     # eligibility_filter is set in Task 3; this test only checks the constant
     # exists with the kind-specific structural fields.
-    assert (
-        PROMOTE_KIND_THEME.mixin_schema_id
-        == "https://schemas.science/mixin-theme-2.0.json"
-    )
+    assert PROMOTE_KIND_THEME.mixin_schema_id == "https://schemas.science/mixin-theme-2.0.json"
 
 
 def test_promote_kind_dataset_constant_shape():
@@ -221,3 +219,96 @@ def test_promote_decision_uses_canonical_artifacts_list():
     # The old singular attrs must be gone:
     assert not hasattr(d, "canonical_path")
     assert not hasattr(d, "canonical_content")
+
+
+def test_promote_kind_dataset_filter_and_slug_source():
+    from science_tool.commons.promote import PROMOTE_KIND_DATASET
+
+    assert PROMOTE_KIND_DATASET.filename_prefix == "data-"
+    assert PROMOTE_KIND_DATASET.slug_from_id is True
+
+
+def test_paper_topic_theme_keep_filename_slug_semantics():
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_PAPER,
+        PROMOTE_KIND_THEME,
+        PROMOTE_KIND_TOPIC,
+    )
+
+    for k in (PROMOTE_KIND_PAPER, PROMOTE_KIND_TOPIC, PROMOTE_KIND_THEME):
+        assert k.filename_prefix == ""
+        assert k.slug_from_id is False
+
+
+def test_dataset_discovery_uses_id_slug_when_filename_stem_differs(tmp_path, monkeypatch):
+    """data-ccle-proteomics.md with id dataset:ccle-proteomics-nusinow-2020 -> slug 'ccle-proteomics-nusinow-2020'."""
+    import shutil
+    import subprocess
+
+    src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
+    proj = tmp_path / "proj-dataset"
+    shutil.copytree(src, proj)
+    (proj / "doc/datasets/data-fixture-ds.md").rename(proj / "doc/datasets/data-fixture.md")
+    f = proj / "doc/datasets/data-fixture.md"
+    text = f.read_text(encoding="utf-8")
+    text = text.replace("id: dataset:fixture-ds", "id: dataset:fixture-ds-2026-01")
+    f.write_text(text, encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(proj),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "init",
+        ],
+        check=True,
+    )
+    monkeypatch.setattr("science_tool.commons.promote.resolve_project_by_id", lambda s: proj)
+    from science_tool.commons.promote import PROMOTE_KIND_DATASET, discover_candidates
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    assert "fixture-ds-2026-01" in discovery.candidates_by_slug
+    assert "fixture" not in discovery.candidates_by_slug
+
+
+def test_dataset_discovery_skips_files_without_filename_prefix(tmp_path, monkeypatch):
+    """A file under doc/datasets/ without the 'data-' prefix is silently skipped."""
+    import shutil
+    import subprocess
+
+    src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
+    proj = tmp_path / "proj-dataset"
+    shutil.copytree(src, proj)
+    (proj / "doc/datasets/notes.md").write_text("---\nid: misc:ignore-me\ntype: note\n---\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(proj),
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "init",
+        ],
+        check=True,
+    )
+    monkeypatch.setattr("science_tool.commons.promote.resolve_project_by_id", lambda s: proj)
+    from science_tool.commons.promote import PROMOTE_KIND_DATASET, discover_candidates
+
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    assert "ignore-me" not in discovery.candidates_by_slug
+    assert all("notes.md" not in str(fc.source_path) for fc in discovery.failed_candidates)
