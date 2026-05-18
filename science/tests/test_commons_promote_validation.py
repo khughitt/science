@@ -154,5 +154,36 @@ def test_plan_validation_dispatches_by_artifact_validator(tmp_path, monkeypatch)
 
     from science_tool.commons.errors import PromoteValidationError
 
-    with pytest.raises(PromoteValidationError):
+    with pytest.raises(PromoteValidationError) as excinfo:
         _validate_artifact(mixin, decision_slug="x", project_id=None)
+    err = excinfo.value
+    assert err.decision_slug == "x"
+    assert err.target_kind == "canonical"
+    assert err.project_id is None
+    assert err.schema_message
+    assert str(err)
+
+
+def test_plan_validation_wraps_missing_datapackage_parser(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from science_tool.commons.errors import PromoteValidationError
+    from science_tool.commons.promote import (
+        CanonicalArtifact,
+        _validate_artifact,
+    )
+
+    artifact = CanonicalArtifact(
+        path=Path("datasets/x/datapackage.yaml"),
+        content="resources: []\n",
+        validator="frictionless-datapackage",
+    )
+
+    with pytest.raises(PromoteValidationError) as excinfo:
+        _validate_artifact(artifact, decision_slug="x", project_id="proj")
+
+    err = excinfo.value
+    assert err.decision_slug == "x"
+    assert err.target_kind == "canonical"
+    assert err.project_id == "proj"
+    assert "parse_canonical_datapackage_yaml" in err.schema_message

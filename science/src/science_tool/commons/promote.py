@@ -596,7 +596,15 @@ def _validate_artifact(
             ) from exc
         return
     if artifact.validator == "frictionless-datapackage":
-        from science_tool.commons.datapackage import parse_canonical_datapackage_yaml
+        try:
+            from science_tool.commons.datapackage import parse_canonical_datapackage_yaml
+        except ImportError as exc:
+            raise PromoteValidationError(
+                decision_slug=decision_slug,
+                target_kind="canonical",
+                project_id=project_id,
+                schema_message=str(exc),
+            ) from exc
 
         try:
             parse_canonical_datapackage_yaml(artifact.content)
