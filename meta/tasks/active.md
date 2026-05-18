@@ -686,16 +686,6 @@ Coordinate the meta-research work on evidence-responsive project topology: promo
 
 Define a v1 signal rubric for project/theme promotion and demotion, split into computable signals from existing artifacts and judgment-required prompts for human review. V1 should score only artifact-derived signals such as graph edges, task counts, commit recency, paper links, unresolved refs, and stale inputs; uncertainty, novelty, coherence, and false-positive risk should remain reviewer prompts until the pilot shows which can be operationalized.
 
-## [t055] Draft adaptive project topology hypothesis and question
-- priority: P1
-- status: proposed
-- aspects: [hypothesis-testing]
-- related: [task:t053]
-- group: adaptive-project-topology
-- created: 2026-05-17
-
-Turn the adaptive project topology idea into a formal Science question and candidate hypothesis: project topology should evolve in response to evidence density, uncertainty, novelty, actionability, and stale-branch decay while preserving provenance and requiring human approval.
-
 ## [t056] Design topology-change recommendation workflow
 - priority: P2
 - status: proposed
