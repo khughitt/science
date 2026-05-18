@@ -114,3 +114,45 @@ def test_plan_promote_wraps_overlay_validation_failure(tmp_path, monkeypatch) ->
     assert err.target_kind == "overlay"
     assert err.project_id == "proj_overlay"
     assert "overlay rejected for test" in err.schema_message
+
+
+def test_plan_validation_dispatches_by_artifact_validator(tmp_path, monkeypatch):
+    """An artifact with validator='plain' is skipped; 'entity-mixin' runs EntityValidator()."""
+    from pathlib import Path
+
+    from science_tool.commons.promote import (
+        CanonicalArtifact,
+        _validate_artifact,
+    )
+
+    plain = CanonicalArtifact(
+        path=Path("datasets/x/recipe/README.md"),
+        content="# Recipe back-fill needed\n",
+        validator="plain",
+    )
+    # Should NOT raise:
+    _validate_artifact(plain, decision_slug="x", project_id=None)
+
+    # Minimal mixin artifact: still missing required dataset-mixin fields
+    # (origin/tier/access), so the science_model EntityValidator will reject it.
+    mixin = CanonicalArtifact(
+        path=Path("datasets/x/entity.md"),
+        content=(
+            "---\n"
+            "schema_profile: science-entity-base/1.0+dataset/1.0\n"
+            "id: dataset:x\n"
+            "type: dataset\n"
+            "title: x\n"
+            "version: 1.0.0\n"
+            "created: '2026-05-18'\n"
+            "updated: '2026-05-18'\n"
+            "---\n"
+        ),
+        validator="entity-mixin",
+    )
+    import pytest
+
+    from science_tool.commons.errors import PromoteValidationError
+
+    with pytest.raises(PromoteValidationError):
+        _validate_artifact(mixin, decision_slug="x", project_id=None)

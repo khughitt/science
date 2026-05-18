@@ -550,21 +550,14 @@ def _validate_plan(decisions: list[PromoteDecision]) -> None:
     """
     from science_model.entity_schema import EntityValidationError, EntityValidator
 
-    validator = EntityValidator()
     for d in decisions:
         for artifact in d.canonical_artifacts:
-            if artifact.validator != "entity-mixin":
-                continue
-            canonical_fm = _parse_frontmatter_only(artifact.content)
-            try:
-                validator.validate(canonical_fm)
-            except EntityValidationError as exc:
-                raise PromoteValidationError(
-                    decision_slug=d.slug,
-                    target_kind="canonical",
-                    project_id=None,
-                    schema_message=str(exc),
-                ) from exc
+            _validate_artifact(
+                artifact,
+                decision_slug=d.slug,
+                project_id=None,
+            )
+        validator = EntityValidator()
         for project_slug, overlay in d.overlays.items():
             overlay_fm = _parse_frontmatter_only(overlay.after_content)
             try:
@@ -576,6 +569,46 @@ def _validate_plan(decisions: list[PromoteDecision]) -> None:
                     project_id=project_slug,
                     schema_message=str(exc),
                 ) from exc
+
+
+def _validate_artifact(
+    artifact: CanonicalArtifact,
+    *,
+    decision_slug: str,
+    project_id: str | None,
+) -> None:
+    """Plan-time validation dispatch by artifact.validator."""
+    if artifact.validator == "plain":
+        return
+    if artifact.validator == "entity-mixin":
+        from science_model.entity_schema import EntityValidator
+        from science_model.entity_schema.validator import EntityValidationError
+
+        fm = _parse_frontmatter_only(artifact.content)
+        try:
+            EntityValidator().validate(fm)
+        except EntityValidationError as exc:
+            raise PromoteValidationError(
+                decision_slug=decision_slug,
+                target_kind="canonical",
+                project_id=project_id,
+                schema_message=str(exc),
+            ) from exc
+        return
+    if artifact.validator == "frictionless-datapackage":
+        from science_tool.commons.datapackage import parse_canonical_datapackage_yaml
+
+        try:
+            parse_canonical_datapackage_yaml(artifact.content)
+        except Exception as exc:
+            raise PromoteValidationError(
+                decision_slug=decision_slug,
+                target_kind="canonical",
+                project_id=project_id,
+                schema_message=str(exc),
+            ) from exc
+        return
+    raise AssertionError(f"unknown artifact validator: {artifact.validator!r}")
 
 
 def _commons_is_clean(commons_root: Path, kind: PromoteKindConfig) -> tuple[bool, list[str]]:
