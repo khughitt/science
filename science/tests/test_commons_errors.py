@@ -21,6 +21,7 @@ from science_tool.commons.errors import (
     PromoteCandidateError,
     PromoteConflictAbort,
     PromoteInputError,
+    PromoteResourceMissingError,
     PromoteWriteError,
 )
 
@@ -168,6 +169,19 @@ def test_promote_candidate_error_carries_slug_and_path() -> None:
     assert e.slug == "Adams2025"
     assert e.path == Path("/x/y.md")
     assert isinstance(e, CommonsError)
+
+
+def test_promote_resource_missing_error_carries_slug_and_paths() -> None:
+    err = PromoteResourceMissingError(
+        slug="fixture-ds",
+        resource_name="r1.txt",
+        resource_path=Path("/abs/path/r1.txt"),
+    )
+    assert err.slug == "fixture-ds"
+    assert err.resource_name == "r1.txt"
+    assert err.resource_path == Path("/abs/path/r1.txt")
+    assert "fixture-ds" in str(err)
+    assert "r1.txt" in str(err)
 
 
 def test_promote_conflict_abort_is_commons_error() -> None:

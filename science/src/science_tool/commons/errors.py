@@ -182,6 +182,28 @@ class PromoteCandidateError(CommonsError):
         self.path = path
 
 
+class PromoteResourceMissingError(CommonsError):
+    """A resources[].path entry in a project datapackage doesn't resolve.
+
+    Recorded as a FailedCandidate during discovery; does not abort the run.
+    """
+
+    def __init__(
+        self,
+        *,
+        slug: str,
+        resource_name: str,
+        resource_path: Path,
+    ) -> None:
+        self.slug = slug
+        self.resource_name = resource_name
+        self.resource_path = resource_path
+        super().__init__(
+            f"dataset {slug!r}: resource {resource_name!r} at "
+            f"{resource_path} does not exist"
+        )
+
+
 class PromoteValidationError(CommonsError):
     """Canonical content or an overlay failed schema validation at the end
     of `plan_promote`. Raised BEFORE any I/O — no rollback needed.
