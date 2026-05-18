@@ -374,7 +374,7 @@ def _validate_artifact(
     if artifact.validator == "entity-mixin":
         from science_model.entity_schema import EntityValidator
         from science_model.entity_schema.validator import EntityValidationError
-        fm, _body = _parse_frontmatter_only(artifact.content)
+        fm = _parse_frontmatter_only(artifact.content)
         try:
             EntityValidator().validate(fm)
         except EntityValidationError as exc:
@@ -596,59 +596,109 @@ git commit -m "commons(promote): add PROMOTE_KIND_DATASET constant"
 
 ---
 
-### Task 7b: Add `filename_prefix` to `PromoteKindConfig` for slug-from-stem derivation
+### Task 7b: Add `filename_prefix` (filter) + `slug_from_id` (slug derivation) to `PromoteKindConfig`
 
-**Background:** Existing `_scan_project` derives the slug from `source_path.stem` and matches it against the id slug (`promote.py:1145, :1203`). Dataset files use the `data-<slug>.md` convention (e.g., `data-fixture-ds.md` → id `dataset:fixture-ds`), so the stem `data-fixture-ds` does not equal `fixture-ds` and discovery rejects every dataset as an id/stem mismatch. Fix by adding a per-kind filename prefix that `_normalize_slug_for_match` strips before regex-matching.
+**Background:** Existing `_scan_project` derives the slug from `source_path.stem` and cross-checks it against the id slug (`promote.py:1145, :1203`). For paper/topic/theme this works because the filename equals the slug. For datasets the real convention is `data-<short>.md` where `<short>` is often a truncation of the full id slug (e.g., `data-ccle-proteomics.md` carries id `dataset:ccle-proteomics-nusinow-2020`). Forcing equality breaks every real dataset file. Fix by decoupling discovery into two concerns:
+
+1. **`filename_prefix`** (new field, default `""`): a kind-membership filter. The file stem must start with this prefix to be considered a candidate for the kind. Datasets set `"data-"`.
+2. **`slug_from_id`** (new field, default `False`): controls slug derivation. When `True`, the canonical slug comes from the `id:` frontmatter field (after stripping the `kind.id_prefix`), and the filename-vs-id cross-check is skipped. Datasets set `True`. Paper/topic/theme keep `False` and the existing stem-equals-slug semantics.
 
 **Files:**
-- Modify: `~/d/science/science/src/science_tool/commons/promote.py` (`PromoteKindConfig`, `_normalize_slug_for_match`, `PROMOTE_KIND_DATASET`)
+- Modify: `~/d/science/science/src/science_tool/commons/promote.py` (`PromoteKindConfig`, `_normalize_slug_for_match`, `_scan_project`, `PROMOTE_KIND_DATASET`)
 - Test: `~/d/science/science/tests/test_commons_promote_kind_config.py`
 
 - [ ] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_commons_promote_kind_config.py — append
-def test_promote_kind_dataset_has_data_filename_prefix():
+def test_promote_kind_dataset_filter_and_slug_source():
     from science_tool.commons.promote import PROMOTE_KIND_DATASET
     assert PROMOTE_KIND_DATASET.filename_prefix == "data-"
+    assert PROMOTE_KIND_DATASET.slug_from_id is True
 
 
-def test_paper_topic_theme_have_empty_filename_prefix():
+def test_paper_topic_theme_keep_filename_slug_semantics():
     from science_tool.commons.promote import (
         PROMOTE_KIND_PAPER, PROMOTE_KIND_TOPIC, PROMOTE_KIND_THEME,
     )
     for k in (PROMOTE_KIND_PAPER, PROMOTE_KIND_TOPIC, PROMOTE_KIND_THEME):
         assert k.filename_prefix == ""
+        assert k.slug_from_id is False
 
 
-def test_normalize_slug_strips_filename_prefix():
-    from science_tool.commons.promote import (
-        PROMOTE_KIND_DATASET, _normalize_slug_for_match,
+def test_dataset_discovery_uses_id_slug_when_filename_stem_differs(tmp_path, monkeypatch):
+    """data-ccle-proteomics.md with id dataset:ccle-proteomics-nusinow-2020 → slug 'ccle-proteomics-nusinow-2020'."""
+    import shutil, subprocess
+    src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
+    proj = tmp_path / "proj-dataset"
+    shutil.copytree(src, proj)
+    # Rename the fixture file + tweak id so stem != id slug:
+    (proj / "doc/datasets/data-fixture-ds.md").rename(
+        proj / "doc/datasets/data-fixture.md"
     )
-    assert _normalize_slug_for_match("data-fixture-ds", PROMOTE_KIND_DATASET) == "fixture-ds"
-    assert _normalize_slug_for_match("data-ccle-proteomics-nusinow-2020", PROMOTE_KIND_DATASET) == "ccle-proteomics-nusinow-2020"
-
-
-def test_normalize_slug_rejects_dataset_filename_without_prefix():
-    """Bare `<slug>.md` (no data- prefix) must NOT be accepted as a dataset."""
-    from science_tool.commons.promote import (
-        PROMOTE_KIND_DATASET, _normalize_slug_for_match,
+    f = proj / "doc/datasets/data-fixture.md"
+    text = f.read_text(encoding="utf-8")
+    text = text.replace(
+        "id: dataset:fixture-ds", "id: dataset:fixture-ds-2026-01"
     )
-    from science_tool.commons.errors import PromoteCandidateError
-    import pytest
-    with pytest.raises(PromoteCandidateError):
-        _normalize_slug_for_match("fixture-ds", PROMOTE_KIND_DATASET)
+    f.write_text(text, encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+    subprocess.run(
+        ["git", "-C", str(proj), "-c", "user.email=t@t", "-c", "user.name=t",
+         "commit", "-q", "-m", "init"], check=True,
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id", lambda s: proj,
+    )
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET, discover_candidates,
+    )
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    # Discovery key is the id slug, NOT the filename stem after data- strip:
+    assert "fixture-ds-2026-01" in discovery.candidates_by_slug
+    assert "fixture" not in discovery.candidates_by_slug   # stem-derived would be wrong
+
+
+def test_dataset_discovery_skips_files_without_filename_prefix(tmp_path, monkeypatch):
+    """A file under doc/datasets/ without the 'data-' prefix is silently skipped."""
+    import shutil, subprocess
+    src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
+    proj = tmp_path / "proj-dataset"
+    shutil.copytree(src, proj)
+    # Add a bare-named file (no data- prefix):
+    (proj / "doc/datasets/notes.md").write_text(
+        "---\nid: misc:ignore-me\ntype: note\n---\n", encoding="utf-8",
+    )
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
+    subprocess.run(
+        ["git", "-C", str(proj), "-c", "user.email=t@t", "-c", "user.name=t",
+         "commit", "-q", "-m", "init"], check=True,
+    )
+    monkeypatch.setattr(
+        "science_tool.commons.promote.resolve_project_by_id", lambda s: proj,
+    )
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET, discover_candidates,
+    )
+    discovery = discover_candidates(["proj-dataset"], PROMOTE_KIND_DATASET)
+    # notes.md was filtered out (not "data-"-prefixed); not in candidates or failures:
+    assert "ignore-me" not in discovery.candidates_by_slug
+    assert all(
+        "notes.md" not in str(fc.source_path) for fc in discovery.failed_candidates
+    )
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
 cd ~/d/science/science
-uv run pytest tests/test_commons_promote_kind_config.py -v -k "filename_prefix or strips_filename"
+uv run pytest tests/test_commons_promote_kind_config.py -v -k "filter_and_slug_source or filename_slug_semantics or uses_id_slug or skips_files_without"
 ```
 Expected: 4 failures.
 
-- [ ] **Step 3: Extend `PromoteKindConfig` with `filename_prefix`**
+- [ ] **Step 3: Extend `PromoteKindConfig` + update `_scan_project`**
 
 In `promote.py`:
 
@@ -656,46 +706,88 @@ In `promote.py`:
 @dataclass(frozen=True, slots=True)
 class PromoteKindConfig:
     # ...existing fields...
-    filename_prefix: str = ""        # NEW — stripped from source_path.stem before slug match
+    filename_prefix: str = ""        # NEW — file stem must start with this prefix (filter)
+    slug_from_id: bool = False        # NEW — when True, slug comes from id frontmatter, not stem
 ```
 
-Update `_normalize_slug_for_match`:
+Update `_scan_project`:
+
+1. **Filename filter** (early in the per-file loop, before existing slug-from-stem logic):
+   ```python
+   if kind.filename_prefix and not source_path.stem.startswith(kind.filename_prefix):
+       continue   # silently skip — not a candidate for this kind
+   ```
+
+2. **Slug derivation** when `slug_from_id=True`: after the existing `id` parsing (around `promote.py:1189`), use the id-derived slug as the authoritative slug and skip the cross-check. Concretely, change the existing block:
+   ```python
+   if id_slug_normalized != slug_normalized:
+       failures.append(FailedCandidate(... "id does not match filename stem" ...))
+       continue
+   ```
+   to:
+   ```python
+   if kind.slug_from_id:
+       # Filename is filter-only for this kind. Authoritative slug = id slug.
+       slug_normalized = id_slug_normalized
+   elif id_slug_normalized != slug_normalized:
+       failures.append(FailedCandidate(... existing ...))
+       continue
+   ```
+
+   And handle the case where `slug_from_id=True` but the file has no `id:` field — fail-fast with a clear FailedCandidate, since there's no way to derive a slug:
+   ```python
+   if kind.slug_from_id and not isinstance(id_val, str):
+       failures.append(FailedCandidate(
+           slug=None, project_slug=project_slug,
+           source_path=source_path,
+           error_class="PromoteCandidateError",
+           error_message=(
+               f"dataset entity at {source_path} requires explicit 'id:' field "
+               f"(kind {kind.kind!r} derives slug from id, not filename)"
+           ),
+       ))
+       continue
+   ```
+
+3. `_normalize_slug_for_match` stays unchanged for paper/topic/theme. For dataset, when called on the **filename stem**, it doesn't need to know about `filename_prefix` because the filter check above already enforced membership. However, if a downstream caller passes a stem like `data-something`, the regex (lowercase-kebab-only) will reject it because `data-something` contains the literal prefix. So extend `_normalize_slug_for_match` to also strip `kind.filename_prefix` for safety (paper/topic/theme are unaffected since their prefix is `""`):
+   ```python
+   def _normalize_slug_for_match(raw: str, kind: PromoteKindConfig) -> str:
+       stripped = raw.removesuffix(".md").strip()
+       if kind.filename_prefix and stripped.startswith(kind.filename_prefix):
+           stripped = stripped[len(kind.filename_prefix):]
+       if not stripped:
+           raise PromoteCandidateError(f"slug {raw!r} is empty after strip")
+       if not kind.slug_regex.match(stripped):
+           raise PromoteCandidateError(f"slug {raw!r} does not match {kind.slug_regex.pattern}")
+       if kind.slug_match == "casefold":
+           return stripped.casefold()
+       return stripped
+   ```
+
+Update `PROMOTE_KIND_DATASET` to set both new fields:
 
 ```python
-def _normalize_slug_for_match(raw: str, kind: PromoteKindConfig) -> str:
-    stripped = raw.removesuffix(".md").strip()
-    if kind.filename_prefix:
-        if not stripped.startswith(kind.filename_prefix):
-            raise PromoteCandidateError(
-                f"file stem {raw!r} must start with prefix "
-                f"{kind.filename_prefix!r} for kind {kind.kind!r}"
-            )
-        stripped = stripped[len(kind.filename_prefix):]
-    if not stripped:
-        raise PromoteCandidateError(f"slug {raw!r} is empty after strip")
-    if not kind.slug_regex.match(stripped):
-        raise PromoteCandidateError(f"slug {raw!r} does not match {kind.slug_regex.pattern}")
-    if kind.slug_match == "casefold":
-        return stripped.casefold()
-    return stripped
+PROMOTE_KIND_DATASET = PromoteKindConfig(
+    # ...existing fields...
+    filename_prefix="data-",
+    slug_from_id=True,
+)
 ```
-
-Update `PROMOTE_KIND_DATASET` to set `filename_prefix="data-"`. Existing PROMOTE_KIND_PAPER / TOPIC / THEME need no change — the default `""` keeps current behavior.
 
 - [ ] **Step 4: Run tests + regressions**
 
 ```bash
 cd ~/d/science/science
-uv run pytest tests/test_commons_promote_kind_config.py tests/test_commons_promote_apply.py tests/test_commons_promote_topic_apply.py tests/test_commons_promote_theme_apply.py -v
+uv run pytest tests/test_commons_promote_kind_config.py tests/test_commons_promote_apply.py tests/test_commons_promote_topic_apply.py tests/test_commons_promote_theme_apply.py tests/test_commons_promote_discovery.py -v
 ```
-Expected: all passing. The paper/topic/theme regressions confirm `filename_prefix=""` is non-breaking.
+Expected: all passing. The paper/topic/theme regressions confirm the new fields with their defaults (`""` / `False`) preserve existing behavior.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 cd ~/d/science/science
 git add src/science_tool/commons/promote.py tests/test_commons_promote_kind_config.py
-git commit -m "commons(promote): add filename_prefix to PromoteKindConfig for dataset 'data-' convention"
+git commit -m "commons(promote): filename_prefix filter + slug_from_id for datasets"
 ```
 
 ---
@@ -2882,8 +2974,8 @@ def test_cli_promote_dataset_requires_slug(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "science_tool.commons.config.resolve_project_by_id", lambda s: proj,
     )
-    from science_tool.commons.cli import app
-    r = CliRunner().invoke(app, ["promote", "dataset", "--from", "proj-dataset"])
+    from science_tool.commons.cli import commons_group
+    r = CliRunner().invoke(commons_group, ["promote", "dataset", "--from", "proj-dataset"])
     assert r.exit_code != 0
     assert "slug" in r.output.lower() or "slug" in (r.stderr or "").lower()
 
@@ -2898,8 +2990,8 @@ def test_cli_promote_dataset_dry_run_completes(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "science_tool.commons.promote.resolve_project_by_id", lambda s: proj,
     )
-    from science_tool.commons.cli import app
-    r = CliRunner().invoke(app, [
+    from science_tool.commons.cli import commons_group
+    r = CliRunner().invoke(commons_group, [
         "promote", "dataset", "--from", "proj-dataset",
         "--slug", "fixture-ds",
     ])
@@ -2919,8 +3011,8 @@ def test_cli_promote_dataset_apply_writes_artifacts(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "science_tool.commons.promote.resolve_project_by_id", lambda s: proj,
     )
-    from science_tool.commons.cli import app
-    r = CliRunner().invoke(app, [
+    from science_tool.commons.cli import commons_group
+    r = CliRunner().invoke(commons_group, [
         "promote", "dataset", "--from", "proj-dataset",
         "--slug", "fixture-ds", "--apply",
     ])
