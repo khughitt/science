@@ -102,10 +102,15 @@ The CLI entry point matches Phase E/F:
 science commons promote dataset --from <project-id> [--slug <slug>] [--apply]
 ```
 
-`--slug` is new; scopes promotion to one dataset within the project. For
-v1, the pilot always passes `--slug`. Without it, all eligible datasets in
-the project are planned (this stays implemented but isn't exercised by the
-pilot).
+`--slug` is **required** in v1 (one dataset per invocation). Batch
+promotion (multiple decisions per op, one commit, N tags, rollback over
+all artifacts/tags/overlays) is deferred to v1.1 — datasets carry real
+bytes, hash computation can be slow, and the override side-channel + the
+recipe back-fill audit signal both want per-dataset operator review. The
+parent design's parallel paper / topic / theme commands already exercise
+batch shape; replicating it for datasets without a concrete batch use
+case would lock in semantics we don't need yet. Promote without `--slug`
+raises `PromoteInputError` at CLI parse time pointing at v1.1.
 
 ### 3.2 Multi-file canonical via the artifact-list model
 
@@ -139,11 +144,16 @@ class PromoteResult:
     ...
 ```
 
-Paths are stored relative to the commons root; the apply stage resolves
-them against `commons_root` before writing. Display surfaces (dry-run
-output, error messages) may render the absolute form
-`<commons-root>/datasets/<slug>/entity.md`, but the in-memory `path` field
-is always commons-relative.
+Paths are stored relative to the commons root in `CanonicalArtifact`;
+the apply stage resolves them against `commons_root` once at write time
+and records the **absolute** resolved path in the per-op rollback context
+(`commons_artifacts_written: list[Path]`). Existing helpers
+`_restore_paths_to_head` (`promote.py:723`) and `_rollback_step5`
+(`promote.py:1745`) call `path.relative_to(commons_root)` on their inputs
+and continue to expect absolute paths; no helper signature change.
+Display surfaces (dry-run output, error messages) may render the
+absolute form `<commons-root>/datasets/<slug>/entity.md`, but the
+in-memory `CanonicalArtifact.path` field is always commons-relative.
 
 Single-file kinds (paper / topic / theme) produce a one-element list:
 `[CanonicalArtifact(path=<subdir>/<slug>.md, content=<body>,
@@ -387,10 +397,12 @@ For each candidate:
 
 ### 4.3 Apply (writes, in order)
 
-Phase G keeps Phase E/F's atomic-transaction shape: any failure after the
-plan-time validation passes triggers an unconditional rollback to the
-pre-apply state. The user is expected to fix the failure cause and
-re-run from scratch — there is no resume-from-partial path. This matches
+Phase G keeps Phase E/F's atomic-transaction shape through project
+overlay rewrite (step 6): any failure after plan-time validation and
+through step 6 triggers an unconditional rollback to the pre-apply
+state. Audit-log failures (steps 7-8) are explicitly excluded — see
+§4.4. The user is expected to fix the failure cause and re-run from
+scratch — there is no resume-from-partial path. This matches
 Phase F precedent (tag-existence preflight at `promote.py:808` already
 rejects re-runs over partially-applied state, so resume would require
 new content/tag-match semantics; deferred).
