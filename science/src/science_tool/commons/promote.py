@@ -820,6 +820,15 @@ def _resolve_canonical_artifact_path(commons_root: Path, artifact_path: Path) ->
     return resolved
 
 
+def _audit_failure_detail(failure_detail: str, plan: PromotePlan) -> str:
+    detail = failure_detail
+    for decision in plan.decisions:
+        for artifact in decision.canonical_artifacts:
+            if artifact.path.is_absolute() or ".." in artifact.path.parts:
+                detail = detail.replace(str(artifact.path), "<invalid canonical artifact path>")
+    return detail
+
+
 def apply_promote(
     plan: PromotePlan,
     commons_root: Path,
@@ -1061,7 +1070,7 @@ def apply_promote(
             plan=plan,
             projects_touched=projects_touched,
             failure_stage=stage,
-            failure_detail=str(exc),
+            failure_detail=_audit_failure_detail(str(exc), plan),
             invocation=invocation,
         )
         if audit_path is None:
@@ -1734,6 +1743,15 @@ def _build_project_rollback_command(
     return f"git -C {project_root} checkout HEAD -- {' '.join(paths_sorted)}"
 
 
+def _audit_canonical_paths(decision: PromoteDecision) -> list[str]:
+    paths: list[str] = []
+    for artifact in decision.canonical_artifacts:
+        if artifact.path.is_absolute() or ".." in artifact.path.parts:
+            continue
+        paths.append(str(artifact.path))
+    return paths
+
+
 def _render_audit_log_yaml(
     result: PromoteResult,
     commons_root: Path,
@@ -1780,7 +1798,7 @@ def _render_audit_log_yaml(
             {
                 "slug": d.slug,
                 "canonical_version": d.canonical_version,
-                "canonical_paths": [str(a.path) for a in d.canonical_artifacts],
+                "canonical_paths": _audit_canonical_paths(d),
             }
             for d in result.decisions
         ],

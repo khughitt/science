@@ -322,10 +322,14 @@ def test_audit_log_records_canonical_paths_per_decision(tmp_path, monkeypatch) -
     assert result.audit_log_path is not None
     log = yaml.safe_load(result.audit_log_path.read_text(encoding="utf-8"))
     assert "decisions" in log
-    for entry in log["decisions"]:
-        assert "canonical_paths" in entry
-        assert isinstance(entry["canonical_paths"], list)
-        assert len(entry["canonical_paths"]) >= 1
+    assert log["decisions"] == [
+        {
+            "slug": "Adams2025",
+            "canonical_version": "1.0.0",
+            "canonical_paths": ["papers/Adams2025.md"],
+        }
+    ]
+    assert not Path(log["decisions"][0]["canonical_paths"][0]).is_absolute()
 
 
 def test_apply_promote_rejects_absolute_canonical_artifact_path(tmp_path) -> None:
@@ -365,6 +369,18 @@ def test_apply_promote_rejects_absolute_canonical_artifact_path(tmp_path) -> Non
         apply_promote(plan, commons_root=commons, invocation="...")
 
     assert not outside.exists()
+    logs = list((commons / ".migrations").glob("*.yaml"))
+    assert len(logs) == 1
+    log = yaml.safe_load(logs[0].read_text(encoding="utf-8"))
+    assert log["status"] == "failed"
+    assert log["decisions"] == [
+        {
+            "slug": "unsafe",
+            "canonical_version": "1.0.0",
+            "canonical_paths": [],
+        }
+    ]
+    assert str(outside) not in logs[0].read_text(encoding="utf-8")
 
 
 def test_apply_promote_rejects_parent_traversal_canonical_artifact_path(tmp_path) -> None:
