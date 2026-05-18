@@ -766,6 +766,17 @@ def _restore_paths_to_head(commons_root: Path, paths: list[Path]) -> None:
             path.unlink(missing_ok=True)
 
 
+def _resolve_canonical_artifact_path(commons_root: Path, artifact_path: Path) -> Path:
+    if artifact_path.is_absolute() or ".." in artifact_path.parts:
+        raise PromoteInputError(f"canonical artifact path must be commons-relative: {artifact_path}")
+
+    commons_root_resolved = commons_root.resolve()
+    resolved = (commons_root_resolved / artifact_path).resolve(strict=False)
+    if not resolved.is_relative_to(commons_root_resolved):
+        raise PromoteInputError(f"canonical artifact path escapes commons root: {artifact_path}")
+    return resolved
+
+
 def apply_promote(
     plan: PromotePlan,
     commons_root: Path,
@@ -807,6 +818,7 @@ def apply_promote(
         # ---------- Step 0: preflight ----------
         if not commons_root.exists():
             raise PromoteInputError(f"commons store missing at {commons_root}; run `science commons init`")
+        commons_root_resolved = commons_root.resolve()
         if not _repo_is_idle(commons_root):
             raise PromoteInputError(f"commons repo is mid-merge/rebase: {commons_root}")
         clean, dirty = _commons_is_clean(commons_root, plan.kind)
@@ -856,22 +868,29 @@ def apply_promote(
         # to PromoteWriteError so the outer except writes a failure audit log
         # (design §6.4 "Before step 5" recovery path).
         written_canonical_paths: list[Path] = []
+        canonical_writes: list[tuple[Path, str]] = []
+        for decision in plan.decisions:
+            for artifact in decision.canonical_artifacts:
+                canonical_writes.append(
+                    (
+                        _resolve_canonical_artifact_path(commons_root_resolved, artifact.path),
+                        artifact.content,
+                    )
+                )
         try:
-            for decision in plan.decisions:
-                for artifact in decision.canonical_artifacts:
-                    abs_path = commons_root / artifact.path
-                    abs_path.parent.mkdir(parents=True, exist_ok=True)
-                    abs_path.write_text(artifact.content, encoding="utf-8")
-                    written_canonical_paths.append(abs_path)
+            for abs_path, content in canonical_writes:
+                abs_path.parent.mkdir(parents=True, exist_ok=True)
+                abs_path.write_text(content, encoding="utf-8")
+                written_canonical_paths.append(abs_path)
         except OSError as exc:
-            _restore_paths_to_head(commons_root, written_canonical_paths)
+            _restore_paths_to_head(commons_root_resolved, written_canonical_paths)
             raise PromoteWriteError(
                 stage="write_commons",
                 detail=f"commons canonical write failed: {exc}",
             ) from exc
 
         # ---------- Step 5.2: commit (path-limited) ----------
-        rel_paths = [str(p.relative_to(commons_root)) for p in written_canonical_paths]
+        rel_paths = [str(p.relative_to(commons_root_resolved)) for p in written_canonical_paths]
         try:
             _git(commons_root, "add", "--", *rel_paths)
             _git(
@@ -883,7 +902,7 @@ def apply_promote(
                 *rel_paths,
             )
         except subprocess.CalledProcessError as exc:
-            _restore_paths_to_head(commons_root, written_canonical_paths)
+            _restore_paths_to_head(commons_root_resolved, written_canonical_paths)
             raise PromoteWriteError(
                 stage="write_commons",
                 detail=f"commons commit failed: {exc.stderr or exc}",
@@ -902,7 +921,7 @@ def apply_promote(
                 _git(commons_root, "tag", tag, commons_commit)
                 tags_created.append(tag)
             except subprocess.CalledProcessError as exc:
-                _rollback_step5(commons_root, tags_created, written_canonical_paths)
+                _rollback_step5(commons_root_resolved, tags_created, written_canonical_paths)
                 rolled_back_commit = commons_commit
                 commons_commit = None
                 tags_created.clear()

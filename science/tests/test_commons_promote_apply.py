@@ -288,6 +288,135 @@ def test_apply_promote_happy_path_writes_commits_tags_rewrites(tmp_path, monkeyp
     assert log_data["status"] == "ok"
 
 
+def test_apply_promote_rejects_absolute_canonical_artifact_path(tmp_path) -> None:
+    from science_tool.commons.errors import PromoteInputError
+    from science_tool.commons.promote import (
+        CanonicalArtifact,
+        PROMOTE_KIND_PAPER,
+        PromoteDecision,
+        PromotePlan,
+        apply_promote,
+    )
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    outside = tmp_path / "outside.md"
+    plan = PromotePlan(
+        decisions=[
+            PromoteDecision(
+                slug="unsafe",
+                canonical_artifacts=[
+                    CanonicalArtifact(
+                        path=outside,
+                        content="unsafe\n",
+                        validator="plain",
+                    )
+                ],
+                canonical_version="1.0.0",
+                overlays={},
+                resolved_conflicts=(),
+            )
+        ],
+        failed_candidates=[],
+        kind=PROMOTE_KIND_PAPER,
+    )
+
+    with pytest.raises(PromoteInputError, match="canonical artifact path"):
+        apply_promote(plan, commons_root=commons, invocation="...")
+
+    assert not outside.exists()
+
+
+def test_apply_promote_rejects_parent_traversal_canonical_artifact_path(tmp_path) -> None:
+    from science_tool.commons.errors import PromoteInputError
+    from science_tool.commons.promote import (
+        CanonicalArtifact,
+        PROMOTE_KIND_PAPER,
+        PromoteDecision,
+        PromotePlan,
+        apply_promote,
+    )
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    outside = tmp_path / "escape.md"
+    plan = PromotePlan(
+        decisions=[
+            PromoteDecision(
+                slug="unsafe",
+                canonical_artifacts=[
+                    CanonicalArtifact(
+                        path=Path("../escape.md"),
+                        content="unsafe\n",
+                        validator="plain",
+                    )
+                ],
+                canonical_version="1.0.0",
+                overlays={},
+                resolved_conflicts=(),
+            )
+        ],
+        failed_candidates=[],
+        kind=PROMOTE_KIND_PAPER,
+    )
+
+    with pytest.raises(PromoteInputError, match="canonical artifact path"):
+        apply_promote(plan, commons_root=commons, invocation="...")
+
+    assert not outside.exists()
+
+
+def test_apply_promote_writes_and_stages_multiple_canonical_artifacts(tmp_path) -> None:
+    from science_tool.commons.promote import (
+        CanonicalArtifact,
+        PROMOTE_KIND_PAPER,
+        PromoteDecision,
+        PromotePlan,
+        apply_promote,
+    )
+
+    commons = tmp_path / "commons"
+    _init_commons(commons)
+    plan = PromotePlan(
+        decisions=[
+            PromoteDecision(
+                slug="multi",
+                canonical_artifacts=[
+                    CanonicalArtifact(
+                        path=Path("papers/multi.md"),
+                        content="primary\n",
+                        validator="plain",
+                    ),
+                    CanonicalArtifact(
+                        path=Path("papers/multi/extra.md"),
+                        content="extra\n",
+                        validator="plain",
+                    ),
+                ],
+                canonical_version="1.0.0",
+                overlays={},
+                resolved_conflicts=(),
+            )
+        ],
+        failed_candidates=[],
+        kind=PROMOTE_KIND_PAPER,
+    )
+
+    result = apply_promote(plan, commons_root=commons, invocation="...")
+
+    assert result.status == "ok"
+    assert (commons / "papers" / "multi.md").read_text(encoding="utf-8") == "primary\n"
+    assert (commons / "papers" / "multi" / "extra.md").read_text(encoding="utf-8") == "extra\n"
+    committed = subprocess.run(
+        ["git", "-C", str(commons), "show", "--name-only", "--format=", "HEAD~1"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    assert "papers/multi.md" in committed
+    assert "papers/multi/extra.md" in committed
+
+
 def test_apply_promote_preflight_rejects_dirty_commons(tmp_path, monkeypatch) -> None:
     from science_tool.commons.errors import PromoteInputError
     from science_tool.commons.promote import (
