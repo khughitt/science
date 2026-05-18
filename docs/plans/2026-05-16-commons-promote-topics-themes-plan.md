@@ -2432,7 +2432,7 @@ cd science && python -m pytest tests/test_commons_promote_validation.py -v -k va
 
 ```python
 _validate_plan(decisions)
-return PromotePlan(decisions=decisions, failed_candidates=failed, kind=kind)
+return PromotePlan(decisions=decisions, failed_candidates=soft_failures, kind=kind)
 ```
 
 And add the helper. Use the existing `EntityValidator` from `science_model.entity_schema` — it owns the schema-loading machinery (`SchemaLoader`), the canonical-validation path (`.validate(entity_dict)` which reads `schema_profile` from the entity), and the overlay-validation path (`.validate_overlay(overlay_dict)` which loads overlay-1.1 internally and also enforces `id == overlay_of`). Wrap the `EntityValidationError` it raises into a `PromoteValidationError`:
@@ -3454,17 +3454,21 @@ def test_topic_apply_rollback_restores_unlinked_source(tmp_path, monkeypatch) ->
     discovery = discover_candidates(["proj-alpha"], PROMOTE_KIND_TOPIC)
     plan = plan_promote(discovery, commons_root=commons, kind=PROMOTE_KIND_TOPIC)
 
-    # Force the SECOND project write to fail by monkeypatching Path.write_text
-    # on the second call only. (Implementation-detail: the worker picks the
-    # least-invasive injection point that fits the existing apply loop —
-    # could be Path.write_text patched after N calls, or a fault-injection
-    # hook already used by Phase E tests.)
+    # Force the SECOND *project overlay* write to fail. Do not count commons
+    # canonical/audit writes here — the regression must reach rewrite_projects
+    # after the first flatten-source overlay has already unlinked its source.
     original_write = Path.write_text
     call_count = {"n": 0}
     def faulty_write(self, *a, **kw):
-        call_count["n"] += 1
-        if call_count["n"] >= 2:
-            raise OSError("simulated write failure")
+        path = Path(self)
+        try:
+            path.relative_to(proj)
+        except ValueError:
+            return original_write(self, *a, **kw)
+        if path.suffix == ".md" and "doc/topics" in path.as_posix():
+            call_count["n"] += 1
+            if call_count["n"] >= 2:
+                raise OSError("simulated project overlay write failure")
         return original_write(self, *a, **kw)
     monkeypatch.setattr(Path, "write_text", faulty_write)
 
