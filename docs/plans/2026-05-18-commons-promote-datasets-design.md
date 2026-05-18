@@ -176,10 +176,13 @@ validator="entity-mixin")]`. The dataset kind produces three artifacts:
 - Tag creation: unchanged. One tag per decision: `<type>/<slug>/<version>`.
 - Rollback for partial commons writes: clean up any path in the artifact
   list, not just `<slug>.md`. Implementation: track which artifacts were
-  written so far in apply, and on failure unwrite them via
-  `Path.unlink(missing_ok=True)` + remove empty parent dirs, before the
-  commons commit happens. Once commons is committed, rollback flips to
-  `git revert` / `git reset --hard` (audit log path).
+  written so far in apply, and on failure restore each path via
+  `_restore_paths_to_head` (`promote.py:723`) — `git checkout HEAD -- <rel>`
+  if the path existed at HEAD, else `Path.unlink(missing_ok=True)`. Once
+  commons is committed, tag-/override-/overlay-failure rollback uses
+  `_rollback_step5` (`promote.py:1745`): delete created tags, `git reset
+  --soft HEAD~1`, then per-path restore. Path-limited throughout — see
+  §4.4.
 - Audit log: records `canonical_paths: [<path>, ...]` instead of singular
   `canonical_path`.
 
@@ -236,8 +239,8 @@ will remove it.
 
 ### 3.4 Per-machine override
 
-After commons write + project overlay rewrite, promote upserts one entry
-into `~/.config/science/data.yaml`:
+After commons write + commit + tag (and before project overlay rewrite —
+§4.3 step 5), promote upserts one entry into `~/.config/science/data.yaml`:
 
 ```yaml
 ccle-proteomics-nusinow-2020: /home/keith/d/cancer/cancer-types/multiple-myeloma/data/external/ccle_proteomics/2020-01
@@ -439,57 +442,76 @@ before overlay keeps the resolver chain coherent.
 
 ### 4.4 Failure handling
 
-Atomic-transaction semantics: each post-plan failure unwinds all prior
-side effects of the op before exiting. The user always sees one of two
-observable states — pre-apply or post-apply — never partial.
+Atomic-transaction semantics through step 6 (project overlay rewrite):
+each failure from step 2 through step 6 unwinds all prior side effects of
+the op before exiting, so the user sees either pre-apply or post-overlay
+state — never partial. Steps 7-8 (audit log) are explicitly carved out
+(see last bullet); a successful migration is not rolled back over an
+audit-log failure.
+
+All rollback is **path-limited**, matching Phase F precedent
+(`_restore_paths_to_head` at `promote.py:723`, `_rollback_step5` at
+`promote.py:1745`). Promote never runs `git reset --hard`, `git clean -fd`,
+or `git checkout -- .` on the commons repo — only `git reset --soft
+HEAD~1` (to undo a commit while leaving working-tree paths under our
+control), per-path `git checkout HEAD -- <rel>`, and `Path.unlink` for
+paths that didn't exist at HEAD. This preserves any unrelated user state
+in the commons working tree.
 
 State accumulated through the apply sequence is tracked in a per-op
 context (`commons_artifacts_written: list[Path]`,
 `commons_commit_sha: str | None`, `tags_created: list[str]`,
 `override_backup_path: Path | None`, `overlay_rewritten: list[Path]`).
 The rollback handler reads this and reverses each side effect that has
-landed.
+landed, in reverse order.
 
 - **Before any writes** (discovery, plan, hash-compute, plan validation,
   preflight) → exit non-zero with `PromoteCandidateError` /
   `PromoteValidationError` / `PromoteResourceMissingError` /
   `PromoteOverrideConflictError`. No state touched anywhere.
-- **Commons artifact write fails** (step 2) → unwrite each path in
-  `commons_artifacts_written` via `Path.unlink(missing_ok=True)`; remove
-  any now-empty parent dirs created by promote. No commit yet. Failure
-  audit log written best-effort.
-- **Commons commit fails** (step 3) → artifacts are written + possibly
-  staged but not committed. Run `git checkout -- .` + `git clean -fd` on
-  commons (Phase F pattern). No override or overlay changes attempted.
+- **Commons artifact write fails** (step 2) → call
+  `_restore_paths_to_head(commons_root, commons_artifacts_written)` —
+  for each artifact, `git checkout HEAD -- <rel>` if it existed at HEAD,
+  else `Path.unlink(missing_ok=True)`. No commit yet. Failure audit log
+  written best-effort.
+- **Commons commit fails** (step 3) → call `_restore_paths_to_head` on
+  the staged artifacts (same as step-2 failure). The Phase F commit
+  failure path at `promote.py:849` is identical; reuse it. No override
+  or overlay changes attempted.
 - **Tag creation fails** (step 4, commit already succeeded) → mirror
-  Phase F's tag-failure handler at `promote.py:862`:
-  delete any tag created by this op, then `git reset --hard HEAD~1` to
-  undo the commit (safe — the commit was made by this op on the same
-  branch, no other refs depend on it). Working tree clean afterward.
-  No override or overlay changes attempted.
+  Phase F's `_rollback_step5` at `promote.py:862`/`promote.py:1745`:
+  delete every tag in `tags_created`, `git reset --soft HEAD~1` to undo
+  the commit, then per-path restore each artifact (`git checkout HEAD --
+  <rel>` if it existed at HEAD, else `Path.unlink`). No override or
+  overlay changes attempted.
 - **Override write fails** (step 5) → restore override from
-  `.bak.<op-id>`. Then unwind commons: delete created tag, `git reset
-  --hard HEAD~1` to undo the promote commit, working tree clean
-  afterward. No overlay changes attempted.
-- **Project overlay rewrite fails** (step 6) → restore overlay via
-  `git checkout HEAD -- <overlay-path>` (Phase F pattern). Then restore
-  override from `.bak.<op-id>`. Then unwind commons: delete created tag,
-  `git reset --hard HEAD~1`.
-- **Audit log write or commit fails** (steps 7-8) → Phase F's bugfix for
-  `.gitignore` makes write+commit safe under normal conditions. If a
-  disk-full or permission failure surfaces here anyway: leave all prior
-  state in place (audit failure does not justify rolling back a
-  successful migration). Emit a clear stderr message pointing at the
-  recovery path: rerun `science commons audit-log write --op <op-id>`
-  (or hand-write the audit yaml from the failure exception's
-  `failure_audit_yaml` payload) when the underlying issue is fixed.
+  `data.yaml.bak.<op-id>` (atomic rename back). Then unwind commons via
+  the same `_rollback_step5` path (delete tag + `reset --soft HEAD~1` +
+  per-path restore). No overlay changes attempted.
+- **Project overlay rewrite fails** (step 6) → restore each path in
+  `overlay_rewritten` via `git checkout HEAD -- <overlay-path>` in the
+  project repo (Phase F pattern at `promote.py:896-905`). Then restore
+  override from `data.yaml.bak.<op-id>`. Then unwind commons via
+  `_rollback_step5`.
+- **Audit log write or commit fails** (steps 7-8) — **excluded from
+  atomic-transaction semantics.** The Phase F bugfix to `.gitignore`
+  makes write+commit safe under normal conditions. If a disk-full or
+  permission failure surfaces here anyway, leave all prior state in
+  place: rolling back a successful migration over a log-write failure
+  is worse than the alternative. Emit a clear stderr message including
+  the rendered `failure_audit_yaml` payload (the same content the
+  success path would have written) so the user can hand-place it into
+  `<commons_root>/.migrations/<ts>-<op-id>.yaml` and commit it manually
+  once the underlying issue is fixed. No new CLI command is added in v1.
 
 Backup files (`data.yaml.bak.<op-id>`) are retained on success too — the
 audit log records their location, so a later manual rollback can find
 them.
 
 The rollback handler is exercised by fault-injection tests at each
-transition (see §6.1).
+transition through step 6 (see §6.1). The audit-log failure path is
+covered by a separate test that asserts the migration remains landed and
+the failure exception carries a parseable `failure_audit_yaml` payload.
 
 ---
 
@@ -516,7 +538,7 @@ project under `tmp_path`.
 |---|---|
 | `tests/test_commons_promote_discovery.py` (append) | Dataset discovery: id-prefix rejection, missing `datapackage:` field, datapackage path doesn't resolve, resource path doesn't resolve (raises `PromoteResourceMissingError`), slug-stem mismatch. |
 | `tests/test_commons_promote_dataset_plan.py` (new) | Hash-compute determinism (golden 12-byte fixture `hello world\n` → sha256 `a948904f...a447`); multi-resource plan; override-conflict detection (`PromoteOverrideConflictError`); canonical `entity.md` rendering; canonical `datapackage.yaml` rendering (project fields stripped, hashes injected, name reset to `<slug>`); recipe stub content when no project recipe; user-authored `tier:` preserved verbatim on the canonical (NOT overwritten when recipe stubbed); `recipe_stubbed: true` flag in the planned audit log. |
-| `tests/test_commons_promote_dataset_apply.py` (new) | Multi-artifact canonical write (3 files, parent dir created); commons commit + tag; per-machine override upsert (new file path; existing file with other entries; conflict path); project overlay rewrite; dropped_fields recorded in audit log; rollback paths (atomic-transaction; each fault-injected at the named step): (a) artifact-write failure unwrites partial files, commons clean; (b) commit failure → `git checkout -- .` + `git clean -fd` cleans the artifacts; (c) tag-creation failure → delete created tag + `git reset --hard HEAD~1` to undo commit; (d) override-write failure → restore `.bak.<op-id>` + delete tag + reset commit; (e) overlay-rewrite failure → restore overlay + restore override + delete tag + reset commit. All five end with commons history at the pre-apply SHA and `~/.config/science/data.yaml` byte-identical to pre-apply. |
+| `tests/test_commons_promote_dataset_apply.py` (new) | Multi-artifact canonical write (3 files, parent dir created); commons commit + tag; per-machine override upsert (new file path; existing file with other entries; conflict path); project overlay rewrite; dropped_fields recorded in audit log; rollback paths (atomic-transaction through step 6; path-limited only — never `reset --hard`, `checkout -- .`, or `clean -fd`): (a) artifact-write failure → `_restore_paths_to_head` over written artifacts; (b) commit failure → `_restore_paths_to_head` over staged artifacts; (c) tag-creation failure → `_rollback_step5` (delete tag + `reset --soft HEAD~1` + per-path restore); (d) override-write failure → restore `.bak.<op-id>` then `_rollback_step5`; (e) overlay-rewrite failure → `git checkout HEAD -- <overlay-path>` per project file + restore override + `_rollback_step5`. All five end with commons HEAD SHA + tags + per-artifact working-tree paths byte-identical to pre-apply, `~/.config/science/data.yaml` byte-identical to pre-apply, and unrelated commons working-tree state untouched. Separate test for audit-log failure (step 7-8): assert migration remains landed and the raised `PromoteWriteError` carries a non-empty `failure_audit_yaml` payload that re-renders identically to a manually-placed audit file. |
 | `tests/test_commons_promote_kind_pluggable.py` (touch) | Cover the new `canonical_artifacts` list model: paper / topic / theme kinds produce a one-element list (regression that single-file rendering is preserved); dataset kind produces three CanonicalArtifact entries with the expected validators. |
 
 ### 6.2 Integration test
@@ -733,7 +755,11 @@ The Phase G implementation is done when:
 4. `science commons inventory`, `science commons show ... --project ...`,
    and `science commons data resolve <dataset-id> <logical-path>` all
    succeed against the migrated dataset.
-5. Rollback from a fault-injected failure at every transition leaves
-   both the commons repo (HEAD SHA, tags, working tree) and
-   `~/.config/science/data.yaml` byte-identical to their pre-apply
-   state.
+5. Rollback from a fault-injected failure at every transition **through
+   step 6** (commons artifact write, commit, tag, override, overlay)
+   leaves the commons repo (HEAD SHA, tags, per-artifact working-tree
+   paths) and `~/.config/science/data.yaml` byte-identical to their
+   pre-apply state, with unrelated commons working-tree state untouched.
+   Audit-log failure (steps 7-8) is explicitly excluded — the migration
+   remains landed and the user is given the rendered audit yaml to
+   hand-place.
