@@ -180,8 +180,10 @@ def test_promote_resource_missing_error_carries_slug_and_paths() -> None:
     assert err.slug == "fixture-ds"
     assert err.resource_name == "r1.txt"
     assert err.resource_path == Path("/abs/path/r1.txt")
+    assert isinstance(err, CommonsError)
     assert "fixture-ds" in str(err)
     assert "r1.txt" in str(err)
+    assert "/abs/path/r1.txt" in str(err)
 
 
 def test_promote_conflict_abort_is_commons_error() -> None:

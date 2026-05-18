@@ -52,6 +52,7 @@ from science_tool.commons.errors import (
     PromoteCandidateError,
     PromoteConflictAbort,
     PromoteInputError,
+    PromoteResourceMissingError,
     PromoteValidationError,
     PromoteWriteError,
 )
@@ -124,6 +125,7 @@ __all__ = [
     "PromoteInputError",
     "PromoteKindConfig",
     "PromotePlan",
+    "PromoteResourceMissingError",
     "PromoteResult",
     "PromoteValidationError",
     "PromoteWriteError",
