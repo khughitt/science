@@ -116,7 +116,7 @@ def _setup_proj_and_commons(
     monkeypatch.delenv("SCIENCE_CONFIG_DIR", raising=False)
     monkeypatch.setattr(
         "science_tool.commons.promote.resolve_project_by_id",
-        lambda _slug: proj,
+        lambda slug: {"proj-rnaseq": proj}[slug],
     )
     return proj, commons
 
@@ -127,7 +127,7 @@ def test_promote_dataset_with_matrix_and_rnaseq_succeeds(
     """Promote a bulk-rnaseq dataset with --mixin bio.matrix --mixin bio.rnaseq.
     Canonical entity.md carries the four-segment schema_profile and the bio
     fields in canonical (not overlay)."""
-    _proj, commons = _setup_proj_and_commons(tmp_path, monkeypatch)
+    proj, commons = _setup_proj_and_commons(tmp_path, monkeypatch)
 
     result = CliRunner().invoke(
         commons_group,
@@ -160,3 +160,11 @@ def test_promote_dataset_with_matrix_and_rnaseq_succeeds(
     assert "assay: bulk-rnaseq" in entity
     assert "feature_axis: rows" in entity
     assert "Homo sapiens" in entity
+
+    overlay = (proj / "doc" / "datasets" / "data-mockrna.md").read_text(
+        encoding="utf-8"
+    )
+    assert "assay: bulk-rnaseq" not in overlay
+    assert "value_dtype: int32" not in overlay
+    assert "feature_axis: rows" not in overlay
+    assert "Homo sapiens" not in overlay
