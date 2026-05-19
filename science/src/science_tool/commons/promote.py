@@ -40,6 +40,7 @@ from science_tool.commons.datapackage import (
     stream_sha256_and_bytes,
 )
 from science_tool.commons.config import check_override_conflict, resolve_project_by_id
+from science_tool.commons.config import _data_yaml_path, upsert_data_override
 from science_tool.commons.errors import (
     PromoteCandidateError,
     PromoteConflictAbort,
@@ -54,6 +55,37 @@ class EligibilityVerdict(Enum):
     ELIGIBLE = "eligible"
     SKIP_SILENT = "skip_silent"
     FAIL = "fail"
+
+
+@dataclass(frozen=True, slots=True)
+class SideChannelContext:
+    decision: PromoteDecision
+    plan: PromotePlan
+    commons_root: Path
+    op_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class SideChannelResult:
+    artifact_paths: list[Path]
+    backup_paths: list[Path]
+
+
+def _dataset_side_channel_apply(ctx: SideChannelContext) -> SideChannelResult:
+    override_path = ctx.plan.dataset_audit_extras[ctx.decision.slug]["override_path"]
+    upsert_data_override(
+        slug=ctx.decision.slug,
+        absolute_path=Path(override_path),
+        op_id=ctx.op_id,
+    )
+    yaml_path = _data_yaml_path()
+    backup_path = yaml_path.parent / f"data.yaml.bak.{ctx.op_id}"
+    absent_sentinel_path = yaml_path.parent / f"data.yaml.bak.{ctx.op_id}.absent"
+    actual_backup = backup_path if backup_path.exists() else absent_sentinel_path
+    return SideChannelResult(
+        artifact_paths=[yaml_path],
+        backup_paths=[actual_backup],
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +107,7 @@ class PromoteKindConfig:
     mixin_schema_id: str
     default_profile: "ProfileString"
     eligibility_filter: Callable[[Mapping[str, Any]], "EligibilityVerdict"] | None
+    side_channel_apply: Callable[[SideChannelContext], SideChannelResult] | None = None
     filename_prefix: str = ""
     slug_from_id: bool = False
 
@@ -146,6 +179,7 @@ PROMOTE_KIND_DATASET = PromoteKindConfig(
     mixin_schema_id="https://schemas.science/mixin-dataset-1.0.json",
     default_profile=default_profile_for_kind("dataset"),
     eligibility_filter=None,
+    side_channel_apply=_dataset_side_channel_apply,
     filename_prefix="data-",
     slug_from_id=True,
 )
