@@ -48,10 +48,22 @@ def test_assay_enum_rejects_unknown(base_cna_entity: dict) -> None:
         EntityValidator().validate(base_cna_entity)
 
 
-def test_species_array_required(base_cna_entity: dict) -> None:
+def test_species_as_string_fails(base_cna_entity: dict) -> None:
     base_cna_entity["species"] = "Homo sapiens"
     with pytest.raises(EntityValidationError):
         EntityValidator().validate(base_cna_entity)
+
+
+def test_missing_species_fails(base_cna_entity: dict) -> None:
+    fm = {k: v for k, v in base_cna_entity.items() if k != "species"}
+    with pytest.raises(EntityValidationError, match="species"):
+        EntityValidator().validate(fm)
+
+
+def test_missing_assay_fails(base_cna_entity: dict) -> None:
+    fm = {k: v for k, v in base_cna_entity.items() if k != "assay"}
+    with pytest.raises(EntityValidationError, match="assay"):
+        EntityValidator().validate(fm)
 
 
 def test_optional_segmentation_method_passes(base_cna_entity: dict) -> None:
