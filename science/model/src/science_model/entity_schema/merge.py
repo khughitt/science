@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
 
 from science_model.entity_schema.loader import SchemaLoader
 from science_model.entity_schema.profile import ProfileComponent, ProfileString
