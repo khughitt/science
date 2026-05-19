@@ -380,6 +380,7 @@ class PromotePlan:
     failed_candidates: list[FailedCandidate]
     kind: PromoteKindConfig
     dataset_audit_extras: dict[str, dict[str, Any]] = field(default_factory=dict)
+    mixin_extensions: tuple["ProfileComponent", ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -418,6 +419,7 @@ class PromoteResult:
     kind: PromoteKindConfig
     side_channel_results: dict[str, SideChannelResult] = field(default_factory=dict)
     plan_audit_extras: dict[str, dict[str, Any]] = field(default_factory=dict)
+    mixin_extensions: tuple["ProfileComponent", ...] = ()
 
 
 # --------------------------------------------------------------------------- #
@@ -818,6 +820,7 @@ def plan_promote(
         failed_candidates=soft_failures,
         kind=kind,
         dataset_audit_extras=dataset_audit_extras,
+        mixin_extensions=mixin_extensions,
     )
 
 
@@ -1092,6 +1095,7 @@ def _write_failure_audit_log(
         kind=plan.kind,
         side_channel_results=side_channel_results or {},
         plan_audit_extras=plan.dataset_audit_extras,
+        mixin_extensions=plan.mixin_extensions,
     )
     yaml_text = _render_audit_log_yaml(result, commons_root, invocation=invocation)
     try:
@@ -1182,6 +1186,7 @@ def apply_promote(
             projects_touched=[],
             kind=plan.kind,
             plan_audit_extras=plan.dataset_audit_extras,
+            mixin_extensions=plan.mixin_extensions,
         )
 
     try:
@@ -1394,6 +1399,7 @@ def apply_promote(
             kind=plan.kind,
             side_channel_results=side_channel_results,
             plan_audit_extras=plan.dataset_audit_extras,
+            mixin_extensions=plan.mixin_extensions,
         )
         try:
             audit_path = _write_audit_log(result, commons_root, invocation=invocation)
@@ -1444,6 +1450,7 @@ def apply_promote(
             kind=result.kind,
             side_channel_results=result.side_channel_results,
             plan_audit_extras=result.plan_audit_extras,
+            mixin_extensions=result.mixin_extensions,
         )
 
     except (PromoteInputError, PromoteWriteError, PromoteCandidateError) as exc:
@@ -2543,6 +2550,15 @@ def _render_audit_log_yaml(
         "finished_at": result.finished_at.isoformat(),
         "commons_commit": result.commons_commit,
         "commons_tags": result.tags_created,
+        **(
+            {
+                "mixin_extensions": [
+                    f"{component.name}/{component.version}" for component in result.mixin_extensions
+                ]
+            }
+            if result.mixin_extensions
+            else {}
+        ),
         "projects_touched": projects_touched,
         "decisions": [_audit_decision_entry(d, result, commons_root) for d in result.decisions],
         "conflict_resolutions": [
