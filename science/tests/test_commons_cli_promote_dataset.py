@@ -5,31 +5,33 @@ import subprocess
 from click.testing import CliRunner
 
 
+def _init_repo(root: Path) -> None:
+    subprocess.run(["git", "init", "-q", str(root)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(root), "config", "user.email", "test@x"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(root), "config", "user.name", "test"],
+        check=True,
+        capture_output=True,
+    )
+
+
 def _setup(tmp_path):
     src = Path(__file__).parent / "fixtures" / "promote" / "proj-dataset"
     proj = tmp_path / "proj-dataset"
     shutil.copytree(src, proj)
-    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    _init_repo(proj)
     subprocess.run(["git", "-C", str(proj), "add", "."], check=True)
     subprocess.run(
-        [
-            "git",
-            "-C",
-            str(proj),
-            "-c",
-            "user.email=t@t",
-            "-c",
-            "user.name=t",
-            "commit",
-            "-q",
-            "-m",
-            "init",
-        ],
+        ["git", "-C", str(proj), "commit", "-q", "-m", "init"],
         check=True,
     )
     commons = tmp_path / "commons"
     commons.mkdir()
-    subprocess.run(["git", "init", "-q", str(commons)], check=True)
+    _init_repo(commons)
     return proj, commons
 
 
