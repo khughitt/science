@@ -93,8 +93,10 @@ def load_data_overrides() -> dict[str, Path]:
 
 
 def _load_data_yaml_mapping(yaml_path: Path) -> dict[str, str]:
-    if not yaml_path.is_file():
+    if not yaml_path.exists():
         return {}
+    if not yaml_path.is_file():
+        raise CommonsError(f"{yaml_path}: expected a file")
     try:
         text = yaml_path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -102,6 +104,14 @@ def _load_data_yaml_mapping(yaml_path: Path) -> dict[str, str]:
     if not text.strip():
         return {}
     try:
+        node = yaml.compose(text)
+        if isinstance(node, yaml.MappingNode):
+            seen_keys: set[str] = set()
+            for key_node, _ in node.value:
+                key = key_node.value
+                if key in seen_keys:
+                    raise CommonsError(f"{yaml_path}: duplicate key {key!r}")
+                seen_keys.add(key)
         raw = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         raise CommonsError(f"{yaml_path}: malformed YAML: {exc}") from exc
@@ -198,6 +208,8 @@ def restore_data_override_from_backup(*, op_id: str) -> None:
         )
     if absent_sentinel_path.is_file():
         if yaml_path.exists():
+            if not yaml_path.is_file():
+                raise CommonsError(f"{yaml_path}: expected a file")
             yaml_path.unlink()
         absent_sentinel_path.unlink()
         return

@@ -169,6 +169,21 @@ def test_load_data_overrides_rejects_non_mapping(
         load_data_overrides()
 
 
+def test_load_data_overrides_rejects_duplicate_keys(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "data.yaml").write_text(
+        "cath-domains: /data/one\ncath-domains: /data/two\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    with pytest.raises(CommonsError, match="duplicate key"):
+        load_data_overrides()
+
+
 def test_load_data_overrides_rejects_malformed_yaml(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -382,6 +397,43 @@ def test_upsert_data_override_rejects_existing_relative_entry(
         )
 
 
+def test_upsert_data_override_rejects_existing_duplicate_key(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "data.yaml").write_text(
+        "x: /data/one\nx: /data/two\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    with pytest.raises(CommonsError, match="duplicate key"):
+        upsert_data_override(
+            slug="y",
+            absolute_path=tmp_path / "fakedata",
+            op_id="opDUP",
+        )
+    assert not (cfg_dir / "data.yaml.bak.opDUP").exists()
+
+
+def test_upsert_data_override_rejects_data_yaml_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "data.yaml").mkdir()
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    with pytest.raises(CommonsError, match="expected a file"):
+        upsert_data_override(
+            slug="x",
+            absolute_path=tmp_path / "fakedata",
+            op_id="opDIR",
+        )
+    assert not (cfg_dir / "data.yaml.bak.opDIR.absent").exists()
+
+
 def test_check_override_conflict_expands_existing_user_path(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -424,6 +476,19 @@ def test_restore_data_override_from_backup_rejects_ambiguous_state(
 
     with pytest.raises(CommonsError, match="ambiguous"):
         restore_data_override_from_backup(op_id="opAMB")
+
+
+def test_restore_data_override_from_backup_rejects_data_yaml_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "data.yaml").mkdir()
+    (cfg_dir / "data.yaml.bak.opDIR.absent").write_text("", encoding="utf-8")
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+
+    with pytest.raises(CommonsError, match="expected a file"):
+        restore_data_override_from_backup(op_id="opDIR")
 
 
 def test_resolve_project_root_returns_registered_path(
