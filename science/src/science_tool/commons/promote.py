@@ -2453,9 +2453,14 @@ def _audit_decision_entry(
     entry["per_resource_hashes"] = {
         str(name): {"hash": str(value[0]), "bytes": value[1]}
         for name, value in per_resource.items()
-        if isinstance(value, tuple | list) and len(value) == 2
+        if (
+            isinstance(value, tuple | list)
+            and len(value) == 2
+            and isinstance(value[0], str)
+            and isinstance(value[1], int)
+        )
     }
-    entry["recipe_stubbed"] = extras.get("recipe_stubbed", False)
+    entry["recipe_stubbed"] = extras.get("recipe_stubbed") is True
     dropped_fields = extras.get("dropped_fields", [])
     if not isinstance(dropped_fields, list | tuple | set):
         dropped_fields = []

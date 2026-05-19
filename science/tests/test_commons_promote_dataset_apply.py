@@ -182,9 +182,9 @@ def test_dataset_apply_audit_log_tolerates_malformed_optional_extras(
         dataset_audit_extras={
             "fixture-ds": {
                 "override_path": str(proj / "data" / "fixture-ds"),
-                "per_resource": {"r1": None},
+                "per_resource": {"r1": None, "r2": ("sha256:x", object())},
                 "dropped_fields": "not-a-list",
-                "recipe_stubbed": True,
+                "recipe_stubbed": object(),
             }
         },
     )
@@ -199,6 +199,7 @@ def test_dataset_apply_audit_log_tolerates_malformed_optional_extras(
     log = yaml.safe_load(result.audit_log_path.read_text(encoding="utf-8"))
     [decision] = [entry for entry in log["decisions"] if entry["slug"] == "fixture-ds"]
     assert decision["per_resource_hashes"] == {}
+    assert decision["recipe_stubbed"] is False
     assert decision["dropped_fields"] == []
 
 
