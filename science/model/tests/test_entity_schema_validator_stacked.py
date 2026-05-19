@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
-from science_model.entity_schema.loader import SchemaLoader
+from science_model.entity_schema.loader import SchemaLoader, SchemaNotFoundError
 from science_model.entity_schema.profile import ProfileComponent, parse_profile
 from science_model.entity_schema.validator import EntityValidationError, EntityValidator
 
@@ -113,3 +113,37 @@ def test_schema_loader_caches_extensions() -> None:
         second = loader.load(comp)
     assert mock_read.call_count == 0
     assert first is second
+
+
+def test_unknown_extension_raises_schema_not_found(
+    stacked_rnaseq_matrix_entity: dict,
+) -> None:
+    """An entity referencing an uninstalled extension fails loud."""
+    stacked_rnaseq_matrix_entity["schema_profile"] = (
+        "science-entity-base/1.0+dataset/1.0+bio.bogus/1.0"
+    )
+    with pytest.raises(SchemaNotFoundError, match="extension-bio-bogus-1.0.json"):
+        EntityValidator().validate(stacked_rnaseq_matrix_entity)
+
+
+def test_unknown_extension_in_middle_of_stack_also_raises() -> None:
+    """Order doesn't matter — any unknown segment fails the composition."""
+    fm = {
+        "schema_profile": (
+            "science-entity-base/1.0+dataset/1.0+bio.unknownmiddle/1.0+bio.rnaseq/1.0"
+        ),
+        "id": "dataset:x",
+        "type": "dataset",
+        "title": "x",
+        "version": "1.0.0",
+        "created": "2026-05-19",
+        "updated": "2026-05-19",
+        "datapackage": "datapackage.yaml",
+        "origin": "external",
+        "tier": "use-now",
+        "access": {"level": "public", "verified": True},
+        "species": ["Homo sapiens"],
+        "assay": "bulk-rnaseq",
+    }
+    with pytest.raises(SchemaNotFoundError):
+        EntityValidator().validate(fm)
