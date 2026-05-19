@@ -73,7 +73,7 @@ class SideChannelResult:
 def _dataset_side_channel_apply(ctx: SideChannelContext) -> SideChannelResult:
     from science_tool.commons.config import (
         _data_yaml_path,
-        upsert_data_override,
+        _upsert_data_override,
     )
 
     extras = ctx.plan.dataset_audit_extras.get(ctx.decision.slug)
@@ -83,10 +83,11 @@ def _dataset_side_channel_apply(ctx: SideChannelContext) -> SideChannelResult:
             slug=ctx.decision.slug,
         )
     override_path = extras["override_path"]
-    upsert_data_override(
+    _upsert_data_override(
         slug=ctx.decision.slug,
         absolute_path=Path(override_path),
         op_id=ctx.op_id,
+        allow_existing_backup=True,
     )
     yaml_path = _data_yaml_path()
     backup_path = yaml_path.parent / f"data.yaml.bak.{ctx.op_id}"

@@ -143,6 +143,22 @@ def _load_data_yaml_mapping(yaml_path: Path) -> dict[str, str]:
 
 def upsert_data_override(*, slug: str, absolute_path: Path, op_id: str) -> Path:
     """Atomically upsert a per-machine dataset data override."""
+    return _upsert_data_override(
+        slug=slug,
+        absolute_path=absolute_path,
+        op_id=op_id,
+        allow_existing_backup=False,
+    )
+
+
+def _upsert_data_override(
+    *,
+    slug: str,
+    absolute_path: Path,
+    op_id: str,
+    allow_existing_backup: bool,
+) -> Path:
+    """Implementation shared by one-shot and same-operation batch upserts."""
     if not absolute_path.is_absolute():
         raise CommonsError(f"data override path must be absolute, got {absolute_path}")
 
@@ -150,17 +166,24 @@ def upsert_data_override(*, slug: str, absolute_path: Path, op_id: str) -> Path:
     yaml_path.parent.mkdir(parents=True, exist_ok=True)
     backup_path = yaml_path.parent / f"data.yaml.bak.{op_id}"
     absent_sentinel_path = yaml_path.parent / f"data.yaml.bak.{op_id}.absent"
-    if backup_path.exists() or absent_sentinel_path.exists():
+    backup_exists = backup_path.exists()
+    sentinel_exists = absent_sentinel_path.exists()
+    if backup_exists and sentinel_exists:
+        raise CommonsError(
+            f"ambiguous data override backup state for op_id {op_id!r}"
+        )
+    if (backup_exists or sentinel_exists) and not allow_existing_backup:
         raise CommonsError(
             f"data override backup already exists for op_id {op_id!r}"
         )
 
     existing = _load_data_yaml_mapping(yaml_path)
 
-    if yaml_path.is_file():
-        shutil.copyfile(yaml_path, backup_path)
-    else:
-        absent_sentinel_path.write_text("", encoding="utf-8")
+    if not (backup_exists or sentinel_exists):
+        if yaml_path.is_file():
+            shutil.copyfile(yaml_path, backup_path)
+        else:
+            absent_sentinel_path.write_text("", encoding="utf-8")
 
     existing[slug] = str(absolute_path)
 

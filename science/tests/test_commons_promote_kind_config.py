@@ -174,6 +174,74 @@ def test_dataset_side_channel_apply_reports_existing_file_backup(
     }
 
 
+def test_dataset_side_channel_apply_allows_multiple_decisions_per_op(
+    tmp_path, monkeypatch
+) -> None:
+    import yaml
+
+    from science_tool.commons.promote import (
+        PROMOTE_KIND_DATASET,
+        PromoteDecision,
+        PromotePlan,
+        SideChannelContext,
+    )
+
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setenv("SCIENCE_CONFIG_DIR", str(cfg_dir))
+    first = PromoteDecision(
+        slug="fixture-a",
+        canonical_artifacts=[],
+        canonical_version="1.0.0",
+        overlays={},
+        resolved_conflicts=(),
+    )
+    second = PromoteDecision(
+        slug="fixture-b",
+        canonical_artifacts=[],
+        canonical_version="1.0.0",
+        overlays={},
+        resolved_conflicts=(),
+    )
+    plan = PromotePlan(
+        decisions=[first, second],
+        failed_candidates=[],
+        kind=PROMOTE_KIND_DATASET,
+        dataset_audit_extras={
+            "fixture-a": {"override_path": str(tmp_path / "bulk" / "a")},
+            "fixture-b": {"override_path": str(tmp_path / "bulk" / "b")},
+        },
+    )
+    side_channel_apply = PROMOTE_KIND_DATASET.side_channel_apply
+    assert side_channel_apply is not None
+
+    first_result = side_channel_apply(
+        SideChannelContext(
+            decision=first,
+            plan=plan,
+            commons_root=tmp_path / "commons",
+            op_id="opBATCH",
+        )
+    )
+    second_result = side_channel_apply(
+        SideChannelContext(
+            decision=second,
+            plan=plan,
+            commons_root=tmp_path / "commons",
+            op_id="opBATCH",
+        )
+    )
+
+    yaml_path = cfg_dir / "data.yaml"
+    absent_backup = cfg_dir / "data.yaml.bak.opBATCH.absent"
+    assert first_result.backup_paths == [absent_backup]
+    assert second_result.backup_paths == [absent_backup]
+    assert yaml.safe_load(yaml_path.read_text(encoding="utf-8")) == {
+        "fixture-a": str(tmp_path / "bulk" / "a"),
+        "fixture-b": str(tmp_path / "bulk" / "b"),
+    }
+    assert absent_backup.is_file()
+
+
 def test_eligibility_verdict_enum_values() -> None:
     from science_tool.commons.promote import EligibilityVerdict
 
